@@ -1,4 +1,4 @@
-# Car Use Case
+# Car
 
 Let's say you're the current owner of a car and you've been keeping track of all the repairs and maintenance that you've done to the car using Thing Time. You've logged every oil change, tire rotation, and any other repairs that you've done, along with the date and cost of each repair.
 

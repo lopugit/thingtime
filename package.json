@@ -1,0 +1,21 @@
+{
+  "name": "thingtime",
+  "version": "0.0.100",
+  "description": "Thing Time",
+  "main": "none",
+  "scripts": {
+    "app": "npm run dev --prefix app",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "postinstall": "npm ci --prefix=app"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lopugit/thingtime.git"
+  },
+  "author": "lopu",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/lopugit/thingtime/issues"
+  },
+  "homepage": "https://github.com/lopugit/thingtime#readme"
+}
