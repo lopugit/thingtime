@@ -5,7 +5,9 @@
   "main": "none",
   "scripts": {
     "app": "npm run dev --prefix app",
+    "app-https": "npm run https --prefix app",
     "api": "npm run dev --prefix api",
+    "api-https": "npm run https --prefix api",
     "postinstall": "npm ci --prefix=app ; npm ci --prefix=api"
   },
   "repository": {
