@@ -6,8 +6,12 @@ import { Card } from '@chakra-ui/card'
 import { Flex } from '@chakra-ui/layout'
 import { colors } from '@/chakra/theme/colors'
 const inter = Inter({ subsets: ['latin'] })
+import rgb from "@/modules/rgb"
 
 export default function Home() {
+  
+  console.log('nik rgb', rgb(colors.green, 0))
+
   return (
     <>
       <Head>
@@ -22,7 +26,7 @@ export default function Home() {
             _hover={{
               cursor: "pointer"
             }} 
-            textShadow={`0px 0px 8px ${colors.green}`}
+            textShadow={`0px 0px 16px ${rgb(colors.green, 1)}`}
           >
             Thing Time
           </Flex>
