@@ -6,11 +6,6 @@ module.exports = {
       namespace: "thingtime"
     },
     {
-      script: 'npm run app-https',
-      name: "thingtime-app-https",
-      namespace: "thingtime"
-    },
-    {
 			script: 'npm run api',
 			name: 'thingtime-api',
       namespace: "thingtime",
