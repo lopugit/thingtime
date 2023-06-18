@@ -2,12 +2,12 @@ module.exports = {
   apps: [
     {
       script: 'npm run app',
-      name: "thingtime-app",
+      name: "tt-app",
       namespace: "thingtime"
     },
     {
 			script: 'npm run api',
-			name: 'thingtime-api',
+			name: 'tt-api',
       namespace: "thingtime",
 			watch: ['node', 'node/*/node_modules', 'node/**/node_modules', 'node/node_modules'],
 			ignore_watch: [],
