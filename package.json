@@ -8,6 +8,7 @@
     "app-https": "npm run https --prefix app",
     "api": "npm run dev --prefix api",
     "api-https": "npm run https --prefix api",
+    "build": "npm run build --prefix app",
     "postinstall": "npm ci --prefix=app ; npm ci --prefix=api"
   },
   "repository": {
