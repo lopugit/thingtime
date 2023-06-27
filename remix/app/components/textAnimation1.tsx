@@ -28,7 +28,7 @@ export const TextAnimation1 = props => {
       const newTextIdx = texts?.indexOf(titleText) + 1
       const newText = texts[newTextIdx] || texts[0]
       setTitleText(newText)
-    }, 5000)
+    }, 4000)
     return () => clearInterval(interval)
   }, [titleText, texts])
 
