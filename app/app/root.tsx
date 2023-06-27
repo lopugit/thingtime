@@ -1,30 +1,31 @@
-import { ChakraProvider } from "@chakra-ui/react"
-import type { MetaFunction } from "@vercel/remix"
+import { ChakraProvider } from '@chakra-ui/react'
+// import type { MetaFunction } from "@vercel/remix"
+import type { MetaFunction } from '@remix-run/node'
 import {
   Links,
   LiveReload,
   Meta,
   Outlet,
   Scripts,
-  ScrollRestoration,
-} from "@remix-run/react"
-import { Analytics } from "@vercel/analytics/react"
+  ScrollRestoration
+} from '@remix-run/react'
+import { Analytics } from '@vercel/analytics/react'
 
 export const meta: MetaFunction = () => ({
-  charset: "utf-8",
-  title: "New Remix App",
-  viewport: "width=device-width,initial-scale=1",
+  charset: 'utf-8',
+  title: 'New Remix App',
+  viewport: 'width=device-width,initial-scale=1'
 })
 
-function Document({
+function Document ({
   children,
-  title = "App title",
+  title = 'App title'
 }: {
   children: React.ReactNode
   title?: string
 }) {
   return (
-    <html lang="en">
+    <html lang='en'>
       <head>
         <Meta />
         <title>{title}</title>
@@ -41,7 +42,7 @@ function Document({
   )
 }
 
-export default function App() {
+export default function App () {
   return (
     <Document>
       <ChakraProvider>
