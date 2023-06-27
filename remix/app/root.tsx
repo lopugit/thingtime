@@ -12,7 +12,7 @@ import { Analytics } from '@vercel/analytics/react'
 
 function Document ({
   children,
-  title = 'Thingtime | For Everything'
+  title = 'Thingtime'
 }: {
   children: React.ReactNode
   title?: string
