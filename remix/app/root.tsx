@@ -1,6 +1,5 @@
 import { ChakraProvider } from '@chakra-ui/react'
 // import type { MetaFunction } from "@vercel/remix"
-import type { MetaFunction } from '@remix-run/node'
 import {
   Links,
   LiveReload,
@@ -11,15 +10,9 @@ import {
 } from '@remix-run/react'
 import { Analytics } from '@vercel/analytics/react'
 
-export const meta: MetaFunction = () => ({
-  charset: 'utf-8',
-  title: 'Thingtime | For Everything',
-  viewport: 'width=device-width,initial-scale=1'
-})
-
 function Document ({
   children,
-  title = 'App title'
+  title = 'Thingtime | For Everything'
 }: {
   children: React.ReactNode
   title?: string

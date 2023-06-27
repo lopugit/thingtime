@@ -2,33 +2,53 @@ import { Box, Flex, Text } from '@chakra-ui/react'
 import React from 'react'
 
 export default function Index () {
-  const [titleText, setTitleText] = React.useState('tt')
+  const texts = [
+    // 't',
+    'tt',
+    '/',
+    'thingtime'
+    // 'tht',
+    // 'thit',
+    // 'thint',
+    // 'thingt',
+    // 'thingti',
+    // 'thingtim',
+    // 'thingtime',
+    // 'Thingtime',
+    // 'ThingTime',
+    // 'Thing Time'
+  ]
+
+  const [titleText, setTitleText] = React.useState(texts[0])
 
   const [started, setStarted] = React.useState(false)
 
-  const mainText = 'Thing Time'
+  // const mainText = 'Thing Time'
   // const mainText = "Thingtime"
-  // const mainText = "thingtime"
+  const mainText = 'thingtime'
 
   React.useEffect(() => {
     const interval = setInterval(() => {
-      if (titleText === 'tt') {
-        setTitleText('tt.')
-      } else if (titleText === 'tt.') {
-        setTitleText('tt..')
-      } else if (titleText === 'tt..') {
-        setTitleText('tt...')
-      } else if (titleText === 'tt...') {
-        setTitleText(mainText)
-      } else if (titleText === mainText) {
-        if (!started) {
-          setStarted(true)
-          setTimeout(() => {
-            setTitleText('tt')
-            setStarted(false)
-          }, 15000)
-        }
-      }
+      const newTextIdx = texts?.indexOf(titleText) + 1
+      const newText = texts[newTextIdx] || texts[0]
+      setTitleText(newText)
+      // if (titleText === 'tt') {
+      //   setTitleText('tt.')
+      // } else if (titleText === 'tt.') {
+      //   setTitleText('tt..')
+      // } else if (titleText === 'tt..') {
+      //   setTitleText('tt...')
+      // } else if (titleText === 'tt...') {
+      //   setTitleText(mainText)
+      // } else if (titleText === mainText) {
+      //   if (!started) {
+      //     setStarted(true)
+      //     setTimeout(() => {
+      //       setTitleText('tt')
+      //       setStarted(false)
+      //     }, 15000)
+      //   }
+      // }
     }, 2000)
     return () => clearInterval(interval)
   }, [titleText, started])
