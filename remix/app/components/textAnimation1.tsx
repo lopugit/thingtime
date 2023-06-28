@@ -13,25 +13,40 @@ export const TextAnimation1 = props => {
       'magical',
       'inspiring',
       'love',
-      'tt'
+      // 'tt'
     ]
   }, [])
 
   const [titleText, setTitleText] = React.useState(texts[0])
 
+  const [usedTexts, setUsedTexts] = React.useState(["thingtime"])
+
+  const state = React.useRef({})
+
   React.useEffect(() => {
-    const newTimeout = Math.random() * 1500 + 2500
+    state.current = { titleText, texts, usedTexts }
+  }, [titleText, texts, usedTexts])
+  
+
+  React.useEffect(() => {
+    const newTimeout = Math.random() * 1500 + 2500 + (titleText === "thingtime" ? 750 : 0)
 
     setTimeout(() => {
-      // let newTextIdx = Math.round(Math.random() * (texts.length - 1))
-      let newTextIdx = texts?.indexOf(titleText) + 1
-      // if (newTextIdx === texts.indexOf(titleText)) {
-      //   newTextIdx = newTextIdx + 1
-      // }
-      const newText = texts[newTextIdx] || texts[0]
+      // choose an unused text or pick texts[0]
+      const usedTexts = state.current.usedTexts
+      const unusedTexts = texts.filter(text => !usedTexts.includes(text))
+      // pick a random unused text
+      const randomIdx = Math.floor(Math.random() * unusedTexts.length)
+      const newText = unusedTexts.length > 0 ? unusedTexts[randomIdx] : texts[0]
+      if (!unusedTexts.length) {
+        setUsedTexts(["thingtime"])
+      } else {
+        setUsedTexts([...usedTexts, newText])
+      }
       setTitleText(newText)
     }, newTimeout)
-  }, [titleText, texts])
+
+  }, [titleText])
 
   return <RainbowText>{titleText}</RainbowText>
 }
