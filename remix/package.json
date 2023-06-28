@@ -3,7 +3,7 @@
   "sideEffects": false,
   "scripts": {
     "build": "remix build",
-    "dev": "remix dev --port 9999"
+    "dev": "remix dev --port 9000"
   },
   "dependencies": {
     "@chakra-ui/react": "^2.7.1",
