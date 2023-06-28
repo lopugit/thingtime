@@ -5,6 +5,7 @@ export const RainbowText = props => {
   return (
     <Text
       as='h1'
+      position='relative'
       fontSize='6xl'
       fontWeight='bold'
       backgroundClip={'text'}

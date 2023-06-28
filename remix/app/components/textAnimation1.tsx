@@ -1,3 +1,4 @@
+import { Box } from '@chakra-ui/react'
 import { RainbowText } from './rainbowText'
 import React from 'react'
 
@@ -5,27 +6,28 @@ export const TextAnimation1 = props => {
   const texts = React.useMemo(() => {
     return [
       'thingtime',
-      'creative',
-      'tt',
       'vibrant',
-      'powerful',
-      'love',
       'infinite',
+      'creative',
+      'powerful',
       'magical',
-      'inspiring'
+      'inspiring',
+      'love',
+      'tt'
     ]
   }, [])
 
   const [titleText, setTitleText] = React.useState(texts[0])
 
   React.useEffect(() => {
-    const newTimeout = Math.random() * 3500 + 1500
+    const newTimeout = Math.random() * 1500 + 2500
 
     setTimeout(() => {
-      let newTextIdx = Math.round(Math.random() * (texts.length - 1))
-      if (newTextIdx === texts.indexOf(titleText)) {
-        newTextIdx = newTextIdx + 1
-      }
+      // let newTextIdx = Math.round(Math.random() * (texts.length - 1))
+      let newTextIdx = texts?.indexOf(titleText) + 1
+      // if (newTextIdx === texts.indexOf(titleText)) {
+      //   newTextIdx = newTextIdx + 1
+      // }
       const newText = texts[newTextIdx] || texts[0]
       setTitleText(newText)
     }, newTimeout)

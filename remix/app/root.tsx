@@ -9,6 +9,7 @@ import {
   ScrollRestoration
 } from '@remix-run/react'
 import { Analytics } from '@vercel/analytics/react'
+import { Main } from './components/Layout/Main'
 
 function Document ({
   children,
@@ -27,7 +28,7 @@ function Document ({
         <Links />
       </head>
       <body>
-        {children}
+        <Main>{children}</Main>
         <ScrollRestoration />
         <Scripts />
         <LiveReload />
