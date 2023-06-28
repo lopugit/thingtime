@@ -18,8 +18,8 @@ export const Nav = props => {
         py={4}
         px={4}
       >
-        <RainbowSkeleton w='40px' ml='auto' mr={"4px"}></RainbowSkeleton>
-        <RainbowSkeleton></RainbowSkeleton>
+        {/* <RainbowSkeleton w='40px' ml='auto' mr={"4px"}></RainbowSkeleton>
+        <RainbowSkeleton></RainbowSkeleton> */}
       </Flex>
     </>
   )

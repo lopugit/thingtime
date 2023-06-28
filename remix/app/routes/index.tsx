@@ -1,9 +1,12 @@
 import { Flex } from '@chakra-ui/react'
-import { TextAnimation1 } from '~/components/textAnimation1'
+import { Splash } from '~/components/Splash/Splash'
+import { ThingtimeDemo } from '~/components/Thingtime/ThingtimeDemo'
+
 export default function Index () {
   return (
-    <Flex w='100vw' h='100vh' alignItems='center' justifyContent='center'>
-      <TextAnimation1 />
+    <Flex flexDir="column" alignItems='center' justifyContent='center'>
+      <Splash></Splash>
+      {/* <ThingtimeDemo></ThingtimeDemo> */}
     </Flex>
   )
 }
