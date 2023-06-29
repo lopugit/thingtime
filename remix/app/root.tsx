@@ -47,3 +47,17 @@ export default function App () {
     </Document>
   )
 }
+
+
+// limiter
+try {
+  window.thingtime = {
+    tmp: {},
+    things: {
+      limit: 999,
+      count: 0,
+    }
+  }
+} catch (err) {
+  // will error on server
+}

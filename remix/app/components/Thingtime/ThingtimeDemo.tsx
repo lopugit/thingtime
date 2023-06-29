@@ -9,7 +9,14 @@ export const ThingtimeDemo = props => {
     image: 'thing image',
     price: 100,
     quantity: 1,
-    id: 1
+    id: 1,
+    nested: {
+      data: {
+        is: {
+          fun: "Isn't it?"
+        }
+      }
+    }
   }
 
   const [demoThing, setDemoThing] = React.useState(thing)
