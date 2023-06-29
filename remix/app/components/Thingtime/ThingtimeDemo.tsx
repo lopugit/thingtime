@@ -24,5 +24,7 @@ export const ThingtimeDemo = props => {
     test: 'hey'
   }
 
+  return null
+
   return <Thingtime thing={debug}></Thingtime>
 }
