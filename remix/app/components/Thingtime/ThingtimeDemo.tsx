@@ -1,5 +1,6 @@
 import React from 'react'
 import { Thingtime } from './Thingtime'
+import { Flex } from '@chakra-ui/react'
 
 export const ThingtimeDemo = props => {
   const thing = {
@@ -26,5 +27,9 @@ export const ThingtimeDemo = props => {
 
   return null
 
-  return <Thingtime thing={debug}></Thingtime>
+  return (
+    <Flex pb={40}>
+      <Thingtime thing={debug}></Thingtime>
+    </Flex>
+  )
 }
