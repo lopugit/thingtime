@@ -1,7 +1,13 @@
 import React from 'react'
 import { Box, Flex } from '@chakra-ui/react'
+import { safe } from '~/functions/safe'
 
 export const Thingtime = props => {
+  // const cuid = React.useMemo(() => {
+  //   return Math.random().toString(36).substring(7)
+  // }, [])
+  const cuid = React.useRef(Math.random().toString(36).substring(7))
+
   const thing = React.useMemo(() => {
     return props.thing
   }, [props.thing])
@@ -90,20 +96,8 @@ export const Thingtime = props => {
     return ret
   }, [thing])
 
-  // do not render more than the limit of things to prevent infinite loops
-  try {
-    if (
-      typeof window?.thingtime?.things?.count === 'number' &&
-      window?.thingtime?.things?.count > window?.thingtime?.things?.limit
-    ) {
-      console.error('Maximum things reached')
-      return null
-    }
-  } catch (err) {
-    // console.error('Error in Thingtime.tsx checking maximum things', err)
-  }
-
-  let ret = null
+  let value = null
+  let editableValue = null
 
   const keysToUse = keys
   // const keysToUse = flattenedKeys
@@ -113,7 +107,7 @@ export const Thingtime = props => {
   if (template1Modes?.includes(mode)) {
     console.log('nik keys', keys)
     if (keys?.length) {
-      ret = (
+      value = (
         <Flex
           position='relative'
           flexDir='column'
@@ -144,40 +138,62 @@ export const Thingtime = props => {
         </Flex>
       )
     } else {
-      ret = (
-        <Flex flexDir='column'>
-          <Box>{props?.key?.human}</Box>
-          <Box
-            contentEditable={mode === 'edit'}
-            border='none'
-            outline={'none'}
-            py={2}
-            fontSize={'20px'}
-          >
-            {renderableValue}
-          </Box>
-        </Flex>
+      editableValue = (
+        <Box
+          contentEditable={mode === 'edit'}
+          border='none'
+          outline={'none'}
+          py={2}
+          fontSize={'20px'}
+        >
+          {renderableValue}
+        </Box>
       )
     }
   }
 
   const contextMenu = (
-    <Flex position='absolute' top={0} right={0}>
+    <Flex userSelect={'none'} position='absolute' top={0} right={0}>
       Settings
     </Flex>
   )
 
   const [showContextMenu, setShowContextMenu] = React.useState(false)
 
-  return (
+  const path = React.useMemo(() => {
+    return <Flex fontSize='12px'>{props?.path?.human}</Flex>
+  }, [props?.path])
+
+  const handleMouseEvent = React.useCallback(
+    e => {
+      const target = e?.target
+      // extract cuid from className
+      console.log('nik eh', target?.className, cuid)
+      const className = target?.className
+      if (className?.includes(cuid?.current)) {
+        setShowContextMenu(e?.type === 'mouseenter')
+      }
+    },
+    [cuid]
+  )
+
+  console.log('nik cuid', cuid)
+
+  return safe(
     <Flex
-      onMouseEnter={() => setShowContextMenu(true)}
-      onMouseLeave={() => setShowContextMenu(false)}
+      onMouseEnter={handleMouseEvent}
+      onMouseLeave={handleMouseEvent}
       position='relative'
+      flexDir='column'
+      py={3}
       {...props}
+      className={`thing-${cuid?.current}`}
     >
+      {cuid?.current}
+      {path}
       {showContextMenu && contextMenu}
-      {ret}
+      {editableValue}
+      {value}
     </Flex>
   )
 }

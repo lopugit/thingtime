@@ -1,8 +1,7 @@
-import React from "react"
-import { Thingtime } from "./Thingtime"
+import React from 'react'
+import { Thingtime } from './Thingtime'
 
 export const ThingtimeDemo = props => {
-
   const thing = {
     name: 'thing',
     description: 'thing description',
@@ -20,8 +19,10 @@ export const ThingtimeDemo = props => {
   }
 
   const [demoThing, setDemoThing] = React.useState(thing)
-  
-  
-  return <Thingtime thing={demoThing}></Thingtime>
 
+  const debug = {
+    test: 'hey'
+  }
+
+  return <Thingtime thing={debug}></Thingtime>
 }
