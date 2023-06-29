@@ -1,12 +1,16 @@
 import React from 'react'
 import { Box, Flex } from '@chakra-ui/react'
-import { safe } from '~/functions/safe'
+import { Safe } from '../Safety/Safe'
 
 export const Thingtime = props => {
-  // const cuid = React.useMemo(() => {
+  // const uuid = React.useMemo(() => {
   //   return Math.random().toString(36).substring(7)
   // }, [])
-  const cuid = React.useRef(Math.random().toString(36).substring(7))
+  const uuid = React.useRef(Math.random().toString(36).substring(7))
+
+  const depth = React.useMemo(() => {
+    return props?.depth || 1
+  }, [props?.depth])
 
   const thing = React.useMemo(() => {
     return props.thing
@@ -27,13 +31,6 @@ export const Thingtime = props => {
       return []
     }
   }, [thing, validKeyTypes])
-
-  React.useEffect(() => {
-    if (window?.thingtime?.things) {
-      window.thingtime.things.count =
-        (window?.thingtime?.things?.count || 1) + 1
-    }
-  }, [])
 
   const type = React.useMemo(() => {
     return typeof thing
@@ -84,14 +81,10 @@ export const Thingtime = props => {
         })
       }
 
-      console.log('nik ret 1', thing)
-
       recurse(thing, '')
     } catch (err) {
       // console.error('Error in Thingtime.tsx creating flattenedKeys', err)
     }
-
-    console.log('nik ret 2', ret)
 
     return ret
   }, [thing])
@@ -105,37 +98,42 @@ export const Thingtime = props => {
   const template1Modes = ['view', 'edit']
 
   if (template1Modes?.includes(mode)) {
-    console.log('nik keys', keys)
     if (keys?.length) {
       value = (
-        <Flex
-          position='relative'
-          flexDir='column'
-          minW='500px'
-          maxW='100%'
-          pl={6}
-        >
-          {keysToUse?.length &&
-            keysToUse.map((key, idx) => {
-              if (!key?.human) {
-                key = {
-                  human: key,
-                  key: key
+        <Safe {...props}>
+          <Flex
+            position='relative'
+            flexDir='column'
+            // w={'500px'}
+            // w={['200px', '500px']}
+            maxW='100%'
+            pl={[4, 6]}
+            pr={[4, 6]}
+          >
+            {keysToUse?.length &&
+              keysToUse.map((key, idx) => {
+                if (!key?.human) {
+                  key = {
+                    human: key,
+                    key: key
+                  }
                 }
-              }
 
-              const nextThing = thing[key?.key]
+                const nextThing = thing[key?.key]
 
-              return (
-                <Thingtime
-                  key={idx}
-                  parent={thing}
-                  path={key}
-                  thing={nextThing}
-                ></Thingtime>
-              )
-            })}
-        </Flex>
+                return (
+                  <Thingtime
+                    key={idx}
+                    depth={depth + 1}
+                    parent={thing}
+                    path={key}
+                    thing={nextThing}
+                    // thing={{ infinite: { yes: true } }}
+                  ></Thingtime>
+                )
+              })}
+          </Flex>
+        </Safe>
       )
     } else {
       editableValue = (
@@ -161,39 +159,45 @@ export const Thingtime = props => {
   const [showContextMenu, setShowContextMenu] = React.useState(false)
 
   const path = React.useMemo(() => {
-    return <Flex fontSize='12px'>{props?.path?.human}</Flex>
+    return (
+      <Flex maxW='100%' wordBreak={'break-all'} fontSize='12px'>
+        {props?.path?.human}
+      </Flex>
+    )
   }, [props?.path])
 
   const handleMouseEvent = React.useCallback(
     e => {
       const target = e?.target
-      // extract cuid from className
-      console.log('nik eh', target?.className, cuid)
+      // extract uuid from className
       const className = target?.className
-      if (className?.includes(cuid?.current)) {
+      if (className?.includes(uuid?.current)) {
         setShowContextMenu(e?.type === 'mouseenter')
       }
     },
-    [cuid]
+    [uuid]
   )
 
-  console.log('nik cuid', cuid)
-
-  return safe(
-    <Flex
-      onMouseEnter={handleMouseEvent}
-      onMouseLeave={handleMouseEvent}
-      position='relative'
-      flexDir='column'
-      py={3}
-      {...props}
-      className={`thing-${cuid?.current}`}
-    >
-      {/* {cuid?.current} */}
-      {path}
-      {showContextMenu && contextMenu}
-      {editableValue}
-      {value}
-    </Flex>
+  return (
+    <Safe {...props} depth={depth} uuid={uuid?.current}>
+      <Flex
+        onMouseEnter={handleMouseEvent}
+        onMouseLeave={handleMouseEvent}
+        position='relative'
+        flexDir='column'
+        py={3}
+        w='500px'
+        // minW={depth === 1 ? '120px' : null}
+        maxW='100%'
+        {...props}
+        className={`thing-${uuid?.current}`}
+      >
+        {/* {uuid?.current} */}
+        {path}
+        {showContextMenu && contextMenu}
+        {editableValue}
+        {value}
+      </Flex>
+    </Safe>
   )
 }

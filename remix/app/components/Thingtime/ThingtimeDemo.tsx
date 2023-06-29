@@ -28,7 +28,7 @@ export const ThingtimeDemo = props => {
   // return null
 
   return (
-    <Flex pb={40}>
+    <Flex maxW='100%' pb={40}>
       <Thingtime thing={demoThing}></Thingtime>
     </Flex>
   )

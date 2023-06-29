@@ -48,16 +48,26 @@ export default function App () {
   )
 }
 
-
 // limiter
-try {
-  window.thingtime = {
-    tmp: {},
-    things: {
-      limit: 999,
-      count: 0,
+
+const setThingtime = glob => {
+  try {
+    glob.thingtime = {
+      tmp: {},
+      things: {
+        db: {},
+        limit: 9999,
+        maxDepth: 10,
+        count: 0
+      }
     }
+  } catch (err) {
+    // will error on server
   }
-} catch (err) {
-  // will error on server
+}
+
+try {
+  setThingtime(window)
+} catch {
+  setThingtime(globalThis)
 }
