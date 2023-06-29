@@ -189,7 +189,7 @@ export const Thingtime = props => {
       {...props}
       className={`thing-${cuid?.current}`}
     >
-      {cuid?.current}
+      {/* {cuid?.current} */}
       {path}
       {showContextMenu && contextMenu}
       {editableValue}

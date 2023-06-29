@@ -21,15 +21,15 @@ export const ThingtimeDemo = props => {
 
   const [demoThing, setDemoThing] = React.useState(thing)
 
-  const debug = {
-    test: 'hey'
-  }
+  // const debug = {
+  //   test: 'hey'
+  // }
 
-  return null
+  // return null
 
   return (
     <Flex pb={40}>
-      <Thingtime thing={debug}></Thingtime>
+      <Thingtime thing={demoThing}></Thingtime>
     </Flex>
   )
 }
