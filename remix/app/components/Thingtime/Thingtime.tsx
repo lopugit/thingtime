@@ -1,12 +1,19 @@
 import React from 'react'
 import { Box, Flex } from '@chakra-ui/react'
 import { Safe } from '../Safety/Safe'
+import { useThingtime } from './useThingtime'
 
 export const Thingtime = props => {
   // const uuid = React.useMemo(() => {
   //   return Math.random().toString(36).substring(7)
   // }, [])
   const uuid = React.useRef(Math.random().toString(36).substring(7))
+
+  const { state } = useThingtime()
+
+  React.useEffect(() => {
+    console.log('nik state changed', state)
+  }, [state])
 
   const depth = React.useMemo(() => {
     return props?.depth || 1

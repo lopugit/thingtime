@@ -54,6 +54,8 @@ const setThingtime = glob => {
   try {
     glob.thingtime = {
       tmp: {},
+      subscribers: {},
+      state: {},
       things: {
         db: {},
         limit: 9999,
