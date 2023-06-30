@@ -10,6 +10,7 @@ import {
 } from '@remix-run/react'
 import { Analytics } from '@vercel/analytics/react'
 import { Main } from './components/Layout/Main'
+import { StateProvider } from './Providers/State'
 
 function Document ({
   children,
@@ -41,9 +42,11 @@ function Document ({
 export default function App () {
   return (
     <Document>
-      <ChakraProvider>
-        <Outlet />
-      </ChakraProvider>
+      <StateProvider>
+        <ChakraProvider>
+          <Outlet />
+        </ChakraProvider>
+      </StateProvider>
     </Document>
   )
 }

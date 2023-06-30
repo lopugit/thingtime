@@ -1,7 +1,7 @@
 import React from 'react'
 import { Box, Flex } from '@chakra-ui/react'
 import { Safe } from '../Safety/Safe'
-import { useThingtime } from './useThingtime'
+import { useState } from './useState'
 
 export const Thingtime = props => {
   // const uuid = React.useMemo(() => {
@@ -9,7 +9,11 @@ export const Thingtime = props => {
   // }, [])
   const uuid = React.useRef(Math.random().toString(36).substring(7))
 
-  const { state } = useThingtime()
+  const { state } = useState()
+
+  React.useEffect(() => {
+    console.log('nik state?.test changed', state?.test)
+  }, [state?.test])
 
   React.useEffect(() => {
     console.log('nik state changed', state)
