@@ -29,8 +29,8 @@ const forceable = {
 
 const initialThingtime = {
   nav: {},
-  version: 12,
-  ...forceable
+  version: 12
+  // ...forceable
 }
 
 const userData = {
