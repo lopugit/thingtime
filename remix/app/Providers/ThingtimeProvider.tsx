@@ -17,9 +17,21 @@ try {
   // nothing
 }
 
+const forceable = {
+  'Bottom Content': {
+    Content: {
+      hidden1: "Edit this to your heart's desire.",
+      hidden2: '?',
+      'How?':
+        'Just search for Bottom Content.Content and edit the value to whatever you want.'
+    }
+  }
+}
+
 const initialThingtime = {
   nav: {},
-  version: 4
+  version: 9,
+  ...forceable
 }
 
 const userData = {
@@ -28,9 +40,7 @@ const userData = {
     clearCommanderOnToggle: true,
     clearCommanderContextOnToggle: true
   },
-  'Bottom Content': {
-    Content: "Edit this to your heart's desire"
-  }
+  ...forceable
 }
 
 export const ThingtimeProvider = (props: any): JSX.Element => {

@@ -194,6 +194,9 @@ export const Thingtime = props => {
   const [showContextMenu, setShowContextMenu] = React.useState(false)
 
   const path = React.useMemo(() => {
+    if (props?.path?.human?.includes?.('hidden')) {
+      return null
+    }
     return (
       <Flex maxW='100%' pl={pl} wordBreak={'break-all'} fontSize='12px'>
         {props?.path?.human}
