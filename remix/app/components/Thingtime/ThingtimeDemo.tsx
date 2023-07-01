@@ -31,7 +31,10 @@ export const ThingtimeDemo = props => {
       {
         name: 'three'
       }
-    ]
+    ],
+    '...unique1': "I'm unique",
+    '...unique2': "I'm unique",
+    '...unique3': "I'm unique"
   }
 
   const [demoThing, setDemoThing] = React.useState(thing)

@@ -197,6 +197,10 @@ export const Thingtime = props => {
     if (props?.path?.human?.includes?.('hidden')) {
       return null
     }
+    if (props?.path?.human?.includes?.('unique')) {
+      // take only path from before the string unique
+      return props?.path?.human?.split?.('unique')?.[0]
+    }
     return (
       <Flex maxW='100%' pl={pl} wordBreak={'break-all'} fontSize='12px'>
         {props?.path?.human}
