@@ -10,20 +10,16 @@ export const Thingtime = props => {
 
   const [uuid, setUuid] = React.useState()
 
+  const pl = React.useMemo(() => {
+    return props?.pl || [4, 6]
+  }, [props?.pl])
+
   // will only run on the client
   React.useEffect(() => {
     setUuid(Math.random().toString(36).substring(7))
   }, [])
 
   const { thingtime } = useThingtime()
-
-  React.useEffect(() => {
-    // console.log('nik thingtime?.test changed', thingtime?.test)
-  }, [thingtime?.test])
-
-  React.useEffect(() => {
-    // console.log('nik thingtime changed', thingtime)
-  }, [thingtime])
 
   const depth = React.useMemo(() => {
     return props?.depth || 1
@@ -44,7 +40,6 @@ export const Thingtime = props => {
   const keys = React.useMemo(() => {
     if (validKeyTypes?.includes(typeof thing)) {
       const keysRet = Object.keys(thing)
-      console.log('nik keysRet', keysRet)
       return keysRet
     } else {
       return []
@@ -57,12 +52,18 @@ export const Thingtime = props => {
 
   const renderableValue = React.useMemo(() => {
     if (type === 'string') {
+      if (!thing) {
+        return 'Empty string'
+      }
       return thing
     } else if (type === 'number') {
       return thing
     } else if (type === 'boolean') {
       return thing ? 'true' : 'false'
     } else if (type === 'object') {
+      if (thing === null) {
+        return 'null'
+      }
       if (!keys?.length) {
         return 'Empty object'
       }
@@ -78,7 +79,7 @@ export const Thingtime = props => {
         return 'Circular reference in object.'
       }
     } else {
-      return null
+      return 'Undefined'
     }
   }, [thing, type])
 
@@ -140,8 +141,7 @@ export const Thingtime = props => {
             // w={['200px', '500px']}
             maxW='100%'
             py={props?.path ? 3 : 0}
-            pl={[4, 6]}
-            // pr={[4, 6]}
+            pl={props?.valuePl}
           >
             {keysToUse?.length &&
               keysToUse.map((key, idx) => {
@@ -162,6 +162,7 @@ export const Thingtime = props => {
                     path={key}
                     thing={nextThing}
                     // thing={{ infinite: { yes: true } }}
+                    valuePl={pl}
                   ></Thingtime>
                 )
               })}
@@ -175,6 +176,7 @@ export const Thingtime = props => {
           border='none'
           outline={'none'}
           py={2}
+          pl={pl}
           fontSize={'20px'}
         >
           {renderableValue}
@@ -184,7 +186,7 @@ export const Thingtime = props => {
   }
 
   const contextMenu = (
-    <Flex userSelect={'none'} position='absolute' top={0} right={0}>
+    <Flex pr={4} userSelect={'none'} position='absolute' top={0} right={0}>
       Settings
     </Flex>
   )
@@ -193,7 +195,7 @@ export const Thingtime = props => {
 
   const path = React.useMemo(() => {
     return (
-      <Flex maxW='100%' wordBreak={'break-all'} fontSize='12px'>
+      <Flex maxW='100%' pl={pl} wordBreak={'break-all'} fontSize='12px'>
         {props?.path?.human}
       </Flex>
     )
@@ -227,7 +229,7 @@ export const Thingtime = props => {
       >
         {/* {uuid?.current} */}
         {path}
-        {showContextMenu && contextMenu}
+        {/* {showContextMenu && contextMenu} */}
         {editableValue}
         {value}
       </Flex>

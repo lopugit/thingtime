@@ -19,15 +19,63 @@ try {
 
 const initialThingtime = {
   nav: {},
+  version: 4
+}
+
+const userData = {
   settings: {
     showCommander: true,
     clearCommanderOnToggle: true,
     clearCommanderContextOnToggle: true
+  },
+  'Bottom Content': {
+    Content: "Edit this to your heart's desire"
   }
 }
 
 export const ThingtimeProvider = (props: any): JSX.Element => {
-  const [thingtime, set] = React.useState(initialThingtime)
+  const [thingtime, set] = React.useState({
+    ...initialThingtime,
+    ...userData
+  })
+
+  const thingtimeRef = React.useRef(thingtime)
+
+  // get thingtime from localstorage
+  React.useEffect(() => {
+    try {
+      const thingtimeFromLocalStorage = window.localStorage.getItem('thingtime')
+
+      if (thingtimeFromLocalStorage) {
+        const parsed = JSON.parse(thingtimeFromLocalStorage)
+        if (parsed) {
+          const invalidLocalStorage =
+            !parsed.version || parsed.version < initialThingtime.version
+          if (!invalidLocalStorage) {
+            set(parsed)
+          } else {
+            const newThingtime = {
+              ...parsed,
+              ...initialThingtime
+            }
+            set(newThingtime)
+          }
+        }
+      }
+    } catch (err) {
+      console.error('There was an error getting thingtime from localStorage')
+    }
+  }, [])
+
+  React.useEffect(() => {
+    thingtimeRef.current = thingtime
+
+    try {
+      window.localStorage.setItem('thingtime', JSON.stringify(thingtime))
+    } catch (err) {
+      console.error('There was an error saving thingtime to localStorage')
+    }
+  }, [thingtime])
 
   const setThingtime = React.useCallback(
     (path, value) => {
@@ -41,11 +89,21 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
 
       path = sanitise(path)
 
-      // log the path and value
-      console.log('nik ThingtimeProvider setThingtime path', path)
-      console.log('nik ThingtimeProvider setThingtime value', value)
-
       smarts.setsmart(newThingtime, path, value)
+
+      // subtract last path part from dot delimitted path
+      // prop1.prop2.prop3 => prop1.prop2
+      const pathParts = path.split('.')
+      pathParts.pop()
+      const parentPath = pathParts.join('.')
+
+      if (parentPath?.length) {
+        const parent = smarts.getsmart(newThingtime, parentPath)
+
+        const newParent = Array.isArray(parent) ? [...parent] : { ...parent }
+
+        smarts.setsmart(newThingtime, parentPath, newParent)
+      }
 
       set(newThingtime)
     },
@@ -55,7 +113,7 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
   const getThingtime = React.useCallback(
     (...args) => {
       const path = args[0]
-      if (path === 'thingtime' || path === 'tt' || !path) {
+      if (path === 'thingtime' || path === 'tt' || path === '.' || !path) {
         return thingtime
       }
       return smarts.getsmart(thingtime, path)
@@ -83,7 +141,8 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
   const value = {
     thingtime,
     setThingtime,
-    getThingtime
+    getThingtime,
+    thingtimeRef
   }
 
   return (

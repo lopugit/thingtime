@@ -5,97 +5,202 @@ import { Thingtime } from '../Thingtime/Thingtime'
 import { sanitise } from '~/functions/path'
 
 export const Commander = props => {
-  const { thingtime, setThingtime, getThingtime } = useThingtime()
-
-  const [contextPath, setContextPath] = React.useState()
-
-  const [showContext, setShowContext] = React.useState(false)
-
-  const contextValue = React.useMemo(() => {
-    console.log('thingtime updated!')
-    const ret = getThingtime(contextPath)
-    console.log('nik ret', ret)
-    return ret
-  }, [contextPath, getThingtime])
-
-  const showCommander = React.useMemo(() => {
-    console.log(
-      'nik thingtime?.settings?.showCommander',
-      thingtime?.settings?.showCommander
-    )
-    return thingtime?.settings?.showCommander
-  }, [thingtime?.settings?.showCommander])
-
-  React.useEffect(() => {
-    if (thingtime?.settings?.clearCommanderOnToggle) {
-      setValue('')
-    }
-    if (showCommander) {
-      inputRef?.current?.focus?.()
-    }
-  }, [showCommander, thingtime])
+  const { thingtime, setThingtime, getThingtime, thingtimeRef } = useThingtime()
 
   const inputRef = React.useRef()
 
   const [value, setValue] = React.useState('')
 
+  const [contextPath, setContextPath] = React.useState()
+
+  const [showContext, setShowContextState] = React.useState(false)
+
+  const setShowContext = React.useCallback(
+    (value, from) => {
+      setShowContextState(value)
+    },
+    [setShowContextState]
+  )
+  const [suggestions, setSuggestions] = React.useState([])
+
+  const contextValue = React.useMemo(() => {
+    console.log('thingtime updated!')
+    const ret = getThingtime(contextPath)
+    return ret
+  }, [contextPath, getThingtime])
+
+  const showCommander = React.useMemo(() => {
+    return thingtime?.settings?.showCommander
+  }, [thingtime?.settings?.showCommander])
+
+  // watch value
+  React.useEffect(() => {
+    if (!value?.length) {
+      setSuggestions([])
+    }
+  }, [value])
+
+  // showCommander useEffect
+  React.useEffect(() => {
+    if (showCommander) {
+      inputRef?.current?.focus?.()
+    } else {
+      if (thingtimeRef?.current?.settings?.clearCommanderOnToggle) {
+        setValue('')
+      }
+      if (thingtimeRef?.current?.settings?.clearCommanderContextOnToggle) {
+        setShowContext(false, 'showCommander useEffect')
+      }
+    }
+  }, [showCommander, thingtimeRef, setShowContext])
+
   const onChange = React.useCallback(e => {
     setValue(e.target.value)
   }, [])
+
+  const validSetters = React.useMemo(() => {
+    return ['=', ' is ']
+  }, [])
+
+  const command = React.useMemo(() => {
+    const sanitizedCommand = sanitise(value)
+
+    if (sanitizedCommand?.includes(validSetters[0])) {
+      const indexOfSplitter = sanitizedCommand?.indexOf(validSetters[0])
+      const [pathRaw, valRaw] = [
+        sanitizedCommand?.slice(0, indexOfSplitter),
+        sanitizedCommand?.slice(indexOfSplitter + validSetters[0]?.length)
+      ]
+      return [pathRaw?.trim(), valRaw?.trim()]
+    } else if (sanitizedCommand?.includes(validSetters[1])) {
+      const indexOfSplitter = sanitizedCommand?.indexOf(validSetters[1])
+      const [pathRaw, valRaw] = [
+        sanitizedCommand?.slice(0, indexOfSplitter),
+        sanitizedCommand?.slice(indexOfSplitter + validSetters[1]?.length)
+      ]
+      return [pathRaw?.trim(), valRaw?.trim()]
+    }
+    return [sanitizedCommand]
+  }, [value, validSetters])
+
+  const commandContainsPath = React.useMemo(() => {
+    const suggestionsIncludesSubstring = suggestions?.find(suggestion => {
+      return command?.includes(suggestion)
+    })
+    return suggestionsIncludesSubstring
+  }, [suggestions, command])
+
+  const commandPath = React.useMemo(() => {
+    return command?.[0]
+  }, [command])
+
+  const commandValue = React.useMemo(() => {
+    return command?.[1]
+  }, [command])
+
+  const validQuotations = React.useMemo(() => {
+    return ['"', "'"]
+  }, [])
+
+  const escapedCommandValue = React.useMemo(() => {
+    // replace quotations with escaped quoations except for first and last quotation
+    const startingQuotation = commandValue?.[0]
+    const endingQuotation = commandValue?.[commandValue?.length - 1]
+    const isQuoted =
+      validQuotations?.includes(startingQuotation) &&
+      validQuotations?.includes(endingQuotation)
+    const restOfCommandValue = isQuoted
+      ? commandValue?.slice(1, commandValue?.length - 1)
+      : commandValue
+    const escaped = restOfCommandValue
+      ?.replace(/"/g, '\\"')
+      ?.replace(/'/g, "\\'")
+    const ret = `"${escaped}"`
+    return ret
+  }, [commandValue, validQuotations])
+
+  const commandIsAction = React.useMemo(() => {
+    return commandPath && commandValue
+  }, [commandPath, commandValue])
+
+  // thingtime changes update suggestions
+  React.useEffect(() => {
+    // when thingtime changes, update suggestions
+    // with all flattened key path values recursively
+
+    if (value?.length) {
+      const suggestions = ['tt', 'thingtime', '.']
+      const recurse = (obj, path) => {
+        Object.keys(obj).forEach(key => {
+          const val = obj[key]
+          const newPath = path ? `${path}.${key}` : key
+          if (typeof val === 'object') {
+            suggestions.push(key)
+            recurse(val, newPath)
+          } else {
+            suggestions.push(newPath)
+          }
+        })
+      }
+      recurse(thingtime, '')
+
+      if (commandPath) {
+        const filteredSuggestions = suggestions.filter((suggestion, i) => {
+          return suggestion?.toLowerCase()?.includes(commandPath?.toLowerCase())
+        })
+        if (!filteredSuggestions?.includes(commandPath)) {
+          const adjustedSuggestions = [commandPath, ...filteredSuggestions]
+          setSuggestions(adjustedSuggestions)
+        } else {
+          setSuggestions(filteredSuggestions)
+        }
+      } else {
+        setSuggestions(suggestions)
+      }
+
+      // if (value) {
+      //   setShowContext(true, 'Thingtime changes update suggestions')
+      // }
+    }
+  }, [thingtime, value, commandPath, setShowContext])
 
   const onEnter = React.useCallback(
     props => {
       // if first characters of value equal tt. then run command
       // or if first character is a dot then run command
       try {
-        const isTT = value?.slice(0, 3) === 'tt.'
-        const isDot = value?.slice(0, 1) === '.'
-        const executeCommand = isTT || isDot
-        if (executeCommand) {
-          const command = isTT ? value?.slice(3) : value?.slice(1)
-          const sanitisedCommand = sanitise(command)
-          console.log('nik command', command)
-
-          console.log('setting to thingtime', thingtime)
-
-          const commandIsSetter = command?.includes('=')
-
-          if (commandIsSetter) {
-            // nothing
-            const [pathRaw, valRaw] = sanitisedCommand?.split('=')
-            const path = pathRaw.trim()
-            const val = valRaw.trim()
-            console.log('nik path', path)
-            console.log('nik val', val)
-            try {
-              const realVal = eval(val)
-              console.log('nik realVal', realVal)
-              setThingtime(path, realVal)
-            } catch (err) {
-              console.log('setThingtime errored in Commander', err)
-            }
-            // setContextPath(path)
-          } else {
-            const val = getThingtime(sanitisedCommand)
-
-            console.log('setting to val', val)
-
-            setContextPath(sanitisedCommand)
-            setShowContext(true)
+        if (commandIsAction) {
+          // nothing
+          try {
+            const fn = `() => { return ${escapedCommandValue} }`
+            const evalFn = eval(fn)
+            const realVal = evalFn()
+            setThingtime(commandPath, realVal)
+          } catch (err) {
+            console.log('setThingtime errored in Commander', err)
           }
+        } else if (commandContainsPath) {
+          setContextPath(commandPath)
+          setShowContext(true, 'commandContainsPath check')
         }
       } catch (err) {
         console.error('Caught error on commander onEnter', err)
       }
     },
-    [value, thingtime, getThingtime, setThingtime]
+    [
+      setShowContext,
+      escapedCommandValue,
+      setThingtime,
+      commandIsAction,
+      commandPath,
+      commandContainsPath
+    ]
   )
 
   // trigger on enter
   const onKeyDown = React.useCallback(
     e => {
       if (e.key === 'Enter') {
-        console.log('nik enter')
         e.preventDefault()
         e.stopPropagation()
         onEnter({ e })
@@ -105,7 +210,7 @@ export const Commander = props => {
         // )
       }
     },
-    [thingtime?.settings?.showCommander, onEnter]
+    [onEnter]
   )
 
   const openCommander = React.useCallback(() => {
@@ -116,7 +221,7 @@ export const Commander = props => {
     setThingtime('settings.showCommander', false)
     setShowContext(false)
     setContextPath(undefined)
-  }, [setThingtime])
+  }, [setThingtime, setShowContext])
 
   const toggleCommander = React.useCallback(() => {
     if (thingtime?.settings?.showCommander) {
@@ -129,7 +234,6 @@ export const Commander = props => {
   React.useEffect(() => {
     const keyListener = (e: any) => {
       if (e?.metaKey && e?.code === 'KeyP') {
-        console.log('nik heard event')
         e.preventDefault()
         e.stopPropagation()
         toggleCommander()
@@ -145,44 +249,114 @@ export const Commander = props => {
     return () => {
       window.removeEventListener('keydown', keyListener)
     }
-  }, [setThingtime, thingtime])
+  }, [setThingtime, thingtime, toggleCommander, closeCommander])
+
+  const selectSuggestion = React.useCallback(
+    suggestion => {
+      setValue(suggestion)
+      setContextPath(suggestion)
+      setShowContext(true, 'Select suggestion')
+    },
+    [setValue, setContextPath, setShowContext]
+  )
+
+  const excludedSuggestions = React.useMemo(() => {
+    return ['.']
+  }, [])
+
+  const renderedSuggestions = React.useMemo(() => {
+    return suggestions?.filter(suggestion => {
+      return !excludedSuggestions?.includes(suggestion)
+    })
+  }, [suggestions, excludedSuggestions])
+
+  const mobileVW = React.useMemo(() => {
+    return 'calc(100vw - 45px)'
+  }, [])
 
   return (
-    <Center
+    <Flex
       id='commander'
-      display={showCommander ? 'flex' : 'none'}
+      display={['flex', showCommander ? 'flex' : 'none']}
+      justifyContent={['flex-start', 'center']}
       // zIndex={99999}
       // position='fixed'
       // top='100px'
+      pointerEvents={'none'}
       position='absolute'
       h='100%'
       top={0}
       left={0}
       right={0}
       py={1}
+      px={1}
+      maxW='100%'
     >
-      <Center
-        display={showContext ? 'flex' : 'none'}
+      <Flex
+        alignItems={['flex-start', 'center']}
         position='absolute'
         top={'100%'}
+        maxH='90vh'
+        overflowY='scroll'
         left={0}
         right={0}
         h='auto'
         mt={2}
+        mx={1}
+        maxW='100%'
+        borderRadius={'12px'}
+        flexDir='column'
       >
-        <Flex p={3} borderRadius={'12px'} bg='grey'>
+        <Flex
+          display={renderedSuggestions?.length ? 'flex' : 'none'}
+          w={['100%', '400px']}
+          maxW={'100%'}
+          bg='grey'
+          borderRadius={'12px'}
+          flexDir='column'
+          id='commander-suggestions'
+          py={3}
+          mb={3}
+          pointerEvents={'all'}
+        >
+          {renderedSuggestions.map((suggestion, i) => {
+            return (
+              <Flex
+                cursor='pointer'
+                px={4}
+                _hover={{
+                  bg: 'greys.medium'
+                }}
+                key={i}
+                onClick={() => selectSuggestion(suggestion)}
+              >
+                {suggestion}
+              </Flex>
+            )
+          })}
+        </Flex>
+        <Flex
+          display={showContext ? 'flex' : 'none'}
+          maxW='100%'
+          py={3}
+          borderRadius={'12px'}
+          bg='grey'
+          pointerEvents={'all'}
+        >
           <Thingtime thing={contextValue}></Thingtime>
         </Flex>
-      </Center>
+      </Flex>
       <Center
         position='relative'
         bg='grey'
-        w='400px'
+        w={['100%', '400px']}
+        maxW={[mobileVW, '100%']}
         h='100%'
         outline={'none'}
         overflow='hidden'
         p={'1px'}
         borderRadius={'6px'}
+        pointerEvents={'all'}
       >
         <Box
           position='absolute'
@@ -218,6 +392,6 @@ export const Commander = props => {
           placeholder={"What's on your mind?"}
         ></Input>
       </Center>
-    </Center>
+    </Flex>
   )
 }

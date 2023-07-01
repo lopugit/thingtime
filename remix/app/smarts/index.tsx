@@ -11,13 +11,13 @@ try {
   // nothing
 }
 
-const babel = require('@babel/standalone')
+// const babel = require('@babel/standalone')
 
-babel.template = require('@babel/template').default
-babel.t = require('@babel/types')
-babel.generator = require('@babel/generator').default
-babel.babylon = require('@babel/parser')
-babel.prettier = require('prettier')
+// babel.template = require('@babel/template').default
+// babel.t = require('@babel/types')
+// babel.generator = require('@babel/generator').default
+// babel.babylon = require('@babel/parser')
+// babel.prettier = require('prettier')
 
 const objList = []
 const stringList = []
@@ -38,8 +38,10 @@ const stringList = []
 // import prettier from 'prettier'
 // babel.prettier = prettier
 
+export const babel = () => {}
 export const local = {}
-export const t = babel?.t
+export const t = () => {}
+// export const t = babel?.t
 
 export const getBabel = () => {
   return babel

@@ -13,10 +13,18 @@ export const Nav = props => {
 
   return (
     <>
-      <Box position='fixed' top={0} left={0} right={0} zIndex={999}>
+      <Box
+        position='fixed'
+        maxW='100vw'
+        top={0}
+        left={0}
+        right={0}
+        zIndex={999}
+      >
         <Flex
           as='nav'
           w='100%'
+          maxW='100%'
           alignItems={'center'}
           position='relative'
           justifyContent='center'
@@ -31,6 +39,7 @@ export const Nav = props => {
             ml={'auto'}
             w='25px'
             h='25px'
+            cursor='pointer'
             onClick={toggleProfileDrawer}
             bg={'rgba(0,0,0,0.1)'}
             sx={{}}

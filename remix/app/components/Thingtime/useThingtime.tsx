@@ -13,7 +13,7 @@ const getGlobal = () => {
 export const useThingtime = (props?: any) => {
   const value = useContext(ThingtimeContext)
 
-  const { thingtime, setThingtime, getThingtime } = value
+  const { thingtime, setThingtime, getThingtime, thingtimeRef } = value
 
   return value
 }
