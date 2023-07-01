@@ -16,7 +16,7 @@ export default function Index () {
       justifyContent='center'
     >
       <Splash></Splash>
-      <Thingtime mb={200} thing={thingtime['Bottom Content']}></Thingtime>
+      <Thingtime mb={200} thing={thingtime['Content']}></Thingtime>
       <ThingtimeDemo></ThingtimeDemo>
       <ProfileDrawer></ProfileDrawer>
     </Flex>

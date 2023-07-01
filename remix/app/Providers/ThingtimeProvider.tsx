@@ -18,19 +18,19 @@ try {
 }
 
 const forceable = {
-  'Bottom Content': {
+  Content: {
     Content: {
       hidden1: "Edit this to your heart's desire.",
       'How?':
-        'Just search for Bottom Content.Content and edit the value to whatever you want.'
+        'Just search for Content.Content and edit the value to whatever you want.'
     }
   }
 }
 
 const initialThingtime = {
   nav: {},
-  version: 11
-  // ...forceable
+  version: 12,
+  ...forceable
 }
 
 const userData = {
