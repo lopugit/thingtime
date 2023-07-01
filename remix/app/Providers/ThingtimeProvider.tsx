@@ -21,7 +21,6 @@ const forceable = {
   'Bottom Content': {
     Content: {
       hidden1: "Edit this to your heart's desire.",
-      hidden2: '?',
       'How?':
         'Just search for Bottom Content.Content and edit the value to whatever you want.'
     }
@@ -30,7 +29,7 @@ const forceable = {
 
 const initialThingtime = {
   nav: {},
-  version: 9,
+  version: 10,
   ...forceable
 }
 

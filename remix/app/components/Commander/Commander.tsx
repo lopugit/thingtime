@@ -135,7 +135,7 @@ export const Commander = props => {
           const val = obj[key]
           const newPath = path ? `${path}.${key}` : key
           if (typeof val === 'object') {
-            suggestions.push(key)
+            suggestions.push(newPath)
             recurse(val, newPath)
           } else {
             suggestions.push(newPath)
@@ -219,6 +219,7 @@ export const Commander = props => {
 
   const closeCommander = React.useCallback(() => {
     setThingtime('settings.showCommander', false)
+    setValue('')
     setShowContext(false)
     setContextPath(undefined)
   }, [setThingtime, setShowContext])
@@ -239,6 +240,7 @@ export const Commander = props => {
         toggleCommander()
       }
       // if key escape close all modals
+      console.log('commander key listener e?.code', e?.code)
       if (e?.code === 'Escape') {
         closeCommander()
       }
