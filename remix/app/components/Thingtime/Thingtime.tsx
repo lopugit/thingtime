@@ -4,9 +4,9 @@ import { Safe } from '../Safety/Safe'
 import { useThingtime } from './useThingtime'
 
 export const Thingtime = props => {
-  // const uuid = React.useMemo(() => {
-  //   return Math.random().toString(36).substring(7)
-  // }, [])
+  // TODO: Add a circular reference seen prop check
+  // and add button to expand circular reference
+  // up to 1 level deep
 
   const [uuid, setUuid] = React.useState()
 
