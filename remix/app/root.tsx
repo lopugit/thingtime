@@ -1,4 +1,4 @@
-import { ChakraProvider } from '@chakra-ui/react'
+import { ChakraWrapper } from './Providers/Chakra/ChakraWrapper'
 // import type { MetaFunction } from "@vercel/remix"
 import {
   Links,
@@ -10,7 +10,7 @@ import {
 } from '@remix-run/react'
 import { Analytics } from '@vercel/analytics/react'
 import { Main } from './components/Layout/Main'
-import { StateProvider } from './Providers/State'
+import { ThingtimeProvider } from './Providers/ThingtimeProvider'
 
 function Document ({
   children,
@@ -29,7 +29,7 @@ function Document ({
         <Links />
       </head>
       <body>
-        <Main>{children}</Main>
+        {children}
         <ScrollRestoration />
         <Scripts />
         <LiveReload />
@@ -42,17 +42,18 @@ function Document ({
 export default function App () {
   return (
     <Document>
-      <StateProvider>
-        <ChakraProvider>
-          <Outlet />
-        </ChakraProvider>
-      </StateProvider>
+      <ChakraWrapper>
+        <ThingtimeProvider>
+          <Main>
+            <Outlet />
+          </Main>
+        </ThingtimeProvider>
+      </ChakraWrapper>
     </Document>
   )
 }
 
 // limiter
-
 const setThingtime = glob => {
   try {
     glob.thingtime = {

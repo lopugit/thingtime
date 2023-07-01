@@ -1,23 +1,29 @@
 import React from 'react'
 import { Box, Flex } from '@chakra-ui/react'
 import { Safe } from '../Safety/Safe'
-import { useState } from './useState'
+import { useThingtime } from './useThingtime'
 
 export const Thingtime = props => {
   // const uuid = React.useMemo(() => {
   //   return Math.random().toString(36).substring(7)
   // }, [])
-  const uuid = React.useRef(Math.random().toString(36).substring(7))
 
-  const { state } = useState()
+  const [uuid, setUuid] = React.useState()
+
+  // will only run on the client
+  React.useEffect(() => {
+    setUuid(Math.random().toString(36).substring(7))
+  }, [])
+
+  const { thingtime } = useThingtime()
 
   React.useEffect(() => {
-    console.log('nik state?.test changed', state?.test)
-  }, [state?.test])
+    // console.log('nik thingtime?.test changed', thingtime?.test)
+  }, [thingtime?.test])
 
   React.useEffect(() => {
-    console.log('nik state changed', state)
-  }, [state])
+    // console.log('nik thingtime changed', thingtime)
+  }, [thingtime])
 
   const depth = React.useMemo(() => {
     return props?.depth || 1
@@ -37,7 +43,9 @@ export const Thingtime = props => {
 
   const keys = React.useMemo(() => {
     if (validKeyTypes?.includes(typeof thing)) {
-      return Object.keys(thing)
+      const keysRet = Object.keys(thing)
+      console.log('nik keysRet', keysRet)
+      return keysRet
     } else {
       return []
     }
@@ -55,7 +63,20 @@ export const Thingtime = props => {
     } else if (type === 'boolean') {
       return thing ? 'true' : 'false'
     } else if (type === 'object') {
-      return JSON.stringify(thing, null, 2)
+      if (!keys?.length) {
+        return 'Empty object'
+      }
+
+      try {
+        return JSON.stringify(thing, null, 2)
+      } catch (err) {
+        console.error(
+          'Caught error making renderableValue of thing',
+          err,
+          thing
+        )
+        return 'Circular reference in object.'
+      }
     } else {
       return null
     }
@@ -118,8 +139,9 @@ export const Thingtime = props => {
             // w={'500px'}
             // w={['200px', '500px']}
             maxW='100%'
+            py={props?.path ? 3 : 0}
             pl={[4, 6]}
-            pr={[4, 6]}
+            // pr={[4, 6]}
           >
             {keysToUse?.length &&
               keysToUse.map((key, idx) => {

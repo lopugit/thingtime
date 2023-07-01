@@ -31,7 +31,6 @@ export const RainbowSkeleton = props => {
       w='10px'
       h='8px'
       borderRadius={'2px'}
-      bg={'rgba(0,0,0,0.1)'}
       sx={{
         '@keyframes placeholder-rainbow': keyframes,
         '@keyframes placeholder-opacity': {
@@ -39,7 +38,7 @@ export const RainbowSkeleton = props => {
           '100%': { opacity: 1 }
         },
         // add delay
-        animation: `placeholder-rainbow 3s infinite linear, placeholder-opacity 1.3s linear 0s infinite alternate none running}`
+        animation: `placeholder-rainbow 8s infinite linear, placeholder-opacity 1.3s linear 0s infinite alternate none running}`
       }}
       {...props}
     ></Flex>
