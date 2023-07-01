@@ -3,6 +3,7 @@ import { Center, Box, Flex, Input } from '@chakra-ui/react'
 import { useThingtime } from '../Thingtime/useThingtime'
 import { Thingtime } from '../Thingtime/Thingtime'
 import { sanitise } from '~/functions/path'
+import ClickAwayListener from 'react-click-away-listener'
 
 export const Commander = props => {
   const { thingtime, setThingtime, getThingtime, thingtimeRef } = useThingtime()
@@ -175,7 +176,12 @@ export const Commander = props => {
             const fn = `() => { return ${escapedCommandValue} }`
             const evalFn = eval(fn)
             const realVal = evalFn()
+            const prevVal = getThingtime(commandPath)
             setThingtime(commandPath, realVal)
+            if (!prevVal) {
+              setContextPath(commandPath)
+              setShowContext(true, 'commandIsAction check')
+            }
           } catch (err) {
             console.log('setThingtime errored in Commander', err)
           }
@@ -277,123 +283,125 @@ export const Commander = props => {
   }, [])
 
   return (
-    <Flex
-      id='commander'
-      // display={['flex', showCommander ? 'flex' : 'none']}
-      justifyContent={['flex-start', 'center']}
-      // zIndex={99999}
-      // position='fixed'
-      // top='100px'
-      pointerEvents={'none'}
-      position='absolute'
-      h='100%'
-      top={0}
-      left={0}
-      right={0}
-      py={1}
-      px={1}
-      maxW='100%'
-    >
+    <ClickAwayListener onClickAway={closeCommander}>
       <Flex
-        alignItems={['flex-start', 'center']}
+        id='commander'
+        // display={['flex', showCommander ? 'flex' : 'none']}
+        justifyContent={['flex-start', 'center']}
+        // zIndex={99999}
+        // position='fixed'
+        // top='100px'
+        pointerEvents={'none'}
         position='absolute'
-        top={'100%'}
-        maxH='90vh'
-        overflowY='scroll'
+        h='100%'
+        top={0}
         left={0}
         right={0}
-        h='auto'
-        mt={2}
-        mx={1}
+        py={1}
+        px={1}
         maxW='100%'
-        borderRadius={'12px'}
-        flexDir='column'
       >
         <Flex
-          display={renderedSuggestions?.length ? 'flex' : 'none'}
-          w={['100%', '400px']}
-          maxW={'100%'}
-          bg='grey'
+          alignItems={['flex-start', 'center']}
+          position='absolute'
+          top={'100%'}
+          maxH='90vh'
+          overflowY='scroll'
+          left={0}
+          right={0}
+          h='auto'
+          mt={2}
+          mx={1}
+          maxW='100%'
           borderRadius={'12px'}
           flexDir='column'
-          id='commander-suggestions'
-          py={3}
-          mb={3}
-          pointerEvents={'all'}
         >
-          {renderedSuggestions.map((suggestion, i) => {
-            return (
-              <Flex
-                cursor='pointer'
-                px={4}
-                _hover={{
-                  bg: 'greys.medium'
-                }}
-                key={i}
-                onClick={() => selectSuggestion(suggestion)}
-              >
-                {suggestion}
-              </Flex>
-            )
-          })}
+          <Flex
+            display={renderedSuggestions?.length ? 'flex' : 'none'}
+            w={['100%', '400px']}
+            maxW={'100%'}
+            bg='grey'
+            borderRadius={'12px'}
+            flexDir='column'
+            id='commander-suggestions'
+            py={3}
+            mb={3}
+            pointerEvents={'all'}
+          >
+            {renderedSuggestions.map((suggestion, i) => {
+              return (
+                <Flex
+                  cursor='pointer'
+                  px={4}
+                  _hover={{
+                    bg: 'greys.medium'
+                  }}
+                  key={i}
+                  onClick={() => selectSuggestion(suggestion)}
+                >
+                  {suggestion}
+                </Flex>
+              )
+            })}
+          </Flex>
+          <Flex
+            display={showContext ? 'flex' : 'none'}
+            maxW='100%'
+            py={3}
+            borderRadius={'12px'}
+            bg='grey'
+            pointerEvents={'all'}
+          >
+            <Thingtime thing={contextValue}></Thingtime>
+          </Flex>
         </Flex>
-        <Flex
-          display={showContext ? 'flex' : 'none'}
-          maxW='100%'
-          py={3}
-          borderRadius={'12px'}
+        <Center
+          position='relative'
           bg='grey'
+          w={['100%', '400px']}
+          maxW={[mobileVW, '100%']}
+          h='100%'
+          outline={'none'}
+          overflow='hidden'
+          p={'1px'}
+          borderRadius={'6px'}
           pointerEvents={'all'}
         >
-          <Thingtime thing={contextValue}></Thingtime>
-        </Flex>
-      </Flex>
-      <Center
-        position='relative'
-        bg='grey'
-        w={['100%', '400px']}
-        maxW={[mobileVW, '100%']}
-        h='100%'
-        outline={'none'}
-        overflow='hidden'
-        p={'1px'}
-        borderRadius={'6px'}
-        pointerEvents={'all'}
-      >
-        <Box
-          position='absolute'
-          width='105%'
-          pb={'105%'}
-          bg={
-            'conic-gradient(#f34a4a, #ffbc48, #58ca70, #47b5e6, #a555e8, #f34a4a)'
-          }
-          sx={{
-            '@keyframes rainbow-conical': {
-              '100%': {
-                transform: 'rotate(-360deg)'
-              }
-            },
-            animation: 'rainbow-conical 1s linear infinite'
-          }}
-        ></Box>
-        <Input
-          ref={inputRef}
-          h='100%'
-          borderRadius={'5px'}
-          outline={'none'}
-          border={'none'}
-          value={value}
-          onChange={onChange}
-          onKeyDown={onKeyDown}
-          w='100%'
-          sx={{
-            '&::placeholder': {
-              color: 'greys.dark'
+          <Box
+            position='absolute'
+            width='105%'
+            pb={'105%'}
+            bg={
+              'conic-gradient(#f34a4a, #ffbc48, #58ca70, #47b5e6, #a555e8, #f34a4a)'
             }
-          }}
-          placeholder={"What's on your mind?"}
-        ></Input>
-      </Center>
-    </Flex>
+            sx={{
+              '@keyframes rainbow-conical': {
+                '100%': {
+                  transform: 'rotate(-360deg)'
+                }
+              },
+              animation: 'rainbow-conical 1s linear infinite'
+            }}
+          ></Box>
+          <Input
+            ref={inputRef}
+            h='100%'
+            borderRadius={'5px'}
+            outline={'none'}
+            border={'none'}
+            value={value}
+            onChange={onChange}
+            onKeyDown={onKeyDown}
+            w='100%'
+            sx={{
+              '&::placeholder': {
+                color: 'greys.dark'
+              }
+            }}
+            placeholder={"What's on your mind?"}
+          ></Input>
+        </Center>
+      </Flex>
+    </ClickAwayListener>
   )
 }
