@@ -19,18 +19,18 @@ try {
 
 const forceable = {
   Content: {
-    Content: {
-      hidden1: "Edit this to your heart's desire.",
-      'How?':
-        'Just search for Content.Content and edit the value to whatever you want.'
-    }
+    hidden1: "Edit this to your heart's desire.",
+    'How?': 'Just search for Content and edit the value to whatever you want.',
+    'Example:': `Content = New Content!
+      Content.Nested Content = New Nested Content!
+    `
   }
 }
 
 const initialThingtime = {
   nav: {},
-  version: 12
-  // ...forceable
+  version: 22,
+  ...forceable
 }
 
 const userData = {

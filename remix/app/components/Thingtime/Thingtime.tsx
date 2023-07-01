@@ -50,6 +50,13 @@ export const Thingtime = props => {
     return typeof thing
   }, [thing])
 
+  const valuePl = React.useMemo(() => {
+    if (typeof props?.valuePl === 'number') {
+      return props?.valuePl
+    }
+    return props?.path ? [4, 6] : [0, 0]
+  }, [props?.valuePl, props?.path])
+
   const renderableValue = React.useMemo(() => {
     if (type === 'string') {
       if (!thing) {
@@ -141,7 +148,7 @@ export const Thingtime = props => {
             // w={['200px', '500px']}
             maxW='100%'
             py={props?.path ? 3 : 0}
-            pl={props?.valuePl}
+            pl={valuePl}
           >
             {keysToUse?.length &&
               keysToUse.map((key, idx) => {
@@ -178,6 +185,8 @@ export const Thingtime = props => {
           py={2}
           pl={pl}
           fontSize={'20px'}
+          whiteSpace={'pre-line'}
+          // dangerouslySetInnerHTML={{ __html: renderableValue }}
         >
           {renderableValue}
         </Box>
@@ -193,20 +202,32 @@ export const Thingtime = props => {
 
   const [showContextMenu, setShowContextMenu] = React.useState(false)
 
+  const humanPath = React.useMemo(() => {
+    if (typeof props?.path === 'string') {
+      return props?.path
+    }
+    return props?.path?.human || ''
+  }, [props?.path])
+
   const path = React.useMemo(() => {
-    if (props?.path?.human?.includes?.('hidden')) {
+    if (humanPath?.includes?.('hidden')) {
       return null
     }
-    if (props?.path?.human?.includes?.('unique')) {
+    if (humanPath?.includes?.('unique')) {
       // take only path from before the string unique
-      return props?.path?.human?.split?.('unique')?.[0]
+      return humanPath.split?.('unique')?.[0]
     }
     return (
-      <Flex maxW='100%' pl={pl} wordBreak={'break-all'} fontSize='12px'>
-        {props?.path?.human}
+      <Flex
+        maxW='100%'
+        pl={props?.pathPl || pl}
+        wordBreak={'break-all'}
+        fontSize='12px'
+      >
+        {humanPath}
       </Flex>
     )
-  }, [props?.path])
+  }, [humanPath, pl, props?.pathPl])
 
   const handleMouseEvent = React.useCallback(
     e => {
