@@ -277,7 +277,7 @@ export const Commander = props => {
   return (
     <Flex
       id='commander'
-      display={['flex', showCommander ? 'flex' : 'none']}
+      // display={['flex', showCommander ? 'flex' : 'none']}
       justifyContent={['flex-start', 'center']}
       // zIndex={99999}
       // position='fixed'
