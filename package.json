@@ -7,7 +7,7 @@
     "remix": "npm run dev --prefix remix",
     "api": "npm run dev --prefix api",
     "build": "npm run build --prefix remix",
-    "postinstall": "npm ci --prefix remix ; npm ci --prefix=api"
+    "postinstall": "pnpm i --prefix remix ; pnpm i --prefix=api"
   },
   "repository": {
     "type": "git",

@@ -23,6 +23,7 @@ export const colors = {
     throat: '#42A5F5',
     thirdEye: '#5C6BC0',
     crown: '#AB47BC',
+
     red: '#C62828',
     orange: '#FF7043',
     yellow: '#FFEE58',

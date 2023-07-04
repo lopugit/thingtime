@@ -1,26 +1,32 @@
-import { Flex } from '@chakra-ui/react'
-import { ProfileDrawer } from '~/components/Nav/ProfileDrawer'
-import { Splash } from '~/components/Splash/Splash'
-import { Thingtime } from '~/components/Thingtime/Thingtime'
-import { ThingtimeDemo } from '~/components/Thingtime/ThingtimeDemo'
-import { useThingtime } from '~/components/Thingtime/useThingtime'
+import { Box, Flex } from "@chakra-ui/react"
 
-export default function Index () {
+import { ProfileDrawer } from "~/components/Nav/ProfileDrawer"
+import { Rainbow } from "~/components/Rainbow/Rainbow"
+import { Splash } from "~/components/Splash/Splash"
+import { Thingtime } from "~/components/Thingtime/Thingtime"
+import { ThingtimeDemo } from "~/components/Thingtime/ThingtimeDemo"
+import { useThingtime } from "~/components/Thingtime/useThingtime"
+
+export default function Index() {
   const { thingtime } = useThingtime()
 
   return (
     <Flex
-      maxW='100%'
-      flexDir='column'
-      alignItems='center'
-      justifyContent='center'
+      alignItems="center"
+      justifyContent="center"
+      flexDirection="column"
+      maxWidth="100%"
     >
+      <Box paddingTop={200}></Box>
+      <Rainbow>
+        <Box width="200px" height="20px" background="grey"></Box>
+      </Rainbow>
       <Splash></Splash>
       <Thingtime
-        mb={200}
-        path='Content'
+        marginBottom={200}
+        path="Content"
         valuePl={0}
-        thing={thingtime['Content']}
+        thing={thingtime["Content"]}
       ></Thingtime>
       <ThingtimeDemo></ThingtimeDemo>
       <ProfileDrawer></ProfileDrawer>

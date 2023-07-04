@@ -1,15 +1,18 @@
-import React, { createContext } from 'react'
-import { sanitise } from '~/functions/path'
-import { smarts } from '~/smarts'
+import React, { createContext } from "react"
+
+import { sanitise } from "~/functions/sanitise"
+import { smarts } from "~/smarts"
 
 export interface ThingtimeContextInterface {
   thingtime: any
   setThingtime: any
+  getThingtime: any
+  thingtimeRef: any
 }
 
-export const ThingtimeContext = createContext<ThingtimeContextInterface | null>(
-  null
-)
+export const ThingtimeContext = createContext<
+  ThingtimeContextInterface[] | null
+>(null)
 
 try {
   window.smarts = smarts
@@ -20,32 +23,32 @@ try {
 const forceable = {
   Content: {
     hidden1: "Edit this to your heart's desire.",
-    'How?': 'Just search for Content and edit the value to whatever you want.',
-    'Example:': `Content = New Content!
+    "How?": "Just search for Content and edit the value to whatever you want.",
+    "Example:": `Content = New Content!
       Content.Nested Content = New Nested Content!
-    `
-  }
+    `,
+  },
 }
 
 const initialThingtime = {
   nav: {},
   version: 22,
-  ...forceable
+  ...forceable,
 }
 
 const userData = {
   settings: {
     showCommander: true,
     clearCommanderOnToggle: true,
-    clearCommanderContextOnToggle: true
+    clearCommanderContextOnToggle: true,
   },
-  ...forceable
+  ...forceable,
 }
 
 export const ThingtimeProvider = (props: any): JSX.Element => {
   const [thingtime, set] = React.useState({
     ...initialThingtime,
-    ...userData
+    ...userData,
   })
 
   const thingtimeRef = React.useRef(thingtime)
@@ -53,7 +56,7 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
   // get thingtime from localstorage
   React.useEffect(() => {
     try {
-      const thingtimeFromLocalStorage = window.localStorage.getItem('thingtime')
+      const thingtimeFromLocalStorage = window.localStorage.getItem("thingtime")
 
       if (thingtimeFromLocalStorage) {
         const parsed = JSON.parse(thingtimeFromLocalStorage)
@@ -65,14 +68,14 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
           } else {
             const newThingtime = {
               ...parsed,
-              ...initialThingtime
+              ...initialThingtime,
             }
             set(newThingtime)
           }
         }
       }
     } catch (err) {
-      console.error('There was an error getting thingtime from localStorage')
+      console.error("There was an error getting thingtime from localStorage")
     }
   }, [])
 
@@ -80,9 +83,9 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
     thingtimeRef.current = thingtime
 
     try {
-      window.localStorage.setItem('thingtime', JSON.stringify(thingtime))
+      window.localStorage.setItem("thingtime", JSON.stringify(thingtime))
     } catch (err) {
-      console.error('There was an error saving thingtime to localStorage')
+      console.error("There was an error saving thingtime to localStorage")
     }
   }, [thingtime])
 
@@ -91,7 +94,7 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
       const prevThingtime = thingtime
 
       const newThingtime = {
-        ...prevThingtime
+        ...prevThingtime,
       }
 
       // check if first characters of path starts with thingtime or tt and strip from path
@@ -102,9 +105,9 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
 
       // subtract last path part from dot delimitted path
       // prop1.prop2.prop3 => prop1.prop2
-      const pathParts = path.split('.')
+      const pathParts = path.split(".")
       pathParts.pop()
-      const parentPath = pathParts.join('.')
+      const parentPath = pathParts.join(".")
 
       if (parentPath?.length) {
         const parent = smarts.getsmart(newThingtime, parentPath)
@@ -121,10 +124,17 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
 
   const getThingtime = React.useCallback(
     (...args) => {
-      const path = args[0]
-      if (path === 'thingtime' || path === 'tt' || path === '.' || !path) {
+      const rawPath = args[0]
+      if (
+        rawPath === "thingtime" ||
+        rawPath === "tt" ||
+        rawPath === "." ||
+        !rawPath
+      ) {
         return thingtime
       }
+      const path = sanitise(rawPath)
+      console.log("Getting thingtime at path", path)
       return smarts.getsmart(thingtime, path)
     },
     [thingtime]
@@ -138,12 +148,12 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
       // nothing
     }
 
-    const keyListener = e => {}
+    const keyListener = (e) => {}
 
-    window.addEventListener('keydown', keyListener)
+    window.addEventListener("keydown", keyListener)
 
     return () => {
-      window.removeEventListener('keydown', keyListener)
+      window.removeEventListener("keydown", keyListener)
     }
   }, [setThingtime, thingtime])
 
@@ -151,7 +161,7 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
     thingtime,
     setThingtime,
     getThingtime,
-    thingtimeRef
+    thingtimeRef,
   }
 
   return (

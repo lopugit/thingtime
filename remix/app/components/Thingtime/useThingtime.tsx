@@ -1,6 +1,6 @@
-import React, { useContext } from 'react'
+import { useContext } from "react"
 
-import { ThingtimeContext } from '~/Providers/ThingtimeProvider'
+import { ThingtimeContext } from "~/Providers/ThingtimeProvider"
 
 const getGlobal = () => {
   try {
@@ -13,7 +13,7 @@ const getGlobal = () => {
 export const useThingtime = (props?: any) => {
   const value = useContext(ThingtimeContext)
 
-  const { thingtime, setThingtime, getThingtime, thingtimeRef } = value
+  // const { thingtime, setThingtime, getThingtime, thingtimeRef } = value
 
   return value
 }

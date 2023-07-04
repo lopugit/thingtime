@@ -53,6 +53,15 @@ export const pause = (value, opts) => {
 export const save = (value, opts) => {
   return stringify(value, opts)
 }
+
+// extract parent path from dot delimitted path
+
+export const getParentPath = path => {
+  const parts = path.split('.')
+  parts.pop()
+  return parts.join('.')
+}
+
 export const toJavascript = (value, opts = {}) => {
   let defaultOpts = {
     wrapInFunction: true,

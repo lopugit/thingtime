@@ -29,10 +29,10 @@ export const Nav = props => {
           position='relative'
           justifyContent='center'
           flexDir={'row'}
-          py={2}
+          py={'10px'}
           px={2}
-          bg='white'
-          boxShadow={'0px 0px 10px rgba(0,0,0,0.1)'}
+          // bg='white'
+          // boxShadow={'0px 0px 10px rgba(0,0,0,0.1)'}
         >
           <Commander></Commander>
           <RainbowSkeleton

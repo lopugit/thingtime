@@ -10,9 +10,17 @@ export const Thingtime = props => {
 
   const [uuid, setUuid] = React.useState()
 
+  const depth = React.useMemo(() => {
+    return props?.depth || 1
+  }, [props?.depth])
+
   const pl = React.useMemo(() => {
     return props?.pl || [4, 6]
   }, [props?.pl])
+
+  const pr = React.useMemo(() => {
+    return props?.pr || (depth === 1 ? [4, 6] : 0)
+  }, [props?.pr])
 
   // will only run on the client
   React.useEffect(() => {
@@ -20,10 +28,6 @@ export const Thingtime = props => {
   }, [])
 
   const { thingtime } = useThingtime()
-
-  const depth = React.useMemo(() => {
-    return props?.depth || 1
-  }, [props?.depth])
 
   const thing = React.useMemo(() => {
     return props.thing
@@ -249,6 +253,7 @@ export const Thingtime = props => {
         position='relative'
         flexDir='column'
         py={3}
+        pr={pr}
         w='500px'
         // minW={depth === 1 ? '120px' : null}
         maxW='100%'
