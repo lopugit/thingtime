@@ -19,7 +19,7 @@ export default function Index() {
     >
       <Box paddingTop={200}></Box>
       <Rainbow>
-        <Box width="200px" height="20px" background="grey"></Box>
+        <Box width="260px" height="40px" background="grey"></Box>
       </Rainbow>
       <Splash></Splash>
       <Thingtime
