@@ -1,9 +1,9 @@
-import { v4 as uuidv4 } from 'uuid'
+import { v4 as uuidv4 } from "uuid"
 // import { Buffer } from 'buffer'
 // weird hack for remix client-side logic
 try {
   window.process = {
-    env: {}
+    env: {},
   }
   window.Buffer = () => {}
   // window.Buffer = Buffer
@@ -56,46 +56,46 @@ export const save = (value, opts) => {
 
 // extract parent path from dot delimitted path
 
-export const getParentPath = path => {
-  const parts = path.split('.')
+export const getParentPath = (path) => {
+  const parts = path.split(".")
   parts.pop()
-  return parts.join('.')
+  return parts.join(".")
 }
 
 export const toJavascript = (value, opts = {}) => {
-  let defaultOpts = {
+  const defaultOpts = {
     wrapInFunction: true,
     declarations: [],
-    identifier: 'obj',
+    identifier: "obj",
     keys: {
-      obj: 1
+      obj: 1,
     },
     dependancies: {},
     mappings: [],
     seen: [],
-    db: []
+    db: [],
   }
   Object.assign(defaultOpts, opts)
   opts = defaultOpts
   toJavascriptAux(value, opts)
   // sort declarations by dependancies
-  for (let declaration of opts.declarations) {
-    if (declaration.type === 'ExpressionStatement') {
+  for (const declaration of opts.declarations) {
+    if (declaration.type === "ExpressionStatement") {
       // nothing
     } else {
-      let key = declaration.declarations[0].id.name
-      let dependancies = opts.dependancies[key]
-      let dependancyCheck = {}
-      for (let dependancy of dependancies) {
+      const key = declaration.declarations[0].id.name
+      const dependancies = opts.dependancies[key]
+      const dependancyCheck = {}
+      for (const dependancy of dependancies) {
         dependancyCheck[dependancy] = false
       }
       let sortableDeclarationIndex = 0
       let insertionIndex = 0
-      for (let sortableDeclaration of opts.declarations) {
-        if (sortableDeclaration.type === 'ExpressionStatement') {
+      for (const sortableDeclaration of opts.declarations) {
+        if (sortableDeclaration.type === "ExpressionStatement") {
           // nothing
         } else {
-          let sortableDeclarationKey =
+          const sortableDeclarationKey =
             sortableDeclaration.declarations[0].id.name
           if (dependancyCheck[sortableDeclarationKey] === false) {
             insertionIndex = sortableDeclarationIndex + 1
@@ -105,15 +105,15 @@ export const toJavascript = (value, opts = {}) => {
         // increment iterator index
         sortableDeclarationIndex++
       }
-      let declarationIndex = opts.declarations.indexOf(declaration)
+      const declarationIndex = opts.declarations.indexOf(declaration)
       opts.declarations.splice(declarationIndex, 1)
       opts.declarations.splice(insertionIndex, 0, declaration)
     }
   }
   let program
   if (opts.wrapInFunction && !opts.moduleExport) {
-    opts.declarations.push(t.returnStatement(t.identifier('obj')))
-    let expression = t.expressionStatement(
+    opts.declarations.push(t.returnStatement(t.identifier("obj")))
+    const expression = t.expressionStatement(
       t.callExpression(
         t.functionExpression(null, [], t.blockStatement(opts.declarations)),
         []
@@ -125,65 +125,65 @@ export const toJavascript = (value, opts = {}) => {
       opts.declarations.push(
         t.expressionStatement(
           t.assignmentExpression(
-            '=',
-            t.memberExpression(t.identifier('module'), t.identifier('exports')),
-            t.identifier('obj')
+            "=",
+            t.memberExpression(t.identifier("module"), t.identifier("exports")),
+            t.identifier("obj")
           )
         )
       )
     }
     program = t.program(opts.declarations)
   }
-  let stringifiedProgram = getBabel().generator(program).code
+  const stringifiedProgram = getBabel().generator(program).code
   return getBabel().prettier.format(stringifiedProgram, {
     semi: false,
-    parser: 'babel',
-    useTabs: true
+    parser: "babel",
+    useTabs: true,
   })
 }
 export const toJavascriptAux = (value, opts) => {
-  if (typeof value === 'object') {
+  if (typeof value === "object") {
     if (!opts.seen.includes(value)) {
       // update map and seen
       opts.seen.push(value)
-      let properties = createObjectProperties(value, opts)
-      let declaration = t.variableDeclaration('let', [
+      const properties = createObjectProperties(value, opts)
+      const declaration = t.variableDeclaration("let", [
         t.variableDeclarator(
           t.identifier(opts.identifier),
           t.objectExpression(properties)
-        )
+        ),
       ])
       opts.declarations.unshift(declaration)
-      for (let key of Object.keys(value)) {
-        let property = properties.find(v => {
+      for (const key of Object.keys(value)) {
+        const property = properties.find((v) => {
           return v.value.name === key
         })
         if (property) {
-          let identifier = property.value.name
+          const identifier = property.value.name
           toJavascriptAux(value[key], { ...opts, identifier })
         }
       }
     }
-  } else if (typeof value === 'string') {
-    let declaration = t.variableDeclaration('let', [
+  } else if (typeof value === "string") {
+    const declaration = t.variableDeclaration("let", [
       t.variableDeclarator(
         t.identifier(opts.identifier),
         t.stringLiteral(value)
-      )
+      ),
     ])
     opts.declarations.unshift(declaration)
   }
 }
 export const createObjectProperties = (value, opts) => {
-  let properties = []
+  const properties = []
   let dependancies = opts.dependancies[opts.identifier]
   if (!dependancies) dependancies = opts.dependancies[opts.identifier] = []
-  for (let key of Object.keys(value)) {
+  for (const key of Object.keys(value)) {
     if (value[key] === value) {
       opts.declarations.push(
         t.expressionStatement(
           t.assignmentExpression(
-            '=',
+            "=",
             t.memberExpression(
               t.identifier(opts.identifier),
               t.identifier(key)
@@ -198,7 +198,7 @@ export const createObjectProperties = (value, opts) => {
         if (opts.keys[key] === undefined) {
           opts.keys[key] = 1
         }
-        let keyIncrement = opts.keys[key]
+        const keyIncrement = opts.keys[key]
         if (keyIncrement == 1) {
           opts.mappings.push(key)
         } else {
@@ -206,7 +206,7 @@ export const createObjectProperties = (value, opts) => {
         }
         opts.keys[key]++
       }
-      let identifier = opts.mappings[opts.db.indexOf(value[key])]
+      const identifier = opts.mappings[opts.db.indexOf(value[key])]
       dependancies.push(identifier)
       properties.push(
         t.objectProperty(
@@ -226,23 +226,23 @@ export const serialize = (value, opts = {}) => {
   return stringify(value, opts)
 }
 export const stringify = (value, opts = {}) => {
-  let schema = {
+  const schema = {
     stringifier: stringifier,
-    replace (key, value) {
+    replace(key, value) {
       if (opts.firstRun) {
         opts.firstRun = !opts.firstRun
         return value
       }
-      var after = opts.stringifier(key, value, opts)
+      const after = opts.stringifier(key, value, opts)
 
       const type = typeof after.value
 
-      if (type === 'object') {
+      if (type === "object") {
         if (after === null || after.value === null) {
           const ret = after.value
           return ret
         }
-      } else if (type === 'string') {
+      } else if (type === "string") {
         const ret =
           opts.known.get(after.key) || setKnown(opts.known, opts.input, after)
         return ret
@@ -254,16 +254,16 @@ export const stringify = (value, opts = {}) => {
     firstRun: undefined,
     known: new Map(),
     input: [],
-    output: []
+    output: [],
   }
 
-  Object.keys(schema).forEach(key => {
+  Object.keys(schema).forEach((key) => {
     if (getsmart(opts, epp(key), { undefined: true }, true).undefined == true) {
       opts[key] = schema[key]
     }
   })
 
-  opts.virtual = opts.stringifier('', value, opts)
+  opts.virtual = opts.stringifier("", value, opts)
   for (
     let i = parseInt(setKnown(opts.known, opts.input, opts.virtual));
     i < opts.input.length;
@@ -276,7 +276,7 @@ export const stringify = (value, opts = {}) => {
       console.error(err)
     }
   }
-  return '[' + opts.output.join(',') + ']'
+  return "[" + opts.output.join(",") + "]"
 }
 export const replacer = (key, value) => {
   const opts = opts || {}
@@ -285,17 +285,17 @@ export const replacer = (key, value) => {
     opts.firstRun = !opts.firstRun
     return value
   }
-  var after = opts.stringifier(key, value, opts)
+  const after = opts.stringifier(key, value, opts)
   // replace with if statements
 
   const type = typeof after.value
 
-  if (type === 'object') {
+  if (type === "object") {
     if (after === null) {
       const ret = after.value
       return ret
     }
-  } else if (type === 'string') {
+  } else if (type === "string") {
     const ret =
       opts.known.get(after.key) || setKnown(opts.known, opts.input, after)
     return ret
@@ -303,7 +303,7 @@ export const replacer = (key, value) => {
   return after.value
 }
 export const setKnown = (known, input, virtual) => {
-  var index = String(input.push(virtual.value) - 1)
+  const index = String(input.push(virtual.value) - 1)
   known.set(virtual.key, index)
   return index
 }
@@ -311,63 +311,63 @@ export const stringifier = (key, val, opts) => {
   let ret = { value: val, key: val }
   if (
     val instanceof Function &&
-    typeof val.toString === 'function' &&
-    (!opts.strictFunctions || typeof val.$scopes != 'undefined')
+    typeof val.toString === "function" &&
+    (!opts.strictFunctions || typeof val.$scopes != "undefined")
   ) {
-    let known = opts.known.get(ret.key)
+    const known = opts.known.get(ret.key)
     ret = {
       value: known || {
-        type: 'function',
+        type: "function",
         js: val.toString(),
         $scopes: val.$scopes,
         $context: val.$context,
-        ...val
+        ...val,
       },
-      key: val
+      key: val,
     }
-    if (ret.value.js == 'function () { [native code] }') return
-    if (typeof known == 'undefined') setKnown(opts.known, opts.input, ret)
-  } else if (ret.value === Infinity && typeof ret.value != 'string') {
-    let known = opts.known.get(ret.key)
+    if (ret.value.js == "function () { [native code] }") return
+    if (typeof known == "undefined") setKnown(opts.known, opts.input, ret)
+  } else if (ret.value === Infinity && typeof ret.value != "string") {
+    const known = opts.known.get(ret.key)
     ret = {
       value: known || {
-        type: 'number',
-        js: 'Infinity',
+        type: "number",
+        js: "Infinity",
         $scopes: [],
-        $context: {}
+        $context: {},
       },
-      key: val
+      key: val,
     }
-    if (typeof known == 'undefined') setKnown(opts.known, opts.input, ret)
-  } else if (typeof ret.value === 'undefined') {
+    if (typeof known == "undefined") setKnown(opts.known, opts.input, ret)
+  } else if (typeof ret.value === "undefined") {
     ret = {
       value: {
-        type: 'undefined',
-        js: 'undefined'
+        type: "undefined",
+        js: "undefined",
       },
-      key: val
+      key: val,
     }
   } else if (ret.value instanceof Array && opts.serializeArrayProps) {
-    let known = opts.known.get(ret.key)
+    const known = opts.known.get(ret.key)
     ret = {
       value: known
         ? ret.value
         : {
-            type: 'Array',
+            type: "Array",
             js: ret.value,
-            uuid: ret.value.uuid
+            uuid: ret.value.uuid,
           },
-      key: val
+      key: val,
     }
     setKnown(opts.known, opts.input, ret)
   }
   return ret
 }
-export const primitives = value => {
+export const primitives = (value) => {
   return value instanceof String ? String(value) : value
 }
 export const Primitives = (key, value) => {
-  return typeof value === 'string' ? new String(value) : value
+  return typeof value === "string" ? new String(value) : value
 }
 export const play = (text, opts) => {
   return parse(text, opts)
@@ -377,17 +377,17 @@ export const load = (text, opts = {}) => {
   return parse(text, opts)
 }
 export const parse = (text, opts = {}) => {
-  let schema = {
+  const schema = {
     // parser: eval('(function '+parser+')'),
     parser: parser(opts),
     value: {},
     strictFunctions: true,
     noFunctions: false,
     firstPass: true,
-    output: new Map()
+    output: new Map(),
   }
 
-  Object.keys(schema).forEach(key => {
+  Object.keys(schema).forEach((key) => {
     if (getsmart(opts, epp(key), { undefined: true }, true).undefined == true) {
       opts[key] = schema[key]
     }
@@ -398,52 +398,52 @@ export const parse = (text, opts = {}) => {
   opts.firstPass = false
   opts.input = opts.input.map(primitives)
   opts.value = opts.input[0]
-  let isObject = typeof opts.value === 'object' && opts.value
-  var tmp = isObject
+  const isObject = typeof opts.value === "object" && opts.value
+  const tmp = isObject
     ? revive(opts.input, opts.output, opts.value, opts.parser, opts)
     : opts.value
 
   opts.replaceMode = true
   let ret = revive(opts.input, new Map(), tmp, opts.parser, opts)
-  ret = opts.parser('', tmp, opts)
+  ret = opts.parser("", tmp, opts)
   return ret
 }
-export const parser = opts => {
+export const parser = (opts) => {
   return function (key, val) {
-    if (val.js && val.type === 'Array') {
+    if (val.js && val.type === "Array") {
       const ret = opts.input[opts.output.get(val)].js
       ret.uuid = opts.input[opts.output.get(val)].uuid
       return ret
     } else if (
       val.js &&
-      val.type === 'function' &&
+      val.type === "function" &&
       opts.replaceMode &&
       !opts.noFunctions
     ) {
       let ret = opts.input[opts.output.get(val)]
       if (typeof ret == val.type) return ret
-      let uuid = jsUUID()
-      var fn
-      var scopedEval
-      if (val.$scopedEval && typeof val.$scopedEval == 'function') {
+      const uuid = jsUUID()
+      let fn
+      let scopedEval
+      if (val.$scopedEval && typeof val.$scopedEval == "function") {
         scopedEval = val.$scopedEval
       } else {
-        var fns = createScopedEval(uuid)
+        const fns = createScopedEval(uuid)
 
         try {
           fn = eval(`(${fns})`)
-          var input = { val, smarts }
+          const input = { val, smarts }
           scopedEval = fn(input)
         } catch (err) {
-          console.log('Caught error evaling createScopedEval', err)
+          console.log("Caught error evaling createScopedEval", err)
         }
       }
 
       ret = scopedEval({ val })
       try {
-        Object.defineProperty(ret, '$scopes', {
+        Object.defineProperty(ret, "$scopes", {
           value: val.$scopes,
-          enumerable: true
+          enumerable: true,
         })
         if (val.uuid) {
           ret.uuid = val.uuid
@@ -452,17 +452,17 @@ export const parser = opts => {
         if (opts.verbose) console.error(err)
       }
       try {
-        Object.defineProperty(ret, '$context', {
+        Object.defineProperty(ret, "$context", {
           value: val.$context,
-          enumerable: true
+          enumerable: true,
         })
       } catch (err) {
         if (opts.verbose) console.error(err)
       }
       try {
-        Object.defineProperty(ret, '$scopedEval', {
+        Object.defineProperty(ret, "$scopedEval", {
           value: scopedEval,
-          enumerable: true
+          enumerable: true,
         })
       } catch (err) {
         if (opts.verbose) console.error(err)
@@ -477,11 +477,11 @@ export const parser = opts => {
 }
 export const revive = (input, parsed, output, parser, opts) => {
   return Object.keys(output).reduce((output, key) => {
-    var value = output[key]
+    let value = output[key]
     // if the value hasn't been revived yet
     if (value instanceof String) {
-      var tmp = input[value]
-      if (typeof tmp === 'object' && !parsed.get(tmp)) {
+      const tmp = input[value]
+      if (typeof tmp === "object" && !parsed.get(tmp)) {
         parsed.set(tmp, value)
         output[key] = primitives(
           parser(key, revive(input, parsed, tmp, parser, opts))
@@ -498,7 +498,7 @@ export const revive = (input, parsed, output, parser, opts) => {
         if (opts.replaceMode) {
           // output[key] = primitives(parser(key, revive(input, parsed, value, parser, opts)))
           value = parser(key, value)
-          if (typeof value === 'object' && !parsed.get(value)) {
+          if (typeof value === "object" && !parsed.get(value)) {
             parsed.set(value, value)
             output[key] = primitives(
               parser(key, revive(input, parsed, value, parser, opts))
@@ -520,8 +520,8 @@ export const revive = (input, parsed, output, parser, opts) => {
     return output
   }, output)
 }
-export const createScopedEval = uuid => {
-  let ret = /*javascript*/ `
+export const createScopedEval = (uuid) => {
+  const ret = /*javascript*/ `
 		function createScopedEval(${uuid}){
 			
 			// scopeCode
@@ -633,7 +633,7 @@ export const createScopedEval = uuid => {
 	`
   return ret
 }
-export const defineVariable = uuid => {
+export const defineVariable = (uuid) => {
   return /*javascript*/ `
 		${uuid.variableType}	${uuid.variableKey} = ${uuid}.$scope[${uuid}.variableKey]
 		Object.defineProperty(
@@ -651,8 +651,8 @@ export const defineVariable = uuid => {
 		)
 	`
 }
-export const scopedEval = uuid => {
-  let ret = /*javascript*/ `function scopedEval(${uuid}){
+export const scopedEval = (uuid) => {
+  const ret = /*javascript*/ `function scopedEval(${uuid}){
 			if(typeof ${uuid} == 'string'){
 				${uuid} = {
 					val: {
@@ -688,11 +688,11 @@ export const scopedEval = uuid => {
 	`
   return ret
 }
-export const jsUUID = (prefix = 'uuid') => {
-  return prefix + uuid().replace(/-/g, '')
+export const jsUUID = (prefix = "uuid") => {
+  return prefix + uuid().replace(/-/g, "")
 }
-export const context = opts => {
-  let uuid = gosmart.bind(this)(opts, 'path.context.scope.uuid', jsUUID())
+export const context = (opts) => {
+  const uuid = gosmart.bind(this)(opts, "path.context.scope.uuid", jsUUID())
   return eval(/*javascript*/ `
 		(
 			function(){
@@ -702,7 +702,7 @@ export const context = opts => {
 		)()
 	`)
 }
-export const contextObject = uuid => {
+export const contextObject = (uuid) => {
   return /*javascript*/ `
 		let ${uuid} = {
 			$$uuid: '${uuid}',
@@ -752,7 +752,7 @@ export const contextObject = uuid => {
 			$parentContexts: [],
 			$contextStatus: "var",
 			$mode: (eval("var ${uuid}1 = null"), (typeof ${
-    uuid + '1'
+    uuid + "1"
   } === "undefined")) ? "strict" : "non-strict",
 		}
 		${uuid}.$functionScoper = ${uuid}.$functionScoper(${uuid}.$functionScoper)
@@ -795,43 +795,43 @@ export const contextObject = uuid => {
 		}
 	`
 }
-export const createContext = opts => {
+export const createContext = (opts) => {
   schema(opts, {
-    wrapBody: true
+    wrapBody: true,
   })
-  let node = opts.aster(/*javascript*/ `
+  const node = opts.aster(/*javascript*/ `
 		${contextObject(opts.uuid)}
 	`)
   node[0].declarations[0].contextDeclaration = true
   // so the $functionScoper function doesn't get wrapped or have $context inserted
-  let property3 = node[0].declarations[0].init.properties[3]
+  const property3 = node[0].declarations[0].init.properties[3]
   property3.value.scoperWrapped = true
   property3.value.body.scopeInitialized = true
-  let property3ScopesValue =
+  const property3ScopesValue =
     property3.value.body.body[0].expression.arguments[2].properties[0].value
   property3ScopesValue.callee.scoperWrapped = true
   property3ScopesValue.callee.body.scopeInitialized = true
-  let property3ForStatement = property3ScopesValue.callee.body.body[0]
+  const property3ForStatement = property3ScopesValue.callee.body.body[0]
   property3ForStatement.body.scopeInitialized = true
   property3ForStatement.init.declarations[0].inScope = true
   property3ForStatement.init.declarations[1].inScope = true
   // so the $add function doesn't get wrapped or have $context inserted
-  let property4 = node[0].declarations[0].init.properties[4]
+  const property4 = node[0].declarations[0].init.properties[4]
   property4.value.scoperWrapped = true
   property4.value.body.scopeInitialized = true
   // so the $scopes self-invoking function doesn't get wrapped or have $context inserted
-  let property5 = node[0].declarations[0].init.properties[5]
+  const property5 = node[0].declarations[0].init.properties[5]
   property5.value.callee.scoperWrapped = true
   property5.value.callee.body.scopeInitialized = true
-  let property5ForStatement = property5.value.callee.body.body[0]
+  const property5ForStatement = property5.value.callee.body.body[0]
   property5ForStatement.body.scopeInitialized = true
   property5ForStatement.init.declarations[0].inScope = true
   property5ForStatement.init.declarations[1].inScope = true
   // so the $variableMaps self-invoking function doesn't get wrapped or have $context inserted
-  let property6 = node[0].declarations[0].init.properties[6]
+  const property6 = node[0].declarations[0].init.properties[6]
   property6.value.callee.scoperWrapped = true
   property6.value.callee.body.scopeInitialized = true
-  let property6ForStatement = property6.value.callee.body.body[0]
+  const property6ForStatement = property6.value.callee.body.body[0]
   property6ForStatement.body.scopeInitialized = true
   property6ForStatement.init.declarations[0].inScope = true
   property6ForStatement.init.declarations[1].inScope = true
@@ -853,7 +853,7 @@ export const createContext = opts => {
   node10.inheritScope = true
   node[node.length - 1].lastContextNode = true
   if (opts.wrapBody) {
-    let bodyWrapper = node[node.length - 1]
+    const bodyWrapper = node[node.length - 1]
     bodyWrapper.body.push(...opts.path.node.body)
   }
   addBindingsToContext({ ...opts, node })
@@ -866,34 +866,34 @@ export const createContext = opts => {
   // wrapper.body.splice(1,0,addContextToScopeNode)
   return node
 }
-export const createInlineContext = opts => {
-  let wrapperString = /*javascript*/ `
+export const createInlineContext = (opts) => {
+  const wrapperString = /*javascript*/ `
 		for(let ${opts.uuid} = function(){
 			// node goes here
 			return ${opts.uuid}
 		}() ; a<1;a++){}
 	`
-  let inlineContextNode = opts.aster(wrapperString).init.declarations[0]
-  let contextBody = createContext({ ...opts, wrapBody: false })
+  const inlineContextNode = opts.aster(wrapperString).init.declarations[0]
+  const contextBody = createContext({ ...opts, wrapBody: false })
   inlineContextNode.init.callee.body.body.splice(0, 0, ...contextBody)
   inlineContextNode.contextDeclaration = true
   return inlineContextNode
 }
-export const addBindingsToContext = opts => {
-  for (let key in opts.path.scope.bindings) {
-    let binding = opts.path.scope.bindings[key]
-    if (binding.kind == 'var') {
-      let newNode = scopeVar({
+export const addBindingsToContext = (opts) => {
+  for (const key in opts.path.scope.bindings) {
+    const binding = opts.path.scope.bindings[key]
+    if (binding.kind == "var") {
+      const newNode = scopeVar({
         ...opts,
         key,
-        type: binding.kind
+        type: binding.kind,
       })
       opts.node.splice(opts.node.length - 1, 0, newNode)
     }
   }
 }
-export const scopeVarCode = opts => {
-  let ret = /*javascript*/ `
+export const scopeVarCode = (opts) => {
+  const ret = /*javascript*/ `
 		Object.defineProperty(
 			${opts.uuid}.$closure,
 			${stringify(opts.key)},
@@ -911,8 +911,8 @@ export const scopeVarCode = opts => {
 	`
   return ret
 }
-export const scopeVarInlineCode = opts => {
-  let ret = /*javascript*/ `
+export const scopeVarInlineCode = (opts) => {
+  const ret = /*javascript*/ `
 		let ${jsUUID()} = (
 			${scopeVarCode(opts)}
 		)
@@ -934,8 +934,8 @@ export const scopeVar = (opts = {}) => {
     thirdArg = node.expression.left.arguments[2]
   }
 
-  let getter = thirdArg.properties[0]
-  let setter = thirdArg.properties[1]
+  const getter = thirdArg.properties[0]
+  const setter = thirdArg.properties[1]
   getter.body.scopeInitialized = true
   setter.body.scopeInitialized = true
   getter.body.scoperWrapped = true
@@ -946,7 +946,7 @@ export const scopeVar = (opts = {}) => {
   return node
 }
 export const functionWrapper = (uuid, path, aster) => {
-  let wrapper = aster(/*javascript*/ `
+  const wrapper = aster(/*javascript*/ `
 		${uuid}.$functionScoper()
 	`)
   wrapper.expression.arguments.push(path.node)
@@ -959,24 +959,24 @@ export const bodyInsert = (index, body, aster, ...things) => {
 export const initBlock = (path, aster) => {
   if (!path.node.scopeInitialized) {
     path.node.scopeInitialized = true
-    let uuid = getPathUUID({ path })
-    let contextNode = createContext({ uuid, aster, path })
+    const uuid = getPathUUID({ path })
+    const contextNode = createContext({ uuid, aster, path })
     path.node.body = contextNode
   }
 }
-export const getNodeUUID = opts => {
+export const getNodeUUID = (opts) => {
   if (
     opts.node &&
-    opts.node.type != 'BlockStatement' &&
-    opts.node.type != 'Program'
+    opts.node.type != "BlockStatement" &&
+    opts.node.type != "Program"
   )
     return getNodeUUID({
       ...opts,
-      node: opts.node.body || opts.node.block
+      node: opts.node.body || opts.node.block,
     })
-  return gosmart.bind(this)(opts.node, 'uuid', jsUUID())
+  return gosmart.bind(this)(opts.node, "uuid", jsUUID())
 }
-export const getPathUUID = opts => {
+export const getPathUUID = (opts) => {
   if (
     opts.path.context.scope.path.node.inheritScope ||
     opts.path.scope.path.node.inheritScope
@@ -984,27 +984,27 @@ export const getPathUUID = opts => {
     return getPathUUID({ ...opts, path: opts.path.parentPath })
   return getNodeUUID({
     ...opts,
-    node: opts.path.context.scope.path.node
+    node: opts.path.context.scope.path.node,
   })
 }
-export const babelPlugin = babel => {
+export const babelPlugin = (babel) => {
   const aster = babel.template.ast
 
-  let metaVisitor = {
-    Program (path) {
+  const metaVisitor = {
+    Program(path) {
       initBlock(path, aster)
     },
-    BlockStatement (path) {
+    BlockStatement(path) {
       initBlock(path, aster)
     },
-    ForInStatement () {
+    ForInStatement() {
       // nothing
     },
     // ForInStatement (path) {
     //   path = path
     // },
-    ObjectMethod (path) {
-      let name = path.node.key.name
+    ObjectMethod(path) {
+      const name = path.node.key.name
       let replacement = aster(/*javascript*/ `
 				let a = {
 					${name}: function ${name}(){}
@@ -1015,32 +1015,32 @@ export const babelPlugin = babel => {
       replacement.value.params = path.node.params
       path.replaceWith(replacement)
     },
-    Function (path) {
+    Function(path) {
       if (
-        path.type != 'FunctionDeclaration' &&
+        path.type != "FunctionDeclaration" &&
         !path.node.scoperWrapped &&
         !path.node.body.scoperWrapped
       ) {
         path.node.scoperWrapped = true
         path.node.body.scoperWrapped = true
-        let uuid = getPathUUID({ path })
-        let replacement = functionWrapper(uuid, path, aster)
+        const uuid = getPathUUID({ path })
+        const replacement = functionWrapper(uuid, path, aster)
         path.replaceWith(replacement)
       }
     },
-    FunctionDeclaration (path) {
+    FunctionDeclaration(path) {
       if (!path.node.scoped) {
         path.node.scoped = true
         const parentBlock = path.scope.parent
         try {
-          parentBlock.block.body.forEach(node => {
+          parentBlock.block.body.forEach((node) => {
             if (node.lastContextNode) {
-              let uuid = getPathUUID({ path })
-              let newNode = aster(/*javascript*/ `
+              const uuid = getPathUUID({ path })
+              const newNode = aster(/*javascript*/ `
 								${uuid}.$functionScoper(${path.node.id.name})
 							`)
               node.body.splice(1, 0, newNode)
-              throw new Error('break foreach')
+              throw new Error("break foreach")
             }
           })
         } catch (err) {
@@ -1048,32 +1048,34 @@ export const babelPlugin = babel => {
         }
       }
     },
-    VariableDeclarator (path) {
+    VariableDeclarator(path) {
       if (!path.node.inScope) {
         path.node.inScope = true
-        let parentPath = getsmart.bind(this)(path, 'parentPath', undefined)
+        const parentPath = getsmart.bind(this)(path, "parentPath", undefined)
         if (
           // this is for inline let and const declarations in normal
           // js blocks
-          (parentPath.node.kind == 'let' || parentPath.node.kind == 'const') &&
+          (parentPath.node.kind == "let" || parentPath.node.kind == "const") &&
           // we check the length of declarations because we only have to do inline replacement
           // if there's a chance another declaration might use a former one
           parentPath.node.declarations.length > 1 &&
           !(
-            parentPath.parentPath.node.type == 'ForInStatement' ||
-            parentPath.parentPath.node.type == 'ForOfStatement' ||
-            parentPath.parentPath.node.type == 'ForStatement'
+            parentPath.parentPath.node.type == "ForInStatement" ||
+            parentPath.parentPath.node.type == "ForOfStatement" ||
+            parentPath.parentPath.node.type == "ForStatement"
           )
         ) {
-          let uuid = getPathUUID({ path })
+          const uuid = getPathUUID({ path })
           if (uuid) {
-            let indexInParent = parentPath.node.declarations.indexOf(path.node)
-            let newDeclaration = scopeVar({
+            const indexInParent = parentPath.node.declarations.indexOf(
+              path.node
+            )
+            const newDeclaration = scopeVar({
               aster,
               inline: true,
               uuid,
               key: parentPath.node.declarations[indexInParent].id.name,
-              type: parentPath.node.kind
+              type: parentPath.node.kind,
             })
             parentPath.node.declarations.splice(
               indexInParent + 1,
@@ -1083,53 +1085,57 @@ export const babelPlugin = babel => {
           }
         } else if (
           //
-          (parentPath.node.kind == 'let' ||
-            parentPath.node.kind == 'var' ||
-            parentPath.node.kind == 'const') &&
+          (parentPath.node.kind == "let" ||
+            parentPath.node.kind == "var" ||
+            parentPath.node.kind == "const") &&
           // only do this for singular declarations
           parentPath.node.declarations.length < 2 &&
           // and check if variable is declared inside a ForX statement
-          (parentPath.parentPath.node.type == 'ForInStatement' ||
-            parentPath.parentPath.node.type == 'ForOfStatement' ||
-            parentPath.parentPath.node.type == 'ForStatement')
+          (parentPath.parentPath.node.type == "ForInStatement" ||
+            parentPath.parentPath.node.type == "ForOfStatement" ||
+            parentPath.parentPath.node.type == "ForStatement")
         ) {
-          let uuid = getPathUUID({ path })
+          const uuid = getPathUUID({ path })
           if (uuid) {
-            let indexInParent = parentPath.node.declarations.indexOf(path.node)
-            let newNode = scopeVar({
+            const indexInParent = parentPath.node.declarations.indexOf(
+              path.node
+            )
+            const newNode = scopeVar({
               aster,
               uuid,
               key: parentPath.node.declarations[indexInParent].id.name,
-              type: parentPath.node.kind
+              type: parentPath.node.kind,
             })
             parentPath.parentPath.node.body.body.splice(0, 0, newNode)
           }
         } else if (
           // this is a special case for when ForStatements get their own scope
-          (parentPath.node.kind == 'let' || parentPath.node.kind == 'const') &&
+          (parentPath.node.kind == "let" || parentPath.node.kind == "const") &&
           // we check the length of declarations because we only have to do inline replacement
           // if there's a chance another declaration might use a former one
           parentPath.node.declarations.length > 1 &&
-          parentPath.parentPath.node.type == 'ForStatement'
+          parentPath.parentPath.node.type == "ForStatement"
         ) {
           // if the first declaration isn't our context declaration, insert one
-          let uuid = gosmart.bind(this)(path, 'scope.uuid', jsUUID())
+          const uuid = gosmart.bind(this)(path, "scope.uuid", jsUUID())
           if (!parentPath.node.declarations[0].contextDeclaration) {
-            let inlineContextDeclaration = createInlineContext({
+            const inlineContextDeclaration = createInlineContext({
               path,
               uuid,
-              aster
+              aster,
             })
             parentPath.node.declarations.splice(0, 0, inlineContextDeclaration)
           }
           if (uuid) {
-            let indexInParent = parentPath.node.declarations.indexOf(path.node)
-            let newDeclaration = scopeVar({
+            const indexInParent = parentPath.node.declarations.indexOf(
+              path.node
+            )
+            const newDeclaration = scopeVar({
               aster,
               inline: true,
               uuid,
               key: parentPath.node.declarations[indexInParent].id.name,
-              type: parentPath.node.kind
+              type: parentPath.node.kind,
             })
             parentPath.node.declarations.splice(
               indexInParent + 1,
@@ -1138,17 +1144,19 @@ export const babelPlugin = babel => {
             )
           }
         } else if (
-          parentPath.node.kind == 'let' ||
-          parentPath.node.kind == 'const'
+          parentPath.node.kind == "let" ||
+          parentPath.node.kind == "const"
         ) {
-          let uuid = getPathUUID({ path })
+          const uuid = getPathUUID({ path })
           if (uuid) {
-            let indexInParent = parentPath.node.declarations.indexOf(path.node)
-            let newNode = scopeVar({
+            const indexInParent = parentPath.node.declarations.indexOf(
+              path.node
+            )
+            const newNode = scopeVar({
               aster,
               uuid,
               key: parentPath.node.declarations[indexInParent].id.name,
-              type: parentPath.node.kind
+              type: parentPath.node.kind,
             })
             parentPath.insertAfter(newNode)
           }
@@ -1166,10 +1174,10 @@ export const babelPlugin = babel => {
           // }
         }
       }
-    }
+    },
   }
-  let ret = {
-    visitor: metaVisitor
+  const ret = {
+    visitor: metaVisitor,
     // visitor: {
     // 	Program(path){
     // 		path.traverse(metaVisitor)
@@ -1181,7 +1189,7 @@ export const babelPlugin = babel => {
 export const transform = (src, opts = {}) => {
   return getBabel().transform(src, {
     plugins: [babelPlugin],
-    ...opts
+    ...opts,
   })
 }
 /** non-parser stuff */
@@ -1191,7 +1199,7 @@ export const stripUuids = (thing, seen = []) => {
   } catch {
     // nothing
   }
-  if (typeof thing === 'object') {
+  if (typeof thing === "object") {
     const keys = Object.keys(thing)
     for (const key of keys) {
       const val = thing[key]
@@ -1213,13 +1221,13 @@ export const schema = (obj1, obj2, opts = {}) => {
     obj2 = clone(obj2, opts)
   }
   return merge(obj1, obj2, {
-    ...opts
+    ...opts,
   })
 }
 export const create = (obj1, obj2, opts) => {
-  let ret = merge(obj1, obj2, {
+  const ret = merge(obj1, obj2, {
     clone: true,
-    ...opts
+    ...opts,
   })
 
   return ret
@@ -1249,14 +1257,14 @@ export const merge = (value1, value2, opts = {}, seen = new Map()) => {
     value2 = clone(value2)
   }
 
-  let props = Object.keys(value2)
+  const props = Object.keys(value2)
 
-  props.forEach(prop => {
-    let propertyValue1 = value1[prop]
+  props.forEach((prop) => {
+    const propertyValue1 = value1[prop]
     if (prop in value1 && basic(propertyValue1) && !opts.overwrite) {
       return
     }
-    let propertyValue2 = value2[prop]
+    const propertyValue2 = value2[prop]
     seen.set(value1, value1)
     let newVal = propertyValue2
     if (prop in value1) {
@@ -1268,43 +1276,43 @@ export const merge = (value1, value2, opts = {}, seen = new Map()) => {
       )
     }
     if (
-      getsmart.bind(this)(local.vue, 'reactiveSetter', false) &&
+      getsmart.bind(this)(local.vue, "reactiveSetter", false) &&
       getsmart.bind(this)(
         this,
-        '$set',
-        getsmart.bind(this)(local.vue, 'Vue.set', false)
+        "$set",
+        getsmart.bind(this)(local.vue, "Vue.set", false)
       ) &&
       value1
     ) {
       const setToUse = this.$set || local.vue.Vue.set
       setToUse?.(value1, prop, newVal)
       if (
-        typeof getsmart.bind(this)(window, '$store.commit', undefined) ==
-        'function'
+        typeof getsmart.bind(this)(window, "$store.commit", undefined) ==
+        "function"
       ) {
-        window.$store.commit(local.vue.basePath || 'graph/thing')
+        window.$store.commit(local.vue.basePath || "graph/thing")
       }
     } else {
       value1[prop] = newVal
       if (
-        getsmart.bind(this)(local.vue, 'store', false) &&
-        typeof getsmart.bind(this)(window, '$store.commit', undefined) ==
-          'function'
+        getsmart.bind(this)(local.vue, "store", false) &&
+        typeof getsmart.bind(this)(window, "$store.commit", undefined) ==
+          "function"
       ) {
-        window.$store.commit(local.vue.basePath || 'graph/thing')
+        window.$store.commit(local.vue.basePath || "graph/thing")
       }
     }
   })
 
   return value1
 }
-export const basic = value => {
-  let valueType = typeof value
-  let ret =
+export const basic = (value) => {
+  const valueType = typeof value
+  const ret =
     !(
-      valueType == 'object' ||
-      valueType == 'array' ||
-      valueType == 'function'
+      valueType == "object" ||
+      valueType == "array" ||
+      valueType == "function"
     ) || value === null
   return ret
 }
@@ -1322,27 +1330,27 @@ export const deepForEach = (
   seens = { originals: [], clones: [] },
   first = true
 ) => {
-  path = path || ''
+  path = path || ""
   if (first) {
-    value = { '': value }
+    value = { "": value }
   }
   // if(!(typeof value == 'string' || typeof value == 'boolean' || typeof value == 'number')){
   // 	seens.originals.push(value)
   // }
   if (Array.isArray(value)) {
     forEachArray(value, fn, path, ret, seens)
-  } else if (typeof value == 'object') {
+  } else if (typeof value == "object") {
     forEachObject(value, fn, path, ret, seens)
   }
-  return ret['']
+  return ret[""]
 }
 export const forEachObject = (obj, fn, path, ret, seens) => {
   for (const key in obj) {
     const deepPath = path ? `${path}.${key}` : key
-    let primitive =
-      typeof obj[key] == 'string' ||
-      typeof obj[key] == 'boolean' ||
-      typeof obj[key] == 'number'
+    const primitive =
+      typeof obj[key] == "string" ||
+      typeof obj[key] == "boolean" ||
+      typeof obj[key] == "number"
     if (primitive || seens.originals.indexOf(obj[key]) < 0) {
       if (!primitive) {
         seens.originals.push(obj[key])
@@ -1356,10 +1364,10 @@ export const forEachObject = (obj, fn, path, ret, seens) => {
 }
 export const forEachArray = (array, fn, path, ret = {}, seens) => {
   array.forEach((value, index, arr) => {
-    let primitive =
-      typeof value == 'string' ||
-      typeof value == 'boolean' ||
-      typeof value == 'number'
+    const primitive =
+      typeof value == "string" ||
+      typeof value == "boolean" ||
+      typeof value == "number"
     if (primitive || seens.originals.indexOf(value) < 0) {
       if (!primitive) {
         seens.originals.push(value)
@@ -1377,11 +1385,11 @@ export const setThing = ({
   option,
   list = getsmart.bind(this)(objList),
   obj = true,
-  keys = ['uuid', '_id', 'id'],
+  keys = ["uuid", "_id", "id"],
   keymatchtype,
   push,
   strings,
-  targets
+  targets,
 } = {}) => {
   let index = thingIndex({
     option,
@@ -1389,18 +1397,18 @@ export const setThing = ({
     obj,
     keys,
     keymatchtype,
-    strings
+    strings,
   })
-  if (obj == 'debug') {
-    console.log('index')
+  if (obj == "debug") {
+    console.log("index")
     console.log(index)
-    console.log('list')
+    console.log("list")
     console.log(list)
   }
   if (index >= 0 && list) {
-    if (targets && targets.length && typeof targets.length == 'number') {
-      for (var i = 0; i < targets.length; i++) {
-        let value = getsmart.bind(this)(option, targets[i], undefined)
+    if (targets && targets.length && typeof targets.length == "number") {
+      for (let i = 0; i < targets.length; i++) {
+        const value = getsmart.bind(this)(option, targets[i], undefined)
         if (value) {
           setsmart.bind(this)(list[index], targets[i], value)
         }
@@ -1408,42 +1416,42 @@ export const setThing = ({
     } else {
       list.splice(index, 1, option)
       if (
-        getsmart.bind(this)(local.vue, 'reactiveSetter', false) &&
+        getsmart.bind(this)(local.vue, "reactiveSetter", false) &&
         getsmart.bind(this)(
           this,
-          '$set',
-          getsmart.bind(this)(local.vue, 'Vue.set', false)
+          "$set",
+          getsmart.bind(this)(local.vue, "Vue.set", false)
         )
       ) {
         if (
-          !localStorage.getItem('vuexWriteLock') &&
-          typeof getsmart.bind(this)(window, '$store.commit', undefined) ==
-            'function'
+          !localStorage.getItem("vuexWriteLock") &&
+          typeof getsmart.bind(this)(window, "$store.commit", undefined) ==
+            "function"
         ) {
-          window.$store.commit(local.vue.basePath || 'graph/thing')
+          window.$store.commit(local.vue.basePath || "graph/thing")
         }
       } else if (
-        getsmart.bind(this)(local.vue, 'store', false) &&
-        !localStorage.getItem('vuexWriteLock') &&
-        typeof getsmart.bind(this)(window, '$store.commit', undefined) ==
-          'function'
+        getsmart.bind(this)(local.vue, "store", false) &&
+        !localStorage.getItem("vuexWriteLock") &&
+        typeof getsmart.bind(this)(window, "$store.commit", undefined) ==
+          "function"
       ) {
-        window.$store.commit(local.vue.basePath || 'graph/thing')
+        window.$store.commit(local.vue.basePath || "graph/thing")
       }
     }
     // list[index] = option
   } else if (push && list) {
     if (
-      getsmart.bind(this)(local.vue, 'reactiveSetter', false) ||
-      getsmart.bind(this)(local.vue, 'store', false)
+      getsmart.bind(this)(local.vue, "reactiveSetter", false) ||
+      getsmart.bind(this)(local.vue, "store", false)
     ) {
       list.splice(list.length, 0, option)
       if (
-        !localStorage.getItem('vuexWriteLock') &&
-        typeof getsmart.bind(this)(window, '$store.commit', undefined) ==
-          'function'
+        !localStorage.getItem("vuexWriteLock") &&
+        typeof getsmart.bind(this)(window, "$store.commit", undefined) ==
+          "function"
       ) {
-        window.$store.commit(local.vue.basePath || 'graph/thing')
+        window.$store.commit(local.vue.basePath || "graph/thing")
       }
     } else {
       list.push(option)
@@ -1456,13 +1464,13 @@ export const setThings = ({
   options,
   list = getsmart.bind(this)(objList),
   obj = true,
-  keys = ['uuid', '_id', 'id'],
+  keys = ["uuid", "_id", "id"],
   keymatchtype,
   push,
-  async
+  async,
 } = {}) => {
   if (options && options instanceof Array && list) {
-    for (let option of options) {
+    for (const option of options) {
       if (async) {
         new Promise(() => {
           setThing({
@@ -1471,7 +1479,7 @@ export const setThings = ({
             obj,
             keys,
             keymatchtype,
-            push
+            push,
           })
         })
       } else {
@@ -1481,7 +1489,7 @@ export const setThings = ({
           obj,
           keys,
           keymatchtype,
-          push
+          push,
         })
       }
     }
@@ -1492,20 +1500,20 @@ export const optIn = (
   option,
   list = getsmart.bind(this)(stringList),
   obj,
-  keys = ['uuid', '_id', 'id'],
+  keys = ["uuid", "_id", "id"],
   keymatchtype,
   index
 ) => {
-  if (typeof option === 'object') {
+  if (typeof option === "object") {
     obj = true
   }
   if (!obj && list && list.indexOf && list.indexOf(option) >= 0) {
     return index ? list.indexOf(option) : true
-  } else if (obj && list && typeof list.length == 'number') {
-    for (var i = 0; i < list.length; i++) {
-      if (!(keys && typeof keys.length == 'number')) return
-      for (var indKey = 0; indKey < keys.length; indKey++) {
-        if (keymatchtype == 'broad') {
+  } else if (obj && list && typeof list.length == "number") {
+    for (let i = 0; i < list.length; i++) {
+      if (!(keys && typeof keys.length == "number")) return
+      for (let indKey = 0; indKey < keys.length; indKey++) {
+        if (keymatchtype == "broad") {
           if (
             list[i] &&
             getsmart.bind(this)(list[i], keys[indKey], undefined) ==
@@ -1515,7 +1523,7 @@ export const optIn = (
             return index ? i : true
           } else if (
             list[i] &&
-            typeof list[i] == 'string' &&
+            typeof list[i] == "string" &&
             list[i] == getsmart.bind(this)(option, keys[indKey], undefined) &&
             getsmart.bind(this)(option, keys[indKey], undefined) !== undefined
           ) {
@@ -1533,7 +1541,7 @@ export const optIn = (
             }
           } else if (
             list[i] &&
-            typeof list[i] == 'string' &&
+            typeof list[i] == "string" &&
             list[i] == getsmart.bind(this)(option, keys[indKey], undefined) &&
             getsmart.bind(this)(option, keys[indKey], undefined) !== undefined
           ) {
@@ -1551,12 +1559,12 @@ export const thingIn = ({
   option,
   list = getsmart.bind(this)(objList),
   obj = true,
-  keys = ['uuid', '_id', 'id'],
+  keys = ["uuid", "_id", "id"],
   keymatchtype,
-  retIndex
+  retIndex,
   // vue = local.vue
 } = {}) => {
-  if (typeof option === 'object') {
+  if (typeof option === "object") {
     obj = true
   }
   if (!obj && list && list.indexOf && list.indexOf(option) >= 0) {
@@ -1565,11 +1573,11 @@ export const thingIn = ({
     } else {
       return true
     }
-  } else if (obj && list && typeof list.length == 'number') {
-    for (var i = 0; i < list.length; i++) {
-      if (!(keys && typeof keys.length == 'number')) return
-      for (var indKey = 0; indKey < keys.length; indKey++) {
-        if (keymatchtype == 'broad') {
+  } else if (obj && list && typeof list.length == "number") {
+    for (let i = 0; i < list.length; i++) {
+      if (!(keys && typeof keys.length == "number")) return
+      for (let indKey = 0; indKey < keys.length; indKey++) {
+        if (keymatchtype == "broad") {
           if (
             list[i] &&
             getsmart.bind(this)(list[i], keys[indKey], undefined) ==
@@ -1583,7 +1591,7 @@ export const thingIn = ({
             }
           } else if (
             list[i] &&
-            typeof list[i] == 'string' &&
+            typeof list[i] == "string" &&
             list[i] == getsmart.bind(this)(option, keys[indKey], undefined) &&
             getsmart.bind(this)(option, keys[indKey], undefined) !== undefined
           ) {
@@ -1609,7 +1617,7 @@ export const thingIn = ({
             }
           } else if (
             list[i] &&
-            typeof list[i] == 'string' &&
+            typeof list[i] == "string" &&
             list[i] == getsmart.bind(this)(option, keys[indKey], undefined) &&
             getsmart.bind(this)(option, keys[indKey], undefined) !== undefined
           ) {
@@ -1635,18 +1643,18 @@ export const optsIn = (
   options,
   list = getsmart.bind(this)(stringList),
   obj,
-  keys = ['uuid', '_id', 'id'],
+  keys = ["uuid", "_id", "id"],
   keymatchtype
 ) => {
   if (!(options instanceof Array)) return true
-  for (let option of options) {
+  for (const option of options) {
     // if(typeof option === 'object'){
     //   obj = true
     // }
     if (!obj && list && list.indexOf && list.indexOf(option) >= 0) {
       // return true
     } else if (obj && list) {
-      for (var i = 0; i < list.length; i++) {
+      for (let i = 0; i < list.length; i++) {
         if (!optIn(option, list[i], obj, keys, keymatchtype)) {
           return false
         }
@@ -1661,18 +1669,18 @@ export const thingsIn = ({
   options,
   list = getsmart.bind(this)(stringList),
   obj,
-  keys = ['uuid', '_id', 'id'],
-  keymatchtype
+  keys = ["uuid", "_id", "id"],
+  keymatchtype,
 } = {}) => {
   if (!(options instanceof Array)) return true
-  for (let option of options) {
+  for (const option of options) {
     // if(typeof option === 'object'){
     //   obj = true
     // }
     if (!obj && list && list.indexOf && list.indexOf(option) >= 0) {
       // return true
-    } else if (obj && list && typeof list.length == 'number') {
-      for (var i = 0; i < list.length; i++) {
+    } else if (obj && list && typeof list.length == "number") {
+      for (let i = 0; i < list.length; i++) {
         if (!optIn(option, list[i], obj, keys, keymatchtype)) {
           return false
         }
@@ -1687,18 +1695,18 @@ export const anyOptsIn = (
   options,
   list = getsmart.bind(this)(stringList),
   obj,
-  keys = ['uuid', '_id', 'id'],
+  keys = ["uuid", "_id", "id"],
   keymatchtype
 ) => {
   if (!(options instanceof Array)) return false
-  for (let option of options) {
+  for (const option of options) {
     // if(typeof option === 'object'){
     //   obj = true
     // }
     if (!obj && list && list.indexOf && list.indexOf(option) >= 0) {
       return true
-    } else if (obj && list && typeof list.length == 'number') {
-      for (var i = 0; i < list.length; i++) {
+    } else if (obj && list && typeof list.length == "number") {
+      for (let i = 0; i < list.length; i++) {
         if (optIn(option, list[i], obj, keys, keymatchtype)) {
           return true
         }
@@ -1711,18 +1719,18 @@ export const anyThingsIn = ({
   options,
   list = getsmart.bind(this)(stringList),
   obj,
-  keys = ['uuid', '_id', 'id'],
-  keymatchtype
+  keys = ["uuid", "_id", "id"],
+  keymatchtype,
 } = {}) => {
   if (!(options instanceof Array)) return false
-  for (let option of options) {
+  for (const option of options) {
     // if(typeof option === 'object'){
     //   obj = true
     // }
     if (!obj && list && list.indexOf && list.indexOf(option) >= 0) {
       return true
-    } else if (obj && list && typeof list.length == 'number') {
-      for (var i = 0; i < list.length; i++) {
+    } else if (obj && list && typeof list.length == "number") {
+      for (let i = 0; i < list.length; i++) {
         if (optIn(option, list[i], obj, keys, keymatchtype)) {
           return true
         }
@@ -1735,14 +1743,14 @@ export const optIndex = (
   option,
   list = getsmart.bind(this)(stringList),
   obj,
-  keys = ['uuid', '_id', 'id'],
+  keys = ["uuid", "_id", "id"],
   keymatchtype
 ) => {
-  if (typeof option === 'object') {
+  if (typeof option === "object") {
     obj = true
   }
-  if (obj && list && keys && typeof list.length == 'number') {
-    for (var i = 0; i < list.length; i++) {
+  if (obj && list && keys && typeof list.length == "number") {
+    for (let i = 0; i < list.length; i++) {
       if (optIn(option, list, obj, keys, keymatchtype)) {
         return i
       }
@@ -1756,22 +1764,22 @@ export const thingIndex = ({
   option,
   list,
   obj,
-  keys = ['uuid', '_id', 'id'],
+  keys = ["uuid", "_id", "id"],
   keymatchtype,
-  strings
+  strings,
 } = {}) => {
-  if (typeof option === 'object') {
+  if (typeof option === "object") {
     obj = true
   }
   if (obj && list && keys) {
-    let index = thingIn({
+    const index = thingIn({
       option,
       list,
       obj,
       keys,
       keymatchtype,
       strings,
-      retIndex: true
+      retIndex: true,
     })
     return index
   } else if (list) {
@@ -1783,25 +1791,25 @@ export const pushOpt = (
   option,
   list = getsmart.bind(this)(stringList),
   obj,
-  keys = ['uuid', '_id', 'id'],
+  keys = ["uuid", "_id", "id"],
   keymatchtype,
   index
 ) => {
   if (
-    typeof list == 'object' &&
+    typeof list == "object" &&
     !optIn(option, list, obj, keys, keymatchtype)
   ) {
     if (
-      getsmart.bind(this)(local.vue, 'reactiveSetter', false) ||
-      getsmart.bind(this)(local.vue, 'store', false)
+      getsmart.bind(this)(local.vue, "reactiveSetter", false) ||
+      getsmart.bind(this)(local.vue, "store", false)
     ) {
       list.splice(list.length, 0, option)
       if (
-        !localStorage.getItem('vuexWriteLock') &&
-        typeof getsmart.bind(this)(window, '$store.commit', undefined) ==
-          'function'
+        !localStorage.getItem("vuexWriteLock") &&
+        typeof getsmart.bind(this)(window, "$store.commit", undefined) ==
+          "function"
       ) {
-        window.$store.commit(local.vue.basePath || 'graph/thing')
+        window.$store.commit(local.vue.basePath || "graph/thing")
       }
     } else {
       list.push(option)
@@ -1815,22 +1823,22 @@ export const addOpt = (
   option,
   list = getsmart.bind(this)(stringList),
   obj,
-  keys = ['uuid', '_id', 'id'],
+  keys = ["uuid", "_id", "id"],
   keymatchtype,
   index
 ) => {
-  if (typeof list == 'object') {
+  if (typeof list == "object") {
     if (
-      getsmart.bind(this)(local.vue, 'reactiveSetter', false) ||
-      getsmart.bind(this)(local.vue, 'store', false)
+      getsmart.bind(this)(local.vue, "reactiveSetter", false) ||
+      getsmart.bind(this)(local.vue, "store", false)
     ) {
       list.splice(list.length, 0, option)
       if (
-        !localStorage.getItem('vuexWriteLock') &&
-        typeof getsmart.bind(this)(window, '$store.commit', undefined) ==
-          'function'
+        !localStorage.getItem("vuexWriteLock") &&
+        typeof getsmart.bind(this)(window, "$store.commit", undefined) ==
+          "function"
       ) {
-        window.$store.commit(local.vue.basePath || 'graph/thing')
+        window.$store.commit(local.vue.basePath || "graph/thing")
       }
     } else {
       list.push(option)
@@ -1844,24 +1852,24 @@ export const pushThing = ({
   option,
   list = getsmart.bind(this)(stringList),
   obj,
-  keys = ['uuid', '_id', 'id'],
-  keymatchtype
+  keys = ["uuid", "_id", "id"],
+  keymatchtype,
 } = {}) => {
   if (
-    typeof list == 'object' &&
+    typeof list == "object" &&
     !thingIn({ option, list, obj, keys, keymatchtype })
   ) {
     if (
-      getsmart.bind(this)(local.vue, 'reactiveSetter', false) ||
-      getsmart.bind(this)(local.vue, 'store', false)
+      getsmart.bind(this)(local.vue, "reactiveSetter", false) ||
+      getsmart.bind(this)(local.vue, "store", false)
     ) {
       list.splice(list.length, 0, option)
       if (
-        !localStorage.getItem('vuexWriteLock') &&
-        typeof getsmart.bind(this)(window, '$store.commit', undefined) ==
-          'function'
+        !localStorage.getItem("vuexWriteLock") &&
+        typeof getsmart.bind(this)(window, "$store.commit", undefined) ==
+          "function"
       ) {
-        window.$store.commit(local.vue.basePath || 'graph/thing')
+        window.$store.commit(local.vue.basePath || "graph/thing")
       }
     } else {
       list.push(option)
@@ -1872,11 +1880,11 @@ export const pushOpts = (
   options,
   list = getsmart.bind(this)(stringList),
   obj,
-  keys = ['uuid', '_id', 'id'],
+  keys = ["uuid", "_id", "id"],
   keymatchtype
 ) => {
   if (!(options instanceof Array)) return
-  for (let option of options) {
+  for (const option of options) {
     pushOpt(option, list, obj, keys, keymatchtype)
   }
 }
@@ -1884,11 +1892,11 @@ export const pushThings = ({
   options,
   list = getsmart.bind(this)(stringList),
   obj,
-  keys = ['uuid', '_id', 'id'],
-  keymatchtype
+  keys = ["uuid", "_id", "id"],
+  keymatchtype,
 } = {}) => {
   if (!(options instanceof Array)) return
-  for (let option of options) {
+  for (const option of options) {
     pushThing({ option, list, obj, keys, keymatchtype })
   }
 }
@@ -1896,21 +1904,21 @@ export const popOpt = (
   option,
   list = getsmart.bind(this)(stringList),
   obj,
-  keys = ['uuid', '_id', 'id'],
+  keys = ["uuid", "_id", "id"],
   keymatchtype
 ) => {
-  if (typeof list == 'object' && optIn(option, list, obj, keys, keymatchtype)) {
+  if (typeof list == "object" && optIn(option, list, obj, keys, keymatchtype)) {
     list.splice(optIndex(option, list, obj, keys, keymatchtype), 1)
     if (
-      getsmart.bind(this)(local.vue, 'reactiveSetter', false) ||
-      getsmart.bind(this)(local.vue, 'store', false)
+      getsmart.bind(this)(local.vue, "reactiveSetter", false) ||
+      getsmart.bind(this)(local.vue, "store", false)
     ) {
       if (
-        !localStorage.getItem('vuexWriteLock') &&
-        typeof getsmart.bind(this)(window, '$store.commit', undefined) ==
-          'function'
+        !localStorage.getItem("vuexWriteLock") &&
+        typeof getsmart.bind(this)(window, "$store.commit", undefined) ==
+          "function"
       ) {
-        window.$store.commit(local.vue.basePath || 'graph/thing')
+        window.$store.commit(local.vue.basePath || "graph/thing")
       }
     }
   }
@@ -1919,17 +1927,17 @@ export const popThing = ({
   option,
   list = getsmart.bind(this)(stringList),
   obj = true,
-  keys = ['uuid', '_id', 'id'],
-  keymatchtype
+  keys = ["uuid", "_id", "id"],
+  keymatchtype,
 } = {}) => {
   if (
-    typeof list == 'object' &&
+    typeof list == "object" &&
     thingIn({
       option,
       list,
       obj,
       keys,
-      keymatchtype
+      keymatchtype,
     })
   ) {
     list.splice(
@@ -1938,20 +1946,20 @@ export const popThing = ({
         list,
         obj,
         keys,
-        keymatchtype
+        keymatchtype,
       }),
       1
     )
     if (
-      getsmart.bind(this)(local.vue, 'reactiveSetter', false) ||
-      getsmart.bind(this)(local.vue, 'store', false)
+      getsmart.bind(this)(local.vue, "reactiveSetter", false) ||
+      getsmart.bind(this)(local.vue, "store", false)
     ) {
       if (
-        !localStorage.getItem('vuexWriteLock') &&
-        typeof getsmart.bind(this)(window, '$store.commit', undefined) ==
-          'function'
+        !localStorage.getItem("vuexWriteLock") &&
+        typeof getsmart.bind(this)(window, "$store.commit", undefined) ==
+          "function"
       ) {
-        window.$store.commit(local.vue.basePath || 'graph/thing')
+        window.$store.commit(local.vue.basePath || "graph/thing")
       }
     }
   }
@@ -1960,11 +1968,11 @@ export const popOpts = (
   options,
   list = getsmart.bind(this)(stringList),
   obj,
-  keys = ['uuid', '_id', 'id'],
+  keys = ["uuid", "_id", "id"],
   keymatchtype
 ) => {
   if (!(options instanceof Array)) return
-  for (let option of options) {
+  for (const option of options) {
     popOpt(option, list, obj, keys, keymatchtype)
   }
 }
@@ -1972,11 +1980,11 @@ export const popThings = ({
   options,
   list = getsmart.bind(this)(stringList),
   obj = true,
-  keys = ['uuid', '_id', 'id'],
-  keymatchtype
+  keys = ["uuid", "_id", "id"],
+  keymatchtype,
 } = {}) => {
   if (!(options instanceof Array)) return
-  for (let option of options) {
+  for (const option of options) {
     popOpt(option, list, obj, keys, keymatchtype)
   }
 }
@@ -1984,7 +1992,7 @@ export const toggleOpt = (
   option,
   list = getsmart.bind(this)(stringList),
   obj,
-  keys = ['uuid', '_id', 'id'],
+  keys = ["uuid", "_id", "id"],
   keymatchtype
 ) => {
   if (optIn(option, list, obj, keys, keymatchtype)) {
@@ -1997,8 +2005,8 @@ export const toggleThing = ({
   option,
   list = getsmart.bind(this)(stringList),
   obj = true,
-  keys = ['uuid', '_id', 'id'],
-  keymatchtype
+  keys = ["uuid", "_id", "id"],
+  keymatchtype,
 } = {}) => {
   if (optIn(option, list, obj, keys, keymatchtype)) {
     popOpt(option, list, obj, keys, keymatchtype)
@@ -2010,11 +2018,11 @@ export const toggleOpts = (
   options,
   list = getsmart.bind(this)(stringList),
   obj,
-  keys = ['uuid', '_id', 'id'],
+  keys = ["uuid", "_id", "id"],
   keymatchtype
 ) => {
   if (!(options instanceof Array)) return
-  for (let option in options) {
+  for (const option in options) {
     toggleOpt(option, list, obj, keys, keymatchtype)
   }
 }
@@ -2022,11 +2030,11 @@ export const toggleThings = ({
   options,
   list = getsmart.bind(this)(stringList),
   obj = true,
-  keys = ['uuid', '_id', 'id'],
-  keymatchtype
+  keys = ["uuid", "_id", "id"],
+  keymatchtype,
 } = {}) => {
   if (!(options instanceof Array)) return
-  for (let option in options) {
+  for (const option in options) {
     if (optIn(option, list, obj, keys, keymatchtype)) {
       popOpt(option, list, obj, keys, keymatchtype)
     } else {
@@ -2057,8 +2065,8 @@ export const getsmart = (
   context?: any,
   schema?: any
 ) => {
-  if (!property && obj && typeof obj == 'string') {
-    property = obj.split('.')
+  if (!property && obj && typeof obj == "string") {
+    property = obj.split(".")
     try {
       obj = eval(property[0])
     } catch (err) {
@@ -2072,46 +2080,46 @@ export const getsmart = (
     if (context) {
       return {
         value: defaultValue,
-        undefined: true
+        undefined: true,
       }
     } else {
       return defaultValue
     }
   }
   // If the property list is in dot notation, convert to array
-  if (typeof property == 'string') {
+  if (typeof property == "string") {
     property = parsePropertyPath(property)
-  } else if (getsmart.bind(this)(property, 'constructor', false) !== Array) {
+  } else if (getsmart.bind(this)(property, "constructor", false) !== Array) {
     if (context) {
       return {
         value: defaultValue,
         undefined: true,
-        err: 'properties path @property argument was not passed properly'
+        err: "properties path @property argument was not passed properly",
       }
     } else {
       return defaultValue
     }
   }
 
-  let deepGetByArray = deepGetByArrayUnbound.bind(this)
+  const deepGetByArray = deepGetByArrayUnbound.bind(this)
 
   return deepGetByArray(obj, property, defaultValue)
 
   // In order to avoid constantly checking the type of the property
   // we separate the real logic out into an inner function.
-  function deepGetByArrayUnbound (obj, propsArray, defaultValue) {
+  function deepGetByArrayUnbound(obj, propsArray, defaultValue) {
     // This case getting to the last property but it not being ultimately defined
     // Not just having a value of undefined
     if (
       propsArray.length > 0 &&
       context &&
-      typeof obj == 'object' &&
+      typeof obj == "object" &&
       obj !== null &&
       !(ee(propsArray[0]) in obj)
     ) {
       return {
         value: defaultValue,
-        undefined: true
+        undefined: true,
       }
     }
 
@@ -2119,7 +2127,7 @@ export const getsmart = (
     // then stop executing and return the default value.
     // If no default was provided it will be undefined.
     if (
-      typeof obj == 'undefined' ||
+      typeof obj == "undefined" ||
       obj == null ||
       (schema && obj.constructor.name !== schema)
     ) {
@@ -2131,7 +2139,7 @@ export const getsmart = (
         return {
           value: defaultValue,
           undefined: undef,
-          schema: schema && obj.constructor.name === schema
+          schema: schema && obj.constructor.name === schema,
         }
       } else {
         return defaultValue
@@ -2143,41 +2151,41 @@ export const getsmart = (
       if (context) {
         return {
           value: obj,
-          undefined: false
+          undefined: false,
         }
       } else {
         return obj
       }
     } // Prepare our found property and path array for recursion
 
-    var nextObj = obj[ee(propsArray[0])]
-    var remainingProps = propsArray.slice(1)
+    const nextObj = obj[ee(propsArray[0])]
+    const remainingProps = propsArray.slice(1)
     return deepGetByArray(nextObj, remainingProps, defaultValue)
   }
 }
-export const escapePropertyPath = (path = '') => {
-  let newPath = escapeEscapes(path)
+export const escapePropertyPath = (path = "") => {
+  const newPath = escapeEscapes(path)
   return '["' + newPath + '"]'
 }
-export const epp = (path = '') => {
+export const epp = (path = "") => {
   return escapePropertyPath(path)
 }
-export const escapeEscapes = (path = '') => {
-  let newPath = ''
+export const escapeEscapes = (path = "") => {
+  let newPath = ""
   for (let i in path) {
     i = +i
-    let char = path[i]
+    const char = path[i]
     if (i > 0 && i < path.length - 1) {
-      let prevChar = path[i - 1]
-      let nextChar = path[i + 1]
-      let openingArrayPath = char === '"' && prevChar === '['
+      const prevChar = path[i - 1]
+      const nextChar = path[i + 1]
+      const openingArrayPath = char === '"' && prevChar === "["
       // && (nextChar !== "\\" || i === path.length-1)
-      let closingArrayPath =
-        char === '"' && nextChar === ']' && prevChar !== '\\'
+      const closingArrayPath =
+        char === '"' && nextChar === "]" && prevChar !== "\\"
       // let offset = 0
       // if(openingArrayPath) offset = 1
       if (openingArrayPath || closingArrayPath) {
-        newPath += '\\'
+        newPath += "\\"
         // path = path.slice(0,i+offset)+"\\"+path.slice(i+offset,path.length)
       }
     }
@@ -2185,27 +2193,27 @@ export const escapeEscapes = (path = '') => {
   }
   return newPath
 }
-export const ee = (path = '') => {
+export const ee = (path = "") => {
   return escapeEscapes(path)
 }
 // TODO
 // Make parsing use \" or \'
 // Currently only uses \"
-export const parsePropertyPath = (path = '') => {
-  let array = []
+export const parsePropertyPath = (path = "") => {
+  const array = []
 
   let readingArrayBasedPath = false
   let i = 0
   let push = false
   let pushed = false
   while (i < path.length) {
-    let arrayPathStart = path[i] == '[' && path[i + 1] == '"'
-    let escapedStart = !(path[i + 1] !== '\\' || i === 0)
+    const arrayPathStart = path[i] == "[" && path[i + 1] == '"'
+    const escapedStart = !(path[i + 1] !== "\\" || i === 0)
 
     if (readingArrayBasedPath) {
       // we found the end of an array delimited path
-      let arrayPathEnd = path[i] == '"' && path[i + 1] == ']'
-      let escapedEnd = !(path[i - 1] !== '\\' || i == 0)
+      const arrayPathEnd = path[i] == '"' && path[i + 1] == "]"
+      const escapedEnd = !(path[i - 1] !== "\\" || i == 0)
       if (arrayPathEnd && !escapedEnd) {
         i += 1
         readingArrayBasedPath = false
@@ -2214,15 +2222,15 @@ export const parsePropertyPath = (path = '') => {
         // if the path includes an "escaped" array based path begin or end value
         // do not push the escape character
         if (
-          (path[i] == '\\' && path[i + 1] == '"' && path[i + 2] == ']') ||
-          (path[i - 1] == '[' && path[i] == '\\' && path[i + 1] == '"')
+          (path[i] == "\\" && path[i + 1] == '"' && path[i + 2] == "]") ||
+          (path[i - 1] == "[" && path[i] == "\\" && path[i + 1] == '"')
         ) {
           // nothing
         } else {
           array[array.length - 1] += path[i]
         }
       }
-    } else if (path[i] == '.') {
+    } else if (path[i] == ".") {
       if (!pushed) push = true
     }
     // we found the start of an array delimited path
@@ -2231,14 +2239,14 @@ export const parsePropertyPath = (path = '') => {
       if (!pushed) push = true
       i += 1
     } else {
-      if (i == 0) array.push('')
+      if (i == 0) array.push("")
       array[array.length - 1] += path[i]
     }
 
     i++
     if (push && i < path.length) {
       pushed = true
-      array.push('')
+      array.push("")
       push = false
     } else {
       pushed = false
@@ -2247,45 +2255,45 @@ export const parsePropertyPath = (path = '') => {
 
   return array
 }
-export const ppp = (path = '') => {
+export const ppp = (path = "") => {
   return this.parsePropertyPath(path)
 }
-export const parsePropertyArray = pathArray => {
-  let path = ''
+export const parsePropertyArray = (pathArray) => {
+  let path = ""
 
   if (pathArray instanceof Array) {
-    pathArray.forEach(subPath => {
+    pathArray.forEach((subPath) => {
       path += epp(subPath)
     })
-  } else if (typeof pathArray === 'string') {
+  } else if (typeof pathArray === "string") {
     return path
   }
 
   return path
 }
-export const ppa = pathArray => {
+export const ppa = (pathArray) => {
   return this.parsePropertyArray(pathArray)
 }
-export const pathToArray = path => {
-  if (typeof path == 'string') {
+export const pathToArray = (path) => {
+  if (typeof path == "string") {
     return parsePropertyPath(path)
   } else {
     return path
   }
 }
-export const pathToString = path => {
-  if (typeof path == 'string') {
+export const pathToString = (path) => {
+  if (typeof path == "string") {
     let ret = parsePropertyPath(path)
     ret = parsePropertyArray(ret)
     return ret
   } else {
-    let ret = parsePropertyArray(path)
+    const ret = parsePropertyArray(path)
     return ret
   }
 }
 export const setsmart = (obj, property, value, context?: any) => {
-  if (!property && typeof obj == 'string') {
-    property = obj.split('.')
+  if (!property && typeof obj == "string") {
+    property = obj.split(".")
     try {
       obj = eval(property[0])
     } catch (err) {
@@ -2294,14 +2302,14 @@ export const setsmart = (obj, property, value, context?: any) => {
     property = property.slice(1, property.length)
   }
   // If the property list is in dot notation, convert to array
-  if (typeof property == 'string') {
+  if (typeof property == "string") {
     property = parsePropertyPath(property)
-  } else if (getsmart.bind(this)(property, 'constructor', false) !== Array) {
+  } else if (getsmart.bind(this)(property, "constructor", false) !== Array) {
     if (context) {
       return {
         value: value,
         undefined: true,
-        err: 'properties path @property argument was not passed properly'
+        err: "properties path @property argument was not passed properly",
       }
     } else {
       return value
@@ -2309,45 +2317,45 @@ export const setsmart = (obj, property, value, context?: any) => {
   }
 
   // if no obj make obj
-  if (!obj || (typeof obj !== 'object' && typeof obj !== 'function')) obj = {}
+  if (!obj || (typeof obj !== "object" && typeof obj !== "function")) obj = {}
 
-  let deepSetByArray = deepSetByArrayUnbound.bind(this)
+  const deepSetByArray = deepSetByArrayUnbound.bind(this)
 
   if (property) {
     return deepSetByArray(obj, property, value)
   } else {
     if (
-      getsmart.bind(this)(local.vue, 'reactiveSetter', false) &&
+      getsmart.bind(this)(local.vue, "reactiveSetter", false) &&
       getsmart.bind(this)(
         this,
-        '$set',
-        getsmart.bind(this)(local.vue, 'Vue.set', false)
+        "$set",
+        getsmart.bind(this)(local.vue, "Vue.set", false)
       ) &&
       obj
     ) {
       const setToUse = this.$set || local.vue.Vue.set
       setToUse(obj, undefined, value)
       if (
-        typeof getsmart.bind(this)(window, '$store.commit', undefined) ==
-        'function'
+        typeof getsmart.bind(this)(window, "$store.commit", undefined) ==
+        "function"
       ) {
-        window.$store.commit(local.vue.basePath || 'graph/thing')
+        window.$store.commit(local.vue.basePath || "graph/thing")
       }
     } else {
       obj = value
       if (
-        getsmart.bind(this)(local.vue, 'store', false) &&
-        typeof getsmart.bind(this)(window, '$store.commit', undefined) ==
-          'function'
+        getsmart.bind(this)(local.vue, "store", false) &&
+        typeof getsmart.bind(this)(window, "$store.commit", undefined) ==
+          "function"
       ) {
-        window.$store.commit(local.vue.basePath || 'graph/thing')
+        window.$store.commit(local.vue.basePath || "graph/thing")
       }
     }
     if (context) {
       return {
         value: obj,
         undefined: false,
-        err: 'there were no properties passed'
+        err: "there were no properties passed",
       }
     } else {
       return obj
@@ -2356,77 +2364,77 @@ export const setsmart = (obj, property, value, context?: any) => {
 
   // In order to avoid constantly checking the type of the property
   // we separate the real logic out into an inner function.
-  function deepSetByArrayUnbound (obj, propsArray, value) {
+  function deepSetByArrayUnbound(obj, propsArray, value) {
     // If the path array has only 1 more element, we've reached
     // the intended property and set its value
     if (propsArray.length == 1) {
       if (
-        getsmart.bind(this)(local.vue, 'reactiveSetter', false) &&
+        getsmart.bind(this)(local.vue, "reactiveSetter", false) &&
         getsmart.bind(this)(
           this,
-          '$set',
-          getsmart.bind(this)(local.vue, 'Vue.set', false)
+          "$set",
+          getsmart.bind(this)(local.vue, "Vue.set", false)
         ) &&
         obj
       ) {
         const setToUse = this.$set || local.vue.Vue.set
         setToUse(obj, ee(propsArray[0]), value)
         if (
-          typeof getsmart.bind(this)(window, '$store.commit', undefined) ==
-          'function'
+          typeof getsmart.bind(this)(window, "$store.commit", undefined) ==
+          "function"
         ) {
-          window.$store.commit(local.vue.basePath || 'graph/thing')
+          window.$store.commit(local.vue.basePath || "graph/thing")
         }
       } else {
         // TODO: make parent object new object so that react can see the change
         obj[ee(propsArray[0])] = value
         if (
-          getsmart.bind(this)(local.vue, 'store', false) &&
-          typeof getsmart.bind(this)(window, '$store.commit', undefined) ==
-            'function'
+          getsmart.bind(this)(local.vue, "store", false) &&
+          typeof getsmart.bind(this)(window, "$store.commit", undefined) ==
+            "function"
         ) {
-          window.$store.commit(local.vue.basePath || 'graph/thing')
+          window.$store.commit(local.vue.basePath || "graph/thing")
         }
       }
       if (context) {
         return {
           value: obj[ee(propsArray[0])],
-          undefined: false
+          undefined: false,
         }
       } else {
         return obj[ee(propsArray[0])]
       }
     }
     // Prepare our path array for recursion
-    var remainingProps = propsArray.slice(1)
+    const remainingProps = propsArray.slice(1)
     // check if next prop is object
-    if (typeof obj[ee(propsArray[0])] !== 'object') {
+    if (typeof obj[ee(propsArray[0])] !== "object") {
       // If we have reached an undefined/null property
       if (
-        getsmart.bind(this)(local.vue, 'reactiveSetter', false) &&
+        getsmart.bind(this)(local.vue, "reactiveSetter", false) &&
         getsmart.bind(this)(
           this,
-          '$set',
-          getsmart.bind(this)(local.vue, 'Vue.set', false)
+          "$set",
+          getsmart.bind(this)(local.vue, "Vue.set", false)
         ) &&
         obj
       ) {
         const setToUse = this.$set || local.vue.Vue.set
         setToUse(obj, ee(propsArray[0]), {})
         if (
-          typeof getsmart.bind(this)(window, '$store.commit', undefined) ==
-          'function'
+          typeof getsmart.bind(this)(window, "$store.commit", undefined) ==
+          "function"
         ) {
-          window.$store.commit(local.vue.basePath || 'graph/thing')
+          window.$store.commit(local.vue.basePath || "graph/thing")
         }
       } else {
         obj[ee(propsArray[0])] = {}
         if (
-          getsmart.bind(this)(local.vue, 'store', false) &&
-          typeof getsmart.bind(this)(window, '$store.commit', undefined) ==
-            'function'
+          getsmart.bind(this)(local.vue, "store", false) &&
+          typeof getsmart.bind(this)(window, "$store.commit", undefined) ==
+            "function"
         ) {
-          window.$store.commit(local.vue.basePath || 'graph/thing')
+          window.$store.commit(local.vue.basePath || "graph/thing")
         }
       }
     }
@@ -2434,8 +2442,8 @@ export const setsmart = (obj, property, value, context?: any) => {
   }
 }
 export const deletesmart = (obj, property) => {
-  if (!property && typeof obj == 'string') {
-    property = obj.split('.')
+  if (!property && typeof obj == "string") {
+    property = obj.split(".")
     try {
       obj = eval(property[0])
     } catch (err) {
@@ -2445,19 +2453,19 @@ export const deletesmart = (obj, property) => {
     property = property.slice(1, property.length)
   }
   // If the property list is in dot notation, convert to array
-  if (typeof property == 'string') {
+  if (typeof property == "string") {
     property = parsePropertyPath(property)
   }
-  let parentPathArray = property.slice(0, property.length - 1)
-  let path = property[property.length - 1]
-  let parentObj = getsmart(obj, parentPathArray, {})
+  const parentPathArray = property.slice(0, property.length - 1)
+  const path = property[property.length - 1]
+  const parentObj = getsmart(obj, parentPathArray, {})
 
   if (
-    getsmart.bind(this)(local.vue, 'reactiveSetter', false) &&
+    getsmart.bind(this)(local.vue, "reactiveSetter", false) &&
     getsmart.bind(this)(
       this,
-      '$set',
-      getsmart.bind(this)(local.vue, 'Vue.set', false)
+      "$set",
+      getsmart.bind(this)(local.vue, "Vue.set", false)
     ) &&
     obj
   ) {
@@ -2468,20 +2476,20 @@ export const deletesmart = (obj, property) => {
 }
 export const pushSmart = (array, value) => {
   if (
-    getsmart.bind(this)(local.vue, 'reactiveSetter', false) &&
+    getsmart.bind(this)(local.vue, "reactiveSetter", false) &&
     getsmart.bind(this)(
       this,
-      '$set',
-      getsmart.bind(this)(local.vue, 'Vue.set', false)
+      "$set",
+      getsmart.bind(this)(local.vue, "Vue.set", false)
     ) &&
     array
   ) {
     array.push(value)
     if (
-      typeof getsmart.bind(this)(window, '$store.commit', undefined) ==
-      'function'
+      typeof getsmart.bind(this)(window, "$store.commit", undefined) ==
+      "function"
     ) {
-      window.$store.commit(local.vue.basePath || 'graph/thing')
+      window.$store.commit(local.vue.basePath || "graph/thing")
     }
   } else {
     array.push(value)
@@ -2489,7 +2497,7 @@ export const pushSmart = (array, value) => {
 }
 export const gosmart = (obj, property, value, context, schema) => {
   // stands for get or set smart
-  var get = getsmart.bind(this)(
+  let get = getsmart.bind(this)(
     obj,
     property,
     value,
@@ -2510,13 +2518,13 @@ export const gosmart = (obj, property, value, context, schema) => {
 export const gosmarter = (obj, property, value, context, schema = true) => {
   return gosmart.bind(this)(obj, property, value, context, schema)
 }
-export const absoluteType = value => {
+export const absoluteType = (value) => {
   let type
   try {
     type = value.constructor.name
   } catch (e) {
-    if (typeof value === 'undefined') type = 'undefined'
-    if (value === null) type = 'null'
+    if (typeof value === "undefined") type = "undefined"
+    if (value === null) type = "null"
   }
   return type
 }
@@ -2525,24 +2533,24 @@ export const vgosmart = (obj, property, value, context) => {
   // return value from property path, either gotten or smartly set
   return {
     get: () => {
-      var get = getsmart.bind(this)(obj, property, value, true)
+      let get = getsmart.bind(this)(obj, property, value, true)
       if (get.undefined) {
         get = setsmart.bind(this)(obj, property, get.value, context)
       }
       if (context) {
         return get
       } else {
-        return getsmart.bind(this)(get, 'value', get)
+        return getsmart.bind(this)(get, "value", get)
       }
     },
-    set: val => {
+    set: (val) => {
       setsmart.bind(this)(obj, property, val)
-    }
+    },
   }
 }
 export const getsmartval = (obj, property, defaultValue) => {
   // get the value of a property path based off its type
-  let target = getsmart.bind(this)(obj, property, defaultValue)
+  const target = getsmart.bind(this)(obj, property, defaultValue)
   if (target && target.type) {
     if (target[target.type]) {
       return target[target.type]
@@ -2554,16 +2562,16 @@ export const getsmartval = (obj, property, defaultValue) => {
   }
   return defaultValue
 }
-export const safestring = something => {
-  return smarts.stringify(something || '')
+export const safestring = (something) => {
+  return smarts.stringify(something || "")
 }
-export const safeparse = something => {
-  return smarts.parse(something || '')
+export const safeparse = (something) => {
+  return smarts.parse(something || "")
 }
-export const flatten = (arrays, func = i => i) => {
+export const flatten = (arrays, func = (i) => i) => {
   const flat = []
 
-  arrays.forEach(array => {
+  arrays.forEach((array) => {
     if (Array.isArray(array)) {
       flat.push(...flatten(array))
     } else {
@@ -2573,15 +2581,15 @@ export const flatten = (arrays, func = i => i) => {
 
   return flat
 }
-export const mapsmart = (list, keyProperty = 'title', returnExistant) => {
+export const mapsmart = (list, keyProperty = "title", returnExistant) => {
   return new Promise((resolve, reject) => {
     if (!keyProperty) {
       reject()
-    } else if (list && typeof list.length == 'number') {
+    } else if (list && typeof list.length == "number") {
       if (list.length == 0) {
         if (
           (returnExistant &&
-            getsmart.bind(this)(list, 'mapped.' + returnExistant, false)) ||
+            getsmart.bind(this)(list, "mapped." + returnExistant, false)) ||
           !returnExistant
         ) {
           resolve(true)
@@ -2591,42 +2599,42 @@ export const mapsmart = (list, keyProperty = 'title', returnExistant) => {
           resolve()
         }
       }
-      if (!list.mapped || typeof list.mapped === 'boolean') {
+      if (!list.mapped || typeof list.mapped === "boolean") {
         if (
-          getsmart.bind(this)(local.vue, 'reactiveSetter', false) &&
+          getsmart.bind(this)(local.vue, "reactiveSetter", false) &&
           getsmart.bind(this)(
             this,
-            '$set',
-            getsmart.bind(this)(local.vue, 'Vue.set', false)
+            "$set",
+            getsmart.bind(this)(local.vue, "Vue.set", false)
           ) &&
           list
         ) {
           const setToUse = this.$set || local.vue.Vue.set
-          setToUse(list, 'mapped', {})
+          setToUse(list, "mapped", {})
         } else {
-          list['mapped'] = {}
+          list["mapped"] = {}
         }
       }
-      for (var i = 0; i < list.length; i++) {
-        if (typeof list[i] !== 'string') {
+      for (let i = 0; i < list.length; i++) {
+        if (typeof list[i] !== "string") {
           if (
-            getsmart.bind(this)(local.vue, 'reactiveSetter', false) &&
+            getsmart.bind(this)(local.vue, "reactiveSetter", false) &&
             getsmart.bind(this)(
               this,
-              '$set',
-              getsmart.bind(this)(local.vue, 'Vue.set', false)
+              "$set",
+              getsmart.bind(this)(local.vue, "Vue.set", false)
             ) &&
             list.mapped
           ) {
             const setToUse = this.$set || local.vue.Vue.set
             setToUse(list.mapped, list[i][keyProperty], list[i])
           } else {
-            list['mapped'][list[i][keyProperty]] = list[i]
+            list["mapped"][list[i][keyProperty]] = list[i]
           }
           if (i == list.length - 1) {
             if (
               (returnExistant &&
-                getsmart.bind(this)(list, 'mapped.' + returnExistant, false)) ||
+                getsmart.bind(this)(list, "mapped." + returnExistant, false)) ||
               !returnExistant
             ) {
               resolve(true)
@@ -2664,7 +2672,7 @@ export const mapsmart = (list, keyProperty = 'title', returnExistant) => {
         else if (i == list.length - 1) {
           if (
             (returnExistant &&
-              getsmart.bind(this)(list, 'mapped.' + returnExistant, false)) ||
+              getsmart.bind(this)(list, "mapped." + returnExistant, false)) ||
             !returnExistant
           ) {
             resolve(true)
@@ -2681,17 +2689,17 @@ export const mapsmart = (list, keyProperty = 'title', returnExistant) => {
     }
   })
 }
-export const domval = thing => {
-  return getsmart.bind(this)(thing, 'properties.description', '')
+export const domval = (thing) => {
+  return getsmart.bind(this)(thing, "properties.description", "")
 }
 export const getParent = (levels = Infinity) => {
-  if (typeof levels == 'string') levels = (levels.match(/\.\./g) || []).length
+  if (typeof levels == "string") levels = (levels.match(/\.\./g) || []).length
 
   if (levels >= this.pathAsArray.length - 1) {
     return this.pathAsArray[0]
   }
 
-  let level = this.pathAsArray.length - 1 - levels
+  const level = this.pathAsArray.length - 1 - levels
 
   return this.pathAsArray[level]
 }
@@ -2699,9 +2707,9 @@ export const getThing = (props = {}) => {
   const { list = getsmart.bind(this)(objList), defaultValue = undefined } =
     props
 
-  var index = thingIn({
+  const index = thingIn({
     ...props,
-    retIndex: true
+    retIndex: true,
   })
   if (index >= 0) {
     return list[index]
@@ -2710,14 +2718,14 @@ export const getThing = (props = {}) => {
   }
 }
 export const equal = (obj1, obj2, seen = []) => {
-  if (obj1 && obj2 && typeof obj1 == 'object' && typeof obj2 == 'object') {
+  if (obj1 && obj2 && typeof obj1 == "object" && typeof obj2 == "object") {
     seen.push(obj1, obj2)
     //Loop through properties in object 1
     for (const p in obj1) {
       //Check property exists on both objects
       if (
-        typeof obj1.hasOwnProperty == 'function' &&
-        typeof obj2.hasOwnProperty == 'function' &&
+        typeof obj1.hasOwnProperty == "function" &&
+        typeof obj2.hasOwnProperty == "function" &&
         Object.prototype.hasOwnProperty.call(obj1, p) !==
           Object.prototype.hasOwnProperty.call(obj2, p)
       )
@@ -2725,14 +2733,14 @@ export const equal = (obj1, obj2, seen = []) => {
 
       switch (typeof obj1[p]) {
         //Deep compare objects
-        case 'object':
+        case "object":
           if (seen.indexOf(obj1[p]) < 0 && !equal(obj1[p], obj2[p], seen))
             return false
           break
         //Compare function code
-        case 'function':
+        case "function":
           if (
-            typeof obj2[p] == 'undefined' ||
+            typeof obj2[p] == "undefined" ||
             obj1[p].toString() != obj2[p].toString()
           )
             return false
@@ -2752,7 +2760,7 @@ export const equal = (obj1, obj2, seen = []) => {
 }
 export const mergeall = (array, options) => {
   if (!Array.isArray(array)) {
-    throw new Error('first argument should be an array')
+    throw new Error("first argument should be an array")
   }
 
   return array.reduce(function (prev, next) {
@@ -2864,5 +2872,5 @@ export const smarts = {
   getParent,
   getThing,
   equal,
-  mergeall
+  mergeall,
 }

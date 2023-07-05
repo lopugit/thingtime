@@ -17,7 +17,14 @@ module.exports = {
       version: "detect",
     },
   },
-  plugins: ["@typescript-eslint", "react", "prettier", "unused-imports", "simple-import-sort", "chakra-ui"],
+  plugins: [
+    "@typescript-eslint",
+    "react",
+    // "unused-imports",
+    "prettier",
+    "simple-import-sort",
+    "chakra-ui",
+  ],
   extends: [
     "@remix-run/eslint-config",
     "eslint:recommended",
@@ -26,7 +33,10 @@ module.exports = {
     "plugin:@typescript-eslint/recommended",
   ],
   rules: {
-    "react/jsx-curly-brace-presence": ["error", { props: "never", children: "never" }],
+    "react/jsx-curly-brace-presence": [
+      "error",
+      { props: "never", children: "never" },
+    ],
     "no-async-promise-executor": "off",
     "react/prop-types": "off",
     "react/display-name": "off",
@@ -35,8 +45,8 @@ module.exports = {
     "@typescript-eslint/explicit-function-return-type": "off",
     "@typescript-eslint/explicit-module-boundary-types": "off",
     "@typescript-eslint/no-unused-vars": "off",
-    "unused-imports/no-unused-imports": "error",
-    "unused-imports/no-unused-vars": "error",
+    // "unused-imports/no-unused-imports": "error",
+    // "unused-imports/no-unused-vars": "error",
     "react/react-in-jsx-scope": "off",
     "chakra-ui/props-order": "error",
     "chakra-ui/props-shorthand": [

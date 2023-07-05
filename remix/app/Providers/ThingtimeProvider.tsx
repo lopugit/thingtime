@@ -20,7 +20,14 @@ try {
   // nothing
 }
 
-const forceable = {
+const force = {
+  settings: {
+    commanderActive: true,
+  },
+  version: 22,
+}
+
+const newVersionData = {
   Content: {
     hidden1: "Edit this to your heart's desire.",
     "How?": "Just search for Content and edit the value to whatever you want.",
@@ -30,26 +37,25 @@ const forceable = {
   },
 }
 
-const initialThingtime = {
-  nav: {},
-  version: 22,
-  ...forceable,
-}
-
-const userData = {
+const initialValues = {
   settings: {
-    showCommander: true,
+    commanderActive: true,
     clearCommanderOnToggle: true,
     clearCommanderContextOnToggle: true,
   },
-  ...forceable,
+  Content: {
+    hidden1: "Edit this to your heart's desire.",
+    "How?": "Just search for Content and edit the value to whatever you want.",
+    "Example:": `Content = New Content!
+      Content.Nested Content = New Nested Content!
+    `,
+  },
 }
 
+const initialThingtime = smarts.merge(initialValues, force)
+
 export const ThingtimeProvider = (props: any): JSX.Element => {
-  const [thingtime, set] = React.useState({
-    ...initialThingtime,
-    ...userData,
-  })
+  const [thingtime, set] = React.useState(smarts.merge(initialValues, force))
 
   const thingtimeRef = React.useRef(thingtime)
 
@@ -61,15 +67,15 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
       if (thingtimeFromLocalStorage) {
         const parsed = JSON.parse(thingtimeFromLocalStorage)
         if (parsed) {
-          const invalidLocalStorage =
-            !parsed.version || parsed.version < initialThingtime.version
-          if (!invalidLocalStorage) {
-            set(parsed)
+          const localIsValid =
+            !parsed.version || parsed.version >= force.version
+          if (localIsValid) {
+            const newThingtime = smarts.merge(force, parsed)
+            console.log("nik comm newThingtime", newThingtime)
+            set(newThingtime)
           } else {
-            const newThingtime = {
-              ...parsed,
-              ...initialThingtime,
-            }
+            const withVersionUpdates = smarts.merge(newVersionData, parsed)
+            const newThingtime = smarts.merge(force, withVersionUpdates)
             set(newThingtime)
           }
         }
@@ -144,6 +150,7 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
     try {
       window.setThingtime = setThingtime
       window.thingtime = thingtime
+      window.tt = thingtime
     } catch {
       // nothing
     }
