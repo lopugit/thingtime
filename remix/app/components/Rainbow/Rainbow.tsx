@@ -13,6 +13,8 @@ export const Rainbow = (allProps: any): JSX.Element => {
 
   const uuid = useUuid()
 
+  props.expand = props?.expand || true
+
   const [hidden, setHidden] = React.useState(true)
   const repeats = props?.repeats || 1
   const [filter, setFilter] = React.useState(props?.filter)

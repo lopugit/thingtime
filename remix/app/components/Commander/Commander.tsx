@@ -317,14 +317,14 @@ export const Commander = (props) => {
     <ClickAwayListener onClickAway={closeCommander}>
       <Flex
         position="absolute"
-        // display={['flex', commanderActive ? 'flex' : 'none']}
         top={0}
+        right={0}
         // zIndex={99999}
         // position='fixed'
         // top='100px'
-        right={0}
         left={0}
         justifyContent={["flex-start", "center"]}
+        // display={["flex", commanderActive ? "flex" : "none"]}
         maxWidth="100%"
         height="100%"
         pointerEvents="none"
@@ -386,55 +386,61 @@ export const Commander = (props) => {
             <Thingtime thing={contextValue}></Thingtime>
           </Flex>
         </Flex>
-        <Rainbow
-          filter="blur(15px)"
-          opacity={commanderActive ? 0.25 : 0}
-          repeats={rainbowRepeats}
-          thickness={8}
-          overflow="visible"
+        <Center
+          position="relative"
+          width={["100%", "400px"]}
+          maxWidth={[mobileVW, "100%"]}
+          height="100%"
         >
-          <Center
-            position="relative"
-            overflow="hidden"
-            width={["100%", "400px"]}
-            maxWidth={[mobileVW, "100%"]}
-            height="100%"
-            padding="1px"
-            borderRadius="6px"
-            pointerEvents="all"
-            outline="none"
+          <Rainbow
+            filter="blur(15px)"
+            opacity={commanderActive ? 0.25 : 0}
+            repeats={rainbowRepeats}
+            thickness={8}
+            overflow="visible"
           >
-            <Rainbow
-              opacity={commanderActive ? 0.5 : 0}
-              position="absolute"
-              expand
-              repeats={rainbowRepeats}
-              opacityTransition="all 3000ms ease"
-              thickness={10}
-            ></Rainbow>
-            <Input
-              // display='none'
-              // opacity={0}
-              ref={inputRef}
-              sx={{
-                "&::placeholder": {
-                  color: "greys.dark",
-                },
-              }}
-              width="100%"
+            <Center
+              position="relative"
+              overflow="hidden"
+              width={["100%", "400px"]}
+              maxWidth={[mobileVW, "100%"]}
               height="100%"
-              background="grey"
-              border="none"
-              borderRadius="5px"
+              padding="1px"
+              borderRadius="6px"
+              pointerEvents="all"
               outline="none"
-              onChange={onChange}
-              onFocus={openCommander}
-              onKeyDown={onKeyDown}
-              placeholder={"What's on your mind?"}
-              value={value}
-            ></Input>
-          </Center>
-        </Rainbow>
+            >
+              <Rainbow
+                opacity={commanderActive ? 0.5 : 0}
+                position="absolute"
+                repeats={rainbowRepeats}
+                opacityTransition="all 3000ms ease"
+                thickness={10}
+              ></Rainbow>
+              <Input
+                // display='none'
+                // opacity={0}
+                ref={inputRef}
+                sx={{
+                  "&::placeholder": {
+                    color: "greys.dark",
+                  },
+                }}
+                width="100%"
+                height="100%"
+                background="grey"
+                border="none"
+                borderRadius="5px"
+                outline="none"
+                onChange={onChange}
+                onFocus={openCommander}
+                onKeyDown={onKeyDown}
+                placeholder={"What's on your mind?"}
+                value={value}
+              ></Input>
+            </Center>
+          </Rainbow>
+        </Center>
       </Flex>
     </ClickAwayListener>
   )
