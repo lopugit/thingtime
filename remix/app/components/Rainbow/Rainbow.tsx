@@ -1,6 +1,7 @@
 import React from "react"
 import { Box, Center } from "@chakra-ui/react"
-import { GradientPath } from "gradient-path"
+
+import { GradientPath } from "~/gp/GradientPath"
 
 export const Rainbow = (props: any): JSX.Element => {
   const rainbow = ["#f34a4a", "#ffbc48", "#58ca70", "#47b5e6", "#a555e8"]
@@ -34,13 +35,49 @@ export const Rainbow = (props: any): JSX.Element => {
 
   const svgRef = React.useRef(null)
 
+  const colourKeyframes = React.useMemo(() => {
+    const ret = {}
+
+    repeatedColours.map((colour, i) => {
+      const keyframe = `${(i / (repeatedColours.length - 1)) * 100}%`
+      ret[keyframe] = {
+        fill: colour,
+        stroke: colour,
+      }
+    })
+
+    return ret
+  }, [repeatedColours])
+
+  const colourClasses = React.useMemo(() => {
+    const ret = {}
+
+    const steps = 500
+
+    repeatedColours.forEach((color, i) => {
+      for (let j = 0; j < steps; j++) {
+        const nth = `:nth-child(${repeatedColours?.length * j}n+${i + j})`
+        ret[".path-segment" + nth] = {
+          // animation: `rainbow-psych 2s linear infinite`,
+          // "animation-delay": `-${(i + j) * 0.05}s`,
+        }
+      }
+    })
+
+    return ret
+  }, [repeatedColours])
+
   const svg = React.useMemo(() => {
     return (
       <Box
         sx={{
-          "svg g:nth-child(2)": {
-            display: "none",
+          rainbowPsych: {
+            rainbowPsych: "rainbowPsych",
           },
+          "@keyframes rainbow-psych": {
+            ...colourKeyframes,
+          },
+          ...colourClasses,
         }}
         width="100%"
         height="100%"
@@ -51,9 +88,17 @@ export const Rainbow = (props: any): JSX.Element => {
           viewBox={viewBox}
           width="100%"
           height="100%"
-          preserveAspectRatio="none"
+          // preserveAspectRatio="none"
         >
-          <rect x={0} y={0} width={100} height={100} rx={10} ry={10}></rect>
+          <rect
+            // stroke="url(#linear-gradient)"
+            x={0}
+            y={0}
+            width={100}
+            height={100}
+            rx={10}
+            ry={10}
+          ></rect>
           {/* <path
             fill="none"
             stroke="blue"
@@ -64,7 +109,16 @@ export const Rainbow = (props: any): JSX.Element => {
         </svg>
       </Box>
     )
-  }, [pathString, strokeWidth, extraStroke, viewBox])
+  }, [
+    pathString,
+    strokeWidth,
+    extraStroke,
+    viewBox,
+    repeatedColours,
+    colors,
+    colourKeyframes,
+    colourClasses,
+  ])
 
   React.useEffect(() => {
     const path = svgRef.current.querySelector("rect")
@@ -72,9 +126,9 @@ export const Rainbow = (props: any): JSX.Element => {
     if (path) {
       const gp = new GradientPath({
         path,
-        segments: props?.segments || 2000,
-        samples: props?.samples || 10,
-        precision: props?.precision || 10,
+        segments: props?.segments || 250,
+        samples: props?.samples || 5,
+        precision: props?.precision || 5,
       })
 
       const colors = repeatedColours?.map((color, idx) => {
@@ -87,46 +141,18 @@ export const Rainbow = (props: any): JSX.Element => {
       gp.render({
         type: "path",
         width: 10,
-        fill: colors,
-        strokeWidth: 1,
-        stroke: colors,
+        fill: ["orange", "blue", "orange"],
+        // fill: colors,
+        strokeWidth: 0.5,
+        stroke: ["orange", "blue", "orange"],
+        // stroke: colors,
       })
 
-      let prevColours = colors
-
-      const interval = setInterval(() => {
-        // pop first colour and append new first colour to end
-        const prevColoursClone = prevColours.map((colour) => {
-          return {
-            ...colour,
-          }
-        })
-        const newColoursStart = prevColoursClone.slice(1)
-        const newColours = [...newColoursStart, { ...newColoursStart[0] }]
-
-        const adjustedPosition = newColours.map((colour, idx) => {
-          return {
-            ...colour,
-            pos: idx / (newColours.length - 1),
-          }
-        })
-
-        prevColours = adjustedPosition
-
-        gp.render({
-          type: "path",
-          width: 10,
-          fill: adjustedPosition,
-          strokeWidth: 1,
-          stroke: adjustedPosition,
-        })
-      }, 1000)
-
       return () => {
-        clearInterval(interval)
+        // clearInterval(interval)
       }
     }
-  }, [])
+  }, [props, repeatedColours])
 
   return (
     <Center
