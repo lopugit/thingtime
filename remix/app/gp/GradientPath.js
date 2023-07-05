@@ -36,7 +36,18 @@ export const GradientPath = class {
     this.path.parentNode.removeChild(this.path)
   }
 
-  render({ type, stroke, strokeWidth, fill, width }) {
+  remove() {
+    this.group.parentNode.removeChild(this.group)
+  }
+
+  render({
+    type,
+    stroke = ["white", "black", "white"],
+    strokeWidth = 1,
+    fill = ["white", "black", "white"],
+    width,
+    animation = {},
+  }) {
     // Store information from this render cycle
     const renderCycle = {}
 
@@ -62,7 +73,7 @@ export const GradientPath = class {
           svgElem("path", {
             class: "path-segment",
             d: segmentToD(samples),
-            ...styleAttrs(fill, stroke, strokeWidth, progress),
+            ...styleAttrs(fill, stroke, strokeWidth, progress, animation),
           })
         )
       }
@@ -79,7 +90,7 @@ export const GradientPath = class {
             cx: x,
             cy: y,
             r: width / 2,
-            ...styleAttrs(fill, stroke, strokeWidth, progress),
+            ...styleAttrs(fill, stroke, strokeWidth, progress, animation),
           })
         )
       }

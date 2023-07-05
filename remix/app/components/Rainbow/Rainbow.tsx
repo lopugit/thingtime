@@ -2,25 +2,56 @@ import React from "react"
 import { Box, Center } from "@chakra-ui/react"
 
 import { GradientPath } from "~/gp/GradientPath"
+import { useProps } from "~/hooks/useProps"
+import { useTrace } from "~/hooks/useTrace"
+import { useUuid } from "~/hooks/useUuid"
 
-export const Rainbow = (props: any): JSX.Element => {
+export const Rainbow = (allProps: any): JSX.Element => {
   const rainbow = ["#f34a4a", "#ffbc48", "#58ca70", "#47b5e6", "#a555e8"]
 
+  const props = useProps(allProps)
+
+  const uuid = useUuid()
+
+  const [hidden, setHidden] = React.useState(true)
+  const repeats = props?.repeats || 1
+  const [filter, setFilter] = React.useState(props?.filter)
+  const opacity = props?.opacity !== undefined ? props?.opacity : 1
   const [colors, setColors] = React.useState(props?.colors || rainbow)
+  const [pathWidth, setPathWidth] = React.useState(props?.thickness || 1)
+  const [overflow, setOverflow] = React.useState(props?.overflow || "hidden")
+  const [opacityTransition, setOpacityTransition] = React.useState(
+    props?.opacityTransition || "all 10000ms ease"
+  )
+
+  const parentRef = React.useRef(null)
 
   const repeatedColours = React.useMemo(() => {
-    return [...colors, colors[0]]
-  }, [colors])
+    const ret = []
+
+    for (let i = 0; i < repeats; i++) {
+      ret.push(...colors)
+    }
+
+    ret.push(colors[0])
+
+    return ret
+  }, [colors, repeats])
 
   // make SVG that takes makes path in the shape of a box
   // which adjusts to the parent containers size
+
+  const [state, setState] = React.useState({
+    width: 100,
+    height: 100,
+  })
 
   const [strokeWidth, setStrokeWidth] = React.useState(1)
 
   const [extraStroke, setExtraStroke] = React.useState(0)
 
-  const [width, setWidth] = React.useState(props?.width || "105%")
-  const [height, setHeight] = React.useState(props?.height || "105%")
+  const [width, setWidth] = React.useState(props?.width || "100%")
+  const [height, setHeight] = React.useState(props?.height || "100%")
 
   const pathString = React.useMemo(() => {
     const startPoint = 0 + strokeWidth / 2
@@ -28,10 +59,6 @@ export const Rainbow = (props: any): JSX.Element => {
 
     return `M -${4} ${startPoint} H ${endPoint} V ${endPoint} H ${startPoint} V ${startPoint}`
   }, [strokeWidth])
-
-  const viewBox = React.useMemo(() => {
-    return `0 0 100 100`
-  }, [])
 
   const svgRef = React.useRef(null)
 
@@ -49,56 +76,45 @@ export const Rainbow = (props: any): JSX.Element => {
     return ret
   }, [repeatedColours])
 
-  const colourClasses = React.useMemo(() => {
-    const ret = {}
+  React.useEffect(() => {
+    const updateChildSize = () => {
+      const { width, height } = parentRef?.current?.getBoundingClientRect()
+      console.log("nik width height", width, height)
+      setState({ width, height })
+    }
 
-    const steps = 500
+    updateChildSize()
 
-    repeatedColours.forEach((color, i) => {
-      for (let j = 0; j < steps; j++) {
-        const nth = `:nth-child(${repeatedColours?.length * j}n+${i + j})`
-        ret[".path-segment" + nth] = {
-          // animation: `rainbow-psych 2s linear infinite`,
-          // "animation-delay": `-${(i + j) * 0.05}s`,
-        }
-      }
-    })
+    new ResizeObserver(updateChildSize).observe(parentRef?.current)
+  }, [])
 
-    return ret
-  }, [repeatedColours])
+  const rect = React.useMemo(() => {
+    return (
+      <rect
+        // stroke="url(#linear-gradient)"
+        x={0}
+        y={0}
+        width={state?.width || 100}
+        height={state?.height || 100}
+        rx={10}
+        ry={10}
+      ></rect>
+    )
+  }, [state?.width, state?.height])
 
   const svg = React.useMemo(() => {
+    const id = Math.random().toString(36).substring(2, 15)
+
     return (
-      <Box
-        sx={{
-          rainbowPsych: {
-            rainbowPsych: "rainbowPsych",
-          },
-          "@keyframes rainbow-psych": {
-            ...colourKeyframes,
-          },
-          ...colourClasses,
-        }}
-        width="100%"
-        height="100%"
-      >
+      <Box width="100%" height="100%" id={id}>
         <svg
-          ref={svgRef}
           overflow="visible"
-          viewBox={viewBox}
+          viewBox={`0 0 ${state?.width || 100} ${state?.height || 100}`}
           width="100%"
           height="100%"
-          // preserveAspectRatio="none"
+          preserveAspectRatio="none"
         >
-          <rect
-            // stroke="url(#linear-gradient)"
-            x={0}
-            y={0}
-            width={100}
-            height={100}
-            rx={10}
-            ry={10}
-          ></rect>
+          {rect}
           {/* <path
             fill="none"
             stroke="blue"
@@ -109,71 +125,115 @@ export const Rainbow = (props: any): JSX.Element => {
         </svg>
       </Box>
     )
-  }, [
-    pathString,
-    strokeWidth,
-    extraStroke,
-    viewBox,
-    repeatedColours,
-    colors,
-    colourKeyframes,
-    colourClasses,
-  ])
+  }, [state, rect])
 
   React.useEffect(() => {
-    const path = svgRef.current.querySelector("rect")
+    if (uuid) {
+      const svg = svgRef?.current?.querySelector("svg")
 
-    if (path) {
-      const gp = new GradientPath({
-        path,
-        segments: props?.segments || 250,
-        samples: props?.samples || 5,
-        precision: props?.precision || 5,
-      })
+      // path is rect or insert new rect if empty svg
+      const rectSource = parentRef?.current?.querySelector(".svg-source rect")
+      const path =
+        svg?.querySelector?.("rect") ||
+        svg?.appendChild?.(rectSource?.cloneNode?.())
 
-      const colors = repeatedColours?.map((color, idx) => {
-        return {
-          color,
-          pos: idx / (repeatedColours.length - 1),
+      if (path) {
+        console.log("nik re-rendering rainbow")
+        const gp = new GradientPath({
+          path,
+          segments: props?.segments || 1000,
+          samples: props?.samples || 1,
+          precision: props?.precision || 5,
+        })
+
+        gp.render({
+          type: "path",
+          width: pathWidth || 1,
+          animation: {
+            name: `rainbow-${uuid}`,
+            duration: 5,
+          },
+        })
+
+        setTimeout(() => {
+          setHidden(false)
+        }, 500)
+
+        return () => {
+          // setHidden(true)
+          gp.remove()
         }
-      })
-
-      gp.render({
-        type: "path",
-        width: 10,
-        fill: ["orange", "blue", "orange"],
-        // fill: colors,
-        strokeWidth: 0.5,
-        stroke: ["orange", "blue", "orange"],
-        // stroke: colors,
-      })
-
-      return () => {
-        // clearInterval(interval)
       }
     }
-  }, [props, repeatedColours])
+  }, [
+    uuid,
+    props?.segments,
+    props?.samples,
+    props?.precision,
+    pathWidth,
+    repeatedColours,
+    parentRef,
+    svgRef,
+    rect,
+  ])
+
+  const render = true
+
+  useTrace("Rainbow", {
+    props,
+  })
 
   return (
-    <Center
-      position={props?.position || "relative"}
-      overflow="visible"
-      padding="25px"
-      background="lightblue"
-    >
-      {props?.children}
+    <>
       <Center
-        position="absolute"
-        top={0}
-        left={0}
-        overflow="visible"
-        width="100%"
-        height="100%"
+        className="Rainbow_n__n"
+        ref={parentRef}
+        sx={{
+          [`@keyframes rainbow-${uuid}`]: {
+            ...colourKeyframes,
+          },
+        }}
+        position={props?.position || "relative"}
+        overflow={overflow}
+        width={props?.expand ? "100%" : ""}
+        height={props?.expand ? "100%" : ""}
       >
-        <Box flexShrink={0} overflow="visible" width={width} height={height}>
-          {svg}
-        </Box>
+        <Center
+          className="main-svg-container"
+          position="absolute"
+          top={0}
+          left={0}
+          overflow="visible"
+          width="100%"
+          height="100%"
+          opacity={hidden ? "0" : opacity}
+          transition={opacityTransition}
+        >
+          {/* debug svg */}
+          <Box
+            className="svg-source"
+            flexShrink={0}
+            display="none"
+            overflow="visible"
+            width={width}
+            height={height}
+          >
+            {svg}
+          </Box>
+          <Box
+            ref={svgRef}
+            flexShrink={0}
+            overflow="visible"
+            width={width}
+            height={height}
+            opacity={hidden ? 0 : !render ? "0" : 1}
+            filter={filter}
+          >
+            {svg}
+          </Box>
+        </Center>
+        {allProps?.children}
       </Center>
-    </Center>
+    </>
   )
 }

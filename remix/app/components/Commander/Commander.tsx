@@ -2,6 +2,7 @@ import React from "react"
 import ClickAwayListener from "react-click-away-listener"
 import { Center, Flex, Input } from "@chakra-ui/react"
 
+import { Rainbow } from "../Rainbow/Rainbow"
 import { Thingtime } from "../Thingtime/Thingtime"
 import { useThingtime } from "../Thingtime/useThingtime"
 
@@ -14,7 +15,7 @@ export const Commander = (props) => {
   const inputRef = React.useRef()
 
   const [value, setValue] = React.useState("")
-
+  const [active, setActive] = React.useState(false)
   const [contextPath, setContextPath] = React.useState()
 
   const [showContext, setShowContextState] = React.useState(false)
@@ -33,23 +34,25 @@ export const Commander = (props) => {
     return ret
   }, [contextPath, getThingtime])
 
-  const showCommander = React.useMemo(() => {
-    return thingtime?.settings?.showCommander
-  }, [thingtime?.settings?.showCommander])
+  const commanderActive = React.useMemo(() => {
+    return thingtime?.settings?.commanderActive
+  }, [thingtime?.settings?.commanderActive])
 
-  // showCommander useEffect
+  console.log("nik commanderActive", commanderActive)
+
+  // commanderActive useEffect
   React.useEffect(() => {
-    if (showCommander) {
+    if (commanderActive) {
       inputRef?.current?.focus?.()
     } else {
       if (thingtimeRef?.current?.settings?.clearCommanderOnToggle) {
         setValue("")
       }
       if (thingtimeRef?.current?.settings?.clearCommanderContextOnToggle) {
-        setShowContext(false, "showCommander useEffect")
+        setShowContext(false, "commanderActive useEffect")
       }
     }
-  }, [showCommander, thingtimeRef, setShowContext])
+  }, [commanderActive, thingtimeRef, setShowContext])
 
   const onChange = React.useCallback((e) => {
     setValue(e.target.value)
@@ -165,7 +168,7 @@ export const Commander = (props) => {
       //   setShowContext(true, 'Thingtime changes update suggestions')
       // }
     }
-  }, [value, thingtime, commandPath, setShowContext])
+  }, [value, thingtime, commandPath])
 
   const onEnter = React.useCallback(
     (props) => {
@@ -202,6 +205,7 @@ export const Commander = (props) => {
       setShowContext,
       escapedCommandValue,
       setThingtime,
+      getThingtime,
       commandIsAction,
       commandPath,
       commandContainsPath,
@@ -216,8 +220,8 @@ export const Commander = (props) => {
         e.stopPropagation()
         onEnter({ e })
         // setThingtime(
-        //   'settings.showCommander',
-        //   !thingtime?.settings?.showCommander
+        //   'settings.commanderActive',
+        //   !thingtime?.settings?.commanderActive
         // )
       }
     },
@@ -225,13 +229,18 @@ export const Commander = (props) => {
   )
 
   const openCommander = React.useCallback(() => {
-    setThingtime("settings.showCommander", true)
+    console.log("nik commander opening commander")
+    setThingtime("settings.commanderActive", true)
   }, [setThingtime])
 
   const closeCommander = React.useCallback(() => {
-    if (thingtime?.settings?.showCommander) {
-      setThingtime("settings.showCommander", false)
+    if (thingtime?.settings?.commanderActive) {
+      console.log("nik commander closing commander")
+      setThingtime("settings.commanderActive", false)
     }
+
+    document.activeElement.blur()
+
     if (value !== "") {
       setValue("")
     }
@@ -241,15 +250,22 @@ export const Commander = (props) => {
     if (showContext !== false) {
       setShowContext(false)
     }
-  }, [setThingtime, setShowContext, value, contextPath, showContext])
+  }, [
+    setThingtime,
+    setShowContext,
+    value,
+    contextPath,
+    showContext,
+    thingtime?.settings?.commanderActive,
+  ])
 
   const toggleCommander = React.useCallback(() => {
-    if (thingtime?.settings?.showCommander) {
+    if (thingtime?.settings?.commanderActive) {
       closeCommander()
     } else {
       openCommander()
     }
-  }, [thingtime?.settings?.showCommander, closeCommander, openCommander])
+  }, [thingtime?.settings?.commanderActive, closeCommander, openCommander])
 
   React.useEffect(() => {
     const keyListener = (e: any) => {
@@ -295,11 +311,13 @@ export const Commander = (props) => {
     return "calc(100vw - 45px)"
   }, [])
 
+  const rainbowRepeats = 1
+
   return (
     <ClickAwayListener onClickAway={closeCommander}>
       <Flex
         position="absolute"
-        // display={['flex', showCommander ? 'flex' : 'none']}
+        // display={['flex', commanderActive ? 'flex' : 'none']}
         top={0}
         // zIndex={99999}
         // position='fixed'
@@ -368,38 +386,55 @@ export const Commander = (props) => {
             <Thingtime thing={contextValue}></Thingtime>
           </Flex>
         </Flex>
-        <Center
-          position="relative"
-          overflow="hidden"
-          width={["100%", "400px"]}
-          maxWidth={[mobileVW, "100%"]}
-          height="100%"
-          padding="1px"
-          background="grey"
-          borderRadius="6px"
-          pointerEvents="all"
-          outline="none"
+        <Rainbow
+          filter="blur(15px)"
+          opacity={commanderActive ? 0.25 : 0}
+          repeats={rainbowRepeats}
+          thickness={8}
+          overflow="visible"
         >
-          <Input
-            // display='none'
-            // opacity={0}
-            ref={inputRef}
-            sx={{
-              "&::placeholder": {
-                color: "greys.dark",
-              },
-            }}
-            width="100%"
+          <Center
+            position="relative"
+            overflow="hidden"
+            width={["100%", "400px"]}
+            maxWidth={[mobileVW, "100%"]}
             height="100%"
-            border="none"
-            borderRadius="5px"
+            padding="1px"
+            borderRadius="6px"
+            pointerEvents="all"
             outline="none"
-            onChange={onChange}
-            onKeyDown={onKeyDown}
-            placeholder={"What's on your mind?"}
-            value={value}
-          ></Input>
-        </Center>
+          >
+            <Rainbow
+              opacity={commanderActive ? 0.5 : 0}
+              position="absolute"
+              expand
+              repeats={rainbowRepeats}
+              opacityTransition="all 3000ms ease"
+              thickness={10}
+            ></Rainbow>
+            <Input
+              // display='none'
+              // opacity={0}
+              ref={inputRef}
+              sx={{
+                "&::placeholder": {
+                  color: "greys.dark",
+                },
+              }}
+              width="100%"
+              height="100%"
+              background="grey"
+              border="none"
+              borderRadius="5px"
+              outline="none"
+              onChange={onChange}
+              onFocus={openCommander}
+              onKeyDown={onKeyDown}
+              placeholder={"What's on your mind?"}
+              value={value}
+            ></Input>
+          </Center>
+        </Rainbow>
       </Flex>
     </ClickAwayListener>
   )

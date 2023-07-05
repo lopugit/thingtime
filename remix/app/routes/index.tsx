@@ -1,11 +1,11 @@
 import { Box, Flex } from "@chakra-ui/react"
 
 import { ProfileDrawer } from "~/components/Nav/ProfileDrawer"
-import { Rainbow } from "~/components/Rainbow/Rainbow"
 import { Splash } from "~/components/Splash/Splash"
 import { Thingtime } from "~/components/Thingtime/Thingtime"
 import { ThingtimeDemo } from "~/components/Thingtime/ThingtimeDemo"
 import { useThingtime } from "~/components/Thingtime/useThingtime"
+import { GradientPath } from "~/gp/GradientPath"
 
 export default function Index() {
   const { thingtime } = useThingtime()
@@ -17,10 +17,7 @@ export default function Index() {
       flexDirection="column"
       maxWidth="100%"
     >
-      <Box paddingTop={200}></Box>
-      <Rainbow>
-        <Box width="260px" height="40px" background="grey"></Box>
-      </Rainbow>
+      {/* <Box paddingTop={200}></Box> */}
       <Splash></Splash>
       <Thingtime
         marginBottom={200}
