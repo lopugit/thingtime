@@ -25,7 +25,7 @@ export default function Index() {
 
       That's Thing Time - a dance of data, a symphony of syntax, a carnival of creation. An epic element of the digital era, forever inviting you to join in the melody of shared imagination. This is your call to the creative, a beacon in the binary, your invite to the infinite. This is Thing Time. Welcome.
       
-      - ChatGPT 4.0
+      - Codex (A ChatGPT 4.0 Session)
       
     `,
     // "- ChatGPT 4.0 hidden": "   ",
