@@ -1,19 +1,26 @@
-export const sanitise = str => {
-  const isTT = str?.slice(0, 3) === 'tt.'
-  const isThingtime = str?.slice(0, 10) === 'thingtime.'
-  const isDot = str?.slice(0, 1) === '.'
+export const sanitise = (str) => {
+  let ret = ""
 
-  console.log('nik thingtime sanitis 1', str, isTT, isThingtime, isDot)
+  const value = str?.trim()
 
-  if (isTT) {
-    str = str?.slice(3)
-  } else if (isThingtime) {
-    str = str?.slice(9)
-  } else if (isDot) {
-    str = str?.slice(1)
+  const sanitised = ["tt", "thingtime"]
+
+  const suffixes = [".", " "]
+
+  // find combination of sanitised + suffixes which str starts with
+
+  const match = sanitised.find((s) => value?.startsWith(s))
+  const withSuffix = suffixes.find(
+    (s) => match?.length && value[match?.length] === s
+  )
+  const noSuffix = match && value?.length === match?.length
+
+  if (match && withSuffix) {
+    ret = value?.slice(match.length + 1)
+  } else if (!noSuffix) {
+    ret = value
   }
+  console.log("nik thingtime sanitis 1", match, withSuffix, ret)
 
-  console.log('nik thingtime sanitise 2', str, isTT, isThingtime, isDot)
-
-  return str
+  return ret
 }

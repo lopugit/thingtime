@@ -45,14 +45,29 @@ export const Commander = (props) => {
     if (commanderActive) {
       inputRef?.current?.focus?.()
     } else {
+      document.activeElement.blur()
+
       if (thingtimeRef?.current?.settings?.clearCommanderOnToggle) {
         setValue("")
       }
       if (thingtimeRef?.current?.settings?.clearCommanderContextOnToggle) {
         setShowContext(false, "commanderActive useEffect")
       }
+      if (contextPath !== undefined) {
+        setContextPath(undefined)
+      }
+      if (showContext !== false) {
+        setShowContext(false)
+      }
     }
-  }, [commanderActive, thingtimeRef, setShowContext])
+  }, [
+    commanderActive,
+    thingtimeRef,
+    setShowContext,
+    value,
+    contextPath,
+    showContext,
+  ])
 
   const onChange = React.useCallback((e) => {
     setValue(e.target.value)
@@ -91,16 +106,6 @@ export const Commander = (props) => {
   const commandValue = React.useMemo(() => {
     return command?.[1]
   }, [command])
-
-  const commandContainsPath = React.useMemo(() => {
-    console.log("nik command", commandPath)
-    // const commandIncludesSuggestion = suggestions?.find(suggestion => {
-    //   return commandPath?.includes(suggestion)
-    // })
-    // console.log('nik commandIncludesSuggestion', commandIncludesSuggestion)
-    return false
-    // return commandIncludesSuggestion
-  }, [commandPath])
 
   const validQuotations = React.useMemo(() => {
     return ['"', "'"]
@@ -148,34 +153,66 @@ export const Commander = (props) => {
 
       // console.log('nik suggestions', suggestions)
 
-      console.log("nik useEffect suggestions commandPath", commandPath)
+      const removeSuggestions = [contextPath]
+
+      let ret = []
 
       if (commandPath) {
         const filteredSuggestions = suggestions.filter((suggestion, i) => {
-          return suggestion?.toLowerCase()?.includes(commandPath?.toLowerCase())
+          return (
+            suggestion?.toLowerCase()?.includes(commandPath?.toLowerCase()) ||
+            suggestion?.includes(commandPath)
+          )
         })
         if (!filteredSuggestions?.includes(commandPath)) {
           const adjustedSuggestions = [commandPath, ...filteredSuggestions]
-          return adjustedSuggestions
+          ret = adjustedSuggestions
         } else {
-          return filteredSuggestions
+          ret = filteredSuggestions
         }
       } else {
-        return suggestions
+        ret = suggestions
       }
+
+      const filtered = ret.filter((suggestion) => {
+        return !removeSuggestions?.includes(suggestion)
+      })
+
+      console.log("nik useEffect suggestions commandPath", commandPath)
+      console.log("nik useEffect suggestions ret", ret)
+      console.log("nik useEffect suggestions suggestions", suggestions)
+      console.log("nik useEffect suggestions filtered", filtered)
+
+      return filtered
 
       // if (value) {
       //   setShowContext(true, 'Thingtime changes update suggestions')
       // }
     }
-  }, [value, thingtime, commandPath])
+  }, [value, thingtime, commandPath, contextPath])
+
+  const commandContainsPath = React.useMemo(() => {
+    console.log("nik command", commandPath)
+    console.log("nik suggestions", suggestions)
+    const commandIncludesSuggestion = suggestions?.find((suggestion) => {
+      return commandPath?.includes(suggestion)
+    })
+    console.log("nik commandIncludesSuggestion", commandIncludesSuggestion)
+    // return false
+    return commandIncludesSuggestion
+  }, [commandPath, suggestions])
 
   const onEnter = React.useCallback(
     (props) => {
       // if first characters of value equal tt. then run command
       // or if first character is a dot then run command
       try {
-        console.log("Commander onEnter")
+        console.log("nik Commander onEnter")
+        console.log("nik commandIsAction", commandIsAction)
+        console.log("nik commandContainsPath", commandContainsPath)
+
+        console.log("nik onEnter commandPath", commandPath)
+
         if (commandIsAction) {
           // nothing
           try {
@@ -193,6 +230,10 @@ export const Commander = (props) => {
             console.log("setThingtime errored in Commander", err)
           }
         } else if (commandContainsPath) {
+          // const prevValue = getThingtime(commandPath)
+
+          // const newValue = setThingtime(commandPath, prevValue)
+
           console.log("Setting context path", commandPath)
           setContextPath(commandPath)
           setShowContext(true, "commandContainsPath check")
@@ -233,31 +274,16 @@ export const Commander = (props) => {
     setThingtime("settings.commanderActive", true)
   }, [setThingtime])
 
-  const closeCommander = React.useCallback(() => {
-    if (thingtime?.settings?.commanderActive) {
-      console.log("nik commander closing commander")
-      setThingtime("settings.commanderActive", false)
-    }
-
-    document.activeElement.blur()
-
-    if (value !== "") {
-      setValue("")
-    }
-    if (contextPath !== undefined) {
-      setContextPath(undefined)
-    }
-    if (showContext !== false) {
-      setShowContext(false)
-    }
-  }, [
-    setThingtime,
-    setShowContext,
-    value,
-    contextPath,
-    showContext,
-    thingtime?.settings?.commanderActive,
-  ])
+  const closeCommander = React.useCallback(
+    (e) => {
+      console.log("nik e", e)
+      if (thingtime?.settings?.commanderActive) {
+        console.log("nik commander closing commander")
+        setThingtime("settings.commanderActive", false)
+      }
+    },
+    [setThingtime, thingtime?.settings?.commanderActive]
+  )
 
   const toggleCommander = React.useCallback(() => {
     if (thingtime?.settings?.commanderActive) {
@@ -311,7 +337,7 @@ export const Commander = (props) => {
     return "calc(100vw - 45px)"
   }, [])
 
-  const rainbowRepeats = 1
+  const rainbowRepeats = 2
 
   return (
     <ClickAwayListener onClickAway={closeCommander}>
@@ -326,11 +352,10 @@ export const Commander = (props) => {
         justifyContent={["flex-start", "center"]}
         // display={["flex", commanderActive ? "flex" : "none"]}
         maxWidth="100%"
-        height="100%"
+        height={12}
+        // height="100%"
         pointerEvents="none"
         id="commander"
-        paddingX={1}
-        paddingY={1}
       >
         <Flex
           position="absolute"
@@ -364,7 +389,7 @@ export const Commander = (props) => {
                 <Flex
                   key={i}
                   _hover={{
-                    bg: "greys.medium",
+                    bg: "greys.lightt",
                   }}
                   cursor="pointer"
                   onClick={() => selectSuggestion(suggestion)}
@@ -397,6 +422,7 @@ export const Commander = (props) => {
             opacity={commanderActive ? 0.25 : 0}
             repeats={rainbowRepeats}
             thickness={8}
+            opacityTransition="all 1000ms ease"
             overflow="visible"
           >
             <Center
@@ -411,10 +437,10 @@ export const Commander = (props) => {
               outline="none"
             >
               <Rainbow
-                opacity={commanderActive ? 0.5 : 0}
+                opacity={commanderActive ? 0.6 : 0}
                 position="absolute"
                 repeats={rainbowRepeats}
-                opacityTransition="all 3000ms ease"
+                opacityTransition="all 2500ms ease"
                 thickness={10}
               ></Rainbow>
               <Input
@@ -435,7 +461,7 @@ export const Commander = (props) => {
                 onChange={onChange}
                 onFocus={openCommander}
                 onKeyDown={onKeyDown}
-                placeholder={"What's on your mind?"}
+                placeholder="Imagine.."
                 value={value}
               ></Input>
             </Center>

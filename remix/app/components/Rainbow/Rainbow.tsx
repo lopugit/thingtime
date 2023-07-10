@@ -7,6 +7,8 @@ import { useTrace } from "~/hooks/useTrace"
 import { useUuid } from "~/hooks/useUuid"
 
 export const Rainbow = (allProps: any): JSX.Element => {
+  // return allProps.children
+
   const rainbow = ["#f34a4a", "#ffbc48", "#58ca70", "#47b5e6", "#a555e8"]
 
   const props = useProps(allProps)
@@ -71,6 +73,7 @@ export const Rainbow = (allProps: any): JSX.Element => {
       const keyframe = `${(i / (repeatedColours.length - 1)) * 100}%`
       ret[keyframe] = {
         fill: colour,
+        "animation-timing-function": "ease-out",
         stroke: colour,
       }
     })
@@ -153,7 +156,7 @@ export const Rainbow = (allProps: any): JSX.Element => {
           width: pathWidth || 1,
           animation: {
             name: `rainbow-${uuid}`,
-            duration: 5,
+            duration: props?.duration || 7,
           },
         })
 
@@ -169,6 +172,7 @@ export const Rainbow = (allProps: any): JSX.Element => {
     }
   }, [
     uuid,
+    props?.duration,
     props?.segments,
     props?.samples,
     props?.precision,

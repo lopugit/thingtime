@@ -1,9 +1,10 @@
-import React from 'react'
-import { Box, Flex } from '@chakra-ui/react'
-import { Safe } from '../Safety/Safe'
-import { useThingtime } from './useThingtime'
+import React from "react"
+import { Box, Flex } from "@chakra-ui/react"
 
-export const Thingtime = props => {
+import { Safe } from "../Safety/Safe"
+import { useThingtime } from "./useThingtime"
+
+export const Thingtime = (props) => {
   // TODO: Add a circular reference seen prop check
   // and add button to expand circular reference
   // up to 1 level deep
@@ -34,11 +35,11 @@ export const Thingtime = props => {
   }, [props.thing])
 
   const mode = React.useMemo(() => {
-    return 'view'
+    return "view"
   }, [])
 
   const validKeyTypes = React.useMemo(() => {
-    return ['object', 'array']
+    return ["object", "array"]
   }, [])
 
   const keys = React.useMemo(() => {
@@ -55,42 +56,44 @@ export const Thingtime = props => {
   }, [thing])
 
   const valuePl = React.useMemo(() => {
-    if (typeof props?.valuePl === 'number') {
+    if (typeof props?.valuePl === "number") {
       return props?.valuePl
     }
     return props?.path ? [4, 6] : [0, 0]
   }, [props?.valuePl, props?.path])
 
   const renderableValue = React.useMemo(() => {
-    if (type === 'string') {
-      if (!thing) {
-        return 'Empty string'
+    if (type === "string") {
+      const trimmed = thing.trim()
+
+      if (!trimmed) {
+        return "Empty string"
       }
+      return trimmed
+    } else if (type === "number") {
       return thing
-    } else if (type === 'number') {
-      return thing
-    } else if (type === 'boolean') {
-      return thing ? 'true' : 'false'
-    } else if (type === 'object') {
+    } else if (type === "boolean") {
+      return thing ? "true" : "false"
+    } else if (type === "object") {
       if (thing === null) {
-        return 'null'
+        return "null"
       }
       if (!keys?.length) {
-        return 'Empty object'
+        return "Something!"
       }
 
       try {
         return JSON.stringify(thing, null, 2)
       } catch (err) {
         console.error(
-          'Caught error making renderableValue of thing',
+          "Caught error making renderableValue of thing",
           err,
           thing
         )
-        return 'Circular reference in object.'
+        return "Circular reference in object."
       }
     } else {
-      return 'Undefined'
+      return "Something!"
     }
   }, [thing, type])
 
@@ -108,24 +111,24 @@ export const Thingtime = props => {
       window.thingtime.tmp[randId] = 0
 
       const recurse = (obj, prefix) => {
-        Object.keys(obj).forEach(key => {
-          if (typeof obj[key] === 'object') {
+        Object.keys(obj).forEach((key) => {
+          if (typeof obj[key] === "object") {
             if (window?.thingtime?.tmp[randId] < 1000) {
               window.thingtime.tmp[randId]++
-              recurse(obj[key], `${prefix}${prefix && '.'}${key}`)
+              recurse(obj[key], `${prefix}${prefix && "."}${key}`)
             } else {
-              console.error('Recursion limit reached in Thingtime.tsx')
+              console.error("Recursion limit reached in Thingtime.tsx")
             }
           } else {
             ret.push({
-              key: `${prefix}${prefix && '.'}${key}`,
-              human: `${prefix}${prefix && ' '}${key}`
+              key: `${prefix}${prefix && "."}${key}`,
+              human: `${prefix}${prefix && " "}${key}`,
             })
           }
         })
       }
 
-      recurse(thing, '')
+      recurse(thing, "")
     } catch (err) {
       // console.error('Error in Thingtime.tsx creating flattenedKeys', err)
     }
@@ -139,27 +142,27 @@ export const Thingtime = props => {
   const keysToUse = keys
   // const keysToUse = flattenedKeys
 
-  const template1Modes = ['view', 'edit']
+  const template1Modes = ["view", "edit"]
 
   if (template1Modes?.includes(mode)) {
     if (keys?.length) {
       value = (
         <Safe {...props}>
           <Flex
-            position='relative'
-            flexDir='column'
+            position="relative"
+            flexDirection="column"
             // w={'500px'}
             // w={['200px', '500px']}
-            maxW='100%'
-            py={props?.path ? 3 : 0}
-            pl={valuePl}
+            maxWidth="100%"
+            paddingLeft={valuePl}
+            paddingY={props?.path ? 3 : 0}
           >
             {keysToUse?.length &&
               keysToUse.map((key, idx) => {
                 if (!key?.human) {
                   key = {
                     human: key,
-                    key: key
+                    key: key,
                   }
                 }
 
@@ -183,13 +186,13 @@ export const Thingtime = props => {
     } else {
       editableValue = (
         <Box
-          contentEditable={mode === 'edit'}
-          border='none'
-          outline={'none'}
-          py={2}
-          pl={pl}
-          fontSize={'20px'}
-          whiteSpace={'pre-line'}
+          paddingLeft={pl}
+          fontSize="20px"
+          border="none"
+          whiteSpace="pre-line"
+          outline="none"
+          contentEditable={mode === "edit"}
+          paddingY={2}
           // dangerouslySetInnerHTML={{ __html: renderableValue }}
         >
           {renderableValue}
@@ -199,7 +202,13 @@ export const Thingtime = props => {
   }
 
   const contextMenu = (
-    <Flex pr={4} userSelect={'none'} position='absolute' top={0} right={0}>
+    <Flex
+      position="absolute"
+      top={0}
+      right={0}
+      paddingRight={4}
+      userSelect="none"
+    >
       Settings
     </Flex>
   )
@@ -207,26 +216,26 @@ export const Thingtime = props => {
   const [showContextMenu, setShowContextMenu] = React.useState(false)
 
   const humanPath = React.useMemo(() => {
-    if (typeof props?.path === 'string') {
+    if (typeof props?.path === "string") {
       return props?.path
     }
-    return props?.path?.human || ''
+    return props?.path?.human || ""
   }, [props?.path])
 
   const path = React.useMemo(() => {
-    if (humanPath?.includes?.('hidden')) {
+    if (humanPath?.includes?.("hidden")) {
       return null
     }
-    if (humanPath?.includes?.('unique')) {
+    if (humanPath?.includes?.("unique")) {
       // take only path from before the string unique
-      return humanPath.split?.('unique')?.[0]
+      return humanPath.split?.("unique")?.[0]
     }
     return (
       <Flex
-        maxW='100%'
-        pl={props?.pathPl || pl}
-        wordBreak={'break-all'}
-        fontSize='12px'
+        maxWidth="100%"
+        paddingLeft={props?.pathPl || pl}
+        fontSize="12px"
+        wordBreak="break-all"
       >
         {humanPath}
       </Flex>
@@ -234,12 +243,12 @@ export const Thingtime = props => {
   }, [humanPath, pl, props?.pathPl])
 
   const handleMouseEvent = React.useCallback(
-    e => {
+    (e) => {
       const target = e?.target
       // extract uuid from className
       const className = target?.className
       if (className?.includes(uuid?.current)) {
-        setShowContextMenu(e?.type === 'mouseenter')
+        setShowContextMenu(e?.type === "mouseenter")
       }
     },
     [uuid]
@@ -248,15 +257,16 @@ export const Thingtime = props => {
   return (
     <Safe {...props} depth={depth} uuid={uuid?.current}>
       <Flex
+        position="relative"
+        flexDirection="column"
+        // width="500px"
+        width={props?.width || props?.w || "100%"}
+        maxWidth="100%"
+        paddingRight={pr}
         onMouseEnter={handleMouseEvent}
         onMouseLeave={handleMouseEvent}
-        position='relative'
-        flexDir='column'
-        py={3}
-        pr={pr}
-        w='500px'
         // minW={depth === 1 ? '120px' : null}
-        maxW='100%'
+        paddingY={3}
         {...props}
         className={`thing-${uuid?.current}`}
       >

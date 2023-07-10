@@ -22,7 +22,7 @@ try {
 
 const force = {
   settings: {
-    commanderActive: true,
+    commanderActive: false,
   },
   version: 22,
 }
@@ -89,6 +89,7 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
     thingtimeRef.current = thingtime
 
     try {
+      console.log("Setting thingtime to localStorage")
       window.localStorage.setItem("thingtime", JSON.stringify(thingtime))
     } catch (err) {
       console.error("There was an error saving thingtime to localStorage")
