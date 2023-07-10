@@ -64,10 +64,12 @@ export const Thingtime = (props) => {
 
   const renderableValue = React.useMemo(() => {
     if (type === "string") {
-      if (!thing) {
+      const trimmed = thing.trim()
+
+      if (!trimmed) {
         return "Empty string"
       }
-      return thing
+      return trimmed
     } else if (type === "number") {
       return thing
     } else if (type === "boolean") {
@@ -257,7 +259,8 @@ export const Thingtime = (props) => {
       <Flex
         position="relative"
         flexDirection="column"
-        width="500px"
+        // width="500px"
+        width={props?.width || props?.w || "100%"}
         maxWidth="100%"
         paddingRight={pr}
         onMouseEnter={handleMouseEvent}

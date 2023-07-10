@@ -21,6 +21,7 @@ export default function Index() {
       <Splash></Splash>
       <Thingtime
         marginBottom={200}
+        width="500px"
         path="Content"
         valuePl={0}
         thing={thingtime["Content"]}
