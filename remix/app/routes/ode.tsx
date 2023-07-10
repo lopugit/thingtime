@@ -39,8 +39,8 @@ export default function Index() {
     >
       {/* <Box paddingTop={200}></Box> */}
       {/* <Splash></Splash> */}
-      <Center width="100vw" maxWidth="100%" minHeight="100vh" paddingY={200}>
-        <Thingtime width="800px" valuePl={0} thing={ode}></Thingtime>
+      <Center width="100vw" maxWidth="100%" minHeight="100vh" paddingY={100}>
+        <Thingtime width="700px" valuePl={0} thing={ode}></Thingtime>
       </Center>
     </Flex>
   )
