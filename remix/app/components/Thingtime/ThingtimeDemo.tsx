@@ -39,9 +39,9 @@ export const ThingtimeDemo = (props) => {
         name: "three",
       },
     ],
-    "...unique1": "I'm unique",
-    "...unique2": "I'm unique",
-    "...unique3": "I'm unique",
+    "Identical Keys unique1": "I'm unique 1",
+    "Identical Keys unique2": "I'm unique 2",
+    "Identical Keys unique3": "I'm unique 3",
   }
 
   const [demoThing, setDemoThing] = React.useState(thing)

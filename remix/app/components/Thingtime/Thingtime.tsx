@@ -222,7 +222,7 @@ export const Thingtime = (props) => {
     return props?.path?.human || ""
   }, [props?.path])
 
-  const path = React.useMemo(() => {
+  const renderedPath = React.useMemo(() => {
     if (humanPath?.includes?.("hidden")) {
       return null
     }
@@ -230,6 +230,11 @@ export const Thingtime = (props) => {
       // take only path from before the string unique
       return humanPath.split?.("unique")?.[0]
     }
+
+    return humanPath
+  }, [humanPath])
+
+  const path = React.useMemo(() => {
     return (
       <Flex
         maxWidth="100%"
@@ -237,10 +242,10 @@ export const Thingtime = (props) => {
         fontSize="12px"
         wordBreak="break-all"
       >
-        {humanPath}
+        {renderedPath}
       </Flex>
     )
-  }, [humanPath, pl, props?.pathPl])
+  }, [renderedPath, pl, props?.pathPl])
 
   const handleMouseEvent = React.useCallback(
     (e) => {
