@@ -20,13 +20,20 @@ export default function Index() {
       {/* <Box paddingTop={200}></Box> */}
       <Splash></Splash>
       <Thingtime
-        marginBottom={200}
+        chakras={{
+          marginBottom: 200,
+        }}
         width="600px"
         path="Content"
         valuePl={0}
         thing={thingtime["Content"]}
       ></Thingtime>
       <ThingtimeDemo></ThingtimeDemo>
+      <Thingtime
+        thing={thingtime}
+        chakras={{ marginY: 200 }}
+        width="600px"
+      ></Thingtime>
       <ProfileDrawer></ProfileDrawer>
     </Flex>
   )

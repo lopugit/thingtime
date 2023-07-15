@@ -1,6 +1,7 @@
 import React from "react"
 import ClickAwayListener from "react-click-away-listener"
 import { Center, Flex, Input } from "@chakra-ui/react"
+import Fuse from "fuse.js"
 
 import { Rainbow } from "../Rainbow/Rainbow"
 import { Thingtime } from "../Thingtime/Thingtime"
@@ -10,15 +11,24 @@ import { sanitise } from "~/functions/sanitise"
 import { getParentPath } from "~/smarts"
 
 export const Commander = (props) => {
-  const { thingtime, setThingtime, getThingtime, thingtimeRef } = useThingtime()
+  const { thingtime, setThingtime, getThingtime, thingtimeRef, paths } =
+    useThingtime()
 
   const inputRef = React.useRef()
 
-  const [value, setValue] = React.useState("")
+  const [inputValue, setInputValue] = React.useState("")
+  const [virtualValue, setVirtualValue] = React.useState("")
+  const [hoveredSuggestion, setHoveredSuggestion] = React.useState()
   const [active, setActive] = React.useState(false)
   const [contextPath, setContextPath] = React.useState()
 
   const [showContext, setShowContextState] = React.useState(false)
+
+  const mobileVW = React.useMemo(() => {
+    return "calc(100vw - 45px)"
+  }, [])
+
+  const rainbowRepeats = 2
 
   const setShowContext = React.useCallback(
     (value, from?: string) => {
@@ -48,7 +58,8 @@ export const Commander = (props) => {
       document.activeElement.blur()
 
       if (thingtimeRef?.current?.settings?.clearCommanderOnToggle) {
-        setValue("")
+        setInputValue("")
+        setHoveredSuggestion(null)
       }
       if (thingtimeRef?.current?.settings?.clearCommanderContextOnToggle) {
         setShowContext(false, "commanderActive useEffect")
@@ -64,13 +75,14 @@ export const Commander = (props) => {
     commanderActive,
     thingtimeRef,
     setShowContext,
-    value,
+    inputValue,
     contextPath,
     showContext,
   ])
 
-  const onChange = React.useCallback((e) => {
-    setValue(e.target.value)
+  const onInputChange = React.useCallback((e) => {
+    setInputValue(e.target.value)
+    setHoveredSuggestion(null)
   }, [])
 
   const validSetters = React.useMemo(() => {
@@ -78,7 +90,9 @@ export const Commander = (props) => {
   }, [])
 
   const command = React.useMemo(() => {
-    const sanitizedCommand = sanitise(value)
+    // const sanitizedCommand = sanitise(value)
+    // const sanitizedCommand = inputValue
+    const sanitizedCommand = virtualValue
 
     if (sanitizedCommand?.includes(validSetters[0])) {
       const indexOfSplitter = sanitizedCommand?.indexOf(validSetters[0])
@@ -97,10 +111,15 @@ export const Commander = (props) => {
     }
     console.log("nik sanitizedCommand", sanitizedCommand)
     return [sanitizedCommand]
-  }, [value, validSetters])
+  }, [
+    // inputValue,
+    virtualValue,
+    validSetters,
+  ])
 
   const commandPath = React.useMemo(() => {
-    return sanitise(command?.[0])
+    return command?.[0]
+    // return sanitise(command?.[0])
   }, [command])
 
   const commandValue = React.useMemo(() => {
@@ -132,64 +151,33 @@ export const Commander = (props) => {
     return commandPath && commandValue
   }, [commandPath, commandValue])
 
+  const showSuggestions = React.useMemo(() => {
+    return inputValue?.length
+  }, [inputValue])
+
   const suggestions = React.useMemo(() => {
-    if (value?.length) {
-      const suggestions = ["tt", "thingtime", "."]
-      const populateSuggestions = (obj, path) => {
-        Object.keys(obj).forEach((key) => {
-          const val = obj[key]
-          const newPath = path ? `${path}${path ? "." : ""}${key}` : key
-          if (typeof val === "object") {
-            suggestions.push(newPath)
-            populateSuggestions(val, newPath)
-          } else {
-            suggestions.push(newPath)
-          }
-        })
-      }
+    const fuse = new Fuse(paths)
 
-      // populateSuggestions(thingtime, commandPath)
-      populateSuggestions(thingtime, "")
+    const results = fuse.search(inputValue)
 
-      // console.log('nik suggestions', suggestions)
+    const mappedResults = results?.map((result) => {
+      return result?.item
+    })
 
-      const removeSuggestions = [contextPath]
+    return mappedResults
+  }, [inputValue, paths])
 
-      let ret = []
+  const selectSuggestion = React.useCallback(
+    (suggestionIdx) => {
+      const suggestion = suggestions?.[suggestionIdx]
 
-      if (commandPath) {
-        const filteredSuggestions = suggestions.filter((suggestion, i) => {
-          return (
-            suggestion?.toLowerCase()?.includes(commandPath?.toLowerCase()) ||
-            suggestion?.includes(commandPath)
-          )
-        })
-        if (!filteredSuggestions?.includes(commandPath)) {
-          const adjustedSuggestions = [commandPath, ...filteredSuggestions]
-          ret = adjustedSuggestions
-        } else {
-          ret = filteredSuggestions
-        }
-      } else {
-        ret = suggestions
-      }
-
-      const filtered = ret.filter((suggestion) => {
-        return !removeSuggestions?.includes(suggestion)
-      })
-
-      console.log("nik useEffect suggestions commandPath", commandPath)
-      console.log("nik useEffect suggestions ret", ret)
-      console.log("nik useEffect suggestions suggestions", suggestions)
-      console.log("nik useEffect suggestions filtered", filtered)
-
-      return filtered
-
-      // if (value) {
-      //   setShowContext(true, 'Thingtime changes update suggestions')
-      // }
-    }
-  }, [value, thingtime, commandPath, contextPath])
+      setInputValue(suggestion)
+      setHoveredSuggestion(null)
+      setContextPath(suggestion)
+      setShowContext(true, "Select suggestion")
+    },
+    [setInputValue, setContextPath, setShowContext, suggestions]
+  )
 
   const commandContainsPath = React.useMemo(() => {
     console.log("nik command", commandPath)
@@ -202,83 +190,17 @@ export const Commander = (props) => {
     return commandIncludesSuggestion
   }, [commandPath, suggestions])
 
-  const onEnter = React.useCallback(
-    (props) => {
-      // if first characters of value equal tt. then run command
-      // or if first character is a dot then run command
-      try {
-        console.log("nik Commander onEnter")
-        console.log("nik commandIsAction", commandIsAction)
-        console.log("nik commandContainsPath", commandContainsPath)
-
-        console.log("nik onEnter commandPath", commandPath)
-
-        if (commandIsAction) {
-          // nothing
-          try {
-            const fn = `() => { return ${escapedCommandValue} }`
-            const evalFn = eval(fn)
-            const realVal = evalFn()
-            const prevVal = getThingtime(commandPath)
-            const parentPath = getParentPath(commandPath)
-            setThingtime(commandPath, realVal)
-            if (!prevVal) {
-              setContextPath(parentPath)
-              setShowContext(true, "commandIsAction check")
-            }
-          } catch (err) {
-            console.log("setThingtime errored in Commander", err)
-          }
-        } else if (commandContainsPath) {
-          // const prevValue = getThingtime(commandPath)
-
-          // const newValue = setThingtime(commandPath, prevValue)
-
-          console.log("Setting context path", commandPath)
-          setContextPath(commandPath)
-          setShowContext(true, "commandContainsPath check")
-        }
-      } catch (err) {
-        console.error("Caught error on commander onEnter", err)
-      }
-    },
-    [
-      setShowContext,
-      escapedCommandValue,
-      setThingtime,
-      getThingtime,
-      commandIsAction,
-      commandPath,
-      commandContainsPath,
-    ]
-  )
-
-  // trigger on enter
-  const onKeyDown = React.useCallback(
-    (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault()
-        e.stopPropagation()
-        onEnter({ e })
-        // setThingtime(
-        //   'settings.commanderActive',
-        //   !thingtime?.settings?.commanderActive
-        // )
-      }
-    },
-    [onEnter]
-  )
-
   const openCommander = React.useCallback(() => {
     console.log("nik commander opening commander")
     setThingtime("settings.commanderActive", true)
   }, [setThingtime])
 
   const closeCommander = React.useCallback(
-    (e) => {
+    (e?: any) => {
       console.log("nik e", e)
       if (thingtime?.settings?.commanderActive) {
         console.log("nik commander closing commander")
+        console.log("nik setting commanderActive to false")
         setThingtime("settings.commanderActive", false)
       }
     },
@@ -293,51 +215,122 @@ export const Commander = (props) => {
     }
   }, [thingtime?.settings?.commanderActive, closeCommander, openCommander])
 
-  React.useEffect(() => {
-    const keyListener = (e: any) => {
+  const allCommanderKeyListener = React.useCallback(
+    (e: any) => {
+      console.log("commander key listener e?.code", e?.code)
       if (e?.metaKey && e?.code === "KeyP") {
         e.preventDefault()
         e.stopPropagation()
         toggleCommander()
       }
       // if key escape close all modals
-      console.log("commander key listener e?.code", e?.code)
-      if (e?.code === "Escape") {
+      else if (e?.code === "Escape") {
         closeCommander()
       }
-    }
+      // if arrow keys then move selection
+      else if (e?.code === "ArrowUp") {
+        // move selection up
+        const curSuggestionIdx =
+          typeof hoveredSuggestion === "number"
+            ? hoveredSuggestion
+            : suggestions?.length
+        const newSuggestionIdx = curSuggestionIdx - 1
+        if (newSuggestionIdx >= 0) {
+          setHoveredSuggestion(newSuggestionIdx)
+        } else {
+          setHoveredSuggestion(suggestions?.length - 1)
+        }
+      } else if (e?.code === "ArrowDown") {
+        // move selection down
+        const curSuggestionIdx =
+          typeof hoveredSuggestion === "number" ? hoveredSuggestion : -1
+        const newSuggestionIdx = curSuggestionIdx + 1
+        if (newSuggestionIdx < suggestions?.length) {
+          setHoveredSuggestion(newSuggestionIdx)
+        } else {
+          setHoveredSuggestion(0)
+        }
+      } else if (e?.code === "Enter") {
+        // if selection is active then select it
+        const curSuggestionIdx = hoveredSuggestion
+        if (curSuggestionIdx !== null) {
+          selectSuggestion(curSuggestionIdx)
+        }
+        if (commanderActive) {
+          try {
+            console.log("nik Commander onEnter")
+            console.log("nik commandIsAction", commandIsAction)
+            console.log("nik commandContainsPath", commandContainsPath)
 
-    window.addEventListener("keydown", keyListener)
+            console.log("nik onEnter commandPath", commandPath)
 
-    return () => {
-      window.removeEventListener("keydown", keyListener)
-    }
-  }, [setThingtime, thingtime, toggleCommander, closeCommander])
+            if (commandIsAction) {
+              // nothing
+              try {
+                const fn = `() => { return ${escapedCommandValue} }`
+                const evalFn = eval(fn)
+                const realVal = evalFn()
+                const prevVal = getThingtime(commandPath)
+                const parentPath = getParentPath(commandPath)
+                setThingtime(commandPath, realVal)
+                if (!prevVal) {
+                  setContextPath(parentPath)
+                  setShowContext(true, "commandIsAction check")
+                }
+              } catch (err) {
+                console.log("setThingtime errored in Commander", err)
+              }
+            } else if (commandContainsPath) {
+              // const prevValue = getThingtime(commandPath)
 
-  const selectSuggestion = React.useCallback(
-    (suggestion) => {
-      setValue(suggestion)
-      setContextPath(suggestion)
-      setShowContext(true, "Select suggestion")
+              // const newValue = setThingtime(commandPath, prevValue)
+
+              console.log("Setting context path", commandPath)
+              setContextPath(commandPath)
+              setShowContext(true, "commandContainsPath check")
+            }
+          } catch (err) {
+            console.error("Caught error on commander onEnter", err)
+          }
+        }
+      }
     },
-    [setValue, setContextPath, setShowContext]
+    [
+      closeCommander,
+      toggleCommander,
+      hoveredSuggestion,
+      selectSuggestion,
+      suggestions,
+      commanderActive,
+      commandIsAction,
+      commandContainsPath,
+      commandPath,
+      escapedCommandValue,
+      getThingtime,
+      setThingtime,
+      setShowContext,
+    ]
   )
 
-  const excludedSuggestions = React.useMemo(() => {
-    return ["."]
-  }, [])
+  React.useEffect(() => {
+    window.addEventListener("keydown", allCommanderKeyListener)
 
-  const renderedSuggestions = React.useMemo(() => {
-    return suggestions?.filter((suggestion) => {
-      return !excludedSuggestions?.includes(suggestion)
-    })
-  }, [suggestions, excludedSuggestions])
+    return () => {
+      window.removeEventListener("keydown", allCommanderKeyListener)
+    }
+  }, [allCommanderKeyListener])
 
-  const mobileVW = React.useMemo(() => {
-    return "calc(100vw - 45px)"
-  }, [])
+  React.useEffect(() => {
+    if (typeof hoveredSuggestion === "number") {
+      setVirtualValue(suggestions?.[hoveredSuggestion])
+    } else {
+      setVirtualValue(inputValue)
+    }
+  }, [hoveredSuggestion, inputValue, suggestions])
 
-  const rainbowRepeats = 2
+  React.useEffect(() => {
+    setVirtualValue(inputValue)
+  }, [inputValue])
 
   return (
     <ClickAwayListener onClickAway={closeCommander}>
@@ -374,7 +367,7 @@ export const Commander = (props) => {
         >
           <Flex
             flexDirection="column"
-            display={renderedSuggestions?.length ? "flex" : "none"}
+            display={showSuggestions ? "flex" : "none"}
             width={["100%", "400px"]}
             maxWidth="100%"
             marginBottom={3}
@@ -382,17 +375,20 @@ export const Commander = (props) => {
             borderRadius="12px"
             pointerEvents="all"
             id="commander-suggestions"
+            onMouseLeave={() => setHoveredSuggestion(null)}
             paddingY={3}
           >
-            {renderedSuggestions?.map((suggestion, i) => {
+            {suggestions?.map((suggestion, i) => {
               return (
                 <Flex
                   key={i}
+                  background={hoveredSuggestion === i ? "greys.lightt" : null}
                   _hover={{
-                    bg: "greys.lightt",
+                    background: "greys.lightt",
                   }}
                   cursor="pointer"
-                  onClick={() => selectSuggestion(suggestion)}
+                  onClick={() => selectSuggestion(i)}
+                  onMouseEnter={() => setHoveredSuggestion(i)}
                   paddingX={4}
                 >
                   {suggestion}
@@ -458,11 +454,10 @@ export const Commander = (props) => {
                 border="none"
                 borderRadius="5px"
                 outline="none"
-                onChange={onChange}
+                onChange={onInputChange}
                 onFocus={openCommander}
-                onKeyDown={onKeyDown}
                 placeholder="Imagine.."
-                value={value}
+                value={inputValue}
               ></Input>
             </Center>
           </Rainbow>

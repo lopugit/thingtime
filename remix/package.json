@@ -14,6 +14,8 @@
     "@remix-run/serve": "^1.15.0",
     "@vercel/analytics": "^0.1.11",
     "@vercel/remix": "^1.15.0",
+    "flatted": "^3.2.7",
+    "fuse.js": "^6.6.2",
     "gradient-path": "^2.3.0",
     "isbot": "latest",
     "lodash-es": "^4.17.21",

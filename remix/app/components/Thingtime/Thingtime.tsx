@@ -21,7 +21,7 @@ export const Thingtime = (props) => {
 
   const pr = React.useMemo(() => {
     return props?.pr || (depth === 1 ? [4, 6] : 0)
-  }, [props?.pr])
+  }, [props?.pr, depth])
 
   // will only run on the client
   React.useEffect(() => {
@@ -33,6 +33,21 @@ export const Thingtime = (props) => {
   const thing = React.useMemo(() => {
     return props.thing
   }, [props.thing])
+
+  const seen = React.useMemo(() => {
+    if (props?.seen instanceof Array) {
+      if (props?.seen?.includes(thing)) {
+        return props?.seen
+      } else if (typeof thing === "object") {
+        return [...props.seen, thing]
+      }
+      return props?.seen || []
+    }
+    if (typeof thing === "object") {
+      return [thing]
+    }
+    return []
+  }, [props?.seen, thing])
 
   const mode = React.useMemo(() => {
     return "view"
@@ -67,7 +82,7 @@ export const Thingtime = (props) => {
       const trimmed = thing.trim()
 
       if (!trimmed) {
-        return "Empty string"
+        return ""
       }
       return trimmed
     } else if (type === "number") {
@@ -85,11 +100,11 @@ export const Thingtime = (props) => {
       try {
         return JSON.stringify(thing, null, 2)
       } catch (err) {
-        console.error(
-          "Caught error making renderableValue of thing",
-          err,
-          thing
-        )
+        // console.error(
+        //   "Caught error making renderableValue of thing",
+        //   err,
+        //   thing
+        // )
         return "Circular reference in object."
       }
     } else {
@@ -145,7 +160,7 @@ export const Thingtime = (props) => {
   const template1Modes = ["view", "edit"]
 
   if (template1Modes?.includes(mode)) {
-    if (keys?.length) {
+    if (keys?.length && !props?.circular) {
       value = (
         <Safe {...props}>
           <Flex
@@ -168,9 +183,17 @@ export const Thingtime = (props) => {
 
                 const nextThing = thing[key?.key]
 
+                const nextSeen = [...seen]
+
+                if (typeof nextThing === "object") {
+                  nextSeen.push(nextThing)
+                }
+
                 return (
                   <Thingtime
                     key={idx}
+                    seen={nextSeen}
+                    circular={seen?.includes?.(nextThing)}
                     depth={depth + 1}
                     parent={thing}
                     path={key}
@@ -272,7 +295,7 @@ export const Thingtime = (props) => {
         onMouseLeave={handleMouseEvent}
         // minW={depth === 1 ? '120px' : null}
         paddingY={3}
-        {...props}
+        {...(props.chakras || {})}
         className={`thing-${uuid?.current}`}
       >
         {/* {uuid?.current} */}

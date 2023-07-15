@@ -1,4 +1,5 @@
 import React, { createContext } from "react"
+import { parse, stringify } from "flatted"
 
 import { sanitise } from "~/functions/sanitise"
 import { smarts } from "~/smarts"
@@ -22,7 +23,7 @@ try {
 
 const force = {
   settings: {
-    commanderActive: false,
+    // commanderActive: false,
   },
   version: 22,
 }
@@ -39,7 +40,7 @@ const newVersionData = {
 
 const initialValues = {
   settings: {
-    commanderActive: true,
+    commanderActive: false,
     clearCommanderOnToggle: true,
     clearCommanderContextOnToggle: true,
   },
@@ -54,47 +55,41 @@ const initialValues = {
 
 const initialThingtime = smarts.merge(initialValues, force)
 
+// TODO: Make localStorage be loaded first before initialValues if local version exists
+// and is valid
+// Issue seems to be server id is different to client hydration
+
+// let thingtimeToUse = initialThingtime
+
+// try {
+//   const thingtimeFromLocalStorage = window.localStorage.getItem("thingtime")
+
+//   if (thingtimeFromLocalStorage) {
+//     const parsed = parse(thingtimeFromLocalStorage)
+//     if (parsed) {
+//       const localIsValid = !parsed.version || parsed.version >= force.version
+//       if (localIsValid) {
+//         const newThingtime = smarts.merge(force, parsed)
+//         console.log("nik comm newThingtime", newThingtime)
+//         thingtimeToUse = newThingtime
+//       } else {
+//         const withVersionUpdates = smarts.merge(newVersionData, parsed)
+//         const newThingtime = smarts.merge(force, withVersionUpdates)
+//         thingtimeToUse = newThingtime
+//       }
+//     }
+//   }
+// } catch (err) {
+//   console.error("Caught error restoring thingtime from localstorage", err)
+// }
+
 export const ThingtimeProvider = (props: any): JSX.Element => {
-  const [thingtime, set] = React.useState(smarts.merge(initialValues, force))
+  const [thingtime, set] = React.useState(initialThingtime)
 
   const thingtimeRef = React.useRef(thingtime)
-
-  // get thingtime from localstorage
-  React.useEffect(() => {
-    try {
-      const thingtimeFromLocalStorage = window.localStorage.getItem("thingtime")
-
-      if (thingtimeFromLocalStorage) {
-        const parsed = JSON.parse(thingtimeFromLocalStorage)
-        if (parsed) {
-          const localIsValid =
-            !parsed.version || parsed.version >= force.version
-          if (localIsValid) {
-            const newThingtime = smarts.merge(force, parsed)
-            console.log("nik comm newThingtime", newThingtime)
-            set(newThingtime)
-          } else {
-            const withVersionUpdates = smarts.merge(newVersionData, parsed)
-            const newThingtime = smarts.merge(force, withVersionUpdates)
-            set(newThingtime)
-          }
-        }
-      }
-    } catch (err) {
-      console.error("There was an error getting thingtime from localStorage")
-    }
-  }, [])
-
-  React.useEffect(() => {
-    thingtimeRef.current = thingtime
-
-    try {
-      console.log("Setting thingtime to localStorage")
-      window.localStorage.setItem("thingtime", JSON.stringify(thingtime))
-    } catch (err) {
-      console.error("There was an error saving thingtime to localStorage")
-    }
-  }, [thingtime])
+  const stateRef = React.useRef({
+    c: 1,
+  })
 
   const setThingtime = React.useCallback(
     (path, value) => {
@@ -106,7 +101,7 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
 
       // check if first characters of path starts with thingtime or tt and strip from path
 
-      path = sanitise(path)
+      // path = sanitise(path)
 
       smarts.setsmart(newThingtime, path, value)
 
@@ -132,21 +127,69 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
   const getThingtime = React.useCallback(
     (...args) => {
       const rawPath = args[0]
-      if (
-        rawPath === "thingtime" ||
-        rawPath === "tt" ||
-        rawPath === "." ||
-        !rawPath
-      ) {
-        return thingtime
-      }
-      const path = sanitise(rawPath)
+      const path = rawPath
+      // do we need to sanitise?
+      // const path = sanitise(rawPath)
       console.log("Getting thingtime at path", path)
       return smarts.getsmart(thingtime, path)
     },
     [thingtime]
   )
 
+  const populatePaths = React.useCallback((obj, path, paths, seen = []) => {
+    Object.keys(obj).forEach((key) => {
+      const val = obj[key]
+      const newPath = path ? `${path}${path ? "." : ""}${key}` : key
+      if (typeof val === "object") {
+        paths.push(newPath)
+        if (!seen?.includes(val)) {
+          seen.push(val)
+          populatePaths(val, newPath, paths, seen)
+        }
+      } else {
+        paths.push(newPath)
+      }
+    })
+  }, [])
+
+  const paths = React.useMemo(() => {
+    // const paths = ["tt", "thingtime", "."]
+    const paths = []
+
+    // populatePaths(thingtime, commandPath)
+    populatePaths(thingtime, "", paths)
+
+    return paths
+  }, [populatePaths, thingtime])
+
+  // get thingtime from localstorage
+  React.useEffect(() => {
+    try {
+      const thingtimeFromLocalStorage = window.localStorage.getItem("thingtime")
+
+      if (thingtimeFromLocalStorage) {
+        const parsed = parse(thingtimeFromLocalStorage)
+        if (parsed) {
+          const localIsValid =
+            !parsed.version || parsed.version >= force.version
+          let newThingtime = null
+          if (localIsValid) {
+            newThingtime = smarts.merge(force, parsed)
+          } else {
+            const withVersionUpdates = smarts.merge(newVersionData, parsed)
+            newThingtime = smarts.merge(force, withVersionUpdates)
+          }
+          console.log("nik setting new thingtime", newThingtime)
+          console.log("nik localIsValid", localIsValid)
+          set(newThingtime)
+        }
+      }
+    } catch (err) {
+      console.error("There was an error getting thingtime from localStorage")
+    }
+  }, [])
+
+  // thingtime change listener
   React.useEffect(() => {
     try {
       window.setThingtime = setThingtime
@@ -155,6 +198,36 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
     } catch {
       // nothing
     }
+
+    console.log("nik detected thingtime change", thingtime)
+
+    if (stateRef.current.initialized) {
+      if (thingtime.thingtime !== thingtime || thingtime.tt !== thingtime) {
+        if (!(stateRef?.current?.c >= 10)) {
+          stateRef.current.c++
+          const newThingtime = {
+            ...thingtime,
+          }
+          newThingtime.thingtime = newThingtime
+          newThingtime.tt = newThingtime
+          set(newThingtime)
+        }
+      } else {
+        try {
+          console.log("Setting thingtime to localStorage", thingtime)
+          setTimeout(() => {
+            const stringified = stringify(thingtime)
+            window.localStorage.setItem("thingtime", stringified)
+          }, 600)
+        } catch (err) {
+          console.error("There was an error saving thingtime to localStorage")
+        }
+      }
+    } else {
+      stateRef.current.initialized = true
+    }
+
+    thingtimeRef.current = thingtime
 
     const keyListener = (e) => {}
 
@@ -170,6 +243,7 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
     setThingtime,
     getThingtime,
     thingtimeRef,
+    paths,
   }
 
   return (

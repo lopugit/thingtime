@@ -73,7 +73,7 @@ export const Rainbow = (allProps: any): JSX.Element => {
       const keyframe = `${(i / (repeatedColours.length - 1)) * 100}%`
       ret[keyframe] = {
         fill: colour,
-        "animation-timing-function": "ease-out",
+        animationTimingFunction: "ease-out",
         stroke: colour,
       }
     })
@@ -108,10 +108,8 @@ export const Rainbow = (allProps: any): JSX.Element => {
   }, [state?.width, state?.height])
 
   const svg = React.useMemo(() => {
-    const id = Math.random().toString(36).substring(2, 15)
-
     return (
-      <Box width="100%" height="100%" id={id}>
+      <Box width="100%" height="100%" id={"rainbow-svg-container-" + uuid}>
         <svg
           overflow="visible"
           viewBox={`0 0 ${state?.width || 100} ${state?.height || 100}`}
@@ -130,7 +128,7 @@ export const Rainbow = (allProps: any): JSX.Element => {
         </svg>
       </Box>
     )
-  }, [state, rect])
+  }, [state, rect, uuid])
 
   React.useEffect(() => {
     if (uuid) {
