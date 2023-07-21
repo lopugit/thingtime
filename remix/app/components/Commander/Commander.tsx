@@ -220,6 +220,7 @@ export const Commander = (props) => {
   const allCommanderKeyListener = React.useCallback(
     (e: any) => {
       console.log("commander key listener e?.code", e?.code)
+      thingtimeRef.current = thingtime
       if (e?.metaKey && e?.code === "KeyP") {
         e.preventDefault()
         e.stopPropagation()
@@ -331,6 +332,8 @@ export const Commander = (props) => {
       hoveredSuggestion,
       selectSuggestion,
       suggestions,
+      thingtime,
+      thingtimeRef,
       commanderActive,
       commandIsAction,
       commandContainsPath,

@@ -1,5 +1,16 @@
 import React from "react"
-import { Box, Flex, Select, Switch } from "@chakra-ui/react"
+import {
+  Box,
+  Flex,
+  Input,
+  NumberDecrementStepper,
+  NumberIncrementStepper,
+  NumberInput,
+  NumberInputField,
+  NumberInputStepper,
+  Select,
+  Switch,
+} from "@chakra-ui/react"
 
 import { Icon } from "../Icon/Icon"
 import { Safe } from "../Safety/Safe"
@@ -214,6 +225,7 @@ export const Thingtime = (props) => {
       return (
         <Flex
           flexDirection="row"
+          flexShrink={1}
           paddingLeft={pl}
           fontSize="20px"
           border="none"
@@ -261,16 +273,41 @@ export const Thingtime = (props) => {
             >
               <Switch colorScheme="red" isChecked={thing}></Switch>
             </Box>
-            {/* <Select
-              width="auto"
-              marginRight="auto"
-              paddingStart={0}
-              paddingX={0}
-            >
-              {renderableValue}
-              <option value="true">true</option>
-              <option value="false">false</option>
-            </Select> */}
+          </AtomicWrapper>
+        )
+      }
+      if (type === "number") {
+        const numberPxLength = thing?.toString()?.length * 13 + 30
+        return (
+          <AtomicWrapper>
+            <Flex>
+              <NumberInput
+                alignItems="center"
+                justifyContent="center"
+                onChange={(value) => {
+                  setTimeout(() => {
+                    try {
+                      const number = Number(value)
+                      console.log("typeof number", typeof number)
+                      updateValue({ value: number })
+                    } catch {
+                      // something went wrong casting to number
+                    }
+                  }, 1)
+                }}
+                value={thing}
+              >
+                <NumberInputField width={numberPxLength + "px"} />
+                <NumberInputStepper transform="scale(0.9)">
+                  <NumberIncrementStepper
+                  // transform="scale(0.7)"
+                  />
+                  <NumberDecrementStepper
+                  // transform="scale(0.7)"
+                  />
+                </NumberInputStepper>
+              </NumberInput>
+            </Flex>
           </AtomicWrapper>
         )
       }
@@ -372,7 +409,8 @@ export const Thingtime = (props) => {
             <Flex>{pathDom}</Flex>
             {props?.edit && (
               <Box
-                marginTop={-3}
+                // marginTop={-3}
+                marginTop={-1}
                 paddingLeft={1}
                 opacity={0.5}
                 cursor="pointer"

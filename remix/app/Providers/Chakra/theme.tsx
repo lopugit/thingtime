@@ -1,4 +1,13 @@
-import { extendTheme, Select, Switch } from "@chakra-ui/react"
+import {
+  extendTheme,
+  NumberDecrementStepper,
+  NumberIncrementStepper,
+  NumberInput,
+  NumberInputField,
+  NumberInputStepper,
+  Select,
+  Switch,
+} from "@chakra-ui/react"
 
 import { colors } from "./colors"
 
@@ -83,6 +92,14 @@ export const theme = extendTheme({
         },
       },
     },
+    NumberInput: {
+      baseStyle: {
+        field: {
+          width: "auto",
+          // border: "none",
+        },
+      },
+    },
   },
 })
 
@@ -104,4 +121,32 @@ Select.defaultProps = {
     paddingInlineStart: "0px",
     paddingInlineEnd: "24px",
   },
+}
+
+NumberInput.defaultProps = {
+  ...NumberInput.defaultProps,
+  variant: "unstyled",
+}
+
+NumberInputField.defaultProps = {
+  ...NumberInputField.defaultProps,
+  height: "100%",
+  pr: 3,
+  fontSize: "inherit",
+  // variant: "unstyled",
+}
+
+NumberInputStepper.defaultProps = {
+  ...NumberInputStepper.defaultProps,
+  border: "none",
+  color: "grays.medium",
+}
+
+NumberIncrementStepper.defaultProps = {
+  ...NumberIncrementStepper.defaultProps,
+  border: "none",
+}
+NumberDecrementStepper.defaultProps = {
+  ...NumberDecrementStepper.defaultProps,
+  border: "none",
 }
