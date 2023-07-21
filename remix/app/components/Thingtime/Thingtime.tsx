@@ -1,6 +1,7 @@
 import React from "react"
 import { Box, Flex } from "@chakra-ui/react"
 
+import { Icon } from "../Icon/Icon"
 import { Safe } from "../Safety/Safe"
 import { useThingtime } from "./useThingtime"
 
@@ -9,7 +10,11 @@ export const Thingtime = (props) => {
   // and add button to expand circular reference
   // up to 1 level deep
 
+  const { thingtime } = useThingtime()
+
   const [uuid, setUuid] = React.useState()
+
+  const [circular, setCircular] = React.useState(props?.circular)
 
   const depth = React.useMemo(() => {
     return props?.depth || 1
@@ -27,8 +32,6 @@ export const Thingtime = (props) => {
   React.useEffect(() => {
     setUuid(Math.random().toString(36).substring(7))
   }, [])
-
-  const { thingtime } = useThingtime()
 
   const thing = React.useMemo(() => {
     return props.thing
@@ -105,109 +108,89 @@ export const Thingtime = (props) => {
         //   err,
         //   thing
         // )
-        return "Circular reference in object."
+        return <Box onClick={() => setCircular(false)}>Click to Expand</Box>
       }
     } else {
       return "Something!"
     }
-  }, [thing, type])
+  }, [thing, type, keys])
 
-  const flattenedKeys = React.useMemo(() => {
-    // create an array of all keys on object so that if object is
-    // { my: { child: {} } }
-    // the array looks like
-    // ['my', 'my.child']
-
-    const ret = []
-
-    try {
-      const randId = Math.random().toString(36).substring(7)
-
-      window.thingtime.tmp[randId] = 0
-
-      const recurse = (obj, prefix) => {
-        Object.keys(obj).forEach((key) => {
-          if (typeof obj[key] === "object") {
-            if (window?.thingtime?.tmp[randId] < 1000) {
-              window.thingtime.tmp[randId]++
-              recurse(obj[key], `${prefix}${prefix && "."}${key}`)
-            } else {
-              console.error("Recursion limit reached in Thingtime.tsx")
-            }
-          } else {
-            ret.push({
-              key: `${prefix}${prefix && "."}${key}`,
-              human: `${prefix}${prefix && " "}${key}`,
-            })
-          }
-        })
-      }
-
-      recurse(thing, "")
-    } catch (err) {
-      // console.error('Error in Thingtime.tsx creating flattenedKeys', err)
-    }
-
-    return ret
-  }, [thing])
-
-  let value = null
-  let editableValue = null
-
-  const keysToUse = keys
+  const keysToUse = React.useMemo(() => {
+    return keys
+  }, [keys])
   // const keysToUse = flattenedKeys
 
-  const template1Modes = ["view", "edit"]
+  const template1Modes = React.useMemo(() => {
+    return ["view", "edit"]
+  }, [])
 
-  if (template1Modes?.includes(mode)) {
-    if (keys?.length && !props?.circular) {
-      value = (
-        <Safe {...props}>
-          <Flex
-            position="relative"
-            flexDirection="column"
-            // w={'500px'}
-            // w={['200px', '500px']}
-            maxWidth="100%"
-            paddingLeft={valuePl}
-            paddingY={props?.path ? 3 : 0}
-          >
-            {keysToUse?.length &&
-              keysToUse.map((key, idx) => {
-                if (!key?.human) {
-                  key = {
-                    human: key,
-                    key: key,
+  const value = React.useMemo(() => {
+    if (template1Modes?.includes(mode)) {
+      if (keys?.length && !circular) {
+        return (
+          <Safe {...props}>
+            <Flex
+              position="relative"
+              flexDirection="column"
+              // w={'500px'}
+              // w={['200px', '500px']}
+              maxWidth="100%"
+              paddingLeft={valuePl}
+              paddingY={props?.path ? 3 : 0}
+            >
+              {keysToUse?.length &&
+                keysToUse.map((key, idx) => {
+                  if (!key?.human) {
+                    key = {
+                      human: key,
+                      key: key,
+                    }
                   }
-                }
 
-                const nextThing = thing[key?.key]
+                  const nextThing = thing[key?.key]
 
-                const nextSeen = [...seen]
+                  const nextSeen = [...seen]
 
-                if (typeof nextThing === "object") {
-                  nextSeen.push(nextThing)
-                }
+                  if (typeof nextThing === "object") {
+                    nextSeen.push(nextThing)
+                  }
 
-                return (
-                  <Thingtime
-                    key={idx}
-                    seen={nextSeen}
-                    circular={seen?.includes?.(nextThing)}
-                    depth={depth + 1}
-                    parent={thing}
-                    path={key}
-                    thing={nextThing}
-                    // thing={{ infinite: { yes: true } }}
-                    valuePl={pl}
-                  ></Thingtime>
-                )
-              })}
-          </Flex>
-        </Safe>
-      )
-    } else {
-      editableValue = (
+                  return (
+                    <Thingtime
+                      key={idx}
+                      seen={nextSeen}
+                      circular={seen?.includes?.(nextThing)}
+                      depth={depth + 1}
+                      parent={thing}
+                      path={key}
+                      thing={nextThing}
+                      // thing={{ infinite: { yes: true } }}
+                      valuePl={pl}
+                    ></Thingtime>
+                  )
+                })}
+            </Flex>
+          </Safe>
+        )
+      }
+    }
+  }, [
+    keysToUse,
+    mode,
+    circular,
+    seen,
+    depth,
+    thing,
+    props,
+    valuePl,
+    pl,
+    keys,
+    template1Modes,
+  ])
+
+  const editableValue = React.useMemo(() => {
+    if (template1Modes?.includes(mode)) {
+      return (
         <Box
           paddingLeft={pl}
           fontSize="20px"
@@ -222,7 +205,7 @@ export const Thingtime = (props) => {
         </Box>
       )
     }
-  }
+  }, [renderableValue, mode, template1Modes, pl])
 
   const contextMenu = (
     <Flex
@@ -299,9 +282,14 @@ export const Thingtime = (props) => {
         className={`thing-${uuid?.current}`}
       >
         {/* {uuid?.current} */}
-        {path}
+        <Flex position="relative" flexDirection="row">
+          {path}
+          <Flex position="absolute" top={0} right={0}>
+            <Icon name="gear"></Icon>
+          </Flex>
+        </Flex>
         {/* {showContextMenu && contextMenu} */}
-        {editableValue}
+        {!value && editableValue}
         {value}
       </Flex>
     </Safe>

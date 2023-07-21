@@ -84,7 +84,13 @@ const initialThingtime = smarts.merge(initialValues, force)
 // }
 
 export const ThingtimeProvider = (props: any): JSX.Element => {
-  const [thingtime, set] = React.useState(initialThingtime)
+  const [thingtime, rawSet] = React.useState(initialThingtime)
+
+  const set = React.useCallback((newThingtime) => {
+    newThingtime.tt = newThingtime
+    newThingtime.thingtime = newThingtime
+    rawSet(newThingtime)
+  }, [])
 
   const thingtimeRef = React.useRef(thingtime)
   const stateRef = React.useRef({

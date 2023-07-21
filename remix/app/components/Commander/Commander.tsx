@@ -25,7 +25,7 @@ export const Commander = (props) => {
   const [showContext, setShowContextState] = React.useState(false)
 
   const mobileVW = React.useMemo(() => {
-    return "calc(100vw - 45px)"
+    return "calc(100vw - 55px)"
   }, [])
 
   const rainbowRepeats = 2
@@ -349,6 +349,7 @@ export const Commander = (props) => {
         // height="100%"
         pointerEvents="none"
         id="commander"
+        paddingX={1}
       >
         <Flex
           position="absolute"
