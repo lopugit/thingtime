@@ -37,6 +37,8 @@ module.exports = {
       "error",
       { props: "never", children: "never" },
     ],
+    "direct-eval/direct-eval": "off",
+    "no-eval": "off",
     "no-async-promise-executor": "off",
     "react/prop-types": "off",
     "react/display-name": "off",

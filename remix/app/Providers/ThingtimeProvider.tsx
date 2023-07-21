@@ -105,9 +105,14 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
         ...prevThingtime,
       }
 
+      newThingtime.tt = newThingtime
+      newThingtime.thingtime = newThingtime
+
       // check if first characters of path starts with thingtime or tt and strip from path
 
       // path = sanitise(path)
+
+      console.log("nik setting newThingtime value at path", path, value)
 
       smarts.setsmart(newThingtime, path, value)
 
@@ -118,6 +123,7 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
       const parentPath = pathParts.join(".")
 
       if (parentPath?.length) {
+        console.log("nik updating parentPath dependancies", parentPath)
         const parent = smarts.getsmart(newThingtime, parentPath)
 
         const newParent = Array.isArray(parent) ? [...parent] : { ...parent }
@@ -127,7 +133,7 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
 
       set(newThingtime)
     },
-    [thingtime]
+    [thingtime, set]
   )
 
   const getThingtime = React.useCallback(
@@ -137,6 +143,7 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
       // do we need to sanitise?
       // const path = sanitise(rawPath)
       console.log("Getting thingtime at path", path)
+      // console.trace("Getting thingtime at path", path)
       return smarts.getsmart(thingtime, path)
     },
     [thingtime]
@@ -221,10 +228,10 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
       } else {
         try {
           console.log("Setting thingtime to localStorage", thingtime)
-          setTimeout(() => {
-            const stringified = stringify(thingtime)
-            window.localStorage.setItem("thingtime", stringified)
-          }, 600)
+          // setTimeout(() => {
+          const stringified = stringify(thingtime)
+          window.localStorage.setItem("thingtime", stringified)
+          // }, 600)
         } catch (err) {
           console.error("There was an error saving thingtime to localStorage")
         }

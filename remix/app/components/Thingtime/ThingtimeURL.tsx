@@ -1,15 +1,11 @@
 import React from "react"
-import { Box, Flex } from "@chakra-ui/react"
+import { Flex } from "@chakra-ui/react"
 import { useMatches } from "@remix-run/react"
 
-import { ProfileDrawer } from "~/components/Nav/ProfileDrawer"
-import { Splash } from "~/components/Splash/Splash"
-import { Thingtime } from "~/components/Thingtime/Thingtime"
-import { ThingtimeDemo } from "~/components/Thingtime/ThingtimeDemo"
-import { useThingtime } from "~/components/Thingtime/useThingtime"
-import { GradientPath } from "~/gp/GradientPath"
+import { Thingtime } from "./Thingtime"
+import { useThingtime } from "./useThingtime"
 
-export default function Index() {
+export const ThingtimeURL = (props) => {
   const { getThingtime } = useThingtime()
 
   const matches = useMatches()
@@ -18,11 +14,12 @@ export default function Index() {
   }, [matches])
 
   const path = React.useMemo(() => {
-    const pathStepOne = location?.pathname?.replace("/things/", "")
+    const pathPartOne = location?.params?.["*"]
 
-    const path = pathStepOne?.replace(/\//g, ".")
+    const path = pathPartOne?.replace(/\//g, ".")
+
     return path
-  }, [location?.pathname])
+  }, [location])
 
   const thing = React.useMemo(() => {
     // remove /things/ from path
@@ -40,12 +37,12 @@ export default function Index() {
       maxWidth="100%"
     >
       <Thingtime
+        edit={props?.edit}
         path={path}
         thing={thing}
         chakras={{ marginY: 200 }}
         width="600px"
       ></Thingtime>
-      <ProfileDrawer></ProfileDrawer>
     </Flex>
   )
 }

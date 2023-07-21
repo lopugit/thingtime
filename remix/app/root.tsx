@@ -10,6 +10,7 @@ import {
 import { Analytics } from "@vercel/analytics/react"
 
 import { Main } from "./components/Layout/Main"
+import { useIcons } from "./hooks/useIcons"
 import { ChakraWrapper } from "./Providers/Chakra/ChakraWrapper"
 import { ThingtimeProvider } from "./Providers/ThingtimeProvider"
 
@@ -41,6 +42,8 @@ function Document({
 }
 
 export default function App() {
+  useIcons()
+
   return (
     <Document>
       <ChakraWrapper>

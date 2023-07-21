@@ -197,11 +197,13 @@ export const Commander = (props) => {
 
   const closeCommander = React.useCallback(
     (e?: any) => {
-      console.log("nik e", e)
-      if (thingtime?.settings?.commanderActive) {
-        console.log("nik commander closing commander")
-        console.log("nik setting commanderActive to false")
-        setThingtime("settings.commanderActive", false)
+      if (!e?.defaultPrevented) {
+        console.log("nik 123123 commander event closeCommander ", e)
+        if (thingtime?.settings?.commanderActive) {
+          console.log("nik commander closing commander")
+          console.log("nik setting commanderActive to false")
+          setThingtime("settings.commanderActive", false)
+        }
       }
     },
     [setThingtime, thingtime?.settings?.commanderActive]
@@ -267,18 +269,46 @@ export const Commander = (props) => {
             if (commandIsAction) {
               // nothing
               try {
-                const fn = `() => { return ${escapedCommandValue} }`
+                // first try to execute literal javscript
+                const fn = `() => { return ${commandValue} }`
                 const evalFn = eval(fn)
                 const realVal = evalFn()
                 const prevVal = getThingtime(commandPath)
                 const parentPath = getParentPath(commandPath)
+                console.log("nik realVal", realVal)
+                console.log("nik prevVal", prevVal)
+                console.log("nik parentPath", parentPath)
+                console.log("nik commandPath", commandPath)
                 setThingtime(commandPath, realVal)
                 if (!prevVal) {
                   setContextPath(parentPath)
                   setShowContext(true, "commandIsAction check")
                 }
               } catch (err) {
-                console.log("setThingtime errored in Commander", err)
+                console.log(
+                  "Caught error after trying to execute literal javascript",
+                  err
+                )
+
+                // likely literaly javascript wasn't valid
+                try {
+                  const fn = `() => { return ${escapedCommandValue} }`
+                  const evalFn = eval(fn)
+                  const realVal = evalFn()
+                  const prevVal = getThingtime(commandPath)
+                  const parentPath = getParentPath(commandPath)
+                  setThingtime(commandPath, realVal)
+                  if (!prevVal) {
+                    setContextPath(parentPath)
+                    setShowContext(true, "commandIsAction check")
+                  }
+                } catch {
+                  // something very bad went wrong
+                  console.log(
+                    "Caught error after trying to execute escaped literal javascript",
+                    err
+                  )
+                }
               }
             } else if (commandContainsPath) {
               // const prevValue = getThingtime(commandPath)
@@ -305,6 +335,7 @@ export const Commander = (props) => {
       commandIsAction,
       commandContainsPath,
       commandPath,
+      commandValue,
       escapedCommandValue,
       getThingtime,
       setThingtime,

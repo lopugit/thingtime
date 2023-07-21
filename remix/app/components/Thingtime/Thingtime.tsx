@@ -1,5 +1,5 @@
 import React from "react"
-import { Box, Flex } from "@chakra-ui/react"
+import { Box, Flex, Select, Switch } from "@chakra-ui/react"
 
 import { Icon } from "../Icon/Icon"
 import { Safe } from "../Safety/Safe"
@@ -10,7 +10,7 @@ export const Thingtime = (props) => {
   // and add button to expand circular reference
   // up to 1 level deep
 
-  const { thingtime } = useThingtime()
+  const { thingtime, setThingtime } = useThingtime()
 
   const [uuid, setUuid] = React.useState()
 
@@ -73,6 +73,23 @@ export const Thingtime = (props) => {
     return typeof thing
   }, [thing])
 
+  const typeIcon = React.useMemo(() => {
+    const size = 7
+    if (thing instanceof Array) {
+      return <Icon name="array" size={size}></Icon>
+    } else if (type === "object") {
+      return <Icon name="object" size={size}></Icon>
+    } else if (type === "string") {
+      return <Icon name="string" size={size}></Icon>
+    } else if (type === "number") {
+      return <Icon name="number" size={size}></Icon>
+    } else if (type === "boolean") {
+      return <Icon name="boolean" size={size}></Icon>
+    } else {
+      return <Icon name="box" size={size}></Icon>
+    }
+  }, [type, thing])
+
   const valuePl = React.useMemo(() => {
     if (typeof props?.valuePl === "number") {
       return props?.valuePl
@@ -124,7 +141,7 @@ export const Thingtime = (props) => {
     return ["view", "edit"]
   }, [])
 
-  const value = React.useMemo(() => {
+  const thingtimeChildren = React.useMemo(() => {
     if (template1Modes?.includes(mode)) {
       if (keys?.length && !circular) {
         return (
@@ -155,13 +172,17 @@ export const Thingtime = (props) => {
                     nextSeen.push(nextThing)
                   }
 
+                  const fullPath = props?.fullPath || props?.path
+
                   return (
                     <Thingtime
                       key={idx}
                       seen={nextSeen}
+                      edit={props?.edit}
                       circular={seen?.includes?.(nextThing)}
                       depth={depth + 1}
                       parent={thing}
+                      fullPath={fullPath + "." + key?.key}
                       path={key}
                       thing={nextThing}
                       // thing={{ infinite: { yes: true } }}
@@ -188,24 +209,74 @@ export const Thingtime = (props) => {
     template1Modes,
   ])
 
-  const editableValue = React.useMemo(() => {
-    if (template1Modes?.includes(mode)) {
+  const AtomicWrapper = React.useCallback(
+    (props) => {
       return (
-        <Box
+        <Flex
+          flexDirection="row"
           paddingLeft={pl}
           fontSize="20px"
           border="none"
           whiteSpace="pre-line"
           outline="none"
-          contentEditable={mode === "edit"}
           paddingY={2}
           // dangerouslySetInnerHTML={{ __html: renderableValue }}
         >
-          {renderableValue}
-        </Box>
+          {props?.children}
+        </Flex>
       )
+    },
+    [pl]
+  )
+
+  const updateValue = React.useCallback(
+    (args) => {
+      const { value } = args
+
+      console.log("nik value", value)
+      console.log("nik props?.fullPath", props?.fullPath)
+
+      setThingtime(props?.fullPath, value)
+    },
+    [props?.fullPath, setThingtime]
+  )
+
+  const atomicValue = React.useMemo(() => {
+    if (props?.edit) {
+      if (type === "boolean") {
+        return (
+          <AtomicWrapper>
+            <Box
+              onClick={(e) => {
+                e?.preventDefault?.()
+                e?.stopPropagation?.()
+                // cancel bubble
+                e?.nativeEvent?.stopImmediatePropagation?.()
+                console.log("nik 123123 clicked", !thing)
+                setTimeout(() => {
+                  updateValue({ value: !thing })
+                  console.log("nik 123123 changed", e)
+                }, 1)
+              }}
+            >
+              <Switch colorScheme="red" isChecked={thing}></Switch>
+            </Box>
+            {/* <Select
+              width="auto"
+              marginRight="auto"
+              paddingStart={0}
+              paddingX={0}
+            >
+              {renderableValue}
+              <option value="true">true</option>
+              <option value="false">false</option>
+            </Select> */}
+          </AtomicWrapper>
+        )
+      }
     }
-  }, [renderableValue, mode, template1Modes, pl])
+    return <AtomicWrapper>{renderableValue}</AtomicWrapper>
+  }, [renderableValue, AtomicWrapper, type, props?.edit, thing, updateValue])
 
   const contextMenu = (
     <Flex
@@ -229,6 +300,10 @@ export const Thingtime = (props) => {
   }, [props?.path])
 
   const renderedPath = React.useMemo(() => {
+    if (props?.edit) {
+      return humanPath
+    }
+
     if (humanPath?.includes?.("hidden")) {
       return null
     }
@@ -238,19 +313,21 @@ export const Thingtime = (props) => {
     }
 
     return humanPath
-  }, [humanPath])
+  }, [humanPath, props?.edit])
 
-  const path = React.useMemo(() => {
-    return (
-      <Flex
-        maxWidth="100%"
-        paddingLeft={props?.pathPl || pl}
-        fontSize="12px"
-        wordBreak="break-all"
-      >
-        {renderedPath}
-      </Flex>
-    )
+  const pathDom = React.useMemo(() => {
+    if (renderedPath) {
+      return (
+        <Flex
+          maxWidth="100%"
+          paddingLeft={props?.pathPl || pl}
+          fontSize="12px"
+          wordBreak="break-all"
+        >
+          {renderedPath}
+        </Flex>
+      )
+    }
   }, [renderedPath, pl, props?.pathPl])
 
   const handleMouseEvent = React.useCallback(
@@ -264,6 +341,8 @@ export const Thingtime = (props) => {
     },
     [uuid]
   )
+
+  const [showContextIcon, setShowContextIcon] = React.useState(false)
 
   return (
     <Safe {...props} depth={depth} uuid={uuid?.current}>
@@ -283,14 +362,39 @@ export const Thingtime = (props) => {
       >
         {/* {uuid?.current} */}
         <Flex position="relative" flexDirection="row">
-          {path}
-          <Flex position="absolute" top={0} right={0}>
-            <Icon name="gear"></Icon>
+          <Flex
+            alignItems="center"
+            flexDirection="row"
+            marginRight="auto"
+            onMouseEnter={() => setShowContextIcon(true)}
+            onMouseLeave={() => setShowContextIcon(false)}
+          >
+            <Flex>{pathDom}</Flex>
+            {props?.edit && (
+              <Box
+                marginTop={-3}
+                paddingLeft={1}
+                opacity={0.5}
+                cursor="pointer"
+              >
+                {typeIcon}
+              </Box>
+            )}
+            {pathDom && (
+              <Flex
+                paddingLeft={1}
+                opacity={showContextIcon ? 1 : 0}
+                cursor="pointer"
+                transition="all 0.2s ease-in-out"
+              >
+                <Icon name="magic" size={10}></Icon>
+              </Flex>
+            )}
           </Flex>
         </Flex>
         {/* {showContextMenu && contextMenu} */}
-        {!value && editableValue}
-        {value}
+        {!thingtimeChildren && atomicValue}
+        {thingtimeChildren}
       </Flex>
     </Safe>
   )
