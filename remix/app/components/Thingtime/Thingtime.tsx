@@ -48,6 +48,10 @@ export const Thingtime = (props) => {
     return props.thing
   }, [props.thing])
 
+  const fullPath = React.useMemo(() => {
+    return props?.fullPath || props?.path
+  }, [props?.fullPath, props?.path])
+
   const seen = React.useMemo(() => {
     if (props?.seen instanceof Array) {
       if (props?.seen?.includes(thing)) {
@@ -191,8 +195,6 @@ export const Thingtime = (props) => {
                     nextSeen.push(nextThing)
                   }
 
-                  const fullPath = props?.fullPath || props?.path
-
                   return (
                     <Thingtime
                       key={idx}
@@ -254,11 +256,11 @@ export const Thingtime = (props) => {
       const { value } = args
 
       console.log("nik value", value)
-      console.log("nik props?.fullPath", props?.fullPath)
+      console.log("nik props?.fullPath", fullPath)
 
-      setThingtime(props?.fullPath, value)
+      setThingtime(fullPath, value)
     },
-    [props?.fullPath, setThingtime]
+    [fullPath, setThingtime]
   )
 
   const atomicValue = React.useMemo(() => {
