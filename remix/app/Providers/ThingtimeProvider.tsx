@@ -145,14 +145,19 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
         }
       })
 
+      newThingtime.thingtime = newThingtime
+      newThingtime.tt = newThingtime
+
       console.log(
         "nik setting newThingtime value at path",
-        path,
+        '"' + path + '"',
         "value: ",
         value
       )
 
       smarts.setsmart(newThingtime, path, value)
+
+      console.log("nik set the newThingtime", newThingtime)
 
       set(newThingtime)
     },
