@@ -48,7 +48,7 @@ export const Commander = (props) => {
     return thingtime?.settings?.commanderActive
   }, [thingtime?.settings?.commanderActive])
 
-  console.log("nik commanderActive", commanderActive)
+  // console.log("nik commanderActive", commanderActive)
 
   // commanderActive useEffect
   React.useEffect(() => {
@@ -109,7 +109,7 @@ export const Commander = (props) => {
       ]
       return [pathRaw?.trim(), valRaw?.trim()]
     }
-    console.log("nik sanitizedCommand", sanitizedCommand)
+    // console.log("nik sanitizedCommand", sanitizedCommand)
     return [sanitizedCommand]
   }, [
     // inputValue,
@@ -180,28 +180,28 @@ export const Commander = (props) => {
   )
 
   const commandContainsPath = React.useMemo(() => {
-    console.log("nik command", commandPath)
-    console.log("nik suggestions", suggestions)
+    // console.log("nik command", commandPath)
+    // console.log("nik suggestions", suggestions)
     const commandIncludesSuggestion = suggestions?.find((suggestion) => {
       return commandPath?.includes(suggestion)
     })
-    console.log("nik commandIncludesSuggestion", commandIncludesSuggestion)
+    // console.log("nik commandIncludesSuggestion", commandIncludesSuggestion)
     // return false
     return commandIncludesSuggestion
   }, [commandPath, suggestions])
 
   const openCommander = React.useCallback(() => {
-    console.log("nik commander opening commander")
+    // console.log("nik commander opening commander")
     setThingtime("settings.commanderActive", true)
   }, [setThingtime])
 
   const closeCommander = React.useCallback(
     (e?: any) => {
       if (!e?.defaultPrevented) {
-        console.log("nik 123123 commander event closeCommander ", e)
+        // console.log("nik 123123 commander event closeCommander ", e)
         if (thingtime?.settings?.commanderActive) {
-          console.log("nik commander closing commander")
-          console.log("nik setting commanderActive to false")
+          // console.log("nik commander closing commander")
+          // console.log("nik setting commanderActive to false")
           setThingtime("settings.commanderActive", false)
         }
       }
@@ -261,11 +261,11 @@ export const Commander = (props) => {
         }
         if (commanderActive) {
           try {
-            console.log("nik Commander onEnter")
-            console.log("nik commandIsAction", commandIsAction)
-            console.log("nik commandContainsPath", commandContainsPath)
+            // console.log("nik Commander onEnter")
+            // console.log("nik commandIsAction", commandIsAction)
+            // console.log("nik commandContainsPath", commandContainsPath)
 
-            console.log("nik onEnter commandPath", commandPath)
+            // console.log("nik onEnter commandPath", commandPath)
 
             if (commandIsAction) {
               // nothing
@@ -276,10 +276,10 @@ export const Commander = (props) => {
                 const realVal = evalFn()
                 const prevVal = getThingtime(commandPath)
                 const parentPath = getParentPath(commandPath)
-                console.log("nik realVal", realVal)
-                console.log("nik prevVal", prevVal)
-                console.log("nik parentPath", parentPath)
-                console.log("nik commandPath", commandPath)
+                // console.log("nik realVal", realVal)
+                // console.log("nik prevVal", prevVal)
+                // console.log("nik parentPath", parentPath)
+                // console.log("nik commandPath", commandPath)
                 setThingtime(commandPath, realVal)
                 if (!prevVal) {
                   setContextPath(parentPath)

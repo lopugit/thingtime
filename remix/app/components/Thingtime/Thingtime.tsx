@@ -73,8 +73,12 @@ export const Thingtime = (props) => {
 
   const keys = React.useMemo(() => {
     if (validKeyTypes?.includes(typeof thing)) {
-      const keysRet = Object.keys(thing)
-      return keysRet
+      try {
+        const keysRet = Object.keys(thing)
+        return keysRet
+      } catch {
+        // nothing
+      }
     } else {
       return []
     }
@@ -136,7 +140,11 @@ export const Thingtime = (props) => {
         //   err,
         //   thing
         // )
-        return <Box onClick={() => setCircular(false)}>Click to Expand</Box>
+        return (
+          <Box cursor="pointer" onClick={() => setCircular(false)}>
+            Click to Expand
+          </Box>
+        )
       }
     } else {
       return "Something!"
@@ -271,7 +279,7 @@ export const Thingtime = (props) => {
                 }, 1)
               }}
             >
-              <Switch colorScheme="red" isChecked={thing}></Switch>
+              <Switch isChecked={thing}></Switch>
             </Box>
           </AtomicWrapper>
         )

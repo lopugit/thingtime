@@ -183,9 +183,9 @@ export const Rainbow = (allProps: any): JSX.Element => {
 
   const render = true
 
-  useTrace("Rainbow", {
-    props,
-  })
+  // useTrace("Rainbow", {
+  //   props,
+  // })
 
   return (
     <>

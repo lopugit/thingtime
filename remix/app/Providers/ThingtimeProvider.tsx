@@ -83,53 +83,76 @@ const initialThingtime = smarts.merge(initialValues, force)
 //   console.error("Caught error restoring thingtime from localstorage", err)
 // }
 
+initialThingtime.thingtime = initialThingtime
+initialThingtime.tt = initialThingtime
+
 export const ThingtimeProvider = (props: any): JSX.Element => {
   const [thingtime, rawSet] = React.useState(initialThingtime)
-
-  const set = React.useCallback((newThingtime) => {
-    newThingtime.tt = newThingtime
-    newThingtime.thingtime = newThingtime
-    rawSet(newThingtime)
-  }, [])
 
   const thingtimeRef = React.useRef(thingtime)
   const stateRef = React.useRef({
     c: 1,
   })
 
+  const set = React.useCallback((newThingtime) => {
+    const thingtimeReference = {
+      ...newThingtime,
+    }
+
+    thingtimeReference.tt = thingtimeReference
+    thingtimeReference.thingtime = thingtimeReference
+    rawSet(thingtimeReference)
+  }, [])
+
   const setThingtime = React.useCallback(
     (path, value) => {
-      const prevThingtime = thingtime
+      const newThingtime = thingtime
 
-      const newThingtime = {
-        ...prevThingtime,
-      }
+      const paths = smarts.parsePropertyPath(path)
 
-      newThingtime.tt = newThingtime
-      newThingtime.thingtime = newThingtime
+      console.log("nik paths", paths)
 
-      // check if first characters of path starts with thingtime or tt and strip from path
+      // find first parent where a path is undefined
+      // paths is array of path parts such as ["path1", "path2", "path3"]
+      // we want to create a new reference at the first object which has an undefined part of the path
+      // and is an object itself
+      // so that react will detect the change and re-render
+      // "path1" = { ...thingtime["path1"] } if path1.path2 undefined
+      // "path1.path2" = { ...thingtime["path1"]["path2"] } if path1.path2.path3 undefined
+      // "path1.path2.path3" = { ...thingtime["path1"]["path2"]["path3"] }
+      // etc
+      let done = false
+      paths.forEach((pathPart, index) => {
+        if (!done) {
+          const pathParts = paths.slice(0, index + 1)
+          const tmpPath = pathParts.join(".")
+          const parentPath = pathParts.slice(0, -1).join(".")
 
-      // path = sanitise(path)
+          const valAtPath = smarts.getsmart(newThingtime, tmpPath)
 
-      console.log("nik setting newThingtime value at path", path, value)
+          if (parentPath) {
+            if (typeof valAtPath !== "object" || valAtPath === null) {
+              const parentVal = smarts.getsmart(newThingtime, parentPath)
+              if (typeof parentVal === "object") {
+                const newParent = Array.isArray(parentVal)
+                  ? [...parentVal]
+                  : { ...parentVal }
+                smarts.setsmart(newThingtime, parentPath, newParent)
+              }
+              done = true
+            }
+          }
+        }
+      })
+
+      console.log(
+        "nik setting newThingtime value at path",
+        path,
+        "value: ",
+        value
+      )
 
       smarts.setsmart(newThingtime, path, value)
-
-      // subtract last path part from dot delimitted path
-      // prop1.prop2.prop3 => prop1.prop2
-      const pathParts = path.split(".")
-      pathParts.pop()
-      const parentPath = pathParts.join(".")
-
-      if (parentPath?.length) {
-        console.log("nik updating parentPath dependancies", parentPath)
-        const parent = smarts.getsmart(newThingtime, parentPath)
-
-        const newParent = Array.isArray(parent) ? [...parent] : { ...parent }
-
-        smarts.setsmart(newThingtime, parentPath, newParent)
-      }
 
       set(newThingtime)
     },
@@ -150,19 +173,23 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
   )
 
   const populatePaths = React.useCallback((obj, path, paths, seen = []) => {
-    Object.keys(obj).forEach((key) => {
-      const val = obj[key]
-      const newPath = path ? `${path}${path ? "." : ""}${key}` : key
-      if (typeof val === "object") {
-        paths.push(newPath)
-        if (!seen?.includes(val)) {
-          seen.push(val)
-          populatePaths(val, newPath, paths, seen)
+    try {
+      Object.keys(obj).forEach((key) => {
+        const val = obj[key]
+        const newPath = path ? `${path}${path ? "." : ""}${key}` : key
+        if (typeof val === "object") {
+          paths.push(newPath)
+          if (!seen?.includes(val)) {
+            seen.push(val)
+            populatePaths(val, newPath, paths, seen)
+          }
+        } else {
+          paths.push(newPath)
         }
-      } else {
-        paths.push(newPath)
-      }
-    })
+      })
+    } catch {
+      // nothing
+    }
   }, [])
 
   const paths = React.useMemo(() => {
@@ -180,6 +207,8 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
     try {
       const thingtimeFromLocalStorage = window.localStorage.getItem("thingtime")
 
+      console.log("nik thingtimeFromLocalStorage", thingtimeFromLocalStorage)
+
       if (thingtimeFromLocalStorage) {
         const parsed = parse(thingtimeFromLocalStorage)
         if (parsed) {
@@ -192,7 +221,10 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
             const withVersionUpdates = smarts.merge(newVersionData, parsed)
             newThingtime = smarts.merge(force, withVersionUpdates)
           }
-          console.log("nik setting new thingtime", newThingtime)
+          console.log(
+            "nik setting new thingtime from localStorage",
+            newThingtime
+          )
           console.log("nik localIsValid", localIsValid)
           set(newThingtime)
         }
@@ -249,7 +281,7 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
     return () => {
       window.removeEventListener("keydown", keyListener)
     }
-  }, [setThingtime, thingtime])
+  }, [setThingtime, thingtime, set])
 
   const value = {
     thingtime,
