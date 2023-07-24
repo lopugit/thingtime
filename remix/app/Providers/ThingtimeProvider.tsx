@@ -168,6 +168,11 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
     (...args) => {
       const rawPath = args[0]
       const path = rawPath
+
+      if (!path) {
+        return thingtime
+      }
+
       // do we need to sanitise?
       // const path = sanitise(rawPath)
       console.log("Getting thingtime at path", path)

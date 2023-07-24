@@ -269,22 +269,18 @@ export const Commander = (props) => {
 
             if (commandIsAction) {
               // nothing
+              const prevVal = getThingtime(commandPath)
+              const parentPath = getParentPath(commandPath) || "thingtime"
               try {
                 // first try to execute literal javscript
                 const fn = `() => { return ${commandValue} }`
                 const evalFn = eval(fn)
                 const realVal = evalFn()
-                const prevVal = getThingtime(commandPath)
-                const parentPath = getParentPath(commandPath)
                 // console.log("nik realVal", realVal)
                 // console.log("nik prevVal", prevVal)
                 // console.log("nik parentPath", parentPath)
                 // console.log("nik commandPath", commandPath)
                 setThingtime(commandPath, realVal)
-                if (!prevVal) {
-                  setContextPath(parentPath)
-                  setShowContext(true, "commandIsAction check")
-                }
               } catch (err) {
                 console.log(
                   "Caught error after trying to execute literal javascript",
@@ -299,10 +295,6 @@ export const Commander = (props) => {
                   const prevVal = getThingtime(commandPath)
                   const parentPath = getParentPath(commandPath)
                   setThingtime(commandPath, realVal)
-                  if (!prevVal) {
-                    setContextPath(parentPath)
-                    setShowContext(true, "commandIsAction check")
-                  }
                 } catch {
                   // something very bad went wrong
                   console.log(
@@ -311,7 +303,13 @@ export const Commander = (props) => {
                   )
                 }
               }
-            } else if (commandContainsPath) {
+              if (!prevVal) {
+                setContextPath(commandPath)
+                setShowContext(true, "commandIsAction check")
+              }
+            }
+            // if (commandContainsPath)
+            else {
               // const prevValue = getThingtime(commandPath)
 
               // const newValue = setThingtime(commandPath, prevValue)
@@ -392,54 +390,65 @@ export const Commander = (props) => {
           left={0}
           alignItems={["flex-start", "center"]}
           flexDirection="column"
-          overflowY="scroll"
           maxWidth="100%"
           height="auto"
-          maxHeight="90vh"
           marginTop={2}
           borderRadius="12px"
           marginX={1}
         >
           <Flex
+            alignItems={["flex-start", "center"]}
             flexDirection="column"
-            display={showSuggestions ? "flex" : "none"}
-            width={["100%", "400px"]}
+            overflowY="scroll"
+            width="auto"
             maxWidth="100%"
-            marginBottom={3}
-            background="grey"
+            maxHeight="90vh"
             borderRadius="12px"
-            pointerEvents="all"
-            id="commander-suggestions"
-            onMouseLeave={() => setHoveredSuggestion(null)}
-            paddingY={3}
           >
-            {suggestions?.map((suggestion, i) => {
-              return (
-                <Flex
-                  key={i}
-                  background={hoveredSuggestion === i ? "greys.lightt" : null}
-                  _hover={{
-                    background: "greys.lightt",
-                  }}
-                  cursor="pointer"
-                  onClick={() => selectSuggestion(i)}
-                  onMouseEnter={() => setHoveredSuggestion(i)}
-                  paddingX={4}
-                >
-                  {suggestion}
-                </Flex>
-              )
-            })}
-          </Flex>
-          <Flex
-            display={showContext ? "flex" : "none"}
-            maxWidth="100%"
-            background="grey"
-            borderRadius="12px"
-            pointerEvents="all"
-            paddingY={3}
-          >
-            <Thingtime thing={contextValue}></Thingtime>
+            <Flex
+              flexDirection="column"
+              flexShrink={0}
+              display={showSuggestions ? "flex" : "none"}
+              overflowY="scroll"
+              width={["100%", "400px"]}
+              maxWidth="100%"
+              maxHeight="300px"
+              marginBottom={3}
+              background="grey"
+              borderRadius="12px"
+              pointerEvents="all"
+              id="commander-suggestions"
+              onMouseLeave={() => setHoveredSuggestion(null)}
+              paddingY={3}
+            >
+              {suggestions?.map((suggestion, i) => {
+                return (
+                  <Flex
+                    key={i}
+                    background={hoveredSuggestion === i ? "greys.lightt" : null}
+                    _hover={{
+                      background: "greys.lightt",
+                    }}
+                    cursor="pointer"
+                    onClick={() => selectSuggestion(i)}
+                    onMouseEnter={() => setHoveredSuggestion(i)}
+                    paddingX={4}
+                  >
+                    {suggestion}
+                  </Flex>
+                )
+              })}
+            </Flex>
+            <Flex
+              display={showContext ? "flex" : "none"}
+              maxWidth="100%"
+              background="grey"
+              borderRadius="12px"
+              pointerEvents="all"
+              paddingY={3}
+            >
+              <Thingtime path={contextPath} thing={contextValue}></Thingtime>
+            </Flex>
           </Flex>
         </Flex>
         <Center
