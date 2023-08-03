@@ -1,4 +1,5 @@
 import React from "react"
+import ContentEditable from "react-contenteditable"
 import {
   Box,
   Flex,
@@ -26,6 +27,8 @@ export const Thingtime = (props) => {
   const [uuid, setUuid] = React.useState()
 
   const [circular, setCircular] = React.useState(props?.circular)
+
+  const contentEditableRef = React.useRef(null)
 
   const depth = React.useMemo(() => {
     return props?.depth || 1
@@ -221,6 +224,7 @@ export const Thingtime = (props) => {
     mode,
     circular,
     seen,
+    fullPath,
     depth,
     thing,
     props,
@@ -236,6 +240,7 @@ export const Thingtime = (props) => {
         <Flex
           flexDirection="row"
           flexShrink={1}
+          width="100%"
           paddingLeft={pl}
           fontSize="20px"
           border="none"
@@ -251,6 +256,22 @@ export const Thingtime = (props) => {
     [pl]
   )
 
+  const updatedRef = React.useRef(false)
+
+  const [contentEditableThing, setContentEditableThing] = React.useState(thing)
+
+  React.useEffect(() => {
+    console.log("nik detected thing changed")
+    console.log("nik thing", thing)
+    console.log("nik contentEditableThing", contentEditableThing)
+    console.log("nik updatedRef?.current", updatedRef?.current)
+    if (!updatedRef?.current && contentEditableThing !== thing) {
+      console.log("nik setting content editable thing", thing)
+      setContentEditableThing(thing)
+    }
+    updatedRef.current = false
+  }, [thing, updatedRef, contentEditableThing, contentEditableRef])
+
   const updateValue = React.useCallback(
     (args) => {
       const { value } = args
@@ -259,11 +280,13 @@ export const Thingtime = (props) => {
       console.log("nik props?.fullPath", fullPath)
 
       setThingtime(fullPath, value)
+      updatedRef.current = true
     },
     [fullPath, setThingtime]
   )
 
   const atomicValue = React.useMemo(() => {
+    console.log("nik contentEditableThing", contentEditableThing)
     if (props?.edit) {
       if (type === "boolean") {
         return (
@@ -321,9 +344,41 @@ export const Thingtime = (props) => {
           </AtomicWrapper>
         )
       }
+      if (type === "string") {
+        return (
+          <AtomicWrapper>
+            <Box
+              ref={contentEditableRef}
+              width="100%"
+              border="none"
+              outline="none"
+              contentEditable={true}
+              onInput={(value) => {
+                console.log("nik value", value)
+
+                const innerText = value?.target?.innerText
+
+                if (typeof innerText === "string") {
+                  updateValue({ value: innerText })
+                }
+              }}
+            >
+              {contentEditableThing}
+            </Box>
+          </AtomicWrapper>
+        )
+      }
     }
     return <AtomicWrapper>{renderableValue}</AtomicWrapper>
-  }, [renderableValue, AtomicWrapper, type, props?.edit, thing, updateValue])
+  }, [
+    renderableValue,
+    contentEditableThing,
+    AtomicWrapper,
+    type,
+    props?.edit,
+    thing,
+    updateValue,
+  ])
 
   const contextMenu = (
     <Flex

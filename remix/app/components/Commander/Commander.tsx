@@ -156,15 +156,19 @@ export const Commander = (props) => {
   }, [inputValue])
 
   const suggestions = React.useMemo(() => {
-    const fuse = new Fuse(paths)
+    try {
+      const fuse = new Fuse(paths)
 
-    const results = fuse.search(inputValue)
+      const results = fuse.search(inputValue)
 
-    const mappedResults = results?.map((result) => {
-      return result?.item
-    })
+      const mappedResults = results?.map((result) => {
+        return result?.item
+      })
 
-    return mappedResults
+      return mappedResults
+    } catch (err) {
+      console.error("nik fuse error", err)
+    }
   }, [inputValue, paths])
 
   const selectSuggestion = React.useCallback(
@@ -230,96 +234,101 @@ export const Commander = (props) => {
       else if (e?.code === "Escape") {
         closeCommander()
       }
-      // if arrow keys then move selection
-      else if (e?.code === "ArrowUp") {
-        // move selection up
-        const curSuggestionIdx =
-          typeof hoveredSuggestion === "number"
-            ? hoveredSuggestion
-            : suggestions?.length
-        const newSuggestionIdx = curSuggestionIdx - 1
-        if (newSuggestionIdx >= 0) {
-          setHoveredSuggestion(newSuggestionIdx)
-        } else {
-          setHoveredSuggestion(suggestions?.length - 1)
-        }
-      } else if (e?.code === "ArrowDown") {
-        // move selection down
-        const curSuggestionIdx =
-          typeof hoveredSuggestion === "number" ? hoveredSuggestion : -1
-        const newSuggestionIdx = curSuggestionIdx + 1
-        if (newSuggestionIdx < suggestions?.length) {
-          setHoveredSuggestion(newSuggestionIdx)
-        } else {
-          setHoveredSuggestion(0)
-        }
-      } else if (e?.code === "Enter") {
-        // if selection is active then select it
-        const curSuggestionIdx = hoveredSuggestion
-        if (curSuggestionIdx !== null) {
-          selectSuggestion(curSuggestionIdx)
-        }
-        if (commanderActive) {
-          try {
-            // console.log("nik Commander onEnter")
-            // console.log("nik commandIsAction", commandIsAction)
-            // console.log("nik commandContainsPath", commandContainsPath)
 
-            // console.log("nik onEnter commandPath", commandPath)
+      // only run these if commander active
 
-            if (commandIsAction) {
-              // nothing
-              const prevVal = getThingtime(commandPath)
-              const parentPath = getParentPath(commandPath) || "thingtime"
-              try {
-                // first try to execute literal javscript
-                const fn = `() => { return ${commandValue} }`
-                const evalFn = eval(fn)
-                const realVal = evalFn()
-                // console.log("nik realVal", realVal)
-                // console.log("nik prevVal", prevVal)
-                // console.log("nik parentPath", parentPath)
-                // console.log("nik commandPath", commandPath)
-                setThingtime(commandPath, realVal)
-              } catch (err) {
-                console.log(
-                  "Caught error after trying to execute literal javascript",
-                  err
-                )
+      if (commanderActive) {
+        // if arrow keys then move selection
+        if (e?.code === "ArrowUp") {
+          // move selection up
+          const curSuggestionIdx =
+            typeof hoveredSuggestion === "number"
+              ? hoveredSuggestion
+              : suggestions?.length
+          const newSuggestionIdx = curSuggestionIdx - 1
+          if (newSuggestionIdx >= 0) {
+            setHoveredSuggestion(newSuggestionIdx)
+          } else {
+            setHoveredSuggestion(suggestions?.length - 1)
+          }
+        } else if (e?.code === "ArrowDown") {
+          // move selection down
+          const curSuggestionIdx =
+            typeof hoveredSuggestion === "number" ? hoveredSuggestion : -1
+          const newSuggestionIdx = curSuggestionIdx + 1
+          if (newSuggestionIdx < suggestions?.length) {
+            setHoveredSuggestion(newSuggestionIdx)
+          } else {
+            setHoveredSuggestion(0)
+          }
+        } else if (e?.code === "Enter") {
+          // if selection is active then select it
+          const curSuggestionIdx = hoveredSuggestion
+          if (curSuggestionIdx !== null) {
+            selectSuggestion(curSuggestionIdx)
+          }
+          if (commanderActive) {
+            try {
+              // console.log("nik Commander onEnter")
+              // console.log("nik commandIsAction", commandIsAction)
+              // console.log("nik commandContainsPath", commandContainsPath)
 
-                // likely literaly javascript wasn't valid
+              // console.log("nik onEnter commandPath", commandPath)
+
+              if (commandIsAction) {
+                // nothing
+                const prevVal = getThingtime(commandPath)
+                const parentPath = getParentPath(commandPath) || "thingtime"
                 try {
-                  const fn = `() => { return ${escapedCommandValue} }`
+                  // first try to execute literal javscript
+                  const fn = `() => { return ${commandValue} }`
                   const evalFn = eval(fn)
                   const realVal = evalFn()
-                  const prevVal = getThingtime(commandPath)
-                  const parentPath = getParentPath(commandPath)
+                  // console.log("nik realVal", realVal)
+                  // console.log("nik prevVal", prevVal)
+                  // console.log("nik parentPath", parentPath)
+                  // console.log("nik commandPath", commandPath)
                   setThingtime(commandPath, realVal)
-                } catch {
-                  // something very bad went wrong
+                } catch (err) {
                   console.log(
-                    "Caught error after trying to execute escaped literal javascript",
+                    "Caught error after trying to execute literal javascript",
                     err
                   )
+
+                  // likely literaly javascript wasn't valid
+                  try {
+                    const fn = `() => { return ${escapedCommandValue} }`
+                    const evalFn = eval(fn)
+                    const realVal = evalFn()
+                    const prevVal = getThingtime(commandPath)
+                    const parentPath = getParentPath(commandPath)
+                    setThingtime(commandPath, realVal)
+                  } catch {
+                    // something very bad went wrong
+                    console.log(
+                      "Caught error after trying to execute escaped literal javascript",
+                      err
+                    )
+                  }
+                }
+                if (!prevVal) {
+                  setContextPath(commandPath)
+                  setShowContext(true, "commandIsAction check")
                 }
               }
-              if (!prevVal) {
+              // if (commandContainsPath)
+              else {
+                // const prevValue = getThingtime(commandPath)
+
+                // const newValue = setThingtime(commandPath, prevValue)
+
+                console.log("Setting context path", commandPath)
                 setContextPath(commandPath)
-                setShowContext(true, "commandIsAction check")
+                setShowContext(true, "commandContainsPath check")
               }
+            } catch (err) {
+              console.error("Caught error on commander onEnter", err)
             }
-            // if (commandContainsPath)
-            else {
-              // const prevValue = getThingtime(commandPath)
-
-              // const newValue = setThingtime(commandPath, prevValue)
-
-              console.log("Setting context path", commandPath)
-              setContextPath(commandPath)
-              setShowContext(true, "commandContainsPath check")
-            }
-          } catch (err) {
-            console.error("Caught error on commander onEnter", err)
           }
         }
       }
@@ -334,7 +343,6 @@ export const Commander = (props) => {
       thingtimeRef,
       commanderActive,
       commandIsAction,
-      commandContainsPath,
       commandPath,
       commandValue,
       escapedCommandValue,
@@ -439,16 +447,18 @@ export const Commander = (props) => {
                 )
               })}
             </Flex>
-            <Flex
-              display={showContext ? "flex" : "none"}
-              maxWidth="100%"
-              background="grey"
-              borderRadius="12px"
-              pointerEvents="all"
-              paddingY={3}
-            >
-              <Thingtime path={contextPath} thing={contextValue}></Thingtime>
-            </Flex>
+            {showContext && (
+              <Flex
+                display={showContext ? "flex" : "none"}
+                maxWidth="100%"
+                background="grey"
+                borderRadius="12px"
+                pointerEvents="all"
+                paddingY={3}
+              >
+                <Thingtime path={contextPath} thing={contextValue}></Thingtime>
+              </Flex>
+            )}
           </Flex>
         </Flex>
         <Center
