@@ -103,8 +103,6 @@ export const theme = extendTheme({
   },
 })
 
-console.log("nik Select", Select)
-
 Switch.defaultProps = {
   ...Switch.defaultProps,
   as: "div",

@@ -254,7 +254,7 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
       // nothing
     }
 
-    console.log("nik detected thingtime change", thingtime)
+    console.log("nik thingtime changed in ThingtimeProvider.tsx", thingtime)
 
     if (stateRef.current.initialized) {
       if (thingtime.thingtime !== thingtime || thingtime.tt !== thingtime) {

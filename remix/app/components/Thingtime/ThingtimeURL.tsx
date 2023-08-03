@@ -18,8 +18,6 @@ export const ThingtimeURL = (props) => {
 
     const path = pathPartOne?.replace(/\//g, ".")
 
-    console.log("nik Detected path in url", path)
-
     return path
   }, [location])
 

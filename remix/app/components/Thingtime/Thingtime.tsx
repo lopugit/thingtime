@@ -11,6 +11,7 @@ import {
   NumberInputStepper,
   Select,
   Switch,
+  Textarea,
 } from "@chakra-ui/react"
 
 import { Icon } from "../Icon/Icon"
@@ -29,6 +30,7 @@ export const Thingtime = (props) => {
   const [circular, setCircular] = React.useState(props?.circular)
 
   const contentEditableRef = React.useRef(null)
+  const editValueRef = React.useRef({})
 
   const depth = React.useMemo(() => {
     return props?.depth || 1
@@ -256,37 +258,64 @@ export const Thingtime = (props) => {
     [pl]
   )
 
-  const updatedRef = React.useRef(false)
-
   const [contentEditableThing, setContentEditableThing] = React.useState(thing)
 
+  const updateContentEditableThing = React.useCallback((value) => {
+    // replace all new line occurences in value with <div><br></div>
+
+    // extract all series of new lines
+    const newlines = value?.split?.(/[^\n]/)?.filter((v) => v !== "")
+
+    let newValue = value
+
+    // replace all new lines groups with <div><br></div>
+    newlines?.forEach?.((newline) => {
+      const baseLength = "\n"?.length
+
+      const newlineClone = newline
+
+      const newlineClonePart1 = newlineClone?.replace(
+        "\n\n\n",
+        "<div><br></div>"
+      )
+      const newlineClonePart2 = newlineClonePart1?.replace(
+        /\n\n/g,
+        "<div><br></div>"
+      )
+      const newlineClonePart3 = newlineClonePart2?.replace(/\n/g, "<br>")
+
+      newValue = newValue?.replace(newline, newlineClonePart3)
+    })
+
+    setContentEditableThing(newValue)
+  }, [])
+
   React.useEffect(() => {
-    console.log("nik detected thing changed")
-    console.log("nik thing", thing)
-    console.log("nik contentEditableThing", contentEditableThing)
-    console.log("nik updatedRef?.current", updatedRef?.current)
-    if (!updatedRef?.current && contentEditableThing !== thing) {
-      console.log("nik setting content editable thing", thing)
-      setContentEditableThing(thing)
+    const entries = Object.entries(editValueRef.current)
+    const propsThingInEntries = entries?.find?.(
+      (entry) => entry[1] === props?.thing
+    )
+    if (!propsThingInEntries) {
+      updateContentEditableThing(props?.thing)
+      // setContentEditableThing(props?.thing)
+    } else {
+      const [time, value] = propsThingInEntries
+      if (time && value) {
+        delete editValueRef.current[time]
+      }
     }
-    updatedRef.current = false
-  }, [thing, updatedRef, contentEditableThing, contentEditableRef])
+  }, [props?.thing])
 
   const updateValue = React.useCallback(
     (args) => {
       const { value } = args
 
-      console.log("nik value", value)
-      console.log("nik props?.fullPath", fullPath)
-
       setThingtime(fullPath, value)
-      updatedRef.current = true
     },
     [fullPath, setThingtime]
   )
 
   const atomicValue = React.useMemo(() => {
-    console.log("nik contentEditableThing", contentEditableThing)
     if (props?.edit) {
       if (type === "boolean") {
         return (
@@ -297,10 +326,8 @@ export const Thingtime = (props) => {
                 e?.stopPropagation?.()
                 // cancel bubble
                 e?.nativeEvent?.stopImmediatePropagation?.()
-                console.log("nik 123123 clicked", !thing)
                 setTimeout(() => {
                   updateValue({ value: !thing })
-                  console.log("nik 123123 changed", e)
                 }, 1)
               }}
             >
@@ -344,7 +371,7 @@ export const Thingtime = (props) => {
           </AtomicWrapper>
         )
       }
-      if (type === "string") {
+      if (type === "string" && typeof contentEditableThing === "string") {
         return (
           <AtomicWrapper>
             <Box
@@ -353,18 +380,16 @@ export const Thingtime = (props) => {
               border="none"
               outline="none"
               contentEditable={true}
+              dangerouslySetInnerHTML={{ __html: contentEditableThing }}
               onInput={(value) => {
-                console.log("nik value", value)
-
                 const innerText = value?.target?.innerText
-
                 if (typeof innerText === "string") {
+                  const time = Date.now()
+                  editValueRef.current[time] = innerText
                   updateValue({ value: innerText })
                 }
               }}
-            >
-              {contentEditableThing}
-            </Box>
+            ></Box>
           </AtomicWrapper>
         )
       }

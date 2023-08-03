@@ -57,9 +57,9 @@ export const save = (value, opts) => {
 // extract parent path from dot delimitted path
 
 export const getParentPath = (path) => {
-  const parts = path.split(".")
-  parts.pop()
-  return parts.join(".")
+  const parts = path?.split(".")
+  parts?.pop()
+  return parts?.join(".")
 }
 
 export const toJavascript = (value, opts = {}) => {

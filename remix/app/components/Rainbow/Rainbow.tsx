@@ -83,8 +83,8 @@ export const Rainbow = (allProps: any): JSX.Element => {
 
   React.useEffect(() => {
     const updateChildSize = () => {
-      const { width, height } = parentRef?.current?.getBoundingClientRect()
-      console.log("nik width height", width, height)
+      const { width, height } =
+        parentRef?.current?.getBoundingClientRect() || {}
       setState({ width, height })
     }
 
@@ -141,7 +141,6 @@ export const Rainbow = (allProps: any): JSX.Element => {
         svg?.appendChild?.(rectSource?.cloneNode?.())
 
       if (path) {
-        console.log("nik re-rendering rainbow")
         const gp = new GradientPath({
           path,
           segments: props?.segments || 1000,
