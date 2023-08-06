@@ -18,7 +18,7 @@ export const ThingtimeURL = (props) => {
 
     const path = pathPartOne?.replace(/\//g, ".")
 
-    return path
+    return path || "thingtime"
   }, [location])
 
   const thing = React.useMemo(() => {
