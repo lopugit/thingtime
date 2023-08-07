@@ -53,6 +53,7 @@ const initialValues = {
   },
 }
 
+// const initialThingtime = createInitialThingtime()
 const initialThingtime = smarts.merge(initialValues, force)
 
 // TODO: Make localStorage be loaded first before initialValues if local version exists
@@ -83,16 +84,19 @@ const initialThingtime = smarts.merge(initialValues, force)
 //   console.error("Caught error restoring thingtime from localstorage", err)
 // }
 
+// initialise thingtime
 initialThingtime.thingtime = initialThingtime
 initialThingtime.tt = initialThingtime
 
 export const ThingtimeProvider = (props: any): JSX.Element => {
-  const [thingtime, rawSet] = React.useState(initialThingtime)
+  const [thingtime, rawSet] = React.useState()
 
   const thingtimeRef = React.useRef(thingtime)
   const stateRef = React.useRef({
     c: 1,
   })
+
+  const [loading, setLoading] = React.useState(true)
 
   const set = React.useCallback((newThingtime) => {
     const thingtimeReference = {
@@ -218,7 +222,6 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
       const thingtimeFromLocalStorage = window.localStorage.getItem("thingtime")
 
       console.log("nik thingtimeFromLocalStorage", thingtimeFromLocalStorage)
-
       if (thingtimeFromLocalStorage) {
         const parsed = parse(thingtimeFromLocalStorage)
         if (parsed) {
@@ -238,10 +241,14 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
           console.log("nik localIsValid", localIsValid)
           set(newThingtime)
         }
+      } else {
+        console.log("nik setting initialThingtime", initialThingtime)
+        set(initialThingtime)
       }
     } catch (err) {
       console.error("There was an error getting thingtime from localStorage")
     }
+    setLoading(false)
   }, [])
 
   // thingtime change listener
@@ -299,6 +306,7 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
     getThingtime,
     thingtimeRef,
     paths,
+    loading,
   }
 
   return (

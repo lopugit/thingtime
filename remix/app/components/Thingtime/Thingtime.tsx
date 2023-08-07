@@ -2,6 +2,7 @@ import React from "react"
 import ContentEditable from "react-contenteditable"
 import {
   Box,
+  Center,
   Flex,
   Input,
   NumberDecrementStepper,
@@ -10,6 +11,7 @@ import {
   NumberInputField,
   NumberInputStepper,
   Select,
+  Spinner,
   Switch,
   Textarea,
 } from "@chakra-ui/react"
@@ -23,9 +25,11 @@ export const Thingtime = (props) => {
   // and add button to expand circular reference
   // up to 1 level deep
 
-  const { thingtime, setThingtime } = useThingtime()
+  const { thingtime, setThingtime, loading } = useThingtime()
 
   const [uuid, setUuid] = React.useState()
+
+  const [root, setRoot] = React.useState(props?.notRoot ? false : true)
 
   const [circular, setCircular] = React.useState(props?.circular)
 
@@ -172,9 +176,10 @@ export const Thingtime = (props) => {
   const thingtimeChildren = React.useMemo(() => {
     if (template1Modes?.includes(mode)) {
       if (keys?.length && !circular) {
-        return (
+        const ret = (
           <Safe {...props}>
             <Flex
+              className="nested-things"
               position="relative"
               flexDirection="column"
               // w={'500px'}
@@ -208,6 +213,7 @@ export const Thingtime = (props) => {
                       circular={seen?.includes?.(nextThing)}
                       depth={depth + 1}
                       parent={thing}
+                      notRoot
                       fullPath={fullPath + "." + key?.key}
                       path={key}
                       thing={nextThing}
@@ -219,6 +225,8 @@ export const Thingtime = (props) => {
             </Flex>
           </Safe>
         )
+        console.log("nik root ret", ret)
+        return ret
       }
     }
   }, [
@@ -226,6 +234,7 @@ export const Thingtime = (props) => {
     mode,
     circular,
     seen,
+    type,
     fullPath,
     depth,
     thing,
@@ -236,27 +245,24 @@ export const Thingtime = (props) => {
     template1Modes,
   ])
 
-  const AtomicWrapper = React.useCallback(
-    (props) => {
-      return (
-        <Flex
-          flexDirection="row"
-          flexShrink={1}
-          width="100%"
-          paddingLeft={pl}
-          fontSize="20px"
-          border="none"
-          whiteSpace="pre-line"
-          outline="none"
-          paddingY={2}
-          // dangerouslySetInnerHTML={{ __html: renderableValue }}
-        >
-          {props?.children}
-        </Flex>
-      )
-    },
-    [pl]
-  )
+  const AtomicWrapper = React.useCallback((props) => {
+    return (
+      <Flex
+        flexDirection="row"
+        flexShrink={1}
+        width="100%"
+        paddingLeft={props?.pl || props?.paddingLeft}
+        fontSize="20px"
+        border="none"
+        whiteSpace="pre-line"
+        outline="none"
+        paddingY={2}
+        // dangerouslySetInnerHTML={{ __html: renderableValue }}
+      >
+        {props?.children}
+      </Flex>
+    )
+  }, [])
 
   const [contentEditableThing, setContentEditableThing] = React.useState(thing)
 
@@ -276,13 +282,13 @@ export const Thingtime = (props) => {
 
       const newlineClonePart1 = newlineClone?.replace(
         "\n\n\n",
-        "<div><br></div>"
+        "<div><br /></div>"
       )
       const newlineClonePart2 = newlineClonePart1?.replace(
         /\n\n/g,
-        "<div><br></div>"
+        "<div><br /></div>"
       )
-      const newlineClonePart3 = newlineClonePart2?.replace(/\n/g, "<br>")
+      const newlineClonePart3 = newlineClonePart2?.replace(/\n/g, "<br />")
 
       newValue = newValue?.replace(newline, newlineClonePart3)
     })
@@ -304,7 +310,7 @@ export const Thingtime = (props) => {
         delete editValueRef.current[time]
       }
     }
-  }, [props?.thing])
+  }, [props?.thing, updateContentEditableThing])
 
   const updateValue = React.useCallback(
     (args) => {
@@ -319,7 +325,7 @@ export const Thingtime = (props) => {
     if (props?.edit) {
       if (type === "boolean") {
         return (
-          <AtomicWrapper>
+          <AtomicWrapper paddingLeft={pl} className="boolean-atomic-wrapper">
             <Box
               onClick={(e) => {
                 e?.preventDefault?.()
@@ -339,8 +345,9 @@ export const Thingtime = (props) => {
       if (type === "number") {
         const numberPxLength = thing?.toString()?.length * 13 + 30
         return (
-          <AtomicWrapper>
+          <AtomicWrapper paddingLeft={pl} className="number-atomic-wrapper">
             <Flex>
+              This is a number?
               <NumberInput
                 alignItems="center"
                 justifyContent="center"
@@ -373,7 +380,7 @@ export const Thingtime = (props) => {
       }
       if (type === "string" && typeof contentEditableThing === "string") {
         return (
-          <AtomicWrapper>
+          <AtomicWrapper paddingLeft={pl} className="string-atomic-wrapper">
             <Box
               ref={contentEditableRef}
               width="100%"
@@ -394,11 +401,16 @@ export const Thingtime = (props) => {
         )
       }
     }
-    return <AtomicWrapper>{renderableValue}</AtomicWrapper>
+
+    return (
+      <AtomicWrapper paddingLeft={pl} className="default-atomic-wrapper">
+        {renderableValue}
+      </AtomicWrapper>
+    )
   }, [
-    renderableValue,
     contentEditableThing,
-    AtomicWrapper,
+    renderableValue,
+    pl,
     type,
     props?.edit,
     thing,
@@ -485,7 +497,8 @@ export const Thingtime = (props) => {
         // minW={depth === 1 ? '120px' : null}
         paddingY={3}
         {...(props.chakras || {})}
-        className={`thing-${uuid?.current}`}
+        className={`thing uuid-${uuid?.current}`}
+        data-path={props?.path}
       >
         {/* {uuid?.current} */}
         <Flex position="relative" flexDirection="row">
@@ -521,8 +534,12 @@ export const Thingtime = (props) => {
           </Flex>
         </Flex>
         {/* {showContextMenu && contextMenu} */}
-        {!thingtimeChildren && atomicValue}
-        {thingtimeChildren}
+        {!loading && !thingtimeChildren && atomicValue && (
+          <Box className="atomicValue">{atomicValue}</Box>
+        )}
+        {!loading && thingtimeChildren && (
+          <Box className="thingtimeChildren">{thingtimeChildren}</Box>
+        )}
       </Flex>
     </Safe>
   )

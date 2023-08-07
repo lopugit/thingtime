@@ -1,4 +1,4 @@
-export const safe = props => {
+export const safe = (props) => {
   // do not render more than the limit of things to prevent infinite loops
   const thingtime = getThingtime()
 
@@ -6,24 +6,24 @@ export const safe = props => {
 
   try {
     if (
-      typeof thingtime?.things?.count === 'number' &&
+      typeof thingtime?.things?.count === "number" &&
       thingtime?.things?.count >= thingtime?.things?.limit
     ) {
       console.error(
-        '[codex] Maximum things reached',
+        "[codex] Maximum things reached",
         thingtime?.things?.count,
         thingtime?.things?.limit
       )
       return null
     }
   } catch (err) {
-    console.error('[codex] Error in Thingtime.tsx checking maximum things', err)
+    console.error("[codex] Error in Thingtime.tsx checking maximum things", err)
   }
 
   try {
     if (!thingtime?.things?.db?.[uuid]) {
       thingtime.things.db[uuid] = {
-        count: 1
+        count: 1,
       }
       thingtime.things.count++
     }
@@ -34,7 +34,7 @@ export const safe = props => {
   try {
     if (props?.depth >= thingtime?.things?.maxDepth) {
       console.error(
-        '[codex] Reached max depth',
+        "[codex] Reached max depth",
         props?.depth,
         thingtime?.things?.maxDepth
       )
@@ -44,7 +44,11 @@ export const safe = props => {
     // nothing
   }
 
-  return props?.children
+  try {
+    return props?.children
+  } catch (err) {
+    console.error("Caught error returning children safely", err)
+  }
 }
 
 export const getThingtime = () => {
