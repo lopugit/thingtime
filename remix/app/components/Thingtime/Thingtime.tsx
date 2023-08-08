@@ -347,7 +347,6 @@ export const Thingtime = (props) => {
         return (
           <AtomicWrapper paddingLeft={pl} className="number-atomic-wrapper">
             <Flex>
-              This is a number?
               <NumberInput
                 alignItems="center"
                 justifyContent="center"
