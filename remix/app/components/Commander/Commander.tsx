@@ -211,6 +211,79 @@ export const Commander = (props) => {
     }
   }, [thingtime?.settings?.commanderActive, closeCommander, openCommander])
 
+  const executeCommand = React.useCallback(() => {
+    // if selection is active then select it
+    const curSuggestionIdx = hoveredSuggestion
+    if (curSuggestionIdx !== null) {
+      selectSuggestion(curSuggestionIdx)
+    }
+    if (commanderActive) {
+      try {
+        if (commandIsAction) {
+          // nothing
+          const prevVal = getThingtime(commandPath)
+          const parentPath = getParentPath(commandPath) || "thingtime"
+          try {
+            // first try to execute literal javscript
+            const fn = `() => { return ${commandValue} }`
+            const evalFn = eval(fn)
+            const realVal = evalFn()
+            setThingtime(commandPath, realVal)
+          } catch (err) {
+            console.log(
+              "Caught error after trying to execute literal javascript",
+              err
+            )
+
+            // likely literaly javascript wasn't valid
+            try {
+              const fn = `() => { return ${escapedCommandValue} }`
+              const evalFn = eval(fn)
+              const realVal = evalFn()
+              const prevVal = getThingtime(commandPath)
+              const parentPath = getParentPath(commandPath)
+              setThingtime(commandPath, realVal)
+            } catch {
+              // something very bad went wrong
+              console.log(
+                "Caught error after trying to execute escaped literal javascript",
+                err
+              )
+            }
+          }
+          if (!prevVal) {
+            setContextPath(commandPath)
+            setShowContext(true, "commandIsAction check")
+          }
+        }
+        // if (commandContainsPath)
+        else {
+          // const prevValue = getThingtime(commandPath)
+
+          // const newValue = setThingtime(commandPath, prevValue)
+
+          console.log("Setting context path", commandPath)
+          setContextPath(commandPath)
+          setShowContext(true, "commandContainsPath check")
+        }
+      } catch (err) {
+        console.error("Caught error on commander onEnter", err)
+      }
+    }
+  }, [
+    hoveredSuggestion,
+    selectSuggestion,
+    commanderActive,
+    commandIsAction,
+    commandPath,
+    commandValue,
+    escapedCommandValue,
+    getThingtime,
+    setThingtime,
+    setContextPath,
+    setShowContext,
+  ])
+
   const allCommanderKeyListener = React.useCallback(
     (e: any) => {
       console.log("commander key listener e?.code", e?.code)
@@ -252,64 +325,7 @@ export const Commander = (props) => {
             setHoveredSuggestion(0)
           }
         } else if (e?.code === "Enter") {
-          // if selection is active then select it
-          const curSuggestionIdx = hoveredSuggestion
-          if (curSuggestionIdx !== null) {
-            selectSuggestion(curSuggestionIdx)
-          }
-          if (commanderActive) {
-            try {
-              if (commandIsAction) {
-                // nothing
-                const prevVal = getThingtime(commandPath)
-                const parentPath = getParentPath(commandPath) || "thingtime"
-                try {
-                  // first try to execute literal javscript
-                  const fn = `() => { return ${commandValue} }`
-                  const evalFn = eval(fn)
-                  const realVal = evalFn()
-                  setThingtime(commandPath, realVal)
-                } catch (err) {
-                  console.log(
-                    "Caught error after trying to execute literal javascript",
-                    err
-                  )
-
-                  // likely literaly javascript wasn't valid
-                  try {
-                    const fn = `() => { return ${escapedCommandValue} }`
-                    const evalFn = eval(fn)
-                    const realVal = evalFn()
-                    const prevVal = getThingtime(commandPath)
-                    const parentPath = getParentPath(commandPath)
-                    setThingtime(commandPath, realVal)
-                  } catch {
-                    // something very bad went wrong
-                    console.log(
-                      "Caught error after trying to execute escaped literal javascript",
-                      err
-                    )
-                  }
-                }
-                if (!prevVal) {
-                  setContextPath(commandPath)
-                  setShowContext(true, "commandIsAction check")
-                }
-              }
-              // if (commandContainsPath)
-              else {
-                // const prevValue = getThingtime(commandPath)
-
-                // const newValue = setThingtime(commandPath, prevValue)
-
-                console.log("Setting context path", commandPath)
-                setContextPath(commandPath)
-                setShowContext(true, "commandContainsPath check")
-              }
-            } catch (err) {
-              console.error("Caught error on commander onEnter", err)
-            }
-          }
+          executeCommand()
         }
       }
     },
@@ -317,18 +333,11 @@ export const Commander = (props) => {
       closeCommander,
       toggleCommander,
       hoveredSuggestion,
-      selectSuggestion,
       suggestions,
       thingtime,
       thingtimeRef,
       commanderActive,
-      commandIsAction,
-      commandPath,
-      commandValue,
-      escapedCommandValue,
-      getThingtime,
-      setThingtime,
-      setShowContext,
+      executeCommand,
     ]
   )
 
