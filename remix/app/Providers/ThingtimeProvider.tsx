@@ -71,7 +71,6 @@ const initialThingtime = smarts.merge(initialValues, force)
 //       const localIsValid = !parsed.version || parsed.version >= force.version
 //       if (localIsValid) {
 //         const newThingtime = smarts.merge(force, parsed)
-//         console.log("nik comm newThingtime", newThingtime)
 //         thingtimeToUse = newThingtime
 //       } else {
 //         const withVersionUpdates = smarts.merge(newVersionData, parsed)
@@ -113,8 +112,6 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
       const newThingtime = thingtime
 
       const paths = smarts.parsePropertyPath(path)
-
-      console.log("nik paths", paths)
 
       // find first parent where a path is undefined
       // paths is array of path parts such as ["path1", "path2", "path3"]
@@ -160,8 +157,6 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
       )
 
       smarts.setsmart(newThingtime, path, value)
-
-      console.log("nik set the newThingtime", newThingtime)
 
       set(newThingtime)
     },
@@ -221,7 +216,6 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
     try {
       const thingtimeFromLocalStorage = window.localStorage.getItem("thingtime")
 
-      console.log("nik thingtimeFromLocalStorage", thingtimeFromLocalStorage)
       if (thingtimeFromLocalStorage) {
         const parsed = parse(thingtimeFromLocalStorage)
         if (parsed) {
@@ -238,11 +232,9 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
             "nik setting new thingtime from localStorage",
             newThingtime
           )
-          console.log("nik localIsValid", localIsValid)
           set(newThingtime)
         }
       } else {
-        console.log("nik setting initialThingtime", initialThingtime)
         set(initialThingtime)
       }
     } catch (err) {
@@ -260,8 +252,6 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
     } catch {
       // nothing
     }
-
-    console.log("nik thingtime changed in ThingtimeProvider.tsx", thingtime)
 
     if (stateRef.current.initialized) {
       if (thingtime.thingtime !== thingtime || thingtime.tt !== thingtime) {

@@ -36,6 +36,31 @@ export const Thingtime = (props) => {
   const contentEditableRef = React.useRef(null)
   const editValueRef = React.useRef({})
 
+  const childrenRef = React.useRef([])
+
+  const [thingDep, setThingDep] = React.useState(childrenRef.current)
+
+  const createDependancies = () => {
+    // push all children into childrenRef.current
+    try {
+      const values = Object.values(props?.thing)
+      // if childrenRef.current does not shallow equal values then replace with array of values
+      const valuesNotEqual =
+        values?.length !== childrenRef.current?.length ||
+        !values?.every?.((value, idx) => {
+          return childrenRef.current[idx] === value
+        })
+      if (valuesNotEqual) {
+        childrenRef.current = values
+        setThingDep(childrenRef.current)
+      }
+    } catch {
+      // nothing
+    }
+  }
+
+  createDependancies()
+
   const depth = React.useMemo(() => {
     return props?.depth || 1
   }, [props?.depth])
@@ -55,7 +80,12 @@ export const Thingtime = (props) => {
 
   const thing = React.useMemo(() => {
     return props.thing
-  }, [props.thing])
+  }, [props.thing, childrenRef.current])
+
+  React.useEffect(() => {
+    console.log("thingtime changed in path", props?.fullPath)
+    createDependancies()
+  }, [thingtime, props?.fullPath, childrenRef])
 
   const fullPath = React.useMemo(() => {
     return props?.fullPath || props?.path
@@ -95,7 +125,7 @@ export const Thingtime = (props) => {
     } else {
       return []
     }
-  }, [thing, validKeyTypes])
+  }, [thing, thingDep, validKeyTypes])
 
   const type = React.useMemo(() => {
     return typeof thing
@@ -162,7 +192,7 @@ export const Thingtime = (props) => {
     } else {
       return "Something!"
     }
-  }, [thing, type, keys])
+  }, [thing, thingDep, type, keys])
 
   const keysToUse = React.useMemo(() => {
     return keys
@@ -225,7 +255,6 @@ export const Thingtime = (props) => {
             </Flex>
           </Safe>
         )
-        console.log("nik root ret", ret)
         return ret
       }
     }
@@ -238,6 +267,7 @@ export const Thingtime = (props) => {
     fullPath,
     depth,
     thing,
+    thingDep,
     props,
     valuePl,
     pl,
@@ -411,8 +441,10 @@ export const Thingtime = (props) => {
     renderableValue,
     pl,
     type,
+    AtomicWrapper,
     props?.edit,
     thing,
+    thingDep,
     updateValue,
   ])
 
