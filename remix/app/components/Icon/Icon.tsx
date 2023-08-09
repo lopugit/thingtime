@@ -127,6 +127,9 @@ export const Icon = (props) => {
     if (["thumb-down", "dislike"]?.includes(name)) {
       return "👎"
     }
+    if (["thingtime"]?.includes(name)) {
+      return "🌀"
+    }
   }, [name])
 
   return (
