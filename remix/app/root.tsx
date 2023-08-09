@@ -60,7 +60,7 @@ export default function App() {
 // limiter
 const setThingtime = (glob) => {
   try {
-    glob.thingtime = {
+    glob.meta = {
       tmp: {},
       subscribers: {},
       state: {},

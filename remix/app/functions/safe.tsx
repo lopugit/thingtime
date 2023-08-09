@@ -53,8 +53,8 @@ export const safe = (props) => {
 
 export const getThingtime = () => {
   try {
-    return window?.thingtime || globalThis?.thingtime
+    return window?.meta || globalThis?.meta
   } catch {
-    return globalThis?.thingtime
+    return globalThis?.meta
   }
 }

@@ -36,12 +36,36 @@ export const Thingtime = (props) => {
   const contentEditableRef = React.useRef(null)
   const editValueRef = React.useRef({})
 
+  const depth = React.useMemo(() => {
+    return props?.depth || 1
+  }, [props?.depth])
+
+  const pl = React.useMemo(() => {
+    return props?.pl || [4, 6]
+  }, [props?.pl])
+
+  const pr = React.useMemo(() => {
+    return props?.pr || (depth === 1 ? [4, 6] : 0)
+  }, [props?.pr, depth])
+
+  // will only run on the client
+  React.useEffect(() => {
+    setUuid(Math.random().toString(36).substring(7))
+  }, [])
+
   const childrenRef = React.useRef([])
 
   const [thingDep, setThingDep] = React.useState(childrenRef.current)
 
   const createDependancies = () => {
     // push all children into childrenRef.current
+
+    try {
+      window.meta.things.db["createDependancies"] =
+        window.meta.things.db["createDependancies"] || 0
+      window.meta.things.db["createDependancies"]++
+    } catch {}
+
     try {
       const values = Object.values(props?.thing)
       // if childrenRef.current does not shallow equal values then replace with array of values
@@ -59,23 +83,8 @@ export const Thingtime = (props) => {
     }
   }
 
-  createDependancies()
-
-  const depth = React.useMemo(() => {
-    return props?.depth || 1
-  }, [props?.depth])
-
-  const pl = React.useMemo(() => {
-    return props?.pl || [4, 6]
-  }, [props?.pl])
-
-  const pr = React.useMemo(() => {
-    return props?.pr || (depth === 1 ? [4, 6] : 0)
-  }, [props?.pr, depth])
-
-  // will only run on the client
   React.useEffect(() => {
-    setUuid(Math.random().toString(36).substring(7))
+    createDependancies()
   }, [])
 
   const thing = React.useMemo(() => {
