@@ -128,6 +128,9 @@ export const Icon = (props) => {
       return "👎"
     }
     if (["thingtime"]?.includes(name)) {
+      if (Math.random() > 0.5) {
+        return "🌳"
+      }
       return "🌀"
     }
   }, [name])
