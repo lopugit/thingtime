@@ -148,10 +148,6 @@ export const Commander = (props) => {
     return commandPath && commandValue
   }, [commandPath, commandValue])
 
-  const showSuggestions = React.useMemo(() => {
-    return inputValue?.length
-  }, [inputValue])
-
   const suggestions = React.useMemo(() => {
     try {
       const fuse = new Fuse(paths)
@@ -167,6 +163,20 @@ export const Commander = (props) => {
       console.error("fuse error", err)
     }
   }, [inputValue, paths])
+
+  const showSuggestions = React.useMemo(() => {
+    return (
+      inputValue?.length &&
+      suggestions?.length &&
+      commanderActive &&
+      thingtime?.settings?.hideSuggestionsOnToggle
+    )
+  }, [
+    inputValue,
+    suggestions,
+    commanderActive,
+    thingtime?.settings?.hideSuggestionsOnToggle,
+  ])
 
   const selectSuggestion = React.useCallback(
     (suggestionIdx) => {
@@ -445,7 +455,11 @@ export const Commander = (props) => {
                 pointerEvents="all"
                 paddingY={3}
               >
-                <Thingtime path={contextPath} thing={contextValue}></Thingtime>
+                <Thingtime
+                  width="600px"
+                  path={contextPath}
+                  thing={contextValue}
+                ></Thingtime>
               </Flex>
             )}
           </Flex>

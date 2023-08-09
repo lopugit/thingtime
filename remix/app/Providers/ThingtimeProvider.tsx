@@ -24,8 +24,9 @@ try {
 const force = {
   settings: {
     // commanderActive: false,
+    // hideSuggestionsOnToggle: true,
   },
-  version: 22,
+  version: 23,
 }
 
 const newVersionData = {
@@ -43,6 +44,7 @@ const initialValues = {
     commanderActive: false,
     clearCommanderOnToggle: true,
     clearCommanderContextOnToggle: true,
+    hideSuggestionsOnToggle: true,
   },
   Content: {
     hidden1: "Edit this to your heart's desire.",

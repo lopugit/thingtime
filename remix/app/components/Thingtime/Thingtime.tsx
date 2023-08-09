@@ -293,7 +293,9 @@ export const Thingtime = (props) => {
         paddingLeft={props?.pl || props?.paddingLeft}
         fontSize="20px"
         border="none"
-        whiteSpace="pre-line"
+        // whiteSpace="pre-line"
+        whiteSpace="pre-wrap"
+        wordBreak={props?.wordBreak || "break-word"}
         outline="none"
         paddingY={2}
         // dangerouslySetInnerHTML={{ __html: renderableValue }}
