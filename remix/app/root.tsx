@@ -64,6 +64,7 @@ const setThingtime = (glob) => {
       tmp: {},
       subscribers: {},
       state: {},
+      db: {},
       things: {
         db: {},
         limit: 9999,

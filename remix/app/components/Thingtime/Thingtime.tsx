@@ -61,9 +61,9 @@ export const Thingtime = (props) => {
     // push all children into childrenRef.current
 
     try {
-      window.meta.things.db["createDependancies"] =
-        window.meta.things.db["createDependancies"] || 0
-      window.meta.things.db["createDependancies"]++
+      window.meta.db["createDependancies"] =
+        window.meta.db["createDependancies"] || 0
+      window.meta.db["createDependancies"]++
     } catch {}
 
     try {
@@ -524,7 +524,7 @@ export const Thingtime = (props) => {
   const [showContextIcon, setShowContextIcon] = React.useState(false)
 
   return (
-    <Safe {...props} depth={depth} uuid={uuid?.current}>
+    <Safe {...props} depth={depth} uuid={uuid}>
       <Flex
         position="relative"
         flexDirection="column"
