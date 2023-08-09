@@ -27,7 +27,7 @@ export const Thingtime = (props) => {
 
   const { thingtime, setThingtime, loading } = useThingtime()
 
-  const [uuid, setUuid] = React.useState()
+  const [uuid, setUuid] = React.useState(undefined)
 
   const [root, setRoot] = React.useState(props?.notRoot ? false : true)
 
@@ -537,7 +537,7 @@ export const Thingtime = (props) => {
         // minW={depth === 1 ? '120px' : null}
         paddingY={3}
         {...(props.chakras || {})}
-        className={`thing uuid-${uuid?.current}`}
+        className={`thing uuid-${uuid}`}
         data-path={props?.path}
       >
         {/* {uuid?.current} */}
