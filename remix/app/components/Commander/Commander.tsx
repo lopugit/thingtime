@@ -62,7 +62,7 @@ export const Commander = (props) => {
       if (thingtimeRef?.current?.settings?.clearCommanderContextOnToggle) {
         setShowContext(false, "commanderActive useEffect")
       }
-      if (contextPath !== undefined) {
+      if (contextPath !== undefined && !inputValue) {
         setContextPath(undefined)
       }
       if (showContext !== false) {
@@ -84,7 +84,7 @@ export const Commander = (props) => {
   }, [])
 
   const validSetters = React.useMemo(() => {
-    return ["=", " is "]
+    return ["=", " is ", " IS ", " Is ", " iS "]
   }, [])
 
   const command = React.useMemo(() => {
@@ -92,19 +92,20 @@ export const Commander = (props) => {
     // const sanitizedCommand = inputValue
     const sanitizedCommand = virtualValue
 
-    if (sanitizedCommand?.includes(validSetters[0])) {
-      const indexOfSplitter = sanitizedCommand?.indexOf(validSetters[0])
+    const validSetter = validSetters?.find((setter) => {
+      if (sanitizedCommand?.includes(setter)) {
+        return setter
+      }
+      return false
+    })
+
+    if (typeof validSetter === "string") {
+      const indexOfSplitter = sanitizedCommand?.indexOf(validSetter)
       const [pathRaw, valRaw] = [
         sanitizedCommand?.slice(0, indexOfSplitter),
-        sanitizedCommand?.slice(indexOfSplitter + validSetters[0]?.length),
+        sanitizedCommand?.slice(indexOfSplitter + validSetter?.length),
       ]
-      return [pathRaw?.trim(), valRaw?.trim()]
-    } else if (sanitizedCommand?.includes(validSetters[1])) {
-      const indexOfSplitter = sanitizedCommand?.indexOf(validSetters[1])
-      const [pathRaw, valRaw] = [
-        sanitizedCommand?.slice(0, indexOfSplitter),
-        sanitizedCommand?.slice(indexOfSplitter + validSetters[1]?.length),
-      ]
+
       return [pathRaw?.trim(), valRaw?.trim()]
     }
     return [sanitizedCommand]
@@ -261,10 +262,10 @@ export const Commander = (props) => {
               )
             }
           }
-          if (!prevVal) {
-            setContextPath(commandPath)
-            setShowContext(true, "commandIsAction check")
-          }
+          // if (!prevVal) {
+          setContextPath(commandPath)
+          setShowContext(true, "commandIsAction check")
+          // }
         }
         // if (commandContainsPath)
         else {
