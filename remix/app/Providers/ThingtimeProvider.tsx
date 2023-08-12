@@ -27,14 +27,14 @@ try {
 
 const force = {
   settings: {
-    commanders: {
-      nav: {
-        // commanderActive: false,
-        // clearCommanderOnToggle: true,
-        // clearCommanderContextOnToggle: true,
-        // hideSuggestionsOnToggle: true,
-      },
-    },
+    // commander: {
+    //   nav: {
+    //     commanderActive: false,
+    //     clearCommanderOnToggle: true,
+    //     clearCommanderContextOnToggle: true,
+    //     hideSuggestionsOnToggle: true,
+    // },
+    // },
   },
   version: 23,
 }
@@ -51,7 +51,7 @@ const newVersionData = {
 
 const initialValues = {
   settings: {
-    commanders: {
+    commander: {
       nav: {
         commanderActive: false,
         clearCommanderOnToggle: true,

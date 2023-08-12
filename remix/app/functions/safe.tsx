@@ -1,18 +1,18 @@
 export const safe = (props) => {
   // do not render more than the limit of things to prevent infinite loops
-  const thingtime = getThingtime()
+  const meta = getMeta()
 
   const uuid = props?.uuid
 
   try {
     if (
-      typeof thingtime?.things?.count === "number" &&
-      thingtime?.things?.count >= thingtime?.things?.limit
+      typeof meta?.stats?.count === "number" &&
+      meta?.stats?.count >= meta?.stats?.limit
     ) {
       console.error(
         "[codex] Maximum things reached",
-        thingtime?.things?.count,
-        thingtime?.things?.limit
+        meta?.stats?.count,
+        meta?.stats?.limit
       )
       return null
     }
@@ -21,22 +21,22 @@ export const safe = (props) => {
   }
 
   try {
-    if (!thingtime?.things?.db?.[uuid]) {
-      thingtime.things.db[uuid] = {
+    if (!meta?.stats?.db?.[uuid]) {
+      meta.stats.db[uuid] = {
         count: 1,
       }
-      thingtime.things.count++
+      meta.stats.count++
     }
   } catch {
     // empty
   }
 
   try {
-    if (props?.depth >= thingtime?.things?.maxDepth) {
+    if (props?.depth >= meta?.stats?.maxDepth) {
       console.error(
         "[codex] Reached max depth",
         props?.depth,
-        thingtime?.things?.maxDepth
+        meta?.stats?.maxDepth
       )
       return null
     }
@@ -51,7 +51,7 @@ export const safe = (props) => {
   }
 }
 
-export const getThingtime = () => {
+export const getMeta = () => {
   try {
     return window?.meta || globalThis?.meta
   } catch {

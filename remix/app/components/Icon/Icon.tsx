@@ -133,12 +133,15 @@ export const Icon = (props) => {
     if (["seedling", "seed"]?.includes(name)) {
       return "🌱"
     }
-    if (["undefined"]?.includes(name)) {
+    if (["undefined", "null", "question", "confused"]?.includes(name)) {
       return "❓"
       // return "🌫️"
     }
     if (["codex", "robot", "ai", "chatgpt"]?.includes(name)) {
       return "🤖"
+    }
+    if (["trash", "bin", "delete", "remove"]?.includes(name)) {
+      return "🗑️"
     }
     if (["thingtime"]?.includes(name)) {
       if (Math.random() > 0.5) {

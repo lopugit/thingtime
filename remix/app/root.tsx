@@ -65,12 +65,13 @@ const setThingtime = (glob) => {
       subscribers: {},
       state: {},
       db: {},
-      things: {
+      stats: {
         db: {},
         limit: 9999,
         maxDepth: 10,
         count: 0,
       },
+      things: {},
     }
   } catch (err) {
     // will error on server

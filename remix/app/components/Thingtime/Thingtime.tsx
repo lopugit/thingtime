@@ -56,6 +56,12 @@ export const Thingtime = (props) => {
     [pl]
   )
 
+  const propsRef = React.useRef(props)
+
+  React.useEffect(() => {
+    propsRef.current = props
+  }, [props])
+
   // will only run on the client
   React.useEffect(() => {
     setUuid(Math.random().toString(36).substring(7))
@@ -99,14 +105,23 @@ export const Thingtime = (props) => {
     return props.thing
   }, [props.thing, childrenRef.current])
 
+  const fullPath = React.useMemo(() => {
+    const ret = props?.fullPath || props?.path
+
+    // store this thing in the global db
+    try {
+      window.meta.things[ret] = props?.thing
+    } catch {
+      // nothing
+    }
+
+    return ret
+  }, [props?.fullPath, props?.path, props?.thing])
+
   React.useEffect(() => {
     console.log("thingtime changed in path", props?.fullPath)
     createDependancies()
   }, [thingtime, props?.fullPath, childrenRef])
-
-  const fullPath = React.useMemo(() => {
-    return props?.fullPath || props?.path
-  }, [props?.fullPath, props?.path])
 
   const seen = React.useMemo(() => {
     if (props?.seen instanceof Array) {
@@ -460,7 +475,7 @@ export const Thingtime = (props) => {
         return (
           <AtomicWrapper>
             {/* TODO: Implement UI-less commander */}
-            {/* <Commander></Commander> */}
+            <Commander path={fullPath} id={uuid}></Commander>
           </AtomicWrapper>
         )
       }
@@ -476,6 +491,8 @@ export const Thingtime = (props) => {
     renderableValue,
     pl,
     type,
+    fullPath,
+    uuid,
     AtomicWrapper,
     props?.edit,
     thing,

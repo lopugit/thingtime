@@ -20,6 +20,16 @@ export const Commander = (props) => {
 
   const inputRef = React.useRef()
 
+  const global = props?.global
+
+  const commanderSettings = React.useMemo(() => {
+    return thingtime?.settings?.commander?.[commanderId] || {}
+  }, [
+    thingtime?.settings?.commander,
+    thingtime?.settings?.commander?.[commanderId],
+    commanderId,
+  ])
+
   const [inputValue, setInputValue] = React.useState("")
   const [virtualValue, setVirtualValue] = React.useState("")
   const [hoveredSuggestion, setHoveredSuggestion] = React.useState()
@@ -53,8 +63,8 @@ export const Commander = (props) => {
   }, [contextPath, getThingtime])
 
   const commanderActive = React.useMemo(() => {
-    return getThingtime("settings.commanderActive." + commanderId)
-  }, [commanderId, getThingtime])
+    return thingtime?.settings?.commander?.[commanderId]?.commanderActive
+  }, [commanderSettings, commanderId])
 
   // commanderActive useEffect
   React.useEffect(() => {
@@ -63,11 +73,18 @@ export const Commander = (props) => {
     } else {
       document.activeElement.blur()
 
-      if (thingtimeRef?.current?.settings?.clearCommanderOnToggle) {
+      if (
+        thingtimeRef?.current?.settings?.commander?.[commanderId]
+          ?.clearCommanderOnToggle
+      ) {
         setInputValue("")
         setHoveredSuggestion(null)
       }
-      if (thingtimeRef?.current?.settings?.clearCommanderContextOnToggle) {
+      if (
+        thingtimeRef?.current?.settings?.commander?.[commanderId]?.commander?.[
+          commanderId
+        ]?.clearCommanderContextOnToggle
+      ) {
         setShowContext(false, "commanderActive useEffect")
       }
       if (contextPath !== undefined && !inputValue) {
@@ -81,6 +98,7 @@ export const Commander = (props) => {
     commanderActive,
     thingtimeRef,
     setShowContext,
+    commanderId,
     inputValue,
     contextPath,
     showContext,
@@ -178,13 +196,15 @@ export const Commander = (props) => {
       inputValue?.length &&
       suggestions?.length &&
       commanderActive &&
-      thingtime?.settings?.hideSuggestionsOnToggle
+      thingtime?.settings?.commander?.[commanderId]?.hideSuggestionsOnToggle
     )
   }, [
     inputValue,
     suggestions,
     commanderActive,
-    thingtime?.settings?.hideSuggestionsOnToggle,
+    commanderId,
+    thingtime?.settings?.commander,
+    commanderSettings,
   ])
 
   const selectSuggestion = React.useCallback(
@@ -208,27 +228,41 @@ export const Commander = (props) => {
   }, [commandPath, suggestions])
 
   const openCommander = React.useCallback(() => {
-    setThingtime("settings.commanderActive", true)
-  }, [setThingtime])
+    setThingtime(`settings.commander.${commanderId}.commanderActive`, true)
+  }, [setThingtime, commanderId])
 
   const closeCommander = React.useCallback(
     (e?: any) => {
       if (!e?.defaultPrevented) {
-        if (thingtime?.settings?.commanderActive) {
-          setThingtime("settings.commanderActive", false)
+        if (thingtime?.settings?.commander?.[commanderId]?.commanderActive) {
+          setThingtime(
+            `settings.commander.${commanderId}.commanderActive`,
+            false
+          )
         }
       }
     },
-    [setThingtime, thingtime?.settings?.commanderActive]
+    [
+      setThingtime,
+      commanderId,
+      commanderSettings,
+      thingtime?.settings?.commander,
+    ]
   )
 
   const toggleCommander = React.useCallback(() => {
-    if (thingtime?.settings?.commanderActive) {
+    if (thingtime?.settings?.commander?.[commanderId]?.commanderActive) {
       closeCommander()
     } else {
       openCommander()
     }
-  }, [thingtime?.settings?.commanderActive, closeCommander, openCommander])
+  }, [
+    thingtime?.settings?.commander,
+    commanderSettings,
+    commanderId,
+    closeCommander,
+    openCommander,
+  ])
 
   const executeCommand = React.useCallback(() => {
     // if selection is active then select it
@@ -380,6 +414,58 @@ export const Commander = (props) => {
     setVirtualValue(inputValue)
   }, [inputValue])
 
+  const InputJSX = React.useMemo(() => {
+    return (
+      <Input
+        // display='none'
+        // opacity={0}
+        ref={inputRef}
+        sx={{
+          "&::placeholder": {
+            color: "greys.dark",
+          },
+        }}
+        width="100%"
+        height="100%"
+        background="grey"
+        border="none"
+        borderRadius="5px"
+        outline="none"
+        onChange={onInputChange}
+        onFocus={openCommander}
+        placeholder="Imagine.."
+        value={inputValue}
+      ></Input>
+    )
+  }, [inputRef, inputValue, onInputChange, openCommander])
+
+  const MainInput = React.useMemo(() => {
+    return (
+      <Center
+        position="relative"
+        overflow="hidden"
+        width={["100%", "400px"]}
+        maxWidth={[mobileVW, "100%"]}
+        height="100%"
+        padding="1px"
+        borderRadius="6px"
+        pointerEvents="all"
+        outline="none"
+      >
+        {props?.rainbow && (
+          <Rainbow
+            opacity={commanderActive ? 0.6 : 0}
+            position="absolute"
+            repeats={rainbowRepeats}
+            opacityTransition="all 2500ms ease"
+            thickness={10}
+          ></Rainbow>
+        )}
+        {InputJSX}
+      </Center>
+    )
+  }, [InputJSX, commanderActive, rainbowRepeats, props?.rainbow, mobileVW])
+
   return (
     <ClickAwayListener onClickAway={closeCommander}>
       <Flex
@@ -479,54 +565,19 @@ export const Commander = (props) => {
           maxWidth={[mobileVW, "100%"]}
           height="100%"
         >
-          <Rainbow
-            filter="blur(15px)"
-            opacity={commanderActive ? 0.25 : 0}
-            repeats={rainbowRepeats}
-            thickness={8}
-            opacityTransition="all 1000ms ease"
-            overflow="visible"
-          >
-            <Center
-              position="relative"
-              overflow="hidden"
-              width={["100%", "400px"]}
-              maxWidth={[mobileVW, "100%"]}
-              height="100%"
-              padding="1px"
-              borderRadius="6px"
-              pointerEvents="all"
-              outline="none"
+          {props?.rainbow && (
+            <Rainbow
+              filter="blur(15px)"
+              opacity={commanderActive ? 0.25 : 0}
+              repeats={rainbowRepeats}
+              thickness={8}
+              opacityTransition="all 1000ms ease"
+              overflow="visible"
             >
-              <Rainbow
-                opacity={commanderActive ? 0.6 : 0}
-                position="absolute"
-                repeats={rainbowRepeats}
-                opacityTransition="all 2500ms ease"
-                thickness={10}
-              ></Rainbow>
-              <Input
-                // display='none'
-                // opacity={0}
-                ref={inputRef}
-                sx={{
-                  "&::placeholder": {
-                    color: "greys.dark",
-                  },
-                }}
-                width="100%"
-                height="100%"
-                background="grey"
-                border="none"
-                borderRadius="5px"
-                outline="none"
-                onChange={onInputChange}
-                onFocus={openCommander}
-                placeholder="Imagine.."
-                value={inputValue}
-              ></Input>
-            </Center>
-          </Rainbow>
+              {MainInput}
+            </Rainbow>
+          )}
+          {!props?.rainbow && MainInput}
         </Center>
       </Flex>
     </ClickAwayListener>
