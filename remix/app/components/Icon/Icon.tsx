@@ -127,6 +127,19 @@ export const Icon = (props) => {
     if (["thumb-down", "dislike"]?.includes(name)) {
       return "👎"
     }
+    if (["plus", "add"]?.includes(name)) {
+      return "➕"
+    }
+    if (["seedling", "seed"]?.includes(name)) {
+      return "🌱"
+    }
+    if (["undefined"]?.includes(name)) {
+      return "❓"
+      // return "🌫️"
+    }
+    if (["codex", "robot", "ai", "chatgpt"]?.includes(name)) {
+      return "🤖"
+    }
     if (["thingtime"]?.includes(name)) {
       if (Math.random() > 0.5) {
         return "🌳"

@@ -16,6 +16,7 @@ import {
   Textarea,
 } from "@chakra-ui/react"
 
+import { Commander } from "../Commander/Commander"
 import { Icon } from "../Icon/Icon"
 import { Safe } from "../Safety/Safe"
 import { useThingtime } from "./useThingtime"
@@ -47,6 +48,13 @@ export const Thingtime = (props) => {
   const pr = React.useMemo(() => {
     return props?.pr || (depth === 1 ? [4, 6] : 0)
   }, [props?.pr, depth])
+
+  const multiplyPl = React.useCallback(
+    (num) => {
+      return pl.map((p) => p * num)
+    },
+    [pl]
+  )
 
   // will only run on the client
   React.useEffect(() => {
@@ -137,6 +145,9 @@ export const Thingtime = (props) => {
   }, [thing, thingDep, validKeyTypes])
 
   const type = React.useMemo(() => {
+    if (thing === null) {
+      return "undefined"
+    }
     return typeof thing
   }, [thing])
 
@@ -152,6 +163,8 @@ export const Thingtime = (props) => {
       return <Icon name="number" size={size}></Icon>
     } else if (type === "boolean") {
       return <Icon name="boolean" size={size}></Icon>
+    } else if (type === "undefined") {
+      return <Icon name="undefined" size={size}></Icon>
     } else {
       return <Icon name="box" size={size}></Icon>
     }
@@ -198,6 +211,8 @@ export const Thingtime = (props) => {
           </Box>
         )
       }
+    } else if (type === "undefined") {
+      return "undefined"
     } else {
       return "Something!"
     }
@@ -287,6 +302,7 @@ export const Thingtime = (props) => {
   const AtomicWrapper = React.useCallback((props) => {
     return (
       <Flex
+        position="relative"
         flexDirection="row"
         flexShrink={1}
         width="100%"
@@ -440,6 +456,14 @@ export const Thingtime = (props) => {
           </AtomicWrapper>
         )
       }
+      if (type === "undefined") {
+        return (
+          <AtomicWrapper>
+            {/* TODO: Implement UI-less commander */}
+            {/* <Commander></Commander> */}
+          </AtomicWrapper>
+        )
+      }
     }
 
     return (
@@ -523,6 +547,48 @@ export const Thingtime = (props) => {
     [uuid]
   )
 
+  const addNewChild = React.useCallback(() => {
+    const newChild = null
+
+    if (thing instanceof Array) {
+      // add new child to array
+      const newValue = [...thing, newChild]
+      setThingtime(fullPath, newValue)
+      return
+    }
+
+    const newChildBasePath = "New Value"
+    // find increment that thing doesn't already have New Value N+1
+    let increment = 0
+    let newPath = newChildBasePath
+    while (Object.hasOwnProperty.call(thing, newPath) && increment <= 999) {
+      increment++
+      newPath = newChildBasePath + " " + increment
+    }
+    const newChildPath = newPath
+    const newChildFullPath = fullPath + "." + newChildPath
+    // create new child on thing using setThingtime
+    setThingtime(newChildFullPath, newChild)
+  }, [fullPath, setThingtime, thing])
+
+  const addChildUi = React.useMemo(() => {
+    if (type === "object" && props?.edit) {
+      return (
+        <Flex
+          width="100%"
+          paddingLeft={multiplyPl(2)}
+          cursor="pointer"
+          onClick={addNewChild}
+          paddingY={2}
+        >
+          <Icon size={12} name="seedling"></Icon>
+          {/* <Icon size={7} name="plus"></Icon>
+          <Icon size={7} name="plus"></Icon> */}
+        </Flex>
+      )
+    }
+  }, [props?.edit, type, multiplyPl, addNewChild])
+
   const [showContextIcon, setShowContextIcon] = React.useState(false)
 
   return (
@@ -582,6 +648,7 @@ export const Thingtime = (props) => {
         {!loading && thingtimeChildren && (
           <Box className="thingtimeChildren">{thingtimeChildren}</Box>
         )}
+        {addChildUi}
       </Flex>
     </Safe>
   )

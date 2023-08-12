@@ -1,5 +1,5 @@
 import React, { createContext } from "react"
-import { parse, stringify } from "flatted"
+import flatted, { parse, stringify } from "flatted"
 
 import { sanitise } from "~/functions/sanitise"
 import { smarts } from "~/smarts"
@@ -17,14 +17,24 @@ export const ThingtimeContext = createContext<
 
 try {
   window.smarts = smarts
+  window.flatted = {
+    parse,
+    stringify,
+  }
 } catch (err) {
   // nothing
 }
 
 const force = {
   settings: {
-    // commanderActive: false,
-    // hideSuggestionsOnToggle: true,
+    commanders: {
+      nav: {
+        // commanderActive: false,
+        // clearCommanderOnToggle: true,
+        // clearCommanderContextOnToggle: true,
+        // hideSuggestionsOnToggle: true,
+      },
+    },
   },
   version: 23,
 }
@@ -41,10 +51,14 @@ const newVersionData = {
 
 const initialValues = {
   settings: {
-    commanderActive: false,
-    clearCommanderOnToggle: true,
-    clearCommanderContextOnToggle: true,
-    hideSuggestionsOnToggle: true,
+    commanders: {
+      nav: {
+        commanderActive: false,
+        clearCommanderOnToggle: true,
+        clearCommanderContextOnToggle: true,
+        hideSuggestionsOnToggle: true,
+      },
+    },
   },
   Content: {
     hidden1: "Edit this to your heart's desire.",
@@ -220,6 +234,7 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
 
       if (thingtimeFromLocalStorage) {
         const parsed = parse(thingtimeFromLocalStorage)
+        console.log("thingtime restored from localstorage", parsed)
         if (parsed) {
           const localIsValid =
             !parsed.version || parsed.version >= force.version
@@ -230,10 +245,7 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
             const withVersionUpdates = smarts.merge(newVersionData, parsed)
             newThingtime = smarts.merge(force, withVersionUpdates)
           }
-          console.log(
-            "nik setting new thingtime from localStorage",
-            newThingtime
-          )
+          console.log("restoring thingtime from localStorage", newThingtime)
           set(newThingtime)
         }
       } else {

@@ -49,7 +49,7 @@ export const Nav = (props) => {
               <Icon size="12px" name="unicorn"></Icon>
             </Link>
           </Center>
-          <Commander></Commander>
+          <Commander global id="nav"></Commander>
           <Center
             width="25px"
             height="25px"

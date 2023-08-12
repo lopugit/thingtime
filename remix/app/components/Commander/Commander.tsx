@@ -14,6 +14,10 @@ export const Commander = (props) => {
   const { thingtime, setThingtime, getThingtime, thingtimeRef, paths } =
     useThingtime()
 
+  const commanderId = React.useMemo(() => {
+    return props?.id || "global"
+  }, [props?.id])
+
   const inputRef = React.useRef()
 
   const [inputValue, setInputValue] = React.useState("")
@@ -21,6 +25,10 @@ export const Commander = (props) => {
   const [hoveredSuggestion, setHoveredSuggestion] = React.useState()
   const [active, setActive] = React.useState(false)
   const [contextPath, setContextPath] = React.useState()
+
+  const mode = React.useMemo(() => {
+    return props?.mode || "value"
+  }, [props?.mode])
 
   const [showContext, setShowContextState] = React.useState(false)
 
@@ -45,8 +53,8 @@ export const Commander = (props) => {
   }, [contextPath, getThingtime])
 
   const commanderActive = React.useMemo(() => {
-    return thingtime?.settings?.commanderActive
-  }, [thingtime?.settings?.commanderActive])
+    return getThingtime("settings.commanderActive." + commanderId)
+  }, [commanderId, getThingtime])
 
   // commanderActive useEffect
   React.useEffect(() => {
