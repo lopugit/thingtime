@@ -126,6 +126,7 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
 
   const setThingtime = React.useCallback(
     (path, value) => {
+      // TODO: make this a lot safer
       if (["thingtime", "tt"]?.includes(path)) {
         if (value) {
           set(value)
@@ -171,7 +172,6 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
       })
 
       // TODO: make thingtime settable
-
       newThingtime.thingtime = newThingtime
       newThingtime.tt = newThingtime
 
