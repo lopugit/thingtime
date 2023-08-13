@@ -1,9 +1,8 @@
 import React from "react"
 import ClickAwayListener from "react-click-away-listener"
-import { Box, Center, Flex, Input } from "@chakra-ui/react"
+import { Center, Flex, Input } from "@chakra-ui/react"
 import Fuse from "fuse.js"
 
-import { MagicInput } from "../MagicInput/MagicInput"
 import { Rainbow } from "../Rainbow/Rainbow"
 import { Thingtime } from "../Thingtime/Thingtime"
 import { useThingtime } from "../Thingtime/useThingtime"
@@ -11,7 +10,7 @@ import { useThingtime } from "../Thingtime/useThingtime"
 import { sanitise } from "~/functions/sanitise"
 import { getParentPath } from "~/smarts"
 
-export const Commander = (props) => {
+export const CommanderV1 = (props) => {
   const { thingtime, setThingtime, getThingtime, thingtimeRef, paths } =
     useThingtime()
 
@@ -70,13 +69,9 @@ export const Commander = (props) => {
   // commanderActive useEffect
   React.useEffect(() => {
     if (commanderActive) {
-      if (props?.global) {
-        inputRef?.current?.focus?.()
-      }
+      inputRef?.current?.focus?.()
     } else {
-      if (props?.global) {
-        document.activeElement.blur()
-      }
+      document.activeElement.blur()
 
       if (
         thingtimeRef?.current?.settings?.commander?.[commanderId]
@@ -103,7 +98,6 @@ export const Commander = (props) => {
     commanderActive,
     thingtimeRef,
     setShowContext,
-    props?.global,
     commanderId,
     inputValue,
     contextPath,
@@ -122,43 +116,27 @@ export const Commander = (props) => {
   const command = React.useMemo(() => {
     // const sanitizedCommand = sanitise(value)
     // const sanitizedCommand = inputValue
-    const sanitizedInput = virtualValue
+    const sanitizedCommand = virtualValue
 
     const validSetter = validSetters?.find((setter) => {
-      if (sanitizedInput?.includes(setter)) {
+      if (sanitizedCommand?.includes(setter)) {
         return setter
       }
       return false
     })
 
     if (typeof validSetter === "string") {
-      const indexOfSplitter = sanitizedInput?.indexOf(validSetter)
+      const indexOfSplitter = sanitizedCommand?.indexOf(validSetter)
       const [pathRaw, valRaw] = [
-        sanitizedInput?.slice(0, indexOfSplitter),
-        sanitizedInput?.slice(indexOfSplitter + validSetter?.length),
+        sanitizedCommand?.slice(0, indexOfSplitter),
+        sanitizedCommand?.slice(indexOfSplitter + validSetter?.length),
       ]
 
-      const pathTrimmed = pathRaw?.trim()
-
-      let path = pathTrimmed
-
-      if (pathTrimmed && props?.pathPrefix) {
-        path = props?.pathPrefix + "." + pathTrimmed
-      } else if (props?.pathPrefix) {
-        path = props?.pathPrefix
-      }
-
-      return [path, valRaw?.trim()]
+      return [pathRaw?.trim(), valRaw?.trim()]
     }
-
-    if (props?.pathPrefix) {
-      return [props?.pathPrefix, sanitizedInput]
-    }
-
-    return [sanitizedInput]
+    return [sanitizedCommand]
   }, [
     // inputValue,
-    props?.pathPrefix,
     virtualValue,
     validSetters,
   ])
@@ -189,9 +167,7 @@ export const Commander = (props) => {
     const escaped = restOfCommandValue
       ?.replace(/"/g, '\\"')
       ?.replace(/'/g, "\\'")
-      ?.replace(/`/g, "\\`")
-
-    const ret = `\`${escaped}\``
+    const ret = `"${escaped}"`
     return ret
   }, [commandValue, validQuotations])
 
@@ -294,8 +270,6 @@ export const Commander = (props) => {
     if (curSuggestionIdx !== null) {
       selectSuggestion(curSuggestionIdx)
     }
-    console.log("nik commanderActive", commanderActive)
-    console.log("nik commandIsAction", commandIsAction)
     if (commanderActive) {
       try {
         if (commandIsAction) {
@@ -404,10 +378,7 @@ export const Commander = (props) => {
             setHoveredSuggestion(0)
           }
         } else if (e?.code === "Enter") {
-          // if not shift enter then execute command
-          if (!e?.shiftKey) {
-            executeCommand()
-          }
+          executeCommand()
         }
       }
     },
@@ -443,140 +414,37 @@ export const Commander = (props) => {
     setVirtualValue(inputValue)
   }, [inputValue])
 
-  const onMagicInput = React.useCallback((args) => {
-    // props?.onValueChange?.(args)
-
-    setInputValue(args?.value)
-    setHoveredSuggestion(null)
-  }, [])
-
-  const InputPartWrapper = React.useCallback(
-    (props) => {
-      return <Box paddingX={commanderActive ? 1 : 0}>{props?.children}</Box>
-    },
-    [commanderActive]
-  )
-
-  const InputPart = React.useMemo(() => {
-    if (props?.simple) {
-      return (
-        <Input
-          // display='none'
-          // opacity={0}
-          ref={inputRef}
-          sx={{
-            "&::placeholder": {
-              color: "greys.dark",
-            },
-          }}
-          width="100%"
-          height="100%"
-          background="grey"
-          border="none"
-          borderRadius="5px"
-          outline="none"
-          onChange={onInputChange}
-          onFocus={openCommander}
-          placeholder="Imagine.."
-          value={inputValue}
-        ></Input>
-      )
-    }
-
-    return (
-      <MagicInput
-        placeholder={props?.placeholder || "Imagine.."}
-        onValueChange={onMagicInput}
-        onFocus={openCommander}
-        chakras={{
-          marginX: commanderActive && props?.rainbow ? 4 : 0,
-        }}
-        transition="all 0.5s ease-in-out"
-      ></MagicInput>
-    )
-  }, [
-    inputRef,
-    onInputChange,
-    commanderActive,
-    props?.rainbow,
-    props?.placeholder,
-    openCommander,
-    onMagicInput,
-    props?.simple,
-    inputValue,
-  ])
-
   return (
     <ClickAwayListener onClickAway={closeCommander}>
       <Flex
-        // position="absolute"
-        // top={0}
-        // right={0}
-        // left={0}
+        position="absolute"
+        top={0}
+        right={0}
         // zIndex={99999}
         // position='fixed'
         // top='100px'
-        className={"commander-uuid-" + commanderId}
+        left={0}
+        justifyContent={["flex-start", "center"]}
         // display={["flex", commanderActive ? "flex" : "none"]}
-        justifyContent="flex-start"
         maxWidth="100%"
+        height={12}
         // height="100%"
-        // paddingX={1}
+        pointerEvents="none"
+        id="commander"
+        paddingX={1}
       >
-        <Center
-          position="relative"
-          flexDirection="column"
-          width={["100%", "400px"]}
-          maxWidth={[mobileVW, "100%"]}
-          height="100%"
-        >
-          {props?.rainbow && (
-            <Rainbow
-              filter="blur(15px)"
-              opacity={commanderActive ? 0.25 : 0}
-              repeats={rainbowRepeats}
-              thickness={10}
-              opacityTransition="all 1000ms ease"
-              overflow="visible"
-            >
-              <Center
-                position="relative"
-                overflow="hidden"
-                width={["100%", "400px"]}
-                maxWidth={[mobileVW, "100%"]}
-                height="100%"
-                padding="1px"
-                borderRadius="6px"
-                pointerEvents="all"
-                outline="none"
-              >
-                <Rainbow
-                  opacity={commanderActive ? 0.6 : 0}
-                  position="absolute"
-                  repeats={rainbowRepeats}
-                  opacityTransition="all 2500ms ease"
-                  thickness={1}
-                >
-                  {/* <InputPartWrapper>{InputPart}</InputPartWrapper> */}
-                  {InputPart}
-                </Rainbow>
-              </Center>
-            </Rainbow>
-          )}
-          {!props?.rainbow && InputPart}
-        </Center>
         <Flex
-          // position="absolute"
-          // top="100%"
-          // right={0}
-          // left={0}
-          alignItems="flex-start"
+          position="absolute"
+          top="100%"
+          right={0}
+          left={0}
+          alignItems={["flex-start", "center"]}
           flexDirection="column"
           maxWidth="100%"
           height="auto"
-          // marginTop={2}
+          marginTop={2}
           borderRadius="12px"
-          // marginX={1}
+          marginX={1}
         >
           <Flex
             alignItems={["flex-start", "center"]}
@@ -621,7 +489,7 @@ export const Commander = (props) => {
                 )
               })}
             </Flex>
-            {showContext && props?.context && (
+            {showContext && (
               <Flex
                 display={showContext ? "flex" : "none"}
                 maxWidth="100%"
@@ -639,6 +507,61 @@ export const Commander = (props) => {
             )}
           </Flex>
         </Flex>
+        <Center
+          position="relative"
+          width={["100%", "400px"]}
+          maxWidth={[mobileVW, "100%"]}
+          height="100%"
+        >
+          <Rainbow
+            filter="blur(15px)"
+            opacity={commanderActive ? 0.25 : 0}
+            repeats={rainbowRepeats}
+            thickness={8}
+            opacityTransition="all 1000ms ease"
+            overflow="visible"
+          >
+            <Center
+              position="relative"
+              overflow="hidden"
+              width={["100%", "400px"]}
+              maxWidth={[mobileVW, "100%"]}
+              height="100%"
+              padding="1px"
+              borderRadius="6px"
+              pointerEvents="all"
+              outline="none"
+            >
+              <Rainbow
+                opacity={commanderActive ? 0.6 : 0}
+                position="absolute"
+                repeats={rainbowRepeats}
+                opacityTransition="all 2500ms ease"
+                thickness={10}
+              ></Rainbow>
+              <Input
+                // display='none'
+                // opacity={0}
+                ref={inputRef}
+                sx={{
+                  "&::placeholder": {
+                    color: "greys.dark",
+                  },
+                }}
+                width="100%"
+                height="100%"
+                background="grey"
+                border="none"
+                borderRadius="5px"
+                outline="none"
+                onChange={onInputChange}
+                onFocus={openCommander}
+                placeholder="Imagine.."
+                value={inputValue}
+              ></Input>
+            </Center>
+          </Rainbow>
+        </Center>
       </Flex>
     </ClickAwayListener>
   )

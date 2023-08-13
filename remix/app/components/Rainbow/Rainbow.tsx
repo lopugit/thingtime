@@ -210,6 +210,7 @@ export const Rainbow = (allProps: any): JSX.Element => {
           width="100%"
           height="100%"
           opacity={hidden ? "0" : opacity}
+          // pointerEvents="none"
           transition={opacityTransition}
         >
           {/* debug svg */}

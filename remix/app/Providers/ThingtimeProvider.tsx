@@ -9,11 +9,12 @@ export interface ThingtimeContextInterface {
   setThingtime: any
   getThingtime: any
   thingtimeRef: any
+  loading: boolean
 }
 
-export const ThingtimeContext = createContext<
-  ThingtimeContextInterface[] | null
->(null)
+export const ThingtimeContext = createContext<ThingtimeContextInterface | null>(
+  null
+)
 
 try {
   window.smarts = smarts

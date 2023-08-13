@@ -12,11 +12,20 @@ export const Icon = (props) => {
     if (["crystal"]?.includes(name)) {
       return "🔮"
     }
+    if (["flower", "hibiscus"]?.includes(name)) {
+      return "🌺"
+    }
     if (["sparke", "magic"]?.includes(name)) {
       return "✨"
     }
     if (["box", "thing", "object"]?.includes(name)) {
       return "📦"
+    }
+    if (["pencil"]?.includes(name)) {
+      return "✏️"
+    }
+    if (["edit", "paint", "create"]?.includes(name)) {
+      return "🎨"
     }
     if (["book", "books"]?.includes(name)) {
       return "📚"
@@ -81,6 +90,9 @@ export const Icon = (props) => {
     }
     if (["star", "favorite"]?.includes(name)) {
       return "⭐"
+    }
+    if (["glowing star", "glowing favorite"]?.includes(name)) {
+      return "🌟"
     }
     if (["question", "help"]?.includes(name)) {
       return "❓"
@@ -152,7 +164,11 @@ export const Icon = (props) => {
   }, [name])
 
   return (
-    <Center {...props?.chakras} fontSize={props?.size}>
+    <Center
+      transition="all 0.2s ease-out"
+      {...props?.chakras}
+      fontSize={props?.size}
+    >
       {icon}
     </Center>
   )

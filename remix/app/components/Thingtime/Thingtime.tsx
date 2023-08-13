@@ -17,7 +17,9 @@ import {
 } from "@chakra-ui/react"
 
 import { Commander } from "../Commander/Commander"
+// import { Magic } from "../Commander/Magic"
 import { Icon } from "../Icon/Icon"
+import { MagicInput } from "../MagicInput/MagicInput"
 import { Safe } from "../Safety/Safe"
 import { useThingtime } from "./useThingtime"
 
@@ -242,64 +244,91 @@ export const Thingtime = (props) => {
     return ["view", "edit"]
   }, [])
 
+  const AtomicWrapper = React.useCallback((args) => {
+    return (
+      <Flex
+        position="relative"
+        flexDirection="row"
+        flexShrink={1}
+        width="100%"
+        paddingLeft={args?.pl || args?.paddingLeft}
+        fontSize="20px"
+        border="none"
+        // whiteSpace="pre-line"
+        whiteSpace="pre-wrap"
+        wordBreak={args?.wordBreak || "break-word"}
+        outline="none"
+        // paddingY={2}
+        // dangerouslySetInnerHTML={{ __html: renderableValue }}
+      >
+        {args?.children}
+      </Flex>
+    )
+  }, [])
+
   const thingtimeChildren = React.useMemo(() => {
-    if (template1Modes?.includes(mode)) {
-      if (keys?.length && !circular) {
-        const ret = (
-          <Safe {...props}>
-            <Flex
-              className="nested-things"
-              position="relative"
-              flexDirection="column"
-              // w={'500px'}
-              // w={['200px', '500px']}
-              maxWidth="100%"
-              paddingLeft={valuePl}
-              paddingY={props?.path ? 3 : 0}
-            >
-              {keysToUse?.length &&
-                keysToUse.map((key, idx) => {
-                  if (!key?.human) {
-                    key = {
-                      human: key,
-                      key: key,
-                    }
-                  }
+    let inner = <AtomicWrapper paddingLeft={pl}>Imagine..</AtomicWrapper>
+    if (keys?.length && !circular) {
+      inner = (
+        <>
+          {keysToUse?.length &&
+            keysToUse.map((key, idx) => {
+              if (!key?.human) {
+                key = {
+                  human: key,
+                  key: key,
+                }
+              }
 
-                  const nextThing = thing[key?.key]
+              const nextThing = thing[key?.key]
 
-                  const nextSeen = [...seen]
+              const nextSeen = [...seen]
 
-                  if (typeof nextThing === "object") {
-                    nextSeen.push(nextThing)
-                  }
+              if (typeof nextThing === "object") {
+                nextSeen.push(nextThing)
+              }
 
-                  return (
-                    <Thingtime
-                      key={idx}
-                      seen={nextSeen}
-                      edit={props?.edit}
-                      circular={seen?.includes?.(nextThing)}
-                      depth={depth + 1}
-                      parent={thing}
-                      notRoot
-                      fullPath={fullPath + "." + key?.key}
-                      path={key}
-                      thing={nextThing}
-                      // thing={{ infinite: { yes: true } }}
-                      valuePl={pl}
-                    ></Thingtime>
-                  )
-                })}
-            </Flex>
-          </Safe>
-        )
-        return ret
-      }
+              return (
+                <Thingtime
+                  key={idx}
+                  seen={nextSeen}
+                  edit={props?.edit}
+                  circular={seen?.includes?.(nextThing)}
+                  depth={depth + 1}
+                  parent={thing}
+                  notRoot
+                  fullPath={fullPath + "." + key?.key}
+                  path={key}
+                  thing={nextThing}
+                  // thing={{ infinite: { yes: true } }}
+                  valuePl={pl}
+                ></Thingtime>
+              )
+            })}
+        </>
+      )
+    }
+    if (type === "object" && !circular) {
+      return (
+        <Safe {...props}>
+          <Flex
+            className="nested-things"
+            position="relative"
+            flexDirection="column"
+            rowGap={9}
+            // w={'500px'}
+            // w={['200px', '500px']}
+            maxWidth="100%"
+            paddingLeft={valuePl}
+            paddingY={props?.path ? 4 : 0}
+          >
+            {inner}
+          </Flex>
+        </Safe>
+      )
     }
   }, [
     keysToUse,
-    mode,
     circular,
     seen,
     type,
@@ -311,30 +340,7 @@ export const Thingtime = (props) => {
     valuePl,
     pl,
     keys,
-    template1Modes,
   ])
-
-  const AtomicWrapper = React.useCallback((props) => {
-    return (
-      <Flex
-        position="relative"
-        flexDirection="row"
-        flexShrink={1}
-        width="100%"
-        paddingLeft={props?.pl || props?.paddingLeft}
-        fontSize="20px"
-        border="none"
-        // whiteSpace="pre-line"
-        whiteSpace="pre-wrap"
-        wordBreak={props?.wordBreak || "break-word"}
-        outline="none"
-        paddingY={2}
-        // dangerouslySetInnerHTML={{ __html: renderableValue }}
-      >
-        {props?.children}
-      </Flex>
-    )
-  }, [])
 
   const [contentEditableThing, setContentEditableThing] = React.useState(thing)
 
@@ -388,6 +394,7 @@ export const Thingtime = (props) => {
     (args) => {
       const { value } = args
 
+      console.log("nik running updateValue", value)
       setThingtime(fullPath, value)
     },
     [fullPath, setThingtime]
@@ -449,10 +456,15 @@ export const Thingtime = (props) => {
           </AtomicWrapper>
         )
       }
-      if (type === "string" && typeof contentEditableThing === "string") {
+      if (type === "string") {
         return (
           <AtomicWrapper paddingLeft={pl} className="string-atomic-wrapper">
-            <Box
+            <MagicInput
+              value={thing}
+              placeholder="Imagine.."
+              onValueChange={updateValue}
+            ></MagicInput>
+            {/* <Box
               ref={contentEditableRef}
               width="100%"
               border="none"
@@ -467,15 +479,21 @@ export const Thingtime = (props) => {
                   updateValue({ value: innerText })
                 }
               }}
-            ></Box>
+            ></Box> */}
           </AtomicWrapper>
         )
       }
       if (type === "undefined") {
         return (
-          <AtomicWrapper>
+          <AtomicWrapper paddingLeft={pl}>
             {/* TODO: Implement UI-less commander */}
-            <Commander path={fullPath} id={uuid}></Commander>
+            <Commander
+              // rainbow
+              id={uuid}
+              pathPrefix={fullPath}
+              placeholder="Imagine.."
+              // onValueChange={updateValue}
+            ></Commander>
           </AtomicWrapper>
         )
       }
@@ -614,13 +632,14 @@ export const Thingtime = (props) => {
         position="relative"
         flexDirection="column"
         // width="500px"
+        rowGap={2}
         width={props?.width || props?.w || "100%"}
         maxWidth="100%"
+        // marginTop={3}
         paddingRight={pr}
+        // minW={depth === 1 ? '120px' : null}
         onMouseEnter={handleMouseEvent}
         onMouseLeave={handleMouseEvent}
-        // minW={depth === 1 ? '120px' : null}
-        paddingY={3}
         {...(props.chakras || {})}
         className={`thing uuid-${uuid}`}
         data-path={props?.path}
@@ -663,9 +682,11 @@ export const Thingtime = (props) => {
           <Box className="atomicValue">{atomicValue}</Box>
         )}
         {!loading && thingtimeChildren && (
-          <Box className="thingtimeChildren">{thingtimeChildren}</Box>
+          <Box className="thingtimeChildren">
+            {thingtimeChildren}
+            {addChildUi}
+          </Box>
         )}
-        {addChildUi}
       </Flex>
     </Safe>
   )
