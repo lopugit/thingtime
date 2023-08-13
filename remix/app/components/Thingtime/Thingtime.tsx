@@ -23,6 +23,8 @@ import { MagicInput } from "../MagicInput/MagicInput"
 import { Safe } from "../Safety/Safe"
 import { useThingtime } from "./useThingtime"
 
+import { getThing } from "~/smarts"
+
 export const Thingtime = (props) => {
   // TODO: Add a circular reference seen prop check
   // and add button to expand circular reference
@@ -122,6 +124,20 @@ export const Thingtime = (props) => {
 
     return ret
   }, [props?.fullPath, props?.path, props?.thing])
+
+  const parentPath = React.useMemo(() => {
+    const parentPath = fullPath.split(".").slice(0, -1).join(".")
+
+    if (!parentPath) {
+      return "thingtime"
+    }
+
+    return parentPath
+  }, [fullPath])
+
+  const parent = React.useMemo(() => {
+    return getThingtime(parentPath)
+  }, [parentPath, getThingtime])
 
   React.useEffect(() => {
     console.log("thingtime changed in path", props?.fullPath)
@@ -356,14 +372,15 @@ export const Thingtime = (props) => {
 
   const deleteValue = React.useCallback(() => {
     // use parent path to clone parent object but without this key
-    const parentPath = fullPath.split(".").slice(0, -1).join(".")
-    const parent = getThingtime(parentPath)
     const clone = { ...parent }
 
     delete clone[path]
 
+    console.log("nik parentPath", parentPath)
+    console.log("nik clone", clone)
+
     setThingtime(parentPath, clone)
-  }, [fullPath, path, getThingtime, setThingtime])
+  }, [path, parent, parentPath, setThingtime])
 
   const atomicValue = React.useMemo(() => {
     if (props?.edit) {

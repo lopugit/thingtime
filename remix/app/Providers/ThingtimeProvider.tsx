@@ -126,6 +126,13 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
 
   const setThingtime = React.useCallback(
     (path, value) => {
+      if (["thingtime", "tt"]?.includes(path)) {
+        if (value) {
+          set(value)
+          return
+        }
+      }
+
       const newThingtime = thingtime
 
       const paths = smarts.parsePropertyPath(path)
@@ -163,6 +170,8 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
         }
       })
 
+      // TODO: make thingtime settable
+
       newThingtime.thingtime = newThingtime
       newThingtime.tt = newThingtime
 
@@ -174,6 +183,8 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
       )
 
       smarts.setsmart(newThingtime, path, value)
+
+      console.log("nik set(newThingtime)", newThingtime)
 
       set(newThingtime)
     },
