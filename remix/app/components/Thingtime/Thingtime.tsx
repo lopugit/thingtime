@@ -360,10 +360,6 @@ export const Thingtime = (props) => {
     const parent = getThingtime(parentPath)
     const clone = { ...parent }
 
-    console.log("nik parentPath", parentPath)
-    console.log("nik path", path)
-    console.log("nik clone", clone)
-
     delete clone[path]
 
     setThingtime(parentPath, clone)
