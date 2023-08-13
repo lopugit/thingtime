@@ -28,7 +28,7 @@ export const Thingtime = (props) => {
   // and add button to expand circular reference
   // up to 1 level deep
 
-  const { thingtime, setThingtime, loading } = useThingtime()
+  const { thingtime, setThingtime, getThingtime, loading } = useThingtime()
 
   const [uuid, setUuid] = React.useState(undefined)
 
@@ -106,8 +106,12 @@ export const Thingtime = (props) => {
     return props.thing
   }, [props.thing, childrenRef.current])
 
+  const path = React.useMemo(() => {
+    return props?.path?.key || props?.path || ""
+  }, [props?.path])
+
   const fullPath = React.useMemo(() => {
-    const ret = props?.fullPath || props?.path
+    const ret = props?.fullPath || props?.path?.key || props?.path
 
     // store this thing in the global db
     try {
@@ -345,6 +349,25 @@ export const Thingtime = (props) => {
     },
     [fullPath, setThingtime]
   )
+
+  const resetValue = React.useCallback(() => {
+    updateValue({ value: null })
+  }, [updateValue])
+
+  const deleteValue = React.useCallback(() => {
+    // use parent path to clone parent object but without this key
+    const parentPath = fullPath.split(".").slice(0, -1).join(".")
+    const parent = getThingtime(parentPath)
+    const clone = { ...parent }
+
+    console.log("nik parentPath", parentPath)
+    console.log("nik path", path)
+    console.log("nik clone", clone)
+
+    delete clone[path]
+
+    setThingtime(parentPath, clone)
+  }, [fullPath, path, getThingtime, setThingtime])
 
   const atomicValue = React.useMemo(() => {
     if (props?.edit) {
@@ -616,8 +639,20 @@ export const Thingtime = (props) => {
                 opacity={showContextIcon ? 1 : 0}
                 cursor="pointer"
                 transition="all 0.2s ease-in-out"
+                onClick={resetValue}
               >
                 <Icon name="magic" size={10}></Icon>
+              </Flex>
+            )}
+            {pathDom && (
+              <Flex
+                paddingLeft={1}
+                opacity={showContextIcon ? 1 : 0}
+                cursor="pointer"
+                transition="all 0.2s ease-in-out"
+                onClick={deleteValue}
+              >
+                <Icon name="bin" size={8}></Icon>
               </Flex>
             )}
           </Flex>
