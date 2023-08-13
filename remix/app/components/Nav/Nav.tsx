@@ -41,11 +41,9 @@ export const Nav = (props) => {
       // or if first characters of pathname are /edit replace with /things
       if (pathname.slice(0, 7) === "/things") {
         const newPathname = pathname.replace("/things", "/edit")
-        e?.preventDefault?.()
         navigate(newPathname)
       } else if (pathname.slice(0, 5) === "/edit") {
         const newPathname = pathname.replace("/edit", "/things")
-        e?.preventDefault?.()
         navigate(newPathname)
       }
     },

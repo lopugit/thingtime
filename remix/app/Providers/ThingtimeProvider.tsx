@@ -28,6 +28,7 @@ try {
 
 const force = {
   settings: {
+    undoLimit: 999,
     // commander: {
     //   nav: {
     //     commanderActive: false,
@@ -37,7 +38,14 @@ const force = {
     // },
     // },
   },
-  version: 23,
+  //   Content: {
+  //     hidden1: "Edit this to your heart's desire.",
+  //     "How?": "Just search for Content and edit the value to whatever you want.",
+  //     "Example:": `Content = New Content!
+  // Content.Nested Content = New Nested Content!
+  //     `,
+  //   },
+  version: 24,
 }
 
 const newVersionData = {
@@ -64,8 +72,9 @@ const initialValues = {
   Content: {
     hidden1: "Edit this to your heart's desire.",
     "How?": "Just search for Content and edit the value to whatever you want.",
-    "Example:": `Content = New Content!
-      Content.Nested Content = New Nested Content!
+    "Example:": `
+Content = New Content!
+Content.Nested Content = New Nested Content!
     `,
   },
 }
@@ -253,9 +262,9 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
         if (parsed) {
           const localIsValid =
             !parsed.version || parsed.version >= force.version
-          let newThingtime = null
+          let newThingtime = smarts.merge(force, initialThingtime)
           if (localIsValid) {
-            newThingtime = smarts.merge(force, parsed)
+            newThingtime = smarts.merge(parsed, newThingtime)
           } else {
             const withVersionUpdates = smarts.merge(newVersionData, parsed)
             newThingtime = smarts.merge(force, withVersionUpdates)
@@ -304,6 +313,38 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
           )
           // setTimeout(() => {
           const stringified = stringify(thingtime)
+          let thingtimeHistory = []
+          try {
+            const thingtimeHistoryString =
+              window.localStorage.getItem("thingtimeHistory")
+            const parsedThingtimeHistory = JSON.parse(thingtimeHistoryString)
+            if (parsedThingtimeHistory instanceof Array) {
+              thingtimeHistory = parsedThingtimeHistory
+            }
+          } catch {
+            // nothing
+          }
+          try {
+            const limit = thingtime?.settings?.undoLimit || 999
+
+            if (thingtimeHistory?.length > limit) {
+              thingtimeHistory = thingtimeHistory.slice(
+                thingtimeHistory.length - limit
+              )
+            }
+
+            thingtimeHistory.push({
+              timestamp: Date.now(),
+              value: stringify(thingtime),
+            })
+            const thingtimeHistoryNewString = JSON.stringify(thingtimeHistory)
+            window.localStorage.setItem(
+              "thingtimeHistory",
+              thingtimeHistoryNewString
+            )
+          } catch {
+            // nothing
+          }
           window.localStorage.setItem("thingtime", stringified)
           // }, 600)
         } catch (err) {

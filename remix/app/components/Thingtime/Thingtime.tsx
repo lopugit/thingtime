@@ -126,7 +126,7 @@ export const Thingtime = (props) => {
   }, [props?.fullPath, props?.path, props?.thing])
 
   const parentPath = React.useMemo(() => {
-    const parentPath = fullPath.split(".").slice(0, -1).join(".")
+    const parentPath = fullPath?.split(".")?.slice(0, -1)?.join(".")
 
     if (!parentPath) {
       return "thingtime"
@@ -597,7 +597,7 @@ export const Thingtime = (props) => {
           onClick={addNewChild}
           paddingY={2}
         >
-          <Icon size={12} name="seedling"></Icon>
+          <Icon size={10} name="seedling"></Icon>
           {/* <Icon size={7} name="plus"></Icon>
           <Icon size={7} name="plus"></Icon> */}
         </Flex>
@@ -647,25 +647,25 @@ export const Thingtime = (props) => {
               </Box>
             )}
             {pathDom && (
-              <Flex
-                paddingLeft={1}
-                opacity={showContextIcon ? 1 : 0}
-                cursor="pointer"
-                transition="all 0.2s ease-in-out"
-                onClick={resetValue}
-              >
-                <Icon name="magic" size={10}></Icon>
-              </Flex>
-            )}
-            {pathDom && (
-              <Flex
-                paddingLeft={1}
-                opacity={showContextIcon ? 1 : 0}
-                cursor="pointer"
-                transition="all 0.2s ease-in-out"
-                onClick={deleteValue}
-              >
-                <Icon name="bin" size={8}></Icon>
+              <Flex flexDirection="row" columnGap={1} paddingLeft={2}>
+                <Flex
+                  paddingLeft={1}
+                  opacity={showContextIcon ? 1 : 0}
+                  cursor="pointer"
+                  transition="all 0.2s ease-in-out"
+                  onClick={resetValue}
+                >
+                  <Icon name="magic" size={10}></Icon>
+                </Flex>
+                <Flex
+                  paddingLeft={1}
+                  opacity={showContextIcon ? 1 : 0}
+                  cursor="pointer"
+                  transition="all 0.2s ease-in-out"
+                  onClick={deleteValue}
+                >
+                  <Icon name="bin" size={8}></Icon>
+                </Flex>
               </Flex>
             )}
           </Flex>
