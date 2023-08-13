@@ -167,7 +167,7 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
       newThingtime.tt = newThingtime
 
       console.log(
-        "nik setting newThingtime value at path",
+        "ThingtimeProvider setting newThingtime value at path",
         '"' + path + '"',
         "value: ",
         value
@@ -191,7 +191,7 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
 
       // do we need to sanitise?
       // const path = sanitise(rawPath)
-      console.log("Getting thingtime at path", path)
+      console.log("ThingtimeProvider getting thingtime at path", path)
       // console.trace("Getting thingtime at path", path)
       return smarts.getsmart(thingtime, path)
     },
@@ -235,7 +235,10 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
 
       if (thingtimeFromLocalStorage) {
         const parsed = parse(thingtimeFromLocalStorage)
-        console.log("thingtime restored from localstorage", parsed)
+        console.log(
+          "ThingtimeProvider thingtime restored from localstorage",
+          parsed
+        )
         if (parsed) {
           const localIsValid =
             !parsed.version || parsed.version >= force.version
@@ -246,7 +249,10 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
             const withVersionUpdates = smarts.merge(newVersionData, parsed)
             newThingtime = smarts.merge(force, withVersionUpdates)
           }
-          console.log("restoring thingtime from localStorage", newThingtime)
+          console.log(
+            "ThingtimeProvider restoring thingtime from localStorage",
+            newThingtime
+          )
           set(newThingtime)
         }
       } else {
@@ -281,7 +287,10 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
         }
       } else {
         try {
-          console.log("Setting thingtime to localStorage", thingtime)
+          console.log(
+            "ThingtimeProvider setting thingtime to localStorage",
+            thingtime
+          )
           // setTimeout(() => {
           const stringified = stringify(thingtime)
           window.localStorage.setItem("thingtime", stringified)

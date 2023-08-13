@@ -109,6 +109,12 @@ export const MagicInput = (props) => {
     [props?.onFocus]
   )
 
+  const dangerouslySetInnerHTML = React.useMemo(() => {
+    if (!props?.readonly) {
+      return { __html: contentEditableValue }
+    }
+    // return { __html: contentEditableValue }
+  }, [contentEditableValue, props?.readonly])
   return (
     <Box
       position="relative"
@@ -121,8 +127,8 @@ export const MagicInput = (props) => {
         width="100%"
         border="none"
         outline="none"
-        contentEditable={true}
-        dangerouslySetInnerHTML={{ __html: contentEditableValue }}
+        contentEditable={!props?.readonly ? true : false}
+        dangerouslySetInnerHTML={dangerouslySetInnerHTML}
         onFocus={onFocus}
         onInput={(value) => {
           const innerText = value?.target?.innerText
@@ -134,7 +140,9 @@ export const MagicInput = (props) => {
             updateValue({ value: innerText })
           }
         }}
-      ></Box>
+      >
+        {props?.readonly ? props?.value : null}
+      </Box>
       <Box
         position="absolute"
         top={0}

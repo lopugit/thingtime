@@ -36,7 +36,6 @@ export const Thingtime = (props) => {
 
   const [circular, setCircular] = React.useState(props?.circular)
 
-  const contentEditableRef = React.useRef(null)
   const editValueRef = React.useRef({})
 
   const depth = React.useMemo(() => {
@@ -196,12 +195,7 @@ export const Thingtime = (props) => {
 
   const renderableValue = React.useMemo(() => {
     if (type === "string") {
-      const trimmed = thing.trim()
-
-      if (!trimmed) {
-        return ""
-      }
-      return trimmed
+      return <MagicInput value={thing} readonly></MagicInput>
     } else if (type === "number") {
       return thing
     } else if (type === "boolean") {
@@ -328,6 +322,7 @@ export const Thingtime = (props) => {
       )
     }
   }, [
+    AtomicWrapper,
     keysToUse,
     circular,
     seen,
@@ -342,59 +337,10 @@ export const Thingtime = (props) => {
     keys,
   ])
 
-  const [contentEditableThing, setContentEditableThing] = React.useState(thing)
-
-  const updateContentEditableThing = React.useCallback((value) => {
-    // replace all new line occurences in value with <div><br></div>
-
-    // extract all series of new lines
-    const newlines = value?.split?.(/[^\n]/)?.filter((v) => v !== "")
-
-    let newValue = value
-
-    // replace all new lines groups with <div><br></div>
-    newlines?.forEach?.((newline) => {
-      const baseLength = "\n"?.length
-
-      const newlineClone = newline
-
-      const newlineClonePart1 = newlineClone?.replace(
-        "\n\n\n",
-        "<div><br /></div>"
-      )
-      const newlineClonePart2 = newlineClonePart1?.replace(
-        /\n\n/g,
-        "<div><br /></div>"
-      )
-      const newlineClonePart3 = newlineClonePart2?.replace(/\n/g, "<br />")
-
-      newValue = newValue?.replace(newline, newlineClonePart3)
-    })
-
-    setContentEditableThing(newValue)
-  }, [])
-
-  React.useEffect(() => {
-    const entries = Object.entries(editValueRef.current)
-    const propsThingInEntries = entries?.find?.(
-      (entry) => entry[1] === props?.thing
-    )
-    if (!propsThingInEntries) {
-      updateContentEditableThing(props?.thing)
-      // setContentEditableThing(props?.thing)
-    } else {
-      const [time, value] = propsThingInEntries
-      if (time && value) {
-        delete editValueRef.current[time]
-      }
-    }
-  }, [props?.thing, updateContentEditableThing])
-
   const updateValue = React.useCallback(
     (args) => {
       const { value } = args
 
-      console.log("nik running updateValue", value)
       setThingtime(fullPath, value)
     },
     [fullPath, setThingtime]
@@ -505,7 +451,6 @@ export const Thingtime = (props) => {
       </AtomicWrapper>
     )
   }, [
-    contentEditableThing,
     renderableValue,
     pl,
     type,

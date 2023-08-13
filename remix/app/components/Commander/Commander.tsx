@@ -294,8 +294,6 @@ export const Commander = (props) => {
     if (curSuggestionIdx !== null) {
       selectSuggestion(curSuggestionIdx)
     }
-    console.log("nik commanderActive", commanderActive)
-    console.log("nik commandIsAction", commandIsAction)
     if (commanderActive) {
       try {
         if (commandIsAction) {
