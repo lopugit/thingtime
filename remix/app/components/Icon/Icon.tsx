@@ -18,6 +18,9 @@ export const Icon = (props) => {
     if (["sparke", "magic"]?.includes(name)) {
       return "✨"
     }
+    if (["wizard", "gandalf"]?.includes(name)) {
+      return "🧙‍♂️"
+    }
     if (["box", "thing", "object"]?.includes(name)) {
       return "📦"
     }
@@ -30,6 +33,9 @@ export const Icon = (props) => {
     if (["book", "books"]?.includes(name)) {
       return "📚"
     }
+    if (["any", "magic wand"]?.includes(name)) {
+      return "🪄"
+    }
     if (["book-open", "books-open"]?.includes(name)) {
       return "📖"
     }
@@ -38,6 +44,9 @@ export const Icon = (props) => {
     }
     if (["number", "hundred"]?.includes(name)) {
       return "💯"
+    }
+    if (["puzzle", "types"]?.includes(name)) {
+      return "🧩"
     }
     if (["heart"]?.includes(name)) {
       return "❤️"
@@ -161,6 +170,9 @@ export const Icon = (props) => {
     }
     if (["money bag"]?.includes(name)) {
       return "💰"
+    }
+    if (["cyclone", "tornado"]?.includes(name)) {
+      return "🌀"
     }
     if (["thingtime"]?.includes(name)) {
       if (Math.random() > 0.5) {

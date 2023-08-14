@@ -21,6 +21,7 @@ import { Commander } from "../Commander/Commander"
 import { Icon } from "../Icon/Icon"
 import { MagicInput } from "../MagicInput/MagicInput"
 import { Safe } from "../Safety/Safe"
+import { SettingsMenu } from "./SettingsMenu"
 import { useThingtime } from "./useThingtime"
 
 import { getThing } from "~/smarts"
@@ -370,6 +371,33 @@ export const Thingtime = (props) => {
     updateValue({ value: null })
   }, [updateValue])
 
+  const onChangeType = React.useCallback(
+    (type) => {
+      const newType = type?.key || type?.value || type
+
+      if (newType === "object") {
+        updateValue({ value: {} })
+      } else if (newType === "array") {
+        updateValue({ value: [] })
+      } else if (newType === "string") {
+        updateValue({ value: "" })
+      } else if (newType === "number") {
+        updateValue({ value: 0 })
+      } else if (newType === "boolean") {
+        updateValue({ value: false })
+      } else if (newType === "undefined") {
+        updateValue({ value: undefined })
+      } else if (newType === "null") {
+        updateValue({ value: null })
+      } else if (newType === "any") {
+        updateValue({ value: null })
+      } else {
+        console.error("Unknown type", newType)
+      }
+    },
+    [updateValue]
+  )
+
   const deleteValue = React.useCallback(() => {
     // use parent path to clone parent object but without this key
     const clone = { ...parent }
@@ -659,6 +687,13 @@ export const Thingtime = (props) => {
                 >
                   <Icon name="magic" size={9}></Icon>
                 </Flex>
+                <SettingsMenu
+                  transition="all 0.2s ease-in-out"
+                  opacity={showContextIcon ? 1 : 0}
+                  uuid={uuid}
+                  fullPath={fullPath}
+                  onChangeType={onChangeType}
+                ></SettingsMenu>
                 <Flex
                   paddingLeft={1}
                   opacity={showContextIcon ? 1 : 0}
