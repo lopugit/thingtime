@@ -644,7 +644,12 @@ export const Thingtime = (props) => {
               </Box>
             )}
             {pathDom && (
-              <Flex flexDirection="row" columnGap={1} paddingLeft={2}>
+              <Flex
+                flexDirection="row"
+                columnGap={1}
+                marginTop={-1}
+                paddingLeft={1}
+              >
                 <Flex
                   paddingLeft={1}
                   opacity={showContextIcon ? 1 : 0}
@@ -652,7 +657,7 @@ export const Thingtime = (props) => {
                   transition="all 0.2s ease-in-out"
                   onClick={resetValue}
                 >
-                  <Icon name="magic" size={10}></Icon>
+                  <Icon name="magic" size={9}></Icon>
                 </Flex>
                 <Flex
                   paddingLeft={1}
@@ -661,7 +666,7 @@ export const Thingtime = (props) => {
                   transition="all 0.2s ease-in-out"
                   onClick={deleteValue}
                 >
-                  <Icon name="bin" size={8}></Icon>
+                  <Icon name="bin" size={6}></Icon>
                 </Flex>
               </Flex>
             )}
