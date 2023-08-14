@@ -690,8 +690,10 @@ export const Thingtime = (props) => {
                 width="100%"
                 paddingLeft={multiplyPl(2)}
                 opacity={props?.edit ? 1 : 0}
+                border="none !important"
                 cursor="pointer"
                 transition="all 0.2s ease-out"
+                outline="none !important"
                 onClick={addNewChild}
                 onKeyUp={(e) => {
                   if (e?.key === "Enter") {
