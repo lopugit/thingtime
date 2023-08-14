@@ -9,7 +9,7 @@ import { RainbowSkeleton } from "../Skeleton/RainbowSkeleton"
 import { ProfileDrawer } from "./ProfileDrawer"
 
 export const Footer = (props) => {
-  const investmentEmail = "investment@thingtime.com"
+  const investmentEmail = "invest@thingtime.com"
 
   return (
     <Center
