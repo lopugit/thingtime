@@ -18,7 +18,7 @@ export const theme = extendTheme({
     global: {
       // make all elements padding and margin animate
       "*": {
-        transition: "padding 0.2s ease, margin 0.2s ease",
+        transition: "padding 0.2s ease, margin 0.2s ease-out",
       },
       // make all elements have a transparent focus border
       "input:focus": {

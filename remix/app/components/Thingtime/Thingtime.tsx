@@ -612,24 +612,6 @@ export const Thingtime = (props) => {
     setThingtime(newChildFullPath, newChild)
   }, [fullPath, setThingtime, thing])
 
-  const addChildUi = React.useMemo(() => {
-    if (type === "object" && props?.edit) {
-      return (
-        <Flex
-          width="100%"
-          paddingLeft={multiplyPl(2)}
-          cursor="pointer"
-          onClick={addNewChild}
-          paddingY={2}
-        >
-          <Icon size={10} name="seedling"></Icon>
-          {/* <Icon size={7} name="plus"></Icon>
-          <Icon size={7} name="plus"></Icon> */}
-        </Flex>
-      )
-    }
-  }, [props?.edit, type, multiplyPl, addNewChild])
-
   const [showContextIcon, setShowContextIcon] = React.useState(false)
 
   return (
@@ -714,7 +696,21 @@ export const Thingtime = (props) => {
         {!loading && thingtimeChildren && (
           <Box className="thingtimeChildren">
             {thingtimeChildren}
-            {addChildUi}
+            {type === "object" && (
+              <Flex
+                width="100%"
+                paddingLeft={multiplyPl(2)}
+                opacity={props?.edit ? 1 : 0}
+                cursor="pointer"
+                transition="all 0.2s ease-out"
+                onClick={addNewChild}
+                paddingY={2}
+              >
+                <Icon size={10} name="seedling"></Icon>
+                {/* <Icon size={7} name="plus"></Icon>
+          <Icon size={7} name="plus"></Icon> */}
+              </Flex>
+            )}
           </Box>
         )}
       </Flex>

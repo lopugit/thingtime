@@ -518,7 +518,7 @@ export const CommanderV1 = (props) => {
             opacity={commanderActive ? 0.25 : 0}
             repeats={rainbowRepeats}
             thickness={8}
-            opacityTransition="all 1000ms ease"
+            opacityTransition="all 1000ms ease-out"
             overflow="visible"
           >
             <Center
@@ -536,7 +536,7 @@ export const CommanderV1 = (props) => {
                 opacity={commanderActive ? 0.6 : 0}
                 position="absolute"
                 repeats={rainbowRepeats}
-                opacityTransition="all 2500ms ease"
+                opacityTransition="all 2500ms ease-out"
                 thickness={10}
               ></Rainbow>
               <Input

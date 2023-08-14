@@ -25,7 +25,7 @@ export const Rainbow = (allProps: any): JSX.Element => {
   const [pathWidth, setPathWidth] = React.useState(props?.thickness || 1)
   const [overflow, setOverflow] = React.useState(props?.overflow || "hidden")
   const [opacityTransition, setOpacityTransition] = React.useState(
-    props?.opacityTransition || "all 10000ms ease"
+    props?.opacityTransition || "all 10000ms ease-out"
   )
 
   const parentRef = React.useRef(null)
