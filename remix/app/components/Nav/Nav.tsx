@@ -86,7 +86,7 @@ export const Nav = (props) => {
               </Link>
             </Center>
           </Center>
-          <CommanderV1 global id="nav" rainbow></CommanderV1>
+          <CommanderV1 global id="nav" rainbow={false}></CommanderV1>
           <Center
             className="nav-right-section"
             columnGap={[3, 8]}
