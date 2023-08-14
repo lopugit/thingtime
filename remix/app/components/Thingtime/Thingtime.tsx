@@ -564,17 +564,21 @@ export const Thingtime = (props) => {
   const pathDom = React.useMemo(() => {
     if (renderedPath) {
       return (
-        <Flex
-          maxWidth="100%"
-          paddingLeft={props?.pathPl || pl}
-          fontSize="12px"
-          wordBreak="break-all"
-        >
-          {renderedPath}
-        </Flex>
+        <>
+          <MagicInput
+            value={renderedPath}
+            readonly={!props?.edit}
+            chakras={{
+              maxWidth: "100%",
+              paddingLeft: props?.pathPl || pl,
+              fontSize: "12px",
+              wordBreak: "break-all",
+            }}
+          ></MagicInput>
+        </>
       )
     }
-  }, [renderedPath, pl, props?.pathPl])
+  }, [renderedPath, pl, props?.edit, props?.pathPl])
 
   const handleMouseEvent = React.useCallback(
     (e) => {
@@ -674,6 +678,7 @@ export const Thingtime = (props) => {
                   opacity={showContextIcon ? 1 : 0}
                   uuid={uuid}
                   fullPath={fullPath}
+                  readonly={!props?.edit}
                   onChangeType={onChangeType}
                 ></SettingsMenu>
                 <Flex

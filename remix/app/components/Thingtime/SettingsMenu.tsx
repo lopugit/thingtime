@@ -67,59 +67,62 @@ export const SettingsMenu = (props) => {
           cursor="pointer"
           paddingY={basePadding}
         >
-          <Flex
-            alignItems="center"
-            flexDirection="row"
-            _hover={{
-              background: "greys.light",
-            }}
-            paddingX={basePadding * 1}
-            paddingY={basePadding / 2}
-          >
-            <Icon marginBottom="-2px" name="cyclone" size={iconSize}></Icon>
-            <Text marginTop="-2px" paddingLeft={2} fontSize="xs">
-              Types
-            </Text>
-          </Flex>
+          {!props?.readonly && (
+            <Flex
+              alignItems="center"
+              flexDirection="row"
+              _hover={{
+                background: "greys.light",
+              }}
+              paddingX={basePadding * 1}
+              paddingY={basePadding / 2}
+            >
+              <Icon marginBottom="-2px" name="cyclone" size={iconSize}></Icon>
+              <Text marginTop="-2px" paddingLeft={2} fontSize="xs">
+                Types
+              </Text>
+            </Flex>
+          )}
           <Flex
             flexDirection="column"
             // rowGap={basePadding}
             background="greys.lightt"
             cursor="pointer"
           >
-            {types.map((type, idx) => {
-              const ret = (
-                <Flex
-                  key={props?.uuid + props?.fullPath + "-type-menu-" + idx}
-                  width="100%"
-                  _hover={{
-                    "&>div": {
-                      background: "greys.light",
-                    },
-                  }}
-                  onClick={() => onChangeType(type?.key || type)}
-                  paddingY={1}
-                >
+            {!props?.readonly &&
+              types.map((type, idx) => {
+                const ret = (
                   <Flex
-                    alignItems="center"
-                    flexDirection="row"
+                    key={props?.uuid + props?.fullPath + "-type-menu-" + idx}
                     width="100%"
-                    paddingX={basePadding * 2}
-                    paddingY={basePadding / 2}
+                    _hover={{
+                      "&>div": {
+                        background: "greys.light",
+                      },
+                    }}
+                    onClick={() => onChangeType(type?.key || type)}
+                    paddingY={1}
                   >
-                    <Icon
-                      marginBottom="-2px"
-                      name={type?.icon || type?.key || type?.label || type}
-                      size={iconSize}
-                    ></Icon>
-                    <Text marginTop="-2px" paddingLeft={2} fontSize="xs">
-                      {type?.label || type?.key || type}
-                    </Text>
+                    <Flex
+                      alignItems="center"
+                      flexDirection="row"
+                      width="100%"
+                      paddingX={basePadding * 2}
+                      paddingY={basePadding / 2}
+                    >
+                      <Icon
+                        marginBottom="-2px"
+                        name={type?.icon || type?.key || type?.label || type}
+                        size={iconSize}
+                      ></Icon>
+                      <Text marginTop="-2px" paddingLeft={2} fontSize="xs">
+                        {type?.label || type?.key || type}
+                      </Text>
+                    </Flex>
                   </Flex>
-                </Flex>
-              )
-              return ret
-            })}
+                )
+                return ret
+              })}
           </Flex>
         </Flex>
       </Flex>
