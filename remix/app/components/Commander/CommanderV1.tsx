@@ -43,7 +43,7 @@ export const CommanderV1 = (props) => {
   const [showContext, setShowContextState] = React.useState(false)
 
   const mobileVW = React.useMemo(() => {
-    return "calc(100vw - 55px)"
+    return "calc(100vw - 108px)"
   }, [])
 
   const rainbowRepeats = 2

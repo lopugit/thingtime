@@ -517,6 +517,7 @@ export const Commander = (props) => {
         className={"commander-uuid-" + commanderId}
         // display={["flex", commanderActive ? "flex" : "none"]}
         justifyContent="flex-start"
+        width="100%"
         maxWidth="100%"
         // height="100%"
         // paddingX={1}

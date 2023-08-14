@@ -74,7 +74,12 @@ export const Nav = (props) => {
           // bg='white'
           // boxShadow={'0px 0px 10px rgba(0,0,0,0.1)'}
         >
-          <Center className="nav-left-section" height="100%" marginRight="auto">
+          <Center
+            className="nav-left-section"
+            display={["none", "flex"]}
+            height="100%"
+            marginRight="auto"
+          >
             <Center transform="scaleX(-100%)" cursor="pointer">
               <Link to="/">
                 <Icon size="12px" name="unicorn"></Icon>
@@ -107,8 +112,13 @@ export const Nav = (props) => {
                 ></Icon> */}
               </Center>
             )}
-            <Center transform="scaleX(-100%)" cursor="pointer">
+            <Center transform={["", "scaleX(-100%)"]} cursor="pointer">
               <Icon size="12px" name="rainbow"></Icon>
+            </Center>
+            <Center display={["flex", "none"]} cursor="pointer">
+              <Link to="/">
+                <Icon size="12px" name="unicorn"></Icon>
+              </Link>
             </Center>
           </Center>
           {/* <RainbowSkeleton

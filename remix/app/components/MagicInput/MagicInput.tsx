@@ -148,6 +148,8 @@ export const MagicInput = (props) => {
         top={0}
         left={0}
         display={inputValue ? "none" : "block"}
+        width="100%"
+        maxWidth="100%"
         color="greys.dark"
         pointerEvents="none"
       >
