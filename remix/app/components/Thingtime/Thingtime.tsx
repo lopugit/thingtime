@@ -693,7 +693,13 @@ export const Thingtime = (props) => {
                 cursor="pointer"
                 transition="all 0.2s ease-out"
                 onClick={addNewChild}
+                onKeyUp={(e) => {
+                  if (e?.key === "Enter") {
+                    addNewChild()
+                  }
+                }}
                 paddingY={2}
+                tabIndex={0}
               >
                 <Icon size={10} name="seedling"></Icon>
                 {/* <Icon size={7} name="plus"></Icon>
