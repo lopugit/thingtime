@@ -150,6 +150,14 @@ export const MagicInput = (props) => {
         {props?.readonly ? props?.value : null}
       </Box>
       <Box
+        display={
+          !props.readonly || inputValue || !isClientSide ? "none" : "block"
+        }
+        opacity={0}
+      >
+        Imagine..
+      </Box>
+      <Box
         position="absolute"
         top={0}
         left={0}
