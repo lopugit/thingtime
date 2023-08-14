@@ -32,7 +32,6 @@ export const Footer = (props) => {
               </Flex>
             </Link>
           </Flex>
-
           <Flex flexDirection="column" fontSize="xs">
             {/* copyright message */}© 2023 Thingtime
           </Flex>
