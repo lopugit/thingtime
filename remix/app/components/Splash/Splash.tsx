@@ -1,11 +1,16 @@
-import { TextAnimation1 } from '~/components/textAnimation1'
-import { Flex } from '@chakra-ui/react'
+import { Flex } from "@chakra-ui/react"
 
-export const Splash = props => {
+import { TextAnimation1 } from "~/components/textAnimation1"
 
-  return <Flex w='100vw' h='100vh' alignItems='center' justifyContent='center'>
-
-    <TextAnimation1></TextAnimation1>
+export const Splash = (props) => {
+  return (
+    <Flex
+      alignItems="center"
+      justifyContent="center"
+      width="100vw"
+      height="100vh"
+    >
+      <TextAnimation1></TextAnimation1>
     </Flex>
-  
+  )
 }

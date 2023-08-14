@@ -155,6 +155,13 @@ export const Icon = (props) => {
     if (["trash", "bin", "delete", "remove"]?.includes(name)) {
       return "🗑️"
     }
+    if (["cash", "money"]?.includes(name)) {
+      // return "💰"
+      return "💵"
+    }
+    if (["money bag"]?.includes(name)) {
+      return "💰"
+    }
     if (["thingtime"]?.includes(name)) {
       if (Math.random() > 0.5) {
         return "🌳"

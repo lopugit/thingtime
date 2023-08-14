@@ -1,20 +1,25 @@
-import { Flex } from '@chakra-ui/react'
-import { Nav } from '../Nav/Nav'
-import { ProfileDrawer } from '../Nav/ProfileDrawer'
+import { Box, Flex } from "@chakra-ui/react"
 
-export const Main = props => {
+import { Footer } from "../Nav/Footer"
+import { Nav } from "../Nav/Nav"
+import { ProfileDrawer } from "../Nav/ProfileDrawer"
+
+export const Main = (props) => {
   return (
     <Flex
-      position={'relative'}
-      alignItems='center'
-      justifyContent='center'
-      flexDir={'column'}
-      overflow='hidden'
-      maxW='100vw'
+      position="relative"
+      alignItems="center"
+      justifyContent="center"
+      flexDirection="column"
+      overflow="hidden"
+      maxWidth="100vw"
     >
       {/* <ProfileDrawer></ProfileDrawer> */}
       <Nav />
-      {props.children}
+      <Box width="100%" minHeight="100vh">
+        {props.children}
+      </Box>
+      <Footer></Footer>
     </Flex>
   )
 }
