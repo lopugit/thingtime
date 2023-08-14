@@ -19,7 +19,14 @@ export const SettingsMenu = (props) => {
   }, [])
 
   const types = React.useMemo(() => {
-    const ret = ["any", "object", "array", "string", "number", "boolean"]
+    const ret = [
+      { label: "any", icon: "any" },
+      "object",
+      "array",
+      "string",
+      "number",
+      "boolean",
+    ]
     return ret
   }, [])
 
@@ -29,13 +36,22 @@ export const SettingsMenu = (props) => {
     },
     [props?.onChangeType]
   )
+  const onDelete = React.useCallback(
+    (type) => {
+      props?.onDelete?.()
+    },
+    [props?.onDelete]
+  )
 
   const iconSize = 10
 
   return (
     <Center
       position="relative"
+      // width="100%"
+      paddingRight={36}
       opacity={props?.opacity}
+      cursor="pointer"
       transition={props?.transition || "all 0.2s ease-in-out"}
       onMouseEnter={showMenu}
       onMouseLeave={hideMenu}
@@ -43,7 +59,6 @@ export const SettingsMenu = (props) => {
       <Flex
         paddingLeft={1}
         // opacity={showContextIcon ? 1 : 0}
-        cursor="pointer"
         transition="all 0.2s ease-in-out"
         // onClick={deleteValue}
       >
@@ -64,7 +79,6 @@ export const SettingsMenu = (props) => {
           background="greys.lightt"
           borderRadius={4}
           boxShadow={props?.boxShadow || "0px 2px 7px 0px rgba(0,0,0,0.2)"}
-          cursor="pointer"
           paddingY={basePadding}
         >
           {!props?.readonly && (
@@ -124,6 +138,23 @@ export const SettingsMenu = (props) => {
                 return ret
               })}
           </Flex>
+          {!props?.readonly && (
+            <Flex
+              alignItems="center"
+              flexDirection="row"
+              _hover={{
+                background: "greys.light",
+              }}
+              onClick={onDelete}
+              paddingX={basePadding * 1}
+              paddingY={basePadding / 2}
+            >
+              <Icon marginBottom="-2px" name="bin" size={iconSize}></Icon>
+              <Text marginTop="-2px" paddingLeft={2} fontSize="xs">
+                Recycle
+              </Text>
+            </Flex>
+          )}
         </Flex>
       </Flex>
     </Center>

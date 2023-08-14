@@ -8,6 +8,12 @@ export const MagicInput = (props) => {
 
   const [inputValue, setInputValue] = React.useState()
 
+  const [isClientSide, setIsClientSide] = React.useState(false)
+
+  React.useEffect(() => {
+    setIsClientSide(true)
+  }, [])
+
   const contentEditableRef = React.useRef(null)
   const editValueRef = React.useRef({})
 
@@ -147,7 +153,7 @@ export const MagicInput = (props) => {
         position="absolute"
         top={0}
         left={0}
-        display={inputValue ? "none" : "block"}
+        display={inputValue || !isClientSide ? "none" : "block"}
         width="100%"
         maxWidth="100%"
         color="greys.dark"

@@ -373,7 +373,8 @@ export const Thingtime = (props) => {
 
   const onChangeType = React.useCallback(
     (type) => {
-      const newType = type?.key || type?.value || type
+      const newType =
+        type?.key || type?.value || type?.label || type?.icon || type
 
       if (newType === "object") {
         updateValue({ value: {} })
@@ -664,15 +665,6 @@ export const Thingtime = (props) => {
                 marginTop={-1}
                 paddingLeft={1}
               >
-                <Flex
-                  paddingLeft={1}
-                  opacity={showContextIcon ? 1 : 0}
-                  cursor="pointer"
-                  transition="all 0.2s ease-in-out"
-                  onClick={resetValue}
-                >
-                  <Icon name="magic" size={9}></Icon>
-                </Flex>
                 <SettingsMenu
                   transition="all 0.2s ease-in-out"
                   opacity={showContextIcon ? 1 : 0}
@@ -680,16 +672,8 @@ export const Thingtime = (props) => {
                   fullPath={fullPath}
                   readonly={!props?.edit}
                   onChangeType={onChangeType}
+                  onDelete={deleteValue}
                 ></SettingsMenu>
-                <Flex
-                  paddingLeft={1}
-                  opacity={showContextIcon ? 1 : 0}
-                  cursor="pointer"
-                  transition="all 0.2s ease-in-out"
-                  onClick={deleteValue}
-                >
-                  <Icon name="bin" size={6}></Icon>
-                </Flex>
               </Flex>
             )}
           </Flex>
