@@ -695,7 +695,7 @@ export const Thingtime = (props) => {
                 transition="all 0.2s ease-out"
                 outline="none !important"
                 onClick={addNewChild}
-                onKeyUp={(e) => {
+                onKeyDown={(e) => {
                   if (e?.key === "Enter") {
                     addNewChild()
                   }
