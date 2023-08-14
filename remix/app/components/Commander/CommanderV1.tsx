@@ -513,14 +513,58 @@ export const CommanderV1 = (props) => {
           maxWidth={[mobileVW, "100%"]}
           height="100%"
         >
-          <Rainbow
-            filter="blur(15px)"
-            opacity={commanderActive ? 0.25 : 0}
-            repeats={rainbowRepeats}
-            thickness={8}
-            opacityTransition="all 1000ms ease-out"
-            overflow="visible"
-          >
+          {/* TODO: Fix duplicate code because of rainbow mode disabling hack */}
+          {props?.rainbow && (
+            <Rainbow
+              filter="blur(15px)"
+              opacity={commanderActive ? 0.25 : 0}
+              repeats={rainbowRepeats}
+              thickness={8}
+              opacityTransition="all 1000ms ease-out"
+              overflow="visible"
+            >
+              <Center
+                position="relative"
+                overflow="hidden"
+                width={["100%", "400px"]}
+                maxWidth={[mobileVW, "100%"]}
+                height="100%"
+                padding="1px"
+                borderRadius="6px"
+                pointerEvents="all"
+                outline="none"
+              >
+                <Rainbow
+                  opacity={commanderActive ? 0.6 : 0}
+                  position="absolute"
+                  repeats={rainbowRepeats}
+                  opacityTransition="all 2500ms ease-out"
+                  thickness={10}
+                ></Rainbow>
+                <Input
+                  // display='none'
+                  // opacity={0}
+                  ref={inputRef}
+                  sx={{
+                    "&::placeholder": {
+                      color: "greys.dark",
+                    },
+                  }}
+                  width="100%"
+                  height="100%"
+                  background="grey"
+                  border="none"
+                  borderRadius="5px"
+                  outline="none"
+                  onChange={onInputChange}
+                  onFocus={openCommander}
+                  placeholder="Imagine.."
+                  value={inputValue}
+                ></Input>
+              </Center>
+            </Rainbow>
+          )}
+          {!props?.rainbow && (
             <Center
               position="relative"
               overflow="hidden"
@@ -532,13 +576,6 @@ export const CommanderV1 = (props) => {
               pointerEvents="all"
               outline="none"
             >
-              <Rainbow
-                opacity={commanderActive ? 0.6 : 0}
-                position="absolute"
-                repeats={rainbowRepeats}
-                opacityTransition="all 2500ms ease-out"
-                thickness={10}
-              ></Rainbow>
               <Input
                 // display='none'
                 // opacity={0}
@@ -560,7 +597,7 @@ export const CommanderV1 = (props) => {
                 value={inputValue}
               ></Input>
             </Center>
-          </Rainbow>
+          )}
         </Center>
       </Flex>
     </ClickAwayListener>
