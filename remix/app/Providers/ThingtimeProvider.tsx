@@ -114,23 +114,137 @@ initialThingtime.thingtime = initialThingtime
 initialThingtime.tt = initialThingtime
 
 export const ThingtimeProvider = (props: any): JSX.Element => {
-  const [thingtime, rawSet] = React.useState()
+  const [thingtimeReference, rawSet] = React.useState()
 
-  const thingtimeRef = React.useRef(thingtime)
+  const thingtimeRef = React.useRef(thingtimeReference)
   const stateRef = React.useRef({
     c: 1,
   })
 
   const [loading, setLoading] = React.useState(true)
 
-  const set = React.useCallback((newThingtime) => {
-    const thingtimeReference = {
+  const set = React.useCallback((newThingtime, ignoreUndoRedo?: any) => {
+    const newThingtimeReference = {
       ...newThingtime,
     }
 
-    thingtimeReference.tt = thingtimeReference
-    thingtimeReference.thingtime = thingtimeReference
-    rawSet(thingtimeReference)
+    newThingtimeReference.tt = newThingtimeReference
+    newThingtimeReference.thingtime = newThingtimeReference
+
+    // store undo/redo history
+    if (!ignoreUndoRedo) {
+      try {
+        console.log(
+          "ThingtimeProvider setting thingtime to localStorage",
+          newThingtimeReference
+        )
+        // setTimeout(() => {
+        const stringified = stringify(newThingtimeReference)
+        let undoHistory = []
+        try {
+          const undoHistoryString = window.localStorage.getItem("undoHistory")
+          const parsedUndoHistory = JSON.parse(undoHistoryString)
+          if (parsedUndoHistory instanceof Array) {
+            undoHistory = parsedUndoHistory
+          }
+        } catch {
+          // nothing
+        }
+        // if last undoHistory does not equal new undo history
+        console.log(
+          "ThingtimeProvider saving to undo history undoHistory[undoHistory.length - 1]?.value",
+          undoHistory[undoHistory.length - 1]?.value
+        )
+        console.log(
+          "ThingtimeProvider saving to undo history stringified",
+          stringified
+        )
+        if (undoHistory[undoHistory.length - 1]?.value !== stringified) {
+          try {
+            console.log(
+              "ThingtimeProvider saving to undo history undoHistory",
+              undoHistory
+            )
+            const limit = newThingtimeReference?.settings?.undoLimit || 999
+
+            if (undoHistory?.length > limit) {
+              undoHistory = undoHistory.slice(undoHistory.length - limit)
+            }
+
+            undoHistory.push({
+              timestamp: Date.now(),
+              value: stringify(newThingtimeReference),
+            })
+            const undoHistoryNewString = JSON.stringify(undoHistory)
+            window.localStorage.setItem("undoHistory", undoHistoryNewString)
+          } catch {
+            // nothing
+          }
+        }
+        // window.localStorage.setItem("thingtime", stringified)
+        // }, 600)
+      } catch (err) {
+        console.error("There was an error saving thingtime to localStorage")
+      }
+      const saveRedo = false
+      if (saveRedo) {
+        try {
+          console.log(
+            "ThingtimeProvider setting thingtime to localStorage",
+            newThingtimeReference
+          )
+          // setTimeout(() => {
+          const stringified = stringify(newThingtimeReference)
+          let redoHistory = []
+          try {
+            const redoHistoryString = window.localStorage.getItem("redoHistory")
+            const parsedRedoHistory = JSON.parse(redoHistoryString)
+            if (parsedRedoHistory instanceof Array) {
+              redoHistory = parsedRedoHistory
+            }
+          } catch {
+            // nothing
+          }
+          // if last redoHistory does not equal new redo history
+          console.log(
+            "ThingtimeProvider saving to redo history redoHistory[redoHistory.length - 1]?.value",
+            redoHistory[redoHistory.length - 1]?.value
+          )
+          console.log(
+            "ThingtimeProvider saving to redo history stringified",
+            stringified
+          )
+          if (redoHistory[redoHistory.length - 1]?.value !== stringified) {
+            try {
+              console.log(
+                "ThingtimeProvider saving to redo history redoHistory",
+                redoHistory
+              )
+              const limit = newThingtimeReference?.settings?.redoLimit || 999
+
+              if (redoHistory?.length > limit) {
+                redoHistory = redoHistory.slice(redoHistory.length - limit)
+              }
+
+              redoHistory.push({
+                timestamp: Date.now(),
+                value: stringify(newThingtimeReference),
+              })
+              const redoHistoryNewString = JSON.stringify(redoHistory)
+              window.localStorage.setItem("redoHistory", redoHistoryNewString)
+            } catch {
+              // nothing
+            }
+          }
+          // window.localStorage.setItem("thingtime", stringified)
+          // }, 600)
+        } catch (err) {
+          console.error("There was an error saving thingtime to localStorage")
+        }
+      }
+    }
+
+    rawSet(newThingtimeReference)
   }, [])
 
   const setThingtime = React.useCallback(
@@ -143,7 +257,7 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
         }
       }
 
-      const newThingtime = thingtime
+      const newThingtime = thingtimeReference
 
       const paths = smarts.parsePropertyPath(path)
 
@@ -193,11 +307,9 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
 
       smarts.setsmart(newThingtime, path, value)
 
-      console.log("nik set(newThingtime)", newThingtime)
-
       set(newThingtime)
     },
-    [thingtime, set]
+    [thingtimeReference, set]
   )
 
   const getThingtime = React.useCallback(
@@ -206,16 +318,16 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
       const path = rawPath
 
       if (!path) {
-        return thingtime
+        return thingtimeReference
       }
 
       // do we need to sanitise?
       // const path = sanitise(rawPath)
       console.log("ThingtimeProvider getting thingtime at path", path)
       // console.trace("Getting thingtime at path", path)
-      return smarts.getsmart(thingtime, path)
+      return smarts.getsmart(thingtimeReference, path)
     },
-    [thingtime]
+    [thingtimeReference]
   )
 
   const populatePaths = React.useCallback((obj, path, paths, seen = []) => {
@@ -243,10 +355,10 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
     const paths = []
 
     // populatePaths(thingtime, commandPath)
-    populatePaths(thingtime, "", paths)
+    populatePaths(thingtimeReference, "", paths)
 
     return paths
-  }, [populatePaths, thingtime])
+  }, [populatePaths, thingtimeReference])
 
   // get thingtime from localstorage
   React.useEffect(() => {
@@ -288,86 +400,173 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
   React.useEffect(() => {
     try {
       window.setThingtime = setThingtime
-      window.thingtime = thingtime
-      window.tt = thingtime
+      window.thingtime = thingtimeReference
+      window.tt = thingtimeReference
     } catch {
       // nothing
     }
 
     if (stateRef.current.initialized) {
-      if (thingtime.thingtime !== thingtime || thingtime.tt !== thingtime) {
-        if (!(stateRef?.current?.c >= 10)) {
-          stateRef.current.c++
-          const newThingtime = {
-            ...thingtime,
-          }
-          newThingtime.thingtime = newThingtime
-          newThingtime.tt = newThingtime
-          set(newThingtime)
-        }
-      } else {
-        try {
-          console.log(
-            "ThingtimeProvider setting thingtime to localStorage",
-            thingtime
-          )
-          // setTimeout(() => {
-          const stringified = stringify(thingtime)
-          let thingtimeHistory = []
-          try {
-            const thingtimeHistoryString =
-              window.localStorage.getItem("thingtimeHistory")
-            const parsedThingtimeHistory = JSON.parse(thingtimeHistoryString)
-            if (parsedThingtimeHistory instanceof Array) {
-              thingtimeHistory = parsedThingtimeHistory
-            }
-          } catch {
-            // nothing
-          }
-          try {
-            const limit = thingtime?.settings?.undoLimit || 999
-
-            if (thingtimeHistory?.length > limit) {
-              thingtimeHistory = thingtimeHistory.slice(
-                thingtimeHistory.length - limit
-              )
-            }
-
-            thingtimeHistory.push({
-              timestamp: Date.now(),
-              value: stringify(thingtime),
-            })
-            const thingtimeHistoryNewString = JSON.stringify(thingtimeHistory)
-            window.localStorage.setItem(
-              "thingtimeHistory",
-              thingtimeHistoryNewString
-            )
-          } catch {
-            // nothing
-          }
-          window.localStorage.setItem("thingtime", stringified)
-          // }, 600)
-        } catch (err) {
-          console.error("There was an error saving thingtime to localStorage")
-        }
+      try {
+        console.log(
+          "ThingtimeProvider setting thingtime to localStorage",
+          thingtimeReference
+        )
+        // setTimeout(() => {
+        const stringified = stringify(thingtimeReference)
+        window.localStorage.setItem("thingtime", stringified)
+        // }, 600)
+      } catch (err) {
+        console.error("There was an error saving thingtime to localStorage")
       }
     } else {
       stateRef.current.initialized = true
     }
 
-    thingtimeRef.current = thingtime
+    thingtimeRef.current = thingtimeReference
 
-    const keyListener = (e) => {}
+    const keyListener = (e) => {
+      // if ctrl + z, restore thingtime from localstorage history
+
+      console.log("ThingtimeProvider listened to key event e?.key", e?.key)
+      console.log(
+        "ThingtimeProvider listened to key event e?.ctrlKey",
+        e?.ctrlKey
+      )
+      console.log(
+        "ThingtimeProvider listened to key event e?.shiftKey",
+        e?.shiftKey
+      )
+      console.log(
+        "ThingtimeProvider listened to key event e?.metaKey",
+        e?.metaKey
+      )
+
+      if ((e?.ctrlKey || e?.metaKey) && e?.key === "z") {
+        e?.preventDefault()
+
+        console.log("ThingtimeProvider detected undo/redo request")
+
+        if (e.shiftKey) {
+          // redo
+          console.log("ThingtimeProvider redo")
+          const redoHistoryString = window.localStorage.getItem("redoHistory")
+          const parsedRedoHistory = JSON.parse(redoHistoryString)
+          if (parsedRedoHistory instanceof Array) {
+            const last = parsedRedoHistory[parsedRedoHistory.length - 1]
+            if (last) {
+              const parsed = parse(last.value)
+              if (parsed) {
+                // remove restored state from history
+                // const currentHistory = parsedRedoHistory.pop()
+                parsedRedoHistory.pop()
+                // parsedRedoHistory.push(currentHistory)
+                const newRedoHistoryString = JSON.stringify(parsedRedoHistory)
+                window.localStorage.setItem("redoHistory", newRedoHistoryString)
+
+                // save old/current state to undo history
+                let undoHistory = []
+                try {
+                  const undoHistoryString =
+                    window.localStorage.getItem("undoHistory")
+                  const parsedUndoHistory = JSON.parse(undoHistoryString)
+                  if (parsedUndoHistory instanceof Array) {
+                    undoHistory = parsedUndoHistory
+                  }
+                } catch {
+                  // nothing
+                }
+                try {
+                  undoHistory.push({
+                    timestamp: Date.now(),
+                    value: stringify(thingtimeReference),
+                  })
+                  const undoHistoryNewString = JSON.stringify(undoHistory)
+                  window.localStorage.setItem(
+                    "undoHistory",
+                    undoHistoryNewString
+                  )
+                } catch {
+                  // nothing
+                }
+
+                const newThingtime = parsed
+                set(newThingtime, true)
+              }
+            }
+          }
+        } else {
+          // undo
+          console.log("ThingtimeProvider undo")
+          try {
+            const undoHistoryString = window.localStorage.getItem("undoHistory")
+            const parsedUndoHistory = JSON.parse(undoHistoryString)
+            if (parsedUndoHistory instanceof Array) {
+              const last = parsedUndoHistory[parsedUndoHistory.length - 2]
+              if (last) {
+                const parsed = parse(last.value)
+                if (parsed) {
+                  // remove restored state from history
+
+                  const currentHistory = parsedUndoHistory.pop()
+                  parsedUndoHistory.pop()
+                  parsedUndoHistory.push(currentHistory)
+
+                  const newUndoHistoryString = JSON.stringify(parsedUndoHistory)
+                  window.localStorage.setItem(
+                    "undoHistory",
+                    newUndoHistoryString
+                  )
+
+                  // save old/current state to redo history
+                  let redoHistory = []
+                  try {
+                    const redoHistoryString =
+                      window.localStorage.getItem("redoHistory")
+                    const parsedRedoHistory = JSON.parse(redoHistoryString)
+                    if (parsedRedoHistory instanceof Array) {
+                      redoHistory = parsedRedoHistory
+                    }
+                  } catch {
+                    // nothing
+                  }
+                  try {
+                    const newValue = stringify(thingtimeReference)
+                    // if last history is not the same as new history
+                    redoHistory.push({
+                      timestamp: Date.now(),
+                      value: newValue,
+                    })
+                    const redoHistoryNewString = JSON.stringify(redoHistory)
+                    window.localStorage.setItem(
+                      "redoHistory",
+                      redoHistoryNewString
+                    )
+                  } catch {
+                    // nothing
+                  }
+
+                  const newThingtime = parsed
+                  set(newThingtime, true)
+                }
+              }
+            }
+          } catch {
+            // nothing
+          }
+        }
+      }
+    }
 
     window.addEventListener("keydown", keyListener)
 
     return () => {
       window.removeEventListener("keydown", keyListener)
     }
-  }, [setThingtime, thingtime, set])
+  }, [setThingtime, thingtimeReference, set])
 
   const value = {
-    thingtime,
+    thingtime: thingtimeReference,
     setThingtime,
     getThingtime,
     thingtimeRef,

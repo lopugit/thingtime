@@ -84,7 +84,7 @@ export const Nav = (props) => {
           <CommanderV1 global id="nav" rainbow></CommanderV1>
           <Center
             className="nav-right-section"
-            columnGap={[3, 5]}
+            columnGap={[3, 8]}
             height="100%"
             marginLeft="auto"
           >

@@ -243,9 +243,9 @@ export const Thingtime = (props) => {
         )
       }
     } else if (type === "undefined") {
-      return "undefined"
+      return "Imagine.."
     } else {
-      return "Something!"
+      return "Something.."
     }
   }, [thing, thingDep, type, keys])
 
@@ -375,9 +375,6 @@ export const Thingtime = (props) => {
     const clone = { ...parent }
 
     delete clone[path]
-
-    console.log("nik parentPath", parentPath)
-    console.log("nik clone", clone)
 
     setThingtime(parentPath, clone)
   }, [path, parent, parentPath, setThingtime])
