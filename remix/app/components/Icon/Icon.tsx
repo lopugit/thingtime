@@ -185,6 +185,7 @@ export const Icon = (props) => {
   return (
     <Center
       transition="all 0.2s ease-out"
+      {...props}
       {...props?.chakras}
       fontSize={props?.size}
     >

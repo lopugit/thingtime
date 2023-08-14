@@ -690,20 +690,25 @@ export const Thingtime = (props) => {
                 width="100%"
                 paddingLeft={multiplyPl(2)}
                 opacity={props?.edit ? 1 : 0}
-                border="none !important"
                 cursor="pointer"
                 transition="all 0.2s ease-out"
-                outline="none !important"
                 onClick={addNewChild}
-                onKeyDown={(e) => {
-                  if (e?.key === "Enter") {
-                    addNewChild()
-                  }
-                }}
                 paddingY={2}
-                tabIndex={0}
               >
-                <Icon size={10} name="seedling"></Icon>
+                <Icon
+                  _focus={{
+                    outline: "none !important",
+                    textShadow: "0px 0px 10px green",
+                  }}
+                  onKeyDown={(e) => {
+                    if (e?.key === "Enter") {
+                      addNewChild()
+                    }
+                  }}
+                  tabIndex={0}
+                  size={10}
+                  name="seedling"
+                ></Icon>
                 {/* <Icon size={7} name="plus"></Icon>
           <Icon size={7} name="plus"></Icon> */}
               </Flex>
