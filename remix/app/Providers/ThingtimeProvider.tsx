@@ -151,20 +151,20 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
           // nothing
         }
         // if last undoHistory does not equal new undo history
-        console.log(
-          "ThingtimeProvider saving to undo history undoHistory[undoHistory.length - 1]?.value",
-          undoHistory[undoHistory.length - 1]?.value
-        )
-        console.log(
-          "ThingtimeProvider saving to undo history stringified",
-          stringified
-        )
+        // console.log(
+        //   "ThingtimeProvider saving to undo history undoHistory[undoHistory.length - 1]?.value",
+        //   undoHistory[undoHistory.length - 1]?.value
+        // )
+        // console.log(
+        //   "ThingtimeProvider saving to undo history stringified",
+        //   stringified
+        // )
         if (undoHistory[undoHistory.length - 1]?.value !== stringified) {
           try {
-            console.log(
-              "ThingtimeProvider saving to undo history undoHistory",
-              undoHistory
-            )
+            // console.log(
+            //   "ThingtimeProvider saving to undo history undoHistory",
+            //   undoHistory
+            // )
             const limit = newThingtimeReference?.settings?.undoLimit || 999
 
             if (undoHistory?.length > limit) {
@@ -206,20 +206,20 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
             // nothing
           }
           // if last redoHistory does not equal new redo history
-          console.log(
-            "ThingtimeProvider saving to redo history redoHistory[redoHistory.length - 1]?.value",
-            redoHistory[redoHistory.length - 1]?.value
-          )
-          console.log(
-            "ThingtimeProvider saving to redo history stringified",
-            stringified
-          )
+          // console.log(
+          //   "ThingtimeProvider saving to redo history redoHistory[redoHistory.length - 1]?.value",
+          //   redoHistory[redoHistory.length - 1]?.value
+          // )
+          // console.log(
+          //   "ThingtimeProvider saving to redo history stringified",
+          //   stringified
+          // )
           if (redoHistory[redoHistory.length - 1]?.value !== stringified) {
             try {
-              console.log(
-                "ThingtimeProvider saving to redo history redoHistory",
-                redoHistory
-              )
+              // console.log(
+              //   "ThingtimeProvider saving to redo history redoHistory",
+              //   redoHistory
+              // )
               const limit = newThingtimeReference?.settings?.redoLimit || 999
 
               if (redoHistory?.length > limit) {
