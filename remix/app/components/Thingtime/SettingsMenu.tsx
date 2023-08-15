@@ -120,9 +120,10 @@ export const SettingsMenu = (props) => {
                 flexDirection="row"
                 paddingRight={basePadding * 2}
                 paddingLeft={basePadding * 1}
-                // _hover={{
-                //   background: "greys.light",
-                // }}
+                _hover={{
+                  background: "greys.light",
+                }}
+                cursor="pointer"
                 // paddingX={basePadding * 1}
                 paddingY={basePadding / 2}
               >
