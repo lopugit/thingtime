@@ -316,6 +316,7 @@ export const Commander = (props) => {
             // likely literaly javascript wasn't valid
             try {
               const fn = `() => { return ${escapedCommandValue} }`
+              const tt = thingtime
               const evalFn = eval(fn)
               const realVal = evalFn()
               const prevVal = getThingtime(commandPath)

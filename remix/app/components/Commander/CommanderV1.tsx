@@ -279,6 +279,7 @@ export const CommanderV1 = (props) => {
           try {
             // first try to execute literal javscript
             const fn = `() => { return ${commandValue} }`
+            const tt = thingtime
             const evalFn = eval(fn)
             const realVal = evalFn()
             setThingtime(commandPath, realVal)
@@ -291,6 +292,7 @@ export const CommanderV1 = (props) => {
             // likely literaly javascript wasn't valid
             try {
               const fn = `() => { return ${escapedCommandValue} }`
+              const tt = thingtime
               const evalFn = eval(fn)
               const realVal = evalFn()
               const prevVal = getThingtime(commandPath)
