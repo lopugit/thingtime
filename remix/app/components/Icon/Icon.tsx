@@ -21,6 +21,9 @@ export const Icon = (props) => {
     if (["wizard", "gandalf"]?.includes(name)) {
       return "🧙‍♂️"
     }
+    if (["two eyes"]?.includes(name)) {
+      return "👀"
+    }
     if (["box", "thing", "object"]?.includes(name)) {
       return "📦"
     }

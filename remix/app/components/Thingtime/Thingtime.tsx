@@ -1,5 +1,6 @@
 import React from "react"
 import ContentEditable from "react-contenteditable"
+import * as Chakras from "@chakra-ui/react"
 import {
   Box,
   Center,
@@ -42,15 +43,43 @@ export const Thingtime = (props) => {
   const editValueRef = React.useRef({})
 
   const depth = React.useMemo(() => {
-    return props?.depth || 1
+    return typeof props?.depth === "number" ? props?.depth : 0
   }, [props?.depth])
 
+  const render = React.useMemo(() => {
+    return props?.render || false
+  }, [props?.render])
+
+  const width = React.useMemo(() => {
+    if (props?.width) {
+      return props?.width
+    }
+    if (props?.w) {
+      return props?.w
+    }
+    if (render) {
+      return "auto"
+    }
+    return "100%"
+  }, [props?.width, props?.w, render])
+
+  const chakras = React.useMemo(() => {
+    if (!props?.edit && props?.chakra) {
+      return true
+    }
+    return false
+  }, [props?.edit, props?.chakra])
+
   const pl = React.useMemo(() => {
+    if (!props.edit && chakras) {
+      return [0]
+    }
+
     return props?.pl || [4, 6]
-  }, [props?.pl])
+  }, [props?.pl, props?.edit, chakras])
 
   const pr = React.useMemo(() => {
-    return props?.pr || (depth === 1 ? [4, 6] : 0)
+    return props?.pr || (depth === 0 ? [4, 6] : 0)
   }, [props?.pr, depth])
 
   const multiplyPl = React.useCallback(
@@ -108,6 +137,10 @@ export const Thingtime = (props) => {
   const thing = React.useMemo(() => {
     return props.thing
   }, [props.thing, childrenRef.current])
+
+  const chakra = React.useMemo(() => {
+    return !props?.edit && typeof thing?.chakra === "string" && thing?.chakra
+  }, [thing?.chakra, props?.edit])
 
   const path = React.useMemo(() => {
     return props?.path?.key || props?.path || ""
@@ -215,6 +248,10 @@ export const Thingtime = (props) => {
   }, [props?.valuePl, props?.path])
 
   const renderableValue = React.useMemo(() => {
+    if (chakras) {
+      return null
+    }
+
     if (type === "string") {
       return <MagicInput value={thing} readonly></MagicInput>
     } else if (type === "number") {
@@ -248,11 +285,15 @@ export const Thingtime = (props) => {
     } else {
       return "Something.."
     }
-  }, [thing, thingDep, type, keys])
+  }, [thing, thingDep, type, chakras, keys])
 
   const keysToUse = React.useMemo(() => {
+    if (!props?.edit && chakra) {
+      return ["children"]
+    }
+
     return keys
-  }, [keys])
+  }, [chakra, keys, props?.edit])
   // const keysToUse = flattenedKeys
 
   const template1Modes = React.useMemo(() => {
@@ -262,19 +303,20 @@ export const Thingtime = (props) => {
   const AtomicWrapper = React.useCallback((args) => {
     return (
       <Flex
+        className="atomic-wrapper"
         position="relative"
         flexDirection="row"
         flexShrink={1}
         width="100%"
         paddingLeft={args?.pl || args?.paddingLeft}
         fontSize="20px"
-        border="none"
         // whiteSpace="pre-line"
+        border="none"
         whiteSpace="pre-wrap"
         wordBreak={args?.wordBreak || "break-word"}
-        outline="none"
         // paddingY={2}
         // dangerouslySetInnerHTML={{ __html: renderableValue }}
+        outline="none"
       >
         {args?.children}
       </Flex>
@@ -308,12 +350,14 @@ export const Thingtime = (props) => {
                   key={idx}
                   seen={nextSeen}
                   edit={props?.edit}
+                  render={render}
                   circular={seen?.includes?.(nextThing)}
                   depth={depth + 1}
                   parent={thing}
                   notRoot
                   fullPath={fullPath + "." + key?.key}
                   path={key}
+                  chakra={chakra}
                   thing={nextThing}
                   // thing={{ infinite: { yes: true } }}
                   valuePl={pl}
@@ -324,6 +368,35 @@ export const Thingtime = (props) => {
       )
     }
     if (type === "object" && !circular) {
+      if (chakra) {
+        console.log("nik Chakras", Chakras)
+        const ChakraComponent = Chakras[chakra]
+
+        console.log("Thingtime is chakra", fullPath, chakra)
+
+        try {
+          if (ChakraComponent) {
+            console.log(
+              "Thingtime found ChakraComponent",
+              fullPath,
+              ChakraComponent
+            )
+            console.log("Thingtime found thing?.props", fullPath, thing?.props)
+
+            const ret = (
+              <Safe {...props}>
+                <ChakraComponent {...(thing?.props || {})}>
+                  {inner}
+                </ChakraComponent>
+              </Safe>
+            )
+            return ret
+          }
+        } catch {
+          // chakra error
+        }
+      }
+
       return (
         <Safe {...props}>
           <Flex
@@ -348,7 +421,9 @@ export const Thingtime = (props) => {
     circular,
     seen,
     type,
+    chakra,
     fullPath,
+    render,
     depth,
     thing,
     thingDep,
@@ -563,6 +638,10 @@ export const Thingtime = (props) => {
   }, [humanPath, props?.edit])
 
   const pathDom = React.useMemo(() => {
+    if (chakras) {
+      return <></>
+    }
+
     if (renderedPath) {
       return (
         <>
@@ -579,7 +658,7 @@ export const Thingtime = (props) => {
         </>
       )
     }
-  }, [renderedPath, pl, props?.edit, props?.pathPl])
+  }, [renderedPath, pl, chakras, props?.edit, props?.pathPl])
 
   const handleMouseEvent = React.useCallback(
     (e) => {
@@ -619,6 +698,10 @@ export const Thingtime = (props) => {
 
   const [showContextIcon, setShowContextIcon] = React.useState(false)
 
+  // if (render && depth >= 1) {
+  //   return thingtimeChildren
+  // }
+
   return (
     <Safe {...props} depth={depth} uuid={uuid}>
       <Flex
@@ -626,7 +709,7 @@ export const Thingtime = (props) => {
         flexDirection="column"
         // width="500px"
         rowGap={2}
-        width={props?.width || props?.w || "100%"}
+        width={width}
         maxWidth="100%"
         // marginTop={3}
         paddingRight={pr}
@@ -634,58 +717,67 @@ export const Thingtime = (props) => {
         onMouseEnter={handleMouseEvent}
         onMouseLeave={handleMouseEvent}
         {...(props.chakras || {})}
-        className={`thing uuid-${uuid}`}
+        className={`thing uuid-${uuid} edit-${props?.edit ? "true" : "false"}`}
         data-path={props?.path}
       >
         {/* {uuid?.current} */}
-        <Flex position="relative" flexDirection="row">
-          <Flex
-            alignItems="center"
-            flexDirection="row"
-            marginRight="auto"
-            onMouseEnter={() => setShowContextIcon(true)}
-            onMouseLeave={() => setShowContextIcon(false)}
-          >
-            <Flex>{pathDom}</Flex>
-            {props?.edit && (
-              <Box
-                // marginTop={-3}
-                marginTop={-1}
-                paddingLeft={1}
-                opacity={0.5}
-                cursor="pointer"
-              >
-                {typeIcon}
-              </Box>
-            )}
-            {pathDom && (
-              <Flex
-                flexDirection="row"
-                columnGap={1}
-                marginTop={-1}
-                paddingLeft={1}
-              >
-                <SettingsMenu
-                  transition="all 0.2s ease-in-out"
-                  opacity={showContextIcon ? 1 : 0}
-                  uuid={uuid}
-                  fullPath={fullPath}
-                  readonly={!props?.edit}
-                  onChangeType={onChangeType}
-                  onDelete={deleteValue}
-                ></SettingsMenu>
-              </Flex>
-            )}
+        {!chakras && (
+          <Flex position="relative" flexDirection="row">
+            <Flex
+              alignItems="center"
+              flexDirection="row"
+              marginRight="auto"
+              onMouseEnter={() => setShowContextIcon(true)}
+              onMouseLeave={() => setShowContextIcon(false)}
+            >
+              <Flex>{pathDom}</Flex>
+              {props?.edit && (
+                <Box
+                  // marginTop={-3}
+                  marginTop={-1}
+                  paddingLeft={1}
+                  opacity={0.5}
+                  cursor="pointer"
+                >
+                  {typeIcon}
+                </Box>
+              )}
+              {pathDom && (
+                <Flex
+                  flexDirection="row"
+                  columnGap={1}
+                  marginTop={-1}
+                  paddingLeft={1}
+                >
+                  <SettingsMenu
+                    transition="all 0.2s ease-in-out"
+                    opacity={showContextIcon ? 1 : 0}
+                    uuid={uuid}
+                    fullPath={fullPath}
+                    readonly={!props?.edit}
+                    onChangeType={onChangeType}
+                    onDelete={deleteValue}
+                  ></SettingsMenu>
+                </Flex>
+              )}
+            </Flex>
           </Flex>
-        </Flex>
+        )}
         {/* {showContextMenu && contextMenu} */}
         {!loading && !thingtimeChildren && atomicValue && (
-          <Box className="atomicValue">{atomicValue}</Box>
+          <Box className="atomicValue" width={render ? "auto" : ""}>
+            {atomicValue}
+          </Box>
         )}
         {!loading && thingtimeChildren && (
-          <Box className="thingtimeChildren">
+          <Box
+            className="thingtimeChildren"
+            flexGrow={0}
+            flexShrink={1}
+            width={render ? "auto" : ""}
+          >
             {thingtimeChildren}
-            {type === "object" && (
+            {!render && type === "object" && (
               <Flex
                 width="100%"
                 paddingLeft={multiplyPl(2)}

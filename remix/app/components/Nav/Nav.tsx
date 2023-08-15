@@ -19,6 +19,13 @@ export const Nav = (props) => {
     setProfileDrawerOpen(!profileDrawerOpen)
   }, [profileDrawerOpen])
 
+  const inEditorMode = React.useMemo(() => {
+    if (pathname.slice(0, 7) === "/editor") {
+      return true
+    }
+    return false
+  }, [pathname])
+
   const inEditMode = React.useMemo(() => {
     if (pathname.slice(0, 5) === "/edit") {
       return true
@@ -35,7 +42,7 @@ export const Nav = (props) => {
     return false
   }, [pathname])
 
-  const toggleEditor = React.useCallback(
+  const toggleEdit = React.useCallback(
     (e) => {
       // if first characters of pathname are /things replace with /edit
       // or if first characters of pathname are /edit replace with /things
@@ -44,6 +51,21 @@ export const Nav = (props) => {
         navigate(newPathname)
       } else if (pathname.slice(0, 5) === "/edit") {
         const newPathname = pathname.replace("/edit", "/things")
+        navigate(newPathname)
+      }
+    },
+    [pathname, navigate]
+  )
+
+  const toggleEditor = React.useCallback(
+    (e) => {
+      // if first characters of pathname are /things replace with /edit
+      // or if first characters of pathname are /edit replace with /things
+      if (pathname.slice(0, 7) === "/editor") {
+        const newPathname = pathname.replace("/editor", "/edit")
+        navigate(newPathname)
+      } else if (pathname.slice(0, 5) === "/edit") {
+        const newPathname = pathname.replace("/edit", "/editor")
         navigate(newPathname)
       }
     },
@@ -95,9 +117,28 @@ export const Nav = (props) => {
           >
             {editorToggleable && (
               <Center
-                transform="scaleX(-100%)"
+                // transform="scaleX(-100%)"
                 cursor="pointer"
                 onClick={toggleEditor}
+              >
+                <Icon
+                  chakras={{
+                    opacity: inEditorMode ? 1 : 0.3,
+                  }}
+                  size="12px"
+                  name="two eyes"
+                ></Icon>
+                {/* <Icon
+                  size="12px"
+                  name={inEditorMode ? "glowing star" : "star"}
+                ></Icon> */}
+              </Center>
+            )}
+            {editorToggleable && (
+              <Center
+                transform="scaleX(-100%)"
+                cursor="pointer"
+                onClick={toggleEdit}
               >
                 <Icon
                   chakras={{
