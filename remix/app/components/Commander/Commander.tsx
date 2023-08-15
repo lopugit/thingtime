@@ -303,6 +303,7 @@ export const Commander = (props) => {
           try {
             // first try to execute literal javscript
             const fn = `() => { return ${commandValue} }`
+            const tt = thingtime
             const evalFn = eval(fn)
             const realVal = evalFn()
             setThingtime(commandPath, realVal)
@@ -353,6 +354,7 @@ export const Commander = (props) => {
     commanderActive,
     commandIsAction,
     commandPath,
+    thingtime,
     commandValue,
     escapedCommandValue,
     getThingtime,
