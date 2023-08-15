@@ -369,7 +369,6 @@ export const Thingtime = (props) => {
     }
     if (type === "object" && !circular) {
       if (chakra) {
-        console.log("nik Chakras", Chakras)
         const ChakraComponent = Chakras[chakra]
 
         console.log("Thingtime is chakra", fullPath, chakra)

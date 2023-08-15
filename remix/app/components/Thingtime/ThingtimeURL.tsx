@@ -16,7 +16,7 @@ export const ThingtimeURL = (props) => {
   }, [matches])
 
   const path = React.useMemo(() => {
-    console.log("nik location", location)
+    console.log("ThingtimeURL location", location)
 
     // const sanitisation = ["/things", "/edit", "/editor", "/code", "/coder"]
 
