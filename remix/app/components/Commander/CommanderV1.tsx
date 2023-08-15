@@ -331,6 +331,7 @@ export const CommanderV1 = (props) => {
     commanderActive,
     commandIsAction,
     commandPath,
+    thingtime,
     commandValue,
     escapedCommandValue,
     getThingtime,
