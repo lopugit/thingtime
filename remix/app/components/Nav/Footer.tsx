@@ -54,16 +54,11 @@ export const Footer = (props) => {
           </Flex>
           <Flex alignItems="center" flexDirection="row" fontSize="xs">
             <Text>{/* copyright message */}© 2023 Thingtime</Text>
-            <Flex
-              flexDirection="row"
-              marginTop={-0.5}
-              marginRight="auto"
-              paddingLeft="5px"
-            >
-              <Icon name="rainbow" size="8px"></Icon>
-              <Icon name="unicorn" size="8px"></Icon>
-              <Icon name="wizard" size="8px"></Icon>
-            </Flex>
+          </Flex>
+          <Flex flexDirection="row" marginRight="auto">
+            <Icon name="rainbow" size="8px"></Icon>
+            <Icon name="unicorn" size="8px"></Icon>
+            <Icon name="wizard" size="8px"></Icon>
           </Flex>
         </Flex>
       </Flex>
