@@ -10,6 +10,7 @@ import { ProfileDrawer } from "./ProfileDrawer"
 
 export const Footer = (props) => {
   const investmentEmail = "invest@thingtime.com"
+  const contactEmail = "connect@thingtime.com"
 
   return (
     <Center
@@ -19,21 +20,50 @@ export const Footer = (props) => {
       paddingX={4}
     >
       <Flex width={["500px", "500px"]} maxWidth="100%">
+        {false && (
+          <Flex flexDirection="column" rowGap={3}>
+            <Flex flexDirection="column">
+              <Flex flexDirection="row" fontSize="xs">
+                <Icon name="cash" size="12px" chakras={{ pr: 1 }}></Icon>
+                To invest, please contact:
+                {/* <Icon name="money bag" size="10px" chakras={{ pl: 1 }}></Icon> */}
+              </Flex>
+              <Link to={`mailto:${investmentEmail}`}>
+                <Flex flexDirection="row">
+                  <Text color="green">{investmentEmail}</Text>
+                </Flex>
+              </Link>
+            </Flex>
+            <Flex flexDirection="column" fontSize="xs">
+              {/* copyright message */}© 2023 Thingtime
+            </Flex>
+          </Flex>
+        )}
         <Flex flexDirection="column" rowGap={3}>
           <Flex flexDirection="column">
             <Flex flexDirection="row" fontSize="xs">
-              <Icon name="cash" size="12px" chakras={{ pr: 1 }}></Icon>
-              To invest, please contact:
+              <Icon name="mail" size="12px" chakras={{ pr: 1 }}></Icon>
+              Contact
               {/* <Icon name="money bag" size="10px" chakras={{ pl: 1 }}></Icon> */}
             </Flex>
-            <Link to={`mailto:${investmentEmail}`}>
+            <Link to={`mailto:${contactEmail}`}>
               <Flex flexDirection="row">
-                <Text color="green">{investmentEmail}</Text>
+                <Text>{contactEmail}</Text>
               </Flex>
             </Link>
           </Flex>
-          <Flex flexDirection="column" fontSize="xs">
-            {/* copyright message */}© 2023 Thingtime
+          <Flex alignItems="center" flexDirection="row" fontSize="xs">
+            <Text>{/* copyright message */}© 2023 Thingtime</Text>
+            <Flex
+              flexDirection="row"
+              marginTop={-0.5}
+              marginRight="auto"
+              paddingLeft="5px"
+            >
+              <Icon name="rainbow" size="8px"></Icon>
+              <Icon name="unicorn" size="8px"></Icon>
+              <Icon name="wizard" size="8px"></Icon>
+            </Flex>
           </Flex>
         </Flex>
       </Flex>
