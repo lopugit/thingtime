@@ -49,6 +49,9 @@ export const Nav = (props) => {
       if (pathname.slice(0, 7) === "/things") {
         const newPathname = pathname.replace("/things", "/edit")
         navigate(newPathname)
+      } else if (pathname.slice(0, 7) === "/editor") {
+        const newPathname = pathname.replace("/editor", "/things")
+        navigate(newPathname)
       } else if (pathname.slice(0, 5) === "/edit") {
         const newPathname = pathname.replace("/edit", "/things")
         navigate(newPathname)
