@@ -115,7 +115,7 @@ export const Nav = (props) => {
             height="100%"
             marginLeft="auto"
           >
-            {editorToggleable && (
+            {inEditMode && (
               <Center
                 // transform="scaleX(-100%)"
                 cursor="pointer"
