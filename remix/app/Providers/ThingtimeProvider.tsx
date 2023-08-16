@@ -400,6 +400,7 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
   React.useEffect(() => {
     try {
       window.setThingtime = setThingtime
+      window.getThingtime = getThingtime
       window.thingtime = thingtimeReference
       window.tt = thingtimeReference
     } catch {
@@ -563,7 +564,7 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
     return () => {
       window.removeEventListener("keydown", keyListener)
     }
-  }, [setThingtime, thingtimeReference, set])
+  }, [setThingtime, getThingtime, thingtimeReference, set])
 
   const value = {
     thingtime: thingtimeReference,
