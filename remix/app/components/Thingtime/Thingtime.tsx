@@ -49,8 +49,8 @@ export const Thingtime = (props) => {
   }, [props?.depth])
 
   const render = React.useMemo(() => {
-    return props?.render || false
-  }, [props?.render])
+    return !props?.edit || props?.render || false
+  }, [props?.render, props?.edit])
 
   const width = React.useMemo(() => {
     if (props?.width) {
