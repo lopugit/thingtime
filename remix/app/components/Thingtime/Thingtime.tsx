@@ -40,6 +40,8 @@ export const Thingtime = (props) => {
 
   const [circular, setCircular] = React.useState(props?.circular)
 
+  const thingtimeRef = React.useRef()
+
   const editValueRef = React.useRef({})
 
   const depth = React.useMemo(() => {
@@ -304,12 +306,8 @@ export const Thingtime = (props) => {
     }
 
     return keys
-  }, [hasChakraChildren, keys])
+  }, [keys, renderChakra])
   // const keysToUse = flattenedKeys
-
-  const template1Modes = React.useMemo(() => {
-    return ["view", "edit"]
-  }, [])
 
   const AtomicWrapper = React.useCallback((args) => {
     return (
@@ -652,6 +650,59 @@ export const Thingtime = (props) => {
     return humanPath
   }, [humanPath, props?.edit])
 
+  const updatePath = React.useCallback(
+    (args) => {
+      if (typeof args?.value === "string") {
+        try {
+          const parentKeys = Object.keys(parent)
+          // create new object with new key order
+          const newObject = {}
+
+          parentKeys.forEach((key) => {
+            if (key === path) {
+              newObject[args.value] = parent[key]
+              return
+            }
+            newObject[key] = parent[key]
+          })
+          // set new object
+          setThingtime(parentPath, newObject)
+
+          // focus next input
+          const focusableNodeList = thingtimeRef?.current?.querySelectorAll?.(
+            ".magic-input-focusable"
+          )
+
+          // convert focusable to array
+          const focusable = Array.from(focusableNodeList)
+
+          const pathMagicInputFocusable = pathRef?.current?.querySelector?.(
+            ".magic-input-focusable"
+          )
+
+          const nearestMagicInput = focusable?.find((input) => {
+            if (input !== pathMagicInputFocusable) {
+              return true
+            }
+            return false
+          })
+
+          if (nearestMagicInput && nearestMagicInput?.focus) {
+            nearestMagicInput.focus()
+          }
+        } catch (err) {
+          console.error(
+            "Thingtime:657 Something went wrong reassigning path",
+            err
+          )
+        }
+      }
+    },
+    [parent, path, parentPath, setThingtime]
+  )
+
+  const pathRef = React.useRef(null)
+
   const pathDom = React.useMemo(() => {
     if (chakras) {
       return <></>
@@ -661,8 +712,10 @@ export const Thingtime = (props) => {
       return (
         <>
           <MagicInput
+            ref={pathRef}
             value={renderedPath}
             readonly={!props?.edit}
+            onEnter={updatePath}
             chakras={{
               maxWidth: "100%",
               paddingLeft: props?.pathPl || pl,
@@ -720,9 +773,10 @@ export const Thingtime = (props) => {
   return (
     <Safe {...props} depth={depth} uuid={uuid}>
       <Flex
+        ref={thingtimeRef}
         position="relative"
-        flexDirection="column"
         // width="500px"
+        flexDirection="column"
         rowGap={2}
         width={width}
         maxWidth="100%"

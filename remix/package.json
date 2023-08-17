@@ -30,6 +30,9 @@
     "react-contenteditable": "^3.3.7",
     "react-dom": "^18.2.0",
     "react-icons": "^4.10.1",
+    "react-sticky": "^6.0.3",
+    "react-sticky-el": "^2.1.0",
+    "react-visibility-sensor": "^5.1.1",
     "tinygradient": "^1.1.5",
     "uuid": "^9.0.0"
   },

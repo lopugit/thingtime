@@ -1,5 +1,7 @@
 import React from "react"
-import { Flex } from "@chakra-ui/react"
+// import { Sticky, StickyContainer } from "react-sticky"
+import Sticky from "react-sticky-el"
+import { Box, Flex } from "@chakra-ui/react"
 import { useLocation, useMatches } from "@remix-run/react"
 
 import { Thingtime } from "./Thingtime"
@@ -58,21 +60,59 @@ export const ThingtimeURL = (props) => {
     return false
   }, [pathname])
 
+  const containerRef = React.useRef(null)
+  const editorRef = React.useRef(null)
+
+  React.useEffect(() => {
+    const scrollListener = () => {
+      if (containerRef?.current?.getBoundingClientRect) {
+        const { top } = containerRef?.current?.getBoundingClientRect()
+
+        editorRef.current.style.top = `${-top}px`
+      }
+    }
+
+    window.addEventListener("scroll", scrollListener)
+
+    return () => {
+      window.removeEventListener("scroll", scrollListener)
+    }
+  }, [])
+
   return (
     <Flex
+      ref={containerRef}
+      // position="sticky"
+      position="relative"
       alignItems={inEditorMode ? "flex-start" : "center"}
       justifyContent="center"
+      // overflow="scroll"
+      // height="auto"
       flexDirection={inEditorMode ? "row" : "column"}
       maxWidth="100%"
+      // maxHeight="100vh"
     >
       {inEditorMode && (
-        <Thingtime
-          path={path}
-          thing={thing}
-          render
-          chakras={{ marginY: 200 }}
+        <Box
+          ref={editorRef}
+          position="relative"
+          // position="sticky"
+          // top={200}
+          // alignSelf="flex-start"
+          // overflow="scroll"
           width="600px"
-        ></Thingtime>
+          // width="100%"
+          maxHeight="100vh"
+          paddingY={2}
+        >
+          <Thingtime
+            path={path}
+            thing={thing}
+            render
+            chakras={{ marginY: 200 }}
+            width="600px"
+          ></Thingtime>
+        </Box>
       )}
       <Thingtime
         edit={inEditMode}

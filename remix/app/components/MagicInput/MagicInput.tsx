@@ -3,7 +3,7 @@ import { Box } from "@chakra-ui/react"
 
 import { useThingtime } from "../Thingtime/useThingtime"
 
-export const MagicInput = (props) => {
+export const MagicInput = React.forwardRef((props, ref) => {
   const { thingtime, setThingtime, loading } = useThingtime()
 
   const [inputValue, setInputValue] = React.useState()
@@ -92,9 +92,10 @@ export const MagicInput = (props) => {
     (args) => {
       const { value } = args
       props?.onValueChange?.({ value })
+      props?.onChange?.({ value })
       // updateContentEditableValue(value)
     },
-    [props?.onValueChange]
+    [props?.onValueChange, props?.onChange]
   )
 
   const updateValue = React.useCallback(
@@ -115,20 +116,36 @@ export const MagicInput = (props) => {
     [props?.onFocus]
   )
 
+  const maybeUpdateValue = React.useCallback(
+    (e) => {
+      const { key } = e
+      if (key === "Enter") {
+        if (props?.onEnter) {
+          e?.preventDefault?.()
+        }
+        props?.onEnter?.({ value: inputValue })
+      }
+    },
+    [inputValue, props?.onEnter]
+  )
+
   const dangerouslySetInnerHTML = React.useMemo(() => {
     if (!props?.readonly) {
       return { __html: contentEditableValue }
     }
     // return { __html: contentEditableValue }
   }, [contentEditableValue, props?.readonly])
+
   return (
     <Box
       position="relative"
       width="100%"
       transition={props?.transition}
       {...(props?.chakras || {})}
+      ref={ref}
     >
       <Box
+        className="magic-input-focusable"
         ref={contentEditableRef}
         width="100%"
         border="none"
@@ -146,6 +163,7 @@ export const MagicInput = (props) => {
             updateValue({ value: innerText })
           }
         }}
+        onKeyDown={maybeUpdateValue}
       >
         {props?.readonly ? props?.value : null}
       </Box>
@@ -171,4 +189,4 @@ export const MagicInput = (props) => {
       </Box>
     </Box>
   )
-}
+})
