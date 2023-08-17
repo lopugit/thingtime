@@ -82,33 +82,6 @@ Content.Nested Content = New Nested Content!
 // const initialThingtime = createInitialThingtime()
 const initialThingtime = smarts.merge(initialValues, force)
 
-// TODO: Make localStorage be loaded first before initialValues if local version exists
-// and is valid
-// Issue seems to be server id is different to client hydration
-
-// let thingtimeToUse = initialThingtime
-
-// try {
-//   const thingtimeFromLocalStorage = window.localStorage.getItem("thingtime")
-
-//   if (thingtimeFromLocalStorage) {
-//     const parsed = parse(thingtimeFromLocalStorage)
-//     if (parsed) {
-//       const localIsValid = !parsed.version || parsed.version >= force.version
-//       if (localIsValid) {
-//         const newThingtime = smarts.merge(force, parsed)
-//         thingtimeToUse = newThingtime
-//       } else {
-//         const withVersionUpdates = smarts.merge(newVersionData, parsed)
-//         const newThingtime = smarts.merge(force, withVersionUpdates)
-//         thingtimeToUse = newThingtime
-//       }
-//     }
-//   }
-// } catch (err) {
-//   console.error("Caught error restoring thingtime from localstorage", err)
-// }
-
 // initialise thingtime
 initialThingtime.thingtime = initialThingtime
 initialThingtime.tt = initialThingtime
@@ -151,20 +124,8 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
           // nothing
         }
         // if last undoHistory does not equal new undo history
-        // console.log(
-        //   "ThingtimeProvider saving to undo history undoHistory[undoHistory.length - 1]?.value",
-        //   undoHistory[undoHistory.length - 1]?.value
-        // )
-        // console.log(
-        //   "ThingtimeProvider saving to undo history stringified",
-        //   stringified
-        // )
         if (undoHistory[undoHistory.length - 1]?.value !== stringified) {
           try {
-            // console.log(
-            //   "ThingtimeProvider saving to undo history undoHistory",
-            //   undoHistory
-            // )
             const limit = newThingtimeReference?.settings?.undoLimit || 999
 
             if (undoHistory?.length > limit) {
@@ -181,8 +142,6 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
             // nothing
           }
         }
-        // window.localStorage.setItem("thingtime", stringified)
-        // }, 600)
       } catch (err) {
         console.error("There was an error saving thingtime to localStorage")
       }
@@ -205,21 +164,8 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
           } catch {
             // nothing
           }
-          // if last redoHistory does not equal new redo history
-          // console.log(
-          //   "ThingtimeProvider saving to redo history redoHistory[redoHistory.length - 1]?.value",
-          //   redoHistory[redoHistory.length - 1]?.value
-          // )
-          // console.log(
-          //   "ThingtimeProvider saving to redo history stringified",
-          //   stringified
-          // )
           if (redoHistory[redoHistory.length - 1]?.value !== stringified) {
             try {
-              // console.log(
-              //   "ThingtimeProvider saving to redo history redoHistory",
-              //   redoHistory
-              // )
               const limit = newThingtimeReference?.settings?.redoLimit || 999
 
               if (redoHistory?.length > limit) {
@@ -236,8 +182,6 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
               // nothing
             }
           }
-          // window.localStorage.setItem("thingtime", stringified)
-          // }, 600)
         } catch (err) {
           console.error("There was an error saving thingtime to localStorage")
         }

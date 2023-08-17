@@ -287,13 +287,24 @@ export const Thingtime = (props) => {
     }
   }, [thing, thingDep, type, chakras, keys])
 
+  const hasChakraChildren = React.useMemo(() => {
+    return !props?.edit && chakra && render && thing?.children
+  }, [chakra, props?.edit, render, thing?.children])
+
+  const renderChakra = React.useMemo(() => {
+    if (!props?.edit && chakra && render) {
+      return true
+    }
+    return false
+  }, [chakra, props?.edit, render])
+
   const keysToUse = React.useMemo(() => {
-    if (!props?.edit && chakra) {
+    if (renderChakra) {
       return ["children"]
     }
 
     return keys
-  }, [chakra, keys, props?.edit])
+  }, [hasChakraChildren, keys])
   // const keysToUse = flattenedKeys
 
   const template1Modes = React.useMemo(() => {
@@ -357,7 +368,7 @@ export const Thingtime = (props) => {
                   notRoot
                   fullPath={fullPath + "." + key?.key}
                   path={key}
-                  chakra={chakra}
+                  chakraChildren={chakra}
                   thing={nextThing}
                   // thing={{ infinite: { yes: true } }}
                   valuePl={pl}
@@ -383,11 +394,9 @@ export const Thingtime = (props) => {
             console.log("Thingtime found thing?.props", fullPath, thing?.props)
 
             const ret = (
-              <Safe {...props}>
-                <ChakraComponent {...(thing?.props || {})}>
-                  {inner}
-                </ChakraComponent>
-              </Safe>
+              <ChakraComponent {...(thing?.props || {})}>
+                {inner}
+              </ChakraComponent>
             )
             return ret
           }
@@ -396,22 +405,27 @@ export const Thingtime = (props) => {
         }
       }
 
+      // TODO: Is it safe to spread props
+      // because having props as a dependency will cause a re-render every time
+
+      if (props?.chakraChildren) {
+        return inner
+      }
+
       return (
-        <Safe {...props}>
-          <Flex
-            className="nested-things"
-            position="relative"
-            flexDirection="column"
-            rowGap={9}
-            // w={'500px'}
-            // w={['200px', '500px']}
-            maxWidth="100%"
-            paddingLeft={valuePl}
-            paddingY={props?.path ? 4 : 0}
-          >
-            {inner}
-          </Flex>
-        </Safe>
+        <Flex
+          className="nested-things"
+          position="relative"
+          flexDirection="column"
+          rowGap={!chakra ? 9 : 0}
+          // w={'500px'}
+          // w={['200px', '500px']}
+          maxWidth="100%"
+          paddingLeft={valuePl}
+          paddingY={!chakra && props?.path ? 4 : 0}
+        >
+          {inner}
+        </Flex>
       )
     }
   }, [
@@ -420,13 +434,15 @@ export const Thingtime = (props) => {
     circular,
     seen,
     type,
+    props?.chakraChildren,
+    props?.path,
+    props?.edit,
     chakra,
     fullPath,
     render,
     depth,
     thing,
     thingDep,
-    props,
     valuePl,
     pl,
     keys,
@@ -697,9 +713,9 @@ export const Thingtime = (props) => {
 
   const [showContextIcon, setShowContextIcon] = React.useState(false)
 
-  // if (render && depth >= 1) {
-  //   return thingtimeChildren
-  // }
+  if (props?.chakraChildren) {
+    return thingtimeChildren
+  }
 
   return (
     <Safe {...props} depth={depth} uuid={uuid}>
@@ -720,7 +736,7 @@ export const Thingtime = (props) => {
         data-path={props?.path}
       >
         {/* {uuid?.current} */}
-        {!chakras && (
+        {!chakras && !chakra && (
           <Flex position="relative" flexDirection="row">
             <Flex
               alignItems="center"

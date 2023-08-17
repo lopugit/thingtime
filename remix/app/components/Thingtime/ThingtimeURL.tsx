@@ -70,7 +70,6 @@ export const ThingtimeURL = (props) => {
           path={path}
           thing={thing}
           render
-          chakra
           chakras={{ marginY: 200 }}
           width="600px"
         ></Thingtime>
