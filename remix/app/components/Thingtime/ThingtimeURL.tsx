@@ -99,7 +99,7 @@ export const ThingtimeURL = (props) => {
           // position="sticky"
           // top={200}
           // alignSelf="flex-start"
-          // overflow="scroll"
+          overflow="scroll"
           width="600px"
           // width="100%"
           maxHeight="100vh"
@@ -109,7 +109,7 @@ export const ThingtimeURL = (props) => {
             path={path}
             thing={thing}
             render
-            chakras={{ marginY: 200 }}
+            chakras={{ marginY: "200px" }}
             width="600px"
           ></Thingtime>
         </Box>
@@ -118,7 +118,7 @@ export const ThingtimeURL = (props) => {
         edit={inEditMode}
         path={path}
         thing={thing}
-        chakras={{ marginY: 200 }}
+        chakras={{ marginY: "200px" }}
         width="600px"
       ></Thingtime>
     </Flex>

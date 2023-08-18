@@ -10,10 +10,12 @@ import {
 } from "@chakra-ui/react"
 
 import { colors } from "./colors"
+import { space } from "./space"
 
 export const theme = extendTheme({
   colors,
   // edit Input defaultProps
+  space,
   styles: {
     global: {
       // make all elements padding and margin animate
