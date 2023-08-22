@@ -32,9 +32,13 @@ export const usePath = (props?: any) => {
         set = true
       }
     })
-    // if (!set) {
-    //   setMode("things")
-    // }
+    if (!set) {
+      setMode((mode) => {
+        if (!mode) {
+          return "things"
+        }
+      })
+    }
   }, [pathname, modes])
 
   const changePath = React.useCallback(
