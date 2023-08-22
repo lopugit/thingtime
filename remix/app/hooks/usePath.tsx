@@ -37,6 +37,7 @@ export const usePath = (props?: any) => {
         if (!mode) {
           return "things"
         }
+        return mode
       })
     }
   }, [pathname, modes])
