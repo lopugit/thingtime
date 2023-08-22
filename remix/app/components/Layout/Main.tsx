@@ -7,6 +7,11 @@ import { ProfileDrawer } from "../Nav/ProfileDrawer"
 export const Main = (props) => {
   return (
     <Flex
+      sx={{
+        "*": {
+          whiteSpace: "pre-wrap",
+        },
+      }}
       position="relative"
       alignItems="center"
       justifyContent="center"

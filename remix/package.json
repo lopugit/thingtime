@@ -20,6 +20,7 @@
     "@vercel/analytics": "^0.1.11",
     "@vercel/remix": "^1.15.0",
     "draft-js": "^0.11.7",
+    "emojis-list": "^3.0.0",
     "flatted": "^3.2.7",
     "fuse.js": "^6.6.2",
     "gradient-path": "^2.3.0",

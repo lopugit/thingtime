@@ -1,6 +1,7 @@
 import React from "react"
 import ClickAwayListener from "react-click-away-listener"
 import { Center, Flex, Input } from "@chakra-ui/react"
+import { useLocation } from "@remix-run/react"
 import Fuse from "fuse.js"
 
 import { Rainbow } from "../Rainbow/Rainbow"
@@ -8,11 +9,14 @@ import { Thingtime } from "../Thingtime/Thingtime"
 import { useThingtime } from "../Thingtime/useThingtime"
 
 import { sanitise } from "~/functions/sanitise"
+import { usePath } from "~/hooks/usePath"
 import { getParentPath } from "~/smarts"
 
 export const CommanderV1 = (props) => {
   const { thingtime, setThingtime, getThingtime, thingtimeRef, paths } =
     useThingtime()
+
+  const { mode, changePath } = usePath()
 
   const commanderId = React.useMemo(() => {
     return props?.id || "global"
@@ -36,7 +40,7 @@ export const CommanderV1 = (props) => {
   const [active, setActive] = React.useState(false)
   const [contextPath, setContextPath] = React.useState()
 
-  const mode = React.useMemo(() => {
+  const commanderMode = React.useMemo(() => {
     return props?.mode || "value"
   }, [props?.mode])
 
@@ -318,8 +322,13 @@ export const CommanderV1 = (props) => {
           // const newValue = setThingtime(commandPath, prevValue)
 
           console.log("Setting context path", commandPath)
-          setContextPath(commandPath)
-          setShowContext(true, "commandContainsPath check")
+          // setContextPath(commandPath)
+
+          changePath({
+            path: commandPath,
+          })
+
+          // setShowContext(true, "commandContainsPath check")
         }
       } catch (err) {
         console.error("Caught error on commander onEnter", err)
@@ -328,6 +337,8 @@ export const CommanderV1 = (props) => {
   }, [
     hoveredSuggestion,
     selectSuggestion,
+    mode,
+    changePath,
     commanderActive,
     commandIsAction,
     commandPath,
@@ -421,9 +432,9 @@ export const CommanderV1 = (props) => {
     <ClickAwayListener onClickAway={closeCommander}>
       <Flex
         position="absolute"
+        zIndex={9999}
         top={0}
         right={0}
-        // zIndex={99999}
         // position='fixed'
         // top='100px'
         left={0}
@@ -438,6 +449,7 @@ export const CommanderV1 = (props) => {
       >
         <Flex
           position="absolute"
+          zIndex={9999}
           top="100%"
           right={0}
           left={0}
@@ -528,6 +540,7 @@ export const CommanderV1 = (props) => {
             >
               <Center
                 position="relative"
+                zIndex={9999}
                 overflow="hidden"
                 width={["100%", "400px"]}
                 maxWidth={[mobileVW, "100%"]}
@@ -553,6 +566,7 @@ export const CommanderV1 = (props) => {
                       color: "greys.dark",
                     },
                   }}
+                  zIndex={9999}
                   width="100%"
                   height="100%"
                   background="grey"
@@ -570,6 +584,7 @@ export const CommanderV1 = (props) => {
           {!props?.rainbow && (
             <Center
               position="relative"
+              zIndex={9999}
               overflow="hidden"
               width={["100%", "400px"]}
               maxWidth={[mobileVW, "100%"]}
@@ -588,6 +603,7 @@ export const CommanderV1 = (props) => {
                     color: "greys.dark",
                   },
                 }}
+                zIndex={9999}
                 width="100%"
                 height="100%"
                 background="grey"

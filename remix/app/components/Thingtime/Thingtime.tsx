@@ -25,6 +25,7 @@ import { Safe } from "../Safety/Safe"
 import { SettingsMenu } from "./SettingsMenu"
 import { useThingtime } from "./useThingtime"
 
+import { useThings } from "~/hooks/useThings"
 import { getThing } from "~/smarts"
 
 export const Thingtime = (props) => {
@@ -32,7 +33,10 @@ export const Thingtime = (props) => {
   // and add button to expand circular reference
   // up to 1 level deep
 
-  const { thingtime, setThingtime, getThingtime, loading } = useThingtime()
+  const { append } = useThings()
+
+  const { thingtime, setThingtime, getThingtime, loading, events } =
+    useThingtime()
 
   const [uuid, setUuid] = React.useState(undefined)
 
@@ -41,6 +45,8 @@ export const Thingtime = (props) => {
   const [circular, setCircular] = React.useState(props?.circular)
 
   const thingtimeRef = React.useRef()
+
+  const [showFullPathContext, setShowFullPathContext] = React.useState(false)
 
   const editValueRef = React.useRef({})
 
@@ -65,20 +71,20 @@ export const Thingtime = (props) => {
     return "100%"
   }, [props?.width, props?.w, render])
 
-  const chakras = React.useMemo(() => {
-    if (!props?.edit && props?.chakra) {
+  const chakraChild = React.useMemo(() => {
+    if (!props?.edit && props?.chakraChild) {
       return true
     }
     return false
-  }, [props?.edit, props?.chakra])
+  }, [props?.edit, props?.chakraChild])
 
   const pl = React.useMemo(() => {
-    if (!props.edit && chakras) {
+    if (!props.edit && chakraChild) {
       return [0]
     }
 
     return props?.pl || [4, 6]
-  }, [props?.pl, props?.edit, chakras])
+  }, [props?.pl, props?.edit, chakraChild])
 
   const pr = React.useMemo(() => {
     return props?.pr || (depth === 0 ? [4, 6] : 0)
@@ -138,7 +144,7 @@ export const Thingtime = (props) => {
 
   const thing = React.useMemo(() => {
     return props.thing
-  }, [props.thing, childrenRef.current])
+  }, [props.thing, uuid, childrenRef.current])
 
   const chakra = React.useMemo(() => {
     return !props?.edit && typeof thing?.chakra === "string" && thing?.chakra
@@ -250,7 +256,7 @@ export const Thingtime = (props) => {
   }, [props?.valuePl, props?.path])
 
   const renderableValue = React.useMemo(() => {
-    if (chakras) {
+    if (chakraChild) {
       return null
     }
 
@@ -287,11 +293,7 @@ export const Thingtime = (props) => {
     } else {
       return "Something.."
     }
-  }, [thing, thingDep, type, chakras, keys])
-
-  const hasChakraChildren = React.useMemo(() => {
-    return !props?.edit && chakra && render && thing?.children
-  }, [chakra, props?.edit, render, thing?.children])
+  }, [thing, thingDep, type, chakraChild, keys])
 
   const renderChakra = React.useMemo(() => {
     if (!props?.edit && chakra && render) {
@@ -366,7 +368,7 @@ export const Thingtime = (props) => {
                   notRoot
                   fullPath={fullPath + "." + key?.key}
                   path={key}
-                  chakraChildren={chakra}
+                  chakraChild={chakra}
                   thing={nextThing}
                   // thing={{ infinite: { yes: true } }}
                   valuePl={pl}
@@ -382,6 +384,8 @@ export const Thingtime = (props) => {
 
         console.log("Thingtime is chakra", fullPath, chakra)
 
+        const rawChildren = thing?.rawChildren
+
         try {
           if (ChakraComponent) {
             console.log(
@@ -393,6 +397,7 @@ export const Thingtime = (props) => {
 
             const ret = (
               <ChakraComponent {...(thing?.props || {})}>
+                {rawChildren}
                 {inner}
               </ChakraComponent>
             )
@@ -406,7 +411,7 @@ export const Thingtime = (props) => {
       // TODO: Is it safe to spread props
       // because having props as a dependency will cause a re-render every time
 
-      if (props?.chakraChildren) {
+      if (props?.chakraChild) {
         return inner
       }
 
@@ -432,7 +437,7 @@ export const Thingtime = (props) => {
     circular,
     seen,
     type,
-    props?.chakraChildren,
+    props?.chakraChild,
     props?.path,
     props?.edit,
     chakra,
@@ -460,29 +465,33 @@ export const Thingtime = (props) => {
   }, [updateValue])
 
   const onChangeType = React.useCallback(
-    (type) => {
-      const newType =
-        type?.key || type?.value || type?.label || type?.icon || type
+    (args) => {
+      const { type, wrap } = args
+      const typeValue =
+        typeof type?.value === "function" ? type?.value() : type?.value
 
-      if (newType === "object") {
-        updateValue({ value: {} })
-      } else if (newType === "array") {
-        updateValue({ value: [] })
-      } else if (newType === "string") {
-        updateValue({ value: "" })
-      } else if (newType === "number") {
-        updateValue({ value: 0 })
-      } else if (newType === "boolean") {
-        updateValue({ value: false })
-      } else if (newType === "undefined") {
-        updateValue({ value: undefined })
-      } else if (newType === "null") {
-        updateValue({ value: null })
-      } else if (newType === "any") {
-        updateValue({ value: null })
-      } else {
-        console.error("Unknown type", newType)
+      if (type) {
+        const wrapTarget = type?.wrap
+        if (wrap && wrapTarget) {
+          const newValue = append({
+            thing: typeValue[wrapTarget],
+            value: thing,
+          })
+          typeValue[wrapTarget] = newValue
+          if (typeValue) {
+            updateValue({ value: typeValue })
+          }
+        } else {
+          updateValue({ value: typeValue })
+        }
       }
+    },
+    [updateValue, thing, append, fullPath]
+  )
+
+  const onWrapType = React.useCallback(
+    (type) => {
+      // nothing
     },
     [updateValue]
   )
@@ -704,7 +713,7 @@ export const Thingtime = (props) => {
   const pathRef = React.useRef(null)
 
   const pathDom = React.useMemo(() => {
-    if (chakras) {
+    if (chakraChild) {
       return <></>
     }
 
@@ -726,7 +735,7 @@ export const Thingtime = (props) => {
         </>
       )
     }
-  }, [renderedPath, pl, chakras, props?.edit, props?.pathPl])
+  }, [renderedPath, pl, chakraChild, props?.edit, props?.pathPl])
 
   const handleMouseEvent = React.useCallback(
     (e) => {
@@ -740,33 +749,73 @@ export const Thingtime = (props) => {
     [uuid]
   )
 
-  const addNewChild = React.useCallback(() => {
-    const newChild = null
+  const addNewChild = React.useCallback(
+    (args) => {
+      const { type } = args
+      const newChild =
+        typeof type?.value === "function" ? type?.value() : type?.value || null
 
-    if (thing instanceof Array) {
-      // add new child to array
-      const newValue = [...thing, newChild]
-      setThingtime(fullPath, newValue)
-      return
-    }
+      if (thing instanceof Array) {
+        // add new child to array
+        const newValue = [...thing, newChild]
+        setThingtime(fullPath, newValue)
+        return
+      }
 
-    const newChildBasePath = "New Value"
-    // find increment that thing doesn't already have New Value N+1
-    let increment = 0
-    let newPath = newChildBasePath
-    while (Object.hasOwnProperty.call(thing, newPath) && increment <= 999) {
-      increment++
-      newPath = newChildBasePath + " " + increment
-    }
-    const newChildPath = newPath
-    const newChildFullPath = fullPath + "." + newChildPath
-    // create new child on thing using setThingtime
-    setThingtime(newChildFullPath, newChild)
-  }, [fullPath, setThingtime, thing])
+      const newChildBasePath = "New Value"
+      // find increment that thing doesn't already have New Value N+1
+      let increment = 0
+      let newPath = newChildBasePath
+      while (Object.hasOwnProperty.call(thing, newPath) && increment <= 999) {
+        increment++
+        newPath = newChildBasePath + " " + increment
+      }
+      const newChildPath = newPath
+      const newChildFullPath = fullPath + "." + newChildPath
+      // create new child on thing using setThingtime
+      setThingtime(newChildFullPath, newChild)
+    },
+    [fullPath, setThingtime, thing]
+  )
 
   const [showContextIcon, setShowContextIcon] = React.useState(false)
+  const [showNewContextIcon, setShowNewContextIcon] = React.useState(false)
 
-  if (props?.chakraChildren) {
+  // should be absolute last
+  React.useEffect(() => {
+    try {
+      window.meta.things[uuid] = {
+        thing: props?.thing,
+        props,
+        state: {
+          chakra,
+          chakraChild,
+          circular,
+          depth,
+          fullPath,
+          parent,
+          parentPath,
+          path,
+        },
+      }
+    } catch {
+      // nothing
+    }
+  }, [
+    thing,
+    props,
+    uuid,
+    chakra,
+    chakraChild,
+    circular,
+    depth,
+    fullPath,
+    parent,
+    parentPath,
+    path,
+  ])
+
+  if (chakra || chakraChild) {
     return thingtimeChildren
   }
 
@@ -790,7 +839,7 @@ export const Thingtime = (props) => {
         data-path={props?.path}
       >
         {/* {uuid?.current} */}
-        {!chakras && !chakra && (
+        {!chakraChild && !chakra && (
           <Flex position="relative" flexDirection="row">
             <Flex
               alignItems="center"
@@ -824,7 +873,7 @@ export const Thingtime = (props) => {
                     uuid={uuid}
                     fullPath={fullPath}
                     readonly={!props?.edit}
-                    onChangeType={onChangeType}
+                    onType={onChangeType}
                     onDelete={deleteValue}
                   ></SettingsMenu>
                 </Flex>
@@ -848,14 +897,37 @@ export const Thingtime = (props) => {
             {thingtimeChildren}
             {!render && type === "object" && (
               <Flex
+                position="relative"
                 width="100%"
                 paddingLeft={multiplyPl(2)}
                 opacity={props?.edit ? 1 : 0}
                 cursor="pointer"
                 transition="all 0.2s ease-out"
                 onClick={addNewChild}
+                onMouseEnter={() => {
+                  setShowFullPathContext(true)
+                  setShowNewContextIcon(true)
+                }}
+                onMouseLeave={() => {
+                  setShowFullPathContext(false)
+                  setShowNewContextIcon(false)
+                }}
                 paddingY={2}
               >
+                <Flex
+                  position="absolute"
+                  bottom="100%"
+                  left={0}
+                  display={showFullPathContext ? "flex" : "none"}
+                  fontSize="sm"
+                  background="greys.light"
+                  borderRadius={6}
+                  pointerEvents="none"
+                  paddingX={3}
+                  paddingY={1}
+                >
+                  {fullPath}
+                </Flex>
                 <Icon
                   _focus={{
                     outline: "none !important",
@@ -870,6 +942,25 @@ export const Thingtime = (props) => {
                   size={10}
                   name="seedling"
                 ></Icon>
+                <Flex
+                  marginLeft={2}
+                  onClick={(e) => {
+                    e?.preventDefault()
+                    e?.stopPropagation()
+                    e?.nativeEvent?.stopImmediatePropagation()
+                  }}
+                >
+                  <SettingsMenu
+                    transition="all 0.2s ease-in-out"
+                    opacity={showNewContextIcon ? 1 : 0}
+                    uuid={uuid}
+                    iconSize={10}
+                    fullPath={fullPath}
+                    readonly={!props?.edit}
+                    onType={addNewChild}
+                  ></SettingsMenu>
+                </Flex>
+
                 {/* <Icon size={7} name="plus"></Icon>
           <Icon size={7} name="plus"></Icon> */}
               </Flex>

@@ -30,7 +30,207 @@ try {
 
 const force = {
   settings: {
-    undoLimit: 999,
+    types: {
+      javascript: {
+        any: {
+          type: "any",
+          value: () => {
+            return null
+          },
+        },
+        object: {
+          type: "object",
+          value: () => {
+            return {}
+          },
+        },
+        array: {
+          type: "array",
+          value: () => {
+            return []
+          },
+        },
+        string: {
+          type: "string",
+          value: () => {
+            return ""
+          },
+        },
+        number: {
+          type: "number",
+          value: () => {
+            return 0
+          },
+        },
+        boolean: {
+          type: "boolean",
+          value: () => {
+            return false
+          },
+        },
+        function: {
+          type: "function",
+          value: () => {
+            return () => {}
+          },
+        },
+      },
+      custom: {
+        "Thingtime Logo": {
+          type: "chakra",
+          value: {
+            type: "chakra",
+            chakra: "Box",
+            props: {
+              fontSize: 12,
+            },
+            rawChildren: ["🌈 Thingtime"],
+          },
+        },
+        "Violet Container Centered": {
+          name: "Violet Container Centered",
+          type: "chakra",
+          icon: "💜",
+          wrap: "children",
+          value: {
+            name: "Violet Container Centered",
+            type: "chakra",
+            chakra: "Center",
+            props: {
+              bg: "#AB47BC",
+              padding: 4,
+              borderRadius: 12,
+            },
+            children: [],
+          },
+        },
+        "Indigo Container Centered": {
+          name: "Indigo Container Centered",
+          type: "chakra",
+          icon: "🩷",
+          wrap: "children",
+          value: {
+            name: "Indigo Container Centered",
+            type: "chakra",
+            chakra: "Center",
+            props: {
+              bg: "#5C6BC0",
+              padding: 4,
+              borderRadius: 12,
+            },
+            children: [],
+          },
+        },
+        "Blue Container Centered": {
+          name: "Blue Container Centered",
+          type: "chakra",
+          icon: "💙",
+          wrap: "children",
+          value: {
+            name: "Blue Container Centered",
+            type: "chakra",
+            chakra: "Center",
+            props: {
+              bg: "#42A5F5",
+              padding: 4,
+              borderRadius: 12,
+            },
+            children: [],
+          },
+        },
+        "Green Container Centered": {
+          name: "Green Container Centered",
+          type: "chakra",
+          icon: "💚",
+          wrap: "children",
+          value: {
+            name: "Green Container Centered",
+            type: "chakra",
+            chakra: "Center",
+            props: {
+              bg: "#66BB6A",
+              padding: 4,
+              borderRadius: 12,
+            },
+            children: [],
+          },
+        },
+        "Yellow Container Centered": {
+          name: "Yellow Container Centered",
+          type: "chakra",
+          icon: "💛",
+          wrap: "children",
+          value: {
+            name: "Yellow Container Centered",
+            type: "chakra",
+            chakra: "Center",
+            props: {
+              bg: "#FFEE58",
+              padding: 4,
+              borderRadius: 12,
+            },
+            children: [],
+          },
+        },
+        "Orange Container Centered": {
+          name: "Orange Container Centered",
+          type: "chakra",
+          icon: "🧡",
+          wrap: "children",
+          value: {
+            name: "Orange Container Centered",
+            type: "chakra",
+            chakra: "Center",
+            props: {
+              bg: "#FF7043",
+              padding: 4,
+              borderRadius: 12,
+            },
+            children: [],
+          },
+        },
+        "Red Container Centered": {
+          name: "Red Container Centered",
+          type: "chakra",
+          icon: "❤️",
+          wrap: "children",
+          value: {
+            name: "Red Container Centered",
+            type: "chakra",
+            chakra: "Center",
+            props: {
+              bg: "#C62828",
+              padding: 4,
+              borderRadius: 12,
+            },
+            children: [],
+          },
+        },
+        "Left Aligned": {
+          type: "chakra",
+          value: {
+            type: "chakra",
+            chakra: "Flex",
+            props: {
+              mr: "auto",
+            },
+            children: [],
+          },
+        },
+        "Right Aligned": {
+          type: "chakra",
+          value: {
+            type: "chakra",
+            chakra: "Flex",
+            props: {
+              ml: "auto",
+            },
+            children: [],
+          },
+        },
+      },
+    },
+    // undoLimit: 999,
     // commander: {
     //   nav: {
     //     commanderActive: false,

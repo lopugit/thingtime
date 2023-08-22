@@ -103,14 +103,14 @@ export const ThingtimeURL = (props) => {
           width="600px"
           // width="100%"
           maxHeight="100vh"
-          paddingY={2}
+          // paddingY={2}
         >
           <Thingtime
             path={path}
             thing={thing}
             render
             chakras={{ marginY: "200px" }}
-            width="600px"
+            // width="600px"
           ></Thingtime>
         </Box>
       )}

@@ -9,6 +9,15 @@ export const SettingsMenu = (props) => {
   const [show, setShow] = useState(false)
   const hideRef = React.useRef(null)
   const [opacity, setOpacity] = React.useState(props?.opacity === 0 ? 0 : 1)
+  const [pinStatus, setPinStatus] = React.useState(false)
+
+  const stateRef = React.useRef({
+    pinStatus,
+  })
+
+  React.useEffect(() => {
+    stateRef.current.pinStatus = pinStatus
+  }, [pinStatus])
 
   const { thingtime, events } = useThingtime()
 
@@ -25,7 +34,10 @@ export const SettingsMenu = (props) => {
   React.useEffect(() => {
     const subscription = events.subscribe((event) => {
       if (event?.type === "settings-menu-hide" && event?.uuid !== uuid) {
-        setShow(false)
+        if (!stateRef?.current?.pinStatus || event?.force) {
+          setShow(false)
+          setOpacity(0)
+        }
       }
     })
 
@@ -40,8 +52,10 @@ export const SettingsMenu = (props) => {
       setOpacity(props?.opacity)
     } else {
       opacityRef.current = setInterval(() => {
-        setOpacity(props?.opacity)
-        setShow(false)
+        if (!stateRef?.current?.pinStatus) {
+          setOpacity(props?.opacity)
+          setShow(false)
+        }
       }, waitTime)
     }
   }, [props?.opacity])
@@ -53,17 +67,23 @@ export const SettingsMenu = (props) => {
         type: "settings-menu-hide",
         uuid,
       })
+    } else if (!show) {
+      setPinStatus(false)
     }
   }, [show, props?.opacity, events, uuid])
 
   const maybeHide = React.useCallback(() => {
     clearInterval(hideRef?.current)
     hideRef.current = setTimeout(() => {
-      setShow(false)
+      if (!stateRef?.current?.pinStatus) {
+        setShow(false)
+        setOpacity(0)
+      }
     }, waitTime)
   }, [])
 
   const showMenu = React.useCallback(() => {
+    clearInterval(hideRef?.current)
     setShow(true)
   }, [])
 
@@ -76,22 +96,41 @@ export const SettingsMenu = (props) => {
   }, [])
 
   const types = React.useMemo(() => {
-    const ret = [
-      { label: "any", icon: "any" },
-      "object",
-      "array",
-      "string",
-      "number",
-      "boolean",
-    ]
-    return ret
-  }, [])
+    const baseTypes = thingtime?.settings?.types?.javascript || {}
+    const baseTypeKeys = Object.keys(baseTypes)
 
-  const onChangeType = React.useCallback(
-    (type) => {
-      props?.onChangeType?.(type)
+    const customTypes = thingtime?.settings?.types?.custom || {}
+    const customTypeKeysRaw = Object.keys(customTypes)
+    const customTypeKeys = customTypeKeysRaw?.filter((key) => {
+      return !baseTypeKeys?.includes?.(key)
+    })
+
+    const types = [
+      ...(baseTypeKeys?.map?.((key) => {
+        return {
+          ...baseTypes?.[key],
+          key,
+        }
+      }) || []),
+      ...(customTypeKeys?.map?.((key) => {
+        return {
+          ...customTypes?.[key],
+          key,
+        }
+      }) || []),
+    ]
+
+    return types
+  }, [
+    thingtime?.settings?.types?.javascript,
+    thingtime?.settings?.types?.custom,
+  ])
+
+  const onType = React.useCallback(
+    (args) => {
+      props?.onType?.(args)
     },
-    [props?.onChangeType]
+    [props?.onType]
   )
   const onDelete = React.useCallback(
     (type) => {
@@ -100,7 +139,8 @@ export const SettingsMenu = (props) => {
     [props?.onDelete]
   )
 
-  const iconSize = 10
+  const childIconSize = 10
+  const iconSize = props?.iconSize || 7
 
   return (
     <ClickAwayListener onClickAway={hideMenu}>
@@ -120,7 +160,7 @@ export const SettingsMenu = (props) => {
           // onClick={deleteValue}
           transition="all 0.2s ease-in-out"
         >
-          <Icon name="wizard" size={7}></Icon>
+          <Icon name="wizard" size={iconSize}></Icon>
         </Flex>
         <Flex
           position="absolute"
@@ -131,6 +171,20 @@ export const SettingsMenu = (props) => {
           opacity={show ? 1 : 0}
           pointerEvents={show ? "all" : "none"}
         >
+          <Flex
+            position="absolute"
+            top={0}
+            right={0}
+            padding="5px"
+            cursor="pointer"
+            onClick={() => setPinStatus((prev) => !prev)}
+          >
+            <Icon
+              opacity={pinStatus ? 1 : 0.5}
+              name={pinStatus ? "pinned" : "pin"}
+              size="8px"
+            ></Icon>
+          </Flex>
           <Flex
             flexDirection="column"
             // rowGap={basePadding / 3}
@@ -143,8 +197,8 @@ export const SettingsMenu = (props) => {
               <Flex
                 alignItems="center"
                 flexDirection="row"
-                paddingRight={basePadding * 2}
-                paddingLeft={basePadding * 1}
+                // paddingRight={basePadding}
+                paddingLeft={basePadding}
                 _hover={{
                   background: "greys.light",
                 }}
@@ -152,7 +206,11 @@ export const SettingsMenu = (props) => {
                 // paddingX={basePadding * 1}
                 paddingY={basePadding / 2}
               >
-                <Icon marginBottom="-2px" name="cyclone" size={iconSize}></Icon>
+                <Icon
+                  marginBottom="-2px"
+                  name="cyclone"
+                  size={childIconSize}
+                ></Icon>
                 <Text marginTop="-2px" paddingLeft={2} fontSize="xs">
                   Types
                 </Text>
@@ -161,6 +219,8 @@ export const SettingsMenu = (props) => {
             <Flex
               flexDirection="column"
               // rowGap={basePadding}
+              overflowY="scroll"
+              maxHeight="300px"
               background="greys.lightt"
               cursor="pointer"
             >
@@ -176,32 +236,53 @@ export const SettingsMenu = (props) => {
                         },
                       }}
                       cursor="pointer"
-                      onClick={() => onChangeType(type?.key || type)}
+                      onClick={() => onType({ type })}
                       paddingY={1}
                     >
                       <Flex
                         alignItems="center"
                         flexDirection="row"
                         width="100%"
-                        paddingRight={basePadding * 4}
+                        paddingRight={basePadding}
                         paddingLeft={basePadding * 2}
                         paddingY={basePadding / 2}
                       >
                         <Icon
                           marginBottom="-2px"
                           name={type?.icon || type?.key || type?.label || type}
-                          size={iconSize}
+                          size={childIconSize}
                         ></Icon>
                         <Text marginTop="-2px" paddingLeft={2} fontSize="xs">
                           {type?.label || type?.key || type}
                         </Text>
+                        {type?.wrap && (
+                          <Flex
+                            marginLeft="auto"
+                            _hover={{
+                              transform: "scale(1.3)",
+                            }}
+                            transition="all 0.2s ease-out"
+                            onClick={(e) => {
+                              e?.preventDefault?.()
+                              e?.stopPropagation?.()
+                              // cancel bubble
+                              e?.nativeEvent?.stopImmediatePropagation?.()
+                              onType({
+                                type,
+                                wrap: true,
+                              })
+                            }}
+                          >
+                            <Icon name="wrap" size={childIconSize}></Icon>
+                          </Flex>
+                        )}
                       </Flex>
                     </Flex>
                   )
                   return ret
                 })}
             </Flex>
-            {!props?.readonly && (
+            {!props?.readonly && props?.onDelete && (
               <Flex
                 alignItems="center"
                 flexDirection="row"
@@ -213,7 +294,11 @@ export const SettingsMenu = (props) => {
                 paddingX={basePadding * 1}
                 paddingY={basePadding / 2}
               >
-                <Icon marginBottom="-2px" name="bin" size={iconSize}></Icon>
+                <Icon
+                  marginBottom="-2px"
+                  name="bin"
+                  size={childIconSize}
+                ></Icon>
                 <Text marginTop="-2px" paddingLeft={2} fontSize="xs">
                   Recycle
                 </Text>

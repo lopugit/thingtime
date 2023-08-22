@@ -79,7 +79,7 @@ export const Nav = (props) => {
     <>
       <Box
         position="fixed"
-        zIndex={999}
+        zIndex={9999}
         top={0}
         right={0}
         left={0}

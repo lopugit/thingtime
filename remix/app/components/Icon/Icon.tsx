@@ -1,5 +1,6 @@
 import React from "react"
 import { Center } from "@chakra-ui/react"
+import emojis from "emojis-list"
 
 export const Icon = (props) => {
   const name = props?.name
@@ -183,6 +184,28 @@ export const Icon = (props) => {
       }
       return "🌀"
     }
+    if (["function", "lambda"]?.includes(name)) {
+      return "📐"
+    }
+    if (["pin", "pinned", "located"]?.includes(name)) {
+      return "📌"
+    }
+
+    if (["wrap", "wrapped"]?.includes(name)) {
+      return "🎁"
+      // return "🎀"
+    }
+
+    if (emojis?.includes(name)) {
+      return name
+    }
+
+    if (["random"]?.includes(name)) {
+      return emojis[Math.floor(Math.random() * emojis.length)]
+    }
+
+    // question mark
+    return "❓"
   }, [name])
 
   return (

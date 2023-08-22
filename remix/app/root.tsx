@@ -68,7 +68,7 @@ const setThingtime = (glob) => {
       stats: {
         db: {},
         limit: 9999,
-        maxDepth: 10,
+        maxDepth: 99,
         count: 0,
       },
       things: {},
