@@ -1,5 +1,6 @@
 import React, { createContext } from "react"
 import flatted, { parse, stringify } from "flatted"
+import { Subject } from "rxjs"
 
 import { sanitise } from "~/functions/sanitise"
 import { smarts } from "~/smarts"
@@ -10,6 +11,7 @@ export interface ThingtimeContextInterface {
   getThingtime: any
   thingtimeRef: any
   loading: boolean
+  events: Subject<any>
 }
 
 export const ThingtimeContext = createContext<ThingtimeContextInterface | null>(
@@ -95,6 +97,12 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
   })
 
   const [loading, setLoading] = React.useState(true)
+
+  const [events, setEvents] = React.useState(null)
+
+  if (!events) {
+    setEvents(() => new Subject())
+  }
 
   const set = React.useCallback((newThingtime, ignoreUndoRedo?: any) => {
     const newThingtimeReference = {
@@ -347,6 +355,7 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
       window.getThingtime = getThingtime
       window.thingtime = thingtimeReference
       window.tt = thingtimeReference
+      window.events = events
     } catch {
       // nothing
     }
@@ -508,7 +517,7 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
     return () => {
       window.removeEventListener("keydown", keyListener)
     }
-  }, [setThingtime, getThingtime, thingtimeReference, set])
+  }, [setThingtime, events, getThingtime, thingtimeReference, set])
 
   const value = {
     thingtime: thingtimeReference,
@@ -517,6 +526,7 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
     thingtimeRef,
     paths,
     loading,
+    events,
   }
 
   return (

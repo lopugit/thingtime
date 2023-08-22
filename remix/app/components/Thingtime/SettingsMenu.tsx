@@ -3,15 +3,36 @@ import ClickAwayListener from "react-click-away-listener"
 import { Center, Flex, Text } from "@chakra-ui/react"
 
 import { Icon } from "../Icon/Icon"
+import { useThingtime } from "./useThingtime"
 
 export const SettingsMenu = (props) => {
   const [show, setShow] = useState(false)
   const hideRef = React.useRef(null)
   const [opacity, setOpacity] = React.useState(props?.opacity === 0 ? 0 : 1)
 
+  const { thingtime, events } = useThingtime()
+
   const opacityRef = React.useRef(null)
 
   const waitTime = 1555
+
+  const [uuid, setUuid] = React.useState(null)
+
+  React.useEffect(() => {
+    setUuid(Math.random().toString(36).substring(7))
+  }, [])
+
+  React.useEffect(() => {
+    const subscription = events.subscribe((event) => {
+      if (event?.type === "settings-menu-hide" && event?.uuid !== uuid) {
+        setShow(false)
+      }
+    })
+
+    return () => {
+      subscription?.unsubscribe?.()
+    }
+  }, [events, uuid])
 
   React.useEffect(() => {
     clearInterval(opacityRef?.current)
@@ -28,8 +49,12 @@ export const SettingsMenu = (props) => {
   React.useEffect(() => {
     if (show || props?.opacity) {
       clearInterval(hideRef?.current)
+      events.next({
+        type: "settings-menu-hide",
+        uuid,
+      })
     }
-  }, [show, props?.opacity])
+  }, [show, props?.opacity, events, uuid])
 
   const maybeHide = React.useCallback(() => {
     clearInterval(hideRef?.current)
