@@ -196,6 +196,10 @@ export const Icon = (props) => {
       // return "🎀"
     }
 
+    if (["dinosaur", "dino"]?.includes(name)) {
+      return "🦕"
+    }
+
     if (emojis?.includes(name)) {
       return name
     }
