@@ -5,6 +5,10 @@ import { RainbowText } from "./rainbowText"
 
 export const TextAnimation1 = (props) => {
   const texts = React.useMemo(() => {
+    if (props?.texts?.length) {
+      return props?.texts
+    }
+
     return [
       "thingtime",
       "vibrant",
@@ -16,7 +20,7 @@ export const TextAnimation1 = (props) => {
       "love",
       // 'tt'
     ]
-  }, [])
+  }, [props?.texts])
 
   const [titleText, setTitleText] = React.useState(texts[0])
 
@@ -48,5 +52,5 @@ export const TextAnimation1 = (props) => {
     }, newTimeout)
   }, [titleText])
 
-  return <RainbowText>{titleText}</RainbowText>
+  return <RainbowText ce={props?.ce}>{titleText}</RainbowText>
 }

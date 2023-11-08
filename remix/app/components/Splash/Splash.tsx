@@ -8,9 +8,18 @@ export const Splash = (props) => {
       alignItems="center"
       justifyContent="center"
       width="100vw"
-      height="100vh"
+      maxWidth="100vw"
+      minHeight="100vh"
+      paddingY="100px"
     >
-      <TextAnimation1></TextAnimation1>
+      <Flex
+        alignItems="center"
+        justifyContent="center"
+        width="800px"
+        textAlign="center"
+      >
+        <TextAnimation1 ce={props?.ce} texts={props?.texts}></TextAnimation1>
+      </Flex>
     </Flex>
   )
 }
