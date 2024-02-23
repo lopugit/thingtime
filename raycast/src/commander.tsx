@@ -8,7 +8,7 @@
  * Last modified  : 2023-07-06 15:47:53
  */
 
-import { Action, ActionPanel, getPreferenceValues, showToast, Toast, Icon, List, openCommandPreferences } from "@raycast/api";
+import { Action, ActionPanel, getPreferenceValues, showToast, Toast, Icon, List, openCommandPreferences, closeMainWindow, showHUD } from "@raycast/api";
 
 import any from "./operations/anyOperation";
 import { getSelectedFiles, getSelectedImages } from "./utilities/utils";
@@ -34,11 +34,7 @@ export default async function Command(props: any) {
     
     openNewFinderWindow(props)
     
-    // show toast of done
-    await showToast({ title: "Done", style: Toast.Style.Success });
-    
-    // use echo "tell application \"System Events\" to key code 53" | osascript to close raycast
-    execSync('osascript -e \'tell application "System Events" to key code 53\'')
+    await showHUD(`🌈 New Finder Window 🦄`)
     
     return
     
