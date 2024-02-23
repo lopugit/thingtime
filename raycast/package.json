@@ -146,10 +146,10 @@
       ]
     },
     {
-      "name": "commanderMp3ToMp4",
-      "title": "mp3 to mp4",
+      "name": "commanderMp4ToMp3",
+      "title": "mp4 to mp3",
       "description": "Converts an mp4 into an mp3 using ffmpeg at 320Kbps",
-      "mode": "view",
+      "mode": "no-view",
       "fallbackText": "test2",
       "keywords": [
         "commander",
@@ -158,7 +158,7 @@
       ],
       "preferences": [
         {
-          "name": "name",
+          "name": "mp4ToMp3",
           "required": false,
           "type": "textfield",
           "key": "name",

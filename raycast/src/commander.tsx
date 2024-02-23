@@ -39,8 +39,29 @@ export default async function Command(props: any) {
     return
     
   }
-  console.log('nik process.argv', process.argv)
-  console.log('nik process.cwd()', process.cwd())
+  // log preferences
+  console.log(preferences)
+  
+  if (Object.hasOwnProperty.call(preferences, 'mp4ToMp3')) {
+    
+    console.log('here !')
+    
+    const selectedFiles = await getSelectedFiles();
+
+    await runOperation({
+      operation: () => any(selectedFiles, 'MP3'),
+      selectedImages: selectedFiles,
+      inProgressMessage: "Conversion in progress...",
+      successMessage: "Converted",
+      failureMessage: "Failed to convert",
+    });
+    
+    await showHUD(`🌈 MP4 to MP3 🦄`)
+    
+    return
+    
+  }
+  
   return (
     <List searchBarPlaceholder="Search image transformations...">
       <List.EmptyView
