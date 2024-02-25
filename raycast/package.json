@@ -176,6 +176,14 @@
       "mode": "view",
       "preferences": [
         {
+          "label": "WEBP",
+          "name": "showWEBP",
+          "description": "Whether to show WEBP as a conversion option",
+          "type": "checkbox",
+          "default": true,
+          "required": false
+        },
+        {
           "title": "Enabled Formats",
           "label": "ASTC",
           "name": "showASTC",
@@ -324,14 +332,6 @@
           "label": "TIFF",
           "name": "showTIFF",
           "description": "Whether to show TIFF as a conversion option",
-          "type": "checkbox",
-          "default": true,
-          "required": false
-        },
-        {
-          "label": "WEBP",
-          "name": "showWEBP",
-          "description": "Whether to show WEBP as a conversion option",
           "type": "checkbox",
           "default": true,
           "required": false

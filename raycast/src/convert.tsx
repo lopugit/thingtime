@@ -19,6 +19,7 @@ import runOperation from "./operations/runOperation";
  * All supported image formats for conversion.
  */
 const FORMATS = [
+  "WEBP",
   "ASTC",
   "BMP",
   "DDS",
