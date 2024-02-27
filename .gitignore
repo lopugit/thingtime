@@ -1,3 +1,7 @@
+.DS_Store
+.vscode
+.env
+
 app/node_modules
 app-next/node_modules
 api/node_modules
@@ -6,8 +10,5 @@ api/node_modules
 localhost-key.pem
 localhost.pem
 
-.vscode
-
-.env
-
 yarn-error.log
+pnpm-lock.yaml
