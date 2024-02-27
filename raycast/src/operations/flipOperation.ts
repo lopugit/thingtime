@@ -2,7 +2,6 @@
  * @file operations/flipOperation.ts
  *
  * @summary Image flipping operation with support for basic image formats, SVGs, WebP, and PDFs.
- * @author Stephen Kaplan <skaplanofficial@gmail.com>
  *
  * Created at     : 2023-07-05 23:16:12
  * Last modified  : 2023-07-06 15:48:56

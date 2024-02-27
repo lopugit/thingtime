@@ -2,7 +2,6 @@
  * @file flip-horizontally.ts
  *
  * @summary Raycast command to flip selected images horizontally.
- * @author Stephen Kaplan <skaplanofficial@gmail.com>
  *
  * Created at     : 2023-07-06 14:54:33
  * Last modified  : 2023-07-18 18:48:24

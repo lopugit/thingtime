@@ -2,7 +2,6 @@
  * @file utilities/utils.ts
  *
  * @summary Helper functions used throughout the extension.
- * @author Stephen Kaplan <skaplanofficial@gmail.com>
  *
  * Created at     : 2023-07-06 14:48:00
  * Last modified  : 2024-01-27 13:31:10

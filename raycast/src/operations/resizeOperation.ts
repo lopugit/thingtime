@@ -2,7 +2,6 @@
  * @file operations/resizeOperation.ts
  *
  * @summary Image resizing operation with support for basic image formats, SVGs, and WebP.
- * @author Stephen Kaplan <skaplanofficial@gmail.com>
  *
  * Created at     : 2023-07-05 23:31:23
  * Last modified  : 2023-07-06 14:52:02

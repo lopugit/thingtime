@@ -2,7 +2,6 @@
  * @file convert.tsx
  *
  * @summary Raycast command to convert selected images between various formats.
- * @author Stephen Kaplan <skaplanofficial@gmail.com>
  *
  * Created at     : 2023-07-06 14:53:25
  * Last modified  : 2023-07-06 15:47:53

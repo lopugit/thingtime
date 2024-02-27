@@ -2,7 +2,6 @@
  * @file operations/filterOperation.ts
  *
  * @summary Image filter operation with support for basic image formats, SVGs, WebP, and PDFs.
- * @author Stephen Kaplan <skaplanofficial@gmail.com>
  *
  * Created at     : 2023-07-dd 00:32:49
  * Last modified  : 2023-07-dd 00:32:49

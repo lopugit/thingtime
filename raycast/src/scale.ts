@@ -2,7 +2,6 @@
  * @file scale.ts
  *
  * @summary Raycast command to scale selected images by a given factor.
- * @author Stephen Kaplan <skaplanofficial@gmail.com>
  *
  * Created at     : 2023-07-06 14:56:29
  * Last modified  : 2023-07-18 18:48:52

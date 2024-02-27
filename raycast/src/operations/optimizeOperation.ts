@@ -2,7 +2,6 @@
  * @file operations/optimizeOperation.ts
  *
  * @summary Image optimization operation with support for basic image formats, SVGs, and WebP.
- * @author Stephen Kaplan <skaplanofficial@gmail.com>
  *
  * Created at     : 2023-07-05 23:49:16
  * Last modified  : 2023-07-06 14:51:57

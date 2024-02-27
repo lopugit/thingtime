@@ -21,7 +21,6 @@
   ],
   "license": "MIT",
   "preferences": [
-    
     {
       "title": "Image Input",
       "name": "inputMethod",
@@ -87,7 +86,6 @@
       "default": true,
       "required": false
     }
-    
   ],
   "commands": [
     {
@@ -168,7 +166,6 @@
         }
       ]
     },
-    
     {
       "name": "convert",
       "title": "Convert Images",
@@ -350,11 +347,11 @@
         "transform"
       ]
     }
-    
   ],
   "dependencies": {
     "@raycast/api": "^1.48.8",
     "@raycast/utils": "^1.4.18",
+    "fuse.js": "^7.0.0",
     "mathjs": "^11.8.2",
     "run-applescript": "^6.1.0",
     "svgo": "^3.0.2",

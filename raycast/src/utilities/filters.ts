@@ -2,7 +2,6 @@
  * @file utilities/filters.ts
  *
  * @summary Helper functions and resources for applying filters to images and PDFs using Core Image and ASObjC.
- * @author Stephen Kaplan <skaplanofficial@gmail.com>
  *
  * Created at     : 2023-07-dd 00:44:28
  * Last modified  : 2023-07-dd 00:44:28

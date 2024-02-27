@@ -2,7 +2,6 @@
  * @file rotate.ts
  *
  * @summary Raycast command to rotate selected images by a specified number of degrees.
- * @author Stephen Kaplan <skaplanofficial@gmail.com>
  *
  * Created at     : 2023-07-06 14:56:15
  * Last modified  : 2023-07-18 18:48:47

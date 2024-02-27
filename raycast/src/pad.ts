@@ -2,7 +2,6 @@
  * @file pad.ts
  *
  * @summary Raycast command to add padding to selected images.
- * @author Stephen Kaplan <skaplanofficial@gmail.com>
  *
  * Created at     : 2023-07-06 14:55:36
  * Last modified  : 2023-07-18 18:48:38

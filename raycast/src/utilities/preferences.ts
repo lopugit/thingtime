@@ -2,7 +2,6 @@
  * @file utilities/preferences.ts
  *
  * @summary Preferences for the extension as a whole and for individual commands.
- * @author Stephen Kaplan <skaplanofficial@gmail.com>
  *
  * Created at     : 2023-07-06 15:34:53
  * Last modified  : 2023-07-06 15:41:56

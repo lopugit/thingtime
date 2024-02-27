@@ -2,7 +2,6 @@
  * @file operations/convertOperation.ts
  *
  * @summary Image conversion operation with support for basic image formats, SVGs, WebP, and PDFs.
- * @author Stephen Kaplan <skaplanofficial@gmail.com>
  *
  * Created at     : 2023-07-dd 00:19:37
  * Last modified  : 2024-01-27 13:31:19

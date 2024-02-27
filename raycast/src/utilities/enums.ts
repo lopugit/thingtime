@@ -2,7 +2,6 @@
  * @file utilities/enums.ts
  *
  * @summary Enumerations used throughout the extension.
- * @author Stephen Kaplan <skaplanofficial@gmail.com>
  *
  * Created at     : 2023-07-06 00:52:09
  * Last modified  : 2023-07-06 15:48:29

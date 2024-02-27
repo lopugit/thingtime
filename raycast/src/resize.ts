@@ -2,7 +2,6 @@
  * @file resize.ts
  *
  * @summary Raycast command to resize selected images to a specified width and/or height.
- * @author Stephen Kaplan <skaplanofficial@gmail.com>
  *
  * Created at     : 2023-07-06 14:55:58
  * Last modified  : 2023-07-18 18:48:42

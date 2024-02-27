@@ -2,7 +2,6 @@
  * @file operations/rotateOperation.ts
  *
  * @summary Image rotation operation with support for basic image formats, SVGs, WebP, and PDFs.
- * @author Stephen Kaplan <skaplanofficial@gmail.com>
  *
  * Created at     : 2023-07-05 23:24:24
  * Last modified  : 2023-07-06 14:52:04

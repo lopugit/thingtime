@@ -2,7 +2,6 @@
  * @file utilities/clipboard.ts
  *
  * @summary Utilities for interacting with and getting images from the clipboard.
- * @author Stephen Kaplan <skaplanofficial@gmail.com>
  *
  * Created at     : 2023-07-06 14:50:26
  * Last modified  : 2023-07-06 15:48:31

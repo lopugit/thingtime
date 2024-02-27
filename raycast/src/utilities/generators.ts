@@ -2,7 +2,6 @@
  * @file utilities/generators.ts
  *
  * @summary Image generators and associated utilities.
- * @author Stephen Kaplan <skaplanofficial@gmail.com>
  *
  * Created at     : 2023-07-06 11:54:14
  * Last modified  : 2023-07-06 16:47:11

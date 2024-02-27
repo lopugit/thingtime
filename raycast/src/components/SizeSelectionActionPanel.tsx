@@ -2,7 +2,6 @@
  * @file components/SizeSelectionActionPanel.tsx
  *
  * @summary Action panel for image size selection grid items.
- * @author Stephen Kaplan <skaplanofficial@gmail.com>
  *
  * Created at     : 2023-07-06 16:46:33
  * Last modified  : 2023-07-06 16:46:49

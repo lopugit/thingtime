@@ -2,7 +2,6 @@
  * @file operations/runOperation.ts
  *
  * @summary Runs an operation on the selected images.
- * @author Stephen Kaplan <skaplanofficial@gmail.com>
  *
  * Created at     : 2023-07-18 18:45:28
  * Last modified  : 2023-07-18 18:46:08

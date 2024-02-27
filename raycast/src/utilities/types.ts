@@ -2,7 +2,6 @@
  * @file utilities/types.ts
  *
  * @summary Types used throughout the extension.
- * @author Stephen Kaplan <skaplanofficial@gmail.com>
  *
  * Created at     : 2023-07-06 14:47:41
  * Last modified  : 2023-07-06 15:48:21

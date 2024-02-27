@@ -2,7 +2,6 @@
  * @file apply-filter.tsx
  *
  * @summary Raycast command to apply filters on selected images.
- * @author Stephen Kaplan <skaplanofficial@gmail.com>
  *
  * Created at     : 2023-07-06 14:52:33
  * Last modified  : 2023-07-06 15:47:50
