@@ -1,7 +1,7 @@
 module.exports = {
   apps: [
     {
-      script: 'npm run remix',
+      script: 'npm run app',
       name: 'tt',
       namespace: 'thingtime'
     }

@@ -4,10 +4,10 @@
   "description": "Thing Time",
   "main": "none",
   "scripts": {
-    "remix": "npm run dev --prefix remix",
+    "app": "npm run dev --prefix app",
     "api": "npm run dev --prefix api",
-    "build": "npm run build --prefix remix",
-    "postinstall": "pnpm i --prefix remix ; pnpm i --prefix=api"
+    "build": "npm run build --prefix app",
+    "postinstall": "pnpm i --prefix app ; pnpm i --prefix=api"
   },
   "repository": {
     "type": "git",
