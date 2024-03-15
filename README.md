@@ -1,4 +1,5 @@
 # 🌈 Welcome 👋 to Thingtime 🦄 🧠
+https://thingtime.com
 
 Thingtime is a powerful platform for storing and sharing information of all kinds. Whether you want to keep track of your personal notes, collaborate on a project with your team, or build a new app that relies on rich data, Thingtime has you covered.
 
