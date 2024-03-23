@@ -2,12 +2,12 @@
  * @type {import('@remix-run/dev').AppConfig}
  */
 module.exports = {
-  ignoredRouteFiles: ['**/.*']
+  ignoredRouteFiles: ["**/.*"],
   // future: {
   // unstable_dev: true
   // appServerPort: 3999
   // }
-  // appDirectory: "app",
+  appDirectory: "src",
   // assetsBuildDirectory: "public/build",
   // serverBuildPath: "build/index.js",
   // publicPath: "/build/",

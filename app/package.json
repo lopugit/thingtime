@@ -5,7 +5,8 @@
     "build": "remix build",
     "dev": "remix dev --port 9999",
     "lint": "eslint --ext .js,.ts,.jsx,.tsx .",
-    "lint-fix": "eslint --ext .js,.ts,.jsx,.tsx . --fix"
+    "lint-fix": "eslint --ext .js,.ts,.jsx,.tsx . --fix",
+    "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,css,scss,md}\""
   },
   "dependencies": {
     "@chakra-ui/react": "^2.7.1",
