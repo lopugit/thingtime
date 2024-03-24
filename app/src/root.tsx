@@ -1,26 +1,15 @@
 // import type { MetaFunction } from "@vercel/remix"
-import {
-  Links,
-  LiveReload,
-  Meta,
-  Outlet,
-  Scripts,
-  ScrollRestoration,
-} from "@remix-run/react"
-import { Analytics } from "@vercel/analytics/react"
+import { Links, LiveReload, Meta, Outlet, Scripts, ScrollRestoration } from '@remix-run/react';
+import { Analytics } from '@vercel/analytics/react';
 
-import { Main } from "./components/Layout/Main"
-import { useIcons } from "./hooks/useIcons"
-import { ChakraWrapper } from "./Providers/Chakra/ChakraWrapper"
-import { ThingtimeProvider } from "./Providers/ThingtimeProvider"
+import { Globals } from './globals/GlobalStyles';
 
-function Document({
-  children,
-  title = "Thingtime",
-}: {
-  children: React.ReactNode
-  title?: string
-}) {
+import { Main } from './components/Layout/Main';
+import { useIcons } from './hooks/useIcons';
+import { ChakraWrapper } from './Providers/Chakra/ChakraWrapper';
+import { ThingtimeProvider } from './Providers/ThingtimeProvider';
+
+function Document({ children, title = 'Thingtime' }: { children: React.ReactNode; title?: string }) {
   return (
     <html lang="en">
       <head>
@@ -32,17 +21,18 @@ function Document({
       </head>
       <body>
         {children}
+        <Globals />
         <ScrollRestoration />
         <Scripts />
-        <LiveReload />
+        {/* <LiveReload /> */}
         <Analytics />
       </body>
     </html>
-  )
+  );
 }
 
 export default function App() {
-  useIcons()
+  useIcons();
 
   return (
     <Document>
@@ -54,7 +44,7 @@ export default function App() {
         </ThingtimeProvider>
       </ChakraWrapper>
     </Document>
-  )
+  );
 }
 
 // limiter
@@ -69,17 +59,17 @@ const setThingtime = (glob) => {
         db: {},
         limit: 9999,
         maxDepth: 99,
-        count: 0,
+        count: 0
       },
-      things: {},
-    }
+      things: {}
+    };
   } catch (err) {
     // will error on server
   }
-}
+};
 
 try {
-  setThingtime(window)
+  setThingtime(window);
 } catch {
-  setThingtime(globalThis)
+  setThingtime(globalThis);
 }

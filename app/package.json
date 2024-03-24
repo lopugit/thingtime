@@ -2,8 +2,8 @@
   "private": true,
   "sideEffects": false,
   "scripts": {
-    "build": "remix build",
-    "dev": "remix dev --port 9999",
+    "build": "remix vite:build",
+    "dev": "remix vite:dev",
     "lint": "eslint --ext .js,.ts,.jsx,.tsx .",
     "lint-fix": "eslint --ext .js,.ts,.jsx,.tsx . --fix",
     "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,css,scss,md}\""
@@ -15,13 +15,14 @@
     "@fortawesome/free-regular-svg-icons": "^6.4.0",
     "@fortawesome/free-solid-svg-icons": "^6.4.0",
     "@fortawesome/react-fontawesome": "^0.2.0",
-    "@remix-run/node": "^1.15.0",
-    "@remix-run/react": "^1.15.0",
-    "@remix-run/serve": "^1.15.0",
+    "@remix-run/node": "^2.8.1",
+    "@remix-run/react": "^2.8.1",
+    "@remix-run/serve": "^2.8.1",
     "@vercel/analytics": "^0.1.11",
     "@vercel/remix": "^1.15.0",
     "draft-js": "^0.11.7",
     "emojis-list": "^3.0.0",
+    "emotion": "^11.0.0",
     "flatted": "^3.2.7",
     "fuse.js": "^6.6.2",
     "gradient-path": "^2.3.0",
@@ -40,8 +41,8 @@
     "uuid": "^9.0.0"
   },
   "devDependencies": {
-    "@remix-run/dev": "^1.15.0",
-    "@remix-run/eslint-config": "^1.15.0",
+    "@remix-run/dev": "^2.8.1",
+    "@remix-run/eslint-config": "^2.8.1",
     "@shopify/eslint-plugin": "^42.1.0",
     "@types/eslint": "^8.40.2",
     "@types/react": "^18.0.25",
@@ -57,7 +58,9 @@
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-simple-import-sort": "^10.0.0",
     "eslint-plugin-unused-imports": "^2.0.0",
-    "typescript": "^4.9.3"
+    "typescript": "^4.9.3",
+    "vite": "^5.1.0",
+    "vite-tsconfig-paths": "^4.3.2"
   },
   "resolutions": {
     "@types/react": "^17.0.2"
