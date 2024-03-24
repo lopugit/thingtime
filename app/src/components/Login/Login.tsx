@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Flex, Button, FormControl, Input, Spinner } from '@chakra-ui/react';
+import { Flex, Button, FormControl, Input, Spinner, Link } from '@chakra-ui/react';
 import { useFetcher } from '@remix-run/react';
 
 export const Login = (props) => {
@@ -65,7 +65,7 @@ export const Login = (props) => {
               borderRadius="5px"
               outline="none"
               onChange={(e) => setUsername(e?.target?.value)}
-              placeholder="💌 Email"
+              placeholder="Email 💌"
               type="email"
               value={username}
             />
@@ -84,7 +84,7 @@ export const Login = (props) => {
               borderRadius="5px"
               outline="none"
               onChange={(e) => setPassword(e?.target?.value)}
-              placeholder="🔑 Password"
+              placeholder="Password 🔑"
               type="password"
               value={password}
             />
