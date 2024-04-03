@@ -20,7 +20,7 @@ export interface ExtensionPreferences {
    * The strategy for handling the result of the image processing, i.e. where to save or display the result. One of {@link ImageResultHandling}.
    */
   imageResultHandling: string;
-  
+
   /**
    * Whether to use lossless conversions with cwebp
    */
@@ -31,6 +31,7 @@ export interface ExtensionPreferences {
  * Preferences for the convert command. Specifies which image formats to show in the conversion formats list.
  */
 export interface ConvertPreferences {
+  trim: boolean;
   showASTC: boolean;
   showBMP: boolean;
   showDDS: boolean;

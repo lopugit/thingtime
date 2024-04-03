@@ -144,6 +144,29 @@
       ]
     },
     {
+      "name": "commanderTrim",
+      "title": "Trim image",
+      "description": "Will trim all whitespace from an image",
+      "mode": "no-view",
+      "fallbackText": "test2",
+      "keywords": [
+        "commander",
+        "thingtime",
+        "ai"
+      ],
+      "preferences": [
+        {
+          "name": "name",
+          "required": false,
+          "type": "textfield",
+          "key": "name",
+          "title": "Name of Command to run",
+          "description": "The name of the command/function to run",
+          "defaultValue": "trim"
+        }
+      ]
+    },
+    {
       "name": "commanderMp4ToMp3",
       "title": "mp4 to mp3",
       "description": "Converts an mp4 into an mp3 using ffmpeg at 320Kbps",
@@ -156,7 +179,7 @@
       ],
       "preferences": [
         {
-          "name": "mp4ToMp3",
+          "name": "name",
           "required": false,
           "type": "textfield",
           "key": "name",
@@ -167,12 +190,31 @@
       ]
     },
     {
-      "name": "convert",
+      "name": "commanderConvert",
       "title": "Convert Images",
       "description": "Convert the selected images to the specified format",
       "mode": "view",
       "preferences": [
         {
+          "name": "name",
+          "required": false,
+          "type": "textfield",
+          "key": "name",
+          "title": "Name of Command to run",
+          "description": "The name of the command/function to run",
+          "defaultValue": "convert"
+        },
+        {
+          "title": "Additional",
+          "label": "Trim",
+          "name": "trim",
+          "description": "Whether to trim the image",
+          "type": "checkbox",
+          "default": false,
+          "required": false
+        },
+        {
+          "title": "Enabled Formats",
           "label": "WEBP",
           "name": "showWEBP",
           "description": "Whether to show WEBP as a conversion option",
@@ -181,7 +223,6 @@
           "required": false
         },
         {
-          "title": "Enabled Formats",
           "label": "ASTC",
           "name": "showASTC",
           "description": "Whether to show ASTC as a conversion option",

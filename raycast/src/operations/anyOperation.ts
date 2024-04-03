@@ -15,7 +15,7 @@ import path from "path";
 import { environment, getPreferenceValues } from "@raycast/api";
 
 import { convertPDF, convertSVG, moveImageResultsToFinalDestination } from "../utilities/utils";
-import { ExtensionPreferences } from "../utilities/preferences";
+import { ConvertPreferences, ExtensionPreferences } from "../utilities/preferences";
 import { ImageResultHandling } from "../utilities/enums";
 
 /**
@@ -25,13 +25,19 @@ import { ImageResultHandling } from "../utilities/enums";
  * @param desiredType The desired format to convert the images to.
  * @returns A promise that resolves when the operation is complete.
  */
-export default async function any(sourcePaths: string[], desiredType: string) {
+export default async function any(sourcePaths: string[], desiredType: string, trim?: boolean) {
   const preferences = getPreferenceValues<ExtensionPreferences>();
+
+  const convertPreferences = getPreferenceValues<ConvertPreferences & ExtensionPreferences>();
+
+  trim = trim || convertPreferences?.trim || desiredType?.includes("Trimmed");
 
   const resultPaths = [];
   for (const item of sourcePaths) {
+    const extension = desiredType.toLowerCase()?.replace("trimmed", "");
+
     const pathComponents = item.split(".");
-    let newPath = pathComponents.slice(0, -1).join("") + "." + desiredType.toLowerCase();
+    let newPath = pathComponents.slice(0, -1).join("");
 
     if (preferences.imageResultHandling == ImageResultHandling.SaveToDownloads) {
       newPath = path.join(os.homedir(), "Downloads", path.basename(newPath));
@@ -52,9 +58,26 @@ export default async function any(sourcePaths: string[], desiredType: string) {
       );
       iter++;
     }
-    
-    console.log('nik desiredType', desiredType)
-    
+
+    console.log("nik trim", trim);
+
+    console.log("nik desiredType", desiredType);
+
+    if (desiredType?.includes("Trimmed")) {
+      desiredType = desiredType?.replace("Trimmed", "");
+    }
+
+    console.log("nik desiredType", desiredType);
+
+    const trimmedPath = `${newPath}.${extension}`;
+    if (trim) {
+      newPath = `${newPath}.tmp.${extension}`;
+    } else {
+      newPath = `${newPath}.${extension}`;
+    }
+
+    console.log("nik desiredType", desiredType);
+
     if (desiredType === "MP3") {
       // const platform = os.arch() === "arm64" ? "/arm" : "/x86";
       // execSync(`chmod +x ${environment.assetsPath}/webp${platform}/cwebp`);
@@ -62,13 +85,32 @@ export default async function any(sourcePaths: string[], desiredType: string) {
       // use ${item} as input.mp4 and ${newPath} as output.mp3
       execSync(`ffmpeg -i "${item}" -vn -ar 44100 -ac 2 -ab 320k -f mp3 "${newPath}"`);
       // resultPaths.push(newPath);
-      
+    } else if (desiredType === "Trim") {
+      // using convert -trim ${item} ${newPath}
+      execSync(`convert -trim "${item}" "${newPath}"`);
     } else if (desiredType === "WEBP") {
       // Input Format -> WebP
       // detect platform is arm or x86
       const platform = os.arch() === "arm64" ? "/arm" : "/x86";
       execSync(`chmod +x ${environment.assetsPath}/webp${platform}/cwebp`);
-      execSync(`${environment.assetsPath}/webp${platform}/cwebp ${preferences?.cwebpLossless ? '-lossless' : ''} "${item}" -o "${newPath}"`);
+      execSync(
+        `${environment.assetsPath}/webp${platform}/cwebp ${
+          preferences?.cwebpLossless ? "-lossless" : ""
+        } "${item}" -o "${newPath}"`
+      );
+
+      console.log("nik trim", trim);
+
+      if (trim) {
+        // const trimmedPath =
+        // execSync(`echo $(which convert) >> /tmp/convert.txt`);
+        // execSync(`convert -trim "${newPath}" "${trimmedPath}"`);
+        // /opt/homebrew/bin/convert
+        execSync(`/opt/homebrew/bin/convert -trim "${newPath}" "${trimmedPath}"`);
+
+        // remove the tmp file
+        fs.unlinkSync(newPath);
+      }
     } else if (pathComponents.at(-1)?.toLowerCase() == "svg") {
       // SVG -> NSBitmapImageRep -> Desired Format
       convertSVG(desiredType, item, newPath);

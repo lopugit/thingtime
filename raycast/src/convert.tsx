@@ -38,13 +38,14 @@ const FORMATS = [
   "PVR",
   "TGA",
   "TIFF",
-  "WEBP",
   "SVG",
 ];
 
 export default function Command() {
   const preferences = getPreferenceValues<ConvertPreferences & ExtensionPreferences>();
   const enabledFormats = FORMATS.filter((format) => preferences[`show${format}`]);
+
+  console.log("nik here????");
 
   return (
     <List searchBarPlaceholder="Search image transformations...">
