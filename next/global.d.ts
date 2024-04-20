@@ -1,0 +1,3 @@
+interface EventTarget {
+  value: any
+}
