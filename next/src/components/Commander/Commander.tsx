@@ -8,8 +8,8 @@ import { Rainbow } from '../Rainbow/Rainbow';
 import { Thingtime } from '../Thingtime/Thingtime';
 import { useThingtime } from '../Thingtime/useThingtime';
 
-import { sanitise } from '@/functions/sanitise';
-import { getParentPath } from '@/smarts';
+import { sanitise } from '~/functions/sanitise';
+import { getParentPath } from '~/smarts';
 
 export const Commander = (props: any) => {
   const { thingtime, setThingtime, getThingtime, thingtimeRef, paths } = useThingtime();

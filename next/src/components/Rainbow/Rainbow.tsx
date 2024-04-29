@@ -1,10 +1,10 @@
 import React from 'react';
 import { Box, Center } from '@chakra-ui/react';
 
-import { GradientPath } from '@/gp/GradientPath';
-import { useProps } from '@/remix_providers/hooks/useProps';
-import { useTrace } from '@/remix_providers/hooks/useTrace';
-import { useUuid } from '@/remix_providers/hooks/useUuid';
+import { GradientPath } from '~/gp/GradientPath';
+import { useProps } from '~/providers/hooks/useProps';
+import { useTrace } from '~/providers/hooks/useTrace';
+import { useUuid } from '~/providers/hooks/useUuid';
 
 export const Rainbow = (allProps: any): JSX.Element => {
   // return allProps.children

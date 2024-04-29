@@ -12,6 +12,8 @@ export const Footer = (props: any) => {
   const investmentEmail = 'invest@thingtime.com';
   const contactEmail = 'connect@thingtime.com';
 
+  const [year, setYear] = React.useState<number>(new Date().getFullYear());
+
   return (
     <Center width="100%" paddingTop="900px" paddingBottom={[5, 12]} paddingX={4}>
       <Flex width={['500px', '500px']} maxWidth="100%">
@@ -30,7 +32,7 @@ export const Footer = (props: any) => {
               </Link>
             </Flex>
             <Flex flexDirection="column" fontSize="xs">
-              {/* copyright message */}© 2023 Thingtime
+              {/* copyright message */}© {year} Thingtime
             </Flex>
           </Flex>
         )}
@@ -42,13 +44,21 @@ export const Footer = (props: any) => {
               {/* <Icon name="money bag" size="10px" chakras={{ pl: 1 }}></Icon> */}
             </Flex>
             <Link href={`mailto:${contactEmail}`}>
-              <Flex flexDirection="row">
+              <Flex
+                transition={'all 0.2s ease-out'}
+                _hover={{
+                  color: 'pink'
+                }}
+                flexDirection="row"
+              >
                 <Text>{contactEmail}</Text>
               </Flex>
             </Link>
           </Flex>
           <Flex alignItems="center" flexDirection="row" fontSize="xs">
-            <Text>{/* copyright message */}© 2023 Thingtime</Text>
+            <Text>
+              {/* copyright message */}© {year} Thingtime
+            </Text>
           </Flex>
           <Flex flexDirection="row" marginRight="auto">
             <Icon name="rainbow" size="8px"></Icon>

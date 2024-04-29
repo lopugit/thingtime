@@ -1,11 +1,11 @@
 import { Box, Center, Flex } from '@chakra-ui/react';
 
-import { ProfileDrawer } from '@/components/Nav/ProfileDrawer';
-import { Splash } from '@/components/Splash/Splash';
-import { Thingtime } from '@/components/Thingtime/Thingtime';
-import { ThingtimeDemo } from '@/components/Thingtime/ThingtimeDemo';
-import { useThingtime } from '@/components/Thingtime/useThingtime';
-import { GradientPath } from '@/gp/GradientPath';
+import { ProfileDrawer } from '~/components/Nav/ProfileDrawer';
+import { Splash } from '~/components/Splash/Splash';
+import { Thingtime } from '~/components/Thingtime/Thingtime';
+import { ThingtimeDemo } from '~/components/Thingtime/ThingtimeDemo';
+import { useThingtime } from '~/components/Thingtime/useThingtime';
+import { GradientPath } from '~/gp/GradientPath';
 
 export default function Index() {
   const { thingtime } = useThingtime();

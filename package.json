@@ -4,6 +4,7 @@
   "description": "Thing Time",
   "main": "none",
   "scripts": {
+    "app": "npm run remix",
     "remix": "npm run dev --prefix remix",
     "next": "npm run dev --prefix next",
     "api": "npm run dev --prefix api",

@@ -8,9 +8,9 @@ import { Rainbow } from '../Rainbow/Rainbow';
 import { Thingtime } from '../Thingtime/Thingtime';
 import { useThingtime } from '../Thingtime/useThingtime';
 
-import { sanitise } from '@/functions/sanitise';
-import { usePath } from '@/remix_providers/hooks/usePath';
-import { getParentPath } from '@/smarts';
+import { sanitise } from '~/functions/sanitise';
+import { usePath } from '~/providers/hooks/usePath';
+import { getParentPath } from '~/smarts';
 
 export const CommanderV1 = (props: any) => {
   const { thingtime, setThingtime, getThingtime, thingtimeRef, paths } = useThingtime();

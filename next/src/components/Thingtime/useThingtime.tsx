@@ -1,6 +1,6 @@
 import { useContext } from 'react';
 
-import { ThingtimeContext } from '@/remix_providers/ThingtimeProvider';
+import { ThingtimeContext } from '~/providers/ThingtimeProvider';
 
 const getGlobal = () => {
   try {

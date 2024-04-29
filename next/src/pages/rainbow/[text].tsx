@@ -1,25 +1,30 @@
 import React from 'react';
 import { Flex } from '@chakra-ui/react';
-import { useLocation } from '@remix-run/react';
+import { useRouter } from 'next/router';
 
-import { Splash } from '@/components/Splash/Splash';
-import { useThingtime } from '@/components/Thingtime/useThingtime';
+import { Splash } from '~/components/Splash/Splash';
+import { useThingtime } from '~/components/Thingtime/useThingtime';
 
-export default function Index() {
-  const location = useLocation();
+export default function Index(props: any) {
+  const text = props?.text;
+
+  const location = useRouter();
   const { pathname } = location;
+
+  console.log('nik location', location);
 
   const strippedPathname = React.useMemo(() => {
     // modify /rainbow/* to just *
 
-    const ret = pathname.split('/')[2];
+    const ret = text;
+    // const ret = pathname.split('/')[2];
 
     if (ret) {
       return decodeURI(ret);
     }
 
     return 'rainbow';
-  }, [pathname]);
+  }, [text]);
 
   const texts = React.useMemo(() => {
     const ret = [strippedPathname];
@@ -58,4 +63,12 @@ export default function Index() {
       <Splash texts={texts} ce={true}></Splash>
     </Flex>
   );
+}
+
+export async function getServerSideProps(context: any) {
+  return {
+    props: {
+      text: context?.params?.text // Access dynamic route parameters
+    }
+  };
 }

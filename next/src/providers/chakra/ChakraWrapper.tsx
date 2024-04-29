@@ -1,6 +1,6 @@
-import { ChakraProvider } from "@chakra-ui/react"
+import { ChakraProvider } from '@chakra-ui/react';
 
-import { theme } from "./chakra"
+import { theme } from './theme';
 export const ChakraWrapper = (props: any) => {
-  return <ChakraProvider theme={theme}>{props.children}</ChakraProvider>
-}
+  return <ChakraProvider theme={theme}>{props.children}</ChakraProvider>;
+};

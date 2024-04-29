@@ -25,8 +25,8 @@ import { Safe } from '../Safety/Safe';
 import { SettingsMenu } from './SettingsMenu';
 import { useThingtime } from './useThingtime';
 
-import { useThings } from '@/remix_providers/hooks/useThings';
-import { getThing } from '@/smarts';
+import { useThings } from '~/providers/hooks/useThings';
+import { getThing } from '~/smarts';
 
 export const Thingtime = (props: any) => {
   // TODO: Add a circular reference seen prop check
@@ -166,7 +166,7 @@ export const Thingtime = (props: any) => {
   }, [props?.fullPath, props?.path, props?.thing]);
 
   const parentPath = React.useMemo(() => {
-    const parentPath = fullPath?.split('.')?.slice(0, -1)?.join('.');
+    const parentPath = fullPath?.split?.('.')?.slice?.(0, -1)?.join?.('.');
 
     if (!parentPath) {
       return 'thingtime';
@@ -180,7 +180,7 @@ export const Thingtime = (props: any) => {
   }, [parentPath, getThingtime]);
 
   React.useEffect(() => {
-    console.log('thingtime changed in path', props?.fullPath);
+    console.log('[tt] changed in path', props?.fullPath);
     createDependancies();
   }, [thingtime, props?.fullPath, childrenRef]);
 
@@ -380,14 +380,14 @@ export const Thingtime = (props: any) => {
       if (chakra) {
         const ChakraComponent = Chakras[chakra];
 
-        console.log('Thingtime is chakra', fullPath, chakra);
+        console.log('[tt] is chakra', fullPath, chakra);
 
         const rawChildren = thing?.rawChildren;
 
         try {
           if (ChakraComponent) {
-            console.log('Thingtime found ChakraComponent', fullPath, ChakraComponent);
-            console.log('Thingtime found thing?.props', fullPath, thing?.props);
+            console.log('[tt] found ChakraComponent', fullPath, ChakraComponent);
+            console.log('[tt] found thing?.props', fullPath, thing?.props);
 
             const ret = (
               <ChakraComponent {...(thing?.props || {})}>

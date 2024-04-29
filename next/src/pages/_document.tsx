@@ -3,7 +3,7 @@ import { Analytics } from '@vercel/analytics/react';
 
 import { Html, Head, Main, NextScript } from 'next/document';
 
-import { Globals } from '@/globals/GlobalStyles';
+import { Globals } from '~/globals/GlobalStyles';
 
 export default function Document({ children, title = 'Thingtime' }: { children: React.ReactNode; title?: string }) {
   return (

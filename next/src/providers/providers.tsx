@@ -1,6 +1,6 @@
 // app/providers.tsx
 
-import { ThingtimeProvider } from '@/remix_providers/ThingtimeProvider';
+import { ThingtimeProvider } from '~/providers/ThingtimeProvider';
 import { ChakraWrapper } from './chakra/ChakraWrapper';
 import { Suspense } from 'react';
 

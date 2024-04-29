@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Flex, Button, FormControl, Input, Spinner, Link } from '@chakra-ui/react';
 import { useFetcher } from '@remix-run/react';
 
-import { useLogin } from '@/api/v1/login/Login';
+import { useLogin } from '~/api/v1/login/Login';
 
 export const Login = (props: any) => {
   const [username, setUsername] = useState('');

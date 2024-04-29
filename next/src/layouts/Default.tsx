@@ -1,10 +1,10 @@
 import { Box, Flex } from '@chakra-ui/react';
 
-import { Providers } from '@/providers/providers';
+import { Providers } from '~/providers/providers';
 
-import { Footer } from '@/components/Nav/Footer';
-import { Nav } from '@/components/Nav/Nav';
-import { ProfileDrawer } from '@/components/Nav/ProfileDrawer';
+import { Footer } from '~/components/Nav/Footer';
+import { Nav } from '~/components/Nav/Nav';
+import { ProfileDrawer } from '~/components/Nav/ProfileDrawer';
 
 export const DefaultLayout = ({ children }: { children: React.ReactNode }) => {
   return (

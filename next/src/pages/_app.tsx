@@ -1,6 +1,6 @@
-import { DefaultLayout } from '@/layouts/Default';
+import { DefaultLayout } from '~/layouts/Default';
 import type { AppProps } from 'next/app';
-import { useIcons } from '@/remix_providers/hooks/useIcons';
+import { useIcons } from '~/providers/hooks/useIcons';
 
 export default function MyApp({ Component, pageProps }: AppProps) {
   useIcons();

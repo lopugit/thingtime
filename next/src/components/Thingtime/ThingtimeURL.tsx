@@ -8,15 +8,20 @@ import { useRouter } from 'next/router';
 
 import { Thingtime } from './Thingtime';
 import { useThingtime } from './useThingtime';
+import { rootPaths } from '~/consts/config';
+import Link from 'next/link';
 
 export const ThingtimeURL = (props: any) => {
+  console.log('nik props', props);
+
   const { getThingtime } = useThingtime();
 
   const router = useRouter();
-  const location = router;
-  const { pathname } = location;
+  const { pathname } = router;
 
   const navigate = router.push;
+
+  const rawPath = props?.path || router?.query?.path;
 
   // const { pathname } = useLocation();
 
@@ -26,25 +31,27 @@ export const ThingtimeURL = (props: any) => {
   // }, [matches]);
 
   const path = React.useMemo(() => {
-    console.log('ThingtimeURL location', location);
+    const path = rawPath instanceof Array ? rawPath.join('.') : rawPath;
 
-    // const sanitisation = ["/things", "/edit", "/editor", "/code", "/coder"]
+    // if path starts with any value in rootPaths, remove it
+    const adjustedPath = rootPaths.reduce((acc: any, rootPath) => {
+      if (typeof path === 'string') {
+        if (path.startsWith(rootPath) && acc === null) {
+          return path.slice(rootPath.length);
+        }
+      }
+      return acc;
+    }, null);
 
-    // // strip the leading /path1/path2 path1 section from the path
-    // let pathPartOne = location?.pathname?.split("/")[2]
+    // remove any leading syntax such as dots or forward slashes
+    const sanitisedPath = adjustedPath?.replace(/^[./]+/, '');
 
-    // // remove all sanitsation strings from path
-    // sanitisation.forEach((sanitisationString) => {
-    //   pathPartOne = pathPartOne?.replace(sanitisationString, "")
-    // })
+    console.log('nik path', path);
+    console.log('nik adjustedPath', adjustedPath);
+    console.log('nik sanitisedPath', sanitisedPath);
 
-    // strip the leading /path1/path2 path1 section from the path
-    const pathPartOne = location?.pathname?.split('/')[2];
-
-    const path = pathPartOne?.replace(/\//g, '.');
-
-    return path || 'thingtime';
-  }, [location]);
+    return sanitisedPath || 'thingtime';
+  }, [rawPath]);
 
   const thing = React.useMemo(() => {
     // remove /things/ from path
@@ -128,3 +135,13 @@ export const ThingtimeURL = (props: any) => {
     </Flex>
   );
 };
+
+export async function getServerSideProps(context: any) {
+  console.log('nik context?.params?.path', context?.params?.path);
+
+  return {
+    props: {
+      path: context?.params?.path // Access dynamic route parameters
+    }
+  };
+}
