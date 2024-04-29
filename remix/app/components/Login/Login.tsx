@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Flex, Button, FormControl, Input, Spinner, Link } from '@chakra-ui/react';
 import { useFetcher } from '@remix-run/react';
 
-import { useLogin } from '~/api/v1/login/Login';
+import { useApi } from '~/hooks/useApi';
 
 export const Login = (props) => {
   const [username, setUsername] = useState('');
@@ -10,24 +10,22 @@ export const Login = (props) => {
 
   const [loading, setLoading] = useState(false);
 
-  const api = useFetcher();
+  const api = useApi();
 
-  const { login } = useLogin();
+  const login = api.v1.login;
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e?.preventDefault();
 
     setLoading(true);
 
-    login(username, password)
-      .then((response) => {
-        console.log('nik response 123', response);
-        setLoading(false);
-      })
-      .catch((error) => {
-        console.error('nik error 123', error);
-        setLoading(false);
-      });
+    const loginResp = await login({ username, password });
+
+    if (loginResp) {
+      console.log('nik loginResp', loginResp);
+    } else {
+      console.error('nik no loginResp', loginResp);
+    }
 
     console.log('nik username', username);
     console.log('nik password', password);

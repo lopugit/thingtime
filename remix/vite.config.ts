@@ -2,10 +2,9 @@ import { vitePlugin as remix } from '@remix-run/dev';
 import { installGlobals } from '@remix-run/node';
 import { defineConfig } from 'vite';
 import tsconfigPaths from 'vite-tsconfig-paths';
+import { flatRoutes } from 'remix-flat-routes'
 
 installGlobals();
-
-// set app path to src/
 
 export default defineConfig({
   // define web socket port
@@ -18,8 +17,13 @@ export default defineConfig({
   },
   plugins: [
     remix({
+      
+      routes: async defineRoutes => {
+        return flatRoutes('routes', defineRoutes)
+      },
+      
       // app path
-      appDirectory: 'src'
+      appDirectory: 'app'
     }),
     tsconfigPaths()
   ]

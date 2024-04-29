@@ -1,7 +1,7 @@
 // modify window / globalThis to support any properties
 // so there's no property does not exist on window typescript errors
 
-// Path: app/src/global-types.d.ts
+// Path: app/global-types.d.ts
 declare global {
   interface Window {
     [key: string]: any;

@@ -13,7 +13,7 @@ export const action = async ({ request }) => {
       'Content-Type': 'application/json'
     },
     body: {
-      message: 'Hello, World! $ Action'
+      message: 'Hello Thingtime!'
     },
     cache: {
       revalidate: 60

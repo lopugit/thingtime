@@ -1,24 +1,24 @@
-import React from "react"
+import React from 'react';
 // import { Sticky, StickyContainer } from "react-sticky"
-import Sticky from "react-sticky-el"
-import { Box, Flex } from "@chakra-ui/react"
-import { useLocation, useMatches } from "@remix-run/react"
+import Sticky from 'react-sticky-el';
+import { Box, Flex } from '@chakra-ui/react';
+import { useLocation, useMatches } from '@remix-run/react';
 
-import { Thingtime } from "./Thingtime"
-import { useThingtime } from "./useThingtime"
+import { Thingtime } from './Thingtime';
+import { useThingtime } from './useThingtime';
 
 export const ThingtimeURL = (props) => {
-  const { getThingtime } = useThingtime()
+  const { getThingtime } = useThingtime();
 
-  const { pathname } = useLocation()
+  const { pathname } = useLocation();
 
-  const matches = useMatches()
+  const matches = useMatches();
   const location = React.useMemo(() => {
-    return matches[matches.length - 1]
-  }, [matches])
+    return matches[matches.length - 1];
+  }, [matches]);
 
   const path = React.useMemo(() => {
-    console.log("ThingtimeURL location", location)
+    console.log('ThingtimeURL location', location);
 
     // const sanitisation = ["/things", "/edit", "/editor", "/code", "/coder"]
 
@@ -31,64 +31,66 @@ export const ThingtimeURL = (props) => {
     // })
 
     // strip the leading /path1/path2 path1 section from the path
-    const pathPartOne = location?.pathname?.split("/")[2]
+    const pathPartOne = location?.pathname?.split('/')[2];
 
-    const path = pathPartOne?.replace(/\//g, ".")
+    const path = pathPartOne?.replace(/\//g, '.');
 
-    return path || "thingtime"
-  }, [location])
+    console.log('nik path', path);
+
+    return path || 'thingtime';
+  }, [location]);
 
   const thing = React.useMemo(() => {
     // remove /things/ from path
 
-    const ret = getThingtime(path)
+    const ret = getThingtime(path);
 
-    return ret
-  }, [path, getThingtime])
+    return ret;
+  }, [path, getThingtime]);
 
   const inEditorMode = React.useMemo(() => {
-    if (pathname.slice(0, 7) === "/editor") {
-      return true
+    if (pathname.slice(0, 7) === '/editor') {
+      return true;
     }
-    return false
-  }, [pathname])
+    return false;
+  }, [pathname]);
 
   const inEditMode = React.useMemo(() => {
-    if (pathname.slice(0, 5) === "/edit") {
-      return true
+    if (pathname.slice(0, 5) === '/edit') {
+      return true;
     }
-    return false
-  }, [pathname])
+    return false;
+  }, [pathname]);
 
-  const containerRef = React.useRef(null)
-  const editorRef = React.useRef(null)
+  const containerRef = React.useRef(null);
+  const editorRef = React.useRef(null);
 
   React.useEffect(() => {
     const scrollListener = () => {
       if (containerRef?.current?.getBoundingClientRect) {
-        const { top } = containerRef?.current?.getBoundingClientRect()
+        const { top } = containerRef?.current?.getBoundingClientRect();
 
-        editorRef.current.style.top = `${-top}px`
+        editorRef.current.style.top = `${-top}px`;
       }
-    }
+    };
 
-    window.addEventListener("scroll", scrollListener)
+    window.addEventListener('scroll', scrollListener);
 
     return () => {
-      window.removeEventListener("scroll", scrollListener)
-    }
-  }, [])
+      window.removeEventListener('scroll', scrollListener);
+    };
+  }, []);
 
   return (
     <Flex
       ref={containerRef}
       // position="sticky"
       position="relative"
-      alignItems={inEditorMode ? "flex-start" : "center"}
+      alignItems={inEditorMode ? 'flex-start' : 'center'}
       justifyContent="center"
       // overflow="scroll"
       // height="auto"
-      flexDirection={inEditorMode ? "row" : "column"}
+      flexDirection={inEditorMode ? 'row' : 'column'}
       maxWidth="100%"
       // maxHeight="100vh"
     >
@@ -109,18 +111,12 @@ export const ThingtimeURL = (props) => {
             path={path}
             thing={thing}
             render
-            chakras={{ marginY: "200px" }}
+            chakras={{ marginY: '200px' }}
             // width="600px"
           ></Thingtime>
         </Box>
       )}
-      <Thingtime
-        edit={inEditMode}
-        path={path}
-        thing={thing}
-        chakras={{ marginY: "200px" }}
-        width="600px"
-      ></Thingtime>
+      <Thingtime edit={inEditMode} path={path} thing={thing} chakras={{ marginY: '200px' }} width="600px"></Thingtime>
     </Flex>
-  )
-}
+  );
+};

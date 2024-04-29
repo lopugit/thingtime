@@ -29,7 +29,7 @@ export const RainbowText = (props) => {
       userSelect="none"
       outline="none"
       contentEditable={props?.ce}
-      spellcheck="false"
+      spellCheck="false"
     >
       {props?.children}
     </Text>
