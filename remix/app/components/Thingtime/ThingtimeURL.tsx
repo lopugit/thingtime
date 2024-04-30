@@ -84,36 +84,15 @@ export const ThingtimeURL = (props) => {
   return (
     <Flex
       ref={containerRef}
-      // position="sticky"
       position="relative"
       alignItems={inEditorMode ? 'flex-start' : 'center'}
       justifyContent="center"
-      // overflow="scroll"
-      // height="auto"
       flexDirection={inEditorMode ? 'row' : 'column'}
       maxWidth="100%"
-      // maxHeight="100vh"
     >
       {inEditorMode && (
-        <Box
-          ref={editorRef}
-          position="relative"
-          // position="sticky"
-          // top={200}
-          // alignSelf="flex-start"
-          overflow="scroll"
-          width="600px"
-          // width="100%"
-          maxHeight="100vh"
-          // paddingY={2}
-        >
-          <Thingtime
-            path={path}
-            thing={thing}
-            render
-            chakras={{ marginY: '200px' }}
-            // width="600px"
-          ></Thingtime>
+        <Box ref={editorRef} position="relative" overflow="scroll" width="container" maxHeight="100vh">
+          <Thingtime path={path} thing={thing} render chakras={{ marginY: '200px' }}></Thingtime>
         </Box>
       )}
       <Thingtime edit={inEditMode} path={path} thing={thing} chakras={{ marginY: '200px' }} width="600px"></Thingtime>
