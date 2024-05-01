@@ -11,6 +11,7 @@ import {
 
 import { colors } from './colors';
 import { space } from './space';
+import { ChakraButton } from './Components/Button';
 
 export const theme = extendTheme({
   colors,
@@ -61,6 +62,7 @@ export const theme = extendTheme({
     }
   },
   components: {
+    Button: ChakraButton,
     Input: {
       defaultProps: {
         // focusBorderColor: "transparent",

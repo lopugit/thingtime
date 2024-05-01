@@ -1,6 +1,6 @@
 import { Suspense, useState } from 'react';
 import { useThingtime } from '../Thingtime/useThingtime';
-import { Flex, Heading, Box } from '@chakra-ui/react';
+import { Flex, Heading, Box, Button } from '@chakra-ui/react';
 import Editor from '@monaco-editor/react';
 
 export const Raw = () => {
@@ -18,9 +18,12 @@ export const Raw = () => {
       <Suspense fallback={<div>Loading...</div>}>
         {/* {editor} */}
         <Flex flexGrow={1} position="relative">
-          <Box pos={'absolute'} top={'0'} left={'0'} right={'0'} bottom={'0'}>
-            <Editor defaultLanguage="javascript" defaultValue={rawValue}></Editor>;
-          </Box>
+          <Flex flexDir="column" pos={'absolute'} top={'0'} left={'0'} right={'0'} bottom={'0'}>
+            <Editor defaultLanguage="javascript" defaultValue={rawValue}></Editor>
+            <Flex>
+              <Button onClick={() => {}}>Save Export Default</Button>
+            </Flex>
+          </Flex>
         </Flex>
       </Suspense>
     </Flex>

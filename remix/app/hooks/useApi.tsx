@@ -9,15 +9,28 @@ export function useApi() {
     login: useCallback(
       async (args) => {
         const { username, password } = args;
-        
+
         console.log('nik submitting with username', username);
         console.log('nik submitting with password', password);
-        
+
         const ret = asyncFetcher.submit({ username, password }, { action: '/api/v1/login' });
         return ret;
       },
       [asyncFetcher]
-    )
+    ),
+    mongodb: {
+      rawResults: useCallback(
+        async (args) => {
+          const { query } = args;
+
+          console.log('submitting query', query);
+
+          const ret = asyncFetcher.submit({ query }, { action: '/api/v1/mongodb/raw-results' });
+          return ret;
+        },
+        [asyncFetcher]
+      )
+    }
   };
 
   const ret = {
