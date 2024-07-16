@@ -136,11 +136,11 @@ export const Nav = (props) => {
               </Center>
             )}
             {/* TODO - Add conditional only show if loggedIn */}
-            <Center transform={['', 'scaleX(-100%)']} cursor="pointer">
+            {/* <Center transform={['', 'scaleX(-100%)']} cursor="pointer">
               <Link to="/logout">
                 <Icon size="12px" name="🗝️"></Icon>
               </Link>
-            </Center>
+            </Center> */}
             <Center transform={['', 'scaleX(-100%)']} cursor="pointer">
               <Link to="/login">
                 <Icon size="12px" name="🌈"></Icon>
