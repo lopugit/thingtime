@@ -1,7 +1,7 @@
-import { Box, Center, Flex, Slider, SliderFilledTrack, SliderThumb, SliderTrack } from '@chakra-ui/react';
+import { Box, Center, Flex, Heading, Slider, SliderFilledTrack, SliderThumb, SliderTrack } from '@chakra-ui/react';
 import React, { useMemo, useState } from 'react';
 
-export const Logo = () => {
+export const Logo = (props) => {
   // a completely dynamic and interactive logo
   // uses borders, border radius, and colour themes to create a simple timeless beautiful logo
 
@@ -16,16 +16,16 @@ export const Logo = () => {
 
   const [squares, setSquares] = useState(9);
 
-  const [width, setWidth] = useState(250);
-
-  const [height, setHeight] = useState(250);
+  const [width, setWidth] = useState(props?.width || 300);
 
   // logo is a T/plus shape made of two intersecting squares
   // you can toggle border sides on both squares to create different shapes
 
   const [borderWidth, setBorderWidth] = useState(18);
 
-  const [borderRadius, setBorderRadius] = useState(12);
+  const [borderRadius, setBorderRadius] = useState(0);
+
+  const [padding, setPadding] = useState(0);
 
   const squaresArray = Array.from({ length: squares }, (_, index) => index);
 
@@ -38,48 +38,56 @@ export const Logo = () => {
 
   const [divisions, setDivisions] = useState(3);
 
-  const [divisionHeight, setDivisionHeight] = useState(100 / divisions);
-
-  const [divisionWidth, setDivisionWidth] = useState(100 / divisions);
+  const [boxWidth, setBoxWidth] = useState(100 / divisions + '%');
 
   const uuid = useMemo(() => {
     return Math.random().toString(36).substring(2) + Date.now().toString(36);
   }, []);
 
+  const boxStyles = {
+    padding: `${padding}px`
+  };
+
+  const innerBox = <Box borderRadius={`${borderRadius}px`} background="hotpink" w="100%" h="100%"></Box>;
+
+  const Square = (props: any = {}) => (
+    <Box {...boxStyles} {...props} display="inline-block" w={boxWidth} h={boxWidth}>
+      {innerBox}
+    </Box>
+  );
+
   return (
     <>
       {/* these are the controls */}
       {/* border radius use chakra slider */}
-      <Center py={12}>
-        <Slider aria-label="slider-ex-1" defaultValue={borderRadius} onChange={setBorderRadius}>
+      <Flex py={12} flexDir={'column'}>
+        <Heading my={4} as="h2" size="md">
+          Logo Controls
+        </Heading>
+        <Heading my={4} as="h3" size="sm">
+          Border Radius
+        </Heading>
+        <Slider aria-label="slider-ex-1" defaultValue={borderRadius} min={0} max={width} onChange={setBorderRadius}>
           <SliderTrack>
             <SliderFilledTrack />
           </SliderTrack>
           <SliderThumb>🟡</SliderThumb>
         </Slider>
-      </Center>
-      <Box className="tt.logo" overflow="hidden" w={width + 'px'} h={height + 'px'} position="relative">
-        {squaresArray.map((_, idx) => {
-          // technically not even in programming terms cause it starts at 0 😂
+        <Heading my={4} as="h3" size="sm">
+          Padding
+        </Heading>
+        <Slider aria-label="slider-ex-1" defaultValue={padding} min={0} max={width} onChange={setPadding}>
+          <SliderTrack>
+            <SliderFilledTrack />
+          </SliderTrack>
+          <SliderThumb>🟡</SliderThumb>
+        </Slider>
+      </Flex>
+      <Box className="tt.logo" fontSize={0} overflow="hidden" w={width + 'px'} h={width + 'px'} position="relative">
+        {squaresArray.map((_, index) => {
+          const odd = index % 2 === 0;
 
-          const humanIdx = idx + 1;
-
-          const even = humanIdx % 2 === 0;
-
-          const colourIndex = Math.round(idx / 2);
-
-          // log the colourIndex
-          console.debug('tt.colourIndex', colourIndex);
-
-          return (
-            <Box
-              display="inline-block"
-              key={`logo-${uuid}-${idx}`}
-              bg={even ? defaultTheme[colourIndex] : 'rgba(0,0,0,0)'}
-              w={`${divisionHeight}%`}
-              h={`${divisionWidth}%`}
-            ></Box>
-          );
+          <Square key={uuid + 'tt.logo' + index} bg={odd ? 'hotpink' : 'transparent'} />;
         })}
       </Box>
     </>
