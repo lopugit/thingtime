@@ -16,7 +16,9 @@ export const Logo = (props) => {
 
   const [squares, setSquares] = useState(9);
 
-  const [width, setWidth] = useState(props?.width || 300);
+  const initialWidth = props?.width || 300;
+
+  const [width, setWidth] = useState(initialWidth);
 
   // logo is a T/plus shape made of two intersecting squares
   // you can toggle border sides on both squares to create different shapes
@@ -48,11 +50,11 @@ export const Logo = (props) => {
     padding: `${padding}px`
   };
 
-  const innerBox = <Box borderRadius={`${borderRadius}px`} background="hotpink" w="100%" h="100%"></Box>;
+  const InnerBox = (props: any = {}) => <Box borderRadius={`${borderRadius}px`} background="hotpink" w="100%" h="100%" {...props}></Box>;
 
   const Square = (props: any = {}) => (
-    <Box {...boxStyles} {...props} display="inline-block" w={boxWidth} h={boxWidth}>
-      {innerBox}
+    <Box {...boxStyles} display="inline-block" w={boxWidth} h={boxWidth}>
+      <InnerBox {...props}></InnerBox>
     </Box>
   );
 
@@ -60,34 +62,45 @@ export const Logo = (props) => {
     <>
       {/* these are the controls */}
       {/* border radius use chakra slider */}
-      <Flex py={12} flexDir={'column'}>
-        <Heading my={4} as="h2" size="md">
-          Logo Controls
-        </Heading>
-        <Heading my={4} as="h3" size="sm">
-          Border Radius
-        </Heading>
-        <Slider aria-label="slider-ex-1" defaultValue={borderRadius} min={0} max={width} onChange={setBorderRadius}>
-          <SliderTrack>
-            <SliderFilledTrack />
-          </SliderTrack>
-          <SliderThumb>🟡</SliderThumb>
-        </Slider>
-        <Heading my={4} as="h3" size="sm">
-          Padding
-        </Heading>
-        <Slider aria-label="slider-ex-1" defaultValue={padding} min={0} max={width} onChange={setPadding}>
-          <SliderTrack>
-            <SliderFilledTrack />
-          </SliderTrack>
-          <SliderThumb>🟡</SliderThumb>
-        </Slider>
-      </Flex>
+      {props?.editable && (
+        <Flex pb={12} flexDir={'column'}>
+          <Heading my={4} as="h2" size="md">
+            Logo Controls
+          </Heading>
+          <Heading my={4} as="h3" size="sm">
+            Width {width}px
+          </Heading>
+          <Slider aria-label="slider-ex-1" defaultValue={width} min={0} max={initialWidth * 10} onChange={setWidth}>
+            <SliderTrack>
+              <SliderFilledTrack />
+            </SliderTrack>
+            <SliderThumb>🟡</SliderThumb>
+          </Slider>
+          <Heading my={4} as="h3" size="sm">
+            Border Radius {borderRadius}px
+          </Heading>
+          <Slider aria-label="slider-ex-1" defaultValue={borderRadius} min={0} max={width} onChange={setBorderRadius}>
+            <SliderTrack>
+              <SliderFilledTrack />
+            </SliderTrack>
+            <SliderThumb>🟡</SliderThumb>
+          </Slider>
+          <Heading my={4} as="h3" size="sm">
+            Padding {padding}px
+          </Heading>
+          <Slider aria-label="slider-ex-1" defaultValue={padding} min={0} max={width} onChange={setPadding}>
+            <SliderTrack>
+              <SliderFilledTrack />
+            </SliderTrack>
+            <SliderThumb>🟡</SliderThumb>
+          </Slider>
+        </Flex>
+      )}
       <Box className="tt.logo" fontSize={0} overflow="hidden" w={width + 'px'} h={width + 'px'} position="relative">
         {squaresArray.map((_, index) => {
           const odd = index % 2 === 0;
-
-          <Square key={uuid + 'tt.logo' + index} bg={odd ? 'hotpink' : 'transparent'} />;
+          const even = !odd;
+          return <Square key={uuid + 'tt.logo' + index} bg={even ? 'hotpink' : 'transparent'} />;
         })}
       </Box>
     </>

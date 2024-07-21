@@ -6,9 +6,9 @@
   "scripts": {
     "app": "npm run remix",
     "remix": "npm run dev --prefix remix",
+    "build-remix": "npm run build --prefix remix",
     "next": "npm run dev --prefix next",
     "api": "npm run dev --prefix api",
-    "build": "npm run build --prefix next",
     "postinstall": "pnpm i --prefix next ; pnpm i --prefix=api"
   },
   "repository": {
