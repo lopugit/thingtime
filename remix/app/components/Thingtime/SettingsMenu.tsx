@@ -1,146 +1,143 @@
-import React, { useState } from "react"
-import ClickAwayListener from "react-click-away-listener"
-import { Center, Flex, Text } from "@chakra-ui/react"
+import React, { useState } from 'react';
+import ClickAwayListener from 'react-click-away-listener';
+import { Center, Flex, Text } from '@chakra-ui/react';
 
-import { Icon } from "../Icon/Icon"
-import { useThingtime } from "./useThingtime"
+import { Icon } from '../Icon/Icon';
+import { useThingtime } from './useThingtime';
 
 export const SettingsMenu = (props) => {
-  const [show, setShow] = useState(false)
-  const hideRef = React.useRef(null)
-  const [opacity, setOpacity] = React.useState(props?.opacity === 0 ? 0 : 1)
-  const [pinStatus, setPinStatus] = React.useState(false)
+  const [show, setShow] = useState(false);
+  const hideRef = React.useRef(null);
+  const [opacity, setOpacity] = React.useState(props?.opacity === 0 ? 0 : 1);
+  const [pinStatus, setPinStatus] = React.useState(false);
 
   const stateRef = React.useRef({
-    pinStatus,
-  })
+    pinStatus
+  });
 
   React.useEffect(() => {
-    stateRef.current.pinStatus = pinStatus
-  }, [pinStatus])
+    stateRef.current.pinStatus = pinStatus;
+  }, [pinStatus]);
 
-  const { thingtime, events } = useThingtime()
+  const { thingtime, events } = useThingtime();
 
-  const opacityRef = React.useRef(null)
+  const opacityRef = React.useRef(null);
 
-  const waitTime = 1555
+  const waitTime = 1555;
 
-  const [uuid, setUuid] = React.useState(null)
+  const [uuid, setUuid] = React.useState(null);
 
   React.useEffect(() => {
-    setUuid(Math.random().toString(36).substring(7))
-  }, [])
+    setUuid(Math.random().toString(36).substring(7));
+  }, []);
 
   React.useEffect(() => {
     const subscription = events.subscribe((event) => {
-      if (event?.type === "settings-menu-hide" && event?.uuid !== uuid) {
+      if (event?.type === 'settings-menu-hide' && event?.uuid !== uuid) {
         if (!stateRef?.current?.pinStatus || event?.force) {
-          setShow(false)
-          setOpacity(0)
+          setShow(false);
+          setOpacity(0);
         }
       }
-    })
+    });
 
     return () => {
-      subscription?.unsubscribe?.()
-    }
-  }, [events, uuid])
+      subscription?.unsubscribe?.();
+    };
+  }, [events, uuid]);
 
   React.useEffect(() => {
-    clearInterval(opacityRef?.current)
+    clearInterval(opacityRef?.current);
     if (props?.opacity) {
-      setOpacity(props?.opacity)
+      setOpacity(props?.opacity);
     } else {
       opacityRef.current = setInterval(() => {
         if (!stateRef?.current?.pinStatus) {
-          setOpacity(props?.opacity)
-          setShow(false)
+          setOpacity(props?.opacity);
+          setShow(false);
         }
-      }, waitTime)
+      }, waitTime);
     }
-  }, [props?.opacity])
+  }, [props?.opacity]);
 
   React.useEffect(() => {
     if (show || props?.opacity) {
-      clearInterval(hideRef?.current)
+      clearInterval(hideRef?.current);
       events.next({
-        type: "settings-menu-hide",
-        uuid,
-      })
+        type: 'settings-menu-hide',
+        uuid
+      });
     } else if (!show) {
-      setPinStatus(false)
+      setPinStatus(false);
     }
-  }, [show, props?.opacity, events, uuid])
+  }, [show, props?.opacity, events, uuid]);
 
   const maybeHide = React.useCallback(() => {
-    clearInterval(hideRef?.current)
+    clearInterval(hideRef?.current);
     hideRef.current = setTimeout(() => {
       if (!stateRef?.current?.pinStatus) {
-        setShow(false)
-        setOpacity(0)
+        setShow(false);
+        setOpacity(0);
       }
-    }, waitTime)
-  }, [])
+    }, waitTime);
+  }, []);
 
   const showMenu = React.useCallback(() => {
-    clearInterval(hideRef?.current)
-    setShow(true)
-  }, [])
+    clearInterval(hideRef?.current);
+    setShow(true);
+  }, []);
 
   const hideMenu = React.useCallback(() => {
-    setShow(false)
-  }, [])
+    setShow(false);
+  }, []);
 
   const basePadding = React.useMemo(() => {
-    return 4
-  }, [])
+    return 4;
+  }, []);
 
   const types = React.useMemo(() => {
-    const baseTypes = thingtime?.settings?.types?.javascript || {}
-    const baseTypeKeys = Object.keys(baseTypes)
+    const baseTypes = thingtime?.settings?.types?.javascript || {};
+    const baseTypeKeys = Object.keys(baseTypes);
 
-    const customTypes = thingtime?.settings?.types?.custom || {}
-    const customTypeKeysRaw = Object.keys(customTypes)
+    const customTypes = thingtime?.settings?.types?.custom || {};
+    const customTypeKeysRaw = Object.keys(customTypes);
     const customTypeKeys = customTypeKeysRaw?.filter((key) => {
-      return !baseTypeKeys?.includes?.(key)
-    })
+      return !baseTypeKeys?.includes?.(key);
+    });
 
     const types = [
       ...(baseTypeKeys?.map?.((key) => {
         return {
           ...baseTypes?.[key],
-          key,
-        }
+          key
+        };
       }) || []),
       ...(customTypeKeys?.map?.((key) => {
         return {
           ...customTypes?.[key],
-          key,
-        }
-      }) || []),
-    ]
+          key
+        };
+      }) || [])
+    ];
 
-    return types
-  }, [
-    thingtime?.settings?.types?.javascript,
-    thingtime?.settings?.types?.custom,
-  ])
+    return types;
+  }, [thingtime?.settings?.types?.javascript, thingtime?.settings?.types?.custom]);
 
   const onType = React.useCallback(
     (args) => {
-      props?.onType?.(args)
+      props?.onType?.(args);
     },
     [props?.onType]
-  )
+  );
   const onDelete = React.useCallback(
     (type) => {
-      props?.onDelete?.()
+      props?.onDelete?.();
     },
     [props?.onDelete]
-  )
+  );
 
-  const childIconSize = 10
-  const iconSize = props?.iconSize || 7
+  const childIconSize = 10;
+  const iconSize = props?.iconSize || 7;
 
   return (
     <ClickAwayListener onClickAway={hideMenu}>
@@ -149,7 +146,7 @@ export const SettingsMenu = (props) => {
         // width="100%"
         paddingRight={36}
         opacity={opacity}
-        transition={props?.transition || "all 0.2s ease-in-out"}
+        transition={props?.transition || 'all 0.2s ease-in-out'}
         onMouseEnter={showMenu}
         onMouseLeave={maybeHide}
       >
@@ -159,6 +156,8 @@ export const SettingsMenu = (props) => {
           cursor="pointer"
           // onClick={deleteValue}
           transition="all 0.2s ease-in-out"
+          // add title for hover context
+          title={`Options`}
         >
           <Icon name="wizard" size={iconSize}></Icon>
         </Flex>
@@ -169,7 +168,7 @@ export const SettingsMenu = (props) => {
           left={0}
           flexDirection="column"
           opacity={show ? 1 : 0}
-          pointerEvents={show ? "all" : "none"}
+          pointerEvents={show ? 'all' : 'none'}
         >
           <Flex
             position="absolute"
@@ -178,19 +177,44 @@ export const SettingsMenu = (props) => {
             padding="5px"
             cursor="pointer"
             onClick={() => setPinStatus((prev) => !prev)}
+            title={`Pin Options`}
           >
-            <Icon
-              opacity={pinStatus ? 1 : 0.5}
-              name={pinStatus ? "pinned" : "pin"}
-              size="8px"
-            ></Icon>
+            {show === true && <Icon opacity={pinStatus ? 1 : 0.5} name={pinStatus ? 'pinned' : 'pin'} size="8px"></Icon>}
           </Flex>
+          {/* edit mode menu item */}
           <Flex
             flexDirection="column"
             // rowGap={basePadding / 3}
             background="greys.lightt"
             borderRadius={4}
-            boxShadow={props?.boxShadow || "0px 2px 7px 0px rgba(0,0,0,0.2)"}
+            boxShadow={props?.boxShadow || '0px 2px 7px 0px rgba(0,0,0,0.2)'}
+            paddingY={basePadding}
+          >
+            <Flex
+              alignItems="center"
+              flexDirection="row"
+              // paddingRight={basePadding}
+              paddingLeft={basePadding}
+              _hover={{
+                background: 'greys.light'
+              }}
+              cursor="pointer"
+              // paddingX={basePadding * 1}
+              paddingY={basePadding / 2}
+            >
+              <Icon marginBottom="-2px" name="🎨" size={childIconSize}></Icon>
+              <Text marginTop="-2px" paddingLeft={2} fontSize="xs">
+                Toggle Edit Mode
+              </Text>
+            </Flex>
+          </Flex>
+
+          <Flex
+            flexDirection="column"
+            // rowGap={basePadding / 3}
+            background="greys.lightt"
+            borderRadius={4}
+            boxShadow={props?.boxShadow || '0px 2px 7px 0px rgba(0,0,0,0.2)'}
             paddingY={basePadding}
           >
             {!props?.readonly && (
@@ -200,17 +224,13 @@ export const SettingsMenu = (props) => {
                 // paddingRight={basePadding}
                 paddingLeft={basePadding}
                 _hover={{
-                  background: "greys.light",
+                  background: 'greys.light'
                 }}
                 cursor="pointer"
                 // paddingX={basePadding * 1}
                 paddingY={basePadding / 2}
               >
-                <Icon
-                  marginBottom="-2px"
-                  name="cyclone"
-                  size={childIconSize}
-                ></Icon>
+                <Icon marginBottom="-2px" name="cyclone" size={childIconSize}></Icon>
                 <Text marginTop="-2px" paddingLeft={2} fontSize="xs">
                   Types
                 </Text>
@@ -228,12 +248,12 @@ export const SettingsMenu = (props) => {
                 types.map((type, idx) => {
                   const ret = (
                     <Flex
-                      key={props?.uuid + props?.fullPath + "-type-menu-" + idx}
+                      key={props?.uuid + props?.fullPath + '-type-menu-' + idx}
                       width="100%"
                       _hover={{
-                        "&>div": {
-                          background: "greys.light",
-                        },
+                        '&>div': {
+                          background: 'greys.light'
+                        }
                       }}
                       cursor="pointer"
                       onClick={() => onType({ type })}
@@ -247,11 +267,7 @@ export const SettingsMenu = (props) => {
                         paddingLeft={basePadding * 2}
                         paddingY={basePadding / 2}
                       >
-                        <Icon
-                          marginBottom="-2px"
-                          name={type?.icon || type?.key || type?.label || type}
-                          size={childIconSize}
-                        ></Icon>
+                        <Icon marginBottom="-2px" name={type?.icon || type?.key || type?.label || type} size={childIconSize}></Icon>
                         <Text marginTop="-2px" paddingLeft={2} fontSize="xs">
                           {type?.label || type?.key || type}
                         </Text>
@@ -259,18 +275,18 @@ export const SettingsMenu = (props) => {
                           <Flex
                             marginLeft="auto"
                             _hover={{
-                              transform: "scale(1.3)",
+                              transform: 'scale(1.3)'
                             }}
                             transition="all 0.2s ease-out"
                             onClick={(e) => {
-                              e?.preventDefault?.()
-                              e?.stopPropagation?.()
+                              e?.preventDefault?.();
+                              e?.stopPropagation?.();
                               // cancel bubble
-                              e?.nativeEvent?.stopImmediatePropagation?.()
+                              e?.nativeEvent?.stopImmediatePropagation?.();
                               onType({
                                 type,
-                                wrap: true,
-                              })
+                                wrap: true
+                              });
                             }}
                           >
                             <Icon name="wrap" size={childIconSize}></Icon>
@@ -278,8 +294,8 @@ export const SettingsMenu = (props) => {
                         )}
                       </Flex>
                     </Flex>
-                  )
-                  return ret
+                  );
+                  return ret;
                 })}
             </Flex>
             {!props?.readonly && props?.onDelete && (
@@ -287,18 +303,14 @@ export const SettingsMenu = (props) => {
                 alignItems="center"
                 flexDirection="row"
                 _hover={{
-                  background: "greys.light",
+                  background: 'greys.light'
                 }}
                 cursor="pointer"
                 onClick={onDelete}
                 paddingX={basePadding * 1}
                 paddingY={basePadding / 2}
               >
-                <Icon
-                  marginBottom="-2px"
-                  name="bin"
-                  size={childIconSize}
-                ></Icon>
+                <Icon marginBottom="-2px" name="bin" size={childIconSize}></Icon>
                 <Text marginTop="-2px" paddingLeft={2} fontSize="xs">
                   Recycle
                 </Text>
@@ -308,5 +320,5 @@ export const SettingsMenu = (props) => {
         </Flex>
       </Center>
     </ClickAwayListener>
-  )
-}
+  );
+};

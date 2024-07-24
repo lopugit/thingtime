@@ -3,6 +3,8 @@
 .env
 
 app/node_modules
+remix/node_modules
+next/node_modules
 app-next/node_modules
 api/node_modules
 node_modules

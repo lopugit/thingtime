@@ -93,7 +93,6 @@
       "title": "Commander",
       "description": "Open Thingtime Commander",
       "mode": "view",
-      "fallbackText": "test2",
       "keywords": [
         "commander",
         "thingtime",
@@ -107,7 +106,38 @@
           "key": "name",
           "title": "Name of Command to run",
           "description": "The name of the command/function to run",
-          "defaultValue": "Menu"
+          "defaultValue": "MagicInput"
+        }
+      ]
+    },
+    {
+      "name": "commanderMagicInput",
+      "title": "Magic Input",
+      "description": "Evaluates a Magic Input",
+      "mode": "no-view",
+      "keywords": [
+        "commander",
+        "thingtime",
+        "ai"
+      ],
+      "arguments": [
+        {
+          "placeholder": "Path",
+          "name": "path",
+          "type": "text",
+          "description": "The path to open the new finder window at",
+          "required": false
+        }
+      ],
+      "preferences": [
+        {
+          "name": "name",
+          "required": false,
+          "type": "textfield",
+          "key": "name",
+          "title": "Name of Command to run",
+          "description": "The name of the command/function to run",
+          "defaultValue": "openNewFinderWindow"
         }
       ]
     },
@@ -116,7 +146,6 @@
       "title": "Open New Finder Window",
       "description": "Open new finder window",
       "mode": "no-view",
-      "fallbackText": "test2",
       "keywords": [
         "commander",
         "thingtime",
@@ -148,7 +177,6 @@
       "title": "Trim image",
       "description": "Will trim all whitespace from an image",
       "mode": "no-view",
-      "fallbackText": "test2",
       "keywords": [
         "commander",
         "thingtime",
@@ -171,7 +199,6 @@
       "title": "mp4 to mp3",
       "description": "Converts an mp4 into an mp3 using ffmpeg at 320Kbps",
       "mode": "no-view",
-      "fallbackText": "test2",
       "keywords": [
         "commander",
         "thingtime",

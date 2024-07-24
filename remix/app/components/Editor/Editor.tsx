@@ -8,8 +8,8 @@ export const Editor = (props) => {
   return (
     <>
       <Box minH="60vh" w="100%" maxW={'container'} pos={'relative'}>
-        {/* only on client side render editor */}
         <Flex position="absolute" w={width} h={height} top={0} left={0} right={0} bottom={0}>
+          {/* only on client side render editor */}
           <Suspense fallback={<div>Loading...</div>}>
             <MonacoEditor defaultLanguage={defaultLanguage} defaultValue={defaultValue} />
           </Suspense>
