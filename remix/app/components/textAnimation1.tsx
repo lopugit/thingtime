@@ -24,7 +24,7 @@ export const TextAnimation1 = (props) => {
 
   const [titleText, setTitleText] = React.useState(texts[0]);
 
-  const [usedTexts, setUsedTexts] = React.useState(['Thingtime']);
+  const [usedTexts, setUsedTexts] = React.useState(texts[0]);
 
   const state: any = React.useRef({});
 
@@ -33,7 +33,7 @@ export const TextAnimation1 = (props) => {
   }, [titleText, texts, usedTexts]);
 
   React.useEffect(() => {
-    const newTimeout = Math.random() * 1500 + 2500 + (titleText === 'thingtime' ? 750 : 0);
+    const newTimeout = Math.random() * 1500 + 2500 + (titleText === texts[0] ? 750 : 0);
 
     const timeout = setTimeout(() => {
       // choose an unused text or pick texts[0]
@@ -41,16 +41,14 @@ export const TextAnimation1 = (props) => {
       const unusedTexts = texts.filter((text) => !usedTexts.includes(text));
       // pick a random unused text
       const randomIdx = Math.floor(Math.random() * unusedTexts.length);
-      const wasThingtime = false && titleText === 'Thingtime';
+      const wasThingtime = false && titleText === texts[0];
       const newText = wasThingtime ? 'is' : unusedTexts.length > 0 ? unusedTexts[randomIdx] : texts[0];
-      console.log('nik newText', newText);
-      console.log('nik wasThingtime', wasThingtime);
-      console.log('nik usedTexts', usedTexts);
       if (!unusedTexts.length) {
-        setUsedTexts(['Thingtime']);
+        setUsedTexts(texts[0]);
       } else {
         setUsedTexts([...usedTexts, newText]);
       }
+
       setTitleText(newText);
     }, newTimeout);
 

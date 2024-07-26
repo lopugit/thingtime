@@ -1,12 +1,32 @@
 import React, { useState } from 'react';
-import { Flex, Button, FormControl, Input, Spinner, Link } from '@chakra-ui/react';
+import { Flex, Button, FormControl, Input, Spinner, Link, InputGroup, InputRightElement, Box } from '@chakra-ui/react';
 import { useFetcher } from '@remix-run/react';
 
 import { useApi } from '~/hooks/useApi';
+import { useThingtime } from '../Thingtime/useThingtime';
+import { Icon } from '../Icon/Icon';
 
 export const Login = (props) => {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const { thingtime } = useThingtime();
+
+  const devMode = thingtime?.devKit?.devMode;
+
+  // log whether devMode
+  console.log('nik devMode', devMode);
+
+  const [username, setUsername] = useState(devMode ? thingtime?.devKit?.testUsers?.default?.username : '');
+  const [password, setPassword] = useState(devMode ? thingtime?.devKit?.testUsers?.default?.password : '');
+
+  const [passwordVisible, setPasswordVisible] = useState(devMode ? true : false);
+
+  React.useEffect(() => {
+    // if devMode is true, set username and password to testUsers
+    if (devMode && !username && !password) {
+      setUsername(thingtime?.devKit?.testUsers?.default?.username || '');
+      setPassword(thingtime?.devKit?.testUsers?.default?.password || '');
+      setPasswordVisible(true);
+    }
+  }, [devMode]);
 
   const [loading, setLoading] = useState(false);
 
@@ -73,29 +93,37 @@ export const Login = (props) => {
               borderRadius="5px"
               outline="none"
               onChange={(e) => setUsername(e?.target?.value)}
-              placeholder="Email 💌"
-              type="email"
+              placeholder="User 💌"
+              type="username"
               value={username}
             />
           </FormControl>
 
           <FormControl>
-            <Input
-              sx={{
-                '&::placeholder': {
-                  color: 'greys.dark'
-                  // color: "white",
-                }
-              }}
-              background="grey"
-              border="none"
-              borderRadius="5px"
-              outline="none"
-              onChange={(e) => setPassword(e?.target?.value)}
-              placeholder="Password 🔑"
-              type="password"
-              value={password}
-            />
+            <InputGroup>
+              <Input
+                sx={{
+                  '&::placeholder': {
+                    color: 'greys.dark'
+                    // color: "white",
+                  }
+                }}
+                background="grey"
+                border="none"
+                borderRadius="5px"
+                outline="none"
+                onChange={(e) => setPassword(e?.target?.value)}
+                placeholder="Password 🔑"
+                type={passwordVisible ? 'text' : 'password'}
+                value={password}
+              />
+              <InputRightElement>
+                <Box cursor="pointer" onClick={() => setPasswordVisible(!passwordVisible)} opacity={passwordVisible ? 1 : 0.5}>
+                  <Icon name={passwordVisible ? '🔓' : '🔒'} />
+                </Box>
+              </InputRightElement>
+            </InputGroup>
+            {/* optional showpassword button/icon */}
           </FormControl>
 
           <Button

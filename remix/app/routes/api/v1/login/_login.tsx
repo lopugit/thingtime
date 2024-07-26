@@ -33,6 +33,23 @@ export const action = async ({ request }) => {
     return earlyReturn({ status: 401, message: 'Password does not match' });
   }
 
+  // @ts-ignore
+  // const keypair = await crypt.generateKeyPairSync('ec', {
+  //   namedCurve: 'prime256v1'
+
+  //   // namedCurve: 'secp256k1',
+  //   // publicKeyEncoding: {
+  //   //   type: 'spki',
+  //   //   format: 'pem'
+  //   // },
+  //   // privateKeyEncoding: {
+  //   //   type: 'pkcs8',
+  //   //   format: 'pem'
+  //   // }
+  // });
+
+  console.log('nik keypair', keypair);
+
   return earlyReturn({ status: 200, message: 'Login successful' });
 };
 

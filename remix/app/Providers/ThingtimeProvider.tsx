@@ -1,417 +1,152 @@
-import React, { createContext } from "react"
-import flatted, { parse, stringify } from "flatted"
-import { Subject } from "rxjs"
-
-import { sanitise } from "../functions/sanitise"
-import { smarts } from "../smarts"
+import React, { createContext } from 'react';
+import flatted, { parse, stringify } from 'flatted';
+import { Subject } from 'rxjs';
+import { thingtimeDefaults, thingtimeForced, thingtimeNewData } from './Thingtime/ThingtimeDefaults';
+import { sanitise } from '../functions/sanitise';
+import { smarts } from '../smarts';
 
 export interface ThingtimeContextInterface {
-  thingtime: any
-  setThingtime: any
-  getThingtime: any
-  thingtimeRef: any
-  loading: boolean
-  events: Subject<any>
+  thingtime: any;
+  setThingtime: any;
+  getThingtime: any;
+  thingtimeRef: any;
+  loading: boolean;
+  events: Subject<any>;
 }
 
-export const ThingtimeContext = createContext<ThingtimeContextInterface | null>(
-  null
-)
+export const ThingtimeContext = createContext<ThingtimeContextInterface | null>(null);
 
 try {
-  window.smarts = smarts
+  window.smarts = smarts;
   window.flatted = {
     parse,
-    stringify,
-  }
+    stringify
+  };
 } catch (err) {
   // nothing
 }
 
-const force = {
-  settings: {
-    types: {
-      javascript: {
-        any: {
-          type: "any",
-          value: () => {
-            return null
-          },
-        },
-        object: {
-          type: "object",
-          value: () => {
-            return {}
-          },
-        },
-        array: {
-          type: "array",
-          value: () => {
-            return []
-          },
-        },
-        string: {
-          type: "string",
-          value: () => {
-            return ""
-          },
-        },
-        number: {
-          type: "number",
-          value: () => {
-            return 0
-          },
-        },
-        boolean: {
-          type: "boolean",
-          value: () => {
-            return false
-          },
-        },
-        function: {
-          type: "function",
-          value: () => {
-            return () => {}
-          },
-        },
-      },
-      custom: {
-        "Thingtime Logo": {
-          type: "chakra",
-          value: {
-            type: "chakra",
-            chakra: "Box",
-            props: {
-              fontSize: 12,
-            },
-            rawChildren: ["🌈 Thingtime"],
-          },
-        },
-        "Violet Container Centered": {
-          name: "Violet Container Centered",
-          type: "chakra",
-          icon: "💜",
-          wrap: "children",
-          value: {
-            name: "Violet Container Centered",
-            type: "chakra",
-            chakra: "Center",
-            props: {
-              bg: "#AB47BC",
-              padding: 4,
-              borderRadius: 12,
-            },
-            children: [],
-          },
-        },
-        "Indigo Container Centered": {
-          name: "Indigo Container Centered",
-          type: "chakra",
-          icon: "🩷",
-          wrap: "children",
-          value: {
-            name: "Indigo Container Centered",
-            type: "chakra",
-            chakra: "Center",
-            props: {
-              bg: "#5C6BC0",
-              padding: 4,
-              borderRadius: 12,
-            },
-            children: [],
-          },
-        },
-        "Blue Container Centered": {
-          name: "Blue Container Centered",
-          type: "chakra",
-          icon: "💙",
-          wrap: "children",
-          value: {
-            name: "Blue Container Centered",
-            type: "chakra",
-            chakra: "Center",
-            props: {
-              bg: "#42A5F5",
-              padding: 4,
-              borderRadius: 12,
-            },
-            children: [],
-          },
-        },
-        "Green Container Centered": {
-          name: "Green Container Centered",
-          type: "chakra",
-          icon: "💚",
-          wrap: "children",
-          value: {
-            name: "Green Container Centered",
-            type: "chakra",
-            chakra: "Center",
-            props: {
-              bg: "#66BB6A",
-              padding: 4,
-              borderRadius: 12,
-            },
-            children: [],
-          },
-        },
-        "Yellow Container Centered": {
-          name: "Yellow Container Centered",
-          type: "chakra",
-          icon: "💛",
-          wrap: "children",
-          value: {
-            name: "Yellow Container Centered",
-            type: "chakra",
-            chakra: "Center",
-            props: {
-              bg: "#FFEE58",
-              padding: 4,
-              borderRadius: 12,
-            },
-            children: [],
-          },
-        },
-        "Orange Container Centered": {
-          name: "Orange Container Centered",
-          type: "chakra",
-          icon: "🧡",
-          wrap: "children",
-          value: {
-            name: "Orange Container Centered",
-            type: "chakra",
-            chakra: "Center",
-            props: {
-              bg: "#FF7043",
-              padding: 4,
-              borderRadius: 12,
-            },
-            children: [],
-          },
-        },
-        "Red Container Centered": {
-          name: "Red Container Centered",
-          type: "chakra",
-          icon: "❤️",
-          wrap: "children",
-          value: {
-            name: "Red Container Centered",
-            type: "chakra",
-            chakra: "Center",
-            props: {
-              bg: "#C62828",
-              padding: 4,
-              borderRadius: 12,
-            },
-            children: [],
-          },
-        },
-        "Left Aligned": {
-          type: "chakra",
-          value: {
-            type: "chakra",
-            chakra: "Flex",
-            props: {
-              mr: "auto",
-            },
-            children: [],
-          },
-        },
-        "Right Aligned": {
-          type: "chakra",
-          value: {
-            type: "chakra",
-            chakra: "Flex",
-            props: {
-              ml: "auto",
-            },
-            children: [],
-          },
-        },
-      },
-    },
-    // undoLimit: 999,
-    // commander: {
-    //   nav: {
-    //     commanderActive: false,
-    //     clearCommanderOnToggle: true,
-    //     clearCommanderContextOnToggle: true,
-    //     hideSuggestionsOnToggle: true,
-    // },
-    // },
-  },
-  //   Content: {
-  //     hidden1: "Edit this to your heart's desire.",
-  //     "How?": "Just search for Content and edit the value to whatever you want.",
-  //     "Example:": `Content = New Content!
-  // Content.Nested Content = New Nested Content!
-  //     `,
-  //   },
-  version: 24,
-}
-
-const newVersionData = {
-  Content: {
-    hidden1: "Edit this to your heart's desire.",
-    "How?": "Just search for Content and edit the value to whatever you want.",
-    "Example:": `Content = New Content!
-      Content.Nested Content = New Nested Content!
-    `,
-  },
-}
-
-const initialValues = {
-  settings: {
-    commander: {
-      nav: {
-        commanderActive: false,
-        clearCommanderOnToggle: true,
-        clearCommanderContextOnToggle: true,
-        hideSuggestionsOnToggle: true,
-      },
-    },
-  },
-  Content: {
-    hidden1: "Edit this to your heart's desire.",
-    "How?": "Just search for Content and edit the value to whatever you want.",
-    "Example:": `
-Content = New Content!
-Content.Nested Content = New Nested Content!
-    `,
-  },
-}
-
-// const initialThingtime = createInitialThingtime()
-const initialThingtime = smarts.merge(initialValues, force)
-
-// initialise thingtime
-initialThingtime.thingtime = initialThingtime
-initialThingtime.tt = initialThingtime
-
 export const ThingtimeProvider = (props: any): JSX.Element => {
-  const [thingtimeReference, rawSet] = React.useState()
+  const [thingtimeReference, rawSet] = React.useState();
 
-  const thingtimeRef = React.useRef(thingtimeReference)
+  const thingtimeRef = React.useRef(thingtimeReference);
   const stateRef: any = React.useRef({
-    c: 1,
-  })
+    c: 1
+  });
 
-  const [loading, setLoading] = React.useState(true)
+  const [loading, setLoading] = React.useState(true);
 
-  const [events, setEvents] = React.useState(null)
+  const [events, setEvents] = React.useState(null);
 
   if (!events) {
-    setEvents(() => new Subject())
+    setEvents(() => new Subject());
   }
 
   const set = React.useCallback((newThingtime, ignoreUndoRedo?: any) => {
     const newThingtimeReference = {
-      ...newThingtime,
-    }
+      ...newThingtime
+    };
 
-    newThingtimeReference.tt = newThingtimeReference
-    newThingtimeReference.thingtime = newThingtimeReference
+    newThingtimeReference.tt = newThingtimeReference;
+    newThingtimeReference.thingtime = newThingtimeReference;
 
     // store undo/redo history
     if (!ignoreUndoRedo) {
       try {
-        console.log(
-          "ThingtimeProvider setting thingtime to localStorage",
-          newThingtimeReference
-        )
+        console.log('ThingtimeProvider setting thingtime to localStorage', newThingtimeReference);
         // setTimeout(() => {
-        const stringified = stringify(newThingtimeReference)
-        let undoHistory = []
+        const stringified = stringify(newThingtimeReference);
+        let undoHistory = [];
         try {
-          const undoHistoryString = window.localStorage.getItem("undoHistory")
-          const parsedUndoHistory = JSON.parse(undoHistoryString)
+          const undoHistoryString = window.localStorage.getItem('undoHistory');
+          const parsedUndoHistory = JSON.parse(undoHistoryString);
           if (parsedUndoHistory instanceof Array) {
-            undoHistory = parsedUndoHistory
+            undoHistory = parsedUndoHistory;
           }
         } catch {
           // nothing
         }
+
         // if last undoHistory does not equal new undo history
         if (undoHistory[undoHistory.length - 1]?.value !== stringified) {
           try {
-            const limit = newThingtimeReference?.settings?.undoLimit || 999
+            const limit = newThingtimeReference?.settings?.undoLimit || 999;
 
             if (undoHistory?.length > limit) {
-              undoHistory = undoHistory.slice(undoHistory.length - limit)
+              undoHistory = undoHistory.slice(undoHistory.length - limit);
             }
 
             undoHistory.push({
               timestamp: Date.now(),
-              value: stringify(newThingtimeReference),
-            })
-            const undoHistoryNewString = JSON.stringify(undoHistory)
-            window.localStorage.setItem("undoHistory", undoHistoryNewString)
+              value: stringify(newThingtimeReference)
+            });
+            const undoHistoryNewString = JSON.stringify(undoHistory);
+            window.localStorage.setItem('undoHistory', undoHistoryNewString);
           } catch {
             // nothing
           }
         }
       } catch (err) {
-        console.error("There was an error saving thingtime to localStorage")
+        console.error('There was an error saving thingtime to localStorage');
       }
-      const saveRedo = false
+
+      const saveRedo = false;
       if (saveRedo) {
         try {
-          console.log(
-            "ThingtimeProvider setting thingtime to localStorage",
-            newThingtimeReference
-          )
+          console.log('ThingtimeProvider setting thingtime to localStorage', newThingtimeReference);
           // setTimeout(() => {
-          const stringified = stringify(newThingtimeReference)
-          let redoHistory = []
+          const stringified = stringify(newThingtimeReference);
+          let redoHistory = [];
           try {
-            const redoHistoryString = window.localStorage.getItem("redoHistory")
-            const parsedRedoHistory = JSON.parse(redoHistoryString)
+            const redoHistoryString = window.localStorage.getItem('redoHistory');
+            const parsedRedoHistory = JSON.parse(redoHistoryString);
             if (parsedRedoHistory instanceof Array) {
-              redoHistory = parsedRedoHistory
+              redoHistory = parsedRedoHistory;
             }
           } catch {
             // nothing
           }
+
           if (redoHistory[redoHistory.length - 1]?.value !== stringified) {
             try {
-              const limit = newThingtimeReference?.settings?.redoLimit || 999
+              const limit = newThingtimeReference?.settings?.redoLimit || 999;
 
               if (redoHistory?.length > limit) {
-                redoHistory = redoHistory.slice(redoHistory.length - limit)
+                redoHistory = redoHistory.slice(redoHistory.length - limit);
               }
 
               redoHistory.push({
                 timestamp: Date.now(),
-                value: stringify(newThingtimeReference),
-              })
-              const redoHistoryNewString = JSON.stringify(redoHistory)
-              window.localStorage.setItem("redoHistory", redoHistoryNewString)
+                value: stringify(newThingtimeReference)
+              });
+              const redoHistoryNewString = JSON.stringify(redoHistory);
+              window.localStorage.setItem('redoHistory', redoHistoryNewString);
             } catch {
               // nothing
             }
           }
         } catch (err) {
-          console.error("There was an error saving thingtime to localStorage")
+          console.error('There was an error saving thingtime to localStorage');
         }
       }
     }
 
-    rawSet(newThingtimeReference)
-  }, [])
+    rawSet(newThingtimeReference);
+  }, []);
 
   const setThingtime = React.useCallback(
     (path, value) => {
       // TODO: make this a lot safer
-      if (["thingtime", "tt"]?.includes(path)) {
+      if (['thingtime', 'tt']?.includes(path)) {
         if (value) {
-          set(value)
-          return
+          set(value);
+          return;
         }
       }
 
-      const newThingtime: any = thingtimeReference || {}
+      const newThingtime: any = thingtimeReference || {};
 
-      const paths = smarts.parsePropertyPath(path)
+      const paths = smarts.parsePropertyPath(path);
 
       // find first parent where a path is undefined
       // paths is array of path parts such as ["path1", "path2", "path3"]
@@ -422,286 +157,254 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
       // "path1.path2" = { ...thingtime["path1"]["path2"] } if path1.path2.path3 undefined
       // "path1.path2.path3" = { ...thingtime["path1"]["path2"]["path3"] }
       // etc
-      let done = false
+      let done = false;
       paths.forEach((pathPart, index) => {
         if (!done) {
-          const pathParts = paths.slice(0, index + 1)
-          const tmpPath = pathParts.join(".")
-          const parentPath = pathParts.slice(0, -1).join(".")
+          const pathParts = paths.slice(0, index + 1);
+          const tmpPath = pathParts.join('.');
+          const parentPath = pathParts.slice(0, -1).join('.');
 
-          const valAtPath = smarts.getsmart(newThingtime, tmpPath)
+          const valAtPath = smarts.getsmart(newThingtime, tmpPath);
 
           if (parentPath) {
-            if (typeof valAtPath !== "object" || valAtPath === null) {
-              const parentVal = smarts.getsmart(newThingtime, parentPath)
-              if (typeof parentVal === "object") {
-                const newParent = Array.isArray(parentVal)
-                  ? [...parentVal]
-                  : { ...parentVal }
-                smarts.setsmart(newThingtime, parentPath, newParent)
+            if (typeof valAtPath !== 'object' || valAtPath === null) {
+              const parentVal = smarts.getsmart(newThingtime, parentPath);
+              if (typeof parentVal === 'object') {
+                const newParent = Array.isArray(parentVal) ? [...parentVal] : { ...parentVal };
+                smarts.setsmart(newThingtime, parentPath, newParent);
               }
-              done = true
+
+              done = true;
             }
           }
         }
-      })
+      });
 
       // TODO: make thingtime settable
-      newThingtime.thingtime = newThingtime
-      newThingtime.tt = newThingtime
+      newThingtime.thingtime = newThingtime;
+      newThingtime.tt = newThingtime;
 
-      console.log(
-        "ThingtimeProvider setting newThingtime value at path",
-        '"' + path + '"',
-        "value: ",
-        value
-      )
+      console.log('ThingtimeProvider setting newThingtime value at path', '"' + path + '"', 'value: ', value);
 
-      smarts.setsmart(newThingtime, path, value)
+      smarts.setsmart(newThingtime, path, value);
 
-      set(newThingtime)
+      set(newThingtime);
     },
     [thingtimeReference, set]
-  )
+  );
 
   const getThingtime = React.useCallback(
     (...args) => {
-      const rawPath = args[0]
-      const path = rawPath
+      const rawPath = args[0];
+      const path = rawPath;
 
       if (!path) {
-        return thingtimeReference
+        return thingtimeReference;
       }
 
       // do we need to sanitise?
       // const path = sanitise(rawPath)
-      console.log("ThingtimeProvider getting thingtime at path", path)
+      console.log('ThingtimeProvider getting thingtime at path', path);
       // console.trace("Getting thingtime at path", path)
-      return smarts.getsmart(thingtimeReference, path)
+      return smarts.getsmart(thingtimeReference, path);
     },
     [thingtimeReference]
-  )
+  );
 
   const populatePaths = React.useCallback((obj, path, paths, seen = []) => {
     try {
       Object.keys(obj).forEach((key) => {
-        const val = obj[key]
-        const newPath = path ? `${path}${path ? "." : ""}${key}` : key
-        if (typeof val === "object") {
-          paths.push(newPath)
+        const val = obj[key];
+        const newPath = path ? `${path}${path ? '.' : ''}${key}` : key;
+        if (typeof val === 'object') {
+          paths.push(newPath);
           if (!seen?.includes(val)) {
-            seen.push(val)
-            populatePaths(val, newPath, paths, seen)
+            seen.push(val);
+            populatePaths(val, newPath, paths, seen);
           }
         } else {
-          paths.push(newPath)
+          paths.push(newPath);
         }
-      })
+      });
     } catch {
       // nothing
     }
-  }, [])
+  }, []);
 
   const paths = React.useMemo(() => {
     // const paths = ["tt", "thingtime", "."]
-    const paths = []
+    const paths = [];
 
     // populatePaths(thingtime, commandPath)
-    populatePaths(thingtimeReference, "", paths)
+    populatePaths(thingtimeReference, '', paths);
 
-    return paths
-  }, [populatePaths, thingtimeReference])
+    return paths;
+  }, [populatePaths, thingtimeReference]);
 
   // get thingtime from localstorage
   React.useEffect(() => {
     try {
-      const thingtimeFromLocalStorage = window.localStorage.getItem("thingtime")
+      const thingtimeFromLocalStorage = window.localStorage.getItem('thingtime');
 
       if (thingtimeFromLocalStorage) {
-        const parsed = parse(thingtimeFromLocalStorage)
-        console.log(
-          "ThingtimeProvider thingtime restored from localstorage",
-          parsed
-        )
+        const parsed = parse(thingtimeFromLocalStorage);
+        console.log('ThingtimeProvider thingtime restored from localstorage', parsed);
         if (parsed) {
-          const localIsValid =
-            !parsed.version || parsed.version >= force.version
-          let newThingtime = smarts.merge(force, initialThingtime)
+          const localIsValid = !parsed.version || parsed.version >= thingtimeForced.version;
+          let newThingtime = smarts.merge(thingtimeForced, thingtimeDefaults);
           if (localIsValid) {
-            newThingtime = smarts.merge(parsed, newThingtime)
+            newThingtime = smarts.merge(parsed, newThingtime);
           } else {
-            const withVersionUpdates = smarts.merge(newVersionData, parsed)
-            newThingtime = smarts.merge(force, withVersionUpdates)
+            const withVersionUpdates = smarts.merge(thingtimeNewData, parsed);
+            newThingtime = smarts.merge(thingtimeForced, withVersionUpdates);
           }
-          console.log(
-            "ThingtimeProvider restoring thingtime from localStorage",
-            newThingtime
-          )
-          set(newThingtime)
+
+          console.log('ThingtimeProvider restoring thingtime from localStorage', newThingtime);
+          set(newThingtime);
         }
       } else {
-        set(initialThingtime)
+        set(thingtimeDefaults);
       }
     } catch (err) {
-      console.error("There was an error getting thingtime from localStorage")
+      console.error('There was an error getting thingtime from localStorage');
     }
-    setLoading(false)
-  }, [])
+
+    setLoading(false);
+  }, []);
 
   // thingtime change listener
   React.useEffect(() => {
     try {
-      window.setThingtime = setThingtime
-      window.getThingtime = getThingtime
-      window.thingtime = thingtimeReference
-      window.tt = thingtimeReference
-      window.events = events
+      window.setThingtime = setThingtime;
+      window.getThingtime = getThingtime;
+      window.thingtime = thingtimeReference;
+      window.tt = thingtimeReference;
+      window.events = events;
     } catch {
       // nothing
     }
 
     if (stateRef.current.initialized) {
       try {
-        console.log(
-          "ThingtimeProvider setting thingtime to localStorage",
-          thingtimeReference
-        )
+        console.log('ThingtimeProvider setting thingtime to localStorage', thingtimeReference);
         // setTimeout(() => {
-        const stringified = stringify(thingtimeReference)
-        window.localStorage.setItem("thingtime", stringified)
+        const stringified = stringify(thingtimeReference);
+        window.localStorage.setItem('thingtime', stringified);
         // }, 600)
       } catch (err) {
-        console.error("There was an error saving thingtime to localStorage")
+        console.error('There was an error saving thingtime to localStorage');
       }
     } else {
-      stateRef.current.initialized = true
+      stateRef.current.initialized = true;
     }
 
-    thingtimeRef.current = thingtimeReference
+    thingtimeRef.current = thingtimeReference;
 
     const keyListener = (e) => {
       // if ctrl + z, restore thingtime from localstorage history
 
-      console.log("ThingtimeProvider listened to key event e?.key", e?.key)
-      console.log(
-        "ThingtimeProvider listened to key event e?.ctrlKey",
-        e?.ctrlKey
-      )
-      console.log(
-        "ThingtimeProvider listened to key event e?.shiftKey",
-        e?.shiftKey
-      )
-      console.log(
-        "ThingtimeProvider listened to key event e?.metaKey",
-        e?.metaKey
-      )
+      console.log('ThingtimeProvider listened to key event e?.key', e?.key);
+      console.log('ThingtimeProvider listened to key event e?.ctrlKey', e?.ctrlKey);
+      console.log('ThingtimeProvider listened to key event e?.shiftKey', e?.shiftKey);
+      console.log('ThingtimeProvider listened to key event e?.metaKey', e?.metaKey);
 
-      if ((e?.ctrlKey || e?.metaKey) && e?.key === "z") {
-        e?.preventDefault()
+      if ((e?.ctrlKey || e?.metaKey) && e?.key === 'z') {
+        e?.preventDefault();
 
-        console.log("ThingtimeProvider detected undo/redo request")
+        console.log('ThingtimeProvider detected undo/redo request');
 
         if (e.shiftKey) {
           // redo
-          console.log("ThingtimeProvider redo")
-          const redoHistoryString = window.localStorage.getItem("redoHistory")
-          const parsedRedoHistory = JSON.parse(redoHistoryString)
+          console.log('ThingtimeProvider redo');
+          const redoHistoryString = window.localStorage.getItem('redoHistory');
+          const parsedRedoHistory = JSON.parse(redoHistoryString);
           if (parsedRedoHistory instanceof Array) {
-            const last = parsedRedoHistory[parsedRedoHistory.length - 1]
+            const last = parsedRedoHistory[parsedRedoHistory.length - 1];
             if (last) {
-              const parsed = parse(last.value)
+              const parsed = parse(last.value);
               if (parsed) {
                 // remove restored state from history
                 // const currentHistory = parsedRedoHistory.pop()
-                parsedRedoHistory.pop()
+                parsedRedoHistory.pop();
                 // parsedRedoHistory.push(currentHistory)
-                const newRedoHistoryString = JSON.stringify(parsedRedoHistory)
-                window.localStorage.setItem("redoHistory", newRedoHistoryString)
+                const newRedoHistoryString = JSON.stringify(parsedRedoHistory);
+                window.localStorage.setItem('redoHistory', newRedoHistoryString);
 
                 // save old/current state to undo history
-                let undoHistory = []
+                let undoHistory = [];
                 try {
-                  const undoHistoryString =
-                    window.localStorage.getItem("undoHistory")
-                  const parsedUndoHistory = JSON.parse(undoHistoryString)
+                  const undoHistoryString = window.localStorage.getItem('undoHistory');
+                  const parsedUndoHistory = JSON.parse(undoHistoryString);
                   if (parsedUndoHistory instanceof Array) {
-                    undoHistory = parsedUndoHistory
+                    undoHistory = parsedUndoHistory;
                   }
                 } catch {
                   // nothing
                 }
+
                 try {
                   undoHistory.push({
                     timestamp: Date.now(),
-                    value: stringify(thingtimeReference),
-                  })
-                  const undoHistoryNewString = JSON.stringify(undoHistory)
-                  window.localStorage.setItem(
-                    "undoHistory",
-                    undoHistoryNewString
-                  )
+                    value: stringify(thingtimeReference)
+                  });
+                  const undoHistoryNewString = JSON.stringify(undoHistory);
+                  window.localStorage.setItem('undoHistory', undoHistoryNewString);
                 } catch {
                   // nothing
                 }
 
-                const newThingtime = parsed
-                set(newThingtime, true)
+                const newThingtime = parsed;
+                set(newThingtime, true);
               }
             }
           }
         } else {
           // undo
-          console.log("ThingtimeProvider undo")
+          console.log('ThingtimeProvider undo');
           try {
-            const undoHistoryString = window.localStorage.getItem("undoHistory")
-            const parsedUndoHistory = JSON.parse(undoHistoryString)
+            const undoHistoryString = window.localStorage.getItem('undoHistory');
+            const parsedUndoHistory = JSON.parse(undoHistoryString);
             if (parsedUndoHistory instanceof Array) {
-              const last = parsedUndoHistory[parsedUndoHistory.length - 2]
+              const last = parsedUndoHistory[parsedUndoHistory.length - 2];
               if (last) {
-                const parsed = parse(last.value)
+                const parsed = parse(last.value);
                 if (parsed) {
                   // remove restored state from history
 
-                  const currentHistory = parsedUndoHistory.pop()
-                  parsedUndoHistory.pop()
-                  parsedUndoHistory.push(currentHistory)
+                  const currentHistory = parsedUndoHistory.pop();
+                  parsedUndoHistory.pop();
+                  parsedUndoHistory.push(currentHistory);
 
-                  const newUndoHistoryString = JSON.stringify(parsedUndoHistory)
-                  window.localStorage.setItem(
-                    "undoHistory",
-                    newUndoHistoryString
-                  )
+                  const newUndoHistoryString = JSON.stringify(parsedUndoHistory);
+                  window.localStorage.setItem('undoHistory', newUndoHistoryString);
 
                   // save old/current state to redo history
-                  let redoHistory = []
+                  let redoHistory = [];
                   try {
-                    const redoHistoryString =
-                      window.localStorage.getItem("redoHistory")
-                    const parsedRedoHistory = JSON.parse(redoHistoryString)
+                    const redoHistoryString = window.localStorage.getItem('redoHistory');
+                    const parsedRedoHistory = JSON.parse(redoHistoryString);
                     if (parsedRedoHistory instanceof Array) {
-                      redoHistory = parsedRedoHistory
+                      redoHistory = parsedRedoHistory;
                     }
                   } catch {
                     // nothing
                   }
+
                   try {
-                    const newValue = stringify(thingtimeReference)
+                    const newValue = stringify(thingtimeReference);
                     // if last history is not the same as new history
                     redoHistory.push({
                       timestamp: Date.now(),
-                      value: newValue,
-                    })
-                    const redoHistoryNewString = JSON.stringify(redoHistory)
-                    window.localStorage.setItem(
-                      "redoHistory",
-                      redoHistoryNewString
-                    )
+                      value: newValue
+                    });
+                    const redoHistoryNewString = JSON.stringify(redoHistory);
+                    window.localStorage.setItem('redoHistory', redoHistoryNewString);
                   } catch {
                     // nothing
                   }
 
-                  const newThingtime = parsed
-                  set(newThingtime, true)
+                  const newThingtime = parsed;
+                  set(newThingtime, true);
                 }
               }
             }
@@ -710,14 +413,14 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
           }
         }
       }
-    }
+    };
 
-    window.addEventListener("keydown", keyListener)
+    window.addEventListener('keydown', keyListener);
 
     return () => {
-      window.removeEventListener("keydown", keyListener)
-    }
-  }, [setThingtime, events, getThingtime, thingtimeReference, set])
+      window.removeEventListener('keydown', keyListener);
+    };
+  }, [setThingtime, events, getThingtime, thingtimeReference, set]);
 
   const value = {
     thingtime: thingtimeReference,
@@ -726,12 +429,8 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
     thingtimeRef,
     paths,
     loading,
-    events,
-  }
+    events
+  };
 
-  return (
-    <ThingtimeContext.Provider value={value}>
-      {props?.children}
-    </ThingtimeContext.Provider>
-  )
-}
+  return <ThingtimeContext.Provider value={value}>{props?.children}</ThingtimeContext.Provider>;
+};
