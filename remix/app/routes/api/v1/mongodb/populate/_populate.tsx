@@ -1,18 +1,17 @@
 import { Flex, Heading } from '@chakra-ui/react';
 import { useLocation } from '@remix-run/react';
-import { getCollection } from '~/api/utils/mongodb/collection';
-import { getConnection } from '~/api/utils/mongodb/connection';
 import { Submit } from '~/components/API/Submit';
 import setup from '~/scripts/mongodb/setup';
 
-const routeName = 'Raw Results';
+const routeName = 'Populate';
 
 export default function Index() {
   const { pathname } = useLocation();
 
   return (
     <Flex flexDir={'column'}>
-      {/* <Thingtime ></Thingtime> */}
+      {/* <Thingtime></Thingtime> */}
+      {/* hmmmmm */}
       <Submit pathname={pathname}></Submit>
     </Flex>
   );
@@ -21,24 +20,22 @@ export default function Index() {
 const actionExport = async ({ request }) => {
   // literally just run the setup.ts script
 
-  const connection = await getConnection();
+  console.log('nik here ???????');
 
-  if (!connection) {
+  const ret = await setup();
+
+  if (!ret) {
     return earlyReturn({
       status: 500,
-      message: `failed to setup mongodb connection`
+      message: `failed to setup mongodb`
     });
   }
-
-  const thingsCollection = await getCollection();
-
-  const things = await thingsCollection.find().toArray();
 
   return earlyReturn({
     status: 200,
     message: `successful`,
     data: {
-      rawResults: things
+      ret
     }
   });
 };
@@ -61,4 +58,4 @@ const earlyReturn = (args) => {
 
 export const action = actionExport;
 
-export const rawResultsAction = actionExport;
+export const populateAction = actionExport;

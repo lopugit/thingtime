@@ -1,7 +1,21 @@
-import { MongoClient } from 'mongodb';
+// @ts-ignore
+import { getClient } from './client';
+import { getConnectionAction } from '../../../routes/api/v1/mongodb/get-connection/_get-connection';
 
-export const createConnection = async () => {
-  const client = new MongoClient(process.env.MONGODB_URI, {});
+export const getConnection = async () => {
+  const MongoClient = await getClient();
+
+  const connectionResp = await getConnectionAction({ request: { method: 'GET' } });
+
+  console.log('nik connectionResp', connectionResp);
+
+  if (!connectionResp?.body?.data) {
+    throw new Error('No valid connection found');
+  }
+
+  const connectionUri = connectionResp.body.data.connection || process.env.MONGODB_URI;
+
+  const client = new MongoClient(connectionUri, {});
   await client.connect();
   return client;
 };

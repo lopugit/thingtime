@@ -54,6 +54,7 @@
     "@remix-run/eslint-config": "^2.8.1",
     "@shopify/eslint-plugin": "^42.1.0",
     "@types/eslint": "^8.40.2",
+    "@types/node": "^20.14.12",
     "@types/react": "^18.0.25",
     "@types/react-dom": "^18.0.11",
     "@typescript-eslint/parser": "^5.60.1",
@@ -69,6 +70,7 @@
     "eslint-plugin-unused-imports": "^2.0.0",
     "framer-motion": "^11.3.12",
     "remix-flat-routes": "^0.6.4",
+    "ts-node": "^10.9.2",
     "typescript": "^5.5.4",
     "vite": "^5.1.0",
     "vite-tsconfig-paths": "^4.3.2"

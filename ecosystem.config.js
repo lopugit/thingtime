@@ -5,6 +5,7 @@ module.exports = {
       name: 'tt',
       namespace: 'thingtime'
     }
+
     // {
     // 	script: 'npm run api',
     // 	name: 'tt-api',

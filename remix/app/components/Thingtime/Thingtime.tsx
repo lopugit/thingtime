@@ -28,7 +28,17 @@ import { useThingtime } from './useThingtime';
 import { useThings } from '~/hooks/useThings';
 import { getThing } from '~/smarts';
 
-export const Thingtime = (props) => {
+export const Thingtime = (args: any = {}) => {
+  const props = {
+    ...args
+  };
+
+  // if there's a props?.value set props?.thing to props?.value
+
+  if (Object.hasOwnProperty.call(props, 'value')) {
+    props.thing = props.value;
+  }
+
   // TODO: Add a circular reference seen prop check
   // and add button to expand circular reference
   // up to 1 level deep

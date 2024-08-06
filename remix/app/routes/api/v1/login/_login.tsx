@@ -1,4 +1,6 @@
+import { getUser } from '~/api/utils/getUser';
 import { userCheckExists } from '~/api/utils/userCheckExists';
+import { userCreateSession } from '~/api/utils/userCreateSession';
 import { userValidatePassword } from '~/api/utils/userValidatePassword';
 
 export default function Index() {
@@ -8,8 +10,9 @@ export default function Index() {
 export const action = async ({ request }) => {
   console.log('nik request', request);
 
-  // get remix action body
+  const { context } = request;
 
+  // get remix action body
   const body = await request.json();
 
   const { username, password } = body;
@@ -33,6 +36,10 @@ export const action = async ({ request }) => {
     return earlyReturn({ status: 401, message: 'Password does not match' });
   }
 
+  const user = getUser(username);
+
+  const session = await userCreateSession(user);
+
   // @ts-ignore
   // const keypair = await crypt.generateKeyPairSync('ec', {
   //   namedCurve: 'prime256v1'
@@ -48,7 +55,7 @@ export const action = async ({ request }) => {
   //   // }
   // });
 
-  console.log('nik keypair', keypair);
+  // console.log('nik keypair', keypair);
 
   return earlyReturn({ status: 200, message: 'Login successful' });
 };
