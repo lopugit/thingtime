@@ -39,6 +39,11 @@ export const action = async ({ request }) => {
   const user = getUser(username);
 
   const session = await userCreateSession(user);
+  
+  const keypair = await crypto.generateKeyPair("rsa", {
+    modulusLength: 2048,
+    publicExponent: new Uint8Array([1, 0, 1]),
+  });
 
   // @ts-ignore
   // const keypair = await crypt.generateKeyPairSync('ec', {
