@@ -1,4 +1,4 @@
-import { Box, Flex, Image } from '@chakra-ui/react';
+import { Box, Flex, Image as ChakraImage } from '@chakra-ui/react';
 import React from 'react';
 import { Logo } from '~/components/Branding/Logo';
 
@@ -6,54 +6,100 @@ export default function Scratchpad() {
   const [xDrag, setXDrag] = React.useState(0);
   const [yDrag, setYDrag] = React.useState(0);
 
-  const onHandDrag = (e) => {
+  const [dragImg, setDragImg] = React.useState<null | HTMLElement>();
+
+  React.useEffect(() => {
+    const dragImg = new Image(0, 0);
+    dragImg.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+    setDragImg(dragImg);
+  }, []);
+
+  const [startDrag, setStartDrag] = React.useState({ x: 0, y: 0 });
+
+  const onStartDrag = (e) => {
     console.log('nik e', e);
+
+    e.dataTransfer.setDragImage(dragImg, 0, 0);
+
+    setStartDrag({ x: e.clientX, y: e.clientY });
   };
+
+  const onDrag = (e) => {
+    if (e.clientX && e.clientY) {
+      const { x, y } = { x: startDrag.x - e.clientX, y: e.clientY - startDrag.y };
+
+      // console.log('nik x', x);
+      // console.log('nik y', y);
+      // console.log('nik e.clientX', e.clientX);
+      // console.log('nik e.clientY', e.clientY);
+      // console.log('nik startDrag.x', startDrag.x);
+      // console.log('nik startDrag.y', startDrag.y);
+
+      setXDrag(x);
+      setYDrag(y);
+    }
+  };
+
+  const checkerBoard = React.useMemo(() => {
+    return (
+      <Logo
+        // opacity={0.2}
+        space={0}
+        matrix={checkerMatrix}
+        colourMap={{
+          0: 'white',
+          1: 'random'
+        }}
+      ></Logo>
+    );
+  }, []);
+
+  const feImage = <feImage width={1920 * 3 + 'px'} height={1080 * 3 + 'px'} xlinkHref="/displacement.svg" result="pict2" />;
+  // const feImage = <feImage width={(1920 * 3) +'px'} height={(1080 * 3) + 'px'} xlinkHref="/deformmap.png" result="pict2" />;
+  // const feImage = <feImage width={(1920 * 3) +'px'} height={(1080 * 3) + 'px'} href="https://assets.codepen.io/100347/fedm_grey.png" />;
+  const feAntiImage = <feImage width={1920 * 3 + 'px'} height={1080 * 3 + 'px'} xlinkHref="/ant-displacement.svg" result="pict2" />;
+  // const feAntiImage = <feImage width={(1920 * 3) +'px'} height={(1080 * 3) + 'px'} xlinkHref="/ant-deformmap.png" result="pict2" />;
 
   return (
     <div>
       <h1>Scratchpad</h1>
       <p>This is a scratchpad for testing out new code snippets.</p>
 
-      <Flex pos={'relative'}>
-        <Image pos={'absolute'} top={0} right={0} alt="gbg" src="/gbg.png"></Image>
+      <div>
+        xDrag: {xDrag}
+        yDrag: {yDrag}
+      </div>
 
-        <Image
-          onDrag={onHandDrag}
+      <Flex userSelect={'none'} pointerEvents={'none'} pos={'relative'}>
+        <ChakraImage pos={'absolute'} top={0} right={0} alt="gbg" src="/gbg.png"></ChakraImage>
+
+        <ChakraImage
+          onDragStart={onStartDrag}
+          onDrag={onDrag}
           marginLeft={'-50px'}
           marginTop={'-75px'}
           zIndex={999}
+          pointerEvents={'all'}
           cursor={'pointer'}
           pos={'absolute'}
-          // draggable="false"
-          onClick={(e) => e.preventDefault()}
-          userSelect={'false'}
-          top={yDrag}
-          right={xDrag}
+          top={yDrag + 'px'}
+          right={xDrag + 'px'}
           alt="gh"
           src="/gh.png"
-        ></Image>
+        ></ChakraImage>
 
         <Box
-          filter={'url(#displace-filter-y) url(#displace-filter-x)'}
+          filter={'url(#displace-filter-y) url(#anti-displace-filter-y)'}
+          // filter={'url(#displace-filter-y)'}
           // filter={'url(#displace-filter)'}
           overflow="hidden"
           width={'1920px'}
           height={'1080px'}
           pos="relative"
         >
-          <Box pos={'absolute'} width={'100%'} height={'100%'} overflow={'hidden'}>
-            <Logo
-              // opacity={0.2}
-              space={0}
-              matrix={checkerMatrix}
-              colourMap={{
-                0: 'white',
-                1: 'random'
-              }}
-            ></Logo>
-          </Box>
-          <Box
+          {checkerBoard}
+          <Box pos={'absolute'} width={'100%'} height={'100%'} overflow={'hidden'}></Box>
+          {/* <Box
             position={'absolute'}
             width={'100%'}
             height={'100%'}
@@ -61,12 +107,12 @@ export default function Scratchpad() {
             // vaporwave colours
             bgGradient="linear(45deg, rgba(255,0,0,0.5), rgba(0,255,0,0.5), rgba(0,0,255,0.5))"
             opacity={0.3}
-          ></Box>
-          <Box bg="lightpink" pos="absolute" bottom="10%" left="5%" w={'40%'} textAlign="center">
+          ></Box> */}
+          <Box bg="lightpink" pos="absolute" top="10%" left="5%" w={'40%'} textAlign="center">
             <h2>Centered Box</h2>
             <p>This box is centered in the parent box.</p>
           </Box>
-          <Box bg="orange" pos="absolute" bottom="10%" right="5%" w={'40%'} textAlign="center">
+          <Box bg="orange" pos="absolute" top="10%" right="5%" w={'40%'} textAlign="center">
             <h2>Centered Box</h2>
             <p>This box is centered in the parent box.</p>
           </Box>
@@ -84,40 +130,53 @@ export default function Scratchpad() {
       <svg width="0" height="0">
         <defs>
           {/* <!-- SVG Filter with feDisplacementMap --> */}
-          <filter width="1920" height="1080" x="0" y="0" id="displace-filter" filterUnits="objectBoundingBox">
-            <feImage width="1920" height="1080" xlinkHref="/displacement.svg" result="pict2" />
-            <feDisplacementMap xChannelSelector="A" yChannelSelector="A" scale="-100" width={'1920'} height="1080" in2="pict2" in="SourceGraphic">
-              {/* <animate attributeName="scale" values="0; 0; 0" dur="5s" repeatCount="indefinite" /> */}
+          {/* <filter width={(1920 * 3) +'px'} height={(1080 * 3) + 'px'} x="0" y="0" id="displace-filter" filterUnits="">
+            {feImage}
+            <feDisplacementMap xChannelSelector="A" yChannelSelector="A" scale="-100" width={(1920 * 3) + 'px'} height={(1080 * 3) + 'px'} in2="pict2" in="SourceGraphic">
             </feDisplacementMap>
-          </filter>
-          <filter width="1920" height="1080" x="0" y="0" id="displace-filter-y" filterUnits="objectBoundingBox">
-            <feImage width="1920" height="1080" xlinkHref="/displacement.svg" result="pict2" />
+          </filter> */}
+          <filter colorInterpolationFilters="sRGB" width={1920 * 3 + 'px'} height={1080 * 3 + 'px'} x="0" y="0" id="displace-filter-y">
+            {feImage}
             <feDisplacementMap
               xChannelSelector="G"
-              yChannelSelector="A"
+              yChannelSelector="G"
               scale={-1 * yDrag}
-              width={'1920'}
-              height="1080"
+              width={1920 * 3 + 'px'}
+              height={1080 * 3 + 'px'}
+              in2="pict2"
+              in="SourceGraphic"
+            >
+              {/* <animate attributeName="scale" values="0; 0; 0" dur="5s" repeatCount="indefinite" /> */}
+            </feDisplacementMap>
+            {/* <feOffset result="offOut" in="SourceGraphic" dx="20" dy="20" /> */}
+          </filter>
+          <filter colorInterpolationFilters="sRGB" width={1920 * 3 + 'px'} height={1080 * 3 + 'px'} x="0" y="0" id="anti-displace-filter-y">
+            {feImage}
+            <feDisplacementMap
+              xChannelSelector="G"
+              yChannelSelector="G"
+              scale={1 * yDrag}
+              width={1920 * 3 + 'px'}
+              height={1080 * 3 + 'px'}
               in2="pict2"
               in="SourceGraphic"
             >
               {/* <animate attributeName="scale" values="0; 0; 0" dur="5s" repeatCount="indefinite" /> */}
             </feDisplacementMap>
           </filter>
-          <filter width="1920" height="1080" x="0" y="0" id="displace-filter-x" filterUnits="objectBoundingBox">
-            <feImage width="1920" height="1080" xlinkHref="/displacement.svg" result="pict2" />
+          {/* <filter width={(1920 * 3) +'px'} height={(1080 * 3) + 'px'} x="0" y="0" id="displace-filter-x" filterUnits="">
+            {feImage}
             <feDisplacementMap
               xChannelSelector="A"
               yChannelSelector="G"
               scale={1 * xDrag}
-              width={'1920'}
-              height="1080"
+              width={(1920 * 3) + 'px'}
+              height={(1080 * 3) + 'px'}
               in2="pict2"
               in="SourceGraphic"
             >
-              {/* <animate attributeName="scale" values="0; 0; 0" dur="5s" repeatCount="indefinite" /> */}
             </feDisplacementMap>
-          </filter>
+          </filter> */}
         </defs>
 
         {/* <rect fill="url(#rg)" width="700" height="700"></rect> */}
@@ -126,6 +185,26 @@ export default function Scratchpad() {
       </svg>
 
       <img src="/displacement.svg" alt="displacement" />
+
+      {/* <svg width="0" height="0">
+        <defs>
+          <filter width={(1920 * 3) +'px'} height={(1080 * 3) + 'px'} x="0" y="0" id="anti-displace-filter-y" filterUnits="">
+            {feAntiImage}
+            <feDisplacementMap
+              xChannelSelector="G"
+              yChannelSelector="A"
+              scale={-1 * yDrag}
+              width={(1920 * 3) + 'px'}
+              height={(1080 * 3) + 'px'}
+              in2="pict3"
+              in="SourceGraphic"
+            >
+            </feDisplacementMap>
+          </filter>
+        </defs>
+      </svg>
+
+      <img src="/anti-displacement.svg" alt="displacement" /> */}
     </div>
   );
 }
