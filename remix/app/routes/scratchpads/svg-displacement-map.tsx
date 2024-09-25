@@ -54,12 +54,6 @@ export default function Scratchpad() {
     );
   }, []);
 
-  const feImage = <feImage width={1920 * 3 + 'px'} height={1080 * 3 + 'px'} xlinkHref="/displacement.svg" result="pict2" />;
-  // const feImage = <feImage width={(1920 * 3) +'px'} height={(1080 * 3) + 'px'} xlinkHref="/deformmap.png" result="pict2" />;
-  // const feImage = <feImage width={(1920 * 3) +'px'} height={(1080 * 3) + 'px'} href="https://assets.codepen.io/100347/fedm_grey.png" />;
-  const feAntiImage = <feImage width={1920 * 3 + 'px'} height={1080 * 3 + 'px'} xlinkHref="/ant-displacement.svg" result="pict2" />;
-  // const feAntiImage = <feImage width={(1920 * 3) +'px'} height={(1080 * 3) + 'px'} xlinkHref="/ant-deformmap.png" result="pict2" />;
-
   return (
     <div>
       <h1>Scratchpad</h1>
@@ -70,14 +64,19 @@ export default function Scratchpad() {
         yDrag: {yDrag}
       </div>
 
+      {/* <canvas id="canvas" width="1920" height="1080">
+        
+      </canvas> */}
       <Flex userSelect={'none'} pointerEvents={'none'} pos={'relative'}>
         <ChakraImage pos={'absolute'} top={0} right={0} alt="gbg" src="/gbg.png"></ChakraImage>
 
         <ChakraImage
           onDragStart={onStartDrag}
           onDrag={onDrag}
-          marginLeft={'-50px'}
-          marginTop={'-75px'}
+          // marginLeft={'-50px'}
+          // marginTop={'-75px'}
+          marginRight={'25%'}
+          marginTop={'25%'}
           zIndex={999}
           pointerEvents={'all'}
           cursor={'pointer'}
@@ -89,25 +88,19 @@ export default function Scratchpad() {
         ></ChakraImage>
 
         <Box
-          filter={'url(#displace-filter-y) url(#anti-displace-filter-y)'}
+          // filter={'url(#displace-filter-y) url(#anti-displace-filter-y)'}
+          // filter={'url(#displace-filter-gradient-2)'}
+          filter={'url(#displace-filter-gradient)'}
           // filter={'url(#displace-filter-y)'}
           // filter={'url(#displace-filter)'}
           overflow="hidden"
           width={'1920px'}
           height={'1080px'}
           pos="relative"
+          backgroundImage={'url(/gs2.png)'}
         >
-          {checkerBoard}
+          {/* {checkerBoard}
           <Box pos={'absolute'} width={'100%'} height={'100%'} overflow={'hidden'}></Box>
-          {/* <Box
-            position={'absolute'}
-            width={'100%'}
-            height={'100%'}
-            // linear gradient to track 3d svg filter changes
-            // vaporwave colours
-            bgGradient="linear(45deg, rgba(255,0,0,0.5), rgba(0,255,0,0.5), rgba(0,0,255,0.5))"
-            opacity={0.3}
-          ></Box> */}
           <Box bg="lightpink" pos="absolute" top="10%" left="5%" w={'40%'} textAlign="center">
             <h2>Centered Box</h2>
             <p>This box is centered in the parent box.</p>
@@ -115,7 +108,7 @@ export default function Scratchpad() {
           <Box bg="orange" pos="absolute" top="10%" right="5%" w={'40%'} textAlign="center">
             <h2>Centered Box</h2>
             <p>This box is centered in the parent box.</p>
-          </Box>
+          </Box> */}
         </Box>
       </Flex>
 
@@ -129,82 +122,52 @@ export default function Scratchpad() {
 
       <svg width="0" height="0">
         <defs>
-          {/* <!-- SVG Filter with feDisplacementMap --> */}
-          {/* <filter width={(1920 * 3) +'px'} height={(1080 * 3) + 'px'} x="0" y="0" id="displace-filter" filterUnits="">
-            {feImage}
-            <feDisplacementMap xChannelSelector="A" yChannelSelector="A" scale="-100" width={(1920 * 3) + 'px'} height={(1080 * 3) + 'px'} in2="pict2" in="SourceGraphic">
-            </feDisplacementMap>
-          </filter> */}
-          <filter colorInterpolationFilters="sRGB" width={1920 * 3 + 'px'} height={1080 * 3 + 'px'} x="0" y="0" id="displace-filter-y">
-            {feImage}
-            <feDisplacementMap
-              xChannelSelector="G"
-              yChannelSelector="G"
-              scale={-1 * yDrag}
-              width={1920 * 3 + 'px'}
-              height={1080 * 3 + 'px'}
-              in2="pict2"
-              in="SourceGraphic"
-            >
-              {/* <animate attributeName="scale" values="0; 0; 0" dur="5s" repeatCount="indefinite" /> */}
-            </feDisplacementMap>
-            {/* <feOffset result="offOut" in="SourceGraphic" dx="20" dy="20" /> */}
-          </filter>
-          <filter colorInterpolationFilters="sRGB" width={1920 * 3 + 'px'} height={1080 * 3 + 'px'} x="0" y="0" id="anti-displace-filter-y">
-            {feImage}
-            <feDisplacementMap
-              xChannelSelector="G"
-              yChannelSelector="G"
-              scale={1 * yDrag}
-              width={1920 * 3 + 'px'}
-              height={1080 * 3 + 'px'}
-              in2="pict2"
-              in="SourceGraphic"
-            >
-              {/* <animate attributeName="scale" values="0; 0; 0" dur="5s" repeatCount="indefinite" /> */}
-            </feDisplacementMap>
-          </filter>
-          {/* <filter width={(1920 * 3) +'px'} height={(1080 * 3) + 'px'} x="0" y="0" id="displace-filter-x" filterUnits="">
-            {feImage}
-            <feDisplacementMap
-              xChannelSelector="A"
-              yChannelSelector="G"
-              scale={1 * xDrag}
-              width={(1920 * 3) + 'px'}
-              height={(1080 * 3) + 'px'}
-              in2="pict2"
-              in="SourceGraphic"
-            >
-            </feDisplacementMap>
-          </filter> */}
-        </defs>
-
-        {/* <rect fill="url(#rg)" width="700" height="700"></rect> */}
-
-        {/* <circle cx="50" cy="50" r="40" fill="url(#rg)" /> */}
-      </svg>
-
-      <img src="/displacement.svg" alt="displacement" />
-
-      {/* <svg width="0" height="0">
-        <defs>
-          <filter width={(1920 * 3) +'px'} height={(1080 * 3) + 'px'} x="0" y="0" id="anti-displace-filter-y" filterUnits="">
-            {feAntiImage}
+          <filter colorInterpolationFilters="sRGB" width={1920} height={1080} x="0" y="0" id="displace-filter-y">
+            <feImage width={1920} height={1080} xlinkHref="/displacement.svg" result="pict2" />;
             <feDisplacementMap
               xChannelSelector="G"
               yChannelSelector="A"
               scale={-1 * yDrag}
-              width={(1920 * 3) + 'px'}
-              height={(1080 * 3) + 'px'}
-              in2="pict3"
+              width={1920}
+              height={1080}
+              in2="pict2"
               in="SourceGraphic"
-            >
+            ></feDisplacementMap>
+          </filter>
+          <filter colorInterpolationFilters="sRGB" width={1920} height={1080} x="0" y="0" id="displace-filter-gradient">
+            <feImage width={1920} height={1080} xlinkHref="/displacement-gradient.svg" result="pict2" />;
+            <feDisplacementMap xChannelSelector="A" yChannelSelector="A" scale={-1000} width={1920} height={1080} in2="pict2" in="SourceGraphic">
+              <animate attributeName="scale" values="0; -1000; 0" dur="5s" repeatCount="indefinite" />
+            </feDisplacementMap>
+          </filter>
+          <filter colorInterpolationFilters="sRGB" width={2147} height={1884} id="displace-filter-gradient-2">
+            <feImage width={2147} height={1884} xlinkHref="/displacement-gradient-2.svg" result="pict2" />;
+            <feDisplacementMap xChannelSelector="A" yChannelSelector="A" scale={0} width={2147} height={1884} in2="pict2" in="SourceGraphic">
+              <animate attributeName="scale" values="0; -1000; 0" dur="5s" repeatCount="indefinite" />
             </feDisplacementMap>
           </filter>
         </defs>
       </svg>
+      <svg width="0" height="0">
+        <defs>
+          <filter colorInterpolationFilters="sRGB" width={1920} height={1080} x="0" y="0" id="anti-displace-filter-y">
+            <feImage width={1920} height={1080} xlinkHref="/anti-displacement.svg" result="pict3" />;
+            <feDisplacementMap
+              xChannelSelector="G"
+              yChannelSelector="A"
+              scale={1 * yDrag}
+              width={1920}
+              height={1080}
+              in2="pict3"
+              in="SourceGraphic"
+            ></feDisplacementMap>
+          </filter>
+        </defs>
+      </svg>
 
-      <img src="/anti-displacement.svg" alt="displacement" /> */}
+      {/* <img src="/displacement-gradient.svg" alt="displacement" /> */}
+      <img src="/displacement-gradient-2.svg" alt="displacement" />
+      {/* <img src="/displacement.svg" alt="displacement" /> */}
     </div>
   );
 }

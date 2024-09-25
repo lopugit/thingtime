@@ -4,6 +4,7 @@ import tt from '../tt';
 import React from 'react';
 import { useAsyncFetcher } from '~/hooks/useAsyncFetcher';
 import { Thingtime } from '../Thingtime/Thingtime';
+import { useThingtime } from '../Thingtime/useThingtime';
 
 export const Submit = (props) => {
   const { pathname } = props;
@@ -32,6 +33,14 @@ export const Submit = (props) => {
     return ret;
   }, []);
 
+  const [input, setInput] = React.useState({
+    query: {}
+  });
+
+  const { thingtime } = useThingtime();
+
+  const connectionUrls = thingtime?.settings?.connectionUrls || ['mongodb://localhost:27017'];
+
   return (
     <Container py={64} px={0} mx={0}>
       <Flex gap={12} flexDir="column">
@@ -39,6 +48,10 @@ export const Submit = (props) => {
         <Heading as={'h2'} size={'md'} mb={4}>
           {pathname}
         </Heading>
+
+        <Thingtime path={'settings.connectionUrls'} edit></Thingtime>
+
+        <Thingtime value={input} edit></Thingtime>
 
         <Thingtime value={ret}></Thingtime>
 

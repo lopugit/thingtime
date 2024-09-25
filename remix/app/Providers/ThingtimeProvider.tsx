@@ -246,12 +246,19 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
     try {
       const thingtimeFromLocalStorage = window.localStorage.getItem('thingtime');
 
+      console.log('[tt.ThingtimeProvider] thingtimeFromLocalStorage', thingtimeFromLocalStorage);
+
       if (thingtimeFromLocalStorage) {
         const parsed = parse(thingtimeFromLocalStorage);
-        console.log('ThingtimeProvider thingtime restored from localstorage', parsed);
+
+        console.log('[tt.ThingtimeProvider] parsed', parsed);
+
         if (parsed) {
           const localIsValid = !parsed.version || parsed.version >= thingtimeForced.version;
           let newThingtime = smarts.merge(thingtimeForced, thingtimeDefaults);
+
+          console.trace('[tt.ThingtimeProvider] localIsValid', localIsValid);
+
           if (localIsValid) {
             newThingtime = smarts.merge(parsed, newThingtime);
           } else {
