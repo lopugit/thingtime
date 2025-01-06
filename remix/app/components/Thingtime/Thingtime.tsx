@@ -154,33 +154,54 @@ export const Thingtime = (args: any = {}) => {
     createDependancies();
   }, []);
 
+  const path = React.useMemo(() => {
+    return props?.path?.key || props?.path || '';
+  }, [props?.path]);
+
+  const fullPath = React.useMemo(() => {
+    const fullPathReturn = props?.fullPath || props?.path?.key || props?.path;
+
+    console.log('[tt.Thingtime] fullPathReturn', fullPathReturn);
+
+    // store this thing in the global db
+    try {
+      window.meta.things[fullPathReturn] = props?.thing;
+    } catch {
+      // nothing
+    }
+
+    return fullPathReturn;
+  }, [props?.fullPath, props?.path, props?.thing]);
+
+  // TODO
+  // attempt at making seedling button work with <Thingtime path argument only
+  // const thingtimeThing = getThingtime(fullPath);
+
+  // basically const value = React.useMemo
   const thing = React.useMemo(() => {
-    return props.thing;
+    return props?.thing;
+
+    // TODO
+    // attempt at making seedling button work with <Thingtime path argument only
+
+    // console.log('[tt.Thingtime] props.thing', props.thing);
+    // console.log('[tt.Thingtime] fullPath', fullPath);
+    // // if props has a key thing then return that
+    // if (Object.hasOwnProperty.call(props, 'thing')) {
+    //   return props.thing;
+    // } else {
+    //   return getThingtime(fullPath);
+    // }
   }, [props.thing, uuid, childrenRef.current]);
 
   const chakra = React.useMemo(() => {
     return !props?.edit && typeof thing?.chakra === 'string' && thing?.chakra;
   }, [thing?.chakra, props?.edit]);
 
-  const path = React.useMemo(() => {
-    return props?.path?.key || props?.path || '';
-  }, [props?.path]);
-
-  const fullPath = React.useMemo(() => {
-    const ret = props?.fullPath || props?.path?.key || props?.path;
-
-    // store this thing in the global db
-    try {
-      window.meta.things[ret] = props?.thing;
-    } catch {
-      // nothing
-    }
-
-    return ret;
-  }, [props?.fullPath, props?.path, props?.thing]);
-
   const parentPath = React.useMemo(() => {
     const parentPath = fullPath?.split('.')?.slice(0, -1)?.join('.');
+
+    console.log('[tt.Thingtime] parentPath', parentPath);
 
     if (!parentPath) {
       return 'thingtime';
@@ -194,7 +215,7 @@ export const Thingtime = (args: any = {}) => {
   }, [parentPath, getThingtime]);
 
   React.useEffect(() => {
-    console.log('thingtime changed in path', props?.fullPath);
+    console.log('[tt.Thingtime][useEffect][thingtime, props?.fullPath, childrenRef] props?.fullPath', props?.fullPath);
     createDependancies();
   }, [thingtime, props?.fullPath, childrenRef]);
 
@@ -543,6 +564,7 @@ export const Thingtime = (args: any = {}) => {
       }
 
       if (type === 'number') {
+        // this helps render numbers better
         const numberPxLength = thing?.toString()?.length * 13 + 30;
         return (
           <AtomicWrapper paddingLeft={pl} className="number-atomic-wrapper">
@@ -748,7 +770,13 @@ export const Thingtime = (args: any = {}) => {
       const { type } = args;
       const newChild = typeof type?.value === 'function' ? type?.value() : type?.value || null;
 
-      if (thing instanceof Array) {
+      console.log('[tt.Thingtime] newChild', newChild);
+
+      const thingIsArray = thing instanceof Array;
+
+      console.log('[tt.Thingtime] thingIsArray', thingIsArray);
+
+      if (thingIsArray) {
         // add new child to array
         const newValue = [...thing, newChild];
         setThingtime(fullPath, newValue);
@@ -766,6 +794,9 @@ export const Thingtime = (args: any = {}) => {
 
       const newChildPath = newPath;
       const newChildFullPath = fullPath + '.' + newChildPath;
+
+      console.log('[tt.Thingtime] newChildFullPath', newChildFullPath);
+
       // create new child on thing using setThingtime
       setThingtime(newChildFullPath, newChild);
     },
