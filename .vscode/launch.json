@@ -1,0 +1,28 @@
+{
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      // failed attempt to use esm
+      // tried launching with ts-node and node 21.1.0 but no luck..
+      // es module settings
+      "type": "node",
+      "runtimeVersion": "21.1.0",
+      "request": "launch",
+      "name": "Debug Current File",
+      "skipFiles": ["<node_internals>/**"],
+      "program": "${file}",
+      // "runtimeArgs": ["--experimental-modules", "--experimental-detect-module", "--experimental-json-modules"],
+      // "args": ["--experimental-modules", "--experimental-detect-module", "--experimental-json-modules"],
+
+      "runtimeExecutable": "${workspaceRoot}/node_modules/.bin/ts-node",
+      "runtimeArgs": [
+        "--transpile-only",
+        // if you use esm
+        "--esm"
+      ]
+    }
+  ]
+}
