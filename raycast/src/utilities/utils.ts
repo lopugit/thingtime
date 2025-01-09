@@ -85,6 +85,50 @@ const getSelectedFinderImages = async (): Promise<string> => {
 };
 
 /**
+ * Gets currently selected files in Finder.
+ *
+ * @returns A promise resolving to the comma-separated list of files as a string.
+ */
+const getSelectedFinderFiles = async (): Promise<string> => {
+  console.log("running getSelectedFinderFiles appleScript");
+
+  // fix all these selected files things not working...
+  return runAppleScript(
+    `
+    try
+      tell application "Finder"
+        set theSelection to selection
+
+        if theSelection is {} and (count Finder windows) > 0 then
+          repeat with i from 1 to (count Finder windows)
+            activate window i
+            set theSelection to selection
+          end repeat
+        end if
+
+        if theSelection is {} then
+          return
+        else if (theSelection count) is equal to 1 then
+          return the POSIX path of (theSelection as alias)
+        else
+          set thePaths to {}
+          repeat with i from 1 to (theSelection count)
+            copy (POSIX path of (item i of theSelection as alias)) to end of thePaths
+          end repeat
+          return thePaths
+        end if
+      end tell
+    on error message number -1743
+      set btn to button returned of (display alert "Permission Needed" message "To use Thingtime on selected files in Finder, you must allow Raycast to control Finder in System Settings > Privacy & Security > Automation." buttons {"Dismiss", "Open Privacy Settings"})
+      if btn is "Open Privacy Settings" then
+        open location "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation"
+      end if
+    end try
+    `
+  );
+};
+
+/**
  * Gets currently selected images in Path Finder.
  *
  * @returns A promise resolving to the comma-separated list of images as a string.
@@ -142,34 +186,6 @@ const getSelectedPathFinderImages = async (): Promise<string> => {
 };
 
 /**
- * Gets currently selected files in Finder.
- *
- * @returns A promise resolving to the comma-separated list of files as a string.
- */
-const getSelectedFinderFiles = async (): Promise<string> => {
-  return runAppleScript(
-    `
-    tell application "Finder"
-      set theSelection to selection
-
-      if (count of theSelection) > 1 then
-        set thePaths to {}
-        repeat with i from 1 to (count of theSelection)
-          set theFile to item i of theSelection
-          set thePath to (POSIX path of (theFile as alias))
-          copy thePath to the end of thePaths
-        end repeat
-        return thePaths
-      else
-        return the POSIX path of (theSelection as alias)
-      end if
-
-    end tell`
-  );
-};
-
-
-/**
  * Gets currently selected files in Path Finder.
  *
  * @returns A promise resolving to the comma-separated list of files as a string.
@@ -220,6 +236,7 @@ export const cleanup = async () => {
       await fs.promises.rm(item);
     }
   }
+
   await LocalStorage.removeItem("itemsToRemove");
 };
 
@@ -306,7 +323,7 @@ export const getSelectedFiles = async (): Promise<string[]> => {
   const extensionPreferences = getPreferenceValues<ExtensionPreferences>();
   const inputMethod = extensionPreferences.inputMethod;
   let inputMethodError = false;
-  
+
   // console.log('nik inputMethod', inputMethod)
 
   if (inputMethod == "Clipboard") {
@@ -314,6 +331,9 @@ export const getSelectedFiles = async (): Promise<string[]> => {
     try {
       const clipboardFiles = (await getClipboardFiles()).split(", ");
       await LocalStorage.setItem("itemsToRemove", clipboardFiles.join(", "));
+
+      console.log("found clipboardFiles", clipboardFiles);
+
       if (clipboardFiles.filter((i) => i.trim().length > 0).length > 0) {
         return clipboardFiles;
       }
@@ -328,6 +348,8 @@ export const getSelectedFiles = async (): Promise<string[]> => {
   let activeApp = inputMethod;
   try {
     activeApp = (await getFrontmostApplication()).name;
+
+    console.log("found activeApp", activeApp);
   } catch {
     console.error("Couldn't get frontmost application");
   }
@@ -351,9 +373,18 @@ export const getSelectedFiles = async (): Promise<string[]> => {
     inputMethodError = true;
   }
 
+  console.log("getting selected finder files");
+
+  const selectedFinderFiles = await getSelectedFinderFiles();
+
+  // log the files
+  console.log("selectedFinderFiles", selectedFinderFiles);
+
   // Get selected images from Finder -- use as fallback for desktop selections & on error
-  const finderFiles = (await getSelectedFinderFiles()).split(", ");
-  // console.log('nik finderFiles', finderFiles)
+  const finderFiles = selectedFinderFiles.split(", ");
+
+  console.log("found finderFiles", finderFiles);
+
   if (activeApp == "Finder" || inputMethod == "Finder" || inputMethodError) {
     selectedFiles.push(...finderFiles);
   } else {
@@ -429,6 +460,7 @@ export const execSIPSCommandOnWebP = async (command: string, webpPath: string): 
     if (fs.existsSync(`${environment.assetsPath}/webp/x86/dwebp`)) {
       await fs.promises.rm(`${environment.assetsPath}/webp/x86/dwebp`);
     }
+
     if (fs.existsSync(`${environment.assetsPath}/webp/x86/cwebp`)) {
       await fs.promises.rm(`${environment.assetsPath}/webp/x86/cwebp`);
     }
@@ -441,6 +473,7 @@ export const execSIPSCommandOnWebP = async (command: string, webpPath: string): 
     if (fs.existsSync(`${environment.assetsPath}/webp/arm/dwebp`)) {
       await fs.promises.rm(`${environment.assetsPath}/webp/arm/dwebp`);
     }
+
     if (fs.existsSync(`${environment.assetsPath}/webp/arm/cwebp`)) {
       await fs.promises.rm(`${environment.assetsPath}/webp/arm/cwebp`);
     }
@@ -569,6 +602,7 @@ export const convertPDF = (targetType: string, pdfPath: string, newPathBase: str
     ${preferences.imageResultHandling == ImageResultHandling.OpenInPreview ? `pageImages's addObject:fileURL` : ``}
     pngData's writeToURL:fileURL atomically:false`
     }
+
   end repeat
 
   ${
@@ -750,6 +784,7 @@ export const getImageDestination = (originalPath: string, targetExtension?: stri
     const desktopPath = path.join(os.homedir(), "Desktop");
     return path.join(desktopPath, newFileName);
   }
+
   return path.join(originalDir, newFileName);
 };
 

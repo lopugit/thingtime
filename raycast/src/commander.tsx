@@ -56,11 +56,31 @@ export default function Command(props: any) {
 
   console.log("Preference Name", preferences.name);
 
-  if (preferences.name === "trim") {
+  // get all object keys of preferences
+  const preferenceKeys = Object.keys(preferences);
+  // find a key that starts with name- and return the value
+  const preferenceNameKey = preferenceKeys.find((key) => key.startsWith("name-")) || "";
+
+  const preferenceName = preferenceNameKey?.replace("name-", "");
+
+  console.log("preferenceName", preferenceName);
+
+  if (preferenceName === "trim") {
     (async () => {
+      // get selected files
+      console.log("getting selected files");
+
       const selectedFiles = await getSelectedFiles();
 
+      // get selected images
+      console.log("getting selected images");
+
       const selectedImages = await getSelectedImages();
+
+      console.log("running trim operation");
+
+      // log selectedImages length
+      console.log("selectedImages length", selectedImages.length);
 
       await runOperation({
         operation: () => any(selectedFiles, "Trim"),
@@ -76,7 +96,7 @@ export default function Command(props: any) {
     return;
   }
 
-  if (preferences.name === "openNewFinderWindow") {
+  if (preferenceName === "openNewFinderWindow") {
     openNewFinderWindow(props);
 
     (async () => {
@@ -85,6 +105,7 @@ export default function Command(props: any) {
 
     return;
   }
+
   // log preferences
   // console.log(preferences);
 
@@ -110,7 +131,7 @@ export default function Command(props: any) {
 
   console.log("nik hey?");
 
-  if (preferences.name === "mp4ToMp3") {
+  if (preferenceName === "mp4ToMp3") {
     return (
       <List searchBarPlaceholder="Search video transformations...">
         <List.EmptyView
@@ -126,6 +147,7 @@ export default function Command(props: any) {
               />
             </ActionPanel>
           }
+
         />
         {formats.map((format) => {
           return (
@@ -149,6 +171,7 @@ export default function Command(props: any) {
                   />
                 </ActionPanel>
               }
+
             />
           );
         })}
@@ -156,7 +179,7 @@ export default function Command(props: any) {
     );
   }
 
-  if (preferences.name === "convert") {
+  if (preferenceName === "convert") {
     return (
       <List searchBarPlaceholder="Search image transformations...">
         <List.EmptyView
@@ -172,6 +195,7 @@ export default function Command(props: any) {
               />
             </ActionPanel>
           }
+
         />
         {convertFormats.map((format) => {
           return (
@@ -195,6 +219,7 @@ export default function Command(props: any) {
                   />
                 </ActionPanel>
               }
+
             />
           );
         })}
@@ -219,6 +244,7 @@ export default function Command(props: any) {
             />
           </ActionPanel>
         }
+
       />
     </List>
   );

@@ -87,29 +87,7 @@
       "required": false
     }
   ],
-  "commands": [
-    {
-      "name": "commander",
-      "title": "Commander",
-      "description": "Open Thingtime Commander",
-      "mode": "view",
-      "keywords": [
-        "commander",
-        "thingtime",
-        "ai"
-      ],
-      "preferences": [
-        {
-          "name": "name",
-          "required": false,
-          "type": "textfield",
-          "key": "name",
-          "title": "Name of Command to run",
-          "description": "The name of the command/function to run",
-          "defaultValue": "MagicInput"
-        }
-      ]
-    },
+  "disabledCommands": [
     {
       "name": "commanderMagicInput",
       "title": "Magic Input",
@@ -131,13 +109,37 @@
       ],
       "preferences": [
         {
-          "name": "name",
+          "name": "name-openNewFinderWindow",
           "required": false,
           "type": "textfield",
           "key": "name",
           "title": "Name of Command to run",
           "description": "The name of the command/function to run",
           "defaultValue": "openNewFinderWindow"
+        }
+      ]
+    }
+  ],
+  "commands": [
+    {
+      "name": "commander",
+      "title": "Commander",
+      "description": "Open Thingtime Commander",
+      "mode": "view",
+      "keywords": [
+        "commander",
+        "thingtime",
+        "ai"
+      ],
+      "preferences": [
+        {
+          "name": "name-MagicInput",
+          "required": false,
+          "type": "textfield",
+          "key": "name",
+          "title": "Name of Command to run",
+          "description": "The name of the command/function to run",
+          "defaultValue": "MagicInput"
         }
       ]
     },
@@ -162,7 +164,7 @@
       ],
       "preferences": [
         {
-          "name": "name",
+          "name": "name-openNewFinderWindow",
           "required": false,
           "type": "textfield",
           "key": "name",
@@ -184,7 +186,7 @@
       ],
       "preferences": [
         {
-          "name": "name",
+          "name": "name-trim",
           "required": false,
           "type": "textfield",
           "key": "name",
@@ -206,7 +208,7 @@
       ],
       "preferences": [
         {
-          "name": "name",
+          "name": "name-mp4ToMp3",
           "required": false,
           "type": "textfield",
           "key": "name",
@@ -223,7 +225,7 @@
       "mode": "view",
       "preferences": [
         {
-          "name": "name",
+          "name": "name-convert",
           "required": false,
           "type": "textfield",
           "key": "name",
