@@ -1,13 +1,17 @@
 // import type { MetaFunction } from "@vercel/remix"
-import { Links, LiveReload, Meta, Outlet, Scripts, ScrollRestoration } from '@remix-run/react';
+import { defer, Links, LiveReload, Meta, Outlet, Scripts, ScrollRestoration } from '@remix-run/react';
 import { Analytics } from '@vercel/analytics/react';
 
-import { Globals } from './globals/GlobalStyles';
+import { GlobalStyles } from './globals/GlobalStyles';
+
+import { Session } from './cookies.server';
 
 import { Main } from './components/Layout/Main';
 import { useIcons } from './hooks/useIcons';
 import { ChakraWrapper } from './Providers/Chakra/ChakraWrapper';
 import { ThingtimeProvider } from './Providers/ThingtimeProvider';
+import { json, LoaderArgs } from '@vercel/remix';
+import { DevKit } from './components/DevKit/DevKit';
 
 function Document({ children, title = 'Thingtime' }: { children: React.ReactNode; title?: string }) {
   return (
@@ -21,7 +25,7 @@ function Document({ children, title = 'Thingtime' }: { children: React.ReactNode
       </head>
       <body>
         {children}
-        <Globals />
+        <GlobalStyles />
         <ScrollRestoration />
         <Scripts />
         {/* <LiveReload /> */}
@@ -38,6 +42,7 @@ export default function App() {
     <Document>
       <ChakraWrapper>
         <ThingtimeProvider>
+          <DevKit />
           <Main>
             <Outlet />
           </Main>
@@ -45,6 +50,45 @@ export default function App() {
       </ChakraWrapper>
     </Document>
   );
+}
+
+export async function loader({ request, context }: LoaderArgs) {
+  const { session, store } = context;
+  console.log('nik context', context);
+  console.log('nik session', session);
+  const cookieHeader = request.headers.get('Cookie');
+
+  const cookie = (await Session.parse(cookieHeader)) || {};
+
+  const cookiePingCounter = cookie.pingCounter || 0;
+
+  const pingCounter = cookiePingCounter + 1;
+
+  // .log everyone
+
+  console.log('nik cookie', cookie);
+  console.log('nik pingCounter', pingCounter);
+  console.log('nik cookie?.pingCounter', cookie?.pingCounter);
+
+  return json(
+    {},
+    {
+      headers: {
+        'Set-Cookie': await Session.serialize({ ...cookie, pingCounter })
+      }
+    }
+  );
+
+  // return defer(
+  //   {
+  //     // isLoggedIn: Boolean(customerAccessToken),
+  //   },
+  //   {
+  //     headers: {
+  //       // 'Set-Cookie': await session.commit()
+  //     }
+  //   }
+  // );
 }
 
 // limiter

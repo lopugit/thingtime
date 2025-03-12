@@ -23,27 +23,27 @@ declare namespace Preferences {
   /** Preferences accessible in the `commander` command */
   export type Commander = ExtensionPreferences & {
   /** Name of Command to run - The name of the command/function to run */
-  "name"?: string
+  "name-MagicInput"?: string
 }
   /** Preferences accessible in the `commanderOpenNewFinderWindow` command */
   export type CommanderOpenNewFinderWindow = ExtensionPreferences & {
   /** Name of Command to run - The name of the command/function to run */
-  "name"?: string
+  "name-openNewFinderWindow"?: string
 }
   /** Preferences accessible in the `commanderTrim` command */
   export type CommanderTrim = ExtensionPreferences & {
   /** Name of Command to run - The name of the command/function to run */
-  "name"?: string
+  "name-trim"?: string
 }
   /** Preferences accessible in the `commanderMp4ToMp3` command */
   export type CommanderMp4ToMp3 = ExtensionPreferences & {
   /** Name of Command to run - The name of the command/function to run */
-  "name"?: string
+  "name-mp4ToMp3"?: string
 }
   /** Preferences accessible in the `commanderConvert` command */
   export type CommanderConvert = ExtensionPreferences & {
   /** Name of Command to run - The name of the command/function to run */
-  "name"?: string,
+  "name-convert"?: string,
   /** Additional - Whether to trim the image */
   "trim": boolean,
   /** Enabled Formats - Whether to show WEBP as a conversion option */

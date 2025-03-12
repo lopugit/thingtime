@@ -1,4 +1,6 @@
+import { getUser } from '~/api/utils/getUser';
 import { userCheckExists } from '~/api/utils/userCheckExists';
+import { userCreateSession } from '~/api/utils/userCreateSession';
 import { userValidatePassword } from '~/api/utils/userValidatePassword';
 
 export default function Index() {
@@ -8,8 +10,9 @@ export default function Index() {
 export const action = async ({ request }) => {
   console.log('nik request', request);
 
-  // get remix action body
+  const { context } = request;
 
+  // get remix action body
   const body = await request.json();
 
   const { username, password } = body;
@@ -32,6 +35,32 @@ export const action = async ({ request }) => {
   if (!passwordMatches) {
     return earlyReturn({ status: 401, message: 'Password does not match' });
   }
+
+  const user = getUser(username);
+
+  const session = await userCreateSession(user);
+  
+  const keypair = await crypto.generateKeyPair("rsa", {
+    modulusLength: 2048,
+    publicExponent: new Uint8Array([1, 0, 1]),
+  });
+
+  // @ts-ignore
+  // const keypair = await crypt.generateKeyPairSync('ec', {
+  //   namedCurve: 'prime256v1'
+
+  //   // namedCurve: 'secp256k1',
+  //   // publicKeyEncoding: {
+  //   //   type: 'spki',
+  //   //   format: 'pem'
+  //   // },
+  //   // privateKeyEncoding: {
+  //   //   type: 'pkcs8',
+  //   //   format: 'pem'
+  //   // }
+  // });
+
+  // console.log('nik keypair', keypair);
 
   return earlyReturn({ status: 200, message: 'Login successful' });
 };

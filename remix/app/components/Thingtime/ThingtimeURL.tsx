@@ -33,7 +33,12 @@ export const ThingtimeURL = (props) => {
     // strip the leading /path1/path2 path1 section from the path
     const pathPartOne = location?.pathname?.split('/')[2];
 
-    const path = pathPartOne?.replace(/\//g, '.');
+    // if pathPartOne is undefined, split and use [1]
+    const pathPartTwo = location?.pathname?.split('/')[1];
+
+    // TODO: maybe do this path part one / two thing a bit cleaner??
+
+    const path = pathPartOne?.replace(/\//g, '.') || pathPartTwo?.replace(/\//g, '.');
 
     console.log('nik path', path);
 
@@ -52,6 +57,7 @@ export const ThingtimeURL = (props) => {
     if (pathname.slice(0, 7) === '/editor') {
       return true;
     }
+
     return false;
   }, [pathname]);
 
@@ -59,6 +65,7 @@ export const ThingtimeURL = (props) => {
     if (pathname.slice(0, 5) === '/edit') {
       return true;
     }
+
     return false;
   }, [pathname]);
 

@@ -1,39 +1,46 @@
-import { userCheckExists } from '~/api/utils/userCheckExists';
-import { userValidatePassword } from '~/api/utils/userValidatePassword';
+import { Flex, Heading } from '@chakra-ui/react';
+import { useLocation } from '@remix-run/react';
+import { getCollection } from '~/api/utils/mongodb/collection';
+import { getConnection } from '~/api/utils/mongodb/connection';
+import { Submit } from '~/components/API/Submit';
+import setup from '~/scripts/mongodb/setup';
+
+const routeName = 'Raw Results';
 
 export default function Index() {
-  return <div>Login</div>;
+  const { pathname } = useLocation();
+
+  return (
+    <Flex flexDir={'column'}>
+      {/* <Thingtime ></Thingtime> */}
+      <Submit pathname={pathname}></Submit>
+    </Flex>
+  );
 }
 
-export const action = async ({ request }) => {
-  console.log('nik request', request);
+const actionExport = async ({ request }) => {
+  // literally just run the setup.ts script
 
-  // get remix action body
+  const connection = await getConnection();
 
-  const body = await request.json();
-
-  const { username, password } = body;
-
-  console.log('nik body', body);
-
-  console.log('nik username', username);
-  console.log('nik password', password);
-
-  const userExists = userCheckExists(username);
-
-  if (!userExists) {
-    // validate password
-    return earlyReturn({ status: 401, message: 'User does not exist' });
+  if (!connection) {
+    return earlyReturn({
+      status: 500,
+      message: `failed to setup mongodb connection`
+    });
   }
 
-  // validate password
-  const passwordMatches = userValidatePassword({ username, password });
+  const thingsCollection = await getCollection();
 
-  if (!passwordMatches) {
-    return earlyReturn({ status: 401, message: 'Password does not match' });
-  }
+  const things = await thingsCollection.find().toArray();
 
-  return earlyReturn({ status: 200, message: 'Login successful' });
+  return earlyReturn({
+    status: 200,
+    message: `successful`,
+    data: {
+      rawResults: things
+    }
+  });
 };
 
 const earlyReturn = (args) => {
@@ -43,10 +50,15 @@ const earlyReturn = (args) => {
       'Content-Type': 'application/json'
     },
     body: {
-      message: 'Early return triggered in login action' + (args?.message ? `: ${args.message}` : '')
+      message: `Early return triggered in ${routeName} action` + (args?.message ? `: ${args.message}` : ''),
+      data: args?.data
     },
     cache: {
       revalidate: 60
     }
   };
 };
+
+export const action = actionExport;
+
+export const rawResultsAction = actionExport;

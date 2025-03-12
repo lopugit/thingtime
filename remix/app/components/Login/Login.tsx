@@ -1,12 +1,35 @@
 import React, { useState } from 'react';
-import { Flex, Button, FormControl, Input, Spinner, Link } from '@chakra-ui/react';
+import { Flex, Button, FormControl, Input, Spinner, Link, InputGroup, InputRightElement, Box } from '@chakra-ui/react';
 import { useFetcher } from '@remix-run/react';
 
 import { useApi } from '~/hooks/useApi';
+import { useThingtime } from '../Thingtime/useThingtime';
+import { Icon } from '../Icon/Icon';
+import { Thingtime } from '../Thingtime/Thingtime';
+
+// import bcrypt from 'bcrypt';
 
 export const Login = (props) => {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const { thingtime } = useThingtime();
+
+  const devMode = thingtime?.devKit?.devMode;
+
+  // log whether devMode
+  console.log('nik devMode', devMode);
+
+  const [username, setUsername] = useState(devMode ? thingtime?.devKit?.testUsers?.default?.username : '');
+  const [password, setPassword] = useState(devMode ? thingtime?.devKit?.testUsers?.default?.password : '');
+
+  const [passwordVisible, setPasswordVisible] = useState(devMode ? true : false);
+
+  React.useEffect(() => {
+    // if devMode is true, set username and password to testUsers
+    if (devMode && !username && !password) {
+      setUsername(thingtime?.devKit?.testUsers?.default?.username || '');
+      setPassword(thingtime?.devKit?.testUsers?.default?.password || '');
+      setPasswordVisible(true);
+    }
+  }, [devMode]);
 
   const [loading, setLoading] = useState(false);
 
@@ -14,12 +37,22 @@ export const Login = (props) => {
 
   const login = api.v1.login;
 
+  const [loginResp, setLoginResp] = React.useState();
+
   const handleLogin = async (e) => {
     e?.preventDefault();
 
     setLoading(true);
 
+    // TODO: hash before sending to server
+
+    // const hashedPassword = bcrypt.hashSync(password);
+
+    // console.log('nik hashedPassword', hashedPassword);
+
     const loginResp = await login({ username, password });
+
+    setLoginResp(loginResp);
 
     if (loginResp) {
       console.log('nik loginResp', loginResp);
@@ -31,28 +64,39 @@ export const Login = (props) => {
     console.log('nik password', password);
   };
 
+  const persistent = devMode ? (
+    <>
+      <Flex>
+        <Thingtime value={loginResp}></Thingtime>
+      </Flex>
+    </>
+  ) : null;
+
   if (loading) {
     return (
-      <Flex alignItems="center" justifyContent="center" height="100vh" width="100%">
-        <Spinner
-          sx={{
-            '@keyframes moving-rainbow': {
-              '0%': { backgroundPosition: '0 0' },
-              '100%': { backgroundPosition: 'calc(100px + 400%) 0' }
-            },
-            '@keyframes rotate': {
-              '0%': { transform: 'rotate(0deg)' },
-              '100%': { transform: 'rotate(360deg)' }
-            },
-            animation: 'rotate 2s linear infinite, moving-rainbow 40s infinite linear'
-          }}
-          bgGradient="linear-gradient(to right, #47b5e6, #a555e8, #f34a4a, #ffbc48, #58ca70, #47b5e6)"
-          // rainbow gradient border
-          backgroundSize="calc(100px + 400%)"
-          color="transparent"
-          size="xl"
-        />
-      </Flex>
+      <>
+        <Flex flexDir="column" alignItems="center" justifyContent="center" height="100vh" width="100%">
+          {persistent}
+          <Spinner
+            sx={{
+              '@keyframes moving-rainbow': {
+                '0%': { backgroundPosition: '0 0' },
+                '100%': { backgroundPosition: 'calc(100px + 400%) 0' }
+              },
+              '@keyframes rotate': {
+                '0%': { transform: 'rotate(0deg)' },
+                '100%': { transform: 'rotate(360deg)' }
+              },
+              animation: 'rotate 2s linear infinite, moving-rainbow 40s infinite linear'
+            }}
+            bgGradient="linear-gradient(to right, #47b5e6, #a555e8, #f34a4a, #ffbc48, #58ca70, #47b5e6)"
+            // rainbow gradient border
+            backgroundSize="calc(100px + 400%)"
+            color="transparent"
+            size="xl"
+          />
+        </Flex>
+      </>
     );
   }
 
@@ -73,29 +117,37 @@ export const Login = (props) => {
               borderRadius="5px"
               outline="none"
               onChange={(e) => setUsername(e?.target?.value)}
-              placeholder="Email 💌"
-              type="email"
+              placeholder="User 💌"
+              type="username"
               value={username}
             />
           </FormControl>
 
           <FormControl>
-            <Input
-              sx={{
-                '&::placeholder': {
-                  color: 'greys.dark'
-                  // color: "white",
-                }
-              }}
-              background="grey"
-              border="none"
-              borderRadius="5px"
-              outline="none"
-              onChange={(e) => setPassword(e?.target?.value)}
-              placeholder="Password 🔑"
-              type="password"
-              value={password}
-            />
+            <InputGroup>
+              <Input
+                sx={{
+                  '&::placeholder': {
+                    color: 'greys.dark'
+                    // color: "white",
+                  }
+                }}
+                background="grey"
+                border="none"
+                borderRadius="5px"
+                outline="none"
+                onChange={(e) => setPassword(e?.target?.value)}
+                placeholder="Password 🔑"
+                type={passwordVisible ? 'text' : 'password'}
+                value={password}
+              />
+              <InputRightElement>
+                <Box cursor="pointer" onClick={() => setPasswordVisible(!passwordVisible)} opacity={passwordVisible ? 1 : 0.5}>
+                  <Icon name={passwordVisible ? '🔓' : '🔒'} />
+                </Box>
+              </InputRightElement>
+            </InputGroup>
+            {/* optional showpassword button/icon */}
           </FormControl>
 
           <Button
