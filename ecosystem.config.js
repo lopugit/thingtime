@@ -1,8 +1,8 @@
 module.exports = {
   apps: [
     {
-      script: 'npm run app',
-      name: 'tt',
+      script: 'npm run thingtime-stack',
+      name: 'thingtime-stack',
       namespace: 'thingtime'
     }
 

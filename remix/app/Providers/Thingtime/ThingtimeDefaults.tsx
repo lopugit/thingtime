@@ -1,3 +1,4 @@
+import { connect } from 'http2';
 import { smarts } from '~/smarts';
 
 export const thingtimeForced = {
@@ -227,23 +228,39 @@ export const thingtimeForced = {
         password: 'password'
       }
     }
-  },
-
-  version: 24
+  }
 };
 
 // if the users local thingtime version is less than the new version then these values will overwrite any older values
 // TODO: implement patch system the way blockchain does..
 // db migration theory
-export const thingtimeNewData = {
-  Content: {
-    hidden1: "Edit this to your heart's desire.",
-    'How?': 'Just search for Content and edit the value to whatever you want.',
-    'Example:': `Content = New Content!
+export const thingtimeNewData = {};
+
+const versions = [
+  {
+    version: 25,
+    settings: {
+      connectionUrls: ['mongodb://localhost:27017']
+    }
+  },
+  {
+    version: 24,
+    Content: {
+      hidden1: "Edit this to your heart's desire.",
+      'How?': 'Just search for Content and edit the value to whatever you want.',
+      'Example:': `Content = New Content!
       Content.Nested Content = New Nested Content!
     `
+    }
   }
-};
+];
+
+// merge all versions into one object using smarts.merge
+export const mergedVersions = versions.reduce((acc, version) => {
+  return smarts.merge(acc, version);
+}, {});
+
+console.log('nik mergedVersions', mergedVersions);
 
 const defaultValues = {
   settings: {
@@ -254,7 +271,8 @@ const defaultValues = {
         clearCommanderContextOnToggle: true,
         hideSuggestionsOnToggle: true
       }
-    }
+    },
+    connectionUrls: ['mongodb://localhost:27017']
   },
   Content: {
     hidden1: "Edit this to your heart's desire.",

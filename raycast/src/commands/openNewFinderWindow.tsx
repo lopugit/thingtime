@@ -13,7 +13,7 @@ export const openNewFinderWindow = async (props: any) => {
 
   // TODO: Get Path working
   // not working:
-  // execSync(`osascript -e 'tell application "Finder" to make new Finder window at ${path}'`);
+  // execSync(`osascript -e 'te ll application "Finder" to make new Finder window at ${path}'`);
   // execSync(`osascript -e 'tell application "Finder" to make new Finder window at POSIX file "${path}"'`);
   // execSync(`osascript -e 'tell application "Finder" to open POSIX file "${path}"'`);
 

@@ -2,6 +2,10 @@
 .vscode
 .env
 
+# Root node_modules
+node_modules
+
+# Subfolder node_modules
 app/node_modules
 remix/node_modules
 next/node_modules

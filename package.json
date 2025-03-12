@@ -4,7 +4,7 @@
   "description": "Thing Time",
   "main": "none",
   "scripts": {
-    "app": "npm run remix ; npm run webserver",
+    "thingtime-stack": "npm run remix ; npm run webserver",
     "webserver": "pm2 restart webserver &> /dev/null",
     "remix": "npm run dev --prefix remix",
     "build-remix": "npm run build --prefix remix",
@@ -24,6 +24,7 @@
   "homepage": "https://github.com/lopugit/thingtime#readme",
   "dependencies": {
     "smarts": "2.0.0",
+    "ts-node": "^10.9.2",
     "typescript": "^4.9.5"
   }
 }

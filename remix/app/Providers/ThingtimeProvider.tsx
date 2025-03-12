@@ -27,7 +27,12 @@ try {
 }
 
 export const ThingtimeProvider = (props: any): JSX.Element => {
-  const [thingtimeReference, rawSet] = React.useState();
+  const [thingtimeReference, rawSet] = React.useState({
+    tt: null,
+    thingtime: null,
+    set: () => console.log('Please wait for Thingtime to load'),
+    get: () => console.log('Please wait for Thingtime to load')
+  });
 
   const thingtimeRef = React.useRef(thingtimeReference);
   const stateRef: any = React.useRef({
@@ -49,6 +54,8 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
 
     newThingtimeReference.tt = newThingtimeReference;
     newThingtimeReference.thingtime = newThingtimeReference;
+
+    // we need to split this into a undo/redo separated logical flow
 
     // store undo/redo history
     if (!ignoreUndoRedo) {
@@ -279,6 +286,274 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
     setLoading(false);
   }, []);
 
+  // Add a listener for the undo/redo key shortcuts
+  React.useEffect(() => {
+    const keyListener = (e) => {
+      // @undoRedoEventKeyShortcutEventListener
+      // if ctrl + z, restore thingtime from localstorage history
+
+      console.log('ThingtimeProvider listened to key event e?.key', e?.key);
+      console.log('ThingtimeProvider listened to key event e?.ctrlKey', e?.ctrlKey);
+      console.log('ThingtimeProvider listened to key event e?.shiftKey', e?.shiftKey);
+      console.log('ThingtimeProvider listened to key event e?.metaKey', e?.metaKey);
+
+      const currentThingtime = thingtimeRef.current;
+
+      if ((e?.ctrlKey || e?.metaKey) && e?.key === 'z') {
+        e?.preventDefault();
+
+        // start console log level
+        console.group('ThingtimeProvider detected undo/redo request');
+
+        try {
+          // log the value of currentThingtime.undo_fix_tests.newVal
+          console.log('ThingtimeProvider detected undo/redo request currentThingtime.undo_fix_tests.newVal', currentThingtime?.undoTest);
+
+          // REDO action
+          // if shift key is pressed
+          // because if shift key is pressed then it's a redo action
+          // so this is ctrl + shift + z / cmd + shift + z
+          if (e.shiftKey) {
+            try {
+              console.log('ThingtimeProvider redo');
+              const redoHistoryString = window.localStorage.getItem('redoHistory');
+              const parsedRedoHistory = JSON.parse(redoHistoryString);
+              if (parsedRedoHistory instanceof Array) {
+                const last = parsedRedoHistory[parsedRedoHistory.length - 1];
+                if (last) {
+                  const parsed = parse(last.value);
+                  if (parsed) {
+                    // remove restored state from history
+                    // const currentHistory = parsedRedoHistory.pop()
+                    parsedRedoHistory.pop();
+                    // parsedRedoHistory.push(currentHistory)
+                    const newRedoHistoryString = JSON.stringify(parsedRedoHistory);
+                    window.localStorage.setItem('redoHistory', newRedoHistoryString);
+
+                    // save old/current state to undo history
+                    let undoHistory = [];
+                    try {
+                      const undoHistoryString = window.localStorage.getItem('undoHistory');
+                      const parsedUndoHistory = JSON.parse(undoHistoryString);
+                      if (parsedUndoHistory instanceof Array) {
+                        undoHistory = parsedUndoHistory;
+                      }
+                    } catch {
+                      // nothing
+                    }
+
+                    // after removing and restoring the last redo item
+                    // we need to push the current state to the undo history
+                    // basically redo[-1] and undo[-1] should be the same.....
+                    // We can fix this later
+                    // TODO: Maybe fix this bad bum logic ???
+                    // as a hack or efficiency thing we just use last.value instead of stringify(currentThingtime)
+                    // because we already have the stringified version
+
+                    try {
+                      // ok here's the issue, we need to pop the last item from undo history because that's the "current" state
+                      // and only THEN we can push the new state
+
+                      // pop
+                      undoHistory.pop();
+
+                      // push
+                      undoHistory.push({
+                        timestamp: Date.now(),
+                        value: last.value
+                      });
+
+                      const undoHistoryNewString = JSON.stringify(undoHistory);
+                      window.localStorage.setItem('undoHistory', undoHistoryNewString);
+                    } catch {
+                      // nothing
+                    }
+
+                    const newThingtime = parsed;
+                    set(newThingtime, true);
+                  }
+                }
+              }
+
+              // log the 2 last undo
+            } catch (err) {
+              console.error('There was an error running the redo action', err);
+            }
+          }
+
+          // UNDO action
+          // if shift key is not pressed
+          // because if shift key is pressed then it's a redo action
+          // so this is just ctrl + z / cmd + z
+          if (!e.shiftKey) {
+            console.log('ThingtimeProvider undo');
+            try {
+              const undoHistoryString = window.localStorage.getItem('undoHistory');
+              const parsedUndoHistory = JSON.parse(undoHistoryString);
+
+              let cachedRedoHistoryLastParsed = {};
+              let cachedUndoHistoryCurrrentParsed = {};
+              let cachedUndoHistoryPreviousParsed = {};
+
+              if (parsedUndoHistory instanceof Array) {
+                /**
+                 * Ok so the reason we use -2 instead of -1
+                 * is because the last item in the undo history is the current state
+                 * and the second last item is the state before the current state
+                 * because we store the "undo" history each time the state updates
+                 * So in redo we need to grab the n-2 not the n-1 which we seem to be doing now so we get an odd skip situation
+                 */
+
+                const undoIndex = -2;
+
+                // there's some issue / off by 1 error here with the -2 etc... ???
+                // log indexes -1 and -2
+                const previous = parsedUndoHistory[parsedUndoHistory.length + undoIndex];
+
+                const current = parsedUndoHistory[parsedUndoHistory.length - 1];
+
+                const previousParsed = parse(previous.value);
+                const currentParsed = parse(current.value);
+
+                cachedUndoHistoryCurrrentParsed = currentParsed;
+                cachedUndoHistoryPreviousParsed = previousParsed;
+
+                // log these
+                console.log('ThingtimeProvider undo previous', previous);
+                console.log('ThingtimeProvider undo previousParsed', previousParsed);
+                console.log('ThingtimeProvider undo previousParsed?.undoTests', previousParsed?.undoTests);
+
+                console.log('ThingtimeProvider undo current', current);
+                console.log('ThingtimeProvider undo currentParsed', currentParsed);
+                console.log('ThingtimeProvider undo currentParsed?.undoTests', currentParsed?.undoTests);
+
+                if (previous) {
+                  const parsed = parse(previous.value);
+                  if (parsed) {
+                    // remove restored state from history
+
+                    // const currentHistory = parsedUndoHistory.pop();
+                    parsedUndoHistory.pop();
+                    // parsedUndoHistory.push(currentHistory);
+
+                    const newUndoHistoryString = JSON.stringify(parsedUndoHistory);
+                    window.localStorage.setItem('undoHistory', newUndoHistoryString);
+
+                    // UNDO PART COMPLETE ---
+
+                    // REDO PART STARTS HERE ---
+                    // We need to save the current state to the redo history
+                    // Because we are undoing the current state
+                    // So we need to be able to redo to the current state
+
+                    // save old/current state to redo history
+                    // do we do this ?????
+                    // TODO: check if this is correct
+                    // and why we do this try catch block
+                    // ohh we use let and pass down to @block:redoContinued
+                    let redoHistory = [];
+                    try {
+                      const redoHistoryString = window.localStorage.getItem('redoHistory');
+                      const parsedRedoHistory = JSON.parse(redoHistoryString);
+                      if (parsedRedoHistory instanceof Array) {
+                        redoHistory = parsedRedoHistory;
+                      }
+                    } catch {
+                      // nothing
+                    }
+
+                    // @block:redoContinued
+                    try {
+                      // hmmmm do we use the current version as pointed to by undo history state or the actual currentThingtime ??
+                      // questions questions, for now let's use current cause it's already stringified so it's efficient to use
+
+                      // Maybe below?
+                      // const stringifiedVersion = stringify(currentThingtime);
+
+                      const stringifiedVersion = current.value;
+
+                      // if previous history is not the same as new history
+                      // hmm we can even push current directly right??
+                      // redoHistory.push({
+                      //   timestamp: Date.now(),
+                      //   value: stringifiedVersion
+                      // });
+
+                      /// push current directly
+                      redoHistory.push(current);
+
+                      cachedRedoHistoryLastParsed = currentParsed;
+
+                      // AI do you see any issues?
+                      // AI: No, I do not see any issues with this approach
+                      // AI: It seems like a good approach to me  - AI
+                      // AI: I think it's a good approach - AI
+                      // AI: I think it's a good approach - AI
+                      // AI: I think it's a good approach - AI
+                      // ok ai...
+
+                      const redoHistoryNewString = JSON.stringify(redoHistory);
+                      window.localStorage.setItem('redoHistory', redoHistoryNewString);
+                    } catch {
+                      // nothing
+                    }
+
+                    const newThingtime = parsed;
+                    set(newThingtime, true);
+                  }
+                }
+              }
+
+              // log 2 top undoHistory items using parsedUndoHistory
+
+              // use cached values
+              // cachedUndoHistoryCurrrentParsed
+              // cachedUndoHistoryPreviousParsed
+              // cachedRedoHistoryLastParsed
+
+              // log indexes -1 and -2
+
+              console.log('ThingtimeProvider undo cachedUndoHistoryPreviousParsed', cachedUndoHistoryPreviousParsed);
+              console.log('ThingtimeProvider undo cachedUndoHistoryCurrrentParsed', cachedUndoHistoryCurrrentParsed);
+
+              // specifically log this path: undo_fix_tests.newVal
+              console.log(
+                'ThingtimeProvider undo cachedUndoHistoryPreviousParsed?.undo_fix_tests.newVal',
+                cachedUndoHistoryPreviousParsed?.undo_fix_tests?.newVal
+              );
+              console.log(
+                'ThingtimeProvider undo cachedUndoHistoryCurrrentParsed?.undo_fix_tests.newVal',
+                cachedUndoHistoryCurrrentParsed?.undo_fix_tests?.newVal
+              );
+
+              // log redo history state
+              // just log the top of the heap
+              const lastRedoItem = cachedRedoHistoryLastParsed;
+
+              console.log('ThingtimeProvider undo lastRedoItem', lastRedoItem);
+
+              // also specifically log the above path here:
+              console.log('ThingtimeProvider undo lastRedoItem?.undo_fix_tests.newVal', lastRedoItem?.undo_fix_tests?.newVal);
+
+              // now to do the same for redo 🤣🤣🤣 🙄🙄🙄
+            } catch {
+              // nothing
+            }
+          }
+        } finally {
+          // end console log level
+          console.groupEnd();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', keyListener);
+
+    return () => {
+      window.removeEventListener('keydown', keyListener);
+    };
+  }, [thingtimeReference, set]);
+
   // thingtime change listener
   React.useEffect(() => {
     try {
@@ -307,127 +582,14 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
 
     thingtimeRef.current = thingtimeReference;
 
-    const keyListener = (e) => {
-      // if ctrl + z, restore thingtime from localstorage history
-
-      console.log('ThingtimeProvider listened to key event e?.key', e?.key);
-      console.log('ThingtimeProvider listened to key event e?.ctrlKey', e?.ctrlKey);
-      console.log('ThingtimeProvider listened to key event e?.shiftKey', e?.shiftKey);
-      console.log('ThingtimeProvider listened to key event e?.metaKey', e?.metaKey);
-
-      if ((e?.ctrlKey || e?.metaKey) && e?.key === 'z') {
-        e?.preventDefault();
-
-        console.log('ThingtimeProvider detected undo/redo request');
-
-        if (e.shiftKey) {
-          // redo
-          console.log('ThingtimeProvider redo');
-          const redoHistoryString = window.localStorage.getItem('redoHistory');
-          const parsedRedoHistory = JSON.parse(redoHistoryString);
-          if (parsedRedoHistory instanceof Array) {
-            const last = parsedRedoHistory[parsedRedoHistory.length - 1];
-            if (last) {
-              const parsed = parse(last.value);
-              if (parsed) {
-                // remove restored state from history
-                // const currentHistory = parsedRedoHistory.pop()
-                parsedRedoHistory.pop();
-                // parsedRedoHistory.push(currentHistory)
-                const newRedoHistoryString = JSON.stringify(parsedRedoHistory);
-                window.localStorage.setItem('redoHistory', newRedoHistoryString);
-
-                // save old/current state to undo history
-                let undoHistory = [];
-                try {
-                  const undoHistoryString = window.localStorage.getItem('undoHistory');
-                  const parsedUndoHistory = JSON.parse(undoHistoryString);
-                  if (parsedUndoHistory instanceof Array) {
-                    undoHistory = parsedUndoHistory;
-                  }
-                } catch {
-                  // nothing
-                }
-
-                try {
-                  undoHistory.push({
-                    timestamp: Date.now(),
-                    value: stringify(thingtimeReference)
-                  });
-                  const undoHistoryNewString = JSON.stringify(undoHistory);
-                  window.localStorage.setItem('undoHistory', undoHistoryNewString);
-                } catch {
-                  // nothing
-                }
-
-                const newThingtime = parsed;
-                set(newThingtime, true);
-              }
-            }
-          }
-        } else {
-          // undo
-          console.log('ThingtimeProvider undo');
-          try {
-            const undoHistoryString = window.localStorage.getItem('undoHistory');
-            const parsedUndoHistory = JSON.parse(undoHistoryString);
-            if (parsedUndoHistory instanceof Array) {
-              const last = parsedUndoHistory[parsedUndoHistory.length - 2];
-              if (last) {
-                const parsed = parse(last.value);
-                if (parsed) {
-                  // remove restored state from history
-
-                  const currentHistory = parsedUndoHistory.pop();
-                  parsedUndoHistory.pop();
-                  parsedUndoHistory.push(currentHistory);
-
-                  const newUndoHistoryString = JSON.stringify(parsedUndoHistory);
-                  window.localStorage.setItem('undoHistory', newUndoHistoryString);
-
-                  // save old/current state to redo history
-                  let redoHistory = [];
-                  try {
-                    const redoHistoryString = window.localStorage.getItem('redoHistory');
-                    const parsedRedoHistory = JSON.parse(redoHistoryString);
-                    if (parsedRedoHistory instanceof Array) {
-                      redoHistory = parsedRedoHistory;
-                    }
-                  } catch {
-                    // nothing
-                  }
-
-                  try {
-                    const newValue = stringify(thingtimeReference);
-                    // if last history is not the same as new history
-                    redoHistory.push({
-                      timestamp: Date.now(),
-                      value: newValue
-                    });
-                    const redoHistoryNewString = JSON.stringify(redoHistory);
-                    window.localStorage.setItem('redoHistory', redoHistoryNewString);
-                  } catch {
-                    // nothing
-                  }
-
-                  const newThingtime = parsed;
-                  set(newThingtime, true);
-                }
-              }
-            }
-          } catch {
-            // nothing
-          }
-        }
-      }
-    };
-
-    window.addEventListener('keydown', keyListener);
-
-    return () => {
-      window.removeEventListener('keydown', keyListener);
-    };
+    // not sure why this used to have @undoRedoEventKeyShortcutEventListener here.. ?
   }, [setThingtime, events, getThingtime, thingtimeReference, set]);
+
+  if (thingtimeReference) {
+    // @ts-expect-error property get/set does not exist or something?
+    thingtimeReference.set = setThingtime;
+    thingtimeReference.get = getThingtime;
+  }
 
   const value = {
     thingtime: thingtimeReference,

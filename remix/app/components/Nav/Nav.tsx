@@ -7,8 +7,11 @@ import { CommanderV1 } from '../Commander/CommanderV2';
 import { Icon } from '../Icon/Icon';
 import { RainbowSkeleton } from '../Skeleton/RainbowSkeleton';
 import { ProfileDrawer } from './ProfileDrawer';
+import { useThingtime } from '../Thingtime/useThingtime';
 
 export const Nav = (props) => {
+  const { thingtime } = useThingtime();
+
   const [profileDrawerOpen, setProfileDrawerOpen] = React.useState(false);
 
   const { pathname } = useLocation();
@@ -23,6 +26,7 @@ export const Nav = (props) => {
     if (pathname.slice(0, 7) === '/editor') {
       return true;
     }
+
     return false;
   }, [pathname]);
 
@@ -30,6 +34,7 @@ export const Nav = (props) => {
     if (pathname.slice(0, 5) === '/edit') {
       return true;
     }
+
     return false;
   }, [pathname]);
 
@@ -39,8 +44,13 @@ export const Nav = (props) => {
     } else if (pathname.slice(0, 5) === '/edit') {
       return true;
     }
+
+    if (thingtime.get('thingtimeUrlPageVisible')) {
+      return true;
+    }
+
     return false;
-  }, [pathname]);
+  }, [pathname, thingtime]);
 
   const toggleEdit = React.useCallback(
     (e) => {
@@ -54,6 +64,9 @@ export const Nav = (props) => {
         navigate(newPathname);
       } else if (pathname.slice(0, 5) === '/edit') {
         const newPathname = pathname.replace('/edit', '/things');
+        navigate(newPathname);
+      } else if (thingtime.get('thingtimeUrlPageVisible')) {
+        const newPathname = pathname.replace('/', '/edit/');
         navigate(newPathname);
       }
     },
