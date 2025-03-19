@@ -416,6 +416,50 @@
         "change",
         "transform"
       ]
+    },
+    {
+      "name": "commanderRegexTrim",
+      "title": "Regex Trim - Whitespace to (\\s*\\r*) Replacement",
+      "description": "Will replace whitespace in the clipboard contents with (\\s*\\r*) to make find-all-replace easier",
+      "mode": "no-view",
+      "keywords": [
+        "commander",
+        "thingtime",
+        "ai"
+      ],
+      "preferences": [
+        {
+          "name": "name-regexTrim",
+          "required": false,
+          "type": "textfield",
+          "key": "name",
+          "title": "Name of Command to run",
+          "description": "The name of the command/function to run",
+          "defaultValue": "regexTrim"
+        }
+      ]
+    },
+    {
+      "name": "commanderRegexToReplacementConverter",
+      "title": "Regex Replacement - Special Replacement",
+      "description": "Will replace all regex (\\s*\\r*) in the clipboard contents with $1,$2,$3.. etc.. to make find-all-replace easier",
+      "mode": "no-view",
+      "keywords": [
+        "commander",
+        "thingtime",
+        "ai"
+      ],
+      "preferences": [
+        {
+          "name": "name-regexToReplacementConverter",
+          "required": false,
+          "type": "textfield",
+          "key": "name",
+          "title": "Name of Command to run",
+          "description": "The name of the command/function to run",
+          "defaultValue": "regexToReplacementConverter"
+        }
+      ]
     }
   ],
   "dependencies": {

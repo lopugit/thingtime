@@ -16,6 +16,9 @@ import { getSelectedFiles, getSelectedImages } from "./utilities/utils";
 import { ConvertPreferences, ExtensionPreferences } from "./utilities/preferences";
 import runOperation from "./operations/runOperation";
 import { openNewFinderWindow } from "./commands/openNewFinderWindow";
+import { regexTrim } from "./commands/regexTrim";
+import { regexToReplacementConverter } from "./commands/regexToReplacementConverter";
+
 import { execSync } from "child_process";
 
 /**
@@ -101,6 +104,26 @@ export default function Command(props: any) {
 
     (async () => {
       await showHUD(`🌈 New Finder Window 🦄`);
+    })();
+
+    return;
+  }
+
+  if (preferenceName === "regexTrim") {
+    regexTrim(props);
+
+    (async () => {
+      await showHUD(`🌈 Converted into Regex 🦄`);
+    })();
+
+    return;
+  }
+
+  if (preferenceName === "regexToReplacementConverter") {
+    regexToReplacementConverter(props);
+
+    (async () => {
+      await showHUD(`🌈 Converted into Replacement Regex 🦄`);
     })();
 
     return;
