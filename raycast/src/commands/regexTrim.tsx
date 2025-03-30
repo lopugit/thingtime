@@ -1,6 +1,11 @@
 import { exec, execSync, spawn } from "child_process";
 
 export const regexTrim = async (props: any) => {
+  /**
+   * ⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️
+   * This will turn a string into a regex search pattern, this is step 1
+   */
+
   // open a new finder window in the current mac desktop
   // execSync(`open -a Finder ${process.cwd()}`);
 

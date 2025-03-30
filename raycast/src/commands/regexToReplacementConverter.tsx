@@ -58,6 +58,9 @@ export const regexToReplacementConverter = async (props: any) => {
   newValue = newValue.replace(/\\]/g, "]");
   newValue = newValue.replace(/\\}/g, "}");
 
+  // replace \. with just n
+  newValue = newValue.replace(/\\\./g, ".");
+
   // const regex = /([\s\r]+)/g;
   // const trimmedText = escapedClipboardText.replace(regex, "(\\s*\\r*)");
 

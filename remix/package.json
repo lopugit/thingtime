@@ -1,6 +1,7 @@
 {
   "private": true,
   "sideEffects": false,
+  "version": "1.0.0",
   "scripts": {
     "build": "remix vite:build",
     "dev": "remix vite:dev --host 127.0.0.1",

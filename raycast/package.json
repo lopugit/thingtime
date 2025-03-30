@@ -1,14 +1,21 @@
 {
   "$schema": "https://www.raycast.com/schemas/extension.json",
+  "version": "1.0.0",
   "name": "thingtime-commander",
   "title": "Thingtime Commander",
   "description": "Next generation command runner for software",
+  "scripts": {
+    "build": "ray build -e dist",
+    "dev": "ray develop",
+    "fix-lint": "ray lint --fix",
+    "lint": "ray lint",
+    "publish": "ray publish"
+  },
   "keywords": [
     "Lopu",
     "Thingtime",
     "Commander"
   ],
-  "version": "1.7.0",
   "icon": "command-icon.png",
   "author": "nikolajfrey",
   "contributors": [
@@ -481,12 +488,5 @@
     "eslint-config-prettier": "^8.3.0",
     "prettier": "^2.5.1",
     "typescript": "^4.4.3"
-  },
-  "scripts": {
-    "build": "ray build -e dist",
-    "dev": "ray develop",
-    "fix-lint": "ray lint --fix",
-    "lint": "ray lint",
-    "publish": "ray publish"
   }
 }
