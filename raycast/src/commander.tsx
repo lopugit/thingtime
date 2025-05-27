@@ -55,8 +55,6 @@ const convertFormats = [
 export default function Command(props: any) {
   const preferences = getPreferenceValues();
 
-  console.log("nik preferences", preferences);
-
   console.log("Preference Name", preferences.name);
 
   // get all object keys of preferences
@@ -152,7 +150,6 @@ export default function Command(props: any) {
     return;
   }
 
-  console.log("nik hey?");
 
   if (preferenceName === "mp4ToMp3") {
     return (
