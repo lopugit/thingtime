@@ -74,10 +74,15 @@ export const ThingtimeURL = (props) => {
 
   React.useEffect(() => {
     const scrollListener = () => {
-      if (containerRef?.current?.getBoundingClientRect) {
-        const { top } = containerRef?.current?.getBoundingClientRect();
+      try {
+        if (containerRef?.current?.getBoundingClientRect) {
+          const { top } = containerRef?.current?.getBoundingClientRect();
 
-        editorRef.current.style.top = `${-top}px`;
+          editorRef.current.style.top = `${-top}px`;
+        }
+      } catch (error) {
+        // silently catch errors
+        // console.error('Error in scrollListener:', error);
       }
     };
 

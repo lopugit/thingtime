@@ -39,11 +39,11 @@ const stringList = [];
 // babel.prettier = prettier
 
 export const babel = () => {};
-export const local = {};
-export const t = () => {};
+export const local: any = {};
+export const t: any = () => {};
 // export const t = babel?.t
 
-export const getBabel = () => {
+export const getBabel = (): any => {
   return babel;
 };
 export const uuid = uuidv4;
@@ -62,7 +62,7 @@ export const getParentPath = (path) => {
   return parts?.join('.');
 };
 
-export const toJavascript = (value, opts = {}) => {
+export const toJavascript = (value, opts: any = {}) => {
   const defaultOpts = {
     wrapInFunction: true,
     declarations: [],
@@ -194,12 +194,12 @@ export const createObjectProperties = (value, opts) => {
 
   return properties;
 };
-export const serialize = (value, opts = {}) => {
+export const serialize = (value, opts: any = {}) => {
   opts.strictFunctions = false;
   opts.serializeArrayProps = true;
   return stringify(value, opts);
 };
-export const stringify = (value, opts = {}) => {
+export const stringify = (value, opts: any = {}) => {
   const schema = {
     stringifier: stringifier,
     replace(key, value) {
@@ -341,11 +341,11 @@ export const Primitives = (key, value) => {
 export const play = (text, opts) => {
   return parse(text, opts);
 };
-export const load = (text, opts = {}) => {
+export const load = (text, opts: any = {}) => {
   opts.strictFunctions = false;
   return parse(text, opts);
 };
-export const parse = (text, opts = {}) => {
+export const parse = (text, opts: any = {}) => {
   const schema = {
     // parser: eval('(function '+parser+')'),
     parser: parser(opts),
@@ -883,7 +883,7 @@ export const scopeVarInlineCode = (opts) => {
 	`;
   return ret;
 };
-export const scopeVar = (opts = {}) => {
+export const scopeVar = (opts: any = {}) => {
   let string;
   let thirdArg;
   let node;
@@ -1120,7 +1120,7 @@ export const babelPlugin = (babel) => {
   };
   return ret;
 };
-export const transform = (src, opts = {}) => {
+export const transform = (src, opts: any = {}) => {
   return getBabel().transform(src, {
     plugins: [babelPlugin],
     ...opts
@@ -1145,13 +1145,13 @@ export const stripUuids = (thing, seen = []) => {
     }
   }
 };
-export const dupe = (obj, opts = {}) => {
+export const dupe = (obj, opts: any = {}) => {
   return parse(stringify(obj, opts), opts);
 };
-export const clone = (obj, opts = {}) => {
+export const clone = (obj, opts: any = {}) => {
   return dupe(obj, opts);
 };
-export const schema = (obj1, obj2, opts = {}) => {
+export const schema = (obj1, obj2, opts: any = {}) => {
   if (!opts.noSchemaClone) {
     obj2 = clone(obj2, opts);
   }
@@ -1168,22 +1168,29 @@ export const create = (obj1, obj2, opts) => {
 
   return ret;
 };
-export const merge = (value1, value2, opts = {}, seen = new Map()) => {
+
+export const merge = (value1, value2, opts: any = {}, seen = new Map()) => {
   if (seen.has(value1)) return seen.get(value1);
 
   if (value1 instanceof Array && value2 instanceof Array) {
     return value1;
   }
 
-  // base case non-basic value
+  // base case basic value exists
+  // and not overwrite mode
   if (basic(value1) && !opts.overwrite) {
     return value1;
   }
 
+  // base case basic value2 exists
+  // and overwrite mode
   if (opts.overwrite && basic(value2)) {
     return value2;
   }
 
+  // base case basic value1 exists
+  // and basic value2 does not exist
+  // and overwrite mode doesn't matter
   if (!basic(value1) && basic(value2)) {
     return value1;
   }
@@ -1193,19 +1200,38 @@ export const merge = (value1, value2, opts = {}, seen = new Map()) => {
     value2 = clone(value2);
   }
 
-  const props = Object.keys(value2);
+  if (opts.overwriteAll) {
+    // log if overwriteAll is true
+    console.log('nik Merging', value1, value2, opts);
+    console.log('nik basic(value2)', basic(value2));
+  }
 
-  props.forEach((prop) => {
-    const propertyValue1 = value1[prop];
-    if (prop in value1 && basic(propertyValue1) && !opts.overwrite) {
+  // base case overwriteAll and value1 exists
+  // wrong place to do this, only on 2nd depth
+  // if (opts.overwriteAll && !basic(value2)) {
+  //   // if overwriteAll is true, we overwrite value1 with value2
+  //   return value2;
+  // }
+
+  const value2PropertyKeys = Object.keys(value2);
+
+  value2PropertyKeys.forEach((value2Property) => {
+    const value1PropertyValue = value1[value2Property];
+    if (value2Property in value1 && basic(value1PropertyValue) && !opts.overwrite) {
       return;
     }
 
-    const propertyValue2 = value2[prop];
+    if (opts.overwriteAll) {
+      // if overwriteAll is true, we overwrite value1 with value2
+      value1[value2Property] = value2[value2Property];
+      return;
+    }
+
+    const propertyValue2 = value2[value2Property];
     seen.set(value1, value1);
     let newVal = propertyValue2;
-    if (prop in value1) {
-      newVal = merge.bind(this)(propertyValue1, propertyValue2, { ...opts, ...{ clone: false } }, seen);
+    if (value2Property in value1) {
+      newVal = merge.bind(this)(value1PropertyValue, propertyValue2, { ...opts, ...{ clone: false } }, seen);
     }
 
     if (
@@ -1214,12 +1240,12 @@ export const merge = (value1, value2, opts = {}, seen = new Map()) => {
       value1
     ) {
       const setToUse = this.$set || local.vue.Vue.set;
-      setToUse?.(value1, prop, newVal);
+      setToUse?.(value1, value2Property, newVal);
       if (typeof getsmart.bind(this)(window, '$store.commit', undefined) == 'function') {
         window.$store.commit(local.vue.basePath || 'graph/thing');
       }
     } else {
-      value1[prop] = newVal;
+      value1[value2Property] = newVal;
       if (getsmart.bind(this)(local.vue, 'store', false) && typeof getsmart.bind(this)(window, '$store.commit', undefined) == 'function') {
         window.$store.commit(local.vue.basePath || 'graph/thing');
       }
@@ -1228,6 +1254,7 @@ export const merge = (value1, value2, opts = {}, seen = new Map()) => {
 
   return value1;
 };
+
 export const basic = (value) => {
   const valueType = typeof value;
   const ret = !(valueType == 'object' || valueType == 'array' || valueType == 'function') || value === null;
@@ -1298,7 +1325,7 @@ export const setThing = ({
   push,
   strings,
   targets
-} = {}) => {
+}: any = {}) => {
   let index = thingIndex({
     option,
     list,
@@ -1626,7 +1653,7 @@ export const optIndex = (option, list = getsmart.bind(this)(stringList), obj, ke
 
   return -1;
 };
-export const thingIndex = ({ option, list, obj, keys = ['uuid', '_id', 'id'], keymatchtype, strings } = {}) => {
+export const thingIndex = ({ option, list, obj, keys = ['uuid', '_id', 'id'], keymatchtype, strings }: any = {}) => {
   if (typeof option === 'object') {
     obj = true;
   }

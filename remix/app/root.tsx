@@ -13,14 +13,60 @@ import { ThingtimeProvider } from './Providers/ThingtimeProvider';
 import { json, LoaderArgs } from '@vercel/remix';
 import { DevKit } from './components/DevKit/DevKit';
 
+// intercept console.log and read from window.tt.settings.logging.all whether to log if it includes [tt.Thingtime]
+const originalConsoleLog = console.log;
+console.log = (...args) => {
+  // Check if the first argument is a string and contains '[tt.Thingtime]'
+  try {
+    
+    if (typeof args[0] === 'string' && args[0].includes('[tt.Thingtime]')) {
+      
+      if (typeof window !== 'undefined' && window.tt?.settings?.logging?.all) {
+        // Check if logging is enabled in Thingtime settings
+        originalConsoleLog(...args);
+      }
+      
+    } else {
+      // For all other logs, just call the original console.log
+      originalConsoleLog(...args);
+    }
+  } catch (err) {
+    // If there's an error (e.g., window.tt is not defined), just call the original console.log
+    originalConsoleLog(...args);
+  }
+}
+
 function Document({ children, title = 'Thingtime' }: { children: React.ReactNode; title?: string }) {
+  // check Remix environment
+  // for dev mode
+  let titlePrefix = '';
+  // log the process.env.NODE_ENV
+  console.log('process.env.NODE_ENV', process.env.NODE_ENV);
+  if (process.env.NODE_ENV === 'development') {
+    titlePrefix = '🧑‍💻';
+  }
+
+  try {
+    // actually also check if the domain is not thingtime.com
+    // then add the prefix
+    const hostname = window.location.hostname;
+    if (hostname !== 'thingtime.com') {
+      titlePrefix = '🧑‍💻';
+    }
+  } catch (err) {
+    // will error on server
+    // do nothing
+  }
+
+  // the favicon will also vary depending on the environment
+
   return (
     <html lang="en">
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width,initial-scale=1" />
         <Meta />
-        <title>{title}</title>
+        <title>{titlePrefix ? titlePrefix + ' ' + title : title}</title>
         <Links />
       </head>
       <body>
@@ -54,8 +100,6 @@ export default function App() {
 
 export async function loader({ request, context }: LoaderArgs) {
   const { session, store } = context;
-  console.log('nik context', context);
-  console.log('nik session', session);
   const cookieHeader = request.headers.get('Cookie');
 
   const cookie = (await Session.parse(cookieHeader)) || {};
@@ -66,9 +110,6 @@ export async function loader({ request, context }: LoaderArgs) {
 
   // .log everyone
 
-  console.log('nik cookie', cookie);
-  console.log('nik pingCounter', pingCounter);
-  console.log('nik cookie?.pingCounter', cookie?.pingCounter);
 
   return json(
     {},
