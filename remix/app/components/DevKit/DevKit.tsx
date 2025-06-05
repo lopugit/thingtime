@@ -47,14 +47,14 @@ export const DevKit = (props) => {
 
   React.useEffect(() => {
     if (devKit && devMode === undefined) {
-      setThingtime('devKit.devMode', true);
+      // setThingtime('devKit.devMode', true);
     }
   }, []);
 
   const setDevMode = React.useCallback(
     (e) => {
       const newValue = e?.target?.value || (typeof e !== 'object' && e) || !devMode;
-      setThingtime('devKit.devMode', newValue);
+      // setThingtime('devKit.devMode', newValue);
     },
     [devMode]
   );

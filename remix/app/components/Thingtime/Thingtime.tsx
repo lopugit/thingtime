@@ -161,7 +161,7 @@ export const Thingtime = (args: any = {}) => {
   const fullPath = React.useMemo(() => {
     const fullPathReturn = props?.fullPath || props?.path?.key || props?.path;
 
-    console.log('[tt.Thingtime] fullPathReturn', fullPathReturn);
+    console.log('[tt] fullPathReturn', fullPathReturn);
 
     // store this thing in the global db
     try {
@@ -184,8 +184,8 @@ export const Thingtime = (args: any = {}) => {
     // TODO
     // attempt at making seedling button work with <Thingtime path argument only
 
-    // console.log('[tt.Thingtime] props.thing', props.thing);
-    // console.log('[tt.Thingtime] fullPath', fullPath);
+    // console.log('[tt] props.thing', props.thing);
+    // console.log('[tt] fullPath', fullPath);
     // // if props has a key thing then return that
     // if (Object.hasOwnProperty.call(props, 'thing')) {
     //   return props.thing;
@@ -201,7 +201,7 @@ export const Thingtime = (args: any = {}) => {
   const parentPath = React.useMemo(() => {
     const parentPath = fullPath?.split('.')?.slice(0, -1)?.join('.');
 
-    console.log('[tt.Thingtime] parentPath', parentPath);
+    console.log('[tt] parentPath', parentPath);
 
     if (!parentPath) {
       return 'thingtime';
@@ -215,7 +215,7 @@ export const Thingtime = (args: any = {}) => {
   }, [parentPath, getThingtime]);
 
   React.useEffect(() => {
-    console.log('[tt.Thingtime][useEffect][thingtime, props?.fullPath, childrenRef] props?.fullPath', props?.fullPath);
+    console.log('[tt][useEffect][thingtime, props?.fullPath, childrenRef] props?.fullPath', props?.fullPath);
     createDependancies();
   }, [thingtime, props?.fullPath, childrenRef]);
 
@@ -576,7 +576,6 @@ export const Thingtime = (args: any = {}) => {
                   setTimeout(() => {
                     try {
                       const number = Number(value);
-                      console.log('typeof number', typeof number);
                       updateValue({ value: number });
                     } catch {
                       // something went wrong casting to number
@@ -770,11 +769,11 @@ export const Thingtime = (args: any = {}) => {
       const { type } = args;
       const newChild = typeof type?.value === 'function' ? type?.value() : type?.value || null;
 
-      console.log('[tt.Thingtime] newChild', newChild);
+      console.log('[tt] newChild', newChild);
 
       const thingIsArray = thing instanceof Array;
 
-      console.log('[tt.Thingtime] thingIsArray', thingIsArray);
+      console.log('[tt] thingIsArray', thingIsArray);
 
       if (thingIsArray) {
         // add new child to array
@@ -795,7 +794,7 @@ export const Thingtime = (args: any = {}) => {
       const newChildPath = newPath;
       const newChildFullPath = fullPath + '.' + newChildPath;
 
-      console.log('[tt.Thingtime] newChildFullPath', newChildFullPath);
+      console.log('[tt] newChildFullPath', newChildFullPath);
 
       // create new child on thing using setThingtime
       setThingtime(newChildFullPath, newChild);

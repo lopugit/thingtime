@@ -10,22 +10,40 @@ import { Main } from './components/Layout/Main';
 import { useIcons } from './hooks/useIcons';
 import { ChakraWrapper } from './Providers/Chakra/ChakraWrapper';
 import { ThingtimeProvider } from './Providers/ThingtimeProvider';
+// TODO: See what to replace LoaderArgs with
 import { json, LoaderArgs } from '@vercel/remix';
 import { DevKit } from './components/DevKit/DevKit';
 
-// intercept console.log and read from window.tt.settings.logging.all whether to log if it includes [tt.Thingtime]
+// intercept console.log and read from window.tt.settings.logging.all whether to log if it includes [tt]
 const originalConsoleLog = console.log;
+const logConfig = {
+  trace: true
+};
+const whitelistObj = {
+  '[tt][undo]': true,
+  '[tt][redo]': true,
+  '[tt][history]': true,
+  '[tt][error]': false,
+  '[tt][warn]': false,
+  '[tt][info]': false,
+  '[tt][debug]': false
+};
+const whitelist = [].concat(Object.keys(whitelistObj).filter((key) => whitelistObj[key]));
 console.log = (...args) => {
-  // Check if the first argument is a string and contains '[tt.Thingtime]'
+  // Check if the first argument is a string and contains '[tt]'
   try {
-    
-    if (typeof args[0] === 'string' && args[0].includes('[tt.Thingtime]')) {
-      
-      if (typeof window !== 'undefined' && window.tt?.settings?.logging?.all) {
-        // Check if logging is enabled in Thingtime settings
-        originalConsoleLog(...args);
+    if (typeof args[0] === 'string' && args[0].startsWith('[tt]')) {
+      const allowLogging = window.tt?.settings?.logging?.all || whitelist.some((item) => args[0].startsWith(item));
+      if (typeof window !== 'undefined' && allowLogging) {
+        if (logConfig.trace) {
+          // If trace is enabled, log the stack trace
+          const stack = new Error().stack;
+          originalConsoleLog(...args, '\nStack Trace:', stack);
+        } else {
+          // Check if logging is enabled in Thingtime settings
+          originalConsoleLog(...args);
+        }
       }
-      
     } else {
       // For all other logs, just call the original console.log
       originalConsoleLog(...args);
@@ -34,7 +52,7 @@ console.log = (...args) => {
     // If there's an error (e.g., window.tt is not defined), just call the original console.log
     originalConsoleLog(...args);
   }
-}
+};
 
 function Document({ children, title = 'Thingtime' }: { children: React.ReactNode; title?: string }) {
   // check Remix environment
@@ -109,7 +127,6 @@ export async function loader({ request, context }: LoaderArgs) {
   const pingCounter = cookiePingCounter + 1;
 
   // .log everyone
-
 
   return json(
     {},

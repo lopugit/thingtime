@@ -6,7 +6,7 @@ import { thingtimeDefaults, thingtimeMinimumValues, thingtimeNewData, thingtimeO
 import { sanitise } from '../functions/sanitise';
 import { smarts } from '../smarts';
 import { useUndoRedo } from '~/hooks/useUndoRedo';
-
+import localforage from 'localforage';
 export interface ThingtimeContextInterface {
   thingtime: any;
   setThingtime: any;
@@ -50,7 +50,7 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
     setEvents(() => new Subject());
   }
 
-  const set = React.useCallback((newThingtime, ignoreUndoRedo?: any) => {
+  const set = React.useCallback((newThingtime, ignoreUndoRedo?: boolean) => {
     const newThingtimeReference = {
       ...newThingtime
     };
@@ -62,75 +62,39 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
 
     // store undo/redo history
     if (!ignoreUndoRedo) {
-      try {
-        console.log('ThingtimeProvider setting thingtime to localStorage', newThingtimeReference);
-        // setTimeout(() => {
-        const stringified = stringify(newThingtimeReference);
-        let undoHistory = [];
+      (async () => {
         try {
-          const undoHistoryString = window.localStorage.getItem('undoHistory');
-          const parsedUndoHistory = JSON.parse(undoHistoryString);
-          if (parsedUndoHistory instanceof Array) {
-            undoHistory = parsedUndoHistory;
-          }
-        } catch {
-          // nothing
-        }
-
-        // if last undoHistory does not equal new undo history
-        if (undoHistory[undoHistory.length - 1]?.value !== stringified) {
-          try {
-            const limit = newThingtimeReference?.settings?.undoLimit || 999;
-
-            if (undoHistory?.length > limit) {
-              undoHistory = undoHistory.slice(undoHistory.length - limit);
-            }
-
-            undoHistory.push({
-              timestamp: Date.now(),
-              value: stringify(newThingtimeReference)
-            });
-            const undoHistoryNewString = JSON.stringify(undoHistory);
-            window.localStorage.setItem('undoHistory', undoHistoryNewString);
-          } catch {
-            // nothing
-          }
-        }
-      } catch (err) {
-        console.error('There was an error saving thingtime to localStorage');
-      }
-
-      const saveRedo = false;
-      if (saveRedo) {
-        try {
-          console.log('ThingtimeProvider setting thingtime to localStorage', newThingtimeReference);
+          console.log('[tt][history] Saving thingtime set event to history');
+          console.log('[tt][ThingtimeProvider.tsx] setting thingtime to localStorage', newThingtimeReference);
           // setTimeout(() => {
           const stringified = stringify(newThingtimeReference);
-          let redoHistory = [];
+          let undoHistory = [];
           try {
-            const redoHistoryString = window.localStorage.getItem('redoHistory');
-            const parsedRedoHistory = JSON.parse(redoHistoryString);
-            if (parsedRedoHistory instanceof Array) {
-              redoHistory = parsedRedoHistory;
+            const localUndoHistory = await localforage.getItem('undoHistory');
+            const undoHistoryString = typeof localUndoHistory === 'string' ? localUndoHistory : '';
+            const parsedUndoHistory = JSON.parse(undoHistoryString);
+            if (parsedUndoHistory instanceof Array) {
+              undoHistory = parsedUndoHistory;
             }
           } catch {
             // nothing
           }
 
-          if (redoHistory[redoHistory.length - 1]?.value !== stringified) {
+          // if last undoHistory does not equal new undo history
+          if (undoHistory[undoHistory.length - 1]?.value !== stringified) {
             try {
-              const limit = newThingtimeReference?.settings?.redoLimit || 999;
+              const limit = newThingtimeReference?.settings?.undoLimit || 999;
 
-              if (redoHistory?.length > limit) {
-                redoHistory = redoHistory.slice(redoHistory.length - limit);
+              if (undoHistory?.length > limit) {
+                undoHistory = undoHistory.slice(undoHistory.length - limit);
               }
 
-              redoHistory.push({
+              undoHistory.push({
                 timestamp: Date.now(),
                 value: stringify(newThingtimeReference)
               });
-              const redoHistoryNewString = JSON.stringify(redoHistory);
-              window.localStorage.setItem('redoHistory', redoHistoryNewString);
+              const undoHistoryNewString = JSON.stringify(undoHistory);
+              await localforage.setItem('undoHistory', undoHistoryNewString);
             } catch {
               // nothing
             }
@@ -138,7 +102,44 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
         } catch (err) {
           console.error('There was an error saving thingtime to localStorage');
         }
-      }
+
+        const saveRedo = false;
+        if (saveRedo) {
+          try {
+            console.log('[tt][ThingtimeProvider.tsx] setting thingtime to localStorage', newThingtimeReference);
+            // setTimeout(() => {
+            const stringified = stringify(newThingtimeReference);
+            let redoHistory = [];
+            const storageRedoHistory = await localforage.getItem('redoHistory');
+            const redoHistoryString = typeof storageRedoHistory === 'string' ? storageRedoHistory : JSON.stringify(storageRedoHistory);
+            const parsedRedoHistory = JSON.parse(redoHistoryString);
+            if (parsedRedoHistory instanceof Array) {
+              redoHistory = parsedRedoHistory;
+            }
+
+            if (redoHistory[redoHistory.length - 1]?.value !== stringified) {
+              try {
+                const limit = newThingtimeReference?.settings?.redoLimit || 999;
+
+                if (redoHistory?.length > limit) {
+                  redoHistory = redoHistory.slice(redoHistory.length - limit);
+                }
+
+                redoHistory.push({
+                  timestamp: Date.now(),
+                  value: stringify(newThingtimeReference)
+                });
+                const redoHistoryNewString = JSON.stringify(redoHistory);
+                localforage.setItem('redoHistory', redoHistoryNewString);
+              } catch {
+                // nothing
+              }
+            }
+          } catch (err) {
+            console.error('There was an error saving thingtime to localStorage');
+          }
+        }
+      })();
     }
 
     rawSet(newThingtimeReference);
@@ -209,7 +210,7 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
       newThingtime.thingtime = newThingtime;
       newThingtime.tt = newThingtime;
 
-      console.log('ThingtimeProvider setting newThingtime value at path', '"' + path + '"', 'value: ', value);
+      console.log('[tt][ThingtimeProvider.tsx] setting newThingtime value at path', '"' + path + '"', 'value: ', value);
 
       smarts.setsmart(newThingtime, path, value);
 
@@ -229,7 +230,7 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
 
       // do we need to sanitise?
       // const path = sanitise(rawPath)
-      console.log('ThingtimeProvider getting thingtime at path', path);
+      console.log('[tt][ThingtimeProvider.tsx] getting thingtime at path', path);
       // console.trace("Getting thingtime at path", path)
       return smarts.getsmart(thingtimeReference, path);
     },
@@ -268,44 +269,49 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
 
   // get thingtime from localstorage
   React.useEffect(() => {
-    try {
-      const thingtimeFromLocalStorage = window.localStorage.getItem('thingtime');
+    setLoading(true);
 
-      console.log('[tt.ThingtimeProvider] thingtimeFromLocalStorage', thingtimeFromLocalStorage);
+    (async () => {
+      try {
+        const localStorageThingtime = await localforage.getItem('thingtime');
 
-      if (thingtimeFromLocalStorage) {
-        const parsed = parse(thingtimeFromLocalStorage);
+        console.log('[tt][ThingtimeProvider.tsx] localStorageThingtime', localStorageThingtime);
 
-        console.log('[tt.ThingtimeProvider] parsed', parsed);
+        if (localStorageThingtime) {
+          const thingtimeFromLocalStorage = typeof localStorageThingtime === 'string' ? localStorageThingtime : '';
+          const parsed = parse(thingtimeFromLocalStorage);
 
-        if (parsed) {
-          const localIsValid = !parsed.version || parsed.version >= thingtimeMinimumValues.version;
-          let newThingtime = smarts.merge(thingtimeMinimumValues, thingtimeDefaults);
+          console.log('[tt][ThingtimeProvider.tsx] parsed', parsed);
 
-          console.trace('[tt.ThingtimeProvider] localIsValid', localIsValid);
+          if (parsed) {
+            const localIsValid = !parsed.version || parsed.version >= thingtimeMinimumValues.version;
+            let newThingtime = smarts.merge(thingtimeMinimumValues, thingtimeDefaults);
 
-          if (localIsValid) {
-            newThingtime = smarts.merge(parsed, newThingtime);
-          } else {
-            const withVersionUpdates = smarts.merge(thingtimeNewData, parsed);
-            newThingtime = smarts.merge(thingtimeMinimumValues, withVersionUpdates);
+            console.trace('[tt][ThingtimeProvider.tsx] localIsValid', localIsValid);
+
+            if (localIsValid) {
+              newThingtime = smarts.merge(parsed, newThingtime);
+            } else {
+              const withVersionUpdates = smarts.merge(thingtimeNewData, parsed);
+              newThingtime = smarts.merge(thingtimeMinimumValues, withVersionUpdates);
+            }
+
+            newThingtime = smarts.merge(newThingtime, thingtimeOverwriteAll, {
+              overwriteAll: true
+            });
+
+            console.log('[tt][ThingtimeProvider.tsx] restoring thingtime from localStorage', newThingtime);
+            set(newThingtime, true);
           }
-
-          newThingtime = smarts.merge(newThingtime, thingtimeOverwriteAll, {
-            overwriteAll: true
-          });
-
-          console.log('ThingtimeProvider restoring thingtime from localStorage', newThingtime);
-          set(newThingtime);
+        } else {
+          set(thingtimeDefaults, true);
         }
-      } else {
-        set(thingtimeDefaults);
+      } catch (err) {
+        console.error('There was an error getting thingtime from localStorage');
       }
-    } catch (err) {
-      console.error('There was an error getting thingtime from localStorage');
-    }
 
-    setLoading(false);
+      setLoading(false);
+    })();
   }, []);
 
   // thingtime change listener
@@ -322,13 +328,15 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
 
     if (stateRef.current.initialized) {
       try {
-        console.log('ThingtimeProvider setting thingtime to localStorage', thingtimeReference);
+        console.log('[tt][ThingtimeProvider.tsx] setting thingtime to localStorage', thingtimeReference);
         // setTimeout(() => {
         const stringified = stringify(thingtimeReference);
-        window.localStorage.setItem('thingtime', stringified);
+        // TODO: check if doing this asynchronously is safe...
+        // or causing issues in general....
+        localforage.setItem('thingtime', stringified);
         // }, 600)
       } catch (err) {
-        console.error('There was an error saving thingtime to localStorage');
+        console.error('There was an error saving thingtime to localStorage', err);
       }
     } else {
       stateRef.current.initialized = true;
