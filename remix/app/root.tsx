@@ -26,7 +26,8 @@ const whitelistObj = {
   '[tt][error]': false,
   '[tt][warn]': false,
   '[tt][info]': false,
-  '[tt][debug]': false
+  '[tt][debug]': false,
+  '[tt][ThingtimeProvider.tsx][set][path]': true
 };
 const whitelist = [].concat(Object.keys(whitelistObj).filter((key) => whitelistObj[key]));
 console.log = (...args) => {

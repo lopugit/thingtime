@@ -1,367 +1,405 @@
 import React, { createContext } from 'react';
 // @ts-ignore
-import flatted, { parse, stringify } from 'flatted';
+import { parse as parseAux, stringify as stringifyAux } from 'flatted';
 import { Subject } from 'rxjs';
 import { thingtimeDefaults, thingtimeMinimumValues, thingtimeNewData, thingtimeOverwriteAll } from './Thingtime/ThingtimeDefaults';
 import { sanitise } from '../functions/sanitise';
 import { smarts } from '../smarts';
-import { useUndoRedo } from '~/hooks/useUndoRedo';
+import { TimelineEvent, useUndoRedo } from '~/hooks/useUndoRedo';
 import localforage from 'localforage';
 export interface ThingtimeContextInterface {
-  thingtime: any;
-  setThingtime: any;
-  getThingtime: any;
-  thingtimeRef: any;
-  loading: boolean;
-  events: Subject<any>;
+	thingtime: any;
+	setThingtime: any;
+	getThingtime: any;
+	thingtimeRef: any;
+	loading: boolean;
+	events: Subject<any>;
 }
 
 export const ThingtimeContext = createContext<ThingtimeContextInterface | null>(null);
 
+// wrap flatted parse and stringify with a function reviver and replacer
+
+const reviver = (key: string, value: any) => {
+	// if value is a Date, return it as a Date object
+	if (typeof value === 'string' && !isNaN(Date.parse(value))) {
+		return new Date(value);
+	}
+
+	// if value is a function, return it as a function
+	if (value?.ttype === 'function') {
+		try {
+			const func = eval(value.code);
+			if (typeof func === 'function') {
+				if (value?.ttScope && typeof value.ttScope === 'object') {
+					func.ttScope = value.ttScope;
+				}
+
+				// if the scope has keys
+				// re-eval the function with these keyed values in a fake function scope
+				if (Object.keys(func.ttScope || {}).length > 0) {
+					const scopeKeys = Object.keys(func.ttScope);
+					const newEval = `function scoper() {
+						${scopeKeys.map((key) => `const ${key} = this.ttScope.${key};`).join('\n')}
+						return ${value.code}
+					}`;
+					const scopedFunc = eval(newEval);
+					scopedFunc.ttScope = func.ttScope;
+					return scopedFunc;
+				}
+
+				return func;
+			}
+		} catch (err) {
+			console.error('There was an error evaluating the function code:', err);
+		}
+		return function () {
+			console.warn('Function could not be revived:', value.code);
+		};
+	}
+
+	return value;
+};
+
+const replacer = (key: string, value: any) => {
+	// if value is a Date, return it as a string
+	if (value instanceof Date) {
+		return value.toISOString();
+	}
+
+	// if value is a function, return it as an object with ttype and code properties
+	if (typeof value === 'function') {
+		return {
+			ttype: 'function',
+			code: value.toString(),
+			ttScope: value?.ttScope || {}
+		};
+	}
+
+	return value;
+};
+
+const parse = (text: string): any => {
+	try {
+		return parseAux(text, reviver);
+	} catch (err) {
+		console.error('There was an error parsing the thingtime data:', err);
+		return null;
+	}
+};
+
+const stringify = (data: any): string => {
+	try {
+		return stringifyAux(data, replacer);
+	} catch (err) {
+		console.error('There was an error stringifying the thingtime data:', err);
+		return '';
+	}
+};
+
 try {
-  window.smarts = smarts;
-  window.flatted = {
-    parse,
-    stringify
-  };
+	window.smarts = smarts;
+	window.flatted = {
+		parse,
+		stringify
+	};
 } catch (err) {
-  // nothing
+	// nothing
 }
 
 export const ThingtimeProvider = (props: any): JSX.Element => {
-  // TODO: work out why we are doing thingtimeReference and thingtimeRef ...... ? 😂
-  const [thingtimeReference, rawSet] = React.useState({
-    tt: null,
-    thingtime: null,
-    set: () => console.log('Please wait for Thingtime to load'),
-    get: () => console.log('Please wait for Thingtime to load')
-  });
+	const [Everything, setEverything] = React.useState<any>({
+		thingtime: null,
+		set: null,
+		setThingtime: null,
+		getThingtime: null,
+		thingtimeRef: null,
+		paths: null,
+		loading: null,
+		events: null
+	});
 
-  const thingtimeRef = React.useRef(thingtimeReference);
-  const stateRef: any = React.useRef({
-    c: 1
-  });
+	// TODO: work out why we are doing thingtimeRef and thingtimeRef ...... ? 😂
+	const [thingtimeState, setThingtimeState] = React.useState({
+		tt: null,
+		thingtime: null,
+		set: () => console.log('Please wait for Thingtime to load'),
+		get: () => console.log('Please wait for Thingtime to load')
+	});
 
-  const [loading, setLoading] = React.useState(true);
+	const thingtimeRef = React.useRef(thingtimeState);
+	const stateRef: any = React.useRef({
+		c: 1
+	});
 
-  const [events, setEvents] = React.useState(null);
+	const [loading, setLoading] = React.useState(true);
 
-  if (!events) {
-    setEvents(() => new Subject());
-  }
+	const [events, setEvents] = React.useState(null);
 
-  const set = React.useCallback((newThingtime, ignoreUndoRedo?: boolean) => {
-    const newThingtimeReference = {
-      ...newThingtime
-    };
+	if (!events) {
+		setEvents(() => new Subject());
+	}
 
-    newThingtimeReference.tt = newThingtimeReference;
-    newThingtimeReference.thingtime = newThingtimeReference;
+	const undoRedo = useUndoRedo(Everything);
 
-    // we need to split this into a undo/redo separated logical flow
+	stateRef.current.undoRedo = undoRedo;
 
-    // store undo/redo history
-    if (!ignoreUndoRedo) {
-      (async () => {
-        try {
-          console.log('[tt][history] Saving thingtime set event to history');
-          console.log('[tt][ThingtimeProvider.tsx] setting thingtime to localStorage', newThingtimeReference);
-          // setTimeout(() => {
-          const stringified = stringify(newThingtimeReference);
-          let undoHistory = [];
-          try {
-            const localUndoHistory = await localforage.getItem('undoHistory');
-            const undoHistoryString = typeof localUndoHistory === 'string' ? localUndoHistory : '';
-            const parsedUndoHistory = JSON.parse(undoHistoryString);
-            if (parsedUndoHistory instanceof Array) {
-              undoHistory = parsedUndoHistory;
-            }
-          } catch {
-            // nothing
-          }
+	const rawSetThingtimeState = React.useCallback((newThingtimeArg, ignoreUndoRedo?: boolean) => {
+		const newThingtime = {
+			...newThingtimeArg
+		};
 
-          // if last undoHistory does not equal new undo history
-          if (undoHistory[undoHistory.length - 1]?.value !== stringified) {
-            try {
-              const limit = newThingtimeReference?.settings?.undoLimit || 999;
+		newThingtime.tt = newThingtime;
+		newThingtime.thingtime = newThingtime;
 
-              if (undoHistory?.length > limit) {
-                undoHistory = undoHistory.slice(undoHistory.length - limit);
-              }
+		setThingtimeState(newThingtime);
+	}, []);
 
-              undoHistory.push({
-                timestamp: Date.now(),
-                value: stringify(newThingtimeReference)
-              });
-              const undoHistoryNewString = JSON.stringify(undoHistory);
-              await localforage.setItem('undoHistory', undoHistoryNewString);
-            } catch {
-              // nothing
-            }
-          }
-        } catch (err) {
-          console.error('There was an error saving thingtime to localStorage');
-        }
+	const setThingtime = React.useCallback(
+		(
+			path,
+			value,
+			options: { ignoreUndoRedo?: boolean; namespace?: string } = {
+				ignoreUndoRedo: false,
+				namespace: 'default'
+			}
+		) => {
+			const { ignoreUndoRedo, namespace } = options;
 
-        const saveRedo = false;
-        if (saveRedo) {
-          try {
-            console.log('[tt][ThingtimeProvider.tsx] setting thingtime to localStorage', newThingtimeReference);
-            // setTimeout(() => {
-            const stringified = stringify(newThingtimeReference);
-            let redoHistory = [];
-            const storageRedoHistory = await localforage.getItem('redoHistory');
-            const redoHistoryString = typeof storageRedoHistory === 'string' ? storageRedoHistory : JSON.stringify(storageRedoHistory);
-            const parsedRedoHistory = JSON.parse(redoHistoryString);
-            if (parsedRedoHistory instanceof Array) {
-              redoHistory = parsedRedoHistory;
-            }
+			console.log('[tt][ThingtimeProvider.tsx][set][path] setThingtime called with path:', path, 'value:', value);
 
-            if (redoHistory[redoHistory.length - 1]?.value !== stringified) {
-              try {
-                const limit = newThingtimeReference?.settings?.redoLimit || 999;
+			// TODO: make this a lot safer
+			if (['thingtime', 'tt']?.includes(path)) {
+				if (value) {
+					rawSetThingtimeState(value);
+					return;
+				}
+			}
 
-                if (redoHistory?.length > limit) {
-                  redoHistory = redoHistory.slice(redoHistory.length - limit);
-                }
+			const time = Date.now();
 
-                redoHistory.push({
-                  timestamp: Date.now(),
-                  value: stringify(newThingtimeReference)
-                });
-                const redoHistoryNewString = JSON.stringify(redoHistory);
-                localforage.setItem('redoHistory', redoHistoryNewString);
-              } catch {
-                // nothing
-              }
-            }
-          } catch (err) {
-            console.error('There was an error saving thingtime to localStorage');
-          }
-        }
-      })();
-    }
+			const newThingtime: any = thingtimeState || {};
 
-    rawSet(newThingtimeReference);
-  }, []);
+			const paths = smarts.parsePropertyPath(path);
 
-  useUndoRedo({
-    set,
-    thingtimeReference,
-    thingtimeRef
-  });
+			// find first parent where a path is undefined
+			// paths is array of path parts such as ["path1", "path2", "path3"]
+			// we want to create a new reference at the first object which has an undefined part of the path
+			// and is an object itself
+			// so that react will detect the change and re-render
+			// "path1" = { ...thingtime["path1"] } if path1.path2 undefined
+			// "path1.path2" = { ...thingtime["path1"]["path2"] } if path1.path2.path3 undefined
+			// "path1.path2.path3" = { ...thingtime["path1"]["path2"]["path3"] }
+			// etc
+			let done = false;
+			paths.forEach((pathPart, index) => {
+				if (!done) {
+					const pathParts = paths.slice(0, index + 1);
+					const tmpPath = pathParts.join('.');
+					const parentPath = pathParts.slice(0, -1).join('.');
 
-  const setThingtime = React.useCallback(
-    (path, value) => {
-      // TODO: make this a lot safer
-      if (['thingtime', 'tt']?.includes(path)) {
-        if (value) {
-          set(value);
-          return;
-        }
-      }
+					const valAtPath = smarts.getsmart(newThingtime, tmpPath);
 
-      // log the event in the window.eventchain to store history
-      window.eventchain = window.eventchain || [];
-      window.eventchain.push({
-        path,
-        value,
-        currentValue: smarts.getsmart(thingtimeReference, path),
-        timestamp: Date.now()
-      });
+					if (parentPath) {
+						if (typeof valAtPath !== 'object' || valAtPath === null) {
+							const parentVal = smarts.getsmart(newThingtime, parentPath);
+							if (typeof parentVal === 'object') {
+								const newParent = Array.isArray(parentVal) ? [...parentVal] : { ...parentVal };
+								smarts.setsmart(newThingtime, parentPath, newParent);
+							}
 
-      const newThingtime: any = thingtimeReference || {};
+							done = true;
+						}
+					}
+				}
+			});
 
-      const paths = smarts.parsePropertyPath(path);
+			// store undo/redo history
+			if (!ignoreUndoRedo) {
+				const event: TimelineEvent = {
+					path: path,
+					value: value,
+					namespace: options?.namespace,
+					currentValue: smarts.getsmart(thingtimeState, path),
+					timestamp: time
+				};
+				console.log('[tt][ThingtimeProvider.tsx] adding timeline event', event);
+				undoRedo.current.addTimelineEvent(newThingtime, event);
+			}
 
-      // find first parent where a path is undefined
-      // paths is array of path parts such as ["path1", "path2", "path3"]
-      // we want to create a new reference at the first object which has an undefined part of the path
-      // and is an object itself
-      // so that react will detect the change and re-render
-      // "path1" = { ...thingtime["path1"] } if path1.path2 undefined
-      // "path1.path2" = { ...thingtime["path1"]["path2"] } if path1.path2.path3 undefined
-      // "path1.path2.path3" = { ...thingtime["path1"]["path2"]["path3"] }
-      // etc
-      let done = false;
-      paths.forEach((pathPart, index) => {
-        if (!done) {
-          const pathParts = paths.slice(0, index + 1);
-          const tmpPath = pathParts.join('.');
-          const parentPath = pathParts.slice(0, -1).join('.');
+			// TODO: make thingtime settable
+			newThingtime.thingtime = newThingtime;
+			newThingtime.tt = newThingtime;
 
-          const valAtPath = smarts.getsmart(newThingtime, tmpPath);
+			console.log('[tt][ThingtimeProvider.tsx] setting newThingtime value at path', '"' + path + '"', 'value: ', value);
 
-          if (parentPath) {
-            if (typeof valAtPath !== 'object' || valAtPath === null) {
-              const parentVal = smarts.getsmart(newThingtime, parentPath);
-              if (typeof parentVal === 'object') {
-                const newParent = Array.isArray(parentVal) ? [...parentVal] : { ...parentVal };
-                smarts.setsmart(newThingtime, parentPath, newParent);
-              }
+			smarts.setsmart(newThingtime, path, value);
 
-              done = true;
-            }
-          }
-        }
-      });
+			rawSetThingtimeState(newThingtime);
+		},
+		[thingtimeState, rawSetThingtimeState]
+	);
 
-      // TODO: make thingtime settable
-      newThingtime.thingtime = newThingtime;
-      newThingtime.tt = newThingtime;
+	const getThingtime = React.useCallback(
+		(...args) => {
+			const rawPath = args[0];
+			const path = rawPath;
 
-      console.log('[tt][ThingtimeProvider.tsx] setting newThingtime value at path', '"' + path + '"', 'value: ', value);
+			if (!path) {
+				return thingtimeState;
+			}
 
-      smarts.setsmart(newThingtime, path, value);
+			// do we need to sanitise?
+			// const path = sanitise(rawPath)
+			console.log('[tt][ThingtimeProvider.tsx] getting thingtime at path', path);
+			// console.trace("Getting thingtime at path", path)
+			return smarts.getsmart(thingtimeState, path);
+		},
+		[thingtimeState]
+	);
 
-      set(newThingtime);
-    },
-    [thingtimeReference, set]
-  );
+	const populatePaths = React.useCallback((obj, path, paths, seen = []) => {
+		try {
+			Object.keys(obj).forEach((key) => {
+				const val = obj[key];
+				const newPath = path ? `${path}${path ? '.' : ''}${key}` : key;
+				if (typeof val === 'object') {
+					paths.push(newPath);
+					if (!seen?.includes(val)) {
+						seen.push(val);
+						populatePaths(val, newPath, paths, seen);
+					}
+				} else {
+					paths.push(newPath);
+				}
+			});
+		} catch {
+			// nothing
+		}
+	}, []);
 
-  const getThingtime = React.useCallback(
-    (...args) => {
-      const rawPath = args[0];
-      const path = rawPath;
+	const paths = React.useMemo(() => {
+		// const paths = ["tt", "thingtime", "."]
+		const paths = [];
 
-      if (!path) {
-        return thingtimeReference;
-      }
+		// populatePaths(thingtime, commandPath)
+		populatePaths(thingtimeState, '', paths);
 
-      // do we need to sanitise?
-      // const path = sanitise(rawPath)
-      console.log('[tt][ThingtimeProvider.tsx] getting thingtime at path', path);
-      // console.trace("Getting thingtime at path", path)
-      return smarts.getsmart(thingtimeReference, path);
-    },
-    [thingtimeReference]
-  );
+		return paths;
+	}, [populatePaths, thingtimeState]);
 
-  const populatePaths = React.useCallback((obj, path, paths, seen = []) => {
-    try {
-      Object.keys(obj).forEach((key) => {
-        const val = obj[key];
-        const newPath = path ? `${path}${path ? '.' : ''}${key}` : key;
-        if (typeof val === 'object') {
-          paths.push(newPath);
-          if (!seen?.includes(val)) {
-            seen.push(val);
-            populatePaths(val, newPath, paths, seen);
-          }
-        } else {
-          paths.push(newPath);
-        }
-      });
-    } catch {
-      // nothing
-    }
-  }, []);
+	// get thingtime from localstorage
+	React.useEffect(() => {
+		setLoading(true);
 
-  const paths = React.useMemo(() => {
-    // const paths = ["tt", "thingtime", "."]
-    const paths = [];
+		(async () => {
+			try {
+				const localStorageThingtime = await localforage.getItem('thingtime');
 
-    // populatePaths(thingtime, commandPath)
-    populatePaths(thingtimeReference, '', paths);
+				console.log('[tt][ThingtimeProvider.tsx] localStorageThingtime', localStorageThingtime);
 
-    return paths;
-  }, [populatePaths, thingtimeReference]);
+				if (localStorageThingtime) {
+					const thingtimeFromLocalStorage = typeof localStorageThingtime === 'string' ? localStorageThingtime : '';
+					const parsed = parse(thingtimeFromLocalStorage);
 
-  // get thingtime from localstorage
-  React.useEffect(() => {
-    setLoading(true);
+					console.log('[tt][ThingtimeProvider.tsx] parsed', parsed);
 
-    (async () => {
-      try {
-        const localStorageThingtime = await localforage.getItem('thingtime');
+					if (parsed) {
+						const localIsValid = !parsed.version || parsed.version >= thingtimeMinimumValues.version;
+						let newThingtime = smarts.merge(thingtimeMinimumValues, thingtimeDefaults);
 
-        console.log('[tt][ThingtimeProvider.tsx] localStorageThingtime', localStorageThingtime);
+						console.trace('[tt][ThingtimeProvider.tsx] localIsValid', localIsValid);
 
-        if (localStorageThingtime) {
-          const thingtimeFromLocalStorage = typeof localStorageThingtime === 'string' ? localStorageThingtime : '';
-          const parsed = parse(thingtimeFromLocalStorage);
+						if (localIsValid) {
+							newThingtime = smarts.merge(parsed, newThingtime);
+						} else {
+							const withVersionUpdates = smarts.merge(thingtimeNewData, parsed);
+							newThingtime = smarts.merge(thingtimeMinimumValues, withVersionUpdates);
+						}
 
-          console.log('[tt][ThingtimeProvider.tsx] parsed', parsed);
+						newThingtime = smarts.merge(newThingtime, thingtimeOverwriteAll, {
+							overwriteAll: true
+						});
 
-          if (parsed) {
-            const localIsValid = !parsed.version || parsed.version >= thingtimeMinimumValues.version;
-            let newThingtime = smarts.merge(thingtimeMinimumValues, thingtimeDefaults);
+						console.log('[tt][ThingtimeProvider.tsx] restoring thingtime from localStorage', newThingtime);
+						rawSetThingtimeState(newThingtime, true);
+					}
+				} else {
+					rawSetThingtimeState(thingtimeDefaults, true);
+				}
+			} catch (err) {
+				console.error('There was an error getting thingtime from localStorage');
+			}
 
-            console.trace('[tt][ThingtimeProvider.tsx] localIsValid', localIsValid);
+			setLoading(false);
+		})();
+	}, []);
 
-            if (localIsValid) {
-              newThingtime = smarts.merge(parsed, newThingtime);
-            } else {
-              const withVersionUpdates = smarts.merge(thingtimeNewData, parsed);
-              newThingtime = smarts.merge(thingtimeMinimumValues, withVersionUpdates);
-            }
+	// thingtime change listener
+	React.useEffect(() => {
+		try {
+			window.setThingtime = setThingtime;
+			window.getThingtime = getThingtime;
+			window.thingtime = thingtimeState;
+			window.tt = thingtimeState;
+			window.events = events;
+		} catch {
+			// nothing
+		}
 
-            newThingtime = smarts.merge(newThingtime, thingtimeOverwriteAll, {
-              overwriteAll: true
-            });
+		if (stateRef.current.initialized) {
+			try {
+				console.log('[tt][ThingtimeProvider.tsx] setting thingtime to localStorage', thingtimeState);
+				// setTimeout(() => {
+				const stringified = stringify(thingtimeState);
+				// TODO: check if doing this asynchronously is safe...
+				// or causing issues in general....
+				localforage.setItem('thingtime', stringified);
+				// }, 600)
+			} catch (err) {
+				console.error('There was an error saving thingtime to localStorage', err);
+			}
+		} else {
+			stateRef.current.initialized = true;
+		}
 
-            console.log('[tt][ThingtimeProvider.tsx] restoring thingtime from localStorage', newThingtime);
-            set(newThingtime, true);
-          }
-        } else {
-          set(thingtimeDefaults, true);
-        }
-      } catch (err) {
-        console.error('There was an error getting thingtime from localStorage');
-      }
+		thingtimeRef.current = thingtimeState;
 
-      setLoading(false);
-    })();
-  }, []);
+		// not sure why this used to have @undoRedoEventKeyShortcutEventListener here.. ?
+	}, [setThingtime, events, getThingtime, thingtimeState, rawSetThingtimeState]);
 
-  // thingtime change listener
-  React.useEffect(() => {
-    try {
-      window.setThingtime = setThingtime;
-      window.getThingtime = getThingtime;
-      window.thingtime = thingtimeReference;
-      window.tt = thingtimeReference;
-      window.events = events;
-    } catch {
-      // nothing
-    }
+	if (thingtimeState) {
+		// @ts-expect-error property get/set does not exist or something?
+		thingtimeState.set = setThingtime;
+		thingtimeState.get = getThingtime;
+	}
 
-    if (stateRef.current.initialized) {
-      try {
-        console.log('[tt][ThingtimeProvider.tsx] setting thingtime to localStorage', thingtimeReference);
-        // setTimeout(() => {
-        const stringified = stringify(thingtimeReference);
-        // TODO: check if doing this asynchronously is safe...
-        // or causing issues in general....
-        localforage.setItem('thingtime', stringified);
-        // }, 600)
-      } catch (err) {
-        console.error('There was an error saving thingtime to localStorage', err);
-      }
-    } else {
-      stateRef.current.initialized = true;
-    }
+	// watch all the exported values and reset on Everything if they change
+	React.useEffect(() => {
+		const newEverything = {
+			thingtime: thingtimeState,
+			setThingtime: setThingtime,
+			getThingtime: getThingtime,
+			thingtimeRef: thingtimeRef,
+			paths: paths,
+			loading: loading,
+			events: events
+		};
 
-    thingtimeRef.current = thingtimeReference;
+		setEverything(newEverything);
+	}, [thingtimeState, setThingtime, getThingtime, thingtimeRef, paths, loading, events]);
 
-    // not sure why this used to have @undoRedoEventKeyShortcutEventListener here.. ?
-  }, [setThingtime, events, getThingtime, thingtimeReference, set]);
+	Object.assign(Everything, {
+		thingtime: thingtimeState,
+		setThingtime: setThingtime,
+		getThingtime: getThingtime,
+		thingtimeRef: thingtimeRef,
+		paths: paths,
+		loading: loading,
+		events: events
+	});
 
-  if (thingtimeReference) {
-    // @ts-expect-error property get/set does not exist or something?
-    thingtimeReference.set = setThingtime;
-    thingtimeReference.get = getThingtime;
-  }
+	console.log('nik thingtimeState', thingtimeState);
 
-  const value = {
-    thingtime: thingtimeReference,
-    setThingtime,
-    getThingtime,
-    thingtimeRef,
-    paths,
-    loading,
-    events
-  };
-
-  return <ThingtimeContext.Provider value={value}>{props?.children}</ThingtimeContext.Provider>;
+	return <ThingtimeContext.Provider value={Everything}>{props?.children}</ThingtimeContext.Provider>;
 };

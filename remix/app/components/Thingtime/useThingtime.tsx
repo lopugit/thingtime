@@ -1,19 +1,19 @@
-import { useContext } from "react"
+import { useContext } from 'react';
 
-import { ThingtimeContext } from "../../Providers/ThingtimeProvider"
+import { ThingtimeContext } from '../../Providers/ThingtimeProvider';
 
 const getGlobal = () => {
   try {
-    return window
+    return window;
   } catch {
-    return globalThis
+    return globalThis;
   }
-}
+};
 
 export const useThingtime = (props?: any): any => {
-  const value = useContext(ThingtimeContext)
+  const value = useContext(ThingtimeContext);
 
   // const { thingtime, setThingtime, getThingtime, thingtimeRef } = value
 
-  return value
-}
+  return value;
+};
