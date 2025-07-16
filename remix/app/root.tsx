@@ -30,30 +30,30 @@ const whitelistObj = {
   '[tt][ThingtimeProvider.tsx][set][path]': true
 };
 const whitelist = [].concat(Object.keys(whitelistObj).filter((key) => whitelistObj[key]));
-console.log = (...args) => {
-  // Check if the first argument is a string and contains '[tt]'
-  try {
-    if (typeof args[0] === 'string' && args[0].startsWith('[tt]')) {
-      const allowLogging = window.tt?.settings?.logging?.all || whitelist.some((item) => args[0].startsWith(item));
-      if (typeof window !== 'undefined' && allowLogging) {
-        if (logConfig.trace) {
-          // If trace is enabled, log the stack trace
-          const stack = new Error().stack;
-          originalConsoleLog(...args, '\nStack Trace:', stack);
-        } else {
-          // Check if logging is enabled in Thingtime settings
-          originalConsoleLog(...args);
-        }
-      }
-    } else {
-      // For all other logs, just call the original console.log
-      originalConsoleLog(...args);
-    }
-  } catch (err) {
-    // If there's an error (e.g., window.tt is not defined), just call the original console.log
-    originalConsoleLog(...args);
-  }
-};
+// console.log = (...args) => {
+//   // Check if the first argument is a string and contains '[tt]'
+//   try {
+//     if (typeof args[0] === 'string' && args[0].startsWith('[tt]')) {
+//       const allowLogging = window.tt?.settings?.logging?.all || whitelist.some((item) => args[0].startsWith(item));
+//       if (typeof window !== 'undefined' && allowLogging) {
+//         if (logConfig.trace) {
+//           // If trace is enabled, log the stack trace
+//           const stack = new Error().stack;
+//           originalConsoleLog(...args, '\nStack Trace:', stack.replace(/^Error\n/, '🌈Thingtime Logger🦄'));
+//         } else {
+//           // Check if logging is enabled in Thingtime settings
+//           originalConsoleLog(...args);
+//         }
+//       }
+//     } else {
+//       // For all other logs, just call the original console.log
+//       originalConsoleLog(...args);
+//     }
+//   } catch (err) {
+//     // If there's an error (e.g., window.tt is not defined), just call the original console.log
+//     originalConsoleLog(...args);
+//   }
+// };
 
 function Document({ children, title = 'Thingtime' }: { children: React.ReactNode; title?: string }) {
   // check Remix environment

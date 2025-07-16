@@ -29,9 +29,9 @@ export interface TimelineEvent {
 }
 
 export const useUndoRedo = (Everything) => {
-  const { thingtime, rawSetThingtimeState } = Everything;
+  const { thingtime } = Everything;
 
-  console.log('nik thingtime', thingtime);
+  console.log('nik[useUndoRedo.tsx/useUndoRedo()x] { thingtime } = Everything', thingtime);
 
   const shortcuts = React.useState({
     undo: {
