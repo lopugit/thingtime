@@ -16,6 +16,7 @@ export interface ThingtimeTypes {
   loading: boolean;
   paths: string[];
   events: Subject<any>;
+  Provider?: React.Context<ThingtimeTypes> | any;
 }
 
 export interface EverythingTypes {
@@ -153,7 +154,7 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
 
   stateRef.current.undoRedo = undoRedo;
 
-  const setThingtimeObjectWrapper = React.useCallback((newThingtimeArg, ignoreUndoRedo?: boolean) => {
+  const setThingtimeObjectWrapper = React.useCallback((newThingtimeArg) => {
     const newThingtime = {
       ...newThingtimeArg
     };
@@ -393,12 +394,6 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
     // not sure why this used to have @undoRedoEventKeyShortcutEventListener here.. ?
   }, [setThingtime, events, getThingtime, thingtimeState, setThingtimeObjectWrapper]);
 
-  if (thingtimeState) {
-    // @ts-expect-error property get/set does not exist or something?
-    thingtimeState.set = setThingtime;
-    thingtimeState.get = getThingtime;
-  }
-
   // watch all the exported values and reset on Everything if they change
   React.useEffect(() => {
     const newEverything = {
@@ -419,6 +414,13 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
     // 2
     setEverything(EverythingRef.current); // 2
   }, [thingtimeState, setThingtime, getThingtime, thingtimeRef, paths, loading, events]);
+
+  // ayo 🐟🤏😤💩
+  // if (thingtimeState) {
+  //   // @ts-expect-error property get/set does not exist or something?
+  //   thingtimeState.set = setThingtime;
+  //   thingtimeState.get = getThingtime;
+  // }
 
   Object.assign(Everything, {
     thingtime: thingtimeState,

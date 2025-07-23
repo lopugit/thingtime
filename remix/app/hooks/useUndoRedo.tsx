@@ -4,6 +4,19 @@ import localforage from 'localforage';
 import { useThingtime } from '~/components/Thingtime/useThingtime';
 import { parse, stringify } from 'flatted';
 
+// timemachine type
+export interface Timemachine {
+  timelines: { [key: string]: any };
+  addTimeline: (key: string, timeline?: any) => void;
+  getTimeline: (key?: string) => any;
+}
+
+export interface TimemachineScaffold {
+  timelines?: { [key: string]: any };
+  addTimeline?: (key?: string, timeline?: any) => void;
+  getTimeline?: (key?: string) => any;
+}
+
 // @ts-ignore
 const undoRedoLogger = console?.with?.({ context: 'undo' }) || console;
 
@@ -265,19 +278,6 @@ export const newTimeline = (key: string = 'default', scaffold?: TimelineScaffold
   return timeline;
 };
 
-// timemachine type
-export interface Timemachine {
-  timelines: { [key: string]: any };
-  addTimeline: (key: string, timeline?: any) => void;
-  getTimeline: (key?: string) => any;
-}
-
-export interface TimemachineScaffold {
-  timelines?: { [key: string]: any };
-  addTimeline?: (key?: string, timeline?: any) => void;
-  getTimeline?: (key?: string) => any;
-}
-
 export const newTimemachine = (scaffold?: TimemachineScaffold) => {
   // this is "instances" of timelines with keys
   const timemachine: Timemachine = {
@@ -307,6 +307,7 @@ export const newTimemachine = (scaffold?: TimemachineScaffold) => {
   // if there's a scaffold, just make sure we add any timelines from the scaffold
   if (scaffold) {
     if (scaffold.timelines) {
+      console.log('nik[tt.useUndoRedo.tsx/newTimemachine] found scaffold.timelines | scaffold:', scaffold);
       Object.keys(scaffold.timelines).forEach((key) => {
         timemachine.addTimeline(key, scaffold.timelines[key]);
       });
