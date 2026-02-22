@@ -54,6 +54,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	const { thingtime, setThingtime, getThingtime, loading, events } = useThingtime();
 
 	const [uuid, setUuid] = React.useState(undefined);
+	const didReportRenderRef = React.useRef(false);
 
 	const [root, setRoot] = React.useState(props?.notRoot ? false : true);
 
@@ -117,6 +118,13 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	);
 
 	const propsRef = React.useRef(props);
+
+	React.useEffect(() => {
+		if (!didReportRenderRef.current) {
+			didReportRenderRef.current = true;
+			props?.onRendered?.();
+		}
+	}, []);
 
 	React.useEffect(() => {
 		propsRef.current = props;
@@ -389,57 +397,61 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	// make type any for this
 	const [thingtimeChildren, setThingtimeChildren] = React.useState<any>(null);
 	const [visibleKeyCount, setVisibleKeyCount] = React.useState(0);
+	const [loadTargetCount, setLoadTargetCount] = React.useState(0);
+	const [mountedChildrenCount, setMountedChildrenCount] = React.useState(0);
 
 	React.useEffect(() => {
 		if (!keysToUse?.length || circular) {
 			setVisibleKeyCount(0);
+			setLoadTargetCount(0);
+			setMountedChildrenCount(0);
 			return;
 		}
 
-		let cancelled = false;
-		let rafId = 0;
-		let nextCount = 0;
-		const total = keysToUse.length;
-		const frameBudgetMs = 8;
-		const maxPerFrame = 200;
+		const keyGateLength = thingtime?.settings?.keyGateLength || 5;
+		const shouldGate = keysToUse.length > keyGateLength;
+		if (!shouldGate) {
+			setVisibleKeyCount(keysToUse.length);
+			setLoadTargetCount(keysToUse.length);
+			setMountedChildrenCount(keysToUse.length);
+			return;
+		}
 
-		setVisibleKeyCount(0);
-
-		const step = () => {
-			if (cancelled) return;
-
-			const start = performance.now();
-			let count = nextCount;
-			let added = 0;
-
-			while (count < total && performance.now() - start < frameBudgetMs && added < maxPerFrame) {
-				count += 1;
-				added += 1;
+		const initialCount = Math.min(keyGateLength, keysToUse.length);
+		setVisibleKeyCount((prev) => {
+			if (prev > 0) {
+				return Math.min(prev, keysToUse.length);
 			}
+			return initialCount;
+		});
+		setLoadTargetCount((prev) => (prev > 0 ? Math.min(prev, keysToUse.length) : initialCount));
+		setMountedChildrenCount((prev) => Math.min(prev, keysToUse.length));
+	}, [keysToUse, circular, thingDep, thing?.settings?.keyGateLength]);
 
-			nextCount = count;
-			setVisibleKeyCount(count);
+	React.useEffect(() => {
+		const keyGateLength = thingtime?.settings?.keyGateLength || 5;
+		const shouldGate = keysToUse?.length > keyGateLength;
+		if (!shouldGate) return;
+		if (visibleKeyCount >= loadTargetCount) return;
+		if (mountedChildrenCount < visibleKeyCount) return;
 
-			if (count < total) {
-				rafId = window.requestAnimationFrame(step);
-			}
-		};
-
-		rafId = window.requestAnimationFrame(step);
-
-		return () => {
-			cancelled = true;
-			if (rafId) {
-				window.cancelAnimationFrame(rafId);
-			}
-		};
-	}, [keysToUse, circular, thingDep]);
+		setVisibleKeyCount((prev) => Math.min(prev + 1, loadTargetCount));
+	}, [keysToUse, thingtime?.settings?.keyGateLength, visibleKeyCount, loadTargetCount, mountedChildrenCount]);
 
 	const inner = React.useMemo(() => {
 		let content = <AtomicWrapper paddingLeft={pl}>Imagine..</AtomicWrapper>;
 
 		if (keysToUse?.length && !circular) {
-			const visibleKeys = keysToUse.slice(0, visibleKeyCount);
+			const keyGateLength = thingtime?.settings?.keyGateLength || 5;
+			const shouldGate = keysToUse.length > keyGateLength;
+			const visibleKeys = shouldGate ? keysToUse.slice(0, visibleKeyCount) : keysToUse;
+			const isLoading = shouldGate && visibleKeyCount < keysToUse.length;
+			const onChildRendered = shouldGate
+				? () => {
+						setMountedChildrenCount((prev) => prev + 1);
+				  }
+				: undefined;
+
 			content = (
 				<>
 					{visibleKeys.map((key, idx) => {
@@ -474,15 +486,47 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 								thing={nextThing}
 								// thing={{ infinite: { yes: true } }}
 								valuePl={pl}
+								onRendered={onChildRendered}
 							></Thingtime>
 						);
 					})}
+					{isLoading && (
+						<AtomicWrapper paddingLeft={pl} className="thingtime-loading">
+							<button
+								type="button"
+								onClick={() => {
+									setLoadTargetCount((prev) =>
+										Math.min(
+											Math.max(prev, visibleKeyCount) + (thingtime?.settings?.keyGateLength || 5),
+											keysToUse.length
+										)
+									);
+								}}
+							>
+								Load more
+							</button>
+						</AtomicWrapper>
+					)}
 				</>
 			);
 		}
 
 		return content;
-	}, [AtomicWrapper, pl, keysToUse, visibleKeyCount, circular, thing, seen, props?.edit, render, depth, fullPath, chakra]);
+	}, [
+		AtomicWrapper,
+		pl,
+		keysToUse,
+		visibleKeyCount,
+		circular,
+		thing,
+		thingtime?.settings?.keyGateLength,
+		seen,
+		props?.edit,
+		render,
+		depth,
+		fullPath,
+		chakra
+	]);
 
 	React.useEffect(() => {
 		if (type === 'object' && !circular) {
@@ -542,22 +586,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 			setThingtimeChildren(wrapped);
 			return;
 		}
-	}, [
-		inner,
-		circular,
-		type,
-		props?.chakraChild,
-		props?.path,
-		props?.edit,
-		chakra,
-		fullPath,
-		render,
-		depth,
-		thing,
-		thingDep,
-		valuePl,
-		pl
-	]);
+	}, [inner, circular, type, props?.chakraChild, props?.path, props?.edit, chakra, fullPath, render, depth, thing, thingDep, valuePl, pl]);
 
 	const updateValue = React.useCallback(
 		(args) => {
