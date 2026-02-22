@@ -13,7 +13,7 @@ export const getConnection = async () => {
     throw new Error('No valid connection found');
   }
 
-  const connectionUri = connectionResp.body.data.connection || process.env.MONGODB_URI;
+  const connectionUri = connectionResp.body.data.connection || process.env.THINGTIME_PRIVATE_MONGODB_URI;
 
   const client = new MongoClient(connectionUri, {});
   await client.connect();

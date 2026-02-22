@@ -8,7 +8,7 @@ import { Thingtime } from '~/components/Thingtime/Thingtime';
 const routeName = 'API V1 MongoDB Get Connection';
 
 // for now store valid mongodb urls using env and a default localhost one
-const validConnections = [process.env.MONGODB_URI, 'mongodb://localhost:27017/'];
+const validConnections = [process.env.THINGTIME_PRIVATE_MONGODB_URI, 'mongodb://localhost:27017/'];
 
 export default function Index() {
   // use a MagicInput to allow any args to be passed to this API

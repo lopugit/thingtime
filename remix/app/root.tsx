@@ -1,5 +1,5 @@
 // import type { MetaFunction } from "@vercel/remix"
-import { defer, Links, LiveReload, Meta, Outlet, Scripts, ScrollRestoration } from '@remix-run/react';
+import { defer, Links, LiveReload, Meta, Outlet, Scripts, ScrollRestoration, useLoaderData } from '@remix-run/react';
 import { Analytics } from '@vercel/analytics/react';
 
 import { GlobalStyles } from './globals/GlobalStyles';
@@ -77,6 +77,18 @@ function Document({ children, title = 'Thingtime' }: { children: React.ReactNode
     // do nothing
   }
 
+  // assign known process.env variables to window.env object
+  try {
+    if (typeof window !== 'undefined') {
+      window.env = {
+        ...window.env,
+        BRANCH_NAME: process.env.BRANCH_NAME || 'git/unknown'
+      };
+    }
+  } catch (err) {
+    // will error on server
+  }
+
   // the favicon will also vary depending on the environment
 
   return (
@@ -101,6 +113,24 @@ function Document({ children, title = 'Thingtime' }: { children: React.ReactNode
 }
 
 export default function App() {
+  // grab env from loader
+  const { envFromCookie } = useLoaderData<typeof loader>();
+
+  // log the cookie
+  console.log('envFromCookie in root.tsx:', envFromCookie);
+
+  // add env to window .env
+  try {
+    if (typeof window !== 'undefined') {
+      window.envFromCookie = {
+        ...window.env,
+        ...envFromCookie
+      };
+    }
+  } catch (err) {
+    // will error on server
+  }
+
   useIcons();
 
   return (
@@ -127,10 +157,21 @@ export async function loader({ request, context }: LoaderArgs) {
 
   const pingCounter = cookiePingCounter + 1;
 
+  const processEnv = {};
+
+  // add all process.env variables that start with THINGTIME_ to the cookie
+  for (const key in process.env) {
+    if (key.startsWith('THINGTIME_') && !key.includes('PRIVATE')) {
+      processEnv[key] = process.env[key];
+    }
+  }
+
   // .log everyone
 
   return json(
-    {},
+    {
+      envFromCookie: { ...processEnv }
+    },
     {
       headers: {
         'Set-Cookie': await Session.serialize({ ...cookie, pingCounter })

@@ -5,7 +5,7 @@ import { Subject } from 'rxjs';
 import { thingtimeDefaults, thingtimeMinimumValues, thingtimeNewData, thingtimeOverwriteAll } from './Thingtime/ThingtimeDefaults';
 import { sanitise } from '../functions/sanitise';
 import { smarts } from '../smarts';
-import { TimelineEvent, useUndoRedo } from '~/hooks/useUndoRedo';
+import { TimelineEvent, useThingtimeLine } from '~/hooks/useThingtimeLine';
 import localforage from 'localforage';
 export interface ThingtimeTypes {
   thingtime: any;
@@ -149,11 +149,11 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
     setEvents(() => new Subject());
   }
 
-  const undoRedo = useUndoRedo(Everything);
+  const undoRedo = useThingtimeLine(Everything);
 
   stateRef.current.undoRedo = undoRedo;
 
-  const setThingtimeObjectWrapper = React.useCallback((newThingtimeArg, ignoreUndoRedo?: boolean) => {
+  const setThingtimeObjectWrapper = React.useCallback((newThingtimeArg) => {
     const newThingtime = {
       ...newThingtimeArg
     };
@@ -239,16 +239,17 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
         }
       });
 
-      // store undo/redo history
       if (!ignoreUndoRedo) {
+        // store undo/redo history
         const event: TimelineEvent = {
           path: path,
           value: value,
-          namespace: options?.namespace,
-          currentValue: smarts.getsmart(thingtimeState, path),
+          namespace: namespace,
+          fromValue: smarts.getsmart(thingtimeState, path),
           timestamp: time
         };
-        console.log('[tt][ThingtimeProvider.tsx] adding timeline event', event);
+        console.log('[tt][ThingtimeProvider.tsx/setThingtime() adding timeline event', event);
+        console.log('[tt][ThingtimeProvider.tsx/setThingtime() undoRedo.current.addTimelineEvent(newThingtime, event)');
         undoRedo.current.addTimelineEvent(newThingtime, event);
       }
 
@@ -347,10 +348,20 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
             });
 
             console.log('[tt][ThingtimeProvider.tsx] restoring thingtime from localStorage. Thingtime: ', newThingtime);
-            setThingtimeObjectWrapper(newThingtime, true);
+            // TODO: does this need to
+            // specifically ignore undo redo calls
+            setThingtime('thingtime', newThingtime, {
+              ignoreUndoRedo: true,
+              namespace: 'tt.localStorage-restore'
+            });
           }
         } else {
-          setThingtimeObjectWrapper(thingtimeDefaults, true);
+          // TODO: does this need to
+          // specifically ignore undo redo calls
+          setThingtime(thingtimeDefaults, {
+            ignoreUndoRedo: true,
+            namespace: 'tt.localStorage-restore'
+          });
         }
       } catch (err) {
         console.error('There was an error getting thingtime from localStorage');
