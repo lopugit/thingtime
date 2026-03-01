@@ -10,7 +10,7 @@
 
 if [ -f .env.auto ]; then
 	export $(cat .env.auto | xargs)
-	echo "THINGTIME_BRANCH_NAME is $THINGTIME_BRANCH_NAME"
+	echo "THINGTIME_BRANCH_NAME is $THINGTIME_BRANCH_NAME in vercel.sh"
 	# create or append to .env file with THINGTIME_BRANCH_NAME env var
 	if grep -q "THINGTIME_BRANCH_NAME" .env; then
 		# replace existing line
