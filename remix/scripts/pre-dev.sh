@@ -17,6 +17,9 @@ if [ -n "$inVercel" ]; then
 	if [ -f .env.auto ]; then
 		export $(cat .env.auto | xargs)
 		echo "THINGTIME_BRANCH_NAME is $THINGTIME_BRANCH_NAME"
+		# use vercel env add 
+		vercel env add THINGTIME_BRANCH_NAME $THINGTIME_BRANCH_NAME production
+		vercel env add THINGTIME_BRANCH_NAME $THINGTIME_BRANCH_NAME preview
 	else
 		echo "Error: .env.auto file not found. Exiting."
 		exit 1
