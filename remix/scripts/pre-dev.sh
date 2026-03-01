@@ -9,6 +9,21 @@ echo "Hello"
 # old method doesn't work in CI
 # BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD)
 # BRANCH_NAME=$(git branch 2> /dev/null | sed -e '/^[^*]/d' -e 's/* \(.*\)/ 🌱 \1/')
+# if in vercel env just grab from committed .env.auto
+inVercel=${VERCEL_ENV:-}
+# if inVercel not null
+if [ -n "$inVercel" ]; then
+	echo "In Vercel environment, using branch name from .env.auto"
+	if [ -f .env.auto ]; then
+		export $(cat .env.auto | xargs)
+		echo "THINGTIME_BRANCH_NAME is $THINGTIME_BRANCH_NAME"
+	else
+		echo "Error: .env.auto file not found. Exiting."
+		exit 1
+	fi
+	exit 0
+fi
+
 BRANCH_NAME=$(git branch 2> /dev/null | sed -e '/^[^*]/d' -e 's/* \(.*\)/\1/')
 echo "THINGTIME_BRANCH_NAME is $BRANCH_NAME"
 
