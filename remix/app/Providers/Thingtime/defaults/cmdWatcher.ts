@@ -102,7 +102,7 @@ done
 terminal-notifier -title "🌈🧠🦄" -sender com.apple.automator.noti -ignoreDnD -message "\${1}" -subtitle "\${2}"
       
       `
-    },
+    }
   },
   '.bashrc/.bash_profile': {
     content: `
@@ -127,8 +127,6 @@ export -f cmdWatcherRestart
 cmdWatcherRestart
       
       `
-    }
   }
 };
-
 export default value;
