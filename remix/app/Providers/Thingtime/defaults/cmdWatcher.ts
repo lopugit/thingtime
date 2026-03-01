@@ -103,8 +103,9 @@ terminal-notifier -title "🌈🧠🦄" -sender com.apple.automator.noti -ignore
       
       `
     },
-    '.bashrc/.bash_profile': {
-      content: `
+  },
+  '.bashrc/.bash_profile': {
+    content: `
       
 # run /Users/USER/things/code/lopugit/root/cmdWatcherNotifier.sh in the background to watch for long running commands and notify when they finish
 cmdWatcherPath="/Users/USER/things/code/lopugit/root/cmdWatcherNotifier.sh"
