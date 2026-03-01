@@ -18,17 +18,10 @@ if [ -n "$inVercel" ]; then
 		export $(cat .env.auto | xargs)
 		echo "THINGTIME_BRANCH_NAME is $THINGTIME_BRANCH_NAME"
 		
-		# add to or create .env and append
-		if grep -q "THINGTIME_BRANCH_NAME" .env; then
-			# replace existing line
-			sed -i.bak "s/THINGTIME_BRANCH_NAME=.*/THINGTIME_BRANCH_NAME=\"$THINGTIME_BRANCH_NAME\"/" .env
-			rm .env.bak
-		elif [ ! -f .env ]; then
-			echo "THINGTIME_BRANCH_NAME=\"$THINGTIME_BRANCH_NAME\"" > .env
-		else
-			# append to bottom of .env
-			echo "THINGTIME_BRANCH_NAME=\"$THINGTIME_BRANCH_NAME\"" >> .env
-		fi
+		# replace process.env.THINGTIME_BRANCH_NAME with string value in all files within ../app
+		find ../app -type f -name "*.tsx" -o -name "*.ts" -o -name "*.jsx" -o -name "*.js" | xargs sed -i.bak "s/process.env.THINGTIME_BRANCH_NAME/\"$THINGTIME_BRANCH_NAME\"/g"
+		# remove .bak files
+		find ../app -type f -name "*.bak" -delete
 		
 	else
 		echo "Error: .env.auto file not found. Exiting."
