@@ -11,6 +11,7 @@
 if [ -f .env.auto ]; then
 	export $(cat .env.auto | xargs)
 	echo "THINGTIME_BRANCH_NAME is $THINGTIME_BRANCH_NAME"
+	export BRANCH_NAME=$THINGTIME_BRANCH_NAME
 else
 fi
 
