@@ -3,7 +3,7 @@
   "sideEffects": false,
   "version": "1.0.0",
   "scripts": {
-    "build": "remix vite:build",
+    "build": "/scripts/pre-dev.sh && remix vite:build",
     "pre-dev": "./scripts/pre-dev.sh",
     "dev": "./scripts/pre-dev.sh && echo $BRANCH_NAME && remix vite:dev --host 127.0.0.1",
     "lint": "eslint --ext .js,.ts,.jsx,.tsx .",
