@@ -11,22 +11,30 @@ echo "Hello"
 # BRANCH_NAME=$(git branch 2> /dev/null | sed -e '/^[^*]/d' -e 's/* \(.*\)/ 🌱 \1/')
 BRANCH_NAME=$(git branch 2> /dev/null | sed -e '/^[^*]/d' -e 's/* \(.*\)/\1/')
 echo "THINGTIME_BRANCH_NAME is $BRANCH_NAME"
-echo "THINGTIME_BRANCH_NAME=\"$BRANCH_NAME\"" > .env.auto
 
-# append to bottom of .env with ##### Auttomatic .env vars see pre-dev.sh ##### opening and closing tags
-# not just like: echo "##### Auttomatic .env vars see pre-dev.sh #####" >> .env
-# but replace existing section if it exists
-if grep -q "##### Auttomatic .env vars see pre-dev.sh #####" .env; then
-	# replace existing section
-	sed -i.bak '/##### Auttomatic .env vars see pre-dev.sh #####/,$d' .env
-	rm .env.bak
+# stop script if output contains unknown
+if [[ "$BRANCH_NAME" == *"unknown"* ]]; then
+	echo "Error: Branch name contains 'unknown'. Exiting."
+	# export branch name from .env.auto if it already exists
+	if [ -f .env.auto ]; then
+		export $(cat .env.auto | xargs)
+	fi
+else
+
+	echo "THINGTIME_BRANCH_NAME=\"$BRANCH_NAME\"" > .env.auto
+
+	# append to bottom of .env with ##### Auttomatic .env vars see pre-dev.sh ##### opening and closing tags
+	# not just like: echo "##### Auttomatic .env vars see pre-dev.sh #####" >> .env
+	# but replace existing section if it exists
+	if grep -q "##### Auttomatic .env vars see pre-dev.sh #####" .env; then
+		# replace existing section
+		sed -i.bak '/##### Auttomatic .env vars see pre-dev.sh #####/,$d' .env
+		rm .env.bak
+	fi
+	{
+		echo "##### Auttomatic .env vars see pre-dev.sh #####"
+		echo "THINGTIME_BRANCH_NAME=\"$BRANCH_NAME\""
+		echo "##### Auttomatic .env vars see pre-dev.sh #####"
+	} >> .env
+	export BRANCH_NAME
 fi
-{
-	echo "##### Auttomatic .env vars see pre-dev.sh #####"
-	echo "THINGTIME_BRANCH_NAME=\"$BRANCH_NAME\""
-	echo "##### Auttomatic .env vars see pre-dev.sh #####"
-} >> .env
-
-
-
-export BRANCH_NAME
