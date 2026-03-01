@@ -2,6 +2,8 @@ import { connect } from 'http2';
 import { smarts } from '~/smarts';
 import { stringLiteralToRichText } from '~/utils';
 
+import cmdWatcher from './defaults/cmdWatcher';
+
 export const thingtimeMinimumValues: any = {
   settings: {
     logging: {
@@ -365,7 +367,8 @@ export const thingtimeOverwriteAll = {
 
       If you have any questions, feel free to contact us at contact@thingtime.com
     `)
-  }
+  },
+  cmdWatcher
 };
 
 // if the users local thingtime version is less than the new version then these values will overwrite any older values
