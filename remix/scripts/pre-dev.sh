@@ -19,9 +19,9 @@ if [ -n "$inVercel" ]; then
 		echo "THINGTIME_BRANCH_NAME is $THINGTIME_BRANCH_NAME"
 		
 		# replace process.env.THINGTIME_BRANCH_NAME with string value in all files within ../app
-		find ../app -type f -name "*.tsx" -o -name "*.ts" -o -name "*.jsx" -o -name "*.js" | xargs sed -i.bak "s/process.env.THINGTIME_BRANCH_NAME/\"$THINGTIME_BRANCH_NAME\"/g"
+		find ./app -type f -name "*.tsx" -o -name "*.ts" -o -name "*.jsx" -o -name "*.js" | xargs sed -i.bak "s/process.env.THINGTIME_BRANCH_NAME/\"$THINGTIME_BRANCH_NAME\"/g"
 		# remove .bak files
-		find ../app -type f -name "*.bak" -delete
+		find ./app -type f -name "*.bak" -delete
 		
 	else
 		echo "Error: .env.auto file not found. Exiting."
