@@ -63,6 +63,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	const thingtimeRef = React.useRef();
 
 	const [showFullPathContext, setShowFullPathContext] = React.useState(false);
+	const [isCollapsed, setIsCollapsed] = React.useState(Boolean(props?.collapsed));
 
 	const editValueRef = React.useRef({});
 
@@ -370,6 +371,27 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		return keys;
 	}, [keys, renderChakra]);
 	// const keysToUse = flattenedKeys
+	const hasCollapsibleChildren = React.useMemo(() => {
+		if (chakraChild || chakra) {
+			return false;
+		}
+
+		if (circular) {
+			return false;
+		}
+
+		if (!keysToUse?.length) {
+			return false;
+		}
+
+		return typeof thing === 'object' && thing !== null;
+	}, [chakraChild, chakra, circular, keysToUse, thing]);
+
+	React.useEffect(() => {
+		if (!hasCollapsibleChildren && isCollapsed) {
+			setIsCollapsed(false);
+		}
+	}, [hasCollapsibleChildren, isCollapsed]);
 
 	const AtomicWrapper = React.useCallback((args) => {
 		return (
@@ -496,10 +518,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 								type="button"
 								onClick={() => {
 									setLoadTargetCount((prev) =>
-										Math.min(
-											Math.max(prev, visibleKeyCount) + (thingtime?.settings?.keyGateLength || 5),
-											keysToUse.length
-										)
+										Math.min(Math.max(prev, visibleKeyCount) + (thingtime?.settings?.keyGateLength || 5), keysToUse.length)
 									);
 								}}
 							>
@@ -969,6 +988,34 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 							onMouseEnter={() => setShowContextIcon(true)}
 							onMouseLeave={() => setShowContextIcon(false)}
 						>
+							{hasCollapsibleChildren && (
+								<Flex
+									className="thingCaretToggle"
+									alignItems="center"
+									justifyContent="center"
+									marginRight={2}
+									cursor="pointer"
+									userSelect="none"
+									opacity={0.8}
+									tabIndex={0}
+									onClick={(e) => {
+										e?.preventDefault?.();
+										e?.stopPropagation?.();
+										e?.nativeEvent?.stopImmediatePropagation?.();
+										setIsCollapsed((prev) => !prev);
+									}}
+									onKeyDown={(e) => {
+										if (e?.key === 'Enter' || e?.key === ' ') {
+											e?.preventDefault?.();
+											setIsCollapsed((prev) => !prev);
+										}
+									}}
+								>
+									<Box fontSize="12px" lineHeight="1">
+										{isCollapsed ? '▸' : '▾'}
+									</Box>
+								</Flex>
+							)}
 							<Flex className="thingPathDom">{pathDom}</Flex>
 							{props?.edit && (
 								<Box
@@ -1010,7 +1057,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 				{/* render any normal React children as well */}
 				{render && props?.children ? props.children : null}
 				{/* render thingtime children */}
-				{!loading && thingtimeChildren && (
+				{!loading && thingtimeChildren && !isCollapsed && (
 					<Box className="thingtimeChildren" flexGrow={0} flexShrink={1} width={render ? 'auto' : ''}>
 						{thingtimeChildren}
 						{!render && type === 'object' && (
@@ -1083,6 +1130,13 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
           <Icon size={7} name="plus"></Icon> */}
 							</Flex>
 						)}
+					</Box>
+				)}
+				{!loading && thingtimeChildren && isCollapsed && (
+					<Box className="thingtimeChildrenCollapsed" paddingLeft={multiplyPl(2)} paddingY={2} opacity={0.6}>
+						<Flex fontSize="12px" userSelect="none">
+							{thing instanceof Array ? `[…] ${thing.length}` : `{…} ${keys?.length || 0}`}
+						</Flex>
 					</Box>
 				)}
 			</Flex>
