@@ -85,7 +85,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		}
 
 		if (render) {
-			return 'auto';
+			return '100%';
 		}
 
 		return '100%';
@@ -191,7 +191,6 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	// TODO
 	// attempt at making seedling button work with <Thingtime path argument only
 	// const thingtimeThing = getThingtime(fullPath);
-
 	// basically const value = React.useMemo
 	const thing = React.useMemo(() => {
 		return props?.thing;
@@ -393,6 +392,22 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		}
 	}, [hasCollapsibleChildren, isCollapsed]);
 
+	// if Thingtime object has "exec" then execute and set thing to returned data
+	React.useEffect(() => {
+		(async () => {
+			if (thing?.exec && typeof thing?.exec === 'function') {
+				try {
+					const execResult = await thing.exec(thing);
+					if (execResult !== thing) {
+						setThingtime(fullPath, execResult);
+					}
+				} catch (err) {
+					console.error('Thingtime exec error', err);
+				}
+			}
+		})();
+	}, [thingDep, fullPath, setThingtime]);
+
 	const AtomicWrapper = React.useCallback((args) => {
 		return (
 			<Flex
@@ -558,21 +573,59 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 
 				try {
 					if (ChakraComponent) {
+						const VOID_ELEMENTS = [
+							// Standard HTML strings
+							'area',
+							'base',
+							'br',
+							'col',
+							'embed',
+							'hr',
+							'img',
+							'input',
+							'link',
+							'meta',
+							'param',
+							'source',
+							'track',
+							'wbr',
+							// Chakra UI DisplayNames (PascalCase)
+							'Image',
+							'Img',
+							'Input',
+							'Divider',
+							'Icon',
+							'Spinner',
+							'Checkbox',
+							'Radio',
+							'Switch'
+						];
+
+						const isVoid =
+							VOID_ELEMENTS.includes(ChakraComponent?.toLowerCase?.()) ||
+							VOID_ELEMENTS.includes(ChakraComponent?.render?.displayName) ||
+							VOID_ELEMENTS.includes(ChakraComponent?.displayName);
+
 						console.log('Thingtime found ChakraComponent', fullPath, ChakraComponent);
 						console.log('Thingtime found thing?.props', fullPath, thing?.props);
+						console.log('Thingtime found isVoid', isVoid, ChakraComponent);
 
-						const ret = (
+						const ret = isVoid ? (
+							<ChakraComponent {...(thing?.props || {})}></ChakraComponent>
+						) : (
 							<ChakraComponent {...(thing?.props || {})}>
 								{rawChildren}
 								{inner}
 							</ChakraComponent>
 						);
+
 						// set thingtimeChildren to ret
 						setThingtimeChildren(ret);
 						return;
 					}
 				} catch {
 					// chakra error
+					console.error('Thingtime Chakra error', fullPath, chakra);
 				}
 			}
 
@@ -840,7 +893,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 					});
 
 					if (nearestMagicInput && nearestMagicInput?.focus) {
-						nearestMagicInput.focus();
+						nearestMagicInput?.focus?.();
 					}
 				} catch (err) {
 					console.error('Thingtime:657 Something went wrong reassigning path', err);
@@ -862,6 +915,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 				<>
 					<MagicInput
 						ref={pathRef}
+						whiteSpace="pre"
 						value={renderedPath}
 						readonly={!props?.edit}
 						onEnter={updatePath}
@@ -1016,7 +1070,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 									</Box>
 								</Flex>
 							)}
-							<Flex className="thingPathDom">{pathDom}</Flex>
+							<Flex className="thingPathDom-raw">{pathDom}</Flex>
 							{props?.edit && (
 								<Box
 									className="thingTypeIcon"
@@ -1050,7 +1104,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 				{/* Basic types like String, Number, etc.. non-object values */}
 				{/* it will also show if the Thing has standard React children */}
 				{!loading && !thingtimeChildren && atomicValue && (
-					<Box className="atomicValue" width={render ? 'auto' : ''}>
+					<Box className="atomicValue" width={'100%'} overflowX={'scroll'}>
 						{atomicValue}
 					</Box>
 				)}
@@ -1058,7 +1112,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 				{render && props?.children ? props.children : null}
 				{/* render thingtime children */}
 				{!loading && thingtimeChildren && !isCollapsed && (
-					<Box className="thingtimeChildren" flexGrow={0} flexShrink={1} width={render ? 'auto' : ''}>
+					<Box className="thingtimeChildren" flexGrow={0} flexShrink={1} width={render ? '100%' : ''}>
 						{thingtimeChildren}
 						{!render && type === 'object' && (
 							<Flex
