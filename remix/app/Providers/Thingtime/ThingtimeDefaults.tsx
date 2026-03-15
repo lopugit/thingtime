@@ -3,6 +3,7 @@ import { smarts } from '~/smarts';
 import { stringLiteralToRichText } from '~/utils';
 
 import cmdWatcher from './defaults/cmdWatcher';
+import assets from '~/routes/branding/assets/all';
 
 export const thingtimeMinimumValues: any = {
   settings: {
@@ -368,6 +369,8 @@ export const thingtimeOverwriteAll = {
       If you have any questions, feel free to contact us at contact@thingtime.com
     `)
   },
+  assets,
+  branding: assets,
   cmdWatcher
 };
 
