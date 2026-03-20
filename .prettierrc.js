@@ -1,0 +1,13 @@
+module.exports = {
+  endOfLine: 'lf',
+  semi: true,
+  singleQuote: true,
+  tabWidth: 2,
+  useTabs: false,
+  trailingComma: 'none',
+  printWidth: 150,
+  singleAttributePerLine: false,
+  arrowParens: 'always',
+  plugins: [],
+};
+

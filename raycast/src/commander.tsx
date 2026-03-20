@@ -16,6 +16,9 @@ import { getSelectedFiles, getSelectedImages } from "./utilities/utils";
 import { ConvertPreferences, ExtensionPreferences } from "./utilities/preferences";
 import runOperation from "./operations/runOperation";
 import { openNewFinderWindow } from "./commands/openNewFinderWindow";
+import { regexTrim } from "./commands/regexTrim";
+import { regexToReplacementConverter } from "./commands/regexToReplacementConverter";
+
 import { execSync } from "child_process";
 
 /**
@@ -51,8 +54,6 @@ const convertFormats = [
 
 export default function Command(props: any) {
   const preferences = getPreferenceValues();
-
-  console.log("nik preferences", preferences);
 
   console.log("Preference Name", preferences.name);
 
@@ -106,6 +107,26 @@ export default function Command(props: any) {
     return;
   }
 
+  if (preferenceName === "regexTrim") {
+    regexTrim(props);
+
+    (async () => {
+      await showHUD(`🌈 Converted into Regex 🦄`);
+    })();
+
+    return;
+  }
+
+  if (preferenceName === "regexToReplacementConverter") {
+    regexToReplacementConverter(props);
+
+    (async () => {
+      await showHUD(`🌈 Converted into Replacement Regex 🦄`);
+    })();
+
+    return;
+  }
+
   // log preferences
   // console.log(preferences);
 
@@ -129,7 +150,6 @@ export default function Command(props: any) {
     return;
   }
 
-  console.log("nik hey?");
 
   if (preferenceName === "mp4ToMp3") {
     return (

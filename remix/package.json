@@ -1,9 +1,11 @@
 {
   "private": true,
   "sideEffects": false,
+  "version": "1.0.0",
   "scripts": {
-    "build": "remix vite:build",
-    "dev": "remix vite:dev --host 127.0.0.1",
+    "build": "./scripts/pre-dev.sh && remix vite:build",
+    "pre-dev": "./scripts/pre-dev.sh",
+    "dev": "./scripts/pre-dev.sh && echo $BRANCH_NAME && remix vite:dev --host 127.0.0.1",
     "lint": "eslint --ext .js,.ts,.jsx,.tsx .",
     "lint-fix": "eslint --ext .js,.ts,.jsx,.tsx . --fix",
     "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,css,scss,md}\""
@@ -28,11 +30,12 @@
     "draft-js": "^0.11.7",
     "emojis-list": "^3.0.0",
     "emotion": "^11.0.0",
-    "flatted": "^3.2.7",
+    "flatted": "^3.3.3",
     "fuse.js": "^6.6.2",
     "gradient-path": "^2.3.0",
     "hex-to-rgba": "^2.0.1",
     "isbot": "latest",
+    "localforage": "^1.10.0",
     "lodash-es": "^4.17.21",
     "mongodb": "^6.5.0",
     "prismjs": "^1.29.0",
@@ -81,6 +84,6 @@
     "@types/react": "^17.0.2"
   },
   "engines": {
-    "node": "18.x"
+    "node": "24.x"
   }
 }

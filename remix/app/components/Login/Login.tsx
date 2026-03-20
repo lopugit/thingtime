@@ -117,7 +117,7 @@ export const Login = (props) => {
               borderRadius="5px"
               outline="none"
               onChange={(e) => setUsername(e?.target?.value)}
-              placeholder="User 💌"
+              placeholder="💌 Username"
               type="username"
               value={username}
             />

@@ -8,9 +8,13 @@ export default function Index() {
   const { thingtime } = useThingtime();
 
   useEffect(() => {
-    thingtime.set('thingtimeUrlPageVisible', true);
+    // TODO: make thingtime.set (setThingtime)
+    // use a queue so as not to intefere run before history (undo/redo)
+    // is setup...
+
+    // thingtime.set('thingtimeUrlPageVisible', true);
     return () => {
-      thingtime.set('thingtimeUrlPageVisible', false);
+      // thingtime.set('thingtimeUrlPageVisible', false);
     };
   }, []);
 

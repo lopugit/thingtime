@@ -1,14 +1,21 @@
 {
   "$schema": "https://www.raycast.com/schemas/extension.json",
+  "version": "1.0.0",
   "name": "thingtime-commander",
   "title": "Thingtime Commander",
   "description": "Next generation command runner for software",
+  "scripts": {
+    "build": "ray build -e dist",
+    "dev": "ray develop",
+    "fix-lint": "ray lint --fix",
+    "lint": "ray lint",
+    "publish": "ray publish"
+  },
   "keywords": [
     "Lopu",
     "Thingtime",
     "Commander"
   ],
-  "version": "1.7.0",
   "icon": "command-icon.png",
   "author": "nikolajfrey",
   "contributors": [
@@ -416,6 +423,50 @@
         "change",
         "transform"
       ]
+    },
+    {
+      "name": "commanderRegexTrim",
+      "title": "Regex Trim - Whitespace to (\\s*\\r*) Replacement",
+      "description": "Will replace whitespace in the clipboard contents with (\\s*\\r*) to make find-all-replace easier",
+      "mode": "no-view",
+      "keywords": [
+        "commander",
+        "thingtime",
+        "ai"
+      ],
+      "preferences": [
+        {
+          "name": "name-regexTrim",
+          "required": false,
+          "type": "textfield",
+          "key": "name",
+          "title": "Name of Command to run",
+          "description": "The name of the command/function to run",
+          "defaultValue": "regexTrim"
+        }
+      ]
+    },
+    {
+      "name": "commanderRegexToReplacementConverter",
+      "title": "Regex Replacement - Special Replacement",
+      "description": "Will replace all regex (\\s*\\r*) in the clipboard contents with $1,$2,$3.. etc.. to make find-all-replace easier",
+      "mode": "no-view",
+      "keywords": [
+        "commander",
+        "thingtime",
+        "ai"
+      ],
+      "preferences": [
+        {
+          "name": "name-regexToReplacementConverter",
+          "required": false,
+          "type": "textfield",
+          "key": "name",
+          "title": "Name of Command to run",
+          "description": "The name of the command/function to run",
+          "defaultValue": "regexToReplacementConverter"
+        }
+      ]
     }
   ],
   "dependencies": {
@@ -437,12 +488,5 @@
     "eslint-config-prettier": "^8.3.0",
     "prettier": "^2.5.1",
     "typescript": "^4.4.3"
-  },
-  "scripts": {
-    "build": "ray build -e dist",
-    "dev": "ray develop",
-    "fix-lint": "ray lint --fix",
-    "lint": "ray lint",
-    "publish": "ray publish"
   }
 }

@@ -89,6 +89,16 @@ declare namespace Preferences {
   /**  - Whether to show SVG as a conversion option */
   "showSVG": boolean
 }
+  /** Preferences accessible in the `commanderRegexTrim` command */
+  export type CommanderRegexTrim = ExtensionPreferences & {
+  /** Name of Command to run - The name of the command/function to run */
+  "name-regexTrim"?: string
+}
+  /** Preferences accessible in the `commanderRegexToReplacementConverter` command */
+  export type CommanderRegexToReplacementConverter = ExtensionPreferences & {
+  /** Name of Command to run - The name of the command/function to run */
+  "name-regexToReplacementConverter"?: string
+}
 }
 
 declare namespace Arguments {
@@ -105,5 +115,9 @@ declare namespace Arguments {
   export type CommanderMp4ToMp3 = {}
   /** Arguments passed to the `commanderConvert` command */
   export type CommanderConvert = {}
+  /** Arguments passed to the `commanderRegexTrim` command */
+  export type CommanderRegexTrim = {}
+  /** Arguments passed to the `commanderRegexToReplacementConverter` command */
+  export type CommanderRegexToReplacementConverter = {}
 }
 
