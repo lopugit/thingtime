@@ -17,7 +17,7 @@ import {
 	Textarea
 } from '@chakra-ui/react';
 
-import { Commander } from '../Commander/Commander';
+import { Commander } from '../Commander/CommanderV1Deprecated';
 // import { Magic } from "../Commander/Magic"
 import { Icon } from '../Icon/Icon';
 import { MagicInput } from '../MagicInput/MagicInput';
@@ -30,6 +30,7 @@ import { getThing } from '~/smarts';
 
 type ThingtimeProps = {
 	debugId?: string;
+	thingtimeMachineNamespace?: string;
 };
 
 // join any with ThingtimeProps
@@ -38,6 +39,9 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	const props = {
 		...args
 	};
+
+	const [thingtimeMachineNamespace, setThingtimeMachineNamespace] = React.useState(props?.thingtimeMachineNamespace || 'user');
+	const [timelineNamespace, setTimelineNamespace] = React.useState('user');
 
 	// if there's a props?.value set props?.thing to props?.value
 
@@ -664,7 +668,9 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		(args) => {
 			const { value } = args;
 
-			setThingtime(fullPath, value);
+			setThingtime(fullPath, value, {
+				namespace: 'user'
+			});
 		},
 		[fullPath, setThingtime]
 	);
@@ -710,7 +716,9 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 
 		delete clone[path];
 
-		setThingtime(parentPath, clone);
+		setThingtime(parentPath, clone, {
+			namespace: 'user'
+		});
 	}, [path, parent, parentPath, setThingtime]);
 
 	const atomicValue = React.useMemo(() => {
@@ -721,6 +729,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		}
 
 		if (props?.edit) {
+			console.log('[tt] atomicVaulue type', type);
 			if (type === 'boolean') {
 				return (
 					<AtomicWrapper paddingLeft={pl} className="boolean-atomic-wrapper">
@@ -874,7 +883,9 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 						newObject[key] = parent[key];
 					});
 					// set new object
-					setThingtime(parentPath, newObject);
+					setThingtime(parentPath, newObject, {
+						namespace: thingtimeMachineNamespace
+					});
 
 					// focus next input
 					const focusableNodeList = thingtimeRef?.current?.querySelectorAll?.('.magic-input-focusable');
@@ -957,7 +968,9 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 			if (thingIsArray) {
 				// add new child to array
 				const newValue = [...thing, newChild];
-				setThingtime(fullPath, newValue);
+				setThingtime(fullPath, newValue, {
+					namespace: thingtimeMachineNamespace
+				});
 				return;
 			}
 
@@ -976,7 +989,9 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 			console.log('[tt] newChildFullPath', newChildFullPath);
 
 			// create new child on thing using setThingtime
-			setThingtime(newChildFullPath, newChild);
+			setThingtime(newChildFullPath, newChild, {
+				namespace: thingtimeMachineNamespace
+			});
 		},
 		[fullPath, setThingtime, thing]
 	);
@@ -1036,6 +1051,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 					<Flex className="thingHeader" position="relative" flexDirection="row">
 						<Flex
 							className="thingHeaderMouseCapture"
+							position="relative"
 							alignItems="center"
 							flexDirection="row"
 							marginRight="auto"
@@ -1052,6 +1068,8 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 									userSelect="none"
 									opacity={0.8}
 									tabIndex={0}
+									position="absolute"
+									left={-4}
 									onClick={(e) => {
 										e?.preventDefault?.();
 										e?.stopPropagation?.();

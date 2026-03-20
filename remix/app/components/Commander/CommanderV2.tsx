@@ -12,542 +12,561 @@ import { sanitise } from '~/functions/sanitise';
 import { usePath } from '~/hooks/usePath';
 import { getParentPath } from '~/smarts';
 
-export const CommanderV1 = (props) => {
-  const { thingtime, setThingtime, getThingtime, thingtimeRef, paths } = useThingtime();
+export const CommanderV2 = (props) => {
+	const { thingtime, setThingtime, getThingtime, thingtimeRef, paths } = useThingtime();
 
-  // log settings.commander.nav.commanderActive
-  console.log('thingtime.settings.commander.nav.commanderActive', thingtime?.settings?.commander?.nav?.commanderActive);
+	// log settings.commander.nav.commanderActive
+	console.log('thingtime.settings.commander.nav.commanderActive', thingtime?.settings?.commander?.nav?.commanderActive);
 
-  const { mode, changePath } = usePath();
+	const { mode, changePath } = usePath();
 
-  const commanderId = React.useMemo(() => {
-    return props?.id || 'global';
-  }, [props?.id]);
+	const commanderId = React.useMemo(() => {
+		return props?.id || 'global';
+	}, [props?.id]);
 
-  const inputRef = React.useRef();
+	const inputRef = React.useRef();
 
-  const global = props?.global;
+	const global = props?.global;
 
-  const commanderSettings = thingtime?.settings?.commander?.[commanderId] || {};
+	const commanderSettings = thingtime?.settings?.commander?.[commanderId] || {};
 
-  const [inputValue, setInputValue] = React.useState('');
-  const [virtualValue, setVirtualValue] = React.useState('');
-  const [hoveredSuggestion, setHoveredSuggestion] = React.useState();
-  const [active, setActive] = React.useState(false);
-  const [contextPath, setContextPath] = React.useState();
+	const [inputValue, setInputValue] = React.useState('');
+	const [virtualValue, setVirtualValue] = React.useState('');
+	const [hoveredSuggestion, setHoveredSuggestion] = React.useState();
+	const [active, setActive] = React.useState(false);
+	const [contextPath, setContextPath] = React.useState();
 
-  const commanderMode = React.useMemo(() => {
-    return props?.mode || 'value';
-  }, [props?.mode]);
+	const commanderMode = React.useMemo(() => {
+		return props?.mode || 'value';
+	}, [props?.mode]);
 
-  const [showContext, setShowContextState] = React.useState(false);
+	const [showContext, setShowContextState] = React.useState(false);
 
-  const mobileVW = React.useMemo(() => {
-    return 'calc(100vw - 108px)';
-  }, []);
+	const mobileVW = React.useMemo(() => {
+		return 'calc(100vw - 108px)';
+	}, []);
 
-  const rainbowRepeats = 2;
+	const rainbowRepeats = 2;
 
-  const setShowContext = React.useCallback(
-    (value, from?: string) => {
-      setShowContextState(value);
-    },
-    [setShowContextState]
-  );
-  // const [suggestions, setSuggestions] = React.useState([])
+	const setShowContext = React.useCallback(
+		(value, from?: string) => {
+			setShowContextState(value);
+		},
+		[setShowContextState]
+	);
+	// const [suggestions, setSuggestions] = React.useState([])
 
-  const contextValue = React.useMemo(() => {
-    // TODO: Figure out why this is running on every click
-    const ret = getThingtime(contextPath);
-    return ret;
-  }, [contextPath, getThingtime]);
+	const contextValue = React.useMemo(() => {
+		// TODO: Figure out why this is running on every click
+		const ret = getThingtime(contextPath);
+		return ret;
+	}, [contextPath, getThingtime]);
 
-  const commanderActive = React.useMemo(() => {
-    return commanderSettings?.commanderActive;
-  }, [commanderSettings?.commanderActive, commanderId]);
+	const commanderActive = React.useMemo(() => {
+		return commanderSettings?.commanderActive;
+	}, [commanderSettings?.commanderActive, commanderId]);
 
-  // commanderActive useEffect
-  React.useEffect(() => {
-    if (commanderActive) {
-      inputRef?.current?.focus?.();
-    } else {
-      document.activeElement.blur();
+	// commanderActive useEffect
+	React.useEffect(() => {
+		if (commanderActive) {
+			inputRef?.current?.focus?.();
+		} else {
+			document.activeElement.blur();
 
-      if (thingtimeRef?.current?.settings?.commander?.[commanderId]?.clearCommanderOnToggle) {
-        setInputValue('');
-        setHoveredSuggestion(null);
-      }
-      if (thingtimeRef?.current?.settings?.commander?.[commanderId]?.commander?.[commanderId]?.clearCommanderContextOnToggle) {
-        setShowContext(false, 'commanderActive useEffect');
-      }
-      if (contextPath !== undefined && !inputValue) {
-        setContextPath(undefined);
-      }
-      if (showContext !== false) {
-        setShowContext(false);
-      }
-    }
-  }, [commanderActive, thingtimeRef, setShowContext, commanderId, inputValue, contextPath, showContext]);
+			if (thingtimeRef?.current?.settings?.commander?.[commanderId]?.clearCommanderOnToggle) {
+				setInputValue('');
+				setHoveredSuggestion(null);
+			}
+			if (thingtimeRef?.current?.settings?.commander?.[commanderId]?.commander?.[commanderId]?.clearCommanderContextOnToggle) {
+				setShowContext(false, 'commanderActive useEffect');
+			}
+			if (contextPath !== undefined && !inputValue) {
+				setContextPath(undefined);
+			}
+			if (showContext !== false) {
+				setShowContext(false);
+			}
+		}
+	}, [commanderActive, thingtimeRef, setShowContext, commanderId, inputValue, contextPath, showContext]);
 
-  const onInputChange = React.useCallback((e) => {
-    setInputValue(e.target.value);
-    setHoveredSuggestion(null);
-  }, []);
+	const onInputChange = React.useCallback((e) => {
+		setInputValue(e.target.value);
+		setHoveredSuggestion(null);
+	}, []);
 
-  const validSetters = React.useMemo(() => {
-    return ['=', ' is ', ' IS ', ' Is ', ' iS '];
-  }, []);
+	const validSetters = React.useMemo(() => {
+		return ['=', ' is ', ' IS ', ' Is ', ' iS '];
+	}, []);
 
-  const command = React.useMemo(() => {
-    // const sanitizedCommand = sanitise(value)
-    // const sanitizedCommand = inputValue
-    const sanitizedCommand = virtualValue;
+	const command = React.useMemo(() => {
+		// const sanitizedCommand = sanitise(value)
+		// const sanitizedCommand = inputValue
+		const sanitizedCommand = virtualValue;
 
-    const validSetter = validSetters?.find((setter) => {
-      if (sanitizedCommand?.includes(setter)) {
-        return setter;
-      }
-      return false;
-    });
+		const validSetter = validSetters?.find((setter) => {
+			if (sanitizedCommand?.includes(setter)) {
+				return setter;
+			}
+			return false;
+		});
 
-    if (typeof validSetter === 'string') {
-      const indexOfSplitter = sanitizedCommand?.indexOf(validSetter);
-      const [pathRaw, valRaw] = [sanitizedCommand?.slice(0, indexOfSplitter), sanitizedCommand?.slice(indexOfSplitter + validSetter?.length)];
+		if (typeof validSetter === 'string') {
+			const indexOfSplitter = sanitizedCommand?.indexOf(validSetter);
+			const [pathRaw, valRaw] = [sanitizedCommand?.slice(0, indexOfSplitter), sanitizedCommand?.slice(indexOfSplitter + validSetter?.length)];
 
-      return [pathRaw?.trim(), valRaw?.trim()];
-    }
-    return [sanitizedCommand];
-  }, [
-    // inputValue,
-    virtualValue,
-    validSetters
-  ]);
+			return [pathRaw?.trim(), valRaw?.trim()];
+		}
+		return [sanitizedCommand];
+	}, [
+		// inputValue,
+		virtualValue,
+		validSetters
+	]);
 
-  const commandPath = React.useMemo(() => {
-    return command?.[0];
-    // return sanitise(command?.[0])
-  }, [command]);
+	const commandPath = React.useMemo(() => {
+		return command?.[0];
+		// return sanitise(command?.[0])
+	}, [command]);
 
-  const commandValue = React.useMemo(() => {
-    return command?.[1];
-  }, [command]);
+	const commandValue = React.useMemo(() => {
+		return command?.[1];
+	}, [command]);
 
-  const validQuotations = React.useMemo(() => {
-    return ['"', "'"];
-  }, []);
+	const validQuotations = React.useMemo(() => {
+		return ['"', "'"];
+	}, []);
 
-  const escapedCommandValue = React.useMemo(() => {
-    // replace quotations with escaped quoations except for first and last quotation
-    const startingQuotation = commandValue?.[0];
-    const endingQuotation = commandValue?.[commandValue?.length - 1];
-    const isQuoted = validQuotations?.includes(startingQuotation) && validQuotations?.includes(endingQuotation);
-    const restOfCommandValue = isQuoted ? commandValue?.slice(1, commandValue?.length - 1) : commandValue;
-    const escaped = restOfCommandValue?.replace(/"/g, '\\"')?.replace(/'/g, "\\'");
-    const ret = `"${escaped}"`;
-    return ret;
-  }, [commandValue, validQuotations]);
+	const escapedCommandValue = React.useMemo(() => {
+		// replace quotations with escaped quoations except for first and last quotation
+		const startingQuotation = commandValue?.[0];
+		const endingQuotation = commandValue?.[commandValue?.length - 1];
+		const isQuoted = validQuotations?.includes(startingQuotation) && validQuotations?.includes(endingQuotation);
+		const restOfCommandValue = isQuoted ? commandValue?.slice(1, commandValue?.length - 1) : commandValue;
+		const escaped = restOfCommandValue?.replace(/"/g, '\\"')?.replace(/'/g, "\\'");
+		const ret = `"${escaped}"`;
+		return ret;
+	}, [commandValue, validQuotations]);
 
-  const commandIsAction = React.useMemo(() => {
-    return commandPath && commandValue;
-  }, [commandPath, commandValue]);
+	const commandIsAction = React.useMemo(() => {
+		return commandPath && commandValue;
+	}, [commandPath, commandValue]);
 
-  const suggestions = React.useMemo(() => {
-    try {
-      const fuse = new Fuse(paths);
+	const suggestions = React.useMemo(() => {
+		try {
+			const fuse = new Fuse(paths);
 
-      const results = fuse.search(inputValue);
+			const results = fuse.search(inputValue);
 
-      const mappedResults = results?.map((result) => {
-        return result?.item;
-      });
+			const mappedResults = results?.map((result) => {
+				return result?.item;
+			});
 
-      return mappedResults;
-    } catch (err) {
-      console.error('fuse error', err);
-    }
-  }, [inputValue, paths]);
+			return mappedResults;
+		} catch (err) {
+			console.error('fuse error', err);
+		}
+	}, [inputValue, paths]);
 
-  const showSuggestions = React.useMemo(() => {
-    return inputValue?.length && suggestions?.length && commanderActive && !commanderSettings?.commanderActive?.hideSuggestionsOnToggle;
-  }, [
-    inputValue,
-    suggestions,
-    commanderActive,
-    commanderId,
-    thingtime?.settings?.commander,
-    commanderSettings?.commanderActive?.hideSuggestionsOnToggle
-  ]);
+	const showSuggestions = React.useMemo(() => {
+		return inputValue?.length && suggestions?.length && commanderActive && !commanderSettings?.commanderActive?.hideSuggestionsOnToggle;
+	}, [
+		inputValue,
+		suggestions,
+		commanderActive,
+		commanderId,
+		thingtime?.settings?.commander,
+		commanderSettings?.commanderActive?.hideSuggestionsOnToggle
+	]);
 
-  const selectSuggestion = React.useCallback(
-    (suggestionIdx) => {
-      const suggestion = suggestions?.[suggestionIdx];
+	const selectSuggestion = React.useCallback(
+		(suggestionIdx) => {
+			const suggestion = suggestions?.[suggestionIdx];
 
-      setInputValue(suggestion);
-      setHoveredSuggestion(null);
-      setContextPath(suggestion);
-      setShowContext(true, 'Select suggestion');
-    },
-    [setInputValue, setContextPath, setShowContext, suggestions]
-  );
+			const previewMode = false;
 
-  const commandContainsPath = React.useMemo(() => {
-    const commandIncludesSuggestion = suggestions?.find((suggestion) => {
-      return commandPath?.includes(suggestion);
-    });
-    // return false
-    return commandIncludesSuggestion;
-  }, [commandPath, suggestions]);
+			if (previewMode) {
+				setInputValue(suggestion);
+				setHoveredSuggestion(null);
+				setContextPath(suggestion);
+				setShowContext(true, 'Select suggestion');
+			} else {
+				changePath({
+					path: suggestion
+				});
 
-  const openCommander = React.useCallback(() => {
-    setThingtime(`settings.commander.${commanderId}.commanderActive`, true);
-  }, [setThingtime, commanderId]);
+				setShowContext(false, 'Select suggestion');
+				setInputValue('');
+				setHoveredSuggestion(null);
+				setContextPath(undefined);
 
-  const closeCommander = React.useCallback(
-    (e?: any) => {
-      console.log('Closing commander if conditions met');
-      if (!e?.defaultPrevented) {
-        console.log('Event default not prevented, closing commander. commanderId:', commanderId);
-        setThingtime(`settings.commander.${commanderId}.commanderActive`, false);
-        // if (thingtime?.settings?.commander?.[commanderId]?.commanderActive) {
-        // }
-      } else {
-        console.log('Event default prevented, not closing commander');
-      }
-    },
-    [setThingtime, commanderId, commanderSettings?.commanderActive, thingtime?.settings?.commander]
-  );
+				closeCommander();
+			}
+		},
+		[setInputValue, setContextPath, setShowContext, suggestions]
+	);
 
-  const toggleCommander = React.useCallback(() => {
-    if (commanderSettings?.commanderActive) {
-      closeCommander();
-    } else {
-      openCommander();
-    }
-  }, [thingtime?.settings?.commander, commanderSettings?.commanderActive, commanderId, closeCommander, openCommander]);
+	const commandContainsPath = React.useMemo(() => {
+		const commandIncludesSuggestion = suggestions?.find((suggestion) => {
+			return commandPath?.includes(suggestion);
+		});
+		// return false
+		return commandIncludesSuggestion;
+	}, [commandPath, suggestions]);
 
-  const executeCommand = React.useCallback(() => {
-    // if selection is active then select it
-    const curSuggestionIdx = hoveredSuggestion;
-    if (curSuggestionIdx !== null) {
-      selectSuggestion(curSuggestionIdx);
-    }
-    if (commanderActive) {
-      try {
-        if (commandIsAction) {
-          // nothing
-          const prevVal = getThingtime(commandPath);
-          const parentPath = getParentPath(commandPath) || 'thingtime';
-          try {
-            // first try to execute literal javscript
-            const fn = `() => { return ${commandValue} }`;
-            const tt = thingtime;
-            const evalFn = eval(fn);
-            const realVal = evalFn();
-            setThingtime(commandPath, realVal);
-          } catch (err) {
-            console.log('Caught error after trying to execute literal javascript', err);
+	const openCommander = React.useCallback(() => {
+		setThingtime(`settings.commander.${commanderId}.commanderActive`, true);
+	}, [setThingtime, commanderId]);
 
-            // likely literaly javascript wasn't valid
-            try {
-              const fn = `() => { return ${escapedCommandValue} }`;
-              const tt = thingtime;
-              const evalFn = eval(fn);
-              const realVal = evalFn();
-              const prevVal = getThingtime(commandPath);
-              const parentPath = getParentPath(commandPath);
-              setThingtime(commandPath, realVal);
-            } catch {
-              // something very bad went wrong
-              console.log('Caught error after trying to execute escaped literal javascript', err);
-            }
-          }
-          // if (!prevVal) {
-          setContextPath(commandPath);
-          setShowContext(true, 'commandIsAction check');
-          // }
-        }
-        // if (commandContainsPath)
-        else {
-          // const prevValue = getThingtime(commandPath)
+	const closeCommander = React.useCallback(
+		(e?: any) => {
+			console.log('Closing commander if conditions met');
+			if (!e?.defaultPrevented) {
+				console.log('Event default not prevented, closing commander. commanderId:', commanderId);
+				setThingtime(`settings.commander.${commanderId}.commanderActive`, false);
+				// if (thingtime?.settings?.commander?.[commanderId]?.commanderActive) {
+				// }
+			} else {
+				console.log('Event default prevented, not closing commander');
+			}
+		},
+		[setThingtime, commanderId, commanderSettings?.commanderActive, thingtime?.settings?.commander]
+	);
 
-          // const newValue = setThingtime(commandPath, prevValue)
+	const toggleCommander = React.useCallback(() => {
+		if (commanderSettings?.commanderActive) {
+			closeCommander();
+		} else {
+			openCommander();
+		}
+	}, [thingtime?.settings?.commander, commanderSettings?.commanderActive, commanderId, closeCommander, openCommander]);
 
-          console.log('Setting context path', commandPath);
-          // setContextPath(commandPath)
+	const executeCommand = React.useCallback(() => {
+		// if selection is active then select it
+		const curSuggestionIdx = hoveredSuggestion;
+		if (curSuggestionIdx !== null) {
+			selectSuggestion(curSuggestionIdx);
+		}
+		if (commanderActive) {
+			try {
+				if (commandIsAction) {
+					// nothing
+					const prevVal = getThingtime(commandPath);
+					const parentPath = getParentPath(commandPath) || 'thingtime';
+					try {
+						// first try to execute literal javscript
+						const fn = `() => { return ${commandValue} }`;
+						const tt = thingtime;
+						const evalFn = eval(fn);
+						const realVal = evalFn();
+						setThingtime(commandPath, realVal, {
+							namespace: 'user'
+						});
+					} catch (err) {
+						console.log('Caught error after trying to execute literal javascript', err);
 
-          changePath({
-            path: commandPath
-          });
+						// likely literaly javascript wasn't valid
+						try {
+							const fn = `() => { return ${escapedCommandValue} }`;
+							const tt = thingtime;
+							const evalFn = eval(fn);
+							const realVal = evalFn();
+							const prevVal = getThingtime(commandPath);
+							const parentPath = getParentPath(commandPath);
+							setThingtime(commandPath, realVal, {
+								namespace: 'user'
+							});
+						} catch {
+							// something very bad went wrong
+							console.log('Caught error after trying to execute escaped literal javascript', err);
+						}
+					}
+					// if (!prevVal) {
+					setContextPath(commandPath);
+					setShowContext(true, 'commandIsAction check');
+					// }
+				}
+				// if (commandContainsPath)
+				else {
+					// const prevValue = getThingtime(commandPath)
 
-          // setShowContext(true, "commandContainsPath check")
+					// const newValue = setThingtime(commandPath, prevValue)
 
-          // close commander after changing path
-          closeCommander();
-        }
-      } catch (err) {
-        console.error('Caught error on commander onEnter', err);
-      }
-    }
-  }, [
-    hoveredSuggestion,
-    selectSuggestion,
-    mode,
-    changePath,
-    commanderActive,
-    commandIsAction,
-    commandPath,
-    thingtime,
-    commandValue,
-    escapedCommandValue,
-    getThingtime,
-    setThingtime,
-    setContextPath,
-    setShowContext
-  ]);
+					console.log('Setting context path', commandPath);
+					// setContextPath(commandPath)
 
-  const allCommanderKeyListener = React.useCallback(
-    (e: any) => {
-      console.log('commander key listener e?.code', e?.code);
-      thingtimeRef.current = thingtime;
-      if (e?.metaKey && e?.code === 'KeyP') {
-        e.preventDefault();
-        e.stopPropagation();
-        toggleCommander();
-      }
-      // if key escape close all modals
-      else if (e?.code === 'Escape') {
-        console.log('Escape key pressed, closing commander if open');
-        closeCommander();
-      }
+					changePath({
+						path: commandPath
+					});
 
-      // only run these if commander active
+					// setShowContext(true, "commandContainsPath check")
 
-      if (commanderActive) {
-        // if arrow keys then move selection
-        if (e?.code === 'ArrowUp') {
-          // move selection up
-          const curSuggestionIdx = typeof hoveredSuggestion === 'number' ? hoveredSuggestion : suggestions?.length;
-          const newSuggestionIdx = curSuggestionIdx - 1;
-          if (newSuggestionIdx >= 0) {
-            setHoveredSuggestion(newSuggestionIdx);
-          } else {
-            setHoveredSuggestion(suggestions?.length - 1);
-          }
-        } else if (e?.code === 'ArrowDown') {
-          // move selection down
-          const curSuggestionIdx = typeof hoveredSuggestion === 'number' ? hoveredSuggestion : -1;
-          const newSuggestionIdx = curSuggestionIdx + 1;
-          if (newSuggestionIdx < suggestions?.length) {
-            setHoveredSuggestion(newSuggestionIdx);
-          } else {
-            setHoveredSuggestion(0);
-          }
-        } else if (e?.code === 'Enter') {
-          executeCommand();
-        }
-      }
-    },
-    [closeCommander, toggleCommander, hoveredSuggestion, suggestions, thingtime, thingtimeRef, commanderActive, executeCommand]
-  );
+					// close commander after changing path
+					closeCommander();
+				}
+			} catch (err) {
+				console.error('Caught error on commander onEnter', err);
+			}
+		}
+	}, [
+		hoveredSuggestion,
+		selectSuggestion,
+		mode,
+		changePath,
+		commanderActive,
+		commandIsAction,
+		commandPath,
+		thingtime,
+		commandValue,
+		escapedCommandValue,
+		getThingtime,
+		setThingtime,
+		setContextPath,
+		setShowContext
+	]);
 
-  React.useEffect(() => {
-    window.addEventListener('keydown', allCommanderKeyListener);
+	const allCommanderKeyListener = React.useCallback(
+		(e: any) => {
+			console.log('commander key listener e?.code', e?.code);
+			thingtimeRef.current = thingtime;
+			if (e?.metaKey && e?.code === 'KeyP') {
+				e.preventDefault();
+				e.stopPropagation();
+				toggleCommander();
+			}
+			// if key escape close all modals
+			else if (e?.code === 'Escape') {
+				console.log('Escape key pressed, closing commander if open');
+				closeCommander();
+			}
 
-    return () => {
-      window.removeEventListener('keydown', allCommanderKeyListener);
-    };
-  }, [allCommanderKeyListener]);
+			// only run these if commander active
 
-  React.useEffect(() => {
-    if (typeof hoveredSuggestion === 'number') {
-      setVirtualValue(suggestions?.[hoveredSuggestion]);
-    } else {
-      setVirtualValue(inputValue);
-    }
-  }, [hoveredSuggestion, inputValue, suggestions]);
+			if (commanderActive) {
+				// if arrow keys then move selection
+				if (e?.code === 'ArrowUp') {
+					// move selection up
+					const curSuggestionIdx = typeof hoveredSuggestion === 'number' ? hoveredSuggestion : suggestions?.length;
+					const newSuggestionIdx = curSuggestionIdx - 1;
+					if (newSuggestionIdx >= 0) {
+						setHoveredSuggestion(newSuggestionIdx);
+					} else {
+						setHoveredSuggestion(suggestions?.length - 1);
+					}
+				} else if (e?.code === 'ArrowDown') {
+					// move selection down
+					const curSuggestionIdx = typeof hoveredSuggestion === 'number' ? hoveredSuggestion : -1;
+					const newSuggestionIdx = curSuggestionIdx + 1;
+					if (newSuggestionIdx < suggestions?.length) {
+						setHoveredSuggestion(newSuggestionIdx);
+					} else {
+						setHoveredSuggestion(0);
+					}
+				} else if (e?.code === 'Enter') {
+					executeCommand();
+				}
+			}
+		},
+		[closeCommander, toggleCommander, hoveredSuggestion, suggestions, thingtime, thingtimeRef, commanderActive, executeCommand]
+	);
 
-  React.useEffect(() => {
-    setVirtualValue(inputValue);
-  }, [inputValue]);
+	React.useEffect(() => {
+		window.addEventListener('keydown', allCommanderKeyListener);
 
-  return (
-    <ClickAwayListener onClickAway={closeCommander}>
-      <Flex
-        position="absolute"
-        zIndex={9999}
-        top={0}
-        right={0}
-        // position='fixed'
-        // top='100px'
-        left={0}
-        justifyContent={['flex-start', 'center']}
-        // display={["flex", commanderActive ? "flex" : "none"]}
-        maxWidth="100%"
-        height={12}
-        // height="100%"
-        pointerEvents="none"
-        id="commander"
-        paddingX={1}
-      >
-        <Flex
-          position="absolute"
-          zIndex={9999}
-          top="100%"
-          right={0}
-          left={0}
-          alignItems={['flex-start', 'center']}
-          flexDirection="column"
-          maxWidth="100%"
-          height="auto"
-          marginTop={2}
-          borderRadius="12px"
-          marginX={1}
-        >
-          <Flex
-            alignItems={['flex-start', 'center']}
-            flexDirection="column"
-            overflowY="scroll"
-            width="auto"
-            maxWidth="100%"
-            maxHeight="90vh"
-            borderRadius="12px"
-          >
-            <Flex
-              flexDirection="column"
-              flexShrink={0}
-              display={showSuggestions ? 'flex' : 'none'}
-              overflowY="scroll"
-              width={['100%', '400px']}
-              maxWidth="100%"
-              maxHeight="300px"
-              marginBottom={3}
-              background="grey"
-              borderRadius="12px"
-              pointerEvents="all"
-              id="commander-suggestions"
-              onMouseLeave={() => setHoveredSuggestion(null)}
-              paddingY={3}
-            >
-              {suggestions?.map((suggestion, i) => {
-                return (
-                  <Flex
-                    key={i}
-                    background={hoveredSuggestion === i ? 'greys.lightt' : null}
-                    _hover={{
-                      background: 'greys.lightt'
-                    }}
-                    cursor="pointer"
-                    onClick={() => selectSuggestion(i)}
-                    onMouseEnter={() => setHoveredSuggestion(i)}
-                    paddingX={4}
-                  >
-                    {suggestion}
-                  </Flex>
-                );
-              })}
-            </Flex>
-            {showContext && (
-              <Flex display={showContext ? 'flex' : 'none'} maxWidth="100%" background="grey" borderRadius="12px" pointerEvents="all" paddingY={3}>
-                <Thingtime width="600px" path={contextPath} thing={contextValue}></Thingtime>
-              </Flex>
-            )}
-          </Flex>
-        </Flex>
-        <Center position="relative" width={['100%', '400px']} maxWidth={[mobileVW, '100%']} height="100%">
-          {/* TODO: Fix duplicate code because of rainbow mode disabling hack */}
-          {props?.rainbow && (
-            <Rainbow
-              filter="blur(15px)"
-              opacity={commanderActive ? 0.25 : 0}
-              repeats={rainbowRepeats}
-              thickness={8}
-              opacityTransition="all 1000ms ease-out"
-              overflow="visible"
-            >
-              <Center
-                position="relative"
-                zIndex={9999}
-                overflow="hidden"
-                width={['100%', '400px']}
-                maxWidth={[mobileVW, '100%']}
-                height="100%"
-                padding="1px"
-                borderRadius="6px"
-                pointerEvents="all"
-                outline="none"
-              >
-                <Rainbow
-                  opacity={commanderActive ? 0.6 : 0}
-                  position="absolute"
-                  repeats={rainbowRepeats}
-                  opacityTransition="all 2500ms ease-out"
-                  thickness={10}
-                ></Rainbow>
-                <Input
-                  // display='none'
-                  // opacity={0}
-                  ref={inputRef}
-                  sx={{
-                    '&::placeholder': {
-                      color: 'greys.dark'
-                      // color: "white",
-                    }
-                  }}
-                  zIndex={9999}
-                  width="100%"
-                  height="100%"
-                  background="grey"
-                  border="none"
-                  borderRadius="5px"
-                  outline="none"
-                  onChange={onInputChange}
-                  onFocus={openCommander}
-                  placeholder="Imagine.."
-                  value={inputValue}
-                ></Input>
-              </Center>
-            </Rainbow>
-          )}
-          {!props?.rainbow && (
-            <Center
-              position="relative"
-              zIndex={9999}
-              overflow="hidden"
-              width={['100%', '400px']}
-              maxWidth={[mobileVW, '100%']}
-              height="100%"
-              padding="1px"
-              borderRadius="6px"
-              pointerEvents="all"
-              outline="none"
-            >
-              <Input
-                // display='none'
-                // opacity={0}
-                ref={inputRef}
-                sx={{
-                  '&::placeholder': {
-                    color: 'greys.dark'
-                    // color: "white",
-                    // textShadow: "0 0 5px black",
-                  }
-                }}
-                zIndex={9999}
-                width="100%"
-                height="100%"
-                background="grey"
-                border="none"
-                borderRadius="5px"
-                outline="none"
-                onChange={onInputChange}
-                onFocus={openCommander}
-                placeholder="Imagine.."
-                value={inputValue}
-              ></Input>
-            </Center>
-          )}
-        </Center>
-      </Flex>
-    </ClickAwayListener>
-  );
+		return () => {
+			window.removeEventListener('keydown', allCommanderKeyListener);
+		};
+	}, [allCommanderKeyListener]);
+
+	React.useEffect(() => {
+		if (typeof hoveredSuggestion === 'number') {
+			setVirtualValue(suggestions?.[hoveredSuggestion]);
+		} else {
+			setVirtualValue(inputValue);
+		}
+	}, [hoveredSuggestion, inputValue, suggestions]);
+
+	React.useEffect(() => {
+		setVirtualValue(inputValue);
+	}, [inputValue]);
+
+	return (
+		<ClickAwayListener onClickAway={closeCommander}>
+			<Flex
+				position="absolute"
+				zIndex={9999}
+				top={0}
+				right={0}
+				// position='fixed'
+				// top='100px'
+				left={0}
+				justifyContent={['flex-start', 'center']}
+				// display={["flex", commanderActive ? "flex" : "none"]}
+				maxWidth="100%"
+				height={12}
+				// height="100%"
+				pointerEvents="none"
+				id="commander"
+				paddingX={1}
+			>
+				<Flex
+					position="absolute"
+					zIndex={9999}
+					top="100%"
+					right={0}
+					left={0}
+					alignItems={['flex-start', 'center']}
+					flexDirection="column"
+					maxWidth="100%"
+					height="auto"
+					marginTop={2}
+					borderRadius="12px"
+					marginX={1}
+				>
+					<Flex
+						alignItems={['flex-start', 'center']}
+						flexDirection="column"
+						overflowY="scroll"
+						width="auto"
+						maxWidth="100%"
+						maxHeight="90vh"
+						borderRadius="12px"
+					>
+						<Flex
+							flexDirection="column"
+							flexShrink={0}
+							display={showSuggestions ? 'flex' : 'none'}
+							overflowY="scroll"
+							width={['100%', '400px']}
+							maxWidth="100%"
+							maxHeight="300px"
+							marginBottom={3}
+							background="grey"
+							borderRadius="12px"
+							pointerEvents="all"
+							id="commander-suggestions"
+							onMouseLeave={() => setHoveredSuggestion(null)}
+							paddingY={3}
+						>
+							{suggestions?.map((suggestion, i) => {
+								return (
+									<Flex
+										key={i}
+										background={hoveredSuggestion === i ? 'greys.lightt' : null}
+										_hover={{
+											background: 'greys.lightt'
+										}}
+										cursor="pointer"
+										onClick={() => selectSuggestion(i)}
+										onMouseEnter={() => setHoveredSuggestion(i)}
+										paddingX={4}
+									>
+										{suggestion}
+									</Flex>
+								);
+							})}
+						</Flex>
+						{showContext && (
+							<Flex display={showContext ? 'flex' : 'none'} maxWidth="100%" background="grey" borderRadius="12px" pointerEvents="all" paddingY={3}>
+								<Thingtime width="600px" path={contextPath} thing={contextValue}></Thingtime>
+							</Flex>
+						)}
+					</Flex>
+				</Flex>
+				<Center position="relative" width={['100%', '400px']} maxWidth={[mobileVW, '100%']} height="100%">
+					{/* TODO: Fix duplicate code because of rainbow mode disabling hack */}
+					{props?.rainbow && (
+						<Rainbow
+							filter="blur(15px)"
+							opacity={commanderActive ? 0.25 : 0}
+							repeats={rainbowRepeats}
+							thickness={8}
+							opacityTransition="all 1000ms ease-out"
+							overflow="visible"
+						>
+							<Center
+								position="relative"
+								zIndex={9999}
+								overflow="hidden"
+								width={['100%', '400px']}
+								maxWidth={[mobileVW, '100%']}
+								height="100%"
+								padding="1px"
+								borderRadius="6px"
+								pointerEvents="all"
+								outline="none"
+							>
+								<Rainbow
+									opacity={commanderActive ? 0.6 : 0}
+									position="absolute"
+									repeats={rainbowRepeats}
+									opacityTransition="all 2500ms ease-out"
+									thickness={10}
+								></Rainbow>
+								<Input
+									// display='none'
+									// opacity={0}
+									ref={inputRef}
+									sx={{
+										'&::placeholder': {
+											color: 'greys.dark'
+											// color: "white",
+										}
+									}}
+									zIndex={9999}
+									width="100%"
+									height="100%"
+									background="grey"
+									border="none"
+									borderRadius="5px"
+									outline="none"
+									onChange={onInputChange}
+									onFocus={openCommander}
+									placeholder="Imagine.."
+									value={inputValue}
+								></Input>
+							</Center>
+						</Rainbow>
+					)}
+					{!props?.rainbow && (
+						<Center
+							position="relative"
+							zIndex={9999}
+							overflow="hidden"
+							width={['100%', '400px']}
+							maxWidth={[mobileVW, '100%']}
+							height="100%"
+							padding="1px"
+							borderRadius="6px"
+							pointerEvents="all"
+							outline="none"
+						>
+							<Input
+								// display='none'
+								// opacity={0}
+								ref={inputRef}
+								sx={{
+									'&::placeholder': {
+										color: 'greys.dark'
+										// color: "white",
+										// textShadow: "0 0 5px black",
+									}
+								}}
+								zIndex={9999}
+								width="100%"
+								height="100%"
+								background="grey"
+								border="none"
+								borderRadius="5px"
+								outline="none"
+								onChange={onInputChange}
+								onFocus={openCommander}
+								placeholder="Imagine.."
+								value={inputValue}
+							></Input>
+						</Center>
+					)}
+				</Center>
+			</Flex>
+		</ClickAwayListener>
+	);
 };

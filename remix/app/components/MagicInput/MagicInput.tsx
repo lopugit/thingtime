@@ -4,173 +4,193 @@ import { Box } from '@chakra-ui/react';
 import { useThingtime } from '../Thingtime/useThingtime';
 import { uuid as uuidV4 } from '~/smarts';
 
-export const MagicInput = React.forwardRef((props: any, ref) => {
-  const { thingtime, setThingtime, loading } = useThingtime();
+export interface MagicInputProps {
+	timemachineNamespace?: string;
 
-  const [inputValue, setInputValue] = React.useState();
+	value?: string;
+	placeholder?: string;
+	onValueChange?: (args: { value: string }) => void;
+	onChange?: (args: { value: string }) => void;
+	onFocus?: (event: React.FocusEvent<HTMLDivElement>) => void;
+	onEnter?: (args: { value: string | undefined }) => void;
+	readonly?: boolean;
+	transition?: string;
+	chakras?: Record<string, unknown>;
+	whiteSpace?: string;
+	fullPath?: string;
+	path?: string;
+}
 
-  const [isClientSide, setIsClientSide] = React.useState(false);
+export const MagicInput = React.forwardRef<HTMLDivElement, MagicInputProps & Record<string, unknown>>((props, ref) => {
+	const { thingtime, setThingtime, loading } = useThingtime();
 
-  const [uuid, setUuid] = React.useState(uuidV4());
+	const [inputValue, setInputValue] = React.useState();
 
-  React.useEffect(() => {
-    setIsClientSide(true);
-  }, []);
+	const [isClientSide, setIsClientSide] = React.useState(false);
 
-  const contentEditableRef = React.useRef(null);
-  const editValueRef = React.useRef({});
+	const [uuid, setUuid] = React.useState(uuidV4());
 
-  const fullPath = React.useMemo(() => {
-    const ret = props?.fullPath || props?.path;
+	React.useEffect(() => {
+		setIsClientSide(true);
+	}, []);
 
-    // store this thing in the global db
-    try {
-      // window.meta.things[ret] = props?.value
-    } catch {
-      // nothing
-    }
+	const contentEditableRef = React.useRef(null);
+	const editValueRef = React.useRef({});
 
-    return ret;
-  }, [props?.fullPath, props?.path, props?.value]);
+	const fullPath = React.useMemo(() => {
+		const ret = props?.fullPath || props?.path;
 
-  const [contentEditableValue, setContentEditableValue] = React.useState(props?.value || props?.placeholder);
+		// store this thing in the global db
+		try {
+			// window.meta.things[ret] = props?.value
+		} catch {
+			// nothing
+		}
 
-  const updateContentEditableValue = React.useCallback((value) => {
-    // replace all new line occurences in value with <div><br></div>
+		return ret;
+	}, [props?.fullPath, props?.path, props?.value]);
 
-    console.log('MagicInput updating contentEditableValue with value', value);
+	const [contentEditableValue, setContentEditableValue] = React.useState(props?.value || props?.placeholder);
 
-    // extract all series of new lines
-    const newlines = value?.split?.(/[^\n]/)?.filter((v) => v !== '');
+	const updateContentEditableValue = React.useCallback((value) => {
+		// replace all new line occurences in value with <div><br></div>
 
-    let newValue = value;
+		console.log('MagicInput updating contentEditableValue with value', value);
 
-    // replace all new lines groups with <div><br></div>
-    newlines?.forEach?.((newline) => {
-      const baseLength = '\n'?.length;
+		// extract all series of new lines
+		const newlines = value?.split?.(/[^\n]/)?.filter((v) => v !== '');
 
-      const newlineClone = newline;
+		let newValue = value;
 
-      const newlineClonePart1 = newlineClone?.replace('\n\n\n', '<div><br /></div>');
-      const newlineClonePart2 = newlineClonePart1?.replace(/\n\n/g, '<div><br /></div>');
-      const newlineClonePart3 = newlineClonePart2?.replace(/\n/g, '<br />');
+		// replace all new lines groups with <div><br></div>
+		newlines?.forEach?.((newline) => {
+			const baseLength = '\n'?.length;
 
-      newValue = newValue?.replace(newline, newlineClonePart3);
-    });
+			const newlineClone = newline;
 
-    setContentEditableValue(newValue);
-  }, []);
+			const newlineClonePart1 = newlineClone?.replace('\n\n\n', '<div><br /></div>');
+			const newlineClonePart2 = newlineClonePart1?.replace(/\n\n/g, '<div><br /></div>');
+			const newlineClonePart3 = newlineClonePart2?.replace(/\n/g, '<br />');
 
-  React.useEffect(() => {
-    setInputValue(contentEditableValue);
-  }, [contentEditableValue]);
+			newValue = newValue?.replace(newline, newlineClonePart3);
+		});
 
-  React.useEffect(() => {
-    const entries = Object.entries(editValueRef.current);
-    const propsValueInEntries = entries?.find?.((entry) => entry[1] === props?.value);
-    if (!propsValueInEntries) {
-      // const valueToUse = props?.value || props?.placeholder
-      const valueToUse = props?.value;
-      updateContentEditableValue(valueToUse);
-      // setContentEditableValue(props?.value)
-    } else {
-      const [time, value] = propsValueInEntries;
-      if (time && value) {
-        delete editValueRef.current[time];
-      }
-    }
-  }, [props?.value, props?.placeholder, updateContentEditableValue]);
+		setContentEditableValue(newValue);
+	}, []);
 
-  const onValueChange = React.useCallback(
-    (args) => {
-      const { value } = args;
-      props?.onValueChange?.({ value });
-      props?.onChange?.({ value });
-      // updateContentEditableValue(value)
-    },
-    [props?.onValueChange, props?.onChange]
-  );
+	React.useEffect(() => {
+		setInputValue(contentEditableValue);
+	}, [contentEditableValue]);
 
-  const updateValue = React.useCallback(
-    (args) => {
-      const { value } = args;
+	React.useEffect(() => {
+		const entries = Object.entries(editValueRef.current);
+		const propsValueInEntries = entries?.find?.((entry) => entry[1] === props?.value);
+		if (!propsValueInEntries) {
+			// const valueToUse = props?.value || props?.placeholder
+			const valueToUse = props?.value;
+			updateContentEditableValue(valueToUse);
+			// setContentEditableValue(props?.value)
+		} else {
+			const [time, value] = propsValueInEntries;
+			if (time && value) {
+				delete editValueRef.current[time];
+			}
+		}
+	}, [props?.value, props?.placeholder, updateContentEditableValue]);
 
-      onValueChange({ value });
-      setInputValue(value);
-      // setThingtime(fullPath, value)
-    },
-    [fullPath, setThingtime, onValueChange]
-  );
+	const onValueChange = React.useCallback(
+		(args) => {
+			const { value } = args;
+			props?.onValueChange?.({ value });
+			props?.onChange?.({ value });
+			// updateContentEditableValue(value)
+		},
+		[props?.onValueChange, props?.onChange]
+	);
 
-  const onFocus = React.useCallback(
-    (e) => {
-      props?.onFocus?.(e);
-    },
-    [props?.onFocus]
-  );
+	const updateValue = React.useCallback(
+		(args) => {
+			const { value } = args;
 
-  const maybeUpdateValue = React.useCallback(
-    (e) => {
-      const { key } = e;
-      if (key === 'Enter') {
-        if (props?.onEnter) {
-          e?.preventDefault?.();
-        }
-        props?.onEnter?.({ value: inputValue });
-      }
-    },
-    [inputValue, props?.onEnter]
-  );
+			onValueChange({ value });
+			setInputValue(value);
+			// setThingtime(fullPath, value)
+		},
+		// not quite sure why setThingtime is here?
+		// is it for thingtime dependancy update ?
+		// TODO: Check for lifecycle efficiency benefits
+		[fullPath, setThingtime, onValueChange]
+	);
 
-  const dangerouslySetInnerHTML = React.useMemo(() => {
-    if (!props?.readonly) {
-      return { __html: contentEditableValue };
-    }
-    // return { __html: contentEditableValue }
-  }, [contentEditableValue, props?.readonly]);
+	const onFocus = React.useCallback(
+		(e) => {
+			props?.onFocus?.(e);
+		},
+		[props?.onFocus]
+	);
 
-  return (
-    <Box key={uuid} position="relative" width="100%" transition={props?.transition} {...(props?.chakras || {})} ref={ref}>
-      <Box
-        className="magic-input-focusable"
-        ref={contentEditableRef}
-        whiteSpace={props?.whiteSpace}
-        width="100%"
-        maxWidth="100%"
-        border="none"
-        outline="none"
-        contentEditable={!props?.readonly ? true : false}
-        dangerouslySetInnerHTML={dangerouslySetInnerHTML}
-        onFocus={onFocus}
-        onInput={(value: EventTarget | any) => {
-          const innerText = value?.target?.innerText;
-          console.log('MagicInput got onInput event value', value);
-          console.log('MagicInput got onInput event innerText', innerText);
-          if (typeof innerText === 'string') {
-            const time = Date.now();
-            editValueRef.current[time] = innerText;
-            updateValue({ value: innerText });
-          }
-        }}
-        onKeyDown={maybeUpdateValue}
-      >
-        {props?.readonly ? props?.value : null}
-      </Box>
-      <Box display={!props.readonly || inputValue || !isClientSide ? 'none' : 'block'} opacity={0}>
-        Imagine..
-      </Box>
-      <Box
-        position="absolute"
-        top={0}
-        left={0}
-        display={inputValue || !isClientSide ? 'none' : 'block'}
-        width="100%"
-        maxWidth="100%"
-        color="greys.dark"
-        pointerEvents="none"
-      >
-        {props?.placeholder || 'Imagine..'}
-      </Box>
-    </Box>
-  );
+	const maybeUpdateValue = React.useCallback(
+		(e) => {
+			const { key } = e;
+			if (key === 'Enter') {
+				if (props?.onEnter) {
+					e?.preventDefault?.();
+				}
+				props?.onEnter?.({ value: inputValue });
+			}
+		},
+		[inputValue, props?.onEnter]
+	);
+
+	const dangerouslySetInnerHTML = React.useMemo(() => {
+		if (!props?.readonly) {
+			return { __html: contentEditableValue };
+		}
+		// return { __html: contentEditableValue }
+	}, [contentEditableValue, props?.readonly]);
+
+	return (
+		<Box key={uuid} position="relative" width="100%" transition={props?.transition} {...(props?.chakras || {})} ref={ref}>
+			<Box
+				className="magic-input-focusable"
+				ref={contentEditableRef}
+				whiteSpace={props?.whiteSpace}
+				width="100%"
+				maxWidth="100%"
+				border="none"
+				outline="none"
+				contentEditable={!props?.readonly ? true : false}
+				dangerouslySetInnerHTML={dangerouslySetInnerHTML}
+				onFocus={onFocus}
+				onInput={(value: EventTarget | any) => {
+					const innerText = value?.target?.innerText;
+					console.log('MagicInput got onInput event value', value);
+					console.log('MagicInput got onInput event innerText', innerText);
+					if (typeof innerText === 'string') {
+						const time = Date.now();
+						editValueRef.current[time] = innerText;
+						updateValue({ value: innerText });
+					}
+				}}
+				onKeyDown={maybeUpdateValue}
+			>
+				{props?.readonly ? props?.value : null}
+			</Box>
+			<Box display={!props.readonly || inputValue || !isClientSide ? 'none' : 'block'} opacity={0}>
+				Imagine..
+			</Box>
+			<Box
+				position="absolute"
+				top={0}
+				left={0}
+				display={inputValue || !isClientSide ? 'none' : 'block'}
+				width="100%"
+				maxWidth="100%"
+				color="greys.dark"
+				pointerEvents="none"
+			>
+				{props?.placeholder || 'Imagine..'}
+			</Box>
+		</Box>
+	);
 });
