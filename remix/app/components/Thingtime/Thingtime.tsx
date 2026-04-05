@@ -75,9 +75,18 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		return typeof props?.depth === 'number' ? props?.depth : 0;
 	}, [props?.depth]);
 
+	const [editMode, setEditMode] = React.useState(props?.edit === true ? true : false);
+
+	// watch props.editMode and if it changes then set editMode to props.editMode
+	React.useEffect(() => {
+		if (typeof props?.edit === 'boolean') {
+			setEditMode(props.edit);
+		}
+	}, [props?.edit]);
+
 	const render = React.useMemo(() => {
-		return !props?.edit || props?.render || false;
-	}, [props?.render, props?.edit]);
+		return !editMode || props?.render || false;
+	}, [props?.render, editMode]);
 
 	const width = React.useMemo(() => {
 		if (props?.width) {
@@ -96,12 +105,12 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	}, [props?.width, props?.w, render]);
 
 	const chakraChild = React.useMemo(() => {
-		if (!props?.edit && props?.chakraChild) {
+		if (!editMode && props?.chakraChild) {
 			return true;
 		}
 
 		return false;
-	}, [props?.edit, props?.chakraChild]);
+	}, [editMode, props?.chakraChild]);
 
 	const pl = React.useMemo(() => {
 		if (!props.edit && chakraChild) {
@@ -109,7 +118,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		}
 
 		return props?.pl || [4, 6];
-	}, [props?.pl, props?.edit, chakraChild]);
+	}, [props?.pl, editMode, chakraChild]);
 
 	const pr = React.useMemo(() => {
 		return props?.pr || (depth === 0 ? [4, 6] : 0);
@@ -213,8 +222,8 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	}, [props.thing, uuid, childrenRef.current]);
 
 	const chakra = React.useMemo(() => {
-		return !props?.edit && typeof thing?.chakra === 'string' && thing?.chakra;
-	}, [thing?.chakra, props?.edit]);
+		return !editMode && typeof thing?.chakra === 'string' && thing?.chakra;
+	}, [thing?.chakra, editMode]);
 
 	const parentPath = React.useMemo(() => {
 		const parentPath = fullPath?.split('.')?.slice(0, -1)?.join('.');
@@ -359,12 +368,12 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	}, [thing, thingDep, type, chakraChild, keys]);
 
 	const renderChakra = React.useMemo(() => {
-		if (!props?.edit && chakra && render) {
+		if (!editMode && chakra && render) {
 			return true;
 		}
 
 		return false;
-	}, [chakra, props?.edit, render]);
+	}, [chakra, editMode, render]);
 
 	const keysToUse = React.useMemo(() => {
 		if (renderChakra) {
@@ -515,7 +524,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 							<Thingtime
 								key={idx}
 								seen={nextSeen}
-								edit={props?.edit}
+								edit={editMode}
 								render={render}
 								circular={seen?.includes?.(nextThing)}
 								depth={depth + 1}
@@ -559,7 +568,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		thing,
 		thingtime?.settings?.keyGateLength,
 		seen,
-		props?.edit,
+		editMode,
 		render,
 		depth,
 		fullPath,
@@ -662,7 +671,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 			setThingtimeChildren(wrapped);
 			return;
 		}
-	}, [inner, circular, type, props?.chakraChild, props?.path, props?.edit, chakra, fullPath, render, depth, thing, thingDep, valuePl, pl]);
+	}, [inner, circular, type, props?.chakraChild, props?.path, editMode, chakra, fullPath, render, depth, thing, thingDep, valuePl, pl]);
 
 	const updateValue = React.useCallback(
 		(args) => {
@@ -728,7 +737,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 			return null;
 		}
 
-		if (props?.edit) {
+		if (editMode) {
 			console.log('[tt] atomicVaulue type', type);
 			if (type === 'boolean') {
 				return (
@@ -831,7 +840,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 				{renderableValue}
 			</AtomicWrapper>
 		);
-	}, [renderableValue, pl, type, fullPath, uuid, AtomicWrapper, props?.edit, thing, thingDep, updateValue]);
+	}, [renderableValue, pl, type, fullPath, uuid, AtomicWrapper, editMode, thing, thingDep, updateValue]);
 
 	const contextMenu = (
 		<Flex position="absolute" top={0} right={0} paddingRight={4} userSelect="none">
@@ -850,7 +859,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	}, [props?.path]);
 
 	const renderedPath = React.useMemo(() => {
-		if (props?.edit) {
+		if (editMode) {
 			return humanPath;
 		}
 
@@ -864,10 +873,12 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		}
 
 		return humanPath;
-	}, [humanPath, props?.edit]);
+	}, [humanPath, editMode]);
 
+	// updatePath updateKey updatePathname updatePropName
 	const updatePath = React.useCallback(
 		(args) => {
+			console.log('nik updatePath args', args);
 			if (typeof args?.value === 'string') {
 				try {
 					const parentKeys = Object.keys(parent);
@@ -928,7 +939,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 						ref={pathRef}
 						whiteSpace="pre"
 						value={renderedPath}
-						readonly={!props?.edit}
+						readonly={!editMode}
 						onEnter={updatePath}
 						chakras={{
 							maxWidth: '100%',
@@ -940,7 +951,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 				</>
 			);
 		}
-	}, [renderedPath, pl, chakraChild, props?.edit, props?.pathPl]);
+	}, [renderedPath, pl, chakraChild, editMode, props?.pathPl]);
 
 	const handleMouseEvent = React.useCallback(
 		(e) => {
@@ -1043,7 +1054,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 				onMouseEnter={handleMouseEvent}
 				onMouseLeave={handleMouseEvent}
 				{...(props.chakras || {})}
-				className={`thing uuid-${uuid} edit-${props?.edit ? 'true' : 'false'}`}
+				className={`thing uuid-${uuid} edit-${editMode ? 'true' : 'false'}`}
 				data-path={props?.path}
 			>
 				{/* {uuid?.current} */}
@@ -1089,7 +1100,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 								</Flex>
 							)}
 							<Flex className="thingPathDom-raw">{pathDom}</Flex>
-							{props?.edit && (
+							{editMode && (
 								<Box
 									className="thingTypeIcon"
 									// marginTop={-3}
@@ -1104,11 +1115,12 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 							{pathDom && (
 								<Flex className="thingPathDom" flexDirection="row" columnGap={1} marginTop={-1} paddingLeft={1}>
 									<SettingsMenu
+										setEditMode={setEditMode}
 										transition="all 0.2s ease-in-out"
 										opacity={showContextIcon ? 1 : 0}
 										uuid={uuid}
 										fullPath={fullPath}
-										readonly={!props?.edit}
+										readonly={!editMode}
 										onType={onChangeType}
 										onDelete={deleteValue}
 									></SettingsMenu>
@@ -1137,7 +1149,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 								position="relative"
 								width="100%"
 								paddingLeft={multiplyPl(2)}
-								opacity={props?.edit ? 1 : 0}
+								opacity={editMode ? 1 : 0}
 								cursor="pointer"
 								transition="all 0.2s ease-out"
 								onClick={addNewChild}
@@ -1188,12 +1200,13 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 									}}
 								>
 									<SettingsMenu
+										setEditMode={setEditMode}
 										transition="all 0.2s ease-in-out"
 										opacity={showNewContextIcon ? 1 : 0}
 										uuid={uuid}
 										iconSize={10}
 										fullPath={fullPath}
-										readonly={!props?.edit}
+										readonly={!editMode}
 										onType={addNewChild}
 									></SettingsMenu>
 								</Flex>

@@ -6,6 +6,11 @@ import { Icon } from '../Icon/Icon';
 import { useThingtime } from './useThingtime';
 
 export const SettingsMenu = (props) => {
+	const setEditMode =
+		props?.setEditMode ||
+		(() => {
+			console.warn('No setEditMode function provided to SettingsMenu');
+		});
   const [show, setShow] = useState(false);
   const hideRef = React.useRef(null);
   const [opacity, setOpacity] = React.useState(props?.opacity === 0 ? 0 : 1);
@@ -19,7 +24,7 @@ export const SettingsMenu = (props) => {
     stateRef.current.pinStatus = pinStatus;
   }, [pinStatus]);
 
-  const { thingtime, events } = useThingtime();
+  const { thingtime, setThingtime, events } = useThingtime();
 
   const opacityRef = React.useRef(null);
 
@@ -140,185 +145,188 @@ export const SettingsMenu = (props) => {
   const iconSize = props?.iconSize || 7;
 
   return (
-    <ClickAwayListener onClickAway={hideMenu}>
-      <Center
-        position="relative"
-        // width="100%"
-        paddingRight={36}
-        opacity={opacity}
-        transition={props?.transition || 'all 0.2s ease-in-out'}
-        onMouseEnter={showMenu}
-        onMouseLeave={maybeHide}
-      >
-        <Flex
-          paddingLeft={1}
-          // opacity={showContextIcon ? 1 : 0}
-          cursor="pointer"
-          // onClick={deleteValue}
-          transition="all 0.2s ease-in-out"
-          // add title for hover context
-          title={`Options`}
-        >
-          <Icon name="wizard" size={iconSize}></Icon>
-        </Flex>
-        <Flex
-          position="absolute"
-          zIndex={999}
-          top="100%"
-          left={0}
-          flexDirection="column"
-          opacity={show ? 1 : 0}
-          pointerEvents={show ? 'all' : 'none'}
-        >
-          <Flex
-            position="absolute"
-            top={0}
-            right={0}
-            padding="5px"
-            cursor="pointer"
-            onClick={() => setPinStatus((prev) => !prev)}
-            title={`Pin Options`}
-          >
-            {show === true && <Icon opacity={pinStatus ? 1 : 0.5} name={pinStatus ? 'pinned' : 'pin'} size="8px"></Icon>}
-          </Flex>
-          {/* edit mode menu item */}
-          <Flex
-            flexDirection="column"
-            // rowGap={basePadding / 3}
-            background="greys.lightt"
-            borderRadius={4}
-            boxShadow={props?.boxShadow || '0px 2px 7px 0px rgba(0,0,0,0.2)'}
-            paddingY={basePadding}
-          >
-            <Flex
-              alignItems="center"
-              flexDirection="row"
-              // paddingRight={basePadding}
-              paddingLeft={basePadding}
-              _hover={{
-                background: 'greys.light'
-              }}
-              cursor="pointer"
-              // paddingX={basePadding * 1}
-              paddingY={basePadding / 2}
-            >
-              <Icon marginBottom="-2px" name="🎨" size={childIconSize}></Icon>
-              <Text marginTop="-2px" paddingLeft={2} fontSize="xs">
-                Toggle Edit Mode
-              </Text>
-            </Flex>
-          </Flex>
+		<ClickAwayListener onClickAway={hideMenu}>
+			<Center
+				position="relative"
+				// width="100%"
+				paddingRight={36}
+				opacity={opacity}
+				transition={props?.transition || 'all 0.2s ease-in-out'}
+				onMouseEnter={showMenu}
+				onMouseLeave={maybeHide}
+			>
+				<Flex
+					paddingLeft={1}
+					// opacity={showContextIcon ? 1 : 0}
+					cursor="pointer"
+					// onClick={deleteValue}
+					transition="all 0.2s ease-in-out"
+					// add title for hover context
+					title={`Options`}
+				>
+					<Icon name="wizard" size={iconSize}></Icon>
+				</Flex>
+				<Flex
+					position="absolute"
+					zIndex={999}
+					top="100%"
+					left={0}
+					flexDirection="column"
+					opacity={show ? 1 : 0}
+					pointerEvents={show ? 'all' : 'none'}
+				>
+					<Flex
+						position="absolute"
+						top={basePadding / 2}
+						transform={'translateY(-50%) translateX(50%)'}
+						right={basePadding / 2}
+						cursor="pointer"
+						onClick={() => setPinStatus((prev) => !prev)}
+						title={`Pin Options`}
+					>
+						{show === true && <Icon opacity={pinStatus ? 1 : 0.5} name={pinStatus ? 'pinned' : 'pin'} size="8px"></Icon>}
+					</Flex>
+					<Flex
+						flexDirection="column"
+						// rowGap={basePadding / 3}
+						overflow="scroll"
+						background="greys.lightt"
+						borderRadius={4}
+						// boxShadow={props?.boxShadow || '0px 2px 7px 0px rgba(0,0,0,0.2)'}
+						// paddingY={basePadding}
+						// vertical spacing for all child items
+						paddingTop={basePadding}
+						sx={{
+							'>*': {
+								paddingY: basePadding / 2
+							}
+						}}
+					>
+						{/* edit mode menu item */}
+						<Flex
+							className="toggleEditModeMenuItem"
+							alignItems="center"
+							flexDirection="row"
+							// paddingRight={basePadding}
+							paddingLeft={basePadding}
+							_hover={{
+								background: 'greys.light'
+							}}
+							cursor="pointer"
+							onClick={() => setEditMode((prev) => !prev)}
+							// paddingX={basePadding * 1}
+							// paddingY={basePadding / 2}
+						>
+							<Icon marginBottom="-2px" name="🎨" size={childIconSize}></Icon>
+							<Text marginTop="-2px" paddingLeft={2} fontSize="xs">
+								Toggle Edit Mode
+							</Text>
+						</Flex>
 
-          <Flex
-            flexDirection="column"
-            // rowGap={basePadding / 3}
-            background="greys.lightt"
-            borderRadius={4}
-            boxShadow={props?.boxShadow || '0px 2px 7px 0px rgba(0,0,0,0.2)'}
-            paddingY={basePadding}
-          >
-            {!props?.readonly && (
-              <Flex
-                alignItems="center"
-                flexDirection="row"
-                // paddingRight={basePadding}
-                paddingLeft={basePadding}
-                _hover={{
-                  background: 'greys.light'
-                }}
-                cursor="pointer"
-                // paddingX={basePadding * 1}
-                paddingY={basePadding / 2}
-              >
-                <Icon marginBottom="-2px" name="cyclone" size={childIconSize}></Icon>
-                <Text marginTop="-2px" paddingLeft={2} fontSize="xs">
-                  Types
-                </Text>
-              </Flex>
-            )}
-            <Flex
-              flexDirection="column"
-              // rowGap={basePadding}
-              overflowY="scroll"
-              maxHeight="300px"
-              background="greys.lightt"
-              cursor="pointer"
-            >
-              {!props?.readonly &&
-                types.map((type, idx) => {
-                  const ret = (
-                    <Flex
-                      key={props?.uuid + props?.fullPath + '-type-menu-' + idx}
-                      width="100%"
-                      _hover={{
-                        '&>div': {
-                          background: 'greys.light'
-                        }
-                      }}
-                      cursor="pointer"
-                      onClick={() => onType({ type })}
-                      paddingY={1}
-                    >
-                      <Flex
-                        alignItems="center"
-                        flexDirection="row"
-                        width="100%"
-                        paddingRight={basePadding}
-                        paddingLeft={basePadding * 2}
-                        paddingY={basePadding / 2}
-                      >
-                        <Icon marginBottom="-2px" name={type?.icon || type?.key || type?.label || type} size={childIconSize}></Icon>
-                        <Text marginTop="-2px" paddingLeft={2} fontSize="xs">
-                          {type?.label || type?.key || type}
-                        </Text>
-                        {type?.wrap && (
-                          <Flex
-                            marginLeft="auto"
-                            _hover={{
-                              transform: 'scale(1.3)'
-                            }}
-                            transition="all 0.2s ease-out"
-                            onClick={(e) => {
-                              e?.preventDefault?.();
-                              e?.stopPropagation?.();
-                              // cancel bubble
-                              e?.nativeEvent?.stopImmediatePropagation?.();
-                              onType({
-                                type,
-                                wrap: true
-                              });
-                            }}
-                          >
-                            <Icon name="wrap" size={childIconSize}></Icon>
-                          </Flex>
-                        )}
-                      </Flex>
-                    </Flex>
-                  );
-                  return ret;
-                })}
-            </Flex>
-            {!props?.readonly && props?.onDelete && (
-              <Flex
-                alignItems="center"
-                flexDirection="row"
-                _hover={{
-                  background: 'greys.light'
-                }}
-                cursor="pointer"
-                onClick={onDelete}
-                paddingX={basePadding * 1}
-                paddingY={basePadding / 2}
-              >
-                <Icon marginBottom="-2px" name="bin" size={childIconSize}></Icon>
-                <Text marginTop="-2px" paddingLeft={2} fontSize="xs">
-                  Recycle
-                </Text>
-              </Flex>
-            )}
-          </Flex>
-        </Flex>
-      </Center>
-    </ClickAwayListener>
-  );
+						{!props?.readonly && (
+							<>
+								<Flex
+									alignItems="center"
+									flexDirection="row"
+									// paddingRight={basePadding}
+									paddingLeft={basePadding}
+									_hover={{
+										background: 'greys.light'
+									}}
+									cursor="pointer"
+									// paddingX={basePadding * 1}
+									// paddingY={basePadding / 2}
+								>
+									<Icon marginBottom="-2px" name="cyclone" size={childIconSize}></Icon>
+									<Text marginTop="-2px" paddingLeft={2} fontSize="xs">
+										Types
+									</Text>
+								</Flex>
+								{!props?.readonly && (
+									<Flex
+										flexDirection="column"
+										// rowGap={basePadding}
+										overflowY="scroll"
+										maxHeight="300px"
+										background="greys.lightt"
+										cursor="pointer"
+										paddingY="0"
+									>
+										{types.map((type, idx) => {
+											const ret = (
+												<Flex
+													key={props?.uuid + props?.fullPath + '-type-menu-' + idx}
+													width="100%"
+													_hover={{
+														'&>div': {
+															background: 'greys.light'
+														}
+													}}
+													cursor="pointer"
+													onClick={() => onType({ type })}
+												>
+													<Flex
+														alignItems="center"
+														flexDirection="row"
+														width="100%"
+														paddingRight={basePadding}
+														paddingLeft={basePadding * 2}
+														paddingY={basePadding / 2}
+													>
+														<Icon marginBottom="-2px" name={type?.icon || type?.key || type?.label || type} size={childIconSize}></Icon>
+														<Text marginTop="-2px" paddingLeft={2} fontSize="xs">
+															{type?.label || type?.key || type}
+														</Text>
+														{type?.wrap && (
+															<Flex
+																marginLeft="auto"
+																_hover={{
+																	transform: 'scale(1.3)'
+																}}
+																transition="all 0.2s ease-out"
+																onClick={(e) => {
+																	e?.preventDefault?.();
+																	e?.stopPropagation?.();
+																	// cancel bubble
+																	e?.nativeEvent?.stopImmediatePropagation?.();
+																	onType({
+																		type,
+																		wrap: true
+																	});
+																}}
+															>
+																<Icon name="wrap" size={childIconSize}></Icon>
+															</Flex>
+														)}
+													</Flex>
+												</Flex>
+											);
+											return ret;
+										})}
+									</Flex>
+								)}
+								{!props?.readonly && props?.onDelete && (
+									<Flex
+										alignItems="center"
+										flexDirection="row"
+										_hover={{
+											background: 'greys.light'
+										}}
+										cursor="pointer"
+										onClick={onDelete}
+										paddingX={basePadding}
+									>
+										<Icon marginBottom="-2px" name="bin" size={childIconSize}></Icon>
+										<Text marginTop="-2px" paddingLeft={2} fontSize="xs">
+											Recycle
+										</Text>
+									</Flex>
+								)}
+							</>
+						)}
+					</Flex>
+				</Flex>
+			</Center>
+		</ClickAwayListener>
+	);
 };

@@ -164,15 +164,58 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
 		setThingtimeState(newThingtime);
 	}, []);
 
+	// create a setThingtime queue so we can batch process race conditions
+	// instead of loosing data like before
+
+	const [setThingtimeQueue, setThingtimeQueueSetter] = React.useState([]);
+
+	const setThingtimeQueueRef = React.useRef(setThingtimeQueue);
+	setThingtimeQueueRef.current = setThingtimeQueue;
+
+	React.useEffect(() => {
+		if (setThingtimeQueue.length > 0) {
+			// process one queue item at a time
+			const nextThingtime = setThingtimeQueueRef.current[0];
+			setThingtimeQueueSetter((prev) => prev.slice(1));
+			setThingtimeAux(nextThingtime.path, nextThingtime.value, nextThingtime.options);
+		}
+	}, [setThingtimeQueue, setThingtimeObjectWrapper]);
+
+	interface setThingtimeProps {
+		(
+			path: string,
+			value: any,
+			options?: {
+				ignoreUndoRedo?: boolean;
+				namespace?: string;
+			}
+		): void;
+	}
+
 	const setThingtime = React.useCallback(
 		(
 			path,
 			value,
-			options: { ignoreUndoRedo?: boolean; namespace?: string } = {
+			options = {
 				ignoreUndoRedo: false,
 				namespace: 'default'
 			}
-		) => {
+		): setThingtimeProps => {
+			setThingtimeQueueSetter((prev) => [...prev, { path, value, options }]);
+			return;
+		},
+		[]
+	);
+
+	const setThingtimeAux = React.useCallback(
+		(
+			path,
+			value,
+			options = {
+				ignoreUndoRedo: false,
+				namespace: 'default'
+			}
+		): setThingtimeProps => {
 			const { ignoreUndoRedo, namespace } = options;
 
 			// is this a security concern do we need to sanitise the object reference?
