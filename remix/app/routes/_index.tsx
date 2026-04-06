@@ -28,7 +28,7 @@ export default function Index() {
 				width="600px"
 				path="Content"
 				valuePl={0}
-				thing={thingtime?.['Content']}
+				// thing={thingtime?.['Content']}
 			></Thingtime>
 			<ThingtimeDemo></ThingtimeDemo>
 			{/* <Thingtime

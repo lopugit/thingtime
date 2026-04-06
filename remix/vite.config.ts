@@ -7,26 +7,26 @@ import { flatRoutes } from 'remix-flat-routes';
 installGlobals();
 
 export default defineConfig({
-  // define web socket port
+	// define web socket port
 
-  server: {
-    port: 9999,
-    hmr: {
-      port: 9998
-    }
-  },
-  plugins: [
-    remix({
-      routes: async (defineRoutes) => {
-        return flatRoutes('routes', defineRoutes);
-      },
+	server: {
+		port: 9999,
+		hmr: {
+			port: 9998
+		}
+	},
+	plugins: [
+		remix({
+			routes: async (defineRoutes) => {
+				return flatRoutes('routes', defineRoutes);
+			},
 
-      serverModuleFormat: 'cjs',
+			serverModuleFormat: 'cjs',
 
-      // app path
-      appDirectory: 'app'
-    }),
-    tsconfigPaths()
-  ]
-  // plugins: [remix(), tsconfigPaths()],
+			// app path
+			appDirectory: 'app'
+		}),
+		tsconfigPaths()
+	]
+	// plugins: [remix(), tsconfigPaths()]
 });

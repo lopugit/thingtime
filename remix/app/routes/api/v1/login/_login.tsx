@@ -8,61 +8,52 @@ export default function Index() {
 }
 
 export const action = async ({ request }) => {
-  console.log('nik request', request);
+	const { context } = request;
 
-  const { context } = request;
+	// get remix action body
+	const body = await request.json();
 
-  // get remix action body
-  const body = await request.json();
+	const { username, password } = body;
 
-  const { username, password } = body;
+	const userExists = userCheckExists(username);
 
-  console.log('nik body', body);
+	if (!userExists) {
+		// validate password
+		return earlyReturn({ status: 401, message: 'User does not exist' });
+	}
 
-  console.log('nik username', username);
-  console.log('nik password', password);
+	// validate password
+	const passwordMatches = userValidatePassword({ username, password });
 
-  const userExists = userCheckExists(username);
+	if (!passwordMatches) {
+		return earlyReturn({ status: 401, message: 'Password does not match' });
+	}
 
-  if (!userExists) {
-    // validate password
-    return earlyReturn({ status: 401, message: 'User does not exist' });
-  }
+	const user = getUser(username);
 
-  // validate password
-  const passwordMatches = userValidatePassword({ username, password });
+	const session = await userCreateSession(user);
 
-  if (!passwordMatches) {
-    return earlyReturn({ status: 401, message: 'Password does not match' });
-  }
+	const keypair = await crypto.generateKeyPair('rsa', {
+		modulusLength: 2048,
+		publicExponent: new Uint8Array([1, 0, 1])
+	});
 
-  const user = getUser(username);
+	// @ts-ignore
+	// const keypair = await crypt.generateKeyPairSync('ec', {
+	//   namedCurve: 'prime256v1'
 
-  const session = await userCreateSession(user);
-  
-  const keypair = await crypto.generateKeyPair("rsa", {
-    modulusLength: 2048,
-    publicExponent: new Uint8Array([1, 0, 1]),
-  });
+	//   // namedCurve: 'secp256k1',
+	//   // publicKeyEncoding: {
+	//   //   type: 'spki',
+	//   //   format: 'pem'
+	//   // },
+	//   // privateKeyEncoding: {
+	//   //   type: 'pkcs8',
+	//   //   format: 'pem'
+	//   // }
+	// });
 
-  // @ts-ignore
-  // const keypair = await crypt.generateKeyPairSync('ec', {
-  //   namedCurve: 'prime256v1'
-
-  //   // namedCurve: 'secp256k1',
-  //   // publicKeyEncoding: {
-  //   //   type: 'spki',
-  //   //   format: 'pem'
-  //   // },
-  //   // privateKeyEncoding: {
-  //   //   type: 'pkcs8',
-  //   //   format: 'pem'
-  //   // }
-  // });
-
-  // console.log('nik keypair', keypair);
-
-  return earlyReturn({ status: 200, message: 'Login successful' });
+	return earlyReturn({ status: 200, message: 'Login successful' });
 };
 
 const earlyReturn = (args) => {

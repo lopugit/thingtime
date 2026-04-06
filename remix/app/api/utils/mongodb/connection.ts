@@ -7,8 +7,6 @@ export const getConnection = async () => {
 
   const connectionResp = await getConnectionAction({ request: { method: 'GET' } });
 
-  console.log('nik connectionResp', connectionResp);
-
   if (!connectionResp?.body?.data) {
     throw new Error('No valid connection found');
   }

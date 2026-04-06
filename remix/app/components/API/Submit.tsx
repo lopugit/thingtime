@@ -28,8 +28,6 @@ export const Submit = (props) => {
 
     setRet(ret);
 
-    console.log('nik ret', ret);
-
     return ret;
   }, []);
 

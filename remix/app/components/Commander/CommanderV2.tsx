@@ -326,6 +326,12 @@ export const CommanderV2 = (props) => {
 
 	const allCommanderKeyListener = React.useCallback(
 		(e: any) => {
+			// don't do anything if commander is not focused
+			const focused = document.activeElement === inputRef.current;
+			if (!focused) {
+				return;
+			}
+
 			console.log('commander key listener e?.code', e?.code);
 			thingtimeRef.current = thingtime;
 			if (e?.metaKey && e?.code === 'KeyP') {

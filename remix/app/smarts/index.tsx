@@ -57,7 +57,7 @@ export const save = (value, opts) => {
 // extract parent path from dot delimitted path
 
 export const getParentPath = (path) => {
-  const parts = path?.split('.');
+  const parts = path instanceof Array ? [...path] : path?.split('.');
   parts?.pop();
   return parts?.join('.');
 };
@@ -1201,10 +1201,9 @@ export const merge = (value1, value2, opts: any = {}, seen = new Map()) => {
   }
 
   if (opts.overwriteAll) {
-    // log if overwriteAll is true
-    console.log('nik Merging', value1, value2, opts);
-    console.log('nik basic(value2)', basic(value2));
-  }
+		// log if overwriteAll is true
+		console.log('[smarts] overwriting all');
+	}
 
   // base case overwriteAll and value1 exists
   // wrong place to do this, only on 2nd depth
@@ -1824,98 +1823,99 @@ export const toggleThings = ({ options, list = getsmart.bind(this)(stringList), 
 //   // },
 // }
 export const getsmart = (obj, property, defaultValue?: any, context?: any, schema?: any) => {
-  if (!property && obj && typeof obj == 'string') {
-    property = obj.split('.');
-    try {
-      obj = eval(property[0]);
-    } catch (err) {
-      // console.error(err)
+	if (!property && obj && typeof obj == 'string') {
+		property = obj.split('.');
+		try {
+			obj = eval(property[0]);
+		} catch (err) {
+			// console.error(err)
 
-      obj = property[0];
-    }
+			obj = property[0];
+		}
 
-    property = property.slice(1, property.length);
-  }
+		property = property.slice(1, property.length);
+	}
 
-  if (!property) {
-    if (context) {
-      return {
-        value: defaultValue,
-        undefined: true
-      };
-    } else {
-      return defaultValue;
-    }
-  }
+	if (!property) {
+		if (context) {
+			return {
+				value: defaultValue,
+				undefined: true
+			};
+		} else {
+			return defaultValue;
+		}
+	}
 
-  // If the property list is in dot notation, convert to array
-  if (typeof property == 'string') {
-    property = parsePropertyPath(property);
-  } else if (getsmart.bind(this)(property, 'constructor', false) !== Array) {
-    if (context) {
-      return {
-        value: defaultValue,
-        undefined: true,
-        err: 'properties path @property argument was not passed properly'
-      };
-    } else {
-      return defaultValue;
-    }
-  }
+	// If the property list is in dot notation, convert to array
+	if (typeof property == 'string') {
+		property = parsePropertyPath(property);
+	} else if (property?.constructor !== Array) {
+		if (context) {
+			return {
+				value: defaultValue,
+				undefined: true,
+				err: 'properties path @property argument was not passed properly'
+			};
+		} else {
+			return defaultValue;
+		}
+	}
 
-  const deepGetByArray = deepGetByArrayUnbound.bind(this);
+	// return defaultValue;
+	const deepGetByArray = deepGetByArrayUnbound.bind(this);
 
-  return deepGetByArray(obj, property, defaultValue);
+	return deepGetByArray(obj, property, defaultValue);
 
-  // In order to avoid constantly checking the type of the property
-  // we separate the real logic out into an inner function.
-  function deepGetByArrayUnbound(obj, propsArray, defaultValue) {
-    // This case getting to the last property but it not being ultimately defined
-    // Not just having a value of undefined
-    if (propsArray.length > 0 && context && typeof obj == 'object' && obj !== null && !(ee(propsArray[0]) in obj)) {
-      return {
-        value: defaultValue,
-        undefined: true
-      };
-    }
+	// In order to avoid constantly checking the type of the property
+	// we separate the real logic out into an inner function.
+	function deepGetByArrayUnbound(obj, propsArray, defaultValue) {
+		// This case getting to the last property but it not being ultimately defined
+		// Not just having a value of undefined
+		if (propsArray.length > 0 && context && typeof obj == 'object' && obj !== null && !(ee(propsArray[0]) in obj)) {
+			return {
+				value: defaultValue,
+				undefined: true
+			};
+		}
 
-    // If we have reached an undefined/null property
-    // then stop executing and return the default value.
-    // If no default was provided it will be undefined.
-    if (typeof obj == 'undefined' || obj == null || (schema && obj.constructor.name !== schema)) {
-      if (context) {
-        let undef = true;
-        if (propsArray.length === 0) {
-          undef = false;
-        }
+		// If we have reached an undefined/null property
+		// then stop executing and return the default value.
+		// If no default was provided it will be undefined.
+		if (typeof obj == 'undefined' || obj == null || (schema && obj.constructor.name !== schema)) {
+			if (context) {
+				let undef = true;
+				if (propsArray.length === 0) {
+					undef = false;
+				}
 
-        return {
-          value: defaultValue,
-          undefined: undef,
-          schema: schema && obj.constructor.name === schema
-        };
-      } else {
-        return defaultValue;
-      }
-    } // If the path array has no more elements, we've reached
-    // the intended property and return its value
+				return {
+					value: defaultValue,
+					undefined: undef,
+					schema: schema && obj.constructor.name === schema
+				};
+			} else {
+				return defaultValue;
+			}
+		} // If the path array has no more elements, we've reached
+		// the intended property and return its value
 
-    if (propsArray.length === 0) {
-      if (context) {
-        return {
-          value: obj,
-          undefined: false
-        };
-      } else {
-        return obj;
-      }
-    } // Prepare our found property and path array for recursion
+		if (propsArray.length === 0) {
+			if (context) {
+				return {
+					value: obj,
+					undefined: false
+				};
+			} else {
+				return obj;
+			}
+		} // Prepare our found property and path array for recursion
 
-    const nextObj = obj[ee(propsArray[0])];
-    const remainingProps = propsArray.slice(1);
-    return deepGetByArray(nextObj, remainingProps, defaultValue);
-  }
-};
+		const nextObj = obj[ee(propsArray[0])];
+		const remainingProps = propsArray.slice(1);
+		return deepGetByArray(nextObj, remainingProps, defaultValue);
+	}
+};;;;
 export const escapePropertyPath = (path = '') => {
   const newPath = escapeEscapes(path);
   return '["' + newPath + '"]';
@@ -2044,127 +2044,127 @@ export const pathToString = (path) => {
   }
 };
 export const setsmart = (obj, property, value, context?: any) => {
-  if (!property && typeof obj == 'string') {
-    property = obj.split('.');
-    try {
-      obj = eval(property[0]);
-    } catch (err) {
-      obj = property[0];
-    }
+	if (!property && typeof obj == 'string') {
+		property = obj.split('.');
+		try {
+			obj = eval(property[0]);
+		} catch (err) {
+			obj = property[0];
+		}
 
-    property = property.slice(1, property.length);
-  }
+		property = property.slice(1, property.length);
+	}
 
-  // If the property list is in dot notation, convert to array
-  if (typeof property == 'string') {
-    property = parsePropertyPath(property);
-  } else if (getsmart.bind(this)(property, 'constructor', false) !== Array) {
-    if (context) {
-      return {
-        value: value,
-        undefined: true,
-        err: 'properties path @property argument was not passed properly'
-      };
-    } else {
-      return value;
-    }
-  }
+	// If the property list is in dot notation, convert to array
+	if (typeof property == 'string') {
+		property = parsePropertyPath(property);
+	} else if (property?.constructor !== Array || property.length === 0) {
+		if (context) {
+			return {
+				value: value,
+				undefined: true,
+				err: 'properties path @property argument was not passed properly'
+			};
+		} else {
+			return value;
+		}
+	}
 
-  // if no obj make obj
-  if (!obj || (typeof obj !== 'object' && typeof obj !== 'function')) obj = {};
+	// if no obj make obj
+	if (!obj || (typeof obj !== 'object' && typeof obj !== 'function')) obj = {};
 
-  const deepSetByArray = deepSetByArrayUnbound.bind(this);
+	const deepSetByArray = deepSetByArrayUnbound.bind(this);
 
-  if (property) {
-    return deepSetByArray(obj, property, value);
-  } else {
-    if (
-      getsmart.bind(this)(local.vue, 'reactiveSetter', false) &&
-      getsmart.bind(this)(this, '$set', getsmart.bind(this)(local.vue, 'Vue.set', false)) &&
-      obj
-    ) {
-      const setToUse = this.$set || local.vue.Vue.set;
-      setToUse(obj, undefined, value);
-      if (typeof getsmart.bind(this)(window, '$store.commit', undefined) == 'function') {
-        window.$store.commit(local.vue.basePath || 'graph/thing');
-      }
-    } else {
-      obj = value;
-      if (getsmart.bind(this)(local.vue, 'store', false) && typeof getsmart.bind(this)(window, '$store.commit', undefined) == 'function') {
-        window.$store.commit(local.vue.basePath || 'graph/thing');
-      }
-    }
+	if (property) {
+		return deepSetByArray(obj, property, value);
+	} else {
+		if (
+			getsmart.bind(this)(local.vue, 'reactiveSetter', false) &&
+			getsmart.bind(this)(this, '$set', getsmart.bind(this)(local.vue, 'Vue.set', false)) &&
+			obj
+		) {
+			const setToUse = this.$set || local.vue.Vue.set;
+			setToUse(obj, undefined, value);
+			if (typeof getsmart.bind(this)(window, '$store.commit', undefined) == 'function') {
+				window.$store.commit(local.vue.basePath || 'graph/thing');
+			}
+		} else {
+			obj = value;
+			if (getsmart.bind(this)(local.vue, 'store', false) && typeof getsmart.bind(this)(window, '$store.commit', undefined) == 'function') {
+				window.$store.commit(local.vue.basePath || 'graph/thing');
+			}
+		}
 
-    if (context) {
-      return {
-        value: obj,
-        undefined: false,
-        err: 'there were no properties passed'
-      };
-    } else {
-      return obj;
-    }
-  }
+		if (context) {
+			return {
+				value: obj,
+				undefined: false,
+				err: 'there were no properties passed'
+			};
+		} else {
+			return obj;
+		}
+	}
 
-  // In order to avoid constantly checking the type of the property
-  // we separate the real logic out into an inner function.
-  function deepSetByArrayUnbound(obj, propsArray, value) {
-    // If the path array has only 1 more element, we've reached
-    // the intended property and set its value
-    if (propsArray.length == 1) {
-      if (
-        getsmart.bind(this)(local.vue, 'reactiveSetter', false) &&
-        getsmart.bind(this)(this, '$set', getsmart.bind(this)(local.vue, 'Vue.set', false)) &&
-        obj
-      ) {
-        const setToUse = this.$set || local.vue.Vue.set;
-        setToUse(obj, ee(propsArray[0]), value);
-        if (typeof getsmart.bind(this)(window, '$store.commit', undefined) == 'function') {
-          window.$store.commit(local.vue.basePath || 'graph/thing');
-        }
-      } else {
-        // TODO: make parent object new object so that react can see the change
-        obj[ee(propsArray[0])] = value;
-        if (getsmart.bind(this)(local.vue, 'store', false) && typeof getsmart.bind(this)(window, '$store.commit', undefined) == 'function') {
-          window.$store.commit(local.vue.basePath || 'graph/thing');
-        }
-      }
+	// In order to avoid constantly checking the type of the property
+	// we separate the real logic out into an inner function.
+	function deepSetByArrayUnbound(obj, propsArray, value) {
+		// If the path array has only 1 more element, we've reached
+		// the intended property and set its value
+		if (propsArray.length == 1) {
+			if (
+				getsmart.bind(this)(local.vue, 'reactiveSetter', false) &&
+				getsmart.bind(this)(this, '$set', getsmart.bind(this)(local.vue, 'Vue.set', false)) &&
+				obj
+			) {
+				const setToUse = this.$set || local.vue.Vue.set;
+				setToUse(obj, ee(propsArray[0]), value);
+				if (typeof getsmart.bind(this)(window, '$store.commit', undefined) == 'function') {
+					window.$store.commit(local.vue.basePath || 'graph/thing');
+				}
+			} else {
+				// TODO: make parent object new object so that react can see the change
+				obj[ee(propsArray[0])] = value;
+				if (getsmart.bind(this)(local.vue, 'store', false) && typeof getsmart.bind(this)(window, '$store.commit', undefined) == 'function') {
+					window.$store.commit(local.vue.basePath || 'graph/thing');
+				}
+			}
 
-      if (context) {
-        return {
-          value: obj[ee(propsArray[0])],
-          undefined: false
-        };
-      } else {
-        return obj[ee(propsArray[0])];
-      }
-    }
+			if (context) {
+				return {
+					value: obj[ee(propsArray[0])],
+					undefined: false
+				};
+			} else {
+				return obj[ee(propsArray[0])];
+			}
+		}
 
-    // Prepare our path array for recursion
-    const remainingProps = propsArray.slice(1);
-    // check if next prop is object
-    if (typeof obj[ee(propsArray[0])] !== 'object') {
-      // If we have reached an undefined/null property
-      if (
-        getsmart.bind(this)(local.vue, 'reactiveSetter', false) &&
-        getsmart.bind(this)(this, '$set', getsmart.bind(this)(local.vue, 'Vue.set', false)) &&
-        obj
-      ) {
-        const setToUse = this.$set || local.vue.Vue.set;
-        setToUse(obj, ee(propsArray[0]), {});
-        if (typeof getsmart.bind(this)(window, '$store.commit', undefined) == 'function') {
-          window.$store.commit(local.vue.basePath || 'graph/thing');
-        }
-      } else {
-        obj[ee(propsArray[0])] = {};
-        if (getsmart.bind(this)(local.vue, 'store', false) && typeof getsmart.bind(this)(window, '$store.commit', undefined) == 'function') {
-          window.$store.commit(local.vue.basePath || 'graph/thing');
-        }
-      }
-    }
+		// Prepare our path array for recursion
+		const remainingProps = propsArray.slice(1);
+		// check if next prop is object
+		if (typeof obj[ee(propsArray[0])] !== 'object' || obj[ee(propsArray[0])] === null) {
+			// If we have reached an undefined/null property
+			if (
+				getsmart.bind(this)(local.vue, 'reactiveSetter', false) &&
+				getsmart.bind(this)(this, '$set', getsmart.bind(this)(local.vue, 'Vue.set', false)) &&
+				obj
+			) {
+				const setToUse = this.$set || local.vue.Vue.set;
+				setToUse(obj, ee(propsArray[0]), {});
+				if (typeof getsmart.bind(this)(window, '$store.commit', undefined) == 'function') {
+					window.$store.commit(local.vue.basePath || 'graph/thing');
+				}
+			} else {
+				obj[ee(propsArray[0])] = {};
+				if (getsmart.bind(this)(local.vue, 'store', false) && typeof getsmart.bind(this)(window, '$store.commit', undefined) == 'function') {
+					window.$store.commit(local.vue.basePath || 'graph/thing');
+				}
+			}
+		}
 
-    return deepSetByArray(obj[ee(propsArray[0])], remainingProps, value);
-  }
+		return deepSetByArray(obj[ee(propsArray[0])], remainingProps, value);
+	}
 };
 export const deletesmart = (obj, property) => {
   if (!property && typeof obj == 'string') {

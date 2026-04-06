@@ -20,7 +20,6 @@ export default function Index() {
 const actionExport = async ({ request }) => {
   // literally just run the setup.ts script
 
-  console.log('nik here ???????');
 
   const ret = await setup();
 

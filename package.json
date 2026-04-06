@@ -4,7 +4,7 @@
   "description": "Thing Time",
   "main": "none",
   "scripts": {
-    "thingtime-stack": "npm run remix ; npm run remix-pms ; npm run webserver",
+    "thingtime-stack": "npm run remix-pms ; npm run webserver",
     "webserver": "pm2 restart webserver &> /dev/null",
     "remix": "npm run dev --prefix remix",
     "remix-pms": "which pm2 ; cd remix && pm2 restart ecosystem.config.js &> /dev/null",

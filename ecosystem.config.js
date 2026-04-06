@@ -3,7 +3,8 @@ module.exports = {
     {
       script: 'npm run thingtime-stack',
       name: 'thingtime-stack',
-      namespace: 'thingtime'
+      namespace: 'thingtime',
+			autorestart: false,
     }
 
     // {

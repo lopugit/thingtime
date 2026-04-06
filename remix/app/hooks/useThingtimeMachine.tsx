@@ -19,8 +19,10 @@ try {
 // fromValue: smarts.getsmart(thingtimeState, path),
 // timestamp: time
 
+export type PathArray = string | string[];
+
 export interface TimelineEvent {
-	path: string;
+	path: PathArray;
 	value: any;
 	namespace?: string;
 	fromValue?: any;
@@ -35,8 +37,8 @@ export const useThingtimeLine = (Everything) => {
 	// Use Everything.thingtime
 	// const { thingtime } = Everything;
 
-	console.log('[tt][useThingtimeLine.tsx/useThingtimeLine()] NEW 🔥 CYCLE Everything:', Everything);
-	console.log('[tt][useThingtimeLine.tsx/useThingtimeLine()] NEW 🔥 CYCLE Everything.thingtime:', Everything.thingtime);
+	console.info('[tt][useThingtimeLine.tsx/useThingtimeLine()] NEW 🔥 CYCLE Everything:', Everything);
+	console.info('[tt][useThingtimeLine.tsx/useThingtimeLine()] NEW 🔥 CYCLE Everything.thingtime:', Everything.thingtime);
 
 	const shortcuts = React.useState({
 		undo: {
@@ -54,17 +56,17 @@ export const useThingtimeLine = (Everything) => {
 	const addTimelineEvent = React.useCallback(async (thingtimeWeAreAddingTimelineEventToo, event: TimelineEvent) => {
 		try {
 			// what caused addTimelineEvent to be called?
-			console.log('[tt][useThingtimeLine.tsx/addTimelineEvent] called');
+			console.info('[tt][useThingtimeLine.tsx/addTimelineEvent] called');
 
-			console.log('[tt][useThingtimeLine.tsx/addTimelineEvent] event', event);
-			console.log('[tt][useThingtimeLine.tsx/addTimelineEvent] PRE-wrap thingtime.timemachine', thingtimeWeAreAddingTimelineEventToo.timemachine);
+			console.info('[tt][useThingtimeLine.tsx/addTimelineEvent] event', event);
+			console.info('[tt][useThingtimeLine.tsx/addTimelineEvent] PRE-wrap thingtime.timemachine', thingtimeWeAreAddingTimelineEventToo.timemachine);
 			const timemachine = ThingtimeLine(thingtimeWeAreAddingTimelineEventToo.timemachine);
 
-			console.log('[tt][useThingtimeLine.tsx/addTimelineEvent] POST-wrap timemachine', timemachine);
-			console.log('[tt][useThingtimeLine.tsx/addTimelineEvent] event.namespace', event?.namespace);
+			console.info('[tt][useThingtimeLine.tsx/addTimelineEvent] POST-wrap timemachine', timemachine);
+			console.info('[tt][useThingtimeLine.tsx/addTimelineEvent] event.namespace', event?.namespace);
 			const timeline = timemachine.getTimeline(event?.namespace || 'default');
 
-			console.log('[tt][useThingtimeLine.tsx/addTimelineEvent] timeline', timeline);
+			console.info('[tt][useThingtimeLine.tsx/addTimelineEvent] timeline', timeline);
 			// return;
 
 			timeline.addEvent(event);
@@ -72,8 +74,6 @@ export const useThingtimeLine = (Everything) => {
 			thingtimeWeAreAddingTimelineEventToo.timemachine = timemachine;
 
 			// log timemachine and timeline
-			console.log('nik timemachine:', timemachine);
-			console.log('nik timeline:', timeline);
 
 			thingtimeWeAreAddingTimelineEventToo.set('timemachine', timemachine, {
 				ignoreUndoRedo: true
@@ -140,7 +140,7 @@ export const useThingtimeLine = (Everything) => {
 				// undoRedoLogger.log('[tt][useThingtimeline.tsx] undo function thingtime', Everything.thingtime);
 				const timemachine = ThingtimeLine(Everything.thingtime.timemachine);
 				const gottenTimeline = timemachine.getTimeline(namespace);
-				console.log(
+				console.info(
 					'[tt][useThingtimeline.tsx][undo = useCallback] gottenTimeline:',
 					gottenTimeline,
 					'for namespace:',
@@ -158,9 +158,9 @@ export const useThingtimeLine = (Everything) => {
 				const future = timeline.future;
 
 				// log past , present, future
-				console.log('[tt][useThingtimeline.tsx][undo = useCallback] past:', past);
-				console.log('[tt][useThingtimeline.tsx][undo = useCallback] present:', present);
-				console.log('[tt][useThingtimeline.tsx][undo = useCallback] future:', future);
+				console.info('[tt][useThingtimeline.tsx][undo = useCallback] past:', past);
+				console.info('[tt][useThingtimeline.tsx][undo = useCallback] present:', present);
+				console.info('[tt][useThingtimeline.tsx][undo = useCallback] future:', future);
 
 				if (past.length === 0) {
 					undoRedoLogger.warn('[tt][useThingtimeline.tsx] No past states to undo to');
@@ -189,8 +189,8 @@ export const useThingtimeLine = (Everything) => {
 				timemachine.addTimeline(namespace, timeline);
 
 				// log the timeline passed and the timemachine object
-				console.log('[tt][useThingtimeline.tsx] new timeline:', timeline);
-				console.log('[tt][useThingtimeline.tsx] new timemachine:', timemachine);
+				console.info('[tt][useThingtimeline.tsx] new timeline:', timeline);
+				console.info('[tt][useThingtimeline.tsx] new timemachine:', timemachine);
 
 				// get path, value from pastEvent
 				// use this event, we run a set to restore
@@ -201,18 +201,18 @@ export const useThingtimeLine = (Everything) => {
 				// will not be properly affected if you just use the present state fromValue to step backwards
 				// this helps implemented linked list rather than solid state undo/redo stack
 				// log the pastEvent.path and pastEvent.value at this moment
-				console.log('[tt][useThingtimeline.tsx] pastEvent.path:', pastEvent.path);
-				console.log('[tt][useThingtimeline.tsx] pastEvent.value:', pastEvent.value);
-				console.log('[tt][useThingtimeline.tsx] pastEvent.fromValue:', pastEvent.fromValue);
+				console.info('[tt][useThingtimeline.tsx] pastEvent.path:', pastEvent.path);
+				console.info('[tt][useThingtimeline.tsx] pastEvent.value:', pastEvent.value);
+				console.info('[tt][useThingtimeline.tsx] pastEvent.fromValue:', pastEvent.fromValue);
 				Everything.thingtime.set(pastEvent.path, pastEvent.value, {
 					ignoreUndoRedo: true,
 					namespace: 'undoRedo'
 				});
 
 				// log the new past present future
-				console.log('[tt][useThingtimeline.tsx] new timeline.past:', timeline.past);
-				console.log('[tt][useThingtimeline.tsx] new timeline.present:', timeline.present);
-				console.log('[tt][useThingtimeline.tsx] new timeline.future:', timeline.future);
+				console.info('[tt][useThingtimeline.tsx] new timeline.past:', timeline.past);
+				console.info('[tt][useThingtimeline.tsx] new timeline.present:', timeline.present);
+				console.info('[tt][useThingtimeline.tsx] new timeline.future:', timeline.future);
 
 				// log the newThingtime
 				undoRedoLogger.log('[tt][useThingtimeline.tsx] pastEvent:', pastEvent);
@@ -246,7 +246,7 @@ export const useThingtimeLine = (Everything) => {
 				// undoRedoLogger.log('[tt][useThingtimeline.tsx] redo function thingtime', Everything.thingtime);
 				const timemachine = ThingtimeLine(Everything.thingtime.timemachine);
 				const gottenTimeline = timemachine.getTimeline(namespace);
-				console.log(
+				console.info(
 					'[tt][useThingtimeline.tsx][redo = useCallback] gottenTimeline:',
 					gottenTimeline,
 					'for namespace:',
@@ -264,9 +264,9 @@ export const useThingtimeLine = (Everything) => {
 				const future = timeline.future;
 
 				// log past , present, future
-				console.log('[tt][useThingtimeline.tsx][redo = useCallback] past:', past);
-				console.log('[tt][useThingtimeline.tsx][redo = useCallback] present:', present);
-				console.log('[tt][useThingtimeline.tsx][redo = useCallback] future:', future);
+				console.info('[tt][useThingtimeline.tsx][redo = useCallback] past:', past);
+				console.info('[tt][useThingtimeline.tsx][redo = useCallback] present:', present);
+				console.info('[tt][useThingtimeline.tsx][redo = useCallback] future:', future);
 				// flip past/future for redo
 				// if (past.length === 0) {
 				if (future.length === 0) {
@@ -298,8 +298,8 @@ export const useThingtimeLine = (Everything) => {
 				timemachine.addTimeline(namespace, timeline);
 
 				// log the timeline passed and the timemachine object
-				console.log('[tt][useThingtimeline.tsx] new timeline:', timeline);
-				console.log('[tt][useThingtimeline.tsx] new timemachine:', timemachine);
+				console.info('[tt][useThingtimeline.tsx] new timeline:', timeline);
+				console.info('[tt][useThingtimeline.tsx] new timemachine:', timemachine);
 
 				// get path, value from futureEvent
 				// use this event, we run a set to restore
@@ -310,18 +310,18 @@ export const useThingtimeLine = (Everything) => {
 				// will not be properly affected if you just use the present state fromValue to step backwards
 				// this helps implemented linked list rather than solid state undo/redo stack
 				// log the futureEvent.path and futureEvent.value at this moment
-				console.log('[tt][useThingtimeline.tsx] futureEvent.path:', futureEvent.path);
-				console.log('[tt][useThingtimeline.tsx] futureEvent.value:', futureEvent.value);
-				console.log('[tt][useThingtimeline.tsx] futureEvent.fromValue:', futureEvent.fromValue);
+				console.info('[tt][useThingtimeline.tsx] futureEvent.path:', futureEvent.path);
+				console.info('[tt][useThingtimeline.tsx] futureEvent.value:', futureEvent.value);
+				console.info('[tt][useThingtimeline.tsx] futureEvent.fromValue:', futureEvent.fromValue);
 				Everything.thingtime.set(futureEvent.path, futureEvent.value, {
 					ignoreUndoRedo: true,
 					namespace: 'undoRedo'
 				});
 
 				// log the new past present future
-				console.log('[tt][useThingtimeline.tsx] new timeline.past:', timeline.past);
-				console.log('[tt][useThingtimeline.tsx] new timeline.present:', timeline.present);
-				console.log('[tt][useThingtimeline.tsx] new timeline.future:', timeline.future);
+				console.info('[tt][useThingtimeline.tsx] new timeline.past:', timeline.past);
+				console.info('[tt][useThingtimeline.tsx] new timeline.present:', timeline.present);
+				console.info('[tt][useThingtimeline.tsx] new timeline.future:', timeline.future);
 
 				// log the newThingtime
 				undoRedoLogger.log('[tt][useThingtimeline.tsx] futureEvent:', futureEvent);
@@ -402,12 +402,12 @@ export const newTimeline = (key: string = 'default', scaffold?: TimelineScaffold
 				event.timestamp = Date.now();
 			}
 
-			console.log('nik timeline in addEvent', timeline);
-			console.log('[tt][useThingtimeLine.tsx/ThingtimeLine.timeline.addEvent] Adding event:', event, 'to timeline', timeline);
-
+			// don't log if namespace is default
+			if (event.namespace !== 'default') {
+				console.log('[tt][useThingtimeLine.tsx/ThingtimeLine.timeline.addEvent] 🕰️ Adding event:', event, 'to timeline', timeline);
+			}
 			// add current present to past
 			if (timeline.present) {
-				console.log('nik adding present to past', timeline.past, timeline.present);
 				timeline.past.push(timeline.present);
 			}
 
@@ -434,8 +434,8 @@ export const newTimeline = (key: string = 'default', scaffold?: TimelineScaffold
 		}
 	}
 
-	console.log('[tt] scaffold is', scaffold);
-	console.log('[tt] returning new scaffolded timeline', timeline);
+	console.info('[tt][useThingtimeLine.tsx] scaffold is', scaffold);
+	console.info('[tt][useThingtimeLine.tsx] returning new scaffolded timeline', timeline);
 
 	return timeline;
 };
@@ -471,7 +471,9 @@ export const ThingtimeLine = (scaffold?: TimemachineScaffold) => {
 				timemachine.addTimeline(key, newTimeline(key));
 			}
 			const timeline = timemachine.timelines[key];
-			console.log('[tt][useThingtimeLine.tsx/ThingtimeLine.addEvent] Adding event to timeline', timeline, 'event:', event);
+			if (event?.namespace !== 'default') {
+				console.log('[tt][useThingtimeLine.tsx/ThingtimeLine.addEvent] 🕰️ Adding event to timeline', timeline, 'event:', event);
+			}
 			timeline.addEvent(event);
 		},
 		addTimeline: (key: string = 'default', timeline: any) => {
@@ -481,7 +483,7 @@ export const ThingtimeLine = (scaffold?: TimemachineScaffold) => {
 			//   return;
 			// }
 			if (!timeline) {
-				console.log(`[tt][useThingtimeLine.tsx/ThingtimeLine.addTimeline] No timeline provided for key "${key}". Creating a new one.`);
+				console.info(`[tt][useThingtimeLine.tsx/ThingtimeLine.addTimeline] No timeline provided for key "${key}". Creating a new one.`);
 				timeline = newTimeline(key);
 			}
 			timemachine.timelines[key] = newTimeline(key, timeline);
@@ -495,7 +497,7 @@ export const ThingtimeLine = (scaffold?: TimemachineScaffold) => {
 		}
 	};
 
-	console.log('[tt][useThingtimeLine.tsx/ThingtimeLine] scaffold is:', scaffold);
+	console.info('[tt][useThingtimeLine.tsx/ThingtimeLine] scaffold is:', scaffold);
 
 	// if there's a scaffold, just make sure we add any timelines from the scaffold
 	if (scaffold) {

@@ -17,7 +17,8 @@ import {
 	Textarea
 } from '@chakra-ui/react';
 
-import { Commander } from '../Commander/CommanderV1Deprecated';
+import { CommanderV1 } from '../Commander/CommanderV1Deprecated';
+import { CommanderV2 } from '../Commander/CommanderV2';
 // import { Magic } from "../Commander/Magic"
 import { Icon } from '../Icon/Icon';
 import { MagicInput } from '../MagicInput/MagicInput';
@@ -27,6 +28,7 @@ import { useThingtime } from './useThingtime';
 
 import { useThings } from '~/hooks/useThings';
 import { getThing } from '~/smarts';
+import { safeJoin, safeSplit } from '~/utils';
 
 type ThingtimeProps = {
 	debugId?: string;
@@ -184,30 +186,38 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 
 	const path = React.useMemo(() => {
 		return props?.path?.key || props?.path || '';
-	}, [props?.path]);
+	}, [safeJoin(props?.path)]);
 
 	const fullPath = React.useMemo(() => {
-		const fullPathReturn = props?.fullPath || props?.path?.key || props?.path;
+		const fullPathReturn = safeSplit(props?.fullPath || props?.path?.key || props?.path);
 
 		console.log('[tt] fullPathReturn', fullPathReturn);
 
 		// store this thing in the global db
+		// Massive security leak issue
 		try {
-			window.meta.things[fullPathReturn] = props?.thing;
+			window.meta.things[safeJoin(fullPathReturn)] = props?.thing;
 		} catch {
 			// nothing
 		}
 
 		return fullPathReturn;
-	}, [props?.fullPath, props?.path, props?.thing]);
+	}, [safeJoin(props?.fullPath), safeJoin(props?.path), safeJoin(props?.path?.key), props?.thing]);
 
 	// TODO
 	// attempt at making seedling button work with <Thingtime path argument only
 	// const thingtimeThing = getThingtime(fullPath);
 	// basically const value = React.useMemo
 	const thing = React.useMemo(() => {
-		return props?.thing;
-
+		// check if props has a thing prop and if not
+		// use path to get thing from thingtime
+		if (Object.hasOwnProperty.call(props, 'thing')) {
+			return props?.thing;
+		} else if (props?.path) {
+			return getThingtime(fullPath);
+		} else {
+			return undefined;
+		}
 		// TODO
 		// attempt at making seedling button work with <Thingtime path argument only
 
@@ -219,14 +229,14 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		// } else {
 		//   return getThingtime(fullPath);
 		// }
-	}, [props.thing, uuid, childrenRef.current]);
+	}, [getThingtime, props?.thing, safeJoin(props?.path), uuid, childrenRef.current]);
 
 	const chakra = React.useMemo(() => {
 		return !editMode && typeof thing?.chakra === 'string' && thing?.chakra;
 	}, [thing?.chakra, editMode]);
 
 	const parentPath = React.useMemo(() => {
-		const parentPath = fullPath?.split('.')?.slice(0, -1)?.join('.');
+		const parentPath = fullPath?.slice(0, -1);
 
 		console.log('[tt] parentPath', parentPath);
 
@@ -235,7 +245,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		}
 
 		return parentPath;
-	}, [fullPath]);
+	}, [safeJoin(fullPath)]);
 
 	const parent = React.useMemo(() => {
 		return getThingtime(parentPath);
@@ -244,7 +254,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	React.useEffect(() => {
 		console.log('[tt][useEffect][thingtime, props?.fullPath, childrenRef] props?.fullPath', props?.fullPath);
 		createDependancies();
-	}, [thingtime, props?.fullPath, childrenRef]);
+	}, [thingtime, safeJoin(props?.fullPath), childrenRef]);
 
 	const seen = React.useMemo(() => {
 		if (props?.seen instanceof Array) {
@@ -318,7 +328,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		}
 
 		return props?.path ? [4, 6] : [0, 0];
-	}, [props?.valuePl, props?.path]);
+	}, [props?.valuePl, safeJoin(props?.path)]);
 
 	const renderableValue = React.useMemo(() => {
 		if (chakraChild) {
@@ -419,7 +429,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 				}
 			}
 		})();
-	}, [thingDep, fullPath, setThingtime]);
+	}, [thingDep, safeJoin(fullPath), setThingtime]);
 
 	const AtomicWrapper = React.useCallback((args) => {
 		return (
@@ -504,7 +514,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 
 			content = (
 				<>
-					{visibleKeys.map((key, idx) => {
+					{visibleKeys.map((key: any, idx) => {
 						if (!key?.human) {
 							key = {
 								human: key,
@@ -530,7 +540,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 								depth={depth + 1}
 								parent={thing}
 								notRoot
-								fullPath={fullPath + '.' + key?.key}
+								fullPath={fullPath instanceof Array ? [...fullPath, key?.key] : fullPath + '.' + key?.key}
 								path={key}
 								chakraChild={chakra}
 								thing={nextThing}
@@ -571,7 +581,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		editMode,
 		render,
 		depth,
-		fullPath,
+		safeJoin(fullPath),
 		chakra
 	]);
 
@@ -671,7 +681,23 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 			setThingtimeChildren(wrapped);
 			return;
 		}
-	}, [inner, circular, type, props?.chakraChild, props?.path, editMode, chakra, fullPath, render, depth, thing, thingDep, valuePl, pl]);
+		setThingtimeChildren(null);
+	}, [
+		inner,
+		circular,
+		type,
+		props?.chakraChild,
+		safeJoin(props?.path),
+		editMode,
+		chakra,
+		safeJoin(fullPath),
+		render,
+		depth,
+		thing,
+		thingDep,
+		valuePl,
+		pl
+	]);
 
 	const updateValue = React.useCallback(
 		(args) => {
@@ -681,7 +707,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 				namespace: 'user'
 			});
 		},
-		[fullPath, setThingtime]
+		[safeJoin(fullPath), setThingtime]
 	);
 
 	const resetValue = React.useCallback(() => {
@@ -709,7 +735,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 				}
 			}
 		},
-		[updateValue, thing, append, fullPath]
+		[updateValue, thing, append, safeJoin(fullPath)]
 	);
 
 	const onWrapType = React.useCallback(
@@ -731,15 +757,19 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	}, [path, parent, parentPath, setThingtime]);
 
 	const atomicValue = React.useMemo(() => {
+		const debug: any = {};
+		console.log('[tt][Thingtime.tsx][atomicValue][debug]', debug);
 		// log renderableValue
 		console.log('renderableValue', props?.debugId, renderableValue);
 		if (renderableValue === null) {
+			debug.noRenderableValue = true;
 			return null;
 		}
 
 		if (editMode) {
 			console.log('[tt] atomicVaulue type', type);
 			if (type === 'boolean') {
+				debug.boolean = true;
 				return (
 					<AtomicWrapper paddingLeft={pl} className="boolean-atomic-wrapper">
 						<Box
@@ -760,6 +790,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 			}
 
 			if (type === 'number') {
+				debug.number = true;
 				// this helps render numbers better
 				const numberPxLength = thing?.toString()?.length * 13 + 30;
 				return (
@@ -769,14 +800,14 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 								alignItems="center"
 								justifyContent="center"
 								onChange={(value) => {
-									setTimeout(() => {
-										try {
-											const number = Number(value);
-											updateValue({ value: number });
-										} catch {
-											// something went wrong casting to number
-										}
-									}, 1);
+									// setTimeout(() => {
+									try {
+										const number = Number(value);
+										updateValue({ value: number });
+									} catch {
+										// something went wrong casting to number
+									}
+									// }, 1);
 								}}
 								value={thing}
 							>
@@ -796,6 +827,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 			}
 
 			if (type === 'string') {
+				debug.string = true;
 				return (
 					<AtomicWrapper paddingLeft={pl} className="string-atomic-wrapper">
 						<MagicInput value={thing} placeholder="Imagine.." onValueChange={updateValue}></MagicInput>
@@ -820,16 +852,18 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 			}
 
 			if (type === 'undefined') {
+				debug.undefined = true;
+				debug.fullPath = fullPath;
 				return (
 					<AtomicWrapper paddingLeft={pl}>
 						{/* TODO: Implement UI-less commander */}
-						<Commander
+						<CommanderV1
 							// rainbow
 							id={uuid}
 							pathPrefix={fullPath}
 							placeholder="Imagine.."
 							// onValueChange={updateValue}
-						></Commander>
+						></CommanderV1>
 					</AtomicWrapper>
 				);
 			}
@@ -840,7 +874,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 				{renderableValue}
 			</AtomicWrapper>
 		);
-	}, [renderableValue, pl, type, fullPath, uuid, AtomicWrapper, editMode, thing, thingDep, updateValue]);
+	}, [renderableValue, pl, type, safeJoin(fullPath), uuid, AtomicWrapper, editMode, thing, thingDep, updateValue]);
 
 	const contextMenu = (
 		<Flex position="absolute" top={0} right={0} paddingRight={4} userSelect="none">
@@ -856,7 +890,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		}
 
 		return props?.path?.human || '';
-	}, [props?.path]);
+	}, [safeJoin(props?.path)]);
 
 	const renderedPath = React.useMemo(() => {
 		if (editMode) {
@@ -878,7 +912,6 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	// updatePath updateKey updatePathname updatePropName
 	const updatePath = React.useCallback(
 		(args) => {
-			console.log('nik updatePath args', args);
 			if (typeof args?.value === 'string') {
 				try {
 					const parentKeys = Object.keys(parent);
@@ -898,15 +931,19 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 						namespace: thingtimeMachineNamespace
 					});
 
+					if (!thingtimeRef?.current) {
+						return;
+					}
+
 					// focus next input
-					const focusableNodeList = thingtimeRef?.current?.querySelectorAll?.('.magic-input-focusable');
+					const focusableNodeList = (thingtimeRef?.current as HTMLElement)?.querySelectorAll?.('.magic-input-focusable');
 
 					// convert focusable to array
 					const focusable = Array.from(focusableNodeList);
 
 					const pathMagicInputFocusable = pathRef?.current?.querySelector?.('.magic-input-focusable');
 
-					const nearestMagicInput = focusable?.find((input) => {
+					const nearestMagicInput: unknown = focusable?.find((input) => {
 						if (input !== pathMagicInputFocusable) {
 							return true;
 						}
@@ -914,8 +951,8 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 						return false;
 					});
 
-					if (nearestMagicInput && nearestMagicInput?.focus) {
-						nearestMagicInput?.focus?.();
+					if (nearestMagicInput) {
+						(nearestMagicInput as HTMLElement)?.focus?.();
 					}
 				} catch (err) {
 					console.error('Thingtime:657 Something went wrong reassigning path', err);
@@ -966,7 +1003,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	);
 
 	const addNewChild = React.useCallback(
-		(args) => {
+		(args?: any) => {
 			const { type } = args;
 			const newChild = typeof type?.value === 'function' ? type?.value() : type?.value || null;
 
@@ -989,13 +1026,15 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 			// find increment that thing doesn't already have New Value N+1
 			let increment = 0;
 			let newPath = newChildBasePath;
+			// TODO: Change so we aren't limiting new properties from New Value 1-999
+			// Maybe use a random natural language name generator
 			while (Object.hasOwnProperty.call(thing, newPath) && increment <= 999) {
 				increment++;
 				newPath = newChildBasePath + ' ' + increment;
 			}
 
 			const newChildPath = newPath;
-			const newChildFullPath = fullPath + '.' + newChildPath;
+			const newChildFullPath = [...safeSplit(fullPath), newChildPath];
 
 			console.log('[tt] newChildFullPath', newChildFullPath);
 
@@ -1004,7 +1043,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 				namespace: thingtimeMachineNamespace
 			});
 		},
-		[fullPath, setThingtime, thing]
+		[safeJoin(fullPath), setThingtime, thing]
 	);
 
 	const [showContextIcon, setShowContextIcon] = React.useState(false);
@@ -1030,14 +1069,12 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		} catch {
 			// nothing
 		}
-	}, [thing, props, uuid, chakra, chakraChild, circular, depth, fullPath, parent, parentPath, path]);
+	}, [thing, props, uuid, chakra, chakraChild, circular, depth, safeJoin(fullPath), parent, parentPath, path]);
 
 	if (chakra || chakraChild) {
 		return thingtimeChildren;
 	}
-	console.log('nik render, props?.children', render, props?.children, args?.debugId);
 	// log chakra and chakraChild
-	console.log('nik chakra chakraChild', chakra, chakraChild, args?.debugId);
 	return (
 		<Safe {...props} depth={depth} uuid={uuid}>
 			<Flex
@@ -1175,7 +1212,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 									paddingX={3}
 									paddingY={1}
 								>
-									{fullPath}
+									{safeJoin(fullPath)}
 								</Flex>
 								<Icon
 									_focus={{
@@ -1227,4 +1264,4 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 			</Flex>
 		</Safe>
 	);
-};
+};;

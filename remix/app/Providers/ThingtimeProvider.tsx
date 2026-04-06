@@ -5,8 +5,9 @@ import { Subject } from 'rxjs';
 import { thingtimeDefaults, thingtimeMinimumValues, thingtimeNewData, thingtimeOverwriteAll } from './Thingtime/ThingtimeDefaults';
 import { sanitise } from '../functions/sanitise';
 import { smarts } from '../smarts';
-import { TimelineEvent, useThingtimeLine } from '~/hooks/useThingtimeMachine';
+import { PathArray, TimelineEvent, useThingtimeLine } from '~/hooks/useThingtimeMachine';
 import localforage from 'localforage';
+import { safeJoin } from '~/utils';
 export interface ThingtimeTypes {
 	thingtime: any;
 	set: any;
@@ -172,57 +173,33 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
 	const setThingtimeQueueRef = React.useRef(setThingtimeQueue);
 	setThingtimeQueueRef.current = setThingtimeQueue;
 
-	React.useEffect(() => {
-		if (setThingtimeQueue.length > 0) {
-			// process one queue item at a time
-			const nextThingtime = setThingtimeQueueRef.current[0];
-			setThingtimeQueueSetter((prev) => prev.slice(1));
-			setThingtimeAux(nextThingtime.path, nextThingtime.value, nextThingtime.options);
-		}
-	}, [setThingtimeQueue, setThingtimeObjectWrapper]);
+
+	type SetThingtimeOptions = {
+		ignoreUndoRedo?: boolean;
+		namespace?: string;
+	};
 
 	interface setThingtimeProps {
-		(
-			path: string,
-			value: any,
-			options?: {
-				ignoreUndoRedo?: boolean;
-				namespace?: string;
-			}
-		): void;
+		(path: PathArray, value: any, options?: SetThingtimeOptions): void;
 	}
 
-	const setThingtime = React.useCallback(
-		(
-			path,
-			value,
-			options = {
-				ignoreUndoRedo: false,
-				namespace: 'default'
-			}
-		): setThingtimeProps => {
-			setThingtimeQueueSetter((prev) => [...prev, { path, value, options }]);
-			return;
-		},
-		[]
-	);
 
-	const setThingtimeAux = React.useCallback(
+	const setThingtimeAux = React.useCallback<setThingtimeProps>(
 		(
 			path,
 			value,
-			options = {
+			options: SetThingtimeOptions = {
 				ignoreUndoRedo: false,
 				namespace: 'default'
 			}
-		): setThingtimeProps => {
+		) => {
 			const { ignoreUndoRedo, namespace } = options;
 
 			// is this a security concern do we need to sanitise the object reference?
 			// if path is thingtime or tt, we can set the whole thingtime object ??? 🤔
 
 			// TODO: make this a lot safer
-			if (['thingtime', 'tt']?.includes(path)) {
+			if (['thingtime', 'tt']?.includes(safeJoin(path))) {
 				if (value) {
 					console.log(
 						'[tt][ThingtimeProvider.tsx/setThingtime() ⚠️ called with Path:',
@@ -248,7 +225,7 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
 				newThingtime
 			);
 
-			const paths = smarts.parsePropertyPath(path);
+			const paths = path instanceof Array ? path : smarts.parsePropertyPath(path);
 
 			// find first parent where a path is undefined
 			// paths is array of path parts such as ["path1", "path2", "path3"]
@@ -306,6 +283,28 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
 		},
 		[thingtimeState, setThingtimeObjectWrapper]
 	);
+
+	const setThingtime = React.useCallback<setThingtimeProps>(
+		(
+			path,
+			value,
+			options: SetThingtimeOptions = {
+				ignoreUndoRedo: false,
+				namespace: 'default'
+			}
+		) => {
+			setThingtimeQueueSetter((prev) => [...prev, { path, value, options, timestamp: Date.now() }]);
+		},
+		[setThingtimeQueueSetter, setThingtimeAux]
+	);
+
+	if (setThingtimeQueue?.length > 0) {
+		// process one queue item at a time
+		const nextThingtime = setThingtimeQueueRef.current[0];
+		setThingtimeQueueSetter((prev) => prev.slice(1));
+		setThingtimeAux(nextThingtime.path, nextThingtime.value, nextThingtime.options);
+	}
+
 
 	const getThingtime = React.useCallback(
 		(...args) => {
@@ -484,7 +483,6 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
 		events: events
 	});
 
-	console.log('nik Everything', Everything);
 
 	return <ThingtimeContext.Provider value={{ Everything }}>{props?.children}</ThingtimeContext.Provider>;
 };

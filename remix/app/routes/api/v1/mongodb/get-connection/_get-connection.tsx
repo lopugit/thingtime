@@ -40,28 +40,26 @@ const actionExport = async ({ request }) => {
     // and mongodb+srv://
     const connectionUrlSanitised = connection.replace(/(mongodb.*?:\/\/)/, '');
 
-    console.log('nik fetching connection', connectionUrlSanitised);
 
     try {
-      // test connection
-      const testConnection = await fetch(`http://${connectionUrlSanitised}/`, {
-        method: 'GET'
-      });
+			// test connection
+			const testConnection = await fetch(`http://${connectionUrlSanitised}/`, {
+				method: 'GET'
+			});
 
-      if (testConnection.ok) {
-        validConnection = connection;
-        break;
-      }
-    } catch (err) {
-      console.log('nik err', err);
-    }
+			if (testConnection.ok) {
+				validConnection = connection;
+				break;
+			}
+		} catch (err) {
+			console.error(`Error testing connection ${connection}:`, err);
+		}
   }
 
   if (!validConnection) {
     return earlyReturn({ status: 500, message: `No valid MongoDB connection found` });
   }
 
-  console.log('nik request', request);
 
   return earlyReturn({
     status: 200,

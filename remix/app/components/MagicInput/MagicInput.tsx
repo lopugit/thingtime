@@ -132,7 +132,6 @@ export const MagicInput = React.forwardRef<HTMLDivElement, MagicInputProps & Rec
 	const maybeUpdateValue = React.useCallback(
 		(e) => {
 			const { key } = e;
-			console.log('nik key', key);
 			if (key === 'Enter') {
 				if (props?.onEnter) {
 					e?.preventDefault?.();

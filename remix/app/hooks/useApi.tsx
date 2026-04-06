@@ -10,9 +10,6 @@ export function useApi() {
       async (args) => {
         const { username, password } = args;
 
-        console.log('nik submitting with username', username);
-        console.log('nik submitting with password', password);
-
         const ret = asyncFetcher.submit({ username, password }, { action: '/api/v1/login' });
         return ret;
       },

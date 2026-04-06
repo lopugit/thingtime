@@ -17,23 +17,15 @@ export default function Scratchpad() {
   const [startDrag, setStartDrag] = React.useState({ x: 0, y: 0 });
 
   const onStartDrag = (e) => {
-    console.log('nik e', e);
+		e.dataTransfer.setDragImage(dragImg, 0, 0);
 
-    e.dataTransfer.setDragImage(dragImg, 0, 0);
-
-    setStartDrag({ x: e.clientX, y: e.clientY });
-  };
+		setStartDrag({ x: e.clientX, y: e.clientY });
+	};
 
   const onDrag = (e) => {
     if (e.clientX && e.clientY) {
       const { x, y } = { x: startDrag.x - e.clientX, y: e.clientY - startDrag.y };
 
-      // console.log('nik x', x);
-      // console.log('nik y', y);
-      // console.log('nik e.clientX', e.clientX);
-      // console.log('nik e.clientY', e.clientY);
-      // console.log('nik startDrag.x', startDrag.x);
-      // console.log('nik startDrag.y', startDrag.y);
 
       setXDrag(x);
       setYDrag(y);

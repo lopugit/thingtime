@@ -13,3 +13,19 @@ export const stringLiteralToRichText = (str: string): string => {
     .replace(/(\*|_)(.*?)\1/g, '<em>$2</em>') // Italic
     .replace(/~~(.*?)~~/g, '<del>$1</del>'); // Strikethrough
 };
+
+export const safeJoin = (stringOrArray: string | Array<any>, join: string = '.') => {
+	if (Array.isArray(stringOrArray)) {
+		return stringOrArray.join(join);
+	} else {
+		return stringOrArray;
+	}
+};
+
+export const safeSplit = (stringOrArray: string | Array<any>, split: string = '.') => {
+	if (typeof stringOrArray === 'string') {
+		return stringOrArray.split(split);
+	} else {
+		return stringOrArray;
+	}
+};

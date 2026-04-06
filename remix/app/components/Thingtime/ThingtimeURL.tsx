@@ -42,8 +42,6 @@ export const ThingtimeURL = (props) => {
 
     const path = pathPartOne?.replace(/\//g, '.') || pathPartTwo?.replace(/\//g, '.');
 
-    console.log('nik path', path);
-
     return path || 'thingtime';
   }, [location]);
 
