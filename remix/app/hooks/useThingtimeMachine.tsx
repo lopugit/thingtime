@@ -140,16 +140,6 @@ export const useThingtimeLine = (Everything) => {
 				// undoRedoLogger.log('[tt][useThingtimeline.tsx] undo function thingtime', Everything.thingtime);
 				const timemachine = ThingtimeLine(Everything.thingtime.timemachine);
 				const gottenTimeline = timemachine.getTimeline(namespace);
-				console.info(
-					'[tt][useThingtimeline.tsx][undo = useCallback] gottenTimeline:',
-					gottenTimeline,
-					'for namespace:',
-					namespace,
-					'and thingtime:',
-					Everything.thingtime
-				);
-
-				// return;
 
 				const timeline = newTimeline(namespace, gottenTimeline);
 
@@ -157,16 +147,10 @@ export const useThingtimeLine = (Everything) => {
 				const present = timeline.present;
 				const future = timeline.future;
 
-				// log past , present, future
-				console.info('[tt][useThingtimeline.tsx][undo = useCallback] past:', past);
-				console.info('[tt][useThingtimeline.tsx][undo = useCallback] present:', present);
-				console.info('[tt][useThingtimeline.tsx][undo = useCallback] future:', future);
-
 				if (past.length === 0) {
 					undoRedoLogger.warn('[tt][useThingtimeline.tsx] No past states to undo to');
 					return;
 				}
-				undoRedoLogger.log('[tt][useThingtimeline.tsx] current timeline:', timeline);
 
 				// TODO: this has not been changed to the new event
 				// with a path based system for efficiency increase
@@ -174,23 +158,22 @@ export const useThingtimeLine = (Everything) => {
 				// Get the last state from the past
 				// const newThingtime: any = past[past.length - 1];
 				// ^^^ Instead of doing this, we have switched to a new event schema which includes a "path"
-				const pastEvent: TimelineEvent = past[past.length - 1];
+				// const pastEvent: TimelineEvent = past[past.length - 1];
+				const pastEvent: TimelineEvent = present;
+
+				const lastPast: TimelineEvent = past[past.length - 1];
 				// Remove the last state from the past
 				const newPast = past.slice(0, -1);
 
 				timeline.past = newPast;
 
 				// Set the present state to the last state
-				timeline.present = pastEvent;
+				timeline.present = lastPast;
 				// timeline.past = past.slice(0, -1);
 				// Add the current present state to the future
 				future.push(present);
 
 				timemachine.addTimeline(namespace, timeline);
-
-				// log the timeline passed and the timemachine object
-				console.info('[tt][useThingtimeline.tsx] new timeline:', timeline);
-				console.info('[tt][useThingtimeline.tsx] new timemachine:', timemachine);
 
 				// get path, value from pastEvent
 				// use this event, we run a set to restore
@@ -201,23 +184,10 @@ export const useThingtimeLine = (Everything) => {
 				// will not be properly affected if you just use the present state fromValue to step backwards
 				// this helps implemented linked list rather than solid state undo/redo stack
 				// log the pastEvent.path and pastEvent.value at this moment
-				console.info('[tt][useThingtimeline.tsx] pastEvent.path:', pastEvent.path);
-				console.info('[tt][useThingtimeline.tsx] pastEvent.value:', pastEvent.value);
-				console.info('[tt][useThingtimeline.tsx] pastEvent.fromValue:', pastEvent.fromValue);
-				Everything.thingtime.set(pastEvent.path, pastEvent.value, {
+				Everything.thingtime.set(pastEvent.path, pastEvent.fromValue, {
 					ignoreUndoRedo: true,
 					namespace: 'undoRedo'
 				});
-
-				// log the new past present future
-				console.info('[tt][useThingtimeline.tsx] new timeline.past:', timeline.past);
-				console.info('[tt][useThingtimeline.tsx] new timeline.present:', timeline.present);
-				console.info('[tt][useThingtimeline.tsx] new timeline.future:', timeline.future);
-
-				// log the newThingtime
-				undoRedoLogger.log('[tt][useThingtimeline.tsx] pastEvent:', pastEvent);
-				undoRedoLogger.log('[tt][useThingtimeline.tsx] Everything:', Everything);
-				undoRedoLogger.log('[tt][useThingtimeline.tsx] Everything.thingtime:', Everything.thingtime);
 
 				const debugUuid = Math.random().toString(36).substring(2, 15);
 				// log the timemachine update value
@@ -227,14 +197,10 @@ export const useThingtimeLine = (Everything) => {
 					ignoreUndoRedo: true,
 					namespace: 'undoRedo'
 				});
-
-				undoRedoLogger.log('[tt][useThingtimeline.tsx] Undo action completed');
 			} catch (err) {
 				// nothing
 				console.error('[tt][useThingtimeline.tsx] There was an error running the undo action', err, err?.stack);
 			}
-			undoRedoLogger.log('[tt][useThingtimeline.tsx] undo action completed');
-			undoRedoLogger.log('[tt][useThingtimeline.tsx]');
 		},
 		[Everything]
 	);
@@ -246,14 +212,6 @@ export const useThingtimeLine = (Everything) => {
 				// undoRedoLogger.log('[tt][useThingtimeline.tsx] redo function thingtime', Everything.thingtime);
 				const timemachine = ThingtimeLine(Everything.thingtime.timemachine);
 				const gottenTimeline = timemachine.getTimeline(namespace);
-				console.info(
-					'[tt][useThingtimeline.tsx][redo = useCallback] gottenTimeline:',
-					gottenTimeline,
-					'for namespace:',
-					namespace,
-					'and thingtime:',
-					Everything.thingtime
-				);
 
 				// return;
 
@@ -263,17 +221,12 @@ export const useThingtimeLine = (Everything) => {
 				const present = timeline.present;
 				const future = timeline.future;
 
-				// log past , present, future
-				console.info('[tt][useThingtimeline.tsx][redo = useCallback] past:', past);
-				console.info('[tt][useThingtimeline.tsx][redo = useCallback] present:', present);
-				console.info('[tt][useThingtimeline.tsx][redo = useCallback] future:', future);
 				// flip past/future for redo
 				// if (past.length === 0) {
 				if (future.length === 0) {
 					undoRedoLogger.warn('[tt][useThingtimeline.tsx] No future states to redo to');
 					return;
 				}
-				undoRedoLogger.log('[tt][useThingtimeline.tsx] current timeline:', timeline);
 
 				// TODO: this has not been changed to the new event
 				// with a path based system for efficiency increase
@@ -297,10 +250,6 @@ export const useThingtimeLine = (Everything) => {
 
 				timemachine.addTimeline(namespace, timeline);
 
-				// log the timeline passed and the timemachine object
-				console.info('[tt][useThingtimeline.tsx] new timeline:', timeline);
-				console.info('[tt][useThingtimeline.tsx] new timemachine:', timemachine);
-
 				// get path, value from futureEvent
 				// use this event, we run a set to restore
 				// the paths value at this undo/redo state
@@ -310,23 +259,10 @@ export const useThingtimeLine = (Everything) => {
 				// will not be properly affected if you just use the present state fromValue to step backwards
 				// this helps implemented linked list rather than solid state undo/redo stack
 				// log the futureEvent.path and futureEvent.value at this moment
-				console.info('[tt][useThingtimeline.tsx] futureEvent.path:', futureEvent.path);
-				console.info('[tt][useThingtimeline.tsx] futureEvent.value:', futureEvent.value);
-				console.info('[tt][useThingtimeline.tsx] futureEvent.fromValue:', futureEvent.fromValue);
 				Everything.thingtime.set(futureEvent.path, futureEvent.value, {
 					ignoreUndoRedo: true,
 					namespace: 'undoRedo'
 				});
-
-				// log the new past present future
-				console.info('[tt][useThingtimeline.tsx] new timeline.past:', timeline.past);
-				console.info('[tt][useThingtimeline.tsx] new timeline.present:', timeline.present);
-				console.info('[tt][useThingtimeline.tsx] new timeline.future:', timeline.future);
-
-				// log the newThingtime
-				undoRedoLogger.log('[tt][useThingtimeline.tsx] futureEvent:', futureEvent);
-				undoRedoLogger.log('[tt][useThingtimeline.tsx] Everything:', Everything);
-				undoRedoLogger.log('[tt][useThingtimeline.tsx] Everything.thingtime:', Everything.thingtime);
 
 				const debugUuid = Math.random().toString(36).substring(2, 15);
 				// log the timemachine update value
@@ -336,14 +272,10 @@ export const useThingtimeLine = (Everything) => {
 					ignoreUndoRedo: true,
 					namespace: 'undoRedo'
 				});
-
-				undoRedoLogger.log('[tt][useThingtimeline.tsx] Undo action completed');
 			} catch (err) {
 				// nothing
 				console.error('[tt][useThingtimeline.tsx] There was an error running the undo action', err, err?.stack);
 			}
-			undoRedoLogger.log('[tt][useThingtimeline.tsx] undo action completed');
-			undoRedoLogger.log('[tt][useThingtimeline.tsx]');
 		},
 		[Everything]
 	);
@@ -434,9 +366,6 @@ export const newTimeline = (key: string = 'default', scaffold?: TimelineScaffold
 		}
 	}
 
-	console.info('[tt][useThingtimeLine.tsx] scaffold is', scaffold);
-	console.info('[tt][useThingtimeLine.tsx] returning new scaffolded timeline', timeline);
-
 	return timeline;
 };
 
@@ -496,8 +425,6 @@ export const ThingtimeLine = (scaffold?: TimemachineScaffold) => {
 			return timemachine.timelines[key];
 		}
 	};
-
-	console.info('[tt][useThingtimeLine.tsx/ThingtimeLine] scaffold is:', scaffold);
 
 	// if there's a scaffold, just make sure we add any timelines from the scaffold
 	if (scaffold) {
