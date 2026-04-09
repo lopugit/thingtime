@@ -69,6 +69,12 @@ export const useThingtimeLine = (Everything) => {
 			console.info('[tt][useThingtimeLine.tsx/addTimelineEvent] timeline', timeline);
 			// return;
 
+			// don't add the event if value and fromValue are equal
+			if (event.value === event.fromValue) {
+				console.info('[tt][useThingtimeLine.tsx/addTimelineEvent] value and fromValue are equal, not adding event to timeline', event);
+				return;
+			}
+
 			timeline.addEvent(event);
 
 			thingtimeWeAreAddingTimelineEventToo.timemachine = timemachine;
