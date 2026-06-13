@@ -109,97 +109,98 @@ export const Nav = (props) => {
 	);
 
 	return (
-		<>
-			<Box position="fixed" zIndex={9999} top={0} right={0} left={0} maxWidth="100vw">
-				<Flex
-					as="nav"
-					position="relative"
-					alignItems="center"
-					justifyContent="center"
-					flexDirection="row"
-					width="100%"
-					maxWidth="100%"
-					marginY={1}
-					paddingX="18px"
-					paddingY="14px"
-					// bg='white'
-					// boxShadow={'0px 0px 10px rgba(0,0,0,0.1)'}
-				>
-					<Center className="nav-left-section" display={['none', 'flex']} height="100%" marginRight="auto">
-						<Center transform="scaleX(-100%)" cursor="pointer">
-							<Link to="/">
-								<Icon size="12px" name="🦄"></Icon>
-							</Link>
-						</Center>
+    <>
+      <Box position="fixed" zIndex={9999} top={0} right={0} left={0} maxWidth="100vw">
+        <Flex
+          as="nav"
+          position="relative"
+          alignItems="center"
+          justifyContent="center"
+          flexDirection="row"
+          width="100%"
+          maxWidth="100%"
+          marginY={1}
+          paddingX="18px"
+          paddingY="14px"
+          // bg='white'
+          // boxShadow={'0px 0px 10px rgba(0,0,0,0.1)'}
+        >
+          <Center className="nav-left-section" display={['none', 'flex']} height="100%" marginRight="auto">
+            <Center transform="scaleX(-100%)" cursor="pointer">
+              <Link to="/">
+                <Icon size="12px" name="🦄"></Icon>
+              </Link>
+            </Center>
 
-						{/* Add the current git branch here for dev purposes */}
-						{/* Use https://github.com/lopugit/thingtime/tree/ as a link */}
-						<Box
-							// link
-							as="a"
-							href={`https://github.com/lopugit/thingtime/tree/${branchName}`}
-							target="_blank"
-							marginLeft="8px"
-							fontSize="10px"
-							opacity={0.5}
-						>
-							🌱 {branchName}
-						</Box>
-					</Center>
-					<CommanderV2 global id="nav" rainbow={false}></CommanderV2>
-					<Center className="nav-right-section" columnGap={[3, 8]} height="100%" marginLeft="auto">
-						{inEditMode && (
-							<Center
-								// transform="scaleX(-100%)"
-								cursor="pointer"
-								onClick={toggleEditor}
-							>
-								<Icon
-									chakras={{
-										opacity: inEditorMode ? 1 : 0.3
-									}}
-									size="12px"
-									name="👀"
-								></Icon>
-								{/* <Icon
+            {/* Add the current git branch here for dev purposes */}
+            {/* Use https://github.com/lopugit/thingtime/tree/ as a link */}
+						{/* 14/06/2026 Took this out and moved to footer */}
+            {/* <Box
+              // link
+              as="a"
+              href={`https://github.com/lopugit/thingtime/tree/${branchName}`}
+              target="_blank"
+              marginLeft="8px"
+              fontSize="10px"
+              opacity={0.5}
+            >
+              🌱 {branchName}
+            </Box> */}
+          </Center>
+          <CommanderV2 global id="nav" rainbow={false}></CommanderV2>
+          <Center className="nav-right-section" columnGap={[3, 8]} height="100%" marginLeft="auto">
+            {inEditMode && (
+              <Center
+                // transform="scaleX(-100%)"
+                cursor="pointer"
+                onClick={toggleEditor}
+              >
+                <Icon
+                  chakras={{
+                    opacity: inEditorMode ? 1 : 0.3
+                  }}
+                  size="12px"
+                  name="👀"
+                ></Icon>
+                {/* <Icon
                   size="12px"
                   name={inEditorMode ? "glowing star" : "star"}
                 ></Icon> */}
-							</Center>
-						)}
-						{editorToggleable && (
-							<Center transform="scaleX(-100%)" cursor="pointer" onClick={toggleEdit}>
-								<Icon
-									chakras={{
-										opacity: inEditMode ? 1 : 0.3
-									}}
-									size="12px"
-									name="🎨"
-								></Icon>
-								{/* <Icon
+              </Center>
+            )}
+            {editorToggleable && (
+              <Center transform="scaleX(-100%)" cursor="pointer" onClick={toggleEdit}>
+                <Icon
+                  chakras={{
+                    opacity: inEditMode ? 1 : 0.3
+                  }}
+                  size="12px"
+                  name="🎨"
+                ></Icon>
+                {/* <Icon
                   size="12px"
                   name={inEditMode ? "glowing star" : "star"}
                 ></Icon> */}
-							</Center>
-						)}
-						{/* TODO - Add conditional only show if loggedIn */}
-						{/* <Center transform={['', 'scaleX(-100%)']} cursor="pointer">
+              </Center>
+            )}
+            {/* TODO - Add conditional only show if loggedIn */}
+            {/* <Center transform={['', 'scaleX(-100%)']} cursor="pointer">
               <Link to="/logout">
                 <Icon size="12px" name="🗝️"></Icon>
               </Link>
             </Center> */}
-						<Center transform={['', 'scaleX(-100%)']} cursor="pointer">
-							<Link to="/login">
-								<Icon size="12px" name="🌈"></Icon>
-							</Link>
-						</Center>
-						<Center display={['flex', 'none']} cursor="pointer">
-							<Link to="/">
-								<Icon size="12px" name="🦄"></Icon>
-							</Link>
-						</Center>
-					</Center>
-					{/* <RainbowSkeleton
+            <Center transform={['', 'scaleX(-100%)']} cursor="pointer">
+              <Link to="/login">
+                <Icon size="12px" name="🌈"></Icon>
+              </Link>
+            </Center>
+            <Center display={['flex', 'none']} cursor="pointer">
+              <Link to="/">
+                <Icon size="12px" name="🦄"></Icon>
+              </Link>
+            </Center>
+          </Center>
+          {/* <RainbowSkeleton
             marginLeft="auto"
             width="25px"
             height="25px"
@@ -209,11 +210,11 @@ export const Nav = (props) => {
             sx={{}}
             borderRadius="999px"
           ></RainbowSkeleton> */}
-					{/* <RainbowSkeleton w='40px' ml='auto' mr={"4px"}></RainbowSkeleton>
+          {/* <RainbowSkeleton w='40px' ml='auto' mr={"4px"}></RainbowSkeleton>
           <RainbowSkeleton></RainbowSkeleton> */}
-				</Flex>
-			</Box>
-			{/* <ProfileDrawer isOpen={profileDrawerOpen}></ProfileDrawer> */}
-		</>
-	);
+        </Flex>
+      </Box>
+      {/* <ProfileDrawer isOpen={profileDrawerOpen}></ProfileDrawer> */}
+    </>
+  );
 };
