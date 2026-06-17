@@ -32,6 +32,24 @@ npm run android
 npm run web
 ```
 
+## Running on a physical iPhone
+
+Install [Expo Go](https://apps.apple.com/app/expo-go/id982107779) from the App
+Store — every dependency in this app runs inside it, so no custom dev build is
+needed. Then pick a path:
+
+1. **Local dev server (easiest).** On your computer, run `npx expo start` and
+   scan the QR with the iOS Camera app (phone + computer on the same WiFi). Use
+   `npx expo start --tunnel` if they're on different networks.
+2. **Cloud build, no computer.** Use [EAS Build](https://docs.expo.dev/build/introduction/)
+   (`eas.json` is included): `npx eas-cli build --platform ios --profile preview`.
+   The build runs on Expo's servers and is distributed to registered devices.
+
+> Note: `expo start --tunnel` relies on ngrok, which cannot establish its
+> control session from network environments that perform TLS interception
+> (it pins its own CA) or without an ngrok authtoken. Run the tunnel from a
+> normal network, or use EAS Build, in those cases.
+
 ## Configuration
 
 The API base URL is resolved in `src/config.ts`, in this order:
