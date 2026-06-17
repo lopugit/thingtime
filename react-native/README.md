@@ -50,6 +50,36 @@ needed. Then pick a path:
 > (it pins its own CA) or without an ngrok authtoken. Run the tunnel from a
 > normal network, or use EAS Build, in those cases.
 
+## Publishing to TestFlight (EAS)
+
+Requires a paid **Apple Developer** account and a free **Expo** account. The
+build runs on Expo's macOS cloud, so you don't need a Mac.
+
+The smoothest credential is an **App Store Connect API key** (`.p8`): in App
+Store Connect → *Users and Access* → *Integrations* → *App Store Connect API*,
+generate a key with the **App Manager** role, download the `.p8` (one-time), and
+note the **Key ID** and **Issuer ID**. This single key lets EAS manage signing
+and upload to TestFlight without 2FA prompts.
+
+> A standalone `.cer` (distribution certificate **without** its private key)
+> cannot sign a build. Either let EAS generate signing credentials for you
+> (recommended), or provide a `.p12` that bundles the certificate **and** its
+> private key.
+
+```sh
+cd react-native
+npm i -g eas-cli          # or use: npx eas-cli@latest <cmd>
+eas login                 # Expo account
+eas build   --platform ios --profile production
+eas submit  --platform ios --latest
+```
+
+On first run, EAS uses your Apple credentials to register the bundle id
+(`com.thingtime.mobile`), create the distribution certificate + provisioning
+profile, and create the App Store Connect app record. After `eas submit`, the
+build shows up in TestFlight once Apple finishes processing (a few minutes);
+add testers under *TestFlight* in App Store Connect.
+
 ## Configuration
 
 The API base URL is resolved in `src/config.ts`, in this order:
