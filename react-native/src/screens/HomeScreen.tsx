@@ -1,5 +1,5 @@
 import React from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { RainbowBar } from '~/components/RainbowBar';
@@ -22,7 +22,10 @@ export function HomeScreen({ navigation }: Props) {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.brand}>Thingtime</Text>
+        <View style={styles.brandRow}>
+          <Image source={require('../../assets/logo.png')} style={styles.logo} resizeMode="contain" />
+          <Text style={styles.brand}>Thingtime</Text>
+        </View>
         <Text style={styles.tagline}>A GUI for the internet 🌈</Text>
       </View>
       <RainbowBar />
@@ -50,6 +53,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
     paddingBottom: spacing.lg
+  },
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  logo: {
+    width: 44,
+    height: 44,
+    marginRight: spacing.sm
   },
   brand: {
     fontSize: fontSizes.xxl,

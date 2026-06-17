@@ -55,6 +55,7 @@ react-native/
 ├── App.tsx                 # Navigation container + theme
 ├── index.ts                # Expo entry point
 ├── app.json                # Expo config
+├── assets/                 # App icon, adaptive icon, splash, favicon, logo
 └── src/
     ├── api/                # REST client, thing endpoints, socket listener
     ├── components/         # Reusable UI (RainbowBar, ThingCard)
@@ -64,6 +65,14 @@ react-native/
     └── config.ts           # API base URL resolution
 ```
 
+## Brand assets
+
+The icon, adaptive icon, splash, favicon and in-app logo in `assets/` are
+generated from the official Thingtime pink-cross mark
+(`resources/favicon/favicon_io (2)/android-chrome-512x512.png`) so they match
+the web app. The horizontal wordmark (`assets/thingtime-horizontal.svg`) is
+included for future use.
+
 ## API
 
 The app uses the same endpoints as the web app (`../api/src/index.js`):
@@ -71,7 +80,3 @@ The app uses the same endpoints as the web app (`../api/src/index.js`):
 - `GET /v1/thing?request=get&uuid=<uuid>` — fetch a thing
 - `GET /v1/thing?thing=<serialized>` — save a thing
 - Socket.io `registerListener` — subscribe to live updates for a thing
-
-> Note: app icons and splash screens are intentionally left as Expo defaults.
-> Drop brand assets into an `assets/` folder and reference them from `app.json`
-> when ready.
