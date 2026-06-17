@@ -1,0 +1,24 @@
+{
+  "expo": {
+    "name": "Thingtime",
+    "slug": "thingtime-mobile",
+    "scheme": "thingtime",
+    "version": "0.0.1",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.thingtime.mobile"
+    },
+    "android": {
+      "package": "com.thingtime.mobile"
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "extra": {
+      "apiBaseUrl": "https://api.thingtime.com"
+    }
+  }
+}

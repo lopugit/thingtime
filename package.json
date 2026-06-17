@@ -10,6 +10,7 @@
     "build-remix": "npm run build --prefix remix",
     "next": "npm run dev --prefix next",
     "api": "npm run dev --prefix api",
+    "mobile": "npm run start --prefix react-native",
     "postinstall": "pnpm i --prefix next ; pnpm i --prefix=api"
   },
   "repository": {

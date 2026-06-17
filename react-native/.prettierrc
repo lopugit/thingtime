@@ -1,0 +1,12 @@
+{
+  "endOfLine": "lf",
+  "semi": true,
+  "singleQuote": true,
+  "useTabs": false,
+  "tabWidth": 2,
+  "trailingComma": "none",
+  "printWidth": 150,
+  "singleAttributePerLine": false,
+  "arrowParens": "always",
+  "plugins": []
+}

@@ -11,7 +11,13 @@ remix/node_modules
 next/node_modules
 app-next/node_modules
 api/node_modules
+react-native/node_modules
 node_modules
+
+# React Native / Expo
+react-native/.expo
+react-native/dist
+react-native/web-build
 
 localhost-key.pem
 localhost.pem
