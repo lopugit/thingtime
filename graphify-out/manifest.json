@@ -1,0 +1,982 @@
+{
+  "/Users/lopu/things/code/lopugit/thingtime/.eslintrc.json": {
+    "mtime": 1712979642.7062294,
+    "ast_hash": "9b8be5ef96ddd69ecd1ddc1554c61a88",
+    "semantic_hash": "9b8be5ef96ddd69ecd1ddc1554c61a88"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/.prettierrc.js": {
+    "mtime": 1774026863.7272317,
+    "ast_hash": "957a9d8b4abad479fccf834840f4f673",
+    "semantic_hash": "957a9d8b4abad479fccf834840f4f673"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/api/.eslintrc.js": {
+    "mtime": 1651574453.0,
+    "ast_hash": "71e8658e113aa4d7c1a306e6993de187",
+    "semantic_hash": "71e8658e113aa4d7c1a306e6993de187"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/api/package.json": {
+    "mtime": 1678257834.787055,
+    "ast_hash": "82cf65071cba84da44c9e21950b30725",
+    "semantic_hash": "82cf65071cba84da44c9e21950b30725"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/api/src/index.js": {
+    "mtime": 1652436512.0,
+    "ast_hash": "1a6fc5f5ed25278ea0f7ad021b1c381f",
+    "semantic_hash": "1a6fc5f5ed25278ea0f7ad021b1c381f"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/api/src/package.json": {
+    "mtime": 1649158232.0,
+    "ast_hash": "b456fc8f5badbbcf6e8ec92ffe4e3342",
+    "semantic_hash": "b456fc8f5badbbcf6e8ec92ffe4e3342"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/api/src/test.js": {
+    "mtime": 1649158111.0,
+    "ast_hash": "593d3ec884132548e4c181678c5d5b16",
+    "semantic_hash": "593d3ec884132548e4c181678c5d5b16"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/ecosystem.config.js": {
+    "mtime": 1775493314.9423141,
+    "ast_hash": "631928c2b911f22f5614e62a253f0bab",
+    "semantic_hash": "631928c2b911f22f5614e62a253f0bab"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/lopu/ecosystem.config.js": {
+    "mtime": 1757561347.5127437,
+    "ast_hash": "64c2b07d331998b2c65b62239b1c081c",
+    "semantic_hash": "64c2b07d331998b2c65b62239b1c081c"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/lopu/package.json": {
+    "mtime": 1774026863.7278929,
+    "ast_hash": "67b60b23c6fa33825ab216f43a2436f4",
+    "semantic_hash": "67b60b23c6fa33825ab216f43a2436f4"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/lopu/src/index.js": {
+    "mtime": 1774026863.7280982,
+    "ast_hash": "7a9487375978d8001acd93869df362b0",
+    "semantic_hash": "7a9487375978d8001acd93869df362b0"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/package.json": {
+    "mtime": 1775493255.1735885,
+    "ast_hash": "c2aeb9632ffca481ebb38b65257508d2",
+    "semantic_hash": "c2aeb9632ffca481ebb38b65257508d2"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/.eslintrc.json": {
+    "mtime": 1707726320.360494,
+    "ast_hash": "a614d94b9bc872dc09902e639e243e98",
+    "semantic_hash": "a614d94b9bc872dc09902e639e243e98"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/ecosystem.config.js": {
+    "mtime": 1736341823.6826153,
+    "ast_hash": "7801b8303fedf9a7b9e2ccb3101a17e8",
+    "semantic_hash": "7801b8303fedf9a7b9e2ccb3101a17e8"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/package.json": {
+    "mtime": 1774026863.7284067,
+    "ast_hash": "c75e7a408030c6c5d4b03fa8c8d72114",
+    "semantic_hash": "c75e7a408030c6c5d4b03fa8c8d72114"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/raycast-env.d.ts": {
+    "mtime": 1774026863.728623,
+    "ast_hash": "a58114210dafe5510737cdfd5407af5e",
+    "semantic_hash": "a58114210dafe5510737cdfd5407af5e"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/src/apply-filter.tsx": {
+    "mtime": 1709029069.5660956,
+    "ast_hash": "5f0f794ff8b3b3d355d695ba3a3cfc84",
+    "semantic_hash": "5f0f794ff8b3b3d355d695ba3a3cfc84"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/src/commander.tsx": {
+    "mtime": 1774026863.7291543,
+    "ast_hash": "10f5495bc0ff839bbeff2ef5afa20f24",
+    "semantic_hash": "10f5495bc0ff839bbeff2ef5afa20f24"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/src/commanderConvert.tsx": {
+    "mtime": 1774026863.7291543,
+    "ast_hash": "10f5495bc0ff839bbeff2ef5afa20f24",
+    "semantic_hash": "10f5495bc0ff839bbeff2ef5afa20f24"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/src/commanderMp4ToMp3.tsx": {
+    "mtime": 1774026863.7291543,
+    "ast_hash": "10f5495bc0ff839bbeff2ef5afa20f24",
+    "semantic_hash": "10f5495bc0ff839bbeff2ef5afa20f24"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/src/commanderOpenNewFinderWindow.tsx": {
+    "mtime": 1774026863.7291543,
+    "ast_hash": "10f5495bc0ff839bbeff2ef5afa20f24",
+    "semantic_hash": "10f5495bc0ff839bbeff2ef5afa20f24"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/src/commanderRegexToReplacementConverter.tsx": {
+    "mtime": 1774026863.7291543,
+    "ast_hash": "10f5495bc0ff839bbeff2ef5afa20f24",
+    "semantic_hash": "10f5495bc0ff839bbeff2ef5afa20f24"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/src/commanderRegexTrim.tsx": {
+    "mtime": 1774026863.7291543,
+    "ast_hash": "10f5495bc0ff839bbeff2ef5afa20f24",
+    "semantic_hash": "10f5495bc0ff839bbeff2ef5afa20f24"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/src/commanderTrim.tsx": {
+    "mtime": 1774026863.7291543,
+    "ast_hash": "10f5495bc0ff839bbeff2ef5afa20f24",
+    "semantic_hash": "10f5495bc0ff839bbeff2ef5afa20f24"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/src/commands/openNewFinderWindow.tsx": {
+    "mtime": 1739492505.4878972,
+    "ast_hash": "8b06465288e3e5f00ea01dabfc64afe7",
+    "semantic_hash": "8b06465288e3e5f00ea01dabfc64afe7"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/src/commands/regexToReplacementConverter.tsx": {
+    "mtime": 1774026863.729771,
+    "ast_hash": "63e7eb2787700e9c49a893fe335eb910",
+    "semantic_hash": "63e7eb2787700e9c49a893fe335eb910"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/src/commands/regexTrim.tsx": {
+    "mtime": 1774026863.7301073,
+    "ast_hash": "bb6bf536a06d108afc9b8b01b6529699",
+    "semantic_hash": "bb6bf536a06d108afc9b8b01b6529699"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/src/components/ImageGeneratorActionPanel.tsx": {
+    "mtime": 1709029069.6145785,
+    "ast_hash": "f924ed898ca5940b131fe341eaaebb18",
+    "semantic_hash": "f924ed898ca5940b131fe341eaaebb18"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/src/components/ImagePatternGrid.tsx": {
+    "mtime": 1709029069.6199286,
+    "ast_hash": "bcc7cf5801441da930bca4da7b1a97f1",
+    "semantic_hash": "bcc7cf5801441da930bca4da7b1a97f1"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/src/components/SizeSelectionActionPanel.tsx": {
+    "mtime": 1709029069.5970275,
+    "ast_hash": "2a37f6d9fa55e8e5689cd00927589a7a",
+    "semantic_hash": "2a37f6d9fa55e8e5689cd00927589a7a"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/src/convert.tsx": {
+    "mtime": 1712008117.5432227,
+    "ast_hash": "4c4fb84ac989ead4ced1ff4c85ec66e7",
+    "semantic_hash": "4c4fb84ac989ead4ced1ff4c85ec66e7"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/src/create-image.tsx": {
+    "mtime": 1709029069.5660443,
+    "ast_hash": "217e394c51e6b434de469972e09302c2",
+    "semantic_hash": "217e394c51e6b434de469972e09302c2"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/src/flip-horizontally.ts": {
+    "mtime": 1709029069.5661354,
+    "ast_hash": "5d8d243beb112c8733b536fb1beb3724",
+    "semantic_hash": "5d8d243beb112c8733b536fb1beb3724"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/src/flip-vertically.ts": {
+    "mtime": 1709029069.5969486,
+    "ast_hash": "d5f82015cd7c95856220621fd20380a3",
+    "semantic_hash": "d5f82015cd7c95856220621fd20380a3"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/src/operations/anyOperation.ts": {
+    "mtime": 1712122492.2772336,
+    "ast_hash": "b3364380d6c497f9052bd74be079468a",
+    "semantic_hash": "b3364380d6c497f9052bd74be079468a"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/src/operations/convertOperation.ts": {
+    "mtime": 1709029069.59669,
+    "ast_hash": "4e9f2a45664afba2a55826c06db5cbcf",
+    "semantic_hash": "4e9f2a45664afba2a55826c06db5cbcf"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/src/operations/filterOperation.ts": {
+    "mtime": 1709029069.5967424,
+    "ast_hash": "09921e83512b551af37a1f82dd2bd97f",
+    "semantic_hash": "09921e83512b551af37a1f82dd2bd97f"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/src/operations/flipOperation.ts": {
+    "mtime": 1709029069.596775,
+    "ast_hash": "f341295f07bf3284d116acc761a72175",
+    "semantic_hash": "f341295f07bf3284d116acc761a72175"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/src/operations/optimizeOperation.ts": {
+    "mtime": 1709029069.5971234,
+    "ast_hash": "87f279afc91d5c369838764a2ba26a77",
+    "semantic_hash": "87f279afc91d5c369838764a2ba26a77"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/src/operations/padOperation.ts": {
+    "mtime": 1709029069.598717,
+    "ast_hash": "61023183a8602923727136ee084d6f18",
+    "semantic_hash": "61023183a8602923727136ee084d6f18"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/src/operations/resizeOperation.ts": {
+    "mtime": 1709029069.596826,
+    "ast_hash": "67e56d82215fef33dbd286f6c006b8ab",
+    "semantic_hash": "67e56d82215fef33dbd286f6c006b8ab"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/src/operations/rotateOperation.ts": {
+    "mtime": 1709029069.5970876,
+    "ast_hash": "5bd320d4ae9005a1021cfbcd61a36f4b",
+    "semantic_hash": "5bd320d4ae9005a1021cfbcd61a36f4b"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/src/operations/runOperation.ts": {
+    "mtime": 1709029069.596718,
+    "ast_hash": "67355727a728dd060cd63bce9c87850a",
+    "semantic_hash": "67355727a728dd060cd63bce9c87850a"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/src/operations/scaleOperation.ts": {
+    "mtime": 1709029069.5967522,
+    "ast_hash": "43243e9232e89bb352a246fdf03737eb",
+    "semantic_hash": "43243e9232e89bb352a246fdf03737eb"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/src/operations/stripEXIFOperation.ts": {
+    "mtime": 1709029069.5968451,
+    "ast_hash": "87e91cd323671538aafd5910886a7819",
+    "semantic_hash": "87e91cd323671538aafd5910886a7819"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/src/optimize.ts": {
+    "mtime": 1709029069.5657394,
+    "ast_hash": "6213a7ce933ead7f70936839a3dc2c5c",
+    "semantic_hash": "6213a7ce933ead7f70936839a3dc2c5c"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/src/pad.ts": {
+    "mtime": 1709029069.5660229,
+    "ast_hash": "30f60851c5a7410d8c394624a7685977",
+    "semantic_hash": "30f60851c5a7410d8c394624a7685977"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/src/resize.ts": {
+    "mtime": 1709029069.5661159,
+    "ast_hash": "cebd007fae4dff802a4646c3f7fe2a98",
+    "semantic_hash": "cebd007fae4dff802a4646c3f7fe2a98"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/src/rotate.ts": {
+    "mtime": 1709029069.5660324,
+    "ast_hash": "bc8ed7d0bceb8f1072ffac1690d45d63",
+    "semantic_hash": "bc8ed7d0bceb8f1072ffac1690d45d63"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/src/scale.ts": {
+    "mtime": 1709029069.5660596,
+    "ast_hash": "31315bb6fe3fb974a79c9dd7f1eead33",
+    "semantic_hash": "31315bb6fe3fb974a79c9dd7f1eead33"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/src/strip-exif.ts": {
+    "mtime": 1707726320.3971736,
+    "ast_hash": "e081673189ebcd667f178ce938016af7",
+    "semantic_hash": "e081673189ebcd667f178ce938016af7"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/src/utilities/clipboard.ts": {
+    "mtime": 1709029069.597007,
+    "ast_hash": "c945eed405ed565265f94b0f7f0f34a9",
+    "semantic_hash": "c945eed405ed565265f94b0f7f0f34a9"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/src/utilities/enums.ts": {
+    "mtime": 1709029069.596857,
+    "ast_hash": "ca123de894629e8481cca824f0060af4",
+    "semantic_hash": "ca123de894629e8481cca824f0060af4"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/src/utilities/filters.ts": {
+    "mtime": 1709029069.5969758,
+    "ast_hash": "dcee0fc8479e4f3451252c37b2910d2a",
+    "semantic_hash": "dcee0fc8479e4f3451252c37b2910d2a"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/src/utilities/generators.ts": {
+    "mtime": 1709029069.5970175,
+    "ast_hash": "e4930cf8086010193b78d953a9a9412a",
+    "semantic_hash": "e4930cf8086010193b78d953a9a9412a"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/src/utilities/preferences.ts": {
+    "mtime": 1712007484.1109648,
+    "ast_hash": "961de9c7b5fdd3e04f23536d240d7d19",
+    "semantic_hash": "961de9c7b5fdd3e04f23536d240d7d19"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/src/utilities/types.ts": {
+    "mtime": 1709029069.596985,
+    "ast_hash": "c6f2c1d373dc0f4455cffdf0a3f469cc",
+    "semantic_hash": "c6f2c1d373dc0f4455cffdf0a3f469cc"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/src/utilities/utils.ts": {
+    "mtime": 1736432043.9089775,
+    "ast_hash": "2805e19da77d3bfd5c735d9973aaa59c",
+    "semantic_hash": "2805e19da77d3bfd5c735d9973aaa59c"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/tsconfig.json": {
+    "mtime": 1707726320.3977475,
+    "ast_hash": "6056c8d052e4413e36d53aada8573110",
+    "semantic_hash": "6056c8d052e4413e36d53aada8573110"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/.prettierrc.js": {
+    "mtime": 1774026863.7310836,
+    "ast_hash": "24432b1434c13a05ae8d0aa0b2f5def9",
+    "semantic_hash": "24432b1434c13a05ae8d0aa0b2f5def9"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/api/index.js": {
+    "mtime": 1711197621.4921465,
+    "ast_hash": "844210d487b558804d922d7ac0c53dfa",
+    "semantic_hash": "844210d487b558804d922d7ac0c53dfa"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/Providers/Chakra/ChakraWrapper.tsx": {
+    "mtime": 1711197621.4927154,
+    "ast_hash": "8dd99329bf696ae6b86c27e82d530860",
+    "semantic_hash": "8dd99329bf696ae6b86c27e82d530860"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/Providers/Chakra/Components/Button.tsx": {
+    "mtime": 1714563483.6674106,
+    "ast_hash": "31e1bfe3ca940583841d20aefcac82cd",
+    "semantic_hash": "31e1bfe3ca940583841d20aefcac82cd"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/Providers/Chakra/colors.tsx": {
+    "mtime": 1714563462.4238214,
+    "ast_hash": "a56c3d13a2d128c27b135df49cd8047c",
+    "semantic_hash": "a56c3d13a2d128c27b135df49cd8047c"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/Providers/Chakra/space.tsx": {
+    "mtime": 1721802184.486877,
+    "ast_hash": "6d4866bb3986cf43b8cd72a7071263e9",
+    "semantic_hash": "6d4866bb3986cf43b8cd72a7071263e9"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/Providers/Chakra/theme.tsx": {
+    "mtime": 1714562348.5793965,
+    "ast_hash": "572d3abeb8deb5a1067e39f8693492a7",
+    "semantic_hash": "572d3abeb8deb5a1067e39f8693492a7"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/Providers/Thingtime/ThingtimeDefaults.tsx": {
+    "mtime": 1774026863.7314303,
+    "ast_hash": "1a50e305263d88edcfaee84039068186",
+    "semantic_hash": "1a50e305263d88edcfaee84039068186"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/Providers/Thingtime/defaults/cmdWatcher.ts": {
+    "mtime": 1774026863.7317188,
+    "ast_hash": "4a9346609db2ffbb77bffd37402b7531",
+    "semantic_hash": "4a9346609db2ffbb77bffd37402b7531"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/Providers/ThingtimeProvider.tsx": {
+    "mtime": 1775501233.2922823,
+    "ast_hash": "a2a357275f811e3d714f3fb11189732d",
+    "semantic_hash": "a2a357275f811e3d714f3fb11189732d"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/api/utils/getUser.ts": {
+    "mtime": 1722245811.1143346,
+    "ast_hash": "4414bbd342342dd679eb33869bf8234e",
+    "semantic_hash": "4414bbd342342dd679eb33869bf8234e"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/api/utils/mongodb/client.ts": {
+    "mtime": 1722239818.3926344,
+    "ast_hash": "992d1ee2a6c5ff97657f3fbaee1332da",
+    "semantic_hash": "992d1ee2a6c5ff97657f3fbaee1332da"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/api/utils/mongodb/collection.ts": {
+    "mtime": 1722238821.5531516,
+    "ast_hash": "f65b01f4781159ee3b8a0a9da33d1f5a",
+    "semantic_hash": "f65b01f4781159ee3b8a0a9da33d1f5a"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/api/utils/mongodb/connection.ts": {
+    "mtime": 1775501158.203398,
+    "ast_hash": "98290f16018425156183d22d662d79bc",
+    "semantic_hash": "98290f16018425156183d22d662d79bc"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/api/utils/mongodb/db.ts": {
+    "mtime": 1722238834.9041255,
+    "ast_hash": "cee5f67fb216795bd9938722627e7ac8",
+    "semantic_hash": "cee5f67fb216795bd9938722627e7ac8"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/api/utils/mongodb/mongodb.ts": {
+    "mtime": 1722242327.5959938,
+    "ast_hash": "5c5e138e1cea90064c85e3b1fb2be9c7",
+    "semantic_hash": "5c5e138e1cea90064c85e3b1fb2be9c7"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/api/utils/mongodb/objectId.ts": {
+    "mtime": 1775501164.4255857,
+    "ast_hash": "501c01c3b816e9d7e919ce6b52d5273f",
+    "semantic_hash": "501c01c3b816e9d7e919ce6b52d5273f"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/api/utils/userCheckExists.ts": {
+    "mtime": 1722235589.2729113,
+    "ast_hash": "eb319f2bb5a23a7475d8dfd48e2f8f41",
+    "semantic_hash": "eb319f2bb5a23a7475d8dfd48e2f8f41"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/api/utils/userCreateSession.ts": {
+    "mtime": 1722245733.5811012,
+    "ast_hash": "9c26f2a7a11610d403b6c4c279dd8466",
+    "semantic_hash": "9c26f2a7a11610d403b6c4c279dd8466"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/api/utils/userGenerateJWT.ts": {
+    "mtime": 1722245425.4966404,
+    "ast_hash": "ff6a61cfa4c452821e0d3afe170aa769",
+    "semantic_hash": "ff6a61cfa4c452821e0d3afe170aa769"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/api/utils/userValidatePassword.ts": {
+    "mtime": 1722235589.329874,
+    "ast_hash": "a277b57c33c60f211d21b8932505a8f9",
+    "semantic_hash": "a277b57c33c60f211d21b8932505a8f9"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/components/API/Submit.tsx": {
+    "mtime": 1775501172.893174,
+    "ast_hash": "c31203f06b73892b948ae6500f080562",
+    "semantic_hash": "c31203f06b73892b948ae6500f080562"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/components/API/Test.tsx": {
+    "mtime": 1714563559.383518,
+    "ast_hash": "9c663697db68de4ef281272f7929db22",
+    "semantic_hash": "9c663697db68de4ef281272f7929db22"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/components/Branding/Branding.tsx": {
+    "mtime": 1726041828.4596643,
+    "ast_hash": "6d4ecbbeb690f52617006b68b2c06ef8",
+    "semantic_hash": "6d4ecbbeb690f52617006b68b2c06ef8"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/components/Branding/Logo.tsx": {
+    "mtime": 1726920015.5020435,
+    "ast_hash": "cb7380b46fd3d63abea65831f2f57198",
+    "semantic_hash": "cb7380b46fd3d63abea65831f2f57198"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/components/Branding/LogoOld2.tsx": {
+    "mtime": 1721802184.4884534,
+    "ast_hash": "31b09c50d7247b6e515c726de5b4dc5f",
+    "semantic_hash": "31b09c50d7247b6e515c726de5b4dc5f"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/components/Branding/LogoOld3.tsx": {
+    "mtime": 1723383038.1082237,
+    "ast_hash": "953d2e88bbd4d7cc30dac0fb8922a4b8",
+    "semantic_hash": "953d2e88bbd4d7cc30dac0fb8922a4b8"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/components/Buttons/Attention.tsx": {
+    "mtime": 1711197621.4922402,
+    "ast_hash": "e86df28c4cd71fcdc8b16341b9f90334",
+    "semantic_hash": "e86df28c4cd71fcdc8b16341b9f90334"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/components/Buttons/Hamburger.tsx": {
+    "mtime": 1711197621.4922497,
+    "ast_hash": "7a5b9189fef162edfd2fee928c37255c",
+    "semantic_hash": "7a5b9189fef162edfd2fee928c37255c"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/components/Commander/CommanderV1Deprecated.tsx": {
+    "mtime": 1775501178.5098836,
+    "ast_hash": "6d2b6468b0f611879393f5b1d0800ff2",
+    "semantic_hash": "6d2b6468b0f611879393f5b1d0800ff2"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/components/Commander/CommanderV2.tsx": {
+    "mtime": 1775493722.1144533,
+    "ast_hash": "e55e69802773050cdf4f8ee632692838",
+    "semantic_hash": "e55e69802773050cdf4f8ee632692838"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/components/DevKit/DevKit.tsx": {
+    "mtime": 1774026863.7332826,
+    "ast_hash": "1bcc1e859437db7664f021d9a223dd74",
+    "semantic_hash": "1bcc1e859437db7664f021d9a223dd74"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/components/Editor/Editor.tsx": {
+    "mtime": 1721802184.488731,
+    "ast_hash": "8caa164ee7e3ed1f80941c96591aeac8",
+    "semantic_hash": "8caa164ee7e3ed1f80941c96591aeac8"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/components/Icon/Icon.tsx": {
+    "mtime": 1711231444.5214787,
+    "ast_hash": "cae6440674fb81b25e0366aab9a0300c",
+    "semantic_hash": "cae6440674fb81b25e0366aab9a0300c"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/components/Layout/Main.tsx": {
+    "mtime": 1774026863.7334723,
+    "ast_hash": "f956d8f3d5be51aac3f904143c0721aa",
+    "semantic_hash": "f956d8f3d5be51aac3f904143c0721aa"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/components/Layout/TopSpacing.tsx": {
+    "mtime": 1714560030.8628676,
+    "ast_hash": "b1734a0bbcfa931b26189ab4faa7b9c3",
+    "semantic_hash": "b1734a0bbcfa931b26189ab4faa7b9c3"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/components/Login/Login.tsx": {
+    "mtime": 1775501209.0005612,
+    "ast_hash": "3b0a7a8f80545f0163a6b5a052f791ce",
+    "semantic_hash": "3b0a7a8f80545f0163a6b5a052f791ce"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/components/MagicInput/MagicInput.tsx": {
+    "mtime": 1775501214.1188247,
+    "ast_hash": "e4e576d77741aa0749225dc980b0f2e4",
+    "semantic_hash": "e4e576d77741aa0749225dc980b0f2e4"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/components/MongoDB/Raw.tsx": {
+    "mtime": 1714519907.647176,
+    "ast_hash": "8bb29ed2e890acfdabbf53f4afffbff7",
+    "semantic_hash": "8bb29ed2e890acfdabbf53f4afffbff7"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/components/MongoDB/RawResult.tsx": {
+    "mtime": 1714560284.0310707,
+    "ast_hash": "f4e1fc41692cf79cc2460885694534ea",
+    "semantic_hash": "f4e1fc41692cf79cc2460885694534ea"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/components/MongoDB/RawResults.tsx": {
+    "mtime": 1714563515.2325757,
+    "ast_hash": "27bff4852d6ff45c5820a31822a9b3b9",
+    "semantic_hash": "27bff4852d6ff45c5820a31822a9b3b9"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/components/Nav/Footer.tsx": {
+    "mtime": 1781359440.2828643,
+    "ast_hash": "22d2d5adb6834041f90f82b282780c10",
+    "semantic_hash": "22d2d5adb6834041f90f82b282780c10"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/components/Nav/Nav.tsx": {
+    "mtime": 1781420118.879475,
+    "ast_hash": "abd7888155189df91a5aa305c27c1d79",
+    "semantic_hash": "abd7888155189df91a5aa305c27c1d79"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/components/Nav/ProfileDrawer.tsx": {
+    "mtime": 1711197621.4923794,
+    "ast_hash": "2b1554d3afac83ac607104098e1969e2",
+    "semantic_hash": "2b1554d3afac83ac607104098e1969e2"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/components/Nav/ReactiveNav.tsx": {
+    "mtime": 1711197621.4924142,
+    "ast_hash": "754772c54e9898c3ba24d30783829efb",
+    "semantic_hash": "754772c54e9898c3ba24d30783829efb"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/components/Nav/ReactiveRightNav.tsx": {
+    "mtime": 1711197621.4923952,
+    "ast_hash": "a7d22a7a4eeecf0650b8a28595ccedba",
+    "semantic_hash": "a7d22a7a4eeecf0650b8a28595ccedba"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/components/Rainbow/Rainbow.tsx": {
+    "mtime": 1711197621.49243,
+    "ast_hash": "4fb71f2cfe15f89d294e25a4e303669e",
+    "semantic_hash": "4fb71f2cfe15f89d294e25a4e303669e"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/components/Safety/Safe.tsx": {
+    "mtime": 1711197621.4924433,
+    "ast_hash": "e3cf4bdd8c27e70c6618dbb30094459d",
+    "semantic_hash": "e3cf4bdd8c27e70c6618dbb30094459d"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/components/Skeleton/RainbowSkeleton.tsx": {
+    "mtime": 1711197621.4924536,
+    "ast_hash": "447c5cc4cd6b2748360fe7aa1bb7d86c",
+    "semantic_hash": "447c5cc4cd6b2748360fe7aa1bb7d86c"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/components/Splash/Splash.tsx": {
+    "mtime": 1711197621.492475,
+    "ast_hash": "5e886f72922842634e6707679be7683c",
+    "semantic_hash": "5e886f72922842634e6707679be7683c"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/components/Thingtime/SettingsMenu.tsx": {
+    "mtime": 1775409106.5132565,
+    "ast_hash": "0aab16d49c937b73cd8d2f0bf5454c17",
+    "semantic_hash": "0aab16d49c937b73cd8d2f0bf5454c17"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/components/Thingtime/Thingtime.tsx": {
+    "mtime": 1775501220.045788,
+    "ast_hash": "53c60e175150596981da0184c842e220",
+    "semantic_hash": "53c60e175150596981da0184c842e220"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/components/Thingtime/ThingtimeDemo.tsx": {
+    "mtime": 1711197621.4925418,
+    "ast_hash": "e3a02ac24915aae0a1689629a928b1d3",
+    "semantic_hash": "e3a02ac24915aae0a1689629a928b1d3"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/components/Thingtime/ThingtimeURL.tsx": {
+    "mtime": 1775501228.695919,
+    "ast_hash": "8b49b8af977b9b8f7ad0c468a9e0c1d0",
+    "semantic_hash": "8b49b8af977b9b8f7ad0c468a9e0c1d0"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/components/Thingtime/useThingtime.tsx": {
+    "mtime": 1774026863.7350957,
+    "ast_hash": "18e010b4d0e23186337b685b90757cd8",
+    "semantic_hash": "18e010b4d0e23186337b685b90757cd8"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/components/rainbowText.tsx": {
+    "mtime": 1714383014.9458668,
+    "ast_hash": "0b82937b1e095db3577337e5d2cf5903",
+    "semantic_hash": "0b82937b1e095db3577337e5d2cf5903"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/components/textAnimation1.tsx": {
+    "mtime": 1721802553.7917185,
+    "ast_hash": "b65eba964af5971be3e65384bb287536",
+    "semantic_hash": "b65eba964af5971be3e65384bb287536"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/components/tt/Button.tsx": {
+    "mtime": 1722002021.5153997,
+    "ast_hash": "3a1131062608a54a711cad0742abcbeb",
+    "semantic_hash": "3a1131062608a54a711cad0742abcbeb"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/components/tt/index.ts": {
+    "mtime": 1722000994.1996102,
+    "ast_hash": "f55f91c00022d66a7c6ff9a0e1f59103",
+    "semantic_hash": "f55f91c00022d66a7c6ff9a0e1f59103"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/cookies.server.ts": {
+    "mtime": 1721808073.2259562,
+    "ast_hash": "a9172b627781d16b1609ce3c70ab822a",
+    "semantic_hash": "a9172b627781d16b1609ce3c70ab822a"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/entry.client.tsx": {
+    "mtime": 1722079113.0920334,
+    "ast_hash": "60810fed90bf8bd3168f5cbb1380e30f",
+    "semantic_hash": "60810fed90bf8bd3168f5cbb1380e30f"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/entry.server.tsx": {
+    "mtime": 1722079116.4901605,
+    "ast_hash": "8780527a2918fd56e6538183187af8c8",
+    "semantic_hash": "8780527a2918fd56e6538183187af8c8"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/functions/safe.tsx": {
+    "mtime": 1711197621.492626,
+    "ast_hash": "4e3eb7f1f1747c03da96b8d5f93e74c6",
+    "semantic_hash": "4e3eb7f1f1747c03da96b8d5f93e74c6"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/functions/sanitise.tsx": {
+    "mtime": 1711197621.4926116,
+    "ast_hash": "b4ce927dfb673ae10a1efaf7359f80c3",
+    "semantic_hash": "b4ce927dfb673ae10a1efaf7359f80c3"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/global-types.d.ts": {
+    "mtime": 1714383937.1062937,
+    "ast_hash": "7f1938dd65767c801825fc721151adbf",
+    "semantic_hash": "7f1938dd65767c801825fc721151adbf"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/globals/GlobalStyles.tsx": {
+    "mtime": 1721959448.9232118,
+    "ast_hash": "e920dc8bdfd99f869ecc9452f1137921",
+    "semantic_hash": "e920dc8bdfd99f869ecc9452f1137921"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/gp/GradientPath.js": {
+    "mtime": 1711197621.4926364,
+    "ast_hash": "6655c69835eedb9a2a4379f09f603263",
+    "semantic_hash": "6655c69835eedb9a2a4379f09f603263"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/gp/Sample.js": {
+    "mtime": 1711197621.4926622,
+    "ast_hash": "ba179168c250b9dd8c22d6f2ed5e4ef3",
+    "semantic_hash": "ba179168c250b9dd8c22d6f2ed5e4ef3"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/gp/Segment.js": {
+    "mtime": 1711197621.4926496,
+    "ast_hash": "291e6bcbac7d90b8e06c1ec9b685e15b",
+    "semantic_hash": "291e6bcbac7d90b8e06c1ec9b685e15b"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/gp/_constants.js": {
+    "mtime": 1711197621.4926739,
+    "ast_hash": "bc5e68237ed6a9ab0b352506ce8a9534",
+    "semantic_hash": "bc5e68237ed6a9ab0b352506ce8a9534"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/gp/_data.js": {
+    "mtime": 1711197621.493144,
+    "ast_hash": "5e4e3751c26872d86239f47b4db8db0a",
+    "semantic_hash": "5e4e3751c26872d86239f47b4db8db0a"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/gp/_utils.js": {
+    "mtime": 1711197621.4927318,
+    "ast_hash": "02f63d448e9f48b5f8f26b0278adeb3e",
+    "semantic_hash": "02f63d448e9f48b5f8f26b0278adeb3e"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/gp/index.js": {
+    "mtime": 1711197621.4926825,
+    "ast_hash": "2c876691ea163b0306ebf575cf88e1b4",
+    "semantic_hash": "2c876691ea163b0306ebf575cf88e1b4"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/hooks/useApi.tsx": {
+    "mtime": 1775501223.4738367,
+    "ast_hash": "39749165275a6efb936d9bca7971c2bc",
+    "semantic_hash": "39749165275a6efb936d9bca7971c2bc"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/hooks/useAsyncFetcher.tsx": {
+    "mtime": 1714387367.2889643,
+    "ast_hash": "81a21a534f74dad5870f5035f7a9daae",
+    "semantic_hash": "81a21a534f74dad5870f5035f7a9daae"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/hooks/useIcons.tsx": {
+    "mtime": 1711197621.49278,
+    "ast_hash": "1ed33bf761fae0a067a7c01b50d02a9c",
+    "semantic_hash": "1ed33bf761fae0a067a7c01b50d02a9c"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/hooks/usePath.tsx": {
+    "mtime": 1711197621.492749,
+    "ast_hash": "bc8169046960e05db35a40c8c2a995b0",
+    "semantic_hash": "bc8169046960e05db35a40c8c2a995b0"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/hooks/useProps.tsx": {
+    "mtime": 1711197621.492804,
+    "ast_hash": "2643b6f24fdb80ba312053ae01b3fa33",
+    "semantic_hash": "2643b6f24fdb80ba312053ae01b3fa33"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/hooks/useThings.tsx": {
+    "mtime": 1711197621.492767,
+    "ast_hash": "0b02a00fb00355c03fd6f53b77d3754d",
+    "semantic_hash": "0b02a00fb00355c03fd6f53b77d3754d"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/hooks/useThingtimeMachine.tsx": {
+    "mtime": 1775744159.3408196,
+    "ast_hash": "d60b82d42e545916204ef19e3ea53a7a",
+    "semantic_hash": "d60b82d42e545916204ef19e3ea53a7a"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/hooks/useTrace.tsx": {
+    "mtime": 1711197621.4928207,
+    "ast_hash": "3ad9146a76bae7fee252439633fe5f41",
+    "semantic_hash": "3ad9146a76bae7fee252439633fe5f41"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/hooks/useUuid.tsx": {
+    "mtime": 1711197621.4928327,
+    "ast_hash": "c4054b1dfdb64ee989f94d84a82f34b0",
+    "semantic_hash": "c4054b1dfdb64ee989f94d84a82f34b0"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/root.tsx": {
+    "mtime": 1774026863.7355728,
+    "ast_hash": "d75267236891aeee052c975947e24a3c",
+    "semantic_hash": "d75267236891aeee052c975947e24a3c"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/routes/$.tsx": {
+    "mtime": 1774026863.7357485,
+    "ast_hash": "f24225f1e21a465081755d2d056b36d6",
+    "semantic_hash": "f24225f1e21a465081755d2d056b36d6"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/routes/_index.tsx": {
+    "mtime": 1775412509.1166835,
+    "ast_hash": "0d1e03a949465ae3b361b90270f07b65",
+    "semantic_hash": "0d1e03a949465ae3b361b90270f07b65"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/routes/api/v1/login/_login.tsx": {
+    "mtime": 1775501239.6514375,
+    "ast_hash": "f7e72f8bb957d3499e3982512e9db592",
+    "semantic_hash": "f7e72f8bb957d3499e3982512e9db592"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/routes/api/v1/mongodb/get-connection/_get-connection.tsx": {
+    "mtime": 1775501258.3552678,
+    "ast_hash": "9b0ce6c1ecd3472e4f49912520f5a5b4",
+    "semantic_hash": "9b0ce6c1ecd3472e4f49912520f5a5b4"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/routes/api/v1/mongodb/populate/_populate.tsx": {
+    "mtime": 1775501266.8477986,
+    "ast_hash": "83f6184734c02ba70c475ad4480dfe6e",
+    "semantic_hash": "83f6184734c02ba70c475ad4480dfe6e"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/routes/api/v1/mongodb/raw-results/_raw-results.tsx": {
+    "mtime": 1722237389.2895868,
+    "ast_hash": "bcedbc2da798d1b454754e3fa6c21890",
+    "semantic_hash": "bcedbc2da798d1b454754e3fa6c21890"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/routes/api/v1/template/_template.tsx": {
+    "mtime": 1714561215.7802622,
+    "ast_hash": "bde4d784e732984fa2c2bf56331efee9",
+    "semantic_hash": "bde4d784e732984fa2c2bf56331efee9"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/routes/branding/_index.tsx": {
+    "mtime": 1774026863.7362792,
+    "ast_hash": "1d7d06ba8d8ea74949a3b514fb469903",
+    "semantic_hash": "1d7d06ba8d8ea74949a3b514fb469903"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/routes/branding/assets/all.ts": {
+    "mtime": 1774026863.7364507,
+    "ast_hash": "5342fc87080ec890af5832fb0fe65669",
+    "semantic_hash": "5342fc87080ec890af5832fb0fe65669"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/routes/branding_old.tsx": {
+    "mtime": 1774026863.73657,
+    "ast_hash": "ea2602b7addff9a915d62a30b1505eef",
+    "semantic_hash": "ea2602b7addff9a915d62a30b1505eef"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/routes/edge.tsx": {
+    "mtime": 1711197621.4928927,
+    "ast_hash": "6544ff7f09cd8b48be92cf5630aded11",
+    "semantic_hash": "6544ff7f09cd8b48be92cf5630aded11"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/routes/login.tsx": {
+    "mtime": 1714130023.0152988,
+    "ast_hash": "0cdce1e2a69b1c7dece0500035d0a03a",
+    "semantic_hash": "0cdce1e2a69b1c7dece0500035d0a03a"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/routes/ode.tsx": {
+    "mtime": 1711197621.493211,
+    "ast_hash": "ae2ebee659b74fdadcd3ffd4e05da565",
+    "semantic_hash": "ae2ebee659b74fdadcd3ffd4e05da565"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/routes/rainbow.$.tsx": {
+    "mtime": 1711276027.2038066,
+    "ast_hash": "5a130cc7f1199ac356e2630c1bd0646d",
+    "semantic_hash": "5a130cc7f1199ac356e2630c1bd0646d"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/routes/raw.tsx": {
+    "mtime": 1714560885.2609162,
+    "ast_hash": "bc732e8681ad9a4d2268f68b9b878b51",
+    "semantic_hash": "bc732e8681ad9a4d2268f68b9b878b51"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/routes/scratchpads/svg-displacement-map.tsx": {
+    "mtime": 1775501275.4415963,
+    "ast_hash": "d483a1f94e84953786c62d5b1e7aaf26",
+    "semantic_hash": "d483a1f94e84953786c62d5b1e7aaf26"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/scripts/mongodb/data/users.ts": {
+    "mtime": 1722242430.6418314,
+    "ast_hash": "4c5d1f71cd1b6801211bc162d301b4fe",
+    "semantic_hash": "4c5d1f71cd1b6801211bc162d301b4fe"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/scripts/mongodb/setup.ts": {
+    "mtime": 1722242448.8122432,
+    "ast_hash": "f25d0883ef501b4a3e471e97e691ed77",
+    "semantic_hash": "f25d0883ef501b4a3e471e97e691ed77"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/sessions.ts": {
+    "mtime": 1721805014.5173573,
+    "ast_hash": "220192e633afb3adf8ee1e44643722c4",
+    "semantic_hash": "220192e633afb3adf8ee1e44643722c4"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/smarts/index.tsx": {
+    "mtime": 1775498158.9888802,
+    "ast_hash": "1b2ac907816d27ef6a8891f9cdc3fc57",
+    "semantic_hash": "1b2ac907816d27ef6a8891f9cdc3fc57"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/app/utils/index.ts": {
+    "mtime": 1775416111.7772295,
+    "ast_hash": "f1a6ff938efc519e30afc4d0fb832fdd",
+    "semantic_hash": "f1a6ff938efc519e30afc4d0fb832fdd"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/ecosystem.config.js": {
+    "mtime": 1775493270.8511794,
+    "ast_hash": "fa9cb4381573d5b9cddcb7f719359deb",
+    "semantic_hash": "fa9cb4381573d5b9cddcb7f719359deb"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/package.json": {
+    "mtime": 1774026863.7371976,
+    "ast_hash": "4d964863402a1a9eb2f0ec0af7a27ce1",
+    "semantic_hash": "4d964863402a1a9eb2f0ec0af7a27ce1"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/public/manifest.json": {
+    "mtime": 1740309368.0,
+    "ast_hash": "b58fcfa7628c9205cb11a1b2c3e8f99a",
+    "semantic_hash": "b58fcfa7628c9205cb11a1b2c3e8f99a"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/remix.env.d.ts": {
+    "mtime": 1687825166.0489094,
+    "ast_hash": "777489b02a8f88977c5883033c37e5fb",
+    "semantic_hash": "777489b02a8f88977c5883033c37e5fb"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/scripts/pre-dev.sh": {
+    "mtime": 1774026863.7375152,
+    "ast_hash": "f747e88762bdee51f77c0f1afdb16c51",
+    "semantic_hash": "f747e88762bdee51f77c0f1afdb16c51"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/tsconfig.json": {
+    "mtime": 1714383825.6793983,
+    "ast_hash": "6f47150939eacf6d3a89a87289013ea3",
+    "semantic_hash": "6f47150939eacf6d3a89a87289013ea3"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/vercel.json": {
+    "mtime": 1711197560.9998775,
+    "ast_hash": "73e50a7b78b0844850089c53b49cc3af",
+    "semantic_hash": "73e50a7b78b0844850089c53b49cc3af"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/vercel.sh": {
+    "mtime": 1774026863.73764,
+    "ast_hash": "a1ebd44301edf723b9f533db965b5b58",
+    "semantic_hash": "a1ebd44301edf723b9f533db965b5b58"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/vite.config.ts": {
+    "mtime": 1775492737.1970313,
+    "ast_hash": "d21e2b162a83ca33cb700e949a6334fc",
+    "semantic_hash": "d21e2b162a83ca33cb700e949a6334fc"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/tsconfig.json": {
+    "mtime": 1736164757.315272,
+    "ast_hash": "6f47150939eacf6d3a89a87289013ea3",
+    "semantic_hash": "6f47150939eacf6d3a89a87289013ea3"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/vercel.json": {
+    "mtime": 1721802184.4900775,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/README.md": {
+    "mtime": 1774026153.1186633,
+    "ast_hash": "5a510a663a8d17ce1f918c743f7ad100",
+    "semantic_hash": "5a510a663a8d17ce1f918c743f7ad100"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/docs/Use Cases/car.md": {
+    "mtime": 1677486421.8399172,
+    "ast_hash": "b4f1086b696aeb835644e14a78daaef4",
+    "semantic_hash": "b4f1086b696aeb835644e14a78daaef4"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/docs/Use Cases/tools.md": {
+    "mtime": 1677486411.201808,
+    "ast_hash": "2696643b2369d088bdbbdc722650dd3d",
+    "semantic_hash": "2696643b2369d088bdbbdc722650dd3d"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/CHANGELOG.md": {
+    "mtime": 1707726320.3607578,
+    "ast_hash": "94429003c9729d3e4b96a9a2ddf652a8",
+    "semantic_hash": "94429003c9729d3e4b96a9a2ddf652a8"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/DEVLOG.md": {
+    "mtime": 1707726320.3608325,
+    "ast_hash": "f89ba8abc8a34811c7de7830048b42cc",
+    "semantic_hash": "f89ba8abc8a34811c7de7830048b42cc"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/README.md": {
+    "mtime": 1707726320.360891,
+    "ast_hash": "bcb904bbb9fb337f22bd10d695af0635",
+    "semantic_hash": "bcb904bbb9fb337f22bd10d695af0635"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/raycast/assets/webp/README.md": {
+    "mtime": 1707726320.369566,
+    "ast_hash": "f162fbffa18046af73dfca08802a536f",
+    "semantic_hash": "f162fbffa18046af73dfca08802a536f"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/README.md": {
+    "mtime": 1687825166.0450187,
+    "ast_hash": "6030fb9d08f47ad8e50ab8f91796bdb3",
+    "semantic_hash": "6030fb9d08f47ad8e50ab8f91796bdb3"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/public/favicon_import.html": {
+    "mtime": 1740225413.24785,
+    "ast_hash": "193aabfa891ee610b0b7e6e38690aac9",
+    "semantic_hash": "193aabfa891ee610b0b7e6e38690aac9"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/public/Group 100.png": {
+    "mtime": 1736669697.7656682,
+    "ast_hash": "ef483cd4d2023a37d8afc0daecdf2682",
+    "semantic_hash": "ef483cd4d2023a37d8afc0daecdf2682"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/public/Group 99.png": {
+    "mtime": 1736669700.2480166,
+    "ast_hash": "68a703f69ff292cbd712e2ef14389689",
+    "semantic_hash": "68a703f69ff292cbd712e2ef14389689"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/public/anti-displacement.svg": {
+    "mtime": 1727220491.3587587,
+    "ast_hash": "1f759aa95e79871da11f7652686dafb8",
+    "semantic_hash": "1f759aa95e79871da11f7652686dafb8"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/public/branding/thingtime-horizontal.svg": {
+    "mtime": 1774026863.7373767,
+    "ast_hash": "b3d500661cf6a8e77e0bbddf718fcaf2",
+    "semantic_hash": "b3d500661cf6a8e77e0bbddf718fcaf2"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/public/deformmap.png": {
+    "mtime": 1727069363.0953941,
+    "ast_hash": "677cbd16d0742239f49207fa3fb0b753",
+    "semantic_hash": "677cbd16d0742239f49207fa3fb0b753"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/public/displacement-gradient-2.svg": {
+    "mtime": 1727239183.9385018,
+    "ast_hash": "1cda8ecf98d05ae39184bfb6bd054fbc",
+    "semantic_hash": "1cda8ecf98d05ae39184bfb6bd054fbc"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/public/displacement-gradient.svg": {
+    "mtime": 1727239556.2521067,
+    "ast_hash": "21703a4418aed867760d57d53828e32e",
+    "semantic_hash": "21703a4418aed867760d57d53828e32e"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/public/displacement.svg": {
+    "mtime": 1727218882.9543667,
+    "ast_hash": "a5572366d113cab2d95895cc3227b87f",
+    "semantic_hash": "a5572366d113cab2d95895cc3227b87f"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/public/gbg.png": {
+    "mtime": 1726813791.0490243,
+    "ast_hash": "f4e007b43717817b657e36a9535861bf",
+    "semantic_hash": "f4e007b43717817b657e36a9535861bf"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/public/gh.png": {
+    "mtime": 1726813826.6655157,
+    "ast_hash": "7c8aa70c0e70a4a6165c42c3cd128371",
+    "semantic_hash": "7c8aa70c0e70a4a6165c42c3cd128371"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/remix/public/gs2.png": {
+    "mtime": 1727231770.1219392,
+    "ast_hash": "b40023627316b98bc93484caa992178a",
+    "semantic_hash": "b40023627316b98bc93484caa992178a"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/resources/svg/qrcode-forqrcode-com.svg": {
+    "mtime": 1734692551.3455245,
+    "ast_hash": "050706709e3fa1e1e54f7f2fa8b75dba",
+    "semantic_hash": "050706709e3fa1e1e54f7f2fa8b75dba"
+  },
+  "/Users/lopu/things/code/lopugit/thingtime/resources/svg/qrcode.svg": {
+    "mtime": 1734693024.0913377,
+    "ast_hash": "6eb815f0cfbe5e0c76790ee42833aa81",
+    "semantic_hash": "6eb815f0cfbe5e0c76790ee42833aa81"
+  }
+}

@@ -1,0 +1,8 @@
+# Machine-local interpreter & path pointers (absolute paths, not portable)
+.graphify_python
+.graphify_root
+# Internal pipeline temp files
+.graphify_*.json
+.needs_update
+# Regenerable extraction cache (rebuilt by `graphify update`)
+cache/
