@@ -27,3 +27,10 @@ api/index.js.map
 pnpm-lock.yaml
 
 tmp/*
+
+# graphify - keep queryable graph + report, ignore machine-specific temp & build artifacts
+graphify-out/.graphify_*
+graphify-out/cache/
+graphify-out/graph.html
+graphify-out/cost.json
+graphify-out/manifest.json
