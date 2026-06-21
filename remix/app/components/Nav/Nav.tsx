@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Center, Flex } from '@chakra-ui/react';
+import { Box, Center, Flex, Text } from '@chakra-ui/react';
 import { Link, useLocation, useNavigate } from '@remix-run/react';
 
 import { CommanderV2 } from '../Commander/CommanderV2';
@@ -9,106 +9,106 @@ import { ProfileDrawer } from './ProfileDrawer';
 import { useThingtime } from '../Thingtime/useThingtime';
 let BRANCH_NAME;
 try {
-	BRANCH_NAME = process.env.THINGTIME_BRANCH_NAME || 'git/unknown';
+  BRANCH_NAME = process.env.THINGTIME_BRANCH_NAME || 'git/unknown';
 } catch (e) {
-	console.log('Error getting BRANCH_NAME from env:', e);
-	// BRANCH_NAME= 'git/unknown';
+  console.log('Error getting BRANCH_NAME from env:', e);
+  // BRANCH_NAME= 'git/unknown';
 }
 
 console.log('BRANCH_NAME:', BRANCH_NAME);
 
 export const Nav = (props) => {
-	let clientState: any = {};
+  let clientState: any = {};
 
-	try {
-		if (typeof window !== 'undefined') {
-			clientState = window.envFromCookie || {};
-		}
-	} catch (err) {
-		// do nothing
-	}
+  try {
+    if (typeof window !== 'undefined') {
+      clientState = window.envFromCookie || {};
+    }
+  } catch (err) {
+    // do nothing
+  }
 
-	const [branchName, setBranchName] = React.useState(clientState.THINGTIME_BRANCH_NAME || BRANCH_NAME || 'git/unknown');
+  const [branchName, setBranchName] = React.useState(clientState.THINGTIME_BRANCH_NAME || BRANCH_NAME || 'git/unknown');
 
-	const { thingtime } = useThingtime();
+  const { thingtime } = useThingtime();
 
-	const [profileDrawerOpen, setProfileDrawerOpen] = React.useState(false);
+  const [profileDrawerOpen, setProfileDrawerOpen] = React.useState(false);
 
-	const { pathname } = useLocation();
+  const { pathname } = useLocation();
 
-	const navigate = useNavigate();
+  const navigate = useNavigate();
 
-	const toggleProfileDrawer = React.useCallback(() => {
-		setProfileDrawerOpen(!profileDrawerOpen);
-	}, [profileDrawerOpen]);
+  const toggleProfileDrawer = React.useCallback(() => {
+    setProfileDrawerOpen(!profileDrawerOpen);
+  }, [profileDrawerOpen]);
 
-	const inEditorMode = React.useMemo(() => {
-		if (pathname.slice(0, 7) === '/editor') {
-			return true;
-		}
+  const inEditorMode = React.useMemo(() => {
+    if (pathname.slice(0, 7) === '/editor') {
+      return true;
+    }
 
-		return false;
-	}, [pathname]);
+    return false;
+  }, [pathname]);
 
-	const inEditMode = React.useMemo(() => {
-		if (pathname.slice(0, 5) === '/edit') {
-			return true;
-		}
+  const inEditMode = React.useMemo(() => {
+    if (pathname.slice(0, 5) === '/edit') {
+      return true;
+    }
 
-		return false;
-	}, [pathname]);
+    return false;
+  }, [pathname]);
 
-	const editorToggleable = React.useMemo(() => {
-		if (pathname.slice(0, 7) === '/things') {
-			return true;
-		} else if (pathname.slice(0, 5) === '/edit') {
-			return true;
-		}
+  const editorToggleable = React.useMemo(() => {
+    if (pathname.slice(0, 7) === '/things') {
+      return true;
+    } else if (pathname.slice(0, 5) === '/edit') {
+      return true;
+    }
 
-		if (thingtime.get('thingtimeUrlPageVisible')) {
-			return true;
-		}
+    if (thingtime.get('thingtimeUrlPageVisible')) {
+      return true;
+    }
 
-		return false;
-	}, [pathname, thingtime]);
+    return false;
+  }, [pathname, thingtime]);
 
-	const toggleEdit = React.useCallback(
-		(e) => {
-			// if first characters of pathname are /things replace with /edit
-			// or if first characters of pathname are /edit replace with /things
-			if (pathname.slice(0, 7) === '/things') {
-				const newPathname = pathname.replace('/things', '/edit');
-				navigate(newPathname);
-			} else if (pathname.slice(0, 7) === '/editor') {
-				const newPathname = pathname.replace('/editor', '/things');
-				navigate(newPathname);
-			} else if (pathname.slice(0, 5) === '/edit') {
-				const newPathname = pathname.replace('/edit', '/things');
-				navigate(newPathname);
-			} else if (thingtime.get('thingtimeUrlPageVisible')) {
-				const newPathname = pathname.replace('/', '/edit/');
-				navigate(newPathname);
-			}
-		},
-		[pathname, navigate]
-	);
+  const toggleEdit = React.useCallback(
+    (e) => {
+      // if first characters of pathname are /things replace with /edit
+      // or if first characters of pathname are /edit replace with /things
+      if (pathname.slice(0, 7) === '/things') {
+        const newPathname = pathname.replace('/things', '/edit');
+        navigate(newPathname);
+      } else if (pathname.slice(0, 7) === '/editor') {
+        const newPathname = pathname.replace('/editor', '/things');
+        navigate(newPathname);
+      } else if (pathname.slice(0, 5) === '/edit') {
+        const newPathname = pathname.replace('/edit', '/things');
+        navigate(newPathname);
+      } else if (thingtime.get('thingtimeUrlPageVisible')) {
+        const newPathname = pathname.replace('/', '/edit/');
+        navigate(newPathname);
+      }
+    },
+    [pathname, navigate]
+  );
 
-	const toggleEditor = React.useCallback(
-		(e) => {
-			// if first characters of pathname are /things replace with /edit
-			// or if first characters of pathname are /edit replace with /things
-			if (pathname.slice(0, 7) === '/editor') {
-				const newPathname = pathname.replace('/editor', '/edit');
-				navigate(newPathname);
-			} else if (pathname.slice(0, 5) === '/edit') {
-				const newPathname = pathname.replace('/edit', '/editor');
-				navigate(newPathname);
-			}
-		},
-		[pathname, navigate]
-	);
+  const toggleEditor = React.useCallback(
+    (e) => {
+      // if first characters of pathname are /things replace with /edit
+      // or if first characters of pathname are /edit replace with /things
+      if (pathname.slice(0, 7) === '/editor') {
+        const newPathname = pathname.replace('/editor', '/edit');
+        navigate(newPathname);
+      } else if (pathname.slice(0, 5) === '/edit') {
+        const newPathname = pathname.replace('/edit', '/editor');
+        navigate(newPathname);
+      }
+    },
+    [pathname, navigate]
+  );
 
-	return (
+  return (
     <>
       <Box position="fixed" zIndex={9999} top={0} right={0} left={0} maxWidth="100vw">
         <Flex
@@ -134,7 +134,7 @@ export const Nav = (props) => {
 
             {/* Add the current git branch here for dev purposes */}
             {/* Use https://github.com/lopugit/thingtime/tree/ as a link */}
-						{/* 14/06/2026 Took this out and moved to footer */}
+            {/* 14/06/2026 Took this out and moved to footer */}
             {/* <Box
               // link
               as="a"
@@ -189,9 +189,14 @@ export const Nav = (props) => {
                 <Icon size="12px" name="🗝️"></Icon>
               </Link>
             </Center> */}
-            <Center transform={['', 'scaleX(-100%)']} cursor="pointer">
+            <Center cursor="pointer">
               <Link to="/login">
-                <Icon size="12px" name="🌈"></Icon>
+                <Flex flexDir={'row'} gap={2}>
+                  <Box fontSize="xs" opacity={0.5}>
+                    Login
+                  </Box>
+                  <Icon transform={['', 'scaleX(-100%)']} size="12px" name="🌈"></Icon>
+                </Flex>
               </Link>
             </Center>
             <Center display={['flex', 'none']} cursor="pointer">
