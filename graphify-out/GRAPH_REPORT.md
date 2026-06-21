@@ -1,16 +1,16 @@
 # Graph Report - thingtime  (2026-06-21)
 
 ## Corpus Check
-- 184 files · ~537,710 words
+- 186 files · ~538,312 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 919 nodes · 1624 edges · 68 communities (52 shown, 16 thin omitted)
+- 926 nodes · 1644 edges · 68 communities (51 shown, 17 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 11 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `3000a9c2`
+- Built from commit: `ed0f6c64`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -97,22 +97,22 @@
   docs/Use Cases/car.md → README.md
 
 ## Import Cycles
-- 3-file cycle: `remix/app/api/utils/mongodb/connection.ts -> remix/app/routes/api/v1/mongodb/get-connection/_get-connection.tsx -> remix/app/api/utils/userValidatePassword.ts -> remix/app/api/utils/mongodb/connection.ts`
 - 3-file cycle: `remix/app/api/utils/mongodb/connection.ts -> remix/app/routes/api/v1/mongodb/get-connection/_get-connection.tsx -> remix/app/api/utils/userCheckExists.ts -> remix/app/api/utils/mongodb/connection.ts`
+- 3-file cycle: `remix/app/api/utils/mongodb/connection.ts -> remix/app/routes/api/v1/mongodb/get-connection/_get-connection.tsx -> remix/app/api/utils/userValidatePassword.ts -> remix/app/api/utils/mongodb/connection.ts`
 - 3-file cycle: `remix/app/Providers/ThingtimeProvider.tsx -> remix/app/hooks/useThingtimeMachine.tsx -> remix/app/components/Thingtime/useThingtime.tsx -> remix/app/Providers/ThingtimeProvider.tsx`
 
 ## Hyperedges (group relationships)
 - **Thingtime Use Cases** — use_cases_car_maintenance_tracking, use_cases_tools_tool_sharing, readme_thingtime_platform [INFERRED 0.75]
 
-## Communities (68 total, 16 thin omitted)
+## Communities (68 total, 17 thin omitted)
 
 ### Community 0 - "Raycast Image Operations"
-Cohesion: 0.08
-Nodes (52): any(), convert(), flip(), optimize(), optimizeJPEG(), optimizeSVG(), optimizeWEBP(), pad() (+44 more)
+Cohesion: 0.07
+Nodes (77): openNewFinderWindow(), regexToReplacementConverter(), regexTrim(), any(), convert(), flip(), optimize(), optimizeJPEG() (+69 more)
 
 ### Community 1 - "Thingtime Commander & Core UI"
-Cohesion: 0.06
-Nodes (45): Submit(), Commander(), CommanderV2(), RainbowText(), TextAnimation1(), DevKit(), getQueryParams(), getMeta() (+37 more)
+Cohesion: 0.05
+Nodes (49): Submit(), commanderArgs, CommanderV1(), CommanderV2(), RainbowText(), TextAnimation1(), DevKit(), getQueryParams() (+41 more)
 
 ### Community 2 - "API Package Manifest"
 Cohesion: 0.04
@@ -136,11 +136,11 @@ Nodes (38): author, categories, commands, contributors, dependencies, fuse.js, m
 
 ### Community 7 - "Image Generators & Filters"
 Cohesion: 0.10
-Nodes (23): ImageGeneratorActionPanel(), SizeSelectionActionPanel(), applyFilter(), applyBasicFilter(), filters, getFilterThumbnail(), initializeFilterScript(), generatePlaceholder() (+15 more)
+Nodes (25): ImageGeneratorActionPanel(), SizeSelectionActionPanel(), applyFilter(), applyBasicFilter(), filters, getFilterThumbnail(), initializeFilterScript(), generatePlaceholder() (+17 more)
 
 ### Community 8 - "Thingtime State & Providers"
 Cohesion: 0.09
-Nodes (23): assets, value, newTimeline(), ThingtimeLine(), Timeline, TimelineEvent, TimelineScaffold, Timemachine (+15 more)
+Nodes (25): assets, value, newTimeline(), PathArray, ThingtimeLine(), Timeline, TimelineEvent, TimelineScaffold (+17 more)
 
 ### Community 9 - "Smarts Core (Babel/Eval)"
 Cohesion: 0.07
@@ -151,16 +151,16 @@ Cohesion: 0.08
 Nodes (19): Session, App(), logConfig, whitelist, whitelistObj, ChakraWrapper(), chakras, chakrasDark (+11 more)
 
 ### Community 11 - "Graphics GP Utilities"
-Cohesion: 0.13
-Nodes (17): averageSegmentJoins(), getData(), outlineStrokes(), strokeToFill(), constructor(), render(), Sample, Segment (+9 more)
+Cohesion: 0.19
+Nodes (13): averageSegmentJoins(), getData(), outlineStrokes(), strokeToFill(), constructor(), render(), Sample, Segment (+5 more)
 
 ### Community 12 - "Templates & Branding Components"
-Cohesion: 0.16
-Nodes (8): TestAPI(), Branding(), Logo(), Editor(), TopSpacing(), Raw(), RawResults(), checkerMatrix
+Cohesion: 0.13
+Nodes (10): TestAPI(), Branding(), Logo(), Editor(), TopSpacing(), Raw(), RawResult(), RawResultProps (+2 more)
 
 ### Community 13 - "Root Package Manifest"
 Cohesion: 0.08
-Nodes (24): author, bugs, url, dependencies, smarts, ts-node, typescript, description (+16 more)
+Nodes (25): author, bugs, url, dependencies, smarts, ts-node, typescript, description (+17 more)
 
 ### Community 14 - "Remix TypeScript Config"
 Cohesion: 0.11
@@ -238,10 +238,6 @@ Nodes (3): build, env, ENABLE_FILE_SYSTEM_API
 Cohesion: 0.50
 Nodes (3): Commands, Features, Image Modification
 
-### Community 58 - "Community 58"
-Cohesion: 0.17
-Nodes (27): openNewFinderWindow(), regexToReplacementConverter(), regexTrim(), Command(), convertFormats, formats, Command(), convertFormats (+19 more)
-
 ### Community 60 - "Community 60"
 Cohesion: 0.19
 Nodes (9): MongoStatus(), pulse, getMongoStatus(), getMongoUri(), MongoConnectionStatus, sanitiseHost(), loader(), action() (+1 more)
@@ -267,15 +263,15 @@ Cohesion: 0.50
 Nodes (3): Deploy Your Own, Development, Remix
 
 ## Knowledge Gaps
-- **351 isolated node(s):** `extends`, `name`, `version`, `description`, `main` (+346 more)
+- **354 isolated node(s):** `extends`, `name`, `version`, `description`, `main` (+349 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **16 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **17 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `useThingtime()` connect `Thingtime Commander & Core UI` to `Thingtime State & Providers`, `Templates & Branding Components`?**
-  _High betweenness centrality (0.029) - this node is a cross-community bridge._
+  _High betweenness centrality (0.028) - this node is a cross-community bridge._
 - **Why does `dependencies` connect `Remix Dependencies` to `Remix Dev Dependencies`?**
   _High betweenness centrality (0.006) - this node is a cross-community bridge._
 - **Why does `Thingtime()` connect `Thingtime Commander & Core UI` to `Thingtime State & Providers`, `Remix Auth & User Routes`?**
@@ -283,8 +279,8 @@ _Questions this graph is uniquely positioned to answer:_
 - **Are the 2 inferred relationships involving `useThingtime()` (e.g. with `Login()` and `Index()`) actually correct?**
   _`useThingtime()` has 2 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `extends`, `name`, `version` to the rest of the system?**
-  _351 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _354 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Raycast Image Operations` be split into smaller, more focused modules?**
-  _Cohesion score 0.08441558441558442 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.06515444015444015 - nodes in this community are weakly interconnected._
 - **Should `Thingtime Commander & Core UI` be split into smaller, more focused modules?**
-  _Cohesion score 0.05742296918767507 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.05327281414237936 - nodes in this community are weakly interconnected._
