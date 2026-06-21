@@ -17,14 +17,12 @@ localhost-key.pem
 localhost.pem
 
 yarn-error.log
-pnpm-lock.yaml
+# pnpm-lock.yaml
 
 build/*
 public/build/*
 api/index.js
 api/index.js.map
-
-pnpm-lock.yaml
 
 tmp/*
 
