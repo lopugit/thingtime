@@ -44,18 +44,28 @@ else
 
 	echo "THINGTIME_BRANCH_NAME=\"$BRANCH_NAME\"" > .env.auto
 
-	# append to bottom of .env with ##### Auttomatic .env vars see pre-dev.sh ##### opening and closing tags
-	# not just like: echo "##### Auttomatic .env vars see pre-dev.sh #####" >> .env
-	# but replace existing section if it exists
-	if grep -q "##### Auttomatic .env vars see pre-dev.sh #####" .env; then
-		# replace existing section
-		sed -i.bak '/##### Auttomatic .env vars see pre-dev.sh #####/,$d' .env
-		rm .env.bak
+	env_marker="##### Auttomatic .env vars see pre-dev.sh #####"
+	# Replace only the managed block, preserving any user-defined lines after it.
+	if [ -f .env ] && [ "$(grep -cF "$env_marker" .env)" -ge 2 ]; then
+		awk -v marker="$env_marker" '
+			$0 == marker && !removed {
+				in_block = 1
+				removed = 1
+				next
+			}
+			$0 == marker && in_block {
+				in_block = 0
+				next
+			}
+			!in_block {
+				print
+			}
+		' .env > .env.tmp && mv .env.tmp .env
 	fi
 	{
-		echo "##### Auttomatic .env vars see pre-dev.sh #####"
+		echo "$env_marker"
 		echo "THINGTIME_BRANCH_NAME=\"$BRANCH_NAME\""
-		echo "##### Auttomatic .env vars see pre-dev.sh #####"
+		echo "$env_marker"
 	} >> .env
 	export BRANCH_NAME
 fi
