@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate } from '@remix-run/react';
 
 import { CommanderV2 } from '../Commander/CommanderV2';
 import { Icon } from '../Icon/Icon';
+import { MongoStatus } from '../MongoDB/MongoStatus';
 import { RainbowSkeleton } from '../Skeleton/RainbowSkeleton';
 import { ProfileDrawer } from './ProfileDrawer';
 
@@ -53,6 +54,8 @@ export const Footer = (props) => {
 							{/* copyright message */}© {year} Thingtime
 						</Text>
 					</Flex>
+					{/* live MongoDB connection status, links to /mongodb-status */}
+					<MongoStatus></MongoStatus>
 					<Flex flexDirection="row" marginRight="auto">
 						<Icon name="rainbow" size="8px"></Icon>
 						<Icon name="unicorn" size="8px"></Icon>

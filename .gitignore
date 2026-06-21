@@ -34,3 +34,5 @@ graphify-out/cache/
 graphify-out/graph.html
 graphify-out/cost.json
 graphify-out/manifest.json
+# dated curated-graph backups created by `graphify update`
+graphify-out/[0-9]*/

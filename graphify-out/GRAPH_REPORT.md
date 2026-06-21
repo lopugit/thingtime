@@ -1,12 +1,18 @@
-# Graph Report - .  (2026-06-19)
+# Graph Report - thingtime  (2026-06-21)
 
 ## Corpus Check
-- Large corpus: 348 files · ~536,627 words. Semantic extraction will be expensive (many Claude tokens). Consider running on a subfolder.
+- 184 files · ~537,597 words
+- Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 859 nodes · 1558 edges · 58 communities (45 shown, 13 thin omitted)
+- 918 nodes · 1623 edges · 76 communities (61 shown, 15 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 11 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
+
+## Graph Freshness
+- Built from commit: `57ad7ac4`
+- Run `git rev-parse HEAD` and compare to check if the graph is stale.
+- Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
 - [[_COMMUNITY_Raycast Image Operations|Raycast Image Operations]]
@@ -54,6 +60,24 @@
 - [[_COMMUNITY_Raw Results Route Action|Raw Results Route Action]]
 - [[_COMMUNITY_Raw Results Action|Raw Results Action]]
 - [[_COMMUNITY_Raycast Extension Docs|Raycast Extension Docs]]
+- [[_COMMUNITY_Community 58|Community 58]]
+- [[_COMMUNITY_Community 59|Community 59]]
+- [[_COMMUNITY_Community 60|Community 60]]
+- [[_COMMUNITY_Community 61|Community 61]]
+- [[_COMMUNITY_Community 62|Community 62]]
+- [[_COMMUNITY_Community 63|Community 63]]
+- [[_COMMUNITY_Community 64|Community 64]]
+- [[_COMMUNITY_Community 65|Community 65]]
+- [[_COMMUNITY_Community 66|Community 66]]
+- [[_COMMUNITY_Community 67|Community 67]]
+- [[_COMMUNITY_Community 68|Community 68]]
+- [[_COMMUNITY_Community 69|Community 69]]
+- [[_COMMUNITY_Community 70|Community 70]]
+- [[_COMMUNITY_Community 71|Community 71]]
+- [[_COMMUNITY_Community 72|Community 72]]
+- [[_COMMUNITY_Community 73|Community 73]]
+- [[_COMMUNITY_Community 74|Community 74]]
+- [[_COMMUNITY_Community 75|Community 75]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `useThingtime()` - 36 edges
@@ -74,36 +98,36 @@
   docs/Use Cases/tools.md → README.md
 - `Remix Web App (Vercel)` --references--> `Thingtime Platform`  [INFERRED]
   remix/README.md → README.md
+- `Login()` --calls--> `useThingtime()`  [INFERRED]
+  remix/app/components/Login/Login.tsx → remix/app/components/Thingtime/useThingtime.tsx
 - `Index()` --calls--> `useThingtime()`  [INFERRED]
   remix/app/routes/_index.tsx → remix/app/components/Thingtime/useThingtime.tsx
-- `Car Maintenance Tracking` --references--> `Thingtime Platform`  [EXTRACTED]
-  docs/Use Cases/car.md → README.md
 
 ## Import Cycles
-- 3-file cycle: `remix/app/api/utils/mongodb/connection.ts -> remix/app/routes/api/v1/mongodb/get-connection/_get-connection.tsx -> remix/app/api/utils/userValidatePassword.ts -> remix/app/api/utils/mongodb/connection.ts`
 - 3-file cycle: `remix/app/api/utils/mongodb/connection.ts -> remix/app/routes/api/v1/mongodb/get-connection/_get-connection.tsx -> remix/app/api/utils/userCheckExists.ts -> remix/app/api/utils/mongodb/connection.ts`
+- 3-file cycle: `remix/app/api/utils/mongodb/connection.ts -> remix/app/routes/api/v1/mongodb/get-connection/_get-connection.tsx -> remix/app/api/utils/userValidatePassword.ts -> remix/app/api/utils/mongodb/connection.ts`
 - 3-file cycle: `remix/app/Providers/ThingtimeProvider.tsx -> remix/app/hooks/useThingtimeMachine.tsx -> remix/app/components/Thingtime/useThingtime.tsx -> remix/app/Providers/ThingtimeProvider.tsx`
 
 ## Hyperedges (group relationships)
 - **Thingtime Use Cases** — use_cases_car_maintenance_tracking, use_cases_tools_tool_sharing, readme_thingtime_platform [INFERRED 0.75]
 
-## Communities (58 total, 13 thin omitted)
+## Communities (76 total, 15 thin omitted)
 
 ### Community 0 - "Raycast Image Operations"
-Cohesion: 0.06
-Nodes (79): openNewFinderWindow(), regexToReplacementConverter(), regexTrim(), any(), convert(), flip(), optimize(), optimizeJPEG() (+71 more)
+Cohesion: 0.11
+Nodes (42): flip(), optimize(), optimizeJPEG(), optimizeSVG(), optimizeWEBP(), pad(), resize(), rotate() (+34 more)
 
 ### Community 1 - "Thingtime Commander & Core UI"
-Cohesion: 0.06
-Nodes (40): Submit(), Commander(), CommanderV2(), RainbowText(), TextAnimation1(), DevKit(), getQueryParams(), getMeta() (+32 more)
+Cohesion: 0.23
+Nodes (8): Commander(), CommanderV2(), sanitise(), usePath(), MagicInput, MagicInputProps, getParentPath(), uuid
 
 ### Community 2 - "API Package Manifest"
 Cohesion: 0.04
 Nodes (45): author, bugs, url, dependencies, axios, bcrypt, body-parser, cors (+37 more)
 
 ### Community 3 - "Remix Auth & User Routes"
-Cohesion: 0.11
-Nodes (24): getUsers(), rickDeckard(), actionExport(), earlyReturn(), getConnectionAction, validConnections, action(), earlyReturn() (+16 more)
+Cohesion: 0.09
+Nodes (29): TestAPI(), getUsers(), rickDeckard(), Editor(), actionExport(), earlyReturn(), getConnectionAction, validConnections (+21 more)
 
 ### Community 4 - "Remix Dependencies"
 Cohesion: 0.05
@@ -118,12 +142,12 @@ Cohesion: 0.05
 Nodes (38): author, categories, commands, contributors, dependencies, fuse.js, mathjs, @raycast/api (+30 more)
 
 ### Community 7 - "Image Generators & Filters"
-Cohesion: 0.11
+Cohesion: 0.10
 Nodes (23): ImageGeneratorActionPanel(), SizeSelectionActionPanel(), applyFilter(), applyBasicFilter(), filters, getFilterThumbnail(), initializeFilterScript(), generatePlaceholder() (+15 more)
 
 ### Community 8 - "Thingtime State & Providers"
-Cohesion: 0.08
-Nodes (25): assets, value, newTimeline(), ThingtimeLine(), Timeline, TimelineEvent, TimelineScaffold, Timemachine (+17 more)
+Cohesion: 0.09
+Nodes (23): assets, value, newTimeline(), ThingtimeLine(), Timeline, TimelineEvent, TimelineScaffold, Timemachine (+15 more)
 
 ### Community 9 - "Smarts Core (Babel/Eval)"
 Cohesion: 0.07
@@ -131,15 +155,15 @@ Nodes (15): createObjectProperties(), deepForEach(), ee(), epp(), escapeEscapes(
 
 ### Community 10 - "Remix Root & Theming"
 Cohesion: 0.08
-Nodes (20): Session, App(), logConfig, whitelist, whitelistObj, ChakraWrapper(), chakras, chakrasDark (+12 more)
+Nodes (19): Session, App(), logConfig, whitelist, whitelistObj, ChakraWrapper(), chakras, chakrasDark (+11 more)
 
 ### Community 11 - "Graphics GP Utilities"
 Cohesion: 0.13
 Nodes (17): averageSegmentJoins(), getData(), outlineStrokes(), strokeToFill(), constructor(), render(), Sample, Segment (+9 more)
 
 ### Community 12 - "Templates & Branding Components"
-Cohesion: 0.12
-Nodes (12): TestAPI(), Branding(), Logo(), Editor(), TopSpacing(), Raw(), RawResult(), RawResultProps (+4 more)
+Cohesion: 0.18
+Nodes (8): Raw(), RawResult(), RawResultProps, RawResults(), ThingtimeContext, EverythingTypes, ThingtimeTypes, useThingtimeScope
 
 ### Community 13 - "Root Package Manifest"
 Cohesion: 0.08
@@ -217,25 +241,89 @@ Nodes (3): { getSession, commitSession, destroySession }, SessionData, SessionFl
 Cohesion: 0.50
 Nodes (3): build, env, ENABLE_FILE_SYSTEM_API
 
+### Community 53 - "Raycast Extension Docs"
+Cohesion: 0.50
+Nodes (3): Commands, Features, Image Modification
+
+### Community 58 - "Community 58"
+Cohesion: 0.12
+Nodes (37): openNewFinderWindow(), regexToReplacementConverter(), regexTrim(), any(), convert(), Command(), convertFormats, formats (+29 more)
+
+### Community 59 - "Community 59"
+Cohesion: 0.26
+Nodes (8): Main(), MongoStatus(), pulse, MongoConnectionStatus, Footer(), Nav(), ProfileDrawer(), RainbowSkeleton()
+
+### Community 60 - "Community 60"
+Cohesion: 0.27
+Nodes (6): getMongoStatus(), getMongoUri(), sanitiseHost(), loader(), action(), loader()
+
+### Community 61 - "Community 61"
+Cohesion: 0.26
+Nodes (7): ThingtimeTypes, Index(), Index(), Index(), ThingtimeURL(), useThingtime(), Button()
+
+### Community 62 - "Community 62"
+Cohesion: 0.38
+Nodes (4): Submit(), useApi(), useAsyncFetcher(), Login()
+
+### Community 63 - "Community 63"
+Cohesion: 0.40
+Nodes (5): useThings(), Thingtime(), ThingtimeComponentProps, ThingtimeProps, ThingtimeDemo()
+
+### Community 64 - "Community 64"
+Cohesion: 0.20
+Nodes (9): [Create Images, In-Clipboard Modification] - 2023-07-06, [Filters] - 2023-03-22, Image Modification Changelog, [Initial Version] - 2023-02-23, [Localization Fix] - 2023-03-07, [Optimize Images, SVG Conversion, More Filters] - 2023-04-03, [Padding, Bug Fixes] - 2023-03-15, [Strip EXIF Data] - 2024-01-28 (+1 more)
+
+### Community 65 - "Community 65"
+Cohesion: 0.36
+Nodes (3): RainbowText(), TextAnimation1(), Splash()
+
+### Community 66 - "Community 66"
+Cohesion: 0.38
+Nodes (3): Branding(), Logo(), checkerMatrix
+
+### Community 67 - "Community 67"
+Cohesion: 0.43
+Nodes (4): DevKit(), getQueryParams(), Icon(), SettingsMenu()
+
+### Community 68 - "Community 68"
+Cohesion: 0.29
+Nodes (6): 2023-06-18, 2023-07-05, 2023-07-06, 2024-01-27, 2024-01-28, Image Modification DevLog - A more detailed changelog
+
+### Community 69 - "Community 69"
+Cohesion: 0.29
+Nodes (6): APIs, Bugs, Discuss, Encoding and Decoding Tools, Files, WebP Codec
+
+### Community 70 - "Community 70"
+Cohesion: 0.33
+Nodes (5): 💹 Donate on Indiegogo to save humanity 🩷, Force Push ? 👉👈, Or Donate on GoFundMe 💖, 🌈 Welcome 👋 to Thingtime 🦄 🧠, You can get Merch 🌈 + other benefits 🦄💯
+
+### Community 71 - "Community 71"
+Cohesion: 0.70
+Nodes (3): getMeta(), safe(), Safe()
+
+### Community 72 - "Community 72"
+Cohesion: 0.50
+Nodes (3): Deploy Your Own, Development, Remix
+
 ## Knowledge Gaps
-- **322 isolated node(s):** `extends`, `name`, `version`, `description`, `main` (+317 more)
+- **350 isolated node(s):** `extends`, `name`, `version`, `description`, `main` (+345 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **13 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **15 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `useThingtime()` connect `Thingtime Commander & Core UI` to `Thingtime State & Providers`, `Templates & Branding Components`?**
-  _High betweenness centrality (0.030) - this node is a cross-community bridge._
+- **Why does `useThingtime()` connect `Community 61` to `Thingtime Commander & Core UI`, `Community 65`, `Community 67`, `Thingtime State & Providers`, `Templates & Branding Components`, `Community 59`, `Community 62`, `Community 63`?**
+  _High betweenness centrality (0.029) - this node is a cross-community bridge._
 - **Why does `dependencies` connect `Remix Dependencies` to `Remix Dev Dependencies`?**
-  _High betweenness centrality (0.007) - this node is a cross-community bridge._
-- **Why does `Thingtime()` connect `Thingtime Commander & Core UI` to `Thingtime State & Providers`, `Remix Auth & User Routes`?**
   _High betweenness centrality (0.006) - this node is a cross-community bridge._
+- **Why does `Thingtime()` connect `Community 63` to `Thingtime Commander & Core UI`, `Remix Auth & User Routes`, `Thingtime State & Providers`, `Community 61`, `Community 62`?**
+  _High betweenness centrality (0.005) - this node is a cross-community bridge._
 - **Are the 2 inferred relationships involving `useThingtime()` (e.g. with `Login()` and `Index()`) actually correct?**
   _`useThingtime()` has 2 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `extends`, `name`, `version` to the rest of the system?**
-  _322 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _350 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Raycast Image Operations` be split into smaller, more focused modules?**
-  _Cohesion score 0.06380996739636702 - nodes in this community are weakly interconnected._
-- **Should `Thingtime Commander & Core UI` be split into smaller, more focused modules?**
-  _Cohesion score 0.06426906426906427 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.10714285714285714 - nodes in this community are weakly interconnected._
+- **Should `API Package Manifest` be split into smaller, more focused modules?**
+  _Cohesion score 0.043478260869565216 - nodes in this community are weakly interconnected._
