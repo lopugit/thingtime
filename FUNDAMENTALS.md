@@ -1,0 +1,74 @@
+# 🏛️ Thingtime Fundamentals
+
+Core engineering principles for this codebase. These are deliberately short and
+non-negotiable — read before adding features. (Roadmap lives in `claude-todo/`.)
+
+## 1. The API is the only gateway to data
+
+All data access — reads, writes, seeding, tests — goes through the Thingtime API
+(`remix/app/routes/api/v1/...`) and the API utils layer
+(`remix/app/api/utils/...`). UI components, scripts, and tests **never** touch
+MongoDB directly.
+
+## 2. Seed and test through the real API (functionality cohesion) ⭐
+
+**Seeding and tests create data by calling the same API the live app calls — not
+by writing to Mongo directly.**
+
+Why: a seeded user and a user who signs up on the site must be **identical** —
+same validation, same password hashing, same schema, same side effects. If
+seeding writes straight to the DB, the two paths drift and "works when seeded /
+breaks on real signup" bugs appear.
+
+- ✅ Seed a user → `POST /api/v1/auth/register` (the real endpoint).
+- ❌ Seed a user → `collection.insertOne({...})` in a script.
+
+This makes **test, live, and direct-API behaviour one and the same code path.**
+Applies to every entity (users, things, sessions): there is one creation path,
+and everything uses it.
+
+## 3. One database: `thingtime`
+
+Single Mongo database `thingtime` with these collections:
+
+| Collection | Holds |
+| ---------- | ----- |
+| `users`    | user accounts (hashed passwords + signup metadata) |
+| `sessions` | server-side sessions / JWT records (for revocation) |
+| `things`   | the actual Thingtime data |
+
+(Replaces the earlier inconsistent `auth.users` vs `thingtime.things` split.)
+
+## 4. One MongoDB connection source
+
+The connection string comes from exactly one place:
+`remix/app/api/utils/mongodb/config.ts` → `getMongoUri()`, fed by
+`MONGODB_CONNECTION_STRING` (+ `MONGO_PASS` for the `<db_password>` placeholder).
+No alternate env vars, no fallbacks. Every helper resolves through it.
+
+For **local dev**: set `MONGODB_CONNECTION_STRING=mongodb://localhost:27017/thingtime`
+(no placeholder → `MONGO_PASS` unused).
+
+## 5. Auth = httpOnly cookie + revocable JWT + Mongo session
+
+One auth model used everywhere (see `claude-todo/03-auth-login-register.md`):
+
+- On login/register: create a **session doc** in `sessions` (Mongo) → gives a
+  `jti` (token id) we can revoke.
+- Mint a **signed JWT** (`sub` = userId, `jti`, `exp`) via `userGenerateJWT`.
+- **Browser:** store the JWT in a signed **httpOnly cookie** (the Remix
+  `Session` cookie) — JS can't read it, sent automatically.
+- **API clients:** send the same JWT as `Authorization: Bearer <jwt>`.
+- Every authed request: verify signature + `exp`, then check the `jti` is still
+  live in `sessions` (not revoked). Logout / revoke = flip the session in Mongo →
+  the JWT stops working immediately, before `exp`.
+
+So the JWT lives in the cookie for the website *and* works as a Bearer token for
+API clients — and either way Mongo is the source of truth for revocation.
+
+## 6. Never leak secrets
+
+- Strip credentials from any connection string shown to a client
+  (`sanitiseMongoHost`).
+- Never return password hashes, session tokens, or raw JWTs in read responses;
+  project them out.

@@ -51,11 +51,20 @@ and expose the current user to the app. JWT optional/secondary.
 - [ ] Decide JWT: either implement `userGenerateJWT` properly (signed, exp) for
       API clients, or drop it for now.
 
-## Open questions (need a call)
-- **Session mechanism:** Remix signed cookie session, server-side session in
-  Mongo, JWT, or cookie + Mongo-backed session? (Recommend: signed cookie
-  holding a `sessionId`, with the session doc in Mongo.)
-- Password rules / min length / rate limiting now or later?
+## Decisions (locked — see FUNDAMENTALS.md §5)
+- **One `thingtime` db**: `users` + `sessions` collections.
+- **Auth = httpOnly cookie + revocable JWT + Mongo session:**
+  1. On register/login, create a `sessions` doc (gives a `jti` to revoke).
+  2. `userGenerateJWT` mints a **signed JWT** (`sub`=userId, `jti`, `exp`).
+  3. Browser stores the JWT in the signed **httpOnly `Session` cookie**;
+     API clients send it as `Authorization: Bearer <jwt>`.
+  4. Each authed request: verify signature + `exp`, then confirm `jti` is live
+     in `sessions`. Logout/revoke flips the Mongo session → JWT dies immediately.
+- Needs a JWT lib + a `JWT_SECRET` env var (HS256 to start).
+
+## Still open (defaults fine for now)
+- Password rules / min length, rate limiting → later.
+- JWT lib choice: `jsonwebtoken` vs `jose` (lean `jose`, ESM-friendly).
 
 ## Acceptance criteria
 - Register → login → an authed request sees `getCurrentUser()` return the user.

@@ -31,16 +31,26 @@ should make `collections` go from 0 → N and insert known seed docs.
 4. **No verification/output.** Return inserted counts + collection name so the
    API response is useful.
 
+## Decisions (locked — see FUNDAMENTALS.md)
+- **One `thingtime` db**; users live in `thingtime.users`.
+- **Seed by calling the real register API** (`POST /api/v1/auth/register`), NOT
+  by direct `insertOne`. The seed user schema is therefore identical to a real
+  signup — password hashing, validation, and metadata all come from one path.
+  This means register (#03) lands first; populate then just calls it.
+
 ## Plan
-- [ ] Decide canonical db/collection model (blocks this + #03).
-- [ ] Rewrite seed users with bcrypt-hashed passwords.
-- [ ] Make `setup.ts` write users to the canonical users collection via a shared
-      connection helper.
-- [ ] Return `{ inserted, collection, db }` from the populate action.
-- [ ] Add a couple more seed users for query testing.
+- [ ] Build `POST /api/v1/auth/register` first (#03) — bcrypt hash, schema,
+      duplicate rejection, writes to `thingtime.users`.
+- [ ] Rewrite `setup.ts` to seed by POSTing each seed user to the register
+      endpoint (server-side fetch / direct action call), not `insertOne`.
+- [ ] Define seed users as plain `{username, password, ...metadata}` (no
+      pre-hashing — the register endpoint hashes).
+- [ ] Return `{ inserted, skipped, collection }` from the populate action.
+- [ ] Add a few seed users for query testing.
 
 ## Acceptance criteria
-- POST `/api/v1/mongodb/populate` inserts seed users into the canonical
-  collection and returns the inserted count.
+- POST `/api/v1/mongodb/populate` creates seed users **via the register
+  endpoint** and reports counts.
 - `/mongodb-status` shows `collections >= 1` afterward.
-- A seeded user can be validated by `userValidatePassword` (bcrypt match).
+- A seeded user logs in successfully through the normal login flow (proves seed
+  == signup cohesion).

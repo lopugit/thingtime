@@ -17,23 +17,22 @@ future Claude sessions (use alongside `graphify-out/` for codebase orientation).
 | 04 | Authed DB read + query | 🔴 Not started | [04-authed-db-read-query.md](./04-authed-db-read-query.md) |
 | 05 | Authed DB write (create/update/delete) | 🔴 Not started | [05-authed-db-write.md](./05-authed-db-write.md) |
 
-## Conventions we're settling on
+## Conventions (see `FUNDAMENTALS.md`)
 
-- **All DB access goes through the Thingtime API** (`remix/app/routes/api/v1/...`)
-  and the API utils layer (`remix/app/api/utils/mongodb/...`). UI never touches
-  Mongo directly.
-- **Single source of truth for the Mongo connection string:** `getMongoUri()` in
-  `remix/app/api/utils/mongodb/status.ts` (resolves `MONGODB_CONNECTION_STRING`
-  + `MONGO_PASS`). Other connection helpers should converge on this.
-- **Databases & collections** (needs a decision — see #03): currently split
-  across `auth.users` and `thingtime.things` inconsistently.
+- **All DB access goes through the Thingtime API** + the API utils layer. UI /
+  scripts / tests never touch Mongo directly.
+- **Seed and test via the real API** (e.g. seed users through
+  `POST /api/v1/auth/register`), never direct DB writes — one creation path for
+  seeded data and real signups.
+- **One Mongo connection source:** `mongodb/config.ts` `getMongoUri()`
+  (`MONGODB_CONNECTION_STRING` + `MONGO_PASS`, no fallbacks). ✅ unified by Codex.
 
-## ⚠️ Cross-cutting issue: which DB/collection?
+## ✅ Decisions (locked)
 
-The auth utils are inconsistent about where data lives:
-- `userCheckExists` / `userValidatePassword` → `db('auth').collection('users')`
-- `getUser` / `userCreateSession` → `db('thingtime').collection('things')`
-
-Pick one model before building #02–#05. Recommendation: users in
-`thingtime.users`, sessions in `thingtime.sessions`, things in `thingtime.things`
-— all in one `thingtime` db, resolved via `getMongoUri()`.
+- **One `thingtime` db** with collections `users`, `sessions`, `things`
+  (replaces the old `auth.users` vs `thingtime.things` split).
+- **Auth:** signed **httpOnly cookie carrying a JWT** (`sub`/`jti`/`exp`) + a
+  Mongo `sessions` doc for revocation; `Authorization: Bearer <jwt>` supported
+  for API clients. Same JWT, Mongo is source of truth for revocation.
+- **Seeding** creates users by calling the real register endpoint, so the seed
+  schema == the live signup schema (no drift).
