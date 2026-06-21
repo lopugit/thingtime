@@ -12,8 +12,8 @@ future Claude sessions (use alongside `graphify-out/` for codebase orientation).
 | # | Feature | Status | File |
 | - | ------- | ------ | ---- |
 | 01 | MongoDB connection status (footer + `/mongodb-status`) | ✅ Done | [01-mongodb-connection-status.md](./01-mongodb-connection-status.md) |
-| 02 | DB populate / seeding | 🟡 Partial (broken) | [02-db-populate-seeding.md](./02-db-populate-seeding.md) |
-| 03 | Auth — login / register / sessions / JWT | 🟡 Partial (inconsistent) | [03-auth-login-register.md](./03-auth-login-register.md) |
+| 02 | DB populate / seeding (now seeds via register API) | 🟢 Built, needs live test | [02-db-populate-seeding.md](./02-db-populate-seeding.md) |
+| 03 | Auth — register/login/logout/me + sessions + JWT + email verification | 🟢 Built, needs live test | [03-auth-login-register.md](./03-auth-login-register.md) |
 | 04 | Authed DB read + query | 🔴 Not started | [04-authed-db-read-query.md](./04-authed-db-read-query.md) |
 | 05 | Authed DB write (create/update/delete) | 🔴 Not started | [05-authed-db-write.md](./05-authed-db-write.md) |
 

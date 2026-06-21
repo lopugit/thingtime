@@ -1,38 +1,38 @@
-// TODO: convert to TS and use ts-node to execute
+// Seeds users by calling the REAL register path (registerUser), never by
+// writing to Mongo directly — so seeded users == real signups
+// (see FUNDAMENTALS.md §2). Idempotent: re-running skips existing users.
 
-import { getConnectionAction } from '~/routes/api/v1/mongodb/get-connection/_get-connection';
-import { getConnection } from '~/api/utils/mongodb/connection';
+import { registerUser } from '~/api/utils/auth/registerUser';
 
-// import users from './data/users';
-import { getCollection } from '~/api/utils/mongodb/collection';
 import { getUsers } from './data/users';
 
-// save all users to mongodb
-
 export const saveUsers = async () => {
-  // log setting up
-  console.log('[tt.setup.ts] Setting up users...');
-
-  const thingsCollection = await getCollection();
-
   const users = await getUsers();
 
+  let created = 0;
+  let skipped = 0;
+
   for (const user of users) {
-    await thingsCollection.deleteMany({
-      _id: user._id
-    });
-    await thingsCollection.insertOne(user);
+    const result = await registerUser(user);
+    if (result.ok) {
+      created++;
+    } else if (result.status === 409) {
+      // already exists (username/email taken) — idempotent re-seed
+      skipped++;
+    } else {
+      throw new Error(`Seed failed for ${user.username}: ${result.error}`);
+    }
   }
+
+  return { created, skipped, total: users.length };
 };
 
 export const setup = async () => {
   try {
-    await saveUsers();
-  } catch (err) {
-    return err;
+    return { ok: true as const, ...(await saveUsers()) };
+  } catch (err: any) {
+    return { ok: false as const, error: err?.message || String(err) };
   }
-
-  return true;
 };
 
 export default setup;

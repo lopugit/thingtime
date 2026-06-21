@@ -35,6 +35,7 @@
     "gradient-path": "^2.3.0",
     "hex-to-rgba": "^2.0.1",
     "isbot": "latest",
+    "jose": "^5.9.6",
     "localforage": "^1.10.0",
     "lodash-es": "^4.17.21",
     "mongodb": "^6.5.0",

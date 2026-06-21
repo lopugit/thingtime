@@ -2240,7 +2240,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "operations_filteroperation",
-      "community": 10,
+      "community": 0,
       "norm_label": "filteroperation.ts"
     },
     {
@@ -2250,7 +2250,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "operations_filteroperation_applyfilter",
-      "community": 10,
+      "community": 0,
       "norm_label": "applyfilter()"
     },
     {
@@ -3020,7 +3020,7 @@
       "source_location": "L231",
       "_origin": "ast",
       "id": "utilities_utils_cleanup",
-      "community": 0,
+      "community": 10,
       "norm_label": "cleanup()"
     },
     {
@@ -3180,7 +3180,7 @@
       "source_location": "L994",
       "_origin": "ast",
       "id": "utilities_utils_showerrortoast",
-      "community": 0,
+      "community": 10,
       "norm_label": "showerrortoast()"
     },
     {
@@ -3660,7 +3660,7 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "providers_thingtimeprovider_thingtimetypes",
-      "community": 1,
+      "community": 7,
       "norm_label": "thingtimetypes"
     },
     {
@@ -3734,6 +3734,436 @@
       "norm_label": "thingtimeprovider()"
     },
     {
+      "label": "authCookie.ts",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/auth/authCookie.ts",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "auth_authcookie",
+      "community": 78,
+      "norm_label": "authcookie.ts"
+    },
+    {
+      "label": "authCookie",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/auth/authCookie.ts",
+      "source_location": "L6",
+      "_origin": "ast",
+      "id": "auth_authcookie_authcookie",
+      "community": 78,
+      "norm_label": "authcookie"
+    },
+    {
+      "label": "getAuthToken()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/auth/authCookie.ts",
+      "source_location": "L15",
+      "_origin": "ast",
+      "id": "auth_authcookie_getauthtoken",
+      "community": 78,
+      "norm_label": "getauthtoken()"
+    },
+    {
+      "label": "serializeAuthCookie()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/auth/authCookie.ts",
+      "source_location": "L26",
+      "_origin": "ast",
+      "id": "auth_authcookie_serializeauthcookie",
+      "community": 78,
+      "norm_label": "serializeauthcookie()"
+    },
+    {
+      "label": "clearAuthCookie()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/auth/authCookie.ts",
+      "source_location": "L27",
+      "_origin": "ast",
+      "id": "auth_authcookie_clearauthcookie",
+      "community": 78,
+      "norm_label": "clearauthcookie()"
+    },
+    {
+      "label": "email.ts",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/auth/email.ts",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "auth_email",
+      "community": 78,
+      "norm_label": "email.ts"
+    },
+    {
+      "label": "SendArgs",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/auth/email.ts",
+      "source_location": "L6",
+      "_origin": "ast",
+      "id": "auth_email_sendargs",
+      "community": 78,
+      "norm_label": "sendargs"
+    },
+    {
+      "label": "sendEmail()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/auth/email.ts",
+      "source_location": "L8",
+      "_origin": "ast",
+      "id": "auth_email_sendemail",
+      "community": 78,
+      "norm_label": "sendemail()"
+    },
+    {
+      "label": "sendVerificationEmail()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/auth/email.ts",
+      "source_location": "L15",
+      "_origin": "ast",
+      "id": "auth_email_sendverificationemail",
+      "community": 78,
+      "norm_label": "sendverificationemail()"
+    },
+    {
+      "label": "emailVerifications.ts",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/auth/emailVerifications.ts",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "auth_emailverifications",
+      "community": 78,
+      "norm_label": "emailverifications.ts"
+    },
+    {
+      "label": "newToken()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/auth/emailVerifications.ts",
+      "source_location": "L5",
+      "_origin": "ast",
+      "id": "auth_emailverifications_newtoken",
+      "community": 78,
+      "norm_label": "newtoken()"
+    },
+    {
+      "label": "createEmailVerification()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/auth/emailVerifications.ts",
+      "source_location": "L8",
+      "_origin": "ast",
+      "id": "auth_emailverifications_createemailverification",
+      "community": 78,
+      "norm_label": "createemailverification()"
+    },
+    {
+      "label": "ConsumeResult",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/auth/emailVerifications.ts",
+      "source_location": "L22",
+      "_origin": "ast",
+      "id": "auth_emailverifications_consumeresult",
+      "community": 78,
+      "norm_label": "consumeresult"
+    },
+    {
+      "label": "consumeEmailVerification()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/auth/emailVerifications.ts",
+      "source_location": "L27",
+      "_origin": "ast",
+      "id": "auth_emailverifications_consumeemailverification",
+      "community": 78,
+      "norm_label": "consumeemailverification()"
+    },
+    {
+      "label": "getCurrentUser.ts",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/auth/getCurrentUser.ts",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "auth_getcurrentuser",
+      "community": 78,
+      "norm_label": "getcurrentuser.ts"
+    },
+    {
+      "label": "getCurrentUser()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/auth/getCurrentUser.ts",
+      "source_location": "L8",
+      "_origin": "ast",
+      "id": "auth_getcurrentuser_getcurrentuser",
+      "community": 78,
+      "norm_label": "getcurrentuser()"
+    },
+    {
+      "label": "jwt.ts",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/auth/jwt.ts",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "auth_jwt",
+      "community": 78,
+      "norm_label": "jwt.ts"
+    },
+    {
+      "label": "getSecret()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/auth/jwt.ts",
+      "source_location": "L5",
+      "_origin": "ast",
+      "id": "auth_jwt_getsecret",
+      "community": 78,
+      "norm_label": "getsecret()"
+    },
+    {
+      "label": "JwtClaims",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/auth/jwt.ts",
+      "source_location": "L14",
+      "_origin": "ast",
+      "id": "auth_jwt_jwtclaims",
+      "community": 78,
+      "norm_label": "jwtclaims"
+    },
+    {
+      "label": "signJwt()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/auth/jwt.ts",
+      "source_location": "L18",
+      "_origin": "ast",
+      "id": "auth_jwt_signjwt",
+      "community": 78,
+      "norm_label": "signjwt()"
+    },
+    {
+      "label": "verifyJwt()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/auth/jwt.ts",
+      "source_location": "L28",
+      "_origin": "ast",
+      "id": "auth_jwt_verifyjwt",
+      "community": 78,
+      "norm_label": "verifyjwt()"
+    },
+    {
+      "label": "loginUser.ts",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/auth/loginUser.ts",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "auth_loginuser",
+      "community": 78,
+      "norm_label": "loginuser.ts"
+    },
+    {
+      "label": "LoginResult",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/auth/loginUser.ts",
+      "source_location": "L6",
+      "_origin": "ast",
+      "id": "auth_loginuser_loginresult",
+      "community": 78,
+      "norm_label": "loginresult"
+    },
+    {
+      "label": "loginUser()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/auth/loginUser.ts",
+      "source_location": "L12",
+      "_origin": "ast",
+      "id": "auth_loginuser_loginuser",
+      "community": 2,
+      "norm_label": "loginuser()"
+    },
+    {
+      "label": "registerUser.ts",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/auth/registerUser.ts",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "auth_registeruser",
+      "community": 78,
+      "norm_label": "registeruser.ts"
+    },
+    {
+      "label": "RegisterInput",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/auth/registerUser.ts",
+      "source_location": "L8",
+      "_origin": "ast",
+      "id": "auth_registeruser_registerinput",
+      "community": 78,
+      "norm_label": "registerinput"
+    },
+    {
+      "label": "RegisterResult",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/auth/registerUser.ts",
+      "source_location": "L18",
+      "_origin": "ast",
+      "id": "auth_registeruser_registerresult",
+      "community": 78,
+      "norm_label": "registerresult"
+    },
+    {
+      "label": "isEmail()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/auth/registerUser.ts",
+      "source_location": "L22",
+      "_origin": "ast",
+      "id": "auth_registeruser_isemail",
+      "community": 78,
+      "norm_label": "isemail()"
+    },
+    {
+      "label": "registerUser()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/auth/registerUser.ts",
+      "source_location": "L26",
+      "_origin": "ast",
+      "id": "auth_registeruser_registeruser",
+      "community": 78,
+      "norm_label": "registeruser()"
+    },
+    {
+      "label": "sessions.ts",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/auth/sessions.ts",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "auth_sessions",
+      "community": 78,
+      "norm_label": "sessions.ts"
+    },
+    {
+      "label": "SessionDoc",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/auth/sessions.ts",
+      "source_location": "L5",
+      "_origin": "ast",
+      "id": "auth_sessions_sessiondoc",
+      "community": 78,
+      "norm_label": "sessiondoc"
+    },
+    {
+      "label": "createSession()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/auth/sessions.ts",
+      "source_location": "L16",
+      "_origin": "ast",
+      "id": "auth_sessions_createsession",
+      "community": 78,
+      "norm_label": "createsession()"
+    },
+    {
+      "label": "getLiveSession()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/auth/sessions.ts",
+      "source_location": "L31",
+      "_origin": "ast",
+      "id": "auth_sessions_getlivesession",
+      "community": 78,
+      "norm_label": "getlivesession()"
+    },
+    {
+      "label": "revokeSession()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/auth/sessions.ts",
+      "source_location": "L39",
+      "_origin": "ast",
+      "id": "auth_sessions_revokesession",
+      "community": 78,
+      "norm_label": "revokesession()"
+    },
+    {
+      "label": "users.ts",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/auth/users.ts",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "auth_users",
+      "community": 78,
+      "norm_label": "users.ts"
+    },
+    {
+      "label": "UserDoc",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/auth/users.ts",
+      "source_location": "L7",
+      "_origin": "ast",
+      "id": "auth_users_userdoc",
+      "community": 78,
+      "norm_label": "userdoc"
+    },
+    {
+      "label": "PublicUser",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/auth/users.ts",
+      "source_location": "L21",
+      "_origin": "ast",
+      "id": "auth_users_publicuser",
+      "community": 78,
+      "norm_label": "publicuser"
+    },
+    {
+      "label": "toPublicUser()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/auth/users.ts",
+      "source_location": "L31",
+      "_origin": "ast",
+      "id": "auth_users_topublicuser",
+      "community": 78,
+      "norm_label": "topublicuser()"
+    },
+    {
+      "label": "findUserByUsername()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/auth/users.ts",
+      "source_location": "L41",
+      "_origin": "ast",
+      "id": "auth_users_finduserbyusername",
+      "community": 78,
+      "norm_label": "finduserbyusername()"
+    },
+    {
+      "label": "findUserByEmail()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/auth/users.ts",
+      "source_location": "L44",
+      "_origin": "ast",
+      "id": "auth_users_finduserbyemail",
+      "community": 78,
+      "norm_label": "finduserbyemail()"
+    },
+    {
+      "label": "findUserById()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/auth/users.ts",
+      "source_location": "L47",
+      "_origin": "ast",
+      "id": "auth_users_finduserbyid",
+      "community": 78,
+      "norm_label": "finduserbyid()"
+    },
+    {
+      "label": "insertUser()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/auth/users.ts",
+      "source_location": "L52",
+      "_origin": "ast",
+      "id": "auth_users_insertuser",
+      "community": 78,
+      "norm_label": "insertuser()"
+    },
+    {
+      "label": "markEmailVerified()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/auth/users.ts",
+      "source_location": "L57",
+      "_origin": "ast",
+      "id": "auth_users_markemailverified",
+      "community": 78,
+      "norm_label": "markemailverified()"
+    },
+    {
       "label": "getUser.ts",
       "file_type": "code",
       "source_file": "remix/app/api/utils/getUser.ts",
@@ -3792,6 +4222,76 @@
       "id": "mongodb_collection_getcollection",
       "community": 2,
       "norm_label": "getcollection()"
+    },
+    {
+      "label": "collections.ts",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/mongodb/collections.ts",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "mongodb_collections",
+      "community": 78,
+      "norm_label": "collections.ts"
+    },
+    {
+      "label": "getClientCached()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/mongodb/collections.ts",
+      "source_location": "L8",
+      "_origin": "ast",
+      "id": "mongodb_collections_getclientcached",
+      "community": 78,
+      "norm_label": "getclientcached()"
+    },
+    {
+      "label": "getThingtimeDb()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/mongodb/collections.ts",
+      "source_location": "L25",
+      "_origin": "ast",
+      "id": "mongodb_collections_getthingtimedb",
+      "community": 78,
+      "norm_label": "getthingtimedb()"
+    },
+    {
+      "label": "getUsersCollection()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/mongodb/collections.ts",
+      "source_location": "L27",
+      "_origin": "ast",
+      "id": "mongodb_collections_getuserscollection",
+      "community": 78,
+      "norm_label": "getuserscollection()"
+    },
+    {
+      "label": "getSessionsCollection()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/mongodb/collections.ts",
+      "source_location": "L28",
+      "_origin": "ast",
+      "id": "mongodb_collections_getsessionscollection",
+      "community": 78,
+      "norm_label": "getsessionscollection()"
+    },
+    {
+      "label": "getThingsCollection()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/mongodb/collections.ts",
+      "source_location": "L29",
+      "_origin": "ast",
+      "id": "mongodb_collections_getthingscollection",
+      "community": 78,
+      "norm_label": "getthingscollection()"
+    },
+    {
+      "label": "getEmailVerificationsCollection()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/mongodb/collections.ts",
+      "source_location": "L30",
+      "_origin": "ast",
+      "id": "mongodb_collections_getemailverificationscollection",
+      "community": 78,
+      "norm_label": "getemailverificationscollection()"
     },
     {
       "label": "config.ts",
@@ -4040,7 +4540,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "api_test",
-      "community": 13,
+      "community": 2,
       "norm_label": "test.tsx"
     },
     {
@@ -4050,7 +4550,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "api_test_testapi",
-      "community": 13,
+      "community": 2,
       "norm_label": "testapi()"
     },
     {
@@ -4070,7 +4570,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "branding_branding_branding",
-      "community": 13,
+      "community": 1,
       "norm_label": "branding()"
     },
     {
@@ -4260,7 +4760,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "editor_editor",
-      "community": 13,
+      "community": 2,
       "norm_label": "editor.tsx"
     },
     {
@@ -4270,7 +4770,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "editor_editor_editor",
-      "community": 13,
+      "community": 2,
       "norm_label": "editor()"
     },
     {
@@ -4280,7 +4780,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "icon_icon",
-      "community": 35,
+      "community": 16,
       "norm_label": "icon.tsx"
     },
     {
@@ -4290,7 +4790,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "icon_icon_icon",
-      "community": 35,
+      "community": 16,
       "norm_label": "icon()"
     },
     {
@@ -4320,7 +4820,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "layout_topspacing",
-      "community": 13,
+      "community": 2,
       "norm_label": "topspacing.tsx"
     },
     {
@@ -4330,7 +4830,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "layout_topspacing_topspacing",
-      "community": 13,
+      "community": 2,
       "norm_label": "topspacing()"
     },
     {
@@ -4352,6 +4852,36 @@
       "id": "login_login_login",
       "community": 76,
       "norm_label": "login()"
+    },
+    {
+      "label": "Register.tsx",
+      "file_type": "code",
+      "source_file": "remix/app/components/Login/Register.tsx",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "login_register",
+      "community": 76,
+      "norm_label": "register.tsx"
+    },
+    {
+      "label": "inputSx",
+      "file_type": "code",
+      "source_file": "remix/app/components/Login/Register.tsx",
+      "source_location": "L8",
+      "_origin": "ast",
+      "id": "login_register_inputsx",
+      "community": 76,
+      "norm_label": "inputsx"
+    },
+    {
+      "label": "Register()",
+      "file_type": "code",
+      "source_file": "remix/app/components/Login/Register.tsx",
+      "source_location": "L14",
+      "_origin": "ast",
+      "id": "login_register_register",
+      "community": 76,
+      "norm_label": "register()"
     },
     {
       "label": "MagicInput.tsx",
@@ -4420,7 +4950,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "mongodb_raw",
-      "community": 13,
+      "community": 1,
       "norm_label": "raw.tsx"
     },
     {
@@ -4430,7 +4960,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "mongodb_raw_raw",
-      "community": 13,
+      "community": 1,
       "norm_label": "raw()"
     },
     {
@@ -4470,7 +5000,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "mongodb_rawresults",
-      "community": 13,
+      "community": 1,
       "norm_label": "rawresults.tsx"
     },
     {
@@ -4480,7 +5010,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "mongodb_rawresults_rawresults",
-      "community": 13,
+      "community": 1,
       "norm_label": "rawresults()"
     },
     {
@@ -4670,7 +5200,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "thingtime_settingsmenu",
-      "community": 35,
+      "community": 16,
       "norm_label": "settingsmenu.tsx"
     },
     {
@@ -4680,7 +5210,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "thingtime_settingsmenu_settingsmenu",
-      "community": 35,
+      "community": 16,
       "norm_label": "settingsmenu()"
     },
     {
@@ -4690,7 +5220,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "thingtime_thingtime",
-      "community": 35,
+      "community": 16,
       "norm_label": "thingtime.tsx"
     },
     {
@@ -4700,7 +5230,7 @@
       "source_location": "L33",
       "_origin": "ast",
       "id": "thingtime_thingtime_thingtimeprops",
-      "community": 35,
+      "community": 16,
       "norm_label": "thingtimeprops"
     },
     {
@@ -4710,7 +5240,7 @@
       "source_location": "L39",
       "_origin": "ast",
       "id": "thingtime_thingtime_thingtimecomponentprops",
-      "community": 35,
+      "community": 16,
       "norm_label": "thingtimecomponentprops"
     },
     {
@@ -4980,7 +5510,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "functions_sanitise",
-      "community": 16,
+      "community": 7,
       "norm_label": "sanitise.tsx"
     },
     {
@@ -4990,7 +5520,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "functions_sanitise_sanitise",
-      "community": 16,
+      "community": 7,
       "norm_label": "sanitise()"
     },
     {
@@ -5380,7 +5910,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "hooks_usethings",
-      "community": 35,
+      "community": 16,
       "norm_label": "usethings.tsx"
     },
     {
@@ -5390,7 +5920,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "hooks_usethings_usethings",
-      "community": 35,
+      "community": 16,
       "norm_label": "usethings()"
     },
     {
@@ -5410,7 +5940,7 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "hooks_usethingtimemachine_patharray",
-      "community": 16,
+      "community": 7,
       "norm_label": "patharray"
     },
     {
@@ -5660,8 +6190,108 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "routes_index_index",
-      "community": 1,
+      "community": 72,
       "norm_label": "index()"
+    },
+    {
+      "label": "_logout.tsx",
+      "file_type": "code",
+      "source_file": "remix/app/routes/api/v1/auth/logout/_logout.tsx",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "logout_logout",
+      "community": 78,
+      "norm_label": "_logout.tsx"
+    },
+    {
+      "label": "action()",
+      "file_type": "code",
+      "source_file": "remix/app/routes/api/v1/auth/logout/_logout.tsx",
+      "source_location": "L8",
+      "_origin": "ast",
+      "id": "logout_logout_action",
+      "community": 78,
+      "norm_label": "action()"
+    },
+    {
+      "label": "_me.tsx",
+      "file_type": "code",
+      "source_file": "remix/app/routes/api/v1/auth/me/_me.tsx",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "me_me",
+      "community": 78,
+      "norm_label": "_me.tsx"
+    },
+    {
+      "label": "loader()",
+      "file_type": "code",
+      "source_file": "remix/app/routes/api/v1/auth/me/_me.tsx",
+      "source_location": "L7",
+      "_origin": "ast",
+      "id": "me_me_loader",
+      "community": 78,
+      "norm_label": "loader()"
+    },
+    {
+      "label": "_register.tsx",
+      "file_type": "code",
+      "source_file": "remix/app/routes/api/v1/auth/register/_register.tsx",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "register_register",
+      "community": 78,
+      "norm_label": "_register.tsx"
+    },
+    {
+      "label": "action()",
+      "file_type": "code",
+      "source_file": "remix/app/routes/api/v1/auth/register/_register.tsx",
+      "source_location": "L9",
+      "_origin": "ast",
+      "id": "register_register_action",
+      "community": 78,
+      "norm_label": "action()"
+    },
+    {
+      "label": "_resend-verification.tsx",
+      "file_type": "code",
+      "source_file": "remix/app/routes/api/v1/auth/resend-verification/_resend-verification.tsx",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "resend_verification_resend_verification",
+      "community": 78,
+      "norm_label": "_resend-verification.tsx"
+    },
+    {
+      "label": "action()",
+      "file_type": "code",
+      "source_file": "remix/app/routes/api/v1/auth/resend-verification/_resend-verification.tsx",
+      "source_location": "L10",
+      "_origin": "ast",
+      "id": "resend_verification_resend_verification_action",
+      "community": 78,
+      "norm_label": "action()"
+    },
+    {
+      "label": "_verify-email.tsx",
+      "file_type": "code",
+      "source_file": "remix/app/routes/api/v1/auth/verify-email/_verify-email.tsx",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "verify_email_verify_email",
+      "community": 78,
+      "norm_label": "_verify-email.tsx"
+    },
+    {
+      "label": "loader()",
+      "file_type": "code",
+      "source_file": "remix/app/routes/api/v1/auth/verify-email/_verify-email.tsx",
+      "source_location": "L8",
+      "_origin": "ast",
+      "id": "verify_email_verify_email_loader",
+      "community": 78,
+      "norm_label": "loader()"
     },
     {
       "label": "_login.tsx",
@@ -5674,34 +6304,14 @@
       "norm_label": "_login.tsx"
     },
     {
-      "label": "Index()",
-      "file_type": "code",
-      "source_file": "remix/app/routes/api/v1/login/_login.tsx",
-      "source_location": "L6",
-      "_origin": "ast",
-      "id": "login_login_index",
-      "community": 2,
-      "norm_label": "index()"
-    },
-    {
       "label": "action()",
       "file_type": "code",
       "source_file": "remix/app/routes/api/v1/login/_login.tsx",
-      "source_location": "L10",
+      "source_location": "L8",
       "_origin": "ast",
       "id": "login_login_action",
       "community": 2,
       "norm_label": "action()"
-    },
-    {
-      "label": "earlyReturn()",
-      "file_type": "code",
-      "source_file": "remix/app/routes/api/v1/login/_login.tsx",
-      "source_location": "L59",
-      "_origin": "ast",
-      "id": "login_login_earlyreturn",
-      "community": 2,
-      "norm_label": "earlyreturn()"
     },
     {
       "label": "_get-connection.tsx",
@@ -5870,7 +6480,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "template_template",
-      "community": 13,
+      "community": 2,
       "norm_label": "_template.tsx"
     },
     {
@@ -5880,7 +6490,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "template_template_index",
-      "community": 13,
+      "community": 2,
       "norm_label": "index()"
     },
     {
@@ -5890,7 +6500,7 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "template_template_action",
-      "community": 13,
+      "community": 2,
       "norm_label": "action()"
     },
     {
@@ -5900,7 +6510,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "template_template_earlyreturn",
-      "community": 13,
+      "community": 2,
       "norm_label": "earlyreturn()"
     },
     {
@@ -5950,7 +6560,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "routes_branding_old",
-      "community": 13,
+      "community": 1,
       "norm_label": "branding_old.tsx"
     },
     {
@@ -5960,7 +6570,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "routes_branding_old_branding",
-      "community": 13,
+      "community": 1,
       "norm_label": "branding()"
     },
     {
@@ -6070,7 +6680,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "routes_ode_index",
-      "community": 1,
+      "community": 72,
       "norm_label": "index()"
     },
     {
@@ -6100,7 +6710,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "routes_raw",
-      "community": 13,
+      "community": 1,
       "norm_label": "raw.tsx"
     },
     {
@@ -6110,8 +6720,28 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "routes_raw_login",
-      "community": 13,
+      "community": 1,
       "norm_label": "login()"
+    },
+    {
+      "label": "register.tsx",
+      "file_type": "code",
+      "source_file": "remix/app/routes/register.tsx",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "routes_register",
+      "community": 76,
+      "norm_label": "register.tsx"
+    },
+    {
+      "label": "register()",
+      "file_type": "code",
+      "source_file": "remix/app/routes/register.tsx",
+      "source_location": "L6",
+      "_origin": "ast",
+      "id": "routes_register_register",
+      "community": 76,
+      "norm_label": "register()"
     },
     {
       "label": "svg-displacement-map.tsx",
@@ -6154,20 +6784,20 @@
       "norm_label": "users.ts"
     },
     {
-      "label": "rickDeckard()",
+      "label": "SeedUser",
       "file_type": "code",
       "source_file": "remix/app/scripts/mongodb/data/users.ts",
-      "source_location": "L10",
+      "source_location": "L6",
       "_origin": "ast",
-      "id": "data_users_rickdeckard",
+      "id": "data_users_seeduser",
       "community": 2,
-      "norm_label": "rickdeckard()"
+      "norm_label": "seeduser"
     },
     {
       "label": "getUsers()",
       "file_type": "code",
       "source_file": "remix/app/scripts/mongodb/data/users.ts",
-      "source_location": "L18",
+      "source_location": "L13",
       "_origin": "ast",
       "id": "data_users_getusers",
       "community": 2,
@@ -6187,7 +6817,7 @@
       "label": "saveUsers()",
       "file_type": "code",
       "source_file": "remix/app/scripts/mongodb/setup.ts",
-      "source_location": "L12",
+      "source_location": "L9",
       "_origin": "ast",
       "id": "mongodb_setup_saveusers",
       "community": 2,
@@ -6197,7 +6827,7 @@
       "label": "setup()",
       "file_type": "code",
       "source_file": "remix/app/scripts/mongodb/setup.ts",
-      "source_location": "L28",
+      "source_location": "L30",
       "_origin": "ast",
       "id": "mongodb_setup_setup",
       "community": 2,
@@ -6340,7 +6970,7 @@
       "source_location": "L59",
       "_origin": "ast",
       "id": "smarts_index_getparentpath",
-      "community": 16,
+      "community": 45,
       "norm_label": "getparentpath()"
     },
     {
@@ -7320,7 +7950,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "utils_index_stringliteraltorichtext",
-      "community": 16,
+      "community": 7,
       "norm_label": "stringliteraltorichtext()"
     },
     {
@@ -7714,10 +8344,20 @@
       "norm_label": "isbot"
     },
     {
-      "label": "localforage",
+      "label": "jose",
       "file_type": "code",
       "source_file": "remix/package.json",
       "source_location": "L38",
+      "_origin": "ast",
+      "id": "remix_package_dependencies_jose",
+      "community": 4,
+      "norm_label": "jose"
+    },
+    {
+      "label": "localforage",
+      "file_type": "code",
+      "source_file": "remix/package.json",
+      "source_location": "L39",
       "_origin": "ast",
       "id": "remix_package_dependencies_localforage",
       "community": 4,
@@ -7727,7 +8367,7 @@
       "label": "lodash-es",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L39",
+      "source_location": "L40",
       "_origin": "ast",
       "id": "remix_package_dependencies_lodash_es",
       "community": 4,
@@ -7737,7 +8377,7 @@
       "label": "mongodb",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L40",
+      "source_location": "L41",
       "_origin": "ast",
       "id": "remix_package_dependencies_mongodb",
       "community": 4,
@@ -7747,7 +8387,7 @@
       "label": "prismjs",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L41",
+      "source_location": "L42",
       "_origin": "ast",
       "id": "remix_package_dependencies_prismjs",
       "community": 4,
@@ -7757,7 +8397,7 @@
       "label": "react",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L42",
+      "source_location": "L43",
       "_origin": "ast",
       "id": "remix_package_dependencies_react",
       "community": 4,
@@ -7767,7 +8407,7 @@
       "label": "react-click-away-listener",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L43",
+      "source_location": "L44",
       "_origin": "ast",
       "id": "remix_package_dependencies_react_click_away_listener",
       "community": 4,
@@ -7777,7 +8417,7 @@
       "label": "react-contenteditable",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L44",
+      "source_location": "L45",
       "_origin": "ast",
       "id": "remix_package_dependencies_react_contenteditable",
       "community": 4,
@@ -7787,7 +8427,7 @@
       "label": "react-dom",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L45",
+      "source_location": "L46",
       "_origin": "ast",
       "id": "remix_package_dependencies_react_dom",
       "community": 4,
@@ -7797,7 +8437,7 @@
       "label": "react-icons",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L46",
+      "source_location": "L47",
       "_origin": "ast",
       "id": "remix_package_dependencies_react_icons",
       "community": 4,
@@ -7807,7 +8447,7 @@
       "label": "react-simple-code-editor",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L47",
+      "source_location": "L48",
       "_origin": "ast",
       "id": "remix_package_dependencies_react_simple_code_editor",
       "community": 4,
@@ -7817,7 +8457,7 @@
       "label": "react-sticky",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L48",
+      "source_location": "L49",
       "_origin": "ast",
       "id": "remix_package_dependencies_react_sticky",
       "community": 4,
@@ -7827,7 +8467,7 @@
       "label": "react-sticky-el",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L49",
+      "source_location": "L50",
       "_origin": "ast",
       "id": "remix_package_dependencies_react_sticky_el",
       "community": 4,
@@ -7837,7 +8477,7 @@
       "label": "react-visibility-sensor",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L50",
+      "source_location": "L51",
       "_origin": "ast",
       "id": "remix_package_dependencies_react_visibility_sensor",
       "community": 4,
@@ -7847,7 +8487,7 @@
       "label": "rxjs",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L51",
+      "source_location": "L52",
       "_origin": "ast",
       "id": "remix_package_dependencies_rxjs",
       "community": 4,
@@ -7857,7 +8497,7 @@
       "label": "sshpk",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L52",
+      "source_location": "L53",
       "_origin": "ast",
       "id": "remix_package_dependencies_sshpk",
       "community": 4,
@@ -7867,7 +8507,7 @@
       "label": "tinygradient",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L53",
+      "source_location": "L54",
       "_origin": "ast",
       "id": "remix_package_dependencies_tinygradient",
       "community": 4,
@@ -7877,7 +8517,7 @@
       "label": "uuid",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L54",
+      "source_location": "L55",
       "_origin": "ast",
       "id": "remix_package_dependencies_uuid",
       "community": 4,
@@ -7887,7 +8527,7 @@
       "label": "devDependencies",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L56",
+      "source_location": "L57",
       "_origin": "ast",
       "id": "remix_package_devdependencies",
       "community": 5,
@@ -7897,7 +8537,7 @@
       "label": "@emotion/styled",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L57",
+      "source_location": "L58",
       "_origin": "ast",
       "id": "remix_package_devdependencies_emotion_styled",
       "community": 5,
@@ -7907,7 +8547,7 @@
       "label": "@remix-run/dev",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L58",
+      "source_location": "L59",
       "_origin": "ast",
       "id": "remix_package_devdependencies_remix_run_dev",
       "community": 5,
@@ -7917,7 +8557,7 @@
       "label": "@remix-run/eslint-config",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L59",
+      "source_location": "L60",
       "_origin": "ast",
       "id": "remix_package_devdependencies_remix_run_eslint_config",
       "community": 5,
@@ -7927,7 +8567,7 @@
       "label": "@shopify/eslint-plugin",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L60",
+      "source_location": "L61",
       "_origin": "ast",
       "id": "remix_package_devdependencies_shopify_eslint_plugin",
       "community": 5,
@@ -7937,7 +8577,7 @@
       "label": "@types/eslint",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L61",
+      "source_location": "L62",
       "_origin": "ast",
       "id": "remix_package_devdependencies_types_eslint",
       "community": 5,
@@ -7947,7 +8587,7 @@
       "label": "@types/node",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L62",
+      "source_location": "L63",
       "_origin": "ast",
       "id": "remix_package_devdependencies_types_node",
       "community": 5,
@@ -7957,7 +8597,7 @@
       "label": "@types/react",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L63",
+      "source_location": "L64",
       "_origin": "ast",
       "id": "remix_package_devdependencies_types_react",
       "community": 5,
@@ -7967,7 +8607,7 @@
       "label": "@types/react-dom",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L64",
+      "source_location": "L65",
       "_origin": "ast",
       "id": "remix_package_devdependencies_types_react_dom",
       "community": 5,
@@ -7977,7 +8617,7 @@
       "label": "@typescript-eslint/parser",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L65",
+      "source_location": "L66",
       "_origin": "ast",
       "id": "remix_package_devdependencies_typescript_eslint_parser",
       "community": 5,
@@ -7987,7 +8627,7 @@
       "label": "eslint",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L66",
+      "source_location": "L67",
       "_origin": "ast",
       "id": "remix_package_devdependencies_eslint",
       "community": 5,
@@ -7997,7 +8637,7 @@
       "label": "eslint-config-prettier",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L67",
+      "source_location": "L68",
       "_origin": "ast",
       "id": "remix_package_devdependencies_eslint_config_prettier",
       "community": 5,
@@ -8007,7 +8647,7 @@
       "label": "eslint-loader",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L68",
+      "source_location": "L69",
       "_origin": "ast",
       "id": "remix_package_devdependencies_eslint_loader",
       "community": 5,
@@ -8017,7 +8657,7 @@
       "label": "eslint-plugin-chakra-ui",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L69",
+      "source_location": "L70",
       "_origin": "ast",
       "id": "remix_package_devdependencies_eslint_plugin_chakra_ui",
       "community": 5,
@@ -8027,7 +8667,7 @@
       "label": "eslint-plugin-hydrogen",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L70",
+      "source_location": "L71",
       "_origin": "ast",
       "id": "remix_package_devdependencies_eslint_plugin_hydrogen",
       "community": 5,
@@ -8037,7 +8677,7 @@
       "label": "eslint-plugin-prettier",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L71",
+      "source_location": "L72",
       "_origin": "ast",
       "id": "remix_package_devdependencies_eslint_plugin_prettier",
       "community": 5,
@@ -8047,7 +8687,7 @@
       "label": "eslint-plugin-react",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L72",
+      "source_location": "L73",
       "_origin": "ast",
       "id": "remix_package_devdependencies_eslint_plugin_react",
       "community": 5,
@@ -8057,7 +8697,7 @@
       "label": "eslint-plugin-react-hooks",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L73",
+      "source_location": "L74",
       "_origin": "ast",
       "id": "remix_package_devdependencies_eslint_plugin_react_hooks",
       "community": 5,
@@ -8067,7 +8707,7 @@
       "label": "eslint-plugin-simple-import-sort",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L74",
+      "source_location": "L75",
       "_origin": "ast",
       "id": "remix_package_devdependencies_eslint_plugin_simple_import_sort",
       "community": 5,
@@ -8077,7 +8717,7 @@
       "label": "eslint-plugin-unused-imports",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L75",
+      "source_location": "L76",
       "_origin": "ast",
       "id": "remix_package_devdependencies_eslint_plugin_unused_imports",
       "community": 5,
@@ -8087,7 +8727,7 @@
       "label": "framer-motion",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L76",
+      "source_location": "L77",
       "_origin": "ast",
       "id": "remix_package_devdependencies_framer_motion",
       "community": 5,
@@ -8097,7 +8737,7 @@
       "label": "remix-flat-routes",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L77",
+      "source_location": "L78",
       "_origin": "ast",
       "id": "remix_package_devdependencies_remix_flat_routes",
       "community": 5,
@@ -8107,7 +8747,7 @@
       "label": "ts-node",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L78",
+      "source_location": "L79",
       "_origin": "ast",
       "id": "remix_package_devdependencies_ts_node",
       "community": 5,
@@ -8117,7 +8757,7 @@
       "label": "typescript",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L79",
+      "source_location": "L80",
       "_origin": "ast",
       "id": "remix_package_devdependencies_typescript",
       "community": 5,
@@ -8127,7 +8767,7 @@
       "label": "vite",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L80",
+      "source_location": "L81",
       "_origin": "ast",
       "id": "remix_package_devdependencies_vite",
       "community": 5,
@@ -8137,7 +8777,7 @@
       "label": "vite-tsconfig-paths",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L81",
+      "source_location": "L82",
       "_origin": "ast",
       "id": "remix_package_devdependencies_vite_tsconfig_paths",
       "community": 5,
@@ -8147,7 +8787,7 @@
       "label": "resolutions",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L83",
+      "source_location": "L84",
       "_origin": "ast",
       "id": "remix_package_resolutions",
       "community": 73,
@@ -8157,7 +8797,7 @@
       "label": "@types/react",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L84",
+      "source_location": "L85",
       "_origin": "ast",
       "id": "remix_package_resolutions_types_react",
       "community": 73,
@@ -8167,7 +8807,7 @@
       "label": "engines",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L86",
+      "source_location": "L87",
       "_origin": "ast",
       "id": "remix_package_engines",
       "community": 73,
@@ -8177,7 +8817,7 @@
       "label": "node",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L87",
+      "source_location": "L88",
       "_origin": "ast",
       "id": "remix_package_engines_node",
       "community": 73,
@@ -8257,7 +8897,7 @@
         "kind": "bash_entrypoint"
       },
       "_origin": "ast",
-      "id": "workspace_thingtime_remix_scripts_pre_dev_sh__entry",
+      "id": "home_user_thingtime_remix_scripts_pre_dev_sh__entry",
       "community": 53,
       "norm_label": "pre-dev.sh script"
     },
@@ -8515,7 +9155,7 @@
         "kind": "bash_entrypoint"
       },
       "_origin": "ast",
-      "id": "workspace_thingtime_remix_vercel_sh__entry",
+      "id": "home_user_thingtime_remix_vercel_sh__entry",
       "community": 52,
       "norm_label": "vercel.sh script"
     },
@@ -8760,10 +9400,20 @@
       "norm_label": "claude.md"
     },
     {
-      "label": "graphify",
+      "label": "Fundamentals (read first)",
       "file_type": "document",
       "source_file": "CLAUDE.md",
       "source_location": "L1",
+      "_origin": "ast",
+      "id": "claude_fundamentals_read_first",
+      "community": 49,
+      "norm_label": "fundamentals (read first)"
+    },
+    {
+      "label": "graphify",
+      "file_type": "document",
+      "source_file": "CLAUDE.md",
+      "source_location": "L11",
       "_origin": "ast",
       "id": "claude_graphify",
       "community": 49,
@@ -8840,6 +9490,136 @@
       "norm_label": "package manager notes"
     },
     {
+      "label": "DECISIONS.md",
+      "file_type": "document",
+      "source_file": "DECISIONS.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "decisions",
+      "community": 86,
+      "norm_label": "decisions.md"
+    },
+    {
+      "label": "Decisions",
+      "file_type": "document",
+      "source_file": "DECISIONS.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "decisions_decisions",
+      "community": 86,
+      "norm_label": "decisions"
+    },
+    {
+      "label": "Nikolaj Frey \u2014 Engineer Decisions",
+      "file_type": "document",
+      "source_file": "DECISIONS.md",
+      "source_location": "L9",
+      "_origin": "ast",
+      "id": "decisions_nikolaj_frey_engineer_decisions",
+      "community": 86,
+      "norm_label": "nikolaj frey \u2014 engineer decisions"
+    },
+    {
+      "label": "Recurring principles (the thinking method)",
+      "file_type": "document",
+      "source_file": "DECISIONS.md",
+      "source_location": "L11",
+      "_origin": "ast",
+      "id": "decisions_recurring_principles_the_thinking_method",
+      "community": 86,
+      "norm_label": "recurring principles (the thinking method)"
+    },
+    {
+      "label": "Decision log",
+      "file_type": "document",
+      "source_file": "DECISIONS.md",
+      "source_location": "L36",
+      "_origin": "ast",
+      "id": "decisions_decision_log",
+      "community": 86,
+      "norm_label": "decision log"
+    },
+    {
+      "label": "FUNDAMENTALS.md",
+      "file_type": "document",
+      "source_file": "FUNDAMENTALS.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "fundamentals",
+      "community": 81,
+      "norm_label": "fundamentals.md"
+    },
+    {
+      "label": "\ud83c\udfdb\ufe0f Thingtime Fundamentals",
+      "file_type": "document",
+      "source_file": "FUNDAMENTALS.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "fundamentals_thingtime_fundamentals",
+      "community": 81,
+      "norm_label": "\ud83c\udfdb\ufe0f thingtime fundamentals"
+    },
+    {
+      "label": "1. The API is the only gateway to data",
+      "file_type": "document",
+      "source_file": "FUNDAMENTALS.md",
+      "source_location": "L6",
+      "_origin": "ast",
+      "id": "fundamentals_1_the_api_is_the_only_gateway_to_data",
+      "community": 81,
+      "norm_label": "1. the api is the only gateway to data"
+    },
+    {
+      "label": "2. Seed and test through the real API (functionality cohesion) \u2b50",
+      "file_type": "document",
+      "source_file": "FUNDAMENTALS.md",
+      "source_location": "L13",
+      "_origin": "ast",
+      "id": "fundamentals_2_seed_and_test_through_the_real_api_functionality_cohesion",
+      "community": 81,
+      "norm_label": "2. seed and test through the real api (functionality cohesion) \u2b50"
+    },
+    {
+      "label": "3. One database: `thingtime`",
+      "file_type": "document",
+      "source_file": "FUNDAMENTALS.md",
+      "source_location": "L30",
+      "_origin": "ast",
+      "id": "fundamentals_3_one_database_thingtime",
+      "community": 81,
+      "norm_label": "3. one database: `thingtime`"
+    },
+    {
+      "label": "4. One MongoDB connection source",
+      "file_type": "document",
+      "source_file": "FUNDAMENTALS.md",
+      "source_location": "L42",
+      "_origin": "ast",
+      "id": "fundamentals_4_one_mongodb_connection_source",
+      "community": 81,
+      "norm_label": "4. one mongodb connection source"
+    },
+    {
+      "label": "5. Auth = httpOnly cookie + revocable JWT + Mongo session",
+      "file_type": "document",
+      "source_file": "FUNDAMENTALS.md",
+      "source_location": "L52",
+      "_origin": "ast",
+      "id": "fundamentals_5_auth_httponly_cookie_revocable_jwt_mongo_session",
+      "community": 81,
+      "norm_label": "5. auth = httponly cookie + revocable jwt + mongo session"
+    },
+    {
+      "label": "6. Never leak secrets",
+      "file_type": "document",
+      "source_file": "FUNDAMENTALS.md",
+      "source_location": "L69",
+      "_origin": "ast",
+      "id": "fundamentals_6_never_leak_secrets",
+      "community": 81,
+      "norm_label": "6. never leak secrets"
+    },
+    {
       "label": "README.md",
       "file_type": "document",
       "source_file": "README.md",
@@ -8898,6 +9678,446 @@
       "id": "readme_force_push",
       "community": 33,
       "norm_label": "force push ? \ud83d\udc49\ud83d\udc48"
+    },
+    {
+      "label": "01-mongodb-connection-status.md",
+      "file_type": "document",
+      "source_file": "claude-todo/01-mongodb-connection-status.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "claude_todo_01_mongodb_connection_status",
+      "community": 84,
+      "norm_label": "01-mongodb-connection-status.md"
+    },
+    {
+      "label": "01 \u2014 MongoDB Connection Status \u2705",
+      "file_type": "document",
+      "source_file": "claude-todo/01-mongodb-connection-status.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "claude_todo_01_mongodb_connection_status_01_mongodb_connection_status",
+      "community": 84,
+      "norm_label": "01 \u2014 mongodb connection status \u2705"
+    },
+    {
+      "label": "Goal",
+      "file_type": "document",
+      "source_file": "claude-todo/01-mongodb-connection-status.md",
+      "source_location": "L5",
+      "_origin": "ast",
+      "id": "claude_todo_01_mongodb_connection_status_goal",
+      "community": 84,
+      "norm_label": "goal"
+    },
+    {
+      "label": "What exists",
+      "file_type": "document",
+      "source_file": "claude-todo/01-mongodb-connection-status.md",
+      "source_location": "L9",
+      "_origin": "ast",
+      "id": "claude_todo_01_mongodb_connection_status_what_exists",
+      "community": 84,
+      "norm_label": "what exists"
+    },
+    {
+      "label": "Verified",
+      "file_type": "document",
+      "source_file": "claude-todo/01-mongodb-connection-status.md",
+      "source_location": "L25",
+      "_origin": "ast",
+      "id": "claude_todo_01_mongodb_connection_status_verified",
+      "community": 84,
+      "norm_label": "verified"
+    },
+    {
+      "label": "Possible follow-ups (nice-to-have)",
+      "file_type": "document",
+      "source_file": "claude-todo/01-mongodb-connection-status.md",
+      "source_location": "L29",
+      "_origin": "ast",
+      "id": "claude_todo_01_mongodb_connection_status_possible_follow_ups_nice_to_have",
+      "community": 84,
+      "norm_label": "possible follow-ups (nice-to-have)"
+    },
+    {
+      "label": "02-db-populate-seeding.md",
+      "file_type": "document",
+      "source_file": "claude-todo/02-db-populate-seeding.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "claude_todo_02_db_populate_seeding",
+      "community": 80,
+      "norm_label": "02-db-populate-seeding.md"
+    },
+    {
+      "label": "02 \u2014 DB Populate / Seeding \ud83d\udfe1",
+      "file_type": "document",
+      "source_file": "claude-todo/02-db-populate-seeding.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "claude_todo_02_db_populate_seeding_02_db_populate_seeding",
+      "community": 80,
+      "norm_label": "02 \u2014 db populate / seeding \ud83d\udfe1"
+    },
+    {
+      "label": "Goal",
+      "file_type": "document",
+      "source_file": "claude-todo/02-db-populate-seeding.md",
+      "source_location": "L5",
+      "_origin": "ast",
+      "id": "claude_todo_02_db_populate_seeding_goal",
+      "community": 80,
+      "norm_label": "goal"
+    },
+    {
+      "label": "What exists",
+      "file_type": "document",
+      "source_file": "claude-todo/02-db-populate-seeding.md",
+      "source_location": "L10",
+      "_origin": "ast",
+      "id": "claude_todo_02_db_populate_seeding_what_exists",
+      "community": 80,
+      "norm_label": "what exists"
+    },
+    {
+      "label": "Problems to fix",
+      "file_type": "document",
+      "source_file": "claude-todo/02-db-populate-seeding.md",
+      "source_location": "L19",
+      "_origin": "ast",
+      "id": "claude_todo_02_db_populate_seeding_problems_to_fix",
+      "community": 80,
+      "norm_label": "problems to fix"
+    },
+    {
+      "label": "Decisions (locked \u2014 see FUNDAMENTALS.md)",
+      "file_type": "document",
+      "source_file": "claude-todo/02-db-populate-seeding.md",
+      "source_location": "L34",
+      "_origin": "ast",
+      "id": "claude_todo_02_db_populate_seeding_decisions_locked_see_fundamentals_md",
+      "community": 80,
+      "norm_label": "decisions (locked \u2014 see fundamentals.md)"
+    },
+    {
+      "label": "Plan",
+      "file_type": "document",
+      "source_file": "claude-todo/02-db-populate-seeding.md",
+      "source_location": "L41",
+      "_origin": "ast",
+      "id": "claude_todo_02_db_populate_seeding_plan",
+      "community": 80,
+      "norm_label": "plan"
+    },
+    {
+      "label": "Acceptance criteria",
+      "file_type": "document",
+      "source_file": "claude-todo/02-db-populate-seeding.md",
+      "source_location": "L51",
+      "_origin": "ast",
+      "id": "claude_todo_02_db_populate_seeding_acceptance_criteria",
+      "community": 80,
+      "norm_label": "acceptance criteria"
+    },
+    {
+      "label": "03-auth-login-register.md",
+      "file_type": "document",
+      "source_file": "claude-todo/03-auth-login-register.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "claude_todo_03_auth_login_register",
+      "community": 79,
+      "norm_label": "03-auth-login-register.md"
+    },
+    {
+      "label": "03 \u2014 Auth: Login / Register / Sessions / JWT \ud83d\udfe2",
+      "file_type": "document",
+      "source_file": "claude-todo/03-auth-login-register.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "claude_todo_03_auth_login_register_03_auth_login_register_sessions_jwt",
+      "community": 79,
+      "norm_label": "03 \u2014 auth: login / register / sessions / jwt \ud83d\udfe2"
+    },
+    {
+      "label": "Built this round (`remix/app/api/utils/auth/`)",
+      "file_type": "document",
+      "source_file": "claude-todo/03-auth-login-register.md",
+      "source_location": "L5",
+      "_origin": "ast",
+      "id": "claude_todo_03_auth_login_register_built_this_round_remix_app_api_utils_auth",
+      "community": 79,
+      "norm_label": "built this round (`remix/app/api/utils/auth/`)"
+    },
+    {
+      "label": "Still TODO",
+      "file_type": "document",
+      "source_file": "claude-todo/03-auth-login-register.md",
+      "source_location": "L18",
+      "_origin": "ast",
+      "id": "claude_todo_03_auth_login_register_still_todo",
+      "community": 79,
+      "norm_label": "still todo"
+    },
+    {
+      "label": "Goal",
+      "file_type": "document",
+      "source_file": "claude-todo/03-auth-login-register.md",
+      "source_location": "L30",
+      "_origin": "ast",
+      "id": "claude_todo_03_auth_login_register_goal",
+      "community": 79,
+      "norm_label": "goal"
+    },
+    {
+      "label": "What exists",
+      "file_type": "document",
+      "source_file": "claude-todo/03-auth-login-register.md",
+      "source_location": "L35",
+      "_origin": "ast",
+      "id": "claude_todo_03_auth_login_register_what_exists",
+      "community": 79,
+      "norm_label": "what exists"
+    },
+    {
+      "label": "Problems to fix",
+      "file_type": "document",
+      "source_file": "claude-todo/03-auth-login-register.md",
+      "source_location": "L51",
+      "_origin": "ast",
+      "id": "claude_todo_03_auth_login_register_problems_to_fix",
+      "community": 79,
+      "norm_label": "problems to fix"
+    },
+    {
+      "label": "Plan",
+      "file_type": "document",
+      "source_file": "claude-todo/03-auth-login-register.md",
+      "source_location": "L67",
+      "_origin": "ast",
+      "id": "claude_todo_03_auth_login_register_plan",
+      "community": 79,
+      "norm_label": "plan"
+    },
+    {
+      "label": "Decisions (locked \u2014 see FUNDAMENTALS.md \u00a75)",
+      "file_type": "document",
+      "source_file": "claude-todo/03-auth-login-register.md",
+      "source_location": "L79",
+      "_origin": "ast",
+      "id": "claude_todo_03_auth_login_register_decisions_locked_see_fundamentals_md_5",
+      "community": 79,
+      "norm_label": "decisions (locked \u2014 see fundamentals.md \u00a75)"
+    },
+    {
+      "label": "Still open (defaults fine for now)",
+      "file_type": "document",
+      "source_file": "claude-todo/03-auth-login-register.md",
+      "source_location": "L90",
+      "_origin": "ast",
+      "id": "claude_todo_03_auth_login_register_still_open_defaults_fine_for_now",
+      "community": 79,
+      "norm_label": "still open (defaults fine for now)"
+    },
+    {
+      "label": "Acceptance criteria",
+      "file_type": "document",
+      "source_file": "claude-todo/03-auth-login-register.md",
+      "source_location": "L94",
+      "_origin": "ast",
+      "id": "claude_todo_03_auth_login_register_acceptance_criteria",
+      "community": 79,
+      "norm_label": "acceptance criteria"
+    },
+    {
+      "label": "04-authed-db-read-query.md",
+      "file_type": "document",
+      "source_file": "claude-todo/04-authed-db-read-query.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "claude_todo_04_authed_db_read_query",
+      "community": 82,
+      "norm_label": "04-authed-db-read-query.md"
+    },
+    {
+      "label": "04 \u2014 Authed DB Read + Query \ud83d\udd34",
+      "file_type": "document",
+      "source_file": "claude-todo/04-authed-db-read-query.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "claude_todo_04_authed_db_read_query_04_authed_db_read_query",
+      "community": 82,
+      "norm_label": "04 \u2014 authed db read + query \ud83d\udd34"
+    },
+    {
+      "label": "Goal",
+      "file_type": "document",
+      "source_file": "claude-todo/04-authed-db-read-query.md",
+      "source_location": "L5",
+      "_origin": "ast",
+      "id": "claude_todo_04_authed_db_read_query_goal",
+      "community": 82,
+      "norm_label": "goal"
+    },
+    {
+      "label": "What exists (to build on)",
+      "file_type": "document",
+      "source_file": "claude-todo/04-authed-db-read-query.md",
+      "source_location": "L9",
+      "_origin": "ast",
+      "id": "claude_todo_04_authed_db_read_query_what_exists_to_build_on",
+      "community": 82,
+      "norm_label": "what exists (to build on)"
+    },
+    {
+      "label": "Plan",
+      "file_type": "document",
+      "source_file": "claude-todo/04-authed-db-read-query.md",
+      "source_location": "L16",
+      "_origin": "ast",
+      "id": "claude_todo_04_authed_db_read_query_plan",
+      "community": 82,
+      "norm_label": "plan"
+    },
+    {
+      "label": "Security notes",
+      "file_type": "document",
+      "source_file": "claude-todo/04-authed-db-read-query.md",
+      "source_location": "L27",
+      "_origin": "ast",
+      "id": "claude_todo_04_authed_db_read_query_security_notes",
+      "community": 82,
+      "norm_label": "security notes"
+    },
+    {
+      "label": "Acceptance criteria",
+      "file_type": "document",
+      "source_file": "claude-todo/04-authed-db-read-query.md",
+      "source_location": "L32",
+      "_origin": "ast",
+      "id": "claude_todo_04_authed_db_read_query_acceptance_criteria",
+      "community": 82,
+      "norm_label": "acceptance criteria"
+    },
+    {
+      "label": "05-authed-db-write.md",
+      "file_type": "document",
+      "source_file": "claude-todo/05-authed-db-write.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "claude_todo_05_authed_db_write",
+      "community": 83,
+      "norm_label": "05-authed-db-write.md"
+    },
+    {
+      "label": "05 \u2014 Authed DB Write (Create / Update / Delete) \ud83d\udd34",
+      "file_type": "document",
+      "source_file": "claude-todo/05-authed-db-write.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "claude_todo_05_authed_db_write_05_authed_db_write_create_update_delete",
+      "community": 83,
+      "norm_label": "05 \u2014 authed db write (create / update / delete) \ud83d\udd34"
+    },
+    {
+      "label": "Goal",
+      "file_type": "document",
+      "source_file": "claude-todo/05-authed-db-write.md",
+      "source_location": "L5",
+      "_origin": "ast",
+      "id": "claude_todo_05_authed_db_write_goal",
+      "community": 83,
+      "norm_label": "goal"
+    },
+    {
+      "label": "What exists (to build on)",
+      "file_type": "document",
+      "source_file": "claude-todo/05-authed-db-write.md",
+      "source_location": "L10",
+      "_origin": "ast",
+      "id": "claude_todo_05_authed_db_write_what_exists_to_build_on",
+      "community": 83,
+      "norm_label": "what exists (to build on)"
+    },
+    {
+      "label": "Plan",
+      "file_type": "document",
+      "source_file": "claude-todo/05-authed-db-write.md",
+      "source_location": "L19",
+      "_origin": "ast",
+      "id": "claude_todo_05_authed_db_write_plan",
+      "community": 83,
+      "norm_label": "plan"
+    },
+    {
+      "label": "Security notes",
+      "file_type": "document",
+      "source_file": "claude-todo/05-authed-db-write.md",
+      "source_location": "L29",
+      "_origin": "ast",
+      "id": "claude_todo_05_authed_db_write_security_notes",
+      "community": 83,
+      "norm_label": "security notes"
+    },
+    {
+      "label": "Acceptance criteria",
+      "file_type": "document",
+      "source_file": "claude-todo/05-authed-db-write.md",
+      "source_location": "L35",
+      "_origin": "ast",
+      "id": "claude_todo_05_authed_db_write_acceptance_criteria",
+      "community": 83,
+      "norm_label": "acceptance criteria"
+    },
+    {
+      "label": "README.md",
+      "file_type": "document",
+      "source_file": "claude-todo/README.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "claude_todo_readme",
+      "community": 85,
+      "norm_label": "readme.md"
+    },
+    {
+      "label": "\ud83e\udde0 Thingtime \u00d7 Claude \u2014 Feature To-Do",
+      "file_type": "document",
+      "source_file": "claude-todo/README.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "claude_todo_readme_thingtime_claude_feature_to_do",
+      "community": 85,
+      "norm_label": "\ud83e\udde0 thingtime \u00d7 claude \u2014 feature to-do"
+    },
+    {
+      "label": "Status board",
+      "file_type": "document",
+      "source_file": "claude-todo/README.md",
+      "source_location": "L10",
+      "_origin": "ast",
+      "id": "claude_todo_readme_status_board",
+      "community": 85,
+      "norm_label": "status board"
+    },
+    {
+      "label": "Conventions (see `FUNDAMENTALS.md`)",
+      "file_type": "document",
+      "source_file": "claude-todo/README.md",
+      "source_location": "L20",
+      "_origin": "ast",
+      "id": "claude_todo_readme_conventions_see_fundamentals_md",
+      "community": 85,
+      "norm_label": "conventions (see `fundamentals.md`)"
+    },
+    {
+      "label": "\u2705 Decisions (locked)",
+      "file_type": "document",
+      "source_file": "claude-todo/README.md",
+      "source_location": "L30",
+      "_origin": "ast",
+      "id": "claude_todo_readme_decisions_locked",
+      "community": 85,
+      "norm_label": "\u2705 decisions (locked)"
     },
     {
       "label": "car.md",
@@ -17145,6 +18365,1600 @@
       "target": "hooks_usethingtimemachine_usethingtimeline"
     },
     {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/authCookie.ts",
+      "source_location": "L6",
+      "weight": 1.0,
+      "source": "auth_authcookie",
+      "target": "auth_authcookie_authcookie",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/authCookie.ts",
+      "source_location": "L27",
+      "weight": 1.0,
+      "source": "auth_authcookie",
+      "target": "auth_authcookie_clearauthcookie",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/authCookie.ts",
+      "source_location": "L15",
+      "weight": 1.0,
+      "source": "auth_authcookie",
+      "target": "auth_authcookie_getauthtoken",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/authCookie.ts",
+      "source_location": "L26",
+      "weight": 1.0,
+      "source": "auth_authcookie",
+      "target": "auth_authcookie_serializeauthcookie",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/getCurrentUser.ts",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "auth_getcurrentuser",
+      "target": "auth_authcookie",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/auth/logout/_logout.tsx",
+      "source_location": "L3",
+      "weight": 1.0,
+      "source": "logout_logout",
+      "target": "auth_authcookie",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/auth/register/_register.tsx",
+      "source_location": "L3",
+      "weight": 1.0,
+      "source": "register_register",
+      "target": "auth_authcookie",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/login/_login.tsx",
+      "source_location": "L3",
+      "weight": 1.0,
+      "source": "remix_app_routes_api_v1_login_login_tsx_login_login",
+      "target": "auth_authcookie",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/getCurrentUser.ts",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "auth_getcurrentuser",
+      "target": "auth_authcookie_getauthtoken",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/api/utils/auth/getCurrentUser.ts",
+      "source_location": "L9",
+      "weight": 1.0,
+      "source": "auth_getcurrentuser_getcurrentuser",
+      "target": "auth_authcookie_getauthtoken"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/auth/logout/_logout.tsx",
+      "source_location": "L3",
+      "weight": 1.0,
+      "source": "logout_logout",
+      "target": "auth_authcookie_getauthtoken",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/routes/api/v1/auth/logout/_logout.tsx",
+      "source_location": "L9",
+      "weight": 1.0,
+      "source": "logout_logout_action",
+      "target": "auth_authcookie_getauthtoken"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "remix/app/routes/api/v1/login/_login.tsx",
+      "source_location": "L18",
+      "weight": 1.0,
+      "source": "login_login_action",
+      "target": "auth_authcookie_serializeauthcookie"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/auth/register/_register.tsx",
+      "source_location": "L3",
+      "weight": 1.0,
+      "source": "register_register",
+      "target": "auth_authcookie_serializeauthcookie",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/routes/api/v1/auth/register/_register.tsx",
+      "source_location": "L28",
+      "weight": 1.0,
+      "source": "register_register_action",
+      "target": "auth_authcookie_serializeauthcookie"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/login/_login.tsx",
+      "source_location": "L3",
+      "weight": 1.0,
+      "source": "remix_app_routes_api_v1_login_login_tsx_login_login",
+      "target": "auth_authcookie_serializeauthcookie",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/auth/logout/_logout.tsx",
+      "source_location": "L3",
+      "weight": 1.0,
+      "source": "logout_logout",
+      "target": "auth_authcookie_clearauthcookie",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/routes/api/v1/auth/logout/_logout.tsx",
+      "source_location": "L14",
+      "weight": 1.0,
+      "source": "logout_logout_action",
+      "target": "auth_authcookie_clearauthcookie"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/email.ts",
+      "source_location": "L6",
+      "weight": 1.0,
+      "source": "auth_email",
+      "target": "auth_email_sendargs",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/email.ts",
+      "source_location": "L8",
+      "weight": 1.0,
+      "source": "auth_email",
+      "target": "auth_email_sendemail",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/email.ts",
+      "source_location": "L15",
+      "weight": 1.0,
+      "source": "auth_email",
+      "target": "auth_email_sendverificationemail",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/registerUser.ts",
+      "source_location": "L2",
+      "weight": 1.0,
+      "source": "auth_registeruser",
+      "target": "auth_email",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/auth/resend-verification/_resend-verification.tsx",
+      "source_location": "L3",
+      "weight": 1.0,
+      "source": "resend_verification_resend_verification",
+      "target": "auth_email",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/email.ts",
+      "source_location": "L19",
+      "weight": 1.0,
+      "source": "auth_email_sendverificationemail",
+      "target": "auth_email_sendemail",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/registerUser.ts",
+      "source_location": "L2",
+      "weight": 1.0,
+      "source": "auth_registeruser",
+      "target": "auth_email_sendverificationemail",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/api/utils/auth/registerUser.ts",
+      "source_location": "L61",
+      "weight": 1.0,
+      "source": "auth_registeruser_registeruser",
+      "target": "auth_email_sendverificationemail"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/auth/resend-verification/_resend-verification.tsx",
+      "source_location": "L3",
+      "weight": 1.0,
+      "source": "resend_verification_resend_verification",
+      "target": "auth_email_sendverificationemail",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/routes/api/v1/auth/resend-verification/_resend-verification.tsx",
+      "source_location": "L19",
+      "weight": 1.0,
+      "source": "resend_verification_resend_verification_action",
+      "target": "auth_email_sendverificationemail"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/emailVerifications.ts",
+      "source_location": "L27",
+      "weight": 1.0,
+      "source": "auth_emailverifications",
+      "target": "auth_emailverifications_consumeemailverification",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/emailVerifications.ts",
+      "source_location": "L22",
+      "weight": 1.0,
+      "source": "auth_emailverifications",
+      "target": "auth_emailverifications_consumeresult",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/emailVerifications.ts",
+      "source_location": "L8",
+      "weight": 1.0,
+      "source": "auth_emailverifications",
+      "target": "auth_emailverifications_createemailverification",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/emailVerifications.ts",
+      "source_location": "L5",
+      "weight": 1.0,
+      "source": "auth_emailverifications",
+      "target": "auth_emailverifications_newtoken",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/emailVerifications.ts",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "auth_emailverifications",
+      "target": "mongodb_collections",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/emailVerifications.ts",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "auth_emailverifications",
+      "target": "mongodb_collections_getemailverificationscollection",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/registerUser.ts",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "auth_registeruser",
+      "target": "auth_emailverifications",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/auth/resend-verification/_resend-verification.tsx",
+      "source_location": "L4",
+      "weight": 1.0,
+      "source": "resend_verification_resend_verification",
+      "target": "auth_emailverifications",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/auth/verify-email/_verify-email.tsx",
+      "source_location": "L3",
+      "weight": 1.0,
+      "source": "verify_email_verify_email",
+      "target": "auth_emailverifications",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/emailVerifications.ts",
+      "source_location": "L11",
+      "weight": 1.0,
+      "source": "auth_emailverifications_createemailverification",
+      "target": "auth_emailverifications_newtoken",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/api/utils/auth/emailVerifications.ts",
+      "source_location": "L18",
+      "weight": 1.0,
+      "source": "auth_emailverifications_createemailverification",
+      "target": "mongodb_collections_getemailverificationscollection"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/registerUser.ts",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "auth_registeruser",
+      "target": "auth_emailverifications_createemailverification",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/api/utils/auth/registerUser.ts",
+      "source_location": "L58",
+      "weight": 1.0,
+      "source": "auth_registeruser_registeruser",
+      "target": "auth_emailverifications_createemailverification"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/auth/resend-verification/_resend-verification.tsx",
+      "source_location": "L4",
+      "weight": 1.0,
+      "source": "resend_verification_resend_verification",
+      "target": "auth_emailverifications_createemailverification",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/routes/api/v1/auth/resend-verification/_resend-verification.tsx",
+      "source_location": "L17",
+      "weight": 1.0,
+      "source": "resend_verification_resend_verification_action",
+      "target": "auth_emailverifications_createemailverification"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/api/utils/auth/emailVerifications.ts",
+      "source_location": "L28",
+      "weight": 1.0,
+      "source": "auth_emailverifications_consumeemailverification",
+      "target": "mongodb_collections_getemailverificationscollection"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/auth/verify-email/_verify-email.tsx",
+      "source_location": "L3",
+      "weight": 1.0,
+      "source": "verify_email_verify_email",
+      "target": "auth_emailverifications_consumeemailverification",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/routes/api/v1/auth/verify-email/_verify-email.tsx",
+      "source_location": "L12",
+      "weight": 1.0,
+      "source": "verify_email_verify_email_loader",
+      "target": "auth_emailverifications_consumeemailverification"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/getCurrentUser.ts",
+      "source_location": "L8",
+      "weight": 1.0,
+      "source": "auth_getcurrentuser",
+      "target": "auth_getcurrentuser_getcurrentuser",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/getCurrentUser.ts",
+      "source_location": "L2",
+      "weight": 1.0,
+      "source": "auth_getcurrentuser",
+      "target": "auth_jwt",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/getCurrentUser.ts",
+      "source_location": "L2",
+      "weight": 1.0,
+      "source": "auth_getcurrentuser",
+      "target": "auth_jwt_verifyjwt",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/getCurrentUser.ts",
+      "source_location": "L3",
+      "weight": 1.0,
+      "source": "auth_getcurrentuser",
+      "target": "auth_sessions",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/getCurrentUser.ts",
+      "source_location": "L3",
+      "weight": 1.0,
+      "source": "auth_getcurrentuser",
+      "target": "auth_sessions_getlivesession",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/getCurrentUser.ts",
+      "source_location": "L4",
+      "weight": 1.0,
+      "source": "auth_getcurrentuser",
+      "target": "auth_users",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/getCurrentUser.ts",
+      "source_location": "L4",
+      "weight": 1.0,
+      "source": "auth_getcurrentuser",
+      "target": "auth_users_finduserbyid",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/getCurrentUser.ts",
+      "source_location": "L4",
+      "weight": 1.0,
+      "source": "auth_getcurrentuser",
+      "target": "auth_users_publicuser",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/getCurrentUser.ts",
+      "source_location": "L4",
+      "weight": 1.0,
+      "source": "auth_getcurrentuser",
+      "target": "auth_users_topublicuser",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/auth/me/_me.tsx",
+      "source_location": "L3",
+      "weight": 1.0,
+      "source": "me_me",
+      "target": "auth_getcurrentuser",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/api/utils/auth/getCurrentUser.ts",
+      "source_location": "L12",
+      "weight": 1.0,
+      "source": "auth_getcurrentuser_getcurrentuser",
+      "target": "auth_jwt_verifyjwt"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/api/utils/auth/getCurrentUser.ts",
+      "source_location": "L16",
+      "weight": 1.0,
+      "source": "auth_getcurrentuser_getcurrentuser",
+      "target": "auth_sessions_getlivesession"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/api/utils/auth/getCurrentUser.ts",
+      "source_location": "L19",
+      "weight": 1.0,
+      "source": "auth_getcurrentuser_getcurrentuser",
+      "target": "auth_users_finduserbyid"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/api/utils/auth/getCurrentUser.ts",
+      "source_location": "L22",
+      "weight": 1.0,
+      "source": "auth_getcurrentuser_getcurrentuser",
+      "target": "auth_users_topublicuser"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/auth/me/_me.tsx",
+      "source_location": "L3",
+      "weight": 1.0,
+      "source": "me_me",
+      "target": "auth_getcurrentuser_getcurrentuser",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/routes/api/v1/auth/me/_me.tsx",
+      "source_location": "L8",
+      "weight": 1.0,
+      "source": "me_me_loader",
+      "target": "auth_getcurrentuser_getcurrentuser"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/jwt.ts",
+      "source_location": "L5",
+      "weight": 1.0,
+      "source": "auth_jwt",
+      "target": "auth_jwt_getsecret",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/jwt.ts",
+      "source_location": "L14",
+      "weight": 1.0,
+      "source": "auth_jwt",
+      "target": "auth_jwt_jwtclaims",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/jwt.ts",
+      "source_location": "L18",
+      "weight": 1.0,
+      "source": "auth_jwt",
+      "target": "auth_jwt_signjwt",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/jwt.ts",
+      "source_location": "L28",
+      "weight": 1.0,
+      "source": "auth_jwt",
+      "target": "auth_jwt_verifyjwt",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/loginUser.ts",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "auth_loginuser",
+      "target": "auth_jwt",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/registerUser.ts",
+      "source_location": "L3",
+      "weight": 1.0,
+      "source": "auth_registeruser",
+      "target": "auth_jwt",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/auth/logout/_logout.tsx",
+      "source_location": "L4",
+      "weight": 1.0,
+      "source": "logout_logout",
+      "target": "auth_jwt",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/jwt.ts",
+      "source_location": "L25",
+      "weight": 1.0,
+      "source": "auth_jwt_signjwt",
+      "target": "auth_jwt_getsecret",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/jwt.ts",
+      "source_location": "L30",
+      "weight": 1.0,
+      "source": "auth_jwt_verifyjwt",
+      "target": "auth_jwt_getsecret",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/loginUser.ts",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "auth_loginuser",
+      "target": "auth_jwt_signjwt",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/api/utils/auth/loginUser.ts",
+      "source_location": "L20",
+      "weight": 1.0,
+      "source": "auth_loginuser_loginuser",
+      "target": "auth_jwt_signjwt"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/registerUser.ts",
+      "source_location": "L3",
+      "weight": 1.0,
+      "source": "auth_registeruser",
+      "target": "auth_jwt_signjwt",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/api/utils/auth/registerUser.ts",
+      "source_location": "L55",
+      "weight": 1.0,
+      "source": "auth_registeruser_registeruser",
+      "target": "auth_jwt_signjwt"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/auth/logout/_logout.tsx",
+      "source_location": "L4",
+      "weight": 1.0,
+      "source": "logout_logout",
+      "target": "auth_jwt_verifyjwt",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/routes/api/v1/auth/logout/_logout.tsx",
+      "source_location": "L11",
+      "weight": 1.0,
+      "source": "logout_logout_action",
+      "target": "auth_jwt_verifyjwt"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/loginUser.ts",
+      "source_location": "L6",
+      "weight": 1.0,
+      "source": "auth_loginuser",
+      "target": "auth_loginuser_loginresult",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/loginUser.ts",
+      "source_location": "L12",
+      "weight": 1.0,
+      "source": "auth_loginuser",
+      "target": "auth_loginuser_loginuser",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/loginUser.ts",
+      "source_location": "L3",
+      "weight": 1.0,
+      "source": "auth_loginuser",
+      "target": "auth_sessions",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/loginUser.ts",
+      "source_location": "L3",
+      "weight": 1.0,
+      "source": "auth_loginuser",
+      "target": "auth_sessions_createsession",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/loginUser.ts",
+      "source_location": "L4",
+      "weight": 1.0,
+      "source": "auth_loginuser",
+      "target": "auth_users",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/loginUser.ts",
+      "source_location": "L4",
+      "weight": 1.0,
+      "source": "auth_loginuser",
+      "target": "auth_users_finduserbyusername",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/loginUser.ts",
+      "source_location": "L4",
+      "weight": 1.0,
+      "source": "auth_loginuser",
+      "target": "auth_users_publicuser",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/loginUser.ts",
+      "source_location": "L4",
+      "weight": 1.0,
+      "source": "auth_loginuser",
+      "target": "auth_users_topublicuser",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/login/_login.tsx",
+      "source_location": "L4",
+      "weight": 1.0,
+      "source": "remix_app_routes_api_v1_login_login_tsx_login_login",
+      "target": "auth_loginuser",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/api/utils/auth/loginUser.ts",
+      "source_location": "L19",
+      "weight": 1.0,
+      "source": "auth_loginuser_loginuser",
+      "target": "auth_sessions_createsession"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/api/utils/auth/loginUser.ts",
+      "source_location": "L13",
+      "weight": 1.0,
+      "source": "auth_loginuser_loginuser",
+      "target": "auth_users_finduserbyusername"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/api/utils/auth/loginUser.ts",
+      "source_location": "L22",
+      "weight": 1.0,
+      "source": "auth_loginuser_loginuser",
+      "target": "auth_users_topublicuser"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "remix/app/routes/api/v1/login/_login.tsx",
+      "source_location": "L11",
+      "weight": 1.0,
+      "source": "login_login_action",
+      "target": "auth_loginuser_loginuser"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/login/_login.tsx",
+      "source_location": "L4",
+      "weight": 1.0,
+      "source": "remix_app_routes_api_v1_login_login_tsx_login_login",
+      "target": "auth_loginuser_loginuser",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/registerUser.ts",
+      "source_location": "L22",
+      "weight": 1.0,
+      "source": "auth_registeruser",
+      "target": "auth_registeruser_isemail",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/registerUser.ts",
+      "source_location": "L8",
+      "weight": 1.0,
+      "source": "auth_registeruser",
+      "target": "auth_registeruser_registerinput",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/registerUser.ts",
+      "source_location": "L18",
+      "weight": 1.0,
+      "source": "auth_registeruser",
+      "target": "auth_registeruser_registerresult",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/registerUser.ts",
+      "source_location": "L26",
+      "weight": 1.0,
+      "source": "auth_registeruser",
+      "target": "auth_registeruser_registeruser",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/registerUser.ts",
+      "source_location": "L5",
+      "weight": 1.0,
+      "source": "auth_registeruser",
+      "target": "auth_sessions",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/registerUser.ts",
+      "source_location": "L5",
+      "weight": 1.0,
+      "source": "auth_registeruser",
+      "target": "auth_sessions_createsession",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/registerUser.ts",
+      "source_location": "L6",
+      "weight": 1.0,
+      "source": "auth_registeruser",
+      "target": "auth_users",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/registerUser.ts",
+      "source_location": "L6",
+      "weight": 1.0,
+      "source": "auth_registeruser",
+      "target": "auth_users_finduserbyemail",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/registerUser.ts",
+      "source_location": "L6",
+      "weight": 1.0,
+      "source": "auth_registeruser",
+      "target": "auth_users_finduserbyusername",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/registerUser.ts",
+      "source_location": "L6",
+      "weight": 1.0,
+      "source": "auth_registeruser",
+      "target": "auth_users_insertuser",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/registerUser.ts",
+      "source_location": "L6",
+      "weight": 1.0,
+      "source": "auth_registeruser",
+      "target": "auth_users_publicuser",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/registerUser.ts",
+      "source_location": "L6",
+      "weight": 1.0,
+      "source": "auth_registeruser",
+      "target": "auth_users_topublicuser",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/scripts/mongodb/setup.ts",
+      "source_location": "L5",
+      "weight": 1.0,
+      "source": "mongodb_setup",
+      "target": "auth_registeruser",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/auth/register/_register.tsx",
+      "source_location": "L4",
+      "weight": 1.0,
+      "source": "register_register",
+      "target": "auth_registeruser",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/registerUser.ts",
+      "source_location": "L33",
+      "weight": 1.0,
+      "source": "auth_registeruser_registeruser",
+      "target": "auth_registeruser_isemail",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/api/utils/auth/registerUser.ts",
+      "source_location": "L54",
+      "weight": 1.0,
+      "source": "auth_registeruser_registeruser",
+      "target": "auth_sessions_createsession"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/api/utils/auth/registerUser.ts",
+      "source_location": "L36",
+      "weight": 1.0,
+      "source": "auth_registeruser_registeruser",
+      "target": "auth_users_finduserbyemail"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/api/utils/auth/registerUser.ts",
+      "source_location": "L35",
+      "weight": 1.0,
+      "source": "auth_registeruser_registeruser",
+      "target": "auth_users_finduserbyusername"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/api/utils/auth/registerUser.ts",
+      "source_location": "L39",
+      "weight": 1.0,
+      "source": "auth_registeruser_registeruser",
+      "target": "auth_users_insertuser"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/api/utils/auth/registerUser.ts",
+      "source_location": "L63",
+      "weight": 1.0,
+      "source": "auth_registeruser_registeruser",
+      "target": "auth_users_topublicuser"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/scripts/mongodb/setup.ts",
+      "source_location": "L5",
+      "weight": 1.0,
+      "source": "mongodb_setup",
+      "target": "auth_registeruser_registeruser",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/scripts/mongodb/setup.ts",
+      "source_location": "L16",
+      "weight": 1.0,
+      "source": "mongodb_setup_saveusers",
+      "target": "auth_registeruser_registeruser"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/auth/register/_register.tsx",
+      "source_location": "L4",
+      "weight": 1.0,
+      "source": "register_register",
+      "target": "auth_registeruser_registeruser",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/routes/api/v1/auth/register/_register.tsx",
+      "source_location": "L13",
+      "weight": 1.0,
+      "source": "register_register_action",
+      "target": "auth_registeruser_registeruser"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/sessions.ts",
+      "source_location": "L16",
+      "weight": 1.0,
+      "source": "auth_sessions",
+      "target": "auth_sessions_createsession",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/sessions.ts",
+      "source_location": "L31",
+      "weight": 1.0,
+      "source": "auth_sessions",
+      "target": "auth_sessions_getlivesession",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/sessions.ts",
+      "source_location": "L39",
+      "weight": 1.0,
+      "source": "auth_sessions",
+      "target": "auth_sessions_revokesession",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/sessions.ts",
+      "source_location": "L5",
+      "weight": 1.0,
+      "source": "auth_sessions",
+      "target": "auth_sessions_sessiondoc",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/sessions.ts",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "auth_sessions",
+      "target": "mongodb_collections",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/sessions.ts",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "auth_sessions",
+      "target": "mongodb_collections_getsessionscollection",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/auth/logout/_logout.tsx",
+      "source_location": "L5",
+      "weight": 1.0,
+      "source": "logout_logout",
+      "target": "auth_sessions",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/api/utils/auth/sessions.ts",
+      "source_location": "L26",
+      "weight": 1.0,
+      "source": "auth_sessions_createsession",
+      "target": "mongodb_collections_getsessionscollection"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/api/utils/auth/sessions.ts",
+      "source_location": "L32",
+      "weight": 1.0,
+      "source": "auth_sessions_getlivesession",
+      "target": "mongodb_collections_getsessionscollection"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/api/utils/auth/sessions.ts",
+      "source_location": "L40",
+      "weight": 1.0,
+      "source": "auth_sessions_revokesession",
+      "target": "mongodb_collections_getsessionscollection"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/auth/logout/_logout.tsx",
+      "source_location": "L5",
+      "weight": 1.0,
+      "source": "logout_logout",
+      "target": "auth_sessions_revokesession",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/routes/api/v1/auth/logout/_logout.tsx",
+      "source_location": "L12",
+      "weight": 1.0,
+      "source": "logout_logout_action",
+      "target": "auth_sessions_revokesession"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/users.ts",
+      "source_location": "L44",
+      "weight": 1.0,
+      "source": "auth_users",
+      "target": "auth_users_finduserbyemail",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/users.ts",
+      "source_location": "L47",
+      "weight": 1.0,
+      "source": "auth_users",
+      "target": "auth_users_finduserbyid",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/users.ts",
+      "source_location": "L41",
+      "weight": 1.0,
+      "source": "auth_users",
+      "target": "auth_users_finduserbyusername",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/users.ts",
+      "source_location": "L52",
+      "weight": 1.0,
+      "source": "auth_users",
+      "target": "auth_users_insertuser",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/users.ts",
+      "source_location": "L57",
+      "weight": 1.0,
+      "source": "auth_users",
+      "target": "auth_users_markemailverified",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/users.ts",
+      "source_location": "L21",
+      "weight": 1.0,
+      "source": "auth_users",
+      "target": "auth_users_publicuser",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/users.ts",
+      "source_location": "L31",
+      "weight": 1.0,
+      "source": "auth_users",
+      "target": "auth_users_topublicuser",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/users.ts",
+      "source_location": "L7",
+      "weight": 1.0,
+      "source": "auth_users",
+      "target": "auth_users_userdoc",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/users.ts",
+      "source_location": "L3",
+      "weight": 1.0,
+      "source": "auth_users",
+      "target": "mongodb_collections",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/users.ts",
+      "source_location": "L3",
+      "weight": 1.0,
+      "source": "auth_users",
+      "target": "mongodb_collections_getuserscollection",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/auth/resend-verification/_resend-verification.tsx",
+      "source_location": "L5",
+      "weight": 1.0,
+      "source": "resend_verification_resend_verification",
+      "target": "auth_users",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/auth/verify-email/_verify-email.tsx",
+      "source_location": "L4",
+      "weight": 1.0,
+      "source": "verify_email_verify_email",
+      "target": "auth_users",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/api/utils/auth/users.ts",
+      "source_location": "L42",
+      "weight": 1.0,
+      "source": "auth_users_finduserbyusername",
+      "target": "mongodb_collections_getuserscollection"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/api/utils/auth/users.ts",
+      "source_location": "L45",
+      "weight": 1.0,
+      "source": "auth_users_finduserbyemail",
+      "target": "mongodb_collections_getuserscollection"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/auth/resend-verification/_resend-verification.tsx",
+      "source_location": "L5",
+      "weight": 1.0,
+      "source": "resend_verification_resend_verification",
+      "target": "auth_users_finduserbyemail",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/routes/api/v1/auth/resend-verification/_resend-verification.tsx",
+      "source_location": "L15",
+      "weight": 1.0,
+      "source": "resend_verification_resend_verification_action",
+      "target": "auth_users_finduserbyemail"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/api/utils/auth/users.ts",
+      "source_location": "L49",
+      "weight": 1.0,
+      "source": "auth_users_finduserbyid",
+      "target": "mongodb_collections_getuserscollection"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/api/utils/auth/users.ts",
+      "source_location": "L53",
+      "weight": 1.0,
+      "source": "auth_users_insertuser",
+      "target": "mongodb_collections_getuserscollection"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/api/utils/auth/users.ts",
+      "source_location": "L59",
+      "weight": 1.0,
+      "source": "auth_users_markemailverified",
+      "target": "mongodb_collections_getuserscollection"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/auth/verify-email/_verify-email.tsx",
+      "source_location": "L4",
+      "weight": 1.0,
+      "source": "verify_email_verify_email",
+      "target": "auth_users_markemailverified",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/routes/api/v1/auth/verify-email/_verify-email.tsx",
+      "source_location": "L15",
+      "weight": 1.0,
+      "source": "verify_email_verify_email_loader",
+      "target": "auth_users_markemailverified"
+    },
+    {
       "relation": "imports_from",
       "context": "import",
       "confidence": "EXTRACTED",
@@ -17437,6 +20251,187 @@
       "weight": 1.0,
       "source": "utils_usercreatesession_usercreatesession",
       "target": "mongodb_collection_getcollection"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/mongodb/collections.ts",
+      "source_location": "L8",
+      "weight": 1.0,
+      "source": "mongodb_collections",
+      "target": "mongodb_collections_getclientcached",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/mongodb/collections.ts",
+      "source_location": "L30",
+      "weight": 1.0,
+      "source": "mongodb_collections",
+      "target": "mongodb_collections_getemailverificationscollection",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/mongodb/collections.ts",
+      "source_location": "L28",
+      "weight": 1.0,
+      "source": "mongodb_collections",
+      "target": "mongodb_collections_getsessionscollection",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/mongodb/collections.ts",
+      "source_location": "L29",
+      "weight": 1.0,
+      "source": "mongodb_collections",
+      "target": "mongodb_collections_getthingscollection",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/mongodb/collections.ts",
+      "source_location": "L25",
+      "weight": 1.0,
+      "source": "mongodb_collections",
+      "target": "mongodb_collections_getthingtimedb",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/mongodb/collections.ts",
+      "source_location": "L27",
+      "weight": 1.0,
+      "source": "mongodb_collections",
+      "target": "mongodb_collections_getuserscollection",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/mongodb/collections.ts",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "mongodb_collections",
+      "target": "mongodb_config",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/mongodb/collections.ts",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "mongodb_collections",
+      "target": "mongodb_config_getmongouri",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/mongodb/collections.ts",
+      "source_location": "L2",
+      "weight": 1.0,
+      "source": "mongodb_collections",
+      "target": "mongodb_mongodb",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/mongodb/collections.ts",
+      "source_location": "L2",
+      "weight": 1.0,
+      "source": "mongodb_collections",
+      "target": "mongodb_mongodb_getmongodb",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/mongodb/collections.ts",
+      "source_location": "L12",
+      "weight": 1.0,
+      "source": "mongodb_collections_getclientcached",
+      "target": "mongodb_config_getmongouri",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/mongodb/collections.ts",
+      "source_location": "L11",
+      "weight": 1.0,
+      "source": "mongodb_collections_getclientcached",
+      "target": "mongodb_mongodb_getmongodb",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/mongodb/collections.ts",
+      "source_location": "L25",
+      "weight": 1.0,
+      "source": "mongodb_collections_getthingtimedb",
+      "target": "mongodb_collections_getclientcached",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/mongodb/collections.ts",
+      "source_location": "L30",
+      "weight": 1.0,
+      "source": "mongodb_collections_getemailverificationscollection",
+      "target": "mongodb_collections_getthingtimedb",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/mongodb/collections.ts",
+      "source_location": "L28",
+      "weight": 1.0,
+      "source": "mongodb_collections_getsessionscollection",
+      "target": "mongodb_collections_getthingtimedb",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/mongodb/collections.ts",
+      "source_location": "L29",
+      "weight": 1.0,
+      "source": "mongodb_collections_getthingscollection",
+      "target": "mongodb_collections_getthingtimedb",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/mongodb/collections.ts",
+      "source_location": "L27",
+      "weight": 1.0,
+      "source": "mongodb_collections_getuserscollection",
+      "target": "mongodb_collections_getthingtimedb",
+      "confidence_score": 1.0
     },
     {
       "relation": "imports_from",
@@ -17914,17 +20909,6 @@
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "data_users",
-      "target": "mongodb_objectid_getobjectid"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "remix/app/scripts/mongodb/data/users.ts",
-      "source_location": "L11",
-      "weight": 1.0,
-      "source": "data_users_rickdeckard",
       "target": "mongodb_objectid_getobjectid"
     },
     {
@@ -19307,6 +22291,17 @@
       "relation": "imports_from",
       "context": "import",
       "confidence": "EXTRACTED",
+      "source_file": "remix/app/components/Login/Register.tsx",
+      "source_location": "L6",
+      "weight": 1.0,
+      "source": "login_register",
+      "target": "icon_icon",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
       "source_file": "remix/app/components/Nav/Footer.tsx",
       "source_location": "L6",
       "weight": 1.0,
@@ -19357,6 +22352,17 @@
       "confidence_score": 1.0,
       "source": "thingtime_thingtime",
       "target": "icon_icon"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/components/Login/Register.tsx",
+      "source_location": "L6",
+      "weight": 1.0,
+      "source": "login_register",
+      "target": "icon_icon_icon",
+      "confidence_score": 1.0
     },
     {
       "relation": "imports",
@@ -19695,6 +22701,81 @@
       "confidence_score": 1.0,
       "source": "routes_login",
       "target": "login_login_login"
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/components/Login/Register.tsx",
+      "source_location": "L5",
+      "weight": 1.0,
+      "source": "login_register",
+      "target": "hooks_useapi",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/components/Login/Register.tsx",
+      "source_location": "L5",
+      "weight": 1.0,
+      "source": "login_register",
+      "target": "hooks_useapi_useapi",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/components/Login/Register.tsx",
+      "source_location": "L8",
+      "weight": 1.0,
+      "source": "login_register",
+      "target": "login_register_inputsx",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/components/Login/Register.tsx",
+      "source_location": "L14",
+      "weight": 1.0,
+      "source": "login_register",
+      "target": "login_register_register",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/register.tsx",
+      "source_location": "L4",
+      "weight": 1.0,
+      "source": "routes_register",
+      "target": "login_register",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/components/Login/Register.tsx",
+      "source_location": "L22",
+      "weight": 1.0,
+      "source": "login_register_register",
+      "target": "hooks_useapi_useapi"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/register.tsx",
+      "source_location": "L4",
+      "weight": 1.0,
+      "source": "routes_register",
+      "target": "login_register_register",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -22433,43 +25514,62 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/auth/logout/_logout.tsx",
+      "source_location": "L8",
+      "weight": 1.0,
+      "source": "logout_logout",
+      "target": "logout_logout_action",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/auth/me/_me.tsx",
+      "source_location": "L7",
+      "weight": 1.0,
+      "source": "me_me",
+      "target": "me_me_loader",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/auth/register/_register.tsx",
+      "source_location": "L9",
+      "weight": 1.0,
+      "source": "register_register",
+      "target": "register_register_action",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/auth/resend-verification/_resend-verification.tsx",
+      "source_location": "L10",
+      "weight": 1.0,
+      "source": "resend_verification_resend_verification",
+      "target": "resend_verification_resend_verification_action",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/auth/verify-email/_verify-email.tsx",
+      "source_location": "L8",
+      "weight": 1.0,
+      "source": "verify_email_verify_email",
+      "target": "verify_email_verify_email_loader",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
       "source_file": "remix/app/routes/api/v1/login/_login.tsx",
       "source_location": "L10",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "remix_app_routes_api_v1_login_login_tsx_login_login",
       "target": "login_login_action"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "remix/app/routes/api/v1/login/_login.tsx",
-      "source_location": "L59",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "remix_app_routes_api_v1_login_login_tsx_login_login",
-      "target": "login_login_earlyreturn"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "remix/app/routes/api/v1/login/_login.tsx",
-      "source_location": "L6",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "remix_app_routes_api_v1_login_login_tsx_login_login",
-      "target": "login_login_index"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "remix/app/routes/api/v1/login/_login.tsx",
-      "source_location": "L22",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "login_login_action",
-      "target": "login_login_earlyreturn"
     },
     {
       "relation": "contains",
@@ -22876,6 +25976,16 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/register.tsx",
+      "source_location": "L6",
+      "weight": 1.0,
+      "source": "routes_register",
+      "target": "routes_register_register",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
       "source_file": "remix/app/routes/scratchpads/svg-displacement-map.tsx",
       "source_location": "L167",
       "weight": 1.0,
@@ -22907,11 +26017,11 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/app/scripts/mongodb/data/users.ts",
-      "source_location": "L10",
+      "source_location": "L6",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "data_users",
-      "target": "data_users_rickdeckard"
+      "target": "data_users_seeduser",
+      "confidence_score": 1.0
     },
     {
       "relation": "imports_from",
@@ -22923,17 +26033,6 @@
       "confidence_score": 1.0,
       "source": "mongodb_setup",
       "target": "data_users"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "remix/app/scripts/mongodb/data/users.ts",
-      "source_location": "L19",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "data_users_getusers",
-      "target": "data_users_rickdeckard"
     },
     {
       "relation": "imports",
@@ -25436,6 +28535,16 @@
       "source_file": "remix/package.json",
       "source_location": "L38",
       "weight": 1.0,
+      "source": "remix_package_dependencies",
+      "target": "remix_package_dependencies_jose",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/package.json",
+      "source_location": "L38",
+      "weight": 1.0,
       "confidence_score": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_localforage"
@@ -25966,9 +29075,9 @@
       "source_file": "remix/scripts/pre-dev.sh",
       "source_location": "L1",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "scripts_pre_dev",
-      "target": "workspace_thingtime_remix_scripts_pre_dev_sh__entry"
+      "target": "home_user_thingtime_remix_scripts_pre_dev_sh__entry",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -26186,9 +29295,9 @@
       "source_file": "remix/vercel.sh",
       "source_location": "L1",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "remix_vercel_sh_remix_vercel",
-      "target": "workspace_thingtime_remix_vercel_sh__entry"
+      "target": "home_user_thingtime_remix_vercel_sh__entry",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -26396,6 +29505,16 @@
       "source_file": "CLAUDE.md",
       "source_location": "L1",
       "weight": 1.0,
+      "source": "claude",
+      "target": "claude_fundamentals_read_first",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "CLAUDE.md",
+      "source_location": "L1",
+      "weight": 1.0,
       "confidence_score": 1.0,
       "source": "claude",
       "target": "claude_graphify"
@@ -26463,6 +29582,116 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
+      "source_file": "DECISIONS.md",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "decisions",
+      "target": "decisions_decisions",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "DECISIONS.md",
+      "source_location": "L9",
+      "weight": 1.0,
+      "source": "decisions_decisions",
+      "target": "decisions_nikolaj_frey_engineer_decisions",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "DECISIONS.md",
+      "source_location": "L36",
+      "weight": 1.0,
+      "source": "decisions_nikolaj_frey_engineer_decisions",
+      "target": "decisions_decision_log",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "DECISIONS.md",
+      "source_location": "L11",
+      "weight": 1.0,
+      "source": "decisions_nikolaj_frey_engineer_decisions",
+      "target": "decisions_recurring_principles_the_thinking_method",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "FUNDAMENTALS.md",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "fundamentals",
+      "target": "fundamentals_thingtime_fundamentals",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "FUNDAMENTALS.md",
+      "source_location": "L6",
+      "weight": 1.0,
+      "source": "fundamentals_thingtime_fundamentals",
+      "target": "fundamentals_1_the_api_is_the_only_gateway_to_data",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "FUNDAMENTALS.md",
+      "source_location": "L13",
+      "weight": 1.0,
+      "source": "fundamentals_thingtime_fundamentals",
+      "target": "fundamentals_2_seed_and_test_through_the_real_api_functionality_cohesion",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "FUNDAMENTALS.md",
+      "source_location": "L30",
+      "weight": 1.0,
+      "source": "fundamentals_thingtime_fundamentals",
+      "target": "fundamentals_3_one_database_thingtime",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "FUNDAMENTALS.md",
+      "source_location": "L42",
+      "weight": 1.0,
+      "source": "fundamentals_thingtime_fundamentals",
+      "target": "fundamentals_4_one_mongodb_connection_source",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "FUNDAMENTALS.md",
+      "source_location": "L52",
+      "weight": 1.0,
+      "source": "fundamentals_thingtime_fundamentals",
+      "target": "fundamentals_5_auth_httponly_cookie_revocable_jwt_mongo_session",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "FUNDAMENTALS.md",
+      "source_location": "L69",
+      "weight": 1.0,
+      "source": "fundamentals_thingtime_fundamentals",
+      "target": "fundamentals_6_never_leak_secrets",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
       "source_file": "README.md",
       "source_location": "L11",
       "weight": 1.0,
@@ -26509,6 +29738,386 @@
       "confidence_score": 1.0,
       "source": "readme_or_donate_on_gofundme",
       "target": "readme_force_push"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "claude-todo/01-mongodb-connection-status.md",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "claude_todo_01_mongodb_connection_status",
+      "target": "claude_todo_01_mongodb_connection_status_01_mongodb_connection_status",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "claude-todo/01-mongodb-connection-status.md",
+      "source_location": "L5",
+      "weight": 1.0,
+      "source": "claude_todo_01_mongodb_connection_status_01_mongodb_connection_status",
+      "target": "claude_todo_01_mongodb_connection_status_goal",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "claude-todo/01-mongodb-connection-status.md",
+      "source_location": "L29",
+      "weight": 1.0,
+      "source": "claude_todo_01_mongodb_connection_status_01_mongodb_connection_status",
+      "target": "claude_todo_01_mongodb_connection_status_possible_follow_ups_nice_to_have",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "claude-todo/01-mongodb-connection-status.md",
+      "source_location": "L25",
+      "weight": 1.0,
+      "source": "claude_todo_01_mongodb_connection_status_01_mongodb_connection_status",
+      "target": "claude_todo_01_mongodb_connection_status_verified",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "claude-todo/01-mongodb-connection-status.md",
+      "source_location": "L9",
+      "weight": 1.0,
+      "source": "claude_todo_01_mongodb_connection_status_01_mongodb_connection_status",
+      "target": "claude_todo_01_mongodb_connection_status_what_exists",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "claude-todo/02-db-populate-seeding.md",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "claude_todo_02_db_populate_seeding",
+      "target": "claude_todo_02_db_populate_seeding_02_db_populate_seeding",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "claude-todo/02-db-populate-seeding.md",
+      "source_location": "L51",
+      "weight": 1.0,
+      "source": "claude_todo_02_db_populate_seeding_02_db_populate_seeding",
+      "target": "claude_todo_02_db_populate_seeding_acceptance_criteria",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "claude-todo/02-db-populate-seeding.md",
+      "source_location": "L34",
+      "weight": 1.0,
+      "source": "claude_todo_02_db_populate_seeding_02_db_populate_seeding",
+      "target": "claude_todo_02_db_populate_seeding_decisions_locked_see_fundamentals_md",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "claude-todo/02-db-populate-seeding.md",
+      "source_location": "L5",
+      "weight": 1.0,
+      "source": "claude_todo_02_db_populate_seeding_02_db_populate_seeding",
+      "target": "claude_todo_02_db_populate_seeding_goal",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "claude-todo/02-db-populate-seeding.md",
+      "source_location": "L41",
+      "weight": 1.0,
+      "source": "claude_todo_02_db_populate_seeding_02_db_populate_seeding",
+      "target": "claude_todo_02_db_populate_seeding_plan",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "claude-todo/02-db-populate-seeding.md",
+      "source_location": "L19",
+      "weight": 1.0,
+      "source": "claude_todo_02_db_populate_seeding_02_db_populate_seeding",
+      "target": "claude_todo_02_db_populate_seeding_problems_to_fix",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "claude-todo/02-db-populate-seeding.md",
+      "source_location": "L10",
+      "weight": 1.0,
+      "source": "claude_todo_02_db_populate_seeding_02_db_populate_seeding",
+      "target": "claude_todo_02_db_populate_seeding_what_exists",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "claude-todo/03-auth-login-register.md",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "claude_todo_03_auth_login_register",
+      "target": "claude_todo_03_auth_login_register_03_auth_login_register_sessions_jwt",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "claude-todo/03-auth-login-register.md",
+      "source_location": "L94",
+      "weight": 1.0,
+      "source": "claude_todo_03_auth_login_register_03_auth_login_register_sessions_jwt",
+      "target": "claude_todo_03_auth_login_register_acceptance_criteria",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "claude-todo/03-auth-login-register.md",
+      "source_location": "L5",
+      "weight": 1.0,
+      "source": "claude_todo_03_auth_login_register_03_auth_login_register_sessions_jwt",
+      "target": "claude_todo_03_auth_login_register_built_this_round_remix_app_api_utils_auth",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "claude-todo/03-auth-login-register.md",
+      "source_location": "L79",
+      "weight": 1.0,
+      "source": "claude_todo_03_auth_login_register_03_auth_login_register_sessions_jwt",
+      "target": "claude_todo_03_auth_login_register_decisions_locked_see_fundamentals_md_5",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "claude-todo/03-auth-login-register.md",
+      "source_location": "L30",
+      "weight": 1.0,
+      "source": "claude_todo_03_auth_login_register_03_auth_login_register_sessions_jwt",
+      "target": "claude_todo_03_auth_login_register_goal",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "claude-todo/03-auth-login-register.md",
+      "source_location": "L67",
+      "weight": 1.0,
+      "source": "claude_todo_03_auth_login_register_03_auth_login_register_sessions_jwt",
+      "target": "claude_todo_03_auth_login_register_plan",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "claude-todo/03-auth-login-register.md",
+      "source_location": "L51",
+      "weight": 1.0,
+      "source": "claude_todo_03_auth_login_register_03_auth_login_register_sessions_jwt",
+      "target": "claude_todo_03_auth_login_register_problems_to_fix",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "claude-todo/03-auth-login-register.md",
+      "source_location": "L90",
+      "weight": 1.0,
+      "source": "claude_todo_03_auth_login_register_03_auth_login_register_sessions_jwt",
+      "target": "claude_todo_03_auth_login_register_still_open_defaults_fine_for_now",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "claude-todo/03-auth-login-register.md",
+      "source_location": "L18",
+      "weight": 1.0,
+      "source": "claude_todo_03_auth_login_register_03_auth_login_register_sessions_jwt",
+      "target": "claude_todo_03_auth_login_register_still_todo",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "claude-todo/03-auth-login-register.md",
+      "source_location": "L35",
+      "weight": 1.0,
+      "source": "claude_todo_03_auth_login_register_03_auth_login_register_sessions_jwt",
+      "target": "claude_todo_03_auth_login_register_what_exists",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "claude-todo/04-authed-db-read-query.md",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "claude_todo_04_authed_db_read_query",
+      "target": "claude_todo_04_authed_db_read_query_04_authed_db_read_query",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "claude-todo/04-authed-db-read-query.md",
+      "source_location": "L32",
+      "weight": 1.0,
+      "source": "claude_todo_04_authed_db_read_query_04_authed_db_read_query",
+      "target": "claude_todo_04_authed_db_read_query_acceptance_criteria",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "claude-todo/04-authed-db-read-query.md",
+      "source_location": "L5",
+      "weight": 1.0,
+      "source": "claude_todo_04_authed_db_read_query_04_authed_db_read_query",
+      "target": "claude_todo_04_authed_db_read_query_goal",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "claude-todo/04-authed-db-read-query.md",
+      "source_location": "L16",
+      "weight": 1.0,
+      "source": "claude_todo_04_authed_db_read_query_04_authed_db_read_query",
+      "target": "claude_todo_04_authed_db_read_query_plan",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "claude-todo/04-authed-db-read-query.md",
+      "source_location": "L27",
+      "weight": 1.0,
+      "source": "claude_todo_04_authed_db_read_query_04_authed_db_read_query",
+      "target": "claude_todo_04_authed_db_read_query_security_notes",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "claude-todo/04-authed-db-read-query.md",
+      "source_location": "L9",
+      "weight": 1.0,
+      "source": "claude_todo_04_authed_db_read_query_04_authed_db_read_query",
+      "target": "claude_todo_04_authed_db_read_query_what_exists_to_build_on",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "claude-todo/05-authed-db-write.md",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "claude_todo_05_authed_db_write",
+      "target": "claude_todo_05_authed_db_write_05_authed_db_write_create_update_delete",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "claude-todo/05-authed-db-write.md",
+      "source_location": "L35",
+      "weight": 1.0,
+      "source": "claude_todo_05_authed_db_write_05_authed_db_write_create_update_delete",
+      "target": "claude_todo_05_authed_db_write_acceptance_criteria",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "claude-todo/05-authed-db-write.md",
+      "source_location": "L5",
+      "weight": 1.0,
+      "source": "claude_todo_05_authed_db_write_05_authed_db_write_create_update_delete",
+      "target": "claude_todo_05_authed_db_write_goal",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "claude-todo/05-authed-db-write.md",
+      "source_location": "L19",
+      "weight": 1.0,
+      "source": "claude_todo_05_authed_db_write_05_authed_db_write_create_update_delete",
+      "target": "claude_todo_05_authed_db_write_plan",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "claude-todo/05-authed-db-write.md",
+      "source_location": "L29",
+      "weight": 1.0,
+      "source": "claude_todo_05_authed_db_write_05_authed_db_write_create_update_delete",
+      "target": "claude_todo_05_authed_db_write_security_notes",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "claude-todo/05-authed-db-write.md",
+      "source_location": "L10",
+      "weight": 1.0,
+      "source": "claude_todo_05_authed_db_write_05_authed_db_write_create_update_delete",
+      "target": "claude_todo_05_authed_db_write_what_exists_to_build_on",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "claude-todo/README.md",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "claude_todo_readme",
+      "target": "claude_todo_readme_thingtime_claude_feature_to_do",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "claude-todo/README.md",
+      "source_location": "L20",
+      "weight": 1.0,
+      "source": "claude_todo_readme_thingtime_claude_feature_to_do",
+      "target": "claude_todo_readme_conventions_see_fundamentals_md",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "claude-todo/README.md",
+      "source_location": "L30",
+      "weight": 1.0,
+      "source": "claude_todo_readme_thingtime_claude_feature_to_do",
+      "target": "claude_todo_readme_decisions_locked",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "claude-todo/README.md",
+      "source_location": "L10",
+      "weight": 1.0,
+      "source": "claude_todo_readme_thingtime_claude_feature_to_do",
+      "target": "claude_todo_readme_status_board",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -26802,5 +30411,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "4fa64e42a528a0e968eea3dc84560d34a3447e7c"
+  "built_at_commit": "43d75361b52550fdf81c131934b6dade2966f2f6"
 }

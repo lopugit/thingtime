@@ -15,6 +15,34 @@ export function useApi() {
       },
       [asyncFetcher]
     ),
+    auth: {
+      register: useCallback(
+        async (args) => {
+          const { username, password, email, displayName } = args;
+          const ret = asyncFetcher.submit(
+            { username, password, email, displayName },
+            { action: '/api/v1/auth/register' }
+          );
+          return ret;
+        },
+        [asyncFetcher]
+      ),
+      resendVerification: useCallback(
+        async (args) => {
+          const { email } = args;
+          const ret = asyncFetcher.submit({ email }, { action: '/api/v1/auth/resend-verification' });
+          return ret;
+        },
+        [asyncFetcher]
+      ),
+      logout: useCallback(
+        async () => {
+          const ret = asyncFetcher.submit({}, { action: '/api/v1/auth/logout' });
+          return ret;
+        },
+        [asyncFetcher]
+      )
+    },
     mongodb: {
       rawResults: useCallback(
         async (args) => {

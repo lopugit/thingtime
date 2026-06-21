@@ -1,6 +1,31 @@
-# 03 — Auth: Login / Register / Sessions / JWT 🟡
+# 03 — Auth: Login / Register / Sessions / JWT 🟢
 
-**Status:** Partial — pieces exist but are inconsistent and not wired end-to-end.
+**Status:** Built (compiles), needs a live test against Mongo.
+
+## Built this round (`remix/app/api/utils/auth/`)
+- `jwt.ts` (jose HS256, `JWT_SECRET`), `passwords.ts` (bcrypt), `authCookie.ts`
+  (httpOnly `tt_auth` cookie + Bearer fallback), `sessions.ts` (Mongo sessions +
+  revocation), `emailVerifications.ts` (single-use 24h tokens), `email.ts`
+  (pluggable, console stub), `users.ts` (thingtime.users + `toPublicUser`).
+- Orchestration: `registerUser.ts`, `loginUser.ts`, `getCurrentUser.ts`.
+- Routes: `POST /api/v1/auth/register`, `GET /api/v1/auth/verify-email`,
+  `POST /api/v1/auth/resend-verification`, `POST /api/v1/auth/logout`,
+  `GET /api/v1/auth/me`, and rewired `POST /api/v1/login`.
+- UI: `/register` page + `Register` component (username, password, **email below
+  password**), login↔register links, `useApi().v1.auth.*`.
+- Seed (`setup.ts`) now creates users via `registerUser` (cohesion).
+
+## Still TODO
+- Live test the full flow against Mongo (register → verify link → login → /me).
+- `getCurrentUser` wired into the app/root so UI knows who's logged in.
+- Remove the now-orphaned old utils (`userCheckExists`, `userValidatePassword`,
+  `userCreateSession`, `getUser`, stub `userGenerateJWT`) once `get-connection`
+  no longer needs them.
+- Real email provider (swap the `email.ts` stub).
+- `JWT_SECRET` env var set in Vercel.
+
+---
+_Original analysis below (kept for reference):_
 
 ## Goal
 A working auth flow through the Thingtime API: register a user (hashed
