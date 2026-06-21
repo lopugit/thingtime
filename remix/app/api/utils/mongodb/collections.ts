@@ -28,3 +28,31 @@ export const getUsersCollection = async () => (await getThingtimeDb()).collectio
 export const getSessionsCollection = async () => (await getThingtimeDb()).collection('sessions');
 export const getThingsCollection = async () => (await getThingtimeDb()).collection('things');
 export const getEmailVerificationsCollection = async () => (await getThingtimeDb()).collection('emailVerifications');
+
+// Idempotently create the auth collections + their indexes. createIndex creates
+// the collection if it doesn't exist yet, so this also bootstraps an empty
+// `thingtime` db on first run. Memoised so it runs at most once per process.
+// The unique indexes are the real source of truth that usernames/emails/tokens
+// can't be duplicated (the app-level findUser checks are racy on their own).
+let indexesEnsured: Promise<void> | null = null;
+
+export const ensureIndexes = async () => {
+  if (!indexesEnsured) {
+    indexesEnsured = (async () => {
+      const db = await getThingtimeDb();
+      await Promise.all([
+        db.collection('users').createIndex({ username: 1 }, { unique: true }),
+        db.collection('users').createIndex({ email: 1 }, { unique: true }),
+        db.collection('sessions').createIndex({ jti: 1 }, { unique: true }),
+        db.collection('sessions').createIndex({ userId: 1 }),
+        db.collection('emailVerifications').createIndex({ token: 1 }, { unique: true }),
+        db.collection('emailVerifications').createIndex({ userId: 1 })
+      ]);
+    })().catch((err) => {
+      // don't cache a failed run — let the next call retry
+      indexesEnsured = null;
+      throw err;
+    });
+  }
+  return indexesEnsured;
+};

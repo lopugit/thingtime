@@ -1,3 +1,5 @@
+import { ensureIndexes } from '../mongodb/collections';
+
 import { createEmailVerification } from './emailVerifications';
 import { sendVerificationEmail } from './email';
 import { signJwt } from './jwt';
@@ -32,21 +34,34 @@ export const registerUser = async (input: RegisterInput): Promise<RegisterResult
   if (password.length < 6) return { ok: false, status: 400, error: 'Password must be at least 6 characters' };
   if (!isEmail(email)) return { ok: false, status: 400, error: 'A valid email is required' };
 
+  // ensure the collections + unique indexes exist (idempotent, API-side)
+  await ensureIndexes();
+
   if (await findUserByUsername(username)) return { ok: false, status: 409, error: 'Username already taken' };
   if (await findUserByEmail(email)) return { ok: false, status: 409, error: 'Email already registered' };
 
   const now = new Date();
-  const user = await insertUser({
-    ttid: username,
-    username,
-    email,
-    passwordHash: await hashPassword(password),
-    displayName: input.displayName ?? null,
-    emailVerified: false,
-    createdAt: now,
-    updatedAt: now,
-    meta: input.meta ?? {}
-  });
+  let user;
+  try {
+    user = await insertUser({
+      ttid: username,
+      username,
+      email,
+      passwordHash: await hashPassword(password),
+      displayName: input.displayName ?? null,
+      emailVerified: false,
+      createdAt: now,
+      updatedAt: now,
+      meta: input.meta ?? {}
+    });
+  } catch (err: any) {
+    // a unique index caught a duplicate that raced past the checks above
+    if (err?.code === 11000) {
+      const field = err?.keyPattern?.email ? 'Email' : 'Username';
+      return { ok: false, status: 409, error: `${field} already registered` };
+    }
+    throw err;
+  }
 
   const userId = String(user._id);
 
