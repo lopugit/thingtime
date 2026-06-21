@@ -16,8 +16,22 @@ export type MongoConnectionStatus = {
 
 // The connection string is resolved here so every Mongo entrypoint (status,
 // connection, scripts) reads it the same way. Never expose this value raw.
-export const getMongoUri = () =>
-  process.env.THINGTIME_PRIVATE_MONGODB_URI || process.env.MONGODB_URI || 'mongodb://localhost:27017';
+//
+// Primary source is the Atlas SRV string in MONGODB_CONNECTION_STRING, which
+// ships with a literal `<db_password>` placeholder — we substitute the secret
+// from MONGO_PASS (URL-encoded so special characters can't corrupt the URI).
+export const getMongoUri = () => {
+  const connectionString = process.env.MONGODB_CONNECTION_STRING;
+
+  if (connectionString) {
+    const password = process.env.MONGO_PASS;
+    return password
+      ? connectionString.replaceAll('<db_password>', encodeURIComponent(password))
+      : connectionString;
+  }
+
+  return process.env.THINGTIME_PRIVATE_MONGODB_URI || process.env.MONGODB_URI || 'mongodb://localhost:27017';
+};
 
 // Strip protocol + credentials so a URI like
 // `mongodb+srv://user:pass@cluster0.abc.mongodb.net/thingtime` is shown as
