@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Flex, Button, FormControl, Input, Spinner, InputGroup, InputRightElement, Box, Text } from '@chakra-ui/react';
+import { Flex, Button, FormControl, Input, InputGroup, InputRightElement, Box, Text, useToast } from '@chakra-ui/react';
 import { Link as RemixLink } from '@remix-run/react';
 
 import { useApi } from '~/hooks/useApi';
@@ -21,34 +21,49 @@ export const Register = (props) => {
 
   const api = useApi();
   const register = api.v1.auth.register;
+  const toast = useToast();
 
   const handleRegister = async (e) => {
     e?.preventDefault();
     setLoading(true);
-    const r = await register({ username, password, email });
-    setResp(r);
-    setLoading(false);
-  };
+    try {
+      const r = await register({ username, password, email });
+      setResp(r);
 
-  if (loading) {
-    return (
-      <Flex flexDir="column" alignItems="center" justifyContent="center" height="100vh" width="100%">
-        <Spinner
-          sx={{
-            '@keyframes rotate': {
-              '0%': { transform: 'rotate(0deg)' },
-              '100%': { transform: 'rotate(360deg)' }
-            },
-            animation: 'rotate 2s linear infinite'
-          }}
-          bgGradient="linear-gradient(to right, #47b5e6, #a555e8, #f34a4a, #ffbc48, #58ca70, #47b5e6)"
-          backgroundSize="calc(100px + 400%)"
-          color="transparent"
-          size="xl"
-        />
-      </Flex>
-    );
-  }
+      if (r?.ok) {
+        toast({
+          title: 'Account created 🎉',
+          description: r.verificationLink
+            ? 'Check your email to verify — or use the link below.'
+            : 'Check your email to verify your account.',
+          status: 'success',
+          duration: 7000,
+          isClosable: true,
+          position: 'top'
+        });
+      } else {
+        toast({
+          title: 'Registration failed',
+          description: r?.error || 'Something went wrong. Please try again.',
+          status: 'error',
+          duration: 7000,
+          isClosable: true,
+          position: 'top'
+        });
+      }
+    } catch (err) {
+      toast({
+        title: 'Network error',
+        description: 'Could not reach the server. Please try again.',
+        status: 'error',
+        duration: 7000,
+        isClosable: true,
+        position: 'top'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <form onSubmit={handleRegister}>
@@ -111,6 +126,8 @@ export const Register = (props) => {
             animation: 'moving-rainbow 40s infinite linear'
           }}
           type="submit"
+          isLoading={loading}
+          loadingText="Creating account…"
           display="Flex"
           justifyContent="flex-start"
           width="100%"

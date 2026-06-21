@@ -9,7 +9,7 @@ import { findUserByEmail } from '~/api/utils/auth/users';
 // belongs to an existing, still-unverified user.
 export const action = async ({ request }: { request: Request }) => {
   const { email } = await request.json().catch(() => ({}));
-  const isDev = process.env.NODE_ENV !== 'production';
+  const showLink = process.env.NODE_ENV !== 'production' || process.env.VERCEL_ENV !== 'production';
 
   if (email) {
     const user = await findUserByEmail(String(email));
@@ -17,7 +17,7 @@ export const action = async ({ request }: { request: Request }) => {
       const verification = await createEmailVerification({ userId: String(user._id), email: user.email });
       const link = `${new URL(request.url).origin}/api/v1/auth/verify-email?token=${verification.token}`;
       await sendVerificationEmail({ to: user.email, link });
-      if (isDev) return json({ ok: true, verificationLink: link });
+      if (showLink) return json({ ok: true, verificationLink: link });
     }
   }
 

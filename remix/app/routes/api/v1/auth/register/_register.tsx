@@ -16,14 +16,16 @@ export const action = async ({ request }: { request: Request }) => {
     return json({ ok: false, error: result.error }, { status: result.status });
   }
 
-  const isDev = process.env.NODE_ENV !== 'production';
+  // Surface the link anywhere that isn't real production (local + Vercel
+  // preview) so you can verify without real email sending. Vercel runs preview
+  // deploys with NODE_ENV=production, so check VERCEL_ENV too.
+  const showLink = process.env.NODE_ENV !== 'production' || process.env.VERCEL_ENV !== 'production';
 
   return json(
     {
       ok: true,
       user: result.user,
-      // dev only: surface the link so you can verify without real email sending
-      verificationLink: isDev ? result.verificationLink : undefined
+      verificationLink: showLink ? result.verificationLink : undefined
     },
     { headers: { 'Set-Cookie': await serializeAuthCookie(result.jwt) } }
   );

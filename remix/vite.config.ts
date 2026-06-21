@@ -7,7 +7,17 @@ import { flatRoutes } from 'remix-flat-routes';
 // nativeFetch is required by Single Fetch (turbo-stream over undici)
 installGlobals({ nativeFetch: true });
 
+// Only the real production deploy gets a minified bundle. Preview (PR) builds
+// and local builds stay un-minified + sourcemapped so they're debuggable in the
+// browser console. VERCEL_ENV is 'production' | 'preview' | 'development'.
+const isVercelProduction = process.env.VERCEL_ENV === 'production';
+
 export default defineConfig({
+	build: {
+		minify: isVercelProduction,
+		sourcemap: !isVercelProduction
+	},
+
 	// define web socket port
 
 	server: {
