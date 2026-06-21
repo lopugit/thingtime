@@ -3,6 +3,7 @@ import { useLocation } from 'react-router';
 
 import { Footer } from '../Nav/Footer';
 import { drawerWidthCss, useDrawer, useDrawerLiveWidth, useIsMobileViewport } from '../Nav/Drawer/useDrawer';
+import { LopuuuPet } from '../Pets/LopuuuPet';
 
 // Full-bleed app surfaces own the whole viewport (fixed-height panes with
 // their own internal scroll), so the footer and its tail spacer stay off —
@@ -70,6 +71,7 @@ export const Main = (props) => {
 				>
 					{props.children}
 				</Flex>
+				<LopuuuPet />
 				{fullBleed ? null : <Footer></Footer>}
 			</Flex>
 		</Flex>
