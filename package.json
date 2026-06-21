@@ -11,7 +11,7 @@
     "build-remix": "npm run build --prefix remix",
     "next": "npm run dev --prefix next",
     "api": "npm run dev --prefix api",
-    "postinstall": "pnpm i --prefix next ; pnpm i --prefix=api"
+    "postinstall": "pnpm i --prefix next ; pnpm i --prefix remix ; pnpm i --prefix raycast ; pnpm i --prefix api"
   },
   "repository": {
     "type": "git",
