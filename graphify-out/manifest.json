@@ -820,9 +820,9 @@
     "semantic_hash": "fa9cb4381573d5b9cddcb7f719359deb"
   },
   "remix/package.json": {
-    "mtime": 1774026863.7371976,
-    "ast_hash": "4d964863402a1a9eb2f0ec0af7a27ce1",
-    "semantic_hash": "4d964863402a1a9eb2f0ec0af7a27ce1"
+    "mtime": 1782041225.9256709,
+    "ast_hash": "5ae3362f0051b2c8e350b6ee67e07266",
+    "semantic_hash": ""
   },
   "remix/public/manifest.json": {
     "mtime": 1740309368.0,
