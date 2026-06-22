@@ -22,3 +22,6 @@ Rules:
 - When making or validating deployment, Vercel, hydration, environment, or local
   runbook workflow changes, add a concise dated entry to `remix/CHANGELOG.md`
   under `[Unreleased]` before finishing.
+- For large PRs or PRs with several rounds of debugging, add or update a
+  PR-specific note in `remix/PRs/` and keep `remix/CHANGELOG.md` as a concise
+  grouped summary that links to the detailed PR note.
