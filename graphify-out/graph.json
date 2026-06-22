@@ -5527,7 +5527,7 @@
       "label": "handleRequest()",
       "file_type": "code",
       "source_file": "remix/app/entry.server.tsx",
-      "source_location": "L5",
+      "source_location": "L15",
       "_origin": "ast",
       "id": "app_entry_server_handlerequest",
       "community": 46,
@@ -17759,9 +17759,9 @@
       "source_file": "remix/.eslintrc.json",
       "source_location": "L4",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "remix_eslintrc",
-      "target": "remix_eslintrc_rules",
-      "confidence_score": 1.0
+      "target": "remix_eslintrc_rules"
     },
     {
       "relation": "contains",
@@ -17769,9 +17769,9 @@
       "source_file": "remix/.eslintrc.json",
       "source_location": "L6",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "remix_eslintrc_rules",
-      "target": "remix_eslintrc_rules_no_unused_vars",
-      "confidence_score": 1.0
+      "target": "remix_eslintrc_rules_no_unused_vars"
     },
     {
       "relation": "contains",
@@ -17779,9 +17779,9 @@
       "source_file": "remix/.eslintrc.json",
       "source_location": "L5",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "remix_eslintrc_rules",
-      "target": "remix_eslintrc_rules_typescript_eslint_no_unused_vars",
-      "confidence_score": 1.0
+      "target": "remix_eslintrc_rules_typescript_eslint_no_unused_vars"
     },
     {
       "relation": "contains",
@@ -17789,9 +17789,9 @@
       "source_file": "remix/.eslintrc.json",
       "source_location": "L7",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "remix_eslintrc_rules",
-      "target": "remix_eslintrc_rules_unused_imports_no_unused_imports",
-      "confidence_score": 1.0
+      "target": "remix_eslintrc_rules_unused_imports_no_unused_imports"
     },
     {
       "relation": "contains",
@@ -17799,9 +17799,9 @@
       "source_file": "remix/.eslintrc.json",
       "source_location": "L8",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "remix_eslintrc_rules",
-      "target": "remix_eslintrc_rules_unused_imports_no_unused_vars",
-      "confidence_score": 1.0
+      "target": "remix_eslintrc_rules_unused_imports_no_unused_vars"
     },
     {
       "relation": "imports_from",
@@ -30331,9 +30331,9 @@
       "source_file": "claude-todo/06-pr-12-review-actions.md",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_06_pr_12_review_actions",
-      "target": "claude_todo_06_pr_12_review_actions_pr_12_review_actions",
-      "confidence_score": 1.0
+      "target": "claude_todo_06_pr_12_review_actions_pr_12_review_actions"
     },
     {
       "relation": "contains",
@@ -30341,9 +30341,9 @@
       "source_file": "claude-todo/06-pr-12-review-actions.md",
       "source_location": "L5",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_06_pr_12_review_actions_pr_12_review_actions",
-      "target": "claude_todo_06_pr_12_review_actions_1_jwt_secret_fallback",
-      "confidence_score": 1.0
+      "target": "claude_todo_06_pr_12_review_actions_1_jwt_secret_fallback"
     },
     {
       "relation": "contains",
@@ -30351,9 +30351,9 @@
       "source_file": "claude-todo/06-pr-12-review-actions.md",
       "source_location": "L12",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_06_pr_12_review_actions_pr_12_review_actions",
-      "target": "claude_todo_06_pr_12_review_actions_2_production_source_maps",
-      "confidence_score": 1.0
+      "target": "claude_todo_06_pr_12_review_actions_2_production_source_maps"
     },
     {
       "relation": "contains",
@@ -30361,9 +30361,9 @@
       "source_file": "claude-todo/06-pr-12-review-actions.md",
       "source_location": "L18",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_06_pr_12_review_actions_pr_12_review_actions",
-      "target": "claude_todo_06_pr_12_review_actions_3_atomic_email_verification_token_consumption",
-      "confidence_score": 1.0
+      "target": "claude_todo_06_pr_12_review_actions_3_atomic_email_verification_token_consumption"
     },
     {
       "relation": "contains",
@@ -30371,9 +30371,9 @@
       "source_file": "claude-todo/06-pr-12-review-actions.md",
       "source_location": "L24",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_06_pr_12_review_actions_pr_12_review_actions",
-      "target": "claude_todo_06_pr_12_review_actions_4_unused_imports",
-      "confidence_score": 1.0
+      "target": "claude_todo_06_pr_12_review_actions_4_unused_imports"
     },
     {
       "relation": "contains",
@@ -30707,5 +30707,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "5a08fa8bd78cd019945743cb74b4826cb1cd49da"
+  "built_at_commit": "01810502380a43b39b39b01a8c57e7d5bf75679e"
 }
