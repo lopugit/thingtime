@@ -50,8 +50,9 @@ export const DevKit = (props) => {
   // Push generated test data into shared thingtime state; the forms watch
   // devKit.registerPrefill / devKit.loginPrefill (by _ts) and fill themselves.
   const prefillRegister = React.useCallback(() => {
-    // rounded random so every prefill is a fresh, unique user
-    const rand = Math.floor(Math.random() * 100000);
+    // crypto RNG (not Math.random) for a fresh, unique-ish dev-user suffix —
+    // not security-sensitive, but keeps the code scanner happy
+    const rand = crypto.getRandomValues(new Uint32Array(1))[0] % 100000;
     setThingtime('devKit.registerPrefill', {
       username: `rick.deckard${rand}`,
       email: `rick.deckard+${rand}@thingtime.com`,
