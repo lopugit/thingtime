@@ -26,8 +26,12 @@ if [ -n "$inVercel" ]; then
 	export THINGTIME_BRANCH_NAME="$BRANCH_NAME"
 	echo "THINGTIME_BRANCH_NAME is $THINGTIME_BRANCH_NAME"
 
-	# replace process.env.THINGTIME_BRANCH_NAME with string value in all files within ../app
-	find ./app -type f -name "*.tsx" -o -name "*.ts" -o -name "*.jsx" -o -name "*.js" | xargs sed -i.bak "s/process.env.THINGTIME_BRANCH_NAME/\"$THINGTIME_BRANCH_NAME\"/g"
+	# replace process.env.THINGTIME_BRANCH_NAME with string value in app source files
+	if ! find ./app -type f \( -name "*.tsx" -o -name "*.ts" -o -name "*.jsx" -o -name "*.js" \) -print0 |
+		xargs -0 perl -0pi.bak -e 's/process\.env\.THINGTIME_BRANCH_NAME/"$ENV{THINGTIME_BRANCH_NAME}"/g'; then
+		echo "Error: failed to replace THINGTIME_BRANCH_NAME in app source files."
+		exit 1
+	fi
 	# remove .bak files
 	find ./app -type f -name "*.bak" -delete
 

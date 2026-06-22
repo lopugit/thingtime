@@ -34,6 +34,10 @@ Detailed PR notes:
 
 ### Changed
 
+- Limited Vercel deployment status UI and status routes to local development
+  and Vercel preview environments, marked successful API-backed status as
+  configured, and hardened Vercel branch-name source rewriting for slash
+  branches. — _Codex (AI), 2026-06-23_
 - Minified the Vercel footer status copy by deduping ready/STAGED wording,
   shortening last-ready ages to `s`/`m`/`h` units, and showing active build
   percentages without brackets. — _Codex (AI), 2026-06-23_

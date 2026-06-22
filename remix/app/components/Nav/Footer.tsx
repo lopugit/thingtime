@@ -16,6 +16,7 @@ export const Footer = (props) => {
   const envFromCookie = rootData?.envFromCookie || {};
 
   const branchName = envFromCookie.THINGTIME_BRANCH_NAME || BRANCH_NAME || 'git/unknown';
+  const showDeploymentStatus = envFromCookie.THINGTIME_SHOW_DEPLOYMENT_STATUS === 'true';
 
   const investmentEmail = 'invest@thingtime.com';
   const contactEmail = 'connect@thingtime.com';
@@ -78,7 +79,7 @@ export const Footer = (props) => {
             </Flex>
           )}
 
-          <VercelStatus></VercelStatus>
+          {showDeploymentStatus ? <VercelStatus></VercelStatus> : null}
 
           {/* live MongoDB connection status, links to /mongodb-status */}
           <MongoStatus></MongoStatus>

@@ -2,9 +2,13 @@ import { Box, Button, Container, Divider, Flex, Heading, Text, Badge, Link, Prog
 import { json } from '@vercel/remix';
 import { useLoaderData, useRevalidator } from '@remix-run/react';
 
-import { getVercelDeploymentStatus } from '~/api/utils/vercel/status';
+import { getVercelDeploymentStatus, isVercelStatusEnabled } from '~/api/utils/vercel/status';
 
 export const loader = async () => {
+  if (!isVercelStatusEnabled()) {
+    throw new Response('Not found', { status: 404 });
+  }
+
   const status = await getVercelDeploymentStatus();
   return json(status);
 };

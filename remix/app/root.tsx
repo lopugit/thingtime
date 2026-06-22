@@ -134,6 +134,14 @@ const getDeploymentBranchName = () => {
   );
 };
 
+const shouldShowDeploymentStatus = () => {
+  return (
+    process.env.NODE_ENV === 'development' ||
+    process.env.VERCEL_ENV === 'preview' ||
+    process.env.VERCEL_TARGET_ENV === 'preview'
+  );
+};
+
 export async function loader({ request }: { request: Request }) {
   const cookieHeader = request.headers.get('Cookie');
 
@@ -167,6 +175,7 @@ export async function loader({ request }: { request: Request }) {
   processEnv.THINGTIME_VERCEL_URL = process.env.VERCEL_URL;
   processEnv.THINGTIME_VERCEL_BRANCH_URL = process.env.VERCEL_BRANCH_URL;
   processEnv.THINGTIME_VERCEL_GIT_COMMIT_SHA = process.env.VERCEL_GIT_COMMIT_SHA;
+  processEnv.THINGTIME_SHOW_DEPLOYMENT_STATUS = shouldShowDeploymentStatus() ? 'true' : 'false';
 
   // .log everyone
 

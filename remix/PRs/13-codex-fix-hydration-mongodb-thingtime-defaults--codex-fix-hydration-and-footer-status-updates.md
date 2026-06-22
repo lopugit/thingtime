@@ -78,6 +78,13 @@ deployment runbook changes discovered while validating Vercel previews.
 - Keeps Vercel and MongoDB footer status dots visible in unavailable states by
   rendering neutral grey indicators with an outline, including MongoDB's initial
   checking state.
+- Limits the Vercel footer/status routes to local development and Vercel preview
+  environments so production does not mount the polling UI or expose the
+  deployment status endpoint.
+- Marks API-backed Vercel status responses as `configured: true` after
+  successful Vercel API calls.
+- Replaces the Vercel build branch rewrite with a slash-safe Perl replacement
+  and exits non-zero if source rewriting fails.
 
 ## Deployment And Repo Hygiene
 

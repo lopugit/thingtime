@@ -21,6 +21,14 @@ export type VercelDeploymentStatus = {
 const DEFAULT_VERCEL_PROJECT_ID = 'prj_ZAX9FhGC2alHMXMwTHX96ql3EQ8v';
 const DEFAULT_VERCEL_TEAM_ID = 'team_JsKhM6fVg9uo701feA0fLh9V';
 
+export const isVercelStatusEnabled = () => {
+  return (
+    process.env.NODE_ENV === 'development' ||
+    process.env.VERCEL_ENV === 'preview' ||
+    process.env.VERCEL_TARGET_ENV === 'preview'
+  );
+};
+
 const normaliseUrl = (url?: string) => {
   if (!url) {
     return undefined;
@@ -543,6 +551,7 @@ export const getVercelDeploymentStatus = async (): Promise<VercelDeploymentStatu
       buildPageUrl,
       buildPhase: phaseLabel,
       buildProgress: resolvedBuildProgress,
+      configured: true,
       hasError: state === 'error',
       lastReadyAt: lastReadyAt ? new Date(lastReadyAt).toISOString() : undefined,
       lastReadyLabel: formatRelativeTime(lastReadyAt),
