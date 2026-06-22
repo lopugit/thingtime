@@ -2050,7 +2050,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "components_imagegeneratoractionpanel",
-      "community": 0,
+      "community": 10,
       "norm_label": "imagegeneratoractionpanel.tsx"
     },
     {
@@ -2090,7 +2090,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "components_sizeselectionactionpanel",
-      "community": 0,
+      "community": 10,
       "norm_label": "sizeselectionactionpanel.tsx"
     },
     {
@@ -3364,6 +3364,56 @@
       "norm_label": "extends"
     },
     {
+      "label": "rules",
+      "file_type": "code",
+      "source_file": "remix/.eslintrc.json",
+      "source_location": "L4",
+      "_origin": "ast",
+      "id": "remix_eslintrc_rules",
+      "community": 77,
+      "norm_label": "rules"
+    },
+    {
+      "label": "@typescript-eslint/no-unused-vars",
+      "file_type": "code",
+      "source_file": "remix/.eslintrc.json",
+      "source_location": "L5",
+      "_origin": "ast",
+      "id": "remix_eslintrc_rules_typescript_eslint_no_unused_vars",
+      "community": 77,
+      "norm_label": "@typescript-eslint/no-unused-vars"
+    },
+    {
+      "label": "no-unused-vars",
+      "file_type": "code",
+      "source_file": "remix/.eslintrc.json",
+      "source_location": "L6",
+      "_origin": "ast",
+      "id": "remix_eslintrc_rules_no_unused_vars",
+      "community": 77,
+      "norm_label": "no-unused-vars"
+    },
+    {
+      "label": "unused-imports/no-unused-imports",
+      "file_type": "code",
+      "source_file": "remix/.eslintrc.json",
+      "source_location": "L7",
+      "_origin": "ast",
+      "id": "remix_eslintrc_rules_unused_imports_no_unused_imports",
+      "community": 77,
+      "norm_label": "unused-imports/no-unused-imports"
+    },
+    {
+      "label": "unused-imports/no-unused-vars",
+      "file_type": "code",
+      "source_file": "remix/.eslintrc.json",
+      "source_location": "L8",
+      "_origin": "ast",
+      "id": "remix_eslintrc_rules_unused_imports_no_unused_vars",
+      "community": 77,
+      "norm_label": "unused-imports/no-unused-vars"
+    },
+    {
       "label": ".prettierrc.js",
       "file_type": "code",
       "source_file": "remix/.prettierrc.js",
@@ -3660,7 +3710,7 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "providers_thingtimeprovider_thingtimetypes",
-      "community": 1,
+      "community": 7,
       "norm_label": "thingtimetypes"
     },
     {
@@ -3680,7 +3730,7 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "providers_thingtimeprovider_thingtimecontext",
-      "community": 1,
+      "community": 7,
       "norm_label": "thingtimecontext"
     },
     {
@@ -3867,7 +3917,7 @@
       "label": "consumeEmailVerification()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/auth/emailVerifications.ts",
-      "source_location": "L27",
+      "source_location": "L28",
       "_origin": "ast",
       "id": "auth_emailverifications_consumeemailverification",
       "community": 78,
@@ -4430,7 +4480,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "mongodb_status_mongoconnectionstatus",
-      "community": 45,
+      "community": 2,
       "norm_label": "mongoconnectionstatus"
     },
     {
@@ -4930,7 +4980,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "mongodb_mongostatus",
-      "community": 45,
+      "community": 2,
       "norm_label": "mongostatus.tsx"
     },
     {
@@ -4940,7 +4990,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "mongodb_mongostatus_pulse",
-      "community": 45,
+      "community": 2,
       "norm_label": "pulse"
     },
     {
@@ -4950,7 +5000,7 @@
       "source_location": "L18",
       "_origin": "ast",
       "id": "mongodb_mongostatus_mongostatus",
-      "community": 45,
+      "community": 2,
       "norm_label": "mongostatus()"
     },
     {
@@ -5260,7 +5310,7 @@
       "source_location": "L40",
       "_origin": "ast",
       "id": "thingtime_thingtime_thingtime",
-      "community": 16,
+      "community": 72,
       "norm_label": "thingtime()"
     },
     {
@@ -5270,7 +5320,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "thingtime_thingtimedemo",
-      "community": 16,
+      "community": 72,
       "norm_label": "thingtimedemo.tsx"
     },
     {
@@ -5280,7 +5330,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "thingtime_thingtimedemo_thingtimedemo",
-      "community": 16,
+      "community": 72,
       "norm_label": "thingtimedemo()"
     },
     {
@@ -5520,7 +5570,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "functions_sanitise",
-      "community": 45,
+      "community": 16,
       "norm_label": "sanitise.tsx"
     },
     {
@@ -5530,7 +5580,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "functions_sanitise_sanitise",
-      "community": 45,
+      "community": 16,
       "norm_label": "sanitise()"
     },
     {
@@ -6087,7 +6137,7 @@
       "label": "logConfig",
       "file_type": "code",
       "source_file": "remix/app/root.tsx",
-      "source_location": "L19",
+      "source_location": "L20",
       "_origin": "ast",
       "id": "app_root_logconfig",
       "community": 9,
@@ -6097,7 +6147,7 @@
       "label": "whitelistObj",
       "file_type": "code",
       "source_file": "remix/app/root.tsx",
-      "source_location": "L22",
+      "source_location": "L23",
       "_origin": "ast",
       "id": "app_root_whitelistobj",
       "community": 9,
@@ -6107,7 +6157,7 @@
       "label": "whitelist",
       "file_type": "code",
       "source_file": "remix/app/root.tsx",
-      "source_location": "L32",
+      "source_location": "L33",
       "_origin": "ast",
       "id": "app_root_whitelist",
       "community": 9,
@@ -6117,7 +6167,7 @@
       "label": "Document()",
       "file_type": "code",
       "source_file": "remix/app/root.tsx",
-      "source_location": "L58",
+      "source_location": "L59",
       "_origin": "ast",
       "id": "app_root_document",
       "community": 9,
@@ -6127,7 +6177,7 @@
       "label": "App()",
       "file_type": "code",
       "source_file": "remix/app/root.tsx",
-      "source_location": "L115",
+      "source_location": "L104",
       "_origin": "ast",
       "id": "app_root_app",
       "community": 9,
@@ -6137,7 +6187,7 @@
       "label": "loader()",
       "file_type": "code",
       "source_file": "remix/app/root.tsx",
-      "source_location": "L150",
+      "source_location": "L139",
       "_origin": "ast",
       "id": "app_root_loader",
       "community": 9,
@@ -6147,7 +6197,7 @@
       "label": "setThingtime()",
       "file_type": "code",
       "source_file": "remix/app/root.tsx",
-      "source_location": "L195",
+      "source_location": "L184",
       "_origin": "ast",
       "id": "app_root_setthingtime",
       "community": 9,
@@ -6190,7 +6240,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_routes_index_tsx_routes_index",
-      "community": 16,
+      "community": 72,
       "norm_label": "_index.tsx"
     },
     {
@@ -6200,7 +6250,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "routes_index_index",
-      "community": 1,
+      "community": 72,
       "norm_label": "index()"
     },
     {
@@ -6490,7 +6540,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "template_template",
-      "community": 2,
+      "community": 13,
       "norm_label": "_template.tsx"
     },
     {
@@ -6500,7 +6550,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "template_template_index",
-      "community": 2,
+      "community": 13,
       "norm_label": "index()"
     },
     {
@@ -6510,7 +6560,7 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "template_template_action",
-      "community": 2,
+      "community": 13,
       "norm_label": "action()"
     },
     {
@@ -6520,7 +6570,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "template_template_earlyreturn",
-      "community": 2,
+      "community": 13,
       "norm_label": "earlyreturn()"
     },
     {
@@ -6530,7 +6580,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "branding_index",
-      "community": 7,
+      "community": 87,
       "norm_label": "_index.tsx"
     },
     {
@@ -6540,7 +6590,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "branding_index_branding",
-      "community": 7,
+      "community": 87,
       "norm_label": "branding()"
     },
     {
@@ -6550,7 +6600,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "assets_all",
-      "community": 7,
+      "community": 87,
       "norm_label": "all.ts"
     },
     {
@@ -6560,7 +6610,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "assets_all_assets",
-      "community": 7,
+      "community": 87,
       "norm_label": "assets"
     },
     {
@@ -6680,7 +6730,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "routes_ode",
-      "community": 16,
+      "community": 72,
       "norm_label": "ode.tsx"
     },
     {
@@ -6690,7 +6740,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "routes_ode_index",
-      "community": 1,
+      "community": 72,
       "norm_label": "index()"
     },
     {
@@ -6980,7 +7030,7 @@
       "source_location": "L59",
       "_origin": "ast",
       "id": "smarts_index_getparentpath",
-      "community": 16,
+      "community": 45,
       "norm_label": "getparentpath()"
     },
     {
@@ -10078,6 +10128,66 @@
       "id": "claude_todo_05_authed_db_write_acceptance_criteria",
       "community": 83,
       "norm_label": "acceptance criteria"
+    },
+    {
+      "label": "06-pr-12-review-actions.md",
+      "file_type": "document",
+      "source_file": "claude-todo/06-pr-12-review-actions.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "claude_todo_06_pr_12_review_actions",
+      "community": 75,
+      "norm_label": "06-pr-12-review-actions.md"
+    },
+    {
+      "label": "PR 12 review actions",
+      "file_type": "document",
+      "source_file": "claude-todo/06-pr-12-review-actions.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "claude_todo_06_pr_12_review_actions_pr_12_review_actions",
+      "community": 75,
+      "norm_label": "pr 12 review actions"
+    },
+    {
+      "label": "1. JWT secret fallback",
+      "file_type": "document",
+      "source_file": "claude-todo/06-pr-12-review-actions.md",
+      "source_location": "L5",
+      "_origin": "ast",
+      "id": "claude_todo_06_pr_12_review_actions_1_jwt_secret_fallback",
+      "community": 75,
+      "norm_label": "1. jwt secret fallback"
+    },
+    {
+      "label": "2. Production source maps",
+      "file_type": "document",
+      "source_file": "claude-todo/06-pr-12-review-actions.md",
+      "source_location": "L12",
+      "_origin": "ast",
+      "id": "claude_todo_06_pr_12_review_actions_2_production_source_maps",
+      "community": 75,
+      "norm_label": "2. production source maps"
+    },
+    {
+      "label": "3. Atomic email verification token consumption",
+      "file_type": "document",
+      "source_file": "claude-todo/06-pr-12-review-actions.md",
+      "source_location": "L18",
+      "_origin": "ast",
+      "id": "claude_todo_06_pr_12_review_actions_3_atomic_email_verification_token_consumption",
+      "community": 75,
+      "norm_label": "3. atomic email verification token consumption"
+    },
+    {
+      "label": "4. Unused imports",
+      "file_type": "document",
+      "source_file": "claude-todo/06-pr-12-review-actions.md",
+      "source_location": "L24",
+      "_origin": "ast",
+      "id": "claude_todo_06_pr_12_review_actions_4_unused_imports",
+      "community": 75,
+      "norm_label": "4. unused imports"
     },
     {
       "label": "README.md",
@@ -17642,6 +17752,56 @@
       "confidence_score": 1.0,
       "source": "remix_eslintrc",
       "target": "remix_eslintrc_root"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/.eslintrc.json",
+      "source_location": "L4",
+      "weight": 1.0,
+      "source": "remix_eslintrc",
+      "target": "remix_eslintrc_rules",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/.eslintrc.json",
+      "source_location": "L6",
+      "weight": 1.0,
+      "source": "remix_eslintrc_rules",
+      "target": "remix_eslintrc_rules_no_unused_vars",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/.eslintrc.json",
+      "source_location": "L5",
+      "weight": 1.0,
+      "source": "remix_eslintrc_rules",
+      "target": "remix_eslintrc_rules_typescript_eslint_no_unused_vars",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/.eslintrc.json",
+      "source_location": "L7",
+      "weight": 1.0,
+      "source": "remix_eslintrc_rules",
+      "target": "remix_eslintrc_rules_unused_imports_no_unused_imports",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/.eslintrc.json",
+      "source_location": "L8",
+      "weight": 1.0,
+      "source": "remix_eslintrc_rules",
+      "target": "remix_eslintrc_rules_unused_imports_no_unused_vars",
+      "confidence_score": 1.0
     },
     {
       "relation": "imports_from",
@@ -30168,6 +30328,56 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
+      "source_file": "claude-todo/06-pr-12-review-actions.md",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "claude_todo_06_pr_12_review_actions",
+      "target": "claude_todo_06_pr_12_review_actions_pr_12_review_actions",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "claude-todo/06-pr-12-review-actions.md",
+      "source_location": "L5",
+      "weight": 1.0,
+      "source": "claude_todo_06_pr_12_review_actions_pr_12_review_actions",
+      "target": "claude_todo_06_pr_12_review_actions_1_jwt_secret_fallback",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "claude-todo/06-pr-12-review-actions.md",
+      "source_location": "L12",
+      "weight": 1.0,
+      "source": "claude_todo_06_pr_12_review_actions_pr_12_review_actions",
+      "target": "claude_todo_06_pr_12_review_actions_2_production_source_maps",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "claude-todo/06-pr-12-review-actions.md",
+      "source_location": "L18",
+      "weight": 1.0,
+      "source": "claude_todo_06_pr_12_review_actions_pr_12_review_actions",
+      "target": "claude_todo_06_pr_12_review_actions_3_atomic_email_verification_token_consumption",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "claude-todo/06-pr-12-review-actions.md",
+      "source_location": "L24",
+      "weight": 1.0,
+      "source": "claude_todo_06_pr_12_review_actions_pr_12_review_actions",
+      "target": "claude_todo_06_pr_12_review_actions_4_unused_imports",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
       "source_file": "claude-todo/README.md",
       "source_location": "L1",
       "weight": 1.0,
@@ -30497,5 +30707,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "942dd0e5cb115ff4eb71a6192ea032439c595662"
+  "built_at_commit": "5a08fa8bd78cd019945743cb74b4826cb1cd49da"
 }

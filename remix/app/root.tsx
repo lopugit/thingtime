@@ -1,4 +1,5 @@
 // import type { MetaFunction } from "@vercel/remix"
+import { useEffect } from 'react';
 import { defer, Links, LiveReload, Meta, Outlet, Scripts, ScrollRestoration, useLoaderData } from '@remix-run/react';
 import { Analytics } from '@vercel/analytics/react';
 
@@ -58,38 +59,26 @@ const whitelist = [].concat(Object.keys(whitelistObj).filter((key) => whitelistO
 function Document({ children, title = 'Thingtime' }: { children: React.ReactNode; title?: string }) {
   // check Remix environment
   // for dev mode
-  let titlePrefix = '';
-  // log the process.env.NODE_ENV
-  console.log('process.env.NODE_ENV', process.env.NODE_ENV);
-  if (process.env.NODE_ENV === 'development') {
-    titlePrefix = '🧑‍💻';
-  }
+  // Apply the dev 🧑‍💻 title prefix AFTER hydration (in an effect). If the
+  // server and client render a different <title>, hydrating the whole <html>
+  // document mismatches and React bails — the page renders but NO event
+  // handlers attach (forms do native submits, buttons do nothing). So SSR and
+  // the first client render MUST produce the same title.
+  useEffect(() => {
+    try {
+      const hostname = window.location.hostname;
+      const isDevLike = process.env.NODE_ENV === 'development' || hostname !== 'thingtime.com';
+      document.title = isDevLike ? `🧑‍💻 ${title}` : title;
 
-  try {
-    // actually also check if the domain is not thingtime.com
-    // then add the prefix
-    const hostname = window.location.hostname;
-    if (hostname !== 'thingtime.com') {
-      titlePrefix = '🧑‍💻';
-    }
-  } catch (err) {
-    // will error on server
-    // do nothing
-  }
-
-  // assign known process.env variables to window.env object
-  try {
-    if (typeof window !== 'undefined') {
+      // expose branch name for debugging (client-only side effect)
       window.env = {
         ...window.env,
         BRANCH_NAME: process.env.BRANCH_NAME || 'git/unknown'
       };
+    } catch {
+      // nothing
     }
-  } catch (err) {
-    // will error on server
-  }
-
-  // the favicon will also vary depending on the environment
+  }, [title]);
 
   return (
     <html lang="en">
@@ -97,7 +86,7 @@ function Document({ children, title = 'Thingtime' }: { children: React.ReactNode
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width,initial-scale=1" />
         <Meta />
-        <title>{titlePrefix ? titlePrefix + ' ' + title : title}</title>
+        <title>{title}</title>
         <Links />
       </head>
       <body>
