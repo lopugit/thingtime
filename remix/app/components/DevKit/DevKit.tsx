@@ -55,6 +55,13 @@ export const DevKit = (props) => {
 
   const [open, setOpen] = React.useState(false);
 
+  // hydration indicator: flips true only once React hydrates + runs effects on
+  // the client. Green dot on the icon = hydrated (handlers work); grey = not.
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
   // Push generated test data into shared thingtime state; the forms watch
   // devKit.registerPrefill / devKit.loginPrefill (by _ts) and fill themselves.
   const prefillRegister = React.useCallback(() => {
@@ -92,60 +99,64 @@ export const DevKit = (props) => {
   );
 
   return devKit ? (
-    <Flex
+    // Compact fixed container at bottom-right (no full-viewport overlay, so no
+    // pointer-events gymnastics). Safe-area offset keeps it clear of mobile
+    // browser bars.
+    <Box
       className="tt.devKit"
-      zIndex={99999}
-      pointerEvents={'none'}
-      sx={{
-        '*': {
-          whiteSpace: 'pre-wrap'
-        }
-      }}
       position="fixed"
-      top={0}
-      left={0}
-      alignItems="center"
-      justifyContent="center"
+      zIndex={99999}
+      bottom="calc(env(safe-area-inset-bottom, 0px) + 20px)"
+      right="calc(env(safe-area-inset-right, 0px) + 20px)"
+      display="flex"
       flexDirection="column"
-      overflow="hidden"
-      width="100vw"
-      maxWidth="100vw"
-      height="100vh"
-      maxHeight="100vh"
+      alignItems="flex-end"
+      gap={2}
+      sx={{ '*': { whiteSpace: 'pre-wrap' } }}
     >
-      <Flex
-        sx={{
-          '*': {
-            pointerEvents: 'all'
-          }
-        }}
-        position={'absolute'}
-        bottom={0}
-        right={0}
-        flexDirection="column"
-        alignItems="flex-end"
-      >
-        {open ? (
-          <Box mb={2} mr={3} bg="gray.800" color="white" borderRadius="md" p={3} boxShadow="lg" minWidth="220px" fontSize="sm">
-            <Text fontWeight="bold" mb={2}>
-              👨‍💻 DevKit
-            </Text>
-            <Button size="sm" width="100%" mb={2} colorScheme="purple" onClick={prefillRegister}>
-              Prefill register form
-            </Button>
-            <Button size="sm" width="100%" colorScheme="blue" onClick={prefillLogin}>
-              Prefill login form
-            </Button>
-          </Box>
-        ) : null}
+      {open ? (
+        <Box bg="gray.800" color="white" borderRadius="md" p={3} boxShadow="lg" minWidth="220px" fontSize="sm">
+          <Text fontWeight="bold" mb={2}>
+            👨‍💻 DevKit
+          </Text>
+          <Button size="sm" width="100%" mb={2} colorScheme="purple" onClick={prefillRegister}>
+            Prefill register form
+          </Button>
+          <Button size="sm" width="100%" colorScheme="blue" onClick={prefillLogin}>
+            Prefill login form
+          </Button>
+        </Box>
+      ) : null}
 
-        {/* floating icon toggles the DevKit panel */}
-        <Flex onClick={() => setOpen((o) => !o)} cursor={'pointer'} opacity={open ? 1 : 0.6}>
-          <Box p={4}>
-            <Icon name="👨‍💻"></Icon>
-          </Box>
-        </Flex>
+      {/* floating icon toggles the panel; the dot turns green once hydrated */}
+      <Flex
+        onClick={() => setOpen((o) => !o)}
+        cursor="pointer"
+        position="relative"
+        width="52px"
+        height="52px"
+        borderRadius="full"
+        bg="gray.800"
+        boxShadow="lg"
+        alignItems="center"
+        justifyContent="center"
+        opacity={open ? 1 : 0.9}
+        _active={{ transform: 'scale(0.92)' }}
+        transition="transform 100ms ease"
+      >
+        <Icon name="👨‍💻"></Icon>
+        <Box
+          position="absolute"
+          top="2px"
+          right="2px"
+          width="12px"
+          height="12px"
+          borderRadius="full"
+          border="2px solid"
+          borderColor="gray.800"
+          bg={mounted ? 'green.400' : 'gray.500'}
+        />
       </Flex>
-    </Flex>
+    </Box>
   ) : null;
 };
