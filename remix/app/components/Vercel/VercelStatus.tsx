@@ -4,7 +4,7 @@ import { keyframes } from '@emotion/react';
 
 import type { VercelDeploymentStatus } from '~/api/utils/vercel/status';
 
-const STATUS_ENDPOINT = '/api/v1/vercel/status-data';
+const STATUS_ENDPOINT = '/api/v1/vercel/status';
 
 const pulse = keyframes`
   0% { opacity: 1; }
