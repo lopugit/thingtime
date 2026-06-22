@@ -470,8 +470,8 @@
     "semantic_hash": "b1734a0bbcfa931b26189ab4faa7b9c3"
   },
   "remix/app/components/Login/Login.tsx": {
-    "mtime": 1782108458.4529932,
-    "ast_hash": "72e0a0a2ce8d526dc50845aa29448524",
+    "mtime": 1782138367.3390415,
+    "ast_hash": "349276adae9ab6f4e6f07db04cadafb4",
     "semantic_hash": ""
   },
   "remix/app/components/MagicInput/MagicInput.tsx": {
@@ -1010,8 +1010,8 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1782054933.4151769,
-    "ast_hash": "c14efc46fc4dc5b31110b78f146c5710",
+    "mtime": 1782138316.773643,
+    "ast_hash": "ecd56991086c481f19cacf49c9cf0efd",
     "semantic_hash": ""
   },
   "raycast/assets/command-icon.png": {
@@ -1860,13 +1860,13 @@
     "semantic_hash": ""
   },
   "remix/app/components/Login/Register.tsx": {
-    "mtime": 1782109692.4729428,
-    "ast_hash": "ae5042e4b3c77a218828d443ce3eef4b",
+    "mtime": 1782138367.3392744,
+    "ast_hash": "9b430b42b911c4b267377065fd02d2f9",
     "semantic_hash": ""
   },
   "remix/app/components/Lopu/useLopu.tsx": {
-    "mtime": 1782137410.4695892,
-    "ast_hash": "fa6817c1daa1f1fe5835132ea31ad047",
+    "mtime": 1782138280.749641,
+    "ast_hash": "cf34ba3ca9f2d789581cea6d03a02583",
     "semantic_hash": ""
   },
   "remix/app/components/User/UserCard.tsx": {
@@ -1930,8 +1930,8 @@
     "semantic_hash": ""
   },
   "FUNDAMENTALS.md": {
-    "mtime": 1782053777.7911081,
-    "ast_hash": "848bba80e18f5884eaeab29788845799",
+    "mtime": 1782138304.0616422,
+    "ast_hash": "459fb3a271e5340a04d5f7275dfd1195",
     "semantic_hash": ""
   },
   "claude-todo/01-mongodb-connection-status.md": {

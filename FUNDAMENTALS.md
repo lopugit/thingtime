@@ -72,3 +72,23 @@ API clients — and either way Mongo is the source of truth for revocation.
   (`sanitiseMongoHost`).
 - Never return password hashes, session tokens, or raw JWTs in read responses;
   project them out.
+
+## 7. One notification: Lopu 🦄
+
+**All user-facing notifications go through the Lopu toast component**
+(`remix/app/components/Lopu/useLopu.tsx`) — never raw Chakra `useToast`, browser
+`alert()`, or ad-hoc banners. This keeps one consistent voice (messages read as
+coming from "Lopu", the Thingtime AI) and one visual style (the rainbow-bordered
+card below the nav, with a built-in ✕ close button).
+
+Two hooks, same look:
+
+- `useLopu()` → one-shot toast: `lopu({ title, description?, status?, duration?, link? })`.
+  `status` is `'success' | 'error' | 'info'`; default `duration` is 15s.
+- `useLopuStream()` → a streaming toast that pops instantly ("Lopu is thinking…")
+  and types an NDJSON response in live (used by the DevKit musing). The read-timer
+  starts when the stream *finishes*.
+
+Don't pass Chakra-native toast props (e.g. `isClosable`, `render`) to `lopu()` —
+the component owns presentation. `console.error`/logging is for developers and is
+not a user notification; surface anything the user should see through Lopu.

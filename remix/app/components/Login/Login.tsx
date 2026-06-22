@@ -66,8 +66,6 @@ export const Login = (props) => {
 					title: `Welcome back, ${resp.user?.username || username}! ✨`,
 					status: 'success',
 					duration: 5000,
-					isClosable: true,
-					position: 'top'
 				});
 				navigate('/');
 			} else {
@@ -76,8 +74,6 @@ export const Login = (props) => {
 					description: resp?.error || 'Invalid username or password',
 					status: 'error',
 					duration: 6000,
-					isClosable: true,
-					position: 'top'
 				});
 			}
 		} catch (err) {
@@ -86,8 +82,6 @@ export const Login = (props) => {
 				description: 'Could not reach the server. Please try again.',
 				status: 'error',
 				duration: 6000,
-				isClosable: true,
-				position: 'top'
 			});
 		} finally {
 			setLoading(false);

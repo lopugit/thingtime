@@ -5,6 +5,7 @@ Read `FUNDAMENTALS.md` before adding features. Non-negotiables:
 - **Seed and test by calling the real API** (e.g. seed users via `POST /api/v1/auth/register`), never by writing to Mongo directly — so seeded data and real signups share one code path.
 - One `thingtime` db (`users`, `sessions`, `things`); one connection source (`mongodb/config.ts` `getMongoUri()`).
 - Auth: httpOnly cookie carrying a signed JWT (`jti`/`sub`/`exp`) + a Mongo `sessions` doc for revocation; Bearer token supported for API clients.
+- All user-facing notifications go through the Lopu toast (`components/Lopu/useLopu.tsx` — `useLopu()` / `useLopuStream()`), never raw Chakra `useToast` or `alert()`.
 
 The active build roadmap lives in `claude-todo/`. The owner's engineering decisions + thinking method are logged in `DECISIONS.md` (read it to predict the call that fits — default to single-source-of-truth, determinism, test==live cohesion, merge commits).
 

@@ -63,8 +63,6 @@ export const Register = (props) => {
           description: r?.error || 'Something went wrong. Please try again.',
           status: 'error',
           duration: 7000,
-          isClosable: true,
-          position: 'top'
         });
       }
     } catch (err) {
@@ -73,8 +71,6 @@ export const Register = (props) => {
         description: 'Could not reach the server. Please try again.',
         status: 'error',
         duration: 7000,
-        isClosable: true,
-        position: 'top'
       });
     } finally {
       setLoading(false);

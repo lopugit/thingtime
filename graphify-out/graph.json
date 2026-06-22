@@ -2050,7 +2050,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "components_imagegeneratoractionpanel",
-      "community": 10,
+      "community": 0,
       "norm_label": "imagegeneratoractionpanel.tsx"
     },
     {
@@ -2240,7 +2240,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "operations_filteroperation",
-      "community": 0,
+      "community": 10,
       "norm_label": "filteroperation.ts"
     },
     {
@@ -2250,7 +2250,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "operations_filteroperation_applyfilter",
-      "community": 0,
+      "community": 10,
       "norm_label": "applyfilter()"
     },
     {
@@ -3020,7 +3020,7 @@
       "source_location": "L231",
       "_origin": "ast",
       "id": "utilities_utils_cleanup",
-      "community": 10,
+      "community": 0,
       "norm_label": "cleanup()"
     },
     {
@@ -3180,7 +3180,7 @@
       "source_location": "L994",
       "_origin": "ast",
       "id": "utilities_utils_showerrortoast",
-      "community": 10,
+      "community": 0,
       "norm_label": "showerrortoast()"
     },
     {
@@ -3710,7 +3710,7 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "providers_thingtimeprovider_thingtimetypes",
-      "community": 72,
+      "community": 87,
       "norm_label": "thingtimetypes"
     },
     {
@@ -3730,7 +3730,7 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "providers_thingtimeprovider_thingtimecontext",
-      "community": 72,
+      "community": 87,
       "norm_label": "thingtimecontext"
     },
     {
@@ -4780,7 +4780,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "api_submit",
-      "community": 2,
+      "community": 72,
       "norm_label": "submit.tsx"
     },
     {
@@ -4790,7 +4790,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "api_submit_submit",
-      "community": 2,
+      "community": 72,
       "norm_label": "submit()"
     },
     {
@@ -4820,7 +4820,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "branding_branding",
-      "community": 13,
+      "community": 87,
       "norm_label": "branding.tsx"
     },
     {
@@ -4830,7 +4830,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "branding_branding_branding",
-      "community": 13,
+      "community": 87,
       "norm_label": "branding()"
     },
     {
@@ -4840,7 +4840,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "branding_logo",
-      "community": 13,
+      "community": 87,
       "norm_label": "logo.tsx"
     },
     {
@@ -4850,7 +4850,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "branding_logo_logo",
-      "community": 13,
+      "community": 87,
       "norm_label": "logo()"
     },
     {
@@ -5050,7 +5050,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "icon_icon",
-      "community": 45,
+      "community": 73,
       "norm_label": "icon.tsx"
     },
     {
@@ -5060,7 +5060,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "icon_icon_icon",
-      "community": 45,
+      "community": 73,
       "norm_label": "icon()"
     },
     {
@@ -5080,7 +5080,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "layout_main_main",
-      "community": 9,
+      "community": 73,
       "norm_label": "main()"
     },
     {
@@ -5237,7 +5237,7 @@
       "label": "useLopu()",
       "file_type": "code",
       "source_file": "remix/app/components/Lopu/useLopu.tsx",
-      "source_location": "L137",
+      "source_location": "L143",
       "_origin": "ast",
       "id": "lopu_uselopu_uselopu",
       "community": 16,
@@ -5247,7 +5247,7 @@
       "label": "sourceLabel()",
       "file_type": "code",
       "source_file": "remix/app/components/Lopu/useLopu.tsx",
-      "source_location": "L154",
+      "source_location": "L160",
       "_origin": "ast",
       "id": "lopu_uselopu_sourcelabel",
       "community": 16,
@@ -5257,7 +5257,7 @@
       "label": "useLopuStream()",
       "file_type": "code",
       "source_file": "remix/app/components/Lopu/useLopu.tsx",
-      "source_location": "L159",
+      "source_location": "L165",
       "_origin": "ast",
       "id": "lopu_uselopu_uselopustream",
       "community": 16,
@@ -5330,7 +5330,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "mongodb_raw",
-      "community": 13,
+      "community": 72,
       "norm_label": "raw.tsx"
     },
     {
@@ -5340,7 +5340,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "mongodb_raw_raw",
-      "community": 13,
+      "community": 72,
       "norm_label": "raw()"
     },
     {
@@ -5390,7 +5390,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "mongodb_rawresults_rawresults",
-      "community": 13,
+      "community": 72,
       "norm_label": "rawresults()"
     },
     {
@@ -5580,7 +5580,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "thingtime_settingsmenu",
-      "community": 45,
+      "community": 72,
       "norm_label": "settingsmenu.tsx"
     },
     {
@@ -5590,7 +5590,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "thingtime_settingsmenu_settingsmenu",
-      "community": 45,
+      "community": 72,
       "norm_label": "settingsmenu()"
     },
     {
@@ -5630,7 +5630,7 @@
       "source_location": "L40",
       "_origin": "ast",
       "id": "thingtime_thingtime_thingtime",
-      "community": 76,
+      "community": 45,
       "norm_label": "thingtime()"
     },
     {
@@ -5910,7 +5910,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "functions_sanitise",
-      "community": 73,
+      "community": 45,
       "norm_label": "sanitise.tsx"
     },
     {
@@ -5920,7 +5920,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "functions_sanitise_sanitise",
-      "community": 73,
+      "community": 45,
       "norm_label": "sanitise()"
     },
     {
@@ -6230,7 +6230,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "hooks_useasyncfetcher",
-      "community": 2,
+      "community": 72,
       "norm_label": "useasyncfetcher.tsx"
     },
     {
@@ -6240,7 +6240,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "hooks_useasyncfetcher_useasyncfetcher",
-      "community": 2,
+      "community": 72,
       "norm_label": "useasyncfetcher()"
     },
     {
@@ -6560,7 +6560,7 @@
       "source_location": "L140",
       "_origin": "ast",
       "id": "app_root_loader",
-      "community": 78,
+      "community": 9,
       "norm_label": "loader()"
     },
     {
@@ -7020,7 +7020,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "routes_branding_old",
-      "community": 13,
+      "community": 72,
       "norm_label": "branding_old.tsx"
     },
     {
@@ -7030,7 +7030,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "routes_branding_old_branding",
-      "community": 13,
+      "community": 72,
       "norm_label": "branding()"
     },
     {
@@ -7070,7 +7070,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "routes_login",
-      "community": 16,
+      "community": 78,
       "norm_label": "login.tsx"
     },
     {
@@ -7090,7 +7090,7 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "routes_login_login",
-      "community": 16,
+      "community": 78,
       "norm_label": "login()"
     },
     {
@@ -7200,7 +7200,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "routes_raw",
-      "community": 13,
+      "community": 72,
       "norm_label": "raw.tsx"
     },
     {
@@ -7210,7 +7210,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "routes_raw_login",
-      "community": 13,
+      "community": 72,
       "norm_label": "login()"
     },
     {
@@ -7250,7 +7250,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "scratchpads_svg_displacement_map",
-      "community": 13,
+      "community": 87,
       "norm_label": "svg-displacement-map.tsx"
     },
     {
@@ -7260,7 +7260,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "scratchpads_svg_displacement_map_scratchpad",
-      "community": 13,
+      "community": 87,
       "norm_label": "scratchpad()"
     },
     {
@@ -7270,7 +7270,7 @@
       "source_location": "L167",
       "_origin": "ast",
       "id": "scratchpads_svg_displacement_map_checkermatrix",
-      "community": 13,
+      "community": 87,
       "norm_label": "checkermatrix"
     },
     {
@@ -7290,7 +7290,7 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "routes_welcome_loader",
-      "community": 78,
+      "community": 16,
       "norm_label": "loader()"
     },
     {
@@ -7500,7 +7500,7 @@
       "source_location": "L59",
       "_origin": "ast",
       "id": "smarts_index_getparentpath",
-      "community": 73,
+      "community": 45,
       "norm_label": "getparentpath()"
     },
     {
@@ -9963,7 +9963,7 @@
       "label": "graphify",
       "file_type": "document",
       "source_file": "CLAUDE.md",
-      "source_location": "L11",
+      "source_location": "L12",
       "_origin": "ast",
       "id": "claude_graphify",
       "community": 49,
@@ -10168,6 +10168,16 @@
       "id": "fundamentals_6_never_leak_secrets",
       "community": 81,
       "norm_label": "6. never leak secrets"
+    },
+    {
+      "label": "7. One notification: Lopu \ud83e\udd84",
+      "file_type": "document",
+      "source_file": "FUNDAMENTALS.md",
+      "source_location": "L76",
+      "_origin": "ast",
+      "id": "fundamentals_7_one_notification_lopu",
+      "community": 81,
+      "norm_label": "7. one notification: lopu \ud83e\udd84"
     },
     {
       "label": "README.md",
@@ -31608,6 +31618,16 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
+      "source_file": "FUNDAMENTALS.md",
+      "source_location": "L76",
+      "weight": 1.0,
+      "source": "fundamentals_thingtime_fundamentals",
+      "target": "fundamentals_7_one_notification_lopu",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
       "source_file": "README.md",
       "source_location": "L11",
       "weight": 1.0,
@@ -32377,5 +32397,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "08f51e084172de6a964e30c97cc7217a6f963f9c"
+  "built_at_commit": "e5c124c571e0c8660af067e6d023773f49f02104"
 }

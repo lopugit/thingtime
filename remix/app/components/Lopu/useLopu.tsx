@@ -80,11 +80,17 @@ const LopuToast = ({
           type="button"
           onClick={onClose}
           aria-label="Close"
+          display="flex"
+          alignItems="center"
+          justifyContent="center"
+          width="20px"
+          height="20px"
+          borderRadius="full"
           fontSize="xs"
           lineHeight={1}
           color="gray.400"
-          _hover={{ color: 'gray.700' }}
-          transition="color 120ms"
+          _hover={{ color: 'gray.700', bg: 'gray.100' }}
+          transition="all 120ms"
         >
           ✕
         </Box>
@@ -138,7 +144,7 @@ export const useLopu = () => {
   const toast = useToast();
 
   return useCallback(
-    ({ title, description, status, duration = 5000, link }: LopuArgs) =>
+    ({ title, description, status, duration = 15000, link }: LopuArgs) =>
       toast({
         duration,
         position: 'top',
@@ -217,10 +223,12 @@ export const useLopuStream = () => {
           }
         }
 
-        update({ title: text.trim() || 'Lopu is daydreaming…', description: sourceLabel(source) }, 6000);
+        // The read-timer starts now (stream finished), not when the toast popped,
+        // so you get the full window to read the finished musing.
+        update({ title: text.trim() || 'Lopu is daydreaming…', description: sourceLabel(source) }, 18000);
       } catch (err: any) {
         if (err?.name === 'AbortError') return; // user closed it — leave closed
-        update({ title: 'Lopu is daydreaming… try again 🔮', status: 'error' }, 5000);
+        update({ title: 'Lopu is daydreaming… try again 🔮', status: 'error' }, 15000);
       }
     },
     [toast]
