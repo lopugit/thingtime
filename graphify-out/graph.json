@@ -3537,7 +3537,7 @@
       "label": "createEmotionCache()",
       "file_type": "code",
       "source_file": "remix/app/Providers/Chakra/createEmotionCache.ts",
-      "source_location": "L3",
+      "source_location": "L5",
       "_origin": "ast",
       "id": "chakra_createemotioncache_createemotioncache",
       "community": 46,
@@ -4270,7 +4270,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "devkit_devkit",
-      "community": 1,
+      "community": 35,
       "norm_label": "devkit.tsx"
     },
     {
@@ -4280,7 +4280,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "devkit_devkit_getqueryparams",
-      "community": 1,
+      "community": 35,
       "norm_label": "getqueryparams()"
     },
     {
@@ -4290,7 +4290,7 @@
       "source_location": "L14",
       "_origin": "ast",
       "id": "devkit_devkit_devkit",
-      "community": 1,
+      "community": 35,
       "norm_label": "devkit()"
     },
     {
@@ -4977,7 +4977,7 @@
       "label": "removeEmotionInlineStyles()",
       "file_type": "code",
       "source_file": "remix/app/entry.server.tsx",
-      "source_location": "L9",
+      "source_location": "L14",
       "_origin": "ast",
       "id": "app_entry_server_removeemotioninlinestyles",
       "community": 46,
@@ -4987,7 +4987,7 @@
       "label": "emotionStylesToHtml()",
       "file_type": "code",
       "source_file": "remix/app/entry.server.tsx",
-      "source_location": "L12",
+      "source_location": "L17",
       "_origin": "ast",
       "id": "app_entry_server_emotionstylestohtml",
       "community": 46,
@@ -4997,7 +4997,7 @@
       "label": "handleRequest()",
       "file_type": "code",
       "source_file": "remix/app/entry.server.tsx",
-      "source_location": "L20",
+      "source_location": "L25",
       "_origin": "ast",
       "id": "app_entry_server_handlerequest",
       "community": 46,
@@ -8893,7 +8893,7 @@
       "label": "Graphify",
       "file_type": "document",
       "source_file": "CODEX.md",
-      "source_location": "L21",
+      "source_location": "L22",
       "_origin": "ast",
       "id": "codex_graphify",
       "community": 74,
@@ -8903,7 +8903,7 @@
       "label": "Remix linting",
       "file_type": "document",
       "source_file": "CODEX.md",
-      "source_location": "L32",
+      "source_location": "L33",
       "_origin": "ast",
       "id": "codex_remix_linting",
       "community": 74,
@@ -8913,7 +8913,7 @@
       "label": "TypeScript checks",
       "file_type": "document",
       "source_file": "CODEX.md",
-      "source_location": "L43",
+      "source_location": "L44",
       "_origin": "ast",
       "id": "codex_typescript_checks",
       "community": 74,
@@ -8923,7 +8923,7 @@
       "label": "Package manager notes",
       "file_type": "document",
       "source_file": "CODEX.md",
-      "source_location": "L48",
+      "source_location": "L49",
       "_origin": "ast",
       "id": "codex_package_manager_notes",
       "community": 74,
@@ -16708,9 +16708,9 @@
       "source_file": "remix/app/entry.client.tsx",
       "source_location": "L6",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "app_entry_client",
-      "target": "chakra_createemotioncache",
-      "confidence_score": 1.0
+      "target": "chakra_createemotioncache"
     },
     {
       "relation": "imports_from",
@@ -16719,9 +16719,9 @@
       "source_file": "remix/app/entry.server.tsx",
       "source_location": "L7",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "app_entry_server",
-      "target": "chakra_createemotioncache",
-      "confidence_score": 1.0
+      "target": "chakra_createemotioncache"
     },
     {
       "relation": "contains",
@@ -16729,9 +16729,9 @@
       "source_file": "remix/app/Providers/Chakra/createEmotionCache.ts",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "chakra_createemotioncache",
-      "target": "chakra_createemotioncache_createemotioncache",
-      "confidence_score": 1.0
+      "target": "chakra_createemotioncache_createemotioncache"
     },
     {
       "relation": "imports",
@@ -16740,9 +16740,9 @@
       "source_file": "remix/app/entry.client.tsx",
       "source_location": "L6",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "app_entry_client",
-      "target": "chakra_createemotioncache_createemotioncache",
-      "confidence_score": 1.0
+      "target": "chakra_createemotioncache_createemotioncache"
     },
     {
       "relation": "imports",
@@ -16751,9 +16751,9 @@
       "source_file": "remix/app/entry.server.tsx",
       "source_location": "L7",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "app_entry_server",
-      "target": "chakra_createemotioncache_createemotioncache",
-      "confidence_score": 1.0
+      "target": "chakra_createemotioncache_createemotioncache"
     },
     {
       "relation": "calls",
@@ -21595,9 +21595,9 @@
       "source_file": "remix/app/entry.server.tsx",
       "source_location": "L12",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "app_entry_server",
-      "target": "app_entry_server_emotionstylestohtml",
-      "confidence_score": 1.0
+      "target": "app_entry_server_emotionstylestohtml"
     },
     {
       "relation": "contains",
@@ -21615,9 +21615,9 @@
       "source_file": "remix/app/entry.server.tsx",
       "source_location": "L9",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "app_entry_server",
-      "target": "app_entry_server_removeemotioninlinestyles",
-      "confidence_score": 1.0
+      "target": "app_entry_server_removeemotioninlinestyles"
     },
     {
       "relation": "calls",
@@ -21626,9 +21626,9 @@
       "source_file": "remix/app/entry.server.tsx",
       "source_location": "L30",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "app_entry_server_handlerequest",
-      "target": "app_entry_server_removeemotioninlinestyles",
-      "confidence_score": 1.0
+      "target": "app_entry_server_removeemotioninlinestyles"
     },
     {
       "relation": "calls",
@@ -21637,9 +21637,9 @@
       "source_file": "remix/app/entry.server.tsx",
       "source_location": "L29",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "app_entry_server_handlerequest",
-      "target": "app_entry_server_emotionstylestohtml",
-      "confidence_score": 1.0
+      "target": "app_entry_server_emotionstylestohtml"
     },
     {
       "relation": "contains",
@@ -25586,9 +25586,9 @@
       "source_file": "remix/package.json",
       "source_location": "L17",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "remix_package_dependencies",
-      "target": "remix_package_dependencies_emotion_cache",
-      "confidence_score": 1.0
+      "target": "remix_package_dependencies_emotion_cache"
     },
     {
       "relation": "contains",
@@ -25606,9 +25606,9 @@
       "source_file": "remix/package.json",
       "source_location": "L19",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "remix_package_dependencies",
-      "target": "remix_package_dependencies_emotion_server",
-      "confidence_score": 1.0
+      "target": "remix_package_dependencies_emotion_server"
     },
     {
       "relation": "contains",
@@ -27062,5 +27062,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "3793d5415dec6868ea840c8d7027cd4b30aa5f28"
+  "built_at_commit": "c218f92c6a27bb547c3a181107eb34a73cbb263c"
 }

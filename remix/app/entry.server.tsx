@@ -1,10 +1,15 @@
 import { RemixServer } from '@remix-run/react';
 import type { EntryContext } from '@remix-run/react/dist/entry';
 import { CacheProvider } from '@emotion/react';
-import createEmotionServer from '@emotion/server/create-instance';
+import createEmotionServerModule from '@emotion/server/create-instance';
 import { renderToString } from 'react-dom/server';
 
 import { createEmotionCache } from './Providers/Chakra/createEmotionCache';
+
+const createEmotionServer =
+  'default' in createEmotionServerModule
+    ? createEmotionServerModule.default
+    : createEmotionServerModule;
 
 const removeEmotionInlineStyles = (markup: string) =>
   markup.replace(/<style data-emotion="[^"]*">[\s\S]*?<\/style>/g, '');

@@ -1,7 +1,7 @@
 # Graph Report - thingtime  (2026-06-22)
 
 ## Corpus Check
-- 195 files · ~539,089 words
+- 195 files · ~539,132 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -10,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `3793d541`
+- Built from commit: `c218f92c`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -105,8 +105,8 @@
   remix/app/routes/mongodb-status.tsx → remix/app/api/utils/mongodb/status.ts
 
 ## Import Cycles
-- 3-file cycle: `remix/app/api/utils/mongodb/connection.ts -> remix/app/routes/api/v1/mongodb/get-connection/_get-connection.tsx -> remix/app/api/utils/userValidatePassword.ts -> remix/app/api/utils/mongodb/connection.ts`
 - 3-file cycle: `remix/app/api/utils/mongodb/connection.ts -> remix/app/routes/api/v1/mongodb/get-connection/_get-connection.tsx -> remix/app/api/utils/userCheckExists.ts -> remix/app/api/utils/mongodb/connection.ts`
+- 3-file cycle: `remix/app/api/utils/mongodb/connection.ts -> remix/app/routes/api/v1/mongodb/get-connection/_get-connection.tsx -> remix/app/api/utils/userValidatePassword.ts -> remix/app/api/utils/mongodb/connection.ts`
 - 3-file cycle: `remix/app/Providers/ThingtimeProvider.tsx -> remix/app/hooks/useThingtimeMachine.tsx -> remix/app/components/Thingtime/useThingtime.tsx -> remix/app/Providers/ThingtimeProvider.tsx`
 
 ## Communities (78 total, 19 thin omitted)
@@ -116,8 +116,8 @@ Cohesion: 0.06
 Nodes (81): openNewFinderWindow(), regexToReplacementConverter(), regexTrim(), any(), convert(), applyFilter(), flip(), optimize() (+73 more)
 
 ### Community 1 - "Remix API Routes & Editor"
-Cohesion: 0.14
-Nodes (16): commanderArgs, CommanderV1(), DevKit(), getQueryParams(), useThings(), PathArray, Icon(), MagicInput (+8 more)
+Cohesion: 0.17
+Nodes (14): commanderArgs, CommanderV1(), useThings(), PathArray, Icon(), MagicInput, MagicInputProps, uuid (+6 more)
 
 ### Community 2 - "Backend API Dependencies"
 Cohesion: 0.07
@@ -244,8 +244,8 @@ Cohesion: 0.40
 Nodes (4): app, io, server, smarts
 
 ### Community 35 - "Community 35"
-Cohesion: 0.17
-Nodes (12): RawResult(), RawResultProps, RawResults(), ThingtimeContext, ThingtimeTypes, Index(), ThingtimeURL(), EverythingTypes (+4 more)
+Cohesion: 0.15
+Nodes (14): DevKit(), getQueryParams(), RawResult(), RawResultProps, RawResults(), ThingtimeContext, ThingtimeTypes, Index() (+6 more)
 
 ### Community 36 - "Displacement Map Assets"
 Cohesion: 0.50
@@ -311,5 +311,5 @@ _Questions this graph is uniquely positioned to answer:_
   _359 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Raycast Image/File Operations` be split into smaller, more focused modules?**
   _Cohesion score 0.061102407064520727 - nodes in this community are weakly interconnected._
-- **Should `Remix API Routes & Editor` be split into smaller, more focused modules?**
-  _Cohesion score 0.14492753623188406 - nodes in this community are weakly interconnected._
+- **Should `Backend API Dependencies` be split into smaller, more focused modules?**
+  _Cohesion score 0.07412587412587412 - nodes in this community are weakly interconnected._
