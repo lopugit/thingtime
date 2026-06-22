@@ -4367,7 +4367,7 @@
       "label": "weatherCodeToText()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/lopu/musing.ts",
-      "source_location": "L76",
+      "source_location": "L78",
       "_origin": "ast",
       "id": "lopu_musing_weathercodetotext",
       "community": 35,
@@ -4377,7 +4377,7 @@
       "label": "fetchWeather()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/lopu/musing.ts",
-      "source_location": "L89",
+      "source_location": "L91",
       "_origin": "ast",
       "id": "lopu_musing_fetchweather",
       "community": 35,
@@ -4387,7 +4387,7 @@
       "label": "providerOrder()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/lopu/musing.ts",
-      "source_location": "L142",
+      "source_location": "L144",
       "_origin": "ast",
       "id": "lopu_musing_providerorder",
       "community": 35,
@@ -4397,7 +4397,7 @@
       "label": "hasAnyKey()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/lopu/musing.ts",
-      "source_location": "L147",
+      "source_location": "L149",
       "_origin": "ast",
       "id": "lopu_musing_hasanykey",
       "community": 35,
@@ -4407,7 +4407,7 @@
       "label": "chunkWords()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/lopu/musing.ts",
-      "source_location": "L151",
+      "source_location": "L153",
       "_origin": "ast",
       "id": "lopu_musing_chunkwords",
       "community": 35,
@@ -4417,7 +4417,7 @@
       "label": "tick()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/lopu/musing.ts",
-      "source_location": "L152",
+      "source_location": "L154",
       "_origin": "ast",
       "id": "lopu_musing_tick",
       "community": 35,
@@ -4427,7 +4427,7 @@
       "label": "generateLopuMusing()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/lopu/musing.ts",
-      "source_location": "L208",
+      "source_location": "L210",
       "_origin": "ast",
       "id": "lopu_musing_generatelopumusing",
       "community": 35,
@@ -20897,9 +20897,9 @@
       "source_file": "remix/app/api/utils/lopu/musing.ts",
       "source_location": "L44",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_musing",
-      "target": "lopu_musing_all_modes",
-      "confidence_score": 1.0
+      "target": "lopu_musing_all_modes"
     },
     {
       "relation": "contains",
@@ -20907,9 +20907,9 @@
       "source_file": "remix/app/api/utils/lopu/musing.ts",
       "source_location": "L52",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_musing",
-      "target": "lopu_musing_buildcontextline",
-      "confidence_score": 1.0
+      "target": "lopu_musing_buildcontextline"
     },
     {
       "relation": "contains",
@@ -20927,9 +20927,9 @@
       "source_file": "remix/app/api/utils/lopu/musing.ts",
       "source_location": "L151",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_musing",
-      "target": "lopu_musing_chunkwords",
-      "confidence_score": 1.0
+      "target": "lopu_musing_chunkwords"
     },
     {
       "relation": "contains",
@@ -20957,9 +20957,9 @@
       "source_file": "remix/app/api/utils/lopu/musing.ts",
       "source_location": "L147",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_musing",
-      "target": "lopu_musing_hasanykey",
-      "confidence_score": 1.0
+      "target": "lopu_musing_hasanykey"
     },
     {
       "relation": "contains",
@@ -20977,9 +20977,9 @@
       "source_file": "remix/app/api/utils/lopu/musing.ts",
       "source_location": "L29",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_musing",
-      "target": "lopu_musing_lopumode",
-      "confidence_score": 1.0
+      "target": "lopu_musing_lopumode"
     },
     {
       "relation": "contains",
@@ -21007,9 +21007,9 @@
       "source_file": "remix/app/api/utils/lopu/musing.ts",
       "source_location": "L33",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_musing",
-      "target": "lopu_musing_lopustreamevent",
-      "confidence_score": 1.0
+      "target": "lopu_musing_lopustreamevent"
     },
     {
       "relation": "contains",
@@ -21027,9 +21027,9 @@
       "source_file": "remix/app/api/utils/lopu/musing.ts",
       "source_location": "L45",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_musing",
-      "target": "lopu_musing_pickmode",
-      "confidence_score": 1.0
+      "target": "lopu_musing_pickmode"
     },
     {
       "relation": "contains",
@@ -21037,9 +21037,9 @@
       "source_file": "remix/app/api/utils/lopu/musing.ts",
       "source_location": "L142",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_musing",
-      "target": "lopu_musing_providerorder",
-      "confidence_score": 1.0
+      "target": "lopu_musing_providerorder"
     },
     {
       "relation": "contains",
@@ -21047,9 +21047,9 @@
       "source_file": "remix/app/api/utils/lopu/musing.ts",
       "source_location": "L152",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_musing",
-      "target": "lopu_musing_tick",
-      "confidence_score": 1.0
+      "target": "lopu_musing_tick"
     },
     {
       "relation": "contains",
@@ -21090,9 +21090,9 @@
       "source_file": "remix/app/api/utils/lopu/musing.ts",
       "source_location": "L64",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_musing_builduserprompt",
-      "target": "lopu_musing_buildcontextline",
-      "confidence_score": 1.0
+      "target": "lopu_musing_buildcontextline"
     },
     {
       "relation": "calls",
@@ -23431,9 +23431,9 @@
       "source_file": "remix/app/components/DevKit/DevKit.tsx",
       "source_location": "L8",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "devkit_devkit",
-      "target": "lopu_uselopu_uselopustream",
-      "confidence_score": 1.0
+      "target": "lopu_uselopu_uselopustream"
     },
     {
       "relation": "imports_from",
@@ -24160,9 +24160,9 @@
       "source_file": "remix/app/components/Lopu/useLopu.tsx",
       "source_location": "L27",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_uselopu",
-      "target": "lopu_uselopu_blink",
-      "confidence_score": 1.0
+      "target": "lopu_uselopu_blink"
     },
     {
       "relation": "contains",
@@ -24170,9 +24170,9 @@
       "source_file": "remix/app/components/Lopu/useLopu.tsx",
       "source_location": "L18",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_uselopu",
-      "target": "lopu_uselopu_container_style",
-      "confidence_score": 1.0
+      "target": "lopu_uselopu_container_style"
     },
     {
       "relation": "contains",
@@ -24220,9 +24220,9 @@
       "source_file": "remix/app/components/Lopu/useLopu.tsx",
       "source_location": "L154",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_uselopu",
-      "target": "lopu_uselopu_sourcelabel",
-      "confidence_score": 1.0
+      "target": "lopu_uselopu_sourcelabel"
     },
     {
       "relation": "contains",
@@ -24250,9 +24250,9 @@
       "source_file": "remix/app/components/Lopu/useLopu.tsx",
       "source_location": "L159",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_uselopu",
-      "target": "lopu_uselopu_uselopustream",
-      "confidence_score": 1.0
+      "target": "lopu_uselopu_uselopustream"
     },
     {
       "relation": "imports_from",
@@ -27392,9 +27392,9 @@
       "source_file": "remix/app/routes/api/v1/lopu/musing/_musing.tsx",
       "source_location": "L7",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "musing_musing",
-      "target": "musing_musing_formatlocaltime",
-      "confidence_score": 1.0
+      "target": "musing_musing_formatlocaltime"
     },
     {
       "relation": "contains",
@@ -27413,9 +27413,9 @@
       "source_file": "remix/app/routes/api/v1/lopu/musing/_musing.tsx",
       "source_location": "L36",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "musing_musing_loader",
-      "target": "musing_musing_formatlocaltime",
-      "confidence_score": 1.0
+      "target": "musing_musing_formatlocaltime"
     },
     {
       "relation": "contains",
@@ -32377,5 +32377,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "932498267cc4f23333014d33483045f57cad3040"
+  "built_at_commit": "08f51e084172de6a964e30c97cc7217a6f963f9c"
 }

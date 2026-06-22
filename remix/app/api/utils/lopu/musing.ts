@@ -26,7 +26,7 @@ export type LopuContext = {
 };
 
 export type LopuSource = 'claude' | 'openai' | 'fallback';
-export type LopuMode = 'weather' | 'musing' | 'quote' | 'commented' | 'fallback';
+export type LopuMode = 'weather' | 'musing' | 'quote' | 'commented' | 'surprise' | 'fallback';
 export type LopuMusing = { message: string; source: LopuSource; mode: LopuMode };
 
 // Streaming protocol (NDJSON over the wire — one JSON object per line).
@@ -41,7 +41,7 @@ export type LopuStreamEvent =
 const pickFallback = () => FALLBACK_MUSINGS[Date.now() % FALLBACK_MUSINGS.length];
 
 // Same time-based rotation for the mode, so each click feels a little different.
-const ALL_MODES: LopuMode[] = ['weather', 'musing', 'quote', 'commented', 'fallback'];
+const ALL_MODES: LopuMode[] = ['weather', 'musing', 'quote', 'commented', 'surprise', 'fallback'];
 const pickMode = (): LopuMode => ALL_MODES[Date.now() % ALL_MODES.length];
 
 const SYSTEM_PROMPT =
@@ -66,6 +66,8 @@ const buildUserPrompt = (mode: LopuMode, ctx: LopuContext, base: string): string
       return `${buildContextLine(ctx)}\nShare a tiny uplifting quote-style line — one sentence, the kind worth pinning to a wall.`;
     case 'commented':
       return `Here is one of your past musings: "${base}". Add a brief, warm one-sentence comment riffing on it. Output ONLY your comment — do not repeat the musing itself.`;
+    case 'surprise':
+      return `${buildContextLine(ctx)}\nDealer's choice — total creative freedom. Blend the weather, a quote, and a musing, or invent something entirely your own. Whatever delights you most right now. Still keep it short and in your voice.`;
     case 'musing':
     default:
       return 'Give me a tiny delightful musing — something warm and a touch magical, no location needed.';
