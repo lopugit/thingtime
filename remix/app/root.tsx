@@ -60,8 +60,9 @@ function Document({ children, title = 'Thingtime' }: { children: React.ReactNode
   // for dev mode
   let titlePrefix = '';
   // log the process.env.NODE_ENV
-  console.log('process.env.NODE_ENV', process.env.NODE_ENV);
-  if (process.env.NODE_ENV === 'development') {
+  const nodeEnv = typeof process !== 'undefined' ? process.env?.NODE_ENV : undefined;
+  console.log('process.env.NODE_ENV', nodeEnv);
+  if (nodeEnv === 'development') {
     titlePrefix = '🧑‍💻';
   }
 
@@ -82,7 +83,10 @@ function Document({ children, title = 'Thingtime' }: { children: React.ReactNode
     if (typeof window !== 'undefined') {
       window.env = {
         ...window.env,
-        BRANCH_NAME: process.env.BRANCH_NAME || 'git/unknown'
+        BRANCH_NAME:
+          typeof process !== 'undefined' && process.env?.BRANCH_NAME
+            ? process.env.BRANCH_NAME
+            : 'git/unknown'
       };
     }
   } catch (err) {

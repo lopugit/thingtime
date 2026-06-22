@@ -1,11 +1,11 @@
 import React from 'react';
 import { Box, Flex, Text } from '@chakra-ui/react';
 import { keyframes } from '@emotion/react';
-import { Link, useFetcher } from '@remix-run/react';
+import { Link } from '@remix-run/react';
 
 import type { MongoConnectionStatus } from '~/api/utils/mongodb/status';
 
-const STATUS_ENDPOINT = '/api/v1/mongodb/status';
+const STATUS_ENDPOINT = '/api/v1/mongodb/status-data';
 
 const pulse = keyframes`
   0% { opacity: 1; }
@@ -16,23 +16,62 @@ const pulse = keyframes`
 // Compact MongoDB connection indicator for the footer. Fetches live status
 // through the Thingtime API and links out to the full status page.
 export const MongoStatus = (props) => {
-  const fetcher = useFetcher<MongoConnectionStatus>();
+  const [status, setStatus] = React.useState<MongoConnectionStatus | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
 
-  // Load status once on mount (footer renders on every page).
   React.useEffect(() => {
-    if (fetcher.state === 'idle' && !fetcher.data) {
-      fetcher.load(STATUS_ENDPOINT);
-    }
-  }, [fetcher]);
+    let isMounted = true;
 
-  const status = fetcher.data;
+    const xhr = new XMLHttpRequest();
+
+    xhr.open('GET', STATUS_ENDPOINT);
+    xhr.setRequestHeader('Accept', 'application/json');
+
+    xhr.onload = () => {
+      if (!isMounted) {
+        return;
+      }
+
+      try {
+        if (xhr.status < 200 || xhr.status >= 300) {
+          throw new Error(`Status request failed: ${xhr.status}`);
+        }
+
+        const data = JSON.parse(xhr.responseText) as MongoConnectionStatus;
+
+        setStatus(data);
+        setError(null);
+      } catch (err: any) {
+        setStatus(null);
+        setError(err?.message || String(err));
+      }
+    };
+
+    xhr.onerror = () => {
+      if (isMounted) {
+        setStatus(null);
+        setError('Status request failed');
+      }
+    };
+
+    xhr.send();
+
+    return () => {
+      isMounted = false;
+      xhr.abort();
+    };
+  }, []);
+
   // No data yet (initial mount or in-flight request) → neutral "checking" look.
-  const checking = !status;
+  const checking = !status && !error;
 
   let color = 'gray.400';
   let label = 'MongoDB: checking…';
 
-  if (status) {
+  if (error) {
+    color = 'red.400';
+    label = 'MongoDB: status unavailable';
+  } else if (status) {
     color = status.connected ? 'green.400' : 'red.400';
     label = status.connected
       ? `MongoDB: connected${typeof status.pingMs === 'number' ? ` (${status.pingMs}ms)` : ''}`

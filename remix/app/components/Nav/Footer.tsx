@@ -8,13 +8,10 @@ import { MongoStatus } from '../MongoDB/MongoStatus';
 import { RainbowSkeleton } from '../Skeleton/RainbowSkeleton';
 import { ProfileDrawer } from './ProfileDrawer';
 
-let BRANCH_NAME;
-try {
-  BRANCH_NAME = process.env.THINGTIME_BRANCH_NAME || 'git/unknown';
-} catch (e) {
-  console.log('Error getting BRANCH_NAME from env:', e);
-  // BRANCH_NAME= 'git/unknown';
-}
+const BRANCH_NAME =
+  typeof process !== 'undefined' && process.env?.THINGTIME_BRANCH_NAME
+    ? process.env.THINGTIME_BRANCH_NAME
+    : 'git/unknown';
 
 export const Footer = (props) => {
   let clientState: any = {};
