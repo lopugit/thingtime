@@ -1,4 +1,5 @@
 // import type { MetaFunction } from "@vercel/remix"
+import { withEmotionCache } from '@emotion/react';
 import { Links, Meta, Outlet, Scripts, ScrollRestoration, useLoaderData } from '@remix-run/react';
 import { Analytics } from '@vercel/analytics/react';
 import React from 'react';
@@ -10,23 +11,39 @@ import { Session } from './cookies.server';
 import { Main } from './components/Layout/Main';
 import { useIcons } from './hooks/useIcons';
 import { ChakraWrapper } from './Providers/Chakra/ChakraWrapper';
-import { ServerStyleContext } from './Providers/Chakra/emotionContext';
+import { ClientStyleContext, ServerStyleContext } from './Providers/Chakra/emotionContext';
 import { ThingtimeProvider } from './Providers/ThingtimeProvider';
 import { json } from '@vercel/remix';
 import { DevKit } from './components/DevKit/DevKit';
 
-function Document({
-  children,
-  title = 'Thingtime',
-  titlePrefix = ''
-}: {
+type DocumentProps = {
   children: React.ReactNode;
   title?: string;
   titlePrefix?: string;
-}) {
+};
+
+const Document = withEmotionCache(function Document(
+  { children, title = 'Thingtime', titlePrefix = '' }: DocumentProps,
+  emotionCache
+) {
   const serverStyleData = React.useContext(ServerStyleContext);
+  const clientStyleData = React.useContext(ClientStyleContext);
 
   // the favicon will also vary depending on the environment
+
+  React.useEffect(() => {
+    emotionCache.sheet.container = document.head;
+
+    const tags = emotionCache.sheet.tags;
+    emotionCache.sheet.flush();
+    tags.forEach((tag) => {
+      emotionCache.sheet._insertTag(tag);
+    });
+
+    clientStyleData?.reset();
+    // Emotion's Remix handoff must run once; adding cache/context deps retriggers the reset loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <html lang="en">
@@ -40,7 +57,6 @@ function Document({
           <style
             key={`${key}-${ids.join(' ')}`}
             data-emotion={`${key} ${ids.join(' ')}`}
-            data-s="true"
             dangerouslySetInnerHTML={{ __html: css }}
           />
         ))}
@@ -53,7 +69,7 @@ function Document({
       </body>
     </html>
   );
-}
+});
 
 export default function App() {
   // grab env from loader
