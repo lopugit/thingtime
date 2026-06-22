@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Flex, Button, FormControl, Input, InputGroup, InputRightElement, Box, Text, useToast } from '@chakra-ui/react';
+import { Flex, Button, FormControl, Input, InputGroup, InputRightElement, Box, Text } from '@chakra-ui/react';
 import { Link as RemixLink } from '@remix-run/react';
 
 import { useApi } from '~/hooks/useApi';
 import { useThingtime } from '../Thingtime/useThingtime';
+import { useLopu } from '../Lopu/useLopu';
 import { Icon } from '../Icon/Icon';
 
 const inputSx = {
@@ -22,7 +23,7 @@ export const Register = (props) => {
 
   const api = useApi();
   const register = api.v1.auth.register;
-  const toast = useToast();
+  const lopu = useLopu();
 
   // DevKit prefill: fills the form when devKit.registerPrefill changes (_ts)
   const { thingtime } = useThingtime();
@@ -46,7 +47,7 @@ export const Register = (props) => {
       setResp(r);
 
       if (r?.ok) {
-        toast({
+        lopu({
           title: 'Account created 🎉',
           description: r.verificationLink
             ? 'Check your email to verify — or use the link below.'
@@ -57,7 +58,7 @@ export const Register = (props) => {
           position: 'top'
         });
       } else {
-        toast({
+        lopu({
           title: 'Registration failed',
           description: r?.error || 'Something went wrong. Please try again.',
           status: 'error',
@@ -67,7 +68,7 @@ export const Register = (props) => {
         });
       }
     } catch (err) {
-      toast({
+      lopu({
         title: 'Network error',
         description: 'Could not reach the server. Please try again.',
         status: 'error',

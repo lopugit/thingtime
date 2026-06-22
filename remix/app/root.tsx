@@ -14,6 +14,7 @@ import { ThingtimeProvider } from './Providers/ThingtimeProvider';
 // TODO: See what to replace LoaderArgs with
 import { json, LoaderArgs } from '@vercel/remix';
 import { DevKit } from './components/DevKit/DevKit';
+import { getCurrentUser } from './api/utils/auth/getCurrentUser';
 
 // intercept console.log and read from window.tt.settings.logging.all whether to log if it includes [tt]
 const originalConsoleLog = console.log;
@@ -155,11 +156,13 @@ export async function loader({ request, context }: LoaderArgs) {
     }
   }
 
-  // .log everyone
+  // resolve the authenticated user (cookie/Bearer JWT → live session → user)
+  const user = await getCurrentUser(request);
 
   return json(
     {
-      envFromCookie: { ...processEnv }
+      envFromCookie: { ...processEnv },
+      user
     },
     {
       headers: {

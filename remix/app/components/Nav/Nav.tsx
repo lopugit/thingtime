@@ -7,6 +7,7 @@ import { Icon } from '../Icon/Icon';
 import { RainbowSkeleton } from '../Skeleton/RainbowSkeleton';
 import { ProfileDrawer } from './ProfileDrawer';
 import { useThingtime } from '../Thingtime/useThingtime';
+import { useCurrentUser } from '~/hooks/useCurrentUser';
 let BRANCH_NAME;
 try {
   BRANCH_NAME = process.env.THINGTIME_BRANCH_NAME || 'git/unknown';
@@ -31,6 +32,8 @@ export const Nav = (props) => {
   const [branchName, setBranchName] = React.useState(clientState.THINGTIME_BRANCH_NAME || BRANCH_NAME || 'git/unknown');
 
   const { thingtime } = useThingtime();
+
+  const user = useCurrentUser();
 
   const [profileDrawerOpen, setProfileDrawerOpen] = React.useState(false);
 
@@ -190,14 +193,25 @@ export const Nav = (props) => {
               </Link>
             </Center> */}
             <Center cursor="pointer">
-              <Link to="/login">
-                <Flex flexDir={'row'} gap={2}>
-                  <Box fontSize="xs" opacity={0.5}>
-                    Login
-                  </Box>
-                  <Icon transform={['', 'scaleX(-100%)']} size="12px" name="🌈"></Icon>
-                </Flex>
-              </Link>
+              {user ? (
+                <Link to="/profile">
+                  <Flex flexDir={'row'} gap={2} alignItems="center">
+                    <Box fontSize="xs" fontWeight="600">
+                      {user.displayName || user.username}
+                    </Box>
+                    <Icon transform={['', 'scaleX(-100%)']} size="12px" name="🦄"></Icon>
+                  </Flex>
+                </Link>
+              ) : (
+                <Link to="/login">
+                  <Flex flexDir={'row'} gap={2}>
+                    <Box fontSize="xs" opacity={0.5}>
+                      Login
+                    </Box>
+                    <Icon transform={['', 'scaleX(-100%)']} size="12px" name="🌈"></Icon>
+                  </Flex>
+                </Link>
+              )}
             </Center>
             <Center display={['flex', 'none']} cursor="pointer">
               <Link to="/">

@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Flex, Button, FormControl, Input, Spinner, Link, InputGroup, InputRightElement, Box, useToast } from '@chakra-ui/react';
+import { Flex, Button, FormControl, Input, Spinner, Link, InputGroup, InputRightElement, Box } from '@chakra-ui/react';
 import { Link as RemixLink, useFetcher, useNavigate } from '@remix-run/react';
 
 import { useApi } from '~/hooks/useApi';
 import { useThingtime } from '../Thingtime/useThingtime';
+import { useLopu } from '../Lopu/useLopu';
 import { Icon } from '../Icon/Icon';
 import { Thingtime } from '../Thingtime/Thingtime';
 
@@ -37,7 +38,7 @@ export const Login = (props) => {
 
 	const [loginResp, setLoginResp] = React.useState();
 
-	const toast = useToast();
+	const lopu = useLopu();
 	const navigate = useNavigate();
 
 	// DevKit prefill: fills the form when devKit.loginPrefill changes (_ts)
@@ -61,7 +62,7 @@ export const Login = (props) => {
 			setLoginResp(resp);
 
 			if (resp?.ok) {
-				toast({
+				lopu({
 					title: `Welcome back, ${resp.user?.username || username}! ✨`,
 					status: 'success',
 					duration: 5000,
@@ -70,7 +71,7 @@ export const Login = (props) => {
 				});
 				navigate('/');
 			} else {
-				toast({
+				lopu({
 					title: 'Login failed',
 					description: resp?.error || 'Invalid username or password',
 					status: 'error',
@@ -80,7 +81,7 @@ export const Login = (props) => {
 				});
 			}
 		} catch (err) {
-			toast({
+			lopu({
 				title: 'Network error',
 				description: 'Could not reach the server. Please try again.',
 				status: 'error',

@@ -1,16 +1,16 @@
 # Graph Report - thingtime  (2026-06-22)
 
 ## Corpus Check
-- 218 files · ~546,291 words
+- 221 files · ~547,018 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 1066 nodes · 1897 edges · 88 communities (70 shown, 18 thin omitted)
-- Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 10 edges (avg confidence: 0.8)
+- 1077 nodes · 1930 edges · 90 communities (73 shown, 17 thin omitted)
+- Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 11 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `01810502`
+- Built from commit: `4fcdedb6`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -88,6 +88,8 @@
 - [[_COMMUNITY_Community 85|Community 85]]
 - [[_COMMUNITY_Community 86|Community 86]]
 - [[_COMMUNITY_Community 87|Community 87]]
+- [[_COMMUNITY_Community 88|Community 88]]
+- [[_COMMUNITY_Community 89|Community 89]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `useThingtime()` - 38 edges
@@ -106,8 +108,8 @@
   remix/app/routes/_index.tsx → remix/app/components/Thingtime/useThingtime.tsx
 - `action()` --calls--> `serializeAuthCookie()`  [INFERRED]
   remix/app/routes/api/v1/login/_login.tsx → remix/app/api/utils/auth/authCookie.ts
-- `action()` --calls--> `loginUser()`  [INFERRED]
-  remix/app/routes/api/v1/login/_login.tsx → remix/app/api/utils/auth/loginUser.ts
+- `loader()` --calls--> `getCurrentUser()`  [EXTRACTED]
+  remix/app/root.tsx → remix/app/api/utils/auth/getCurrentUser.ts
 - `Login()` --calls--> `useThingtime()`  [INFERRED]
   remix/app/components/Login/Login.tsx → remix/app/components/Thingtime/useThingtime.tsx
 - `Index()` --calls--> `useThingtime()`  [EXTRACTED]
@@ -118,19 +120,19 @@
 - 3-file cycle: `remix/app/api/utils/mongodb/connection.ts -> remix/app/routes/api/v1/mongodb/get-connection/_get-connection.tsx -> remix/app/api/utils/userValidatePassword.ts -> remix/app/api/utils/mongodb/connection.ts`
 - 3-file cycle: `remix/app/Providers/ThingtimeProvider.tsx -> remix/app/hooks/useThingtimeMachine.tsx -> remix/app/components/Thingtime/useThingtime.tsx -> remix/app/Providers/ThingtimeProvider.tsx`
 
-## Communities (88 total, 18 thin omitted)
+## Communities (90 total, 17 thin omitted)
 
 ### Community 0 - "Raycast Image Operations"
 Cohesion: 0.06
-Nodes (79): openNewFinderWindow(), regexToReplacementConverter(), regexTrim(), any(), convert(), flip(), optimize(), optimizeJPEG() (+71 more)
+Nodes (80): openNewFinderWindow(), regexToReplacementConverter(), regexTrim(), any(), convert(), applyFilter(), flip(), optimize() (+72 more)
 
 ### Community 1 - "Thingtime Commander & Core UI"
-Cohesion: 0.20
-Nodes (9): RawResult(), RawResultProps, Index(), ThingtimeURL(), EverythingTypes, ThingtimeTypes, useThingtime(), useThingtimeScope (+1 more)
+Cohesion: 0.15
+Nodes (13): DevKit(), getQueryParams(), Raw(), RawResult(), RawResultProps, RawResults(), Index(), SettingsMenu() (+5 more)
 
 ### Community 2 - "API Package Manifest"
-Cohesion: 0.08
-Nodes (31): getUsers(), SeedUser, actionExport(), earlyReturn(), getConnectionAction, action(), getClient(), getCollection() (+23 more)
+Cohesion: 0.07
+Nodes (37): TestAPI(), loginUser(), getUsers(), SeedUser, Editor(), actionExport(), earlyReturn(), getConnectionAction (+29 more)
 
 ### Community 3 - "Remix Auth & User Routes"
 Cohesion: 0.04
@@ -149,20 +151,20 @@ Cohesion: 0.05
 Nodes (38): author, categories, commands, contributors, dependencies, fuse.js, mathjs, @raycast/api (+30 more)
 
 ### Community 7 - "Image Generators & Filters"
-Cohesion: 0.10
-Nodes (24): value, newTimeline(), PathArray, ThingtimeLine(), Timeline, TimelineEvent, TimelineScaffold, Timemachine (+16 more)
+Cohesion: 0.22
+Nodes (8): useThingtimeLine(), EverythingTypes, parse(), reviver(), ThingtimeContext, ThingtimeProvider(), ThingtimeTypes, thingtimeOverwriteAll
 
 ### Community 8 - "Thingtime State & Providers"
 Cohesion: 0.07
 Nodes (15): createObjectProperties(), deepForEach(), ee(), epp(), escapeEscapes(), escapePropertyPath(), forEachArray(), forEachObject() (+7 more)
 
 ### Community 9 - "Smarts Core (Babel/Eval)"
-Cohesion: 0.08
-Nodes (20): Session, App(), logConfig, whitelist, whitelistObj, ChakraWrapper(), chakras, chakrasDark (+12 more)
+Cohesion: 0.13
+Nodes (12): ChakraWrapper(), chakras, chakrasDark, chakrasLight, colors, g, greys, space (+4 more)
 
 ### Community 10 - "Remix Root & Theming"
 Cohesion: 0.11
-Nodes (23): ImageGeneratorActionPanel(), SizeSelectionActionPanel(), applyFilter(), applyBasicFilter(), filters, getFilterThumbnail(), initializeFilterScript(), generatePlaceholder() (+15 more)
+Nodes (22): ImageGeneratorActionPanel(), SizeSelectionActionPanel(), applyBasicFilter(), filters, getFilterThumbnail(), initializeFilterScript(), generatePlaceholder(), generatePreview() (+14 more)
 
 ### Community 11 - "Graphics GP Utilities"
 Cohesion: 0.13
@@ -173,8 +175,8 @@ Cohesion: 0.08
 Nodes (25): author, bugs, url, dependencies, smarts, ts-node, typescript, description (+17 more)
 
 ### Community 13 - "Root Package Manifest"
-Cohesion: 0.14
-Nodes (10): TestAPI(), Branding(), Logo(), Editor(), TopSpacing(), Raw(), RawResults(), checkerMatrix (+2 more)
+Cohesion: 0.38
+Nodes (3): Branding(), Logo(), checkerMatrix
 
 ### Community 14 - "Remix TypeScript Config"
 Cohesion: 0.11
@@ -185,8 +187,8 @@ Cohesion: 0.11
 Nodes (18): compilerOptions, allowJs, baseUrl, esModuleInterop, forceConsistentCasingInFileNames, isolatedModules, jsx, lib (+10 more)
 
 ### Community 16 - "Smarts Opt Helpers"
-Cohesion: 0.19
-Nodes (12): commanderArgs, CommanderV1(), sanitise(), useThings(), MagicInput, MagicInputProps, uuid, ThingtimeComponentProps (+4 more)
+Cohesion: 0.17
+Nodes (15): commanderArgs, CommanderV1(), CommanderV2(), sanitise(), usePath(), useThings(), MagicInput, MagicInputProps (+7 more)
 
 ### Community 17 - "Raycast TypeScript Config"
 Cohesion: 0.18
@@ -277,16 +279,16 @@ Cohesion: 0.50
 Nodes (3): build, env, ENABLE_FILE_SYSTEM_API
 
 ### Community 45 - "Remix Client Entry"
-Cohesion: 0.31
-Nodes (7): CommanderV2(), usePath(), Footer(), Nav(), ProfileDrawer(), RainbowSkeleton(), getParentPath()
+Cohesion: 0.34
+Nodes (7): CurrentUser, useCurrentUser(), Icon(), Footer(), Nav(), ProfileDrawer(), RainbowSkeleton()
 
 ### Community 72 - "Community 72"
 Cohesion: 0.23
-Nodes (7): RainbowText(), TextAnimation1(), Index(), Index(), Splash(), Thingtime(), ThingtimeDemo()
+Nodes (6): RainbowText(), TextAnimation1(), Index(), Index(), Splash(), ThingtimeDemo()
 
 ### Community 73 - "Community 73"
-Cohesion: 0.43
-Nodes (4): DevKit(), getQueryParams(), Icon(), SettingsMenu()
+Cohesion: 0.17
+Nodes (9): Session, App(), loader(), logConfig, whitelist, whitelistObj, GlobalStyles(), useIcons() (+1 more)
 
 ### Community 74 - "Community 74"
 Cohesion: 0.29
@@ -297,8 +299,8 @@ Cohesion: 0.33
 Nodes (5): 1. JWT secret fallback, 2. Production source maps, 3. Atomic email verification token consumption, 4. Unused imports, PR 12 review actions
 
 ### Community 76 - "Community 76"
-Cohesion: 0.24
-Nodes (6): Submit(), useApi(), useAsyncFetcher(), Login(), inputSx, Register()
+Cohesion: 0.19
+Nodes (10): useApi(), Login(), inputSx, Register(), LopuArgs, LopuStatus, LopuToast(), statusEmoji() (+2 more)
 
 ### Community 77 - "Community 77"
 Cohesion: 0.25
@@ -306,7 +308,7 @@ Nodes (7): extends, root, rules, no-unused-vars, @typescript-eslint/no-unused-va
 
 ### Community 78 - "Community 78"
 Cohesion: 0.09
-Nodes (46): authCookie, clearAuthCookie(), getAuthToken(), serializeAuthCookie(), SendArgs, sendEmail(), sendVerificationEmail(), consumeEmailVerification() (+38 more)
+Nodes (45): authCookie, clearAuthCookie(), getAuthToken(), serializeAuthCookie(), SendArgs, sendEmail(), sendVerificationEmail(), consumeEmailVerification() (+37 more)
 
 ### Community 79 - "Community 79"
 Cohesion: 0.18
@@ -340,25 +342,37 @@ Nodes (4): Conventions (see `FUNDAMENTALS.md`), ✅ Decisions (locked), Status b
 Cohesion: 0.40
 Nodes (4): Decision log, Decisions, Nikolaj Frey — Engineer Decisions, Recurring principles (the thinking method)
 
+### Community 87 - "Community 87"
+Cohesion: 0.18
+Nodes (9): assets, value, defaultValues, mergedVersions, thingtimeDefaults, thingtimeMinimumValues, thingtimeNewData, versions (+1 more)
+
+### Community 88 - "Community 88"
+Cohesion: 0.22
+Nodes (9): newTimeline(), PathArray, ThingtimeLine(), Timeline, TimelineEvent, TimelineScaffold, Timemachine, TimemachineScaffold (+1 more)
+
+### Community 89 - "Community 89"
+Cohesion: 0.43
+Nodes (3): Submit(), useAsyncFetcher(), Button()
+
 ## Knowledge Gaps
-- **418 isolated node(s):** `extends`, `name`, `version`, `description`, `main` (+413 more)
+- **421 isolated node(s):** `extends`, `name`, `version`, `description`, `main` (+416 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **18 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **17 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `useThingtime()` connect `Thingtime Commander & Core UI` to `Image Generators & Filters`, `Community 72`, `Community 73`, `Community 76`, `Remix Client Entry`, `Root Package Manifest`, `Smarts Opt Helpers`?**
-  _High betweenness centrality (0.026) - this node is a cross-community bridge._
-- **Why does `getMongoUri()` connect `API Package Manifest` to `Community 78`?**
-  _High betweenness centrality (0.009) - this node is a cross-community bridge._
-- **Why does `Thingtime()` connect `Community 72` to `Thingtime Commander & Core UI`, `API Package Manifest`, `Community 76`, `Remix Client Entry`, `Smarts Opt Helpers`, `Community 87`?**
+- **Why does `useThingtime()` connect `Thingtime Commander & Core UI` to `Community 72`, `Community 76`, `Remix Client Entry`, `Smarts Opt Helpers`, `Community 88`, `Community 89`?**
+  _High betweenness centrality (0.021) - this node is a cross-community bridge._
+- **Why does `Thingtime()` connect `Smarts Opt Helpers` to `Thingtime Commander & Core UI`, `API Package Manifest`, `Community 72`, `Community 76`, `Community 87`, `Community 89`?**
   _High betweenness centrality (0.008) - this node is a cross-community bridge._
+- **Why does `getMongoUri()` connect `API Package Manifest` to `Community 78`?**
+  _High betweenness centrality (0.007) - this node is a cross-community bridge._
 - **Are the 2 inferred relationships involving `useThingtime()` (e.g. with `Login()` and `Index()`) actually correct?**
   _`useThingtime()` has 2 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `extends`, `name`, `version` to the rest of the system?**
-  _418 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _421 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Raycast Image Operations` be split into smaller, more focused modules?**
-  _Cohesion score 0.06380996739636702 - nodes in this community are weakly interconnected._
-- **Should `API Package Manifest` be split into smaller, more focused modules?**
-  _Cohesion score 0.08106473079249849 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.062481579722959035 - nodes in this community are weakly interconnected._
+- **Should `Thingtime Commander & Core UI` be split into smaller, more focused modules?**
+  _Cohesion score 0.1452991452991453 - nodes in this community are weakly interconnected._
