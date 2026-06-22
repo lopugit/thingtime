@@ -700,8 +700,8 @@
     "semantic_hash": "c4054b1dfdb64ee989f94d84a82f34b0"
   },
   "remix/app/root.tsx": {
-    "mtime": 1782110972.6146524,
-    "ast_hash": "3f4010b24bab0aed150f4bbdbeeedbf5",
+    "mtime": 1782117569.6752646,
+    "ast_hash": "aec17f14d2f72ccb4d4c178a5290d9b7",
     "semantic_hash": ""
   },
   "remix/app/routes/$.tsx": {
@@ -1825,8 +1825,8 @@
     "semantic_hash": ""
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1782111097.894106,
-    "ast_hash": "dfffad45fcd2929a9f4f6bc6ed13790a",
+    "mtime": 1782117622.6871896,
+    "ast_hash": "55815d858404dd12549a92ae8931f7fb",
     "semantic_hash": ""
   }
 }

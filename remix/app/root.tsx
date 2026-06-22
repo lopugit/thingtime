@@ -22,6 +22,9 @@ type DocumentProps = {
   titlePrefix?: string;
 };
 
+const useClientLayoutEffect =
+  typeof document !== 'undefined' ? React.useLayoutEffect : React.useEffect;
+
 const Document = withEmotionCache(function Document(
   { children, title = 'Thingtime', titlePrefix = '' }: DocumentProps,
   emotionCache
@@ -31,7 +34,7 @@ const Document = withEmotionCache(function Document(
 
   // the favicon will also vary depending on the environment
 
-  React.useEffect(() => {
+  useClientLayoutEffect(() => {
     emotionCache.sheet.container = document.head;
 
     const tags = emotionCache.sheet.tags;

@@ -31,6 +31,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- **Moved the Emotion sheet handoff before paint.** The Chakra/Emotion client
+  handoff now runs through an SSR-safe layout effect so the required
+  `sheet.flush()` / reinsertion step does not briefly expose unstyled native
+  icon/input/layout rendering during startup. — _Codex (AI), 2026-06-22_
 - **Completed the proper Chakra/Emotion document hydration wiring.**
   `entry.client.tsx` now uses the resettable client Emotion cache pattern,
   `createEmotionCache.ts` uses the Chakra Remix `cha` cache key, and
@@ -68,8 +72,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 | 1 | Emotion could throw `NotFoundError: Failed to execute 'insertBefore' on 'Node'` after click/navigation because the client cache could point at style nodes React had replaced. | Keep Emotion SSR styles in the React document tree and hydrate them through the shared Emotion cache instead of manually cloning/removing/restoring style tags. | Codex (AI) | 2026-06-22 |
 | 2 | Some loads visibly jumped through unstyled content because critical Emotion styles were temporarily removed before being restored. | Stop deleting SSR style tags on startup; render them into `<head>` from React and let Emotion adopt them. | Codex (AI) | 2026-06-22 |
 | 3 | The first proper `ClientStyleContext.reset()` attempt could recurse because the Emotion sheet handoff reran after each cache replacement. | Make the client reset context stable and run the Emotion sheet handoff once, matching Chakra's Remix contract while documenting why exhaustive-deps is intentionally disabled there. | Codex (AI) | 2026-06-22 |
-| 4 | `smarts.merge(..., { clone: true })` behavior was at risk during PR cleanup. | Verified the clone path still deep-clones nested values without mutating the source object. | Codex (AI) | 2026-06-22 |
-| 5 | Local dev-server restarts could accidentally spawn duplicate Remix servers or leave unclear runtime state. | Documented the PM2-managed `tt-remix-9999` workflow in root `AGENTS.md`; local app was restarted through `npm run remix-pms`. | Codex (AI) | 2026-06-22 |
+| 4 | The Emotion handoff still ran after the browser's first hydrated paint, so users could occasionally see boxed icons and layout snapping for a frame. | Move the handoff from a passive effect to an SSR-safe layout effect, keeping the handoff pre-paint while avoiding server `useLayoutEffect` warnings. | Codex (AI) | 2026-06-22 |
+| 5 | `smarts.merge(..., { clone: true })` behavior was at risk during PR cleanup. | Verified the clone path still deep-clones nested values without mutating the source object. | Codex (AI) | 2026-06-22 |
+| 6 | Local dev-server restarts could accidentally spawn duplicate Remix servers or leave unclear runtime state. | Documented the PM2-managed `tt-remix-9999` workflow in root `AGENTS.md`; local app was restarted through `npm run remix-pms`. | Codex (AI) | 2026-06-22 |
 
 ### Verified
 
@@ -82,6 +87,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   without React hydration, Emotion insertion, or update-depth console failures;
   an extension-enabled Chrome profile still injected third-party attributes/DOM
   that can perturb full-document hydration checks. — _Codex (AI), 2026-06-22_
+- Clean headless Chrome after the pre-paint handoff change still reported seven
+  SSR Emotion style tags and no React hydration, Emotion insertion, or
+  update-depth console failures. — _Codex (AI), 2026-06-22_
 - `bash --noprofile --norc -n remix/scripts/pre-dev.sh` passed after confirming
   the `.env.auto` auto-update behavior is intentionally preserved. — _Codex (AI),
   2026-06-22_
