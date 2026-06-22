@@ -145,7 +145,8 @@ export const DevKit = (props) => {
     try {
       const resp = await fetch('/api/v1/lopu/musing');
       const data = await resp.json();
-      lopu({ title: data?.message || 'Lopu is daydreaming…' });
+      const via = data?.source === 'claude' ? 'via Claude 🤖' : data?.source === 'openai' ? 'via ChatGPT 🤖' : undefined;
+      lopu({ title: data?.message || 'Lopu is daydreaming…', description: via });
     } catch {
       lopu({ title: 'Lopu is daydreaming… try again 🔮', status: 'error' });
     }

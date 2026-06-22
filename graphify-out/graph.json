@@ -2050,7 +2050,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "components_imagegeneratoractionpanel",
-      "community": 10,
+      "community": 0,
       "norm_label": "imagegeneratoractionpanel.tsx"
     },
     {
@@ -2090,7 +2090,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "components_sizeselectionactionpanel",
-      "community": 10,
+      "community": 0,
       "norm_label": "sizeselectionactionpanel.tsx"
     },
     {
@@ -2240,7 +2240,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "operations_filteroperation",
-      "community": 0,
+      "community": 10,
       "norm_label": "filteroperation.ts"
     },
     {
@@ -2250,7 +2250,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "operations_filteroperation_applyfilter",
-      "community": 0,
+      "community": 10,
       "norm_label": "applyfilter()"
     },
     {
@@ -4247,17 +4247,27 @@
       "label": "LopuContext",
       "file_type": "code",
       "source_file": "remix/app/api/utils/lopu/musing.ts",
-      "source_location": "L8",
+      "source_location": "L14",
       "_origin": "ast",
       "id": "lopu_musing_lopucontext",
       "community": 35,
       "norm_label": "lopucontext"
     },
     {
+      "label": "LopuSource",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/lopu/musing.ts",
+      "source_location": "L22",
+      "_origin": "ast",
+      "id": "lopu_musing_lopusource",
+      "community": 35,
+      "norm_label": "lopusource"
+    },
+    {
       "label": "LopuMusing",
       "file_type": "code",
       "source_file": "remix/app/api/utils/lopu/musing.ts",
-      "source_location": "L16",
+      "source_location": "L23",
       "_origin": "ast",
       "id": "lopu_musing_lopumusing",
       "community": 35,
@@ -4267,7 +4277,7 @@
       "label": "FALLBACKS",
       "file_type": "code",
       "source_file": "remix/app/api/utils/lopu/musing.ts",
-      "source_location": "L18",
+      "source_location": "L25",
       "_origin": "ast",
       "id": "lopu_musing_fallbacks",
       "community": 35,
@@ -4277,17 +4287,27 @@
       "label": "pickFallback()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/lopu/musing.ts",
-      "source_location": "L26",
+      "source_location": "L35",
       "_origin": "ast",
       "id": "lopu_musing_pickfallback",
       "community": 35,
       "norm_label": "pickfallback()"
     },
     {
+      "label": "buildUserPrompt()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/lopu/musing.ts",
+      "source_location": "L42",
+      "_origin": "ast",
+      "id": "lopu_musing_builduserprompt",
+      "community": 35,
+      "norm_label": "builduserprompt()"
+    },
+    {
       "label": "weatherCodeToText()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/lopu/musing.ts",
-      "source_location": "L29",
+      "source_location": "L52",
       "_origin": "ast",
       "id": "lopu_musing_weathercodetotext",
       "community": 35,
@@ -4297,17 +4317,37 @@
       "label": "fetchWeather()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/lopu/musing.ts",
-      "source_location": "L42",
+      "source_location": "L65",
       "_origin": "ast",
       "id": "lopu_musing_fetchweather",
       "community": 35,
       "norm_label": "fetchweather()"
     },
     {
+      "label": "tryClaude()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/lopu/musing.ts",
+      "source_location": "L84",
+      "_origin": "ast",
+      "id": "lopu_musing_tryclaude",
+      "community": 35,
+      "norm_label": "tryclaude()"
+    },
+    {
+      "label": "tryOpenAI()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/lopu/musing.ts",
+      "source_location": "L102",
+      "_origin": "ast",
+      "id": "lopu_musing_tryopenai",
+      "community": 35,
+      "norm_label": "tryopenai()"
+    },
+    {
       "label": "generateLopuMusing()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/lopu/musing.ts",
-      "source_location": "L56",
+      "source_location": "L121",
       "_origin": "ast",
       "id": "lopu_musing_generatelopumusing",
       "community": 35,
@@ -4950,7 +4990,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "layout_main",
-      "community": 16,
+      "community": 9,
       "norm_label": "main.tsx"
     },
     {
@@ -6400,7 +6440,7 @@
       "source_location": "L140",
       "_origin": "ast",
       "id": "app_root_loader",
-      "community": 78,
+      "community": 9,
       "norm_label": "loader()"
     },
     {
@@ -6900,7 +6940,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "routes_login",
-      "community": 78,
+      "community": 16,
       "norm_label": "login.tsx"
     },
     {
@@ -6920,7 +6960,7 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "routes_login_login",
-      "community": 78,
+      "community": 16,
       "norm_label": "login()"
     },
     {
@@ -7050,7 +7090,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "routes_register",
-      "community": 16,
+      "community": 78,
       "norm_label": "register.tsx"
     },
     {
@@ -7060,7 +7100,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "routes_register_loader",
-      "community": 16,
+      "community": 78,
       "norm_label": "loader()"
     },
     {
@@ -7070,7 +7110,7 @@
       "source_location": "L14",
       "_origin": "ast",
       "id": "routes_register_register",
-      "community": 16,
+      "community": 78,
       "norm_label": "register()"
     },
     {
@@ -8310,7 +8350,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "utils_index_stringliteraltorichtext",
-      "community": 87,
+      "community": 16,
       "norm_label": "stringliteraltorichtext()"
     },
     {
@@ -8754,10 +8794,20 @@
       "norm_label": "mongodb"
     },
     {
-      "label": "prismjs",
+      "label": "openai",
       "file_type": "code",
       "source_file": "remix/package.json",
       "source_location": "L43",
+      "_origin": "ast",
+      "id": "remix_package_dependencies_openai",
+      "community": 4,
+      "norm_label": "openai"
+    },
+    {
+      "label": "prismjs",
+      "file_type": "code",
+      "source_file": "remix/package.json",
+      "source_location": "L44",
       "_origin": "ast",
       "id": "remix_package_dependencies_prismjs",
       "community": 4,
@@ -8767,7 +8817,7 @@
       "label": "react",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L44",
+      "source_location": "L45",
       "_origin": "ast",
       "id": "remix_package_dependencies_react",
       "community": 4,
@@ -8777,7 +8827,7 @@
       "label": "react-click-away-listener",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L45",
+      "source_location": "L46",
       "_origin": "ast",
       "id": "remix_package_dependencies_react_click_away_listener",
       "community": 4,
@@ -8787,7 +8837,7 @@
       "label": "react-contenteditable",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L46",
+      "source_location": "L47",
       "_origin": "ast",
       "id": "remix_package_dependencies_react_contenteditable",
       "community": 4,
@@ -8797,7 +8847,7 @@
       "label": "react-dom",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L47",
+      "source_location": "L48",
       "_origin": "ast",
       "id": "remix_package_dependencies_react_dom",
       "community": 4,
@@ -8807,7 +8857,7 @@
       "label": "react-icons",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L48",
+      "source_location": "L49",
       "_origin": "ast",
       "id": "remix_package_dependencies_react_icons",
       "community": 4,
@@ -8817,7 +8867,7 @@
       "label": "react-simple-code-editor",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L49",
+      "source_location": "L50",
       "_origin": "ast",
       "id": "remix_package_dependencies_react_simple_code_editor",
       "community": 4,
@@ -8827,7 +8877,7 @@
       "label": "react-sticky",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L50",
+      "source_location": "L51",
       "_origin": "ast",
       "id": "remix_package_dependencies_react_sticky",
       "community": 4,
@@ -8837,7 +8887,7 @@
       "label": "react-sticky-el",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L51",
+      "source_location": "L52",
       "_origin": "ast",
       "id": "remix_package_dependencies_react_sticky_el",
       "community": 4,
@@ -8847,7 +8897,7 @@
       "label": "react-visibility-sensor",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L52",
+      "source_location": "L53",
       "_origin": "ast",
       "id": "remix_package_dependencies_react_visibility_sensor",
       "community": 4,
@@ -8857,7 +8907,7 @@
       "label": "rxjs",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L53",
+      "source_location": "L54",
       "_origin": "ast",
       "id": "remix_package_dependencies_rxjs",
       "community": 4,
@@ -8867,7 +8917,7 @@
       "label": "sshpk",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L54",
+      "source_location": "L55",
       "_origin": "ast",
       "id": "remix_package_dependencies_sshpk",
       "community": 4,
@@ -8877,7 +8927,7 @@
       "label": "tinygradient",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L55",
+      "source_location": "L56",
       "_origin": "ast",
       "id": "remix_package_dependencies_tinygradient",
       "community": 4,
@@ -8887,7 +8937,7 @@
       "label": "uuid",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L56",
+      "source_location": "L57",
       "_origin": "ast",
       "id": "remix_package_dependencies_uuid",
       "community": 4,
@@ -8897,7 +8947,7 @@
       "label": "devDependencies",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L58",
+      "source_location": "L59",
       "_origin": "ast",
       "id": "remix_package_devdependencies",
       "community": 5,
@@ -8907,7 +8957,7 @@
       "label": "@emotion/styled",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L59",
+      "source_location": "L60",
       "_origin": "ast",
       "id": "remix_package_devdependencies_emotion_styled",
       "community": 5,
@@ -8917,7 +8967,7 @@
       "label": "@remix-run/dev",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L60",
+      "source_location": "L61",
       "_origin": "ast",
       "id": "remix_package_devdependencies_remix_run_dev",
       "community": 5,
@@ -8927,7 +8977,7 @@
       "label": "@remix-run/eslint-config",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L61",
+      "source_location": "L62",
       "_origin": "ast",
       "id": "remix_package_devdependencies_remix_run_eslint_config",
       "community": 5,
@@ -8937,7 +8987,7 @@
       "label": "@shopify/eslint-plugin",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L62",
+      "source_location": "L63",
       "_origin": "ast",
       "id": "remix_package_devdependencies_shopify_eslint_plugin",
       "community": 5,
@@ -8947,7 +8997,7 @@
       "label": "@types/eslint",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L63",
+      "source_location": "L64",
       "_origin": "ast",
       "id": "remix_package_devdependencies_types_eslint",
       "community": 5,
@@ -8957,7 +9007,7 @@
       "label": "@types/node",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L64",
+      "source_location": "L65",
       "_origin": "ast",
       "id": "remix_package_devdependencies_types_node",
       "community": 5,
@@ -8967,7 +9017,7 @@
       "label": "@types/react",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L65",
+      "source_location": "L66",
       "_origin": "ast",
       "id": "remix_package_devdependencies_types_react",
       "community": 5,
@@ -8977,7 +9027,7 @@
       "label": "@types/react-dom",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L66",
+      "source_location": "L67",
       "_origin": "ast",
       "id": "remix_package_devdependencies_types_react_dom",
       "community": 5,
@@ -8987,7 +9037,7 @@
       "label": "@typescript-eslint/parser",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L67",
+      "source_location": "L68",
       "_origin": "ast",
       "id": "remix_package_devdependencies_typescript_eslint_parser",
       "community": 5,
@@ -8997,7 +9047,7 @@
       "label": "eslint",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L68",
+      "source_location": "L69",
       "_origin": "ast",
       "id": "remix_package_devdependencies_eslint",
       "community": 5,
@@ -9007,7 +9057,7 @@
       "label": "eslint-config-prettier",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L69",
+      "source_location": "L70",
       "_origin": "ast",
       "id": "remix_package_devdependencies_eslint_config_prettier",
       "community": 5,
@@ -9017,7 +9067,7 @@
       "label": "eslint-loader",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L70",
+      "source_location": "L71",
       "_origin": "ast",
       "id": "remix_package_devdependencies_eslint_loader",
       "community": 5,
@@ -9027,7 +9077,7 @@
       "label": "eslint-plugin-chakra-ui",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L71",
+      "source_location": "L72",
       "_origin": "ast",
       "id": "remix_package_devdependencies_eslint_plugin_chakra_ui",
       "community": 5,
@@ -9037,7 +9087,7 @@
       "label": "eslint-plugin-hydrogen",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L72",
+      "source_location": "L73",
       "_origin": "ast",
       "id": "remix_package_devdependencies_eslint_plugin_hydrogen",
       "community": 5,
@@ -9047,7 +9097,7 @@
       "label": "eslint-plugin-prettier",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L73",
+      "source_location": "L74",
       "_origin": "ast",
       "id": "remix_package_devdependencies_eslint_plugin_prettier",
       "community": 5,
@@ -9057,7 +9107,7 @@
       "label": "eslint-plugin-react",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L74",
+      "source_location": "L75",
       "_origin": "ast",
       "id": "remix_package_devdependencies_eslint_plugin_react",
       "community": 5,
@@ -9067,7 +9117,7 @@
       "label": "eslint-plugin-react-hooks",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L75",
+      "source_location": "L76",
       "_origin": "ast",
       "id": "remix_package_devdependencies_eslint_plugin_react_hooks",
       "community": 5,
@@ -9077,7 +9127,7 @@
       "label": "eslint-plugin-simple-import-sort",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L76",
+      "source_location": "L77",
       "_origin": "ast",
       "id": "remix_package_devdependencies_eslint_plugin_simple_import_sort",
       "community": 5,
@@ -9087,7 +9137,7 @@
       "label": "eslint-plugin-unused-imports",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L77",
+      "source_location": "L78",
       "_origin": "ast",
       "id": "remix_package_devdependencies_eslint_plugin_unused_imports",
       "community": 5,
@@ -9097,7 +9147,7 @@
       "label": "framer-motion",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L78",
+      "source_location": "L79",
       "_origin": "ast",
       "id": "remix_package_devdependencies_framer_motion",
       "community": 5,
@@ -9107,7 +9157,7 @@
       "label": "remix-flat-routes",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L79",
+      "source_location": "L80",
       "_origin": "ast",
       "id": "remix_package_devdependencies_remix_flat_routes",
       "community": 5,
@@ -9117,7 +9167,7 @@
       "label": "ts-node",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L80",
+      "source_location": "L81",
       "_origin": "ast",
       "id": "remix_package_devdependencies_ts_node",
       "community": 5,
@@ -9127,7 +9177,7 @@
       "label": "typescript",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L81",
+      "source_location": "L82",
       "_origin": "ast",
       "id": "remix_package_devdependencies_typescript",
       "community": 5,
@@ -9137,7 +9187,7 @@
       "label": "vite",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L82",
+      "source_location": "L83",
       "_origin": "ast",
       "id": "remix_package_devdependencies_vite",
       "community": 5,
@@ -9147,7 +9197,7 @@
       "label": "vite-tsconfig-paths",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L83",
+      "source_location": "L84",
       "_origin": "ast",
       "id": "remix_package_devdependencies_vite_tsconfig_paths",
       "community": 5,
@@ -9157,7 +9207,7 @@
       "label": "resolutions",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L85",
+      "source_location": "L86",
       "_origin": "ast",
       "id": "remix_package_resolutions",
       "community": 1,
@@ -9167,7 +9217,7 @@
       "label": "@types/react",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L86",
+      "source_location": "L87",
       "_origin": "ast",
       "id": "remix_package_resolutions_types_react",
       "community": 1,
@@ -9177,7 +9227,7 @@
       "label": "engines",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L88",
+      "source_location": "L89",
       "_origin": "ast",
       "id": "remix_package_engines",
       "community": 1,
@@ -9187,7 +9237,7 @@
       "label": "node",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L89",
+      "source_location": "L90",
       "_origin": "ast",
       "id": "remix_package_engines_node",
       "community": 1,
@@ -20683,11 +20733,21 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/app/api/utils/lopu/musing.ts",
-      "source_location": "L18",
+      "source_location": "L42",
       "weight": 1.0,
       "source": "lopu_musing",
-      "target": "lopu_musing_fallbacks",
+      "target": "lopu_musing_builduserprompt",
       "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/lopu/musing.ts",
+      "source_location": "L18",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "lopu_musing",
+      "target": "lopu_musing_fallbacks"
     },
     {
       "relation": "contains",
@@ -20695,9 +20755,9 @@
       "source_file": "remix/app/api/utils/lopu/musing.ts",
       "source_location": "L42",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_musing",
-      "target": "lopu_musing_fetchweather",
-      "confidence_score": 1.0
+      "target": "lopu_musing_fetchweather"
     },
     {
       "relation": "contains",
@@ -20705,9 +20765,9 @@
       "source_file": "remix/app/api/utils/lopu/musing.ts",
       "source_location": "L56",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_musing",
-      "target": "lopu_musing_generatelopumusing",
-      "confidence_score": 1.0
+      "target": "lopu_musing_generatelopumusing"
     },
     {
       "relation": "contains",
@@ -20715,9 +20775,9 @@
       "source_file": "remix/app/api/utils/lopu/musing.ts",
       "source_location": "L8",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_musing",
-      "target": "lopu_musing_lopucontext",
-      "confidence_score": 1.0
+      "target": "lopu_musing_lopucontext"
     },
     {
       "relation": "contains",
@@ -20725,8 +20785,18 @@
       "source_file": "remix/app/api/utils/lopu/musing.ts",
       "source_location": "L16",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_musing",
-      "target": "lopu_musing_lopumusing",
+      "target": "lopu_musing_lopumusing"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/lopu/musing.ts",
+      "source_location": "L22",
+      "weight": 1.0,
+      "source": "lopu_musing",
+      "target": "lopu_musing_lopusource",
       "confidence_score": 1.0
     },
     {
@@ -20735,8 +20805,28 @@
       "source_file": "remix/app/api/utils/lopu/musing.ts",
       "source_location": "L26",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_musing",
-      "target": "lopu_musing_pickfallback",
+      "target": "lopu_musing_pickfallback"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/lopu/musing.ts",
+      "source_location": "L84",
+      "weight": 1.0,
+      "source": "lopu_musing",
+      "target": "lopu_musing_tryclaude",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/lopu/musing.ts",
+      "source_location": "L102",
+      "weight": 1.0,
+      "source": "lopu_musing",
+      "target": "lopu_musing_tryopenai",
       "confidence_score": 1.0
     },
     {
@@ -20745,9 +20835,9 @@
       "source_file": "remix/app/api/utils/lopu/musing.ts",
       "source_location": "L29",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_musing",
-      "target": "lopu_musing_weathercodetotext",
-      "confidence_score": 1.0
+      "target": "lopu_musing_weathercodetotext"
     },
     {
       "relation": "imports_from",
@@ -20756,9 +20846,9 @@
       "source_file": "remix/app/routes/api/v1/lopu/musing/_musing.tsx",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "musing_musing",
-      "target": "lopu_musing",
-      "confidence_score": 1.0
+      "target": "lopu_musing"
     },
     {
       "relation": "calls",
@@ -20767,8 +20857,19 @@
       "source_file": "remix/app/api/utils/lopu/musing.ts",
       "source_location": "L58",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_musing_generatelopumusing",
-      "target": "lopu_musing_pickfallback",
+      "target": "lopu_musing_pickfallback"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/lopu/musing.ts",
+      "source_location": "L122",
+      "weight": 1.0,
+      "source": "lopu_musing_generatelopumusing",
+      "target": "lopu_musing_builduserprompt",
       "confidence_score": 1.0
     },
     {
@@ -20778,9 +20879,9 @@
       "source_file": "remix/app/api/utils/lopu/musing.ts",
       "source_location": "L50",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_musing_fetchweather",
-      "target": "lopu_musing_weathercodetotext",
-      "confidence_score": 1.0
+      "target": "lopu_musing_weathercodetotext"
     },
     {
       "relation": "imports",
@@ -20789,9 +20890,9 @@
       "source_file": "remix/app/routes/api/v1/lopu/musing/_musing.tsx",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "musing_musing",
-      "target": "lopu_musing_fetchweather",
-      "confidence_score": 1.0
+      "target": "lopu_musing_fetchweather"
     },
     {
       "relation": "calls",
@@ -20805,15 +20906,37 @@
       "target": "lopu_musing_fetchweather"
     },
     {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/lopu/musing.ts",
+      "source_location": "L130",
+      "weight": 1.0,
+      "source": "lopu_musing_generatelopumusing",
+      "target": "lopu_musing_tryclaude",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/lopu/musing.ts",
+      "source_location": "L130",
+      "weight": 1.0,
+      "source": "lopu_musing_generatelopumusing",
+      "target": "lopu_musing_tryopenai",
+      "confidence_score": 1.0
+    },
+    {
       "relation": "imports",
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "remix/app/routes/api/v1/lopu/musing/_musing.tsx",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "musing_musing",
-      "target": "lopu_musing_generatelopumusing",
-      "confidence_score": 1.0
+      "target": "lopu_musing_generatelopumusing"
     },
     {
       "relation": "calls",
@@ -26996,9 +27119,9 @@
       "source_file": "remix/app/routes/api/v1/lopu/musing/_musing.tsx",
       "source_location": "L9",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "musing_musing",
-      "target": "musing_musing_loader",
-      "confidence_score": 1.0
+      "target": "musing_musing_loader"
     },
     {
       "relation": "contains",
@@ -29834,9 +29957,9 @@
       "source_file": "remix/package.json",
       "source_location": "L14",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "remix_package_dependencies",
-      "target": "remix_package_dependencies_anthropic_ai_sdk",
-      "confidence_score": 1.0
+      "target": "remix_package_dependencies_anthropic_ai_sdk"
     },
     {
       "relation": "contains",
@@ -30067,6 +30190,16 @@
       "confidence_score": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_mongodb"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/package.json",
+      "source_location": "L43",
+      "weight": 1.0,
+      "source": "remix_package_dependencies",
+      "target": "remix_package_dependencies_openai",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -31950,5 +32083,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "da8a1430846dc8822e9d2498f66d4b9baa6f7d36"
+  "built_at_commit": "dd66ea2011bb39d64efda7ee5e73c06a399afcd6"
 }

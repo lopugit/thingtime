@@ -1,16 +1,16 @@
 # Graph Report - thingtime  (2026-06-22)
 
 ## Corpus Check
-- 225 files · ~548,611 words
+- 225 files · ~548,869 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 1097 nodes · 1984 edges · 84 communities (67 shown, 17 thin omitted)
+- 1102 nodes · 1992 edges · 84 communities (67 shown, 17 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 11 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `da8a1430`
+- Built from commit: `dd66ea20`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -101,13 +101,13 @@
 - `action()` --calls--> `serializeAuthCookie()`  [INFERRED]
   remix/app/routes/api/v1/login/_login.tsx → remix/app/api/utils/auth/authCookie.ts
 - `loader()` --calls--> `getCurrentUser()`  [EXTRACTED]
-  remix/app/routes/register.tsx → remix/app/api/utils/auth/getCurrentUser.ts
+  remix/app/root.tsx → remix/app/api/utils/auth/getCurrentUser.ts
 - `action()` --calls--> `loginUser()`  [INFERRED]
   remix/app/routes/api/v1/login/_login.tsx → remix/app/api/utils/auth/loginUser.ts
 - `Index()` --calls--> `useThingtime()`  [INFERRED]
   remix/app/routes/_index.tsx → remix/app/components/Thingtime/useThingtime.tsx
-- `loader()` --calls--> `getCurrentUser()`  [EXTRACTED]
-  remix/app/root.tsx → remix/app/api/utils/auth/getCurrentUser.ts
+- `applyFilter()` --calls--> `moveImageResultsToFinalDestination()`  [EXTRACTED]
+  raycast/src/operations/filterOperation.ts → raycast/src/utilities/utils.ts
 
 ## Import Cycles
 - 3-file cycle: `remix/app/api/utils/mongodb/connection.ts -> remix/app/routes/api/v1/mongodb/get-connection/_get-connection.tsx -> remix/app/api/utils/userCheckExists.ts -> remix/app/api/utils/mongodb/connection.ts`
@@ -118,7 +118,7 @@
 
 ### Community 0 - "Raycast Image Operations"
 Cohesion: 0.06
-Nodes (80): openNewFinderWindow(), regexToReplacementConverter(), regexTrim(), any(), convert(), applyFilter(), flip(), optimize() (+72 more)
+Nodes (79): openNewFinderWindow(), regexToReplacementConverter(), regexTrim(), any(), convert(), flip(), optimize(), optimizeJPEG() (+71 more)
 
 ### Community 1 - "Community 1"
 Cohesion: 0.25
@@ -133,8 +133,8 @@ Cohesion: 0.04
 Nodes (45): author, bugs, url, dependencies, axios, bcrypt, body-parser, cors (+37 more)
 
 ### Community 4 - "Remix Dependencies"
-Cohesion: 0.05
-Nodes (44): dependencies, @anthropic-ai/sdk, axios, bcrypt, @chakra-ui/react, @chakra-ui/react-types, draft-js, @editorjs/editorjs (+36 more)
+Cohesion: 0.04
+Nodes (45): dependencies, @anthropic-ai/sdk, axios, bcrypt, @chakra-ui/react, @chakra-ui/react-types, draft-js, @editorjs/editorjs (+37 more)
 
 ### Community 5 - "Remix Dev Dependencies"
 Cohesion: 0.08
@@ -153,12 +153,12 @@ Cohesion: 0.07
 Nodes (15): createObjectProperties(), deepForEach(), ee(), epp(), escapeEscapes(), escapePropertyPath(), forEachArray(), forEachObject() (+7 more)
 
 ### Community 9 - "Smarts Core (Babel/Eval)"
-Cohesion: 0.08
-Nodes (20): Session, App(), logConfig, whitelist, whitelistObj, ChakraWrapper(), chakras, chakrasDark (+12 more)
+Cohesion: 0.07
+Nodes (21): Session, App(), loader(), logConfig, whitelist, whitelistObj, ChakraWrapper(), chakras (+13 more)
 
 ### Community 10 - "Remix Root & Theming"
-Cohesion: 0.11
-Nodes (22): ImageGeneratorActionPanel(), SizeSelectionActionPanel(), applyBasicFilter(), filters, getFilterThumbnail(), initializeFilterScript(), generatePlaceholder(), generatePreview() (+14 more)
+Cohesion: 0.10
+Nodes (23): ImageGeneratorActionPanel(), SizeSelectionActionPanel(), applyFilter(), applyBasicFilter(), filters, getFilterThumbnail(), initializeFilterScript(), generatePlaceholder() (+15 more)
 
 ### Community 11 - "Graphics GP Utilities"
 Cohesion: 0.13
@@ -253,8 +253,8 @@ Cohesion: 0.40
 Nodes (4): app, io, server, smarts
 
 ### Community 35 - "Community 35"
-Cohesion: 0.33
-Nodes (8): FALLBACKS, fetchWeather(), generateLopuMusing(), LopuContext, LopuMusing, pickFallback(), weatherCodeToText(), loader()
+Cohesion: 0.24
+Nodes (12): buildUserPrompt(), FALLBACKS, fetchWeather(), generateLopuMusing(), LopuContext, LopuMusing, LopuSource, pickFallback() (+4 more)
 
 ### Community 36 - "Edge Route"
 Cohesion: 0.50
@@ -286,7 +286,7 @@ Nodes (7): extends, root, rules, no-unused-vars, @typescript-eslint/no-unused-va
 
 ### Community 78 - "Community 78"
 Cohesion: 0.08
-Nodes (49): loader(), authCookie, clearAuthCookie(), getAuthToken(), serializeAuthCookie(), SendArgs, sendEmail(), sendVerificationEmail() (+41 more)
+Nodes (49): authCookie, clearAuthCookie(), getAuthToken(), serializeAuthCookie(), SendArgs, sendEmail(), sendVerificationEmail(), consumeEmailVerification() (+41 more)
 
 ### Community 79 - "Community 79"
 Cohesion: 0.18
@@ -321,11 +321,11 @@ Cohesion: 0.40
 Nodes (4): Decision log, Decisions, Nikolaj Frey — Engineer Decisions, Recurring principles (the thinking method)
 
 ### Community 87 - "Community 87"
-Cohesion: 0.08
-Nodes (26): assets, value, newTimeline(), PathArray, ThingtimeLine(), Timeline, TimelineEvent, TimelineScaffold (+18 more)
+Cohesion: 0.09
+Nodes (25): assets, value, newTimeline(), PathArray, ThingtimeLine(), Timeline, TimelineEvent, TimelineScaffold (+17 more)
 
 ## Knowledge Gaps
-- **425 isolated node(s):** `extends`, `name`, `version`, `description`, `main` (+420 more)
+- **427 isolated node(s):** `extends`, `name`, `version`, `description`, `main` (+422 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **17 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -333,7 +333,7 @@ Nodes (26): assets, value, newTimeline(), PathArray, ThingtimeLine(), Timeline, 
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `useThingtime()` connect `Smarts Opt Helpers` to `Root Package Manifest`, `Community 87`?**
-  _High betweenness centrality (0.028) - this node is a cross-community bridge._
+  _High betweenness centrality (0.031) - this node is a cross-community bridge._
 - **Why does `getMongoUri()` connect `API Package Manifest` to `Community 78`?**
   _High betweenness centrality (0.007) - this node is a cross-community bridge._
 - **Why does `Thingtime()` connect `Smarts Opt Helpers` to `API Package Manifest`, `Community 87`?**
@@ -341,8 +341,8 @@ _Questions this graph is uniquely positioned to answer:_
 - **Are the 2 inferred relationships involving `useThingtime()` (e.g. with `Login()` and `Index()`) actually correct?**
   _`useThingtime()` has 2 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `extends`, `name`, `version` to the rest of the system?**
-  _425 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _427 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Raycast Image Operations` be split into smaller, more focused modules?**
-  _Cohesion score 0.06281859070464768 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.0631184407796102 - nodes in this community are weakly interconnected._
 - **Should `API Package Manifest` be split into smaller, more focused modules?**
   _Cohesion score 0.08106473079249849 - nodes in this community are weakly interconnected._

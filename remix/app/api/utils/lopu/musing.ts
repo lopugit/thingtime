@@ -1,9 +1,15 @@
 import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 
 // 🦄 Lopu's musings — a little message generated from the user's real-world
-// context (approximate location + current weather + time of day). Weather is
-// keyless (Open-Meteo). The Claude call needs ANTHROPIC_API_KEY; without it we
-// fall back to a canned musing so the feature always works.
+// context (approximate location + current weather + time of day).
+//
+// Providers (set either or both env keys):
+//   - ANTHROPIC_API_KEY → Claude (model: LOPU_CLAUDE_MODEL, default claude-opus-4-8)
+//   - OPENAI_API_KEY    → ChatGPT (model: LOPU_OPENAI_MODEL, default gpt-4o-mini)
+// Preference order via LOPU_PROVIDER = "claude" | "openai" (default: claude first).
+// If neither key is set (or both calls fail), a canned fallback is returned, so
+// the feature always works. Weather is keyless (Open-Meteo).
 
 export type LopuContext = {
   city?: string;
@@ -13,7 +19,8 @@ export type LopuContext = {
   localTime?: string;
 };
 
-export type LopuMusing = { message: string; source: 'claude' | 'fallback' };
+export type LopuSource = 'claude' | 'openai' | 'fallback';
+export type LopuMusing = { message: string; source: LopuSource };
 
 const FALLBACKS = [
   'The best ideas, like unicorns, show up when you stop chasing them. 🦄',
@@ -23,10 +30,23 @@ const FALLBACKS = [
   "Progress hides in the boring parts — you're closer than it feels. 🌱"
 ];
 
-// Rotate the fallback line by time of day. Deliberately NOT a crypto RNG:
-// CodeQL flags any range-reduction of a secure RNG as "biased", and this isn't
-// security-sensitive — it just varies a whimsical line when Claude is offline.
+// Rotate the fallback line by time (no RNG — not security-sensitive, and CodeQL
+// flags any range-reduction of a secure RNG).
 const pickFallback = () => FALLBACKS[Date.now() % FALLBACKS.length];
+
+const SYSTEM_PROMPT =
+  'You are Lopu, the whimsical unicorn AI living inside Thingtime. Reply with ONE short, delightful musing ' +
+  "(max two sentences) — warm, a touch magical, and weave in the user's weather, city, or time of day when given. " +
+  'Use at most one emoji. Output ONLY the musing text: no preamble, no quotes, no meta-commentary, no reasoning.';
+
+const buildUserPrompt = (ctx: LopuContext): string => {
+  const bits: string[] = [];
+  if (ctx.city) bits.push(`city: ${ctx.city}${ctx.country ? ', ' + ctx.country : ''}`);
+  if (typeof ctx.tempC === 'number') bits.push(`weather: ${ctx.weather ?? ''} ${ctx.tempC}°C`.trim());
+  if (ctx.localTime) bits.push(`local time: ${ctx.localTime}`);
+  const contextLine = bits.length ? `Context — ${bits.join('; ')}.` : 'No location context available.';
+  return `${contextLine}\nGive me today's little musing.`;
+};
 
 // Minimal WMO weather-code → words mapping (Open-Meteo `weather_code`).
 const weatherCodeToText = (code: number): string => {
@@ -50,41 +70,66 @@ export const fetchWeather = async (lat: string, lon: string): Promise<{ tempC?: 
     const data: any = await resp.json();
     const tempC = data?.current?.temperature_2m;
     const code = data?.current?.weather_code;
-    return { tempC: typeof tempC === 'number' ? tempC : undefined, weather: typeof code === 'number' ? weatherCodeToText(code) : undefined };
+    return {
+      tempC: typeof tempC === 'number' ? tempC : undefined,
+      weather: typeof code === 'number' ? weatherCodeToText(code) : undefined
+    };
+  } catch {
+    return null;
+  }
+};
+
+// --- Providers (each returns the musing text, or null to fall through) -------
+
+const tryClaude = async (user: string): Promise<string | null> => {
+  if (!process.env.ANTHROPIC_API_KEY) return null;
+  try {
+    const client = new Anthropic();
+    const response = await client.messages.create({
+      model: process.env.LOPU_CLAUDE_MODEL || 'claude-opus-4-8',
+      max_tokens: 120,
+      system: SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: user }]
+    });
+    const block = response.content.find((b) => b.type === 'text');
+    const text = block && 'text' in block ? block.text.trim() : '';
+    return text || null;
+  } catch {
+    return null;
+  }
+};
+
+const tryOpenAI = async (user: string): Promise<string | null> => {
+  if (!process.env.OPENAI_API_KEY) return null;
+  try {
+    const client = new OpenAI();
+    const resp = await client.chat.completions.create({
+      model: process.env.LOPU_OPENAI_MODEL || 'gpt-4o-mini',
+      max_tokens: 120,
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: user }
+      ]
+    });
+    const text = resp.choices?.[0]?.message?.content?.trim();
+    return text || null;
   } catch {
     return null;
   }
 };
 
 export const generateLopuMusing = async (ctx: LopuContext): Promise<LopuMusing> => {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return { message: pickFallback(), source: 'fallback' };
+  const user = buildUserPrompt(ctx);
+
+  // Preference order: LOPU_PROVIDER picks who goes first; the other is the
+  // automatic fallback. Default is Claude first.
+  const pref = (process.env.LOPU_PROVIDER || '').toLowerCase();
+  const order: Array<'claude' | 'openai'> = pref === 'openai' ? ['openai', 'claude'] : ['claude', 'openai'];
+
+  for (const provider of order) {
+    const text = provider === 'claude' ? await tryClaude(user) : await tryOpenAI(user);
+    if (text) return { message: text, source: provider };
   }
 
-  try {
-    const client = new Anthropic();
-
-    const bits: string[] = [];
-    if (ctx.city) bits.push(`city: ${ctx.city}${ctx.country ? ', ' + ctx.country : ''}`);
-    if (typeof ctx.tempC === 'number') bits.push(`weather: ${ctx.weather ?? ''} ${ctx.tempC}°C`.trim());
-    if (ctx.localTime) bits.push(`local time: ${ctx.localTime}`);
-    const contextLine = bits.length ? `Context — ${bits.join('; ')}.` : 'No location context available.';
-
-    const response = await client.messages.create({
-      model: 'claude-opus-4-8',
-      max_tokens: 120,
-      system:
-        'You are Lopu, the whimsical unicorn AI living inside Thingtime. Reply with ONE short, delightful musing ' +
-        '(max two sentences) — warm, a touch magical, and weave in the user\'s weather, city, or time of day when given. ' +
-        'Use at most one emoji. Output ONLY the musing text: no preamble, no quotes, no meta-commentary, no reasoning.',
-      messages: [{ role: 'user', content: `${contextLine}\nGive me today's little musing.` }]
-    });
-
-    const textBlock = response.content.find((b) => b.type === 'text');
-    const message = textBlock && 'text' in textBlock ? textBlock.text.trim() : '';
-
-    return message ? { message, source: 'claude' } : { message: pickFallback(), source: 'fallback' };
-  } catch {
-    return { message: pickFallback(), source: 'fallback' };
-  }
+  return { message: pickFallback(), source: 'fallback' };
 };
