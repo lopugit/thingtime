@@ -4,6 +4,7 @@ import { Link, useRouteLoaderData } from '@remix-run/react';
 
 import { Icon } from '../Icon/Icon';
 import { MongoStatus } from '../MongoDB/MongoStatus';
+import { VercelStatus } from '../Vercel/VercelStatus';
 
 const BRANCH_NAME =
   typeof process !== 'undefined' && process.env?.THINGTIME_BRANCH_NAME
@@ -76,6 +77,8 @@ export const Footer = (props) => {
               </Box>
             </Flex>
           )}
+
+          <VercelStatus></VercelStatus>
 
           {/* live MongoDB connection status, links to /mongodb-status */}
           <MongoStatus></MongoStatus>

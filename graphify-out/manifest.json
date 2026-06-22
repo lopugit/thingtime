@@ -495,13 +495,13 @@
     "semantic_hash": "27bff4852d6ff45c5820a31822a9b3b9"
   },
   "remix/app/components/Nav/Footer.tsx": {
-    "mtime": 1782097412.4254901,
-    "ast_hash": "80c286f68126a6b5bea09b5b732b13b0",
+    "mtime": 1782117925.3689318,
+    "ast_hash": "b528637b1e5aec555383592b42d1ec1a",
     "semantic_hash": ""
   },
   "remix/app/components/Nav/Nav.tsx": {
-    "mtime": 1782087523.4795327,
-    "ast_hash": "f0820478e4a3f2ec9c9793dfacc22c2b",
+    "mtime": 1782118024.9586737,
+    "ast_hash": "e1ce821e4eec1691dcde7d150789082b",
     "semantic_hash": ""
   },
   "remix/app/components/Nav/ProfileDrawer.tsx": {
@@ -700,8 +700,8 @@
     "semantic_hash": "c4054b1dfdb64ee989f94d84a82f34b0"
   },
   "remix/app/root.tsx": {
-    "mtime": 1782117569.6752646,
-    "ast_hash": "aec17f14d2f72ccb4d4c178a5290d9b7",
+    "mtime": 1782117884.7305312,
+    "ast_hash": "66b6283cd9deb6de8427c59bfd92fe9d",
     "semantic_hash": ""
   },
   "remix/app/routes/$.tsx": {
@@ -830,8 +830,8 @@
     "semantic_hash": ""
   },
   "remix/scripts/pre-dev.sh": {
-    "mtime": 1782109846.229558,
-    "ast_hash": "076ea875f035cd6fce5a07f9cadef83d",
+    "mtime": 1782117893.9875658,
+    "ast_hash": "3bff4102650970810d7ec72c6ca0c284",
     "semantic_hash": ""
   },
   "remix/tsconfig.json": {
@@ -1825,8 +1825,23 @@
     "semantic_hash": ""
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1782117622.6871896,
-    "ast_hash": "55815d858404dd12549a92ae8931f7fb",
+    "mtime": 1782118041.2560272,
+    "ast_hash": "a62e1e27b2ed5a1bcd8c92798fb7f73c",
+    "semantic_hash": ""
+  },
+  "remix/app/api/utils/vercel/status.ts": {
+    "mtime": 1782117937.7763665,
+    "ast_hash": "961771412990cd2387126a5d4ba63311",
+    "semantic_hash": ""
+  },
+  "remix/app/components/Vercel/VercelStatus.tsx": {
+    "mtime": 1782117920.9091406,
+    "ast_hash": "582505892f0f518000ef4e10bbdc4d63",
+    "semantic_hash": ""
+  },
+  "remix/app/routes/api/v1/vercel/status-data/_status-data.tsx": {
+    "mtime": 1782117920.9084604,
+    "ast_hash": "bddc6a47b2297a1c27e076c880a6f18c",
     "semantic_hash": ""
   }
 }

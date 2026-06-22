@@ -18,6 +18,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Vercel deployment footer status.** Added a compact footer indicator backed by
+  `/api/v1/vercel/status-data`; it reports local/unconfigured state without
+  secrets and can query the Vercel deployments API when `VERCEL_API_TOKEN` plus
+  project identity env vars are configured server-side. — _Codex (AI),
+  2026-06-22_
 - **`app/Providers/Chakra/emotionContext.ts`** — shared server/client context
   for Emotion SSR style chunks, so the Remix document can render critical
   Emotion styles as part of the React tree instead of string-splicing them into
@@ -73,8 +78,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 | 2 | Some loads visibly jumped through unstyled content because critical Emotion styles were temporarily removed before being restored. | Stop deleting SSR style tags on startup; render them into `<head>` from React and let Emotion adopt them. | Codex (AI) | 2026-06-22 |
 | 3 | The first proper `ClientStyleContext.reset()` attempt could recurse because the Emotion sheet handoff reran after each cache replacement. | Make the client reset context stable and run the Emotion sheet handoff once, matching Chakra's Remix contract while documenting why exhaustive-deps is intentionally disabled there. | Codex (AI) | 2026-06-22 |
 | 4 | The Emotion handoff still ran after the browser's first hydrated paint, so users could occasionally see boxed icons and layout snapping for a frame. | Move the handoff from a passive effect to an SSR-safe layout effect, keeping the handoff pre-paint while avoiding server `useLayoutEffect` warnings. | Codex (AI) | 2026-06-22 |
-| 5 | `smarts.merge(..., { clone: true })` behavior was at risk during PR cleanup. | Verified the clone path still deep-clones nested values without mutating the source object. | Codex (AI) | 2026-06-22 |
-| 6 | Local dev-server restarts could accidentally spawn duplicate Remix servers or leave unclear runtime state. | Documented the PM2-managed `tt-remix-9999` workflow in root `AGENTS.md`; local app was restarted through `npm run remix-pms`. | Codex (AI) | 2026-06-22 |
+| 5 | Vercel previews could show `git/unknown` or a stale committed `.env.auto` branch in the footer. | Prefer Vercel's `VERCEL_GIT_COMMIT_REF` in the Remix root loader and Vercel pre-dev script, then pass that branch through root loader data to the footer. | Codex (AI) | 2026-06-22 |
+| 6 | `smarts.merge(..., { clone: true })` behavior was at risk during PR cleanup. | Verified the clone path still deep-clones nested values without mutating the source object. | Codex (AI) | 2026-06-22 |
+| 7 | Local dev-server restarts could accidentally spawn duplicate Remix servers or leave unclear runtime state. | Documented the PM2-managed `tt-remix-9999` workflow in root `AGENTS.md`; local app was restarted through `npm run remix-pms`. | Codex (AI) | 2026-06-22 |
 
 ### Verified
 
@@ -90,6 +96,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - Clean headless Chrome after the pre-paint handoff change still reported seven
   SSR Emotion style tags and no React hydration, Emotion insertion, or
   update-depth console failures. — _Codex (AI), 2026-06-22_
+- `/api/v1/vercel/status-data` returns a local/unconfigured payload locally, and
+  targeted lint/build checks passed for the Vercel status route/component. —
+  _Codex (AI), 2026-06-22_
 - `bash --noprofile --norc -n remix/scripts/pre-dev.sh` passed after confirming
   the `.env.auto` auto-update behavior is intentionally preserved. — _Codex (AI),
   2026-06-22_

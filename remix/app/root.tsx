@@ -126,6 +126,14 @@ type RootLoaderData = {
   titlePrefix: string;
 };
 
+const getDeploymentBranchName = () => {
+  return (
+    process.env.VERCEL_GIT_COMMIT_REF ||
+    process.env.THINGTIME_BRANCH_NAME ||
+    'git/unknown'
+  );
+};
+
 export async function loader({ request }: { request: Request }) {
   const cookieHeader = request.headers.get('Cookie');
 
@@ -152,6 +160,13 @@ export async function loader({ request }: { request: Request }) {
       processEnv[key] = process.env[key];
     }
   }
+
+  processEnv.THINGTIME_BRANCH_NAME = getDeploymentBranchName();
+  processEnv.THINGTIME_VERCEL_ENV =
+    process.env.VERCEL_TARGET_ENV || process.env.VERCEL_ENV;
+  processEnv.THINGTIME_VERCEL_URL = process.env.VERCEL_URL;
+  processEnv.THINGTIME_VERCEL_BRANCH_URL = process.env.VERCEL_BRANCH_URL;
+  processEnv.THINGTIME_VERCEL_GIT_COMMIT_SHA = process.env.VERCEL_GIT_COMMIT_SHA;
 
   // .log everyone
 

@@ -15,18 +15,6 @@ const BRANCH_NAME =
 console.log('BRANCH_NAME:', BRANCH_NAME);
 
 export const Nav = (props) => {
-  let clientState: any = {};
-
-  try {
-    if (typeof window !== 'undefined') {
-      clientState = window.envFromCookie || {};
-    }
-  } catch (err) {
-    // do nothing
-  }
-
-  const [branchName, setBranchName] = React.useState(clientState.THINGTIME_BRANCH_NAME || BRANCH_NAME || 'git/unknown');
-
   const { thingtime } = useThingtime();
 
   const [profileDrawerOpen, setProfileDrawerOpen] = React.useState(false);
