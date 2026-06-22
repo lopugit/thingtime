@@ -2050,7 +2050,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "components_imagegeneratoractionpanel",
-      "community": 10,
+      "community": 0,
       "norm_label": "imagegeneratoractionpanel.tsx"
     },
     {
@@ -2090,7 +2090,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "components_sizeselectionactionpanel",
-      "community": 10,
+      "community": 0,
       "norm_label": "sizeselectionactionpanel.tsx"
     },
     {
@@ -3960,7 +3960,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "mongodb_status_mongoconnectionstatus",
-      "community": 1,
+      "community": 2,
       "norm_label": "mongoconnectionstatus"
     },
     {
@@ -4340,7 +4340,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "layout_main_main",
-      "community": 1,
+      "community": 9,
       "norm_label": "main()"
     },
     {
@@ -4420,7 +4420,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "mongodb_mongostatus",
-      "community": 1,
+      "community": 2,
       "norm_label": "mongostatus.tsx"
     },
     {
@@ -4430,7 +4430,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "mongodb_mongostatus_pulse",
-      "community": 1,
+      "community": 2,
       "norm_label": "pulse"
     },
     {
@@ -4440,7 +4440,7 @@
       "source_location": "L18",
       "_origin": "ast",
       "id": "mongodb_mongostatus_mongostatus",
-      "community": 1,
+      "community": 2,
       "norm_label": "mongostatus()"
     },
     {
@@ -4470,7 +4470,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "mongodb_rawresult",
-      "community": 35,
+      "community": 13,
       "norm_label": "rawresult.tsx"
     },
     {
@@ -4480,7 +4480,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "mongodb_rawresult_rawresultprops",
-      "community": 35,
+      "community": 13,
       "norm_label": "rawresultprops"
     },
     {
@@ -4490,7 +4490,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "mongodb_rawresult_rawresult",
-      "community": 35,
+      "community": 13,
       "norm_label": "rawresult()"
     },
     {
@@ -4500,7 +4500,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "mongodb_rawresults",
-      "community": 35,
+      "community": 13,
       "norm_label": "rawresults.tsx"
     },
     {
@@ -4510,7 +4510,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "mongodb_rawresults_rawresults",
-      "community": 35,
+      "community": 13,
       "norm_label": "rawresults()"
     },
     {
@@ -4560,7 +4560,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "nav_profiledrawer",
-      "community": 45,
+      "community": 1,
       "norm_label": "profiledrawer.tsx"
     },
     {
@@ -4570,7 +4570,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "nav_profiledrawer_profiledrawer",
-      "community": 45,
+      "community": 1,
       "norm_label": "profiledrawer()"
     },
     {
@@ -4964,10 +4964,20 @@
       "norm_label": "serveremotionstyles"
     },
     {
+      "label": "emotionCache",
+      "file_type": "code",
+      "source_file": "remix/app/entry.client.tsx",
+      "source_location": "L18",
+      "_origin": "ast",
+      "id": "app_entry_client_emotioncache",
+      "community": 46,
+      "norm_label": "emotioncache"
+    },
+    {
       "label": "restoreServerEmotionStyles()",
       "file_type": "code",
       "source_file": "remix/app/entry.client.tsx",
-      "source_location": "L19",
+      "source_location": "L20",
       "_origin": "ast",
       "id": "app_entry_client_restoreserveremotionstyles",
       "community": 46,
@@ -4977,7 +4987,7 @@
       "label": "preserveServerEmotionStyles()",
       "file_type": "code",
       "source_file": "remix/app/entry.client.tsx",
-      "source_location": "L36",
+      "source_location": "L39",
       "_origin": "ast",
       "id": "app_entry_client_preserveserveremotionstyles",
       "community": 46,
@@ -5940,7 +5950,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "template_template",
-      "community": 13,
+      "community": 2,
       "norm_label": "_template.tsx"
     },
     {
@@ -5950,7 +5960,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "template_template_index",
-      "community": 13,
+      "community": 2,
       "norm_label": "index()"
     },
     {
@@ -5960,7 +5970,7 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "template_template_action",
-      "community": 13,
+      "community": 2,
       "norm_label": "action()"
     },
     {
@@ -5970,7 +5980,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "template_template_earlyreturn",
-      "community": 13,
+      "community": 2,
       "norm_label": "earlyreturn()"
     },
     {
@@ -7430,7 +7440,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_package",
-      "community": 5,
+      "community": 75,
       "norm_label": "package.json"
     },
     {
@@ -7440,7 +7450,7 @@
       "source_location": "L2",
       "_origin": "ast",
       "id": "remix_package_private",
-      "community": 5,
+      "community": 75,
       "norm_label": "private"
     },
     {
@@ -7450,7 +7460,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "remix_package_sideeffects",
-      "community": 5,
+      "community": 75,
       "norm_label": "sideeffects"
     },
     {
@@ -7460,7 +7470,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "remix_package_version",
-      "community": 5,
+      "community": 75,
       "norm_label": "version"
     },
     {
@@ -7470,7 +7480,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "remix_package_scripts",
-      "community": 5,
+      "community": 76,
       "norm_label": "scripts"
     },
     {
@@ -7480,7 +7490,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "remix_package_scripts_build",
-      "community": 5,
+      "community": 76,
       "norm_label": "build"
     },
     {
@@ -7490,7 +7500,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "remix_package_scripts_pre_dev",
-      "community": 5,
+      "community": 76,
       "norm_label": "pre-dev"
     },
     {
@@ -7500,7 +7510,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "remix_package_scripts_dev",
-      "community": 5,
+      "community": 76,
       "norm_label": "dev"
     },
     {
@@ -7510,7 +7520,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "remix_package_scripts_lint",
-      "community": 5,
+      "community": 76,
       "norm_label": "lint"
     },
     {
@@ -7520,7 +7530,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "remix_package_scripts_lint_fix",
-      "community": 5,
+      "community": 76,
       "norm_label": "lint-fix"
     },
     {
@@ -7530,7 +7540,7 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "remix_package_scripts_format",
-      "community": 5,
+      "community": 76,
       "norm_label": "format"
     },
     {
@@ -8240,7 +8250,7 @@
       "source_location": "L85",
       "_origin": "ast",
       "id": "remix_package_resolutions",
-      "community": 5,
+      "community": 75,
       "norm_label": "resolutions"
     },
     {
@@ -8250,7 +8260,7 @@
       "source_location": "L86",
       "_origin": "ast",
       "id": "remix_package_resolutions_types_react",
-      "community": 5,
+      "community": 75,
       "norm_label": "@types/react"
     },
     {
@@ -8260,7 +8270,7 @@
       "source_location": "L88",
       "_origin": "ast",
       "id": "remix_package_engines",
-      "community": 5,
+      "community": 75,
       "norm_label": "engines"
     },
     {
@@ -8270,7 +8280,7 @@
       "source_location": "L89",
       "_origin": "ast",
       "id": "remix_package_engines_node",
-      "community": 5,
+      "community": 75,
       "norm_label": "node"
     },
     {
@@ -21562,11 +21572,21 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/app/entry.client.tsx",
-      "source_location": "L36",
+      "source_location": "L18",
       "weight": 1.0,
       "source": "app_entry_client",
-      "target": "app_entry_client_preserveserveremotionstyles",
+      "target": "app_entry_client_emotioncache",
       "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/entry.client.tsx",
+      "source_location": "L36",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "app_entry_client",
+      "target": "app_entry_client_preserveserveremotionstyles"
     },
     {
       "relation": "contains",
@@ -21595,9 +21615,9 @@
       "source_file": "remix/app/entry.client.tsx",
       "source_location": "L37",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "app_entry_client_preserveserveremotionstyles",
-      "target": "app_entry_client_restoreserveremotionstyles",
-      "confidence_score": 1.0
+      "target": "app_entry_client_restoreserveremotionstyles"
     },
     {
       "relation": "contains",
@@ -27042,5 +27062,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "57920dfd5ffb1f9ff9a485d4409a2009c65472bf"
+  "built_at_commit": "3d7560e8fbce2b13b7ab89fb190de3143703e784"
 }

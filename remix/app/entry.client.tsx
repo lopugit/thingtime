@@ -15,8 +15,11 @@ try {
 const serverEmotionStyles = Array.from(document.querySelectorAll('style[data-emotion]')).map(
   (style) => style.cloneNode(true) as HTMLStyleElement
 );
+const emotionCache = createEmotionCache();
 
 const restoreServerEmotionStyles = () => {
+  emotionCache.sheet.container = document.head;
+
   const currentEmotionKeys = new Set(
     Array.from(document.querySelectorAll('style[data-emotion]')).map((style) =>
       style.getAttribute('data-emotion')
@@ -42,7 +45,7 @@ const preserveServerEmotionStyles = () => {
 
 startTransition(() => {
   createRoot(document).render(
-    <CacheProvider value={createEmotionCache()}>
+    <CacheProvider value={emotionCache}>
       <RemixBrowser />
     </CacheProvider>
   );

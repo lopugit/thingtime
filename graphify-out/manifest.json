@@ -590,8 +590,8 @@
     "semantic_hash": "a9172b627781d16b1609ce3c70ab822a"
   },
   "remix/app/entry.client.tsx": {
-    "mtime": 1782099935.0627623,
-    "ast_hash": "0ef24d2d5ad500202b910e8d96a0967a",
+    "mtime": 1782100486.598149,
+    "ast_hash": "e22f8286c1c0c7f2dbf69b1c4bad987a",
     "semantic_hash": ""
   },
   "remix/app/entry.server.tsx": {
