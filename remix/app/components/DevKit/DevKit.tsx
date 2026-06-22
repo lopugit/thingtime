@@ -13,8 +13,11 @@ import { Icon } from '../Icon/Icon';
 // injected by vite `define` — 'development' | 'preview' | 'production'
 declare const __TT_DEPLOY_ENV__: string;
 
-// Rainbow shimmer for the hydration status badge — flows the gradient sideways.
-const shimmer = keyframes`0% { background-position: 0% 50% } 100% { background-position: 200% 50% }`;
+// Rotating conic rainbow for the hydration badge. A conic gradient whose first
+// and last colour match spins with no seam (a linear gradient tiles with a hard
+// diagonal line — this avoids that entirely).
+const RAINBOW_CONIC = 'conic-gradient(from 0deg, #47b5e6, #a555e8, #f34a4a, #ffbc48, #58ca70, #47b5e6)';
+const spin = keyframes`from { transform: rotate(0deg) } to { transform: rotate(360deg) }`;
 
 const getQueryParams: any = () => {
   try {
@@ -271,10 +274,10 @@ export const DevKit = (props) => {
             borderRadius="full"
             border="2px solid"
             borderColor="white"
-            backgroundImage={mounted ? RAINBOW : 'none'}
+            backgroundImage={mounted ? RAINBOW_CONIC : 'none'}
             bg={mounted ? undefined : 'gray.400'}
             boxShadow={mounted ? '0 0 8px rgba(165,85,232,0.7)' : 'none'}
-            sx={mounted ? { backgroundSize: '200% 200%', animation: `${shimmer} 3s linear infinite` } : undefined}
+            sx={mounted ? { animation: `${spin} 4s linear infinite` } : undefined}
           />
         </Flex>
       </Box>

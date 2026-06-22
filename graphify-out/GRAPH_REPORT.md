@@ -1,7 +1,7 @@
 # Graph Report - thingtime  (2026-06-22)
 
 ## Corpus Check
-- 226 files · ~554,437 words
+- 226 files · ~554,467 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -10,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `61de3a55`
+- Built from commit: `b3ae6786`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -188,7 +188,7 @@ Nodes (18): compilerOptions, allowJs, baseUrl, esModuleInterop, forceConsistentC
 
 ### Community 16 - "Smarts Opt Helpers"
 Cohesion: 0.18
-Nodes (15): DevKit(), getQueryParams(), shimmer, useApi(), CurrentUser, useCurrentUser(), Login(), inputSx (+7 more)
+Nodes (15): DevKit(), getQueryParams(), spin, useApi(), CurrentUser, useCurrentUser(), Login(), inputSx (+7 more)
 
 ### Community 17 - "Raycast TypeScript Config"
 Cohesion: 0.18
