@@ -48,8 +48,17 @@ deployment runbook changes discovered while validating Vercel previews.
 - Supports tokenless local/preview fallback state.
 - Uses `VERCEL_API_TOKEN` plus Vercel project identity when available to show
   deployment state, build phase, build progress, and build page links.
+- Derives Vercel project name from the Vercel git repo slug when
+  `VERCEL_PROJECT_NAME` is not configured, so setting only `VERCEL_API_TOKEN`
+  can still query the deployments API when the token has access.
+- Uses env-overridable fallback project/team IDs and the `lopugits-projects`
+  dashboard owner slug so deployment links point to
+  `https://vercel.com/lopugits-projects/thingtime/deployments`.
+- Avoids appending tokenless fallback phase text to API error labels.
 - Fixed preview footer branch display by preferring `VERCEL_GIT_COMMIT_REF`
   over stale committed `.env.auto` branch data.
+- Keeps Vercel and MongoDB footer status dots visible in unavailable states by
+  rendering neutral grey indicators with an outline.
 
 ## Deployment And Repo Hygiene
 

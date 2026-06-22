@@ -69,14 +69,16 @@ export const MongoStatus = (props) => {
   let label = 'MongoDB: checking…';
 
   if (error) {
-    color = 'red.400';
+    color = 'gray.400';
     label = 'MongoDB: status unavailable';
   } else if (status) {
-    color = status.connected ? 'green.400' : 'red.400';
+    color = status.connected ? 'green.400' : 'gray.400';
     label = status.connected
       ? `MongoDB: connected${typeof status.pingMs === 'number' ? ` (${status.pingMs}ms)` : ''}`
       : 'MongoDB: disconnected';
   }
+
+  const isUnavailable = Boolean(error || (status && !status.connected));
 
   return (
     <Link to="/mongodb-status" title="View MongoDB connection status">
@@ -84,8 +86,11 @@ export const MongoStatus = (props) => {
         <Box
           width="8px"
           height="8px"
+          minWidth="8px"
           borderRadius="full"
           backgroundColor={color}
+          border={isUnavailable ? '1px solid' : undefined}
+          borderColor={isUnavailable ? 'gray.500' : undefined}
           flexShrink={0}
           sx={checking ? { animation: `${pulse} 1.2s ease-in-out infinite` } : undefined}
         />

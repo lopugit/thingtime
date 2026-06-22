@@ -4050,7 +4050,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "mongodb_status_mongoconnectionstatus",
-      "community": 2,
+      "community": 45,
       "norm_label": "mongoconnectionstatus"
     },
     {
@@ -4167,7 +4167,7 @@
       "label": "normaliseUrl()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/vercel/status.ts",
-      "source_location": "L18",
+      "source_location": "L22",
       "_origin": "ast",
       "id": "vercel_status_normaliseurl",
       "community": 76,
@@ -4177,7 +4177,7 @@
       "label": "normaliseState()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/vercel/status.ts",
-      "source_location": "L26",
+      "source_location": "L30",
       "_origin": "ast",
       "id": "vercel_status_normalisestate",
       "community": 76,
@@ -4187,7 +4187,7 @@
       "label": "clampPercent()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/vercel/status.ts",
-      "source_location": "L45",
+      "source_location": "L49",
       "_origin": "ast",
       "id": "vercel_status_clamppercent",
       "community": 76,
@@ -4197,7 +4197,7 @@
       "label": "normaliseProgress()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/vercel/status.ts",
-      "source_location": "L53",
+      "source_location": "L57",
       "_origin": "ast",
       "id": "vercel_status_normaliseprogress",
       "community": 76,
@@ -4207,7 +4207,7 @@
       "label": "getBuildProgressFromChecks()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/vercel/status.ts",
-      "source_location": "L66",
+      "source_location": "L70",
       "_origin": "ast",
       "id": "vercel_status_getbuildprogressfromchecks",
       "community": 76,
@@ -4217,7 +4217,7 @@
       "label": "formatBuildPhase()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/vercel/status.ts",
-      "source_location": "L126",
+      "source_location": "L130",
       "_origin": "ast",
       "id": "vercel_status_formatbuildphase",
       "community": 76,
@@ -4227,7 +4227,7 @@
       "label": "getTokenlessFallback()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/vercel/status.ts",
-      "source_location": "L147",
+      "source_location": "L151",
       "_origin": "ast",
       "id": "vercel_status_gettokenlessfallback",
       "community": 76,
@@ -4237,7 +4237,7 @@
       "label": "getVercelDeploymentStatus()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/vercel/status.ts",
-      "source_location": "L184",
+      "source_location": "L192",
       "_origin": "ast",
       "id": "vercel_status_getverceldeploymentstatus",
       "community": 76,
@@ -4530,7 +4530,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "layout_main_main",
-      "community": 9,
+      "community": 45,
       "norm_label": "main()"
     },
     {
@@ -4610,7 +4610,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "mongodb_mongostatus",
-      "community": 2,
+      "community": 45,
       "norm_label": "mongostatus.tsx"
     },
     {
@@ -4620,7 +4620,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "mongodb_mongostatus_pulse",
-      "community": 2,
+      "community": 45,
       "norm_label": "pulse"
     },
     {
@@ -4630,7 +4630,7 @@
       "source_location": "L18",
       "_origin": "ast",
       "id": "mongodb_mongostatus_mongostatus",
-      "community": 2,
+      "community": 45,
       "norm_label": "mongostatus()"
     },
     {
@@ -4660,7 +4660,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "mongodb_rawresult",
-      "community": 45,
+      "community": 13,
       "norm_label": "rawresult.tsx"
     },
     {
@@ -4670,7 +4670,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "mongodb_rawresult_rawresultprops",
-      "community": 45,
+      "community": 13,
       "norm_label": "rawresultprops"
     },
     {
@@ -4680,7 +4680,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "mongodb_rawresult_rawresult",
-      "community": 45,
+      "community": 13,
       "norm_label": "rawresult()"
     },
     {
@@ -4690,7 +4690,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "mongodb_rawresults",
-      "community": 45,
+      "community": 13,
       "norm_label": "rawresults.tsx"
     },
     {
@@ -4810,7 +4810,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "rainbow_rainbow",
-      "community": 45,
+      "community": 11,
       "norm_label": "rainbow.tsx"
     },
     {
@@ -4820,7 +4820,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "rainbow_rainbow_rainbow",
-      "community": 45,
+      "community": 11,
       "norm_label": "rainbow()"
     },
     {
@@ -4830,7 +4830,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "safety_safe",
-      "community": 1,
+      "community": 45,
       "norm_label": "safe.tsx"
     },
     {
@@ -4840,7 +4840,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "safety_safe_safe",
-      "community": 1,
+      "community": 45,
       "norm_label": "safe()"
     },
     {
@@ -5250,7 +5250,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "functions_safe",
-      "community": 1,
+      "community": 45,
       "norm_label": "safe.tsx"
     },
     {
@@ -5260,7 +5260,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "functions_safe_safe",
-      "community": 1,
+      "community": 45,
       "norm_label": "safe()"
     },
     {
@@ -5270,7 +5270,7 @@
       "source_location": "L54",
       "_origin": "ast",
       "id": "functions_safe_getmeta",
-      "community": 1,
+      "community": 45,
       "norm_label": "getmeta()"
     },
     {
@@ -5660,7 +5660,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "hooks_useprops",
-      "community": 45,
+      "community": 11,
       "norm_label": "useprops.tsx"
     },
     {
@@ -5670,7 +5670,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "hooks_useprops_useprops",
-      "community": 45,
+      "community": 11,
       "norm_label": "useprops()"
     },
     {
@@ -5800,7 +5800,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "hooks_usetrace",
-      "community": 45,
+      "community": 11,
       "norm_label": "usetrace.tsx"
     },
     {
@@ -5810,7 +5810,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "hooks_usetrace_usetrace",
-      "community": 45,
+      "community": 11,
       "norm_label": "usetrace()"
     },
     {
@@ -5820,7 +5820,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "hooks_useuuid",
-      "community": 45,
+      "community": 11,
       "norm_label": "useuuid.tsx"
     },
     {
@@ -5830,7 +5830,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "hooks_useuuid_useuuid",
-      "community": 45,
+      "community": 11,
       "norm_label": "useuuid()"
     },
     {
@@ -7100,7 +7100,7 @@
       "source_location": "L1148",
       "_origin": "ast",
       "id": "smarts_index_dupe",
-      "community": 24,
+      "community": 31,
       "norm_label": "dupe()"
     },
     {
@@ -7110,7 +7110,7 @@
       "source_location": "L1151",
       "_origin": "ast",
       "id": "smarts_index_clone",
-      "community": 24,
+      "community": 31,
       "norm_label": "clone()"
     },
     {
@@ -7120,7 +7120,7 @@
       "source_location": "L1154",
       "_origin": "ast",
       "id": "smarts_index_schema",
-      "community": 24,
+      "community": 31,
       "norm_label": "schema()"
     },
     {
@@ -7130,7 +7130,7 @@
       "source_location": "L1163",
       "_origin": "ast",
       "id": "smarts_index_create",
-      "community": 24,
+      "community": 31,
       "norm_label": "create()"
     },
     {
@@ -7140,7 +7140,7 @@
       "source_location": "L1172",
       "_origin": "ast",
       "id": "smarts_index_merge",
-      "community": 24,
+      "community": 31,
       "norm_label": "merge()"
     },
     {
@@ -7150,7 +7150,7 @@
       "source_location": "L1257",
       "_origin": "ast",
       "id": "smarts_index_basic",
-      "community": 24,
+      "community": 31,
       "norm_label": "basic()"
     },
     {
@@ -7700,7 +7700,7 @@
       "source_location": "L2452",
       "_origin": "ast",
       "id": "smarts_index_mergeall",
-      "community": 24,
+      "community": 31,
       "norm_label": "mergeall()"
     },
     {
@@ -9123,7 +9123,7 @@
       "label": "graphify",
       "file_type": "document",
       "source_file": "AGENTS.md",
-      "source_location": "L6",
+      "source_location": "L9",
       "_origin": "ast",
       "id": "agents_graphify",
       "community": 44,
@@ -9133,7 +9133,7 @@
       "label": "Delivery messaging",
       "file_type": "document",
       "source_file": "AGENTS.md",
-      "source_location": "L17",
+      "source_location": "L20",
       "_origin": "ast",
       "id": "agents_delivery_messaging",
       "community": 44,
@@ -9660,10 +9660,20 @@
       "norm_label": "[unreleased]"
     },
     {
-      "label": "Added",
+      "label": "PR #13 - Remix Hydration, Vercel Status, And Deployment Hygiene",
       "file_type": "document",
       "source_file": "remix/CHANGELOG.md",
       "source_location": "L19",
+      "_origin": "ast",
+      "id": "remix_changelog_pr_13_remix_hydration_vercel_status_and_deployment_hygiene",
+      "community": 78,
+      "norm_label": "pr #13 - remix hydration, vercel status, and deployment hygiene"
+    },
+    {
+      "label": "Added",
+      "file_type": "document",
+      "source_file": "remix/CHANGELOG.md",
+      "source_location": "L24",
       "_origin": "ast",
       "id": "remix_changelog_added",
       "community": 78,
@@ -9673,7 +9683,7 @@
       "label": "Changed",
       "file_type": "document",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L37",
+      "source_location": "L35",
       "_origin": "ast",
       "id": "remix_changelog_changed",
       "community": 78,
@@ -9683,7 +9693,7 @@
       "label": "Fixed",
       "file_type": "document",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L78",
+      "source_location": "L55",
       "_origin": "ast",
       "id": "remix_changelog_fixed",
       "community": 78,
@@ -9693,7 +9703,7 @@
       "label": "Verified",
       "file_type": "document",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L93",
+      "source_location": "L65",
       "_origin": "ast",
       "id": "remix_changelog_verified",
       "community": 78,
@@ -9703,11 +9713,101 @@
       "label": "[1.0.0] - YYYY-MM-DD",
       "file_type": "document",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L127",
+      "source_location": "L75",
       "_origin": "ast",
       "id": "remix_changelog_1_0_0_yyyy_mm_dd",
       "community": 78,
       "norm_label": "[1.0.0] - yyyy-mm-dd"
+    },
+    {
+      "label": "13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md",
+      "file_type": "document",
+      "source_file": "remix/PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates",
+      "community": 1,
+      "norm_label": "13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md"
+    },
+    {
+      "label": "PR #13 - Hydration, Vercel Status, and Deployment Hygiene",
+      "file_type": "document",
+      "source_file": "remix/PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_pr_13_hydration_vercel_status_and_deployment_hygiene",
+      "community": 1,
+      "norm_label": "pr #13 - hydration, vercel status, and deployment hygiene"
+    },
+    {
+      "label": "Summary",
+      "file_type": "document",
+      "source_file": "remix/PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md",
+      "source_location": "L8",
+      "_origin": "ast",
+      "id": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_summary",
+      "community": 1,
+      "norm_label": "summary"
+    },
+    {
+      "label": "Hydration And Emotion",
+      "file_type": "document",
+      "source_file": "remix/PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md",
+      "source_location": "L14",
+      "_origin": "ast",
+      "id": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_hydration_and_emotion",
+      "community": 1,
+      "norm_label": "hydration and emotion"
+    },
+    {
+      "label": "Vercel Runtime Fixes",
+      "file_type": "document",
+      "source_file": "remix/PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md",
+      "source_location": "L30",
+      "_origin": "ast",
+      "id": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_vercel_runtime_fixes",
+      "community": 1,
+      "norm_label": "vercel runtime fixes"
+    },
+    {
+      "label": "Vercel Status And Branch Display",
+      "file_type": "document",
+      "source_file": "remix/PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md",
+      "source_location": "L44",
+      "_origin": "ast",
+      "id": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_vercel_status_and_branch_display",
+      "community": 1,
+      "norm_label": "vercel status and branch display"
+    },
+    {
+      "label": "Deployment And Repo Hygiene",
+      "file_type": "document",
+      "source_file": "remix/PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md",
+      "source_location": "L63",
+      "_origin": "ast",
+      "id": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_deployment_and_repo_hygiene",
+      "community": 1,
+      "norm_label": "deployment and repo hygiene"
+    },
+    {
+      "label": "Preserved Behavior",
+      "file_type": "document",
+      "source_file": "remix/PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md",
+      "source_location": "L75",
+      "_origin": "ast",
+      "id": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_preserved_behavior",
+      "community": 1,
+      "norm_label": "preserved behavior"
+    },
+    {
+      "label": "Verification",
+      "file_type": "document",
+      "source_file": "remix/PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md",
+      "source_location": "L81",
+      "_origin": "ast",
+      "id": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_verification",
+      "community": 1,
+      "norm_label": "verification"
     },
     {
       "label": "README.md",
@@ -22570,9 +22670,9 @@
       "source_file": "remix/app/entry.server.tsx",
       "source_location": "L31",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "app_entry_server",
-      "target": "app_entry_server_createemotionserverinstance",
-      "confidence_score": 1.0
+      "target": "app_entry_server_createemotionserverinstance"
     },
     {
       "relation": "contains",
@@ -22580,9 +22680,9 @@
       "source_file": "remix/app/entry.server.tsx",
       "source_location": "L11",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "app_entry_server",
-      "target": "app_entry_server_emotionserverfactory",
-      "confidence_score": 1.0
+      "target": "app_entry_server_emotionserverfactory"
     },
     {
       "relation": "contains",
@@ -22590,9 +22690,9 @@
       "source_file": "remix/app/entry.server.tsx",
       "source_location": "L13",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "app_entry_server",
-      "target": "app_entry_server_getexport",
-      "confidence_score": 1.0
+      "target": "app_entry_server_getexport"
     },
     {
       "relation": "contains",
@@ -22610,9 +22710,9 @@
       "source_file": "remix/app/entry.server.tsx",
       "source_location": "L21",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "app_entry_server",
-      "target": "app_entry_server_resolveemotionserverfactory",
-      "confidence_score": 1.0
+      "target": "app_entry_server_resolveemotionserverfactory"
     },
     {
       "relation": "calls",
@@ -22621,9 +22721,9 @@
       "source_file": "remix/app/entry.server.tsx",
       "source_location": "L24",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "app_entry_server_resolveemotionserverfactory",
-      "target": "app_entry_server_getexport",
-      "confidence_score": 1.0
+      "target": "app_entry_server_getexport"
     },
     {
       "relation": "calls",
@@ -22632,9 +22732,9 @@
       "source_file": "remix/app/entry.server.tsx",
       "source_location": "L41",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "app_entry_server_handlerequest",
-      "target": "app_entry_server_createemotionserverinstance",
-      "confidence_score": 1.0
+      "target": "app_entry_server_createemotionserverinstance"
     },
     {
       "relation": "contains",
@@ -28172,11 +28272,101 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/CHANGELOG.md",
+      "source_location": "L19",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "remix_changelog_unreleased",
+      "target": "remix_changelog_pr_13_remix_hydration_vercel_status_and_deployment_hygiene"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/CHANGELOG.md",
       "source_location": "L67",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "remix_changelog_unreleased",
       "target": "remix_changelog_verified"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md",
+      "source_location": "L1",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates",
+      "target": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_pr_13_hydration_vercel_status_and_deployment_hygiene"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md",
+      "source_location": "L60",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_pr_13_hydration_vercel_status_and_deployment_hygiene",
+      "target": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_deployment_and_repo_hygiene"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md",
+      "source_location": "L14",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_pr_13_hydration_vercel_status_and_deployment_hygiene",
+      "target": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_hydration_and_emotion"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md",
+      "source_location": "L72",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_pr_13_hydration_vercel_status_and_deployment_hygiene",
+      "target": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_preserved_behavior"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md",
+      "source_location": "L8",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_pr_13_hydration_vercel_status_and_deployment_hygiene",
+      "target": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_summary"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md",
+      "source_location": "L30",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_pr_13_hydration_vercel_status_and_deployment_hygiene",
+      "target": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_vercel_runtime_fixes"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md",
+      "source_location": "L44",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_pr_13_hydration_vercel_status_and_deployment_hygiene",
+      "target": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_vercel_status_and_branch_display"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md",
+      "source_location": "L78",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_pr_13_hydration_vercel_status_and_deployment_hygiene",
+      "target": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_verification"
     },
     {
       "relation": "contains",
@@ -28210,5 +28400,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "9e1dedde63619d4cb53ae8b232c938a8dc887075"
+  "built_at_commit": "d79543d8832c6760cbadfc524b58e3baa3a4cecc"
 }

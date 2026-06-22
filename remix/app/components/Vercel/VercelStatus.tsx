@@ -62,9 +62,12 @@ export const VercelStatus = (props) => {
   const buildPhase = status?.buildPhase;
   const buildUrl = status?.buildPageUrl || status?.latestDeploymentUrl;
   const hasBuildProgress = typeof buildProgress === 'number' && state !== 'ready' && state !== 'error';
+  const isUnavailable = Boolean(error || status?.hasError || state === 'unknown');
   const color =
-    error || state === 'error'
-      ? 'red.400'
+    isUnavailable
+      ? 'gray.400'
+      : state === 'error'
+        ? 'red.400'
       : state === 'ready'
         ? 'green.400'
         : state === 'building' || state === 'queued'
@@ -75,7 +78,7 @@ export const VercelStatus = (props) => {
   const label = error
     ? 'Vercel: status unavailable'
     : status?.label
-      ? `${status.label}${buildPhase ? ` ${buildPhase}` : ''}${
+      ? `${status.label}${buildPhase && !status.hasError ? ` ${buildPhase}` : ''}${
           typeof buildProgress === 'number' ? ` (${buildProgress}%)` : ''
         }`
       : 'Vercel: checking...';
@@ -86,8 +89,11 @@ export const VercelStatus = (props) => {
       <Box
         width="8px"
         height="8px"
+        minWidth="8px"
         borderRadius="full"
         backgroundColor={color}
+        border={isUnavailable ? '1px solid' : undefined}
+        borderColor={isUnavailable ? 'gray.500' : undefined}
         flexShrink={0}
         sx={checking || state === 'building' || state === 'queued' ? { animation: `${pulse} 1.2s ease-in-out infinite` } : undefined}
       />

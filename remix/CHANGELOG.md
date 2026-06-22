@@ -34,6 +34,13 @@ Detailed PR notes:
 
 ### Changed
 
+- Improved footer health indicators so Vercel and MongoDB unavailable states
+  render visible neutral grey status dots instead of appearing blank. —
+  _Codex (AI), 2026-06-22_
+- Made Vercel status resolution derive the project name from Vercel's repo slug
+  when only `VERCEL_API_TOKEN` is configured, use this project's Vercel
+  project/team fallback IDs and dashboard owner slug, and stop mixing tokenless
+  phase text into API error labels. — _Codex (AI), 2026-06-22_
 - Completed proper Chakra/Emotion document hydration wiring around
   `hydrateRoot(document, ...)`, server-collected Emotion style chunks, and a
   one-shot client Emotion sheet handoff before first paint. — _Codex (AI),

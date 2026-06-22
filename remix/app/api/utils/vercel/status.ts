@@ -15,6 +15,10 @@ export type VercelDeploymentStatus = {
   state: 'local' | 'ready' | 'building' | 'queued' | 'error' | 'unknown';
 };
 
+const DEFAULT_VERCEL_PROJECT_ID = 'prj_ZAX9FhGC2alHMXMwTHX96ql3EQ8v';
+const DEFAULT_VERCEL_TEAM_ID = 'team_JsKhM6fVg9uo701feA0fLh9V';
+const DEFAULT_VERCEL_DASHBOARD_TEAM_SLUG = 'lopugits-projects';
+
 const normaliseUrl = (url?: string) => {
   if (!url) {
     return undefined;
@@ -156,12 +160,16 @@ const getTokenlessFallback = ({
   environment?: string;
 }): VercelDeploymentStatus => {
   const branchUrl = normaliseUrl(process.env.VERCEL_BRANCH_URL);
-  const repoOwner = process.env.VERCEL_GIT_REPO_OWNER;
   const repoSlug = process.env.VERCEL_GIT_REPO_SLUG || process.env.VERCEL_GIT_REPO;
+  const teamSlug =
+    process.env.VERCEL_DASHBOARD_TEAM_SLUG ||
+    process.env.VERCEL_TEAM_SLUG ||
+    process.env.VERCEL_ORG_SLUG ||
+    DEFAULT_VERCEL_DASHBOARD_TEAM_SLUG;
 
   const dashboardPath =
-    repoOwner && repoSlug
-      ? `https://vercel.com/${repoOwner}/${repoSlug}/deployments`
+    teamSlug && repoSlug
+      ? `https://vercel.com/${teamSlug}/${repoSlug}/deployments`
       : branchUrl
         ? `${branchUrl}/_/` // safe fallback anchor near deployment host
         : deploymentUrl;
@@ -188,9 +196,12 @@ export const getVercelDeploymentStatus = async (): Promise<VercelDeploymentStatu
     const deploymentUrl = normaliseUrl(process.env.VERCEL_URL);
     const environment = process.env.VERCEL_TARGET_ENV || process.env.VERCEL_ENV;
     const token = process.env.VERCEL_API_TOKEN;
-    const projectId = process.env.VERCEL_PROJECT_ID;
-    const projectName = process.env.VERCEL_PROJECT_NAME;
-    const teamId = process.env.VERCEL_TEAM_ID;
+    const projectId = process.env.VERCEL_PROJECT_ID || DEFAULT_VERCEL_PROJECT_ID;
+    const projectName =
+      process.env.VERCEL_PROJECT_NAME ||
+      process.env.VERCEL_GIT_REPO_SLUG ||
+      process.env.VERCEL_GIT_REPO;
+    const teamId = process.env.VERCEL_TEAM_ID || process.env.VERCEL_ORG_ID || DEFAULT_VERCEL_TEAM_ID;
 
     if (!process.env.VERCEL && !deploymentUrl) {
       return {
@@ -211,7 +222,7 @@ export const getVercelDeploymentStatus = async (): Promise<VercelDeploymentStatu
       deploymentUrl
     });
 
-    if (!token || (!projectId && !projectName)) {
+    if (!token) {
       return fallback;
     }
 
@@ -286,7 +297,9 @@ export const getVercelDeploymentStatus = async (): Promise<VercelDeploymentStatu
     const buildPageUrl =
       normaliseUrl(typeof currentDeployment.inspectorUrl === 'string' ? currentDeployment.inspectorUrl : '') ||
       (projectName && deploymentId
-        ? `https://vercel.com/${deploymentMeta.orgName || 'team'}/${projectName}/deployments/${deploymentId}`
+        ? `https://vercel.com/${
+            deploymentMeta.orgName || process.env.VERCEL_DASHBOARD_TEAM_SLUG || DEFAULT_VERCEL_DASHBOARD_TEAM_SLUG
+          }/${projectName}/deployments/${deploymentId}`
         : undefined);
 
     const resolvedBuildProgress =
@@ -332,6 +345,7 @@ export const getVercelDeploymentStatus = async (): Promise<VercelDeploymentStatu
         deploymentUrl,
         environment: fallbackEnvironment
       }),
+      buildPhase: undefined,
       error: err?.message || String(err),
       hasError: true,
       label: 'Vercel: status unavailable',
