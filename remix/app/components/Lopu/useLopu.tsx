@@ -19,7 +19,7 @@ type LopuArgs = {
   link?: LopuLink;
 };
 
-const statusEmoji = (status?: LopuStatus) => (status === 'success' ? '✨' : status === 'error' ? '🌧️' : '🦄');
+const statusEmoji = (status?: LopuStatus) => (status === 'success' ? '✨ ' : status === 'error' ? '🌧️ ' : '');
 
 const LopuToast = ({ title, description, status, link, onClose }: LopuArgs & { onClose: () => void }) => (
   <Box
@@ -66,7 +66,8 @@ const LopuToast = ({ title, description, status, link, onClose }: LopuArgs & { o
 
       {title && (
         <Text fontSize="sm" fontWeight="600" color="gray.800">
-          {statusEmoji(status)} {title}
+          {statusEmoji(status)}
+          {title}
         </Text>
       )}
       {description && (
@@ -101,12 +102,15 @@ export const useLopu = () => {
       toast({
         duration,
         position: 'top',
-        // A full-viewport flex container centers the card via flow (margin/flex),
-        // which is immune to the ancestor-transform quirk that broke
-        // translateX(-50%) centering. pointerEvents:none keeps the wide,
-        // invisible container from eating clicks (the card re-enables them).
+        // A full-viewport flex container centers the card via flow (immune to the
+        // ancestor-transform quirk that broke translateX(-50%) centering).
+        // translateY offsets each toast below the nav *visually only* — it
+        // doesn't affect layout, so Chakra's native tight stacking + slide/fade
+        // animation is preserved (marginTop would compound into big gaps).
+        // pointerEvents:none keeps the wide invisible container from eating
+        // clicks (the card re-enables them).
         containerStyle: {
-          marginTop: '70px',
+          transform: 'translateY(70px)',
           width: '100vw',
           maxWidth: '100vw',
           display: 'flex',

@@ -141,6 +141,16 @@ export const DevKit = (props) => {
     navigate('/login');
   }, [api, navigate]);
 
+  const pushMusing = React.useCallback(async () => {
+    try {
+      const resp = await fetch('/api/v1/lopu/musing');
+      const data = await resp.json();
+      lopu({ title: data?.message || 'Lopu is daydreaming…' });
+    } catch {
+      lopu({ title: 'Lopu is daydreaming… try again 🔮', status: 'error' });
+    }
+  }, [lopu]);
+
   if (!devKit) return null;
 
   return (
@@ -200,6 +210,11 @@ export const DevKit = (props) => {
             </Text>
             <DevAction onClick={prefillRegister}>📝 Prefill register form</DevAction>
             <DevAction onClick={prefillLogin}>🔑 Prefill login form</DevAction>
+
+            <Text px={3} pt={2} fontSize="10px" fontWeight="700" color="gray.400" textTransform="uppercase">
+              Lopu
+            </Text>
+            <DevAction onClick={pushMusing}>🔮 Push a Lopu musing</DevAction>
 
             <Text px={3} pt={2} fontSize="10px" fontWeight="700" color="gray.400" textTransform="uppercase">
               Account {user ? `· ${user.username}` : ''}

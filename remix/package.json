@@ -11,6 +11,7 @@
     "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,css,scss,md}\""
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.105.0",
     "@chakra-ui/react": "^2.7.1",
     "@chakra-ui/react-types": "^2.0.6",
     "@editorjs/editorjs": "^2.27.2",
