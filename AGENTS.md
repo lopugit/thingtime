@@ -19,3 +19,6 @@ Rules:
 - When finishing a branch update in this workspace, always report the pushed remote branch and the PR URL.
 - If a PR exists (or was created), include the PR URL in your completion response.
 - If Vercel preview deployment exists for that branch, include the most recent preview URL as well.
+- When making or validating deployment, Vercel, hydration, environment, or local
+  runbook workflow changes, add a concise dated entry to `remix/CHANGELOG.md`
+  under `[Unreleased]` before finishing.

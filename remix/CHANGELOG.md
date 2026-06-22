@@ -36,6 +36,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- **Vercel duplicate-SHA deploy prevention documented and tested.** Confirmed
+  Vercel's Ignored Build Step can skip redeploying the same branch SHA with the
+  compact command
+  `[ -n "$VERCEL_GIT_PREVIOUS_SHA" ]&&[ "$VERCEL_GIT_COMMIT_SHA" = "$VERCEL_GIT_PREVIOUS_SHA" ]`.
+  — _Codex (AI), 2026-06-22_
 - **Moved the Emotion sheet handoff before paint.** The Chakra/Emotion client
   handoff now runs through an SSR-safe layout effect so the required
   `sheet.flush()` / reinsertion step does not briefly expose unstyled native
@@ -81,6 +86,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 | 5 | Vercel previews could show `git/unknown` or a stale committed `.env.auto` branch in the footer. | Prefer Vercel's `VERCEL_GIT_COMMIT_REF` in the Remix root loader and Vercel pre-dev script, then pass that branch through root loader data to the footer. | Codex (AI) | 2026-06-22 |
 | 6 | `smarts.merge(..., { clone: true })` behavior was at risk during PR cleanup. | Verified the clone path still deep-clones nested values without mutating the source object. | Codex (AI) | 2026-06-22 |
 | 7 | Local dev-server restarts could accidentally spawn duplicate Remix servers or leave unclear runtime state. | Documented the PM2-managed `tt-remix-9999` workflow in root `AGENTS.md`; local app was restarted through `npm run remix-pms`. | Codex (AI) | 2026-06-22 |
+| 8 | Vercel could list repeated deployments for unchanged `main`/`staging` SHAs when project settings or branch events retriggered the same branch heads. | Tested an Ignored Build Step guard using `VERCEL_GIT_COMMIT_SHA` versus `VERCEL_GIT_PREVIOUS_SHA` so identical branch SHAs are skipped instead of rebuilt. | Codex (AI) | 2026-06-22 |
 
 ### Verified
 
@@ -99,6 +105,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - `/api/v1/vercel/status-data` returns a local/unconfigured payload locally, and
   targeted lint/build checks passed for the Vercel status route/component. —
   _Codex (AI), 2026-06-22_
+- An empty commit push to `codex/fix-hydration-mongodb-thingtime-defaults`
+  confirmed the Vercel duplicate-SHA ignored-build rule skips repeated branch
+  deployments as intended. — _Codex (AI), 2026-06-22_
 - `bash --noprofile --norc -n remix/scripts/pre-dev.sh` passed after confirming
   the `.env.auto` auto-update behavior is intentionally preserved. — _Codex (AI),
   2026-06-22_
