@@ -12,7 +12,15 @@ installGlobals({ nativeFetch: true });
 // browser console. VERCEL_ENV is 'production' | 'preview' | 'development'.
 const isVercelProduction = process.env.VERCEL_ENV === 'production';
 
+// Deploy env baked into the bundle so the client can tell dev/preview from
+// production (Vercel sets VERCEL_ENV at build time; it isn't otherwise visible
+// in the browser). Used to auto-show the DevKit on dev + preview.
+const deployEnv = process.env.VERCEL_ENV || process.env.NODE_ENV || 'development';
+
 export default defineConfig({
+	define: {
+		__TT_DEPLOY_ENV__: JSON.stringify(deployEnv)
+	},
 	build: {
 		minify: isVercelProduction,
 		sourcemap: !isVercelProduction

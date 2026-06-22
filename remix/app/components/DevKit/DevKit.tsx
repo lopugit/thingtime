@@ -3,6 +3,9 @@ import { useThingtime } from '../Thingtime/useThingtime';
 import { Icon } from '../Icon/Icon';
 import React from 'react';
 
+// injected by vite `define` — 'development' | 'preview' | 'production'
+declare const __TT_DEPLOY_ENV__: string;
+
 const getQueryParams: any = () => {
   try {
     return new URLSearchParams(window.location.search);
@@ -39,9 +42,14 @@ export const DevKit = (props) => {
     // be happy
   }
 
-  const dev = env.NODE_ENV === 'development';
+  // baked in at build time: 'development' | 'preview' | 'production'
+  const deployEnv = typeof __TT_DEPLOY_ENV__ !== 'undefined' ? __TT_DEPLOY_ENV__ : env.NODE_ENV;
 
-  const devKit = (dev || env.devKit) && env.devKit !== false;
+  // Auto-show on dev + Vercel preview (anything that isn't production). The
+  // ?devKit query param can still force it on (e.g. on production) or off
+  // (?devKit=false).
+  const explicitlyOff = env.devKit === false || env.devKit === 'false';
+  const devKit = !explicitlyOff && (deployEnv !== 'production' || !!env.devKit);
 
   const devMode = thingtime?.devKit?.devMode;
 

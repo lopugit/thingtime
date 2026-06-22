@@ -1,16 +1,16 @@
 # Graph Report - thingtime  (2026-06-22)
 
 ## Corpus Check
-- 217 files · ~545,566 words
+- 217 files · ~545,701 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 1055 nodes · 1887 edges · 85 communities (67 shown, 18 thin omitted)
+- 1055 nodes · 1887 edges · 86 communities (68 shown, 18 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 10 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `03ed32be`
+- Built from commit: `942dd0e5`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -73,6 +73,7 @@
 - [[_COMMUNITY_Community 65|Community 65]]
 - [[_COMMUNITY_Community 66|Community 66]]
 - [[_COMMUNITY_Community 72|Community 72]]
+- [[_COMMUNITY_Community 73|Community 73]]
 - [[_COMMUNITY_Community 74|Community 74]]
 - [[_COMMUNITY_Community 76|Community 76]]
 - [[_COMMUNITY_Community 77|Community 77]]
@@ -111,19 +112,19 @@
   raycast/src/operations/filterOperation.ts → raycast/src/utilities/utils.ts
 
 ## Import Cycles
-- 3-file cycle: `remix/app/api/utils/mongodb/connection.ts -> remix/app/routes/api/v1/mongodb/get-connection/_get-connection.tsx -> remix/app/api/utils/userCheckExists.ts -> remix/app/api/utils/mongodb/connection.ts`
 - 3-file cycle: `remix/app/api/utils/mongodb/connection.ts -> remix/app/routes/api/v1/mongodb/get-connection/_get-connection.tsx -> remix/app/api/utils/userValidatePassword.ts -> remix/app/api/utils/mongodb/connection.ts`
+- 3-file cycle: `remix/app/api/utils/mongodb/connection.ts -> remix/app/routes/api/v1/mongodb/get-connection/_get-connection.tsx -> remix/app/api/utils/userCheckExists.ts -> remix/app/api/utils/mongodb/connection.ts`
 - 3-file cycle: `remix/app/Providers/ThingtimeProvider.tsx -> remix/app/hooks/useThingtimeMachine.tsx -> remix/app/components/Thingtime/useThingtime.tsx -> remix/app/Providers/ThingtimeProvider.tsx`
 
-## Communities (85 total, 18 thin omitted)
+## Communities (86 total, 18 thin omitted)
 
 ### Community 0 - "Raycast Image Operations"
 Cohesion: 0.06
 Nodes (79): openNewFinderWindow(), regexToReplacementConverter(), regexTrim(), any(), convert(), flip(), optimize(), optimizeJPEG() (+71 more)
 
 ### Community 1 - "Thingtime Commander & Core UI"
-Cohesion: 0.14
-Nodes (15): DevKit(), getQueryParams(), RawResult(), RawResultProps, ThingtimeContext, ThingtimeTypes, Index(), Index() (+7 more)
+Cohesion: 0.15
+Nodes (13): RawResult(), RawResultProps, ThingtimeContext, ThingtimeTypes, Index(), Index(), Index(), ThingtimeURL() (+5 more)
 
 ### Community 2 - "API Package Manifest"
 Cohesion: 0.08
@@ -182,8 +183,8 @@ Cohesion: 0.11
 Nodes (18): compilerOptions, allowJs, baseUrl, esModuleInterop, forceConsistentCasingInFileNames, isolatedModules, jsx, lib (+10 more)
 
 ### Community 16 - "Smarts Opt Helpers"
-Cohesion: 0.15
-Nodes (17): commanderArgs, CommanderV1(), CommanderV2(), sanitise(), usePath(), useThings(), MagicInput, MagicInputProps (+9 more)
+Cohesion: 0.18
+Nodes (14): commanderArgs, CommanderV1(), useThings(), MagicInput, MagicInputProps, getParentPath(), uuid, Thingtime() (+6 more)
 
 ### Community 17 - "Raycast TypeScript Config"
 Cohesion: 0.18
@@ -274,12 +275,16 @@ Cohesion: 0.50
 Nodes (3): build, env, ENABLE_FILE_SYSTEM_API
 
 ### Community 45 - "Remix Client Entry"
-Cohesion: 0.23
-Nodes (9): Icon(), MongoStatus(), pulse, MongoConnectionStatus, Footer(), Nav(), ProfileDrawer(), RainbowSkeleton() (+1 more)
+Cohesion: 0.20
+Nodes (10): CommanderV2(), sanitise(), usePath(), MongoStatus(), pulse, MongoConnectionStatus, Footer(), Nav() (+2 more)
 
 ### Community 72 - "Community 72"
 Cohesion: 0.36
 Nodes (3): RainbowText(), TextAnimation1(), Splash()
+
+### Community 73 - "Community 73"
+Cohesion: 0.43
+Nodes (4): DevKit(), getQueryParams(), Icon(), SettingsMenu()
 
 ### Community 74 - "Community 74"
 Cohesion: 0.29
@@ -333,9 +338,9 @@ Nodes (4): Decision log, Decisions, Nikolaj Frey — Engineer Decisions, Recurri
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `useThingtime()` connect `Thingtime Commander & Core UI` to `Image Generators & Filters`, `Community 72`, `Community 76`, `Remix Client Entry`, `Root Package Manifest`, `Smarts Opt Helpers`?**
+- **Why does `useThingtime()` connect `Thingtime Commander & Core UI` to `Image Generators & Filters`, `Community 72`, `Community 73`, `Community 76`, `Remix Client Entry`, `Root Package Manifest`, `Smarts Opt Helpers`?**
   _High betweenness centrality (0.031) - this node is a cross-community bridge._
-- **Why does `Thingtime()` connect `Smarts Opt Helpers` to `Thingtime Commander & Core UI`, `API Package Manifest`, `Community 76`, `Image Generators & Filters`?**
+- **Why does `Thingtime()` connect `Smarts Opt Helpers` to `Thingtime Commander & Core UI`, `API Package Manifest`, `Image Generators & Filters`, `Community 76`, `Remix Client Entry`?**
   _High betweenness centrality (0.009) - this node is a cross-community bridge._
 - **Why does `getMongoUri()` connect `API Package Manifest` to `Community 78`?**
   _High betweenness centrality (0.007) - this node is a cross-community bridge._
@@ -345,5 +350,5 @@ _Questions this graph is uniquely positioned to answer:_
   _410 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Raycast Image Operations` be split into smaller, more focused modules?**
   _Cohesion score 0.0631184407796102 - nodes in this community are weakly interconnected._
-- **Should `Thingtime Commander & Core UI` be split into smaller, more focused modules?**
-  _Cohesion score 0.13666666666666666 - nodes in this community are weakly interconnected._
+- **Should `API Package Manifest` be split into smaller, more focused modules?**
+  _Cohesion score 0.08287961282516637 - nodes in this community are weakly interconnected._
