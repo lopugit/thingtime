@@ -3,24 +3,28 @@ import { Box, Flex, Text, useToast } from '@chakra-ui/react';
 
 // 🦄 Lopu — the Thingtime AI. A minimal, modern toast: a rainbow gradient
 // "unicorn vomit" border around a clean white card, shown as a little message
-// from Lopu. Rendered below the fixed nav so it never overlaps the search bar.
+// from Lopu, below the fixed nav.
 
 const RAINBOW = 'linear-gradient(120deg, #47b5e6, #a555e8, #f34a4a, #ffbc48, #58ca70, #47b5e6)';
 
 type LopuStatus = 'success' | 'error' | 'info';
+
+type LopuLink = { label: string; href: string };
 
 type LopuArgs = {
   title?: string;
   description?: string;
   status?: LopuStatus;
   duration?: number;
+  link?: LopuLink;
 };
 
 const statusEmoji = (status?: LopuStatus) => (status === 'success' ? '✨' : status === 'error' ? '🌧️' : '🦄');
 
-const LopuToast = ({ title, description, status, onClose }: LopuArgs & { onClose: () => void }) => (
+const LopuToast = ({ title, description, status, link, onClose }: LopuArgs & { onClose: () => void }) => (
   <Box
     role="status"
+    pointerEvents="auto"
     p="2px"
     borderRadius="20px"
     backgroundImage={RAINBOW}
@@ -70,6 +74,21 @@ const LopuToast = ({ title, description, status, onClose }: LopuArgs & { onClose
           {description}
         </Text>
       )}
+      {link && (
+        <Box
+          as="a"
+          href={link.href}
+          mt={2}
+          display="inline-block"
+          fontSize="xs"
+          fontWeight="700"
+          color="purple.500"
+          textDecoration="underline"
+          wordBreak="break-all"
+        >
+          {link.label}
+        </Box>
+      )}
     </Box>
   </Box>
 );
@@ -78,14 +97,24 @@ export const useLopu = () => {
   const toast = useToast();
 
   return useCallback(
-    ({ title, description, status, duration = 5000 }: LopuArgs) =>
+    ({ title, description, status, duration = 5000, link }: LopuArgs) =>
       toast({
         duration,
         position: 'top',
-        // sit below the fixed nav (so they don't overlap + the ✕ is clickable)
-        containerStyle: { marginTop: '70px', maxWidth: '360px' },
+        // A full-viewport flex container centers the card via flow (margin/flex),
+        // which is immune to the ancestor-transform quirk that broke
+        // translateX(-50%) centering. pointerEvents:none keeps the wide,
+        // invisible container from eating clicks (the card re-enables them).
+        containerStyle: {
+          marginTop: '70px',
+          width: '100vw',
+          maxWidth: '100vw',
+          display: 'flex',
+          justifyContent: 'center',
+          pointerEvents: 'none'
+        },
         render: ({ onClose }) => (
-          <LopuToast title={title} description={description} status={status} onClose={onClose} />
+          <LopuToast title={title} description={description} status={status} link={link} onClose={onClose} />
         )
       }),
     [toast]

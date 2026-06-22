@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Flex, Button, FormControl, Input, InputGroup, InputRightElement, Box, Text } from '@chakra-ui/react';
-import { Link as RemixLink } from '@remix-run/react';
+import { Link as RemixLink, useNavigate } from '@remix-run/react';
 
 import { useApi } from '~/hooks/useApi';
 import { useThingtime } from '../Thingtime/useThingtime';
@@ -24,6 +24,7 @@ export const Register = (props) => {
   const api = useApi();
   const register = api.v1.auth.register;
   const lopu = useLopu();
+  const navigate = useNavigate();
 
   // DevKit prefill: fills the form when devKit.registerPrefill changes (_ts)
   const { thingtime } = useThingtime();
@@ -48,15 +49,14 @@ export const Register = (props) => {
 
       if (r?.ok) {
         lopu({
-          title: 'Account created 🎉',
-          description: r.verificationLink
-            ? 'Check your email to verify — or use the link below.'
-            : 'Check your email to verify your account.',
+          title: `Welcome, ${r.user?.username || username}! 🎉`,
+          description: 'Your account is ready. Check your email to verify it.',
           status: 'success',
-          duration: 7000,
-          isClosable: true,
-          position: 'top'
+          duration: 8000,
+          link: r.verificationLink ? { label: '🔗 Verify your email now (dev)', href: r.verificationLink } : undefined
         });
+        // off to the welcome page (carry the dev verify link along)
+        navigate('/welcome', { state: { verificationLink: r.verificationLink } });
       } else {
         lopu({
           title: 'Registration failed',

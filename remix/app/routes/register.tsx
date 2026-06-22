@@ -5,9 +5,9 @@ import { redirect } from '@vercel/remix';
 import { Register } from '~/components/Login/Register';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 
-// already logged in? skip the form and go to the profile
+// already logged in (incl. right after registering)? go to the welcome page
 export async function loader({ request }: { request: Request }) {
-  if (await getCurrentUser(request)) return redirect('/profile');
+  if (await getCurrentUser(request)) return redirect('/welcome');
   return null;
 }
 
