@@ -79,6 +79,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 | # | Problem | Fix | Author | Date |
 |---|---------|-----|--------|------|
+| 9 | Vercel serverless could still crash with `TypeError: createCache is not a function` because the SSR CJS bundle wrapped `@emotion/cache` as a nested default export. | Resolve the Emotion cache factory across direct, `default`, `createCache`, and nested `default.default` / `default.createCache` module shapes, then validate by requiring the compiled server bundle. | Codex (AI) | 2026-06-22 |
 | 1 | Emotion could throw `NotFoundError: Failed to execute 'insertBefore' on 'Node'` after click/navigation because the client cache could point at style nodes React had replaced. | Keep Emotion SSR styles in the React document tree and hydrate them through the shared Emotion cache instead of manually cloning/removing/restoring style tags. | Codex (AI) | 2026-06-22 |
 | 2 | Some loads visibly jumped through unstyled content because critical Emotion styles were temporarily removed before being restored. | Stop deleting SSR style tags on startup; render them into `<head>` from React and let Emotion adopt them. | Codex (AI) | 2026-06-22 |
 | 3 | The first proper `ClientStyleContext.reset()` attempt could recurse because the Emotion sheet handoff reran after each cache replacement. | Make the client reset context stable and run the Emotion sheet handoff once, matching Chakra's Remix contract while documenting why exhaustive-deps is intentionally disabled there. | Codex (AI) | 2026-06-22 |
@@ -92,6 +93,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - `pnpm --dir remix exec eslint app/entry.client.tsx app/entry.server.tsx app/root.tsx app/Providers/Chakra/createEmotionCache.ts app/Providers/Chakra/emotionContext.ts`
   passed. — _Codex (AI), 2026-06-22_
+- `node -e "require('./build/server/index.js')"` passed after the Emotion cache
+  import fix, confirming the compiled SSR bundle can load before deploying to
+  Vercel. — _Codex (AI), 2026-06-22_
 - `pnpm --dir remix exec vite build` passed. Existing warnings remain around
   Remix future flags, MongoDB browser externalization, eval usage, and large
   chunks. — _Codex (AI), 2026-06-22_
