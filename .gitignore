@@ -34,3 +34,7 @@ graphify-out/cost.json
 graphify-out/manifest.json
 # dated curated-graph backups created by `graphify update`
 graphify-out/[0-9]*/
+
+# Keep test branch workspace directories out of git, but keep the folder itself.
+/.test-branches/*
+!/.test-branches/.keep
