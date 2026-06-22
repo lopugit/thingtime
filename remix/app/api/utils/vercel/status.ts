@@ -11,6 +11,9 @@ export type VercelDeploymentStatus = {
   hasError: boolean;
   error?: string;
   label: string;
+  lastReadyAt?: string;
+  lastReadyLabel?: string;
+  lastReadyUrl?: string;
   latestDeploymentUrl?: string;
   state: 'local' | 'ready' | 'building' | 'queued' | 'error' | 'unknown';
 };
@@ -150,6 +153,92 @@ const getProjectDashboardUrl = ({
   return deploymentId ? `${baseUrl}/${deploymentId}` : baseUrl;
 };
 
+const getDashboardUrlFromDeploymentHost = (url?: string) => {
+  const normalized = normaliseUrl(url);
+
+  if (!normalized) {
+    return undefined;
+  }
+
+  try {
+    const host = new URL(normalized).hostname.replace(/\.vercel\.app$/i, '');
+    const repoSlug =
+      process.env.VERCEL_PROJECT_NAME ||
+      process.env.VERCEL_GIT_REPO_SLUG ||
+      process.env.VERCEL_GIT_REPO ||
+      host.split('-git-')[0] ||
+      host.split('-')[0];
+    const ownerMatch = host.match(/-([a-z0-9-]+-projects)$/i);
+    const ownerSlug = ownerMatch?.[1] || process.env.VERCEL_DASHBOARD_TEAM_SLUG;
+
+    if (!ownerSlug || !repoSlug) {
+      return undefined;
+    }
+
+    return `https://vercel.com/${ownerSlug}/${repoSlug}/deployments`;
+  } catch {
+    return undefined;
+  }
+};
+
+const getTimestamp = (value: unknown): number | undefined => {
+  if (typeof value === 'number') {
+    return value > 100000000000 ? value : value * 1000;
+  }
+
+  if (typeof value === 'string') {
+    const parsedNumber = Number(value);
+
+    if (!Number.isNaN(parsedNumber)) {
+      return parsedNumber > 100000000000 ? parsedNumber : parsedNumber * 1000;
+    }
+
+    const parsedDate = Date.parse(value);
+    return Number.isNaN(parsedDate) ? undefined : parsedDate;
+  }
+
+  return undefined;
+};
+
+const getDeploymentReadyAt = (deployment: unknown) => {
+  return (
+    getTimestamp(getObjectValue(deployment, 'ready')) ||
+    getTimestamp(getObjectValue(deployment, 'readyAt')) ||
+    getTimestamp(getObjectValue(deployment, 'buildingAt')) ||
+    getTimestamp(getObjectValue(deployment, 'createdAt'))
+  );
+};
+
+const formatRelativeTime = (timestamp?: number) => {
+  if (!timestamp) {
+    return undefined;
+  }
+
+  const diffMs = Date.now() - timestamp;
+  const absMs = Math.abs(diffMs);
+  const units: Array<[Intl.RelativeTimeFormatUnit, number]> = [
+    ['day', 86400000],
+    ['hour', 3600000],
+    ['minute', 60000],
+    ['second', 1000],
+  ];
+  const formatter = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+
+  for (const [unit, ms] of units) {
+    if (absMs >= ms || unit === 'second') {
+      return formatter.format(Math.round(-diffMs / ms), unit);
+    }
+  }
+
+  return undefined;
+};
+
+const getLastReadyDeployment = (deployments: unknown[]) => {
+  return deployments.find((deployment) => normaliseState(
+    getStringValue(deployment, 'state') || getStringValue(deployment, 'readyState')
+  ) === 'ready');
+};
+
 const getBuildProgressFromChecks = (checks: unknown): { progress?: number; phase?: string } => {
   if (!Array.isArray(checks)) {
     return {};
@@ -248,12 +337,15 @@ const getTokenlessFallback = ({
     process.env.VERCEL_DASHBOARD_TEAM_SLUG ||
     process.env.VERCEL_TEAM_SLUG ||
     process.env.VERCEL_ORG_SLUG;
+  const hostDashboardUrl = getDashboardUrlFromDeploymentHost(branchUrl || deploymentUrl);
 
   const dashboardPath =
     teamSlug && repoSlug
       ? `https://vercel.com/${teamSlug}/${repoSlug}/deployments`
+      : hostDashboardUrl
+        ? hostDashboardUrl
       : branchUrl
-        ? `${branchUrl}/_/` // safe fallback anchor near deployment host
+        ? branchUrl
         : deploymentUrl;
 
   return {
@@ -321,12 +413,22 @@ export const getVercelDeploymentStatus = async (): Promise<VercelDeploymentStatu
       url.searchParams.set('teamId', teamId);
     }
 
-    const response = await fetch(url.toString(), {
+    let response = await fetch(url.toString(), {
       headers: {
         Authorization: `Bearer ${token}`,
         Accept: 'application/json'
       }
     });
+
+    if (response.status === 403 && teamId) {
+      url.searchParams.delete('teamId');
+      response = await fetch(url.toString(), {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/json'
+        }
+      });
+    }
 
     if (!response.ok) {
       throw new Error(`Vercel API returned ${response.status}`);
@@ -356,6 +458,7 @@ export const getVercelDeploymentStatus = async (): Promise<VercelDeploymentStatu
       return fallback;
     }
 
+    const lastReadyDeployment = getLastReadyDeployment(deployments);
     const state = normaliseState(currentDeployment.state || currentDeployment.readyState);
     const latestDeploymentUrl = normaliseUrl(currentDeployment.url);
     const deploymentId =
@@ -372,6 +475,23 @@ export const getVercelDeploymentStatus = async (): Promise<VercelDeploymentStatu
       getDashboardOwnerSlug(deploymentMeta) ||
       getDashboardOwnerSlug(currentDeployment);
     const dashboardProjectSlug = getDashboardProjectSlug(projectData, projectName);
+    const dashboardUrl = getProjectDashboardUrl({
+      ownerSlug: dashboardOwnerSlug,
+      projectSlug: dashboardProjectSlug
+    }) || getDashboardUrlFromDeploymentHost(process.env.VERCEL_BRANCH_URL || deploymentUrl);
+    const lastReadyAt = getDeploymentReadyAt(lastReadyDeployment);
+    const lastReadyDeploymentId =
+      (typeof getObjectValue(lastReadyDeployment, 'uid') === 'string' && getObjectValue(lastReadyDeployment, 'uid')) ||
+      (typeof getObjectValue(lastReadyDeployment, 'id') === 'string' && getObjectValue(lastReadyDeployment, 'id')) ||
+      undefined;
+    const lastReadyUrl =
+      normaliseUrl(getStringValue(lastReadyDeployment, 'url')) ||
+      getProjectDashboardUrl({
+        deploymentId: typeof lastReadyDeploymentId === 'string' ? lastReadyDeploymentId : undefined,
+        ownerSlug: dashboardOwnerSlug,
+        projectSlug: dashboardProjectSlug
+      }) ||
+      dashboardUrl;
 
     const checksFromDeployment = currentDeployment.checks || currentDeployment.builds;
     const checksProgress = getBuildProgressFromChecks(checksFromDeployment);
@@ -393,7 +513,8 @@ export const getVercelDeploymentStatus = async (): Promise<VercelDeploymentStatu
         deploymentId,
         ownerSlug: dashboardOwnerSlug,
         projectSlug: dashboardProjectSlug
-      });
+      }) ||
+      dashboardUrl;
 
     const resolvedBuildProgress =
       state === 'ready'
@@ -420,6 +541,9 @@ export const getVercelDeploymentStatus = async (): Promise<VercelDeploymentStatu
       buildPhase: phaseLabel,
       buildProgress: resolvedBuildProgress,
       hasError: state === 'error',
+      lastReadyAt: lastReadyAt ? new Date(lastReadyAt).toISOString() : undefined,
+      lastReadyLabel: formatRelativeTime(lastReadyAt),
+      lastReadyUrl,
       latestDeploymentUrl,
       label: `Vercel: ${labelState}`,
       state
@@ -430,6 +554,7 @@ export const getVercelDeploymentStatus = async (): Promise<VercelDeploymentStatu
     const branch = process.env.VERCEL_GIT_COMMIT_REF || process.env.THINGTIME_BRANCH_NAME;
     const commitSha = process.env.VERCEL_GIT_COMMIT_SHA;
     const deploymentUrl = normaliseUrl(process.env.VERCEL_URL);
+    const fallbackDashboardUrl = getDashboardUrlFromDeploymentHost(process.env.VERCEL_BRANCH_URL || deploymentUrl);
 
     return {
       ...getTokenlessFallback({
@@ -439,6 +564,7 @@ export const getVercelDeploymentStatus = async (): Promise<VercelDeploymentStatu
         environment: fallbackEnvironment
       }),
       buildPhase: undefined,
+      buildPageUrl: fallbackDashboardUrl,
       error: err?.message || String(err),
       hasError: true,
       label: 'Vercel: status unavailable',

@@ -5,6 +5,15 @@ import { keyframes } from '@emotion/react';
 import type { VercelDeploymentStatus } from '~/api/utils/vercel/status';
 
 const STATUS_ENDPOINT = '/api/v1/vercel/status';
+const ACTIVE_POLL_MS = 5000;
+const IDLE_POLL_MS = 60000;
+const STATUS_COLORS = {
+  unavailable: '#A0AEC0',
+  error: '#FC8181',
+  ready: '#48BB78',
+  active: '#ECC94B',
+  local: '#A0AEC0',
+};
 
 const pulse = keyframes`
   0% { opacity: 1; }
@@ -18,41 +27,64 @@ export const VercelStatus = (props) => {
 
   React.useEffect(() => {
     let isMounted = true;
-    const xhr = new XMLHttpRequest();
+    let timeoutId: ReturnType<typeof window.setTimeout> | undefined;
+    let xhr: XMLHttpRequest | undefined;
 
-    xhr.open('GET', STATUS_ENDPOINT);
-    xhr.setRequestHeader('Accept', 'application/json');
+    const requestStatus = () => {
+      xhr?.abort();
+      xhr = new XMLHttpRequest();
 
-    xhr.onload = () => {
-      if (!isMounted) {
-        return;
-      }
+      xhr.open('GET', STATUS_ENDPOINT);
+      xhr.setRequestHeader('Accept', 'application/json');
 
-      try {
-        if (xhr.status < 200 || xhr.status >= 300) {
-          throw new Error(`Status request failed: ${xhr.status}`);
+      xhr.onload = () => {
+        if (!isMounted) {
+          return;
         }
 
-        setStatus(JSON.parse(xhr.responseText) as VercelDeploymentStatus);
-        setError(null);
-      } catch (err: any) {
-        setStatus(null);
-        setError(err?.message || String(err));
-      }
+        try {
+          if (!xhr || xhr.status < 200 || xhr.status >= 300) {
+            throw new Error(`Status request failed: ${xhr?.status}`);
+          }
+
+          const nextStatus = JSON.parse(xhr.responseText) as VercelDeploymentStatus;
+          const nextState = nextStatus.state;
+
+          setStatus(nextStatus);
+          setError(null);
+
+          timeoutId = window.setTimeout(
+            requestStatus,
+            nextState === 'building' || nextState === 'queued' || nextState === 'unknown'
+              ? ACTIVE_POLL_MS
+              : IDLE_POLL_MS,
+          );
+        } catch (err: any) {
+          setStatus(null);
+          setError(err?.message || String(err));
+          timeoutId = window.setTimeout(requestStatus, ACTIVE_POLL_MS);
+        }
+      };
+
+      xhr.onerror = () => {
+        if (isMounted) {
+          setStatus(null);
+          setError('Status request failed');
+          timeoutId = window.setTimeout(requestStatus, ACTIVE_POLL_MS);
+        }
+      };
+
+      xhr.send();
     };
 
-    xhr.onerror = () => {
-      if (isMounted) {
-        setStatus(null);
-        setError('Status request failed');
-      }
-    };
-
-    xhr.send();
+    requestStatus();
 
     return () => {
       isMounted = false;
-      xhr.abort();
+      xhr?.abort();
+      if (timeoutId) {
+        window.clearTimeout(timeoutId);
+      }
     };
   }, []);
 
@@ -61,26 +93,28 @@ export const VercelStatus = (props) => {
   const buildProgress = status?.buildProgress;
   const buildPhase = status?.buildPhase;
   const buildUrl = status?.buildPageUrl || status?.latestDeploymentUrl;
-  const hasBuildProgress = typeof buildProgress === 'number' && state !== 'ready' && state !== 'error';
+  const isActive = checking || state === 'building' || state === 'queued';
+  const hasBuildProgress = typeof buildProgress === 'number' && (isActive || state === 'ready');
   const isUnavailable = Boolean(error || status?.hasError || state === 'unknown');
   const color =
     isUnavailable
-      ? 'gray.400'
+      ? STATUS_COLORS.unavailable
       : state === 'error'
-        ? 'red.400'
+        ? STATUS_COLORS.error
       : state === 'ready'
-        ? 'green.400'
+        ? STATUS_COLORS.ready
         : state === 'building' || state === 'queued'
-          ? 'yellow.400'
+          ? STATUS_COLORS.active
           : state === 'local'
-            ? 'gray.400'
-            : 'gray.400';
+            ? STATUS_COLORS.local
+            : STATUS_COLORS.unavailable;
+  const lastReadyLabel = status?.lastReadyLabel ? ` last ready ${status.lastReadyLabel}` : '';
   const label = error
     ? 'Vercel: status unavailable'
     : status?.label
       ? `${status.label}${buildPhase && !status.hasError ? ` ${buildPhase}` : ''}${
           typeof buildProgress === 'number' ? ` (${buildProgress}%)` : ''
-        }`
+        }${lastReadyLabel}`
       : 'Vercel: checking...';
   const href = buildUrl || status?.latestDeploymentUrl || status?.deploymentUrl;
 
@@ -92,10 +126,12 @@ export const VercelStatus = (props) => {
         minWidth="8px"
         borderRadius="full"
         backgroundColor={color}
-        border={isUnavailable ? '1px solid' : undefined}
-        borderColor={isUnavailable ? 'gray.500' : undefined}
+        border="1px solid"
+        borderColor={isUnavailable ? '#4A5568' : color}
+        boxSizing="border-box"
+        display="inline-block"
         flexShrink={0}
-        sx={checking || state === 'building' || state === 'queued' ? { animation: `${pulse} 1.2s ease-in-out infinite` } : undefined}
+        sx={isActive ? { animation: `${pulse} 1.2s ease-in-out infinite` } : undefined}
       />
       <Text textDecoration={href ? 'underline' : undefined}>{label}</Text>
     </Flex>
