@@ -855,9 +855,9 @@
     "semantic_hash": "6f47150939eacf6d3a89a87289013ea3"
   },
   "README.md": {
-    "mtime": 1774026153.1186633,
-    "ast_hash": "5a510a663a8d17ce1f918c743f7ad100",
-    "semantic_hash": "5a510a663a8d17ce1f918c743f7ad100"
+    "mtime": 1782138837.8257928,
+    "ast_hash": "22e358bb842f4a72fc99b91190d6f5a8",
+    "semantic_hash": ""
   },
   "docs/Use Cases/car.md": {
     "mtime": 1677486421.8399172,
@@ -995,8 +995,8 @@
     "semantic_hash": ""
   },
   "AGENTS.md": {
-    "mtime": 1782135125.0752442,
-    "ast_hash": "ddc088bce952e6ced3a96443ce1aee5b",
+    "mtime": 1782138845.4855895,
+    "ast_hash": "800e09f98e8c8ad7f4194928c50a6e26",
     "semantic_hash": ""
   },
   "CLAUDE.md": {

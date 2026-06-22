@@ -5,6 +5,11 @@
 - When a task reveals a repeatable workflow, validation command, deployment
   setting, project convention, or other future-use instruction, add it to this
   `AGENTS.md` runbook before finishing so future agents do it by default.
+- When adding or changing a feature that depends on private/non-public
+  configuration, external dashboards, secrets, deploy settings, or environment
+  variables, also document the fork-safe setup steps in `README.md`. Use
+  placeholder values only; never copy real tokens, passwords, project secrets,
+  or account-specific credentials into public docs.
 - For Vercel dashboard links, do not use `VERCEL_GIT_REPO_OWNER` as the
   dashboard owner slug; that value is the Git provider owner. Prefer Vercel API
   project/deployment data when `VERCEL_API_TOKEN` is available, or an explicit
