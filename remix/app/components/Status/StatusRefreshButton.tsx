@@ -1,6 +1,12 @@
 import React from 'react';
 import { Box } from '@chakra-ui/react';
+import { keyframes } from '@emotion/react';
 import { RefreshCw } from 'lucide-react';
+
+const spin = keyframes`
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+`;
 
 export const StatusRefreshButton = ({
   isLoading,
@@ -11,12 +17,22 @@ export const StatusRefreshButton = ({
   label: string;
   onRefresh: () => void;
 }) => {
+  const handleClick = React.useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      onRefresh();
+    },
+    [onRefresh]
+  );
+
   return (
     <Box
       as="button"
       type="button"
       aria-label={label}
       title={label}
+      onClick={handleClick}
       width="14px"
       height="14px"
       minWidth="14px"
@@ -42,7 +58,12 @@ export const StatusRefreshButton = ({
         transform: 'rotate(35deg) scale(0.95)'
       }}
     >
-      <RefreshCw aria-hidden="true" size={9} strokeWidth={2} />
+      <RefreshCw
+        aria-hidden="true"
+        size={9}
+        strokeWidth={2}
+        style={isLoading ? { animation: `${spin} 700ms linear infinite` } : undefined}
+      />
     </Box>
   );
 };

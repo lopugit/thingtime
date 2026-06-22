@@ -4360,7 +4360,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "api_submit",
-      "community": 2,
+      "community": 46,
       "norm_label": "submit.tsx"
     },
     {
@@ -4370,7 +4370,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "api_submit_submit",
-      "community": 2,
+      "community": 46,
       "norm_label": "submit()"
     },
     {
@@ -4550,7 +4550,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "commander_commanderv2",
-      "community": 73,
+      "community": 45,
       "norm_label": "commanderv2.tsx"
     },
     {
@@ -4560,7 +4560,7 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "commander_commanderv2_commanderv2",
-      "community": 73,
+      "community": 45,
       "norm_label": "commanderv2()"
     },
     {
@@ -4610,7 +4610,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "icon_icon",
-      "community": 45,
+      "community": 73,
       "norm_label": "icon.tsx"
     },
     {
@@ -4620,7 +4620,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "icon_icon_icon",
-      "community": 45,
+      "community": 73,
       "norm_label": "icon()"
     },
     {
@@ -4780,7 +4780,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "mongodb_rawresult",
-      "community": 35,
+      "community": 13,
       "norm_label": "rawresult.tsx"
     },
     {
@@ -4790,7 +4790,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "mongodb_rawresult_rawresultprops",
-      "community": 35,
+      "community": 13,
       "norm_label": "rawresultprops"
     },
     {
@@ -4800,7 +4800,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "mongodb_rawresult_rawresult",
-      "community": 35,
+      "community": 13,
       "norm_label": "rawresult()"
     },
     {
@@ -4810,7 +4810,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "mongodb_rawresults",
-      "community": 35,
+      "community": 13,
       "norm_label": "rawresults.tsx"
     },
     {
@@ -4820,7 +4820,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "mongodb_rawresults_rawresults",
-      "community": 35,
+      "community": 13,
       "norm_label": "rawresults()"
     },
     {
@@ -4950,7 +4950,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "safety_safe",
-      "community": 72,
+      "community": 73,
       "norm_label": "safe.tsx"
     },
     {
@@ -4960,7 +4960,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "safety_safe_safe",
-      "community": 72,
+      "community": 73,
       "norm_label": "safe()"
     },
     {
@@ -5014,10 +5014,20 @@
       "norm_label": "statusrefreshbutton.tsx"
     },
     {
+      "label": "spin",
+      "file_type": "code",
+      "source_file": "remix/app/components/Status/StatusRefreshButton.tsx",
+      "source_location": "L6",
+      "_origin": "ast",
+      "id": "status_statusrefreshbutton_spin",
+      "community": 76,
+      "norm_label": "spin"
+    },
+    {
       "label": "StatusRefreshButton()",
       "file_type": "code",
       "source_file": "remix/app/components/Status/StatusRefreshButton.tsx",
-      "source_location": "L5",
+      "source_location": "L11",
       "_origin": "ast",
       "id": "status_statusrefreshbutton_statusrefreshbutton",
       "community": 76,
@@ -5030,7 +5040,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "thingtime_settingsmenu",
-      "community": 45,
+      "community": 73,
       "norm_label": "settingsmenu.tsx"
     },
     {
@@ -5040,7 +5050,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "thingtime_settingsmenu_settingsmenu",
-      "community": 45,
+      "community": 73,
       "norm_label": "settingsmenu()"
     },
     {
@@ -5050,7 +5060,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "thingtime_thingtime",
-      "community": 72,
+      "community": 73,
       "norm_label": "thingtime.tsx"
     },
     {
@@ -5060,7 +5070,7 @@
       "source_location": "L33",
       "_origin": "ast",
       "id": "thingtime_thingtime_thingtimeprops",
-      "community": 72,
+      "community": 73,
       "norm_label": "thingtimeprops"
     },
     {
@@ -5070,7 +5080,7 @@
       "source_location": "L39",
       "_origin": "ast",
       "id": "thingtime_thingtime_thingtimecomponentprops",
-      "community": 72,
+      "community": 73,
       "norm_label": "thingtimecomponentprops"
     },
     {
@@ -5430,7 +5440,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "functions_safe",
-      "community": 72,
+      "community": 73,
       "norm_label": "safe.tsx"
     },
     {
@@ -5440,7 +5450,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "functions_safe_safe",
-      "community": 72,
+      "community": 73,
       "norm_label": "safe()"
     },
     {
@@ -5450,7 +5460,7 @@
       "source_location": "L54",
       "_origin": "ast",
       "id": "functions_safe_getmeta",
-      "community": 72,
+      "community": 73,
       "norm_label": "getmeta()"
     },
     {
@@ -5460,7 +5470,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "functions_sanitise",
-      "community": 73,
+      "community": 72,
       "norm_label": "sanitise.tsx"
     },
     {
@@ -5470,7 +5480,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "functions_sanitise_sanitise",
-      "community": 73,
+      "community": 72,
       "norm_label": "sanitise()"
     },
     {
@@ -5780,7 +5790,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "hooks_useasyncfetcher",
-      "community": 2,
+      "community": 46,
       "norm_label": "useasyncfetcher.tsx"
     },
     {
@@ -5790,7 +5800,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "hooks_useasyncfetcher_useasyncfetcher",
-      "community": 2,
+      "community": 46,
       "norm_label": "useasyncfetcher()"
     },
     {
@@ -5820,7 +5830,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "hooks_usepath",
-      "community": 73,
+      "community": 45,
       "norm_label": "usepath.tsx"
     },
     {
@@ -5830,7 +5840,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "hooks_usepath_usepath",
-      "community": 73,
+      "community": 45,
       "norm_label": "usepath()"
     },
     {
@@ -5860,7 +5870,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "hooks_usethings",
-      "community": 72,
+      "community": 73,
       "norm_label": "usethings.tsx"
     },
     {
@@ -5870,7 +5880,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "hooks_usethings_usethings",
-      "community": 72,
+      "community": 73,
       "norm_label": "usethings()"
     },
     {
@@ -5890,7 +5900,7 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "hooks_usethingtimemachine_patharray",
-      "community": 7,
+      "community": 72,
       "norm_label": "patharray"
     },
     {
@@ -6930,7 +6940,7 @@
       "source_location": "L59",
       "_origin": "ast",
       "id": "smarts_index_getparentpath",
-      "community": 73,
+      "community": 72,
       "norm_label": "getparentpath()"
     },
     {
@@ -7950,7 +7960,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_package",
-      "community": 5,
+      "community": 75,
       "norm_label": "package.json"
     },
     {
@@ -7960,7 +7970,7 @@
       "source_location": "L2",
       "_origin": "ast",
       "id": "remix_package_private",
-      "community": 5,
+      "community": 75,
       "norm_label": "private"
     },
     {
@@ -7970,7 +7980,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "remix_package_sideeffects",
-      "community": 5,
+      "community": 75,
       "norm_label": "sideeffects"
     },
     {
@@ -7980,7 +7990,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "remix_package_version",
-      "community": 5,
+      "community": 75,
       "norm_label": "version"
     },
     {
@@ -7990,7 +8000,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "remix_package_scripts",
-      "community": 5,
+      "community": 79,
       "norm_label": "scripts"
     },
     {
@@ -8000,7 +8010,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "remix_package_scripts_build",
-      "community": 5,
+      "community": 79,
       "norm_label": "build"
     },
     {
@@ -8010,7 +8020,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "remix_package_scripts_pre_dev",
-      "community": 5,
+      "community": 79,
       "norm_label": "pre-dev"
     },
     {
@@ -8020,7 +8030,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "remix_package_scripts_dev",
-      "community": 5,
+      "community": 79,
       "norm_label": "dev"
     },
     {
@@ -8030,7 +8040,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "remix_package_scripts_lint",
-      "community": 5,
+      "community": 79,
       "norm_label": "lint"
     },
     {
@@ -8040,7 +8050,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "remix_package_scripts_lint_fix",
-      "community": 5,
+      "community": 79,
       "norm_label": "lint-fix"
     },
     {
@@ -8050,7 +8060,7 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "remix_package_scripts_format",
-      "community": 5,
+      "community": 79,
       "norm_label": "format"
     },
     {
@@ -8770,7 +8780,7 @@
       "source_location": "L86",
       "_origin": "ast",
       "id": "remix_package_resolutions",
-      "community": 5,
+      "community": 75,
       "norm_label": "resolutions"
     },
     {
@@ -8780,7 +8790,7 @@
       "source_location": "L87",
       "_origin": "ast",
       "id": "remix_package_resolutions_types_react",
-      "community": 5,
+      "community": 75,
       "norm_label": "@types/react"
     },
     {
@@ -8790,7 +8800,7 @@
       "source_location": "L89",
       "_origin": "ast",
       "id": "remix_package_engines",
-      "community": 5,
+      "community": 75,
       "norm_label": "engines"
     },
     {
@@ -8800,7 +8810,7 @@
       "source_location": "L90",
       "_origin": "ast",
       "id": "remix_package_engines_node",
-      "community": 5,
+      "community": 75,
       "norm_label": "node"
     },
     {
@@ -9893,7 +9903,7 @@
       "label": "Verified",
       "file_type": "document",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L79",
+      "source_location": "L80",
       "_origin": "ast",
       "id": "remix_changelog_verified",
       "community": 78,
@@ -9903,7 +9913,7 @@
       "label": "[1.0.0] - YYYY-MM-DD",
       "file_type": "document",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L89",
+      "source_location": "L90",
       "_origin": "ast",
       "id": "remix_changelog_1_0_0_yyyy_mm_dd",
       "community": 78,
@@ -9973,7 +9983,7 @@
       "label": "Deployment And Repo Hygiene",
       "file_type": "document",
       "source_file": "remix/PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md",
-      "source_location": "L80",
+      "source_location": "L82",
       "_origin": "ast",
       "id": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_deployment_and_repo_hygiene",
       "community": 1,
@@ -9983,7 +9993,7 @@
       "label": "Preserved Behavior",
       "file_type": "document",
       "source_file": "remix/PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md",
-      "source_location": "L92",
+      "source_location": "L94",
       "_origin": "ast",
       "id": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_preserved_behavior",
       "community": 1,
@@ -9993,7 +10003,7 @@
       "label": "Verification",
       "file_type": "document",
       "source_file": "remix/PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md",
-      "source_location": "L98",
+      "source_location": "L100",
       "_origin": "ast",
       "id": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_verification",
       "community": 1,
@@ -22358,6 +22368,16 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/app/components/Status/StatusRefreshButton.tsx",
+      "source_location": "L6",
+      "weight": 1.0,
+      "source": "status_statusrefreshbutton",
+      "target": "status_statusrefreshbutton_spin",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/components/Status/StatusRefreshButton.tsx",
       "source_location": "L4",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -27549,9 +27569,9 @@
       "source_file": "remix/package.json",
       "source_location": "L42",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "remix_package_dependencies",
-      "target": "remix_package_dependencies_lucide_react",
-      "confidence_score": 1.0
+      "target": "remix_package_dependencies_lucide_react"
     },
     {
       "relation": "contains",
@@ -29045,5 +29065,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "635cec292b0961aeb819fc48bcd84591e5f3ec4d"
+  "built_at_commit": "0e48b6a8e2e9b7ab3c423548ee545fca7bda5429"
 }

@@ -70,6 +70,8 @@ deployment runbook changes discovered while validating Vercel previews.
 - Adds tiny lucide manual refresh controls to both Vercel and MongoDB footer
   status rows, with the buttons kept outside the status links so refresh does
   not navigate away.
+- Wires those refresh controls to actually call their status recheck callbacks,
+  clear current labels into checking state, and show a tiny loading spin.
 - Avoids appending tokenless fallback phase text to API error labels.
 - Fixed preview footer branch display by preferring `VERCEL_GIT_COMMIT_REF`
   over stale committed `.env.auto` branch data.

@@ -70,6 +70,7 @@ Detailed PR notes:
 
 | # | Problem | Fix | Author | Date |
 |---|---------|-----|--------|------|
+| 6 | Vercel and MongoDB footer refresh icons rendered but did not trigger a recheck. | Wired the shared refresh button to call its callback, prevent link bubbling, and show a small loading spin. | Codex (AI) | 2026-06-23 |
 | 1 | Emotion hydration caused `insertBefore` crashes, flash-of-unstyled content, boxed icons, and update-depth risk. | Hydrate the Remix document with server-rendered Emotion style tags in the React tree and perform the Emotion handoff pre-paint. | Codex (AI) | 2026-06-22 |
 | 2 | Vercel serverless wrapped Emotion CJS modules differently than local default imports expected. | Resolve `@emotion/cache` and `@emotion/server/create-instance` across direct, default, named, and nested default export shapes. | Codex (AI) | 2026-06-22 |
 | 3 | Vercel previews could show `git/unknown`, and repeated branch-head deployments could rebuild unchanged SHAs. | Prefer Vercel git env vars for branch display and document/test an Ignored Build Step duplicate-SHA guard. | Codex (AI) | 2026-06-22 |
