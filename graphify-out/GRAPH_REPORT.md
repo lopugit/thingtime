@@ -1,16 +1,16 @@
 # Graph Report - thingtime  (2026-06-22)
 
 ## Corpus Check
-- 201 files · ~542,358 words
+- 201 files · ~542,501 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 977 nodes · 1735 edges · 78 communities (60 shown, 18 thin omitted)
+- 981 nodes · 1741 edges · 74 communities (56 shown, 18 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 15 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `df813447`
+- Built from commit: `9e1dedde`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -46,7 +46,6 @@
 - [[_COMMUNITY_Smarts Parser & Eval|Smarts Parser & Eval]]
 - [[_COMMUNITY_Smart Path Access (getset)|Smart Path Access (get/set)]]
 - [[_COMMUNITY_Reactive Navigation Components|Reactive Navigation Components]]
-- [[_COMMUNITY_McDonalds Promo Banner (gs2)|McDonalds Promo Banner (gs2)]]
 - [[_COMMUNITY_ESLint Config|ESLint Config]]
 - [[_COMMUNITY_Smart Thing Access (getset)|Smart Thing Access (get/set)]]
 - [[_COMMUNITY_Smarts Serialization|Smarts Serialization]]
@@ -72,10 +71,7 @@
 - [[_COMMUNITY_Remix Client Entry|Remix Client Entry]]
 - [[_COMMUNITY_Community 65|Community 65]]
 - [[_COMMUNITY_Community 66|Community 66]]
-- [[_COMMUNITY_Community 72|Community 72]]
-- [[_COMMUNITY_Community 73|Community 73]]
 - [[_COMMUNITY_Community 74|Community 74]]
-- [[_COMMUNITY_Community 75|Community 75]]
 - [[_COMMUNITY_Community 76|Community 76]]
 - [[_COMMUNITY_Community 77|Community 77]]
 - [[_COMMUNITY_Community 78|Community 78]]
@@ -93,8 +89,6 @@
 10. `regexTrim()` - 15 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `Index()` --calls--> `useThingtime()`  [INFERRED]
-  remix/app/routes/_index.tsx → remix/app/components/Thingtime/useThingtime.tsx
 - `loader()` --calls--> `getMongoStatus()`  [INFERRED]
   remix/app/routes/api/v1/mongodb/status-data/_status-data.tsx → remix/app/api/utils/mongodb/status.ts
 - `action()` --calls--> `getMongoStatus()`  [INFERRED]
@@ -103,21 +97,23 @@
   remix/app/routes/api/v1/mongodb/status/_status.tsx → remix/app/api/utils/mongodb/status.ts
 - `loader()` --calls--> `getVercelDeploymentStatus()`  [INFERRED]
   remix/app/routes/api/v1/vercel/status-data/_status-data.tsx → remix/app/api/utils/vercel/status.ts
+- `action()` --calls--> `getVercelDeploymentStatus()`  [INFERRED]
+  remix/app/routes/api/v1/vercel/status/_status.tsx → remix/app/api/utils/vercel/status.ts
 
 ## Import Cycles
 - 3-file cycle: `remix/app/api/utils/mongodb/connection.ts -> remix/app/routes/api/v1/mongodb/get-connection/_get-connection.tsx -> remix/app/api/utils/userCheckExists.ts -> remix/app/api/utils/mongodb/connection.ts`
 - 3-file cycle: `remix/app/api/utils/mongodb/connection.ts -> remix/app/routes/api/v1/mongodb/get-connection/_get-connection.tsx -> remix/app/api/utils/userValidatePassword.ts -> remix/app/api/utils/mongodb/connection.ts`
 - 3-file cycle: `remix/app/Providers/ThingtimeProvider.tsx -> remix/app/hooks/useThingtimeMachine.tsx -> remix/app/components/Thingtime/useThingtime.tsx -> remix/app/Providers/ThingtimeProvider.tsx`
 
-## Communities (78 total, 18 thin omitted)
+## Communities (74 total, 18 thin omitted)
 
 ### Community 0 - "Raycast Image/File Operations"
 Cohesion: 0.06
-Nodes (80): openNewFinderWindow(), regexToReplacementConverter(), regexTrim(), any(), convert(), applyFilter(), flip(), optimize() (+72 more)
+Nodes (79): openNewFinderWindow(), regexToReplacementConverter(), regexTrim(), any(), convert(), flip(), optimize(), optimizeJPEG() (+71 more)
 
 ### Community 1 - "Community 1"
-Cohesion: 0.42
-Nodes (5): Icon(), Footer(), Nav(), ProfileDrawer(), RainbowSkeleton()
+Cohesion: 0.70
+Nodes (3): getMeta(), safe(), Safe()
 
 ### Community 2 - "Backend API Dependencies"
 Cohesion: 0.07
@@ -140,8 +136,8 @@ Cohesion: 0.05
 Nodes (38): author, categories, commands, contributors, dependencies, fuse.js, mathjs, @raycast/api (+30 more)
 
 ### Community 7 - "Smarts Babel Codegen"
-Cohesion: 0.09
-Nodes (24): assets, value, newTimeline(), PathArray, ThingtimeLine(), Timeline, TimelineEvent, TimelineScaffold (+16 more)
+Cohesion: 0.08
+Nodes (26): assets, value, newTimeline(), PathArray, ThingtimeLine(), Timeline, TimelineEvent, TimelineScaffold (+18 more)
 
 ### Community 8 - "Remix Root & Session Setup"
 Cohesion: 0.07
@@ -149,23 +145,23 @@ Nodes (15): createObjectProperties(), deepForEach(), ee(), epp(), escapeEscapes(
 
 ### Community 9 - "Thingtime Timeline/Timemachine"
 Cohesion: 0.06
-Nodes (33): Session, ClientCacheProvider(), handleRequest(), App(), Document, DocumentProps, getDeploymentBranchName(), loader() (+25 more)
+Nodes (37): Session, ClientCacheProvider(), createEmotionServerInstance, EmotionServerFactory, getExport(), handleRequest(), resolveEmotionServerFactory(), App() (+29 more)
 
 ### Community 10 - "Smarts Package Manifest"
 Cohesion: 0.11
-Nodes (22): ImageGeneratorActionPanel(), SizeSelectionActionPanel(), applyBasicFilter(), filters, getFilterThumbnail(), initializeFilterScript(), generatePlaceholder(), generatePreview() (+14 more)
+Nodes (23): ImageGeneratorActionPanel(), SizeSelectionActionPanel(), applyFilter(), applyBasicFilter(), filters, getFilterThumbnail(), initializeFilterScript(), generatePlaceholder() (+15 more)
 
 ### Community 11 - "GradientPath SVG Library"
-Cohesion: 0.13
-Nodes (17): averageSegmentJoins(), getData(), outlineStrokes(), strokeToFill(), constructor(), render(), Sample, Segment (+9 more)
+Cohesion: 0.19
+Nodes (13): averageSegmentJoins(), getData(), outlineStrokes(), strokeToFill(), constructor(), render(), Sample, Segment (+5 more)
 
 ### Community 12 - "Raw Result Display Components"
 Cohesion: 0.08
 Nodes (25): author, bugs, url, dependencies, smarts, ts-node, typescript, description (+17 more)
 
 ### Community 13 - "TypeScript Config (A)"
-Cohesion: 0.13
-Nodes (10): TestAPI(), Branding(), Logo(), Editor(), TopSpacing(), Raw(), RawResult(), RawResultProps (+2 more)
+Cohesion: 0.16
+Nodes (8): TestAPI(), Branding(), Logo(), Editor(), TopSpacing(), Raw(), RawResults(), checkerMatrix
 
 ### Community 14 - "TypeScript Config (B)"
 Cohesion: 0.11
@@ -204,8 +200,8 @@ Cohesion: 0.20
 Nodes (9): author, description, license, main, name, scripts, test, type (+1 more)
 
 ### Community 24 - "Image Mod Extension Docs & Tools"
-Cohesion: 0.22
-Nodes (9): createScopedEval(), load(), parse(), parser(), play(), primitives(), revive(), safeparse() (+1 more)
+Cohesion: 0.13
+Nodes (16): basic(), clone(), create(), createScopedEval(), dupe(), load(), merge(), mergeall() (+8 more)
 
 ### Community 25 - "Auth & Fetch Hooks"
 Cohesion: 0.25
@@ -226,10 +222,6 @@ Nodes (8): pause(), replacer(), safestring(), save(), serialize(), setKnown(), s
 ### Community 30 - "Reactive Navigation Components"
 Cohesion: 0.29
 Nodes (6): 2023-06-18, 2023-07-05, 2023-07-06, 2024-01-27, 2024-01-28, Image Modification DevLog - A more detailed changelog
-
-### Community 31 - "McDonalds Promo Banner (gs2)"
-Cohesion: 0.33
-Nodes (7): basic(), clone(), create(), dupe(), merge(), mergeall(), schema()
 
 ### Community 32 - "ESLint Config"
 Cohesion: 0.29
@@ -264,28 +256,16 @@ Cohesion: 0.50
 Nodes (3): Codex workspace notes, Delivery messaging, graphify
 
 ### Community 45 - "Community 45"
-Cohesion: 0.13
-Nodes (18): commanderArgs, CommanderV1(), CommanderV2(), getMeta(), safe(), sanitise(), usePath(), useThings() (+10 more)
+Cohesion: 0.06
+Nodes (45): Submit(), commanderArgs, CommanderV1(), CommanderV2(), RainbowText(), TextAnimation1(), DevKit(), sanitise() (+37 more)
 
 ### Community 46 - "Community 46"
 Cohesion: 0.29
 Nodes (7): scripts, build, dev, format, lint, lint-fix, pre-dev
 
-### Community 72 - "Community 72"
-Cohesion: 0.23
-Nodes (7): RainbowText(), TextAnimation1(), Index(), Index(), Splash(), Thingtime(), ThingtimeDemo()
-
-### Community 73 - "Community 73"
-Cohesion: 0.18
-Nodes (10): DevKit(), ThingtimeContext, Index(), SettingsMenu(), ThingtimeURL(), EverythingTypes, ThingtimeTypes, useThingtime() (+2 more)
-
 ### Community 74 - "Community 74"
 Cohesion: 0.29
 Nodes (6): Codex workspace notes, GitHub push / PR publishing, Graphify, Package manager notes, Remix linting, TypeScript checks
-
-### Community 75 - "Community 75"
-Cohesion: 0.38
-Nodes (4): Submit(), useApi(), useAsyncFetcher(), Login()
 
 ### Community 76 - "Community 76"
 Cohesion: 0.17
@@ -296,24 +276,24 @@ Cohesion: 0.25
 Nodes (7): [1.0.0] - YYYY-MM-DD, Added, Changed, Changelog, Fixed, [Unreleased], Verified
 
 ## Knowledge Gaps
-- **366 isolated node(s):** `extends`, `name`, `version`, `description`, `main` (+361 more)
+- **367 isolated node(s):** `extends`, `name`, `version`, `description`, `main` (+362 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **18 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `useThingtime()` connect `Community 73` to `Community 1`, `Smarts Babel Codegen`, `Community 72`, `Community 75`, `TypeScript Config (A)`, `Community 45`?**
+- **Why does `useThingtime()` connect `Community 45` to `TypeScript Config (A)`, `Smarts Babel Codegen`?**
   _High betweenness centrality (0.029) - this node is a cross-community bridge._
-- **Why does `Thingtime()` connect `Community 72` to `Backend API Dependencies`, `Smarts Babel Codegen`, `Community 73`, `Community 75`, `Community 45`?**
+- **Why does `Thingtime()` connect `Community 45` to `Backend API Dependencies`, `Smarts Babel Codegen`?**
   _High betweenness centrality (0.006) - this node is a cross-community bridge._
 - **Why does `dependencies` connect `Remix Dev/Lint Dependencies` to `Community 35`?**
   _High betweenness centrality (0.006) - this node is a cross-community bridge._
 - **Are the 2 inferred relationships involving `useThingtime()` (e.g. with `Login()` and `Index()`) actually correct?**
   _`useThingtime()` has 2 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `extends`, `name`, `version` to the rest of the system?**
-  _366 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _367 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Raycast Image/File Operations` be split into smaller, more focused modules?**
-  _Cohesion score 0.062481579722959035 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.06380996739636702 - nodes in this community are weakly interconnected._
 - **Should `Backend API Dependencies` be split into smaller, more focused modules?**
   _Cohesion score 0.0703962703962704 - nodes in this community are weakly interconnected._

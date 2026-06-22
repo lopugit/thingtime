@@ -2050,7 +2050,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "components_imagegeneratoractionpanel",
-      "community": 0,
+      "community": 10,
       "norm_label": "imagegeneratoractionpanel.tsx"
     },
     {
@@ -2240,7 +2240,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "operations_filteroperation",
-      "community": 0,
+      "community": 10,
       "norm_label": "filteroperation.ts"
     },
     {
@@ -2250,7 +2250,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "operations_filteroperation_applyfilter",
-      "community": 0,
+      "community": 10,
       "norm_label": "applyfilter()"
     },
     {
@@ -3810,7 +3810,7 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "providers_thingtimeprovider_thingtimecontext",
-      "community": 73,
+      "community": 7,
       "norm_label": "thingtimecontext"
     },
     {
@@ -4250,7 +4250,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "api_submit",
-      "community": 75,
+      "community": 45,
       "norm_label": "submit.tsx"
     },
     {
@@ -4260,7 +4260,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "api_submit_submit",
-      "community": 75,
+      "community": 45,
       "norm_label": "submit()"
     },
     {
@@ -4460,7 +4460,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "devkit_devkit",
-      "community": 73,
+      "community": 45,
       "norm_label": "devkit.tsx"
     },
     {
@@ -4470,7 +4470,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "devkit_devkit_devkit",
-      "community": 73,
+      "community": 45,
       "norm_label": "devkit()"
     },
     {
@@ -4500,7 +4500,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "icon_icon",
-      "community": 1,
+      "community": 45,
       "norm_label": "icon.tsx"
     },
     {
@@ -4510,7 +4510,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "icon_icon_icon",
-      "community": 1,
+      "community": 45,
       "norm_label": "icon()"
     },
     {
@@ -4520,7 +4520,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "layout_main",
-      "community": 1,
+      "community": 45,
       "norm_label": "main.tsx"
     },
     {
@@ -4560,7 +4560,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_components_login_login_tsx_login_login",
-      "community": 75,
+      "community": 45,
       "norm_label": "login.tsx"
     },
     {
@@ -4570,7 +4570,7 @@
       "source_location": "L12",
       "_origin": "ast",
       "id": "login_login_login",
-      "community": 75,
+      "community": 45,
       "norm_label": "login()"
     },
     {
@@ -4660,7 +4660,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "mongodb_rawresult",
-      "community": 13,
+      "community": 45,
       "norm_label": "rawresult.tsx"
     },
     {
@@ -4670,7 +4670,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "mongodb_rawresult_rawresultprops",
-      "community": 13,
+      "community": 45,
       "norm_label": "rawresultprops"
     },
     {
@@ -4680,7 +4680,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "mongodb_rawresult_rawresult",
-      "community": 13,
+      "community": 45,
       "norm_label": "rawresult()"
     },
     {
@@ -4690,7 +4690,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "mongodb_rawresults",
-      "community": 13,
+      "community": 45,
       "norm_label": "rawresults.tsx"
     },
     {
@@ -4710,7 +4710,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "nav_footer",
-      "community": 1,
+      "community": 45,
       "norm_label": "footer.tsx"
     },
     {
@@ -4720,7 +4720,7 @@
       "source_location": "L14",
       "_origin": "ast",
       "id": "nav_footer_footer",
-      "community": 1,
+      "community": 45,
       "norm_label": "footer()"
     },
     {
@@ -4730,7 +4730,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "nav_nav",
-      "community": 1,
+      "community": 45,
       "norm_label": "nav.tsx"
     },
     {
@@ -4740,7 +4740,7 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "nav_nav_nav",
-      "community": 1,
+      "community": 45,
       "norm_label": "nav()"
     },
     {
@@ -4750,7 +4750,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "nav_profiledrawer",
-      "community": 1,
+      "community": 45,
       "norm_label": "profiledrawer.tsx"
     },
     {
@@ -4760,7 +4760,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "nav_profiledrawer_profiledrawer",
-      "community": 1,
+      "community": 45,
       "norm_label": "profiledrawer()"
     },
     {
@@ -4810,7 +4810,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "rainbow_rainbow",
-      "community": 11,
+      "community": 45,
       "norm_label": "rainbow.tsx"
     },
     {
@@ -4820,7 +4820,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "rainbow_rainbow_rainbow",
-      "community": 11,
+      "community": 45,
       "norm_label": "rainbow()"
     },
     {
@@ -4830,7 +4830,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "safety_safe",
-      "community": 45,
+      "community": 1,
       "norm_label": "safe.tsx"
     },
     {
@@ -4840,7 +4840,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "safety_safe_safe",
-      "community": 45,
+      "community": 1,
       "norm_label": "safe()"
     },
     {
@@ -4850,7 +4850,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "skeleton_rainbowskeleton",
-      "community": 1,
+      "community": 45,
       "norm_label": "rainbowskeleton.tsx"
     },
     {
@@ -4860,7 +4860,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "skeleton_rainbowskeleton_rainbowskeleton",
-      "community": 1,
+      "community": 45,
       "norm_label": "rainbowskeleton()"
     },
     {
@@ -4870,7 +4870,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "splash_splash",
-      "community": 72,
+      "community": 45,
       "norm_label": "splash.tsx"
     },
     {
@@ -4880,7 +4880,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "splash_splash_splash",
-      "community": 72,
+      "community": 45,
       "norm_label": "splash()"
     },
     {
@@ -4890,7 +4890,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "thingtime_settingsmenu",
-      "community": 73,
+      "community": 45,
       "norm_label": "settingsmenu.tsx"
     },
     {
@@ -4900,7 +4900,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "thingtime_settingsmenu_settingsmenu",
-      "community": 73,
+      "community": 45,
       "norm_label": "settingsmenu()"
     },
     {
@@ -4940,7 +4940,7 @@
       "source_location": "L40",
       "_origin": "ast",
       "id": "thingtime_thingtime_thingtime",
-      "community": 72,
+      "community": 45,
       "norm_label": "thingtime()"
     },
     {
@@ -4950,7 +4950,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "thingtime_thingtimedemo",
-      "community": 72,
+      "community": 45,
       "norm_label": "thingtimedemo.tsx"
     },
     {
@@ -4960,7 +4960,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "thingtime_thingtimedemo_thingtimedemo",
-      "community": 72,
+      "community": 45,
       "norm_label": "thingtimedemo()"
     },
     {
@@ -4970,7 +4970,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "thingtime_thingtimeurl",
-      "community": 73,
+      "community": 45,
       "norm_label": "thingtimeurl.tsx"
     },
     {
@@ -4980,7 +4980,7 @@
       "source_location": "L12",
       "_origin": "ast",
       "id": "thingtime_thingtimeurl_thingtimeurl",
-      "community": 73,
+      "community": 45,
       "norm_label": "thingtimeurl()"
     },
     {
@@ -4990,7 +4990,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "thingtime_usethingtime",
-      "community": 73,
+      "community": 45,
       "norm_label": "usethingtime.tsx"
     },
     {
@@ -5000,7 +5000,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "thingtime_usethingtime_thingtimetypes",
-      "community": 73,
+      "community": 45,
       "norm_label": "thingtimetypes"
     },
     {
@@ -5010,7 +5010,7 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "thingtime_usethingtime_everythingtypes",
-      "community": 73,
+      "community": 45,
       "norm_label": "everythingtypes"
     },
     {
@@ -5020,7 +5020,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "thingtime_usethingtime_getglobal",
-      "community": 73,
+      "community": 45,
       "norm_label": "getglobal()"
     },
     {
@@ -5030,7 +5030,7 @@
       "source_location": "L33",
       "_origin": "ast",
       "id": "thingtime_usethingtime_usethingtimescope",
-      "community": 73,
+      "community": 45,
       "norm_label": "usethingtimescope"
     },
     {
@@ -5040,7 +5040,7 @@
       "source_location": "L43",
       "_origin": "ast",
       "id": "thingtime_usethingtime_usethingtime",
-      "community": 73,
+      "community": 45,
       "norm_label": "usethingtime()"
     },
     {
@@ -5080,7 +5080,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "components_rainbowtext",
-      "community": 72,
+      "community": 45,
       "norm_label": "rainbowtext.tsx"
     },
     {
@@ -5090,7 +5090,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "components_rainbowtext_rainbowtext",
-      "community": 72,
+      "community": 45,
       "norm_label": "rainbowtext()"
     },
     {
@@ -5100,7 +5100,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "components_textanimation1",
-      "community": 72,
+      "community": 45,
       "norm_label": "textanimation1.tsx"
     },
     {
@@ -5110,7 +5110,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "components_textanimation1_textanimation1",
-      "community": 72,
+      "community": 45,
       "norm_label": "textanimation1()"
     },
     {
@@ -5120,7 +5120,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tt_button",
-      "community": 73,
+      "community": 45,
       "norm_label": "button.tsx"
     },
     {
@@ -5130,7 +5130,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "tt_button_button",
-      "community": 73,
+      "community": 45,
       "norm_label": "button()"
     },
     {
@@ -5140,7 +5140,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tt_index",
-      "community": 73,
+      "community": 45,
       "norm_label": "index.ts"
     },
     {
@@ -5194,10 +5194,50 @@
       "norm_label": "entry.server.tsx"
     },
     {
+      "label": "EmotionServerFactory",
+      "file_type": "code",
+      "source_file": "remix/app/entry.server.tsx",
+      "source_location": "L11",
+      "_origin": "ast",
+      "id": "app_entry_server_emotionserverfactory",
+      "community": 9,
+      "norm_label": "emotionserverfactory"
+    },
+    {
+      "label": "getExport()",
+      "file_type": "code",
+      "source_file": "remix/app/entry.server.tsx",
+      "source_location": "L13",
+      "_origin": "ast",
+      "id": "app_entry_server_getexport",
+      "community": 9,
+      "norm_label": "getexport()"
+    },
+    {
+      "label": "resolveEmotionServerFactory()",
+      "file_type": "code",
+      "source_file": "remix/app/entry.server.tsx",
+      "source_location": "L21",
+      "_origin": "ast",
+      "id": "app_entry_server_resolveemotionserverfactory",
+      "community": 9,
+      "norm_label": "resolveemotionserverfactory()"
+    },
+    {
+      "label": "createEmotionServerInstance",
+      "file_type": "code",
+      "source_file": "remix/app/entry.server.tsx",
+      "source_location": "L31",
+      "_origin": "ast",
+      "id": "app_entry_server_createemotionserverinstance",
+      "community": 9,
+      "norm_label": "createemotionserverinstance"
+    },
+    {
       "label": "handleRequest()",
       "file_type": "code",
       "source_file": "remix/app/entry.server.tsx",
-      "source_location": "L10",
+      "source_location": "L39",
       "_origin": "ast",
       "id": "app_entry_server_handlerequest",
       "community": 9,
@@ -5210,7 +5250,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "functions_safe",
-      "community": 45,
+      "community": 1,
       "norm_label": "safe.tsx"
     },
     {
@@ -5220,7 +5260,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "functions_safe_safe",
-      "community": 45,
+      "community": 1,
       "norm_label": "safe()"
     },
     {
@@ -5230,7 +5270,7 @@
       "source_location": "L54",
       "_origin": "ast",
       "id": "functions_safe_getmeta",
-      "community": 45,
+      "community": 1,
       "norm_label": "getmeta()"
     },
     {
@@ -5540,7 +5580,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "hooks_useapi",
-      "community": 75,
+      "community": 45,
       "norm_label": "useapi.tsx"
     },
     {
@@ -5550,7 +5590,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "hooks_useapi_useapi",
-      "community": 75,
+      "community": 45,
       "norm_label": "useapi()"
     },
     {
@@ -5560,7 +5600,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "hooks_useasyncfetcher",
-      "community": 75,
+      "community": 45,
       "norm_label": "useasyncfetcher.tsx"
     },
     {
@@ -5570,7 +5610,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "hooks_useasyncfetcher_useasyncfetcher",
-      "community": 75,
+      "community": 45,
       "norm_label": "useasyncfetcher()"
     },
     {
@@ -5620,7 +5660,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "hooks_useprops",
-      "community": 11,
+      "community": 45,
       "norm_label": "useprops.tsx"
     },
     {
@@ -5630,7 +5670,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "hooks_useprops_useprops",
-      "community": 11,
+      "community": 45,
       "norm_label": "useprops()"
     },
     {
@@ -5760,7 +5800,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "hooks_usetrace",
-      "community": 11,
+      "community": 45,
       "norm_label": "usetrace.tsx"
     },
     {
@@ -5770,7 +5810,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "hooks_usetrace_usetrace",
-      "community": 11,
+      "community": 45,
       "norm_label": "usetrace()"
     },
     {
@@ -5780,7 +5820,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "hooks_useuuid",
-      "community": 11,
+      "community": 45,
       "norm_label": "useuuid.tsx"
     },
     {
@@ -5790,7 +5830,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "hooks_useuuid_useuuid",
-      "community": 11,
+      "community": 45,
       "norm_label": "useuuid()"
     },
     {
@@ -5880,7 +5920,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "routes",
-      "community": 73,
+      "community": 45,
       "norm_label": "$.tsx"
     },
     {
@@ -5890,7 +5930,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "remix_app_routes_tsx_routes_index",
-      "community": 73,
+      "community": 45,
       "norm_label": "index()"
     },
     {
@@ -5900,7 +5940,7 @@
       "source_location": "L24",
       "_origin": "ast",
       "id": "routes_action",
-      "community": 73,
+      "community": 45,
       "norm_label": "action()"
     },
     {
@@ -5910,7 +5950,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_routes_index_tsx_routes_index",
-      "community": 72,
+      "community": 45,
       "norm_label": "_index.tsx"
     },
     {
@@ -5920,7 +5960,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "routes_index_index",
-      "community": 72,
+      "community": 45,
       "norm_label": "index()"
     },
     {
@@ -6330,7 +6370,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "routes_login",
-      "community": 75,
+      "community": 45,
       "norm_label": "login.tsx"
     },
     {
@@ -6340,7 +6380,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "routes_login_login",
-      "community": 75,
+      "community": 45,
       "norm_label": "login()"
     },
     {
@@ -6390,7 +6430,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "routes_ode",
-      "community": 72,
+      "community": 45,
       "norm_label": "ode.tsx"
     },
     {
@@ -6400,7 +6440,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "routes_ode_index",
-      "community": 72,
+      "community": 45,
       "norm_label": "index()"
     },
     {
@@ -6410,7 +6450,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "routes_rainbow",
-      "community": 72,
+      "community": 45,
       "norm_label": "rainbow.$.tsx"
     },
     {
@@ -6420,7 +6460,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "routes_rainbow_index",
-      "community": 72,
+      "community": 45,
       "norm_label": "index()"
     },
     {
@@ -7060,7 +7100,7 @@
       "source_location": "L1148",
       "_origin": "ast",
       "id": "smarts_index_dupe",
-      "community": 31,
+      "community": 24,
       "norm_label": "dupe()"
     },
     {
@@ -7070,7 +7110,7 @@
       "source_location": "L1151",
       "_origin": "ast",
       "id": "smarts_index_clone",
-      "community": 31,
+      "community": 24,
       "norm_label": "clone()"
     },
     {
@@ -7080,7 +7120,7 @@
       "source_location": "L1154",
       "_origin": "ast",
       "id": "smarts_index_schema",
-      "community": 31,
+      "community": 24,
       "norm_label": "schema()"
     },
     {
@@ -7090,7 +7130,7 @@
       "source_location": "L1163",
       "_origin": "ast",
       "id": "smarts_index_create",
-      "community": 31,
+      "community": 24,
       "norm_label": "create()"
     },
     {
@@ -7100,7 +7140,7 @@
       "source_location": "L1172",
       "_origin": "ast",
       "id": "smarts_index_merge",
-      "community": 31,
+      "community": 24,
       "norm_label": "merge()"
     },
     {
@@ -7110,7 +7150,7 @@
       "source_location": "L1257",
       "_origin": "ast",
       "id": "smarts_index_basic",
-      "community": 31,
+      "community": 24,
       "norm_label": "basic()"
     },
     {
@@ -7660,7 +7700,7 @@
       "source_location": "L2452",
       "_origin": "ast",
       "id": "smarts_index_mergeall",
-      "community": 31,
+      "community": 24,
       "norm_label": "mergeall()"
     },
     {
@@ -7690,7 +7730,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "utils_index_stringliteraltorichtext",
-      "community": 45,
+      "community": 7,
       "norm_label": "stringliteraltorichtext()"
     },
     {
@@ -9653,7 +9693,7 @@
       "label": "Verified",
       "file_type": "document",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L92",
+      "source_location": "L93",
       "_origin": "ast",
       "id": "remix_changelog_verified",
       "community": 78,
@@ -9663,7 +9703,7 @@
       "label": "[1.0.0] - YYYY-MM-DD",
       "file_type": "document",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L126",
+      "source_location": "L127",
       "_origin": "ast",
       "id": "remix_changelog_1_0_0_yyyy_mm_dd",
       "community": 78,
@@ -17109,9 +17149,9 @@
       "source_file": "remix/app/Providers/Chakra/createEmotionCache.ts",
       "source_location": "L26",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "chakra_createemotioncache",
-      "target": "chakra_createemotioncache_emotioncachefactory",
-      "confidence_score": 1.0
+      "target": "chakra_createemotioncache_emotioncachefactory"
     },
     {
       "relation": "contains",
@@ -17119,9 +17159,9 @@
       "source_file": "remix/app/Providers/Chakra/createEmotionCache.ts",
       "source_location": "L6",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "chakra_createemotioncache",
-      "target": "chakra_createemotioncache_getexport",
-      "confidence_score": 1.0
+      "target": "chakra_createemotioncache_getexport"
     },
     {
       "relation": "contains",
@@ -17129,9 +17169,9 @@
       "source_file": "remix/app/Providers/Chakra/createEmotionCache.ts",
       "source_location": "L14",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "chakra_createemotioncache",
-      "target": "chakra_createemotioncache_resolveemotioncachefactory",
-      "confidence_score": 1.0
+      "target": "chakra_createemotioncache_resolveemotioncachefactory"
     },
     {
       "relation": "calls",
@@ -17151,9 +17191,9 @@
       "source_file": "remix/app/Providers/Chakra/createEmotionCache.ts",
       "source_location": "L17",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "chakra_createemotioncache_resolveemotioncachefactory",
-      "target": "chakra_createemotioncache_getexport",
-      "confidence_score": 1.0
+      "target": "chakra_createemotioncache_getexport"
     },
     {
       "relation": "imports",
@@ -18724,9 +18764,9 @@
       "source_file": "remix/app/routes/api/v1/mongodb/status/_status.tsx",
       "source_location": "L4",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "remix_app_routes_api_v1_mongodb_status_status_tsx_status_status",
-      "target": "mongodb_status",
-      "confidence_score": 1.0
+      "target": "mongodb_status"
     },
     {
       "relation": "imports_from",
@@ -18779,9 +18819,9 @@
       "source_file": "remix/app/routes/api/v1/mongodb/status/_status.tsx",
       "source_location": "L4",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "remix_app_routes_api_v1_mongodb_status_status_tsx_status_status",
-      "target": "mongodb_status_getmongostatus",
-      "confidence_score": 1.0
+      "target": "mongodb_status_getmongostatus"
     },
     {
       "relation": "calls",
@@ -19072,9 +19112,9 @@
       "source_file": "remix/app/routes/api/v1/vercel/status/_status.tsx",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "remix_app_routes_api_v1_vercel_status_status_tsx_status_status",
-      "target": "vercel_status",
-      "confidence_score": 1.0
+      "target": "vercel_status"
     },
     {
       "relation": "imports_from",
@@ -19083,9 +19123,9 @@
       "source_file": "remix/app/routes/status.tsx",
       "source_location": "L5",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_status",
-      "target": "vercel_status",
-      "confidence_score": 1.0
+      "target": "vercel_status"
     },
     {
       "relation": "contains",
@@ -19093,9 +19133,9 @@
       "source_file": "remix/app/api/utils/vercel/status.ts",
       "source_location": "L45",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "vercel_status",
-      "target": "vercel_status_clamppercent",
-      "confidence_score": 1.0
+      "target": "vercel_status_clamppercent"
     },
     {
       "relation": "contains",
@@ -19103,9 +19143,9 @@
       "source_file": "remix/app/api/utils/vercel/status.ts",
       "source_location": "L126",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "vercel_status",
-      "target": "vercel_status_formatbuildphase",
-      "confidence_score": 1.0
+      "target": "vercel_status_formatbuildphase"
     },
     {
       "relation": "contains",
@@ -19113,9 +19153,9 @@
       "source_file": "remix/app/api/utils/vercel/status.ts",
       "source_location": "L66",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "vercel_status",
-      "target": "vercel_status_getbuildprogressfromchecks",
-      "confidence_score": 1.0
+      "target": "vercel_status_getbuildprogressfromchecks"
     },
     {
       "relation": "contains",
@@ -19123,9 +19163,9 @@
       "source_file": "remix/app/api/utils/vercel/status.ts",
       "source_location": "L147",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "vercel_status",
-      "target": "vercel_status_gettokenlessfallback",
-      "confidence_score": 1.0
+      "target": "vercel_status_gettokenlessfallback"
     },
     {
       "relation": "contains",
@@ -19143,9 +19183,9 @@
       "source_file": "remix/app/api/utils/vercel/status.ts",
       "source_location": "L53",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "vercel_status",
-      "target": "vercel_status_normaliseprogress",
-      "confidence_score": 1.0
+      "target": "vercel_status_normaliseprogress"
     },
     {
       "relation": "contains",
@@ -19206,9 +19246,9 @@
       "source_file": "remix/app/api/utils/vercel/status.ts",
       "source_location": "L158",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "vercel_status_gettokenlessfallback",
-      "target": "vercel_status_normaliseurl",
-      "confidence_score": 1.0
+      "target": "vercel_status_normaliseurl"
     },
     {
       "relation": "calls",
@@ -19239,9 +19279,9 @@
       "source_file": "remix/app/api/utils/vercel/status.ts",
       "source_location": "L117",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "vercel_status_getbuildprogressfromchecks",
-      "target": "vercel_status_clamppercent",
-      "confidence_score": 1.0
+      "target": "vercel_status_clamppercent"
     },
     {
       "relation": "calls",
@@ -19250,9 +19290,9 @@
       "source_file": "remix/app/api/utils/vercel/status.ts",
       "source_location": "L55",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "vercel_status_normaliseprogress",
-      "target": "vercel_status_clamppercent",
-      "confidence_score": 1.0
+      "target": "vercel_status_clamppercent"
     },
     {
       "relation": "calls",
@@ -19261,9 +19301,9 @@
       "source_file": "remix/app/api/utils/vercel/status.ts",
       "source_location": "L278",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "vercel_status_getverceldeploymentstatus",
-      "target": "vercel_status_normaliseprogress",
-      "confidence_score": 1.0
+      "target": "vercel_status_normaliseprogress"
     },
     {
       "relation": "calls",
@@ -19272,9 +19312,9 @@
       "source_file": "remix/app/api/utils/vercel/status.ts",
       "source_location": "L273",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "vercel_status_getverceldeploymentstatus",
-      "target": "vercel_status_getbuildprogressfromchecks",
-      "confidence_score": 1.0
+      "target": "vercel_status_getbuildprogressfromchecks"
     },
     {
       "relation": "calls",
@@ -19283,9 +19323,9 @@
       "source_file": "remix/app/api/utils/vercel/status.ts",
       "source_location": "L284",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "vercel_status_getverceldeploymentstatus",
-      "target": "vercel_status_formatbuildphase",
-      "confidence_score": 1.0
+      "target": "vercel_status_formatbuildphase"
     },
     {
       "relation": "calls",
@@ -19294,9 +19334,9 @@
       "source_file": "remix/app/api/utils/vercel/status.ts",
       "source_location": "L207",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "vercel_status_getverceldeploymentstatus",
-      "target": "vercel_status_gettokenlessfallback",
-      "confidence_score": 1.0
+      "target": "vercel_status_gettokenlessfallback"
     },
     {
       "relation": "imports",
@@ -19327,9 +19367,9 @@
       "source_file": "remix/app/routes/api/v1/vercel/status/_status.tsx",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "remix_app_routes_api_v1_vercel_status_status_tsx_status_status",
-      "target": "vercel_status_getverceldeploymentstatus",
-      "confidence_score": 1.0
+      "target": "vercel_status_getverceldeploymentstatus"
     },
     {
       "relation": "calls",
@@ -19360,9 +19400,9 @@
       "source_file": "remix/app/routes/status.tsx",
       "source_location": "L5",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_status",
-      "target": "vercel_status_getverceldeploymentstatus",
-      "confidence_score": 1.0
+      "target": "vercel_status_getverceldeploymentstatus"
     },
     {
       "relation": "calls",
@@ -19502,9 +19542,9 @@
       "source_file": "remix/app/routes/api/v1/mongodb/status/_status.tsx",
       "source_location": "L5",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "remix_app_routes_api_v1_mongodb_status_status_tsx_status_status",
-      "target": "api_submit",
-      "confidence_score": 1.0
+      "target": "api_submit"
     },
     {
       "relation": "calls",
@@ -19568,9 +19608,9 @@
       "source_file": "remix/app/routes/api/v1/mongodb/status/_status.tsx",
       "source_location": "L5",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "remix_app_routes_api_v1_mongodb_status_status_tsx_status_status",
-      "target": "api_submit_submit",
-      "confidence_score": 1.0
+      "target": "api_submit_submit"
     },
     {
       "relation": "contains",
@@ -22528,11 +22568,73 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/app/entry.server.tsx",
+      "source_location": "L31",
+      "weight": 1.0,
+      "source": "app_entry_server",
+      "target": "app_entry_server_createemotionserverinstance",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/entry.server.tsx",
+      "source_location": "L11",
+      "weight": 1.0,
+      "source": "app_entry_server",
+      "target": "app_entry_server_emotionserverfactory",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/entry.server.tsx",
+      "source_location": "L13",
+      "weight": 1.0,
+      "source": "app_entry_server",
+      "target": "app_entry_server_getexport",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/entry.server.tsx",
       "source_location": "L5",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "app_entry_server",
       "target": "app_entry_server_handlerequest"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/entry.server.tsx",
+      "source_location": "L21",
+      "weight": 1.0,
+      "source": "app_entry_server",
+      "target": "app_entry_server_resolveemotionserverfactory",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/entry.server.tsx",
+      "source_location": "L24",
+      "weight": 1.0,
+      "source": "app_entry_server_resolveemotionserverfactory",
+      "target": "app_entry_server_getexport",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/entry.server.tsx",
+      "source_location": "L41",
+      "weight": 1.0,
+      "source": "app_entry_server_handlerequest",
+      "target": "app_entry_server_createemotionserverinstance",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -23831,9 +23933,9 @@
       "source_file": "remix/app/routes/api/v1/mongodb/status/_status.tsx",
       "source_location": "L17",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "remix_app_routes_api_v1_mongodb_status_status_tsx_status_status",
-      "target": "remix_app_routes_api_v1_mongodb_status_status_tsx_status_status_action",
-      "confidence_score": 1.0
+      "target": "remix_app_routes_api_v1_mongodb_status_status_tsx_status_status_action"
     },
     {
       "relation": "contains",
@@ -23841,9 +23943,9 @@
       "source_file": "remix/app/routes/api/v1/mongodb/status/_status.tsx",
       "source_location": "L10",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "remix_app_routes_api_v1_mongodb_status_status_tsx_status_status",
-      "target": "remix_app_routes_api_v1_mongodb_status_status_tsx_status_status_loader",
-      "confidence_score": 1.0
+      "target": "remix_app_routes_api_v1_mongodb_status_status_tsx_status_status_loader"
     },
     {
       "relation": "contains",
@@ -23851,9 +23953,9 @@
       "source_file": "remix/app/routes/api/v1/mongodb/status/_status.tsx",
       "source_location": "L22",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "remix_app_routes_api_v1_mongodb_status_status_tsx_status_status",
-      "target": "status_status_index",
-      "confidence_score": 1.0
+      "target": "status_status_index"
     },
     {
       "relation": "contains",
@@ -23912,9 +24014,9 @@
       "source_file": "remix/app/routes/api/v1/vercel/status/_status.tsx",
       "source_location": "L12",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "remix_app_routes_api_v1_vercel_status_status_tsx_status_status",
-      "target": "remix_app_routes_api_v1_vercel_status_status_tsx_status_status_action",
-      "confidence_score": 1.0
+      "target": "remix_app_routes_api_v1_vercel_status_status_tsx_status_status_action"
     },
     {
       "relation": "contains",
@@ -23922,9 +24024,9 @@
       "source_file": "remix/app/routes/api/v1/vercel/status/_status.tsx",
       "source_location": "L6",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "remix_app_routes_api_v1_vercel_status_status_tsx_status_status",
-      "target": "remix_app_routes_api_v1_vercel_status_status_tsx_status_status_loader",
-      "confidence_score": 1.0
+      "target": "remix_app_routes_api_v1_vercel_status_status_tsx_status_status_loader"
     },
     {
       "relation": "imports_from",
@@ -24094,9 +24196,9 @@
       "source_file": "remix/app/routes/status.tsx",
       "source_location": "L7",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_status",
-      "target": "routes_status_loader",
-      "confidence_score": 1.0
+      "target": "routes_status_loader"
     },
     {
       "relation": "contains",
@@ -24104,9 +24206,9 @@
       "source_file": "remix/app/routes/status.tsx",
       "source_location": "L14",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_status",
-      "target": "routes_status_statuspage",
-      "confidence_score": 1.0
+      "target": "routes_status_statuspage"
     },
     {
       "relation": "contains",
@@ -24114,9 +24216,9 @@
       "source_file": "remix/app/routes/status.tsx",
       "source_location": "L12",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_status",
-      "target": "routes_status_value",
-      "confidence_score": 1.0
+      "target": "routes_status_value"
     },
     {
       "relation": "calls",
@@ -24125,9 +24227,9 @@
       "source_file": "remix/app/routes/status.tsx",
       "source_location": "L61",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_status_statuspage",
-      "target": "routes_status_value",
-      "confidence_score": 1.0
+      "target": "routes_status_value"
     },
     {
       "relation": "contains",
@@ -27402,9 +27504,9 @@
       "source_file": "remix/vercel.sh",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "remix_vercel",
-      "target": "users_lopu_things_code_lopugit_thingtime_remix_vercel_sh__entry",
-      "confidence_score": 1.0
+      "target": "users_lopu_things_code_lopugit_thingtime_remix_vercel_sh__entry"
     },
     {
       "relation": "contains",
@@ -27602,9 +27704,9 @@
       "source_file": "AGENTS.md",
       "source_location": "L17",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "agents",
-      "target": "agents_delivery_messaging",
-      "confidence_score": 1.0
+      "target": "agents_delivery_messaging"
     },
     {
       "relation": "contains",
@@ -28108,5 +28210,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "df813447c6f831a6c7fbf99e2ee91c395f174569"
+  "built_at_commit": "9e1dedde63619d4cb53ae8b232c938a8dc887075"
 }

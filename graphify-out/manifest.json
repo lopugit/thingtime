@@ -595,8 +595,8 @@
     "semantic_hash": ""
   },
   "remix/app/entry.server.tsx": {
-    "mtime": 1782109533.1609583,
-    "ast_hash": "679365053b82e77cee02a5958ee80548",
+    "mtime": 1782134142.6338847,
+    "ast_hash": "ba073b3c41c9e82d10cec7a1cd731a6c",
     "semantic_hash": ""
   },
   "remix/app/functions/safe.tsx": {
@@ -1815,8 +1815,8 @@
     "semantic_hash": ""
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1782133584.1867144,
-    "ast_hash": "ce09f891da538fa3e9951f2e8587742f",
+    "mtime": 1782134151.6628323,
+    "ast_hash": "39de6f9fdfff6d8cda22514e915fa20e",
     "semantic_hash": ""
   },
   "remix/app/api/utils/vercel/status.ts": {

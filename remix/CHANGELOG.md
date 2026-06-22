@@ -79,6 +79,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 | # | Problem | Fix | Author | Date |
 |---|---------|-----|--------|------|
+| 10 | Vercel serverless could then crash with `TypeError: createEmotionServer is not a function` from `@emotion/server/create-instance` using the same CJS nested default shape. | Resolve the Emotion server factory across direct, `default`, and nested `default.default` module shapes before extracting critical CSS on the server. | Codex (AI) | 2026-06-22 |
 | 9 | Vercel serverless could still crash with `TypeError: createCache is not a function` because the SSR CJS bundle wrapped `@emotion/cache` as a nested default export. | Resolve the Emotion cache factory across direct, `default`, `createCache`, and nested `default.default` / `default.createCache` module shapes, then validate by requiring the compiled server bundle. | Codex (AI) | 2026-06-22 |
 | 1 | Emotion could throw `NotFoundError: Failed to execute 'insertBefore' on 'Node'` after click/navigation because the client cache could point at style nodes React had replaced. | Keep Emotion SSR styles in the React document tree and hydrate them through the shared Emotion cache instead of manually cloning/removing/restoring style tags. | Codex (AI) | 2026-06-22 |
 | 2 | Some loads visibly jumped through unstyled content because critical Emotion styles were temporarily removed before being restored. | Stop deleting SSR style tags on startup; render them into `<head>` from React and let Emotion adopt them. | Codex (AI) | 2026-06-22 |
