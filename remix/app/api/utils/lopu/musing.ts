@@ -1,6 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 
+import { FALLBACK_MUSINGS } from './fallbacks';
+
 // 🦄 Lopu's musings — a little message generated from the user's real-world
 // context (approximate location + current weather + time of day).
 //
@@ -22,17 +24,10 @@ export type LopuContext = {
 export type LopuSource = 'claude' | 'openai' | 'fallback';
 export type LopuMusing = { message: string; source: LopuSource };
 
-const FALLBACKS = [
-  'The best ideas, like unicorns, show up when you stop chasing them. 🦄',
-  'Somewhere a rainbow is forming just because you showed up today. 🌈',
-  'Tiny things become big things. Keep tending the little ones. ✨',
-  'You are allowed to make something just because it delights you. 🎈',
-  "Progress hides in the boring parts — you're closer than it feels. 🌱"
-];
-
-// Rotate the fallback line by time (no RNG — not security-sensitive, and CodeQL
-// flags any range-reduction of a secure RNG).
-const pickFallback = () => FALLBACKS[Date.now() % FALLBACKS.length];
+// Rotate through the big fallback library by time (no RNG — not security-
+// sensitive, and CodeQL flags any range-reduction of a secure RNG). With ~370
+// lines this gives plenty of variety while the endpoint stays live with no keys.
+const pickFallback = () => FALLBACK_MUSINGS[Date.now() % FALLBACK_MUSINGS.length];
 
 const SYSTEM_PROMPT =
   'You are Lopu, the whimsical unicorn AI living inside Thingtime. Reply with ONE short, delightful musing ' +
