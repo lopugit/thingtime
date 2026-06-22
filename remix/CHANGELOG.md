@@ -34,6 +34,15 @@ Detailed PR notes:
 
 ### Changed
 
+- Minified the Vercel footer status copy by deduping ready/STAGED wording,
+  shortening last-ready ages to `s`/`m`/`h` units, and showing active build
+  percentages without brackets. — _Codex (AI), 2026-06-23_
+- Replaced the Vercel footer progress bar with a tiny pale-track meter that
+  hides after ready builds and marks failed builds at their failure point. —
+  _Codex (AI), 2026-06-23_
+- Added tiny lucide refresh buttons to the Vercel and MongoDB footer status
+  indicators so users can recheck each service without opening the status
+  links. — _Codex (AI), 2026-06-23_
 - Improved footer health indicators so Vercel and MongoDB unavailable states
   render visible neutral grey status dots instead of appearing blank, including
   MongoDB's checking state. — _Codex (AI), 2026-06-22_

@@ -1,8 +1,9 @@
 import React from 'react';
-import { Box, Flex, Progress, Text } from '@chakra-ui/react';
+import { Box, Flex, Text } from '@chakra-ui/react';
 import { keyframes } from '@emotion/react';
 
 import type { VercelDeploymentStatus } from '~/api/utils/vercel/status';
+import { StatusRefreshButton } from '~/components/Status/StatusRefreshButton';
 
 const STATUS_ENDPOINT = '/api/v1/vercel/status';
 const ACTIVE_POLL_MS = 5000;
@@ -21,9 +22,38 @@ const pulse = keyframes`
   100% { opacity: 1; }
 `;
 
+const getStatusText = (label?: string) => {
+  return label?.replace(/^Vercel:\s*/i, '').trim();
+};
+
+const getDisplayPhase = (phase?: string, state?: VercelDeploymentStatus['state']) => {
+  const normalizedPhase = phase?.trim();
+  const normalizedKey = normalizedPhase?.toLowerCase();
+
+  if (!normalizedPhase) {
+    return undefined;
+  }
+
+  if (
+    normalizedKey === state ||
+    (state === 'ready' && (normalizedKey === 'ready' || normalizedKey === 'staged')) ||
+    (state === 'building' && normalizedKey === 'building') ||
+    (state === 'queued' && normalizedKey === 'queued')
+  ) {
+    return undefined;
+  }
+
+  return normalizedPhase;
+};
+
+const getProgressLeft = (progress: number) => {
+  return `${Math.max(0, Math.min(100, progress))}%`;
+};
+
 export const VercelStatus = (props) => {
   const [status, setStatus] = React.useState<VercelDeploymentStatus | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const [refreshTick, setRefreshTick] = React.useState(0);
 
   React.useEffect(() => {
     let isMounted = true;
@@ -86,6 +116,12 @@ export const VercelStatus = (props) => {
         window.clearTimeout(timeoutId);
       }
     };
+  }, [refreshTick]);
+
+  const refreshStatus = React.useCallback(() => {
+    setStatus(null);
+    setError(null);
+    setRefreshTick((tick) => tick + 1);
   }, []);
 
   const checking = !status && !error;
@@ -94,7 +130,7 @@ export const VercelStatus = (props) => {
   const buildPhase = status?.buildPhase;
   const buildUrl = status?.buildPageUrl || status?.latestDeploymentUrl;
   const isActive = checking || state === 'building' || state === 'queued';
-  const hasBuildProgress = typeof buildProgress === 'number' && (isActive || state === 'ready');
+  const hasBuildProgress = typeof buildProgress === 'number' && (isActive || state === 'error');
   const isUnavailable = Boolean(error || status?.hasError || state === 'unknown');
   const color =
     isUnavailable
@@ -108,17 +144,18 @@ export const VercelStatus = (props) => {
           : state === 'local'
             ? STATUS_COLORS.local
             : STATUS_COLORS.unavailable;
-  const lastReadyLabel = status?.lastReadyLabel ? ` last ready ${status.lastReadyLabel}` : '';
+  const statusText = getStatusText(status?.label);
+  const displayPhase = getDisplayPhase(buildPhase, state);
+  const percentageLabel = hasBuildProgress ? `${buildProgress}%` : '';
+  const ageLabel = status?.lastReadyLabel && state === 'ready' ? status.lastReadyLabel : '';
   const label = error
     ? 'Vercel: status unavailable'
     : status?.label
-      ? `${status.label}${buildPhase && !status.hasError ? ` ${buildPhase}` : ''}${
-          typeof buildProgress === 'number' ? ` (${buildProgress}%)` : ''
-        }${lastReadyLabel}`
+      ? ['Vercel:', statusText, displayPhase, percentageLabel, ageLabel].filter(Boolean).join(' ')
       : 'Vercel: checking...';
   const href = buildUrl || status?.latestDeploymentUrl || status?.deploymentUrl;
 
-  const content = (
+  const statusContent = (
     <Flex alignItems="center" flexDirection="row" fontSize="xs" columnGap={2} {...props?.chakras}>
       <Box
         width="8px"
@@ -137,21 +174,83 @@ export const VercelStatus = (props) => {
     </Flex>
   );
 
-  const progressBar =
-    hasBuildProgress ? (
-      <Progress size="xs" borderRadius="full" value={buildProgress} max={100} min={0} colorScheme={state === 'error' ? 'red' : 'yellow'} />
-    ) : null;
+  const refreshButton = (
+    <StatusRefreshButton
+      isLoading={checking}
+      label="Refresh Vercel status"
+      onRefresh={refreshStatus}
+    />
+  );
+
+  const content = (
+    <Flex alignItems="center" columnGap={1.5}>
+      {href ? (
+        <Box as="a" href={href} target="_blank" title="View Vercel deployment status">
+          {statusContent}
+        </Box>
+      ) : (
+        statusContent
+      )}
+      {refreshButton}
+    </Flex>
+  );
+
+  const progressBar = hasBuildProgress ? (
+    <Box
+      aria-label={`Vercel build progress ${buildProgress}%`}
+      role="progressbar"
+      aria-valuenow={buildProgress}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      position="relative"
+      width="56px"
+      height="3px"
+      borderRadius="full"
+      backgroundColor="rgba(237, 242, 247, 0.9)"
+      boxShadow="inset 0 0 0 1px rgba(160, 174, 192, 0.4)"
+      overflow="visible"
+      marginLeft="16px"
+    >
+      <Box
+        position="absolute"
+        top={0}
+        left={0}
+        height="100%"
+        width={getProgressLeft(buildProgress)}
+        borderRadius="full"
+        backgroundColor={state === 'error' ? STATUS_COLORS.error : STATUS_COLORS.active}
+      />
+      {state === 'error' ? (
+        <Text
+          as="span"
+          position="absolute"
+          left={`calc(${getProgressLeft(buildProgress)} - 3px)`}
+          top="-6px"
+          color={STATUS_COLORS.error}
+          fontSize="8px"
+          fontWeight="bold"
+          lineHeight="1"
+          textDecoration="none"
+        >
+          x
+        </Text>
+      ) : null}
+    </Box>
+  ) : null;
 
   if (!href) {
-    return content;
-  }
-
-  return (
-    <Box as="a" href={href} target="_blank" title="View Vercel deployment status">
-      <Flex direction="column" rowGap={1}>
+    return (
+      <Flex direction="column" rowGap={0.5}>
         {content}
         {progressBar}
       </Flex>
-    </Box>
+    );
+  }
+
+  return (
+    <Flex direction="column" rowGap={0.5}>
+      {content}
+      {progressBar}
+    </Flex>
   );
 };

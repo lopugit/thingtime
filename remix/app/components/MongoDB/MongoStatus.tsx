@@ -4,6 +4,7 @@ import { keyframes } from '@emotion/react';
 import { Link } from '@remix-run/react';
 
 import type { MongoConnectionStatus } from '~/api/utils/mongodb/status';
+import { StatusRefreshButton } from '~/components/Status/StatusRefreshButton';
 
 const STATUS_ENDPOINT = '/api/v1/mongodb/status-data';
 const STATUS_COLORS = {
@@ -22,6 +23,7 @@ const pulse = keyframes`
 export const MongoStatus = (props) => {
   const [status, setStatus] = React.useState<MongoConnectionStatus | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const [refreshTick, setRefreshTick] = React.useState(0);
 
   React.useEffect(() => {
     let isMounted = true;
@@ -64,6 +66,12 @@ export const MongoStatus = (props) => {
       isMounted = false;
       xhr.abort();
     };
+  }, [refreshTick]);
+
+  const refreshStatus = React.useCallback(() => {
+    setStatus(null);
+    setError(null);
+    setRefreshTick((tick) => tick + 1);
   }, []);
 
   // No data yet (initial mount or in-flight request) → neutral "checking" look.
@@ -85,23 +93,30 @@ export const MongoStatus = (props) => {
   const isUnavailable = Boolean(checking || error || (status && !status.connected));
 
   return (
-    <Link to="/mongodb-status" title="View MongoDB connection status">
-      <Flex alignItems="center" flexDirection="row" fontSize="xs" columnGap={2} {...props?.chakras}>
-        <Box
-          width="8px"
-          height="8px"
-          minWidth="8px"
-          borderRadius="full"
-          backgroundColor={color}
-          border="1px solid"
-          borderColor={isUnavailable ? '#4A5568' : color}
-          boxSizing="border-box"
-          display="inline-block"
-          flexShrink={0}
-          sx={checking ? { animation: `${pulse} 1.2s ease-in-out infinite` } : undefined}
-        />
-        <Text textDecoration="underline">{label}</Text>
-      </Flex>
-    </Link>
+    <Flex alignItems="center" columnGap={1.5}>
+      <Link to="/mongodb-status" title="View MongoDB connection status">
+        <Flex alignItems="center" flexDirection="row" fontSize="xs" columnGap={2} {...props?.chakras}>
+          <Box
+            width="8px"
+            height="8px"
+            minWidth="8px"
+            borderRadius="full"
+            backgroundColor={color}
+            border="1px solid"
+            borderColor={isUnavailable ? '#4A5568' : color}
+            boxSizing="border-box"
+            display="inline-block"
+            flexShrink={0}
+            sx={checking ? { animation: `${pulse} 1.2s ease-in-out infinite` } : undefined}
+          />
+          <Text textDecoration="underline">{label}</Text>
+        </Flex>
+      </Link>
+      <StatusRefreshButton
+        isLoading={checking}
+        label="Refresh MongoDB status"
+        onRefresh={refreshStatus}
+      />
+    </Flex>
   );
 };

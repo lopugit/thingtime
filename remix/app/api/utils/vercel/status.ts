@@ -219,17 +219,17 @@ const formatRelativeTime = (timestamp?: number) => {
 
   const diffMs = Date.now() - timestamp;
   const absMs = Math.abs(diffMs);
-  const units: Array<[Intl.RelativeTimeFormatUnit, number]> = [
-    ['day', 86400000],
-    ['hour', 3600000],
-    ['minute', 60000],
-    ['second', 1000],
+  const suffix = diffMs < 0 ? ' from now' : '';
+  const units: Array<[string, number]> = [
+    ['d', 86400000],
+    ['h', 3600000],
+    ['m', 60000],
+    ['s', 1000],
   ];
-  const formatter = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
 
   for (const [unit, ms] of units) {
-    if (absMs >= ms || unit === 'second') {
-      return formatter.format(Math.round(-diffMs / ms), unit);
+    if (absMs >= ms || unit === 's') {
+      return `${Math.max(0, Math.round(absMs / ms))}${unit}${suffix}`;
     }
   }
 

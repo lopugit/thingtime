@@ -61,6 +61,15 @@ deployment runbook changes discovered while validating Vercel previews.
   access to the Vercel team/project used by this preview.
 - Polls Vercel status while builds are active and exposes last successful build
   completion metadata when the deployments API is available.
+- Minifies Vercel footer copy so ready deployments render with compact elapsed
+  ages like `12s`, active build percentages render without brackets, and
+  redundant ready/STAGED wording is deduped.
+- Replaces the Vercel progress bar with a tiny pale-track meter that keeps the
+  build endpoint visible, hides when ready, and places a small failure marker
+  where errored builds stopped.
+- Adds tiny lucide manual refresh controls to both Vercel and MongoDB footer
+  status rows, with the buttons kept outside the status links so refresh does
+  not navigate away.
 - Avoids appending tokenless fallback phase text to API error labels.
 - Fixed preview footer branch display by preferring `VERCEL_GIT_COMMIT_REF`
   over stale committed `.env.auto` branch data.
