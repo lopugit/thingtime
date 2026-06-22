@@ -17,7 +17,6 @@ export type VercelDeploymentStatus = {
 
 const DEFAULT_VERCEL_PROJECT_ID = 'prj_ZAX9FhGC2alHMXMwTHX96ql3EQ8v';
 const DEFAULT_VERCEL_TEAM_ID = 'team_JsKhM6fVg9uo701feA0fLh9V';
-const DEFAULT_VERCEL_DASHBOARD_TEAM_SLUG = 'lopugits-projects';
 
 const normaliseUrl = (url?: string) => {
   if (!url) {
@@ -65,6 +64,90 @@ const normaliseProgress = (value?: unknown): number | undefined => {
   }
 
   return undefined;
+};
+
+const getObjectValue = (value: unknown, key: string): unknown => {
+  if (typeof value !== 'object' || value === null) {
+    return undefined;
+  }
+
+  return (value as Record<string, unknown>)[key];
+};
+
+const getStringValue = (value: unknown, key: string): string | undefined => {
+  const nested = getObjectValue(value, key);
+  return typeof nested === 'string' && nested ? nested : undefined;
+};
+
+const getDashboardOwnerSlug = (value: unknown): string | undefined => {
+  return (
+    getStringValue(getObjectValue(value, 'account'), 'slug') ||
+    getStringValue(getObjectValue(value, 'team'), 'slug') ||
+    getStringValue(getObjectValue(value, 'owner'), 'slug') ||
+    getStringValue(value, 'orgName') ||
+    getStringValue(value, 'accountSlug') ||
+    process.env.VERCEL_DASHBOARD_TEAM_SLUG ||
+    process.env.VERCEL_TEAM_SLUG ||
+    process.env.VERCEL_ORG_SLUG
+  );
+};
+
+const getDashboardProjectSlug = (projectData: unknown, fallbackProjectName?: string) => {
+  return getStringValue(projectData, 'name') || getStringValue(projectData, 'slug') || fallbackProjectName;
+};
+
+const getVercelProjectData = async ({
+  projectId,
+  projectName,
+  teamId,
+  token
+}: {
+  projectId?: string;
+  projectName?: string;
+  teamId?: string;
+  token: string;
+}) => {
+  const idOrName = projectId || projectName;
+
+  if (!idOrName) {
+    return undefined;
+  }
+
+  const projectUrl = new URL(`https://api.vercel.com/v9/projects/${encodeURIComponent(idOrName)}`);
+
+  if (teamId) {
+    projectUrl.searchParams.set('teamId', teamId);
+  }
+
+  const response = await fetch(projectUrl.toString(), {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: 'application/json'
+    }
+  });
+
+  if (!response.ok) {
+    return undefined;
+  }
+
+  return response.json();
+};
+
+const getProjectDashboardUrl = ({
+  deploymentId,
+  ownerSlug,
+  projectSlug
+}: {
+  deploymentId?: string;
+  ownerSlug?: string;
+  projectSlug?: string;
+}) => {
+  if (!ownerSlug || !projectSlug) {
+    return undefined;
+  }
+
+  const baseUrl = `https://vercel.com/${ownerSlug}/${projectSlug}/deployments`;
+  return deploymentId ? `${baseUrl}/${deploymentId}` : baseUrl;
 };
 
 const getBuildProgressFromChecks = (checks: unknown): { progress?: number; phase?: string } => {
@@ -164,8 +247,7 @@ const getTokenlessFallback = ({
   const teamSlug =
     process.env.VERCEL_DASHBOARD_TEAM_SLUG ||
     process.env.VERCEL_TEAM_SLUG ||
-    process.env.VERCEL_ORG_SLUG ||
-    DEFAULT_VERCEL_DASHBOARD_TEAM_SLUG;
+    process.env.VERCEL_ORG_SLUG;
 
   const dashboardPath =
     teamSlug && repoSlug
@@ -251,6 +333,12 @@ export const getVercelDeploymentStatus = async (): Promise<VercelDeploymentStatu
     }
 
     const data = await response.json();
+    const projectData = await getVercelProjectData({
+      projectId,
+      projectName,
+      teamId,
+      token
+    });
     const deployments = Array.isArray(data?.deployments) ? data.deployments : [];
     const currentDeployment =
       deployments.find((deployment) => {
@@ -279,6 +367,11 @@ export const getVercelDeploymentStatus = async (): Promise<VercelDeploymentStatu
       typeof currentDeployment.meta === 'object' && currentDeployment.meta !== null
         ? (currentDeployment.meta as Record<string, unknown>)
         : {};
+    const dashboardOwnerSlug =
+      getDashboardOwnerSlug(projectData) ||
+      getDashboardOwnerSlug(deploymentMeta) ||
+      getDashboardOwnerSlug(currentDeployment);
+    const dashboardProjectSlug = getDashboardProjectSlug(projectData, projectName);
 
     const checksFromDeployment = currentDeployment.checks || currentDeployment.builds;
     const checksProgress = getBuildProgressFromChecks(checksFromDeployment);
@@ -296,11 +389,11 @@ export const getVercelDeploymentStatus = async (): Promise<VercelDeploymentStatu
 
     const buildPageUrl =
       normaliseUrl(typeof currentDeployment.inspectorUrl === 'string' ? currentDeployment.inspectorUrl : '') ||
-      (projectName && deploymentId
-        ? `https://vercel.com/${
-            deploymentMeta.orgName || process.env.VERCEL_DASHBOARD_TEAM_SLUG || DEFAULT_VERCEL_DASHBOARD_TEAM_SLUG
-          }/${projectName}/deployments/${deploymentId}`
-        : undefined);
+      getProjectDashboardUrl({
+        deploymentId,
+        ownerSlug: dashboardOwnerSlug,
+        projectSlug: dashboardProjectSlug
+      });
 
     const resolvedBuildProgress =
       state === 'ready'

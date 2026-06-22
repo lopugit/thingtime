@@ -51,9 +51,9 @@ deployment runbook changes discovered while validating Vercel previews.
 - Derives Vercel project name from the Vercel git repo slug when
   `VERCEL_PROJECT_NAME` is not configured, so setting only `VERCEL_API_TOKEN`
   can still query the deployments API when the token has access.
-- Uses env-overridable fallback project/team IDs and the `lopugits-projects`
-  dashboard owner slug so deployment links point to
-  `https://vercel.com/lopugits-projects/thingtime/deployments`.
+- Derives Vercel dashboard links from Vercel project/deployment API data when
+  available, with `VERCEL_DASHBOARD_TEAM_SLUG` as an explicit tokenless
+  override if Vercel does not expose the dashboard slug.
 - Avoids appending tokenless fallback phase text to API error labels.
 - Fixed preview footer branch display by preferring `VERCEL_GIT_COMMIT_REF`
   over stale committed `.env.auto` branch data.

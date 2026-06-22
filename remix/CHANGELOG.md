@@ -38,8 +38,8 @@ Detailed PR notes:
   render visible neutral grey status dots instead of appearing blank. —
   _Codex (AI), 2026-06-22_
 - Made Vercel status resolution derive the project name from Vercel's repo slug
-  when only `VERCEL_API_TOKEN` is configured, use this project's Vercel
-  project/team fallback IDs and dashboard owner slug, and stop mixing tokenless
+  when only `VERCEL_API_TOKEN` is configured, derive dashboard links from
+  Vercel project/deployment API data when available, and stop mixing tokenless
   phase text into API error labels. — _Codex (AI), 2026-06-22_
 - Completed proper Chakra/Emotion document hydration wiring around
   `hydrateRoot(document, ...)`, server-collected Emotion style chunks, and a
