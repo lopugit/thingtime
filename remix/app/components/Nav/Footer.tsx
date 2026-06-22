@@ -115,7 +115,7 @@ export const Footer = (props) => {
         {/* account / user column */}
         <Flex flexDirection="column" rowGap={3}>
           <Flex flexDirection="row" fontSize="xs" alignItems="center">
-            <Icon name="unicorn" size="12px" chakras={{ pr: 1 }}></Icon>
+            <Icon name="rainbow" size="12px" chakras={{ pr: 1 }}></Icon>
             {user ? user.displayName || user.username : 'Account'}
           </Flex>
           {user ? (

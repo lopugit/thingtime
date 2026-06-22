@@ -25,8 +25,8 @@ const LopuToast = ({ title, description, status, onClose }: LopuArgs & { onClose
     borderRadius="20px"
     backgroundImage={RAINBOW}
     boxShadow="0 10px 34px rgba(0,0,0,0.14)"
-    maxWidth="360px"
-    width="100%"
+    width="360px"
+    maxWidth="calc(100vw - 24px)"
   >
     <Box bg="white" borderRadius="18px" px={4} py={3}>
       <Flex align="center" gap={2} mb={title || description ? 1.5 : 0}>

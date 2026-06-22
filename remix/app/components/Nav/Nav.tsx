@@ -199,7 +199,7 @@ export const Nav = (props) => {
                     <Box fontSize="xs" fontWeight="600">
                       {user.displayName || user.username}
                     </Box>
-                    <Icon transform={['', 'scaleX(-100%)']} size="12px" name="🦄"></Icon>
+                    <Icon transform={['', 'scaleX(-100%)']} size="12px" name="🌈"></Icon>
                   </Flex>
                 </Link>
               ) : (
