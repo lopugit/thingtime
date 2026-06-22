@@ -18,7 +18,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### PR #13 - Remix Hydration, Vercel Status, And Deployment Hygiene
 
-Detailed PR notes: [PRs/13-hydration-vercel-status.md](PRs/13-hydration-vercel-status.md)
+Detailed PR notes:
+[PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md](PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md)
 
 ### Added
 
