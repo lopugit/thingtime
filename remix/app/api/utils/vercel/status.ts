@@ -168,8 +168,11 @@ const getDashboardUrlFromDeploymentHost = (url?: string) => {
       process.env.VERCEL_GIT_REPO ||
       host.split('-git-')[0] ||
       host.split('-')[0];
-    const ownerMatch = host.match(/-([a-z0-9-]+-projects)$/i);
-    const ownerSlug = ownerMatch?.[1] || process.env.VERCEL_DASHBOARD_TEAM_SLUG;
+    const parts = host.split('-');
+    const ownerSlug =
+      parts.at(-1) === 'projects' && parts.at(-2)
+        ? `${parts.at(-2)}-projects`
+        : process.env.VERCEL_DASHBOARD_TEAM_SLUG;
 
     if (!ownerSlug || !repoSlug) {
       return undefined;

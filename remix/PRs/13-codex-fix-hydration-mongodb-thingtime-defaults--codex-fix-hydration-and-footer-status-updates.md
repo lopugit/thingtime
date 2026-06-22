@@ -57,6 +57,8 @@ deployment runbook changes discovered while validating Vercel previews.
 - Retries Vercel deployment API lookups without `teamId` after a `403`, then
   falls back to parsing the dashboard owner/project from the preview host so
   status-unavailable links still land on the Vercel deployments dashboard.
+  A persistent `403` means the configured `VERCEL_API_TOKEN` does not have
+  access to the Vercel team/project used by this preview.
 - Polls Vercel status while builds are active and exposes last successful build
   completion metadata when the deployments API is available.
 - Avoids appending tokenless fallback phase text to API error labels.

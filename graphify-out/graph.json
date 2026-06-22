@@ -4277,7 +4277,7 @@
       "label": "getTimestamp()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/vercel/status.ts",
-      "source_location": "L184",
+      "source_location": "L187",
       "_origin": "ast",
       "id": "vercel_status_gettimestamp",
       "community": 76,
@@ -4287,7 +4287,7 @@
       "label": "getDeploymentReadyAt()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/vercel/status.ts",
-      "source_location": "L203",
+      "source_location": "L206",
       "_origin": "ast",
       "id": "vercel_status_getdeploymentreadyat",
       "community": 76,
@@ -4297,7 +4297,7 @@
       "label": "formatRelativeTime()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/vercel/status.ts",
-      "source_location": "L212",
+      "source_location": "L215",
       "_origin": "ast",
       "id": "vercel_status_formatrelativetime",
       "community": 76,
@@ -4307,7 +4307,7 @@
       "label": "getLastReadyDeployment()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/vercel/status.ts",
-      "source_location": "L236",
+      "source_location": "L239",
       "_origin": "ast",
       "id": "vercel_status_getlastreadydeployment",
       "community": 76,
@@ -4317,7 +4317,7 @@
       "label": "getBuildProgressFromChecks()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/vercel/status.ts",
-      "source_location": "L242",
+      "source_location": "L245",
       "_origin": "ast",
       "id": "vercel_status_getbuildprogressfromchecks",
       "community": 76,
@@ -4327,7 +4327,7 @@
       "label": "formatBuildPhase()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/vercel/status.ts",
-      "source_location": "L302",
+      "source_location": "L305",
       "_origin": "ast",
       "id": "vercel_status_formatbuildphase",
       "community": 76,
@@ -4337,7 +4337,7 @@
       "label": "getTokenlessFallback()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/vercel/status.ts",
-      "source_location": "L323",
+      "source_location": "L326",
       "_origin": "ast",
       "id": "vercel_status_gettokenlessfallback",
       "community": 76,
@@ -4347,7 +4347,7 @@
       "label": "getVercelDeploymentStatus()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/vercel/status.ts",
-      "source_location": "L366",
+      "source_location": "L369",
       "_origin": "ast",
       "id": "vercel_status_getverceldeploymentstatus",
       "community": 76,
@@ -9913,7 +9913,7 @@
       "label": "Deployment And Repo Hygiene",
       "file_type": "document",
       "source_file": "remix/PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md",
-      "source_location": "L69",
+      "source_location": "L71",
       "_origin": "ast",
       "id": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_deployment_and_repo_hygiene",
       "community": 1,
@@ -9923,7 +9923,7 @@
       "label": "Preserved Behavior",
       "file_type": "document",
       "source_file": "remix/PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md",
-      "source_location": "L81",
+      "source_location": "L83",
       "_origin": "ast",
       "id": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_preserved_behavior",
       "community": 1,
@@ -9933,7 +9933,7 @@
       "label": "Verification",
       "file_type": "document",
       "source_file": "remix/PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md",
-      "source_location": "L87",
+      "source_location": "L89",
       "_origin": "ast",
       "id": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_verification",
       "community": 1,
@@ -19383,9 +19383,9 @@
       "source_file": "remix/app/api/utils/vercel/status.ts",
       "source_location": "L212",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "vercel_status",
-      "target": "vercel_status_formatrelativetime",
-      "confidence_score": 1.0
+      "target": "vercel_status_formatrelativetime"
     },
     {
       "relation": "contains",
@@ -19423,9 +19423,9 @@
       "source_file": "remix/app/api/utils/vercel/status.ts",
       "source_location": "L156",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "vercel_status",
-      "target": "vercel_status_getdashboardurlfromdeploymenthost",
-      "confidence_score": 1.0
+      "target": "vercel_status_getdashboardurlfromdeploymenthost"
     },
     {
       "relation": "contains",
@@ -19433,9 +19433,9 @@
       "source_file": "remix/app/api/utils/vercel/status.ts",
       "source_location": "L203",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "vercel_status",
-      "target": "vercel_status_getdeploymentreadyat",
-      "confidence_score": 1.0
+      "target": "vercel_status_getdeploymentreadyat"
     },
     {
       "relation": "contains",
@@ -19443,9 +19443,9 @@
       "source_file": "remix/app/api/utils/vercel/status.ts",
       "source_location": "L236",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "vercel_status",
-      "target": "vercel_status_getlastreadydeployment",
-      "confidence_score": 1.0
+      "target": "vercel_status_getlastreadydeployment"
     },
     {
       "relation": "contains",
@@ -19483,9 +19483,9 @@
       "source_file": "remix/app/api/utils/vercel/status.ts",
       "source_location": "L184",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "vercel_status",
-      "target": "vercel_status_gettimestamp",
-      "confidence_score": 1.0
+      "target": "vercel_status_gettimestamp"
     },
     {
       "relation": "contains",
@@ -19586,9 +19586,9 @@
       "source_file": "remix/app/api/utils/vercel/status.ts",
       "source_location": "L157",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "vercel_status_getdashboardurlfromdeploymenthost",
-      "target": "vercel_status_normaliseurl",
-      "confidence_score": 1.0
+      "target": "vercel_status_normaliseurl"
     },
     {
       "relation": "calls",
@@ -19674,9 +19674,9 @@
       "source_file": "remix/app/api/utils/vercel/status.ts",
       "source_location": "L205",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "vercel_status_getdeploymentreadyat",
-      "target": "vercel_status_getobjectvalue",
-      "confidence_score": 1.0
+      "target": "vercel_status_getobjectvalue"
     },
     {
       "relation": "calls",
@@ -19696,9 +19696,9 @@
       "source_file": "remix/app/api/utils/vercel/status.ts",
       "source_location": "L484",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "vercel_status_getverceldeploymentstatus",
-      "target": "vercel_status_getobjectvalue",
-      "confidence_score": 1.0
+      "target": "vercel_status_getobjectvalue"
     },
     {
       "relation": "calls",
@@ -19729,9 +19729,9 @@
       "source_file": "remix/app/api/utils/vercel/status.ts",
       "source_location": "L488",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "vercel_status_getverceldeploymentstatus",
-      "target": "vercel_status_getstringvalue",
-      "confidence_score": 1.0
+      "target": "vercel_status_getstringvalue"
     },
     {
       "relation": "calls",
@@ -19784,9 +19784,9 @@
       "source_file": "remix/app/api/utils/vercel/status.ts",
       "source_location": "L340",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "vercel_status_gettokenlessfallback",
-      "target": "vercel_status_getdashboardurlfromdeploymenthost",
-      "confidence_score": 1.0
+      "target": "vercel_status_getdashboardurlfromdeploymenthost"
     },
     {
       "relation": "calls",
@@ -19795,9 +19795,9 @@
       "source_file": "remix/app/api/utils/vercel/status.ts",
       "source_location": "L481",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "vercel_status_getverceldeploymentstatus",
-      "target": "vercel_status_getdashboardurlfromdeploymenthost",
-      "confidence_score": 1.0
+      "target": "vercel_status_getdashboardurlfromdeploymenthost"
     },
     {
       "relation": "calls",
@@ -19806,9 +19806,9 @@
       "source_file": "remix/app/api/utils/vercel/status.ts",
       "source_location": "L205",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "vercel_status_getdeploymentreadyat",
-      "target": "vercel_status_gettimestamp",
-      "confidence_score": 1.0
+      "target": "vercel_status_gettimestamp"
     },
     {
       "relation": "calls",
@@ -19817,9 +19817,9 @@
       "source_file": "remix/app/api/utils/vercel/status.ts",
       "source_location": "L482",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "vercel_status_getverceldeploymentstatus",
-      "target": "vercel_status_getdeploymentreadyat",
-      "confidence_score": 1.0
+      "target": "vercel_status_getdeploymentreadyat"
     },
     {
       "relation": "calls",
@@ -19828,9 +19828,9 @@
       "source_file": "remix/app/api/utils/vercel/status.ts",
       "source_location": "L545",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "vercel_status_getverceldeploymentstatus",
-      "target": "vercel_status_formatrelativetime",
-      "confidence_score": 1.0
+      "target": "vercel_status_formatrelativetime"
     },
     {
       "relation": "calls",
@@ -19839,9 +19839,9 @@
       "source_file": "remix/app/api/utils/vercel/status.ts",
       "source_location": "L461",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "vercel_status_getverceldeploymentstatus",
-      "target": "vercel_status_getlastreadydeployment",
-      "confidence_score": 1.0
+      "target": "vercel_status_getlastreadydeployment"
     },
     {
       "relation": "calls",
@@ -21467,9 +21467,9 @@
       "source_file": "remix/app/components/MongoDB/MongoStatus.tsx",
       "source_location": "L9",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "mongodb_mongostatus",
-      "target": "mongodb_mongostatus_status_colors",
-      "confidence_score": 1.0
+      "target": "mongodb_mongostatus_status_colors"
     },
     {
       "relation": "imports_from",
@@ -22992,9 +22992,9 @@
       "source_file": "remix/app/components/Vercel/VercelStatus.tsx",
       "source_location": "L10",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "vercel_vercelstatus",
-      "target": "vercel_vercelstatus_status_colors",
-      "confidence_score": 1.0
+      "target": "vercel_vercelstatus_status_colors"
     },
     {
       "relation": "contains",
@@ -28858,5 +28858,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "44adfe5959e2451cd4c7a2daec7e9abdef1c7da7"
+  "built_at_commit": "3470210008bd1adcd1a3bcb931f995592dc7e0ca"
 }
