@@ -182,39 +182,39 @@ const getTokenlessFallback = ({
 };
 
 export const getVercelDeploymentStatus = async (): Promise<VercelDeploymentStatus> => {
-  const branch = process.env.VERCEL_GIT_COMMIT_REF || process.env.THINGTIME_BRANCH_NAME;
-  const commitSha = process.env.VERCEL_GIT_COMMIT_SHA;
-  const deploymentUrl = normaliseUrl(process.env.VERCEL_URL);
-  const environment = process.env.VERCEL_TARGET_ENV || process.env.VERCEL_ENV;
-  const token = process.env.VERCEL_API_TOKEN;
-  const projectId = process.env.VERCEL_PROJECT_ID;
-  const projectName = process.env.VERCEL_PROJECT_NAME;
-  const teamId = process.env.VERCEL_TEAM_ID;
+  try {
+    const branch = process.env.VERCEL_GIT_COMMIT_REF || process.env.THINGTIME_BRANCH_NAME;
+    const commitSha = process.env.VERCEL_GIT_COMMIT_SHA;
+    const deploymentUrl = normaliseUrl(process.env.VERCEL_URL);
+    const environment = process.env.VERCEL_TARGET_ENV || process.env.VERCEL_ENV;
+    const token = process.env.VERCEL_API_TOKEN;
+    const projectId = process.env.VERCEL_PROJECT_ID;
+    const projectName = process.env.VERCEL_PROJECT_NAME;
+    const teamId = process.env.VERCEL_TEAM_ID;
 
-  if (!process.env.VERCEL && !deploymentUrl) {
-    return {
+    if (!process.env.VERCEL && !deploymentUrl) {
+      return {
+        branch,
+        commitSha,
+        hasError: false,
+        configured: false,
+        environment: 'local',
+        label: 'Vercel: local',
+        state: 'local'
+      };
+    }
+
+    const fallback = getTokenlessFallback({
       branch,
       commitSha,
-      hasError: false,
-      configured: false,
-      environment: 'local',
-      label: 'Vercel: local',
-      state: 'local'
-    };
-  }
+      environment,
+      deploymentUrl
+    });
 
-  const fallback = getTokenlessFallback({
-    branch,
-    commitSha,
-    environment,
-    deploymentUrl
-  });
+    if (!token || (!projectId && !projectName)) {
+      return fallback;
+    }
 
-  if (!token || (!projectId && !projectName)) {
-    return fallback;
-  }
-
-  try {
     const url = new URL('https://api.vercel.com/v6/deployments');
     url.searchParams.set('limit', '20');
 
@@ -319,8 +319,19 @@ export const getVercelDeploymentStatus = async (): Promise<VercelDeploymentStatu
       state
     };
   } catch (err: any) {
+    const fallbackEnvironment =
+      process.env.VERCEL_TARGET_ENV || process.env.VERCEL_ENV || 'deployment';
+    const branch = process.env.VERCEL_GIT_COMMIT_REF || process.env.THINGTIME_BRANCH_NAME;
+    const commitSha = process.env.VERCEL_GIT_COMMIT_SHA;
+    const deploymentUrl = normaliseUrl(process.env.VERCEL_URL);
+
     return {
-      ...fallback,
+      ...getTokenlessFallback({
+        branch,
+        commitSha,
+        deploymentUrl,
+        environment: fallbackEnvironment
+      }),
       error: err?.message || String(err),
       hasError: true,
       label: 'Vercel: status unavailable',
