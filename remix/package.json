@@ -14,7 +14,9 @@
     "@chakra-ui/react": "^2.7.1",
     "@chakra-ui/react-types": "^2.0.6",
     "@editorjs/editorjs": "^2.27.2",
+    "@emotion/cache": "^11.11.0",
     "@emotion/react": "^11.11.4",
+    "@emotion/server": "^11.11.0",
     "@fortawesome/fontawesome-svg-core": "^6.4.0",
     "@fortawesome/free-regular-svg-icons": "^6.4.0",
     "@fortawesome/free-solid-svg-icons": "^6.4.0",
@@ -37,6 +39,7 @@
     "isbot": "latest",
     "localforage": "^1.10.0",
     "lodash-es": "^4.17.21",
+    "lucide-react": "^1.21.0",
     "mongodb": "^6.5.0",
     "prismjs": "^1.29.0",
     "react": "^18.2.0",
@@ -81,7 +84,7 @@
     "vite-tsconfig-paths": "^4.3.2"
   },
   "resolutions": {
-    "@types/react": "^17.0.2"
+    "@types/react": "^18.0.25"
   },
   "engines": {
     "node": "24.x"

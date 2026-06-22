@@ -1,6 +1,8 @@
 // import type { MetaFunction } from "@vercel/remix"
-import { defer, Links, LiveReload, Meta, Outlet, Scripts, ScrollRestoration, useLoaderData } from '@remix-run/react';
+import { withEmotionCache } from '@emotion/react';
+import { Links, Meta, Outlet, Scripts, ScrollRestoration, useLoaderData } from '@remix-run/react';
 import { Analytics } from '@vercel/analytics/react';
+import React from 'react';
 
 import { GlobalStyles } from './globals/GlobalStyles';
 
@@ -9,87 +11,42 @@ import { Session } from './cookies.server';
 import { Main } from './components/Layout/Main';
 import { useIcons } from './hooks/useIcons';
 import { ChakraWrapper } from './Providers/Chakra/ChakraWrapper';
+import { ClientStyleContext, ServerStyleContext } from './Providers/Chakra/emotionContext';
 import { ThingtimeProvider } from './Providers/ThingtimeProvider';
-// TODO: See what to replace LoaderArgs with
-import { json, LoaderArgs } from '@vercel/remix';
+import { json } from '@vercel/remix';
 import { DevKit } from './components/DevKit/DevKit';
 
-// intercept console.log and read from window.tt.settings.logging.all whether to log if it includes [tt]
-const originalConsoleLog = console.log;
-const logConfig = {
-  trace: true
+type DocumentProps = {
+  children: React.ReactNode;
+  title?: string;
+  titlePrefix?: string;
 };
-const whitelistObj = {
-  '[tt][undo]': true,
-  '[tt][redo]': true,
-  '[tt][history]': true,
-  '[tt][error]': false,
-  '[tt][warn]': false,
-  '[tt][info]': false,
-  '[tt][debug]': false,
-  '[tt][ThingtimeProvider.tsx][set][path]': true
-};
-const whitelist = [].concat(Object.keys(whitelistObj).filter((key) => whitelistObj[key]));
-// console.log = (...args) => {
-//   // Check if the first argument is a string and contains '[tt]'
-//   try {
-//     if (typeof args[0] === 'string' && args[0].startsWith('[tt]')) {
-//       const allowLogging = window.tt?.settings?.logging?.all || whitelist.some((item) => args[0].startsWith(item));
-//       if (typeof window !== 'undefined' && allowLogging) {
-//         if (logConfig.trace) {
-//           // If trace is enabled, log the stack trace
-//           const stack = new Error().stack;
-//           originalConsoleLog(...args, '\nStack Trace:', stack.replace(/^Error\n/, '🌈Thingtime Logger🦄'));
-//         } else {
-//           // Check if logging is enabled in Thingtime settings
-//           originalConsoleLog(...args);
-//         }
-//       }
-//     } else {
-//       // For all other logs, just call the original console.log
-//       originalConsoleLog(...args);
-//     }
-//   } catch (err) {
-//     // If there's an error (e.g., window.tt is not defined), just call the original console.log
-//     originalConsoleLog(...args);
-//   }
-// };
 
-function Document({ children, title = 'Thingtime' }: { children: React.ReactNode; title?: string }) {
-  // check Remix environment
-  // for dev mode
-  let titlePrefix = '';
-  // log the process.env.NODE_ENV
-  console.log('process.env.NODE_ENV', process.env.NODE_ENV);
-  if (process.env.NODE_ENV === 'development') {
-    titlePrefix = '🧑‍💻';
-  }
+const useClientLayoutEffect =
+  typeof document !== 'undefined' ? React.useLayoutEffect : React.useEffect;
 
-  try {
-    // actually also check if the domain is not thingtime.com
-    // then add the prefix
-    const hostname = window.location.hostname;
-    if (hostname !== 'thingtime.com') {
-      titlePrefix = '🧑‍💻';
-    }
-  } catch (err) {
-    // will error on server
-    // do nothing
-  }
-
-  // assign known process.env variables to window.env object
-  try {
-    if (typeof window !== 'undefined') {
-      window.env = {
-        ...window.env,
-        BRANCH_NAME: process.env.BRANCH_NAME || 'git/unknown'
-      };
-    }
-  } catch (err) {
-    // will error on server
-  }
+const Document = withEmotionCache(function Document(
+  { children, title = 'Thingtime', titlePrefix = '' }: DocumentProps,
+  emotionCache
+) {
+  const serverStyleData = React.useContext(ServerStyleContext);
+  const clientStyleData = React.useContext(ClientStyleContext);
 
   // the favicon will also vary depending on the environment
+
+  useClientLayoutEffect(() => {
+    emotionCache.sheet.container = document.head;
+
+    const tags = emotionCache.sheet.tags;
+    emotionCache.sheet.flush();
+    tags.forEach((tag) => {
+      emotionCache.sheet._insertTag(tag);
+    });
+
+    clientStyleData?.reset();
+    // Emotion's Remix handoff must run once; adding cache/context deps retriggers the reset loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <html lang="en">
@@ -99,56 +56,93 @@ function Document({ children, title = 'Thingtime' }: { children: React.ReactNode
         <Meta />
         <title>{titlePrefix ? titlePrefix + ' ' + title : title}</title>
         <Links />
+        {serverStyleData?.map(({ key, ids, css }) => (
+          <style
+            key={`${key}-${ids.join(' ')}`}
+            data-emotion={`${key} ${ids.join(' ')}`}
+            dangerouslySetInnerHTML={{ __html: css }}
+          />
+        ))}
       </head>
       <body>
         {children}
-        <GlobalStyles />
         <ScrollRestoration />
         <Scripts />
         {/* <LiveReload /> */}
-        <Analytics />
       </body>
     </html>
   );
-}
+});
 
 export default function App() {
   // grab env from loader
-  const { envFromCookie } = useLoaderData<typeof loader>();
+  const { envFromCookie, titlePrefix } = useLoaderData<typeof loader>();
+  const [mounted, setMounted] = React.useState(false);
 
   // log the cookie
   console.log('envFromCookie in root.tsx:', envFromCookie);
 
   // add env to window .env
-  try {
-    if (typeof window !== 'undefined') {
-      window.envFromCookie = {
-        ...window.env,
-        ...envFromCookie
-      };
+  React.useEffect(() => {
+    setMounted(true);
+
+    try {
+      if (typeof window !== 'undefined') {
+        window.envFromCookie = {
+          ...window.env,
+          ...envFromCookie
+        };
+        window.env = {
+          ...window.env,
+          BRANCH_NAME: envFromCookie?.THINGTIME_BRANCH_NAME || 'git/unknown'
+        };
+      }
+    } catch (err) {
+      // will error on server
     }
-  } catch (err) {
-    // will error on server
-  }
+  }, [envFromCookie]);
 
   useIcons();
 
   return (
-    <Document>
+    <Document titlePrefix={titlePrefix}>
       <ChakraWrapper>
+        <GlobalStyles />
         <ThingtimeProvider>
           <DevKit />
           <Main>
             <Outlet />
           </Main>
         </ThingtimeProvider>
+        {mounted ? <Analytics /> : null}
       </ChakraWrapper>
     </Document>
   );
 }
 
-export async function loader({ request, context }: LoaderArgs) {
-  const { session, store } = context;
+type RootLoaderData = {
+  envFromCookie: Record<string, string | undefined>;
+  devKitEnv: Record<string, string | undefined>;
+  titlePrefix: string;
+};
+
+const getDeploymentBranchName = () => {
+  return (
+    process.env.VERCEL_GIT_COMMIT_REF ||
+    process.env.THINGTIME_BRANCH_NAME ||
+    'git/unknown'
+  );
+};
+
+const shouldShowDeploymentStatus = () => {
+  return (
+    process.env.NODE_ENV === 'development' ||
+    process.env.VERCEL_ENV === 'preview' ||
+    process.env.VERCEL_TARGET_ENV === 'preview'
+  );
+};
+
+export async function loader({ request }: { request: Request }) {
   const cookieHeader = request.headers.get('Cookie');
 
   const cookie = (await Session.parse(cookieHeader)) || {};
@@ -157,7 +151,16 @@ export async function loader({ request, context }: LoaderArgs) {
 
   const pingCounter = cookiePingCounter + 1;
 
-  const processEnv = {};
+  const processEnv: RootLoaderData['envFromCookie'] = {};
+  const url = new URL(request.url);
+  const devKitEnv = {
+    NODE_ENV: process.env.NODE_ENV,
+    ...Object.fromEntries(url.searchParams)
+  };
+  const titlePrefix =
+    process.env.NODE_ENV === 'development' || url.hostname !== 'thingtime.com'
+      ? '🧑‍💻'
+      : '';
 
   // add all process.env variables that start with THINGTIME_ to the cookie
   for (const key in process.env) {
@@ -166,11 +169,21 @@ export async function loader({ request, context }: LoaderArgs) {
     }
   }
 
+  processEnv.THINGTIME_BRANCH_NAME = getDeploymentBranchName();
+  processEnv.THINGTIME_VERCEL_ENV =
+    process.env.VERCEL_TARGET_ENV || process.env.VERCEL_ENV;
+  processEnv.THINGTIME_VERCEL_URL = process.env.VERCEL_URL;
+  processEnv.THINGTIME_VERCEL_BRANCH_URL = process.env.VERCEL_BRANCH_URL;
+  processEnv.THINGTIME_VERCEL_GIT_COMMIT_SHA = process.env.VERCEL_GIT_COMMIT_SHA;
+  processEnv.THINGTIME_SHOW_DEPLOYMENT_STATUS = shouldShowDeploymentStatus() ? 'true' : 'false';
+
   // .log everyone
 
   return json(
     {
-      envFromCookie: { ...processEnv }
+      envFromCookie: { ...processEnv },
+      devKitEnv,
+      titlePrefix
     },
     {
       headers: {

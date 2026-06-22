@@ -6,6 +6,7 @@ This file records workspace-specific setup fixes discovered while working in the
 
 - The repository may not have a configured Git remote in the cloud checkout.
 - The canonical repository URL from `package.json` is `https://github.com/lopugit/thingtime.git`.
+- After a successful push, clearly tell the user that the push completed and name the remote branch, for example: `Pushed to origin/codex/example-branch`.
 - If no remote exists, add it with:
 
   ```sh

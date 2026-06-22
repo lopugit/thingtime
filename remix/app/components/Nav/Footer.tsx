@@ -1,33 +1,22 @@
 import React from 'react';
 import { Box, Center, Flex, Text } from '@chakra-ui/react';
-import { Link, useLocation, useNavigate } from '@remix-run/react';
+import { Link, useRouteLoaderData } from '@remix-run/react';
 
-import { CommanderV2 } from '../Commander/CommanderV2';
 import { Icon } from '../Icon/Icon';
 import { MongoStatus } from '../MongoDB/MongoStatus';
-import { RainbowSkeleton } from '../Skeleton/RainbowSkeleton';
-import { ProfileDrawer } from './ProfileDrawer';
+import { VercelStatus } from '../Vercel/VercelStatus';
 
-let BRANCH_NAME;
-try {
-  BRANCH_NAME = process.env.THINGTIME_BRANCH_NAME || 'git/unknown';
-} catch (e) {
-  console.log('Error getting BRANCH_NAME from env:', e);
-  // BRANCH_NAME= 'git/unknown';
-}
+const BRANCH_NAME =
+  typeof process !== 'undefined' && process.env?.THINGTIME_BRANCH_NAME
+    ? process.env.THINGTIME_BRANCH_NAME
+    : 'git/unknown';
 
 export const Footer = (props) => {
-  let clientState: any = {};
+  const rootData = useRouteLoaderData('root') as any;
+  const envFromCookie = rootData?.envFromCookie || {};
 
-  try {
-    if (typeof window !== 'undefined') {
-      clientState = window.envFromCookie || {};
-    }
-  } catch (err) {
-    // do nothing
-  }
-
-  const [branchName, setBranchName] = React.useState(clientState.THINGTIME_BRANCH_NAME || BRANCH_NAME || 'git/unknown');
+  const branchName = envFromCookie.THINGTIME_BRANCH_NAME || BRANCH_NAME || 'git/unknown';
+  const showDeploymentStatus = envFromCookie.THINGTIME_SHOW_DEPLOYMENT_STATUS === 'true';
 
   const investmentEmail = 'invest@thingtime.com';
   const contactEmail = 'connect@thingtime.com';
@@ -89,6 +78,8 @@ export const Footer = (props) => {
               </Box>
             </Flex>
           )}
+
+          {showDeploymentStatus ? <VercelStatus></VercelStatus> : null}
 
           {/* live MongoDB connection status, links to /mongodb-status */}
           <MongoStatus></MongoStatus>

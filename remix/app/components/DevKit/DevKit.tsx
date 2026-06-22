@@ -1,43 +1,25 @@
 import { Box, Flex } from '@chakra-ui/react';
+import { useRouteLoaderData } from '@remix-run/react';
 import { useThingtime } from '../Thingtime/useThingtime';
 import { Icon } from '../Icon/Icon';
 import React from 'react';
 
-const getQueryParams: any = () => {
-  try {
-    return new URLSearchParams(window.location.search);
-  } catch (err) {}
-
-  return {};
-};
-
 export const DevKit = (props) => {
-  const { thingtime, setThingtime, getThingtime, loading, events } = useThingtime();
+  const { thingtime } = useThingtime();
+  const rootData = useRouteLoaderData('root') as any;
+  const env = React.useMemo(() => rootData?.devKitEnv || {}, [rootData?.devKitEnv]);
+  const [mounted, setMounted] = React.useState(false);
 
-  // get query params from url
-  const urlParams = getQueryParams();
-  // get all params and store in object
-  const params = {};
-  try {
-    for (const [key, value] of urlParams) {
-      params[key] = value;
+  React.useEffect(() => {
+    setMounted(true);
+
+    try {
+      window.env = env;
+    } catch (error) {
+      // dont worry
+      // be happy
     }
-  } catch (error) {
-    // dont worry
-    // be happy
-  }
-
-  const env: any = {
-    NODE_ENV: process.env.NODE_ENV,
-    ...params
-  };
-
-  try {
-    window.env = env;
-  } catch (error) {
-    // dont worry
-    // be happy
-  }
+  }, [env]);
 
   const dev = env.NODE_ENV === 'development';
 
@@ -45,19 +27,11 @@ export const DevKit = (props) => {
 
   const devMode = thingtime?.devKit?.devMode;
 
-  React.useEffect(() => {
-    if (devKit && devMode === undefined) {
-      // setThingtime('devKit.devMode', true);
-    }
-  }, []);
+  const setDevMode = React.useCallback(() => {}, []);
 
-  const setDevMode = React.useCallback(
-    (e) => {
-      const newValue = e?.target?.value || (typeof e !== 'object' && e) || !devMode;
-      // setThingtime('devKit.devMode', newValue);
-    },
-    [devMode]
-  );
+  if (!mounted) {
+    return null;
+  }
 
   return devKit ? (
     <Flex

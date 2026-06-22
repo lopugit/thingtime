@@ -7,29 +7,14 @@ import { Icon } from '../Icon/Icon';
 import { RainbowSkeleton } from '../Skeleton/RainbowSkeleton';
 import { ProfileDrawer } from './ProfileDrawer';
 import { useThingtime } from '../Thingtime/useThingtime';
-let BRANCH_NAME;
-try {
-  BRANCH_NAME = process.env.THINGTIME_BRANCH_NAME || 'git/unknown';
-} catch (e) {
-  console.log('Error getting BRANCH_NAME from env:', e);
-  // BRANCH_NAME= 'git/unknown';
-}
+const BRANCH_NAME =
+  typeof process !== 'undefined' && process.env?.THINGTIME_BRANCH_NAME
+    ? process.env.THINGTIME_BRANCH_NAME
+    : 'git/unknown';
 
 console.log('BRANCH_NAME:', BRANCH_NAME);
 
 export const Nav = (props) => {
-  let clientState: any = {};
-
-  try {
-    if (typeof window !== 'undefined') {
-      clientState = window.envFromCookie || {};
-    }
-  } catch (err) {
-    // do nothing
-  }
-
-  const [branchName, setBranchName] = React.useState(clientState.THINGTIME_BRANCH_NAME || BRANCH_NAME || 'git/unknown');
-
   const { thingtime } = useThingtime();
 
   const [profileDrawerOpen, setProfileDrawerOpen] = React.useState(false);

@@ -144,11 +144,7 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
 
 	const [loading, setLoading] = React.useState(true);
 
-	const [events, setEvents] = React.useState(null);
-
-	if (!events) {
-		setEvents(() => new Subject());
-	}
+	const [events] = React.useState(() => new Subject());
 
 	const undoRedo = useThingtimeLine(Everything);
 
@@ -164,6 +160,19 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
 
 		setThingtimeState(newThingtime);
 	}, []);
+
+	const restoreThingtime = React.useCallback(
+		(nextThingtime) => {
+			const newThingtime = smarts.merge({ ...(nextThingtime || {}) }, thingtimeDefaults);
+
+			if (!newThingtime.Content) {
+				newThingtime.Content = thingtimeDefaults.Content;
+			}
+
+			setThingtimeObjectWrapper(newThingtime);
+		},
+		[setThingtimeObjectWrapper]
+	);
 
 	// create a setThingtime queue so we can batch process race conditions
 	// instead of loosing data like before
@@ -298,12 +307,14 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
 		[setThingtimeQueueSetter, setThingtimeAux]
 	);
 
-	if (setThingtimeQueue?.length > 0) {
-		// process one queue item at a time
-		const nextThingtime = setThingtimeQueueRef.current[0];
-		setThingtimeQueueSetter((prev) => prev.slice(1));
-		setThingtimeAux(nextThingtime.path, nextThingtime.value, nextThingtime.options);
-	}
+	React.useEffect(() => {
+		if (setThingtimeQueue?.length > 0) {
+			// process one queue item at a time
+			const nextThingtime = setThingtimeQueueRef.current[0];
+			setThingtimeQueueSetter((prev) => prev.slice(1));
+			setThingtimeAux(nextThingtime.path, nextThingtime.value, nextThingtime.options);
+		}
+	}, [setThingtimeQueue, setThingtimeAux]);
 
 
 	const getThingtime = React.useCallback(
@@ -365,8 +376,10 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
 				console.log('[tt][ThingtimeProvider.tsx] localStorageThingtime', localStorageThingtime);
 
 				if (localStorageThingtime) {
-					const thingtimeFromLocalStorage = typeof localStorageThingtime === 'string' ? localStorageThingtime : '';
-					const parsed = parse(thingtimeFromLocalStorage);
+					const parsed =
+						typeof localStorageThingtime === 'string'
+							? parse(localStorageThingtime)
+							: localStorageThingtime;
 
 					if (parsed) {
 						const localIsUptoDateVersion = !parsed.version || parsed.version >= thingtimeMinimumValues.version;
@@ -390,28 +403,18 @@ export const ThingtimeProvider = (props: any): JSX.Element => {
 						});
 
 						console.log('[tt][ThingtimeProvider.tsx] restoring thingtime from localStorage. Thingtime: ', newThingtime);
-						// TODO: does this need to
-						// specifically ignore undo redo calls
-						setThingtime('thingtime', newThingtime, {
-							ignoreUndoRedo: true,
-							namespace: 'tt.localStorage-restore'
-						});
+						restoreThingtime(newThingtime);
 					}
 				} else {
-					// TODO: does this need to
-					// specifically ignore undo redo calls
-					setThingtime(thingtimeDefaults, {
-						ignoreUndoRedo: true,
-						namespace: 'tt.localStorage-restore'
-					});
+					restoreThingtime(thingtimeDefaults);
 				}
 			} catch (err) {
-				console.error('There was an error getting thingtime from localStorage');
+				console.error('There was an error getting thingtime from localStorage', err);
 			}
 
 			setLoading(false);
 		})();
-	}, []);
+	}, [restoreThingtime]);
 
 	// thingtime change listener
 	React.useEffect(() => {

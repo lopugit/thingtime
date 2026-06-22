@@ -13,20 +13,28 @@ echo "Hello"
 inVercel=${VERCEL_ENV:-}
 # if inVercel not null
 if [ -n "$inVercel" ]; then
-	echo "In Vercel environment, using branch name from .env.auto"
+	echo "In Vercel environment, using branch name from Vercel system env"
+	BRANCH_NAME="${VERCEL_GIT_COMMIT_REF:-${THINGTIME_BRANCH_NAME:-}}"
 	if [ -f .env.auto ]; then
 		export $(cat .env.auto | xargs)
-		echo "THINGTIME_BRANCH_NAME is $THINGTIME_BRANCH_NAME"
-		
-		# replace process.env.THINGTIME_BRANCH_NAME with string value in all files within ../app
-		find ./app -type f -name "*.tsx" -o -name "*.ts" -o -name "*.jsx" -o -name "*.js" | xargs sed -i.bak "s/process.env.THINGTIME_BRANCH_NAME/\"$THINGTIME_BRANCH_NAME\"/g"
-		# remove .bak files
-		find ./app -type f -name "*.bak" -delete
-		
-	else
-		echo "Error: .env.auto file not found. Exiting."
+		BRANCH_NAME="${BRANCH_NAME:-$THINGTIME_BRANCH_NAME}"
+	fi
+	if [ -z "$BRANCH_NAME" ]; then
+		echo "Error: could not determine THINGTIME_BRANCH_NAME. Exiting."
 		exit 1
 	fi
+	export THINGTIME_BRANCH_NAME="$BRANCH_NAME"
+	echo "THINGTIME_BRANCH_NAME is $THINGTIME_BRANCH_NAME"
+
+	# replace process.env.THINGTIME_BRANCH_NAME with string value in app source files
+	if ! find ./app -type f \( -name "*.tsx" -o -name "*.ts" -o -name "*.jsx" -o -name "*.js" \) -print0 |
+		xargs -0 perl -0pi.bak -e 's/process\.env\.THINGTIME_BRANCH_NAME/"$ENV{THINGTIME_BRANCH_NAME}"/g'; then
+		echo "Error: failed to replace THINGTIME_BRANCH_NAME in app source files."
+		exit 1
+	fi
+	# remove .bak files
+	find ./app -type f -name "*.bak" -delete
+
 	exit 0
 fi
 
@@ -44,18 +52,28 @@ else
 
 	echo "THINGTIME_BRANCH_NAME=\"$BRANCH_NAME\"" > .env.auto
 
-	# append to bottom of .env with ##### Auttomatic .env vars see pre-dev.sh ##### opening and closing tags
-	# not just like: echo "##### Auttomatic .env vars see pre-dev.sh #####" >> .env
-	# but replace existing section if it exists
-	if grep -q "##### Auttomatic .env vars see pre-dev.sh #####" .env; then
-		# replace existing section
-		sed -i.bak '/##### Auttomatic .env vars see pre-dev.sh #####/,$d' .env
-		rm .env.bak
+	env_marker="##### Auttomatic .env vars see pre-dev.sh #####"
+	# Replace only the managed block, preserving any user-defined lines after it.
+	if [ -f .env ] && [ "$(grep -cF "$env_marker" .env)" -ge 2 ]; then
+		awk -v marker="$env_marker" '
+			$0 == marker && !removed {
+				in_block = 1
+				removed = 1
+				next
+			}
+			$0 == marker && in_block {
+				in_block = 0
+				next
+			}
+			!in_block {
+				print
+			}
+		' .env > .env.tmp && mv .env.tmp .env
 	fi
 	{
-		echo "##### Auttomatic .env vars see pre-dev.sh #####"
+		echo "$env_marker"
 		echo "THINGTIME_BRANCH_NAME=\"$BRANCH_NAME\""
-		echo "##### Auttomatic .env vars see pre-dev.sh #####"
+		echo "$env_marker"
 	} >> .env
 	export BRANCH_NAME
 fi

@@ -1690,7 +1690,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_apply_filter",
-      "community": 10,
+      "community": 0,
       "norm_label": "apply-filter.tsx"
     },
     {
@@ -1700,7 +1700,7 @@
       "source_location": "L19",
       "_origin": "ast",
       "id": "src_apply_filter_command",
-      "community": 10,
+      "community": 0,
       "norm_label": "command()"
     },
     {
@@ -2240,7 +2240,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "operations_filteroperation",
-      "community": 10,
+      "community": 0,
       "norm_label": "filteroperation.ts"
     },
     {
@@ -2250,7 +2250,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "operations_filteroperation_applyfilter",
-      "community": 10,
+      "community": 0,
       "norm_label": "applyfilter()"
     },
     {
@@ -2930,7 +2930,7 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "utilities_types_filter",
-      "community": 10,
+      "community": 0,
       "norm_label": "filter"
     },
     {
@@ -3374,6 +3374,26 @@
       "norm_label": ".prettierrc.js"
     },
     {
+      "label": "index.js",
+      "file_type": "code",
+      "source_file": "remix/api/index.js",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "api_index",
+      "community": 16,
+      "norm_label": "index.js"
+    },
+    {
+      "label": "{ createRequestHandler }",
+      "file_type": "code",
+      "source_file": "remix/api/index.js",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "api_index_createrequesthandler",
+      "community": 16,
+      "norm_label": "{ createrequesthandler }"
+    },
+    {
       "label": "ChakraWrapper.tsx",
       "file_type": "code",
       "source_file": "remix/app/Providers/Chakra/ChakraWrapper.tsx",
@@ -3502,6 +3522,116 @@
       "id": "chakra_colors_adddark",
       "community": 9,
       "norm_label": "adddark()"
+    },
+    {
+      "label": "createEmotionCache.ts",
+      "file_type": "code",
+      "source_file": "remix/app/Providers/Chakra/createEmotionCache.ts",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "chakra_createemotioncache",
+      "community": 9,
+      "norm_label": "createemotioncache.ts"
+    },
+    {
+      "label": "EmotionCacheFactory",
+      "file_type": "code",
+      "source_file": "remix/app/Providers/Chakra/createEmotionCache.ts",
+      "source_location": "L4",
+      "_origin": "ast",
+      "id": "chakra_createemotioncache_emotioncachefactory",
+      "community": 9,
+      "norm_label": "emotioncachefactory"
+    },
+    {
+      "label": "getExport()",
+      "file_type": "code",
+      "source_file": "remix/app/Providers/Chakra/createEmotionCache.ts",
+      "source_location": "L6",
+      "_origin": "ast",
+      "id": "chakra_createemotioncache_getexport",
+      "community": 9,
+      "norm_label": "getexport()"
+    },
+    {
+      "label": "resolveEmotionCacheFactory()",
+      "file_type": "code",
+      "source_file": "remix/app/Providers/Chakra/createEmotionCache.ts",
+      "source_location": "L14",
+      "_origin": "ast",
+      "id": "chakra_createemotioncache_resolveemotioncachefactory",
+      "community": 9,
+      "norm_label": "resolveemotioncachefactory()"
+    },
+    {
+      "label": "createEmotionCache()",
+      "file_type": "code",
+      "source_file": "remix/app/Providers/Chakra/createEmotionCache.ts",
+      "source_location": "L34",
+      "_origin": "ast",
+      "id": "chakra_createemotioncache_createemotioncache",
+      "community": 9,
+      "norm_label": "createemotioncache()"
+    },
+    {
+      "label": "defaultEmotionCache",
+      "file_type": "code",
+      "source_file": "remix/app/Providers/Chakra/createEmotionCache.ts",
+      "source_location": "L40",
+      "_origin": "ast",
+      "id": "chakra_createemotioncache_defaultemotioncache",
+      "community": 9,
+      "norm_label": "defaultemotioncache"
+    },
+    {
+      "label": "emotionContext.ts",
+      "file_type": "code",
+      "source_file": "remix/app/Providers/Chakra/emotionContext.ts",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "chakra_emotioncontext",
+      "community": 9,
+      "norm_label": "emotioncontext.ts"
+    },
+    {
+      "label": "EmotionStyleData",
+      "file_type": "code",
+      "source_file": "remix/app/Providers/Chakra/emotionContext.ts",
+      "source_location": "L3",
+      "_origin": "ast",
+      "id": "chakra_emotioncontext_emotionstyledata",
+      "community": 9,
+      "norm_label": "emotionstyledata"
+    },
+    {
+      "label": "ServerStyleContext",
+      "file_type": "code",
+      "source_file": "remix/app/Providers/Chakra/emotionContext.ts",
+      "source_location": "L9",
+      "_origin": "ast",
+      "id": "chakra_emotioncontext_serverstylecontext",
+      "community": 9,
+      "norm_label": "serverstylecontext"
+    },
+    {
+      "label": "ClientStyleContextData",
+      "file_type": "code",
+      "source_file": "remix/app/Providers/Chakra/emotionContext.ts",
+      "source_location": "L11",
+      "_origin": "ast",
+      "id": "chakra_emotioncontext_clientstylecontextdata",
+      "community": 9,
+      "norm_label": "clientstylecontextdata"
+    },
+    {
+      "label": "ClientStyleContext",
+      "file_type": "code",
+      "source_file": "remix/app/Providers/Chakra/emotionContext.ts",
+      "source_location": "L15",
+      "_origin": "ast",
+      "id": "chakra_emotioncontext_clientstylecontext",
+      "community": 9,
+      "norm_label": "clientstylecontext"
     },
     {
       "label": "space.tsx",
@@ -3660,7 +3790,7 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "providers_thingtimeprovider_thingtimetypes",
-      "community": 1,
+      "community": 35,
       "norm_label": "thingtimetypes"
     },
     {
@@ -3680,7 +3810,7 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "providers_thingtimeprovider_thingtimecontext",
-      "community": 1,
+      "community": 35,
       "norm_label": "thingtimecontext"
     },
     {
@@ -3920,7 +4050,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "mongodb_status_mongoconnectionstatus",
-      "community": 2,
+      "community": 76,
       "norm_label": "mongoconnectionstatus"
     },
     {
@@ -4014,13 +4144,233 @@
       "norm_label": "uservalidatepassword()"
     },
     {
+      "label": "status.ts",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "vercel_status",
+      "community": 76,
+      "norm_label": "status.ts"
+    },
+    {
+      "label": "VercelDeploymentStatus",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "vercel_status_verceldeploymentstatus",
+      "community": 76,
+      "norm_label": "verceldeploymentstatus"
+    },
+    {
+      "label": "isVercelStatusEnabled()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L24",
+      "_origin": "ast",
+      "id": "vercel_status_isvercelstatusenabled",
+      "community": 76,
+      "norm_label": "isvercelstatusenabled()"
+    },
+    {
+      "label": "normaliseUrl()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L32",
+      "_origin": "ast",
+      "id": "vercel_status_normaliseurl",
+      "community": 76,
+      "norm_label": "normaliseurl()"
+    },
+    {
+      "label": "normaliseState()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L40",
+      "_origin": "ast",
+      "id": "vercel_status_normalisestate",
+      "community": 76,
+      "norm_label": "normalisestate()"
+    },
+    {
+      "label": "clampPercent()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L59",
+      "_origin": "ast",
+      "id": "vercel_status_clamppercent",
+      "community": 76,
+      "norm_label": "clamppercent()"
+    },
+    {
+      "label": "normaliseProgress()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L67",
+      "_origin": "ast",
+      "id": "vercel_status_normaliseprogress",
+      "community": 76,
+      "norm_label": "normaliseprogress()"
+    },
+    {
+      "label": "getObjectValue()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L80",
+      "_origin": "ast",
+      "id": "vercel_status_getobjectvalue",
+      "community": 76,
+      "norm_label": "getobjectvalue()"
+    },
+    {
+      "label": "getStringValue()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L88",
+      "_origin": "ast",
+      "id": "vercel_status_getstringvalue",
+      "community": 76,
+      "norm_label": "getstringvalue()"
+    },
+    {
+      "label": "getDashboardOwnerSlug()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L93",
+      "_origin": "ast",
+      "id": "vercel_status_getdashboardownerslug",
+      "community": 76,
+      "norm_label": "getdashboardownerslug()"
+    },
+    {
+      "label": "getDashboardProjectSlug()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L106",
+      "_origin": "ast",
+      "id": "vercel_status_getdashboardprojectslug",
+      "community": 76,
+      "norm_label": "getdashboardprojectslug()"
+    },
+    {
+      "label": "getVercelProjectData()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L110",
+      "_origin": "ast",
+      "id": "vercel_status_getvercelprojectdata",
+      "community": 76,
+      "norm_label": "getvercelprojectdata()"
+    },
+    {
+      "label": "getProjectDashboardUrl()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L147",
+      "_origin": "ast",
+      "id": "vercel_status_getprojectdashboardurl",
+      "community": 76,
+      "norm_label": "getprojectdashboardurl()"
+    },
+    {
+      "label": "getDashboardUrlFromDeploymentHost()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L164",
+      "_origin": "ast",
+      "id": "vercel_status_getdashboardurlfromdeploymenthost",
+      "community": 76,
+      "norm_label": "getdashboardurlfromdeploymenthost()"
+    },
+    {
+      "label": "getTimestamp()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L195",
+      "_origin": "ast",
+      "id": "vercel_status_gettimestamp",
+      "community": 76,
+      "norm_label": "gettimestamp()"
+    },
+    {
+      "label": "getDeploymentReadyAt()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L214",
+      "_origin": "ast",
+      "id": "vercel_status_getdeploymentreadyat",
+      "community": 76,
+      "norm_label": "getdeploymentreadyat()"
+    },
+    {
+      "label": "formatRelativeTime()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L223",
+      "_origin": "ast",
+      "id": "vercel_status_formatrelativetime",
+      "community": 76,
+      "norm_label": "formatrelativetime()"
+    },
+    {
+      "label": "getLastReadyDeployment()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L247",
+      "_origin": "ast",
+      "id": "vercel_status_getlastreadydeployment",
+      "community": 76,
+      "norm_label": "getlastreadydeployment()"
+    },
+    {
+      "label": "getBuildProgressFromChecks()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L253",
+      "_origin": "ast",
+      "id": "vercel_status_getbuildprogressfromchecks",
+      "community": 76,
+      "norm_label": "getbuildprogressfromchecks()"
+    },
+    {
+      "label": "formatBuildPhase()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L313",
+      "_origin": "ast",
+      "id": "vercel_status_formatbuildphase",
+      "community": 76,
+      "norm_label": "formatbuildphase()"
+    },
+    {
+      "label": "getTokenlessFallback()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L334",
+      "_origin": "ast",
+      "id": "vercel_status_gettokenlessfallback",
+      "community": 76,
+      "norm_label": "gettokenlessfallback()"
+    },
+    {
+      "label": "getVercelDeploymentStatus()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L377",
+      "_origin": "ast",
+      "id": "vercel_status_getverceldeploymentstatus",
+      "community": 76,
+      "norm_label": "getverceldeploymentstatus()"
+    },
+    {
       "label": "Submit.tsx",
       "file_type": "code",
       "source_file": "remix/app/components/API/Submit.tsx",
       "source_location": "L1",
       "_origin": "ast",
       "id": "api_submit",
-      "community": 2,
+      "community": 46,
       "norm_label": "submit.tsx"
     },
     {
@@ -4030,7 +4380,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "api_submit_submit",
-      "community": 2,
+      "community": 46,
       "norm_label": "submit()"
     },
     {
@@ -4180,7 +4530,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "commander_commanderv1deprecated",
-      "community": 16,
+      "community": 72,
       "norm_label": "commanderv1deprecated.tsx"
     },
     {
@@ -4190,7 +4540,7 @@
       "source_location": "L16",
       "_origin": "ast",
       "id": "commander_commanderv1deprecated_commanderargs",
-      "community": 16,
+      "community": 72,
       "norm_label": "commanderargs"
     },
     {
@@ -4200,7 +4550,7 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "commander_commanderv1deprecated_commanderv1",
-      "community": 16,
+      "community": 72,
       "norm_label": "commanderv1()"
     },
     {
@@ -4230,27 +4580,17 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "devkit_devkit",
-      "community": 1,
+      "community": 35,
       "norm_label": "devkit.tsx"
-    },
-    {
-      "label": "getQueryParams()",
-      "file_type": "code",
-      "source_file": "remix/app/components/DevKit/DevKit.tsx",
-      "source_location": "L6",
-      "_origin": "ast",
-      "id": "devkit_devkit_getqueryparams",
-      "community": 1,
-      "norm_label": "getqueryparams()"
     },
     {
       "label": "DevKit()",
       "file_type": "code",
       "source_file": "remix/app/components/DevKit/DevKit.tsx",
-      "source_location": "L14",
+      "source_location": "L7",
       "_origin": "ast",
       "id": "devkit_devkit_devkit",
-      "community": 1,
+      "community": 35,
       "norm_label": "devkit()"
     },
     {
@@ -4340,7 +4680,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_components_login_login_tsx_login_login",
-      "community": 76,
+      "community": 46,
       "norm_label": "login.tsx"
     },
     {
@@ -4350,7 +4690,7 @@
       "source_location": "L12",
       "_origin": "ast",
       "id": "login_login_login",
-      "community": 76,
+      "community": 46,
       "norm_label": "login()"
     },
     {
@@ -4360,7 +4700,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "magicinput_magicinput",
-      "community": 16,
+      "community": 72,
       "norm_label": "magicinput.tsx"
     },
     {
@@ -4370,7 +4710,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "magicinput_magicinput_magicinputprops",
-      "community": 16,
+      "community": 72,
       "norm_label": "magicinputprops"
     },
     {
@@ -4380,7 +4720,7 @@
       "source_location": "L24",
       "_origin": "ast",
       "id": "magicinput_magicinput_magicinput",
-      "community": 16,
+      "community": 72,
       "norm_label": "magicinput"
     },
     {
@@ -4390,27 +4730,37 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "mongodb_mongostatus",
-      "community": 2,
+      "community": 76,
       "norm_label": "mongostatus.tsx"
+    },
+    {
+      "label": "STATUS_COLORS",
+      "file_type": "code",
+      "source_file": "remix/app/components/MongoDB/MongoStatus.tsx",
+      "source_location": "L10",
+      "_origin": "ast",
+      "id": "mongodb_mongostatus_status_colors",
+      "community": 76,
+      "norm_label": "status_colors"
     },
     {
       "label": "pulse",
       "file_type": "code",
       "source_file": "remix/app/components/MongoDB/MongoStatus.tsx",
-      "source_location": "L10",
+      "source_location": "L15",
       "_origin": "ast",
       "id": "mongodb_mongostatus_pulse",
-      "community": 2,
+      "community": 76,
       "norm_label": "pulse"
     },
     {
       "label": "MongoStatus()",
       "file_type": "code",
       "source_file": "remix/app/components/MongoDB/MongoStatus.tsx",
-      "source_location": "L18",
+      "source_location": "L23",
       "_origin": "ast",
       "id": "mongodb_mongostatus_mongostatus",
-      "community": 2,
+      "community": 76,
       "norm_label": "mongostatus()"
     },
     {
@@ -4440,7 +4790,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "mongodb_rawresult",
-      "community": 1,
+      "community": 35,
       "norm_label": "rawresult.tsx"
     },
     {
@@ -4450,7 +4800,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "mongodb_rawresult_rawresultprops",
-      "community": 1,
+      "community": 35,
       "norm_label": "rawresultprops"
     },
     {
@@ -4460,7 +4810,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "mongodb_rawresult_rawresult",
-      "community": 1,
+      "community": 35,
       "norm_label": "rawresult()"
     },
     {
@@ -4470,7 +4820,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "mongodb_rawresults",
-      "community": 13,
+      "community": 35,
       "norm_label": "rawresults.tsx"
     },
     {
@@ -4497,7 +4847,7 @@
       "label": "Footer()",
       "file_type": "code",
       "source_file": "remix/app/components/Nav/Footer.tsx",
-      "source_location": "L19",
+      "source_location": "L14",
       "_origin": "ast",
       "id": "nav_footer_footer",
       "community": 45,
@@ -4517,7 +4867,7 @@
       "label": "Nav()",
       "file_type": "code",
       "source_file": "remix/app/components/Nav/Nav.tsx",
-      "source_location": "L20",
+      "source_location": "L17",
       "_origin": "ast",
       "id": "nav_nav_nav",
       "community": 45,
@@ -4610,7 +4960,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "safety_safe",
-      "community": 35,
+      "community": 79,
       "norm_label": "safe.tsx"
     },
     {
@@ -4620,7 +4970,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "safety_safe_safe",
-      "community": 35,
+      "community": 79,
       "norm_label": "safe()"
     },
     {
@@ -4650,7 +5000,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "splash_splash",
-      "community": 72,
+      "community": 39,
       "norm_label": "splash.tsx"
     },
     {
@@ -4660,8 +5010,38 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "splash_splash_splash",
-      "community": 72,
+      "community": 39,
       "norm_label": "splash()"
+    },
+    {
+      "label": "StatusRefreshButton.tsx",
+      "file_type": "code",
+      "source_file": "remix/app/components/Status/StatusRefreshButton.tsx",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "status_statusrefreshbutton",
+      "community": 76,
+      "norm_label": "statusrefreshbutton.tsx"
+    },
+    {
+      "label": "spin",
+      "file_type": "code",
+      "source_file": "remix/app/components/Status/StatusRefreshButton.tsx",
+      "source_location": "L6",
+      "_origin": "ast",
+      "id": "status_statusrefreshbutton_spin",
+      "community": 76,
+      "norm_label": "spin"
+    },
+    {
+      "label": "StatusRefreshButton()",
+      "file_type": "code",
+      "source_file": "remix/app/components/Status/StatusRefreshButton.tsx",
+      "source_location": "L11",
+      "_origin": "ast",
+      "id": "status_statusrefreshbutton_statusrefreshbutton",
+      "community": 76,
+      "norm_label": "statusrefreshbutton()"
     },
     {
       "label": "SettingsMenu.tsx",
@@ -4690,7 +5070,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "thingtime_thingtime",
-      "community": 35,
+      "community": 72,
       "norm_label": "thingtime.tsx"
     },
     {
@@ -4700,7 +5080,7 @@
       "source_location": "L33",
       "_origin": "ast",
       "id": "thingtime_thingtime_thingtimeprops",
-      "community": 35,
+      "community": 72,
       "norm_label": "thingtimeprops"
     },
     {
@@ -4710,7 +5090,7 @@
       "source_location": "L39",
       "_origin": "ast",
       "id": "thingtime_thingtime_thingtimecomponentprops",
-      "community": 35,
+      "community": 72,
       "norm_label": "thingtimecomponentprops"
     },
     {
@@ -4730,7 +5110,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "thingtime_thingtimedemo",
-      "community": 72,
+      "community": 39,
       "norm_label": "thingtimedemo.tsx"
     },
     {
@@ -4740,7 +5120,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "thingtime_thingtimedemo_thingtimedemo",
-      "community": 72,
+      "community": 39,
       "norm_label": "thingtimedemo()"
     },
     {
@@ -4750,7 +5130,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "thingtime_thingtimeurl",
-      "community": 1,
+      "community": 35,
       "norm_label": "thingtimeurl.tsx"
     },
     {
@@ -4760,7 +5140,7 @@
       "source_location": "L12",
       "_origin": "ast",
       "id": "thingtime_thingtimeurl_thingtimeurl",
-      "community": 1,
+      "community": 35,
       "norm_label": "thingtimeurl()"
     },
     {
@@ -4770,7 +5150,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "thingtime_usethingtime",
-      "community": 1,
+      "community": 35,
       "norm_label": "usethingtime.tsx"
     },
     {
@@ -4780,7 +5160,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "thingtime_usethingtime_thingtimetypes",
-      "community": 1,
+      "community": 35,
       "norm_label": "thingtimetypes"
     },
     {
@@ -4790,7 +5170,7 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "thingtime_usethingtime_everythingtypes",
-      "community": 1,
+      "community": 35,
       "norm_label": "everythingtypes"
     },
     {
@@ -4800,7 +5180,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "thingtime_usethingtime_getglobal",
-      "community": 1,
+      "community": 35,
       "norm_label": "getglobal()"
     },
     {
@@ -4810,7 +5190,7 @@
       "source_location": "L33",
       "_origin": "ast",
       "id": "thingtime_usethingtime_usethingtimescope",
-      "community": 1,
+      "community": 35,
       "norm_label": "usethingtimescope"
     },
     {
@@ -4820,8 +5200,78 @@
       "source_location": "L43",
       "_origin": "ast",
       "id": "thingtime_usethingtime_usethingtime",
-      "community": 1,
+      "community": 35,
       "norm_label": "usethingtime()"
+    },
+    {
+      "label": "VercelStatus.tsx",
+      "file_type": "code",
+      "source_file": "remix/app/components/Vercel/VercelStatus.tsx",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "vercel_vercelstatus",
+      "community": 76,
+      "norm_label": "vercelstatus.tsx"
+    },
+    {
+      "label": "STATUS_COLORS",
+      "file_type": "code",
+      "source_file": "remix/app/components/Vercel/VercelStatus.tsx",
+      "source_location": "L11",
+      "_origin": "ast",
+      "id": "vercel_vercelstatus_status_colors",
+      "community": 76,
+      "norm_label": "status_colors"
+    },
+    {
+      "label": "pulse",
+      "file_type": "code",
+      "source_file": "remix/app/components/Vercel/VercelStatus.tsx",
+      "source_location": "L19",
+      "_origin": "ast",
+      "id": "vercel_vercelstatus_pulse",
+      "community": 76,
+      "norm_label": "pulse"
+    },
+    {
+      "label": "getStatusText()",
+      "file_type": "code",
+      "source_file": "remix/app/components/Vercel/VercelStatus.tsx",
+      "source_location": "L25",
+      "_origin": "ast",
+      "id": "vercel_vercelstatus_getstatustext",
+      "community": 76,
+      "norm_label": "getstatustext()"
+    },
+    {
+      "label": "getDisplayPhase()",
+      "file_type": "code",
+      "source_file": "remix/app/components/Vercel/VercelStatus.tsx",
+      "source_location": "L29",
+      "_origin": "ast",
+      "id": "vercel_vercelstatus_getdisplayphase",
+      "community": 76,
+      "norm_label": "getdisplayphase()"
+    },
+    {
+      "label": "getProgressLeft()",
+      "file_type": "code",
+      "source_file": "remix/app/components/Vercel/VercelStatus.tsx",
+      "source_location": "L49",
+      "_origin": "ast",
+      "id": "vercel_vercelstatus_getprogressleft",
+      "community": 76,
+      "norm_label": "getprogressleft()"
+    },
+    {
+      "label": "VercelStatus()",
+      "file_type": "code",
+      "source_file": "remix/app/components/Vercel/VercelStatus.tsx",
+      "source_location": "L53",
+      "_origin": "ast",
+      "id": "vercel_vercelstatus_vercelstatus",
+      "community": 76,
+      "norm_label": "vercelstatus()"
     },
     {
       "label": "rainbowText.tsx",
@@ -4830,7 +5280,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "components_rainbowtext",
-      "community": 72,
+      "community": 39,
       "norm_label": "rainbowtext.tsx"
     },
     {
@@ -4840,7 +5290,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "components_rainbowtext_rainbowtext",
-      "community": 72,
+      "community": 39,
       "norm_label": "rainbowtext()"
     },
     {
@@ -4850,7 +5300,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "components_textanimation1",
-      "community": 72,
+      "community": 39,
       "norm_label": "textanimation1.tsx"
     },
     {
@@ -4860,7 +5310,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "components_textanimation1_textanimation1",
-      "community": 72,
+      "community": 39,
       "norm_label": "textanimation1()"
     },
     {
@@ -4870,7 +5320,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tt_button",
-      "community": 1,
+      "community": 35,
       "norm_label": "button.tsx"
     },
     {
@@ -4880,7 +5330,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "tt_button_button",
-      "community": 1,
+      "community": 35,
       "norm_label": "button()"
     },
     {
@@ -4890,7 +5340,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tt_index",
-      "community": 1,
+      "community": 35,
       "norm_label": "index.ts"
     },
     {
@@ -4920,8 +5370,18 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "app_entry_client",
-      "community": 58,
+      "community": 9,
       "norm_label": "entry.client.tsx"
+    },
+    {
+      "label": "ClientCacheProvider()",
+      "file_type": "code",
+      "source_file": "remix/app/entry.client.tsx",
+      "source_location": "L19",
+      "_origin": "ast",
+      "id": "app_entry_client_clientcacheprovider",
+      "community": 9,
+      "norm_label": "clientcacheprovider()"
     },
     {
       "label": "entry.server.tsx",
@@ -4930,17 +5390,57 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "app_entry_server",
-      "community": 46,
+      "community": 9,
       "norm_label": "entry.server.tsx"
+    },
+    {
+      "label": "EmotionServerFactory",
+      "file_type": "code",
+      "source_file": "remix/app/entry.server.tsx",
+      "source_location": "L11",
+      "_origin": "ast",
+      "id": "app_entry_server_emotionserverfactory",
+      "community": 9,
+      "norm_label": "emotionserverfactory"
+    },
+    {
+      "label": "getExport()",
+      "file_type": "code",
+      "source_file": "remix/app/entry.server.tsx",
+      "source_location": "L13",
+      "_origin": "ast",
+      "id": "app_entry_server_getexport",
+      "community": 9,
+      "norm_label": "getexport()"
+    },
+    {
+      "label": "resolveEmotionServerFactory()",
+      "file_type": "code",
+      "source_file": "remix/app/entry.server.tsx",
+      "source_location": "L21",
+      "_origin": "ast",
+      "id": "app_entry_server_resolveemotionserverfactory",
+      "community": 9,
+      "norm_label": "resolveemotionserverfactory()"
+    },
+    {
+      "label": "createEmotionServerInstance",
+      "file_type": "code",
+      "source_file": "remix/app/entry.server.tsx",
+      "source_location": "L31",
+      "_origin": "ast",
+      "id": "app_entry_server_createemotionserverinstance",
+      "community": 9,
+      "norm_label": "createemotionserverinstance"
     },
     {
       "label": "handleRequest()",
       "file_type": "code",
       "source_file": "remix/app/entry.server.tsx",
-      "source_location": "L5",
+      "source_location": "L39",
       "_origin": "ast",
       "id": "app_entry_server_handlerequest",
-      "community": 46,
+      "community": 9,
       "norm_label": "handlerequest()"
     },
     {
@@ -4950,7 +5450,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "functions_safe",
-      "community": 35,
+      "community": 79,
       "norm_label": "safe.tsx"
     },
     {
@@ -4960,7 +5460,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "functions_safe_safe",
-      "community": 35,
+      "community": 79,
       "norm_label": "safe()"
     },
     {
@@ -4970,7 +5470,7 @@
       "source_location": "L54",
       "_origin": "ast",
       "id": "functions_safe_getmeta",
-      "community": 35,
+      "community": 79,
       "norm_label": "getmeta()"
     },
     {
@@ -4980,7 +5480,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "functions_sanitise",
-      "community": 16,
+      "community": 72,
       "norm_label": "sanitise.tsx"
     },
     {
@@ -4990,7 +5490,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "functions_sanitise_sanitise",
-      "community": 16,
+      "community": 72,
       "norm_label": "sanitise()"
     },
     {
@@ -5280,7 +5780,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "hooks_useapi",
-      "community": 76,
+      "community": 46,
       "norm_label": "useapi.tsx"
     },
     {
@@ -5290,7 +5790,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "hooks_useapi_useapi",
-      "community": 76,
+      "community": 46,
       "norm_label": "useapi()"
     },
     {
@@ -5300,7 +5800,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "hooks_useasyncfetcher",
-      "community": 2,
+      "community": 46,
       "norm_label": "useasyncfetcher.tsx"
     },
     {
@@ -5310,7 +5810,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "hooks_useasyncfetcher_useasyncfetcher",
-      "community": 2,
+      "community": 46,
       "norm_label": "useasyncfetcher()"
     },
     {
@@ -5380,7 +5880,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "hooks_usethings",
-      "community": 35,
+      "community": 72,
       "norm_label": "usethings.tsx"
     },
     {
@@ -5390,7 +5890,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "hooks_usethings_usethings",
-      "community": 35,
+      "community": 72,
       "norm_label": "usethings()"
     },
     {
@@ -5410,7 +5910,7 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "hooks_usethingtimemachine_patharray",
-      "community": 16,
+      "community": 7,
       "norm_label": "patharray"
     },
     {
@@ -5544,60 +6044,70 @@
       "norm_label": "root.tsx"
     },
     {
-      "label": "logConfig",
+      "label": "DocumentProps",
       "file_type": "code",
       "source_file": "remix/app/root.tsx",
       "source_location": "L19",
       "_origin": "ast",
-      "id": "app_root_logconfig",
+      "id": "app_root_documentprops",
       "community": 9,
-      "norm_label": "logconfig"
+      "norm_label": "documentprops"
     },
     {
-      "label": "whitelistObj",
+      "label": "Document",
       "file_type": "code",
       "source_file": "remix/app/root.tsx",
-      "source_location": "L22",
-      "_origin": "ast",
-      "id": "app_root_whitelistobj",
-      "community": 9,
-      "norm_label": "whitelistobj"
-    },
-    {
-      "label": "whitelist",
-      "file_type": "code",
-      "source_file": "remix/app/root.tsx",
-      "source_location": "L32",
-      "_origin": "ast",
-      "id": "app_root_whitelist",
-      "community": 9,
-      "norm_label": "whitelist"
-    },
-    {
-      "label": "Document()",
-      "file_type": "code",
-      "source_file": "remix/app/root.tsx",
-      "source_location": "L58",
+      "source_location": "L28",
       "_origin": "ast",
       "id": "app_root_document",
       "community": 9,
-      "norm_label": "document()"
+      "norm_label": "document"
     },
     {
       "label": "App()",
       "file_type": "code",
       "source_file": "remix/app/root.tsx",
-      "source_location": "L115",
+      "source_location": "L77",
       "_origin": "ast",
       "id": "app_root_app",
       "community": 9,
       "norm_label": "app()"
     },
     {
+      "label": "RootLoaderData",
+      "file_type": "code",
+      "source_file": "remix/app/root.tsx",
+      "source_location": "L123",
+      "_origin": "ast",
+      "id": "app_root_rootloaderdata",
+      "community": 9,
+      "norm_label": "rootloaderdata"
+    },
+    {
+      "label": "getDeploymentBranchName()",
+      "file_type": "code",
+      "source_file": "remix/app/root.tsx",
+      "source_location": "L129",
+      "_origin": "ast",
+      "id": "app_root_getdeploymentbranchname",
+      "community": 9,
+      "norm_label": "getdeploymentbranchname()"
+    },
+    {
+      "label": "shouldShowDeploymentStatus()",
+      "file_type": "code",
+      "source_file": "remix/app/root.tsx",
+      "source_location": "L137",
+      "_origin": "ast",
+      "id": "app_root_shouldshowdeploymentstatus",
+      "community": 9,
+      "norm_label": "shouldshowdeploymentstatus()"
+    },
+    {
       "label": "loader()",
       "file_type": "code",
       "source_file": "remix/app/root.tsx",
-      "source_location": "L150",
+      "source_location": "L145",
       "_origin": "ast",
       "id": "app_root_loader",
       "community": 9,
@@ -5607,7 +6117,7 @@
       "label": "setThingtime()",
       "file_type": "code",
       "source_file": "remix/app/root.tsx",
-      "source_location": "L195",
+      "source_location": "L208",
       "_origin": "ast",
       "id": "app_root_setthingtime",
       "community": 9,
@@ -5620,7 +6130,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "routes",
-      "community": 1,
+      "community": 35,
       "norm_label": "$.tsx"
     },
     {
@@ -5630,7 +6140,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "remix_app_routes_tsx_routes_index",
-      "community": 1,
+      "community": 35,
       "norm_label": "index()"
     },
     {
@@ -5640,7 +6150,7 @@
       "source_location": "L24",
       "_origin": "ast",
       "id": "routes_action",
-      "community": 1,
+      "community": 35,
       "norm_label": "action()"
     },
     {
@@ -5650,7 +6160,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_routes_index_tsx_routes_index",
-      "community": 72,
+      "community": 39,
       "norm_label": "_index.tsx"
     },
     {
@@ -5660,7 +6170,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "routes_index_index",
-      "community": 1,
+      "community": 39,
       "norm_label": "index()"
     },
     {
@@ -5824,12 +6334,32 @@
       "norm_label": "earlyreturn()"
     },
     {
+      "label": "_status-data.tsx",
+      "file_type": "code",
+      "source_file": "remix/app/routes/api/v1/mongodb/status-data/_status-data.tsx",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "remix_app_routes_api_v1_mongodb_status_data_status_data_tsx_status_data_status_data",
+      "community": 2,
+      "norm_label": "_status-data.tsx"
+    },
+    {
+      "label": "loader()",
+      "file_type": "code",
+      "source_file": "remix/app/routes/api/v1/mongodb/status-data/_status-data.tsx",
+      "source_location": "L7",
+      "_origin": "ast",
+      "id": "remix_app_routes_api_v1_mongodb_status_data_status_data_tsx_status_data_status_data_loader",
+      "community": 2,
+      "norm_label": "loader()"
+    },
+    {
       "label": "_status.tsx",
       "file_type": "code",
       "source_file": "remix/app/routes/api/v1/mongodb/status/_status.tsx",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "status_status",
+      "id": "remix_app_routes_api_v1_mongodb_status_status_tsx_status_status",
       "community": 2,
       "norm_label": "_status.tsx"
     },
@@ -5839,7 +6369,7 @@
       "source_file": "remix/app/routes/api/v1/mongodb/status/_status.tsx",
       "source_location": "L10",
       "_origin": "ast",
-      "id": "status_status_loader",
+      "id": "remix_app_routes_api_v1_mongodb_status_status_tsx_status_status_loader",
       "community": 2,
       "norm_label": "loader()"
     },
@@ -5849,7 +6379,7 @@
       "source_file": "remix/app/routes/api/v1/mongodb/status/_status.tsx",
       "source_location": "L17",
       "_origin": "ast",
-      "id": "status_status_action",
+      "id": "remix_app_routes_api_v1_mongodb_status_status_tsx_status_status_action",
       "community": 2,
       "norm_label": "action()"
     },
@@ -5902,6 +6432,56 @@
       "id": "template_template_earlyreturn",
       "community": 13,
       "norm_label": "earlyreturn()"
+    },
+    {
+      "label": "_status-data.tsx",
+      "file_type": "code",
+      "source_file": "remix/app/routes/api/v1/vercel/status-data/_status-data.tsx",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "remix_app_routes_api_v1_vercel_status_data_status_data_tsx_status_data_status_data",
+      "community": 76,
+      "norm_label": "_status-data.tsx"
+    },
+    {
+      "label": "loader()",
+      "file_type": "code",
+      "source_file": "remix/app/routes/api/v1/vercel/status-data/_status-data.tsx",
+      "source_location": "L5",
+      "_origin": "ast",
+      "id": "remix_app_routes_api_v1_vercel_status_data_status_data_tsx_status_data_status_data_loader",
+      "community": 76,
+      "norm_label": "loader()"
+    },
+    {
+      "label": "_status.tsx",
+      "file_type": "code",
+      "source_file": "remix/app/routes/api/v1/vercel/status/_status.tsx",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "remix_app_routes_api_v1_vercel_status_status_tsx_status_status",
+      "community": 76,
+      "norm_label": "_status.tsx"
+    },
+    {
+      "label": "loader()",
+      "file_type": "code",
+      "source_file": "remix/app/routes/api/v1/vercel/status/_status.tsx",
+      "source_location": "L6",
+      "_origin": "ast",
+      "id": "remix_app_routes_api_v1_vercel_status_status_tsx_status_status_loader",
+      "community": 76,
+      "norm_label": "loader()"
+    },
+    {
+      "label": "action()",
+      "file_type": "code",
+      "source_file": "remix/app/routes/api/v1/vercel/status/_status.tsx",
+      "source_location": "L16",
+      "_origin": "ast",
+      "id": "remix_app_routes_api_v1_vercel_status_status_tsx_status_status_action",
+      "community": 76,
+      "norm_label": "action()"
     },
     {
       "label": "_index.tsx",
@@ -6000,7 +6580,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "routes_login",
-      "community": 76,
+      "community": 46,
       "norm_label": "login.tsx"
     },
     {
@@ -6010,7 +6590,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "routes_login_login",
-      "community": 76,
+      "community": 46,
       "norm_label": "login()"
     },
     {
@@ -6060,7 +6640,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "routes_ode",
-      "community": 72,
+      "community": 39,
       "norm_label": "ode.tsx"
     },
     {
@@ -6070,7 +6650,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "routes_ode_index",
-      "community": 1,
+      "community": 39,
       "norm_label": "index()"
     },
     {
@@ -6080,7 +6660,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "routes_rainbow",
-      "community": 72,
+      "community": 39,
       "norm_label": "rainbow.$.tsx"
     },
     {
@@ -6090,7 +6670,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "routes_rainbow_index",
-      "community": 72,
+      "community": 39,
       "norm_label": "index()"
     },
     {
@@ -6142,6 +6722,46 @@
       "id": "scratchpads_svg_displacement_map_checkermatrix",
       "community": 13,
       "norm_label": "checkermatrix"
+    },
+    {
+      "label": "status.tsx",
+      "file_type": "code",
+      "source_file": "remix/app/routes/status.tsx",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "routes_status",
+      "community": 76,
+      "norm_label": "status.tsx"
+    },
+    {
+      "label": "loader()",
+      "file_type": "code",
+      "source_file": "remix/app/routes/status.tsx",
+      "source_location": "L7",
+      "_origin": "ast",
+      "id": "routes_status_loader",
+      "community": 76,
+      "norm_label": "loader()"
+    },
+    {
+      "label": "value()",
+      "file_type": "code",
+      "source_file": "remix/app/routes/status.tsx",
+      "source_location": "L16",
+      "_origin": "ast",
+      "id": "routes_status_value",
+      "community": 76,
+      "norm_label": "value()"
+    },
+    {
+      "label": "StatusPage()",
+      "file_type": "code",
+      "source_file": "remix/app/routes/status.tsx",
+      "source_location": "L18",
+      "_origin": "ast",
+      "id": "routes_status_statuspage",
+      "community": 76,
+      "norm_label": "statuspage()"
     },
     {
       "label": "users.ts",
@@ -6340,7 +6960,7 @@
       "source_location": "L59",
       "_origin": "ast",
       "id": "smarts_index_getparentpath",
-      "community": 16,
+      "community": 45,
       "norm_label": "getparentpath()"
     },
     {
@@ -7310,7 +7930,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "utils_index",
-      "community": 16,
+      "community": 72,
       "norm_label": "index.ts"
     },
     {
@@ -7320,7 +7940,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "utils_index_stringliteraltorichtext",
-      "community": 16,
+      "community": 72,
       "norm_label": "stringliteraltorichtext()"
     },
     {
@@ -7330,7 +7950,7 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "utils_index_safejoin",
-      "community": 16,
+      "community": 72,
       "norm_label": "safejoin()"
     },
     {
@@ -7340,7 +7960,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "utils_index_safesplit",
-      "community": 16,
+      "community": 72,
       "norm_label": "safesplit()"
     },
     {
@@ -7360,7 +7980,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_package",
-      "community": 73,
+      "community": 5,
       "norm_label": "package.json"
     },
     {
@@ -7370,7 +7990,7 @@
       "source_location": "L2",
       "_origin": "ast",
       "id": "remix_package_private",
-      "community": 73,
+      "community": 5,
       "norm_label": "private"
     },
     {
@@ -7380,7 +8000,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "remix_package_sideeffects",
-      "community": 73,
+      "community": 5,
       "norm_label": "sideeffects"
     },
     {
@@ -7390,7 +8010,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "remix_package_version",
-      "community": 73,
+      "community": 5,
       "norm_label": "version"
     },
     {
@@ -7400,7 +8020,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "remix_package_scripts",
-      "community": 75,
+      "community": 5,
       "norm_label": "scripts"
     },
     {
@@ -7410,7 +8030,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "remix_package_scripts_build",
-      "community": 75,
+      "community": 5,
       "norm_label": "build"
     },
     {
@@ -7420,7 +8040,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "remix_package_scripts_pre_dev",
-      "community": 75,
+      "community": 5,
       "norm_label": "pre-dev"
     },
     {
@@ -7430,7 +8050,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "remix_package_scripts_dev",
-      "community": 75,
+      "community": 5,
       "norm_label": "dev"
     },
     {
@@ -7440,7 +8060,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "remix_package_scripts_lint",
-      "community": 75,
+      "community": 5,
       "norm_label": "lint"
     },
     {
@@ -7450,7 +8070,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "remix_package_scripts_lint_fix",
-      "community": 75,
+      "community": 5,
       "norm_label": "lint-fix"
     },
     {
@@ -7460,7 +8080,7 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "remix_package_scripts_format",
-      "community": 75,
+      "community": 5,
       "norm_label": "format"
     },
     {
@@ -7504,20 +8124,40 @@
       "norm_label": "@editorjs/editorjs"
     },
     {
-      "label": "@emotion/react",
+      "label": "@emotion/cache",
       "file_type": "code",
       "source_file": "remix/package.json",
       "source_location": "L17",
+      "_origin": "ast",
+      "id": "remix_package_dependencies_emotion_cache",
+      "community": 4,
+      "norm_label": "@emotion/cache"
+    },
+    {
+      "label": "@emotion/react",
+      "file_type": "code",
+      "source_file": "remix/package.json",
+      "source_location": "L18",
       "_origin": "ast",
       "id": "remix_package_dependencies_emotion_react",
       "community": 4,
       "norm_label": "@emotion/react"
     },
     {
+      "label": "@emotion/server",
+      "file_type": "code",
+      "source_file": "remix/package.json",
+      "source_location": "L19",
+      "_origin": "ast",
+      "id": "remix_package_dependencies_emotion_server",
+      "community": 4,
+      "norm_label": "@emotion/server"
+    },
+    {
       "label": "@fortawesome/fontawesome-svg-core",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L18",
+      "source_location": "L20",
       "_origin": "ast",
       "id": "remix_package_dependencies_fortawesome_fontawesome_svg_core",
       "community": 4,
@@ -7527,7 +8167,7 @@
       "label": "@fortawesome/free-regular-svg-icons",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L19",
+      "source_location": "L21",
       "_origin": "ast",
       "id": "remix_package_dependencies_fortawesome_free_regular_svg_icons",
       "community": 4,
@@ -7537,7 +8177,7 @@
       "label": "@fortawesome/free-solid-svg-icons",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L20",
+      "source_location": "L22",
       "_origin": "ast",
       "id": "remix_package_dependencies_fortawesome_free_solid_svg_icons",
       "community": 4,
@@ -7547,7 +8187,7 @@
       "label": "@fortawesome/react-fontawesome",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L21",
+      "source_location": "L23",
       "_origin": "ast",
       "id": "remix_package_dependencies_fortawesome_react_fontawesome",
       "community": 4,
@@ -7557,7 +8197,7 @@
       "label": "@monaco-editor/react",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L22",
+      "source_location": "L24",
       "_origin": "ast",
       "id": "remix_package_dependencies_monaco_editor_react",
       "community": 4,
@@ -7567,7 +8207,7 @@
       "label": "@remix-run/node",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L23",
+      "source_location": "L25",
       "_origin": "ast",
       "id": "remix_package_dependencies_remix_run_node",
       "community": 4,
@@ -7577,7 +8217,7 @@
       "label": "@remix-run/react",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L24",
+      "source_location": "L26",
       "_origin": "ast",
       "id": "remix_package_dependencies_remix_run_react",
       "community": 4,
@@ -7587,7 +8227,7 @@
       "label": "@remix-run/serve",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L25",
+      "source_location": "L27",
       "_origin": "ast",
       "id": "remix_package_dependencies_remix_run_serve",
       "community": 4,
@@ -7597,7 +8237,7 @@
       "label": "@vercel/analytics",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L26",
+      "source_location": "L28",
       "_origin": "ast",
       "id": "remix_package_dependencies_vercel_analytics",
       "community": 4,
@@ -7607,7 +8247,7 @@
       "label": "@vercel/remix",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L27",
+      "source_location": "L29",
       "_origin": "ast",
       "id": "remix_package_dependencies_vercel_remix",
       "community": 4,
@@ -7617,7 +8257,7 @@
       "label": "axios",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L28",
+      "source_location": "L30",
       "_origin": "ast",
       "id": "remix_package_dependencies_axios",
       "community": 4,
@@ -7627,7 +8267,7 @@
       "label": "bcrypt",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L29",
+      "source_location": "L31",
       "_origin": "ast",
       "id": "remix_package_dependencies_bcrypt",
       "community": 4,
@@ -7637,7 +8277,7 @@
       "label": "draft-js",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L30",
+      "source_location": "L32",
       "_origin": "ast",
       "id": "remix_package_dependencies_draft_js",
       "community": 4,
@@ -7647,7 +8287,7 @@
       "label": "emojis-list",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L31",
+      "source_location": "L33",
       "_origin": "ast",
       "id": "remix_package_dependencies_emojis_list",
       "community": 4,
@@ -7657,7 +8297,7 @@
       "label": "emotion",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L32",
+      "source_location": "L34",
       "_origin": "ast",
       "id": "remix_package_dependencies_emotion",
       "community": 4,
@@ -7667,7 +8307,7 @@
       "label": "flatted",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L33",
+      "source_location": "L35",
       "_origin": "ast",
       "id": "remix_package_dependencies_flatted",
       "community": 4,
@@ -7677,7 +8317,7 @@
       "label": "fuse.js",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L34",
+      "source_location": "L36",
       "_origin": "ast",
       "id": "remix_package_dependencies_fuse_js",
       "community": 4,
@@ -7687,7 +8327,7 @@
       "label": "gradient-path",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L35",
+      "source_location": "L37",
       "_origin": "ast",
       "id": "remix_package_dependencies_gradient_path",
       "community": 4,
@@ -7697,7 +8337,7 @@
       "label": "hex-to-rgba",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L36",
+      "source_location": "L38",
       "_origin": "ast",
       "id": "remix_package_dependencies_hex_to_rgba",
       "community": 4,
@@ -7707,7 +8347,7 @@
       "label": "isbot",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L37",
+      "source_location": "L39",
       "_origin": "ast",
       "id": "remix_package_dependencies_isbot",
       "community": 4,
@@ -7717,7 +8357,7 @@
       "label": "localforage",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L38",
+      "source_location": "L40",
       "_origin": "ast",
       "id": "remix_package_dependencies_localforage",
       "community": 4,
@@ -7727,17 +8367,27 @@
       "label": "lodash-es",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L39",
+      "source_location": "L41",
       "_origin": "ast",
       "id": "remix_package_dependencies_lodash_es",
       "community": 4,
       "norm_label": "lodash-es"
     },
     {
+      "label": "lucide-react",
+      "file_type": "code",
+      "source_file": "remix/package.json",
+      "source_location": "L42",
+      "_origin": "ast",
+      "id": "remix_package_dependencies_lucide_react",
+      "community": 4,
+      "norm_label": "lucide-react"
+    },
+    {
       "label": "mongodb",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L40",
+      "source_location": "L43",
       "_origin": "ast",
       "id": "remix_package_dependencies_mongodb",
       "community": 4,
@@ -7747,7 +8397,7 @@
       "label": "prismjs",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L41",
+      "source_location": "L44",
       "_origin": "ast",
       "id": "remix_package_dependencies_prismjs",
       "community": 4,
@@ -7757,7 +8407,7 @@
       "label": "react",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L42",
+      "source_location": "L45",
       "_origin": "ast",
       "id": "remix_package_dependencies_react",
       "community": 4,
@@ -7767,7 +8417,7 @@
       "label": "react-click-away-listener",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L43",
+      "source_location": "L46",
       "_origin": "ast",
       "id": "remix_package_dependencies_react_click_away_listener",
       "community": 4,
@@ -7777,7 +8427,7 @@
       "label": "react-contenteditable",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L44",
+      "source_location": "L47",
       "_origin": "ast",
       "id": "remix_package_dependencies_react_contenteditable",
       "community": 4,
@@ -7787,7 +8437,7 @@
       "label": "react-dom",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L45",
+      "source_location": "L48",
       "_origin": "ast",
       "id": "remix_package_dependencies_react_dom",
       "community": 4,
@@ -7797,7 +8447,7 @@
       "label": "react-icons",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L46",
+      "source_location": "L49",
       "_origin": "ast",
       "id": "remix_package_dependencies_react_icons",
       "community": 4,
@@ -7807,7 +8457,7 @@
       "label": "react-simple-code-editor",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L47",
+      "source_location": "L50",
       "_origin": "ast",
       "id": "remix_package_dependencies_react_simple_code_editor",
       "community": 4,
@@ -7817,7 +8467,7 @@
       "label": "react-sticky",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L48",
+      "source_location": "L51",
       "_origin": "ast",
       "id": "remix_package_dependencies_react_sticky",
       "community": 4,
@@ -7827,7 +8477,7 @@
       "label": "react-sticky-el",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L49",
+      "source_location": "L52",
       "_origin": "ast",
       "id": "remix_package_dependencies_react_sticky_el",
       "community": 4,
@@ -7837,7 +8487,7 @@
       "label": "react-visibility-sensor",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L50",
+      "source_location": "L53",
       "_origin": "ast",
       "id": "remix_package_dependencies_react_visibility_sensor",
       "community": 4,
@@ -7847,7 +8497,7 @@
       "label": "rxjs",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L51",
+      "source_location": "L54",
       "_origin": "ast",
       "id": "remix_package_dependencies_rxjs",
       "community": 4,
@@ -7857,7 +8507,7 @@
       "label": "sshpk",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L52",
+      "source_location": "L55",
       "_origin": "ast",
       "id": "remix_package_dependencies_sshpk",
       "community": 4,
@@ -7867,7 +8517,7 @@
       "label": "tinygradient",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L53",
+      "source_location": "L56",
       "_origin": "ast",
       "id": "remix_package_dependencies_tinygradient",
       "community": 4,
@@ -7877,7 +8527,7 @@
       "label": "uuid",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L54",
+      "source_location": "L57",
       "_origin": "ast",
       "id": "remix_package_dependencies_uuid",
       "community": 4,
@@ -7887,7 +8537,7 @@
       "label": "devDependencies",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L56",
+      "source_location": "L59",
       "_origin": "ast",
       "id": "remix_package_devdependencies",
       "community": 5,
@@ -7897,7 +8547,7 @@
       "label": "@emotion/styled",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L57",
+      "source_location": "L60",
       "_origin": "ast",
       "id": "remix_package_devdependencies_emotion_styled",
       "community": 5,
@@ -7907,7 +8557,7 @@
       "label": "@remix-run/dev",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L58",
+      "source_location": "L61",
       "_origin": "ast",
       "id": "remix_package_devdependencies_remix_run_dev",
       "community": 5,
@@ -7917,7 +8567,7 @@
       "label": "@remix-run/eslint-config",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L59",
+      "source_location": "L62",
       "_origin": "ast",
       "id": "remix_package_devdependencies_remix_run_eslint_config",
       "community": 5,
@@ -7927,7 +8577,7 @@
       "label": "@shopify/eslint-plugin",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L60",
+      "source_location": "L63",
       "_origin": "ast",
       "id": "remix_package_devdependencies_shopify_eslint_plugin",
       "community": 5,
@@ -7937,7 +8587,7 @@
       "label": "@types/eslint",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L61",
+      "source_location": "L64",
       "_origin": "ast",
       "id": "remix_package_devdependencies_types_eslint",
       "community": 5,
@@ -7947,7 +8597,7 @@
       "label": "@types/node",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L62",
+      "source_location": "L65",
       "_origin": "ast",
       "id": "remix_package_devdependencies_types_node",
       "community": 5,
@@ -7957,7 +8607,7 @@
       "label": "@types/react",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L63",
+      "source_location": "L66",
       "_origin": "ast",
       "id": "remix_package_devdependencies_types_react",
       "community": 5,
@@ -7967,7 +8617,7 @@
       "label": "@types/react-dom",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L64",
+      "source_location": "L67",
       "_origin": "ast",
       "id": "remix_package_devdependencies_types_react_dom",
       "community": 5,
@@ -7977,7 +8627,7 @@
       "label": "@typescript-eslint/parser",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L65",
+      "source_location": "L68",
       "_origin": "ast",
       "id": "remix_package_devdependencies_typescript_eslint_parser",
       "community": 5,
@@ -7987,7 +8637,7 @@
       "label": "eslint",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L66",
+      "source_location": "L69",
       "_origin": "ast",
       "id": "remix_package_devdependencies_eslint",
       "community": 5,
@@ -7997,7 +8647,7 @@
       "label": "eslint-config-prettier",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L67",
+      "source_location": "L70",
       "_origin": "ast",
       "id": "remix_package_devdependencies_eslint_config_prettier",
       "community": 5,
@@ -8007,7 +8657,7 @@
       "label": "eslint-loader",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L68",
+      "source_location": "L71",
       "_origin": "ast",
       "id": "remix_package_devdependencies_eslint_loader",
       "community": 5,
@@ -8017,7 +8667,7 @@
       "label": "eslint-plugin-chakra-ui",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L69",
+      "source_location": "L72",
       "_origin": "ast",
       "id": "remix_package_devdependencies_eslint_plugin_chakra_ui",
       "community": 5,
@@ -8027,7 +8677,7 @@
       "label": "eslint-plugin-hydrogen",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L70",
+      "source_location": "L73",
       "_origin": "ast",
       "id": "remix_package_devdependencies_eslint_plugin_hydrogen",
       "community": 5,
@@ -8037,7 +8687,7 @@
       "label": "eslint-plugin-prettier",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L71",
+      "source_location": "L74",
       "_origin": "ast",
       "id": "remix_package_devdependencies_eslint_plugin_prettier",
       "community": 5,
@@ -8047,7 +8697,7 @@
       "label": "eslint-plugin-react",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L72",
+      "source_location": "L75",
       "_origin": "ast",
       "id": "remix_package_devdependencies_eslint_plugin_react",
       "community": 5,
@@ -8057,7 +8707,7 @@
       "label": "eslint-plugin-react-hooks",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L73",
+      "source_location": "L76",
       "_origin": "ast",
       "id": "remix_package_devdependencies_eslint_plugin_react_hooks",
       "community": 5,
@@ -8067,7 +8717,7 @@
       "label": "eslint-plugin-simple-import-sort",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L74",
+      "source_location": "L77",
       "_origin": "ast",
       "id": "remix_package_devdependencies_eslint_plugin_simple_import_sort",
       "community": 5,
@@ -8077,7 +8727,7 @@
       "label": "eslint-plugin-unused-imports",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L75",
+      "source_location": "L78",
       "_origin": "ast",
       "id": "remix_package_devdependencies_eslint_plugin_unused_imports",
       "community": 5,
@@ -8087,7 +8737,7 @@
       "label": "framer-motion",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L76",
+      "source_location": "L79",
       "_origin": "ast",
       "id": "remix_package_devdependencies_framer_motion",
       "community": 5,
@@ -8097,7 +8747,7 @@
       "label": "remix-flat-routes",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L77",
+      "source_location": "L80",
       "_origin": "ast",
       "id": "remix_package_devdependencies_remix_flat_routes",
       "community": 5,
@@ -8107,7 +8757,7 @@
       "label": "ts-node",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L78",
+      "source_location": "L81",
       "_origin": "ast",
       "id": "remix_package_devdependencies_ts_node",
       "community": 5,
@@ -8117,7 +8767,7 @@
       "label": "typescript",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L79",
+      "source_location": "L82",
       "_origin": "ast",
       "id": "remix_package_devdependencies_typescript",
       "community": 5,
@@ -8127,7 +8777,7 @@
       "label": "vite",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L80",
+      "source_location": "L83",
       "_origin": "ast",
       "id": "remix_package_devdependencies_vite",
       "community": 5,
@@ -8137,7 +8787,7 @@
       "label": "vite-tsconfig-paths",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L81",
+      "source_location": "L84",
       "_origin": "ast",
       "id": "remix_package_devdependencies_vite_tsconfig_paths",
       "community": 5,
@@ -8147,40 +8797,40 @@
       "label": "resolutions",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L83",
+      "source_location": "L86",
       "_origin": "ast",
       "id": "remix_package_resolutions",
-      "community": 73,
+      "community": 5,
       "norm_label": "resolutions"
     },
     {
       "label": "@types/react",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L84",
+      "source_location": "L87",
       "_origin": "ast",
       "id": "remix_package_resolutions_types_react",
-      "community": 73,
+      "community": 5,
       "norm_label": "@types/react"
     },
     {
       "label": "engines",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L86",
+      "source_location": "L89",
       "_origin": "ast",
       "id": "remix_package_engines",
-      "community": 73,
+      "community": 5,
       "norm_label": "engines"
     },
     {
       "label": "node",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L87",
+      "source_location": "L90",
       "_origin": "ast",
       "id": "remix_package_engines_node",
-      "community": 73,
+      "community": 5,
       "norm_label": "node"
     },
     {
@@ -8224,16 +8874,6 @@
       "norm_label": "remix.env.d.ts"
     },
     {
-      "label": "Future",
-      "file_type": "code",
-      "source_file": "remix/remix.env.d.ts",
-      "source_location": "L7",
-      "_origin": "ast",
-      "id": "remix_remix_env_d_future",
-      "community": 51,
-      "norm_label": "future"
-    },
-    {
       "label": "pre-dev.sh",
       "file_type": "code",
       "source_file": "remix/scripts/pre-dev.sh",
@@ -8257,7 +8897,7 @@
         "kind": "bash_entrypoint"
       },
       "_origin": "ast",
-      "id": "workspace_thingtime_remix_scripts_pre_dev_sh__entry",
+      "id": "users_lopu_things_code_lopugit_thingtime_remix_scripts_pre_dev_sh__entry",
       "community": 53,
       "norm_label": "pre-dev.sh script"
     },
@@ -8452,46 +9092,6 @@
       "norm_label": "noemit"
     },
     {
-      "label": "vercel.json",
-      "file_type": "code",
-      "source_file": "remix/vercel.json",
-      "source_location": "L1",
-      "_origin": "ast",
-      "id": "remix_vercel_json_remix_vercel",
-      "community": 39,
-      "norm_label": "vercel.json"
-    },
-    {
-      "label": "build",
-      "file_type": "code",
-      "source_file": "remix/vercel.json",
-      "source_location": "L2",
-      "_origin": "ast",
-      "id": "remix_vercel_build",
-      "community": 39,
-      "norm_label": "build"
-    },
-    {
-      "label": "env",
-      "file_type": "code",
-      "source_file": "remix/vercel.json",
-      "source_location": "L3",
-      "_origin": "ast",
-      "id": "remix_vercel_build_env",
-      "community": 39,
-      "norm_label": "env"
-    },
-    {
-      "label": "ENABLE_FILE_SYSTEM_API",
-      "file_type": "code",
-      "source_file": "remix/vercel.json",
-      "source_location": "L4",
-      "_origin": "ast",
-      "id": "remix_vercel_env_enable_file_system_api",
-      "community": 39,
-      "norm_label": "enable_file_system_api"
-    },
-    {
       "label": "vercel.sh",
       "file_type": "code",
       "source_file": "remix/vercel.sh",
@@ -8501,7 +9101,7 @@
         "kind": "file"
       },
       "_origin": "ast",
-      "id": "remix_vercel_sh_remix_vercel",
+      "id": "remix_vercel",
       "community": 52,
       "norm_label": "vercel.sh"
     },
@@ -8515,7 +9115,7 @@
         "kind": "bash_entrypoint"
       },
       "_origin": "ast",
-      "id": "workspace_thingtime_remix_vercel_sh__entry",
+      "id": "users_lopu_things_code_lopugit_thingtime_remix_vercel_sh__entry",
       "community": 52,
       "norm_label": "vercel.sh script"
     },
@@ -8743,11 +9343,21 @@
       "label": "graphify",
       "file_type": "document",
       "source_file": "AGENTS.md",
-      "source_location": "L5",
+      "source_location": "L18",
       "_origin": "ast",
       "id": "agents_graphify",
       "community": 44,
       "norm_label": "graphify"
+    },
+    {
+      "label": "Delivery messaging",
+      "file_type": "document",
+      "source_file": "AGENTS.md",
+      "source_location": "L29",
+      "_origin": "ast",
+      "id": "agents_delivery_messaging",
+      "community": 44,
+      "norm_label": "delivery messaging"
     },
     {
       "label": "CLAUDE.md",
@@ -8803,7 +9413,7 @@
       "label": "Graphify",
       "file_type": "document",
       "source_file": "CODEX.md",
-      "source_location": "L21",
+      "source_location": "L22",
       "_origin": "ast",
       "id": "codex_graphify",
       "community": 74,
@@ -8813,7 +9423,7 @@
       "label": "Remix linting",
       "file_type": "document",
       "source_file": "CODEX.md",
-      "source_location": "L32",
+      "source_location": "L33",
       "_origin": "ast",
       "id": "codex_remix_linting",
       "community": 74,
@@ -8823,7 +9433,7 @@
       "label": "TypeScript checks",
       "file_type": "document",
       "source_file": "CODEX.md",
-      "source_location": "L43",
+      "source_location": "L44",
       "_origin": "ast",
       "id": "codex_typescript_checks",
       "community": 74,
@@ -8833,7 +9443,7 @@
       "label": "Package manager notes",
       "file_type": "document",
       "source_file": "CODEX.md",
-      "source_location": "L48",
+      "source_location": "L49",
       "_origin": "ast",
       "id": "codex_package_manager_notes",
       "community": 74,
@@ -8898,6 +9508,76 @@
       "id": "readme_force_push",
       "community": 33,
       "norm_label": "force push ? \ud83d\udc49\ud83d\udc48"
+    },
+    {
+      "label": "Setup for Forks",
+      "file_type": "document",
+      "source_file": "README.md",
+      "source_location": "L23",
+      "_origin": "ast",
+      "id": "readme_setup_for_forks",
+      "community": 33,
+      "norm_label": "setup for forks"
+    },
+    {
+      "label": "Remix app",
+      "file_type": "document",
+      "source_file": "README.md",
+      "source_location": "L28",
+      "_origin": "ast",
+      "id": "readme_remix_app",
+      "community": 33,
+      "norm_label": "remix app"
+    },
+    {
+      "label": "MongoDB",
+      "file_type": "document",
+      "source_file": "README.md",
+      "source_location": "L43",
+      "_origin": "ast",
+      "id": "readme_mongodb",
+      "community": 33,
+      "norm_label": "mongodb"
+    },
+    {
+      "label": "Vercel deployment status",
+      "file_type": "document",
+      "source_file": "README.md",
+      "source_location": "L66",
+      "_origin": "ast",
+      "id": "readme_vercel_deployment_status",
+      "community": 33,
+      "norm_label": "vercel deployment status"
+    },
+    {
+      "label": "Public env exposure rule",
+      "file_type": "document",
+      "source_file": "README.md",
+      "source_location": "L101",
+      "_origin": "ast",
+      "id": "readme_public_env_exposure_rule",
+      "community": 33,
+      "norm_label": "public env exposure rule"
+    },
+    {
+      "label": "TODO.md",
+      "file_type": "document",
+      "source_file": "TODO.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "todo",
+      "community": 58,
+      "norm_label": "todo.md"
+    },
+    {
+      "label": "TODO",
+      "file_type": "document",
+      "source_file": "TODO.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "todo_todo",
+      "community": 58,
+      "norm_label": "todo"
     },
     {
       "label": "car.md",
@@ -9220,6 +9900,186 @@
       "norm_label": "discuss"
     },
     {
+      "label": "CHANGELOG.md",
+      "file_type": "document",
+      "source_file": "remix/CHANGELOG.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "remix_changelog",
+      "community": 78,
+      "norm_label": "changelog.md"
+    },
+    {
+      "label": "Changelog",
+      "file_type": "document",
+      "source_file": "remix/CHANGELOG.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "remix_changelog_changelog",
+      "community": 78,
+      "norm_label": "changelog"
+    },
+    {
+      "label": "[Unreleased]",
+      "file_type": "document",
+      "source_file": "remix/CHANGELOG.md",
+      "source_location": "L17",
+      "_origin": "ast",
+      "id": "remix_changelog_unreleased",
+      "community": 78,
+      "norm_label": "[unreleased]"
+    },
+    {
+      "label": "PR #13 - Remix Hydration, Vercel Status, And Deployment Hygiene",
+      "file_type": "document",
+      "source_file": "remix/CHANGELOG.md",
+      "source_location": "L19",
+      "_origin": "ast",
+      "id": "remix_changelog_pr_13_remix_hydration_vercel_status_and_deployment_hygiene",
+      "community": 78,
+      "norm_label": "pr #13 - remix hydration, vercel status, and deployment hygiene"
+    },
+    {
+      "label": "Added",
+      "file_type": "document",
+      "source_file": "remix/CHANGELOG.md",
+      "source_location": "L24",
+      "_origin": "ast",
+      "id": "remix_changelog_added",
+      "community": 78,
+      "norm_label": "added"
+    },
+    {
+      "label": "Changed",
+      "file_type": "document",
+      "source_file": "remix/CHANGELOG.md",
+      "source_location": "L35",
+      "_origin": "ast",
+      "id": "remix_changelog_changed",
+      "community": 78,
+      "norm_label": "changed"
+    },
+    {
+      "label": "Fixed",
+      "file_type": "document",
+      "source_file": "remix/CHANGELOG.md",
+      "source_location": "L73",
+      "_origin": "ast",
+      "id": "remix_changelog_fixed",
+      "community": 78,
+      "norm_label": "fixed"
+    },
+    {
+      "label": "Verified",
+      "file_type": "document",
+      "source_file": "remix/CHANGELOG.md",
+      "source_location": "L84",
+      "_origin": "ast",
+      "id": "remix_changelog_verified",
+      "community": 78,
+      "norm_label": "verified"
+    },
+    {
+      "label": "[1.0.0] - YYYY-MM-DD",
+      "file_type": "document",
+      "source_file": "remix/CHANGELOG.md",
+      "source_location": "L94",
+      "_origin": "ast",
+      "id": "remix_changelog_1_0_0_yyyy_mm_dd",
+      "community": 78,
+      "norm_label": "[1.0.0] - yyyy-mm-dd"
+    },
+    {
+      "label": "13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md",
+      "file_type": "document",
+      "source_file": "remix/PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates",
+      "community": 1,
+      "norm_label": "13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md"
+    },
+    {
+      "label": "PR #13 - Hydration, Vercel Status, and Deployment Hygiene",
+      "file_type": "document",
+      "source_file": "remix/PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_pr_13_hydration_vercel_status_and_deployment_hygiene",
+      "community": 1,
+      "norm_label": "pr #13 - hydration, vercel status, and deployment hygiene"
+    },
+    {
+      "label": "Summary",
+      "file_type": "document",
+      "source_file": "remix/PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md",
+      "source_location": "L8",
+      "_origin": "ast",
+      "id": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_summary",
+      "community": 1,
+      "norm_label": "summary"
+    },
+    {
+      "label": "Hydration And Emotion",
+      "file_type": "document",
+      "source_file": "remix/PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md",
+      "source_location": "L14",
+      "_origin": "ast",
+      "id": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_hydration_and_emotion",
+      "community": 1,
+      "norm_label": "hydration and emotion"
+    },
+    {
+      "label": "Vercel Runtime Fixes",
+      "file_type": "document",
+      "source_file": "remix/PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md",
+      "source_location": "L30",
+      "_origin": "ast",
+      "id": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_vercel_runtime_fixes",
+      "community": 1,
+      "norm_label": "vercel runtime fixes"
+    },
+    {
+      "label": "Vercel Status And Branch Display",
+      "file_type": "document",
+      "source_file": "remix/PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md",
+      "source_location": "L44",
+      "_origin": "ast",
+      "id": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_vercel_status_and_branch_display",
+      "community": 1,
+      "norm_label": "vercel status and branch display"
+    },
+    {
+      "label": "Deployment And Repo Hygiene",
+      "file_type": "document",
+      "source_file": "remix/PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md",
+      "source_location": "L89",
+      "_origin": "ast",
+      "id": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_deployment_and_repo_hygiene",
+      "community": 1,
+      "norm_label": "deployment and repo hygiene"
+    },
+    {
+      "label": "Preserved Behavior",
+      "file_type": "document",
+      "source_file": "remix/PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md",
+      "source_location": "L101",
+      "_origin": "ast",
+      "id": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_preserved_behavior",
+      "community": 1,
+      "norm_label": "preserved behavior"
+    },
+    {
+      "label": "Verification",
+      "file_type": "document",
+      "source_file": "remix/PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md",
+      "source_location": "L107",
+      "_origin": "ast",
+      "id": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_verification",
+      "community": 1,
+      "norm_label": "verification"
+    },
+    {
       "label": "README.md",
       "file_type": "document",
       "source_file": "remix/README.md",
@@ -9336,7 +10196,7 @@
       "source_location": "L49",
       "_origin": "ast",
       "id": "smarts_index_uuid",
-      "community": 16,
+      "community": 72,
       "norm_label": "uuid"
     }
   ],
@@ -16414,6 +17274,16 @@
       "target": "remix_eslintrc_root"
     },
     {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/api/index.js",
+      "source_location": "L1",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "api_index",
+      "target": "api_index_createrequesthandler"
+    },
+    {
       "relation": "imports_from",
       "context": "import",
       "confidence": "EXTRACTED",
@@ -16600,6 +17470,294 @@
       "confidence_score": 1.0,
       "source": "chakra_theme",
       "target": "chakra_colors_colors"
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/entry.client.tsx",
+      "source_location": "L6",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "app_entry_client",
+      "target": "chakra_createemotioncache"
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/entry.server.tsx",
+      "source_location": "L7",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "app_entry_server",
+      "target": "chakra_createemotioncache"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/Providers/Chakra/createEmotionCache.ts",
+      "source_location": "L3",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "chakra_createemotioncache",
+      "target": "chakra_createemotioncache_createemotioncache"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/Providers/Chakra/createEmotionCache.ts",
+      "source_location": "L9",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "chakra_createemotioncache",
+      "target": "chakra_createemotioncache_defaultemotioncache"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/Providers/Chakra/createEmotionCache.ts",
+      "source_location": "L26",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "chakra_createemotioncache",
+      "target": "chakra_createemotioncache_emotioncachefactory"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/Providers/Chakra/createEmotionCache.ts",
+      "source_location": "L6",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "chakra_createemotioncache",
+      "target": "chakra_createemotioncache_getexport"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/Providers/Chakra/createEmotionCache.ts",
+      "source_location": "L14",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "chakra_createemotioncache",
+      "target": "chakra_createemotioncache_resolveemotioncachefactory"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "remix/app/Providers/Chakra/createEmotionCache.ts",
+      "source_location": "L35",
+      "weight": 1.0,
+      "source": "chakra_createemotioncache_createemotioncache",
+      "target": "chakra_createemotioncache_emotioncachefactory"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/Providers/Chakra/createEmotionCache.ts",
+      "source_location": "L17",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "chakra_createemotioncache_resolveemotioncachefactory",
+      "target": "chakra_createemotioncache_getexport"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/entry.client.tsx",
+      "source_location": "L6",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "app_entry_client",
+      "target": "chakra_createemotioncache_createemotioncache"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/entry.client.tsx",
+      "source_location": "L23",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "app_entry_client_clientcacheprovider",
+      "target": "chakra_createemotioncache_createemotioncache"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/entry.server.tsx",
+      "source_location": "L7",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "app_entry_server",
+      "target": "chakra_createemotioncache_createemotioncache"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/entry.server.tsx",
+      "source_location": "L21",
+      "weight": 1.0,
+      "source": "app_entry_server_handlerequest",
+      "target": "chakra_createemotioncache_createemotioncache"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/entry.client.tsx",
+      "source_location": "L7",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "app_entry_client",
+      "target": "chakra_createemotioncache_defaultemotioncache"
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/entry.client.tsx",
+      "source_location": "L9",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "app_entry_client",
+      "target": "chakra_emotioncontext"
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/entry.server.tsx",
+      "source_location": "L8",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "app_entry_server",
+      "target": "chakra_emotioncontext"
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/root.tsx",
+      "source_location": "L13",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "app_root",
+      "target": "chakra_emotioncontext"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/Providers/Chakra/emotionContext.ts",
+      "source_location": "L15",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "chakra_emotioncontext",
+      "target": "chakra_emotioncontext_clientstylecontext"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/Providers/Chakra/emotionContext.ts",
+      "source_location": "L11",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "chakra_emotioncontext",
+      "target": "chakra_emotioncontext_clientstylecontextdata"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/Providers/Chakra/emotionContext.ts",
+      "source_location": "L3",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "chakra_emotioncontext",
+      "target": "chakra_emotioncontext_emotionstyledata"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/Providers/Chakra/emotionContext.ts",
+      "source_location": "L9",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "chakra_emotioncontext",
+      "target": "chakra_emotioncontext_serverstylecontext"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/entry.client.tsx",
+      "source_location": "L8",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "app_entry_client",
+      "target": "chakra_emotioncontext_emotionstyledata"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/entry.client.tsx",
+      "source_location": "L9",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "app_entry_client",
+      "target": "chakra_emotioncontext_serverstylecontext"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/entry.server.tsx",
+      "source_location": "L8",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "app_entry_server",
+      "target": "chakra_emotioncontext_serverstylecontext"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/root.tsx",
+      "source_location": "L13",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "app_root",
+      "target": "chakra_emotioncontext_serverstylecontext"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/entry.client.tsx",
+      "source_location": "L11",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "app_entry_client",
+      "target": "chakra_emotioncontext_clientstylecontext"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/root.tsx",
+      "source_location": "L14",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "app_root",
+      "target": "chakra_emotioncontext_clientstylecontext"
     },
     {
       "relation": "contains",
@@ -17962,11 +19120,11 @@
       "relation": "imports_from",
       "context": "import",
       "confidence": "EXTRACTED",
-      "source_file": "remix/app/routes/mongodb-status.tsx",
-      "source_location": "L5",
+      "source_file": "remix/app/routes/api/v1/mongodb/status-data/_status-data.tsx",
+      "source_location": "L3",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "source": "routes_mongodb_status",
+      "source": "remix_app_routes_api_v1_mongodb_status_data_status_data_tsx_status_data_status_data",
       "target": "mongodb_status"
     },
     {
@@ -17977,7 +19135,18 @@
       "source_location": "L4",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "source": "status_status",
+      "source": "remix_app_routes_api_v1_mongodb_status_status_tsx_status_status",
+      "target": "mongodb_status"
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/mongodb-status.tsx",
+      "source_location": "L5",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "routes_mongodb_status",
       "target": "mongodb_status"
     },
     {
@@ -17990,6 +19159,61 @@
       "confidence_score": 1.0,
       "source": "mongodb_mongostatus",
       "target": "mongodb_status_mongoconnectionstatus"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/mongodb/status-data/_status-data.tsx",
+      "source_location": "L3",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "remix_app_routes_api_v1_mongodb_status_data_status_data_tsx_status_data_status_data",
+      "target": "mongodb_status_getmongostatus"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "remix/app/routes/api/v1/mongodb/status-data/_status-data.tsx",
+      "source_location": "L8",
+      "weight": 1.0,
+      "source": "remix_app_routes_api_v1_mongodb_status_data_status_data_tsx_status_data_status_data_loader",
+      "target": "mongodb_status_getmongostatus"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/mongodb/status/_status.tsx",
+      "source_location": "L4",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "remix_app_routes_api_v1_mongodb_status_status_tsx_status_status",
+      "target": "mongodb_status_getmongostatus"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "remix/app/routes/api/v1/mongodb/status/_status.tsx",
+      "source_location": "L18",
+      "weight": 1.0,
+      "source": "remix_app_routes_api_v1_mongodb_status_status_tsx_status_status_action",
+      "target": "mongodb_status_getmongostatus"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "remix/app/routes/api/v1/mongodb/status/_status.tsx",
+      "source_location": "L11",
+      "weight": 1.0,
+      "source": "remix_app_routes_api_v1_mongodb_status_status_tsx_status_status_loader",
+      "target": "mongodb_status_getmongostatus"
     },
     {
       "relation": "imports",
@@ -18011,39 +19235,6 @@
       "source_location": "L9",
       "weight": 1.0,
       "source": "routes_mongodb_status_loader",
-      "target": "mongodb_status_getmongostatus"
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "remix/app/routes/api/v1/mongodb/status/_status.tsx",
-      "source_location": "L4",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "status_status",
-      "target": "mongodb_status_getmongostatus"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "remix/app/routes/api/v1/mongodb/status/_status.tsx",
-      "source_location": "L18",
-      "weight": 1.0,
-      "source": "status_status_action",
-      "target": "mongodb_status_getmongostatus"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "remix/app/routes/api/v1/mongodb/status/_status.tsx",
-      "source_location": "L11",
-      "weight": 1.0,
-      "source": "status_status_loader",
       "target": "mongodb_status_getmongostatus"
     },
     {
@@ -18274,6 +19465,722 @@
       "target": "utils_uservalidatepassword_uservalidatepassword"
     },
     {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/vercel/status-data/_status-data.tsx",
+      "source_location": "L3",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "remix_app_routes_api_v1_vercel_status_data_status_data_tsx_status_data_status_data",
+      "target": "vercel_status"
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/vercel/status/_status.tsx",
+      "source_location": "L3",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "remix_app_routes_api_v1_vercel_status_status_tsx_status_status",
+      "target": "vercel_status"
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/status.tsx",
+      "source_location": "L5",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "routes_status",
+      "target": "vercel_status"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L45",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status",
+      "target": "vercel_status_clamppercent"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L126",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status",
+      "target": "vercel_status_formatbuildphase"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L212",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status",
+      "target": "vercel_status_formatrelativetime"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L66",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status",
+      "target": "vercel_status_getbuildprogressfromchecks"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L82",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status",
+      "target": "vercel_status_getdashboardownerslug"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L95",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status",
+      "target": "vercel_status_getdashboardprojectslug"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L156",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status",
+      "target": "vercel_status_getdashboardurlfromdeploymenthost"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L203",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status",
+      "target": "vercel_status_getdeploymentreadyat"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L236",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status",
+      "target": "vercel_status_getlastreadydeployment"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L69",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status",
+      "target": "vercel_status_getobjectvalue"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L136",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status",
+      "target": "vercel_status_getprojectdashboardurl"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L77",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status",
+      "target": "vercel_status_getstringvalue"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L184",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status",
+      "target": "vercel_status_gettimestamp"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L147",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status",
+      "target": "vercel_status_gettokenlessfallback"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L40",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status",
+      "target": "vercel_status_getverceldeploymentstatus"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L99",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status",
+      "target": "vercel_status_getvercelprojectdata"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L24",
+      "weight": 1.0,
+      "source": "vercel_status",
+      "target": "vercel_status_isvercelstatusenabled",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L53",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status",
+      "target": "vercel_status_normaliseprogress"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L21",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status",
+      "target": "vercel_status_normalisestate"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L13",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status",
+      "target": "vercel_status_normaliseurl"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L1",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status",
+      "target": "vercel_status_verceldeploymentstatus"
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/components/Vercel/VercelStatus.tsx",
+      "source_location": "L5",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_vercelstatus",
+      "target": "vercel_status"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/components/Vercel/VercelStatus.tsx",
+      "source_location": "L5",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_vercelstatus",
+      "target": "vercel_status_verceldeploymentstatus"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/vercel/status-data/_status-data.tsx",
+      "source_location": "L3",
+      "weight": 1.0,
+      "source": "remix_app_routes_api_v1_vercel_status_data_status_data_tsx_status_data_status_data",
+      "target": "vercel_status_isvercelstatusenabled",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "remix/app/routes/api/v1/vercel/status-data/_status-data.tsx",
+      "source_location": "L6",
+      "weight": 1.0,
+      "source": "remix_app_routes_api_v1_vercel_status_data_status_data_tsx_status_data_status_data_loader",
+      "target": "vercel_status_isvercelstatusenabled"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/vercel/status/_status.tsx",
+      "source_location": "L3",
+      "weight": 1.0,
+      "source": "remix_app_routes_api_v1_vercel_status_status_tsx_status_status",
+      "target": "vercel_status_isvercelstatusenabled",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "remix/app/routes/api/v1/vercel/status/_status.tsx",
+      "source_location": "L17",
+      "weight": 1.0,
+      "source": "remix_app_routes_api_v1_vercel_status_status_tsx_status_status_action",
+      "target": "vercel_status_isvercelstatusenabled"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "remix/app/routes/api/v1/vercel/status/_status.tsx",
+      "source_location": "L7",
+      "weight": 1.0,
+      "source": "remix_app_routes_api_v1_vercel_status_status_tsx_status_status_loader",
+      "target": "vercel_status_isvercelstatusenabled"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/status.tsx",
+      "source_location": "L5",
+      "weight": 1.0,
+      "source": "routes_status",
+      "target": "vercel_status_isvercelstatusenabled",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/routes/status.tsx",
+      "source_location": "L8",
+      "weight": 1.0,
+      "source": "routes_status_loader",
+      "target": "vercel_status_isvercelstatusenabled"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L157",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status_getdashboardurlfromdeploymenthost",
+      "target": "vercel_status_normaliseurl"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L158",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status_gettokenlessfallback",
+      "target": "vercel_status_normaliseurl"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L43",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status_getverceldeploymentstatus",
+      "target": "vercel_status_normaliseurl"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L118",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status_getverceldeploymentstatus",
+      "target": "vercel_status_normalisestate"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L117",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status_getbuildprogressfromchecks",
+      "target": "vercel_status_clamppercent"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L55",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status_normaliseprogress",
+      "target": "vercel_status_clamppercent"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L278",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status_getverceldeploymentstatus",
+      "target": "vercel_status_normaliseprogress"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L84",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status_getdashboardownerslug",
+      "target": "vercel_status_getobjectvalue"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L205",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status_getdeploymentreadyat",
+      "target": "vercel_status_getobjectvalue"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L78",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status_getstringvalue",
+      "target": "vercel_status_getobjectvalue"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L484",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status_getverceldeploymentstatus",
+      "target": "vercel_status_getobjectvalue"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L84",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status_getdashboardownerslug",
+      "target": "vercel_status_getstringvalue"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L96",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status_getdashboardprojectslug",
+      "target": "vercel_status_getstringvalue"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L488",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status_getverceldeploymentstatus",
+      "target": "vercel_status_getstringvalue"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L371",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status_getverceldeploymentstatus",
+      "target": "vercel_status_getdashboardownerslug"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L374",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status_getverceldeploymentstatus",
+      "target": "vercel_status_getdashboardprojectslug"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L336",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status_getverceldeploymentstatus",
+      "target": "vercel_status_getvercelprojectdata"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L392",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status_getverceldeploymentstatus",
+      "target": "vercel_status_getprojectdashboardurl"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L340",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status_gettokenlessfallback",
+      "target": "vercel_status_getdashboardurlfromdeploymenthost"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L481",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status_getverceldeploymentstatus",
+      "target": "vercel_status_getdashboardurlfromdeploymenthost"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L205",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status_getdeploymentreadyat",
+      "target": "vercel_status_gettimestamp"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L482",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status_getverceldeploymentstatus",
+      "target": "vercel_status_getdeploymentreadyat"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L545",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status_getverceldeploymentstatus",
+      "target": "vercel_status_formatrelativetime"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L461",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status_getverceldeploymentstatus",
+      "target": "vercel_status_getlastreadydeployment"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L273",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status_getverceldeploymentstatus",
+      "target": "vercel_status_getbuildprogressfromchecks"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L284",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status_getverceldeploymentstatus",
+      "target": "vercel_status_formatbuildphase"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L207",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_status_getverceldeploymentstatus",
+      "target": "vercel_status_gettokenlessfallback"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/vercel/status-data/_status-data.tsx",
+      "source_location": "L3",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "remix_app_routes_api_v1_vercel_status_data_status_data_tsx_status_data_status_data",
+      "target": "vercel_status_getverceldeploymentstatus"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "remix/app/routes/api/v1/vercel/status-data/_status-data.tsx",
+      "source_location": "L6",
+      "weight": 1.0,
+      "source": "remix_app_routes_api_v1_vercel_status_data_status_data_tsx_status_data_status_data_loader",
+      "target": "vercel_status_getverceldeploymentstatus"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/vercel/status/_status.tsx",
+      "source_location": "L3",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "remix_app_routes_api_v1_vercel_status_status_tsx_status_status",
+      "target": "vercel_status_getverceldeploymentstatus"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "remix/app/routes/api/v1/vercel/status/_status.tsx",
+      "source_location": "L13",
+      "weight": 1.0,
+      "source": "remix_app_routes_api_v1_vercel_status_status_tsx_status_status_action",
+      "target": "vercel_status_getverceldeploymentstatus"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "remix/app/routes/api/v1/vercel/status/_status.tsx",
+      "source_location": "L7",
+      "weight": 1.0,
+      "source": "remix_app_routes_api_v1_vercel_status_status_tsx_status_status_loader",
+      "target": "vercel_status_getverceldeploymentstatus"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/status.tsx",
+      "source_location": "L5",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "routes_status",
+      "target": "vercel_status_getverceldeploymentstatus"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/routes/status.tsx",
+      "source_location": "L8",
+      "weight": 1.0,
+      "source": "routes_status_loader",
+      "target": "vercel_status_getverceldeploymentstatus"
+    },
+    {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/app/components/API/Submit.tsx",
@@ -18401,7 +20308,7 @@
       "source_location": "L5",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "source": "status_status",
+      "source": "remix_app_routes_api_v1_mongodb_status_status_tsx_status_status",
       "target": "api_submit"
     },
     {
@@ -18467,7 +20374,7 @@
       "source_location": "L5",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "source": "status_status",
+      "source": "remix_app_routes_api_v1_mongodb_status_status_tsx_status_status",
       "target": "api_submit_submit"
     },
     {
@@ -19197,16 +21104,6 @@
       "target": "devkit_devkit_devkit"
     },
     {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "remix/app/components/DevKit/DevKit.tsx",
-      "source_location": "L6",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "devkit_devkit",
-      "target": "devkit_devkit_getqueryparams"
-    },
-    {
       "relation": "imports_from",
       "context": "import",
       "confidence": "EXTRACTED",
@@ -19249,17 +21146,6 @@
       "confidence_score": 1.0,
       "source": "devkit_devkit",
       "target": "thingtime_usethingtime_usethingtime"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "remix/app/components/DevKit/DevKit.tsx",
-      "source_location": "L18",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "devkit_devkit_devkit",
-      "target": "devkit_devkit_getqueryparams"
     },
     {
       "relation": "imports",
@@ -19803,6 +21689,38 @@
       "target": "mongodb_mongostatus_pulse"
     },
     {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/components/MongoDB/MongoStatus.tsx",
+      "source_location": "L9",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "mongodb_mongostatus",
+      "target": "mongodb_mongostatus_status_colors"
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/components/MongoDB/MongoStatus.tsx",
+      "source_location": "L7",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "mongodb_mongostatus",
+      "target": "status_statusrefreshbutton"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/components/MongoDB/MongoStatus.tsx",
+      "source_location": "L7",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "mongodb_mongostatus",
+      "target": "status_statusrefreshbutton_statusrefreshbutton"
+    },
+    {
       "relation": "imports_from",
       "context": "import",
       "confidence": "EXTRACTED",
@@ -20126,6 +22044,28 @@
       "confidence_score": 1.0,
       "source": "nav_footer",
       "target": "skeleton_rainbowskeleton_rainbowskeleton"
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/components/Nav/Footer.tsx",
+      "source_location": "L7",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "nav_footer",
+      "target": "vercel_vercelstatus"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/components/Nav/Footer.tsx",
+      "source_location": "L7",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "nav_footer",
+      "target": "vercel_vercelstatus_vercelstatus"
     },
     {
       "relation": "contains",
@@ -20580,6 +22520,48 @@
       "confidence_score": 1.0,
       "source": "routes_rainbow",
       "target": "splash_splash_splash"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/components/Status/StatusRefreshButton.tsx",
+      "source_location": "L6",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "status_statusrefreshbutton",
+      "target": "status_statusrefreshbutton_spin"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/components/Status/StatusRefreshButton.tsx",
+      "source_location": "L4",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "status_statusrefreshbutton",
+      "target": "status_statusrefreshbutton_statusrefreshbutton"
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/components/Vercel/VercelStatus.tsx",
+      "source_location": "L6",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_vercelstatus",
+      "target": "status_statusrefreshbutton"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/components/Vercel/VercelStatus.tsx",
+      "source_location": "L6",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_vercelstatus",
+      "target": "status_statusrefreshbutton_statusrefreshbutton"
     },
     {
       "relation": "contains",
@@ -21288,6 +23270,99 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
+      "source_file": "remix/app/components/Vercel/VercelStatus.tsx",
+      "source_location": "L28",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_vercelstatus",
+      "target": "vercel_vercelstatus_getdisplayphase"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/components/Vercel/VercelStatus.tsx",
+      "source_location": "L49",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_vercelstatus",
+      "target": "vercel_vercelstatus_getprogressleft"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/components/Vercel/VercelStatus.tsx",
+      "source_location": "L24",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_vercelstatus",
+      "target": "vercel_vercelstatus_getstatustext"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/components/Vercel/VercelStatus.tsx",
+      "source_location": "L9",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_vercelstatus",
+      "target": "vercel_vercelstatus_pulse"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/components/Vercel/VercelStatus.tsx",
+      "source_location": "L10",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_vercelstatus",
+      "target": "vercel_vercelstatus_status_colors"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/components/Vercel/VercelStatus.tsx",
+      "source_location": "L15",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_vercelstatus",
+      "target": "vercel_vercelstatus_vercelstatus"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/components/Vercel/VercelStatus.tsx",
+      "source_location": "L135",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_vercelstatus_vercelstatus",
+      "target": "vercel_vercelstatus_getstatustext"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/components/Vercel/VercelStatus.tsx",
+      "source_location": "L136",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_vercelstatus_vercelstatus",
+      "target": "vercel_vercelstatus_getdisplayphase"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/components/Vercel/VercelStatus.tsx",
+      "source_location": "L219",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "vercel_vercelstatus_vercelstatus",
+      "target": "vercel_vercelstatus_getprogressleft"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
       "source_file": "remix/app/components/rainbowText.tsx",
       "source_location": "L4",
       "weight": 1.0,
@@ -21394,12 +23469,84 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
+      "source_file": "remix/app/entry.client.tsx",
+      "source_location": "L19",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "app_entry_client",
+      "target": "app_entry_client_clientcacheprovider"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/entry.server.tsx",
+      "source_location": "L31",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "app_entry_server",
+      "target": "app_entry_server_createemotionserverinstance"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/entry.server.tsx",
+      "source_location": "L11",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "app_entry_server",
+      "target": "app_entry_server_emotionserverfactory"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/entry.server.tsx",
+      "source_location": "L13",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "app_entry_server",
+      "target": "app_entry_server_getexport"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
       "source_file": "remix/app/entry.server.tsx",
       "source_location": "L5",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "app_entry_server",
       "target": "app_entry_server_handlerequest"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/entry.server.tsx",
+      "source_location": "L21",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "app_entry_server",
+      "target": "app_entry_server_resolveemotionserverfactory"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/entry.server.tsx",
+      "source_location": "L24",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "app_entry_server_resolveemotionserverfactory",
+      "target": "app_entry_server_getexport"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/entry.server.tsx",
+      "source_location": "L41",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "app_entry_server_handlerequest",
+      "target": "app_entry_server_createemotionserverinstance"
     },
     {
       "relation": "contains",
@@ -22158,6 +24305,17 @@
       "target": "hooks_useicons_useicons"
     },
     {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/root.tsx",
+      "source_location": "L85",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "app_root_document",
+      "target": "hooks_useicons_useicons"
+    },
+    {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/app/hooks/usePath.tsx",
@@ -22354,6 +24512,26 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/app/root.tsx",
+      "source_location": "L19",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "app_root",
+      "target": "app_root_documentprops"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/root.tsx",
+      "source_location": "L129",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "app_root",
+      "target": "app_root_getdeploymentbranchname"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/root.tsx",
       "source_location": "L150",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -22364,11 +24542,11 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/app/root.tsx",
-      "source_location": "L19",
+      "source_location": "L90",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "app_root",
-      "target": "app_root_logconfig"
+      "target": "app_root_rootloaderdata"
     },
     {
       "relation": "contains",
@@ -22384,21 +24562,33 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/app/root.tsx",
-      "source_location": "L32",
+      "source_location": "L137",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "app_root",
-      "target": "app_root_whitelist"
+      "target": "app_root_shouldshowdeploymentstatus",
+      "confidence_score": 1.0
     },
     {
-      "relation": "contains",
+      "relation": "calls",
+      "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "remix/app/root.tsx",
-      "source_location": "L22",
+      "source_location": "L164",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "source": "app_root",
-      "target": "app_root_whitelistobj"
+      "source": "app_root_loader",
+      "target": "app_root_getdeploymentbranchname"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/root.tsx",
+      "source_location": "L178",
+      "weight": 1.0,
+      "source": "app_root_loader",
+      "target": "app_root_shouldshowdeploymentstatus",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -22663,22 +24853,22 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "remix/app/routes/api/v1/mongodb/status/_status.tsx",
-      "source_location": "L17",
+      "source_file": "remix/app/routes/api/v1/mongodb/status-data/_status-data.tsx",
+      "source_location": "L7",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "source": "status_status",
-      "target": "status_status_action"
+      "source": "remix_app_routes_api_v1_mongodb_status_data_status_data_tsx_status_data_status_data",
+      "target": "remix_app_routes_api_v1_mongodb_status_data_status_data_tsx_status_data_status_data_loader"
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/app/routes/api/v1/mongodb/status/_status.tsx",
-      "source_location": "L22",
+      "source_location": "L17",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "source": "status_status",
-      "target": "status_status_index"
+      "source": "remix_app_routes_api_v1_mongodb_status_status_tsx_status_status",
+      "target": "remix_app_routes_api_v1_mongodb_status_status_tsx_status_status_action"
     },
     {
       "relation": "contains",
@@ -22687,8 +24877,18 @@
       "source_location": "L10",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "source": "status_status",
-      "target": "status_status_loader"
+      "source": "remix_app_routes_api_v1_mongodb_status_status_tsx_status_status",
+      "target": "remix_app_routes_api_v1_mongodb_status_status_tsx_status_status_loader"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/mongodb/status/_status.tsx",
+      "source_location": "L22",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "remix_app_routes_api_v1_mongodb_status_status_tsx_status_status",
+      "target": "status_status_index"
     },
     {
       "relation": "contains",
@@ -22730,6 +24930,36 @@
       "confidence_score": 1.0,
       "source": "template_template_action",
       "target": "template_template_earlyreturn"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/vercel/status-data/_status-data.tsx",
+      "source_location": "L5",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "remix_app_routes_api_v1_vercel_status_data_status_data_tsx_status_data_status_data",
+      "target": "remix_app_routes_api_v1_vercel_status_data_status_data_tsx_status_data_status_data_loader"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/vercel/status/_status.tsx",
+      "source_location": "L12",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "remix_app_routes_api_v1_vercel_status_status_tsx_status_status",
+      "target": "remix_app_routes_api_v1_vercel_status_status_tsx_status_status_action"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/vercel/status/_status.tsx",
+      "source_location": "L6",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "remix_app_routes_api_v1_vercel_status_status_tsx_status_status",
+      "target": "remix_app_routes_api_v1_vercel_status_status_tsx_status_status_loader"
     },
     {
       "relation": "imports_from",
@@ -22892,6 +25122,47 @@
       "confidence_score": 1.0,
       "source": "scratchpads_svg_displacement_map",
       "target": "scratchpads_svg_displacement_map_scratchpad"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/status.tsx",
+      "source_location": "L7",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "routes_status",
+      "target": "routes_status_loader"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/status.tsx",
+      "source_location": "L14",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "routes_status",
+      "target": "routes_status_statuspage"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/status.tsx",
+      "source_location": "L12",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "routes_status",
+      "target": "routes_status_value"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/status.tsx",
+      "source_location": "L61",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "routes_status_statuspage",
+      "target": "routes_status_value"
     },
     {
       "relation": "contains",
@@ -25338,7 +27609,27 @@
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "remix_package_dependencies",
+      "target": "remix_package_dependencies_emotion_cache"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/package.json",
+      "source_location": "L17",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_emotion_react"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/package.json",
+      "source_location": "L19",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "remix_package_dependencies",
+      "target": "remix_package_dependencies_emotion_server"
     },
     {
       "relation": "contains",
@@ -25449,6 +27740,16 @@
       "confidence_score": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_lodash_es"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/package.json",
+      "source_location": "L42",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "remix_package_dependencies",
+      "target": "remix_package_dependencies_lucide_react"
     },
     {
       "relation": "contains",
@@ -25953,22 +28254,12 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "remix/remix.env.d.ts",
-      "source_location": "L7",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "remix_remix_env_d",
-      "target": "remix_remix_env_d_future"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
       "source_file": "remix/scripts/pre-dev.sh",
       "source_location": "L1",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "scripts_pre_dev",
-      "target": "workspace_thingtime_remix_scripts_pre_dev_sh__entry"
+      "target": "users_lopu_things_code_lopugit_thingtime_remix_scripts_pre_dev_sh__entry"
     },
     {
       "relation": "contains",
@@ -26153,42 +28444,12 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "remix/vercel.json",
-      "source_location": "L2",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "remix_vercel_json_remix_vercel",
-      "target": "remix_vercel_build"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "remix/vercel.json",
-      "source_location": "L3",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "remix_vercel_build",
-      "target": "remix_vercel_build_env"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "remix/vercel.json",
-      "source_location": "L4",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "remix_vercel_build_env",
-      "target": "remix_vercel_env_enable_file_system_api"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
       "source_file": "remix/vercel.sh",
       "source_location": "L1",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "source": "remix_vercel_sh_remix_vercel",
-      "target": "workspace_thingtime_remix_vercel_sh__entry"
+      "source": "remix_vercel",
+      "target": "users_lopu_things_code_lopugit_thingtime_remix_vercel_sh__entry"
     },
     {
       "relation": "contains",
@@ -26384,6 +28645,16 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "AGENTS.md",
+      "source_location": "L17",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "agents",
+      "target": "agents_delivery_messaging"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AGENTS.md",
       "source_location": "L1",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -26474,6 +28745,16 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
+      "source_location": "L23",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "readme",
+      "target": "readme_setup_for_forks"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "README.md",
       "source_location": "L1",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -26509,6 +28790,56 @@
       "confidence_score": 1.0,
       "source": "readme_or_donate_on_gofundme",
       "target": "readme_force_push"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "README.md",
+      "source_location": "L43",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "readme_setup_for_forks",
+      "target": "readme_mongodb"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "README.md",
+      "source_location": "L101",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "readme_setup_for_forks",
+      "target": "readme_public_env_exposure_rule"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "README.md",
+      "source_location": "L28",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "readme_setup_for_forks",
+      "target": "readme_remix_app"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "README.md",
+      "source_location": "L66",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "readme_setup_for_forks",
+      "target": "readme_vercel_deployment_status"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "TODO.md",
+      "source_location": "L1",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "todo",
+      "target": "todo_todo"
     },
     {
       "relation": "contains",
@@ -26773,6 +29104,166 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
+      "source_file": "remix/CHANGELOG.md",
+      "source_location": "L1",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "remix_changelog",
+      "target": "remix_changelog_changelog"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/CHANGELOG.md",
+      "source_location": "L85",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "remix_changelog_changelog",
+      "target": "remix_changelog_1_0_0_yyyy_mm_dd"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/CHANGELOG.md",
+      "source_location": "L17",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "remix_changelog_changelog",
+      "target": "remix_changelog_unreleased"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/CHANGELOG.md",
+      "source_location": "L19",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "remix_changelog_unreleased",
+      "target": "remix_changelog_added"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/CHANGELOG.md",
+      "source_location": "L32",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "remix_changelog_unreleased",
+      "target": "remix_changelog_changed"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/CHANGELOG.md",
+      "source_location": "L58",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "remix_changelog_unreleased",
+      "target": "remix_changelog_fixed"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/CHANGELOG.md",
+      "source_location": "L19",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "remix_changelog_unreleased",
+      "target": "remix_changelog_pr_13_remix_hydration_vercel_status_and_deployment_hygiene"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/CHANGELOG.md",
+      "source_location": "L67",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "remix_changelog_unreleased",
+      "target": "remix_changelog_verified"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md",
+      "source_location": "L1",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates",
+      "target": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_pr_13_hydration_vercel_status_and_deployment_hygiene"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md",
+      "source_location": "L60",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_pr_13_hydration_vercel_status_and_deployment_hygiene",
+      "target": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_deployment_and_repo_hygiene"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md",
+      "source_location": "L14",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_pr_13_hydration_vercel_status_and_deployment_hygiene",
+      "target": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_hydration_and_emotion"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md",
+      "source_location": "L72",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_pr_13_hydration_vercel_status_and_deployment_hygiene",
+      "target": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_preserved_behavior"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md",
+      "source_location": "L8",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_pr_13_hydration_vercel_status_and_deployment_hygiene",
+      "target": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_summary"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md",
+      "source_location": "L30",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_pr_13_hydration_vercel_status_and_deployment_hygiene",
+      "target": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_vercel_runtime_fixes"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md",
+      "source_location": "L44",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_pr_13_hydration_vercel_status_and_deployment_hygiene",
+      "target": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_vercel_status_and_branch_display"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md",
+      "source_location": "L78",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_pr_13_hydration_vercel_status_and_deployment_hygiene",
+      "target": "prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates_verification"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
       "source_file": "remix/README.md",
       "source_location": "L1",
       "weight": 1.0,
@@ -26802,5 +29293,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "4fa64e42a528a0e968eea3dc84560d34a3447e7c"
+  "built_at_commit": "b3166b7d50eb389492995de93d440feafc435729"
 }
