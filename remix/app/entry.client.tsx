@@ -2,55 +2,38 @@ import { CacheProvider } from '@emotion/react';
 // import { RemixBrowser } from "remix";
 import { RemixBrowser } from '@remix-run/react';
 import { startTransition } from 'react';
-import { createRoot } from 'react-dom/client';
+import { hydrateRoot } from 'react-dom/client';
 
 import { createEmotionCache } from './Providers/Chakra/createEmotionCache';
+import type { EmotionStyleData } from './Providers/Chakra/emotionContext';
+import { ServerStyleContext } from './Providers/Chakra/emotionContext';
 
 try {
-  window.process = window.process || { env: {} };
+  window.process = window.process || ({ env: {} } as any);
 } catch (err) {
   // nothing
 }
 
-const serverEmotionStyles = Array.from(document.querySelectorAll('style[data-emotion]')).map(
-  (style) => style.cloneNode(true) as HTMLStyleElement
-);
 const emotionCache = createEmotionCache();
+const serverStyleData: EmotionStyleData[] = Array.from(
+  document.querySelectorAll<HTMLStyleElement>('style[data-emotion]')
+).map((style) => {
+  const [key, ...ids] = (style.getAttribute('data-emotion') || '').split(' ');
 
-const restoreServerEmotionStyles = () => {
-  emotionCache.sheet.container = document.head;
-
-  const currentEmotionKeys = new Set(
-    Array.from(document.querySelectorAll('style[data-emotion]')).map((style) =>
-      style.getAttribute('data-emotion')
-    )
-  );
-
-  for (const style of serverEmotionStyles) {
-    const emotionKey = style.getAttribute('data-emotion');
-
-    if (emotionKey && !currentEmotionKeys.has(emotionKey)) {
-      document.head.appendChild(style.cloneNode(true));
-      currentEmotionKeys.add(emotionKey);
-    }
-  }
-};
-
-const preserveServerEmotionStyles = () => {
-  restoreServerEmotionStyles();
-
-  const interval = window.setInterval(restoreServerEmotionStyles, 100);
-  window.setTimeout(() => window.clearInterval(interval), 10000);
-};
+  return {
+    key,
+    ids,
+    css: style.textContent || ''
+  };
+});
 
 startTransition(() => {
-  createRoot(document).render(
-    <CacheProvider value={emotionCache}>
-      <RemixBrowser />
-    </CacheProvider>
+  hydrateRoot(
+    document,
+    <ServerStyleContext.Provider value={serverStyleData}>
+      <CacheProvider value={emotionCache}>
+        <RemixBrowser />
+      </CacheProvider>
+    </ServerStyleContext.Provider>
   );
-
-  queueMicrotask(preserveServerEmotionStyles);
-  requestAnimationFrame(preserveServerEmotionStyles);
-  setTimeout(preserveServerEmotionStyles, 50);
 });

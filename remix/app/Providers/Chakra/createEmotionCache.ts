@@ -1,6 +1,4 @@
-import createCacheModule from '@emotion/cache';
-
-const createCache = 'default' in createCacheModule ? createCacheModule.default : createCacheModule;
+import createCache from '@emotion/cache';
 
 export const createEmotionCache = () => {
   return createCache({

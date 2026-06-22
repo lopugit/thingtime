@@ -590,13 +590,13 @@
     "semantic_hash": "a9172b627781d16b1609ce3c70ab822a"
   },
   "remix/app/entry.client.tsx": {
-    "mtime": 1782100486.598149,
-    "ast_hash": "e22f8286c1c0c7f2dbf69b1c4bad987a",
+    "mtime": 1782109554.889741,
+    "ast_hash": "c2af6e6257e2d82b3450eafd8548f69b",
     "semantic_hash": ""
   },
   "remix/app/entry.server.tsx": {
-    "mtime": 1782098864.234089,
-    "ast_hash": "ee76894b22607004224f0beb3911abb0",
+    "mtime": 1782109533.1609583,
+    "ast_hash": "679365053b82e77cee02a5958ee80548",
     "semantic_hash": ""
   },
   "remix/app/functions/safe.tsx": {
@@ -700,8 +700,8 @@
     "semantic_hash": "c4054b1dfdb64ee989f94d84a82f34b0"
   },
   "remix/app/root.tsx": {
-    "mtime": 1782098864.234551,
-    "ast_hash": "5327aaa7ab911a58bba03d488692570a",
+    "mtime": 1782109765.8122056,
+    "ast_hash": "26a963650cdb68ab8eca782d23625632",
     "semantic_hash": ""
   },
   "remix/app/routes/$.tsx": {
@@ -830,7 +830,7 @@
     "semantic_hash": ""
   },
   "remix/scripts/pre-dev.sh": {
-    "mtime": 1782087523.431447,
+    "mtime": 1782109846.229558,
     "ast_hash": "076ea875f035cd6fce5a07f9cadef83d",
     "semantic_hash": ""
   },
@@ -1005,8 +1005,8 @@
     "semantic_hash": ""
   },
   "AGENTS.md": {
-    "mtime": 1782052771.7626119,
-    "ast_hash": "b04cfcb217ba6efb8f8dd10890edac27",
+    "mtime": 1782108328.1737568,
+    "ast_hash": "46c9fb19751454c543836746b242a4f7",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1810,8 +1810,23 @@
     "semantic_hash": ""
   },
   "remix/app/Providers/Chakra/createEmotionCache.ts": {
-    "mtime": 1782098534.4782352,
-    "ast_hash": "e095afc8451a1a12f5dd3a700ab51022",
+    "mtime": 1782108138.0310664,
+    "ast_hash": "421672fc55ca06cdbc06d7b7b121d66b",
+    "semantic_hash": ""
+  },
+  "remix/app/Providers/Chakra/emotionContext.ts": {
+    "mtime": 1782109518.5061994,
+    "ast_hash": "16336910b0216ccb9aac98d12294f3f6",
+    "semantic_hash": ""
+  },
+  "TODO.md": {
+    "mtime": 1782108971.3785572,
+    "ast_hash": "71d42efd4aee4857128d07347c9070e7",
+    "semantic_hash": ""
+  },
+  "remix/CHANGELOG.md": {
+    "mtime": 1782110413.689295,
+    "ast_hash": "15a4bf4ea10e7e4597a8def6ac9c785c",
     "semantic_hash": ""
   }
 }

@@ -3530,18 +3530,48 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "chakra_createemotioncache",
-      "community": 46,
+      "community": 9,
       "norm_label": "createemotioncache.ts"
     },
     {
       "label": "createEmotionCache()",
       "file_type": "code",
       "source_file": "remix/app/Providers/Chakra/createEmotionCache.ts",
-      "source_location": "L5",
+      "source_location": "L3",
       "_origin": "ast",
       "id": "chakra_createemotioncache_createemotioncache",
-      "community": 46,
+      "community": 9,
       "norm_label": "createemotioncache()"
+    },
+    {
+      "label": "emotionContext.ts",
+      "file_type": "code",
+      "source_file": "remix/app/Providers/Chakra/emotionContext.ts",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "chakra_emotioncontext",
+      "community": 9,
+      "norm_label": "emotioncontext.ts"
+    },
+    {
+      "label": "EmotionStyleData",
+      "file_type": "code",
+      "source_file": "remix/app/Providers/Chakra/emotionContext.ts",
+      "source_location": "L3",
+      "_origin": "ast",
+      "id": "chakra_emotioncontext_emotionstyledata",
+      "community": 9,
+      "norm_label": "emotionstyledata"
+    },
+    {
+      "label": "ServerStyleContext",
+      "file_type": "code",
+      "source_file": "remix/app/Providers/Chakra/emotionContext.ts",
+      "source_location": "L9",
+      "_origin": "ast",
+      "id": "chakra_emotioncontext_serverstylecontext",
+      "community": 9,
+      "norm_label": "serverstylecontext"
     },
     {
       "label": "space.tsx",
@@ -3700,7 +3730,7 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "providers_thingtimeprovider_thingtimetypes",
-      "community": 35,
+      "community": 1,
       "norm_label": "thingtimetypes"
     },
     {
@@ -3720,7 +3750,7 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "providers_thingtimeprovider_thingtimecontext",
-      "community": 35,
+      "community": 1,
       "norm_label": "thingtimecontext"
     },
     {
@@ -4060,7 +4090,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "api_submit",
-      "community": 73,
+      "community": 76,
       "norm_label": "submit.tsx"
     },
     {
@@ -4070,7 +4100,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "api_submit_submit",
-      "community": 73,
+      "community": 76,
       "norm_label": "submit()"
     },
     {
@@ -4080,7 +4110,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "api_test",
-      "community": 13,
+      "community": 2,
       "norm_label": "test.tsx"
     },
     {
@@ -4090,7 +4120,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "api_test_testapi",
-      "community": 13,
+      "community": 2,
       "norm_label": "testapi()"
     },
     {
@@ -4250,7 +4280,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "commander_commanderv2",
-      "community": 1,
+      "community": 75,
       "norm_label": "commanderv2.tsx"
     },
     {
@@ -4260,7 +4290,7 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "commander_commanderv2_commanderv2",
-      "community": 1,
+      "community": 75,
       "norm_label": "commanderv2()"
     },
     {
@@ -4270,7 +4300,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "devkit_devkit",
-      "community": 58,
+      "community": 9,
       "norm_label": "devkit.tsx"
     },
     {
@@ -4290,7 +4320,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "editor_editor",
-      "community": 13,
+      "community": 2,
       "norm_label": "editor.tsx"
     },
     {
@@ -4300,7 +4330,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "editor_editor_editor",
-      "community": 13,
+      "community": 2,
       "norm_label": "editor()"
     },
     {
@@ -4310,7 +4340,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "icon_icon",
-      "community": 58,
+      "community": 73,
       "norm_label": "icon.tsx"
     },
     {
@@ -4320,7 +4350,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "icon_icon_icon",
-      "community": 58,
+      "community": 73,
       "norm_label": "icon()"
     },
     {
@@ -4330,7 +4360,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "layout_main",
-      "community": 1,
+      "community": 75,
       "norm_label": "main.tsx"
     },
     {
@@ -4350,7 +4380,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "layout_topspacing",
-      "community": 13,
+      "community": 2,
       "norm_label": "topspacing.tsx"
     },
     {
@@ -4360,7 +4390,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "layout_topspacing_topspacing",
-      "community": 13,
+      "community": 2,
       "norm_label": "topspacing()"
     },
     {
@@ -4370,7 +4400,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_components_login_login_tsx_login_login",
-      "community": 73,
+      "community": 76,
       "norm_label": "login.tsx"
     },
     {
@@ -4380,7 +4410,7 @@
       "source_location": "L12",
       "_origin": "ast",
       "id": "login_login_login",
-      "community": 73,
+      "community": 76,
       "norm_label": "login()"
     },
     {
@@ -4470,7 +4500,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "mongodb_rawresult",
-      "community": 13,
+      "community": 1,
       "norm_label": "rawresult.tsx"
     },
     {
@@ -4480,7 +4510,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "mongodb_rawresult_rawresultprops",
-      "community": 13,
+      "community": 1,
       "norm_label": "rawresultprops"
     },
     {
@@ -4490,7 +4520,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "mongodb_rawresult_rawresult",
-      "community": 13,
+      "community": 1,
       "norm_label": "rawresult()"
     },
     {
@@ -4500,7 +4530,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "mongodb_rawresults",
-      "community": 13,
+      "community": 1,
       "norm_label": "rawresults.tsx"
     },
     {
@@ -4520,7 +4550,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "nav_footer",
-      "community": 1,
+      "community": 75,
       "norm_label": "footer.tsx"
     },
     {
@@ -4530,7 +4560,7 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "nav_footer_footer",
-      "community": 1,
+      "community": 75,
       "norm_label": "footer()"
     },
     {
@@ -4540,7 +4570,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "nav_nav",
-      "community": 1,
+      "community": 75,
       "norm_label": "nav.tsx"
     },
     {
@@ -4550,7 +4580,7 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "nav_nav_nav",
-      "community": 1,
+      "community": 75,
       "norm_label": "nav()"
     },
     {
@@ -4560,7 +4590,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "nav_profiledrawer",
-      "community": 1,
+      "community": 75,
       "norm_label": "profiledrawer.tsx"
     },
     {
@@ -4570,7 +4600,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "nav_profiledrawer_profiledrawer",
-      "community": 1,
+      "community": 75,
       "norm_label": "profiledrawer()"
     },
     {
@@ -4640,7 +4670,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "safety_safe",
-      "community": 58,
+      "community": 73,
       "norm_label": "safe.tsx"
     },
     {
@@ -4650,7 +4680,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "safety_safe_safe",
-      "community": 58,
+      "community": 73,
       "norm_label": "safe()"
     },
     {
@@ -4660,7 +4690,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "skeleton_rainbowskeleton",
-      "community": 1,
+      "community": 75,
       "norm_label": "rainbowskeleton.tsx"
     },
     {
@@ -4670,7 +4700,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "skeleton_rainbowskeleton_rainbowskeleton",
-      "community": 1,
+      "community": 75,
       "norm_label": "rainbowskeleton()"
     },
     {
@@ -4700,7 +4730,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "thingtime_settingsmenu",
-      "community": 58,
+      "community": 73,
       "norm_label": "settingsmenu.tsx"
     },
     {
@@ -4710,7 +4740,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "thingtime_settingsmenu_settingsmenu",
-      "community": 58,
+      "community": 73,
       "norm_label": "settingsmenu()"
     },
     {
@@ -4720,7 +4750,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "thingtime_thingtime",
-      "community": 58,
+      "community": 73,
       "norm_label": "thingtime.tsx"
     },
     {
@@ -4730,7 +4760,7 @@
       "source_location": "L33",
       "_origin": "ast",
       "id": "thingtime_thingtime_thingtimeprops",
-      "community": 58,
+      "community": 73,
       "norm_label": "thingtimeprops"
     },
     {
@@ -4740,7 +4770,7 @@
       "source_location": "L39",
       "_origin": "ast",
       "id": "thingtime_thingtime_thingtimecomponentprops",
-      "community": 58,
+      "community": 73,
       "norm_label": "thingtimecomponentprops"
     },
     {
@@ -4780,7 +4810,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "thingtime_thingtimeurl",
-      "community": 35,
+      "community": 1,
       "norm_label": "thingtimeurl.tsx"
     },
     {
@@ -4790,7 +4820,7 @@
       "source_location": "L12",
       "_origin": "ast",
       "id": "thingtime_thingtimeurl_thingtimeurl",
-      "community": 35,
+      "community": 1,
       "norm_label": "thingtimeurl()"
     },
     {
@@ -4800,7 +4830,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "thingtime_usethingtime",
-      "community": 35,
+      "community": 1,
       "norm_label": "usethingtime.tsx"
     },
     {
@@ -4810,7 +4840,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "thingtime_usethingtime_thingtimetypes",
-      "community": 35,
+      "community": 1,
       "norm_label": "thingtimetypes"
     },
     {
@@ -4820,7 +4850,7 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "thingtime_usethingtime_everythingtypes",
-      "community": 35,
+      "community": 1,
       "norm_label": "everythingtypes"
     },
     {
@@ -4830,7 +4860,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "thingtime_usethingtime_getglobal",
-      "community": 35,
+      "community": 1,
       "norm_label": "getglobal()"
     },
     {
@@ -4840,7 +4870,7 @@
       "source_location": "L33",
       "_origin": "ast",
       "id": "thingtime_usethingtime_usethingtimescope",
-      "community": 35,
+      "community": 1,
       "norm_label": "usethingtimescope"
     },
     {
@@ -4850,7 +4880,7 @@
       "source_location": "L43",
       "_origin": "ast",
       "id": "thingtime_usethingtime_usethingtime",
-      "community": 35,
+      "community": 1,
       "norm_label": "usethingtime()"
     },
     {
@@ -4900,7 +4930,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tt_button",
-      "community": 35,
+      "community": 1,
       "norm_label": "button.tsx"
     },
     {
@@ -4910,7 +4940,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "tt_button_button",
-      "community": 35,
+      "community": 1,
       "norm_label": "button()"
     },
     {
@@ -4920,7 +4950,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tt_index",
-      "community": 35,
+      "community": 1,
       "norm_label": "index.ts"
     },
     {
@@ -4950,48 +4980,28 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "app_entry_client",
-      "community": 46,
+      "community": 9,
       "norm_label": "entry.client.tsx"
-    },
-    {
-      "label": "serverEmotionStyles",
-      "file_type": "code",
-      "source_file": "remix/app/entry.client.tsx",
-      "source_location": "L15",
-      "_origin": "ast",
-      "id": "app_entry_client_serveremotionstyles",
-      "community": 46,
-      "norm_label": "serveremotionstyles"
     },
     {
       "label": "emotionCache",
       "file_type": "code",
       "source_file": "remix/app/entry.client.tsx",
-      "source_location": "L18",
+      "source_location": "L17",
       "_origin": "ast",
       "id": "app_entry_client_emotioncache",
-      "community": 46,
+      "community": 9,
       "norm_label": "emotioncache"
     },
     {
-      "label": "restoreServerEmotionStyles()",
+      "label": "serverStyleData",
       "file_type": "code",
       "source_file": "remix/app/entry.client.tsx",
-      "source_location": "L20",
+      "source_location": "L18",
       "_origin": "ast",
-      "id": "app_entry_client_restoreserveremotionstyles",
-      "community": 46,
-      "norm_label": "restoreserveremotionstyles()"
-    },
-    {
-      "label": "preserveServerEmotionStyles()",
-      "file_type": "code",
-      "source_file": "remix/app/entry.client.tsx",
-      "source_location": "L39",
-      "_origin": "ast",
-      "id": "app_entry_client_preserveserveremotionstyles",
-      "community": 46,
-      "norm_label": "preserveserveremotionstyles()"
+      "id": "app_entry_client_serverstyledata",
+      "community": 9,
+      "norm_label": "serverstyledata"
     },
     {
       "label": "entry.server.tsx",
@@ -5000,37 +5010,17 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "app_entry_server",
-      "community": 46,
+      "community": 9,
       "norm_label": "entry.server.tsx"
-    },
-    {
-      "label": "removeEmotionInlineStyles()",
-      "file_type": "code",
-      "source_file": "remix/app/entry.server.tsx",
-      "source_location": "L14",
-      "_origin": "ast",
-      "id": "app_entry_server_removeemotioninlinestyles",
-      "community": 46,
-      "norm_label": "removeemotioninlinestyles()"
-    },
-    {
-      "label": "emotionStylesToHtml()",
-      "file_type": "code",
-      "source_file": "remix/app/entry.server.tsx",
-      "source_location": "L17",
-      "_origin": "ast",
-      "id": "app_entry_server_emotionstylestohtml",
-      "community": 46,
-      "norm_label": "emotionstylestohtml()"
     },
     {
       "label": "handleRequest()",
       "file_type": "code",
       "source_file": "remix/app/entry.server.tsx",
-      "source_location": "L27",
+      "source_location": "L10",
       "_origin": "ast",
       "id": "app_entry_server_handlerequest",
-      "community": 46,
+      "community": 9,
       "norm_label": "handlerequest()"
     },
     {
@@ -5040,7 +5030,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "functions_safe",
-      "community": 58,
+      "community": 73,
       "norm_label": "safe.tsx"
     },
     {
@@ -5050,7 +5040,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "functions_safe_safe",
-      "community": 58,
+      "community": 73,
       "norm_label": "safe()"
     },
     {
@@ -5060,7 +5050,7 @@
       "source_location": "L54",
       "_origin": "ast",
       "id": "functions_safe_getmeta",
-      "community": 58,
+      "community": 73,
       "norm_label": "getmeta()"
     },
     {
@@ -5370,7 +5360,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "hooks_useapi",
-      "community": 73,
+      "community": 76,
       "norm_label": "useapi.tsx"
     },
     {
@@ -5380,7 +5370,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "hooks_useapi_useapi",
-      "community": 73,
+      "community": 76,
       "norm_label": "useapi()"
     },
     {
@@ -5390,7 +5380,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "hooks_useasyncfetcher",
-      "community": 73,
+      "community": 76,
       "norm_label": "useasyncfetcher.tsx"
     },
     {
@@ -5400,7 +5390,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "hooks_useasyncfetcher_useasyncfetcher",
-      "community": 73,
+      "community": 76,
       "norm_label": "useasyncfetcher()"
     },
     {
@@ -5430,7 +5420,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "hooks_usepath",
-      "community": 1,
+      "community": 75,
       "norm_label": "usepath.tsx"
     },
     {
@@ -5440,7 +5430,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "hooks_usepath_usepath",
-      "community": 1,
+      "community": 75,
       "norm_label": "usepath()"
     },
     {
@@ -5470,7 +5460,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "hooks_usethings",
-      "community": 58,
+      "community": 73,
       "norm_label": "usethings.tsx"
     },
     {
@@ -5480,7 +5470,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "hooks_usethings_usethings",
-      "community": 58,
+      "community": 73,
       "norm_label": "usethings()"
     },
     {
@@ -5500,7 +5490,7 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "hooks_usethingtimemachine_patharray",
-      "community": 7,
+      "community": 72,
       "norm_label": "patharray"
     },
     {
@@ -5637,7 +5627,7 @@
       "label": "Document()",
       "file_type": "code",
       "source_file": "remix/app/root.tsx",
-      "source_location": "L19",
+      "source_location": "L18",
       "_origin": "ast",
       "id": "app_root_document",
       "community": 9,
@@ -5647,17 +5637,27 @@
       "label": "App()",
       "file_type": "code",
       "source_file": "remix/app/root.tsx",
-      "source_location": "L49",
+      "source_location": "L58",
       "_origin": "ast",
       "id": "app_root_app",
       "community": 9,
       "norm_label": "app()"
     },
     {
+      "label": "RootLoaderData",
+      "file_type": "code",
+      "source_file": "remix/app/root.tsx",
+      "source_location": "L104",
+      "_origin": "ast",
+      "id": "app_root_rootloaderdata",
+      "community": 9,
+      "norm_label": "rootloaderdata"
+    },
+    {
       "label": "loader()",
       "file_type": "code",
       "source_file": "remix/app/root.tsx",
-      "source_location": "L92",
+      "source_location": "L110",
       "_origin": "ast",
       "id": "app_root_loader",
       "community": 9,
@@ -5667,7 +5667,7 @@
       "label": "setThingtime()",
       "file_type": "code",
       "source_file": "remix/app/root.tsx",
-      "source_location": "L147",
+      "source_location": "L165",
       "_origin": "ast",
       "id": "app_root_setthingtime",
       "community": 9,
@@ -5680,7 +5680,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "routes",
-      "community": 35,
+      "community": 1,
       "norm_label": "$.tsx"
     },
     {
@@ -5690,7 +5690,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "remix_app_routes_tsx_routes_index",
-      "community": 35,
+      "community": 1,
       "norm_label": "index()"
     },
     {
@@ -5700,7 +5700,7 @@
       "source_location": "L24",
       "_origin": "ast",
       "id": "routes_action",
-      "community": 35,
+      "community": 1,
       "norm_label": "action()"
     },
     {
@@ -6080,7 +6080,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "routes_login",
-      "community": 73,
+      "community": 76,
       "norm_label": "login.tsx"
     },
     {
@@ -6090,7 +6090,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "routes_login_login",
-      "community": 73,
+      "community": 76,
       "norm_label": "login()"
     },
     {
@@ -6420,7 +6420,7 @@
       "source_location": "L59",
       "_origin": "ast",
       "id": "smarts_index_getparentpath",
-      "community": 1,
+      "community": 72,
       "norm_label": "getparentpath()"
     },
     {
@@ -7440,7 +7440,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_package",
-      "community": 75,
+      "community": 35,
       "norm_label": "package.json"
     },
     {
@@ -7450,7 +7450,7 @@
       "source_location": "L2",
       "_origin": "ast",
       "id": "remix_package_private",
-      "community": 75,
+      "community": 35,
       "norm_label": "private"
     },
     {
@@ -7460,7 +7460,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "remix_package_sideeffects",
-      "community": 75,
+      "community": 35,
       "norm_label": "sideeffects"
     },
     {
@@ -7470,7 +7470,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "remix_package_version",
-      "community": 75,
+      "community": 35,
       "norm_label": "version"
     },
     {
@@ -7480,7 +7480,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "remix_package_scripts",
-      "community": 76,
+      "community": 46,
       "norm_label": "scripts"
     },
     {
@@ -7490,7 +7490,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "remix_package_scripts_build",
-      "community": 76,
+      "community": 46,
       "norm_label": "build"
     },
     {
@@ -7500,7 +7500,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "remix_package_scripts_pre_dev",
-      "community": 76,
+      "community": 46,
       "norm_label": "pre-dev"
     },
     {
@@ -7510,7 +7510,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "remix_package_scripts_dev",
-      "community": 76,
+      "community": 46,
       "norm_label": "dev"
     },
     {
@@ -7520,7 +7520,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "remix_package_scripts_lint",
-      "community": 76,
+      "community": 46,
       "norm_label": "lint"
     },
     {
@@ -7530,7 +7530,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "remix_package_scripts_lint_fix",
-      "community": 76,
+      "community": 46,
       "norm_label": "lint-fix"
     },
     {
@@ -7540,7 +7540,7 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "remix_package_scripts_format",
-      "community": 76,
+      "community": 46,
       "norm_label": "format"
     },
     {
@@ -8250,7 +8250,7 @@
       "source_location": "L85",
       "_origin": "ast",
       "id": "remix_package_resolutions",
-      "community": 75,
+      "community": 35,
       "norm_label": "resolutions"
     },
     {
@@ -8260,7 +8260,7 @@
       "source_location": "L86",
       "_origin": "ast",
       "id": "remix_package_resolutions_types_react",
-      "community": 75,
+      "community": 35,
       "norm_label": "@types/react"
     },
     {
@@ -8270,7 +8270,7 @@
       "source_location": "L88",
       "_origin": "ast",
       "id": "remix_package_engines",
-      "community": 75,
+      "community": 35,
       "norm_label": "engines"
     },
     {
@@ -8280,7 +8280,7 @@
       "source_location": "L89",
       "_origin": "ast",
       "id": "remix_package_engines_node",
-      "community": 75,
+      "community": 35,
       "norm_label": "node"
     },
     {
@@ -8833,7 +8833,7 @@
       "label": "graphify",
       "file_type": "document",
       "source_file": "AGENTS.md",
-      "source_location": "L5",
+      "source_location": "L6",
       "_origin": "ast",
       "id": "agents_graphify",
       "community": 44,
@@ -8988,6 +8988,26 @@
       "id": "readme_force_push",
       "community": 33,
       "norm_label": "force push ? \ud83d\udc49\ud83d\udc48"
+    },
+    {
+      "label": "TODO.md",
+      "file_type": "document",
+      "source_file": "TODO.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "todo",
+      "community": 58,
+      "norm_label": "todo.md"
+    },
+    {
+      "label": "TODO",
+      "file_type": "document",
+      "source_file": "TODO.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "todo_todo",
+      "community": 58,
+      "norm_label": "todo"
     },
     {
       "label": "car.md",
@@ -9308,6 +9328,86 @@
       "id": "webp_readme_discuss",
       "community": 32,
       "norm_label": "discuss"
+    },
+    {
+      "label": "CHANGELOG.md",
+      "file_type": "document",
+      "source_file": "remix/CHANGELOG.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "remix_changelog",
+      "community": 78,
+      "norm_label": "changelog.md"
+    },
+    {
+      "label": "Changelog",
+      "file_type": "document",
+      "source_file": "remix/CHANGELOG.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "remix_changelog_changelog",
+      "community": 78,
+      "norm_label": "changelog"
+    },
+    {
+      "label": "[Unreleased]",
+      "file_type": "document",
+      "source_file": "remix/CHANGELOG.md",
+      "source_location": "L17",
+      "_origin": "ast",
+      "id": "remix_changelog_unreleased",
+      "community": 78,
+      "norm_label": "[unreleased]"
+    },
+    {
+      "label": "Added",
+      "file_type": "document",
+      "source_file": "remix/CHANGELOG.md",
+      "source_location": "L19",
+      "_origin": "ast",
+      "id": "remix_changelog_added",
+      "community": 78,
+      "norm_label": "added"
+    },
+    {
+      "label": "Changed",
+      "file_type": "document",
+      "source_file": "remix/CHANGELOG.md",
+      "source_location": "L32",
+      "_origin": "ast",
+      "id": "remix_changelog_changed",
+      "community": 78,
+      "norm_label": "changed"
+    },
+    {
+      "label": "Fixed",
+      "file_type": "document",
+      "source_file": "remix/CHANGELOG.md",
+      "source_location": "L58",
+      "_origin": "ast",
+      "id": "remix_changelog_fixed",
+      "community": 78,
+      "norm_label": "fixed"
+    },
+    {
+      "label": "Verified",
+      "file_type": "document",
+      "source_file": "remix/CHANGELOG.md",
+      "source_location": "L67",
+      "_origin": "ast",
+      "id": "remix_changelog_verified",
+      "community": 78,
+      "norm_label": "verified"
+    },
+    {
+      "label": "[1.0.0] - YYYY-MM-DD",
+      "file_type": "document",
+      "source_file": "remix/CHANGELOG.md",
+      "source_location": "L85",
+      "_origin": "ast",
+      "id": "remix_changelog_1_0_0_yyyy_mm_dd",
+      "community": 78,
+      "norm_label": "[1.0.0] - yyyy-mm-dd"
     },
     {
       "label": "README.md",
@@ -16767,6 +16867,103 @@
       "target": "chakra_createemotioncache_createemotioncache"
     },
     {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/entry.client.tsx",
+      "source_location": "L9",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "app_entry_client",
+      "target": "chakra_emotioncontext"
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/entry.server.tsx",
+      "source_location": "L8",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "app_entry_server",
+      "target": "chakra_emotioncontext"
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/root.tsx",
+      "source_location": "L13",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "app_root",
+      "target": "chakra_emotioncontext"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/Providers/Chakra/emotionContext.ts",
+      "source_location": "L3",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "chakra_emotioncontext",
+      "target": "chakra_emotioncontext_emotionstyledata"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/Providers/Chakra/emotionContext.ts",
+      "source_location": "L9",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "chakra_emotioncontext",
+      "target": "chakra_emotioncontext_serverstylecontext"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/entry.client.tsx",
+      "source_location": "L8",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "app_entry_client",
+      "target": "chakra_emotioncontext_emotionstyledata"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/entry.client.tsx",
+      "source_location": "L9",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "app_entry_client",
+      "target": "chakra_emotioncontext_serverstylecontext"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/entry.server.tsx",
+      "source_location": "L8",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "app_entry_server",
+      "target": "chakra_emotioncontext_serverstylecontext"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/root.tsx",
+      "source_location": "L13",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "app_root",
+      "target": "chakra_emotioncontext_serverstylecontext"
+    },
+    {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/app/Providers/Chakra/space.tsx",
@@ -21574,60 +21771,19 @@
       "source_file": "remix/app/entry.client.tsx",
       "source_location": "L18",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "app_entry_client",
-      "target": "app_entry_client_emotioncache",
-      "confidence_score": 1.0
+      "target": "app_entry_client_emotioncache"
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/app/entry.client.tsx",
-      "source_location": "L36",
+      "source_location": "L18",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "app_entry_client",
-      "target": "app_entry_client_preserveserveremotionstyles"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "remix/app/entry.client.tsx",
-      "source_location": "L19",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "app_entry_client",
-      "target": "app_entry_client_restoreserveremotionstyles"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "remix/app/entry.client.tsx",
-      "source_location": "L15",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "app_entry_client",
-      "target": "app_entry_client_serveremotionstyles"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "remix/app/entry.client.tsx",
-      "source_location": "L37",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "app_entry_client_preserveserveremotionstyles",
-      "target": "app_entry_client_restoreserveremotionstyles"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "remix/app/entry.server.tsx",
-      "source_location": "L12",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "app_entry_server",
-      "target": "app_entry_server_emotionstylestohtml"
+      "target": "app_entry_client_serverstyledata"
     },
     {
       "relation": "contains",
@@ -21638,38 +21794,6 @@
       "confidence_score": 1.0,
       "source": "app_entry_server",
       "target": "app_entry_server_handlerequest"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "remix/app/entry.server.tsx",
-      "source_location": "L9",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "app_entry_server",
-      "target": "app_entry_server_removeemotioninlinestyles"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "remix/app/entry.server.tsx",
-      "source_location": "L30",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "app_entry_server_handlerequest",
-      "target": "app_entry_server_removeemotioninlinestyles"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "remix/app/entry.server.tsx",
-      "source_location": "L29",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "app_entry_server_handlerequest",
-      "target": "app_entry_server_emotionstylestohtml"
     },
     {
       "relation": "contains",
@@ -22428,6 +22552,17 @@
       "target": "hooks_useicons_useicons"
     },
     {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/root.tsx",
+      "source_location": "L85",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "app_root_document",
+      "target": "hooks_useicons_useicons"
+    },
+    {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/app/hooks/usePath.tsx",
@@ -22629,6 +22764,16 @@
       "confidence_score": 1.0,
       "source": "app_root",
       "target": "app_root_loader"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/root.tsx",
+      "source_location": "L90",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "app_root",
+      "target": "app_root_rootloaderdata"
     },
     {
       "relation": "contains",
@@ -26773,6 +26918,16 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
+      "source_file": "TODO.md",
+      "source_location": "L1",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "todo",
+      "target": "todo_todo"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
       "source_file": "docs/Use Cases/car.md",
       "source_location": "L1",
       "weight": 1.0,
@@ -27033,6 +27188,76 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
+      "source_file": "remix/CHANGELOG.md",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "remix_changelog",
+      "target": "remix_changelog_changelog",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/CHANGELOG.md",
+      "source_location": "L85",
+      "weight": 1.0,
+      "source": "remix_changelog_changelog",
+      "target": "remix_changelog_1_0_0_yyyy_mm_dd",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/CHANGELOG.md",
+      "source_location": "L17",
+      "weight": 1.0,
+      "source": "remix_changelog_changelog",
+      "target": "remix_changelog_unreleased",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/CHANGELOG.md",
+      "source_location": "L19",
+      "weight": 1.0,
+      "source": "remix_changelog_unreleased",
+      "target": "remix_changelog_added",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/CHANGELOG.md",
+      "source_location": "L32",
+      "weight": 1.0,
+      "source": "remix_changelog_unreleased",
+      "target": "remix_changelog_changed",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/CHANGELOG.md",
+      "source_location": "L58",
+      "weight": 1.0,
+      "source": "remix_changelog_unreleased",
+      "target": "remix_changelog_fixed",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/CHANGELOG.md",
+      "source_location": "L67",
+      "weight": 1.0,
+      "source": "remix_changelog_unreleased",
+      "target": "remix_changelog_verified",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
       "source_file": "remix/README.md",
       "source_location": "L1",
       "weight": 1.0,
@@ -27062,5 +27287,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "3d7560e8fbce2b13b7ab89fb190de3143703e784"
+  "built_at_commit": "a7a62007887b2eacc0543df048f56ab4884ea186"
 }

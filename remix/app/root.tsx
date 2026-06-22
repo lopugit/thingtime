@@ -10,10 +10,9 @@ import { Session } from './cookies.server';
 import { Main } from './components/Layout/Main';
 import { useIcons } from './hooks/useIcons';
 import { ChakraWrapper } from './Providers/Chakra/ChakraWrapper';
+import { ServerStyleContext } from './Providers/Chakra/emotionContext';
 import { ThingtimeProvider } from './Providers/ThingtimeProvider';
-// TODO: See what to replace LoaderArgs with
 import { json } from '@vercel/remix';
-import type { LoaderArgs } from '@vercel/remix';
 import { DevKit } from './components/DevKit/DevKit';
 
 function Document({
@@ -25,16 +24,26 @@ function Document({
   title?: string;
   titlePrefix?: string;
 }) {
+  const serverStyleData = React.useContext(ServerStyleContext);
+
   // the favicon will also vary depending on the environment
 
   return (
-    <html lang="en" suppressHydrationWarning>
-      <head suppressHydrationWarning>
+    <html lang="en">
+      <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width,initial-scale=1" />
         <Meta />
         <title>{titlePrefix ? titlePrefix + ' ' + title : title}</title>
         <Links />
+        {serverStyleData?.map(({ key, ids, css }) => (
+          <style
+            key={`${key}-${ids.join(' ')}`}
+            data-emotion={`${key} ${ids.join(' ')}`}
+            data-s="true"
+            dangerouslySetInnerHTML={{ __html: css }}
+          />
+        ))}
       </head>
       <body>
         {children}
@@ -49,12 +58,15 @@ function Document({
 export default function App() {
   // grab env from loader
   const { envFromCookie, titlePrefix } = useLoaderData<typeof loader>();
+  const [mounted, setMounted] = React.useState(false);
 
   // log the cookie
   console.log('envFromCookie in root.tsx:', envFromCookie);
 
   // add env to window .env
   React.useEffect(() => {
+    setMounted(true);
+
     try {
       if (typeof window !== 'undefined') {
         window.envFromCookie = {
@@ -83,13 +95,19 @@ export default function App() {
             <Outlet />
           </Main>
         </ThingtimeProvider>
-        <Analytics />
+        {mounted ? <Analytics /> : null}
       </ChakraWrapper>
     </Document>
   );
 }
 
-export async function loader({ request }: LoaderArgs) {
+type RootLoaderData = {
+  envFromCookie: Record<string, string | undefined>;
+  devKitEnv: Record<string, string | undefined>;
+  titlePrefix: string;
+};
+
+export async function loader({ request }: { request: Request }) {
   const cookieHeader = request.headers.get('Cookie');
 
   const cookie = (await Session.parse(cookieHeader)) || {};
@@ -98,7 +116,7 @@ export async function loader({ request }: LoaderArgs) {
 
   const pingCounter = cookiePingCounter + 1;
 
-	const processEnv = {};
+  const processEnv: RootLoaderData['envFromCookie'] = {};
   const url = new URL(request.url);
   const devKitEnv = {
     NODE_ENV: process.env.NODE_ENV,
@@ -118,13 +136,13 @@ export async function loader({ request }: LoaderArgs) {
 
   // .log everyone
 
-	return json(
-		{
-			envFromCookie: { ...processEnv },
-			devKitEnv,
-			titlePrefix
-		},
-		{
+  return json(
+    {
+      envFromCookie: { ...processEnv },
+      devKitEnv,
+      titlePrefix
+    },
+    {
       headers: {
         'Set-Cookie': await Session.serialize({ ...cookie, pingCounter })
       }

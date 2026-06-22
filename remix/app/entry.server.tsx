@@ -1,44 +1,34 @@
 import { RemixServer } from '@remix-run/react';
 import type { EntryContext } from '@remix-run/react/dist/entry';
 import { CacheProvider } from '@emotion/react';
-import createEmotionServerModule from '@emotion/server/create-instance';
+import createEmotionServer from '@emotion/server/create-instance';
 import { renderToString } from 'react-dom/server';
 
 import { createEmotionCache } from './Providers/Chakra/createEmotionCache';
-
-const createEmotionServer =
-  'default' in createEmotionServerModule
-    ? createEmotionServerModule.default
-    : createEmotionServerModule;
-
-const removeEmotionInlineStyles = (markup: string) =>
-  markup.replace(/<style data-emotion="[^"]*">[\s\S]*?<\/style>/g, '');
-
-const emotionStylesToHtml = (
-  styles: ReturnType<ReturnType<typeof createEmotionServer>['extractCriticalToChunks']>['styles']
-) =>
-  styles
-    .map(
-      (style) =>
-        `<style data-emotion="${style.key} ${style.ids.join(' ')}">${style.css}</style>`
-    )
-    .join('');
+import { ServerStyleContext } from './Providers/Chakra/emotionContext';
 
 export default function handleRequest(request: Request, responseStatusCode: number, responseHeaders: Headers, remixContext: EntryContext) {
   const cache = createEmotionCache();
   const { extractCriticalToChunks } = createEmotionServer(cache);
-  const markup = renderToString(
-    <CacheProvider value={cache}>
-      <RemixServer context={remixContext} url={request.url} />
-    </CacheProvider>
+  const html = renderToString(
+    <ServerStyleContext.Provider value={null}>
+      <CacheProvider value={cache}>
+        <RemixServer context={remixContext} url={request.url} />
+      </CacheProvider>
+    </ServerStyleContext.Provider>
   );
-  const chunks = extractCriticalToChunks(markup);
-  const emotionStyles = emotionStylesToHtml(chunks.styles);
-  const html = removeEmotionInlineStyles(markup).replace('</head>', `${emotionStyles}</head>`);
+  const chunks = extractCriticalToChunks(html);
+  const markup = renderToString(
+    <ServerStyleContext.Provider value={chunks.styles}>
+      <CacheProvider value={cache}>
+        <RemixServer context={remixContext} url={request.url} />
+      </CacheProvider>
+    </ServerStyleContext.Provider>
+  );
 
   responseHeaders.set('Content-Type', 'text/html');
 
-  return new Response(`<!DOCTYPE html>${html}`, {
+  return new Response(`<!DOCTYPE html>${markup}`, {
     status: responseStatusCode,
     headers: responseHeaders
   });
