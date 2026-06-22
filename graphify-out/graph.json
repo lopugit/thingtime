@@ -2050,7 +2050,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "components_imagegeneratoractionpanel",
-      "community": 0,
+      "community": 10,
       "norm_label": "imagegeneratoractionpanel.tsx"
     },
     {
@@ -2090,7 +2090,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "components_sizeselectionactionpanel",
-      "community": 0,
+      "community": 10,
       "norm_label": "sizeselectionactionpanel.tsx"
     },
     {
@@ -2240,7 +2240,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "operations_filteroperation",
-      "community": 10,
+      "community": 0,
       "norm_label": "filteroperation.ts"
     },
     {
@@ -2250,7 +2250,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "operations_filteroperation_applyfilter",
-      "community": 10,
+      "community": 0,
       "norm_label": "applyfilter()"
     },
     {
@@ -3020,7 +3020,7 @@
       "source_location": "L231",
       "_origin": "ast",
       "id": "utilities_utils_cleanup",
-      "community": 0,
+      "community": 10,
       "norm_label": "cleanup()"
     },
     {
@@ -3180,7 +3180,7 @@
       "source_location": "L994",
       "_origin": "ast",
       "id": "utilities_utils_showerrortoast",
-      "community": 0,
+      "community": 10,
       "norm_label": "showerrortoast()"
     },
     {
@@ -3710,7 +3710,7 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "providers_thingtimeprovider_thingtimetypes",
-      "community": 87,
+      "community": 72,
       "norm_label": "thingtimetypes"
     },
     {
@@ -3730,7 +3730,7 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "providers_thingtimeprovider_thingtimecontext",
-      "community": 87,
+      "community": 72,
       "norm_label": "thingtimecontext"
     },
     {
@@ -4267,7 +4267,7 @@
       "label": "LopuContext",
       "file_type": "code",
       "source_file": "remix/app/api/utils/lopu/musing.ts",
-      "source_location": "L16",
+      "source_location": "L20",
       "_origin": "ast",
       "id": "lopu_musing_lopucontext",
       "community": 35,
@@ -4277,37 +4277,87 @@
       "label": "LopuSource",
       "file_type": "code",
       "source_file": "remix/app/api/utils/lopu/musing.ts",
-      "source_location": "L24",
+      "source_location": "L28",
       "_origin": "ast",
       "id": "lopu_musing_lopusource",
       "community": 35,
       "norm_label": "lopusource"
     },
     {
+      "label": "LopuMode",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/lopu/musing.ts",
+      "source_location": "L29",
+      "_origin": "ast",
+      "id": "lopu_musing_lopumode",
+      "community": 35,
+      "norm_label": "lopumode"
+    },
+    {
       "label": "LopuMusing",
       "file_type": "code",
       "source_file": "remix/app/api/utils/lopu/musing.ts",
-      "source_location": "L25",
+      "source_location": "L30",
       "_origin": "ast",
       "id": "lopu_musing_lopumusing",
       "community": 35,
       "norm_label": "lopumusing"
     },
     {
+      "label": "LopuStreamEvent",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/lopu/musing.ts",
+      "source_location": "L33",
+      "_origin": "ast",
+      "id": "lopu_musing_lopustreamevent",
+      "community": 35,
+      "norm_label": "lopustreamevent"
+    },
+    {
       "label": "pickFallback()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/lopu/musing.ts",
-      "source_location": "L30",
+      "source_location": "L41",
       "_origin": "ast",
       "id": "lopu_musing_pickfallback",
       "community": 35,
       "norm_label": "pickfallback()"
     },
     {
+      "label": "ALL_MODES",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/lopu/musing.ts",
+      "source_location": "L44",
+      "_origin": "ast",
+      "id": "lopu_musing_all_modes",
+      "community": 35,
+      "norm_label": "all_modes"
+    },
+    {
+      "label": "pickMode()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/lopu/musing.ts",
+      "source_location": "L45",
+      "_origin": "ast",
+      "id": "lopu_musing_pickmode",
+      "community": 35,
+      "norm_label": "pickmode()"
+    },
+    {
+      "label": "buildContextLine()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/lopu/musing.ts",
+      "source_location": "L52",
+      "_origin": "ast",
+      "id": "lopu_musing_buildcontextline",
+      "community": 35,
+      "norm_label": "buildcontextline()"
+    },
+    {
       "label": "buildUserPrompt()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/lopu/musing.ts",
-      "source_location": "L37",
+      "source_location": "L61",
       "_origin": "ast",
       "id": "lopu_musing_builduserprompt",
       "community": 35,
@@ -4317,7 +4367,7 @@
       "label": "weatherCodeToText()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/lopu/musing.ts",
-      "source_location": "L47",
+      "source_location": "L76",
       "_origin": "ast",
       "id": "lopu_musing_weathercodetotext",
       "community": 35,
@@ -4327,37 +4377,57 @@
       "label": "fetchWeather()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/lopu/musing.ts",
-      "source_location": "L60",
+      "source_location": "L89",
       "_origin": "ast",
       "id": "lopu_musing_fetchweather",
       "community": 35,
       "norm_label": "fetchweather()"
     },
     {
-      "label": "tryClaude()",
+      "label": "providerOrder()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/lopu/musing.ts",
-      "source_location": "L79",
+      "source_location": "L142",
       "_origin": "ast",
-      "id": "lopu_musing_tryclaude",
+      "id": "lopu_musing_providerorder",
       "community": 35,
-      "norm_label": "tryclaude()"
+      "norm_label": "providerorder()"
     },
     {
-      "label": "tryOpenAI()",
+      "label": "hasAnyKey()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/lopu/musing.ts",
-      "source_location": "L97",
+      "source_location": "L147",
       "_origin": "ast",
-      "id": "lopu_musing_tryopenai",
+      "id": "lopu_musing_hasanykey",
       "community": 35,
-      "norm_label": "tryopenai()"
+      "norm_label": "hasanykey()"
+    },
+    {
+      "label": "chunkWords()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/lopu/musing.ts",
+      "source_location": "L151",
+      "_origin": "ast",
+      "id": "lopu_musing_chunkwords",
+      "community": 35,
+      "norm_label": "chunkwords()"
+    },
+    {
+      "label": "tick()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/lopu/musing.ts",
+      "source_location": "L152",
+      "_origin": "ast",
+      "id": "lopu_musing_tick",
+      "community": 35,
+      "norm_label": "tick()"
     },
     {
       "label": "generateLopuMusing()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/lopu/musing.ts",
-      "source_location": "L116",
+      "source_location": "L208",
       "_origin": "ast",
       "id": "lopu_musing_generatelopumusing",
       "community": 35,
@@ -4710,7 +4780,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "api_submit",
-      "community": 16,
+      "community": 2,
       "norm_label": "submit.tsx"
     },
     {
@@ -4720,7 +4790,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "api_submit_submit",
-      "community": 16,
+      "community": 2,
       "norm_label": "submit()"
     },
     {
@@ -4730,7 +4800,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "api_test",
-      "community": 13,
+      "community": 2,
       "norm_label": "test.tsx"
     },
     {
@@ -4740,7 +4810,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "api_test_testapi",
-      "community": 13,
+      "community": 2,
       "norm_label": "testapi()"
     },
     {
@@ -4870,7 +4940,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "commander_commanderv1deprecated",
-      "community": 16,
+      "community": 45,
       "norm_label": "commanderv1deprecated.tsx"
     },
     {
@@ -4880,7 +4950,7 @@
       "source_location": "L16",
       "_origin": "ast",
       "id": "commander_commanderv1deprecated_commanderargs",
-      "community": 16,
+      "community": 45,
       "norm_label": "commanderargs"
     },
     {
@@ -4890,7 +4960,7 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "commander_commanderv1deprecated_commanderv1",
-      "community": 16,
+      "community": 45,
       "norm_label": "commanderv1()"
     },
     {
@@ -4900,7 +4970,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "commander_commanderv2",
-      "community": 16,
+      "community": 73,
       "norm_label": "commanderv2.tsx"
     },
     {
@@ -4910,7 +4980,7 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "commander_commanderv2_commanderv2",
-      "community": 16,
+      "community": 73,
       "norm_label": "commanderv2()"
     },
     {
@@ -4960,7 +5030,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "editor_editor",
-      "community": 13,
+      "community": 2,
       "norm_label": "editor.tsx"
     },
     {
@@ -4970,7 +5040,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "editor_editor_editor",
-      "community": 13,
+      "community": 2,
       "norm_label": "editor()"
     },
     {
@@ -4980,7 +5050,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "icon_icon",
-      "community": 16,
+      "community": 45,
       "norm_label": "icon.tsx"
     },
     {
@@ -4990,7 +5060,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "icon_icon_icon",
-      "community": 16,
+      "community": 45,
       "norm_label": "icon()"
     },
     {
@@ -5000,7 +5070,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "layout_main",
-      "community": 16,
+      "community": 73,
       "norm_label": "main.tsx"
     },
     {
@@ -5020,7 +5090,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "layout_topspacing",
-      "community": 13,
+      "community": 2,
       "norm_label": "topspacing.tsx"
     },
     {
@@ -5030,7 +5100,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "layout_topspacing_topspacing",
-      "community": 13,
+      "community": 2,
       "norm_label": "topspacing()"
     },
     {
@@ -5094,10 +5164,30 @@
       "norm_label": "uselopu.tsx"
     },
     {
+      "label": "CONTAINER_STYLE",
+      "file_type": "code",
+      "source_file": "remix/app/components/Lopu/useLopu.tsx",
+      "source_location": "L18",
+      "_origin": "ast",
+      "id": "lopu_uselopu_container_style",
+      "community": 16,
+      "norm_label": "container_style"
+    },
+    {
+      "label": "blink",
+      "file_type": "code",
+      "source_file": "remix/app/components/Lopu/useLopu.tsx",
+      "source_location": "L27",
+      "_origin": "ast",
+      "id": "lopu_uselopu_blink",
+      "community": 16,
+      "norm_label": "blink"
+    },
+    {
       "label": "LopuStatus",
       "file_type": "code",
       "source_file": "remix/app/components/Lopu/useLopu.tsx",
-      "source_location": "L10",
+      "source_location": "L29",
       "_origin": "ast",
       "id": "lopu_uselopu_lopustatus",
       "community": 16,
@@ -5107,7 +5197,7 @@
       "label": "LopuLink",
       "file_type": "code",
       "source_file": "remix/app/components/Lopu/useLopu.tsx",
-      "source_location": "L12",
+      "source_location": "L31",
       "_origin": "ast",
       "id": "lopu_uselopu_lopulink",
       "community": 16,
@@ -5117,7 +5207,7 @@
       "label": "LopuArgs",
       "file_type": "code",
       "source_file": "remix/app/components/Lopu/useLopu.tsx",
-      "source_location": "L14",
+      "source_location": "L33",
       "_origin": "ast",
       "id": "lopu_uselopu_lopuargs",
       "community": 16,
@@ -5127,7 +5217,7 @@
       "label": "statusEmoji()",
       "file_type": "code",
       "source_file": "remix/app/components/Lopu/useLopu.tsx",
-      "source_location": "L22",
+      "source_location": "L41",
       "_origin": "ast",
       "id": "lopu_uselopu_statusemoji",
       "community": 16,
@@ -5137,7 +5227,7 @@
       "label": "LopuToast()",
       "file_type": "code",
       "source_file": "remix/app/components/Lopu/useLopu.tsx",
-      "source_location": "L24",
+      "source_location": "L43",
       "_origin": "ast",
       "id": "lopu_uselopu_loputoast",
       "community": 16,
@@ -5147,11 +5237,31 @@
       "label": "useLopu()",
       "file_type": "code",
       "source_file": "remix/app/components/Lopu/useLopu.tsx",
-      "source_location": "L97",
+      "source_location": "L137",
       "_origin": "ast",
       "id": "lopu_uselopu_uselopu",
       "community": 16,
       "norm_label": "uselopu()"
+    },
+    {
+      "label": "sourceLabel()",
+      "file_type": "code",
+      "source_file": "remix/app/components/Lopu/useLopu.tsx",
+      "source_location": "L154",
+      "_origin": "ast",
+      "id": "lopu_uselopu_sourcelabel",
+      "community": 16,
+      "norm_label": "sourcelabel()"
+    },
+    {
+      "label": "useLopuStream()",
+      "file_type": "code",
+      "source_file": "remix/app/components/Lopu/useLopu.tsx",
+      "source_location": "L159",
+      "_origin": "ast",
+      "id": "lopu_uselopu_uselopustream",
+      "community": 16,
+      "norm_label": "uselopustream()"
     },
     {
       "label": "MagicInput.tsx",
@@ -5160,7 +5270,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "magicinput_magicinput",
-      "community": 16,
+      "community": 45,
       "norm_label": "magicinput.tsx"
     },
     {
@@ -5170,7 +5280,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "magicinput_magicinput_magicinputprops",
-      "community": 16,
+      "community": 45,
       "norm_label": "magicinputprops"
     },
     {
@@ -5180,7 +5290,7 @@
       "source_location": "L24",
       "_origin": "ast",
       "id": "magicinput_magicinput_magicinput",
-      "community": 16,
+      "community": 45,
       "norm_label": "magicinput"
     },
     {
@@ -5240,7 +5350,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "mongodb_rawresult",
-      "community": 13,
+      "community": 72,
       "norm_label": "rawresult.tsx"
     },
     {
@@ -5250,7 +5360,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "mongodb_rawresult_rawresultprops",
-      "community": 13,
+      "community": 72,
       "norm_label": "rawresultprops"
     },
     {
@@ -5260,7 +5370,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "mongodb_rawresult_rawresult",
-      "community": 13,
+      "community": 72,
       "norm_label": "rawresult()"
     },
     {
@@ -5270,7 +5380,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "mongodb_rawresults",
-      "community": 13,
+      "community": 72,
       "norm_label": "rawresults.tsx"
     },
     {
@@ -5290,7 +5400,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "nav_footer",
-      "community": 16,
+      "community": 73,
       "norm_label": "footer.tsx"
     },
     {
@@ -5300,7 +5410,7 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "nav_footer_footer",
-      "community": 16,
+      "community": 73,
       "norm_label": "footer()"
     },
     {
@@ -5310,7 +5420,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "nav_nav",
-      "community": 16,
+      "community": 73,
       "norm_label": "nav.tsx"
     },
     {
@@ -5320,7 +5430,7 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "nav_nav_nav",
-      "community": 16,
+      "community": 73,
       "norm_label": "nav()"
     },
     {
@@ -5330,7 +5440,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "nav_profiledrawer",
-      "community": 16,
+      "community": 73,
       "norm_label": "profiledrawer.tsx"
     },
     {
@@ -5340,7 +5450,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "nav_profiledrawer_profiledrawer",
-      "community": 16,
+      "community": 73,
       "norm_label": "profiledrawer()"
     },
     {
@@ -5410,7 +5520,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "safety_safe",
-      "community": 16,
+      "community": 88,
       "norm_label": "safe.tsx"
     },
     {
@@ -5420,7 +5530,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "safety_safe_safe",
-      "community": 16,
+      "community": 88,
       "norm_label": "safe()"
     },
     {
@@ -5430,7 +5540,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "skeleton_rainbowskeleton",
-      "community": 16,
+      "community": 73,
       "norm_label": "rainbowskeleton.tsx"
     },
     {
@@ -5440,7 +5550,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "skeleton_rainbowskeleton_rainbowskeleton",
-      "community": 16,
+      "community": 73,
       "norm_label": "rainbowskeleton()"
     },
     {
@@ -5450,7 +5560,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "splash_splash",
-      "community": 16,
+      "community": 76,
       "norm_label": "splash.tsx"
     },
     {
@@ -5460,7 +5570,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "splash_splash_splash",
-      "community": 16,
+      "community": 76,
       "norm_label": "splash()"
     },
     {
@@ -5470,7 +5580,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "thingtime_settingsmenu",
-      "community": 16,
+      "community": 45,
       "norm_label": "settingsmenu.tsx"
     },
     {
@@ -5480,7 +5590,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "thingtime_settingsmenu_settingsmenu",
-      "community": 16,
+      "community": 45,
       "norm_label": "settingsmenu()"
     },
     {
@@ -5490,7 +5600,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "thingtime_thingtime",
-      "community": 16,
+      "community": 45,
       "norm_label": "thingtime.tsx"
     },
     {
@@ -5500,7 +5610,7 @@
       "source_location": "L33",
       "_origin": "ast",
       "id": "thingtime_thingtime_thingtimeprops",
-      "community": 16,
+      "community": 45,
       "norm_label": "thingtimeprops"
     },
     {
@@ -5510,7 +5620,7 @@
       "source_location": "L39",
       "_origin": "ast",
       "id": "thingtime_thingtime_thingtimecomponentprops",
-      "community": 16,
+      "community": 45,
       "norm_label": "thingtimecomponentprops"
     },
     {
@@ -5520,7 +5630,7 @@
       "source_location": "L40",
       "_origin": "ast",
       "id": "thingtime_thingtime_thingtime",
-      "community": 16,
+      "community": 76,
       "norm_label": "thingtime()"
     },
     {
@@ -5530,7 +5640,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "thingtime_thingtimedemo",
-      "community": 16,
+      "community": 76,
       "norm_label": "thingtimedemo.tsx"
     },
     {
@@ -5540,7 +5650,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "thingtime_thingtimedemo_thingtimedemo",
-      "community": 16,
+      "community": 76,
       "norm_label": "thingtimedemo()"
     },
     {
@@ -5550,7 +5660,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "thingtime_thingtimeurl",
-      "community": 16,
+      "community": 72,
       "norm_label": "thingtimeurl.tsx"
     },
     {
@@ -5560,7 +5670,7 @@
       "source_location": "L12",
       "_origin": "ast",
       "id": "thingtime_thingtimeurl_thingtimeurl",
-      "community": 16,
+      "community": 72,
       "norm_label": "thingtimeurl()"
     },
     {
@@ -5570,7 +5680,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "thingtime_usethingtime",
-      "community": 16,
+      "community": 72,
       "norm_label": "usethingtime.tsx"
     },
     {
@@ -5580,7 +5690,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "thingtime_usethingtime_thingtimetypes",
-      "community": 16,
+      "community": 72,
       "norm_label": "thingtimetypes"
     },
     {
@@ -5590,7 +5700,7 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "thingtime_usethingtime_everythingtypes",
-      "community": 16,
+      "community": 72,
       "norm_label": "everythingtypes"
     },
     {
@@ -5600,7 +5710,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "thingtime_usethingtime_getglobal",
-      "community": 16,
+      "community": 72,
       "norm_label": "getglobal()"
     },
     {
@@ -5610,7 +5720,7 @@
       "source_location": "L33",
       "_origin": "ast",
       "id": "thingtime_usethingtime_usethingtimescope",
-      "community": 16,
+      "community": 72,
       "norm_label": "usethingtimescope"
     },
     {
@@ -5620,7 +5730,7 @@
       "source_location": "L43",
       "_origin": "ast",
       "id": "thingtime_usethingtime_usethingtime",
-      "community": 16,
+      "community": 72,
       "norm_label": "usethingtime()"
     },
     {
@@ -5650,7 +5760,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "components_rainbowtext",
-      "community": 16,
+      "community": 76,
       "norm_label": "rainbowtext.tsx"
     },
     {
@@ -5660,7 +5770,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "components_rainbowtext_rainbowtext",
-      "community": 16,
+      "community": 76,
       "norm_label": "rainbowtext()"
     },
     {
@@ -5670,7 +5780,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "components_textanimation1",
-      "community": 16,
+      "community": 76,
       "norm_label": "textanimation1.tsx"
     },
     {
@@ -5680,7 +5790,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "components_textanimation1_textanimation1",
-      "community": 16,
+      "community": 76,
       "norm_label": "textanimation1()"
     },
     {
@@ -5690,7 +5800,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tt_button",
-      "community": 16,
+      "community": 72,
       "norm_label": "button.tsx"
     },
     {
@@ -5700,7 +5810,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "tt_button_button",
-      "community": 16,
+      "community": 72,
       "norm_label": "button()"
     },
     {
@@ -5710,7 +5820,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tt_index",
-      "community": 16,
+      "community": 72,
       "norm_label": "index.ts"
     },
     {
@@ -5770,7 +5880,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "functions_safe",
-      "community": 16,
+      "community": 88,
       "norm_label": "safe.tsx"
     },
     {
@@ -5780,7 +5890,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "functions_safe_safe",
-      "community": 16,
+      "community": 88,
       "norm_label": "safe()"
     },
     {
@@ -5790,7 +5900,7 @@
       "source_location": "L54",
       "_origin": "ast",
       "id": "functions_safe_getmeta",
-      "community": 16,
+      "community": 88,
       "norm_label": "getmeta()"
     },
     {
@@ -5800,7 +5910,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "functions_sanitise",
-      "community": 16,
+      "community": 73,
       "norm_label": "sanitise.tsx"
     },
     {
@@ -5810,7 +5920,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "functions_sanitise_sanitise",
-      "community": 16,
+      "community": 73,
       "norm_label": "sanitise()"
     },
     {
@@ -6120,7 +6230,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "hooks_useasyncfetcher",
-      "community": 16,
+      "community": 2,
       "norm_label": "useasyncfetcher.tsx"
     },
     {
@@ -6130,7 +6240,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "hooks_useasyncfetcher_useasyncfetcher",
-      "community": 16,
+      "community": 2,
       "norm_label": "useasyncfetcher()"
     },
     {
@@ -6190,7 +6300,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "hooks_usepath",
-      "community": 16,
+      "community": 73,
       "norm_label": "usepath.tsx"
     },
     {
@@ -6200,7 +6310,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "hooks_usepath_usepath",
-      "community": 16,
+      "community": 73,
       "norm_label": "usepath()"
     },
     {
@@ -6230,7 +6340,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "hooks_usethings",
-      "community": 16,
+      "community": 45,
       "norm_label": "usethings.tsx"
     },
     {
@@ -6240,7 +6350,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "hooks_usethings_usethings",
-      "community": 16,
+      "community": 45,
       "norm_label": "usethings()"
     },
     {
@@ -6470,7 +6580,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "routes",
-      "community": 16,
+      "community": 72,
       "norm_label": "$.tsx"
     },
     {
@@ -6480,7 +6590,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "remix_app_routes_tsx_routes_index",
-      "community": 16,
+      "community": 72,
       "norm_label": "index()"
     },
     {
@@ -6490,7 +6600,7 @@
       "source_location": "L24",
       "_origin": "ast",
       "id": "routes_action",
-      "community": 16,
+      "community": 72,
       "norm_label": "action()"
     },
     {
@@ -6500,7 +6610,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_routes_index_tsx_routes_index",
-      "community": 16,
+      "community": 76,
       "norm_label": "_index.tsx"
     },
     {
@@ -6510,7 +6620,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "routes_index_index",
-      "community": 16,
+      "community": 76,
       "norm_label": "index()"
     },
     {
@@ -6644,10 +6754,20 @@
       "norm_label": "_musing.tsx"
     },
     {
+      "label": "formatLocalTime()",
+      "file_type": "code",
+      "source_file": "remix/app/routes/api/v1/lopu/musing/_musing.tsx",
+      "source_location": "L7",
+      "_origin": "ast",
+      "id": "musing_musing_formatlocaltime",
+      "community": 35,
+      "norm_label": "formatlocaltime()"
+    },
+    {
       "label": "loader()",
       "file_type": "code",
       "source_file": "remix/app/routes/api/v1/lopu/musing/_musing.tsx",
-      "source_location": "L9",
+      "source_location": "L21",
       "_origin": "ast",
       "id": "musing_musing_loader",
       "community": 35,
@@ -6820,7 +6940,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "template_template",
-      "community": 13,
+      "community": 2,
       "norm_label": "_template.tsx"
     },
     {
@@ -6830,7 +6950,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "template_template_index",
-      "community": 13,
+      "community": 2,
       "norm_label": "index()"
     },
     {
@@ -6840,7 +6960,7 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "template_template_action",
-      "community": 13,
+      "community": 2,
       "norm_label": "action()"
     },
     {
@@ -6850,7 +6970,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "template_template_earlyreturn",
-      "community": 13,
+      "community": 2,
       "norm_label": "earlyreturn()"
     },
     {
@@ -7020,7 +7140,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "routes_ode",
-      "community": 16,
+      "community": 76,
       "norm_label": "ode.tsx"
     },
     {
@@ -7030,7 +7150,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "routes_ode_index",
-      "community": 16,
+      "community": 76,
       "norm_label": "index()"
     },
     {
@@ -7060,7 +7180,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "routes_rainbow",
-      "community": 16,
+      "community": 76,
       "norm_label": "rainbow.$.tsx"
     },
     {
@@ -7070,7 +7190,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "routes_rainbow_index",
-      "community": 16,
+      "community": 76,
       "norm_label": "index()"
     },
     {
@@ -7380,7 +7500,7 @@
       "source_location": "L59",
       "_origin": "ast",
       "id": "smarts_index_getparentpath",
-      "community": 16,
+      "community": 73,
       "norm_label": "getparentpath()"
     },
     {
@@ -8350,7 +8470,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "utils_index",
-      "community": 16,
+      "community": 45,
       "norm_label": "index.ts"
     },
     {
@@ -8360,7 +8480,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "utils_index_stringliteraltorichtext",
-      "community": 87,
+      "community": 45,
       "norm_label": "stringliteraltorichtext()"
     },
     {
@@ -8370,7 +8490,7 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "utils_index_safejoin",
-      "community": 16,
+      "community": 45,
       "norm_label": "safejoin()"
     },
     {
@@ -8380,7 +8500,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "utils_index_safesplit",
-      "community": 16,
+      "community": 45,
       "norm_label": "safesplit()"
     },
     {
@@ -11046,7 +11166,7 @@
       "source_location": "L49",
       "_origin": "ast",
       "id": "smarts_index_uuid",
-      "community": 16,
+      "community": 45,
       "norm_label": "uuid"
     }
   ],
@@ -20745,9 +20865,9 @@
       "source_file": "remix/app/api/utils/lopu/fallbacks.ts",
       "source_location": "L6",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_fallbacks",
-      "target": "lopu_fallbacks_fallback_musings",
-      "confidence_score": 1.0
+      "target": "lopu_fallbacks_fallback_musings"
     },
     {
       "relation": "imports_from",
@@ -20756,9 +20876,9 @@
       "source_file": "remix/app/api/utils/lopu/musing.ts",
       "source_location": "L4",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_musing",
-      "target": "lopu_fallbacks",
-      "confidence_score": 1.0
+      "target": "lopu_fallbacks"
     },
     {
       "relation": "imports",
@@ -20767,8 +20887,28 @@
       "source_file": "remix/app/api/utils/lopu/musing.ts",
       "source_location": "L4",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_musing",
-      "target": "lopu_fallbacks_fallback_musings",
+      "target": "lopu_fallbacks_fallback_musings"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/lopu/musing.ts",
+      "source_location": "L44",
+      "weight": 1.0,
+      "source": "lopu_musing",
+      "target": "lopu_musing_all_modes",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/lopu/musing.ts",
+      "source_location": "L52",
+      "weight": 1.0,
+      "source": "lopu_musing",
+      "target": "lopu_musing_buildcontextline",
       "confidence_score": 1.0
     },
     {
@@ -20780,6 +20920,16 @@
       "confidence_score": 1.0,
       "source": "lopu_musing",
       "target": "lopu_musing_builduserprompt"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/lopu/musing.ts",
+      "source_location": "L151",
+      "weight": 1.0,
+      "source": "lopu_musing",
+      "target": "lopu_musing_chunkwords",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -20805,11 +20955,31 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/app/api/utils/lopu/musing.ts",
+      "source_location": "L147",
+      "weight": 1.0,
+      "source": "lopu_musing",
+      "target": "lopu_musing_hasanykey",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/lopu/musing.ts",
       "source_location": "L8",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "lopu_musing",
       "target": "lopu_musing_lopucontext"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/lopu/musing.ts",
+      "source_location": "L29",
+      "weight": 1.0,
+      "source": "lopu_musing",
+      "target": "lopu_musing_lopumode",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -20835,6 +21005,16 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/app/api/utils/lopu/musing.ts",
+      "source_location": "L33",
+      "weight": 1.0,
+      "source": "lopu_musing",
+      "target": "lopu_musing_lopustreamevent",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/lopu/musing.ts",
       "source_location": "L26",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -20845,21 +21025,31 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/app/api/utils/lopu/musing.ts",
-      "source_location": "L84",
+      "source_location": "L45",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "lopu_musing",
-      "target": "lopu_musing_tryclaude"
+      "target": "lopu_musing_pickmode",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/app/api/utils/lopu/musing.ts",
-      "source_location": "L102",
+      "source_location": "L142",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "lopu_musing",
-      "target": "lopu_musing_tryopenai"
+      "target": "lopu_musing_providerorder",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/lopu/musing.ts",
+      "source_location": "L152",
+      "weight": 1.0,
+      "source": "lopu_musing",
+      "target": "lopu_musing_tick",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -20892,6 +21082,17 @@
       "confidence_score": 1.0,
       "source": "lopu_musing_generatelopumusing",
       "target": "lopu_musing_pickfallback"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/lopu/musing.ts",
+      "source_location": "L64",
+      "weight": 1.0,
+      "source": "lopu_musing_builduserprompt",
+      "target": "lopu_musing_buildcontextline",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -20936,28 +21137,6 @@
       "weight": 1.0,
       "source": "musing_musing_loader",
       "target": "lopu_musing_fetchweather"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "remix/app/api/utils/lopu/musing.ts",
-      "source_location": "L130",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "lopu_musing_generatelopumusing",
-      "target": "lopu_musing_tryclaude"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "remix/app/api/utils/lopu/musing.ts",
-      "source_location": "L130",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "lopu_musing_generatelopumusing",
-      "target": "lopu_musing_tryopenai"
     },
     {
       "relation": "imports",
@@ -23246,6 +23425,17 @@
       "target": "lopu_uselopu_uselopu"
     },
     {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/components/DevKit/DevKit.tsx",
+      "source_location": "L8",
+      "weight": 1.0,
+      "source": "devkit_devkit",
+      "target": "lopu_uselopu_uselopustream",
+      "confidence_score": 1.0
+    },
+    {
       "relation": "imports_from",
       "context": "import",
       "confidence": "EXTRACTED",
@@ -23332,6 +23522,17 @@
       "weight": 1.0,
       "source": "devkit_devkit_devkit",
       "target": "lopu_uselopu_uselopu"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/components/DevKit/DevKit.tsx",
+      "source_location": "L49",
+      "weight": 1.0,
+      "source": "devkit_devkit_devkit",
+      "target": "lopu_uselopu_uselopustream"
     },
     {
       "relation": "calls",
@@ -23957,6 +24158,26 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/app/components/Lopu/useLopu.tsx",
+      "source_location": "L27",
+      "weight": 1.0,
+      "source": "lopu_uselopu",
+      "target": "lopu_uselopu_blink",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/components/Lopu/useLopu.tsx",
+      "source_location": "L18",
+      "weight": 1.0,
+      "source": "lopu_uselopu",
+      "target": "lopu_uselopu_container_style",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/components/Lopu/useLopu.tsx",
       "source_location": "L12",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -23997,6 +24218,16 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/app/components/Lopu/useLopu.tsx",
+      "source_location": "L154",
+      "weight": 1.0,
+      "source": "lopu_uselopu",
+      "target": "lopu_uselopu_sourcelabel",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/components/Lopu/useLopu.tsx",
       "source_location": "L19",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -24012,6 +24243,16 @@
       "confidence_score": 1.0,
       "source": "lopu_uselopu",
       "target": "lopu_uselopu_uselopu"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/components/Lopu/useLopu.tsx",
+      "source_location": "L159",
+      "weight": 1.0,
+      "source": "lopu_uselopu",
+      "target": "lopu_uselopu_uselopustream",
+      "confidence_score": 1.0
     },
     {
       "relation": "imports_from",
@@ -27149,11 +27390,32 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/app/routes/api/v1/lopu/musing/_musing.tsx",
+      "source_location": "L7",
+      "weight": 1.0,
+      "source": "musing_musing",
+      "target": "musing_musing_formatlocaltime",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/lopu/musing/_musing.tsx",
       "source_location": "L9",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "musing_musing",
       "target": "musing_musing_loader"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/lopu/musing/_musing.tsx",
+      "source_location": "L36",
+      "weight": 1.0,
+      "source": "musing_musing_loader",
+      "target": "musing_musing_formatlocaltime",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -32115,5 +32377,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "8cba5041c22bba4fe0308e60908175de66680d7e"
+  "built_at_commit": "932498267cc4f23333014d33483045f57cad3040"
 }

@@ -5,7 +5,7 @@ import React from 'react';
 import { useThingtime } from '../Thingtime/useThingtime';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useApi } from '~/hooks/useApi';
-import { useLopu } from '../Lopu/useLopu';
+import { useLopu, useLopuStream } from '../Lopu/useLopu';
 import { RAINBOW } from '../User/UserCard';
 import { Icon } from '../Icon/Icon';
 
@@ -46,6 +46,7 @@ export const DevKit = (props) => {
   const navigate = useNavigate();
   const revalidator = useRevalidator();
   const lopu = useLopu();
+  const pushLopuMusing = useLopuStream();
 
   const urlParams = getQueryParams();
   const params = {};
@@ -141,16 +142,11 @@ export const DevKit = (props) => {
     navigate('/login');
   }, [api, navigate]);
 
-  const pushMusing = React.useCallback(async () => {
-    try {
-      const resp = await fetch('/api/v1/lopu/musing');
-      const data = await resp.json();
-      const via = data?.source === 'claude' ? 'via Claude 🤖' : data?.source === 'openai' ? 'via ChatGPT 🤖' : undefined;
-      lopu({ title: data?.message || 'Lopu is daydreaming…', description: via });
-    } catch {
-      lopu({ title: 'Lopu is daydreaming… try again 🔮', status: 'error' });
-    }
-  }, [lopu]);
+  // Streams the musing in live: the toast pops instantly ("Lopu is thinking…")
+  // then types the response in, à la modern AI chat.
+  const pushMusing = React.useCallback(() => {
+    pushLopuMusing('/api/v1/lopu/musing');
+  }, [pushLopuMusing]);
 
   if (!devKit) return null;
 

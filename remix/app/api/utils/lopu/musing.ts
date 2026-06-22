@@ -4,14 +4,18 @@ import OpenAI from 'openai';
 import { FALLBACK_MUSINGS } from './fallbacks';
 
 // 🦄 Lopu's musings — a little message generated from the user's real-world
-// context (approximate location + current weather + time of day).
+// context (approximate location + current weather + local time of day).
 //
 // Providers (set either or both env keys):
 //   - ANTHROPIC_API_KEY → Claude (model: LOPU_CLAUDE_MODEL, default claude-opus-4-8)
 //   - OPENAI_API_KEY    → ChatGPT (model: LOPU_OPENAI_MODEL, default gpt-4o-mini)
 // Preference order via LOPU_PROVIDER = "claude" | "openai" (default: claude first).
-// If neither key is set (or both calls fail), a canned fallback is returned, so
-// the feature always works. Weather is keyless (Open-Meteo).
+//
+// For variety, each request picks a "mode": a weather/place musing, a fresh
+// musing, a little quote, a hand-written fallback line, or a fallback line with
+// a short comment from the AI. If no key is set (or a call fails), we fall back
+// to the 370-strong canned library, so the feature always works. Weather is
+// keyless (Open-Meteo).
 
 export type LopuContext = {
   city?: string;
@@ -22,25 +26,50 @@ export type LopuContext = {
 };
 
 export type LopuSource = 'claude' | 'openai' | 'fallback';
-export type LopuMusing = { message: string; source: LopuSource };
+export type LopuMode = 'weather' | 'musing' | 'quote' | 'commented' | 'fallback';
+export type LopuMusing = { message: string; source: LopuSource; mode: LopuMode };
+
+// Streaming protocol (NDJSON over the wire — one JSON object per line).
+export type LopuStreamEvent =
+  | { type: 'meta'; source: LopuSource; mode: LopuMode }
+  | { type: 'delta'; text: string }
+  | { type: 'done' };
 
 // Rotate through the big fallback library by time (no RNG — not security-
 // sensitive, and CodeQL flags any range-reduction of a secure RNG). With ~370
 // lines this gives plenty of variety while the endpoint stays live with no keys.
 const pickFallback = () => FALLBACK_MUSINGS[Date.now() % FALLBACK_MUSINGS.length];
 
+// Same time-based rotation for the mode, so each click feels a little different.
+const ALL_MODES: LopuMode[] = ['weather', 'musing', 'quote', 'commented', 'fallback'];
+const pickMode = (): LopuMode => ALL_MODES[Date.now() % ALL_MODES.length];
+
 const SYSTEM_PROMPT =
   'You are Lopu, the whimsical unicorn AI living inside Thingtime. Reply with ONE short, delightful musing ' +
   "(max two sentences) — warm, a touch magical, and weave in the user's weather, city, or time of day when given. " +
   'Use at most one emoji. Output ONLY the musing text: no preamble, no quotes, no meta-commentary, no reasoning.';
 
-const buildUserPrompt = (ctx: LopuContext): string => {
+const buildContextLine = (ctx: LopuContext): string => {
   const bits: string[] = [];
   if (ctx.city) bits.push(`city: ${ctx.city}${ctx.country ? ', ' + ctx.country : ''}`);
   if (typeof ctx.tempC === 'number') bits.push(`weather: ${ctx.weather ?? ''} ${ctx.tempC}°C`.trim());
   if (ctx.localTime) bits.push(`local time: ${ctx.localTime}`);
-  const contextLine = bits.length ? `Context — ${bits.join('; ')}.` : 'No location context available.';
-  return `${contextLine}\nGive me today's little musing.`;
+  return bits.length ? `Context — ${bits.join('; ')}.` : 'No location context available.';
+};
+
+// The user-turn prompt for each mode. System prompt is shared.
+const buildUserPrompt = (mode: LopuMode, ctx: LopuContext, base: string): string => {
+  switch (mode) {
+    case 'weather':
+      return `${buildContextLine(ctx)}\nGive me today's little musing, woven around that real-world context.`;
+    case 'quote':
+      return `${buildContextLine(ctx)}\nShare a tiny uplifting quote-style line — one sentence, the kind worth pinning to a wall.`;
+    case 'commented':
+      return `Here is one of your past musings: "${base}". Add a brief, warm one-sentence comment riffing on it. Output ONLY your comment — do not repeat the musing itself.`;
+    case 'musing':
+    default:
+      return 'Give me a tiny delightful musing — something warm and a touch magical, no location needed.';
+  }
 };
 
 // Minimal WMO weather-code → words mapping (Open-Meteo `weather_code`).
@@ -74,57 +103,119 @@ export const fetchWeather = async (lat: string, lon: string): Promise<{ tempC?: 
   }
 };
 
-// --- Providers (each returns the musing text, or null to fall through) -------
+// --- Streaming providers (each yields text chunks, or throws to fall through) -
 
-const tryClaude = async (user: string): Promise<string | null> => {
-  if (!process.env.ANTHROPIC_API_KEY) return null;
-  try {
-    const client = new Anthropic();
-    const response = await client.messages.create({
-      model: process.env.LOPU_CLAUDE_MODEL || 'claude-opus-4-8',
-      max_tokens: 120,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: user }]
-    });
-    const block = response.content.find((b) => b.type === 'text');
-    const text = block && 'text' in block ? block.text.trim() : '';
-    return text || null;
-  } catch {
-    return null;
+async function* streamClaude(system: string, user: string): AsyncGenerator<string> {
+  const client = new Anthropic();
+  const stream = client.messages.stream({
+    model: process.env.LOPU_CLAUDE_MODEL || 'claude-opus-4-8',
+    max_tokens: 200, // intentionally short — a musing is one or two sentences
+    system,
+    messages: [{ role: 'user', content: user }]
+  });
+  for await (const event of stream) {
+    if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+      yield event.delta.text;
+    }
   }
-};
+}
 
-const tryOpenAI = async (user: string): Promise<string | null> => {
-  if (!process.env.OPENAI_API_KEY) return null;
-  try {
-    const client = new OpenAI();
-    const resp = await client.chat.completions.create({
-      model: process.env.LOPU_OPENAI_MODEL || 'gpt-4o-mini',
-      max_tokens: 120,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: user }
-      ]
-    });
-    const text = resp.choices?.[0]?.message?.content?.trim();
-    return text || null;
-  } catch {
-    return null;
+async function* streamOpenAI(system: string, user: string): AsyncGenerator<string> {
+  const client = new OpenAI();
+  const stream = await client.chat.completions.create({
+    model: process.env.LOPU_OPENAI_MODEL || 'gpt-4o-mini',
+    max_tokens: 200,
+    stream: true,
+    messages: [
+      { role: 'system', content: system },
+      { role: 'user', content: user }
+    ]
+  });
+  for await (const chunk of stream) {
+    const text = chunk.choices?.[0]?.delta?.content;
+    if (text) yield text;
   }
-};
+}
 
-export const generateLopuMusing = async (ctx: LopuContext): Promise<LopuMusing> => {
-  const user = buildUserPrompt(ctx);
-
-  // Preference order: LOPU_PROVIDER picks who goes first; the other is the
-  // automatic fallback. Default is Claude first.
+// Provider preference: LOPU_PROVIDER picks who goes first; the other is the
+// automatic fallback. Default is Claude first.
+const providerOrder = (): Array<'claude' | 'openai'> => {
   const pref = (process.env.LOPU_PROVIDER || '').toLowerCase();
-  const order: Array<'claude' | 'openai'> = pref === 'openai' ? ['openai', 'claude'] : ['claude', 'openai'];
+  return pref === 'openai' ? ['openai', 'claude'] : ['claude', 'openai'];
+};
 
-  for (const provider of order) {
-    const text = provider === 'claude' ? await tryClaude(user) : await tryOpenAI(user);
-    if (text) return { message: text, source: provider };
+const hasAnyKey = () => !!process.env.ANTHROPIC_API_KEY || !!process.env.OPENAI_API_KEY;
+
+// Split a string into word-sized chunks (keeping trailing spaces) so a canned
+// line can be "typed in" with the same streaming feel as the AI.
+const chunkWords = (s: string): string[] => s.match(/\S+\s*/g) || [s];
+const tick = () => new Promise((resolve) => setTimeout(resolve, 45));
+
+async function* streamFallback(mode: LopuMode): AsyncGenerator<LopuStreamEvent> {
+  yield { type: 'meta', source: 'fallback', mode };
+  for (const chunk of chunkWords(pickFallback())) {
+    yield { type: 'delta', text: chunk };
+    await tick();
+  }
+  yield { type: 'done' };
+}
+
+// The streaming heart of the feature: pick a mode, try each provider, and on any
+// failure (no key / no credits / network) fall back to the canned library.
+export async function* streamLopuMusing(ctx: LopuContext): AsyncGenerator<LopuStreamEvent> {
+  const mode = pickMode();
+
+  // Pure-fallback mode, or no AI configured at all: serve a canned line.
+  if (mode === 'fallback' || !hasAnyKey()) {
+    yield* streamFallback(mode);
+    return;
   }
 
-  return { message: pickFallback(), source: 'fallback' };
+  // For "commented" mode we show a real library line, then the AI riff.
+  const base = mode === 'commented' ? pickFallback() : '';
+  const user = buildUserPrompt(mode, ctx, base);
+
+  for (const provider of providerOrder()) {
+    const key = provider === 'claude' ? process.env.ANTHROPIC_API_KEY : process.env.OPENAI_API_KEY;
+    if (!key) continue;
+    try {
+      const gen = provider === 'claude' ? streamClaude(SYSTEM_PROMPT, user) : streamOpenAI(SYSTEM_PROMPT, user);
+      // Pull the first chunk inside the try so a failing provider (bad key, no
+      // credits) is caught here and we move to the next one cleanly.
+      const first = await gen.next();
+      yield { type: 'meta', source: provider, mode };
+      // "commented" prepends the chosen library line before the AI's comment.
+      if (base) {
+        for (const chunk of chunkWords(base + ' — ')) {
+          yield { type: 'delta', text: chunk };
+          await tick();
+        }
+      }
+      if (!first.done && first.value) yield { type: 'delta', text: first.value };
+      for await (const text of gen) yield { type: 'delta', text };
+      yield { type: 'done' };
+      return;
+    } catch {
+      // try the next provider
+    }
+  }
+
+  // Every provider failed — never leave the user empty-handed.
+  yield* streamFallback(mode);
+}
+
+// Non-streaming convenience wrapper (collects the stream into a final string).
+export const generateLopuMusing = async (ctx: LopuContext): Promise<LopuMusing> => {
+  let message = '';
+  let source: LopuSource = 'fallback';
+  let mode: LopuMode = 'fallback';
+  for await (const ev of streamLopuMusing(ctx)) {
+    if (ev.type === 'meta') {
+      source = ev.source;
+      mode = ev.mode;
+    } else if (ev.type === 'delta') {
+      message += ev.text;
+    }
+  }
+  return { message: message.trim() || pickFallback(), source, mode };
 };
