@@ -17,13 +17,27 @@ const serverEmotionStyles = Array.from(document.querySelectorAll('style[data-emo
 );
 
 const restoreServerEmotionStyles = () => {
+  const currentEmotionKeys = new Set(
+    Array.from(document.querySelectorAll('style[data-emotion]')).map((style) =>
+      style.getAttribute('data-emotion')
+    )
+  );
+
   for (const style of serverEmotionStyles) {
     const emotionKey = style.getAttribute('data-emotion');
 
-    if (emotionKey && !document.querySelector(`style[data-emotion="${emotionKey}"]`)) {
-      document.head.appendChild(style);
+    if (emotionKey && !currentEmotionKeys.has(emotionKey)) {
+      document.head.appendChild(style.cloneNode(true));
+      currentEmotionKeys.add(emotionKey);
     }
   }
+};
+
+const preserveServerEmotionStyles = () => {
+  restoreServerEmotionStyles();
+
+  const interval = window.setInterval(restoreServerEmotionStyles, 100);
+  window.setTimeout(() => window.clearInterval(interval), 10000);
 };
 
 startTransition(() => {
@@ -33,8 +47,7 @@ startTransition(() => {
     </CacheProvider>
   );
 
-  queueMicrotask(restoreServerEmotionStyles);
-  requestAnimationFrame(restoreServerEmotionStyles);
-  setTimeout(restoreServerEmotionStyles, 50);
-  setTimeout(restoreServerEmotionStyles, 250);
+  queueMicrotask(preserveServerEmotionStyles);
+  requestAnimationFrame(preserveServerEmotionStyles);
+  setTimeout(preserveServerEmotionStyles, 50);
 });
