@@ -1,9 +1,14 @@
 export type VercelDeploymentStatus = {
   branch?: string;
   commitSha?: string;
+  buildId?: string;
+  buildPageUrl?: string;
+  buildPhase?: string;
+  buildProgress?: number;
   configured: boolean;
   deploymentUrl?: string;
   environment?: string;
+  hasError: boolean;
   error?: string;
   label: string;
   latestDeploymentUrl?: string;
@@ -37,6 +42,129 @@ const normaliseState = (state?: string): VercelDeploymentStatus['state'] => {
   return 'unknown';
 };
 
+const clampPercent = (value?: number) => {
+  if (typeof value !== 'number' || Number.isNaN(value)) {
+    return undefined;
+  }
+
+  return Math.max(0, Math.min(100, Math.round(value)));
+};
+
+const normaliseProgress = (value?: unknown): number | undefined => {
+  if (typeof value === 'number') {
+    return clampPercent(value);
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number.parseInt(value, 10);
+    return clampPercent(parsed);
+  }
+
+  return undefined;
+};
+
+const getBuildProgressFromChecks = (checks: unknown): { progress?: number; phase?: string } => {
+  if (!Array.isArray(checks)) {
+    return {};
+  }
+
+  let activePhases: string[] = [];
+  let completeCount = 0;
+  let totalCount = 0;
+
+  for (const rawCheck of checks) {
+    if (typeof rawCheck !== 'object' || rawCheck === null) {
+      continue;
+    }
+
+    const check = rawCheck as Record<string, unknown>;
+    const name = typeof check.name === 'string' ? check.name : undefined;
+    const state = String(check.state || check.status || '').toUpperCase();
+
+    if (!name) {
+      continue;
+    }
+
+    totalCount += 1;
+
+    if (state === 'ERROR' || state === 'FAILED' || state === 'CANCELLED') {
+      completeCount = -1;
+      activePhases = ['Error'];
+      continue;
+    }
+
+    if (state === 'READY' || state === 'DONE' || state === 'SUCCEEDED' || state === 'COMPLETED') {
+      completeCount += 1;
+      continue;
+    }
+
+    if (state === 'IN_PROGRESS' || state === 'RUNNING' || state === 'BUILDING' || state === 'PROCESSING' || state === 'PENDING') {
+      activePhases.push(name);
+    }
+  }
+
+  if (totalCount === 0) {
+    return {};
+  }
+
+  if (completeCount < 0) {
+    return {
+      phase: activePhases[0] || 'Error',
+      progress: 0
+    };
+  }
+
+  const percentage = totalCount === 0 ? undefined : clampPercent((completeCount / totalCount) * 100);
+  const inProgressPhase = activePhases[0] || 'Build in progress';
+
+  return {
+    phase: inProgressPhase,
+    progress: percentage
+  };
+};
+
+const formatBuildPhase = (phase?: string, state?: VercelDeploymentStatus['state']) => {
+  if (phase) {
+    return phase;
+  }
+
+  switch (state) {
+    case 'queued':
+      return 'Queued';
+    case 'building':
+      return 'Building';
+    case 'ready':
+      return 'Ready';
+    case 'error':
+      return 'Error';
+    case 'local':
+      return 'Local';
+    default:
+      return 'Unknown';
+  }
+};
+
+const getFallback = ({ branch, commitSha, environment, deploymentUrl, token, projectId, projectName }: {
+  branch?: string;
+  commitSha?: string;
+  environment?: string;
+  deploymentUrl?: string;
+  token?: string;
+  projectId?: string;
+  projectName?: string;
+}): VercelDeploymentStatus => {
+  return {
+    branch,
+    commitSha,
+    configured: Boolean(token && (projectId || projectName)),
+    deploymentUrl,
+    environment,
+    hasError: false,
+    label: `Vercel: ${environment || 'deployment'} ready`,
+    state: 'ready'
+  };
+};
+
 export const getVercelDeploymentStatus = async (): Promise<VercelDeploymentStatus> => {
   const branch = process.env.VERCEL_GIT_COMMIT_REF || process.env.THINGTIME_BRANCH_NAME;
   const commitSha = process.env.VERCEL_GIT_COMMIT_SHA;
@@ -51,6 +179,7 @@ export const getVercelDeploymentStatus = async (): Promise<VercelDeploymentStatu
     return {
       branch,
       commitSha,
+      hasError: false,
       configured: false,
       environment: 'local',
       label: 'Vercel: local',
@@ -58,15 +187,15 @@ export const getVercelDeploymentStatus = async (): Promise<VercelDeploymentStatu
     };
   }
 
-  const fallback: VercelDeploymentStatus = {
+  const fallback = getFallback({
     branch,
     commitSha,
-    configured: Boolean(token && (projectId || projectName)),
-    deploymentUrl,
     environment,
-    label: `Vercel: ${environment || 'deployment'} ready`,
-    state: 'ready'
-  };
+    deploymentUrl,
+    token,
+    projectId,
+    projectName
+  });
 
   if (!token || (!projectId && !projectName)) {
     return fallback;
@@ -117,6 +246,43 @@ export const getVercelDeploymentStatus = async (): Promise<VercelDeploymentStatu
 
     const state = normaliseState(currentDeployment.state || currentDeployment.readyState);
     const latestDeploymentUrl = normaliseUrl(currentDeployment.url);
+    const deploymentId =
+      (typeof currentDeployment.uid === 'string' && currentDeployment.uid) ||
+      (typeof currentDeployment.id === 'string' && currentDeployment.id) ||
+      undefined;
+
+    const deploymentMeta =
+      typeof currentDeployment.meta === 'object' && currentDeployment.meta !== null
+        ? (currentDeployment.meta as Record<string, unknown>)
+        : {};
+
+    const checksFromDeployment = currentDeployment.checks || currentDeployment.builds;
+    const checksProgress = getBuildProgressFromChecks(checksFromDeployment);
+
+    const readySubstate = typeof currentDeployment.readySubstate === 'string' ? currentDeployment.readySubstate : undefined;
+    const stateProgress =
+      checksProgress.progress ??
+      normaliseProgress(currentDeployment.progress) ??
+      normaliseProgress(currentDeployment.progressPercent);
+
+    const phaseLabel =
+      readySubstate ||
+      checksProgress.phase ||
+      formatBuildPhase(undefined, state);
+
+    const buildPageUrl =
+      normaliseUrl(typeof currentDeployment.inspectorUrl === 'string' ? currentDeployment.inspectorUrl : '') ||
+      (projectName && deploymentId
+        ? `https://vercel.com/${deploymentMeta.orgName || 'team'}/${projectName}/deployments/${deploymentId}`
+        : undefined);
+
+    const resolvedBuildProgress =
+      state === 'ready'
+        ? 100
+        : state === 'error'
+          ? 0
+          : (stateProgress ?? undefined);
+
     const labelState =
       state === 'ready'
         ? 'ready'
@@ -130,6 +296,11 @@ export const getVercelDeploymentStatus = async (): Promise<VercelDeploymentStatu
 
     return {
       ...fallback,
+      buildId: deploymentId,
+      buildPageUrl,
+      buildPhase: phaseLabel,
+      buildProgress: resolvedBuildProgress,
+      hasError: state === 'error',
       latestDeploymentUrl,
       label: `Vercel: ${labelState}`,
       state
@@ -138,6 +309,7 @@ export const getVercelDeploymentStatus = async (): Promise<VercelDeploymentStatu
     return {
       ...fallback,
       error: err?.message || String(err),
+      hasError: true,
       label: 'Vercel: status unavailable',
       state: 'unknown'
     };

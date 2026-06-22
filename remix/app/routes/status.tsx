@@ -1,4 +1,4 @@
-import { Box, Button, Container, Divider, Flex, Heading, Text, Badge, Link } from '@chakra-ui/react';
+import { Box, Button, Container, Divider, Flex, Heading, Text, Badge, Link, Progress } from '@chakra-ui/react';
 import { json } from '@vercel/remix';
 import { useLoaderData, useRevalidator } from '@remix-run/react';
 
@@ -15,7 +15,19 @@ export default function StatusPage() {
   const status = useLoaderData<typeof loader>();
   const revalidator = useRevalidator();
 
-  const badgeScheme = status.state === 'ready' ? 'green' : status.state === 'building' || status.state === 'queued' ? 'yellow' : status.state === 'local' ? 'gray' : 'red';
+  const badgeScheme =
+    status.state === 'ready'
+      ? 'green'
+      : status.state === 'building' || status.state === 'queued'
+        ? 'yellow'
+        : status.state === 'local'
+          ? 'gray'
+          : 'red';
+  const buildProgress = typeof status.buildProgress === 'number' ? status.buildProgress : 0;
+  const buildProgressText =
+    status.buildProgress === undefined || Number.isNaN(status.buildProgress)
+      ? '—'
+      : `${status.buildProgress}%`;
   const checking = revalidator.state === 'loading';
 
   return (
@@ -88,6 +100,37 @@ export default function StatusPage() {
             )}
           </Text>
         </Flex>
+        <Flex justify="space-between">
+          <Text color="gray.500" fontSize="sm">
+            Build page
+          </Text>
+          <Text fontFamily="mono" fontSize="sm" textAlign="right" maxW="65%">
+            {status.buildPageUrl ? (
+              <Link href={status.buildPageUrl} color="teal.500" isExternal>
+                Open build info
+              </Link>
+            ) : (
+              '—'
+            )}
+          </Text>
+        </Flex>
+        <Flex justify="space-between">
+          <Text color="gray.500" fontSize="sm">
+            Build phase
+          </Text>
+          <Text fontFamily="mono" fontSize="sm" textAlign="right">
+            {value(status.buildPhase)}
+          </Text>
+        </Flex>
+        <Flex justify="space-between">
+          <Text color="gray.500" fontSize="sm">
+            Build progress
+          </Text>
+          <Text fontFamily="mono" fontSize="sm" textAlign="right">
+            {buildProgressText}
+          </Text>
+        </Flex>
+        {status.state === 'building' || status.state === 'queued' ? <Progress value={buildProgress} size="sm" max={100} min={0} isIndeterminate={status.buildProgress === undefined} /> : null}
         <Flex justify="space-between">
           <Text color="gray.500" fontSize="sm">
             Vercel API configured

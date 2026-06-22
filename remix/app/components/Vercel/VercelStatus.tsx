@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Flex, Text } from '@chakra-ui/react';
+import { Box, Flex, Progress, Text } from '@chakra-ui/react';
 import { keyframes } from '@emotion/react';
 
 import type { VercelDeploymentStatus } from '~/api/utils/vercel/status';
@@ -58,6 +58,10 @@ export const VercelStatus = (props) => {
 
   const checking = !status && !error;
   const state = status?.state || 'unknown';
+  const buildProgress = status?.buildProgress;
+  const buildPhase = status?.buildPhase;
+  const buildUrl = status?.buildPageUrl || status?.latestDeploymentUrl;
+  const hasBuildProgress = typeof buildProgress === 'number' && state !== 'ready' && state !== 'error';
   const color =
     error || state === 'error'
       ? 'red.400'
@@ -68,8 +72,14 @@ export const VercelStatus = (props) => {
           : state === 'local'
             ? 'gray.400'
             : 'gray.400';
-  const label = error ? 'Vercel: status unavailable' : status?.label || 'Vercel: checking...';
-  const href = status?.latestDeploymentUrl || status?.deploymentUrl;
+  const label = error
+    ? 'Vercel: status unavailable'
+    : status?.label
+      ? `${status.label}${buildPhase ? ` ${buildPhase}` : ''}${
+          typeof buildProgress === 'number' ? ` (${buildProgress}%)` : ''
+        }`
+      : 'Vercel: checking...';
+  const href = buildUrl || status?.latestDeploymentUrl || status?.deploymentUrl;
 
   const content = (
     <Flex alignItems="center" flexDirection="row" fontSize="xs" columnGap={2} {...props?.chakras}>
@@ -85,13 +95,21 @@ export const VercelStatus = (props) => {
     </Flex>
   );
 
+  const progressBar =
+    hasBuildProgress ? (
+      <Progress size="xs" borderRadius="full" value={buildProgress} max={100} min={0} colorScheme={state === 'error' ? 'red' : 'yellow'} />
+    ) : null;
+
   if (!href) {
     return content;
   }
 
   return (
     <Box as="a" href={href} target="_blank" title="View Vercel deployment status">
-      {content}
+      <Flex direction="column" rowGap={1}>
+        {content}
+        {progressBar}
+      </Flex>
     </Box>
   );
 };
