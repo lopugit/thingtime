@@ -144,24 +144,40 @@ const formatBuildPhase = (phase?: string, state?: VercelDeploymentStatus['state'
   }
 };
 
-const getFallback = ({ branch, commitSha, environment, deploymentUrl, token, projectId, projectName }: {
+const getTokenlessFallback = ({
+  branch,
+  commitSha,
+  deploymentUrl,
+  environment
+}: {
   branch?: string;
   commitSha?: string;
-  environment?: string;
   deploymentUrl?: string;
-  token?: string;
-  projectId?: string;
-  projectName?: string;
+  environment?: string;
 }): VercelDeploymentStatus => {
+  const branchUrl = normaliseUrl(process.env.VERCEL_BRANCH_URL);
+  const repoOwner = process.env.VERCEL_GIT_REPO_OWNER;
+  const repoSlug = process.env.VERCEL_GIT_REPO_SLUG || process.env.VERCEL_GIT_REPO;
+
+  const dashboardPath =
+    repoOwner && repoSlug
+      ? `https://vercel.com/${repoOwner}/${repoSlug}/deployments`
+      : branchUrl
+        ? `${branchUrl}/_/` // safe fallback anchor near deployment host
+        : deploymentUrl;
+
   return {
     branch,
     commitSha,
-    configured: Boolean(token && (projectId || projectName)),
+    buildPageUrl: dashboardPath,
+    buildPhase: 'Tokenless dashboard view',
+    configured: false,
     deploymentUrl,
     environment,
     hasError: false,
-    label: `Vercel: ${environment || 'deployment'} ready`,
-    state: 'ready'
+    latestDeploymentUrl: branchUrl || deploymentUrl,
+    label: `Vercel: ${environment || 'deployment'} (tokenless)`,
+    state: environment ? 'ready' : 'unknown'
   };
 };
 
@@ -187,14 +203,11 @@ export const getVercelDeploymentStatus = async (): Promise<VercelDeploymentStatu
     };
   }
 
-  const fallback = getFallback({
+  const fallback = getTokenlessFallback({
     branch,
     commitSha,
     environment,
-    deploymentUrl,
-    token,
-    projectId,
-    projectName
+    deploymentUrl
   });
 
   if (!token || (!projectId && !projectName)) {
