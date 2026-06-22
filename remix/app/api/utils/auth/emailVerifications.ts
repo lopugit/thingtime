@@ -23,13 +23,26 @@ export type ConsumeResult =
   | { ok: true; userId: string; email: string }
   | { ok: false; reason: 'invalid' | 'used' | 'expired' };
 
-// Validate + burn a token. Single-use: a second click returns 'used'.
+// Validate + burn a token atomically. Single-use: if two clicks race, only one
+// update can match consumedAt: null; the loser sees the token as used.
 export const consumeEmailVerification = async (token: string): Promise<ConsumeResult> => {
   const coll = await getEmailVerificationsCollection();
+  const now = new Date();
+
+  const consumed = await coll.findOneAndUpdate(
+    {
+      token,
+      consumedAt: null,
+      expiresAt: { $gt: now }
+    },
+    { $set: { consumedAt: now } },
+    { returnDocument: 'after' }
+  );
+
+  if (consumed) return { ok: true, userId: consumed.userId, email: consumed.email };
+
   const doc = await coll.findOne({ token });
   if (!doc) return { ok: false, reason: 'invalid' };
   if (doc.consumedAt) return { ok: false, reason: 'used' };
-  if (doc.expiresAt && new Date(doc.expiresAt).getTime() < Date.now()) return { ok: false, reason: 'expired' };
-  await coll.updateOne({ _id: doc._id }, { $set: { consumedAt: new Date() } });
-  return { ok: true, userId: doc.userId, email: doc.email };
+  return { ok: false, reason: 'expired' };
 };
