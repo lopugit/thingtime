@@ -1,4 +1,4 @@
-import { Box, Flex } from '@chakra-ui/react';
+import { Box, Flex, Button, Text } from '@chakra-ui/react';
 import { useThingtime } from '../Thingtime/useThingtime';
 import { Icon } from '../Icon/Icon';
 import React from 'react';
@@ -45,6 +45,29 @@ export const DevKit = (props) => {
 
   const devMode = thingtime?.devKit?.devMode;
 
+  const [open, setOpen] = React.useState(false);
+
+  // Push generated test data into shared thingtime state; the forms watch
+  // devKit.registerPrefill / devKit.loginPrefill (by _ts) and fill themselves.
+  const prefillRegister = React.useCallback(() => {
+    // rounded random so every prefill is a fresh, unique user
+    const rand = Math.floor(Math.random() * 100000);
+    setThingtime('devKit.registerPrefill', {
+      username: `rick.deckard${rand}`,
+      email: `rick.deckard+${rand}@thingtime.com`,
+      password: 'password1',
+      _ts: Date.now()
+    });
+  }, [setThingtime]);
+
+  const prefillLogin = React.useCallback(() => {
+    setThingtime('devKit.loginPrefill', {
+      username: 'rick.deckard',
+      password: 'password1',
+      _ts: Date.now()
+    });
+  }, [setThingtime]);
+
   React.useEffect(() => {
     if (devKit && devMode === undefined) {
       // setThingtime('devKit.devMode', true);
@@ -90,9 +113,25 @@ export const DevKit = (props) => {
         position={'absolute'}
         bottom={0}
         right={0}
+        flexDirection="column"
+        alignItems="flex-end"
       >
-        {/* add a little icon for toggling dev mode when devKit is enabled */}
-        <Flex onClick={setDevMode} cursor={'pointer'} opacity={devMode ? 1 : 0.5}>
+        {open ? (
+          <Box mb={2} mr={3} bg="gray.800" color="white" borderRadius="md" p={3} boxShadow="lg" minWidth="220px" fontSize="sm">
+            <Text fontWeight="bold" mb={2}>
+              👨‍💻 DevKit
+            </Text>
+            <Button size="sm" width="100%" mb={2} colorScheme="purple" onClick={prefillRegister}>
+              Prefill register form
+            </Button>
+            <Button size="sm" width="100%" colorScheme="blue" onClick={prefillLogin}>
+              Prefill login form
+            </Button>
+          </Box>
+        ) : null}
+
+        {/* floating icon toggles the DevKit panel */}
+        <Flex onClick={() => setOpen((o) => !o)} cursor={'pointer'} opacity={open ? 1 : 0.6}>
           <Box p={4}>
             <Icon name="👨‍💻"></Icon>
           </Box>

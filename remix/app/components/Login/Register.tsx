@@ -3,6 +3,7 @@ import { Flex, Button, FormControl, Input, InputGroup, InputRightElement, Box, T
 import { Link as RemixLink } from '@remix-run/react';
 
 import { useApi } from '~/hooks/useApi';
+import { useThingtime } from '../Thingtime/useThingtime';
 import { Icon } from '../Icon/Icon';
 
 const inputSx = {
@@ -22,6 +23,20 @@ export const Register = (props) => {
   const api = useApi();
   const register = api.v1.auth.register;
   const toast = useToast();
+
+  // DevKit prefill: fills the form when devKit.registerPrefill changes (_ts)
+  const { thingtime } = useThingtime();
+  const prefill = thingtime?.devKit?.registerPrefill;
+
+  React.useEffect(() => {
+    if (prefill?._ts) {
+      if (typeof prefill.username === 'string') setUsername(prefill.username);
+      if (typeof prefill.password === 'string') setPassword(prefill.password);
+      if (typeof prefill.email === 'string') setEmail(prefill.email);
+      setPasswordVisible(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefill?._ts]);
 
   const handleRegister = async (e) => {
     e?.preventDefault();

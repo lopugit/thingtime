@@ -1,16 +1,16 @@
-# Graph Report - thingtime  (2026-06-21)
+# Graph Report - thingtime  (2026-06-22)
 
 ## Corpus Check
-- 217 files · ~545,156 words
+- 217 files · ~545,566 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 1055 nodes · 1884 edges · 87 communities (69 shown, 18 thin omitted)
+- 1055 nodes · 1887 edges · 85 communities (67 shown, 18 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 10 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `cdc1d3e4`
+- Built from commit: `03ed32be`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -73,9 +73,7 @@
 - [[_COMMUNITY_Community 65|Community 65]]
 - [[_COMMUNITY_Community 66|Community 66]]
 - [[_COMMUNITY_Community 72|Community 72]]
-- [[_COMMUNITY_Community 73|Community 73]]
 - [[_COMMUNITY_Community 74|Community 74]]
-- [[_COMMUNITY_Community 75|Community 75]]
 - [[_COMMUNITY_Community 76|Community 76]]
 - [[_COMMUNITY_Community 77|Community 77]]
 - [[_COMMUNITY_Community 78|Community 78]]
@@ -89,7 +87,7 @@
 - [[_COMMUNITY_Community 86|Community 86]]
 
 ## God Nodes (most connected - your core abstractions)
-1. `useThingtime()` - 36 edges
+1. `useThingtime()` - 38 edges
 2. `getSelectedImages()` - 29 edges
 3. `moveImageResultsToFinalDestination()` - 26 edges
 4. `runOperation()` - 22 edges
@@ -113,11 +111,11 @@
   raycast/src/operations/filterOperation.ts → raycast/src/utilities/utils.ts
 
 ## Import Cycles
-- 3-file cycle: `remix/app/api/utils/mongodb/connection.ts -> remix/app/routes/api/v1/mongodb/get-connection/_get-connection.tsx -> remix/app/api/utils/userValidatePassword.ts -> remix/app/api/utils/mongodb/connection.ts`
 - 3-file cycle: `remix/app/api/utils/mongodb/connection.ts -> remix/app/routes/api/v1/mongodb/get-connection/_get-connection.tsx -> remix/app/api/utils/userCheckExists.ts -> remix/app/api/utils/mongodb/connection.ts`
+- 3-file cycle: `remix/app/api/utils/mongodb/connection.ts -> remix/app/routes/api/v1/mongodb/get-connection/_get-connection.tsx -> remix/app/api/utils/userValidatePassword.ts -> remix/app/api/utils/mongodb/connection.ts`
 - 3-file cycle: `remix/app/Providers/ThingtimeProvider.tsx -> remix/app/hooks/useThingtimeMachine.tsx -> remix/app/components/Thingtime/useThingtime.tsx -> remix/app/Providers/ThingtimeProvider.tsx`
 
-## Communities (87 total, 18 thin omitted)
+## Communities (85 total, 18 thin omitted)
 
 ### Community 0 - "Raycast Image Operations"
 Cohesion: 0.06
@@ -140,8 +138,8 @@ Cohesion: 0.05
 Nodes (43): dependencies, axios, bcrypt, @chakra-ui/react, @chakra-ui/react-types, draft-js, @editorjs/editorjs, emojis-list (+35 more)
 
 ### Community 5 - "Remix Dev Dependencies"
-Cohesion: 0.08
-Nodes (26): devDependencies, @emotion/styled, eslint, eslint-config-prettier, eslint-loader, eslint-plugin-chakra-ui, eslint-plugin-hydrogen, eslint-plugin-prettier (+18 more)
+Cohesion: 0.05
+Nodes (40): devDependencies, @emotion/styled, eslint, eslint-config-prettier, eslint-loader, eslint-plugin-chakra-ui, eslint-plugin-hydrogen, eslint-plugin-prettier (+32 more)
 
 ### Community 6 - "Raycast Extension Manifest"
 Cohesion: 0.05
@@ -184,8 +182,8 @@ Cohesion: 0.11
 Nodes (18): compilerOptions, allowJs, baseUrl, esModuleInterop, forceConsistentCasingInFileNames, isolatedModules, jsx, lib (+10 more)
 
 ### Community 16 - "Smarts Opt Helpers"
-Cohesion: 0.21
-Nodes (8): commanderArgs, sanitise(), MagicInput, MagicInputProps, getParentPath(), uuid, safeSplit(), stringLiteralToRichText()
+Cohesion: 0.15
+Nodes (17): commanderArgs, CommanderV1(), CommanderV2(), sanitise(), usePath(), useThings(), MagicInput, MagicInputProps (+9 more)
 
 ### Community 17 - "Raycast TypeScript Config"
 Cohesion: 0.18
@@ -276,28 +274,20 @@ Cohesion: 0.50
 Nodes (3): build, env, ENABLE_FILE_SYSTEM_API
 
 ### Community 45 - "Remix Client Entry"
-Cohesion: 0.24
-Nodes (9): CommanderV2(), usePath(), MongoStatus(), pulse, MongoConnectionStatus, Footer(), Nav(), ProfileDrawer() (+1 more)
+Cohesion: 0.23
+Nodes (9): Icon(), MongoStatus(), pulse, MongoConnectionStatus, Footer(), Nav(), ProfileDrawer(), RainbowSkeleton() (+1 more)
 
 ### Community 72 - "Community 72"
-Cohesion: 0.19
-Nodes (10): CommanderV1(), RainbowText(), TextAnimation1(), useThings(), Splash(), Thingtime(), ThingtimeComponentProps, ThingtimeProps (+2 more)
-
-### Community 73 - "Community 73"
-Cohesion: 0.25
-Nodes (7): engines, node, private, resolutions, @types/react, sideEffects, version
+Cohesion: 0.36
+Nodes (3): RainbowText(), TextAnimation1(), Splash()
 
 ### Community 74 - "Community 74"
 Cohesion: 0.29
 Nodes (6): Codex workspace notes, GitHub push / PR publishing, Graphify, Package manager notes, Remix linting, TypeScript checks
 
-### Community 75 - "Community 75"
-Cohesion: 0.29
-Nodes (7): scripts, build, dev, format, lint, lint-fix, pre-dev
-
 ### Community 76 - "Community 76"
-Cohesion: 0.19
-Nodes (8): Submit(), useApi(), useAsyncFetcher(), Icon(), Login(), inputSx, Register(), SettingsMenu()
+Cohesion: 0.24
+Nodes (6): Submit(), useApi(), useAsyncFetcher(), Login(), inputSx, Register()
 
 ### Community 78 - "Community 78"
 Cohesion: 0.09
@@ -344,8 +334,8 @@ Nodes (4): Decision log, Decisions, Nikolaj Frey — Engineer Decisions, Recurri
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `useThingtime()` connect `Thingtime Commander & Core UI` to `Image Generators & Filters`, `Community 72`, `Community 76`, `Remix Client Entry`, `Root Package Manifest`, `Smarts Opt Helpers`?**
-  _High betweenness centrality (0.030) - this node is a cross-community bridge._
-- **Why does `Thingtime()` connect `Community 72` to `Thingtime Commander & Core UI`, `API Package Manifest`, `Image Generators & Filters`, `Community 76`, `Remix Client Entry`, `Smarts Opt Helpers`?**
+  _High betweenness centrality (0.031) - this node is a cross-community bridge._
+- **Why does `Thingtime()` connect `Smarts Opt Helpers` to `Thingtime Commander & Core UI`, `API Package Manifest`, `Community 76`, `Image Generators & Filters`?**
   _High betweenness centrality (0.009) - this node is a cross-community bridge._
 - **Why does `getMongoUri()` connect `API Package Manifest` to `Community 78`?**
   _High betweenness centrality (0.007) - this node is a cross-community bridge._

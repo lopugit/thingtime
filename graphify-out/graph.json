@@ -4710,7 +4710,7 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "commander_commanderv1deprecated_commanderv1",
-      "community": 72,
+      "community": 16,
       "norm_label": "commanderv1()"
     },
     {
@@ -4720,7 +4720,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "commander_commanderv2",
-      "community": 45,
+      "community": 16,
       "norm_label": "commanderv2.tsx"
     },
     {
@@ -4730,7 +4730,7 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "commander_commanderv2_commanderv2",
-      "community": 45,
+      "community": 16,
       "norm_label": "commanderv2()"
     },
     {
@@ -4790,7 +4790,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "icon_icon",
-      "community": 76,
+      "community": 45,
       "norm_label": "icon.tsx"
     },
     {
@@ -4800,7 +4800,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "icon_icon_icon",
-      "community": 76,
+      "community": 45,
       "norm_label": "icon()"
     },
     {
@@ -4877,7 +4877,7 @@
       "label": "inputSx",
       "file_type": "code",
       "source_file": "remix/app/components/Login/Register.tsx",
-      "source_location": "L8",
+      "source_location": "L9",
       "_origin": "ast",
       "id": "login_register_inputsx",
       "community": 76,
@@ -4887,7 +4887,7 @@
       "label": "Register()",
       "file_type": "code",
       "source_file": "remix/app/components/Login/Register.tsx",
-      "source_location": "L14",
+      "source_location": "L15",
       "_origin": "ast",
       "id": "login_register_register",
       "community": 76,
@@ -5210,7 +5210,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "thingtime_settingsmenu",
-      "community": 76,
+      "community": 45,
       "norm_label": "settingsmenu.tsx"
     },
     {
@@ -5220,7 +5220,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "thingtime_settingsmenu_settingsmenu",
-      "community": 76,
+      "community": 45,
       "norm_label": "settingsmenu()"
     },
     {
@@ -5230,7 +5230,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "thingtime_thingtime",
-      "community": 72,
+      "community": 16,
       "norm_label": "thingtime.tsx"
     },
     {
@@ -5240,7 +5240,7 @@
       "source_location": "L33",
       "_origin": "ast",
       "id": "thingtime_thingtime_thingtimeprops",
-      "community": 72,
+      "community": 16,
       "norm_label": "thingtimeprops"
     },
     {
@@ -5250,7 +5250,7 @@
       "source_location": "L39",
       "_origin": "ast",
       "id": "thingtime_thingtime_thingtimecomponentprops",
-      "community": 72,
+      "community": 16,
       "norm_label": "thingtimecomponentprops"
     },
     {
@@ -5260,7 +5260,7 @@
       "source_location": "L40",
       "_origin": "ast",
       "id": "thingtime_thingtime_thingtime",
-      "community": 72,
+      "community": 16,
       "norm_label": "thingtime()"
     },
     {
@@ -5270,7 +5270,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "thingtime_thingtimedemo",
-      "community": 72,
+      "community": 16,
       "norm_label": "thingtimedemo.tsx"
     },
     {
@@ -5280,7 +5280,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "thingtime_thingtimedemo_thingtimedemo",
-      "community": 72,
+      "community": 16,
       "norm_label": "thingtimedemo()"
     },
     {
@@ -5880,7 +5880,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "hooks_usepath",
-      "community": 45,
+      "community": 16,
       "norm_label": "usepath.tsx"
     },
     {
@@ -5890,7 +5890,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "hooks_usepath_usepath",
-      "community": 45,
+      "community": 16,
       "norm_label": "usepath()"
     },
     {
@@ -5920,7 +5920,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "hooks_usethings",
-      "community": 72,
+      "community": 16,
       "norm_label": "usethings.tsx"
     },
     {
@@ -5930,7 +5930,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "hooks_usethings_usethings",
-      "community": 72,
+      "community": 16,
       "norm_label": "usethings()"
     },
     {
@@ -6190,7 +6190,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_routes_index_tsx_routes_index",
-      "community": 72,
+      "community": 16,
       "norm_label": "_index.tsx"
     },
     {
@@ -6680,7 +6680,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "routes_ode",
-      "community": 72,
+      "community": 16,
       "norm_label": "ode.tsx"
     },
     {
@@ -7970,7 +7970,7 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "utils_index_safejoin",
-      "community": 72,
+      "community": 16,
       "norm_label": "safejoin()"
     },
     {
@@ -8000,7 +8000,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_package",
-      "community": 73,
+      "community": 5,
       "norm_label": "package.json"
     },
     {
@@ -8010,7 +8010,7 @@
       "source_location": "L2",
       "_origin": "ast",
       "id": "remix_package_private",
-      "community": 73,
+      "community": 5,
       "norm_label": "private"
     },
     {
@@ -8020,7 +8020,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "remix_package_sideeffects",
-      "community": 73,
+      "community": 5,
       "norm_label": "sideeffects"
     },
     {
@@ -8030,7 +8030,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "remix_package_version",
-      "community": 73,
+      "community": 5,
       "norm_label": "version"
     },
     {
@@ -8040,7 +8040,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "remix_package_scripts",
-      "community": 75,
+      "community": 5,
       "norm_label": "scripts"
     },
     {
@@ -8050,7 +8050,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "remix_package_scripts_build",
-      "community": 75,
+      "community": 5,
       "norm_label": "build"
     },
     {
@@ -8060,7 +8060,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "remix_package_scripts_pre_dev",
-      "community": 75,
+      "community": 5,
       "norm_label": "pre-dev"
     },
     {
@@ -8070,7 +8070,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "remix_package_scripts_dev",
-      "community": 75,
+      "community": 5,
       "norm_label": "dev"
     },
     {
@@ -8080,7 +8080,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "remix_package_scripts_lint",
-      "community": 75,
+      "community": 5,
       "norm_label": "lint"
     },
     {
@@ -8090,7 +8090,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "remix_package_scripts_lint_fix",
-      "community": 75,
+      "community": 5,
       "norm_label": "lint-fix"
     },
     {
@@ -8100,7 +8100,7 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "remix_package_scripts_format",
-      "community": 75,
+      "community": 5,
       "norm_label": "format"
     },
     {
@@ -8800,7 +8800,7 @@
       "source_location": "L84",
       "_origin": "ast",
       "id": "remix_package_resolutions",
-      "community": 73,
+      "community": 5,
       "norm_label": "resolutions"
     },
     {
@@ -8810,7 +8810,7 @@
       "source_location": "L85",
       "_origin": "ast",
       "id": "remix_package_resolutions_types_react",
-      "community": 73,
+      "community": 5,
       "norm_label": "@types/react"
     },
     {
@@ -8820,7 +8820,7 @@
       "source_location": "L87",
       "_origin": "ast",
       "id": "remix_package_engines",
-      "community": 73,
+      "community": 5,
       "norm_label": "engines"
     },
     {
@@ -8830,7 +8830,7 @@
       "source_location": "L88",
       "_origin": "ast",
       "id": "remix_package_engines_node",
-      "community": 73,
+      "community": 5,
       "norm_label": "node"
     },
     {
@@ -19492,9 +19492,9 @@
       "source_file": "remix/app/api/utils/auth/registerUser.ts",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_registeruser",
-      "target": "mongodb_collections",
-      "confidence_score": 1.0
+      "target": "mongodb_collections"
     },
     {
       "relation": "imports",
@@ -19503,9 +19503,9 @@
       "source_file": "remix/app/api/utils/auth/registerUser.ts",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_registeruser",
-      "target": "mongodb_collections_ensureindexes",
-      "confidence_score": 1.0
+      "target": "mongodb_collections_ensureindexes"
     },
     {
       "relation": "imports_from",
@@ -20301,9 +20301,9 @@
       "source_file": "remix/app/api/utils/mongodb/collections.ts",
       "source_location": "L39",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "mongodb_collections",
-      "target": "mongodb_collections_ensureindexes",
-      "confidence_score": 1.0
+      "target": "mongodb_collections_ensureindexes"
     },
     {
       "relation": "contains",
@@ -22801,6 +22801,28 @@
       "relation": "imports_from",
       "context": "import",
       "confidence": "EXTRACTED",
+      "source_file": "remix/app/components/Login/Register.tsx",
+      "source_location": "L6",
+      "weight": 1.0,
+      "source": "login_register",
+      "target": "thingtime_usethingtime",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/components/Login/Register.tsx",
+      "source_location": "L6",
+      "weight": 1.0,
+      "source": "login_register",
+      "target": "thingtime_usethingtime_usethingtime",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
       "source_file": "remix/app/routes/register.tsx",
       "source_location": "L4",
       "weight": 1.0,
@@ -22818,6 +22840,17 @@
       "weight": 1.0,
       "source": "login_register_register",
       "target": "hooks_useapi_useapi"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/components/Login/Register.tsx",
+      "source_location": "L28",
+      "weight": 1.0,
+      "source": "login_register_register",
+      "target": "thingtime_usethingtime_usethingtime"
     },
     {
       "relation": "imports",
@@ -30464,5 +30497,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "cdc1d3e4398bd7382c710e2f939b04392890b4e1"
+  "built_at_commit": "03ed32be447ee014bd43eadabb1806fb0fdbd6f6"
 }
