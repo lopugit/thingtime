@@ -445,8 +445,8 @@
     "semantic_hash": "e55e69802773050cdf4f8ee632692838"
   },
   "remix/app/components/DevKit/DevKit.tsx": {
-    "mtime": 1782087523.4790313,
-    "ast_hash": "1c65628d62d33d254d0820e07df0580f",
+    "mtime": 1782097689.254462,
+    "ast_hash": "1d8bdec3382aaae98c7a567b799d3b56",
     "semantic_hash": ""
   },
   "remix/app/components/Editor/Editor.tsx": {
@@ -495,8 +495,8 @@
     "semantic_hash": "27bff4852d6ff45c5820a31822a9b3b9"
   },
   "remix/app/components/Nav/Footer.tsx": {
-    "mtime": 1782087523.4793496,
-    "ast_hash": "0f15522b2304abbb93d3e7d5fa847e1f",
+    "mtime": 1782097412.4254901,
+    "ast_hash": "80c286f68126a6b5bea09b5b732b13b0",
     "semantic_hash": ""
   },
   "remix/app/components/Nav/Nav.tsx": {
@@ -590,13 +590,13 @@
     "semantic_hash": "a9172b627781d16b1609ce3c70ab822a"
   },
   "remix/app/entry.client.tsx": {
-    "mtime": 1782090142.728138,
-    "ast_hash": "188f5d5d8bf610f82d30ffdb46592e2d",
+    "mtime": 1782098990.6555338,
+    "ast_hash": "ae7ee2b25e2ab4789775e60cfca52d96",
     "semantic_hash": ""
   },
   "remix/app/entry.server.tsx": {
-    "mtime": 1782095960.041743,
-    "ast_hash": "3f7e297d33352ec5063849331ab7447e",
+    "mtime": 1782098864.234089,
+    "ast_hash": "ee76894b22607004224f0beb3911abb0",
     "semantic_hash": ""
   },
   "remix/app/functions/safe.tsx": {
@@ -700,8 +700,8 @@
     "semantic_hash": "c4054b1dfdb64ee989f94d84a82f34b0"
   },
   "remix/app/root.tsx": {
-    "mtime": 1782087523.4800222,
-    "ast_hash": "96143679a82dc3cf2b1321103667517a",
+    "mtime": 1782098864.234551,
+    "ast_hash": "5327aaa7ab911a58bba03d488692570a",
     "semantic_hash": ""
   },
   "remix/app/routes/$.tsx": {
@@ -815,8 +815,8 @@
     "semantic_hash": "fa9cb4381573d5b9cddcb7f719359deb"
   },
   "remix/package.json": {
-    "mtime": 1782090142.7287965,
-    "ast_hash": "a0874203c5cdb4655d4ac2075f156849",
+    "mtime": 1782099049.2629838,
+    "ast_hash": "4ca16a823562cc01b56cb2fa9c6b44c4",
     "semantic_hash": ""
   },
   "remix/public/manifest.json": {
@@ -1810,8 +1810,8 @@
     "semantic_hash": ""
   },
   "remix/app/Providers/Chakra/createEmotionCache.ts": {
-    "mtime": 1782095911.264238,
-    "ast_hash": "11209c9db65caeeb25dd2849592e0054",
+    "mtime": 1782098534.4782352,
+    "ast_hash": "e095afc8451a1a12f5dd3a700ab51022",
     "semantic_hash": ""
   }
 }

@@ -1,12 +1,9 @@
 import React from 'react';
 import { Box, Center, Flex, Text } from '@chakra-ui/react';
-import { Link, useLocation, useNavigate } from '@remix-run/react';
+import { Link, useRouteLoaderData } from '@remix-run/react';
 
-import { CommanderV2 } from '../Commander/CommanderV2';
 import { Icon } from '../Icon/Icon';
 import { MongoStatus } from '../MongoDB/MongoStatus';
-import { RainbowSkeleton } from '../Skeleton/RainbowSkeleton';
-import { ProfileDrawer } from './ProfileDrawer';
 
 const BRANCH_NAME =
   typeof process !== 'undefined' && process.env?.THINGTIME_BRANCH_NAME
@@ -14,17 +11,10 @@ const BRANCH_NAME =
     : 'git/unknown';
 
 export const Footer = (props) => {
-  let clientState: any = {};
+  const rootData = useRouteLoaderData('root') as any;
+  const envFromCookie = rootData?.envFromCookie || {};
 
-  try {
-    if (typeof window !== 'undefined') {
-      clientState = window.envFromCookie || {};
-    }
-  } catch (err) {
-    // do nothing
-  }
-
-  const [branchName, setBranchName] = React.useState(clientState.THINGTIME_BRANCH_NAME || BRANCH_NAME || 'git/unknown');
+  const branchName = envFromCookie.THINGTIME_BRANCH_NAME || BRANCH_NAME || 'git/unknown';
 
   const investmentEmail = 'invest@thingtime.com';
   const contactEmail = 'connect@thingtime.com';

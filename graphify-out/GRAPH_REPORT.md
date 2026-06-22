@@ -1,22 +1,21 @@
 # Graph Report - thingtime  (2026-06-22)
 
 ## Corpus Check
-- 195 files · ~539,132 words
+- 195 files · ~538,802 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 941 nodes · 1670 edges · 78 communities (59 shown, 19 thin omitted)
+- 939 nodes · 1667 edges · 71 communities (53 shown, 18 thin omitted)
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS · INFERRED: 8 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `c218f92c`
+- Built from commit: `2822a4ff`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
 - [[_COMMUNITY_Raycast ImageFile Operations|Raycast Image/File Operations]]
-- [[_COMMUNITY_Remix API Routes & Editor|Remix API Routes & Editor]]
 - [[_COMMUNITY_Backend API Dependencies|Backend API Dependencies]]
 - [[_COMMUNITY_Remix Frontend Dependencies|Remix Frontend Dependencies]]
 - [[_COMMUNITY_Remix DevLint Dependencies|Remix Dev/Lint Dependencies]]
@@ -59,7 +58,6 @@
 - [[_COMMUNITY_Deformation Map (deformmap)|Deformation Map (deformmap)]]
 - [[_COMMUNITY_Grimace Shake Background (gbg)|Grimace Shake Background (gbg)]]
 - [[_COMMUNITY_Remix Session Storage|Remix Session Storage]]
-- [[_COMMUNITY_Community 45|Community 45]]
 - [[_COMMUNITY_Add Icon (Group 99)|Add Icon (Group 99)]]
 - [[_COMMUNITY_Internet Speed Test Entry|Internet Speed Test Entry]]
 - [[_COMMUNITY_GH Logo (Purple Blobs)|GH Logo (Purple Blobs)]]
@@ -67,17 +65,12 @@
 - [[_COMMUNITY_Remix Request Handler|Remix Request Handler]]
 - [[_COMMUNITY_Remix Server Entry|Remix Server Entry]]
 - [[_COMMUNITY_Legacy Logo (Old2)|Legacy Logo (Old2)]]
-- [[_COMMUNITY_Favicon Imports & Deploy|Favicon Imports & Deploy]]
 - [[_COMMUNITY_Pre-dev Script|Pre-dev Script]]
 - [[_COMMUNITY_ESLint JS Config|ESLint JS Config]]
 - [[_COMMUNITY_Remix Client Entry|Remix Client Entry]]
 - [[_COMMUNITY_Community 65|Community 65]]
 - [[_COMMUNITY_Community 66|Community 66]]
-- [[_COMMUNITY_Community 72|Community 72]]
-- [[_COMMUNITY_Community 73|Community 73]]
 - [[_COMMUNITY_Community 74|Community 74]]
-- [[_COMMUNITY_Community 75|Community 75]]
-- [[_COMMUNITY_Community 76|Community 76]]
 - [[_COMMUNITY_Community 77|Community 77]]
 
 ## God Nodes (most connected - your core abstractions)
@@ -95,33 +88,29 @@
 ## Surprising Connections (you probably didn't know these)
 - `Index()` --calls--> `useThingtime()`  [INFERRED]
   remix/app/routes/_index.tsx → remix/app/components/Thingtime/useThingtime.tsx
-- `Login()` --calls--> `useThingtime()`  [INFERRED]
-  remix/app/components/Login/Login.tsx → remix/app/components/Thingtime/useThingtime.tsx
-- `Index()` --calls--> `useThingtime()`  [EXTRACTED]
-  remix/app/routes/ode.tsx → remix/app/components/Thingtime/useThingtime.tsx
 - `action()` --calls--> `getUser()`  [INFERRED]
   remix/app/routes/api/v1/login/_login.tsx → remix/app/api/utils/getUser.ts
 - `loader()` --calls--> `getMongoStatus()`  [EXTRACTED]
   remix/app/routes/mongodb-status.tsx → remix/app/api/utils/mongodb/status.ts
+- `loader()` --calls--> `getMongoStatus()`  [EXTRACTED]
+  remix/app/routes/api/v1/mongodb/status-data/_status-data.tsx → remix/app/api/utils/mongodb/status.ts
+- `action()` --calls--> `getMongoStatus()`  [EXTRACTED]
+  remix/app/routes/api/v1/mongodb/status/_status.tsx → remix/app/api/utils/mongodb/status.ts
 
 ## Import Cycles
 - 3-file cycle: `remix/app/api/utils/mongodb/connection.ts -> remix/app/routes/api/v1/mongodb/get-connection/_get-connection.tsx -> remix/app/api/utils/userCheckExists.ts -> remix/app/api/utils/mongodb/connection.ts`
 - 3-file cycle: `remix/app/api/utils/mongodb/connection.ts -> remix/app/routes/api/v1/mongodb/get-connection/_get-connection.tsx -> remix/app/api/utils/userValidatePassword.ts -> remix/app/api/utils/mongodb/connection.ts`
 - 3-file cycle: `remix/app/Providers/ThingtimeProvider.tsx -> remix/app/hooks/useThingtimeMachine.tsx -> remix/app/components/Thingtime/useThingtime.tsx -> remix/app/Providers/ThingtimeProvider.tsx`
 
-## Communities (78 total, 19 thin omitted)
+## Communities (71 total, 18 thin omitted)
 
 ### Community 0 - "Raycast Image/File Operations"
 Cohesion: 0.06
 Nodes (81): openNewFinderWindow(), regexToReplacementConverter(), regexTrim(), any(), convert(), applyFilter(), flip(), optimize() (+73 more)
 
-### Community 1 - "Remix API Routes & Editor"
-Cohesion: 0.17
-Nodes (14): commanderArgs, CommanderV1(), useThings(), PathArray, Icon(), MagicInput, MagicInputProps, uuid (+6 more)
-
 ### Community 2 - "Backend API Dependencies"
 Cohesion: 0.07
-Nodes (34): Submit(), getUsers(), rickDeckard(), actionExport(), earlyReturn(), getConnectionAction, useAsyncFetcher(), action() (+26 more)
+Nodes (34): TestAPI(), getUsers(), rickDeckard(), Editor(), actionExport(), earlyReturn(), getConnectionAction, action() (+26 more)
 
 ### Community 3 - "Remix Frontend Dependencies"
 Cohesion: 0.04
@@ -132,27 +121,27 @@ Cohesion: 0.05
 Nodes (44): dependencies, axios, bcrypt, @chakra-ui/react, @chakra-ui/react-types, draft-js, @editorjs/editorjs, emojis-list (+36 more)
 
 ### Community 5 - "Raycast Manifest & Deps"
-Cohesion: 0.08
-Nodes (26): devDependencies, @emotion/styled, eslint, eslint-config-prettier, eslint-loader, eslint-plugin-chakra-ui, eslint-plugin-hydrogen, eslint-plugin-prettier (+18 more)
+Cohesion: 0.05
+Nodes (40): devDependencies, @emotion/styled, eslint, eslint-config-prettier, eslint-loader, eslint-plugin-chakra-ui, eslint-plugin-hydrogen, eslint-plugin-prettier (+32 more)
 
 ### Community 6 - "Raycast Image Generation & Filters"
 Cohesion: 0.05
 Nodes (38): author, categories, commands, contributors, dependencies, fuse.js, mathjs, @raycast/api (+30 more)
 
 ### Community 7 - "Smarts Babel Codegen"
-Cohesion: 0.09
-Nodes (22): assets, value, newTimeline(), ThingtimeLine(), Timeline, TimelineEvent, TimelineScaffold, Timemachine (+14 more)
+Cohesion: 0.08
+Nodes (26): assets, value, newTimeline(), PathArray, ThingtimeLine(), Timeline, TimelineEvent, TimelineScaffold (+18 more)
 
 ### Community 8 - "Remix Root & Session Setup"
 Cohesion: 0.07
 Nodes (15): createObjectProperties(), deepForEach(), ee(), epp(), escapeEscapes(), escapePropertyPath(), forEachArray(), forEachObject() (+7 more)
 
 ### Community 9 - "Thingtime Timeline/Timemachine"
-Cohesion: 0.08
-Nodes (20): Session, App(), logConfig, whitelist, whitelistObj, ChakraWrapper(), chakras, chakrasDark (+12 more)
+Cohesion: 0.09
+Nodes (17): Session, App(), ChakraWrapper(), chakras, chakrasDark, chakrasLight, colors, g (+9 more)
 
 ### Community 10 - "Smarts Package Manifest"
-Cohesion: 0.12
+Cohesion: 0.11
 Nodes (21): ImageGeneratorActionPanel(), SizeSelectionActionPanel(), applyBasicFilter(), filters, getFilterThumbnail(), initializeFilterScript(), generatePlaceholder(), generatePreview() (+13 more)
 
 ### Community 11 - "GradientPath SVG Library"
@@ -164,8 +153,8 @@ Cohesion: 0.08
 Nodes (25): author, bugs, url, dependencies, smarts, ts-node, typescript, description (+17 more)
 
 ### Community 13 - "TypeScript Config (A)"
-Cohesion: 0.16
-Nodes (7): TestAPI(), Branding(), Logo(), Editor(), TopSpacing(), Raw(), checkerMatrix
+Cohesion: 0.38
+Nodes (3): Branding(), Logo(), checkerMatrix
 
 ### Community 14 - "TypeScript Config (B)"
 Cohesion: 0.11
@@ -244,8 +233,8 @@ Cohesion: 0.40
 Nodes (4): app, io, server, smarts
 
 ### Community 35 - "Community 35"
-Cohesion: 0.15
-Nodes (14): DevKit(), getQueryParams(), RawResult(), RawResultProps, RawResults(), ThingtimeContext, ThingtimeTypes, Index() (+6 more)
+Cohesion: 0.05
+Nodes (50): Submit(), commanderArgs, CommanderV1(), CommanderV2(), RainbowText(), TextAnimation1(), DevKit(), getMeta() (+42 more)
 
 ### Community 36 - "Displacement Map Assets"
 Cohesion: 0.50
@@ -263,53 +252,33 @@ Nodes (3): Deploy Your Own, Development, Remix
 Cohesion: 0.50
 Nodes (3): build, env, ENABLE_FILE_SYSTEM_API
 
-### Community 45 - "Community 45"
-Cohesion: 0.25
-Nodes (7): engines, node, private, resolutions, @types/react, sideEffects, version
-
 ### Community 46 - "Add Icon (Group 99)"
-Cohesion: 0.52
-Nodes (4): emotionStylesToHtml(), handleRequest(), removeEmotionInlineStyles(), createEmotionCache()
-
-### Community 58 - "Favicon Imports & Deploy"
-Cohesion: 0.19
-Nodes (11): CommanderV2(), sanitise(), usePath(), MongoStatus(), pulse, MongoConnectionStatus, Footer(), Nav() (+3 more)
-
-### Community 72 - "Community 72"
-Cohesion: 0.29
-Nodes (7): scripts, build, dev, format, lint, lint-fix, pre-dev
-
-### Community 73 - "Community 73"
-Cohesion: 0.23
-Nodes (7): RainbowText(), TextAnimation1(), Index(), Index(), Splash(), Thingtime(), ThingtimeDemo()
+Cohesion: 0.36
+Nodes (5): serverEmotionStyles, emotionStylesToHtml(), handleRequest(), removeEmotionInlineStyles(), createEmotionCache()
 
 ### Community 74 - "Community 74"
 Cohesion: 0.29
 Nodes (6): Codex workspace notes, GitHub push / PR publishing, Graphify, Package manager notes, Remix linting, TypeScript checks
 
-### Community 76 - "Community 76"
-Cohesion: 0.70
-Nodes (3): getMeta(), safe(), Safe()
-
 ## Knowledge Gaps
-- **359 isolated node(s):** `extends`, `name`, `version`, `description`, `main` (+354 more)
+- **357 isolated node(s):** `extends`, `name`, `version`, `description`, `main` (+352 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **19 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **18 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `useThingtime()` connect `Community 35` to `Remix API Routes & Editor`, `Backend API Dependencies`, `Smarts Babel Codegen`, `Community 73`, `Community 75`, `TypeScript Config (A)`, `Favicon Imports & Deploy`?**
-  _High betweenness centrality (0.027) - this node is a cross-community bridge._
-- **Why does `dependencies` connect `Remix Dev/Lint Dependencies` to `Community 45`?**
+- **Why does `useThingtime()` connect `Community 35` to `Smarts Babel Codegen`?**
+  _High betweenness centrality (0.026) - this node is a cross-community bridge._
+- **Why does `dependencies` connect `Remix Dev/Lint Dependencies` to `Raycast Manifest & Deps`?**
   _High betweenness centrality (0.006) - this node is a cross-community bridge._
-- **Why does `Thingtime()` connect `Community 73` to `Remix API Routes & Editor`, `Backend API Dependencies`, `Community 35`, `Smarts Babel Codegen`, `Community 75`, `Favicon Imports & Deploy`?**
+- **Why does `Thingtime()` connect `Community 35` to `Backend API Dependencies`, `Smarts Babel Codegen`?**
   _High betweenness centrality (0.006) - this node is a cross-community bridge._
 - **Are the 2 inferred relationships involving `useThingtime()` (e.g. with `Login()` and `Index()`) actually correct?**
   _`useThingtime()` has 2 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `extends`, `name`, `version` to the rest of the system?**
-  _359 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _357 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Raycast Image/File Operations` be split into smaller, more focused modules?**
-  _Cohesion score 0.061102407064520727 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.060784313725490195 - nodes in this community are weakly interconnected._
 - **Should `Backend API Dependencies` be split into smaller, more focused modules?**
-  _Cohesion score 0.07412587412587412 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.07086247086247087 - nodes in this community are weakly interconnected._

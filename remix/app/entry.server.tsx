@@ -14,7 +14,9 @@ const createEmotionServer =
 const removeEmotionInlineStyles = (markup: string) =>
   markup.replace(/<style data-emotion="[^"]*">[\s\S]*?<\/style>/g, '');
 
-const emotionStylesToHtml = (styles: ReturnType<ReturnType<typeof createEmotionServer>['extractCriticalToChunks']>['styles']) =>
+const emotionStylesToHtml = (
+  styles: ReturnType<ReturnType<typeof createEmotionServer>['extractCriticalToChunks']>['styles']
+) =>
   styles
     .map(
       (style) =>
@@ -36,7 +38,7 @@ export default function handleRequest(request: Request, responseStatusCode: numb
 
   responseHeaders.set('Content-Type', 'text/html');
 
-  return new Response('<!DOCTYPE html>' + html, {
+  return new Response(`<!DOCTYPE html>${html}`, {
     status: responseStatusCode,
     headers: responseHeaders
   });

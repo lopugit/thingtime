@@ -83,7 +83,7 @@
     "vite-tsconfig-paths": "^4.3.2"
   },
   "resolutions": {
-    "@types/react": "^17.0.2"
+    "@types/react": "^18.0.25"
   },
   "engines": {
     "node": "24.x"
