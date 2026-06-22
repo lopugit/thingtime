@@ -26,7 +26,16 @@ export const UserCard = ({ user, children }: { user: NonNullable<CurrentUser>; c
         @{user.username}
       </Text>
       <Text fontSize="sm" wordBreak="break-word">
-        {user.email} {user.emailVerified ? '✅ verified' : '✉️ unverified'}
+        {user.email}{' '}
+        {user.emailVerified ? (
+          <Text as="span" color="green.500">
+            ✅ verified
+          </Text>
+        ) : (
+          <Text as="span" color="red.300">
+            ✉️ unverified
+          </Text>
+        )}
       </Text>
       {children}
     </Flex>

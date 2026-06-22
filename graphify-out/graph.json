@@ -1690,7 +1690,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_apply_filter",
-      "community": 10,
+      "community": 0,
       "norm_label": "apply-filter.tsx"
     },
     {
@@ -1700,7 +1700,7 @@
       "source_location": "L19",
       "_origin": "ast",
       "id": "src_apply_filter_command",
-      "community": 10,
+      "community": 0,
       "norm_label": "command()"
     },
     {
@@ -2090,7 +2090,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "components_sizeselectionactionpanel",
-      "community": 10,
+      "community": 0,
       "norm_label": "sizeselectionactionpanel.tsx"
     },
     {
@@ -2930,7 +2930,7 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "utilities_types_filter",
-      "community": 10,
+      "community": 0,
       "norm_label": "filter"
     },
     {
@@ -4580,7 +4580,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "api_submit",
-      "community": 16,
+      "community": 2,
       "norm_label": "submit.tsx"
     },
     {
@@ -4590,7 +4590,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "api_submit_submit",
-      "community": 16,
+      "community": 2,
       "norm_label": "submit()"
     },
     {
@@ -4797,17 +4797,27 @@
       "label": "getQueryParams()",
       "file_type": "code",
       "source_file": "remix/app/components/DevKit/DevKit.tsx",
-      "source_location": "L9",
+      "source_location": "L15",
       "_origin": "ast",
       "id": "devkit_devkit_getqueryparams",
       "community": 16,
       "norm_label": "getqueryparams()"
     },
     {
+      "label": "DevAction()",
+      "file_type": "code",
+      "source_file": "remix/app/components/DevKit/DevKit.tsx",
+      "source_location": "L24",
+      "_origin": "ast",
+      "id": "devkit_devkit_devaction",
+      "community": 16,
+      "norm_label": "devaction()"
+    },
+    {
       "label": "DevKit()",
       "file_type": "code",
       "source_file": "remix/app/components/DevKit/DevKit.tsx",
-      "source_location": "L17",
+      "source_location": "L42",
       "_origin": "ast",
       "id": "devkit_devkit_devkit",
       "community": 16,
@@ -5080,7 +5090,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "mongodb_raw",
-      "community": 13,
+      "community": 16,
       "norm_label": "raw.tsx"
     },
     {
@@ -5090,7 +5100,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "mongodb_raw_raw",
-      "community": 13,
+      "community": 16,
       "norm_label": "raw()"
     },
     {
@@ -5270,7 +5280,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "safety_safe",
-      "community": 16,
+      "community": 35,
       "norm_label": "safe.tsx"
     },
     {
@@ -5280,7 +5290,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "safety_safe_safe",
-      "community": 16,
+      "community": 35,
       "norm_label": "safe()"
     },
     {
@@ -5630,7 +5640,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "functions_safe",
-      "community": 16,
+      "community": 35,
       "norm_label": "safe.tsx"
     },
     {
@@ -5640,7 +5650,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "functions_safe_safe",
-      "community": 16,
+      "community": 35,
       "norm_label": "safe()"
     },
     {
@@ -5650,7 +5660,7 @@
       "source_location": "L54",
       "_origin": "ast",
       "id": "functions_safe_getmeta",
-      "community": 16,
+      "community": 35,
       "norm_label": "getmeta()"
     },
     {
@@ -5980,7 +5990,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "hooks_useasyncfetcher",
-      "community": 16,
+      "community": 2,
       "norm_label": "useasyncfetcher.tsx"
     },
     {
@@ -5990,7 +6000,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "hooks_useasyncfetcher_useasyncfetcher",
-      "community": 16,
+      "community": 2,
       "norm_label": "useasyncfetcher()"
     },
     {
@@ -6887,7 +6897,7 @@
       "label": "Profile()",
       "file_type": "code",
       "source_file": "remix/app/routes/profile.tsx",
-      "source_location": "L8",
+      "source_location": "L9",
       "_origin": "ast",
       "id": "routes_profile_profile",
       "community": 16,
@@ -7010,7 +7020,7 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "routes_welcome_loader",
-      "community": 78,
+      "community": 16,
       "norm_label": "loader()"
     },
     {
@@ -8200,7 +8210,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "utils_index_stringliteraltorichtext",
-      "community": 87,
+      "community": 16,
       "norm_label": "stringliteraltorichtext()"
     },
     {
@@ -8240,7 +8250,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_package",
-      "community": 5,
+      "community": 1,
       "norm_label": "package.json"
     },
     {
@@ -8250,7 +8260,7 @@
       "source_location": "L2",
       "_origin": "ast",
       "id": "remix_package_private",
-      "community": 5,
+      "community": 1,
       "norm_label": "private"
     },
     {
@@ -8260,7 +8270,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "remix_package_sideeffects",
-      "community": 5,
+      "community": 1,
       "norm_label": "sideeffects"
     },
     {
@@ -8270,7 +8280,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "remix_package_version",
-      "community": 5,
+      "community": 1,
       "norm_label": "version"
     },
     {
@@ -8280,7 +8290,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "remix_package_scripts",
-      "community": 5,
+      "community": 7,
       "norm_label": "scripts"
     },
     {
@@ -8290,7 +8300,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "remix_package_scripts_build",
-      "community": 5,
+      "community": 7,
       "norm_label": "build"
     },
     {
@@ -8300,7 +8310,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "remix_package_scripts_pre_dev",
-      "community": 5,
+      "community": 7,
       "norm_label": "pre-dev"
     },
     {
@@ -8310,7 +8320,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "remix_package_scripts_dev",
-      "community": 5,
+      "community": 7,
       "norm_label": "dev"
     },
     {
@@ -8320,7 +8330,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "remix_package_scripts_lint",
-      "community": 5,
+      "community": 7,
       "norm_label": "lint"
     },
     {
@@ -8330,7 +8340,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "remix_package_scripts_lint_fix",
-      "community": 5,
+      "community": 7,
       "norm_label": "lint-fix"
     },
     {
@@ -8340,7 +8350,7 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "remix_package_scripts_format",
-      "community": 5,
+      "community": 7,
       "norm_label": "format"
     },
     {
@@ -9040,7 +9050,7 @@
       "source_location": "L84",
       "_origin": "ast",
       "id": "remix_package_resolutions",
-      "community": 5,
+      "community": 1,
       "norm_label": "resolutions"
     },
     {
@@ -9050,7 +9060,7 @@
       "source_location": "L85",
       "_origin": "ast",
       "id": "remix_package_resolutions_types_react",
-      "community": 5,
+      "community": 1,
       "norm_label": "@types/react"
     },
     {
@@ -9060,7 +9070,7 @@
       "source_location": "L87",
       "_origin": "ast",
       "id": "remix_package_engines",
-      "community": 5,
+      "community": 1,
       "norm_label": "engines"
     },
     {
@@ -9070,7 +9080,7 @@
       "source_location": "L88",
       "_origin": "ast",
       "id": "remix_package_engines_node",
-      "community": 5,
+      "community": 1,
       "norm_label": "node"
     },
     {
@@ -19368,9 +19378,9 @@
       "source_file": "remix/app/routes/welcome.tsx",
       "source_location": "L5",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_welcome",
-      "target": "auth_getcurrentuser",
-      "confidence_score": 1.0
+      "target": "auth_getcurrentuser"
     },
     {
       "relation": "imports",
@@ -19511,9 +19521,9 @@
       "source_file": "remix/app/routes/welcome.tsx",
       "source_location": "L5",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_welcome",
-      "target": "auth_getcurrentuser_getcurrentuser",
-      "confidence_score": 1.0
+      "target": "auth_getcurrentuser_getcurrentuser"
     },
     {
       "relation": "calls",
@@ -22709,6 +22719,16 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/app/components/DevKit/DevKit.tsx",
+      "source_location": "L24",
+      "weight": 1.0,
+      "source": "devkit_devkit",
+      "target": "devkit_devkit_devaction",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/components/DevKit/DevKit.tsx",
       "source_location": "L14",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -22724,6 +22744,50 @@
       "confidence_score": 1.0,
       "source": "devkit_devkit",
       "target": "devkit_devkit_getqueryparams"
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/components/DevKit/DevKit.tsx",
+      "source_location": "L7",
+      "weight": 1.0,
+      "source": "devkit_devkit",
+      "target": "hooks_useapi",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/components/DevKit/DevKit.tsx",
+      "source_location": "L7",
+      "weight": 1.0,
+      "source": "devkit_devkit",
+      "target": "hooks_useapi_useapi",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/components/DevKit/DevKit.tsx",
+      "source_location": "L6",
+      "weight": 1.0,
+      "source": "devkit_devkit",
+      "target": "hooks_usecurrentuser",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/components/DevKit/DevKit.tsx",
+      "source_location": "L6",
+      "weight": 1.0,
+      "source": "devkit_devkit",
+      "target": "hooks_usecurrentuser_usecurrentuser",
+      "confidence_score": 1.0
     },
     {
       "relation": "imports_from",
@@ -22752,6 +22816,28 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "remix/app/components/DevKit/DevKit.tsx",
+      "source_location": "L8",
+      "weight": 1.0,
+      "source": "devkit_devkit",
+      "target": "lopu_uselopu",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/components/DevKit/DevKit.tsx",
+      "source_location": "L8",
+      "weight": 1.0,
+      "source": "devkit_devkit",
+      "target": "lopu_uselopu_uselopu",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/components/DevKit/DevKit.tsx",
       "source_location": "L2",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -22768,6 +22854,17 @@
       "confidence_score": 1.0,
       "source": "devkit_devkit",
       "target": "thingtime_usethingtime_usethingtime"
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/components/DevKit/DevKit.tsx",
+      "source_location": "L9",
+      "weight": 1.0,
+      "source": "devkit_devkit",
+      "target": "user_usercard",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -22790,6 +22887,39 @@
       "confidence_score": 1.0,
       "source": "app_root",
       "target": "devkit_devkit_devkit"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/components/DevKit/DevKit.tsx",
+      "source_location": "L45",
+      "weight": 1.0,
+      "source": "devkit_devkit_devkit",
+      "target": "hooks_useapi_useapi"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/components/DevKit/DevKit.tsx",
+      "source_location": "L44",
+      "weight": 1.0,
+      "source": "devkit_devkit_devkit",
+      "target": "hooks_usecurrentuser_usecurrentuser"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/components/DevKit/DevKit.tsx",
+      "source_location": "L48",
+      "weight": 1.0,
+      "source": "devkit_devkit_devkit",
+      "target": "lopu_uselopu_uselopu"
     },
     {
       "relation": "calls",
@@ -23427,9 +23557,9 @@
       "source_file": "remix/app/components/Lopu/useLopu.tsx",
       "source_location": "L12",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_uselopu",
-      "target": "lopu_uselopu_lopulink",
-      "confidence_score": 1.0
+      "target": "lopu_uselopu_lopulink"
     },
     {
       "relation": "contains",
@@ -23472,6 +23602,17 @@
       "target": "lopu_uselopu_uselopu"
     },
     {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/profile.tsx",
+      "source_location": "L6",
+      "weight": 1.0,
+      "source": "routes_profile",
+      "target": "lopu_uselopu",
+      "confidence_score": 1.0
+    },
+    {
       "relation": "calls",
       "context": "call",
       "confidence": "EXTRACTED",
@@ -23481,6 +23622,28 @@
       "confidence_score": 1.0,
       "source": "lopu_uselopu_loputoast",
       "target": "lopu_uselopu_statusemoji"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/profile.tsx",
+      "source_location": "L6",
+      "weight": 1.0,
+      "source": "routes_profile",
+      "target": "lopu_uselopu_uselopu",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/routes/profile.tsx",
+      "source_location": "L13",
+      "weight": 1.0,
+      "source": "routes_profile_profile",
+      "target": "lopu_uselopu_uselopu"
     },
     {
       "relation": "contains",
@@ -25177,9 +25340,9 @@
       "source_file": "remix/app/routes/profile.tsx",
       "source_location": "L6",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_profile",
-      "target": "user_usercard",
-      "confidence_score": 1.0
+      "target": "user_usercard"
     },
     {
       "relation": "imports_from",
@@ -25188,9 +25351,9 @@
       "source_file": "remix/app/routes/welcome.tsx",
       "source_location": "L7",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_welcome",
-      "target": "user_usercard",
-      "confidence_score": 1.0
+      "target": "user_usercard"
     },
     {
       "relation": "imports_from",
@@ -25199,9 +25362,9 @@
       "source_file": "remix/app/components/User/UserCard.tsx",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "user_usercard",
-      "target": "hooks_usecurrentuser",
-      "confidence_score": 1.0
+      "target": "hooks_usecurrentuser"
     },
     {
       "relation": "imports",
@@ -25210,9 +25373,9 @@
       "source_file": "remix/app/components/User/UserCard.tsx",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "user_usercard",
-      "target": "hooks_usecurrentuser_currentuser",
-      "confidence_score": 1.0
+      "target": "hooks_usecurrentuser_currentuser"
     },
     {
       "relation": "contains",
@@ -25220,9 +25383,9 @@
       "source_file": "remix/app/components/User/UserCard.tsx",
       "source_location": "L9",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "user_usercard",
-      "target": "user_usercard_usercard",
-      "confidence_score": 1.0
+      "target": "user_usercard_usercard"
     },
     {
       "relation": "imports",
@@ -25231,9 +25394,9 @@
       "source_file": "remix/app/routes/profile.tsx",
       "source_location": "L6",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_profile",
-      "target": "user_usercard_usercard",
-      "confidence_score": 1.0
+      "target": "user_usercard_usercard"
     },
     {
       "relation": "imports",
@@ -25242,9 +25405,9 @@
       "source_file": "remix/app/routes/welcome.tsx",
       "source_location": "L7",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_welcome",
-      "target": "user_usercard_usercard",
-      "confidence_score": 1.0
+      "target": "user_usercard_usercard"
     },
     {
       "relation": "contains",
@@ -26146,9 +26309,9 @@
       "source_file": "remix/app/routes/welcome.tsx",
       "source_location": "L6",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_welcome",
-      "target": "hooks_usecurrentuser",
-      "confidence_score": 1.0
+      "target": "hooks_usecurrentuser"
     },
     {
       "relation": "imports",
@@ -26179,9 +26342,9 @@
       "source_file": "remix/app/routes/welcome.tsx",
       "source_location": "L6",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_welcome",
-      "target": "hooks_usecurrentuser_usecurrentuser",
-      "confidence_score": 1.0
+      "target": "hooks_usecurrentuser_usecurrentuser"
     },
     {
       "relation": "calls",
@@ -27038,9 +27201,9 @@
       "source_file": "remix/app/routes/welcome.tsx",
       "source_location": "L11",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_welcome",
-      "target": "routes_welcome_loader",
-      "confidence_score": 1.0
+      "target": "routes_welcome_loader"
     },
     {
       "relation": "contains",
@@ -27048,9 +27211,9 @@
       "source_file": "remix/app/routes/welcome.tsx",
       "source_location": "L16",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_welcome",
-      "target": "routes_welcome_welcome",
-      "confidence_score": 1.0
+      "target": "routes_welcome_welcome"
     },
     {
       "relation": "contains",
@@ -31510,5 +31673,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "24423feb95007c87154f3ddd12728670d18dc3eb"
+  "built_at_commit": "417717696307f2cf274675ac55d7557d9d337ba0"
 }

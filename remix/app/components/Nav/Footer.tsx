@@ -43,7 +43,7 @@ export const Footer = (props) => {
   const handleLogout = React.useCallback(async () => {
     await api.v1.auth.logout();
     // the fetcher submit revalidates the root loader → user clears
-    navigate('/');
+    navigate('/login');
   }, [api, navigate]);
 
   return (
