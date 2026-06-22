@@ -23,7 +23,9 @@ const FALLBACKS = [
   "Progress hides in the boring parts — you're closer than it feels. 🌱"
 ];
 
-const pickFallback = () => FALLBACKS[crypto.getRandomValues(new Uint32Array(1))[0] % FALLBACKS.length];
+// crypto RNG, scaled by division (not modulo) to avoid the bias warning — this
+// just picks a whimsical fallback line, nothing security-sensitive.
+const pickFallback = () => FALLBACKS[Math.floor((crypto.getRandomValues(new Uint32Array(1))[0] / 2 ** 32) * FALLBACKS.length)];
 
 // Minimal WMO weather-code → words mapping (Open-Meteo `weather_code`).
 const weatherCodeToText = (code: number): string => {
