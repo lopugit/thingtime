@@ -26,6 +26,45 @@ const CONTAINER_STYLE = {
 
 const blink = keyframes`0%, 100% { opacity: 1 } 50% { opacity: 0 }`;
 
+// Tiny rainbow countdown ring (bottom-right) that drains over the toast's
+// remaining lifetime, then vanishes — a gentle "time left to read" cue. r=5 →
+// circumference ≈ 31.42, animated via stroke-dashoffset (full → empty).
+const drain = keyframes`from { stroke-dashoffset: 0 } to { stroke-dashoffset: 31.42 }`;
+
+const CountdownRing = ({ ms }: { ms: number }) => (
+  <Box
+    position="absolute"
+    bottom="6px"
+    right="8px"
+    pointerEvents="none"
+    sx={{ '& .lopu-drain': { animation: `${drain} ${ms}ms linear forwards` } }}
+  >
+    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+      <defs>
+        <linearGradient id="lopu-ring" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#47b5e6" />
+          <stop offset="35%" stopColor="#a555e8" />
+          <stop offset="65%" stopColor="#f34a4a" />
+          <stop offset="100%" stopColor="#58ca70" />
+        </linearGradient>
+      </defs>
+      <circle cx="7" cy="7" r="5" fill="none" stroke="#edf2f7" strokeWidth="2" />
+      <circle
+        className="lopu-drain"
+        cx="7"
+        cy="7"
+        r="5"
+        fill="none"
+        stroke="url(#lopu-ring)"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeDasharray="31.42"
+        transform="rotate(-90 7 7)"
+      />
+    </svg>
+  </Box>
+);
+
 type LopuStatus = 'success' | 'error' | 'info';
 
 type LopuLink = { label: string; href: string };
@@ -46,8 +85,9 @@ const LopuToast = ({
   status,
   link,
   loading,
+  countdown,
   onClose
-}: LopuArgs & { loading?: boolean; onClose: () => void }) => (
+}: LopuArgs & { loading?: boolean; countdown?: number | null; onClose: () => void }) => (
   <Box
     role="status"
     pointerEvents="auto"
@@ -58,7 +98,7 @@ const LopuToast = ({
     width="360px"
     maxWidth="calc(100vw - 24px)"
   >
-    <Box bg="white" borderRadius="18px" px={4} py={3}>
+    <Box bg="white" borderRadius="18px" px={4} py={3} position="relative">
       <Flex align="center" gap={2} mb={title || description || loading ? 1.5 : 0}>
         <Text fontSize="md" lineHeight={1}>
           🦄
@@ -136,6 +176,7 @@ const LopuToast = ({
           {link.label}
         </Box>
       )}
+      {!loading && countdown ? <CountdownRing ms={countdown} /> : null}
     </Box>
   </Box>
 );
@@ -150,7 +191,14 @@ export const useLopu = () => {
         position: 'top',
         containerStyle: CONTAINER_STYLE,
         render: ({ onClose }) => (
-          <LopuToast title={title} description={description} status={status} link={link} onClose={onClose} />
+          <LopuToast
+            title={title}
+            description={description}
+            status={status}
+            link={link}
+            countdown={duration}
+            onClose={onClose}
+          />
         )
       }),
     [toast]
@@ -170,7 +218,7 @@ export const useLopuStream = () => {
       const controller = new AbortController();
 
       const render =
-        (props: LopuArgs & { loading?: boolean }) =>
+        (props: LopuArgs & { loading?: boolean; countdown?: number | null }) =>
         ({ onClose }: { onClose: () => void }) => {
           const close = () => {
             controller.abort();
@@ -187,7 +235,7 @@ export const useLopuStream = () => {
         render: render({ loading: true })
       });
 
-      const update = (props: LopuArgs & { loading?: boolean }, duration: number | null) =>
+      const update = (props: LopuArgs & { loading?: boolean; countdown?: number | null }, duration: number | null) =>
         toast.update(id, { duration, containerStyle: CONTAINER_STYLE, render: render(props) });
 
       let text = '';
@@ -225,10 +273,10 @@ export const useLopuStream = () => {
 
         // The read-timer starts now (stream finished), not when the toast popped,
         // so you get the full window to read the finished musing.
-        update({ title: text.trim() || 'Lopu is daydreaming…', description: sourceLabel(source) }, 18000);
+        update({ title: text.trim() || 'Lopu is daydreaming…', description: sourceLabel(source), countdown: 18000 }, 18000);
       } catch (err: any) {
         if (err?.name === 'AbortError') return; // user closed it — leave closed
-        update({ title: 'Lopu is daydreaming… try again 🔮', status: 'error' }, 15000);
+        update({ title: 'Lopu is daydreaming… try again 🔮', status: 'error', countdown: 15000 }, 15000);
       }
     },
     [toast]

@@ -1,4 +1,5 @@
 import { Box, Flex, Text } from '@chakra-ui/react';
+import { keyframes } from '@emotion/react';
 import { useNavigate, useRevalidator } from '@remix-run/react';
 import React from 'react';
 
@@ -11,6 +12,9 @@ import { Icon } from '../Icon/Icon';
 
 // injected by vite `define` — 'development' | 'preview' | 'production'
 declare const __TT_DEPLOY_ENV__: string;
+
+// Rainbow shimmer for the hydration status badge — flows the gradient sideways.
+const shimmer = keyframes`0% { background-position: 0% 50% } 100% { background-position: 200% 50% }`;
 
 const getQueryParams: any = () => {
   try {
@@ -257,16 +261,20 @@ export const DevKit = (props) => {
           transition="transform 100ms ease"
         >
           <Icon name="👨‍💻"></Icon>
+          {/* hydration badge: shimmering rainbow once React hydrates, else grey */}
           <Box
             position="absolute"
-            top="2px"
-            right="2px"
-            width="12px"
-            height="12px"
+            top="-2px"
+            right="-2px"
+            width="14px"
+            height="14px"
             borderRadius="full"
             border="2px solid"
-            borderColor="gray.800"
-            bg={mounted ? 'green.400' : 'gray.500'}
+            borderColor="white"
+            backgroundImage={mounted ? RAINBOW : 'none'}
+            bg={mounted ? undefined : 'gray.400'}
+            boxShadow={mounted ? '0 0 8px rgba(165,85,232,0.7)' : 'none'}
+            sx={mounted ? { backgroundSize: '200% 200%', animation: `${shimmer} 3s linear infinite` } : undefined}
           />
         </Flex>
       </Box>
