@@ -38,6 +38,16 @@
   ignored values from `iOS/.env` when present, then runs the Fastlane `beta`
   lane from `iOS/`. Put `THINGTIME_WEB_URL` and Apple signing/API values in the
   shell environment or `iOS/.env`; keep only placeholder examples in git.
+- If iOS TestFlight export fails with `Cloud signing permission error` or `No
+  profiles for '<bundle id>' were found` while an App Store provisioning
+  profile is already installed, set `PROVISIONING_PROFILE_SPECIFIER` to that
+  profile name. The Fastlane lane keeps automatic signing by default and uses
+  manual export mapping only when this variable is present.
+- The iOS Fastlane build lane syncs an Apple Distribution certificate and App
+  Store provisioning profile via the App Store Connect API key before
+  archiving. Use `SKIP_CERT_SYNC=1` or `SKIP_PROFILE_SYNC=1` only when the
+  correct signing asset is already installed and that sync should be skipped
+  intentionally.
 
 ## Fundamentals (read first)
 

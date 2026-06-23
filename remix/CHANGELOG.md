@@ -31,6 +31,17 @@ Detailed PR notes:
 
 ### Changed
 
+- Bumped the native iOS build number to 2 for the next TestFlight upload. —
+  _Codex (AI), 2026-06-24_
+- Disabled iOS export symbol packaging for the initial webview shell TestFlight
+  build to avoid the local Xcode beta `rsync --extended-attributes` packaging
+  failure. — _Codex (AI), 2026-06-24_
+- Added an optional iOS `PROVISIONING_PROFILE_SPECIFIER` export fallback so
+  TestFlight uploads can use an installed App Store profile when Xcode automatic
+  export cannot create or find one. — _Codex (AI), 2026-06-24_
+- Added iOS Fastlane distribution-certificate and App Store profile syncing
+  before TestFlight builds so fresh local keychains can recover signing assets
+  from the App Store Connect API key. — _Codex (AI), 2026-06-24_
 - Added an ignored `iOS/.env` TestFlight workflow and
   `iOS/scripts/testflight-beta.sh` so native uploads can target preview web URLs
   without committing branch-specific build values. — _Codex (AI), 2026-06-24_

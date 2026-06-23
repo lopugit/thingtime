@@ -29,6 +29,45 @@ def thingtime_web_url_xcarg
   "THINGTIME_WEB_URL=#{Shellwords.escape(ENV.fetch('THINGTIME_WEB_URL', 'https://thingtime.com'))}"
 end
 
+def xcodebuild_xcargs
+  args = []
+  if ENV["PROVISIONING_PROFILE_SPECIFIER"].to_s.empty?
+    args << api_key_xcargs
+  else
+    args << "CODE_SIGN_STYLE=Manual"
+    args << "CODE_SIGN_IDENTITY=#{Shellwords.escape('Apple Distribution')}"
+    args << "PROVISIONING_PROFILE_SPECIFIER=#{Shellwords.escape(ENV.fetch('PROVISIONING_PROFILE_SPECIFIER'))}"
+  end
+  args << "DEVELOPMENT_TEAM=#{ENV.fetch('DEVELOPMENT_TEAM')}"
+  args << thingtime_web_url_xcarg
+  args.join(" ")
+end
+
+def export_options
+  options = {
+    method: "app-store",
+    signingStyle: "automatic",
+    uploadSymbols: false
+  }
+
+  return options if ENV["PROVISIONING_PROFILE_SPECIFIER"].to_s.empty?
+
+  options.merge(
+    signingStyle: "manual",
+    teamID: ENV.fetch("DEVELOPMENT_TEAM"),
+    provisioningProfiles: {
+      ENV.fetch("PRODUCT_BUNDLE_IDENTIFIER") => ENV.fetch("PROVISIONING_PROFILE_SPECIFIER")
+    }
+  )
+end
+
+def provisioning_profile_name
+  ENV.fetch(
+    "PROVISIONING_PROFILE_SPECIFIER",
+    "Thingtime App Store #{ENV.fetch('PRODUCT_BUNDLE_IDENTIFIER')}"
+  )
+end
+
 platform :ios do
   desc "Generate the Xcode project from project.yml"
   lane :generate do
@@ -40,6 +79,27 @@ platform :ios do
   lane :build do
     generate
     setup_ci if ENV["CI"]
+    unless ENV["SKIP_CERT_SYNC"] == "1"
+      get_certificates(
+        api_key: app_store_api_key,
+        team_id: ENV.fetch("DEVELOPMENT_TEAM"),
+        development: false,
+        output_path: OUTPUT_DIRECTORY
+      )
+    end
+
+    unless ENV["SKIP_PROFILE_SYNC"] == "1"
+      ENV["PROVISIONING_PROFILE_SPECIFIER"] = provisioning_profile_name
+      get_provisioning_profile(
+        api_key: app_store_api_key,
+        team_id: ENV.fetch("DEVELOPMENT_TEAM"),
+        app_identifier: ENV.fetch("PRODUCT_BUNDLE_IDENTIFIER"),
+        provisioning_name: provisioning_profile_name,
+        cert_id: lane_context[SharedValues::CERT_CERTIFICATE_ID],
+        force: true,
+        output_path: OUTPUT_DIRECTORY
+      )
+    end
 
     build_app(
       scheme: SCHEME,
@@ -47,11 +107,9 @@ platform :ios do
       output_directory: OUTPUT_DIRECTORY,
       output_name: OUTPUT_NAME,
       export_method: "app-store",
-      xcargs: "#{api_key_xcargs} DEVELOPMENT_TEAM=#{ENV.fetch('DEVELOPMENT_TEAM')} #{thingtime_web_url_xcarg}",
-      export_options: {
-        method: "app-store",
-        signingStyle: "automatic"
-      }
+      include_symbols: false,
+      xcargs: xcodebuild_xcargs,
+      export_options: export_options
     )
   end
 

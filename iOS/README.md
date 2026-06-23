@@ -42,3 +42,14 @@ loads `iOS/.env` when present and then runs `bundle exec fastlane beta`. Keep
 git unless they are intended public examples. App Store Connect accepts uploaded
 archives; it does not compile this repository from source unless a separate
 Xcode Cloud workflow is configured.
+
+If automatic App Store export reports that no profile was found, set
+`PROVISIONING_PROFILE_SPECIFIER` to the installed App Store provisioning profile
+name for `PRODUCT_BUNDLE_IDENTIFIER`. The Fastlane lane will keep automatic
+signing as the default and switch only the export step to manual profile
+mapping when that variable is present.
+
+The lane syncs an Apple Distribution certificate and App Store provisioning
+profile with the App Store Connect API key before building. Set
+`SKIP_CERT_SYNC=1` or `SKIP_PROFILE_SYNC=1` only when the correct signing asset
+is already installed and you intentionally want to skip that step.

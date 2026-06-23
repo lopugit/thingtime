@@ -1,16 +1,16 @@
 # Graph Report - thingtime  (2026-06-24)
 
 ## Corpus Check
-- 263 files · ~586,745 words
+- 263 files · ~587,143 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 1430 nodes · 2529 edges · 115 communities (92 shown, 23 thin omitted)
+- 1430 nodes · 2529 edges · 117 communities (94 shown, 23 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 23 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `fb98f946`
+- Built from commit: `dcc7abde`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -116,6 +116,8 @@
 - [[_COMMUNITY_Community 112|Community 112]]
 - [[_COMMUNITY_Community 113|Community 113]]
 - [[_COMMUNITY_Community 114|Community 114]]
+- [[_COMMUNITY_Community 115|Community 115]]
+- [[_COMMUNITY_Community 116|Community 116]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `useThingtime()` - 38 edges
@@ -142,15 +144,15 @@
   remix/app/routes/api/v1/mongodb/status/_status.tsx → remix/app/api/utils/mongodb/status.ts
 
 ## Import Cycles
-- 3-file cycle: `remix/app/api/utils/mongodb/connection.ts -> remix/app/routes/api/v1/mongodb/get-connection/_get-connection.tsx -> remix/app/api/utils/userValidatePassword.ts -> remix/app/api/utils/mongodb/connection.ts`
 - 3-file cycle: `remix/app/api/utils/mongodb/connection.ts -> remix/app/routes/api/v1/mongodb/get-connection/_get-connection.tsx -> remix/app/api/utils/userCheckExists.ts -> remix/app/api/utils/mongodb/connection.ts`
+- 3-file cycle: `remix/app/api/utils/mongodb/connection.ts -> remix/app/routes/api/v1/mongodb/get-connection/_get-connection.tsx -> remix/app/api/utils/userValidatePassword.ts -> remix/app/api/utils/mongodb/connection.ts`
 - 3-file cycle: `remix/app/Providers/ThingtimeProvider.tsx -> remix/app/hooks/useThingtimeMachine.tsx -> remix/app/components/Thingtime/useThingtime.tsx -> remix/app/Providers/ThingtimeProvider.tsx`
 
-## Communities (115 total, 23 thin omitted)
+## Communities (117 total, 23 thin omitted)
 
 ### Community 0 - "Raycast Image/File Operations"
-Cohesion: 0.14
-Nodes (29): any(), convert(), flip(), pad(), resize(), rotate(), scale(), stripEXIF() (+21 more)
+Cohesion: 0.25
+Nodes (14): pad(), resize(), rotate(), scale(), stripEXIF(), Command(), getExifToolLocation(), installExifTool() (+6 more)
 
 ### Community 1 - "Community 1"
 Cohesion: 0.22
@@ -309,8 +311,8 @@ Cohesion: 0.50
 Nodes (3): Codex workspace notes, Delivery messaging, graphify
 
 ### Community 45 - "Community 45"
-Cohesion: 0.17
-Nodes (27): openNewFinderWindow(), regexToReplacementConverter(), regexTrim(), Command(), convertFormats, formats, Command(), convertFormats (+19 more)
+Cohesion: 0.16
+Nodes (24): openNewFinderWindow(), regexToReplacementConverter(), regexTrim(), Command(), convertFormats, formats, Command(), convertFormats (+16 more)
 
 ### Community 46 - "Community 46"
 Cohesion: 0.21
@@ -421,8 +423,8 @@ Cohesion: 0.29
 Nodes (5): chakras, chakrasDark, chakrasLight, g, greys
 
 ### Community 104 - "Community 104"
-Cohesion: 0.16
-Nodes (18): runOperation(), FORMATS, Command(), Command(), Command(), Command(), Command(), Command() (+10 more)
+Cohesion: 0.21
+Nodes (15): flip(), runOperation(), Command(), Command(), Command(), Command(), Command(), Direction (+7 more)
 
 ### Community 105 - "Community 105"
 Cohesion: 0.29
@@ -458,7 +460,15 @@ Nodes (7): engines, node, private, resolutions, @types/react, sideEffects, versi
 
 ### Community 113 - "Community 113"
 Cohesion: 0.52
-Nodes (5): optimize(), optimizeJPEG(), optimizeSVG(), optimizeWEBP(), ImageResultHandling
+Nodes (5): optimize(), optimizeJPEG(), optimizeSVG(), optimizeWEBP(), Command()
+
+### Community 115 - "Community 115"
+Cohesion: 0.25
+Nodes (11): any(), convert(), FORMATS, Command(), ImageResultHandling, ConvertPreferences, ExtensionPreferences, PadPreferences (+3 more)
+
+### Community 116 - "Community 116"
+Cohesion: 0.24
+Nodes (10): copyImagesAtPathsToClipboard(), getClipboardFiles(), getClipboardImages(), deleteFiles(), getCurrentDirectory(), getMenubarOwningApplication(), getSelectedFiles(), getSelectedFinderFiles() (+2 more)
 
 ## Knowledge Gaps
 - **530 isolated node(s):** `extends`, `name`, `version`, `description`, `main` (+525 more)
@@ -478,7 +488,7 @@ _Questions this graph is uniquely positioned to answer:_
   _`useThingtime()` has 2 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `extends`, `name`, `version` to the rest of the system?**
   _530 weakly-connected nodes found - possible documentation gaps or missing edges._
-- **Should `Raycast Image/File Operations` be split into smaller, more focused modules?**
-  _Cohesion score 0.14285714285714285 - nodes in this community are weakly interconnected._
 - **Should `Backend API Dependencies` be split into smaller, more focused modules?**
   _Cohesion score 0.06832298136645963 - nodes in this community are weakly interconnected._
+- **Should `Remix Frontend Dependencies` be split into smaller, more focused modules?**
+  _Cohesion score 0.043478260869565216 - nodes in this community are weakly interconnected._
