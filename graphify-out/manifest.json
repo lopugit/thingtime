@@ -855,8 +855,8 @@
     "semantic_hash": "6f47150939eacf6d3a89a87289013ea3"
   },
   "README.md": {
-    "mtime": 1782176036.8484313,
-    "ast_hash": "22e358bb842f4a72fc99b91190d6f5a8",
+    "mtime": 1782177883.4809694,
+    "ast_hash": "6786d61b111a34fee2e8d92da391e5dd",
     "semantic_hash": ""
   },
   "docs/Use Cases/car.md": {
@@ -1805,13 +1805,13 @@
     "semantic_hash": ""
   },
   "TODO.md": {
-    "mtime": 1782176036.8487124,
-    "ast_hash": "e1770d270b896c571c9c1a08026953b3",
+    "mtime": 1782177864.547962,
+    "ast_hash": "760c883e5324d203135ac77552628a5c",
     "semantic_hash": ""
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1782176036.8527625,
-    "ast_hash": "e9120ab2a798e8ff56d645e589f3565c",
+    "mtime": 1782177883.4817905,
+    "ast_hash": "a92c06396935c3503c082190b359aff6",
     "semantic_hash": ""
   },
   "remix/app/api/utils/vercel/status.ts": {
@@ -1840,8 +1840,8 @@
     "semantic_hash": ""
   },
   "remix/PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md": {
-    "mtime": 1782176036.853146,
-    "ast_hash": "745a99e8b8ef3e77d0dc79f3dac798b1",
+    "mtime": 1782176416.7801309,
+    "ast_hash": "3ee9e0c9d98402760b8ead84cbadaded",
     "semantic_hash": ""
   },
   "remix/app/components/Status/StatusRefreshButton.tsx": {
@@ -1865,13 +1865,13 @@
     "semantic_hash": ""
   },
   "remix/app/api/utils/auth/getCurrentUser.ts": {
-    "mtime": 1782176032.686676,
-    "ast_hash": "17bca1b9b75d39d5e0bf91d8764bc4ff",
+    "mtime": 1782177919.8977242,
+    "ast_hash": "1d6717cd42f156cc477f31c54ba6221a",
     "semantic_hash": ""
   },
   "remix/app/api/utils/auth/jwt.ts": {
-    "mtime": 1782176032.6867876,
-    "ast_hash": "826cf51038846d89d45b402e0bbc7191",
+    "mtime": 1782177864.5444436,
+    "ast_hash": "3f085bb5eb8f6effb0158b57ccfaaef3",
     "semantic_hash": ""
   },
   "remix/app/api/utils/auth/loginUser.ts": {
@@ -1900,13 +1900,13 @@
     "semantic_hash": ""
   },
   "remix/app/api/utils/lopu/musing.ts": {
-    "mtime": 1782176032.688724,
-    "ast_hash": "18c311edcb62b5c88a5407694f1f9b9e",
+    "mtime": 1782177864.5471816,
+    "ast_hash": "790a7df2204cecbde203194ed7d12370",
     "semantic_hash": ""
   },
   "remix/app/api/utils/mongodb/collections.ts": {
-    "mtime": 1782176032.6905525,
-    "ast_hash": "d1465a8409e81c44d7b82d0bf5204a3f",
+    "mtime": 1782177864.5467925,
+    "ast_hash": "793b59c5123a0682c6e3b45b7219bf36",
     "semantic_hash": ""
   },
   "remix/app/components/Login/Register.tsx": {
@@ -1940,13 +1940,13 @@
     "semantic_hash": ""
   },
   "remix/app/routes/api/v1/auth/register/_register.tsx": {
-    "mtime": 1782176032.719915,
-    "ast_hash": "97a21d269cd4871ca1e7941ccab4551f",
+    "mtime": 1782177864.546407,
+    "ast_hash": "d87c55197f8b2f6192ae571974b10758",
     "semantic_hash": ""
   },
   "remix/app/routes/api/v1/auth/resend-verification/_resend-verification.tsx": {
-    "mtime": 1782176032.7200558,
-    "ast_hash": "4dd73375677680f56d03e6f1534fc731",
+    "mtime": 1782177864.546594,
+    "ast_hash": "a9cb336d84d4dbdf5e18f8042257a68c",
     "semantic_hash": ""
   },
   "remix/app/routes/api/v1/auth/verify-email/_verify-email.tsx": {
@@ -1955,8 +1955,8 @@
     "semantic_hash": ""
   },
   "remix/app/routes/api/v1/lopu/musing/_musing.tsx": {
-    "mtime": 1782176032.7204635,
-    "ast_hash": "dbbfbe902f2d4c930e36ef316d09fbe1",
+    "mtime": 1782177864.5475152,
+    "ast_hash": "0dc94c9c6c612a33a733f0d1c5b5c865",
     "semantic_hash": ""
   },
   "remix/app/routes/profile.tsx": {
@@ -2017,6 +2017,21 @@
   "claude-todo/README.md": {
     "mtime": 1782176032.5564177,
     "ast_hash": "95c7edae2e7bf3e8b056c2695a5083dd",
+    "semantic_hash": ""
+  },
+  "remix/app/api/utils/auth/devVerification.ts": {
+    "mtime": 1782177864.5461507,
+    "ast_hash": "a02fb31201ad9cf9d435523912960e52",
+    "semantic_hash": ""
+  },
+  "remix/app/api/utils/lopu/rateLimit.ts": {
+    "mtime": 1782177864.5469482,
+    "ast_hash": "620b2e0ae2857036dee5e4848436353d",
+    "semantic_hash": ""
+  },
+  "remix/PRs/16-resolve-main-into-thingtime-dev-branch.md": {
+    "mtime": 1782177935.7686098,
+    "ast_hash": "5fe738d622401a4b4fd6fcb4bf5fe621",
     "semantic_hash": ""
   }
 }

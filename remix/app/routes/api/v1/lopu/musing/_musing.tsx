@@ -1,4 +1,5 @@
-import { fetchWeather, streamLopuMusing } from '~/api/utils/lopu/musing';
+import { consumeLopuMusingQuota } from '~/api/utils/lopu/rateLimit';
+import { fetchWeather, hasLopuAiProviderConfigured, streamLopuMusing } from '~/api/utils/lopu/musing';
 
 // Format the current time in the visitor's own timezone (Vercel geo header),
 // falling back to UTC. Using the real timezone is what stops Lopu from saying
@@ -25,8 +26,10 @@ export const loader = async ({ request }: { request: Request }) => {
   const lat = h.get('x-vercel-ip-latitude');
   const lon = h.get('x-vercel-ip-longitude');
   const tz = h.get('x-vercel-ip-timezone');
+  const quota = hasLopuAiProviderConfigured() ? await consumeLopuMusingQuota(request) : null;
+  const forceFallback = quota ? !quota.allowed : false;
 
-  const weather = lat && lon ? await fetchWeather(lat, lon) : null;
+  const weather = !forceFallback && lat && lon ? await fetchWeather(lat, lon) : null;
 
   const ctx = {
     city: city ? decodeURIComponent(city) : undefined,
@@ -40,7 +43,7 @@ export const loader = async ({ request }: { request: Request }) => {
   const body = new ReadableStream({
     async start(controller) {
       try {
-        for await (const ev of streamLopuMusing(ctx)) {
+        for await (const ev of streamLopuMusing(ctx, { forceFallback })) {
           controller.enqueue(encoder.encode(JSON.stringify(ev) + '\n'));
         }
       } catch {
@@ -56,7 +59,9 @@ export const loader = async ({ request }: { request: Request }) => {
     headers: {
       'Content-Type': 'application/x-ndjson; charset=utf-8',
       'Cache-Control': 'no-store',
-      'X-Accel-Buffering': 'no'
+      'X-Accel-Buffering': 'no',
+      'X-Thingtime-Lopu-Rate-Limited': forceFallback ? 'true' : 'false',
+      ...(quota ? { 'X-Thingtime-Lopu-RateLimit-Remaining': String(quota.remaining) } : {})
     }
   });
 };

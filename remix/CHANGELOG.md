@@ -16,6 +16,25 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### PR #16 - Auth And Lopu Hardening
+
+Detailed PR notes:
+[PRs/16-resolve-main-into-thingtime-dev-branch.md](PRs/16-resolve-main-into-thingtime-dev-branch.md)
+
+### Fixed
+
+- Hardened JWT auth so deployed runtimes fail closed without `JWT_SECRET`, and
+  live session checks now require the session `userId` to match the JWT `sub`.
+  — _Codex (AI), 2026-06-23_
+- Limited raw dev email-verification links to local development and Vercel
+  preview environments only. — _Codex (AI), 2026-06-23_
+
+### Changed
+
+- Added a Mongo-backed rolling 10-per-hour IP quota for AI-backed Lopu musings;
+  over-limit or rate-limit-storage failures now stream the built-in fallback
+  library instead of calling weather or AI providers. — _Codex (AI), 2026-06-23_
+
 ### PR #13 - Remix Hydration, Vercel Status, And Deployment Hygiene
 
 Detailed PR notes:

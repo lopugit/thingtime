@@ -1,14 +1,20 @@
 import { SignJWT, jwtVerify } from 'jose';
 
-// HS256 signing secret. Set JWT_SECRET in every real environment; the dev
-// fallback exists only so local work isn't blocked (and warns loudly).
+// HS256 signing secret. Set JWT_SECRET in every real environment. Local dev can
+// use the fallback, but production must fail closed instead of minting tokens
+// with a public, guessable secret.
 const getSecret = () => {
   const secret = process.env.JWT_SECRET;
-  if (!secret) {
-    console.warn('[auth] JWT_SECRET is not set — using an insecure dev secret. Set JWT_SECRET before production.');
-    return new TextEncoder().encode('dev-insecure-secret-change-me');
+  if (secret) {
+    return new TextEncoder().encode(secret);
   }
-  return new TextEncoder().encode(secret);
+
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('[auth] JWT_SECRET must be set before auth can run in production.');
+  }
+
+  console.warn('[auth] JWT_SECRET is not set — using an insecure local-dev secret.');
+  return new TextEncoder().encode('dev-insecure-secret-change-me');
 };
 
 export type JwtClaims = { sub: string; jti: string };

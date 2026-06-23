@@ -1690,7 +1690,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_apply_filter",
-      "community": 10,
+      "community": 0,
       "norm_label": "apply-filter.tsx"
     },
     {
@@ -1700,7 +1700,7 @@
       "source_location": "L19",
       "_origin": "ast",
       "id": "src_apply_filter_command",
-      "community": 10,
+      "community": 0,
       "norm_label": "command()"
     },
     {
@@ -2090,7 +2090,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "components_sizeselectionactionpanel",
-      "community": 0,
+      "community": 10,
       "norm_label": "sizeselectionactionpanel.tsx"
     },
     {
@@ -2240,7 +2240,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "operations_filteroperation",
-      "community": 10,
+      "community": 0,
       "norm_label": "filteroperation.ts"
     },
     {
@@ -2250,7 +2250,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "operations_filteroperation_applyfilter",
-      "community": 10,
+      "community": 0,
       "norm_label": "applyfilter()"
     },
     {
@@ -3820,7 +3820,7 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "providers_thingtimeprovider_thingtimetypes",
-      "community": 7,
+      "community": 35,
       "norm_label": "thingtimetypes"
     },
     {
@@ -3840,7 +3840,7 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "providers_thingtimeprovider_thingtimecontext",
-      "community": 7,
+      "community": 35,
       "norm_label": "thingtimecontext"
     },
     {
@@ -3942,6 +3942,26 @@
       "id": "auth_authcookie_clearauthcookie",
       "community": 16,
       "norm_label": "clearauthcookie()"
+    },
+    {
+      "label": "devVerification.ts",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/auth/devVerification.ts",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "auth_devverification",
+      "community": 16,
+      "norm_label": "devverification.ts"
+    },
+    {
+      "label": "shouldShowDevVerificationLink()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/auth/devVerification.ts",
+      "source_location": "L4",
+      "_origin": "ast",
+      "id": "auth_devverification_shouldshowdevverificationlink",
+      "community": 16,
+      "norm_label": "shouldshowdevverificationlink()"
     },
     {
       "label": "email.ts",
@@ -4047,7 +4067,7 @@
       "label": "getCurrentUser()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/auth/getCurrentUser.ts",
-      "source_location": "L8",
+      "source_location": "L9",
       "_origin": "ast",
       "id": "auth_getcurrentuser_getcurrentuser",
       "community": 16,
@@ -4067,7 +4087,7 @@
       "label": "getSecret()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/auth/jwt.ts",
-      "source_location": "L5",
+      "source_location": "L6",
       "_origin": "ast",
       "id": "auth_jwt_getsecret",
       "community": 16,
@@ -4077,7 +4097,7 @@
       "label": "JwtClaims",
       "file_type": "code",
       "source_file": "remix/app/api/utils/auth/jwt.ts",
-      "source_location": "L14",
+      "source_location": "L20",
       "_origin": "ast",
       "id": "auth_jwt_jwtclaims",
       "community": 16,
@@ -4087,7 +4107,7 @@
       "label": "signJwt()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/auth/jwt.ts",
-      "source_location": "L18",
+      "source_location": "L24",
       "_origin": "ast",
       "id": "auth_jwt_signjwt",
       "community": 16,
@@ -4097,7 +4117,7 @@
       "label": "verifyJwt()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/auth/jwt.ts",
-      "source_location": "L28",
+      "source_location": "L34",
       "_origin": "ast",
       "id": "auth_jwt_verifyjwt",
       "community": 16,
@@ -4517,7 +4537,7 @@
       "label": "chunkWords()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/lopu/musing.ts",
-      "source_location": "L153",
+      "source_location": "L154",
       "_origin": "ast",
       "id": "lopu_musing_chunkwords",
       "community": 73,
@@ -4527,7 +4547,7 @@
       "label": "tick()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/lopu/musing.ts",
-      "source_location": "L154",
+      "source_location": "L155",
       "_origin": "ast",
       "id": "lopu_musing_tick",
       "community": 73,
@@ -4537,11 +4557,91 @@
       "label": "generateLopuMusing()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/lopu/musing.ts",
-      "source_location": "L210",
+      "source_location": "L214",
       "_origin": "ast",
       "id": "lopu_musing_generatelopumusing",
       "community": 73,
       "norm_label": "generatelopumusing()"
+    },
+    {
+      "label": "rateLimit.ts",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/lopu/rateLimit.ts",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "lopu_ratelimit",
+      "community": 16,
+      "norm_label": "ratelimit.ts"
+    },
+    {
+      "label": "RateLimitResult",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/lopu/rateLimit.ts",
+      "source_location": "L8",
+      "_origin": "ast",
+      "id": "lopu_ratelimit_ratelimitresult",
+      "community": 16,
+      "norm_label": "ratelimitresult"
+    },
+    {
+      "label": "firstHeaderIp()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/lopu/rateLimit.ts",
+      "source_location": "L16",
+      "_origin": "ast",
+      "id": "lopu_ratelimit_firstheaderip",
+      "community": 16,
+      "norm_label": "firstheaderip()"
+    },
+    {
+      "label": "getRequestIp()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/lopu/rateLimit.ts",
+      "source_location": "L18",
+      "_origin": "ast",
+      "id": "lopu_ratelimit_getrequestip",
+      "community": 16,
+      "norm_label": "getrequestip()"
+    },
+    {
+      "label": "hashIp()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/lopu/rateLimit.ts",
+      "source_location": "L29",
+      "_origin": "ast",
+      "id": "lopu_ratelimit_haship",
+      "community": 16,
+      "norm_label": "haship()"
+    },
+    {
+      "label": "activeRequestsExpr()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/lopu/rateLimit.ts",
+      "source_location": "L31",
+      "_origin": "ast",
+      "id": "lopu_ratelimit_activerequestsexpr",
+      "community": 16,
+      "norm_label": "activerequestsexpr()"
+    },
+    {
+      "label": "resetFromRequests()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/lopu/rateLimit.ts",
+      "source_location": "L39",
+      "_origin": "ast",
+      "id": "lopu_ratelimit_resetfromrequests",
+      "community": 16,
+      "norm_label": "resetfromrequests()"
+    },
+    {
+      "label": "consumeLopuMusingQuota()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/lopu/rateLimit.ts",
+      "source_location": "L52",
+      "_origin": "ast",
+      "id": "lopu_ratelimit_consumelopumusingquota",
+      "community": 16,
+      "norm_label": "consumelopumusingquota()"
     },
     {
       "label": "client.ts",
@@ -4654,10 +4754,20 @@
       "norm_label": "getemailverificationscollection()"
     },
     {
+      "label": "getLopuMusingRateLimitsCollection()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/mongodb/collections.ts",
+      "source_location": "L31",
+      "_origin": "ast",
+      "id": "mongodb_collections_getlopumusingratelimitscollection",
+      "community": 16,
+      "norm_label": "getlopumusingratelimitscollection()"
+    },
+    {
       "label": "ensureIndexes()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/mongodb/collections.ts",
-      "source_location": "L39",
+      "source_location": "L42",
       "_origin": "ast",
       "id": "mongodb_collections_ensureindexes",
       "community": 16,
@@ -5880,7 +5990,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "safety_safe",
-      "community": 72,
+      "community": 86,
       "norm_label": "safe.tsx"
     },
     {
@@ -5890,7 +6000,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "safety_safe_safe",
-      "community": 72,
+      "community": 86,
       "norm_label": "safe()"
     },
     {
@@ -5970,7 +6080,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "thingtime_settingsmenu",
-      "community": 35,
+      "community": 46,
       "norm_label": "settingsmenu.tsx"
     },
     {
@@ -5980,7 +6090,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "thingtime_settingsmenu_settingsmenu",
-      "community": 35,
+      "community": 46,
       "norm_label": "settingsmenu()"
     },
     {
@@ -6390,7 +6500,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "functions_safe",
-      "community": 72,
+      "community": 86,
       "norm_label": "safe.tsx"
     },
     {
@@ -6400,7 +6510,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "functions_safe_safe",
-      "community": 72,
+      "community": 86,
       "norm_label": "safe()"
     },
     {
@@ -6410,7 +6520,7 @@
       "source_location": "L54",
       "_origin": "ast",
       "id": "functions_safe_getmeta",
-      "community": 72,
+      "community": 86,
       "norm_label": "getmeta()"
     },
     {
@@ -7140,7 +7250,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "routes_index_index",
-      "community": 35,
+      "community": 39,
       "norm_label": "index()"
     },
     {
@@ -7197,7 +7307,7 @@
       "label": "action()",
       "file_type": "code",
       "source_file": "remix/app/routes/api/v1/auth/register/_register.tsx",
-      "source_location": "L9",
+      "source_location": "L10",
       "_origin": "ast",
       "id": "register_register_action",
       "community": 16,
@@ -7217,7 +7327,7 @@
       "label": "action()",
       "file_type": "code",
       "source_file": "remix/app/routes/api/v1/auth/resend-verification/_resend-verification.tsx",
-      "source_location": "L10",
+      "source_location": "L11",
       "_origin": "ast",
       "id": "resend_verification_resend_verification_action",
       "community": 16,
@@ -7277,7 +7387,7 @@
       "label": "formatLocalTime()",
       "file_type": "code",
       "source_file": "remix/app/routes/api/v1/lopu/musing/_musing.tsx",
-      "source_location": "L7",
+      "source_location": "L8",
       "_origin": "ast",
       "id": "musing_musing_formatlocaltime",
       "community": 73,
@@ -7287,7 +7397,7 @@
       "label": "loader()",
       "file_type": "code",
       "source_file": "remix/app/routes/api/v1/lopu/musing/_musing.tsx",
-      "source_location": "L21",
+      "source_location": "L22",
       "_origin": "ast",
       "id": "musing_musing_loader",
       "community": 73,
@@ -7480,7 +7590,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "template_template",
-      "community": 2,
+      "community": 13,
       "norm_label": "_template.tsx"
     },
     {
@@ -7490,7 +7600,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "template_template_index",
-      "community": 2,
+      "community": 13,
       "norm_label": "index()"
     },
     {
@@ -7500,7 +7610,7 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "template_template_action",
-      "community": 2,
+      "community": 13,
       "norm_label": "action()"
     },
     {
@@ -7510,7 +7620,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "template_template_earlyreturn",
-      "community": 2,
+      "community": 13,
       "norm_label": "earlyreturn()"
     },
     {
@@ -7660,7 +7770,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "routes_login",
-      "community": 16,
+      "community": 46,
       "norm_label": "login.tsx"
     },
     {
@@ -7680,7 +7790,7 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "routes_login_login",
-      "community": 16,
+      "community": 46,
       "norm_label": "login()"
     },
     {
@@ -7740,7 +7850,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "routes_ode_index",
-      "community": 35,
+      "community": 39,
       "norm_label": "index()"
     },
     {
@@ -7810,7 +7920,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "routes_register",
-      "community": 16,
+      "community": 46,
       "norm_label": "register.tsx"
     },
     {
@@ -7820,7 +7930,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "routes_register_loader",
-      "community": 16,
+      "community": 46,
       "norm_label": "loader()"
     },
     {
@@ -7830,7 +7940,7 @@
       "source_location": "L14",
       "_origin": "ast",
       "id": "routes_register_register",
-      "community": 16,
+      "community": 46,
       "norm_label": "register()"
     },
     {
@@ -7920,7 +8030,7 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "routes_welcome_loader",
-      "community": 80,
+      "community": 16,
       "norm_label": "loader()"
     },
     {
@@ -9110,7 +9220,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "utils_index_stringliteraltorichtext",
-      "community": 7,
+      "community": 72,
       "norm_label": "stringliteraltorichtext()"
     },
     {
@@ -9150,7 +9260,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_package",
-      "community": 83,
+      "community": 5,
       "norm_label": "package.json"
     },
     {
@@ -9160,7 +9270,7 @@
       "source_location": "L2",
       "_origin": "ast",
       "id": "remix_package_private",
-      "community": 83,
+      "community": 5,
       "norm_label": "private"
     },
     {
@@ -9170,7 +9280,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "remix_package_sideeffects",
-      "community": 83,
+      "community": 5,
       "norm_label": "sideeffects"
     },
     {
@@ -9180,7 +9290,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "remix_package_version",
-      "community": 83,
+      "community": 5,
       "norm_label": "version"
     },
     {
@@ -9190,7 +9300,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "remix_package_scripts",
-      "community": 86,
+      "community": 5,
       "norm_label": "scripts"
     },
     {
@@ -9200,7 +9310,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "remix_package_scripts_build",
-      "community": 86,
+      "community": 5,
       "norm_label": "build"
     },
     {
@@ -9210,7 +9320,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "remix_package_scripts_pre_dev",
-      "community": 86,
+      "community": 5,
       "norm_label": "pre-dev"
     },
     {
@@ -9220,7 +9330,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "remix_package_scripts_dev",
-      "community": 86,
+      "community": 5,
       "norm_label": "dev"
     },
     {
@@ -9230,7 +9340,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "remix_package_scripts_lint",
-      "community": 86,
+      "community": 5,
       "norm_label": "lint"
     },
     {
@@ -9240,7 +9350,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "remix_package_scripts_lint_fix",
-      "community": 86,
+      "community": 5,
       "norm_label": "lint-fix"
     },
     {
@@ -9250,7 +9360,7 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "remix_package_scripts_format",
-      "community": 86,
+      "community": 5,
       "norm_label": "format"
     },
     {
@@ -10000,7 +10110,7 @@
       "source_location": "L89",
       "_origin": "ast",
       "id": "remix_package_resolutions",
-      "community": 83,
+      "community": 5,
       "norm_label": "resolutions"
     },
     {
@@ -10010,7 +10120,7 @@
       "source_location": "L90",
       "_origin": "ast",
       "id": "remix_package_resolutions_types_react",
-      "community": 83,
+      "community": 5,
       "norm_label": "@types/react"
     },
     {
@@ -10020,7 +10130,7 @@
       "source_location": "L92",
       "_origin": "ast",
       "id": "remix_package_engines",
-      "community": 83,
+      "community": 5,
       "norm_label": "engines"
     },
     {
@@ -10030,7 +10140,7 @@
       "source_location": "L93",
       "_origin": "ast",
       "id": "remix_package_engines_node",
-      "community": 83,
+      "community": 5,
       "norm_label": "node"
     },
     {
@@ -10890,10 +11000,20 @@
       "norm_label": "mongodb"
     },
     {
-      "label": "Vercel deployment status",
+      "label": "Auth and Lopu AI",
       "file_type": "document",
       "source_file": "README.md",
       "source_location": "L66",
+      "_origin": "ast",
+      "id": "readme_auth_and_lopu_ai",
+      "community": 33,
+      "norm_label": "auth and lopu ai"
+    },
+    {
+      "label": "Vercel deployment status",
+      "file_type": "document",
+      "source_file": "README.md",
+      "source_location": "L92",
       "_origin": "ast",
       "id": "readme_vercel_deployment_status",
       "community": 33,
@@ -10903,7 +11023,7 @@
       "label": "Public env exposure rule",
       "file_type": "document",
       "source_file": "README.md",
-      "source_location": "L101",
+      "source_location": "L127",
       "_origin": "ast",
       "id": "readme_public_env_exposure_rule",
       "community": 33,
@@ -11780,10 +11900,40 @@
       "norm_label": "[unreleased]"
     },
     {
-      "label": "PR #13 - Remix Hydration, Vercel Status, And Deployment Hygiene",
+      "label": "PR #16 - Auth And Lopu Hardening",
       "file_type": "document",
       "source_file": "remix/CHANGELOG.md",
       "source_location": "L19",
+      "_origin": "ast",
+      "id": "remix_changelog_pr_16_auth_and_lopu_hardening",
+      "community": 78,
+      "norm_label": "pr #16 - auth and lopu hardening"
+    },
+    {
+      "label": "Fixed",
+      "file_type": "document",
+      "source_file": "remix/CHANGELOG.md",
+      "source_location": "L24",
+      "_origin": "ast",
+      "id": "remix_changelog_fixed",
+      "community": 78,
+      "norm_label": "fixed"
+    },
+    {
+      "label": "Changed",
+      "file_type": "document",
+      "source_file": "remix/CHANGELOG.md",
+      "source_location": "L32",
+      "_origin": "ast",
+      "id": "remix_changelog_changed",
+      "community": 78,
+      "norm_label": "changed"
+    },
+    {
+      "label": "PR #13 - Remix Hydration, Vercel Status, And Deployment Hygiene",
+      "file_type": "document",
+      "source_file": "remix/CHANGELOG.md",
+      "source_location": "L38",
       "_origin": "ast",
       "id": "remix_changelog_pr_13_remix_hydration_vercel_status_and_deployment_hygiene",
       "community": 78,
@@ -11793,7 +11943,7 @@
       "label": "Added",
       "file_type": "document",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L24",
+      "source_location": "L43",
       "_origin": "ast",
       "id": "remix_changelog_added",
       "community": 78,
@@ -11803,9 +11953,9 @@
       "label": "Changed",
       "file_type": "document",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L35",
+      "source_location": "L54",
       "_origin": "ast",
-      "id": "remix_changelog_changed",
+      "id": "remix_changelog_changed_54",
       "community": 78,
       "norm_label": "changed"
     },
@@ -11813,9 +11963,9 @@
       "label": "Fixed",
       "file_type": "document",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L73",
+      "source_location": "L92",
       "_origin": "ast",
-      "id": "remix_changelog_fixed",
+      "id": "remix_changelog_fixed_92",
       "community": 78,
       "norm_label": "fixed"
     },
@@ -11823,7 +11973,7 @@
       "label": "Verified",
       "file_type": "document",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L84",
+      "source_location": "L103",
       "_origin": "ast",
       "id": "remix_changelog_verified",
       "community": 78,
@@ -11833,7 +11983,7 @@
       "label": "[1.0.0] - YYYY-MM-DD",
       "file_type": "document",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L94",
+      "source_location": "L113",
       "_origin": "ast",
       "id": "remix_changelog_1_0_0_yyyy_mm_dd",
       "community": 78,
@@ -11930,6 +12080,76 @@
       "norm_label": "verification"
     },
     {
+      "label": "16-resolve-main-into-thingtime-dev-branch.md",
+      "file_type": "document",
+      "source_file": "remix/PRs/16-resolve-main-into-thingtime-dev-branch.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "prs_16_resolve_main_into_thingtime_dev_branch",
+      "community": 83,
+      "norm_label": "16-resolve-main-into-thingtime-dev-branch.md"
+    },
+    {
+      "label": "PR #16 - Resolve Main Into Thingtime Dev Branch",
+      "file_type": "document",
+      "source_file": "remix/PRs/16-resolve-main-into-thingtime-dev-branch.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "prs_16_resolve_main_into_thingtime_dev_branch_pr_16_resolve_main_into_thingtime_dev_branch",
+      "community": 83,
+      "norm_label": "pr #16 - resolve main into thingtime dev branch"
+    },
+    {
+      "label": "Security Follow-Up - 2026-06-23",
+      "file_type": "document",
+      "source_file": "remix/PRs/16-resolve-main-into-thingtime-dev-branch.md",
+      "source_location": "L3",
+      "_origin": "ast",
+      "id": "prs_16_resolve_main_into_thingtime_dev_branch_security_follow_up_2026_06_23",
+      "community": 83,
+      "norm_label": "security follow-up - 2026-06-23"
+    },
+    {
+      "label": "Fixed",
+      "file_type": "document",
+      "source_file": "remix/PRs/16-resolve-main-into-thingtime-dev-branch.md",
+      "source_location": "L5",
+      "_origin": "ast",
+      "id": "prs_16_resolve_main_into_thingtime_dev_branch_fixed",
+      "community": 83,
+      "norm_label": "fixed"
+    },
+    {
+      "label": "Changed",
+      "file_type": "document",
+      "source_file": "remix/PRs/16-resolve-main-into-thingtime-dev-branch.md",
+      "source_location": "L14",
+      "_origin": "ast",
+      "id": "prs_16_resolve_main_into_thingtime_dev_branch_changed",
+      "community": 83,
+      "norm_label": "changed"
+    },
+    {
+      "label": "Follow-Up",
+      "file_type": "document",
+      "source_file": "remix/PRs/16-resolve-main-into-thingtime-dev-branch.md",
+      "source_location": "L22",
+      "_origin": "ast",
+      "id": "prs_16_resolve_main_into_thingtime_dev_branch_follow_up",
+      "community": 83,
+      "norm_label": "follow-up"
+    },
+    {
+      "label": "Verification",
+      "file_type": "document",
+      "source_file": "remix/PRs/16-resolve-main-into-thingtime-dev-branch.md",
+      "source_location": "L27",
+      "_origin": "ast",
+      "id": "prs_16_resolve_main_into_thingtime_dev_branch_verification",
+      "community": 83,
+      "norm_label": "verification"
+    },
+    {
       "label": "README.md",
       "file_type": "document",
       "source_file": "remix/README.md",
@@ -11978,6 +12198,16 @@
       "id": "chakra_space_space",
       "community": 9,
       "norm_label": "space"
+    },
+    {
+      "label": "hasLopuAiProviderConfigured",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/lopu/musing.ts",
+      "source_location": "L150",
+      "_origin": "ast",
+      "id": "lopu_musing_haslopuaiproviderconfigured",
+      "community": 73,
+      "norm_label": "haslopuaiproviderconfigured"
     },
     {
       "label": "action",
@@ -19129,9 +19359,9 @@
       "source_file": "remix/.eslintrc.json",
       "source_location": "L4",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "remix_eslintrc",
-      "target": "remix_eslintrc_rules",
-      "confidence_score": 1.0
+      "target": "remix_eslintrc_rules"
     },
     {
       "relation": "contains",
@@ -19139,9 +19369,9 @@
       "source_file": "remix/.eslintrc.json",
       "source_location": "L6",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "remix_eslintrc_rules",
-      "target": "remix_eslintrc_rules_no_unused_vars",
-      "confidence_score": 1.0
+      "target": "remix_eslintrc_rules_no_unused_vars"
     },
     {
       "relation": "contains",
@@ -19149,9 +19379,9 @@
       "source_file": "remix/.eslintrc.json",
       "source_location": "L5",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "remix_eslintrc_rules",
-      "target": "remix_eslintrc_rules_typescript_eslint_no_unused_vars",
-      "confidence_score": 1.0
+      "target": "remix_eslintrc_rules_typescript_eslint_no_unused_vars"
     },
     {
       "relation": "contains",
@@ -19159,9 +19389,9 @@
       "source_file": "remix/.eslintrc.json",
       "source_location": "L7",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "remix_eslintrc_rules",
-      "target": "remix_eslintrc_rules_unused_imports_no_unused_imports",
-      "confidence_score": 1.0
+      "target": "remix_eslintrc_rules_unused_imports_no_unused_imports"
     },
     {
       "relation": "contains",
@@ -19169,9 +19399,9 @@
       "source_file": "remix/.eslintrc.json",
       "source_location": "L8",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "remix_eslintrc_rules",
-      "target": "remix_eslintrc_rules_unused_imports_no_unused_vars",
-      "confidence_score": 1.0
+      "target": "remix_eslintrc_rules_unused_imports_no_unused_vars"
     },
     {
       "relation": "imports_from",
@@ -20198,9 +20428,9 @@
       "source_file": "remix/app/api/utils/auth/authCookie.ts",
       "source_location": "L6",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_authcookie",
-      "target": "auth_authcookie_authcookie",
-      "confidence_score": 1.0
+      "target": "auth_authcookie_authcookie"
     },
     {
       "relation": "contains",
@@ -20208,9 +20438,9 @@
       "source_file": "remix/app/api/utils/auth/authCookie.ts",
       "source_location": "L27",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_authcookie",
-      "target": "auth_authcookie_clearauthcookie",
-      "confidence_score": 1.0
+      "target": "auth_authcookie_clearauthcookie"
     },
     {
       "relation": "contains",
@@ -20218,9 +20448,9 @@
       "source_file": "remix/app/api/utils/auth/authCookie.ts",
       "source_location": "L15",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_authcookie",
-      "target": "auth_authcookie_getauthtoken",
-      "confidence_score": 1.0
+      "target": "auth_authcookie_getauthtoken"
     },
     {
       "relation": "contains",
@@ -20228,9 +20458,9 @@
       "source_file": "remix/app/api/utils/auth/authCookie.ts",
       "source_location": "L26",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_authcookie",
-      "target": "auth_authcookie_serializeauthcookie",
-      "confidence_score": 1.0
+      "target": "auth_authcookie_serializeauthcookie"
     },
     {
       "relation": "imports_from",
@@ -20239,9 +20469,9 @@
       "source_file": "remix/app/api/utils/auth/getCurrentUser.ts",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_getcurrentuser",
-      "target": "auth_authcookie",
-      "confidence_score": 1.0
+      "target": "auth_authcookie"
     },
     {
       "relation": "imports_from",
@@ -20250,9 +20480,9 @@
       "source_file": "remix/app/routes/api/v1/auth/logout/_logout.tsx",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "logout_logout",
-      "target": "auth_authcookie",
-      "confidence_score": 1.0
+      "target": "auth_authcookie"
     },
     {
       "relation": "imports_from",
@@ -20261,9 +20491,9 @@
       "source_file": "remix/app/routes/api/v1/auth/register/_register.tsx",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "register_register",
-      "target": "auth_authcookie",
-      "confidence_score": 1.0
+      "target": "auth_authcookie"
     },
     {
       "relation": "imports_from",
@@ -20272,9 +20502,9 @@
       "source_file": "remix/app/routes/api/v1/login/_login.tsx",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "remix_app_routes_api_v1_login_login_tsx_login_login",
-      "target": "auth_authcookie",
-      "confidence_score": 1.0
+      "target": "auth_authcookie"
     },
     {
       "relation": "imports",
@@ -20283,9 +20513,9 @@
       "source_file": "remix/app/api/utils/auth/getCurrentUser.ts",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_getcurrentuser",
-      "target": "auth_authcookie_getauthtoken",
-      "confidence_score": 1.0
+      "target": "auth_authcookie_getauthtoken"
     },
     {
       "relation": "calls",
@@ -20305,9 +20535,9 @@
       "source_file": "remix/app/routes/api/v1/auth/logout/_logout.tsx",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "logout_logout",
-      "target": "auth_authcookie_getauthtoken",
-      "confidence_score": 1.0
+      "target": "auth_authcookie_getauthtoken"
     },
     {
       "relation": "calls",
@@ -20338,9 +20568,9 @@
       "source_file": "remix/app/routes/api/v1/auth/register/_register.tsx",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "register_register",
-      "target": "auth_authcookie_serializeauthcookie",
-      "confidence_score": 1.0
+      "target": "auth_authcookie_serializeauthcookie"
     },
     {
       "relation": "calls",
@@ -20360,9 +20590,9 @@
       "source_file": "remix/app/routes/api/v1/login/_login.tsx",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "remix_app_routes_api_v1_login_login_tsx_login_login",
-      "target": "auth_authcookie_serializeauthcookie",
-      "confidence_score": 1.0
+      "target": "auth_authcookie_serializeauthcookie"
     },
     {
       "relation": "imports",
@@ -20371,9 +20601,9 @@
       "source_file": "remix/app/routes/api/v1/auth/logout/_logout.tsx",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "logout_logout",
-      "target": "auth_authcookie_clearauthcookie",
-      "confidence_score": 1.0
+      "target": "auth_authcookie_clearauthcookie"
     },
     {
       "relation": "calls",
@@ -20389,42 +20619,22 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "remix/app/api/utils/auth/email.ts",
-      "source_location": "L6",
+      "source_file": "remix/app/api/utils/auth/devVerification.ts",
+      "source_location": "L4",
       "weight": 1.0,
-      "source": "auth_email",
-      "target": "auth_email_sendargs",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "remix/app/api/utils/auth/email.ts",
-      "source_location": "L8",
-      "weight": 1.0,
-      "source": "auth_email",
-      "target": "auth_email_sendemail",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "remix/app/api/utils/auth/email.ts",
-      "source_location": "L15",
-      "weight": 1.0,
-      "source": "auth_email",
-      "target": "auth_email_sendverificationemail",
+      "source": "auth_devverification",
+      "target": "auth_devverification_shouldshowdevverificationlink",
       "confidence_score": 1.0
     },
     {
       "relation": "imports_from",
       "context": "import",
       "confidence": "EXTRACTED",
-      "source_file": "remix/app/api/utils/auth/registerUser.ts",
+      "source_file": "remix/app/routes/api/v1/auth/register/_register.tsx",
       "source_location": "L4",
       "weight": 1.0,
-      "source": "auth_registeruser",
-      "target": "auth_email",
+      "source": "register_register",
+      "target": "auth_devverification",
       "confidence_score": 1.0
     },
     {
@@ -20435,8 +20645,104 @@
       "source_location": "L3",
       "weight": 1.0,
       "source": "resend_verification_resend_verification",
-      "target": "auth_email",
+      "target": "auth_devverification",
       "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/auth/register/_register.tsx",
+      "source_location": "L4",
+      "weight": 1.0,
+      "source": "register_register",
+      "target": "auth_devverification_shouldshowdevverificationlink",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/routes/api/v1/auth/register/_register.tsx",
+      "source_location": "L22",
+      "weight": 1.0,
+      "source": "register_register_action",
+      "target": "auth_devverification_shouldshowdevverificationlink"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/auth/resend-verification/_resend-verification.tsx",
+      "source_location": "L3",
+      "weight": 1.0,
+      "source": "resend_verification_resend_verification",
+      "target": "auth_devverification_shouldshowdevverificationlink",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/routes/api/v1/auth/resend-verification/_resend-verification.tsx",
+      "source_location": "L13",
+      "weight": 1.0,
+      "source": "resend_verification_resend_verification_action",
+      "target": "auth_devverification_shouldshowdevverificationlink"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/email.ts",
+      "source_location": "L6",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "auth_email",
+      "target": "auth_email_sendargs"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/email.ts",
+      "source_location": "L8",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "auth_email",
+      "target": "auth_email_sendemail"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/email.ts",
+      "source_location": "L15",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "auth_email",
+      "target": "auth_email_sendverificationemail"
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/auth/registerUser.ts",
+      "source_location": "L4",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "auth_registeruser",
+      "target": "auth_email"
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/auth/resend-verification/_resend-verification.tsx",
+      "source_location": "L3",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "resend_verification_resend_verification",
+      "target": "auth_email"
     },
     {
       "relation": "calls",
@@ -20445,9 +20751,9 @@
       "source_file": "remix/app/api/utils/auth/email.ts",
       "source_location": "L19",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_email_sendverificationemail",
-      "target": "auth_email_sendemail",
-      "confidence_score": 1.0
+      "target": "auth_email_sendemail"
     },
     {
       "relation": "imports",
@@ -20456,9 +20762,9 @@
       "source_file": "remix/app/api/utils/auth/registerUser.ts",
       "source_location": "L4",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_registeruser",
-      "target": "auth_email_sendverificationemail",
-      "confidence_score": 1.0
+      "target": "auth_email_sendverificationemail"
     },
     {
       "relation": "calls",
@@ -20478,9 +20784,9 @@
       "source_file": "remix/app/routes/api/v1/auth/resend-verification/_resend-verification.tsx",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "resend_verification_resend_verification",
-      "target": "auth_email_sendverificationemail",
-      "confidence_score": 1.0
+      "target": "auth_email_sendverificationemail"
     },
     {
       "relation": "calls",
@@ -20499,9 +20805,9 @@
       "source_file": "remix/app/api/utils/auth/emailVerifications.ts",
       "source_location": "L28",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_emailverifications",
-      "target": "auth_emailverifications_consumeemailverification",
-      "confidence_score": 1.0
+      "target": "auth_emailverifications_consumeemailverification"
     },
     {
       "relation": "contains",
@@ -20509,9 +20815,9 @@
       "source_file": "remix/app/api/utils/auth/emailVerifications.ts",
       "source_location": "L22",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_emailverifications",
-      "target": "auth_emailverifications_consumeresult",
-      "confidence_score": 1.0
+      "target": "auth_emailverifications_consumeresult"
     },
     {
       "relation": "contains",
@@ -20519,9 +20825,9 @@
       "source_file": "remix/app/api/utils/auth/emailVerifications.ts",
       "source_location": "L8",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_emailverifications",
-      "target": "auth_emailverifications_createemailverification",
-      "confidence_score": 1.0
+      "target": "auth_emailverifications_createemailverification"
     },
     {
       "relation": "contains",
@@ -20529,9 +20835,9 @@
       "source_file": "remix/app/api/utils/auth/emailVerifications.ts",
       "source_location": "L5",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_emailverifications",
-      "target": "auth_emailverifications_newtoken",
-      "confidence_score": 1.0
+      "target": "auth_emailverifications_newtoken"
     },
     {
       "relation": "imports_from",
@@ -20540,9 +20846,9 @@
       "source_file": "remix/app/api/utils/auth/emailVerifications.ts",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_emailverifications",
-      "target": "mongodb_collections",
-      "confidence_score": 1.0
+      "target": "mongodb_collections"
     },
     {
       "relation": "imports",
@@ -20551,9 +20857,9 @@
       "source_file": "remix/app/api/utils/auth/emailVerifications.ts",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_emailverifications",
-      "target": "mongodb_collections_getemailverificationscollection",
-      "confidence_score": 1.0
+      "target": "mongodb_collections_getemailverificationscollection"
     },
     {
       "relation": "imports_from",
@@ -20562,9 +20868,9 @@
       "source_file": "remix/app/api/utils/auth/registerUser.ts",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_registeruser",
-      "target": "auth_emailverifications",
-      "confidence_score": 1.0
+      "target": "auth_emailverifications"
     },
     {
       "relation": "imports_from",
@@ -20573,9 +20879,9 @@
       "source_file": "remix/app/routes/api/v1/auth/resend-verification/_resend-verification.tsx",
       "source_location": "L4",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "resend_verification_resend_verification",
-      "target": "auth_emailverifications",
-      "confidence_score": 1.0
+      "target": "auth_emailverifications"
     },
     {
       "relation": "imports_from",
@@ -20584,9 +20890,9 @@
       "source_file": "remix/app/routes/api/v1/auth/verify-email/_verify-email.tsx",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "verify_email_verify_email",
-      "target": "auth_emailverifications",
-      "confidence_score": 1.0
+      "target": "auth_emailverifications"
     },
     {
       "relation": "calls",
@@ -20595,9 +20901,9 @@
       "source_file": "remix/app/api/utils/auth/emailVerifications.ts",
       "source_location": "L11",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_emailverifications_createemailverification",
-      "target": "auth_emailverifications_newtoken",
-      "confidence_score": 1.0
+      "target": "auth_emailverifications_newtoken"
     },
     {
       "relation": "calls",
@@ -20617,9 +20923,9 @@
       "source_file": "remix/app/api/utils/auth/registerUser.ts",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_registeruser",
-      "target": "auth_emailverifications_createemailverification",
-      "confidence_score": 1.0
+      "target": "auth_emailverifications_createemailverification"
     },
     {
       "relation": "calls",
@@ -20639,9 +20945,9 @@
       "source_file": "remix/app/routes/api/v1/auth/resend-verification/_resend-verification.tsx",
       "source_location": "L4",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "resend_verification_resend_verification",
-      "target": "auth_emailverifications_createemailverification",
-      "confidence_score": 1.0
+      "target": "auth_emailverifications_createemailverification"
     },
     {
       "relation": "calls",
@@ -20672,9 +20978,9 @@
       "source_file": "remix/app/routes/api/v1/auth/verify-email/_verify-email.tsx",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "verify_email_verify_email",
-      "target": "auth_emailverifications_consumeemailverification",
-      "confidence_score": 1.0
+      "target": "auth_emailverifications_consumeemailverification"
     },
     {
       "relation": "calls",
@@ -20694,9 +21000,9 @@
       "source_file": "remix/app/root.tsx",
       "source_location": "L18",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "app_root",
-      "target": "auth_getcurrentuser",
-      "confidence_score": 1.0
+      "target": "auth_getcurrentuser"
     },
     {
       "relation": "contains",
@@ -20704,9 +21010,9 @@
       "source_file": "remix/app/api/utils/auth/getCurrentUser.ts",
       "source_location": "L8",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_getcurrentuser",
-      "target": "auth_getcurrentuser_getcurrentuser",
-      "confidence_score": 1.0
+      "target": "auth_getcurrentuser_getcurrentuser"
     },
     {
       "relation": "imports_from",
@@ -20715,9 +21021,9 @@
       "source_file": "remix/app/api/utils/auth/getCurrentUser.ts",
       "source_location": "L2",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_getcurrentuser",
-      "target": "auth_jwt",
-      "confidence_score": 1.0
+      "target": "auth_jwt"
     },
     {
       "relation": "imports",
@@ -20726,9 +21032,9 @@
       "source_file": "remix/app/api/utils/auth/getCurrentUser.ts",
       "source_location": "L2",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_getcurrentuser",
-      "target": "auth_jwt_verifyjwt",
-      "confidence_score": 1.0
+      "target": "auth_jwt_verifyjwt"
     },
     {
       "relation": "imports_from",
@@ -20737,9 +21043,9 @@
       "source_file": "remix/app/api/utils/auth/getCurrentUser.ts",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_getcurrentuser",
-      "target": "auth_sessions",
-      "confidence_score": 1.0
+      "target": "auth_sessions"
     },
     {
       "relation": "imports",
@@ -20748,9 +21054,9 @@
       "source_file": "remix/app/api/utils/auth/getCurrentUser.ts",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_getcurrentuser",
-      "target": "auth_sessions_getlivesession",
-      "confidence_score": 1.0
+      "target": "auth_sessions_getlivesession"
     },
     {
       "relation": "imports_from",
@@ -20759,9 +21065,9 @@
       "source_file": "remix/app/api/utils/auth/getCurrentUser.ts",
       "source_location": "L4",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_getcurrentuser",
-      "target": "auth_users",
-      "confidence_score": 1.0
+      "target": "auth_users"
     },
     {
       "relation": "imports",
@@ -20770,9 +21076,9 @@
       "source_file": "remix/app/api/utils/auth/getCurrentUser.ts",
       "source_location": "L4",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_getcurrentuser",
-      "target": "auth_users_finduserbyid",
-      "confidence_score": 1.0
+      "target": "auth_users_finduserbyid"
     },
     {
       "relation": "imports",
@@ -20781,9 +21087,9 @@
       "source_file": "remix/app/api/utils/auth/getCurrentUser.ts",
       "source_location": "L4",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_getcurrentuser",
-      "target": "auth_users_publicuser",
-      "confidence_score": 1.0
+      "target": "auth_users_publicuser"
     },
     {
       "relation": "imports",
@@ -20792,9 +21098,9 @@
       "source_file": "remix/app/api/utils/auth/getCurrentUser.ts",
       "source_location": "L4",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_getcurrentuser",
-      "target": "auth_users_topublicuser",
-      "confidence_score": 1.0
+      "target": "auth_users_topublicuser"
     },
     {
       "relation": "imports_from",
@@ -20803,9 +21109,9 @@
       "source_file": "remix/app/routes/api/v1/auth/me/_me.tsx",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "me_me",
-      "target": "auth_getcurrentuser",
-      "confidence_score": 1.0
+      "target": "auth_getcurrentuser"
     },
     {
       "relation": "imports_from",
@@ -20814,9 +21120,9 @@
       "source_file": "remix/app/routes/login.tsx",
       "source_location": "L7",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_login",
-      "target": "auth_getcurrentuser",
-      "confidence_score": 1.0
+      "target": "auth_getcurrentuser"
     },
     {
       "relation": "imports_from",
@@ -20825,9 +21131,9 @@
       "source_file": "remix/app/routes/register.tsx",
       "source_location": "L6",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_register",
-      "target": "auth_getcurrentuser",
-      "confidence_score": 1.0
+      "target": "auth_getcurrentuser"
     },
     {
       "relation": "imports_from",
@@ -20836,9 +21142,9 @@
       "source_file": "remix/app/routes/welcome.tsx",
       "source_location": "L5",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_welcome",
-      "target": "auth_getcurrentuser",
-      "confidence_score": 1.0
+      "target": "auth_getcurrentuser"
     },
     {
       "relation": "imports",
@@ -20847,9 +21153,9 @@
       "source_file": "remix/app/root.tsx",
       "source_location": "L18",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "app_root",
-      "target": "auth_getcurrentuser_getcurrentuser",
-      "confidence_score": 1.0
+      "target": "auth_getcurrentuser_getcurrentuser"
     },
     {
       "relation": "calls",
@@ -20913,9 +21219,9 @@
       "source_file": "remix/app/routes/api/v1/auth/me/_me.tsx",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "me_me",
-      "target": "auth_getcurrentuser_getcurrentuser",
-      "confidence_score": 1.0
+      "target": "auth_getcurrentuser_getcurrentuser"
     },
     {
       "relation": "calls",
@@ -20935,9 +21241,9 @@
       "source_file": "remix/app/routes/login.tsx",
       "source_location": "L7",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_login",
-      "target": "auth_getcurrentuser_getcurrentuser",
-      "confidence_score": 1.0
+      "target": "auth_getcurrentuser_getcurrentuser"
     },
     {
       "relation": "calls",
@@ -20957,9 +21263,9 @@
       "source_file": "remix/app/routes/register.tsx",
       "source_location": "L6",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_register",
-      "target": "auth_getcurrentuser_getcurrentuser",
-      "confidence_score": 1.0
+      "target": "auth_getcurrentuser_getcurrentuser"
     },
     {
       "relation": "calls",
@@ -20979,9 +21285,9 @@
       "source_file": "remix/app/routes/welcome.tsx",
       "source_location": "L5",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_welcome",
-      "target": "auth_getcurrentuser_getcurrentuser",
-      "confidence_score": 1.0
+      "target": "auth_getcurrentuser_getcurrentuser"
     },
     {
       "relation": "calls",
@@ -21000,9 +21306,9 @@
       "source_file": "remix/app/api/utils/auth/jwt.ts",
       "source_location": "L5",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_jwt",
-      "target": "auth_jwt_getsecret",
-      "confidence_score": 1.0
+      "target": "auth_jwt_getsecret"
     },
     {
       "relation": "contains",
@@ -21010,9 +21316,9 @@
       "source_file": "remix/app/api/utils/auth/jwt.ts",
       "source_location": "L14",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_jwt",
-      "target": "auth_jwt_jwtclaims",
-      "confidence_score": 1.0
+      "target": "auth_jwt_jwtclaims"
     },
     {
       "relation": "contains",
@@ -21020,9 +21326,9 @@
       "source_file": "remix/app/api/utils/auth/jwt.ts",
       "source_location": "L18",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_jwt",
-      "target": "auth_jwt_signjwt",
-      "confidence_score": 1.0
+      "target": "auth_jwt_signjwt"
     },
     {
       "relation": "contains",
@@ -21030,9 +21336,9 @@
       "source_file": "remix/app/api/utils/auth/jwt.ts",
       "source_location": "L28",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_jwt",
-      "target": "auth_jwt_verifyjwt",
-      "confidence_score": 1.0
+      "target": "auth_jwt_verifyjwt"
     },
     {
       "relation": "imports_from",
@@ -21041,9 +21347,9 @@
       "source_file": "remix/app/api/utils/auth/loginUser.ts",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_loginuser",
-      "target": "auth_jwt",
-      "confidence_score": 1.0
+      "target": "auth_jwt"
     },
     {
       "relation": "imports_from",
@@ -21052,9 +21358,9 @@
       "source_file": "remix/app/api/utils/auth/registerUser.ts",
       "source_location": "L5",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_registeruser",
-      "target": "auth_jwt",
-      "confidence_score": 1.0
+      "target": "auth_jwt"
     },
     {
       "relation": "imports_from",
@@ -21063,9 +21369,9 @@
       "source_file": "remix/app/routes/api/v1/auth/logout/_logout.tsx",
       "source_location": "L4",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "logout_logout",
-      "target": "auth_jwt",
-      "confidence_score": 1.0
+      "target": "auth_jwt"
     },
     {
       "relation": "calls",
@@ -21074,9 +21380,9 @@
       "source_file": "remix/app/api/utils/auth/jwt.ts",
       "source_location": "L25",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_jwt_signjwt",
-      "target": "auth_jwt_getsecret",
-      "confidence_score": 1.0
+      "target": "auth_jwt_getsecret"
     },
     {
       "relation": "calls",
@@ -21085,9 +21391,9 @@
       "source_file": "remix/app/api/utils/auth/jwt.ts",
       "source_location": "L30",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_jwt_verifyjwt",
-      "target": "auth_jwt_getsecret",
-      "confidence_score": 1.0
+      "target": "auth_jwt_getsecret"
     },
     {
       "relation": "imports",
@@ -21096,9 +21402,9 @@
       "source_file": "remix/app/api/utils/auth/loginUser.ts",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_loginuser",
-      "target": "auth_jwt_signjwt",
-      "confidence_score": 1.0
+      "target": "auth_jwt_signjwt"
     },
     {
       "relation": "calls",
@@ -21118,9 +21424,9 @@
       "source_file": "remix/app/api/utils/auth/registerUser.ts",
       "source_location": "L5",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_registeruser",
-      "target": "auth_jwt_signjwt",
-      "confidence_score": 1.0
+      "target": "auth_jwt_signjwt"
     },
     {
       "relation": "calls",
@@ -21140,9 +21446,9 @@
       "source_file": "remix/app/routes/api/v1/auth/logout/_logout.tsx",
       "source_location": "L4",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "logout_logout",
-      "target": "auth_jwt_verifyjwt",
-      "confidence_score": 1.0
+      "target": "auth_jwt_verifyjwt"
     },
     {
       "relation": "calls",
@@ -21161,9 +21467,9 @@
       "source_file": "remix/app/api/utils/auth/loginUser.ts",
       "source_location": "L6",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_loginuser",
-      "target": "auth_loginuser_loginresult",
-      "confidence_score": 1.0
+      "target": "auth_loginuser_loginresult"
     },
     {
       "relation": "contains",
@@ -21171,9 +21477,9 @@
       "source_file": "remix/app/api/utils/auth/loginUser.ts",
       "source_location": "L12",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_loginuser",
-      "target": "auth_loginuser_loginuser",
-      "confidence_score": 1.0
+      "target": "auth_loginuser_loginuser"
     },
     {
       "relation": "imports_from",
@@ -21182,9 +21488,9 @@
       "source_file": "remix/app/api/utils/auth/loginUser.ts",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_loginuser",
-      "target": "auth_sessions",
-      "confidence_score": 1.0
+      "target": "auth_sessions"
     },
     {
       "relation": "imports",
@@ -21193,9 +21499,9 @@
       "source_file": "remix/app/api/utils/auth/loginUser.ts",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_loginuser",
-      "target": "auth_sessions_createsession",
-      "confidence_score": 1.0
+      "target": "auth_sessions_createsession"
     },
     {
       "relation": "imports_from",
@@ -21204,9 +21510,9 @@
       "source_file": "remix/app/api/utils/auth/loginUser.ts",
       "source_location": "L4",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_loginuser",
-      "target": "auth_users",
-      "confidence_score": 1.0
+      "target": "auth_users"
     },
     {
       "relation": "imports",
@@ -21215,9 +21521,9 @@
       "source_file": "remix/app/api/utils/auth/loginUser.ts",
       "source_location": "L4",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_loginuser",
-      "target": "auth_users_finduserbyusername",
-      "confidence_score": 1.0
+      "target": "auth_users_finduserbyusername"
     },
     {
       "relation": "imports",
@@ -21226,9 +21532,9 @@
       "source_file": "remix/app/api/utils/auth/loginUser.ts",
       "source_location": "L4",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_loginuser",
-      "target": "auth_users_publicuser",
-      "confidence_score": 1.0
+      "target": "auth_users_publicuser"
     },
     {
       "relation": "imports",
@@ -21237,9 +21543,9 @@
       "source_file": "remix/app/api/utils/auth/loginUser.ts",
       "source_location": "L4",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_loginuser",
-      "target": "auth_users_topublicuser",
-      "confidence_score": 1.0
+      "target": "auth_users_topublicuser"
     },
     {
       "relation": "imports_from",
@@ -21248,9 +21554,9 @@
       "source_file": "remix/app/routes/api/v1/login/_login.tsx",
       "source_location": "L4",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "remix_app_routes_api_v1_login_login_tsx_login_login",
-      "target": "auth_loginuser",
-      "confidence_score": 1.0
+      "target": "auth_loginuser"
     },
     {
       "relation": "calls",
@@ -21303,9 +21609,9 @@
       "source_file": "remix/app/routes/api/v1/login/_login.tsx",
       "source_location": "L4",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "remix_app_routes_api_v1_login_login_tsx_login_login",
-      "target": "auth_loginuser_loginuser",
-      "confidence_score": 1.0
+      "target": "auth_loginuser_loginuser"
     },
     {
       "relation": "contains",
@@ -21313,9 +21619,9 @@
       "source_file": "remix/app/api/utils/auth/registerUser.ts",
       "source_location": "L24",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_registeruser",
-      "target": "auth_registeruser_isemail",
-      "confidence_score": 1.0
+      "target": "auth_registeruser_isemail"
     },
     {
       "relation": "contains",
@@ -21323,9 +21629,9 @@
       "source_file": "remix/app/api/utils/auth/registerUser.ts",
       "source_location": "L10",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_registeruser",
-      "target": "auth_registeruser_registerinput",
-      "confidence_score": 1.0
+      "target": "auth_registeruser_registerinput"
     },
     {
       "relation": "contains",
@@ -21333,9 +21639,9 @@
       "source_file": "remix/app/api/utils/auth/registerUser.ts",
       "source_location": "L20",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_registeruser",
-      "target": "auth_registeruser_registerresult",
-      "confidence_score": 1.0
+      "target": "auth_registeruser_registerresult"
     },
     {
       "relation": "contains",
@@ -21343,9 +21649,9 @@
       "source_file": "remix/app/api/utils/auth/registerUser.ts",
       "source_location": "L28",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_registeruser",
-      "target": "auth_registeruser_registeruser",
-      "confidence_score": 1.0
+      "target": "auth_registeruser_registeruser"
     },
     {
       "relation": "imports_from",
@@ -21354,9 +21660,9 @@
       "source_file": "remix/app/api/utils/auth/registerUser.ts",
       "source_location": "L7",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_registeruser",
-      "target": "auth_sessions",
-      "confidence_score": 1.0
+      "target": "auth_sessions"
     },
     {
       "relation": "imports",
@@ -21365,9 +21671,9 @@
       "source_file": "remix/app/api/utils/auth/registerUser.ts",
       "source_location": "L7",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_registeruser",
-      "target": "auth_sessions_createsession",
-      "confidence_score": 1.0
+      "target": "auth_sessions_createsession"
     },
     {
       "relation": "imports_from",
@@ -21376,9 +21682,9 @@
       "source_file": "remix/app/api/utils/auth/registerUser.ts",
       "source_location": "L8",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_registeruser",
-      "target": "auth_users",
-      "confidence_score": 1.0
+      "target": "auth_users"
     },
     {
       "relation": "imports",
@@ -21387,9 +21693,9 @@
       "source_file": "remix/app/api/utils/auth/registerUser.ts",
       "source_location": "L8",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_registeruser",
-      "target": "auth_users_finduserbyemail",
-      "confidence_score": 1.0
+      "target": "auth_users_finduserbyemail"
     },
     {
       "relation": "imports",
@@ -21398,9 +21704,9 @@
       "source_file": "remix/app/api/utils/auth/registerUser.ts",
       "source_location": "L8",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_registeruser",
-      "target": "auth_users_finduserbyusername",
-      "confidence_score": 1.0
+      "target": "auth_users_finduserbyusername"
     },
     {
       "relation": "imports",
@@ -21409,9 +21715,9 @@
       "source_file": "remix/app/api/utils/auth/registerUser.ts",
       "source_location": "L8",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_registeruser",
-      "target": "auth_users_insertuser",
-      "confidence_score": 1.0
+      "target": "auth_users_insertuser"
     },
     {
       "relation": "imports",
@@ -21420,9 +21726,9 @@
       "source_file": "remix/app/api/utils/auth/registerUser.ts",
       "source_location": "L8",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_registeruser",
-      "target": "auth_users_publicuser",
-      "confidence_score": 1.0
+      "target": "auth_users_publicuser"
     },
     {
       "relation": "imports",
@@ -21431,9 +21737,9 @@
       "source_file": "remix/app/api/utils/auth/registerUser.ts",
       "source_location": "L8",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_registeruser",
-      "target": "auth_users_topublicuser",
-      "confidence_score": 1.0
+      "target": "auth_users_topublicuser"
     },
     {
       "relation": "imports_from",
@@ -21442,9 +21748,9 @@
       "source_file": "remix/app/api/utils/auth/registerUser.ts",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_registeruser",
-      "target": "mongodb_collections",
-      "confidence_score": 1.0
+      "target": "mongodb_collections"
     },
     {
       "relation": "imports",
@@ -21453,9 +21759,9 @@
       "source_file": "remix/app/api/utils/auth/registerUser.ts",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_registeruser",
-      "target": "mongodb_collections_ensureindexes",
-      "confidence_score": 1.0
+      "target": "mongodb_collections_ensureindexes"
     },
     {
       "relation": "imports_from",
@@ -21464,9 +21770,9 @@
       "source_file": "remix/app/scripts/mongodb/setup.ts",
       "source_location": "L5",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "mongodb_setup",
-      "target": "auth_registeruser",
-      "confidence_score": 1.0
+      "target": "auth_registeruser"
     },
     {
       "relation": "imports_from",
@@ -21475,9 +21781,9 @@
       "source_file": "remix/app/routes/api/v1/auth/register/_register.tsx",
       "source_location": "L4",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "register_register",
-      "target": "auth_registeruser",
-      "confidence_score": 1.0
+      "target": "auth_registeruser"
     },
     {
       "relation": "calls",
@@ -21486,9 +21792,9 @@
       "source_file": "remix/app/api/utils/auth/registerUser.ts",
       "source_location": "L35",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_registeruser_registeruser",
-      "target": "auth_registeruser_isemail",
-      "confidence_score": 1.0
+      "target": "auth_registeruser_isemail"
     },
     {
       "relation": "calls",
@@ -21563,9 +21869,9 @@
       "source_file": "remix/app/scripts/mongodb/setup.ts",
       "source_location": "L5",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "mongodb_setup",
-      "target": "auth_registeruser_registeruser",
-      "confidence_score": 1.0
+      "target": "auth_registeruser_registeruser"
     },
     {
       "relation": "calls",
@@ -21585,9 +21891,9 @@
       "source_file": "remix/app/routes/api/v1/auth/register/_register.tsx",
       "source_location": "L4",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "register_register",
-      "target": "auth_registeruser_registeruser",
-      "confidence_score": 1.0
+      "target": "auth_registeruser_registeruser"
     },
     {
       "relation": "calls",
@@ -21606,9 +21912,9 @@
       "source_file": "remix/app/api/utils/auth/sessions.ts",
       "source_location": "L16",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_sessions",
-      "target": "auth_sessions_createsession",
-      "confidence_score": 1.0
+      "target": "auth_sessions_createsession"
     },
     {
       "relation": "contains",
@@ -21616,9 +21922,9 @@
       "source_file": "remix/app/api/utils/auth/sessions.ts",
       "source_location": "L31",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_sessions",
-      "target": "auth_sessions_getlivesession",
-      "confidence_score": 1.0
+      "target": "auth_sessions_getlivesession"
     },
     {
       "relation": "contains",
@@ -21626,9 +21932,9 @@
       "source_file": "remix/app/api/utils/auth/sessions.ts",
       "source_location": "L39",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_sessions",
-      "target": "auth_sessions_revokesession",
-      "confidence_score": 1.0
+      "target": "auth_sessions_revokesession"
     },
     {
       "relation": "contains",
@@ -21636,9 +21942,9 @@
       "source_file": "remix/app/api/utils/auth/sessions.ts",
       "source_location": "L5",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_sessions",
-      "target": "auth_sessions_sessiondoc",
-      "confidence_score": 1.0
+      "target": "auth_sessions_sessiondoc"
     },
     {
       "relation": "imports_from",
@@ -21647,9 +21953,9 @@
       "source_file": "remix/app/api/utils/auth/sessions.ts",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_sessions",
-      "target": "mongodb_collections",
-      "confidence_score": 1.0
+      "target": "mongodb_collections"
     },
     {
       "relation": "imports",
@@ -21658,9 +21964,9 @@
       "source_file": "remix/app/api/utils/auth/sessions.ts",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_sessions",
-      "target": "mongodb_collections_getsessionscollection",
-      "confidence_score": 1.0
+      "target": "mongodb_collections_getsessionscollection"
     },
     {
       "relation": "imports_from",
@@ -21669,9 +21975,9 @@
       "source_file": "remix/app/routes/api/v1/auth/logout/_logout.tsx",
       "source_location": "L5",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "logout_logout",
-      "target": "auth_sessions",
-      "confidence_score": 1.0
+      "target": "auth_sessions"
     },
     {
       "relation": "calls",
@@ -21713,9 +22019,9 @@
       "source_file": "remix/app/routes/api/v1/auth/logout/_logout.tsx",
       "source_location": "L5",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "logout_logout",
-      "target": "auth_sessions_revokesession",
-      "confidence_score": 1.0
+      "target": "auth_sessions_revokesession"
     },
     {
       "relation": "calls",
@@ -21734,9 +22040,9 @@
       "source_file": "remix/app/api/utils/auth/users.ts",
       "source_location": "L44",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_users",
-      "target": "auth_users_finduserbyemail",
-      "confidence_score": 1.0
+      "target": "auth_users_finduserbyemail"
     },
     {
       "relation": "contains",
@@ -21744,9 +22050,9 @@
       "source_file": "remix/app/api/utils/auth/users.ts",
       "source_location": "L47",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_users",
-      "target": "auth_users_finduserbyid",
-      "confidence_score": 1.0
+      "target": "auth_users_finduserbyid"
     },
     {
       "relation": "contains",
@@ -21754,9 +22060,9 @@
       "source_file": "remix/app/api/utils/auth/users.ts",
       "source_location": "L41",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_users",
-      "target": "auth_users_finduserbyusername",
-      "confidence_score": 1.0
+      "target": "auth_users_finduserbyusername"
     },
     {
       "relation": "contains",
@@ -21764,9 +22070,9 @@
       "source_file": "remix/app/api/utils/auth/users.ts",
       "source_location": "L52",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_users",
-      "target": "auth_users_insertuser",
-      "confidence_score": 1.0
+      "target": "auth_users_insertuser"
     },
     {
       "relation": "contains",
@@ -21774,9 +22080,9 @@
       "source_file": "remix/app/api/utils/auth/users.ts",
       "source_location": "L57",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_users",
-      "target": "auth_users_markemailverified",
-      "confidence_score": 1.0
+      "target": "auth_users_markemailverified"
     },
     {
       "relation": "contains",
@@ -21784,9 +22090,9 @@
       "source_file": "remix/app/api/utils/auth/users.ts",
       "source_location": "L21",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_users",
-      "target": "auth_users_publicuser",
-      "confidence_score": 1.0
+      "target": "auth_users_publicuser"
     },
     {
       "relation": "contains",
@@ -21794,9 +22100,9 @@
       "source_file": "remix/app/api/utils/auth/users.ts",
       "source_location": "L31",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_users",
-      "target": "auth_users_topublicuser",
-      "confidence_score": 1.0
+      "target": "auth_users_topublicuser"
     },
     {
       "relation": "contains",
@@ -21804,9 +22110,9 @@
       "source_file": "remix/app/api/utils/auth/users.ts",
       "source_location": "L7",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_users",
-      "target": "auth_users_userdoc",
-      "confidence_score": 1.0
+      "target": "auth_users_userdoc"
     },
     {
       "relation": "imports_from",
@@ -21815,9 +22121,9 @@
       "source_file": "remix/app/api/utils/auth/users.ts",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_users",
-      "target": "mongodb_collections",
-      "confidence_score": 1.0
+      "target": "mongodb_collections"
     },
     {
       "relation": "imports",
@@ -21826,9 +22132,9 @@
       "source_file": "remix/app/api/utils/auth/users.ts",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_users",
-      "target": "mongodb_collections_getuserscollection",
-      "confidence_score": 1.0
+      "target": "mongodb_collections_getuserscollection"
     },
     {
       "relation": "imports_from",
@@ -21837,9 +22143,9 @@
       "source_file": "remix/app/routes/api/v1/auth/resend-verification/_resend-verification.tsx",
       "source_location": "L5",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "resend_verification_resend_verification",
-      "target": "auth_users",
-      "confidence_score": 1.0
+      "target": "auth_users"
     },
     {
       "relation": "imports_from",
@@ -21848,9 +22154,9 @@
       "source_file": "remix/app/routes/api/v1/auth/verify-email/_verify-email.tsx",
       "source_location": "L4",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "verify_email_verify_email",
-      "target": "auth_users",
-      "confidence_score": 1.0
+      "target": "auth_users"
     },
     {
       "relation": "calls",
@@ -21881,9 +22187,9 @@
       "source_file": "remix/app/routes/api/v1/auth/resend-verification/_resend-verification.tsx",
       "source_location": "L5",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "resend_verification_resend_verification",
-      "target": "auth_users_finduserbyemail",
-      "confidence_score": 1.0
+      "target": "auth_users_finduserbyemail"
     },
     {
       "relation": "calls",
@@ -21936,9 +22242,9 @@
       "source_file": "remix/app/routes/api/v1/auth/verify-email/_verify-email.tsx",
       "source_location": "L4",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "verify_email_verify_email",
-      "target": "auth_users_markemailverified",
-      "confidence_score": 1.0
+      "target": "auth_users_markemailverified"
     },
     {
       "relation": "calls",
@@ -22033,9 +22339,9 @@
       "source_file": "remix/app/api/utils/lopu/fallbacks.ts",
       "source_location": "L6",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_fallbacks",
-      "target": "lopu_fallbacks_fallback_musings",
-      "confidence_score": 1.0
+      "target": "lopu_fallbacks_fallback_musings"
     },
     {
       "relation": "imports_from",
@@ -22044,9 +22350,9 @@
       "source_file": "remix/app/api/utils/lopu/musing.ts",
       "source_location": "L4",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_musing",
-      "target": "lopu_fallbacks",
-      "confidence_score": 1.0
+      "target": "lopu_fallbacks"
     },
     {
       "relation": "imports",
@@ -22055,9 +22361,9 @@
       "source_file": "remix/app/api/utils/lopu/musing.ts",
       "source_location": "L4",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_musing",
-      "target": "lopu_fallbacks_fallback_musings",
-      "confidence_score": 1.0
+      "target": "lopu_fallbacks_fallback_musings"
     },
     {
       "relation": "contains",
@@ -22065,9 +22371,9 @@
       "source_file": "remix/app/api/utils/lopu/musing.ts",
       "source_location": "L44",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_musing",
-      "target": "lopu_musing_all_modes",
-      "confidence_score": 1.0
+      "target": "lopu_musing_all_modes"
     },
     {
       "relation": "contains",
@@ -22075,9 +22381,9 @@
       "source_file": "remix/app/api/utils/lopu/musing.ts",
       "source_location": "L52",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_musing",
-      "target": "lopu_musing_buildcontextline",
-      "confidence_score": 1.0
+      "target": "lopu_musing_buildcontextline"
     },
     {
       "relation": "contains",
@@ -22085,9 +22391,9 @@
       "source_file": "remix/app/api/utils/lopu/musing.ts",
       "source_location": "L61",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_musing",
-      "target": "lopu_musing_builduserprompt",
-      "confidence_score": 1.0
+      "target": "lopu_musing_builduserprompt"
     },
     {
       "relation": "contains",
@@ -22095,9 +22401,9 @@
       "source_file": "remix/app/api/utils/lopu/musing.ts",
       "source_location": "L153",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_musing",
-      "target": "lopu_musing_chunkwords",
-      "confidence_score": 1.0
+      "target": "lopu_musing_chunkwords"
     },
     {
       "relation": "contains",
@@ -22105,9 +22411,9 @@
       "source_file": "remix/app/api/utils/lopu/musing.ts",
       "source_location": "L91",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_musing",
-      "target": "lopu_musing_fetchweather",
-      "confidence_score": 1.0
+      "target": "lopu_musing_fetchweather"
     },
     {
       "relation": "contains",
@@ -22115,9 +22421,9 @@
       "source_file": "remix/app/api/utils/lopu/musing.ts",
       "source_location": "L210",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_musing",
-      "target": "lopu_musing_generatelopumusing",
-      "confidence_score": 1.0
+      "target": "lopu_musing_generatelopumusing"
     },
     {
       "relation": "contains",
@@ -22125,9 +22431,9 @@
       "source_file": "remix/app/api/utils/lopu/musing.ts",
       "source_location": "L149",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_musing",
-      "target": "lopu_musing_hasanykey",
-      "confidence_score": 1.0
+      "target": "lopu_musing_hasanykey"
     },
     {
       "relation": "contains",
@@ -22135,9 +22441,9 @@
       "source_file": "remix/app/api/utils/lopu/musing.ts",
       "source_location": "L20",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_musing",
-      "target": "lopu_musing_lopucontext",
-      "confidence_score": 1.0
+      "target": "lopu_musing_lopucontext"
     },
     {
       "relation": "contains",
@@ -22145,9 +22451,9 @@
       "source_file": "remix/app/api/utils/lopu/musing.ts",
       "source_location": "L29",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_musing",
-      "target": "lopu_musing_lopumode",
-      "confidence_score": 1.0
+      "target": "lopu_musing_lopumode"
     },
     {
       "relation": "contains",
@@ -22155,9 +22461,9 @@
       "source_file": "remix/app/api/utils/lopu/musing.ts",
       "source_location": "L30",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_musing",
-      "target": "lopu_musing_lopumusing",
-      "confidence_score": 1.0
+      "target": "lopu_musing_lopumusing"
     },
     {
       "relation": "contains",
@@ -22165,9 +22471,9 @@
       "source_file": "remix/app/api/utils/lopu/musing.ts",
       "source_location": "L28",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_musing",
-      "target": "lopu_musing_lopusource",
-      "confidence_score": 1.0
+      "target": "lopu_musing_lopusource"
     },
     {
       "relation": "contains",
@@ -22175,9 +22481,9 @@
       "source_file": "remix/app/api/utils/lopu/musing.ts",
       "source_location": "L33",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_musing",
-      "target": "lopu_musing_lopustreamevent",
-      "confidence_score": 1.0
+      "target": "lopu_musing_lopustreamevent"
     },
     {
       "relation": "contains",
@@ -22185,9 +22491,9 @@
       "source_file": "remix/app/api/utils/lopu/musing.ts",
       "source_location": "L41",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_musing",
-      "target": "lopu_musing_pickfallback",
-      "confidence_score": 1.0
+      "target": "lopu_musing_pickfallback"
     },
     {
       "relation": "contains",
@@ -22195,9 +22501,9 @@
       "source_file": "remix/app/api/utils/lopu/musing.ts",
       "source_location": "L45",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_musing",
-      "target": "lopu_musing_pickmode",
-      "confidence_score": 1.0
+      "target": "lopu_musing_pickmode"
     },
     {
       "relation": "contains",
@@ -22205,9 +22511,9 @@
       "source_file": "remix/app/api/utils/lopu/musing.ts",
       "source_location": "L144",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_musing",
-      "target": "lopu_musing_providerorder",
-      "confidence_score": 1.0
+      "target": "lopu_musing_providerorder"
     },
     {
       "relation": "contains",
@@ -22215,9 +22521,9 @@
       "source_file": "remix/app/api/utils/lopu/musing.ts",
       "source_location": "L154",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_musing",
-      "target": "lopu_musing_tick",
-      "confidence_score": 1.0
+      "target": "lopu_musing_tick"
     },
     {
       "relation": "contains",
@@ -22225,9 +22531,9 @@
       "source_file": "remix/app/api/utils/lopu/musing.ts",
       "source_location": "L78",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_musing",
-      "target": "lopu_musing_weathercodetotext",
-      "confidence_score": 1.0
+      "target": "lopu_musing_weathercodetotext"
     },
     {
       "relation": "imports_from",
@@ -22236,9 +22542,9 @@
       "source_file": "remix/app/routes/api/v1/lopu/musing/_musing.tsx",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "musing_musing",
-      "target": "lopu_musing",
-      "confidence_score": 1.0
+      "target": "lopu_musing"
     },
     {
       "relation": "calls",
@@ -22247,9 +22553,9 @@
       "source_file": "remix/app/api/utils/lopu/musing.ts",
       "source_location": "L222",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_musing_generatelopumusing",
-      "target": "lopu_musing_pickfallback",
-      "confidence_score": 1.0
+      "target": "lopu_musing_pickfallback"
     },
     {
       "relation": "calls",
@@ -22258,9 +22564,9 @@
       "source_file": "remix/app/api/utils/lopu/musing.ts",
       "source_location": "L64",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_musing_builduserprompt",
-      "target": "lopu_musing_buildcontextline",
-      "confidence_score": 1.0
+      "target": "lopu_musing_buildcontextline"
     },
     {
       "relation": "calls",
@@ -22269,9 +22575,9 @@
       "source_file": "remix/app/api/utils/lopu/musing.ts",
       "source_location": "L101",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_musing_fetchweather",
-      "target": "lopu_musing_weathercodetotext",
-      "confidence_score": 1.0
+      "target": "lopu_musing_weathercodetotext"
     },
     {
       "relation": "imports",
@@ -22280,9 +22586,9 @@
       "source_file": "remix/app/routes/api/v1/lopu/musing/_musing.tsx",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "musing_musing",
-      "target": "lopu_musing_fetchweather",
-      "confidence_score": 1.0
+      "target": "lopu_musing_fetchweather"
     },
     {
       "relation": "calls",
@@ -22294,6 +22600,219 @@
       "weight": 1.0,
       "source": "musing_musing_loader",
       "target": "lopu_musing_fetchweather"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/lopu/rateLimit.ts",
+      "source_location": "L31",
+      "weight": 1.0,
+      "source": "lopu_ratelimit",
+      "target": "lopu_ratelimit_activerequestsexpr",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/lopu/rateLimit.ts",
+      "source_location": "L52",
+      "weight": 1.0,
+      "source": "lopu_ratelimit",
+      "target": "lopu_ratelimit_consumelopumusingquota",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/lopu/rateLimit.ts",
+      "source_location": "L16",
+      "weight": 1.0,
+      "source": "lopu_ratelimit",
+      "target": "lopu_ratelimit_firstheaderip",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/lopu/rateLimit.ts",
+      "source_location": "L18",
+      "weight": 1.0,
+      "source": "lopu_ratelimit",
+      "target": "lopu_ratelimit_getrequestip",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/lopu/rateLimit.ts",
+      "source_location": "L29",
+      "weight": 1.0,
+      "source": "lopu_ratelimit",
+      "target": "lopu_ratelimit_haship",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/lopu/rateLimit.ts",
+      "source_location": "L8",
+      "weight": 1.0,
+      "source": "lopu_ratelimit",
+      "target": "lopu_ratelimit_ratelimitresult",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/lopu/rateLimit.ts",
+      "source_location": "L39",
+      "weight": 1.0,
+      "source": "lopu_ratelimit",
+      "target": "lopu_ratelimit_resetfromrequests",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/lopu/rateLimit.ts",
+      "source_location": "L3",
+      "weight": 1.0,
+      "source": "lopu_ratelimit",
+      "target": "mongodb_collections",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/lopu/rateLimit.ts",
+      "source_location": "L3",
+      "weight": 1.0,
+      "source": "lopu_ratelimit",
+      "target": "mongodb_collections_ensureindexes",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/lopu/rateLimit.ts",
+      "source_location": "L3",
+      "weight": 1.0,
+      "source": "lopu_ratelimit",
+      "target": "mongodb_collections_getlopumusingratelimitscollection",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/lopu/musing/_musing.tsx",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "musing_musing",
+      "target": "lopu_ratelimit",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/lopu/rateLimit.ts",
+      "source_location": "L21",
+      "weight": 1.0,
+      "source": "lopu_ratelimit_getrequestip",
+      "target": "lopu_ratelimit_firstheaderip",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/lopu/rateLimit.ts",
+      "source_location": "L56",
+      "weight": 1.0,
+      "source": "lopu_ratelimit_consumelopumusingquota",
+      "target": "lopu_ratelimit_getrequestip",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/lopu/rateLimit.ts",
+      "source_location": "L56",
+      "weight": 1.0,
+      "source": "lopu_ratelimit_consumelopumusingquota",
+      "target": "lopu_ratelimit_haship",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/lopu/rateLimit.ts",
+      "source_location": "L83",
+      "weight": 1.0,
+      "source": "lopu_ratelimit_consumelopumusingquota",
+      "target": "lopu_ratelimit_activerequestsexpr",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/lopu/rateLimit.ts",
+      "source_location": "L104",
+      "weight": 1.0,
+      "source": "lopu_ratelimit_consumelopumusingquota",
+      "target": "lopu_ratelimit_resetfromrequests",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/api/utils/lopu/rateLimit.ts",
+      "source_location": "L59",
+      "weight": 1.0,
+      "source": "lopu_ratelimit_consumelopumusingquota",
+      "target": "mongodb_collections_ensureindexes"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/api/utils/lopu/rateLimit.ts",
+      "source_location": "L60",
+      "weight": 1.0,
+      "source": "lopu_ratelimit_consumelopumusingquota",
+      "target": "mongodb_collections_getlopumusingratelimitscollection"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/lopu/musing/_musing.tsx",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "musing_musing",
+      "target": "lopu_ratelimit_consumelopumusingquota",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/routes/api/v1/lopu/musing/_musing.tsx",
+      "source_location": "L29",
+      "weight": 1.0,
+      "source": "musing_musing_loader",
+      "target": "lopu_ratelimit_consumelopumusingquota"
     },
     {
       "relation": "contains",
@@ -22519,9 +23038,9 @@
       "source_file": "remix/app/api/utils/mongodb/collections.ts",
       "source_location": "L39",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "mongodb_collections",
-      "target": "mongodb_collections_ensureindexes",
-      "confidence_score": 1.0
+      "target": "mongodb_collections_ensureindexes"
     },
     {
       "relation": "contains",
@@ -22529,9 +23048,9 @@
       "source_file": "remix/app/api/utils/mongodb/collections.ts",
       "source_location": "L8",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "mongodb_collections",
-      "target": "mongodb_collections_getclientcached",
-      "confidence_score": 1.0
+      "target": "mongodb_collections_getclientcached"
     },
     {
       "relation": "contains",
@@ -22539,8 +23058,18 @@
       "source_file": "remix/app/api/utils/mongodb/collections.ts",
       "source_location": "L30",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "mongodb_collections",
-      "target": "mongodb_collections_getemailverificationscollection",
+      "target": "mongodb_collections_getemailverificationscollection"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/mongodb/collections.ts",
+      "source_location": "L31",
+      "weight": 1.0,
+      "source": "mongodb_collections",
+      "target": "mongodb_collections_getlopumusingratelimitscollection",
       "confidence_score": 1.0
     },
     {
@@ -22549,9 +23078,9 @@
       "source_file": "remix/app/api/utils/mongodb/collections.ts",
       "source_location": "L28",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "mongodb_collections",
-      "target": "mongodb_collections_getsessionscollection",
-      "confidence_score": 1.0
+      "target": "mongodb_collections_getsessionscollection"
     },
     {
       "relation": "contains",
@@ -22559,9 +23088,9 @@
       "source_file": "remix/app/api/utils/mongodb/collections.ts",
       "source_location": "L29",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "mongodb_collections",
-      "target": "mongodb_collections_getthingscollection",
-      "confidence_score": 1.0
+      "target": "mongodb_collections_getthingscollection"
     },
     {
       "relation": "contains",
@@ -22569,9 +23098,9 @@
       "source_file": "remix/app/api/utils/mongodb/collections.ts",
       "source_location": "L25",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "mongodb_collections",
-      "target": "mongodb_collections_getthingtimedb",
-      "confidence_score": 1.0
+      "target": "mongodb_collections_getthingtimedb"
     },
     {
       "relation": "contains",
@@ -22579,9 +23108,9 @@
       "source_file": "remix/app/api/utils/mongodb/collections.ts",
       "source_location": "L27",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "mongodb_collections",
-      "target": "mongodb_collections_getuserscollection",
-      "confidence_score": 1.0
+      "target": "mongodb_collections_getuserscollection"
     },
     {
       "relation": "imports_from",
@@ -22590,9 +23119,9 @@
       "source_file": "remix/app/api/utils/mongodb/collections.ts",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "mongodb_collections",
-      "target": "mongodb_config",
-      "confidence_score": 1.0
+      "target": "mongodb_config"
     },
     {
       "relation": "imports",
@@ -22601,9 +23130,9 @@
       "source_file": "remix/app/api/utils/mongodb/collections.ts",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "mongodb_collections",
-      "target": "mongodb_config_getmongouri",
-      "confidence_score": 1.0
+      "target": "mongodb_config_getmongouri"
     },
     {
       "relation": "imports_from",
@@ -22612,9 +23141,9 @@
       "source_file": "remix/app/api/utils/mongodb/collections.ts",
       "source_location": "L2",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "mongodb_collections",
-      "target": "mongodb_mongodb",
-      "confidence_score": 1.0
+      "target": "mongodb_mongodb"
     },
     {
       "relation": "imports",
@@ -22623,9 +23152,9 @@
       "source_file": "remix/app/api/utils/mongodb/collections.ts",
       "source_location": "L2",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "mongodb_collections",
-      "target": "mongodb_mongodb_getmongodb",
-      "confidence_score": 1.0
+      "target": "mongodb_mongodb_getmongodb"
     },
     {
       "relation": "calls",
@@ -22634,9 +23163,9 @@
       "source_file": "remix/app/api/utils/mongodb/collections.ts",
       "source_location": "L12",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "mongodb_collections_getclientcached",
-      "target": "mongodb_config_getmongouri",
-      "confidence_score": 1.0
+      "target": "mongodb_config_getmongouri"
     },
     {
       "relation": "calls",
@@ -22645,9 +23174,9 @@
       "source_file": "remix/app/api/utils/mongodb/collections.ts",
       "source_location": "L11",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "mongodb_collections_getclientcached",
-      "target": "mongodb_mongodb_getmongodb",
-      "confidence_score": 1.0
+      "target": "mongodb_mongodb_getmongodb"
     },
     {
       "relation": "calls",
@@ -22656,9 +23185,9 @@
       "source_file": "remix/app/api/utils/mongodb/collections.ts",
       "source_location": "L25",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "mongodb_collections_getthingtimedb",
-      "target": "mongodb_collections_getclientcached",
-      "confidence_score": 1.0
+      "target": "mongodb_collections_getclientcached"
     },
     {
       "relation": "calls",
@@ -22667,7 +23196,18 @@
       "source_file": "remix/app/api/utils/mongodb/collections.ts",
       "source_location": "L30",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "mongodb_collections_getemailverificationscollection",
+      "target": "mongodb_collections_getthingtimedb"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/mongodb/collections.ts",
+      "source_location": "L32",
+      "weight": 1.0,
+      "source": "mongodb_collections_getlopumusingratelimitscollection",
       "target": "mongodb_collections_getthingtimedb",
       "confidence_score": 1.0
     },
@@ -22678,9 +23218,9 @@
       "source_file": "remix/app/api/utils/mongodb/collections.ts",
       "source_location": "L28",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "mongodb_collections_getsessionscollection",
-      "target": "mongodb_collections_getthingtimedb",
-      "confidence_score": 1.0
+      "target": "mongodb_collections_getthingtimedb"
     },
     {
       "relation": "calls",
@@ -22689,9 +23229,9 @@
       "source_file": "remix/app/api/utils/mongodb/collections.ts",
       "source_location": "L29",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "mongodb_collections_getthingscollection",
-      "target": "mongodb_collections_getthingtimedb",
-      "confidence_score": 1.0
+      "target": "mongodb_collections_getthingtimedb"
     },
     {
       "relation": "calls",
@@ -22700,9 +23240,9 @@
       "source_file": "remix/app/api/utils/mongodb/collections.ts",
       "source_location": "L27",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "mongodb_collections_getuserscollection",
-      "target": "mongodb_collections_getthingtimedb",
-      "confidence_score": 1.0
+      "target": "mongodb_collections_getthingtimedb"
     },
     {
       "relation": "imports_from",
@@ -25196,9 +25736,9 @@
       "source_file": "remix/app/components/DevKit/DevKit.tsx",
       "source_location": "L16",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "devkit_devkit",
-      "target": "devkit_devkit_devaction",
-      "confidence_score": 1.0
+      "target": "devkit_devkit_devaction"
     },
     {
       "relation": "contains",
@@ -25216,9 +25756,9 @@
       "source_file": "remix/app/components/DevKit/DevKit.tsx",
       "source_location": "L14",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "devkit_devkit",
-      "target": "devkit_devkit_spin",
-      "confidence_score": 1.0
+      "target": "devkit_devkit_spin"
     },
     {
       "relation": "imports_from",
@@ -25227,9 +25767,9 @@
       "source_file": "remix/app/components/DevKit/DevKit.tsx",
       "source_location": "L10",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "devkit_devkit",
-      "target": "hooks_useapi",
-      "confidence_score": 1.0
+      "target": "hooks_useapi"
     },
     {
       "relation": "imports",
@@ -25238,9 +25778,9 @@
       "source_file": "remix/app/components/DevKit/DevKit.tsx",
       "source_location": "L10",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "devkit_devkit",
-      "target": "hooks_useapi_useapi",
-      "confidence_score": 1.0
+      "target": "hooks_useapi_useapi"
     },
     {
       "relation": "imports_from",
@@ -25249,9 +25789,9 @@
       "source_file": "remix/app/components/DevKit/DevKit.tsx",
       "source_location": "L11",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "devkit_devkit",
-      "target": "hooks_usecurrentuser",
-      "confidence_score": 1.0
+      "target": "hooks_usecurrentuser"
     },
     {
       "relation": "imports",
@@ -25260,9 +25800,9 @@
       "source_file": "remix/app/components/DevKit/DevKit.tsx",
       "source_location": "L11",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "devkit_devkit",
-      "target": "hooks_usecurrentuser_usecurrentuser",
-      "confidence_score": 1.0
+      "target": "hooks_usecurrentuser_usecurrentuser"
     },
     {
       "relation": "imports_from",
@@ -25293,9 +25833,9 @@
       "source_file": "remix/app/components/DevKit/DevKit.tsx",
       "source_location": "L7",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "devkit_devkit",
-      "target": "lopu_uselopu",
-      "confidence_score": 1.0
+      "target": "lopu_uselopu"
     },
     {
       "relation": "imports",
@@ -25304,9 +25844,9 @@
       "source_file": "remix/app/components/DevKit/DevKit.tsx",
       "source_location": "L7",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "devkit_devkit",
-      "target": "lopu_uselopu_uselopu",
-      "confidence_score": 1.0
+      "target": "lopu_uselopu_uselopu"
     },
     {
       "relation": "imports",
@@ -25315,9 +25855,9 @@
       "source_file": "remix/app/components/DevKit/DevKit.tsx",
       "source_location": "L7",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "devkit_devkit",
-      "target": "lopu_uselopu_uselopustream",
-      "confidence_score": 1.0
+      "target": "lopu_uselopu_uselopustream"
     },
     {
       "relation": "imports_from",
@@ -25348,9 +25888,9 @@
       "source_file": "remix/app/components/DevKit/DevKit.tsx",
       "source_location": "L9",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "devkit_devkit",
-      "target": "user_usercard",
-      "confidence_score": 1.0
+      "target": "user_usercard"
     },
     {
       "relation": "imports",
@@ -25445,9 +25985,9 @@
       "source_file": "remix/app/components/Login/Register.tsx",
       "source_location": "L8",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "login_register",
-      "target": "icon_icon",
-      "confidence_score": 1.0
+      "target": "icon_icon"
     },
     {
       "relation": "imports_from",
@@ -25511,9 +26051,9 @@
       "source_file": "remix/app/components/Login/Register.tsx",
       "source_location": "L8",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "login_register",
-      "target": "icon_icon_icon",
-      "confidence_score": 1.0
+      "target": "icon_icon_icon"
     },
     {
       "relation": "imports",
@@ -25783,9 +26323,9 @@
       "source_file": "remix/app/components/Login/Login.tsx",
       "source_location": "L7",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "remix_app_components_login_login_tsx_login_login",
-      "target": "lopu_uselopu",
-      "confidence_score": 1.0
+      "target": "lopu_uselopu"
     },
     {
       "relation": "imports",
@@ -25794,9 +26334,9 @@
       "source_file": "remix/app/components/Login/Login.tsx",
       "source_location": "L7",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "remix_app_components_login_login_tsx_login_login",
-      "target": "lopu_uselopu_uselopu",
-      "confidence_score": 1.0
+      "target": "lopu_uselopu_uselopu"
     },
     {
       "relation": "imports_from",
@@ -25893,9 +26433,9 @@
       "source_file": "remix/app/components/Login/Register.tsx",
       "source_location": "L5",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "login_register",
-      "target": "hooks_useapi",
-      "confidence_score": 1.0
+      "target": "hooks_useapi"
     },
     {
       "relation": "imports",
@@ -25904,9 +26444,9 @@
       "source_file": "remix/app/components/Login/Register.tsx",
       "source_location": "L5",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "login_register",
-      "target": "hooks_useapi_useapi",
-      "confidence_score": 1.0
+      "target": "hooks_useapi_useapi"
     },
     {
       "relation": "contains",
@@ -25914,9 +26454,9 @@
       "source_file": "remix/app/components/Login/Register.tsx",
       "source_location": "L10",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "login_register",
-      "target": "login_register_inputsx",
-      "confidence_score": 1.0
+      "target": "login_register_inputsx"
     },
     {
       "relation": "contains",
@@ -25924,9 +26464,9 @@
       "source_file": "remix/app/components/Login/Register.tsx",
       "source_location": "L16",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "login_register",
-      "target": "login_register_register",
-      "confidence_score": 1.0
+      "target": "login_register_register"
     },
     {
       "relation": "imports_from",
@@ -25935,9 +26475,9 @@
       "source_file": "remix/app/components/Login/Register.tsx",
       "source_location": "L7",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "login_register",
-      "target": "lopu_uselopu",
-      "confidence_score": 1.0
+      "target": "lopu_uselopu"
     },
     {
       "relation": "imports",
@@ -25946,9 +26486,9 @@
       "source_file": "remix/app/components/Login/Register.tsx",
       "source_location": "L7",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "login_register",
-      "target": "lopu_uselopu_uselopu",
-      "confidence_score": 1.0
+      "target": "lopu_uselopu_uselopu"
     },
     {
       "relation": "imports_from",
@@ -25957,9 +26497,9 @@
       "source_file": "remix/app/components/Login/Register.tsx",
       "source_location": "L6",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "login_register",
-      "target": "thingtime_usethingtime",
-      "confidence_score": 1.0
+      "target": "thingtime_usethingtime"
     },
     {
       "relation": "imports",
@@ -25968,9 +26508,9 @@
       "source_file": "remix/app/components/Login/Register.tsx",
       "source_location": "L6",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "login_register",
-      "target": "thingtime_usethingtime_usethingtime",
-      "confidence_score": 1.0
+      "target": "thingtime_usethingtime_usethingtime"
     },
     {
       "relation": "imports_from",
@@ -25979,9 +26519,9 @@
       "source_file": "remix/app/routes/register.tsx",
       "source_location": "L5",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_register",
-      "target": "login_register",
-      "confidence_score": 1.0
+      "target": "login_register"
     },
     {
       "relation": "calls",
@@ -26023,9 +26563,9 @@
       "source_file": "remix/app/routes/register.tsx",
       "source_location": "L5",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_register",
-      "target": "login_register_register",
-      "confidence_score": 1.0
+      "target": "login_register_register"
     },
     {
       "relation": "contains",
@@ -26033,9 +26573,9 @@
       "source_file": "remix/app/components/Lopu/useLopu.tsx",
       "source_location": "L27",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_uselopu",
-      "target": "lopu_uselopu_blink",
-      "confidence_score": 1.0
+      "target": "lopu_uselopu_blink"
     },
     {
       "relation": "contains",
@@ -26043,9 +26583,9 @@
       "source_file": "remix/app/components/Lopu/useLopu.tsx",
       "source_location": "L18",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_uselopu",
-      "target": "lopu_uselopu_container_style",
-      "confidence_score": 1.0
+      "target": "lopu_uselopu_container_style"
     },
     {
       "relation": "contains",
@@ -26053,9 +26593,9 @@
       "source_file": "remix/app/components/Lopu/useLopu.tsx",
       "source_location": "L34",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_uselopu",
-      "target": "lopu_uselopu_countdownring",
-      "confidence_score": 1.0
+      "target": "lopu_uselopu_countdownring"
     },
     {
       "relation": "contains",
@@ -26063,9 +26603,9 @@
       "source_file": "remix/app/components/Lopu/useLopu.tsx",
       "source_location": "L32",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_uselopu",
-      "target": "lopu_uselopu_drain",
-      "confidence_score": 1.0
+      "target": "lopu_uselopu_drain"
     },
     {
       "relation": "contains",
@@ -26073,9 +26613,9 @@
       "source_file": "remix/app/components/Lopu/useLopu.tsx",
       "source_location": "L72",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_uselopu",
-      "target": "lopu_uselopu_lopuargs",
-      "confidence_score": 1.0
+      "target": "lopu_uselopu_lopuargs"
     },
     {
       "relation": "contains",
@@ -26083,9 +26623,9 @@
       "source_file": "remix/app/components/Lopu/useLopu.tsx",
       "source_location": "L70",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_uselopu",
-      "target": "lopu_uselopu_lopulink",
-      "confidence_score": 1.0
+      "target": "lopu_uselopu_lopulink"
     },
     {
       "relation": "contains",
@@ -26093,9 +26633,9 @@
       "source_file": "remix/app/components/Lopu/useLopu.tsx",
       "source_location": "L68",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_uselopu",
-      "target": "lopu_uselopu_lopustatus",
-      "confidence_score": 1.0
+      "target": "lopu_uselopu_lopustatus"
     },
     {
       "relation": "contains",
@@ -26103,9 +26643,9 @@
       "source_file": "remix/app/components/Lopu/useLopu.tsx",
       "source_location": "L82",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_uselopu",
-      "target": "lopu_uselopu_loputoast",
-      "confidence_score": 1.0
+      "target": "lopu_uselopu_loputoast"
     },
     {
       "relation": "contains",
@@ -26113,9 +26653,9 @@
       "source_file": "remix/app/components/Lopu/useLopu.tsx",
       "source_location": "L208",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_uselopu",
-      "target": "lopu_uselopu_sourcelabel",
-      "confidence_score": 1.0
+      "target": "lopu_uselopu_sourcelabel"
     },
     {
       "relation": "contains",
@@ -26123,9 +26663,9 @@
       "source_file": "remix/app/components/Lopu/useLopu.tsx",
       "source_location": "L80",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_uselopu",
-      "target": "lopu_uselopu_statusemoji",
-      "confidence_score": 1.0
+      "target": "lopu_uselopu_statusemoji"
     },
     {
       "relation": "contains",
@@ -26133,9 +26673,9 @@
       "source_file": "remix/app/components/Lopu/useLopu.tsx",
       "source_location": "L184",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_uselopu",
-      "target": "lopu_uselopu_uselopu",
-      "confidence_score": 1.0
+      "target": "lopu_uselopu_uselopu"
     },
     {
       "relation": "contains",
@@ -26143,9 +26683,9 @@
       "source_file": "remix/app/components/Lopu/useLopu.tsx",
       "source_location": "L213",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_uselopu",
-      "target": "lopu_uselopu_uselopustream",
-      "confidence_score": 1.0
+      "target": "lopu_uselopu_uselopustream"
     },
     {
       "relation": "imports_from",
@@ -26154,9 +26694,9 @@
       "source_file": "remix/app/routes/profile.tsx",
       "source_location": "L6",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_profile",
-      "target": "lopu_uselopu",
-      "confidence_score": 1.0
+      "target": "lopu_uselopu"
     },
     {
       "relation": "calls",
@@ -26165,9 +26705,9 @@
       "source_file": "remix/app/components/Lopu/useLopu.tsx",
       "source_location": "L149",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "lopu_uselopu_loputoast",
-      "target": "lopu_uselopu_statusemoji",
-      "confidence_score": 1.0
+      "target": "lopu_uselopu_statusemoji"
     },
     {
       "relation": "imports",
@@ -26176,9 +26716,9 @@
       "source_file": "remix/app/routes/profile.tsx",
       "source_location": "L6",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_profile",
-      "target": "lopu_uselopu_uselopu",
-      "confidence_score": 1.0
+      "target": "lopu_uselopu_uselopu"
     },
     {
       "relation": "calls",
@@ -26607,9 +27147,9 @@
       "source_file": "remix/app/components/Nav/Footer.tsx",
       "source_location": "L8",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "nav_footer",
-      "target": "hooks_useapi",
-      "confidence_score": 1.0
+      "target": "hooks_useapi"
     },
     {
       "relation": "imports",
@@ -26618,9 +27158,9 @@
       "source_file": "remix/app/components/Nav/Footer.tsx",
       "source_location": "L8",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "nav_footer",
-      "target": "hooks_useapi_useapi",
-      "confidence_score": 1.0
+      "target": "hooks_useapi_useapi"
     },
     {
       "relation": "imports_from",
@@ -26629,9 +27169,9 @@
       "source_file": "remix/app/components/Nav/Footer.tsx",
       "source_location": "L9",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "nav_footer",
-      "target": "hooks_usecurrentuser",
-      "confidence_score": 1.0
+      "target": "hooks_usecurrentuser"
     },
     {
       "relation": "imports",
@@ -26640,9 +27180,9 @@
       "source_file": "remix/app/components/Nav/Footer.tsx",
       "source_location": "L9",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "nav_footer",
-      "target": "hooks_usecurrentuser_usecurrentuser",
-      "confidence_score": 1.0
+      "target": "hooks_usecurrentuser_usecurrentuser"
     },
     {
       "relation": "contains",
@@ -26749,9 +27289,9 @@
       "source_file": "remix/app/components/Nav/Nav.tsx",
       "source_location": "L10",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "nav_nav",
-      "target": "hooks_usecurrentuser",
-      "confidence_score": 1.0
+      "target": "hooks_usecurrentuser"
     },
     {
       "relation": "imports",
@@ -26760,9 +27300,9 @@
       "source_file": "remix/app/components/Nav/Nav.tsx",
       "source_location": "L10",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "nav_nav",
-      "target": "hooks_usecurrentuser_usecurrentuser",
-      "confidence_score": 1.0
+      "target": "hooks_usecurrentuser_usecurrentuser"
     },
     {
       "relation": "contains",
@@ -27982,9 +28522,9 @@
       "source_file": "remix/app/routes/profile.tsx",
       "source_location": "L7",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_profile",
-      "target": "user_usercard",
-      "confidence_score": 1.0
+      "target": "user_usercard"
     },
     {
       "relation": "imports_from",
@@ -27993,9 +28533,9 @@
       "source_file": "remix/app/routes/welcome.tsx",
       "source_location": "L7",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_welcome",
-      "target": "user_usercard",
-      "confidence_score": 1.0
+      "target": "user_usercard"
     },
     {
       "relation": "imports_from",
@@ -28004,9 +28544,9 @@
       "source_file": "remix/app/components/User/UserCard.tsx",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "user_usercard",
-      "target": "hooks_usecurrentuser",
-      "confidence_score": 1.0
+      "target": "hooks_usecurrentuser"
     },
     {
       "relation": "imports",
@@ -28015,9 +28555,9 @@
       "source_file": "remix/app/components/User/UserCard.tsx",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "user_usercard",
-      "target": "hooks_usecurrentuser_currentuser",
-      "confidence_score": 1.0
+      "target": "hooks_usecurrentuser_currentuser"
     },
     {
       "relation": "contains",
@@ -28025,9 +28565,9 @@
       "source_file": "remix/app/components/User/UserCard.tsx",
       "source_location": "L9",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "user_usercard",
-      "target": "user_usercard_usercard",
-      "confidence_score": 1.0
+      "target": "user_usercard_usercard"
     },
     {
       "relation": "imports",
@@ -28036,9 +28576,9 @@
       "source_file": "remix/app/routes/profile.tsx",
       "source_location": "L7",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_profile",
-      "target": "user_usercard_usercard",
-      "confidence_score": 1.0
+      "target": "user_usercard_usercard"
     },
     {
       "relation": "imports",
@@ -28047,9 +28587,9 @@
       "source_file": "remix/app/routes/welcome.tsx",
       "source_location": "L7",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_welcome",
-      "target": "user_usercard_usercard",
-      "confidence_score": 1.0
+      "target": "user_usercard_usercard"
     },
     {
       "relation": "contains",
@@ -29020,9 +29560,9 @@
       "source_file": "remix/app/routes/profile.tsx",
       "source_location": "L4",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_profile",
-      "target": "hooks_useapi",
-      "confidence_score": 1.0
+      "target": "hooks_useapi"
     },
     {
       "relation": "calls",
@@ -29053,9 +29593,9 @@
       "source_file": "remix/app/routes/profile.tsx",
       "source_location": "L4",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_profile",
-      "target": "hooks_useapi_useapi",
-      "confidence_score": 1.0
+      "target": "hooks_useapi_useapi"
     },
     {
       "relation": "calls",
@@ -29084,9 +29624,9 @@
       "source_file": "remix/app/hooks/useCurrentUser.tsx",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "hooks_usecurrentuser",
-      "target": "hooks_usecurrentuser_currentuser",
-      "confidence_score": 1.0
+      "target": "hooks_usecurrentuser_currentuser"
     },
     {
       "relation": "contains",
@@ -29094,9 +29634,9 @@
       "source_file": "remix/app/hooks/useCurrentUser.tsx",
       "source_location": "L15",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "hooks_usecurrentuser",
-      "target": "hooks_usecurrentuser_usecurrentuser",
-      "confidence_score": 1.0
+      "target": "hooks_usecurrentuser_usecurrentuser"
     },
     {
       "relation": "imports_from",
@@ -29105,9 +29645,9 @@
       "source_file": "remix/app/routes/profile.tsx",
       "source_location": "L5",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_profile",
-      "target": "hooks_usecurrentuser",
-      "confidence_score": 1.0
+      "target": "hooks_usecurrentuser"
     },
     {
       "relation": "imports_from",
@@ -29116,9 +29656,9 @@
       "source_file": "remix/app/routes/welcome.tsx",
       "source_location": "L6",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_welcome",
-      "target": "hooks_usecurrentuser",
-      "confidence_score": 1.0
+      "target": "hooks_usecurrentuser"
     },
     {
       "relation": "imports",
@@ -29127,9 +29667,9 @@
       "source_file": "remix/app/routes/profile.tsx",
       "source_location": "L5",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_profile",
-      "target": "hooks_usecurrentuser_usecurrentuser",
-      "confidence_score": 1.0
+      "target": "hooks_usecurrentuser_usecurrentuser"
     },
     {
       "relation": "calls",
@@ -29149,9 +29689,9 @@
       "source_file": "remix/app/routes/welcome.tsx",
       "source_location": "L6",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_welcome",
-      "target": "hooks_usecurrentuser_usecurrentuser",
-      "confidence_score": 1.0
+      "target": "hooks_usecurrentuser_usecurrentuser"
     },
     {
       "relation": "calls",
@@ -29529,9 +30069,9 @@
       "source_file": "remix/app/routes/api/v1/auth/logout/_logout.tsx",
       "source_location": "L8",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "logout_logout",
-      "target": "logout_logout_action",
-      "confidence_score": 1.0
+      "target": "logout_logout_action"
     },
     {
       "relation": "contains",
@@ -29539,9 +30079,9 @@
       "source_file": "remix/app/routes/api/v1/auth/me/_me.tsx",
       "source_location": "L7",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "me_me",
-      "target": "me_me_loader",
-      "confidence_score": 1.0
+      "target": "me_me_loader"
     },
     {
       "relation": "contains",
@@ -29549,9 +30089,9 @@
       "source_file": "remix/app/routes/api/v1/auth/register/_register.tsx",
       "source_location": "L9",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "register_register",
-      "target": "register_register_action",
-      "confidence_score": 1.0
+      "target": "register_register_action"
     },
     {
       "relation": "contains",
@@ -29559,9 +30099,9 @@
       "source_file": "remix/app/routes/api/v1/auth/resend-verification/_resend-verification.tsx",
       "source_location": "L10",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "resend_verification_resend_verification",
-      "target": "resend_verification_resend_verification_action",
-      "confidence_score": 1.0
+      "target": "resend_verification_resend_verification_action"
     },
     {
       "relation": "contains",
@@ -29569,9 +30109,9 @@
       "source_file": "remix/app/routes/api/v1/auth/verify-email/_verify-email.tsx",
       "source_location": "L8",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "verify_email_verify_email",
-      "target": "verify_email_verify_email_loader",
-      "confidence_score": 1.0
+      "target": "verify_email_verify_email_loader"
     },
     {
       "relation": "contains",
@@ -29584,14 +30124,25 @@
       "target": "login_login_action"
     },
     {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/routes/api/v1/lopu/musing/_musing.tsx",
+      "source_location": "L2",
+      "weight": 1.0,
+      "source": "musing_musing",
+      "target": "lopu_musing_haslopuaiproviderconfigured",
+      "confidence_score": 1.0
+    },
+    {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/app/routes/api/v1/lopu/musing/_musing.tsx",
       "source_location": "L7",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "musing_musing",
-      "target": "musing_musing_formatlocaltime",
-      "confidence_score": 1.0
+      "target": "musing_musing_formatlocaltime"
     },
     {
       "relation": "contains",
@@ -29599,9 +30150,9 @@
       "source_file": "remix/app/routes/api/v1/lopu/musing/_musing.tsx",
       "source_location": "L21",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "musing_musing",
-      "target": "musing_musing_loader",
-      "confidence_score": 1.0
+      "target": "musing_musing_loader"
     },
     {
       "relation": "calls",
@@ -29610,9 +30161,20 @@
       "source_file": "remix/app/routes/api/v1/lopu/musing/_musing.tsx",
       "source_location": "L36",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "musing_musing_loader",
-      "target": "musing_musing_formatlocaltime",
-      "confidence_score": 1.0
+      "target": "musing_musing_formatlocaltime"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "remix/app/routes/api/v1/lopu/musing/_musing.tsx",
+      "source_location": "L29",
+      "weight": 1.0,
+      "source": "musing_musing_loader",
+      "target": "lopu_musing_haslopuaiproviderconfigured"
     },
     {
       "relation": "contains",
@@ -29992,9 +30554,9 @@
       "source_file": "remix/app/routes/login.tsx",
       "source_location": "L10",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_login",
-      "target": "routes_login_loader",
-      "confidence_score": 1.0
+      "target": "routes_login_loader"
     },
     {
       "relation": "contains",
@@ -30052,9 +30614,9 @@
       "source_file": "remix/app/routes/profile.tsx",
       "source_location": "L9",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_profile",
-      "target": "routes_profile_profile",
-      "confidence_score": 1.0
+      "target": "routes_profile_profile"
     },
     {
       "relation": "contains",
@@ -30082,9 +30644,9 @@
       "source_file": "remix/app/routes/register.tsx",
       "source_location": "L9",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_register",
-      "target": "routes_register_loader",
-      "confidence_score": 1.0
+      "target": "routes_register_loader"
     },
     {
       "relation": "contains",
@@ -30092,9 +30654,9 @@
       "source_file": "remix/app/routes/register.tsx",
       "source_location": "L14",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_register",
-      "target": "routes_register_register",
-      "confidence_score": 1.0
+      "target": "routes_register_register"
     },
     {
       "relation": "contains",
@@ -30163,9 +30725,9 @@
       "source_file": "remix/app/routes/welcome.tsx",
       "source_location": "L11",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_welcome",
-      "target": "routes_welcome_loader",
-      "confidence_score": 1.0
+      "target": "routes_welcome_loader"
     },
     {
       "relation": "contains",
@@ -30173,9 +30735,9 @@
       "source_file": "remix/app/routes/welcome.tsx",
       "source_location": "L16",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_welcome",
-      "target": "routes_welcome_welcome",
-      "confidence_score": 1.0
+      "target": "routes_welcome_welcome"
     },
     {
       "relation": "contains",
@@ -30193,9 +30755,9 @@
       "source_file": "remix/app/scripts/mongodb/data/users.ts",
       "source_location": "L6",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "data_users",
-      "target": "data_users_seeduser",
-      "confidence_score": 1.0
+      "target": "data_users_seeduser"
     },
     {
       "relation": "imports_from",
@@ -32529,9 +33091,9 @@
       "source_file": "remix/package.json",
       "source_location": "L14",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "remix_package_dependencies",
-      "target": "remix_package_dependencies_anthropic_ai_sdk",
-      "confidence_score": 1.0
+      "target": "remix_package_dependencies_anthropic_ai_sdk"
     },
     {
       "relation": "contains",
@@ -32739,9 +33301,9 @@
       "source_file": "remix/package.json",
       "source_location": "L41",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "remix_package_dependencies",
-      "target": "remix_package_dependencies_jose",
-      "confidence_score": 1.0
+      "target": "remix_package_dependencies_jose"
     },
     {
       "relation": "contains",
@@ -32799,9 +33361,9 @@
       "source_file": "remix/package.json",
       "source_location": "L46",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "remix_package_dependencies",
-      "target": "remix_package_dependencies_openai",
-      "confidence_score": 1.0
+      "target": "remix_package_dependencies_openai"
     },
     {
       "relation": "contains",
@@ -33289,9 +33851,9 @@
       "source_file": "remix/scripts/pre-dev.sh",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "scripts_pre_dev",
-      "target": "users_lopu_things_code_lopugit_thingtime_test_branches_resolve_thingtime_dev_67n4f1_main_remix_scripts_pre_dev_sh__entry",
-      "confidence_score": 1.0
+      "target": "users_lopu_things_code_lopugit_thingtime_test_branches_resolve_thingtime_dev_67n4f1_main_remix_scripts_pre_dev_sh__entry"
     },
     {
       "relation": "contains",
@@ -33479,9 +34041,9 @@
       "source_file": "remix/vercel.sh",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "remix_vercel",
-      "target": "users_lopu_things_code_lopugit_thingtime_test_branches_resolve_thingtime_dev_67n4f1_main_remix_vercel_sh__entry",
-      "confidence_score": 1.0
+      "target": "users_lopu_things_code_lopugit_thingtime_test_branches_resolve_thingtime_dev_67n4f1_main_remix_vercel_sh__entry"
     },
     {
       "relation": "contains",
@@ -33699,9 +34261,9 @@
       "source_file": "CLAUDE.md",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude",
-      "target": "claude_fundamentals_read_first",
-      "confidence_score": 1.0
+      "target": "claude_fundamentals_read_first"
     },
     {
       "relation": "contains",
@@ -33779,9 +34341,9 @@
       "source_file": "DECISIONS.md",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "decisions",
-      "target": "decisions_decisions",
-      "confidence_score": 1.0
+      "target": "decisions_decisions"
     },
     {
       "relation": "contains",
@@ -33789,9 +34351,9 @@
       "source_file": "DECISIONS.md",
       "source_location": "L9",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "decisions_decisions",
-      "target": "decisions_nikolaj_frey_engineer_decisions",
-      "confidence_score": 1.0
+      "target": "decisions_nikolaj_frey_engineer_decisions"
     },
     {
       "relation": "contains",
@@ -33799,9 +34361,9 @@
       "source_file": "DECISIONS.md",
       "source_location": "L36",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "decisions_nikolaj_frey_engineer_decisions",
-      "target": "decisions_decision_log",
-      "confidence_score": 1.0
+      "target": "decisions_decision_log"
     },
     {
       "relation": "contains",
@@ -33809,9 +34371,9 @@
       "source_file": "DECISIONS.md",
       "source_location": "L11",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "decisions_nikolaj_frey_engineer_decisions",
-      "target": "decisions_recurring_principles_the_thinking_method",
-      "confidence_score": 1.0
+      "target": "decisions_recurring_principles_the_thinking_method"
     },
     {
       "relation": "contains",
@@ -33819,9 +34381,9 @@
       "source_file": "FUNDAMENTALS.md",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "fundamentals",
-      "target": "fundamentals_thingtime_fundamentals",
-      "confidence_score": 1.0
+      "target": "fundamentals_thingtime_fundamentals"
     },
     {
       "relation": "contains",
@@ -33829,9 +34391,9 @@
       "source_file": "FUNDAMENTALS.md",
       "source_location": "L6",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "fundamentals_thingtime_fundamentals",
-      "target": "fundamentals_1_the_api_is_the_only_gateway_to_data",
-      "confidence_score": 1.0
+      "target": "fundamentals_1_the_api_is_the_only_gateway_to_data"
     },
     {
       "relation": "contains",
@@ -33839,9 +34401,9 @@
       "source_file": "FUNDAMENTALS.md",
       "source_location": "L13",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "fundamentals_thingtime_fundamentals",
-      "target": "fundamentals_2_seed_and_test_through_the_real_api_functionality_cohesion",
-      "confidence_score": 1.0
+      "target": "fundamentals_2_seed_and_test_through_the_real_api_functionality_cohesion"
     },
     {
       "relation": "contains",
@@ -33849,9 +34411,9 @@
       "source_file": "FUNDAMENTALS.md",
       "source_location": "L30",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "fundamentals_thingtime_fundamentals",
-      "target": "fundamentals_3_one_database_thingtime",
-      "confidence_score": 1.0
+      "target": "fundamentals_3_one_database_thingtime"
     },
     {
       "relation": "contains",
@@ -33859,9 +34421,9 @@
       "source_file": "FUNDAMENTALS.md",
       "source_location": "L42",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "fundamentals_thingtime_fundamentals",
-      "target": "fundamentals_4_one_mongodb_connection_source",
-      "confidence_score": 1.0
+      "target": "fundamentals_4_one_mongodb_connection_source"
     },
     {
       "relation": "contains",
@@ -33869,9 +34431,9 @@
       "source_file": "FUNDAMENTALS.md",
       "source_location": "L52",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "fundamentals_thingtime_fundamentals",
-      "target": "fundamentals_5_auth_httponly_cookie_revocable_jwt_mongo_session",
-      "confidence_score": 1.0
+      "target": "fundamentals_5_auth_httponly_cookie_revocable_jwt_mongo_session"
     },
     {
       "relation": "contains",
@@ -33879,9 +34441,9 @@
       "source_file": "FUNDAMENTALS.md",
       "source_location": "L69",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "fundamentals_thingtime_fundamentals",
-      "target": "fundamentals_6_never_leak_secrets",
-      "confidence_score": 1.0
+      "target": "fundamentals_6_never_leak_secrets"
     },
     {
       "relation": "contains",
@@ -33889,9 +34451,9 @@
       "source_file": "FUNDAMENTALS.md",
       "source_location": "L76",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "fundamentals_thingtime_fundamentals",
-      "target": "fundamentals_7_one_notification_lopu",
-      "confidence_score": 1.0
+      "target": "fundamentals_7_one_notification_lopu"
     },
     {
       "relation": "contains",
@@ -33957,6 +34519,16 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
+      "source_location": "L66",
+      "weight": 1.0,
+      "source": "readme_setup_for_forks",
+      "target": "readme_auth_and_lopu_ai",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "README.md",
       "source_location": "L43",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -34009,9 +34581,9 @@
       "source_file": "claude-todo/01-mongodb-connection-status.md",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_01_mongodb_connection_status",
-      "target": "claude_todo_01_mongodb_connection_status_01_mongodb_connection_status",
-      "confidence_score": 1.0
+      "target": "claude_todo_01_mongodb_connection_status_01_mongodb_connection_status"
     },
     {
       "relation": "contains",
@@ -34019,9 +34591,9 @@
       "source_file": "claude-todo/01-mongodb-connection-status.md",
       "source_location": "L5",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_01_mongodb_connection_status_01_mongodb_connection_status",
-      "target": "claude_todo_01_mongodb_connection_status_goal",
-      "confidence_score": 1.0
+      "target": "claude_todo_01_mongodb_connection_status_goal"
     },
     {
       "relation": "contains",
@@ -34029,9 +34601,9 @@
       "source_file": "claude-todo/01-mongodb-connection-status.md",
       "source_location": "L29",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_01_mongodb_connection_status_01_mongodb_connection_status",
-      "target": "claude_todo_01_mongodb_connection_status_possible_follow_ups_nice_to_have",
-      "confidence_score": 1.0
+      "target": "claude_todo_01_mongodb_connection_status_possible_follow_ups_nice_to_have"
     },
     {
       "relation": "contains",
@@ -34039,9 +34611,9 @@
       "source_file": "claude-todo/01-mongodb-connection-status.md",
       "source_location": "L25",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_01_mongodb_connection_status_01_mongodb_connection_status",
-      "target": "claude_todo_01_mongodb_connection_status_verified",
-      "confidence_score": 1.0
+      "target": "claude_todo_01_mongodb_connection_status_verified"
     },
     {
       "relation": "contains",
@@ -34049,9 +34621,9 @@
       "source_file": "claude-todo/01-mongodb-connection-status.md",
       "source_location": "L9",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_01_mongodb_connection_status_01_mongodb_connection_status",
-      "target": "claude_todo_01_mongodb_connection_status_what_exists",
-      "confidence_score": 1.0
+      "target": "claude_todo_01_mongodb_connection_status_what_exists"
     },
     {
       "relation": "contains",
@@ -34059,9 +34631,9 @@
       "source_file": "claude-todo/02-db-populate-seeding.md",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_02_db_populate_seeding",
-      "target": "claude_todo_02_db_populate_seeding_02_db_populate_seeding",
-      "confidence_score": 1.0
+      "target": "claude_todo_02_db_populate_seeding_02_db_populate_seeding"
     },
     {
       "relation": "contains",
@@ -34069,9 +34641,9 @@
       "source_file": "claude-todo/02-db-populate-seeding.md",
       "source_location": "L51",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_02_db_populate_seeding_02_db_populate_seeding",
-      "target": "claude_todo_02_db_populate_seeding_acceptance_criteria",
-      "confidence_score": 1.0
+      "target": "claude_todo_02_db_populate_seeding_acceptance_criteria"
     },
     {
       "relation": "contains",
@@ -34079,9 +34651,9 @@
       "source_file": "claude-todo/02-db-populate-seeding.md",
       "source_location": "L34",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_02_db_populate_seeding_02_db_populate_seeding",
-      "target": "claude_todo_02_db_populate_seeding_decisions_locked_see_fundamentals_md",
-      "confidence_score": 1.0
+      "target": "claude_todo_02_db_populate_seeding_decisions_locked_see_fundamentals_md"
     },
     {
       "relation": "contains",
@@ -34089,9 +34661,9 @@
       "source_file": "claude-todo/02-db-populate-seeding.md",
       "source_location": "L5",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_02_db_populate_seeding_02_db_populate_seeding",
-      "target": "claude_todo_02_db_populate_seeding_goal",
-      "confidence_score": 1.0
+      "target": "claude_todo_02_db_populate_seeding_goal"
     },
     {
       "relation": "contains",
@@ -34099,9 +34671,9 @@
       "source_file": "claude-todo/02-db-populate-seeding.md",
       "source_location": "L41",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_02_db_populate_seeding_02_db_populate_seeding",
-      "target": "claude_todo_02_db_populate_seeding_plan",
-      "confidence_score": 1.0
+      "target": "claude_todo_02_db_populate_seeding_plan"
     },
     {
       "relation": "contains",
@@ -34109,9 +34681,9 @@
       "source_file": "claude-todo/02-db-populate-seeding.md",
       "source_location": "L19",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_02_db_populate_seeding_02_db_populate_seeding",
-      "target": "claude_todo_02_db_populate_seeding_problems_to_fix",
-      "confidence_score": 1.0
+      "target": "claude_todo_02_db_populate_seeding_problems_to_fix"
     },
     {
       "relation": "contains",
@@ -34119,9 +34691,9 @@
       "source_file": "claude-todo/02-db-populate-seeding.md",
       "source_location": "L10",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_02_db_populate_seeding_02_db_populate_seeding",
-      "target": "claude_todo_02_db_populate_seeding_what_exists",
-      "confidence_score": 1.0
+      "target": "claude_todo_02_db_populate_seeding_what_exists"
     },
     {
       "relation": "contains",
@@ -34129,9 +34701,9 @@
       "source_file": "claude-todo/03-auth-login-register.md",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_03_auth_login_register",
-      "target": "claude_todo_03_auth_login_register_03_auth_login_register_sessions_jwt",
-      "confidence_score": 1.0
+      "target": "claude_todo_03_auth_login_register_03_auth_login_register_sessions_jwt"
     },
     {
       "relation": "contains",
@@ -34139,9 +34711,9 @@
       "source_file": "claude-todo/03-auth-login-register.md",
       "source_location": "L94",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_03_auth_login_register_03_auth_login_register_sessions_jwt",
-      "target": "claude_todo_03_auth_login_register_acceptance_criteria",
-      "confidence_score": 1.0
+      "target": "claude_todo_03_auth_login_register_acceptance_criteria"
     },
     {
       "relation": "contains",
@@ -34149,9 +34721,9 @@
       "source_file": "claude-todo/03-auth-login-register.md",
       "source_location": "L5",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_03_auth_login_register_03_auth_login_register_sessions_jwt",
-      "target": "claude_todo_03_auth_login_register_built_this_round_remix_app_api_utils_auth",
-      "confidence_score": 1.0
+      "target": "claude_todo_03_auth_login_register_built_this_round_remix_app_api_utils_auth"
     },
     {
       "relation": "contains",
@@ -34159,9 +34731,9 @@
       "source_file": "claude-todo/03-auth-login-register.md",
       "source_location": "L79",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_03_auth_login_register_03_auth_login_register_sessions_jwt",
-      "target": "claude_todo_03_auth_login_register_decisions_locked_see_fundamentals_md_5",
-      "confidence_score": 1.0
+      "target": "claude_todo_03_auth_login_register_decisions_locked_see_fundamentals_md_5"
     },
     {
       "relation": "contains",
@@ -34169,9 +34741,9 @@
       "source_file": "claude-todo/03-auth-login-register.md",
       "source_location": "L30",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_03_auth_login_register_03_auth_login_register_sessions_jwt",
-      "target": "claude_todo_03_auth_login_register_goal",
-      "confidence_score": 1.0
+      "target": "claude_todo_03_auth_login_register_goal"
     },
     {
       "relation": "contains",
@@ -34179,9 +34751,9 @@
       "source_file": "claude-todo/03-auth-login-register.md",
       "source_location": "L67",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_03_auth_login_register_03_auth_login_register_sessions_jwt",
-      "target": "claude_todo_03_auth_login_register_plan",
-      "confidence_score": 1.0
+      "target": "claude_todo_03_auth_login_register_plan"
     },
     {
       "relation": "contains",
@@ -34189,9 +34761,9 @@
       "source_file": "claude-todo/03-auth-login-register.md",
       "source_location": "L51",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_03_auth_login_register_03_auth_login_register_sessions_jwt",
-      "target": "claude_todo_03_auth_login_register_problems_to_fix",
-      "confidence_score": 1.0
+      "target": "claude_todo_03_auth_login_register_problems_to_fix"
     },
     {
       "relation": "contains",
@@ -34199,9 +34771,9 @@
       "source_file": "claude-todo/03-auth-login-register.md",
       "source_location": "L90",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_03_auth_login_register_03_auth_login_register_sessions_jwt",
-      "target": "claude_todo_03_auth_login_register_still_open_defaults_fine_for_now",
-      "confidence_score": 1.0
+      "target": "claude_todo_03_auth_login_register_still_open_defaults_fine_for_now"
     },
     {
       "relation": "contains",
@@ -34209,9 +34781,9 @@
       "source_file": "claude-todo/03-auth-login-register.md",
       "source_location": "L18",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_03_auth_login_register_03_auth_login_register_sessions_jwt",
-      "target": "claude_todo_03_auth_login_register_still_todo",
-      "confidence_score": 1.0
+      "target": "claude_todo_03_auth_login_register_still_todo"
     },
     {
       "relation": "contains",
@@ -34219,9 +34791,9 @@
       "source_file": "claude-todo/03-auth-login-register.md",
       "source_location": "L35",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_03_auth_login_register_03_auth_login_register_sessions_jwt",
-      "target": "claude_todo_03_auth_login_register_what_exists",
-      "confidence_score": 1.0
+      "target": "claude_todo_03_auth_login_register_what_exists"
     },
     {
       "relation": "contains",
@@ -34229,9 +34801,9 @@
       "source_file": "claude-todo/04-authed-db-read-query.md",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_04_authed_db_read_query",
-      "target": "claude_todo_04_authed_db_read_query_04_authed_db_read_query",
-      "confidence_score": 1.0
+      "target": "claude_todo_04_authed_db_read_query_04_authed_db_read_query"
     },
     {
       "relation": "contains",
@@ -34239,9 +34811,9 @@
       "source_file": "claude-todo/04-authed-db-read-query.md",
       "source_location": "L32",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_04_authed_db_read_query_04_authed_db_read_query",
-      "target": "claude_todo_04_authed_db_read_query_acceptance_criteria",
-      "confidence_score": 1.0
+      "target": "claude_todo_04_authed_db_read_query_acceptance_criteria"
     },
     {
       "relation": "contains",
@@ -34249,9 +34821,9 @@
       "source_file": "claude-todo/04-authed-db-read-query.md",
       "source_location": "L5",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_04_authed_db_read_query_04_authed_db_read_query",
-      "target": "claude_todo_04_authed_db_read_query_goal",
-      "confidence_score": 1.0
+      "target": "claude_todo_04_authed_db_read_query_goal"
     },
     {
       "relation": "contains",
@@ -34259,9 +34831,9 @@
       "source_file": "claude-todo/04-authed-db-read-query.md",
       "source_location": "L16",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_04_authed_db_read_query_04_authed_db_read_query",
-      "target": "claude_todo_04_authed_db_read_query_plan",
-      "confidence_score": 1.0
+      "target": "claude_todo_04_authed_db_read_query_plan"
     },
     {
       "relation": "contains",
@@ -34269,9 +34841,9 @@
       "source_file": "claude-todo/04-authed-db-read-query.md",
       "source_location": "L27",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_04_authed_db_read_query_04_authed_db_read_query",
-      "target": "claude_todo_04_authed_db_read_query_security_notes",
-      "confidence_score": 1.0
+      "target": "claude_todo_04_authed_db_read_query_security_notes"
     },
     {
       "relation": "contains",
@@ -34279,9 +34851,9 @@
       "source_file": "claude-todo/04-authed-db-read-query.md",
       "source_location": "L9",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_04_authed_db_read_query_04_authed_db_read_query",
-      "target": "claude_todo_04_authed_db_read_query_what_exists_to_build_on",
-      "confidence_score": 1.0
+      "target": "claude_todo_04_authed_db_read_query_what_exists_to_build_on"
     },
     {
       "relation": "contains",
@@ -34289,9 +34861,9 @@
       "source_file": "claude-todo/05-authed-db-write.md",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_05_authed_db_write",
-      "target": "claude_todo_05_authed_db_write_05_authed_db_write_create_update_delete",
-      "confidence_score": 1.0
+      "target": "claude_todo_05_authed_db_write_05_authed_db_write_create_update_delete"
     },
     {
       "relation": "contains",
@@ -34299,9 +34871,9 @@
       "source_file": "claude-todo/05-authed-db-write.md",
       "source_location": "L35",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_05_authed_db_write_05_authed_db_write_create_update_delete",
-      "target": "claude_todo_05_authed_db_write_acceptance_criteria",
-      "confidence_score": 1.0
+      "target": "claude_todo_05_authed_db_write_acceptance_criteria"
     },
     {
       "relation": "contains",
@@ -34309,9 +34881,9 @@
       "source_file": "claude-todo/05-authed-db-write.md",
       "source_location": "L5",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_05_authed_db_write_05_authed_db_write_create_update_delete",
-      "target": "claude_todo_05_authed_db_write_goal",
-      "confidence_score": 1.0
+      "target": "claude_todo_05_authed_db_write_goal"
     },
     {
       "relation": "contains",
@@ -34319,9 +34891,9 @@
       "source_file": "claude-todo/05-authed-db-write.md",
       "source_location": "L19",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_05_authed_db_write_05_authed_db_write_create_update_delete",
-      "target": "claude_todo_05_authed_db_write_plan",
-      "confidence_score": 1.0
+      "target": "claude_todo_05_authed_db_write_plan"
     },
     {
       "relation": "contains",
@@ -34329,9 +34901,9 @@
       "source_file": "claude-todo/05-authed-db-write.md",
       "source_location": "L29",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_05_authed_db_write_05_authed_db_write_create_update_delete",
-      "target": "claude_todo_05_authed_db_write_security_notes",
-      "confidence_score": 1.0
+      "target": "claude_todo_05_authed_db_write_security_notes"
     },
     {
       "relation": "contains",
@@ -34339,9 +34911,9 @@
       "source_file": "claude-todo/05-authed-db-write.md",
       "source_location": "L10",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_05_authed_db_write_05_authed_db_write_create_update_delete",
-      "target": "claude_todo_05_authed_db_write_what_exists_to_build_on",
-      "confidence_score": 1.0
+      "target": "claude_todo_05_authed_db_write_what_exists_to_build_on"
     },
     {
       "relation": "contains",
@@ -34349,9 +34921,9 @@
       "source_file": "claude-todo/06-pr-12-review-actions.md",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_06_pr_12_review_actions",
-      "target": "claude_todo_06_pr_12_review_actions_pr_12_review_actions",
-      "confidence_score": 1.0
+      "target": "claude_todo_06_pr_12_review_actions_pr_12_review_actions"
     },
     {
       "relation": "contains",
@@ -34359,9 +34931,9 @@
       "source_file": "claude-todo/06-pr-12-review-actions.md",
       "source_location": "L5",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_06_pr_12_review_actions_pr_12_review_actions",
-      "target": "claude_todo_06_pr_12_review_actions_1_jwt_secret_fallback",
-      "confidence_score": 1.0
+      "target": "claude_todo_06_pr_12_review_actions_1_jwt_secret_fallback"
     },
     {
       "relation": "contains",
@@ -34369,9 +34941,9 @@
       "source_file": "claude-todo/06-pr-12-review-actions.md",
       "source_location": "L12",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_06_pr_12_review_actions_pr_12_review_actions",
-      "target": "claude_todo_06_pr_12_review_actions_2_production_source_maps",
-      "confidence_score": 1.0
+      "target": "claude_todo_06_pr_12_review_actions_2_production_source_maps"
     },
     {
       "relation": "contains",
@@ -34379,9 +34951,9 @@
       "source_file": "claude-todo/06-pr-12-review-actions.md",
       "source_location": "L18",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_06_pr_12_review_actions_pr_12_review_actions",
-      "target": "claude_todo_06_pr_12_review_actions_3_atomic_email_verification_token_consumption",
-      "confidence_score": 1.0
+      "target": "claude_todo_06_pr_12_review_actions_3_atomic_email_verification_token_consumption"
     },
     {
       "relation": "contains",
@@ -34389,9 +34961,9 @@
       "source_file": "claude-todo/06-pr-12-review-actions.md",
       "source_location": "L24",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_06_pr_12_review_actions_pr_12_review_actions",
-      "target": "claude_todo_06_pr_12_review_actions_4_unused_imports",
-      "confidence_score": 1.0
+      "target": "claude_todo_06_pr_12_review_actions_4_unused_imports"
     },
     {
       "relation": "contains",
@@ -34399,9 +34971,9 @@
       "source_file": "claude-todo/README.md",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_readme",
-      "target": "claude_todo_readme_thingtime_claude_feature_to_do",
-      "confidence_score": 1.0
+      "target": "claude_todo_readme_thingtime_claude_feature_to_do"
     },
     {
       "relation": "contains",
@@ -34409,9 +34981,9 @@
       "source_file": "claude-todo/README.md",
       "source_location": "L20",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_readme_thingtime_claude_feature_to_do",
-      "target": "claude_todo_readme_conventions_see_fundamentals_md",
-      "confidence_score": 1.0
+      "target": "claude_todo_readme_conventions_see_fundamentals_md"
     },
     {
       "relation": "contains",
@@ -34419,9 +34991,9 @@
       "source_file": "claude-todo/README.md",
       "source_location": "L30",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_readme_thingtime_claude_feature_to_do",
-      "target": "claude_todo_readme_decisions_locked",
-      "confidence_score": 1.0
+      "target": "claude_todo_readme_decisions_locked"
     },
     {
       "relation": "contains",
@@ -34429,9 +35001,9 @@
       "source_file": "claude-todo/README.md",
       "source_location": "L10",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "claude_todo_readme_thingtime_claude_feature_to_do",
-      "target": "claude_todo_readme_status_board",
-      "confidence_score": 1.0
+      "target": "claude_todo_readme_status_board"
     },
     {
       "relation": "contains",
@@ -34747,6 +35319,16 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/CHANGELOG.md",
+      "source_location": "L54",
+      "weight": 1.0,
+      "source": "remix_changelog_unreleased",
+      "target": "remix_changelog_changed_54",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/CHANGELOG.md",
       "source_location": "L58",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -34757,11 +35339,31 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/CHANGELOG.md",
+      "source_location": "L92",
+      "weight": 1.0,
+      "source": "remix_changelog_unreleased",
+      "target": "remix_changelog_fixed_92",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/CHANGELOG.md",
       "source_location": "L19",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "remix_changelog_unreleased",
       "target": "remix_changelog_pr_13_remix_hydration_vercel_status_and_deployment_hygiene"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/CHANGELOG.md",
+      "source_location": "L19",
+      "weight": 1.0,
+      "source": "remix_changelog_unreleased",
+      "target": "remix_changelog_pr_16_auth_and_lopu_hardening",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -34856,6 +35458,66 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
+      "source_file": "remix/PRs/16-resolve-main-into-thingtime-dev-branch.md",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "prs_16_resolve_main_into_thingtime_dev_branch",
+      "target": "prs_16_resolve_main_into_thingtime_dev_branch_pr_16_resolve_main_into_thingtime_dev_branch",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/PRs/16-resolve-main-into-thingtime-dev-branch.md",
+      "source_location": "L3",
+      "weight": 1.0,
+      "source": "prs_16_resolve_main_into_thingtime_dev_branch_pr_16_resolve_main_into_thingtime_dev_branch",
+      "target": "prs_16_resolve_main_into_thingtime_dev_branch_security_follow_up_2026_06_23",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/PRs/16-resolve-main-into-thingtime-dev-branch.md",
+      "source_location": "L14",
+      "weight": 1.0,
+      "source": "prs_16_resolve_main_into_thingtime_dev_branch_security_follow_up_2026_06_23",
+      "target": "prs_16_resolve_main_into_thingtime_dev_branch_changed",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/PRs/16-resolve-main-into-thingtime-dev-branch.md",
+      "source_location": "L5",
+      "weight": 1.0,
+      "source": "prs_16_resolve_main_into_thingtime_dev_branch_security_follow_up_2026_06_23",
+      "target": "prs_16_resolve_main_into_thingtime_dev_branch_fixed",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/PRs/16-resolve-main-into-thingtime-dev-branch.md",
+      "source_location": "L22",
+      "weight": 1.0,
+      "source": "prs_16_resolve_main_into_thingtime_dev_branch_security_follow_up_2026_06_23",
+      "target": "prs_16_resolve_main_into_thingtime_dev_branch_follow_up",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/PRs/16-resolve-main-into-thingtime-dev-branch.md",
+      "source_location": "L27",
+      "weight": 1.0,
+      "source": "prs_16_resolve_main_into_thingtime_dev_branch_security_follow_up_2026_06_23",
+      "target": "prs_16_resolve_main_into_thingtime_dev_branch_verification",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
       "source_file": "remix/README.md",
       "source_location": "L1",
       "weight": 1.0,
@@ -34885,5 +35547,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "2481d61ec132daf39cdf6f82bb10d9ab8d6cba50"
+  "built_at_commit": "68613aa4e2b0840602e1f3207b327dd839ef6b88"
 }

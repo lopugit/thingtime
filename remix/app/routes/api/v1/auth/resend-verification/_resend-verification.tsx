@@ -1,5 +1,6 @@
 import { json } from '@vercel/remix';
 
+import { shouldShowDevVerificationLink } from '~/api/utils/auth/devVerification';
 import { sendVerificationEmail } from '~/api/utils/auth/email';
 import { createEmailVerification } from '~/api/utils/auth/emailVerifications';
 import { findUserByEmail } from '~/api/utils/auth/users';
@@ -9,7 +10,7 @@ import { findUserByEmail } from '~/api/utils/auth/users';
 // belongs to an existing, still-unverified user.
 export const action = async ({ request }: { request: Request }) => {
   const { email } = await request.json().catch(() => ({}));
-  const showLink = process.env.NODE_ENV !== 'production' || process.env.VERCEL_ENV !== 'production';
+  const showLink = shouldShowDevVerificationLink();
 
   if (email) {
     const user = await findUserByEmail(String(email));

@@ -147,6 +147,7 @@ const providerOrder = (): Array<'claude' | 'openai'> => {
 };
 
 const hasAnyKey = () => !!process.env.ANTHROPIC_API_KEY || !!process.env.OPENAI_API_KEY;
+export const hasLopuAiProviderConfigured = hasAnyKey;
 
 // Split a string into word-sized chunks (keeping trailing spaces) so a canned
 // line can be "typed in" with the same streaming feel as the AI.
@@ -164,11 +165,14 @@ async function* streamFallback(mode: LopuMode): AsyncGenerator<LopuStreamEvent> 
 
 // The streaming heart of the feature: pick a mode, try each provider, and on any
 // failure (no key / no credits / network) fall back to the canned library.
-export async function* streamLopuMusing(ctx: LopuContext): AsyncGenerator<LopuStreamEvent> {
-  const mode = pickMode();
+export async function* streamLopuMusing(
+  ctx: LopuContext,
+  opts: { forceFallback?: boolean } = {}
+): AsyncGenerator<LopuStreamEvent> {
+  const mode = opts.forceFallback ? 'fallback' : pickMode();
 
   // Pure-fallback mode, or no AI configured at all: serve a canned line.
-  if (mode === 'fallback' || !hasAnyKey()) {
+  if (opts.forceFallback || mode === 'fallback' || !hasAnyKey()) {
     yield* streamFallback(mode);
     return;
   }

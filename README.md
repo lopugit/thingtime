@@ -63,6 +63,32 @@ placeholder:
 MONGODB_CONNECTION_STRING="mongodb://localhost:27017/thingtime"
 ```
 
+## Auth and Lopu AI
+
+JWT-backed browser sessions require a signing secret in every deployed
+environment:
+
+```sh
+JWT_SECRET="<long-random-secret>"
+```
+
+Local development can run without `JWT_SECRET`, but preview and production
+auth fail closed until the secret is set.
+
+Lopu musings can optionally use Claude and/or OpenAI. Without these keys, the
+endpoint serves the built-in fallback library.
+
+```sh
+ANTHROPIC_API_KEY="<anthropic-api-key>"
+OPENAI_API_KEY="<openai-api-key>"
+LOPU_PROVIDER="claude"
+```
+
+When an AI key is configured, the musing endpoint uses MongoDB to allow 10
+AI-backed musings per detected IP address per rolling hour. Requests over the
+limit, or requests made while the rate-limit collection is unavailable, stream
+the preset fallback responses instead of calling an AI provider.
+
 ## Vercel deployment status
 
 The footer can show live Vercel preview/build status. It works in a limited

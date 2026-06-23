@@ -1,6 +1,7 @@
 import { json } from '@vercel/remix';
 
 import { serializeAuthCookie } from '~/api/utils/auth/authCookie';
+import { shouldShowDevVerificationLink } from '~/api/utils/auth/devVerification';
 import { registerUser } from '~/api/utils/auth/registerUser';
 
 // POST /api/v1/auth/register — { username, password, email, displayName?, meta? }
@@ -16,10 +17,9 @@ export const action = async ({ request }: { request: Request }) => {
     return json({ ok: false, error: result.error }, { status: result.status });
   }
 
-  // Surface the link anywhere that isn't real production (local + Vercel
-  // preview) so you can verify without real email sending. Vercel runs preview
-  // deploys with NODE_ENV=production, so check VERCEL_ENV too.
-  const showLink = process.env.NODE_ENV !== 'production' || process.env.VERCEL_ENV !== 'production';
+  // Surface the link only in local + Vercel preview so production never returns
+  // raw verification tokens to the browser.
+  const showLink = shouldShowDevVerificationLink();
 
   return json(
     {
