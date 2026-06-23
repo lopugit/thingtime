@@ -31,6 +31,9 @@ Detailed PR notes:
 
 ### Changed
 
+- Added iOS webview safe-area support with `viewport-fit=cover`, full-bleed
+  native WKWebView rendering, and status-bar-aware Remix nav padding. —
+  _Codex (AI), 2026-06-24_
 - Added shared AGENTS/CLAUDE PR-review instructions prioritizing code quality,
   performance, potential bugs, crashes, and security issues. — _Codex (AI),
   2026-06-23_
@@ -118,14 +121,14 @@ Detailed PR notes:
 
 ### Fixed
 
-| # | Problem | Fix | Author | Date |
-|---|---------|-----|--------|------|
-| 6 | Vercel and MongoDB footer refresh icons rendered but did not trigger a recheck. | Wired the shared refresh button to call its callback, prevent link bubbling, and show a small loading spin. | Codex (AI) | 2026-06-23 |
-| 1 | Emotion hydration caused `insertBefore` crashes, flash-of-unstyled content, boxed icons, and update-depth risk. | Hydrate the Remix document with server-rendered Emotion style tags in the React tree and perform the Emotion handoff pre-paint. | Codex (AI) | 2026-06-22 |
-| 2 | Vercel serverless wrapped Emotion CJS modules differently than local default imports expected. | Resolve `@emotion/cache` and `@emotion/server/create-instance` across direct, default, named, and nested default export shapes. | Codex (AI) | 2026-06-22 |
-| 3 | Vercel previews could show `git/unknown`, and repeated branch-head deployments could rebuild unchanged SHAs. | Prefer Vercel git env vars for branch display and document/test an Ignored Build Step duplicate-SHA guard. | Codex (AI) | 2026-06-22 |
-| 4 | Local dev-server and PR validation workflow details were scattered across chat. | Document PM2-managed Remix restarts, PR-specific notes, and verification in project docs. | Codex (AI) | 2026-06-22 |
-| 5 | `smarts.merge(..., { clone: true })` behavior was at risk during PR cleanup. | Verified the clone path still deep-clones nested values without mutating the source object. | Codex (AI) | 2026-06-22 |
+| #   | Problem                                                                                                         | Fix                                                                                                                             | Author     | Date       |
+| --- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ---------- | ---------- |
+| 6   | Vercel and MongoDB footer refresh icons rendered but did not trigger a recheck.                                 | Wired the shared refresh button to call its callback, prevent link bubbling, and show a small loading spin.                     | Codex (AI) | 2026-06-23 |
+| 1   | Emotion hydration caused `insertBefore` crashes, flash-of-unstyled content, boxed icons, and update-depth risk. | Hydrate the Remix document with server-rendered Emotion style tags in the React tree and perform the Emotion handoff pre-paint. | Codex (AI) | 2026-06-22 |
+| 2   | Vercel serverless wrapped Emotion CJS modules differently than local default imports expected.                  | Resolve `@emotion/cache` and `@emotion/server/create-instance` across direct, default, named, and nested default export shapes. | Codex (AI) | 2026-06-22 |
+| 3   | Vercel previews could show `git/unknown`, and repeated branch-head deployments could rebuild unchanged SHAs.    | Prefer Vercel git env vars for branch display and document/test an Ignored Build Step duplicate-SHA guard.                      | Codex (AI) | 2026-06-22 |
+| 4   | Local dev-server and PR validation workflow details were scattered across chat.                                 | Document PM2-managed Remix restarts, PR-specific notes, and verification in project docs.                                       | Codex (AI) | 2026-06-22 |
+| 5   | `smarts.merge(..., { clone: true })` behavior was at risk during PR cleanup.                                    | Verified the clone path still deep-clones nested values without mutating the source object.                                     | Codex (AI) | 2026-06-22 |
 
 ### Verified
 

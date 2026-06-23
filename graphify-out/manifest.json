@@ -500,8 +500,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Nav/Nav.tsx": {
-    "mtime": 1782186283.8858848,
-    "ast_hash": "2584d62611bdddca22a06a03e2c6521a",
+    "mtime": 1782235931.1671634,
+    "ast_hash": "31b8e1ad728d7a2dd58025e0da5a0feb",
     "semantic_hash": ""
   },
   "remix/app/components/Nav/ProfileDrawer.tsx": {
@@ -615,9 +615,9 @@
     "semantic_hash": "7f1938dd65767c801825fc721151adbf"
   },
   "remix/app/globals/GlobalStyles.tsx": {
-    "mtime": 1721959448.9232118,
-    "ast_hash": "e920dc8bdfd99f869ecc9452f1137921",
-    "semantic_hash": "e920dc8bdfd99f869ecc9452f1137921"
+    "mtime": 1782235931.1369102,
+    "ast_hash": "b7cdb3037b397f8ac832fabc8712af27",
+    "semantic_hash": ""
   },
   "remix/app/gp/GradientPath.js": {
     "mtime": 1711197621.4926364,
@@ -700,8 +700,8 @@
     "semantic_hash": "c4054b1dfdb64ee989f94d84a82f34b0"
   },
   "remix/app/root.tsx": {
-    "mtime": 1782213346.891463,
-    "ast_hash": "147b7933a3b0d8b1d66327df35251965",
+    "mtime": 1782235931.1247072,
+    "ast_hash": "5579d6b6bccdb510f537b08672b177b7",
     "semantic_hash": ""
   },
   "remix/app/routes/$.tsx": {
@@ -1810,8 +1810,8 @@
     "semantic_hash": ""
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1782186665.2119608,
-    "ast_hash": "935618351393a99a7bbadaf8c0f168bf",
+    "mtime": 1782235931.2207077,
+    "ast_hash": "e8d836ef1f06534f2c4c3b3dad6310e5",
     "semantic_hash": ""
   },
   "remix/app/api/utils/vercel/status.ts": {
@@ -2090,13 +2090,13 @@
     "semantic_hash": ""
   },
   "iOS/Thingtime/Web/ThingtimeWebView.swift": {
-    "mtime": 1782212406.6751113,
-    "ast_hash": "dc6f1981b77c364c802b5faa7d40e9ab",
+    "mtime": 1782235914.06847,
+    "ast_hash": "5b2f5f6ee60f05c79e941484efd9f52d",
     "semantic_hash": ""
   },
   "iOS/Thingtime/Web/WebView.swift": {
-    "mtime": 1782213346.8906667,
-    "ast_hash": "c3625aec4364c3da0fa88e6998801449",
+    "mtime": 1782235914.0692234,
+    "ast_hash": "d1a1a7323916ac3e91b9e72328c1aca2",
     "semantic_hash": ""
   },
   "iOS/ThingtimeTests/ThingtimeWebDestinationTests.swift": {

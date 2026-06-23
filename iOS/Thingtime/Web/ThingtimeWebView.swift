@@ -6,7 +6,7 @@ struct ThingtimeWebView: View {
 
     var body: some View {
         WebView(url: homeURL)
-            .ignoresSafeArea(.container, edges: .bottom)
+            .ignoresSafeArea(.container, edges: [.top, .bottom])
     }
 }
 
