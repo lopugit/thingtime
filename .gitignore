@@ -26,6 +26,18 @@ api/index.js.map
 
 tmp/*
 
+# Xcode / XcodeGen local outputs
+iOS/*.xcodeproj/
+iOS/*.xcworkspace/
+iOS/DerivedData/
+iOS/build/
+iOS/*.xcarchive
+iOS/*.ipa
+iOS/*.dSYM
+iOS/xcuserdata/
+iOS/**/xcuserdata/
+iOS/Thingtime/Resources/Info.plist
+
 # graphify - keep queryable graph + report, ignore machine-specific temp & build artifacts
 graphify-out/.graphify_*
 graphify-out/cache/

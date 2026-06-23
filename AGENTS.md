@@ -37,6 +37,10 @@
   dashboard owner slug; that value is the Git provider owner. Prefer Vercel API
   project/deployment data when `VERCEL_API_TOKEN` is available, or an explicit
   `VERCEL_DASHBOARD_TEAM_SLUG` env var for tokenless dashboard links.
+- The native iOS app lives in `iOS/` and uses XcodeGen; treat
+  `iOS/project.yml` as the source of truth and run `xcodegen generate` inside
+  `iOS/` before `xcodebuild` checks. Keep generated `.xcodeproj` files
+  untracked.
 
 ## graphify
 

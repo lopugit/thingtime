@@ -26,6 +26,10 @@
   browser window before finishing. Use screenshot evidence or measured element
   bounds across the relevant desktop/mobile viewport so centering, max-width,
   overflow, and overlap behavior match the request.
+- The native iOS app lives in `iOS/` and uses XcodeGen; treat
+  `iOS/project.yml` as the source of truth and run `xcodegen generate` inside
+  `iOS/` before `xcodebuild` checks. Keep generated `.xcodeproj` files
+  untracked.
 
 ## Fundamentals (read first)
 
