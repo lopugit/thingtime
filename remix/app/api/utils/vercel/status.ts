@@ -18,6 +18,31 @@ export type VercelDeploymentStatus = {
   state: 'local' | 'ready' | 'building' | 'queued' | 'error' | 'unknown';
 };
 
+export type VercelDeploymentSummary = {
+  branch?: string;
+  commitSha?: string;
+  createdAt?: string;
+  dashboardUrl?: string;
+  environment?: string;
+  id?: string;
+  readyAt?: string;
+  readyLabel?: string;
+  state: VercelDeploymentStatus['state'];
+  url: string;
+};
+
+export type VercelDeploymentsOverview = {
+  configured: boolean;
+  deployments: VercelDeploymentSummary[];
+  error?: string;
+  fetchedAt: string;
+  hasError: boolean;
+  label: string;
+  projectName?: string;
+  source: 'api' | 'local' | 'tokenless';
+  uniqueUrlCount: number;
+};
+
 const DEFAULT_VERCEL_PROJECT_ID = 'prj_ZAX9FhGC2alHMXMwTHX96ql3EQ8v';
 const DEFAULT_VERCEL_TEAM_ID = 'team_JsKhM6fVg9uo701feA0fLh9V';
 
@@ -90,6 +115,55 @@ const getStringValue = (value: unknown, key: string): string | undefined => {
   return typeof nested === 'string' && nested ? nested : undefined;
 };
 
+const getVercelApiHeaders = (token: string) => ({
+  Authorization: `Bearer ${token}`,
+  Accept: 'application/json'
+});
+
+const getVercelDeploymentsPage = async ({
+  limit,
+  projectId,
+  projectName,
+  teamId,
+  token
+}: {
+  limit: number;
+  projectId?: string;
+  projectName?: string;
+  teamId?: string;
+  token: string;
+}) => {
+  const url = new URL('https://api.vercel.com/v6/deployments');
+  url.searchParams.set('limit', String(limit));
+
+  if (projectId) {
+    url.searchParams.set('projectId', projectId);
+  } else if (projectName) {
+    url.searchParams.set('app', projectName);
+  }
+
+  if (teamId) {
+    url.searchParams.set('teamId', teamId);
+  }
+
+  let response = await fetch(url.toString(), {
+    headers: getVercelApiHeaders(token)
+  });
+
+  if (response.status === 403 && teamId) {
+    url.searchParams.delete('teamId');
+    response = await fetch(url.toString(), {
+      headers: getVercelApiHeaders(token)
+    });
+  }
+
+  if (!response.ok) {
+    throw new Error(`Vercel API returned ${response.status}`);
+  }
+
+  return response.json();
+};
+
 const getDashboardOwnerSlug = (value: unknown): string | undefined => {
   return (
     getStringValue(getObjectValue(value, 'account'), 'slug') ||
@@ -131,10 +205,7 @@ const getVercelProjectData = async ({
   }
 
   const response = await fetch(projectUrl.toString(), {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: 'application/json'
-    }
+    headers: getVercelApiHeaders(token)
   });
 
   if (!response.ok) {
@@ -248,6 +319,40 @@ const getLastReadyDeployment = (deployments: unknown[]) => {
   return deployments.find((deployment) => normaliseState(
     getStringValue(deployment, 'state') || getStringValue(deployment, 'readyState')
   ) === 'ready');
+};
+
+const getDeploymentId = (deployment: unknown) => {
+  return getStringValue(deployment, 'uid') || getStringValue(deployment, 'id');
+};
+
+const getDeploymentBranch = (deployment: unknown) => {
+  const meta = getObjectValue(deployment, 'meta');
+  const gitSource = getObjectValue(deployment, 'gitSource');
+
+  return (
+    getStringValue(meta, 'githubCommitRef') ||
+    getStringValue(gitSource, 'ref') ||
+    getStringValue(deployment, 'target')
+  );
+};
+
+const getDeploymentCommitSha = (deployment: unknown) => {
+  const meta = getObjectValue(deployment, 'meta');
+  const gitSource = getObjectValue(deployment, 'gitSource');
+
+  return getStringValue(meta, 'githubCommitSha') || getStringValue(gitSource, 'sha');
+};
+
+const getDeploymentEnvironment = (deployment: unknown) => {
+  return getStringValue(deployment, 'target') || getStringValue(deployment, 'type');
+};
+
+const getDeploymentCreatedAt = (deployment: unknown) => {
+  return (
+    getTimestamp(getObjectValue(deployment, 'createdAt')) ||
+    getTimestamp(getObjectValue(deployment, 'created')) ||
+    getTimestamp(getObjectValue(deployment, 'buildingAt'))
+  );
 };
 
 const getBuildProgressFromChecks = (checks: unknown): { progress?: number; phase?: string } => {
@@ -411,41 +516,13 @@ export const getVercelDeploymentStatus = async (): Promise<VercelDeploymentStatu
       return fallback;
     }
 
-    const url = new URL('https://api.vercel.com/v6/deployments');
-    url.searchParams.set('limit', '20');
-
-    if (projectId) {
-      url.searchParams.set('projectId', projectId);
-    } else if (projectName) {
-      url.searchParams.set('app', projectName);
-    }
-
-    if (teamId) {
-      url.searchParams.set('teamId', teamId);
-    }
-
-    let response = await fetch(url.toString(), {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/json'
-      }
+    const data = await getVercelDeploymentsPage({
+      limit: 20,
+      projectId,
+      projectName,
+      teamId,
+      token
     });
-
-    if (response.status === 403 && teamId) {
-      url.searchParams.delete('teamId');
-      response = await fetch(url.toString(), {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/json'
-        }
-      });
-    }
-
-    if (!response.ok) {
-      throw new Error(`Vercel API returned ${response.status}`);
-    }
-
-    const data = await response.json();
     const projectData = await getVercelProjectData({
       projectId,
       projectName,
@@ -581,6 +658,123 @@ export const getVercelDeploymentStatus = async (): Promise<VercelDeploymentStatu
       hasError: true,
       label: 'Vercel: status unavailable',
       state: 'unknown'
+    };
+  }
+};
+
+export const getVercelDeploymentsOverview = async ({
+  limit = 100
+}: {
+  limit?: number;
+} = {}): Promise<VercelDeploymentsOverview> => {
+  const fetchedAt = new Date().toISOString();
+  const token = process.env.VERCEL_API_TOKEN;
+  const deploymentUrl = normaliseUrl(process.env.VERCEL_URL);
+  const projectId = process.env.VERCEL_PROJECT_ID || DEFAULT_VERCEL_PROJECT_ID;
+  const projectName =
+    process.env.VERCEL_PROJECT_NAME ||
+    process.env.VERCEL_GIT_REPO_SLUG ||
+    process.env.VERCEL_GIT_REPO;
+  const teamId = process.env.VERCEL_TEAM_ID || process.env.VERCEL_ORG_ID || DEFAULT_VERCEL_TEAM_ID;
+
+  const fallbackDeployments: VercelDeploymentSummary[] = deploymentUrl
+    ? [
+        {
+          branch: process.env.VERCEL_GIT_COMMIT_REF || process.env.THINGTIME_BRANCH_NAME,
+          commitSha: process.env.VERCEL_GIT_COMMIT_SHA,
+          environment: process.env.VERCEL_TARGET_ENV || process.env.VERCEL_ENV,
+          state: (process.env.VERCEL_TARGET_ENV || process.env.VERCEL_ENV) ? 'ready' : 'unknown',
+          url: deploymentUrl
+        }
+      ]
+    : [];
+
+  if (!token) {
+    return {
+      configured: false,
+      deployments: fallbackDeployments,
+      fetchedAt,
+      hasError: false,
+      label: fallbackDeployments.length ? 'Tokenless Vercel deployment' : 'Vercel API token not configured',
+      projectName,
+      source: fallbackDeployments.length ? 'tokenless' : 'local',
+      uniqueUrlCount: fallbackDeployments.length
+    };
+  }
+
+  try {
+    const data = await getVercelDeploymentsPage({
+      limit: Math.max(1, Math.min(100, limit)),
+      projectId,
+      projectName,
+      teamId,
+      token
+    });
+    const projectData = await getVercelProjectData({
+      projectId,
+      projectName,
+      teamId,
+      token
+    });
+    const dashboardOwnerSlug = getDashboardOwnerSlug(projectData);
+    const dashboardProjectSlug = getDashboardProjectSlug(projectData, projectName);
+    const deployments = Array.isArray(data?.deployments) ? data.deployments : [];
+    const seenUrls = new Set<string>();
+
+    const deploymentSummaries = deployments.reduce<VercelDeploymentSummary[]>((items, deployment) => {
+      const url = normaliseUrl(getStringValue(deployment, 'url'));
+
+      if (!url || seenUrls.has(url)) {
+        return items;
+      }
+
+      seenUrls.add(url);
+
+      const id = getDeploymentId(deployment);
+      const readyAt = getDeploymentReadyAt(deployment);
+      const createdAt = getDeploymentCreatedAt(deployment);
+
+      items.push({
+        branch: getDeploymentBranch(deployment),
+        commitSha: getDeploymentCommitSha(deployment),
+        createdAt: createdAt ? new Date(createdAt).toISOString() : undefined,
+        dashboardUrl: getProjectDashboardUrl({
+          deploymentId: id,
+          ownerSlug: dashboardOwnerSlug,
+          projectSlug: dashboardProjectSlug
+        }),
+        environment: getDeploymentEnvironment(deployment),
+        id,
+        readyAt: readyAt ? new Date(readyAt).toISOString() : undefined,
+        readyLabel: formatRelativeTime(readyAt || createdAt),
+        state: normaliseState(getStringValue(deployment, 'state') || getStringValue(deployment, 'readyState')),
+        url
+      });
+
+      return items;
+    }, []);
+
+    return {
+      configured: true,
+      deployments: deploymentSummaries,
+      fetchedAt,
+      hasError: false,
+      label: `${deploymentSummaries.length} unique deployment URL${deploymentSummaries.length === 1 ? '' : 's'}`,
+      projectName: getDashboardProjectSlug(projectData, projectName),
+      source: 'api',
+      uniqueUrlCount: deploymentSummaries.length
+    };
+  } catch (err: any) {
+    return {
+      configured: true,
+      deployments: fallbackDeployments,
+      error: err?.message || String(err),
+      fetchedAt,
+      hasError: true,
+      label: 'Vercel deployments unavailable',
+      projectName,
+      source: fallbackDeployments.length ? 'tokenless' : 'api',
+      uniqueUrlCount: fallbackDeployments.length
     };
   }
 };

@@ -855,8 +855,8 @@
     "semantic_hash": "6f47150939eacf6d3a89a87289013ea3"
   },
   "README.md": {
-    "mtime": 1782180033.944224,
-    "ast_hash": "97a9333ab7b0b13baee3f985c10a4525",
+    "mtime": 1782180633.5134592,
+    "ast_hash": "58452b90e31781248b051211feb26f6c",
     "semantic_hash": ""
   },
   "docs/Use Cases/car.md": {
@@ -995,13 +995,13 @@
     "semantic_hash": ""
   },
   "AGENTS.md": {
-    "mtime": 1782180315.5326726,
-    "ast_hash": "aa7d6dcd54acdc8c0640fb2864d031f3",
+    "mtime": 1782180984.006261,
+    "ast_hash": "e7bd57c8c85e5a6b5449883cd68c802d",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1782180315.5331473,
-    "ast_hash": "bf4405fe319c17e81cf53f2f23fd4e45",
+    "mtime": 1782180984.0067797,
+    "ast_hash": "3c0c9852ec4919028265c44e46d84976",
     "semantic_hash": ""
   },
   "raycast/assets/command-icon.png": {
@@ -1810,13 +1810,13 @@
     "semantic_hash": ""
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1782180315.5334527,
-    "ast_hash": "432139f1675b9dc788f64fd42ac5f68d",
+    "mtime": 1782180984.0071175,
+    "ast_hash": "5f3ba8dcf3233d5a8d2598c88ebddb20",
     "semantic_hash": ""
   },
   "remix/app/api/utils/vercel/status.ts": {
-    "mtime": 1782176036.854643,
-    "ast_hash": "8a82396d76cedf1d32d32fea2c5b1fbe",
+    "mtime": 1782180536.9874077,
+    "ast_hash": "2ad3516b3205a8c5a94d76e3dd92fdd1",
     "semantic_hash": ""
   },
   "remix/app/components/Vercel/VercelStatus.tsx": {
@@ -2030,8 +2030,8 @@
     "semantic_hash": ""
   },
   "remix/PRs/16-resolve-main-into-thingtime-dev-branch.md": {
-    "mtime": 1782180315.5337765,
-    "ast_hash": "40b7ca3fe53a817d7f15ec790c7e431a",
+    "mtime": 1782180984.0077345,
+    "ast_hash": "c9d910eafad59f099a9e6ffc25c46647",
     "semantic_hash": ""
   },
   "remix/app/api/utils/crypto/cryptoTools.server.ts": {
@@ -2050,13 +2050,23 @@
     "semantic_hash": ""
   },
   "remix/app/routes/crypto.tsx": {
-    "mtime": 1782179346.5930412,
-    "ast_hash": "5826f1d6bc027d887eb5af295b597197",
+    "mtime": 1782181241.3986747,
+    "ast_hash": "e2f37b8c1a602d36c1d4ad4a1a7ec123",
     "semantic_hash": ""
   },
   "remix/scripts/ensure-bcrypt-binding.js": {
     "mtime": 1782179834.6657314,
     "ast_hash": "33c41e5c78a7edd4008ff2e5107fbf31",
+    "semantic_hash": ""
+  },
+  "remix/app/routes/api/v1/vercel/deployments/_deployments.tsx": {
+    "mtime": 1782180544.4319923,
+    "ast_hash": "3a78afa1afdc18ec63c535723dc549ef",
+    "semantic_hash": ""
+  },
+  "remix/app/routes/vercel.tsx": {
+    "mtime": 1782181241.3990037,
+    "ast_hash": "012376a3957a12e8818fa28b3380a841",
     "semantic_hash": ""
   }
 }

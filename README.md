@@ -144,6 +144,10 @@ The footer can show live Vercel preview/build status. It works in a limited
 tokenless mode on Vercel, but full status, dashboard links, build state, last
 ready time, and active polling need a Vercel REST API token.
 
+Local development and preview deployments also expose `/vercel`, backed by
+`/api/v1/vercel/deployments`, to list unique deployment URLs and their current
+Vercel states using the same server-only token configuration.
+
 Add this as a sensitive Vercel project environment variable:
 
 ```sh
@@ -153,8 +157,8 @@ VERCEL_API_TOKEN="<vercel-rest-api-token>"
 Create this token from Vercel account/team token settings, not from the OAuth
 App / "Sign in with Vercel" setup page. The token needs access to the Vercel
 team and project that own the deployment. A persistent `403` from
-`/api/v1/vercel/status` usually means the token was created for the wrong
-account/team, has expired, or lacks project access.
+`/api/v1/vercel/status` or `/api/v1/vercel/deployments` usually means the token
+was created for the wrong account/team, has expired, or lacks project access.
 
 These Vercel variables are optional because the hosted Vercel runtime normally
 provides enough deployment metadata automatically:

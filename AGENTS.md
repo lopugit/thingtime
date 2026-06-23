@@ -11,6 +11,10 @@
 - On local desktop sessions, use the PM2 ecosystem configs for local dev servers instead of starting duplicate ad-hoc Remix servers. The local alias `pm` may be available for PM2; otherwise use `pm2`. The root `ecosystem.config.js` defines `thingtime-stack`, while `remix/ecosystem.config.js` defines the actual Remix dev app `tt-remix-9999` on port 9999. Prefer `npm run remix-pms` from the repo root or `cd remix && pm restart ecosystem.config.js --only tt-remix-9999` when restarting Remix locally. Stop/restart the managed app before claiming a local dev-server state.
 - If Remix dev 500s with a missing `bcrypt_lib.node` native binding, run `corepack pnpm --dir remix run ensure-bcrypt`, then restart the PM2-managed `tt-remix-9999` app. The Remix `postinstall`, `dev`, and `build` scripts also run this check automatically.
 - For rendered browser validation in Codex Desktop, prefer the in-app Browser first when it is available. If localhost is blocked there, or the user explicitly asks for Chrome, use the Codex Chrome tab control workflow (`chrome:control-chrome`) before falling back to standalone Playwright. Keep Chrome checks read-only unless the user requested an action, and do not inspect cookies, local storage, passwords, or profile data.
+- For layout or alignment changes, always verify the affected screen in a live
+  browser window before finishing. Use screenshot evidence or measured element
+  bounds across the relevant desktop/mobile viewport so centering, max-width,
+  overflow, and overlap behavior match the request.
 - When a task reveals a repeatable workflow, validation command, deployment
   setting, project convention, or other future-use instruction, add it to this
   `AGENTS.md` runbook before finishing so future agents do it by default.

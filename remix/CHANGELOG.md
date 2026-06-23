@@ -31,6 +31,11 @@ Detailed PR notes:
 
 ### Changed
 
+- Added shared AGENTS/CLAUDE instructions requiring live browser verification
+  for layout and alignment changes. — _Codex (AI), 2026-06-23_
+- Added a centered `/vercel` deployment URL dashboard backed by
+  `/api/v1/vercel/deployments`, and constrained both `/crypto` and `/vercel`
+  to viewport-safe centered page widths. — _Codex (AI), 2026-06-23_
 - Added shared AGENTS/CLAUDE runbook instructions so Codex and Claude both read
   both files and avoid duplicating long agent rules. — _Codex (AI),
   2026-06-23_

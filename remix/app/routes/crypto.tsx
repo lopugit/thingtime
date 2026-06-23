@@ -4,7 +4,6 @@ import {
   Badge,
   Box,
   Button,
-  Container,
   Flex,
   FormControl,
   FormLabel,
@@ -53,6 +52,8 @@ const textEncodingOptions: Array<{ value: TextEncoding; label: string }> = [
   { value: 'base64url', label: 'Base64url' },
   { value: 'hex', label: 'Hex' }
 ];
+
+const PAGE_MAX_WIDTH = '920px';
 
 const postCrypto = async (body: Record<string, unknown>) => {
   const res = await fetch('/api/v1/crypto', {
@@ -116,7 +117,7 @@ const ToolPanel = ({
   badge?: string;
   children: React.ReactNode;
 }) => (
-  <Box borderWidth="1px" borderColor="gray.200" borderRadius="md" p={5} bg="white">
+  <Box borderWidth="1px" borderColor="gray.200" borderRadius="md" p={5} bg="white" w="100%" minW={0}>
     <Flex alignItems="center" justifyContent="space-between" gap={3} mb={4}>
       <Flex alignItems="center" gap={2}>
         <Icon as={icon} boxSize={5} color="teal.500" />
@@ -136,12 +137,12 @@ const OutputTextarea = ({ label, value, minH = '120px' }: { label: string; value
       </FormLabel>
       <CopyButton value={value} />
     </Flex>
-    <Textarea value={value || ''} minH={minH} readOnly fontFamily="mono" fontSize="xs" resize="vertical" />
+    <Textarea value={value || ''} minH={minH} readOnly fontFamily="mono" fontSize="xs" resize="vertical" maxW="100%" />
   </FormControl>
 );
 
 const JsonOutput = ({ value }: { value: unknown }) => (
-  <Textarea value={formatJson(value)} minH="150px" readOnly fontFamily="mono" fontSize="xs" resize="vertical" />
+  <Textarea value={formatJson(value)} minH="150px" readOnly fontFamily="mono" fontSize="xs" resize="vertical" maxW="100%" />
 );
 
 export default function CryptoPage() {
@@ -265,10 +266,10 @@ export default function CryptoPage() {
   }, [message, messageEncoding, signature, signatureEncoding, signatureKeyEncoding, signaturePrivateKey, signaturePublicKey, signatureStandard]);
 
   return (
-    <Box minH="100vh" bg="gray.50" py={{ base: 6, md: 10 }}>
-      <Container maxW="container.xl">
-        <Flex alignItems={{ base: 'flex-start', md: 'center' }} justifyContent="space-between" gap={4} mb={6} flexDirection={{ base: 'column', md: 'row' }}>
-          <Box>
+    <Box minH="100vh" w="100%" minW={0} bg="gray.50" pt={{ base: 28, md: 32 }} pb={{ base: 6, md: 10 }} px={{ base: 3, md: 12 }} display="flex" justifyContent="center">
+      <Box as="main" data-testid="crypto-shell" maxW={PAGE_MAX_WIDTH} w="100%">
+        <Flex alignItems="center" justifyContent="center" gap={4} mb={6} flexDirection="column" textAlign="center">
+          <Box minW={0}>
             <Heading size="lg">Crypto</Heading>
             <Text color="gray.600" fontSize="sm" mt={1}>
               `/api/v1/crypto`
@@ -277,7 +278,7 @@ export default function CryptoPage() {
           <CopyButton value={generatedEnvValue(generated, outputEncoding)} label="Copy env" />
         </Flex>
 
-        <Grid templateColumns={{ base: '1fr', xl: '1fr 1fr' }} gap={5} alignItems="start">
+        <Grid templateColumns={{ base: '1fr', xl: '1fr 1fr' }} gap={5} alignItems="start" w="100%">
           <ToolPanel title="Key Generator" icon={KeyRound} badge={standard === 'ES256' ? 'Thingtime auth' : undefined}>
             <Stack spacing={4}>
               <Flex gap={2} wrap="wrap">
@@ -489,7 +490,7 @@ export default function CryptoPage() {
             </Stack>
           </ToolPanel>
         </Grid>
-      </Container>
+      </Box>
     </Box>
   );
 }

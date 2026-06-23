@@ -7,6 +7,10 @@
 - Before adding or changing agent instructions, check both `CLAUDE.md` and
   `AGENTS.md` for existing coverage. Keep shared rules in one canonical place
   with a pointer from the other file instead of duplicating long runbook text.
+- For layout or alignment changes, always verify the affected screen in a live
+  browser window before finishing. Use screenshot evidence or measured element
+  bounds across the relevant desktop/mobile viewport so centering, max-width,
+  overflow, and overlap behavior match the request.
 
 ## Fundamentals (read first)
 
