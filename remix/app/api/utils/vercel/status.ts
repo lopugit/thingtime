@@ -201,6 +201,25 @@ const getStringValue = (value: unknown, key: string): string | undefined => {
   return typeof nested === 'string' && nested ? nested : undefined;
 };
 
+const LIVE_STATUS_DEPLOYMENT_STATES = new Set<VercelDeploymentStatus['state']>([
+  'ready',
+  'building',
+  'queued',
+  'initializing',
+  'error',
+  'blocked',
+]);
+
+const getDeploymentState = (deployment: unknown) => {
+  return normaliseState(
+    getStringValue(deployment, 'state') || getStringValue(deployment, 'readyState')
+  );
+};
+
+const isLiveStatusDeployment = (deployment: unknown) => {
+  return LIVE_STATUS_DEPLOYMENT_STATES.has(getDeploymentState(deployment));
+};
+
 const getVercelApiHeaders = (token: string) => ({
   Authorization: `Bearer ${token}`,
   Accept: 'application/json'
@@ -563,9 +582,27 @@ const formatRelativeTime = (timestamp?: number) => {
 };
 
 const getLastReadyDeployment = (deployments: unknown[]) => {
-  return deployments.find((deployment) => normaliseState(
-    getStringValue(deployment, 'state') || getStringValue(deployment, 'readyState')
-  ) === 'ready');
+  return deployments.find((deployment) => getDeploymentState(deployment) === 'ready');
+};
+
+const isMatchingDeployment = ({
+  branch,
+  commitSha,
+  deployment,
+}: {
+  branch?: string;
+  commitSha?: string;
+  deployment: unknown;
+}) => {
+  const meta = getObjectValue(deployment, 'meta') || {};
+  const gitSource = getObjectValue(deployment, 'gitSource') || {};
+
+  return (
+    (commitSha && getStringValue(meta, 'githubCommitSha') === commitSha) ||
+    (commitSha && getStringValue(gitSource, 'sha') === commitSha) ||
+    (branch && getStringValue(meta, 'githubCommitRef') === branch) ||
+    (branch && getStringValue(gitSource, 'ref') === branch)
+  );
 };
 
 const getDeploymentId = (deployment: unknown) => {
@@ -797,22 +834,22 @@ export const getVercelDeploymentStatus = async (): Promise<VercelDeploymentStatu
     const deployments = Array.isArray(data?.deployments) ? data.deployments : [];
     const currentDeployment =
       deployments.find((deployment) => {
-        const meta = deployment?.meta || {};
-        const gitSource = deployment?.gitSource || {};
         return (
-          (commitSha && meta.githubCommitSha === commitSha) ||
-          (commitSha && gitSource.sha === commitSha) ||
-          (branch && meta.githubCommitRef === branch) ||
-          (branch && gitSource.ref === branch)
+          isLiveStatusDeployment(deployment) &&
+          isMatchingDeployment({
+            branch,
+            commitSha,
+            deployment
+          })
         );
-      }) || deployments[0];
+      }) || deployments.find(isLiveStatusDeployment);
 
     if (!currentDeployment) {
       return fallback;
     }
 
     const lastReadyDeployment = getLastReadyDeployment(deployments);
-    const state = normaliseState(currentDeployment.state || currentDeployment.readyState);
+    const state = getDeploymentState(currentDeployment);
     const latestDeploymentUrl = normaliseUrl(currentDeployment.url);
     const deploymentId =
       (typeof currentDeployment.uid === 'string' && currentDeployment.uid) ||

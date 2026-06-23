@@ -23,6 +23,9 @@ Detailed PR notes:
 
 ### Fixed
 
+- Ignored canceled Vercel deployments when selecting the footer deployment
+  status so skip-rule cancellations do not mask the latest live deployment
+  state. — _Codex (AI), 2026-06-24_
 - Hardened JWT auth so deployed runtimes fail closed without `JWT_SECRET`, and
   live session checks now require the session `userId` to match the JWT `sub`.
   — _Codex (AI), 2026-06-23_
