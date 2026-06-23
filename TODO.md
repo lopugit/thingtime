@@ -12,3 +12,15 @@
    to a canonical `APP_URL` or explicit host allowlist before relying on real
    email delivery, so unexpected or spoofed hosts cannot generate verification
    URLs on the wrong origin.
+
+3. **Remove legacy HS256 JWT fallback after ES256 migration.**
+
+   Keep `JWT_SECRET` only long enough to verify browser cookies minted before
+   ES256 signing shipped. After the 30-day auth cookie window, remove the
+   fallback verifier and the legacy secret from deployment environments.
+
+4. **Add revocation-aware token introspection for external platforms.**
+
+   `/api/v1/auth/jwks` lets third parties verify token signature, issuer, and
+   expiry offline. If an external integration needs live session revocation
+   status, add a server-side introspection endpoint that checks Mongo sessions.

@@ -31,6 +31,15 @@ Detailed PR notes:
 
 ### Changed
 
+- Added `/crypto` plus `/api/v1/crypto` key-generation and verification tools,
+  including format selectors for PEM, escaped PEM, base64 PEM, base64url PEM,
+  JWK JSON, and message encodings. — _Codex (AI), 2026-06-23_
+- Added a Remix `ensure-bcrypt` install/dev/build hook that repairs missing
+  `bcrypt_lib.node` native bindings before local Vite startup. — _Codex (AI),
+  2026-06-23_
+- Added ES256 JWT signing with a public JWKS endpoint at `/api/v1/auth/jwks`
+  for external verification, while keeping `JWT_SECRET` as a legacy HS256
+  migration fallback for existing sessions. — _Codex (AI), 2026-06-23_
 - Added a Mongo-backed rolling 10-per-hour IP quota for AI-backed Lopu musings;
   over-limit or rate-limit-storage failures now stream the built-in fallback
   library instead of calling weather or AI providers. — _Codex (AI), 2026-06-23_

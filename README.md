@@ -65,15 +65,64 @@ MONGODB_CONNECTION_STRING="mongodb://localhost:27017/thingtime"
 
 ## Auth and Lopu AI
 
-JWT-backed browser sessions require a signing secret in every deployed
-environment:
+JWT-backed browser sessions prefer ES256 asymmetric signing so other platforms
+can verify Thingtime-issued user tokens without knowing the private signing key.
+Configured asymmetric deployments publish the verification key at:
 
 ```sh
-JWT_SECRET="<long-random-secret>"
+/api/v1/auth/jwks
 ```
 
-Local development can run without `JWT_SECRET`, but preview and production
-auth fail closed until the secret is set.
+Use a P-256 private key in PKCS#8 PEM format and a public key in SPKI PEM
+format. The env vars accept either full PEM text with escaped `\n` newlines or
+base64-encoded PEM, which is easier to paste into Vercel:
+
+```sh
+JWT_PRIVATE_KEY="<base64-pkcs8-private-pem>"
+JWT_PUBLIC_KEY="<base64-spki-public-pem>"
+JWT_KEY_ID="thingtime-es256-1"
+JWT_ISSUER="https://thingtime.com"
+```
+
+Generate a fresh key pair with:
+
+```sh
+node <<'NODE'
+const { generateKeyPairSync } = require('node:crypto');
+
+const { privateKey, publicKey } = generateKeyPairSync('ec', {
+  namedCurve: 'P-256',
+});
+const encode = (key) => Buffer.from(key).toString('base64');
+
+console.log('JWT_PRIVATE_KEY=' + encode(privateKey.export({ type: 'pkcs8', format: 'pem' })));
+console.log('JWT_PUBLIC_KEY=' + encode(publicKey.export({ type: 'spki', format: 'pem' })));
+console.log('JWT_KEY_ID=thingtime-es256-1');
+console.log('JWT_ISSUER=https://thingtime.com');
+NODE
+```
+
+The app also exposes a local helper UI at `/crypto`, backed by
+`/api/v1/crypto`, for generating ES256 pairs, switching key encodings, checking
+private/public key matches, verifying JWTs, and verifying signed messages
+before pasting env vars into Vercel.
+
+`JWT_PUBLIC_KEY` is recommended for clarity, but the server can derive it from
+`JWT_PRIVATE_KEY` if only the private key is configured. Keep `JWT_SECRET`
+temporarily as a legacy HS256 verifier while older browser cookies expire:
+
+```sh
+JWT_SECRET="<legacy-long-random-secret>"
+```
+
+If neither asymmetric key material nor `JWT_SECRET` is set, preview and
+production auth fail closed. Local development can still run without keys using
+an insecure dev-only fallback.
+
+The JWKS endpoint supports offline signature, issuer, and expiry verification.
+It does not tell external platforms whether the backing Mongo session has been
+revoked; add a server-side introspection endpoint before relying on live
+revocation checks outside Thingtime.
 
 Lopu musings can optionally use Claude and/or OpenAI. Without these keys, the
 endpoint serves the built-in fallback library.

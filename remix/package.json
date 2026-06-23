@@ -3,9 +3,11 @@
   "sideEffects": false,
   "version": "1.0.0",
   "scripts": {
-    "build": "./scripts/pre-dev.sh && remix vite:build",
+    "build": "npm run ensure-bcrypt && ./scripts/pre-dev.sh && remix vite:build",
+    "ensure-bcrypt": "node scripts/ensure-bcrypt-binding.js",
+    "postinstall": "node scripts/ensure-bcrypt-binding.js",
     "pre-dev": "./scripts/pre-dev.sh",
-    "dev": "./scripts/pre-dev.sh && echo $BRANCH_NAME && remix vite:dev --host 127.0.0.1",
+    "dev": "npm run ensure-bcrypt && ./scripts/pre-dev.sh && echo $BRANCH_NAME && remix vite:dev --host 127.0.0.1",
     "lint": "eslint --ext .js,.ts,.jsx,.tsx .",
     "lint-fix": "eslint --ext .js,.ts,.jsx,.tsx . --fix",
     "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,css,scss,md}\""

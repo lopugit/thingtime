@@ -815,8 +815,8 @@
     "semantic_hash": "fa9cb4381573d5b9cddcb7f719359deb"
   },
   "remix/package.json": {
-    "mtime": 1782176036.8584952,
-    "ast_hash": "a1c527341c41befc7eda9cc1f046aba6",
+    "mtime": 1782179834.6662326,
+    "ast_hash": "7655f7855f0d2aad479acf6c30b09578",
     "semantic_hash": ""
   },
   "remix/public/manifest.json": {
@@ -855,8 +855,8 @@
     "semantic_hash": "6f47150939eacf6d3a89a87289013ea3"
   },
   "README.md": {
-    "mtime": 1782177883.4809694,
-    "ast_hash": "6786d61b111a34fee2e8d92da391e5dd",
+    "mtime": 1782180033.944224,
+    "ast_hash": "97a9333ab7b0b13baee3f985c10a4525",
     "semantic_hash": ""
   },
   "docs/Use Cases/car.md": {
@@ -995,8 +995,8 @@
     "semantic_hash": ""
   },
   "AGENTS.md": {
-    "mtime": 1782176036.847488,
-    "ast_hash": "800e09f98e8c8ad7f4194928c50a6e26",
+    "mtime": 1782179834.6665998,
+    "ast_hash": "22357e130b7b0ee578ba37598c539ea4",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -1805,13 +1805,13 @@
     "semantic_hash": ""
   },
   "TODO.md": {
-    "mtime": 1782177864.547962,
-    "ast_hash": "760c883e5324d203135ac77552628a5c",
+    "mtime": 1782178681.7443972,
+    "ast_hash": "64e7247d0105bff797435fd2c492715a",
     "semantic_hash": ""
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1782177883.4817905,
-    "ast_hash": "a92c06396935c3503c082190b359aff6",
+    "mtime": 1782179834.6677108,
+    "ast_hash": "ed2aa1470a2904b02d9f891f0048b0ef",
     "semantic_hash": ""
   },
   "remix/app/api/utils/vercel/status.ts": {
@@ -1870,8 +1870,8 @@
     "semantic_hash": ""
   },
   "remix/app/api/utils/auth/jwt.ts": {
-    "mtime": 1782177864.5444436,
-    "ast_hash": "3f085bb5eb8f6effb0158b57ccfaaef3",
+    "mtime": 1782178751.7720952,
+    "ast_hash": "b99c6f5696f303a2da6b75074e371baf",
     "semantic_hash": ""
   },
   "remix/app/api/utils/auth/loginUser.ts": {
@@ -2030,8 +2030,33 @@
     "semantic_hash": ""
   },
   "remix/PRs/16-resolve-main-into-thingtime-dev-branch.md": {
-    "mtime": 1782177935.7686098,
-    "ast_hash": "5fe738d622401a4b4fd6fcb4bf5fe621",
+    "mtime": 1782180033.9446287,
+    "ast_hash": "b7bc78bd8c6bef639f284c92fd8d6fa0",
+    "semantic_hash": ""
+  },
+  "remix/app/api/utils/crypto/cryptoTools.server.ts": {
+    "mtime": 1782179278.9070683,
+    "ast_hash": "7402639c9c6d111633537d26c86876a1",
+    "semantic_hash": ""
+  },
+  "remix/app/routes/api/v1/auth/jwks/_jwks.tsx": {
+    "mtime": 1782178649.678351,
+    "ast_hash": "561882e7a3495b1707d8ccacf2d98fbb",
+    "semantic_hash": ""
+  },
+  "remix/app/routes/api/v1/crypto/_crypto.tsx": {
+    "mtime": 1782179015.7599075,
+    "ast_hash": "ea8ceeb23e20669993c18071b2f293ce",
+    "semantic_hash": ""
+  },
+  "remix/app/routes/crypto.tsx": {
+    "mtime": 1782179346.5930412,
+    "ast_hash": "5826f1d6bc027d887eb5af295b597197",
+    "semantic_hash": ""
+  },
+  "remix/scripts/ensure-bcrypt-binding.js": {
+    "mtime": 1782179834.6657314,
+    "ast_hash": "33c41e5c78a7edd4008ff2e5107fbf31",
     "semantic_hash": ""
   }
 }
