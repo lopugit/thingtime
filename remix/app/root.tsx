@@ -16,6 +16,7 @@ import { ThingtimeProvider } from './Providers/ThingtimeProvider';
 import { json } from '@vercel/remix';
 import { DevKit } from './components/DevKit/DevKit';
 import { getCurrentUser } from './api/utils/auth/getCurrentUser';
+import { NativeBridgeHost } from './components/NativeBridge/NativeBridgeHost';
 
 type DocumentProps = {
   children: React.ReactNode;
@@ -110,6 +111,7 @@ export default function App() {
       <ChakraWrapper>
         <GlobalStyles />
         <ThingtimeProvider>
+          {mounted ? <NativeBridgeHost /> : null}
           <DevKit />
           <Main>
             <Outlet />

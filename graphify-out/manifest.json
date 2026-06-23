@@ -700,8 +700,8 @@
     "semantic_hash": "c4054b1dfdb64ee989f94d84a82f34b0"
   },
   "remix/app/root.tsx": {
-    "mtime": 1782186283.8895347,
-    "ast_hash": "0cf3bc745f4e5bf447eb27a6c7ffc8d2",
+    "mtime": 1782213346.891463,
+    "ast_hash": "147b7933a3b0d8b1d66327df35251965",
     "semantic_hash": ""
   },
   "remix/app/routes/$.tsx": {
@@ -2095,8 +2095,8 @@
     "semantic_hash": ""
   },
   "iOS/Thingtime/Web/WebView.swift": {
-    "mtime": 1782212406.67666,
-    "ast_hash": "195837f36587c582e4004cad583e2867",
+    "mtime": 1782213346.8906667,
+    "ast_hash": "c3625aec4364c3da0fa88e6998801449",
     "semantic_hash": ""
   },
   "iOS/ThingtimeTests/ThingtimeWebDestinationTests.swift": {
@@ -2137,6 +2137,16 @@
   "iOS/project.yml": {
     "mtime": 1782212406.6734364,
     "ast_hash": "7a319374c6db7b952ba10a626c888162",
+    "semantic_hash": ""
+  },
+  "remix/app/components/NativeBridge/NativeBridgeHost.tsx": {
+    "mtime": 1782213346.8911984,
+    "ast_hash": "0764e4a310e585e50d45dfc06b18bcbe",
+    "semantic_hash": ""
+  },
+  "remix/app/utils/nativeBridge.ts": {
+    "mtime": 1782213346.8908644,
+    "ast_hash": "c64df66b18e07a8201e80def07e7cceb",
     "semantic_hash": ""
   }
 }
