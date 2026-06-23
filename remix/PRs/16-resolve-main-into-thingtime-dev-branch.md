@@ -22,6 +22,8 @@
   key formats.
 - Remix local dev/build scripts now run an `ensure-bcrypt` check that repairs a
   missing `bcrypt_lib.node` native binding before Vite starts.
+- `AGENTS.md` and `CLAUDE.md` now both instruct future agents to read both repo
+  instruction files and avoid duplicating long shared runbook rules.
 - `/api/v1/lopu/musing` now checks a Mongo-backed rolling quota before making
   weather or AI provider calls when Claude/OpenAI keys are configured.
 - The quota allows 10 AI-backed musings per detected IP address per rolling

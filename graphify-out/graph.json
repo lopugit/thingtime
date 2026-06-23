@@ -3840,7 +3840,7 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "providers_thingtimeprovider_thingtimecontext",
-      "community": 7,
+      "community": 35,
       "norm_label": "thingtimecontext"
     },
     {
@@ -5630,7 +5630,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "api_submit",
-      "community": 35,
+      "community": 2,
       "norm_label": "submit.tsx"
     },
     {
@@ -5640,7 +5640,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "api_submit_submit",
-      "community": 35,
+      "community": 2,
       "norm_label": "submit()"
     },
     {
@@ -5900,7 +5900,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "icon_icon",
-      "community": 45,
+      "community": 46,
       "norm_label": "icon.tsx"
     },
     {
@@ -5910,7 +5910,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "icon_icon_icon",
-      "community": 45,
+      "community": 46,
       "norm_label": "icon()"
     },
     {
@@ -5930,7 +5930,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "layout_main_main",
-      "community": 9,
+      "community": 45,
       "norm_label": "main()"
     },
     {
@@ -6380,7 +6380,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "rainbow_rainbow",
-      "community": 11,
+      "community": 93,
       "norm_label": "rainbow.tsx"
     },
     {
@@ -6390,7 +6390,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "rainbow_rainbow_rainbow",
-      "community": 11,
+      "community": 93,
       "norm_label": "rainbow()"
     },
     {
@@ -6440,7 +6440,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "splash_splash",
-      "community": 39,
+      "community": 72,
       "norm_label": "splash.tsx"
     },
     {
@@ -6450,7 +6450,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "splash_splash_splash",
-      "community": 39,
+      "community": 72,
       "norm_label": "splash()"
     },
     {
@@ -6490,7 +6490,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "thingtime_settingsmenu",
-      "community": 45,
+      "community": 46,
       "norm_label": "settingsmenu.tsx"
     },
     {
@@ -6500,7 +6500,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "thingtime_settingsmenu_settingsmenu",
-      "community": 45,
+      "community": 46,
       "norm_label": "settingsmenu()"
     },
     {
@@ -7260,7 +7260,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "hooks_useasyncfetcher",
-      "community": 35,
+      "community": 2,
       "norm_label": "useasyncfetcher.tsx"
     },
     {
@@ -7270,7 +7270,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "hooks_useasyncfetcher_useasyncfetcher",
-      "community": 35,
+      "community": 2,
       "norm_label": "useasyncfetcher()"
     },
     {
@@ -7350,7 +7350,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "hooks_useprops",
-      "community": 11,
+      "community": 93,
       "norm_label": "useprops.tsx"
     },
     {
@@ -7360,7 +7360,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "hooks_useprops_useprops",
-      "community": 11,
+      "community": 93,
       "norm_label": "useprops()"
     },
     {
@@ -7490,7 +7490,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "hooks_usetrace",
-      "community": 11,
+      "community": 93,
       "norm_label": "usetrace.tsx"
     },
     {
@@ -7500,7 +7500,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "hooks_usetrace_usetrace",
-      "community": 11,
+      "community": 93,
       "norm_label": "usetrace()"
     },
     {
@@ -7510,7 +7510,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "hooks_useuuid",
-      "community": 11,
+      "community": 93,
       "norm_label": "useuuid.tsx"
     },
     {
@@ -7520,7 +7520,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "hooks_useuuid_useuuid",
-      "community": 11,
+      "community": 93,
       "norm_label": "useuuid()"
     },
     {
@@ -8450,7 +8450,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "routes_login_loader",
-      "community": 16,
+      "community": 46,
       "norm_label": "loader()"
     },
     {
@@ -8550,7 +8550,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "routes_rainbow",
-      "community": 39,
+      "community": 72,
       "norm_label": "rainbow.$.tsx"
     },
     {
@@ -8560,7 +8560,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "routes_rainbow_index",
-      "community": 39,
+      "community": 72,
       "norm_label": "index()"
     },
     {
@@ -8700,7 +8700,7 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "routes_welcome_loader",
-      "community": 16,
+      "community": 46,
       "norm_label": "loader()"
     },
     {
@@ -8910,7 +8910,7 @@
       "source_location": "L59",
       "_origin": "ast",
       "id": "smarts_index_getparentpath",
-      "community": 45,
+      "community": 72,
       "norm_label": "getparentpath()"
     },
     {
@@ -9890,7 +9890,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "utils_index_stringliteraltorichtext",
-      "community": 7,
+      "community": 72,
       "norm_label": "stringliteraltorichtext()"
     },
     {
@@ -11413,7 +11413,7 @@
       "label": "graphify",
       "file_type": "document",
       "source_file": "AGENTS.md",
-      "source_location": "L20",
+      "source_location": "L27",
       "_origin": "ast",
       "id": "agents_graphify",
       "community": 44,
@@ -11423,7 +11423,7 @@
       "label": "Delivery messaging",
       "file_type": "document",
       "source_file": "AGENTS.md",
-      "source_location": "L31",
+      "source_location": "L38",
       "_origin": "ast",
       "id": "agents_delivery_messaging",
       "community": 44,
@@ -11440,10 +11440,20 @@
       "norm_label": "claude.md"
     },
     {
-      "label": "Fundamentals (read first)",
+      "label": "Shared agent instructions",
       "file_type": "document",
       "source_file": "CLAUDE.md",
       "source_location": "L1",
+      "_origin": "ast",
+      "id": "claude_shared_agent_instructions",
+      "community": 49,
+      "norm_label": "shared agent instructions"
+    },
+    {
+      "label": "Fundamentals (read first)",
+      "file_type": "document",
+      "source_file": "CLAUDE.md",
+      "source_location": "L11",
       "_origin": "ast",
       "id": "claude_fundamentals_read_first",
       "community": 49,
@@ -11453,7 +11463,7 @@
       "label": "graphify",
       "file_type": "document",
       "source_file": "CLAUDE.md",
-      "source_location": "L12",
+      "source_location": "L22",
       "_origin": "ast",
       "id": "claude_graphify",
       "community": 49,
@@ -12693,7 +12703,7 @@
       "label": "PR #13 - Remix Hydration, Vercel Status, And Deployment Hygiene",
       "file_type": "document",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L47",
+      "source_location": "L50",
       "_origin": "ast",
       "id": "remix_changelog_pr_13_remix_hydration_vercel_status_and_deployment_hygiene",
       "community": 78,
@@ -12703,7 +12713,7 @@
       "label": "Added",
       "file_type": "document",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L52",
+      "source_location": "L55",
       "_origin": "ast",
       "id": "remix_changelog_added",
       "community": 78,
@@ -12713,9 +12723,9 @@
       "label": "Changed",
       "file_type": "document",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L63",
+      "source_location": "L66",
       "_origin": "ast",
-      "id": "remix_changelog_changed_63",
+      "id": "remix_changelog_changed_66",
       "community": 78,
       "norm_label": "changed"
     },
@@ -12723,9 +12733,9 @@
       "label": "Fixed",
       "file_type": "document",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L101",
+      "source_location": "L104",
       "_origin": "ast",
-      "id": "remix_changelog_fixed_101",
+      "id": "remix_changelog_fixed_104",
       "community": 78,
       "norm_label": "fixed"
     },
@@ -12733,7 +12743,7 @@
       "label": "Verified",
       "file_type": "document",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L112",
+      "source_location": "L115",
       "_origin": "ast",
       "id": "remix_changelog_verified",
       "community": 78,
@@ -12743,7 +12753,7 @@
       "label": "[1.0.0] - YYYY-MM-DD",
       "file_type": "document",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L122",
+      "source_location": "L125",
       "_origin": "ast",
       "id": "remix_changelog_1_0_0_yyyy_mm_dd",
       "community": 78,
@@ -12893,7 +12903,7 @@
       "label": "Follow-Up",
       "file_type": "document",
       "source_file": "remix/PRs/16-resolve-main-into-thingtime-dev-branch.md",
-      "source_location": "L31",
+      "source_location": "L33",
       "_origin": "ast",
       "id": "prs_16_resolve_main_into_thingtime_dev_branch_follow_up",
       "community": 83,
@@ -12903,7 +12913,7 @@
       "label": "Verification",
       "file_type": "document",
       "source_file": "remix/PRs/16-resolve-main-into-thingtime-dev-branch.md",
-      "source_location": "L38",
+      "source_location": "L40",
       "_origin": "ast",
       "id": "prs_16_resolve_main_into_thingtime_dev_branch_verification",
       "community": 83,
@@ -22066,9 +22076,9 @@
       "source_file": "remix/app/api/utils/auth/jwt.ts",
       "source_location": "L36",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_jwt",
-      "target": "auth_jwt_getes256signingkey",
-      "confidence_score": 1.0
+      "target": "auth_jwt_getes256signingkey"
     },
     {
       "relation": "contains",
@@ -22076,9 +22086,9 @@
       "source_file": "remix/app/api/utils/auth/jwt.ts",
       "source_location": "L59",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_jwt",
-      "target": "auth_jwt_getes256verifykey",
-      "confidence_score": 1.0
+      "target": "auth_jwt_getes256verifykey"
     },
     {
       "relation": "contains",
@@ -22086,9 +22096,9 @@
       "source_file": "remix/app/api/utils/auth/jwt.ts",
       "source_location": "L32",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_jwt",
-      "target": "auth_jwt_getjwtissuer",
-      "confidence_score": 1.0
+      "target": "auth_jwt_getjwtissuer"
     },
     {
       "relation": "contains",
@@ -22096,9 +22106,9 @@
       "source_file": "remix/app/api/utils/auth/jwt.ts",
       "source_location": "L30",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_jwt",
-      "target": "auth_jwt_getjwtkeyid",
-      "confidence_score": 1.0
+      "target": "auth_jwt_getjwtkeyid"
     },
     {
       "relation": "contains",
@@ -22106,9 +22116,9 @@
       "source_file": "remix/app/api/utils/auth/jwt.ts",
       "source_location": "L75",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_jwt",
-      "target": "auth_jwt_getlegacysecret",
-      "confidence_score": 1.0
+      "target": "auth_jwt_getlegacysecret"
     },
     {
       "relation": "contains",
@@ -22116,9 +22126,9 @@
       "source_file": "remix/app/api/utils/auth/jwt.ts",
       "source_location": "L21",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_jwt",
-      "target": "auth_jwt_getprivatekeypem",
-      "confidence_score": 1.0
+      "target": "auth_jwt_getprivatekeypem"
     },
     {
       "relation": "contains",
@@ -22126,9 +22136,9 @@
       "source_file": "remix/app/api/utils/auth/jwt.ts",
       "source_location": "L44",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_jwt",
-      "target": "auth_jwt_getpublicjwk",
-      "confidence_score": 1.0
+      "target": "auth_jwt_getpublicjwk"
     },
     {
       "relation": "contains",
@@ -22136,9 +22146,9 @@
       "source_file": "remix/app/api/utils/auth/jwt.ts",
       "source_location": "L145",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_jwt",
-      "target": "auth_jwt_getpublicjwks",
-      "confidence_score": 1.0
+      "target": "auth_jwt_getpublicjwks"
     },
     {
       "relation": "contains",
@@ -22146,9 +22156,9 @@
       "source_file": "remix/app/api/utils/auth/jwt.ts",
       "source_location": "L23",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_jwt",
-      "target": "auth_jwt_getpublickeypem",
-      "confidence_score": 1.0
+      "target": "auth_jwt_getpublickeypem"
     },
     {
       "relation": "contains",
@@ -22156,9 +22166,9 @@
       "source_file": "remix/app/api/utils/auth/jwt.ts",
       "source_location": "L34",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_jwt",
-      "target": "auth_jwt_hasasymmetricjwtkeys",
-      "confidence_score": 1.0
+      "target": "auth_jwt_hasasymmetricjwtkeys"
     },
     {
       "relation": "contains",
@@ -22176,9 +22186,9 @@
       "source_file": "remix/app/api/utils/auth/jwt.ts",
       "source_location": "L11",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_jwt",
-      "target": "auth_jwt_normalizepem",
-      "confidence_score": 1.0
+      "target": "auth_jwt_normalizepem"
     },
     {
       "relation": "contains",
@@ -22186,9 +22196,9 @@
       "source_file": "remix/app/api/utils/auth/jwt.ts",
       "source_location": "L90",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_jwt",
-      "target": "auth_jwt_publicjwks",
-      "confidence_score": 1.0
+      "target": "auth_jwt_publicjwks"
     },
     {
       "relation": "contains",
@@ -22239,9 +22249,9 @@
       "source_file": "remix/app/routes/api/v1/auth/jwks/_jwks.tsx",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "jwks_jwks",
-      "target": "auth_jwt",
-      "confidence_score": 1.0
+      "target": "auth_jwt"
     },
     {
       "relation": "imports_from",
@@ -22261,9 +22271,9 @@
       "source_file": "remix/app/api/utils/auth/jwt.ts",
       "source_location": "L21",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_jwt_getprivatekeypem",
-      "target": "auth_jwt_normalizepem",
-      "confidence_score": 1.0
+      "target": "auth_jwt_normalizepem"
     },
     {
       "relation": "calls",
@@ -22272,9 +22282,9 @@
       "source_file": "remix/app/api/utils/auth/jwt.ts",
       "source_location": "L24",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_jwt_getpublickeypem",
-      "target": "auth_jwt_normalizepem",
-      "confidence_score": 1.0
+      "target": "auth_jwt_normalizepem"
     },
     {
       "relation": "calls",
@@ -22283,9 +22293,9 @@
       "source_file": "remix/app/api/utils/auth/jwt.ts",
       "source_location": "L37",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_jwt_getes256signingkey",
-      "target": "auth_jwt_getprivatekeypem",
-      "confidence_score": 1.0
+      "target": "auth_jwt_getprivatekeypem"
     },
     {
       "relation": "calls",
@@ -22294,9 +22304,9 @@
       "source_file": "remix/app/api/utils/auth/jwt.ts",
       "source_location": "L66",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_jwt_getes256verifykey",
-      "target": "auth_jwt_getprivatekeypem",
-      "confidence_score": 1.0
+      "target": "auth_jwt_getprivatekeypem"
     },
     {
       "relation": "calls",
@@ -22305,9 +22315,9 @@
       "source_file": "remix/app/api/utils/auth/jwt.ts",
       "source_location": "L34",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_jwt_hasasymmetricjwtkeys",
-      "target": "auth_jwt_getprivatekeypem",
-      "confidence_score": 1.0
+      "target": "auth_jwt_getprivatekeypem"
     },
     {
       "relation": "calls",
@@ -22316,9 +22326,9 @@
       "source_file": "remix/app/api/utils/auth/jwt.ts",
       "source_location": "L60",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_jwt_getes256verifykey",
-      "target": "auth_jwt_getpublickeypem",
-      "confidence_score": 1.0
+      "target": "auth_jwt_getpublickeypem"
     },
     {
       "relation": "calls",
@@ -22327,9 +22337,9 @@
       "source_file": "remix/app/api/utils/auth/jwt.ts",
       "source_location": "L45",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_jwt_getpublicjwk",
-      "target": "auth_jwt_getpublickeypem",
-      "confidence_score": 1.0
+      "target": "auth_jwt_getpublickeypem"
     },
     {
       "relation": "calls",
@@ -22338,9 +22348,9 @@
       "source_file": "remix/app/api/utils/auth/jwt.ts",
       "source_location": "L34",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_jwt_hasasymmetricjwtkeys",
-      "target": "auth_jwt_getpublickeypem",
-      "confidence_score": 1.0
+      "target": "auth_jwt_getpublickeypem"
     },
     {
       "relation": "calls",
@@ -22349,9 +22359,9 @@
       "source_file": "remix/app/api/utils/auth/jwt.ts",
       "source_location": "L155",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_jwt_getpublicjwks",
-      "target": "auth_jwt_getjwtkeyid",
-      "confidence_score": 1.0
+      "target": "auth_jwt_getjwtkeyid"
     },
     {
       "relation": "calls",
@@ -22360,9 +22370,9 @@
       "source_file": "remix/app/api/utils/auth/jwt.ts",
       "source_location": "L98",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_jwt_signjwt",
-      "target": "auth_jwt_getjwtkeyid",
-      "confidence_score": 1.0
+      "target": "auth_jwt_getjwtkeyid"
     },
     {
       "relation": "calls",
@@ -22371,9 +22381,9 @@
       "source_file": "remix/app/api/utils/auth/jwt.ts",
       "source_location": "L99",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_jwt_signjwt",
-      "target": "auth_jwt_getjwtissuer",
-      "confidence_score": 1.0
+      "target": "auth_jwt_getjwtissuer"
     },
     {
       "relation": "imports",
@@ -22382,9 +22392,9 @@
       "source_file": "remix/app/routes/api/v1/auth/jwks/_jwks.tsx",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "jwks_jwks",
-      "target": "auth_jwt_hasasymmetricjwtkeys",
-      "confidence_score": 1.0
+      "target": "auth_jwt_hasasymmetricjwtkeys"
     },
     {
       "relation": "calls",
@@ -22404,9 +22414,9 @@
       "source_file": "remix/app/api/utils/auth/jwt.ts",
       "source_location": "L51",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_jwt_getpublicjwk",
-      "target": "auth_jwt_getes256signingkey",
-      "confidence_score": 1.0
+      "target": "auth_jwt_getes256signingkey"
     },
     {
       "relation": "calls",
@@ -22415,9 +22425,9 @@
       "source_file": "remix/app/api/utils/auth/jwt.ts",
       "source_location": "L95",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_jwt_signjwt",
-      "target": "auth_jwt_getes256signingkey",
-      "confidence_score": 1.0
+      "target": "auth_jwt_getes256signingkey"
     },
     {
       "relation": "calls",
@@ -22426,9 +22436,9 @@
       "source_file": "remix/app/api/utils/auth/jwt.ts",
       "source_location": "L68",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_jwt_getes256verifykey",
-      "target": "auth_jwt_getpublicjwk",
-      "confidence_score": 1.0
+      "target": "auth_jwt_getpublicjwk"
     },
     {
       "relation": "calls",
@@ -22437,9 +22447,9 @@
       "source_file": "remix/app/api/utils/auth/jwt.ts",
       "source_location": "L146",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_jwt_getpublicjwks",
-      "target": "auth_jwt_getpublicjwk",
-      "confidence_score": 1.0
+      "target": "auth_jwt_getpublicjwk"
     },
     {
       "relation": "calls",
@@ -22448,9 +22458,9 @@
       "source_file": "remix/app/api/utils/auth/jwt.ts",
       "source_location": "L122",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_jwt_verifyjwt",
-      "target": "auth_jwt_getes256verifykey",
-      "confidence_score": 1.0
+      "target": "auth_jwt_getes256verifykey"
     },
     {
       "relation": "calls",
@@ -22459,9 +22469,9 @@
       "source_file": "remix/app/api/utils/auth/jwt.ts",
       "source_location": "L107",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_jwt_signjwt",
-      "target": "auth_jwt_getlegacysecret",
-      "confidence_score": 1.0
+      "target": "auth_jwt_getlegacysecret"
     },
     {
       "relation": "calls",
@@ -22470,9 +22480,9 @@
       "source_file": "remix/app/api/utils/auth/jwt.ts",
       "source_location": "L133",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "auth_jwt_verifyjwt",
-      "target": "auth_jwt_getlegacysecret",
-      "confidence_score": 1.0
+      "target": "auth_jwt_getlegacysecret"
     },
     {
       "relation": "imports",
@@ -22547,9 +22557,9 @@
       "source_file": "remix/app/routes/api/v1/auth/jwks/_jwks.tsx",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "jwks_jwks",
-      "target": "auth_jwt_getpublicjwks",
-      "confidence_score": 1.0
+      "target": "auth_jwt_getpublicjwks"
     },
     {
       "relation": "calls",
@@ -23365,9 +23375,9 @@
       "source_file": "remix/app/routes/api/v1/crypto/_crypto.tsx",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_crypto",
-      "target": "crypto_cryptotools_server",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server"
     },
     {
       "relation": "contains",
@@ -23375,9 +23385,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L87",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server",
-      "target": "crypto_cryptotools_server_base64urltobase64",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_base64urltobase64"
     },
     {
       "relation": "contains",
@@ -23385,9 +23395,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L163",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server",
-      "target": "crypto_cryptotools_server_configuredpublicpem",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_configuredpublicpem"
     },
     {
       "relation": "contains",
@@ -23395,9 +23405,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L32",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server",
-      "target": "crypto_cryptotools_server_crypto_standards",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_crypto_standards"
     },
     {
       "relation": "contains",
@@ -23405,9 +23415,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L10",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server",
-      "target": "crypto_cryptotools_server_cryptostandard",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_cryptostandard"
     },
     {
       "relation": "contains",
@@ -23415,9 +23425,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L92",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server",
-      "target": "crypto_cryptotools_server_decodebase64urltext",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_decodebase64urltext"
     },
     {
       "relation": "contains",
@@ -23425,9 +23435,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L101",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server",
-      "target": "crypto_cryptotools_server_decodekeymaterial",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_decodekeymaterial"
     },
     {
       "relation": "contains",
@@ -23435,9 +23445,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L181",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server",
-      "target": "crypto_cryptotools_server_decodesignature",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_decodesignature"
     },
     {
       "relation": "contains",
@@ -23445,9 +23455,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L94",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server",
-      "target": "crypto_cryptotools_server_decodetext",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_decodetext"
     },
     {
       "relation": "contains",
@@ -23455,9 +23465,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L133",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server",
-      "target": "crypto_cryptotools_server_encodepembase64",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_encodepembase64"
     },
     {
       "relation": "contains",
@@ -23465,9 +23475,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L134",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server",
-      "target": "crypto_cryptotools_server_encodepembase64url",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_encodepembase64url"
     },
     {
       "relation": "contains",
@@ -23475,9 +23485,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L85",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server",
-      "target": "crypto_cryptotools_server_errormessage",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_errormessage"
     },
     {
       "relation": "contains",
@@ -23485,9 +23495,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L136",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server",
-      "target": "crypto_cryptotools_server_escapepem",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_escapepem"
     },
     {
       "relation": "contains",
@@ -23495,9 +23505,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L143",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server",
-      "target": "crypto_cryptotools_server_exportprivatepem",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_exportprivatepem"
     },
     {
       "relation": "contains",
@@ -23505,9 +23515,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L146",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server",
-      "target": "crypto_cryptotools_server_exportpublicpem",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_exportpublicpem"
     },
     {
       "relation": "contains",
@@ -23515,9 +23525,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L191",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server",
-      "target": "crypto_cryptotools_server_generatecryptokeypair",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_generatecryptokeypair"
     },
     {
       "relation": "contains",
@@ -23525,9 +23535,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L63",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server",
-      "target": "crypto_cryptotools_server_generateinput",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_generateinput"
     },
     {
       "relation": "contains",
@@ -23535,9 +23545,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L138",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server",
-      "target": "crypto_cryptotools_server_getstandard",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_getstandard"
     },
     {
       "relation": "contains",
@@ -23545,9 +23555,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L11",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server",
-      "target": "crypto_cryptotools_server_keyencoding",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_keyencoding"
     },
     {
       "relation": "contains",
@@ -23555,9 +23565,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L22",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server",
-      "target": "crypto_cryptotools_server_keyinput",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_keyinput"
     },
     {
       "relation": "contains",
@@ -23565,9 +23575,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L316",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server",
-      "target": "crypto_cryptotools_server_matchkeypairinput",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_matchkeypairinput"
     },
     {
       "relation": "contains",
@@ -23575,9 +23585,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L149",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server",
-      "target": "crypto_cryptotools_server_normalizeprivatepem",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_normalizeprivatepem"
     },
     {
       "relation": "contains",
@@ -23585,9 +23595,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L155",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server",
-      "target": "crypto_cryptotools_server_normalizepublicpem",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_normalizepublicpem"
     },
     {
       "relation": "contains",
@@ -23595,9 +23605,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L161",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server",
-      "target": "crypto_cryptotools_server_publicpemfromprivatepem",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_publicpemfromprivatepem"
     },
     {
       "relation": "contains",
@@ -23605,9 +23615,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L171",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server",
-      "target": "crypto_cryptotools_server_resolvepublicpem",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_resolvepublicpem"
     },
     {
       "relation": "contains",
@@ -23615,9 +23625,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L14",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server",
-      "target": "crypto_cryptotools_server_standardconfig",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_standardconfig"
     },
     {
       "relation": "contains",
@@ -23625,9 +23635,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L12",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server",
-      "target": "crypto_cryptotools_server_textencoding",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_textencoding"
     },
     {
       "relation": "contains",
@@ -23635,9 +23645,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L262",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server",
-      "target": "crypto_cryptotools_server_verifyjwtinput",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_verifyjwtinput"
     },
     {
       "relation": "contains",
@@ -23645,9 +23655,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L75",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server",
-      "target": "crypto_cryptotools_server_verifysignatureinput",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_verifysignatureinput"
     },
     {
       "relation": "contains",
@@ -23655,9 +23665,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L299",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server",
-      "target": "crypto_cryptotools_server_verifysignedmessageinput",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_verifysignedmessageinput"
     },
     {
       "relation": "imports",
@@ -23666,9 +23676,9 @@
       "source_file": "remix/app/routes/api/v1/crypto/_crypto.tsx",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_crypto",
-      "target": "crypto_cryptotools_server_crypto_standards",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_crypto_standards"
     },
     {
       "relation": "imports",
@@ -23677,9 +23687,9 @@
       "source_file": "remix/app/routes/api/v1/crypto/_crypto.tsx",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_crypto",
-      "target": "crypto_cryptotools_server_verifyjwtinput",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_verifyjwtinput"
     },
     {
       "relation": "calls",
@@ -23699,9 +23709,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L295",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server_verifyjwtinput",
-      "target": "crypto_cryptotools_server_errormessage",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_errormessage"
     },
     {
       "relation": "calls",
@@ -23710,9 +23720,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L282",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server_verifyjwtinput",
-      "target": "crypto_cryptotools_server_resolvepublicpem",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_resolvepublicpem"
     },
     {
       "relation": "imports",
@@ -23721,9 +23731,9 @@
       "source_file": "remix/app/routes/api/v1/crypto/_crypto.tsx",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_crypto",
-      "target": "crypto_cryptotools_server_matchkeypairinput",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_matchkeypairinput"
     },
     {
       "relation": "calls",
@@ -23743,9 +23753,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L317",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server_matchkeypairinput",
-      "target": "crypto_cryptotools_server_normalizeprivatepem",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_normalizeprivatepem"
     },
     {
       "relation": "calls",
@@ -23754,9 +23764,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L318",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server_matchkeypairinput",
-      "target": "crypto_cryptotools_server_normalizepublicpem",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_normalizepublicpem"
     },
     {
       "relation": "calls",
@@ -23765,9 +23775,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L329",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server_matchkeypairinput",
-      "target": "crypto_cryptotools_server_publicpemfromprivatepem",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_publicpemfromprivatepem"
     },
     {
       "relation": "calls",
@@ -23776,9 +23786,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L92",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server_decodebase64urltext",
-      "target": "crypto_cryptotools_server_base64urltobase64",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_base64urltobase64"
     },
     {
       "relation": "calls",
@@ -23787,9 +23797,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L186",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server_decodesignature",
-      "target": "crypto_cryptotools_server_base64urltobase64",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_base64urltobase64"
     },
     {
       "relation": "calls",
@@ -23798,9 +23808,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L97",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server_decodetext",
-      "target": "crypto_cryptotools_server_base64urltobase64",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_base64urltobase64"
     },
     {
       "relation": "calls",
@@ -23809,9 +23819,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L109",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server_decodekeymaterial",
-      "target": "crypto_cryptotools_server_decodebase64urltext",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_decodebase64urltext"
     },
     {
       "relation": "calls",
@@ -23820,9 +23830,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L304",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server_verifysignedmessageinput",
-      "target": "crypto_cryptotools_server_decodetext",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_decodetext"
     },
     {
       "relation": "calls",
@@ -23831,9 +23841,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L150",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server_normalizeprivatepem",
-      "target": "crypto_cryptotools_server_decodekeymaterial",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_decodekeymaterial"
     },
     {
       "relation": "calls",
@@ -23842,9 +23852,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L156",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server_normalizepublicpem",
-      "target": "crypto_cryptotools_server_decodekeymaterial",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_decodekeymaterial"
     },
     {
       "relation": "calls",
@@ -23853,9 +23863,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L135",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server_encodepembase64url",
-      "target": "crypto_cryptotools_server_encodepembase64",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_encodepembase64"
     },
     {
       "relation": "calls",
@@ -23864,9 +23874,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L200",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server_generatecryptokeypair",
-      "target": "crypto_cryptotools_server_encodepembase64",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_encodepembase64"
     },
     {
       "relation": "calls",
@@ -23875,9 +23885,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L202",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server_generatecryptokeypair",
-      "target": "crypto_cryptotools_server_encodepembase64url",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_encodepembase64url"
     },
     {
       "relation": "calls",
@@ -23886,9 +23896,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L196",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server_generatecryptokeypair",
-      "target": "crypto_cryptotools_server_escapepem",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_escapepem"
     },
     {
       "relation": "calls",
@@ -23897,9 +23907,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L192",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server_generatecryptokeypair",
-      "target": "crypto_cryptotools_server_getstandard",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_getstandard"
     },
     {
       "relation": "calls",
@@ -23908,9 +23918,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L300",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server_verifysignedmessageinput",
-      "target": "crypto_cryptotools_server_getstandard",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_getstandard"
     },
     {
       "relation": "calls",
@@ -23919,9 +23929,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L194",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server_generatecryptokeypair",
-      "target": "crypto_cryptotools_server_exportprivatepem",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_exportprivatepem"
     },
     {
       "relation": "calls",
@@ -23930,9 +23940,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L152",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server_normalizeprivatepem",
-      "target": "crypto_cryptotools_server_exportprivatepem",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_exportprivatepem"
     },
     {
       "relation": "calls",
@@ -23941,9 +23951,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L195",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server_generatecryptokeypair",
-      "target": "crypto_cryptotools_server_exportpublicpem",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_exportpublicpem"
     },
     {
       "relation": "calls",
@@ -23952,9 +23962,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L158",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server_normalizepublicpem",
-      "target": "crypto_cryptotools_server_exportpublicpem",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_exportpublicpem"
     },
     {
       "relation": "calls",
@@ -23963,9 +23973,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L161",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server_publicpemfromprivatepem",
-      "target": "crypto_cryptotools_server_exportpublicpem",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_exportpublicpem"
     },
     {
       "relation": "calls",
@@ -23974,9 +23984,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L167",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server_configuredpublicpem",
-      "target": "crypto_cryptotools_server_normalizeprivatepem",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_normalizeprivatepem"
     },
     {
       "relation": "calls",
@@ -23985,9 +23995,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L175",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server_resolvepublicpem",
-      "target": "crypto_cryptotools_server_normalizeprivatepem",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_normalizeprivatepem"
     },
     {
       "relation": "calls",
@@ -23996,9 +24006,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L164",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server_configuredpublicpem",
-      "target": "crypto_cryptotools_server_normalizepublicpem",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_normalizepublicpem"
     },
     {
       "relation": "calls",
@@ -24007,9 +24017,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L172",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server_resolvepublicpem",
-      "target": "crypto_cryptotools_server_normalizepublicpem",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_normalizepublicpem"
     },
     {
       "relation": "calls",
@@ -24018,9 +24028,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L168",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server_configuredpublicpem",
-      "target": "crypto_cryptotools_server_publicpemfromprivatepem",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_publicpemfromprivatepem"
     },
     {
       "relation": "calls",
@@ -24029,9 +24039,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L176",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server_resolvepublicpem",
-      "target": "crypto_cryptotools_server_publicpemfromprivatepem",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_publicpemfromprivatepem"
     },
     {
       "relation": "calls",
@@ -24040,9 +24050,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L178",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server_resolvepublicpem",
-      "target": "crypto_cryptotools_server_configuredpublicpem",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_configuredpublicpem"
     },
     {
       "relation": "calls",
@@ -24051,9 +24061,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L301",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server_verifysignedmessageinput",
-      "target": "crypto_cryptotools_server_resolvepublicpem",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_resolvepublicpem"
     },
     {
       "relation": "calls",
@@ -24062,9 +24072,9 @@
       "source_file": "remix/app/api/utils/crypto/cryptoTools.server.ts",
       "source_location": "L305",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_cryptotools_server_verifysignedmessageinput",
-      "target": "crypto_cryptotools_server_decodesignature",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_decodesignature"
     },
     {
       "relation": "imports",
@@ -24073,9 +24083,9 @@
       "source_file": "remix/app/routes/api/v1/crypto/_crypto.tsx",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_crypto",
-      "target": "crypto_cryptotools_server_generatecryptokeypair",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_generatecryptokeypair"
     },
     {
       "relation": "calls",
@@ -24095,9 +24105,9 @@
       "source_file": "remix/app/routes/api/v1/crypto/_crypto.tsx",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_crypto",
-      "target": "crypto_cryptotools_server_verifysignedmessageinput",
-      "confidence_score": 1.0
+      "target": "crypto_cryptotools_server_verifysignedmessageinput"
     },
     {
       "relation": "calls",
@@ -31922,9 +31932,9 @@
       "source_file": "remix/app/routes/api/v1/auth/jwks/_jwks.tsx",
       "source_location": "L6",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "jwks_jwks",
-      "target": "jwks_jwks_loader",
-      "confidence_score": 1.0
+      "target": "jwks_jwks_loader"
     },
     {
       "relation": "contains",
@@ -31982,9 +31992,9 @@
       "source_file": "remix/app/routes/api/v1/crypto/_crypto.tsx",
       "source_location": "L24",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_crypto",
-      "target": "crypto_crypto_action",
-      "confidence_score": 1.0
+      "target": "crypto_crypto_action"
     },
     {
       "relation": "contains",
@@ -31992,9 +32002,9 @@
       "source_file": "remix/app/routes/api/v1/crypto/_crypto.tsx",
       "source_location": "L11",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_crypto",
-      "target": "crypto_crypto_errormessage",
-      "confidence_score": 1.0
+      "target": "crypto_crypto_errormessage"
     },
     {
       "relation": "contains",
@@ -32002,9 +32012,9 @@
       "source_file": "remix/app/routes/api/v1/crypto/_crypto.tsx",
       "source_location": "L13",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_crypto",
-      "target": "crypto_crypto_loader",
-      "confidence_score": 1.0
+      "target": "crypto_crypto_loader"
     },
     {
       "relation": "calls",
@@ -32013,9 +32023,9 @@
       "source_file": "remix/app/routes/api/v1/crypto/_crypto.tsx",
       "source_location": "L47",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "crypto_crypto_action",
-      "target": "crypto_crypto_errormessage",
-      "confidence_score": 1.0
+      "target": "crypto_crypto_errormessage"
     },
     {
       "relation": "contains",
@@ -32438,9 +32448,9 @@
       "source_file": "remix/app/routes/crypto.tsx",
       "source_location": "L28",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_crypto",
-      "target": "routes_crypto_apiresponse",
-      "confidence_score": 1.0
+      "target": "routes_crypto_apiresponse"
     },
     {
       "relation": "contains",
@@ -32448,9 +32458,9 @@
       "source_file": "remix/app/routes/crypto.tsx",
       "source_location": "L92",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_crypto",
-      "target": "routes_crypto_copybutton",
-      "confidence_score": 1.0
+      "target": "routes_crypto_copybutton"
     },
     {
       "relation": "contains",
@@ -32458,9 +32468,9 @@
       "source_file": "remix/app/routes/crypto.tsx",
       "source_location": "L147",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_crypto",
-      "target": "routes_crypto_cryptopage",
-      "confidence_score": 1.0
+      "target": "routes_crypto_cryptopage"
     },
     {
       "relation": "contains",
@@ -32468,9 +32478,9 @@
       "source_file": "remix/app/routes/crypto.tsx",
       "source_location": "L24",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_crypto",
-      "target": "routes_crypto_cryptostandard",
-      "confidence_score": 1.0
+      "target": "routes_crypto_cryptostandard"
     },
     {
       "relation": "contains",
@@ -32478,9 +32488,9 @@
       "source_file": "remix/app/routes/crypto.tsx",
       "source_location": "L70",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_crypto",
-      "target": "routes_crypto_encodinglabel",
-      "confidence_score": 1.0
+      "target": "routes_crypto_encodinglabel"
     },
     {
       "relation": "contains",
@@ -32488,9 +32498,9 @@
       "source_file": "remix/app/routes/crypto.tsx",
       "source_location": "L68",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_crypto",
-      "target": "routes_crypto_formatjson",
-      "confidence_score": 1.0
+      "target": "routes_crypto_formatjson"
     },
     {
       "relation": "contains",
@@ -32498,9 +32508,9 @@
       "source_file": "remix/app/routes/crypto.tsx",
       "source_location": "L83",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_crypto",
-      "target": "routes_crypto_generatedenvvalue",
-      "confidence_score": 1.0
+      "target": "routes_crypto_generatedenvvalue"
     },
     {
       "relation": "contains",
@@ -32508,9 +32518,9 @@
       "source_file": "remix/app/routes/crypto.tsx",
       "source_location": "L73",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_crypto",
-      "target": "routes_crypto_generatedkeyvalue",
-      "confidence_score": 1.0
+      "target": "routes_crypto_generatedkeyvalue"
     },
     {
       "relation": "contains",
@@ -32518,9 +32528,9 @@
       "source_file": "remix/app/routes/crypto.tsx",
       "source_location": "L143",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_crypto",
-      "target": "routes_crypto_jsonoutput",
-      "confidence_score": 1.0
+      "target": "routes_crypto_jsonoutput"
     },
     {
       "relation": "contains",
@@ -32528,9 +32538,9 @@
       "source_file": "remix/app/routes/crypto.tsx",
       "source_location": "L25",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_crypto",
-      "target": "routes_crypto_keyencoding",
-      "confidence_score": 1.0
+      "target": "routes_crypto_keyencoding"
     },
     {
       "relation": "contains",
@@ -32538,9 +32548,9 @@
       "source_file": "remix/app/routes/crypto.tsx",
       "source_location": "L37",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_crypto",
-      "target": "routes_crypto_keyencodingoptions",
-      "confidence_score": 1.0
+      "target": "routes_crypto_keyencodingoptions"
     },
     {
       "relation": "contains",
@@ -32548,9 +32558,9 @@
       "source_file": "remix/app/routes/crypto.tsx",
       "source_location": "L26",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_crypto",
-      "target": "routes_crypto_outputencoding",
-      "confidence_score": 1.0
+      "target": "routes_crypto_outputencoding"
     },
     {
       "relation": "contains",
@@ -32558,9 +32568,9 @@
       "source_file": "remix/app/routes/crypto.tsx",
       "source_location": "L46",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_crypto",
-      "target": "routes_crypto_outputencodingoptions",
-      "confidence_score": 1.0
+      "target": "routes_crypto_outputencodingoptions"
     },
     {
       "relation": "contains",
@@ -32568,9 +32578,9 @@
       "source_file": "remix/app/routes/crypto.tsx",
       "source_location": "L131",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_crypto",
-      "target": "routes_crypto_outputtextarea",
-      "confidence_score": 1.0
+      "target": "routes_crypto_outputtextarea"
     },
     {
       "relation": "contains",
@@ -32578,9 +32588,9 @@
       "source_file": "remix/app/routes/crypto.tsx",
       "source_location": "L57",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_crypto",
-      "target": "routes_crypto_postcrypto",
-      "confidence_score": 1.0
+      "target": "routes_crypto_postcrypto"
     },
     {
       "relation": "contains",
@@ -32588,9 +32598,9 @@
       "source_file": "remix/app/routes/crypto.tsx",
       "source_location": "L30",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_crypto",
-      "target": "routes_crypto_standards",
-      "confidence_score": 1.0
+      "target": "routes_crypto_standards"
     },
     {
       "relation": "contains",
@@ -32598,9 +32608,9 @@
       "source_file": "remix/app/routes/crypto.tsx",
       "source_location": "L27",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_crypto",
-      "target": "routes_crypto_textencoding",
-      "confidence_score": 1.0
+      "target": "routes_crypto_textencoding"
     },
     {
       "relation": "contains",
@@ -32608,9 +32618,9 @@
       "source_file": "remix/app/routes/crypto.tsx",
       "source_location": "L50",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_crypto",
-      "target": "routes_crypto_textencodingoptions",
-      "confidence_score": 1.0
+      "target": "routes_crypto_textencodingoptions"
     },
     {
       "relation": "contains",
@@ -32618,9 +32628,9 @@
       "source_file": "remix/app/routes/crypto.tsx",
       "source_location": "L108",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_crypto",
-      "target": "routes_crypto_toolpanel",
-      "confidence_score": 1.0
+      "target": "routes_crypto_toolpanel"
     },
     {
       "relation": "calls",
@@ -32629,9 +32639,9 @@
       "source_file": "remix/app/routes/crypto.tsx",
       "source_location": "L144",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_crypto_jsonoutput",
-      "target": "routes_crypto_formatjson",
-      "confidence_score": 1.0
+      "target": "routes_crypto_formatjson"
     },
     {
       "relation": "calls",
@@ -32640,9 +32650,9 @@
       "source_file": "remix/app/routes/crypto.tsx",
       "source_location": "L323",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_crypto_cryptopage",
-      "target": "routes_crypto_encodinglabel",
-      "confidence_score": 1.0
+      "target": "routes_crypto_encodinglabel"
     },
     {
       "relation": "calls",
@@ -32651,9 +32661,9 @@
       "source_file": "remix/app/routes/crypto.tsx",
       "source_location": "L324",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_crypto_cryptopage",
-      "target": "routes_crypto_generatedkeyvalue",
-      "confidence_score": 1.0
+      "target": "routes_crypto_generatedkeyvalue"
     },
     {
       "relation": "calls",
@@ -32662,9 +32672,9 @@
       "source_file": "remix/app/routes/crypto.tsx",
       "source_location": "L277",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "routes_crypto_cryptopage",
-      "target": "routes_crypto_generatedenvvalue",
-      "confidence_score": 1.0
+      "target": "routes_crypto_generatedenvvalue"
     },
     {
       "relation": "contains",
@@ -35189,9 +35199,9 @@
       "source_file": "remix/package.json",
       "source_location": "L7",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "remix_package_scripts",
-      "target": "remix_package_scripts_ensure_bcrypt",
-      "confidence_score": 1.0
+      "target": "remix_package_scripts_ensure_bcrypt"
     },
     {
       "relation": "contains",
@@ -35229,9 +35239,9 @@
       "source_file": "remix/package.json",
       "source_location": "L8",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "remix_package_scripts",
-      "target": "remix_package_scripts_postinstall",
-      "confidence_score": 1.0
+      "target": "remix_package_scripts_postinstall"
     },
     {
       "relation": "contains",
@@ -36009,9 +36019,9 @@
       "source_file": "remix/scripts/ensure-bcrypt-binding.js",
       "source_location": "L17",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "scripts_ensure_bcrypt_binding",
-      "target": "scripts_ensure_bcrypt_binding_initial",
-      "confidence_score": 1.0
+      "target": "scripts_ensure_bcrypt_binding_initial"
     },
     {
       "relation": "contains",
@@ -36019,9 +36029,9 @@
       "source_file": "remix/scripts/ensure-bcrypt-binding.js",
       "source_location": "L33",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "scripts_ensure_bcrypt_binding",
-      "target": "scripts_ensure_bcrypt_binding_install",
-      "confidence_score": 1.0
+      "target": "scripts_ensure_bcrypt_binding_install"
     },
     {
       "relation": "contains",
@@ -36029,9 +36039,9 @@
       "source_file": "remix/scripts/ensure-bcrypt-binding.js",
       "source_location": "L8",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "scripts_ensure_bcrypt_binding",
-      "target": "scripts_ensure_bcrypt_binding_loadbcrypt",
-      "confidence_score": 1.0
+      "target": "scripts_ensure_bcrypt_binding_loadbcrypt"
     },
     {
       "relation": "contains",
@@ -36039,9 +36049,9 @@
       "source_file": "remix/scripts/ensure-bcrypt-binding.js",
       "source_location": "L4",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "scripts_ensure_bcrypt_binding",
-      "target": "scripts_ensure_bcrypt_binding_path",
-      "confidence_score": 1.0
+      "target": "scripts_ensure_bcrypt_binding_path"
     },
     {
       "relation": "contains",
@@ -36049,9 +36059,9 @@
       "source_file": "remix/scripts/ensure-bcrypt-binding.js",
       "source_location": "L43",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "scripts_ensure_bcrypt_binding",
-      "target": "scripts_ensure_bcrypt_binding_repaired",
-      "confidence_score": 1.0
+      "target": "scripts_ensure_bcrypt_binding_repaired"
     },
     {
       "relation": "contains",
@@ -36059,9 +36069,9 @@
       "source_file": "remix/scripts/ensure-bcrypt-binding.js",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "scripts_ensure_bcrypt_binding",
-      "target": "scripts_ensure_bcrypt_binding_spawnsync",
-      "confidence_score": 1.0
+      "target": "scripts_ensure_bcrypt_binding_spawnsync"
     },
     {
       "relation": "contains",
@@ -36492,6 +36502,16 @@
       "confidence_score": 1.0,
       "source": "claude",
       "target": "claude_graphify"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "CLAUDE.md",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "claude",
+      "target": "claude_shared_agent_instructions",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -37537,10 +37557,10 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L63",
+      "source_location": "L66",
       "weight": 1.0,
       "source": "remix_changelog_unreleased",
-      "target": "remix_changelog_changed_63",
+      "target": "remix_changelog_changed_66",
       "confidence_score": 1.0
     },
     {
@@ -37557,10 +37577,10 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L101",
+      "source_location": "L104",
       "weight": 1.0,
       "source": "remix_changelog_unreleased",
-      "target": "remix_changelog_fixed_101",
+      "target": "remix_changelog_fixed_104",
       "confidence_score": 1.0
     },
     {
@@ -37765,5 +37785,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "537ffc65b9cf8b8541906d0148c06b2c0df11966"
+  "built_at_commit": "7f9df5009b19ea1ca6e8070ed7e3e2bc7758c8c0"
 }

@@ -1,3 +1,13 @@
+## Shared agent instructions
+
+- Always read both `CLAUDE.md` and `AGENTS.md` at the start of a repo session,
+  whether the agent is running as Claude or Codex. Treat `AGENTS.md`
+  workspace/runbook notes as shared repo instructions unless a rule explicitly
+  names one tool.
+- Before adding or changing agent instructions, check both `CLAUDE.md` and
+  `AGENTS.md` for existing coverage. Keep shared rules in one canonical place
+  with a pointer from the other file instead of duplicating long runbook text.
+
 ## Fundamentals (read first)
 
 Read `FUNDAMENTALS.md` before adding features. Non-negotiables:

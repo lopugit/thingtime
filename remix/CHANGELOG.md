@@ -31,6 +31,9 @@ Detailed PR notes:
 
 ### Changed
 
+- Added shared AGENTS/CLAUDE runbook instructions so Codex and Claude both read
+  both files and avoid duplicating long agent rules. — _Codex (AI),
+  2026-06-23_
 - Added `/crypto` plus `/api/v1/crypto` key-generation and verification tools,
   including format selectors for PEM, escaped PEM, base64 PEM, base64url PEM,
   JWK JSON, and message encodings. — _Codex (AI), 2026-06-23_
