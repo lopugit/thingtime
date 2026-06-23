@@ -1,0 +1,7 @@
+# TODO
+
+1. **URGENT HIGH PRIORITY: Make true `hydrateRoot(document, ...)` merge-ready.**
+
+   Rollback checkpoint before deeper hydrate experiments: `61c234a` (`Fix Remix Emotion hydration styling`).
+
+   The current PR fix keeps Emotion SSR styles in the React document tree and removes the visible unstyled-content jump. Remaining work: make local Vite dev-mode `hydrateRoot(document, ...)` pass without React document mismatch warnings/errors, then verify the same flow in production build/serve.

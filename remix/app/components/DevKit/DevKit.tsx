@@ -1,33 +1,18 @@
 import { Box, Flex, Text } from '@chakra-ui/react';
 import { keyframes } from '@emotion/react';
-import { useNavigate, useRevalidator } from '@remix-run/react';
+import { useNavigate, useRevalidator, useRouteLoaderData } from '@remix-run/react';
 import React from 'react';
 
-import { useThingtime } from '../Thingtime/useThingtime';
-import { useCurrentUser } from '~/hooks/useCurrentUser';
-import { useApi } from '~/hooks/useApi';
-import { useLopu, useLopuStream } from '../Lopu/useLopu';
-import { RAINBOW } from '../User/UserCard';
 import { Icon } from '../Icon/Icon';
+import { useLopu, useLopuStream } from '../Lopu/useLopu';
+import { useThingtime } from '../Thingtime/useThingtime';
+import { RAINBOW } from '../User/UserCard';
+import { useApi } from '~/hooks/useApi';
+import { useCurrentUser } from '~/hooks/useCurrentUser';
 
-// injected by vite `define` — 'development' | 'preview' | 'production'
-declare const __TT_DEPLOY_ENV__: string;
-
-// Rotating conic rainbow for the hydration badge. A conic gradient whose first
-// and last colour match spins with no seam (a linear gradient tiles with a hard
-// diagonal line — this avoids that entirely).
 const RAINBOW_CONIC = 'conic-gradient(from 0deg, #47b5e6, #a555e8, #f34a4a, #ffbc48, #58ca70, #47b5e6)';
 const spin = keyframes`from { transform: rotate(0deg) } to { transform: rotate(360deg) }`;
 
-const getQueryParams: any = () => {
-  try {
-    return new URLSearchParams(window.location.search);
-  } catch (err) {}
-
-  return {};
-};
-
-// A single menu row in the DevKit window.
 const DevAction = ({ onClick, children }: { onClick: () => void; children: React.ReactNode }) => (
   <Box
     as="button"
@@ -46,52 +31,40 @@ const DevAction = ({ onClick, children }: { onClick: () => void; children: React
   </Box>
 );
 
-export const DevKit = (props) => {
-  const { thingtime, setThingtime } = useThingtime();
+export const DevKit = (_props) => {
+  const { setThingtime } = useThingtime();
+  const rootData = useRouteLoaderData('root') as any;
+  const env = React.useMemo(() => rootData?.devKitEnv || {}, [rootData?.devKitEnv]);
+  const envFromCookie = rootData?.envFromCookie || {};
   const user = useCurrentUser();
   const api = useApi();
   const navigate = useNavigate();
   const revalidator = useRevalidator();
   const lopu = useLopu();
   const pushLopuMusing = useLopuStream();
-
-  const urlParams = getQueryParams();
-  const params = {};
-  try {
-    for (const [key, value] of urlParams) {
-      params[key] = value;
-    }
-  } catch (error) {
-    // dont worry, be happy
-  }
-
-  const env: any = { NODE_ENV: process.env.NODE_ENV, ...params };
-  try {
-    window.env = env;
-  } catch (error) {
-    // dont worry, be happy
-  }
-
-  // baked in at build time: 'development' | 'preview' | 'production'
-  const deployEnv = typeof __TT_DEPLOY_ENV__ !== 'undefined' ? __TT_DEPLOY_ENV__ : env.NODE_ENV;
-  const explicitlyOff = env.devKit === false || env.devKit === 'false';
-  const devKit = !explicitlyOff && (deployEnv !== 'production' || !!env.devKit);
-
-  const [open, setOpen] = React.useState(false);
-
-  // hydration indicator: green once React hydrates + runs effects
   const [mounted, setMounted] = React.useState(false);
+  const [open, setOpen] = React.useState(false);
+  const [pos, setPos] = React.useState<{ left: number; top: number } | null>(null);
+
   React.useEffect(() => {
     setMounted(true);
-  }, []);
 
-  // draggable window position (set on first open, client-side)
-  const [pos, setPos] = React.useState<{ left: number; top: number } | null>(null);
+    try {
+      window.env = env;
+    } catch (error) {
+      // dont worry, be happy
+    }
+  }, [env]);
+
   React.useEffect(() => {
     if (open && pos === null && typeof window !== 'undefined') {
       setPos({ left: Math.max(12, window.innerWidth - 292), top: 80 });
     }
   }, [open, pos]);
+
+  const deployEnv = envFromCookie.THINGTIME_VERCEL_ENV || env.NODE_ENV;
+  const explicitlyOff = env.devKit === false || env.devKit === 'false';
+  const devKit = !explicitlyOff && (deployEnv !== 'production' || !!env.devKit);
 
   const dragRef = React.useRef<{ dx: number; dy: number } | null>(null);
   const onPointerDown = (e: React.PointerEvent) => {
@@ -111,9 +84,7 @@ export const DevKit = (props) => {
     dragRef.current = null;
   };
 
-  // --- dev actions ---------------------------------------------------------
   const prefillRegister = React.useCallback(() => {
-    // crypto RNG for a fresh, unique dev-user suffix (full uint32, no modulo)
     const rand = crypto.getRandomValues(new Uint32Array(1))[0];
     setThingtime('devKit.registerPrefill', {
       username: `rick.deckard${rand}`,
@@ -135,7 +106,7 @@ export const DevKit = (props) => {
     const resp = await api.v1.auth.resendVerification({ email: user.email });
     if (resp?.verificationLink) {
       try {
-        await fetch(resp.verificationLink); // GET consumes the token → verified
+        await fetch(resp.verificationLink);
       } catch {}
       revalidator.revalidate();
       lopu({ title: 'Email verified (dev) ✅', description: user.email, status: 'success' });
@@ -149,17 +120,14 @@ export const DevKit = (props) => {
     navigate('/login');
   }, [api, navigate]);
 
-  // Streams the musing in live: the toast pops instantly ("Lopu is thinking…")
-  // then types the response in, à la modern AI chat.
   const pushMusing = React.useCallback(() => {
     pushLopuMusing('/api/v1/lopu/musing');
   }, [pushLopuMusing]);
 
-  if (!devKit) return null;
+  if (!mounted || !devKit) return null;
 
   return (
     <>
-      {/* draggable DevKit window */}
       {open && pos ? (
         <Box
           position="fixed"
@@ -174,7 +142,6 @@ export const DevKit = (props) => {
           borderColor="gray.200"
           overflow="hidden"
         >
-          {/* title bar — drag handle */}
           <Flex
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
@@ -207,7 +174,6 @@ export const DevKit = (props) => {
             </Box>
           </Flex>
 
-          {/* menu actions */}
           <Flex direction="column" p={2} gap={1}>
             <Text px={3} pt={1} fontSize="10px" fontWeight="700" color="gray.400" textTransform="uppercase">
               Forms
@@ -240,7 +206,6 @@ export const DevKit = (props) => {
         </Box>
       ) : null}
 
-      {/* floating launcher icon (bottom-right, clear of mobile bars) */}
       <Box
         className="tt.devKit"
         position="fixed"
@@ -264,7 +229,6 @@ export const DevKit = (props) => {
           transition="transform 100ms ease"
         >
           <Icon name="👨‍💻"></Icon>
-          {/* hydration badge: shimmering rainbow once React hydrates, else grey */}
           <Box
             position="absolute"
             top="-2px"

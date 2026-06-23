@@ -19,3 +19,88 @@ https://www.indiegogo.com/projects/thingtime-a-gui-for-the-internet/coming_soon
 https://www.gofundme.com/f/thingtime
 
 ### Force Push ? 👉👈
+
+# Setup for Forks
+
+Thingtime can run with mostly public configuration, but a few integrations need
+private environment variables in local development or on Vercel.
+
+## Remix app
+
+The Remix app lives in `remix/`.
+
+Install and run from the Remix directory:
+
+```sh
+cd remix
+corepack pnpm install
+corepack pnpm run dev
+```
+
+Local branch metadata is managed automatically by `remix/scripts/pre-dev.sh`.
+That script updates `remix/.env.auto`; do not edit that generated block by hand.
+
+## MongoDB
+
+MongoDB powers the app status checks and database-backed API routes.
+
+Set these variables in `remix/.env` for local development, and in your Vercel
+project environment variables for deployed previews/production:
+
+```sh
+MONGODB_CONNECTION_STRING="mongodb+srv://<user>:<db_password>@<cluster>/<database>?retryWrites=true&w=majority"
+MONGO_PASS="<password>"
+```
+
+`MONGO_PASS` is only required when `MONGODB_CONNECTION_STRING` contains the
+literal `<db_password>` placeholder. The app substitutes `MONGO_PASS` into that
+placeholder using URL encoding so special characters in the password are safe.
+
+For a local MongoDB instance you can instead use a complete URI with no password
+placeholder:
+
+```sh
+MONGODB_CONNECTION_STRING="mongodb://localhost:27017/thingtime"
+```
+
+## Vercel deployment status
+
+The footer can show live Vercel preview/build status. It works in a limited
+tokenless mode on Vercel, but full status, dashboard links, build state, last
+ready time, and active polling need a Vercel REST API token.
+
+Add this as a sensitive Vercel project environment variable:
+
+```sh
+VERCEL_API_TOKEN="<vercel-rest-api-token>"
+```
+
+Create this token from Vercel account/team token settings, not from the OAuth
+App / "Sign in with Vercel" setup page. The token needs access to the Vercel
+team and project that own the deployment. A persistent `403` from
+`/api/v1/vercel/status` usually means the token was created for the wrong
+account/team, has expired, or lacks project access.
+
+These Vercel variables are optional because the hosted Vercel runtime normally
+provides enough deployment metadata automatically:
+
+```sh
+VERCEL_PROJECT_ID="<project-id>"
+VERCEL_TEAM_ID="<team-id>"
+VERCEL_DASHBOARD_TEAM_SLUG="<team-or-scope-slug>"
+VERCEL_PROJECT_NAME="<project-slug>"
+```
+
+Use `VERCEL_DASHBOARD_TEAM_SLUG` when tokenless dashboard links need to point to
+a Vercel team slug that differs from the GitHub repository owner.
+
+Vercel automatically provides variables such as `VERCEL`, `VERCEL_ENV`,
+`VERCEL_URL`, `VERCEL_BRANCH_URL`, `VERCEL_GIT_COMMIT_REF`, and
+`VERCEL_GIT_COMMIT_SHA` during deployments.
+
+## Public env exposure rule
+
+Only variables with the `THINGTIME_` prefix are intentionally copied into the
+browser-visible loader data, and variables containing `PRIVATE` are excluded.
+Keep secrets such as MongoDB passwords and Vercel API tokens unprefixed and
+server-only.

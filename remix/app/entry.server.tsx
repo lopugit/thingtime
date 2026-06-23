@@ -1,58 +1,64 @@
-import { PassThrough } from 'node:stream';
-
-import { createReadableStreamFromReadable } from '@remix-run/node';
 import { RemixServer } from '@remix-run/react';
 import type { EntryContext } from '@remix-run/react/dist/entry';
-import { renderToPipeableStream } from 'react-dom/server';
+import { CacheProvider } from '@emotion/react';
+import * as emotionServerModule from '@emotion/server/create-instance';
+import type createEmotionServer from '@emotion/server/create-instance';
+import { renderToString } from 'react-dom/server';
 
-const ABORT_DELAY = 5000;
+import { createEmotionCache } from './Providers/Chakra/createEmotionCache';
+import { ServerStyleContext } from './Providers/Chakra/emotionContext';
 
-// Single Fetch (v3_singleFetch) streams loader data to the client via
-// `window.__remixContext.stream`. That stream is only enqueued + CLOSED while
-// React streams the response, so the server MUST use a streaming renderer.
-// The old synchronous renderToString never closed the stream, so the client
-// hydration suspended forever (page rendered, but no event handlers attached).
-export default function handleRequest(
-  request: Request,
-  responseStatusCode: number,
-  responseHeaders: Headers,
-  remixContext: EntryContext
-) {
-  return new Promise((resolve, reject) => {
-    let shellRendered = false;
+type EmotionServerFactory = typeof createEmotionServer;
 
-    const { pipe, abort } = renderToPipeableStream(
-      <RemixServer context={remixContext} url={request.url} abortDelay={ABORT_DELAY} />,
-      {
-        onShellReady() {
-          shellRendered = true;
-          const body = new PassThrough();
-          const stream = createReadableStreamFromReadable(body);
+const getExport = (value: unknown, key: 'default') => {
+  if (typeof value !== 'object' || value === null) {
+    return undefined;
+  }
 
-          responseHeaders.set('Content-Type', 'text/html');
+  return (value as Record<string, unknown>)[key];
+};
 
-          resolve(
-            new Response(stream, {
-              headers: responseHeaders,
-              status: responseStatusCode
-            })
-          );
+const resolveEmotionServerFactory = (moduleValue: unknown) => {
+  const candidates = [
+    moduleValue,
+    getExport(moduleValue, 'default'),
+    getExport(getExport(moduleValue, 'default'), 'default'),
+  ];
 
-          pipe(body);
-        },
-        onShellError(error: unknown) {
-          reject(error);
-        },
-        onError(error: unknown) {
-          responseStatusCode = 500;
-          if (shellRendered) {
-            // log streaming errors that happen after the shell flushed
-            console.error(error);
-          }
-        }
-      }
-    );
+  return candidates.find((candidate): candidate is EmotionServerFactory => typeof candidate === 'function');
+};
 
-    setTimeout(abort, ABORT_DELAY);
+const createEmotionServerInstance = resolveEmotionServerFactory(emotionServerModule);
+
+if (!createEmotionServerInstance) {
+  throw new Error(
+    'Emotion server factory import failed. Expected a function export from @emotion/server/create-instance.',
+  );
+}
+
+export default function handleRequest(request: Request, responseStatusCode: number, responseHeaders: Headers, remixContext: EntryContext) {
+  const cache = createEmotionCache();
+  const { extractCriticalToChunks } = createEmotionServerInstance(cache);
+  const html = renderToString(
+    <ServerStyleContext.Provider value={null}>
+      <CacheProvider value={cache}>
+        <RemixServer context={remixContext} url={request.url} />
+      </CacheProvider>
+    </ServerStyleContext.Provider>
+  );
+  const chunks = extractCriticalToChunks(html);
+  const markup = renderToString(
+    <ServerStyleContext.Provider value={chunks.styles}>
+      <CacheProvider value={cache}>
+        <RemixServer context={remixContext} url={request.url} />
+      </CacheProvider>
+    </ServerStyleContext.Provider>
+  );
+
+  responseHeaders.set('Content-Type', 'text/html');
+
+  return new Response(`<!DOCTYPE html>${markup}`, {
+    status: responseStatusCode,
+    headers: responseHeaders
   });
 }
