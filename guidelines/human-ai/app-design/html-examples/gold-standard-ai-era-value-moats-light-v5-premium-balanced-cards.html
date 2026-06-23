@@ -1,0 +1,162 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AI-Era Value Moats Report — Light V3 Premium</title><style>
+:root{
+  --bg:#fff7fb;
+  --bg2:#f6fbff;
+  --text:#151426;
+  --muted:#575367;
+  --soft:#28223c;
+  --card:rgba(255,255,255,.82);
+  --card2:rgba(255,255,255,.97);
+  --border:rgba(236,72,153,.24);
+  --accent:#f04aa7;
+  --accent2:#8b5cf6;
+  --accent3:#06b6d4;
+  --accent4:#34d399;
+  --danger:#fb7185;
+  --shadow:0 28px 86px rgba(157,84,143,.21),0 10px 28px rgba(30,41,59,.075);
+  --glow:0 0 96px rgba(240,74,167,.26),0 0 46px rgba(139,92,246,.15);
+}
+*{box-sizing:border-box}
+::selection{background:rgba(240,74,167,.18)}
+html{scroll-behavior:smooth}
+body{
+  margin:0;
+  font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  color:var(--text);
+  line-height:1.55;
+  background:
+    radial-gradient(circle at -16% 2%,rgba(240,74,167,.25),transparent 30rem),
+    radial-gradient(circle at 96% 8%,rgba(6,182,212,.20),transparent 30rem),
+    radial-gradient(circle at 50% 38%,rgba(139,92,246,.12),transparent 32rem),
+    linear-gradient(135deg,#fff7fc 0%,#f7fbff 45%,#eefdf9 100%);
+}
+body:before{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:-1;
+  background-image:
+    linear-gradient(rgba(236,72,153,.045) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(6,182,212,.04) 1px,transparent 1px);
+  background-size:46px 46px;
+  mask-image:linear-gradient(to bottom,black,transparent 76%);
+}
+.wrap{width:min(1120px,calc(100% - 32px));margin:0 auto;padding:42px 0 72px}
+.hero{padding:64px 0 38px;position:relative}
+.hero:before{content:"";position:absolute;inset:5% 0 auto auto;width:330px;height:330px;background:conic-gradient(from 120deg,var(--accent),var(--accent2),var(--accent3),var(--accent4),var(--accent));filter:blur(78px);opacity:.26;z-index:-1;border-radius:999px}
+.hero:after{content:"✦";position:absolute;right:5%;top:15%;font-size:62px;color:rgba(236,72,153,.24);text-shadow:0 0 35px rgba(236,72,153,.28)}
+.eyebrow,.section-kicker,.label{font-size:12px;text-transform:uppercase;letter-spacing:.2em;font-weight:900;color:var(--accent)}
+h1{font-size:clamp(48px,8vw,104px);letter-spacing:-.078em;line-height:.88;margin:18px 0 24px;max-width:980px;background:linear-gradient(100deg,#151426 0%,#26184f 36%,#a21caf 62%,#ec4899 82%,#0891b2 100%);-webkit-background-clip:text;background-clip:text;color:transparent;text-shadow:0 16px 50px rgba(236,72,153,.13)}
+h2{font-size:clamp(30px,4vw,58px);letter-spacing:-.055em;line-height:.95;margin:10px 0 16px}
+h3{font-size:20px;letter-spacing:-.03em;margin:0 0 10px;color:#242034}.lede{font-size:clamp(20px,2.4vw,30px);max-width:890px;color:var(--soft);margin:0}.thesis-card,.panel,.card,.step,.metric{background:linear-gradient(180deg,var(--card),var(--card2));border:1px solid var(--border);border-radius:28px;box-shadow:var(--shadow);backdrop-filter:blur(20px);position:relative;overflow:hidden}.thesis-card:before,.panel:before,.card:before,.step:before,.metric:before{content:"";position:absolute;inset:0;background:radial-gradient(circle at -24% 0%,rgba(255,255,255,.46),transparent 44%),linear-gradient(135deg,rgba(255,255,255,.18),rgba(255,255,255,.06) 22%,transparent 62%);pointer-events:none}.thesis-card{margin-top:34px;padding:26px 28px;max-width:900px;box-shadow:var(--shadow),var(--glow);border-color:rgba(236,72,153,.28)}.thesis-card p{font-size:clamp(22px,3vw,36px);line-height:1.1;margin:10px 0 0;font-weight:900;letter-spacing:-.048em}.pill{display:inline-flex;border:1px solid rgba(236,72,153,.35);background:linear-gradient(135deg,rgba(236,72,153,.10),rgba(6,182,212,.08));color:#db2777;border-radius:999px;padding:8px 12px;font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:.12em;box-shadow:0 0 0 6px rgba(236,72,153,.045)}section{padding:54px 0;border-top:1px solid rgba(197,78,149,.16)}.split{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}.panel{padding:28px}.panel p,.card p,.step p,.section-intro,footer p{color:var(--muted);font-size:17px}.panel.success{border-color:rgba(52,211,153,.28);box-shadow:var(--shadow),0 0 48px rgba(52,211,153,.12)}.panel.danger{border-color:rgba(251,113,133,.25);box-shadow:var(--shadow),0 0 48px rgba(251,113,133,.10)}.grid{display:grid;gap:16px}.cards{grid-template-columns:repeat(4,minmax(0,1fr));margin-top:24px}.two{grid-template-columns:repeat(2,minmax(0,1fr));margin-top:20px}.three{grid-template-columns:repeat(3,minmax(0,1fr));margin-top:18px}.card{padding:22px;min-height:250px;box-shadow:0 18px 56px rgba(157,84,143,.145);transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease}.card:hover{transform:translateY(-2px);box-shadow:0 24px 70px rgba(157,84,143,.18);border-color:rgba(236,72,153,.32)}.card.featured{background:linear-gradient(180deg,rgba(255,255,255,.92),rgba(253,242,248,.96));border-color:rgba(236,72,153,.34);box-shadow:0 22px 80px rgba(236,72,153,.15)}.icon{font-size:28px;margin-bottom:16px;filter:drop-shadow(0 8px 18px rgba(236,72,153,.25))}.mini{font-size:14px!important;color:#be185d!important;margin-top:18px;font-weight:750}.matrix{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:22px}.matrix div{padding:24px;border-radius:24px;background:linear-gradient(180deg,rgba(255,255,255,.78),rgba(255,255,255,.94));border:1px solid var(--border);box-shadow:0 14px 42px rgba(157,84,143,.10)}.matrix strong{display:block;font-size:20px;margin-bottom:8px}.matrix span{color:var(--muted)}.steps{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px;margin-top:24px}.step{padding:22px;min-width:0;box-shadow:0 16px 50px rgba(157,84,143,.12)}.step span{display:inline-flex;align-items:center;justify-content:center;width:52px;height:52px;border-radius:18px;background:linear-gradient(135deg,#f472b6,#a78bfa 52%,#67e8f9);color:#fff;font-weight:950;font-size:24px;margin-bottom:18px;box-shadow:0 14px 32px rgba(236,72,153,.30)}.step h3{overflow-wrap:anywhere}.big-quote{font-size:clamp(26px,4vw,52px);line-height:1.03;letter-spacing:-.055em;font-weight:900;margin:24px 0;color:var(--text);background:linear-gradient(100deg,#151426,#7e22ce,#db2777,#0891b2);-webkit-background-clip:text;background-clip:text;color:transparent}.metric{padding:24px;box-shadow:0 18px 56px rgba(157,84,143,.145)}.metric strong{display:block;font-size:22px;margin-bottom:6px}.metric span{color:var(--muted)}.thingtime{border-top:1px solid rgba(236,72,153,.32);position:relative}.thingtime:before{content:"";position:absolute;inset:20px 0 auto 20%;height:220px;background:linear-gradient(90deg,var(--accent2),var(--accent),var(--accent3));opacity:.18;filter:blur(70px);z-index:-1}.flywheel{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:28px 0;padding:22px;border-radius:28px;border:1px solid var(--border);background:linear-gradient(180deg,rgba(255,255,255,.72),rgba(255,255,255,.92));box-shadow:var(--shadow)}.flywheel div{padding:12px 14px;border-radius:999px;background:linear-gradient(135deg,rgba(236,72,153,.13),rgba(6,182,212,.10));border:1px solid rgba(236,72,153,.24);font-weight:800}.flywheel span{color:var(--accent);font-weight:950}.compact{grid-template-columns:repeat(5,minmax(0,1fr))}footer{padding:34px 0 0}footer p{font-size:20px}.report-title{position:sticky;top:0;z-index:10;backdrop-filter:blur(22px);background:rgba(255,247,252,.78);border-bottom:1px solid rgba(197,78,149,.16);box-shadow:0 10px 36px rgba(157,84,143,.09)}.report-title .wrap{display:flex;justify-content:space-between;align-items:center;padding:16px 0}.brand{font-weight:950;letter-spacing:-.04em;background:linear-gradient(90deg,#151426,#db2777,#0891b2);-webkit-background-clip:text;background-clip:text;color:transparent}.mode{color:var(--muted);font-size:14px}@media(max-width:920px){.cards{grid-template-columns:repeat(2,minmax(0,1fr))}.steps,.compact{grid-template-columns:1fr 1fr}.split,.matrix{grid-template-columns:1fr}.wrap{width:min(100% - 28px,1120px)}.hero{padding-top:44px}}@media(max-width:560px){h1{font-size:52px}.cards,.two,.three,.steps,.compact{grid-template-columns:1fr}.card{min-height:auto}.panel,.card,.step,.thesis-card{border-radius:24px;padding:22px}.flywheel{display:grid;grid-template-columns:1fr}.flywheel span{display:none}.report-title .wrap{padding:13px 0}.mode{display:none}}
+</style></head><body><div class="report-title"><div class="wrap"><div class="brand">AI-Era Value Moats</div><div class="mode">Light edition · v3 premium</div></div></div><main class="wrap">
+<header class="hero">
+  <div class="eyebrow">AI-era strategy report</div>
+  <h1>Beyond features in the vibe-coded software era.</h1>
+  <p class="lede">When AI can clone the visible surface of software quickly, durable value shifts from screens and features to hard-to-copy assets: context, domain expertise, proprietary data, workflow depth, distribution, community, integrations, trust, and network effects.</p>
+  <div class="thesis-card">
+    <span class="pill">Core question</span>
+    <p>If someone cloned the UI next week, why would users still choose the product?</p>
+  </div>
+</header>
+
+<section class="split">
+  <div class="panel danger">
+    <div class="label">Old value</div>
+    <h2>Features and code</h2>
+    <p>Useful, but increasingly cloneable. Generic CRUD, dashboards, forms, and workflows are less defensible than they used to be.</p>
+  </div>
+  <div class="panel success">
+    <div class="label">New value</div>
+    <h2>Context and gravity</h2>
+    <p>Value lives in the reasons people stay: data, habits, ecosystem, trust, switching costs, workflow lock-in, and shared standards.</p>
+  </div>
+</section>
+
+<section>
+  <div class="section-kicker">Part 1</div>
+  <h2>The 12 sources of durable software value</h2>
+  <p class="section-intro">These are the assets that survive a UI clone. A product does not need all twelve, but it should intentionally compound at least two or three.</p>
+  <div class="grid cards">
+    <article class="card"><div class="icon">🌐</div><h3>1. Network effects</h3><p>Every new user makes the product more valuable for existing users. Marketplaces, social graphs, collaboration networks, and shared ecosystems benefit here.</p><p class="mini">Test: does adding users improve the product for everyone else?</p></article>
+    <article class="card"><div class="icon">🧬</div><h3>2. Proprietary data</h3><p>Unique data that improves decisions, recommendations, automation, or benchmarking over time. AI makes this more important, not less.</p><p class="mini">Test: if the code vanished, would the dataset still be valuable?</p></article>
+    <article class="card"><div class="icon">🔒</div><h3>3. Workflow lock-in</h3><p>The product becomes part of how people operate. Leaving would break processes, reporting, permissions, handovers, habits, or institutional memory.</p><p class="mini">Test: what breaks if customers stop using it tomorrow?</p></article>
+    <article class="card"><div class="icon">📣</div><h3>4. Distribution</h3><p>Audience, channels, partnerships, SEO, sales relationships, marketplace placement, and reputation can beat technically superior products.</p><p class="mini">Test: can the product reliably reach buyers without luck?</p></article>
+    <article class="card"><div class="icon">🫶</div><h3>5. Community</h3><p>People stay for the people: shared identity, support, tutorials, conventions, culture, and user-generated improvement.</p><p class="mini">Test: would users miss each other, not just the app?</p></article>
+    <article class="card"><div class="icon">💎</div><h3>6. Brand trust</h3><p>Trust lowers perceived risk. In AI and business software, users often choose the brand they believe will protect them and still exist later.</p><p class="mini">Test: would buyers feel safer choosing you?</p></article>
+    <article class="card"><div class="icon">🧩</div><h3>7. Integrations</h3><p>Deep connections into payments, CRM, accounting, ecommerce, communications, identity, analytics, and internal tools create embedding gravity.</p><p class="mini">Test: how many other systems depend on this?</p></article>
+    <article class="card featured"><div class="icon">🧠</div><h3>8. Domain expertise</h3><p>Deep understanding of a painful niche can beat a prettier generic app. The moat is knowing the weird edge cases, language, incentives, and workflows.</p><p class="mini">Test: could a smart outsider understand the problem in a weekend?</p></article>
+    <article class="card"><div class="icon">💸</div><h3>9. Switching costs</h3><p>Training, migration risk, data history, process change, templates, reporting continuity, and staff habits make churn less attractive.</p><p class="mini">Test: is leaving painful for legitimate reasons?</p></article>
+    <article class="card"><div class="icon">🧱</div><h3>10. Platform extensibility</h3><p>Users, partners, and developers can build on top of the product. Extensions, plugins, APIs, templates, and marketplace mechanics compound value.</p><p class="mini">Test: can others create value you did not build yourself?</p></article>
+    <article class="card"><div class="icon">⚖️</div><h3>11. Regulatory or legal barriers</h3><p>Compliance, licences, certifications, procurement approvals, audit readiness, security posture, or industry trust can create serious friction for clones.</p><p class="mini">Test: does adoption require proof beyond the demo?</p></article>
+    <article class="card"><div class="icon">🗝️</div><h3>12. Scarcity and access</h3><p>Exclusive supply, rare partnerships, premium inventory, scarce data, privileged relationships, or unique access can create defensibility.</p><p class="mini">Test: can competitors get the same inputs easily?</p></article>
+  </div>
+</section>
+
+<section>
+  <div class="section-kicker">Part 2</div>
+  <h2>The moat matrix</h2>
+  <p class="section-intro">Use this to separate copyable surface area from compounding advantage.</p>
+  <div class="matrix">
+    <div><strong>Easier to copy</strong><span>UI, pages, CRUD, dashboards, forms, copywriting, basic workflows, generic AI wrappers.</span></div>
+    <div><strong>Harder to copy</strong><span>Data, community, distribution, trust, regulatory credibility, workflow ownership, integrations, domain scars.</span></div>
+    <div><strong>Weak signal</strong><span>“We built this for two years.” Time spent building is no longer enough by itself.</span></div>
+    <div><strong>Strong signal</strong><span>“Customers would lose history, relationships, insight, or operating rhythm if they left.”</span></div>
+  </div>
+</section>
+
+<section>
+  <div class="section-kicker">Part 3</div>
+  <h2>Practical roadmap for defensibility</h2>
+  <div class="steps">
+    <div class="step"><span>1</span><h3>Start with a painful domain</h3><p>Pick a specific workflow where generic apps fail. The narrower and more painful the workflow, the easier it is to build expertise and trust.</p></div>
+    <div class="step"><span>2</span><h3>Name the moat early</h3><p>Before adding features, decide what will compound: data, community, integrations, switching costs, distribution, or domain expertise.</p></div>
+    <div class="step"><span>3</span><h3>Design for accumulation</h3><p>Every user action should make the product more valuable later: more history, better templates, smarter automation, better benchmarks, or stronger relationships.</p></div>
+    <div class="step"><span>4</span><h3>Turn workflows into assets</h3><p>Templates, schemas, saved processes, permission models, reports, and histories should become portable enough to trust, but sticky enough to matter.</p></div>
+    <div class="step"><span>5</span><h3>Build trust before scale</h3><p>Security, export, reliability, transparent pricing, and support are not boring. They are part of the moat when software becomes easier to clone.</p></div>
+  </div>
+</section>
+
+<section>
+  <div class="section-kicker">Part 4</div>
+  <h2>Common traps in the AI era</h2>
+  <div class="grid two">
+    <div class="card"><h3>Feature-count thinking</h3><p>Adding more screens can create complexity without defensibility. Ask what compounds, not what merely exists.</p></div>
+    <div class="card"><h3>Generic AI wrapper risk</h3><p>If the only value is a prompt over a common model, the business can be copied quickly unless it owns data, workflow, trust, or distribution.</p></div>
+    <div class="card"><h3>Confusing polish with moat</h3><p>A beautiful interface helps adoption, but polish alone is not protection once competitors can generate equivalent surfaces.</p></div>
+    <div class="card"><h3>Ignoring boring workflows</h3><p>The deepest value often sits in unglamorous admin, compliance, migration, reporting, and coordination work.</p></div>
+  </div>
+</section>
+
+<section>
+  <div class="section-kicker">Part 5</div>
+  <h2>Developer edge: scars beat speed</h2>
+  <p class="big-quote">AI can generate code. It still struggles to generate years of judgment about what matters, what breaks, what scales, and what users actually need.</p>
+  <div class="grid three">
+    <div class="metric"><strong>Architecture</strong><span>Knowing which shortcuts collapse later.</span></div>
+    <div class="metric"><strong>Product taste</strong><span>Knowing which features are noise.</span></div>
+    <div class="metric"><strong>Domain empathy</strong><span>Knowing the user’s real workflow.</span></div>
+  </div>
+</section>
+
+<section class="thingtime">
+  <div class="section-kicker">Final section</div>
+  <h2>Implications for Thingtime</h2>
+  <p class="section-intro">Thingtime should not be positioned as “a better UI for objects.” That is too cloneable. The stronger positioning is a system where reusable structures, shared blueprints, user-created things, and AI-legible workflows compound into an ecosystem.</p>
+  <div class="split">
+    <div class="panel success"><div class="label">Thingtime moat direction</div><h3>Blueprints as the asset</h3><p>The reusable structure is more defensible than the screen. A marketplace or gallery of blueprints could become a community knowledge layer.</p></div>
+    <div class="panel success"><div class="label">AI-era advantage</div><h3>Things as AI-legible context</h3><p>If Things have relationships, permissions, history, actions, and schemas, AI agents can operate on them more safely and usefully than loose documents.</p></div>
+  </div>
+  <div class="flywheel">
+    <div>Users</div><span>→</span><div>Create Things</div><span>→</span><div>Create Blueprints</div><span>→</span><div>Share & remix</div><span>→</span><div>Better ecosystem</div><span>→</span><div>More users</div>
+  </div>
+  <div class="steps compact">
+    <div class="step"><span>1</span><h3>Lead with blueprints</h3><p>Make reusable object structures the hero. The UI is the door; blueprints are the durable asset.</p></div>
+    <div class="step"><span>2</span><h3>Create a public gallery</h3><p>Let people browse, remix, fork, rate, and share useful Thingtime structures.</p></div>
+    <div class="step"><span>3</span><h3>Target painful domains</h3><p>Start with workflows where generic apps fail: inventories, creative projects, collections, routines, client portals, ops, and weird admin.</p></div>
+    <div class="step"><span>4</span><h3>Design for AI agents</h3><p>Make Things legible to AI through schemas, permissions, relationships, history, and actions.</p></div>
+    <div class="step"><span>5</span><h3>Build export trust</h3><p>People will trust a new data system more if they know they can leave. Ironically, portability can increase adoption.</p></div>
+  </div>
+</section>
+
+<footer>
+  <p>Founder note: the software surface is becoming easier to clone. The mission is to build the gravity that remains.</p>
+</footer>
+</main></body></html>

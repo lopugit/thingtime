@@ -2079,14 +2079,24 @@
     "ast_hash": "59f8351ed84a0cbcb7d22b931abffa01",
     "semantic_hash": ""
   },
-  "guidelines/human-ai/app-design/html-examples/gold-star-html-styling-example.html": {
-    "mtime": 1782200724.7024744,
-    "ast_hash": "25fe648db8498facaf0d1659cc3472ac",
-    "semantic_hash": ""
-  },
   "guidelines/human-ai/app-design/image-examples/gold-star-flashy-saas-theme-design.jpg": {
     "mtime": 1782199280.4146836,
     "ast_hash": "17f9d65ca49d887be58ba6bfdc3f5a35",
+    "semantic_hash": ""
+  },
+  "guidelines/human-ai/app-design/html-examples/gold-standard-ai-era-value-moats-light-v5-balanced-cards.html": {
+    "mtime": 1782203747.5000515,
+    "ast_hash": "aa4f12f6e680d02e2a68edf7bed7fd80",
+    "semantic_hash": ""
+  },
+  "guidelines/human-ai/app-design/html-examples/gold-standard-ai-era-value-moats-light-v5-premium-balanced-cards.html": {
+    "mtime": 1782203747.5026813,
+    "ast_hash": "dda13f29629227492b9cfc19e219d1b4",
+    "semantic_hash": ""
+  },
+  "guidelines/human-ai/app-design/html-examples/silver-standard-ai-era-moats-gradient-overflow-text-legibility-bug.html": {
+    "mtime": 1782200724.7024744,
+    "ast_hash": "25fe648db8498facaf0d1659cc3472ac",
     "semantic_hash": ""
   }
 }
