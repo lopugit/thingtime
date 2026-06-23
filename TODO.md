@@ -24,3 +24,11 @@
    `/api/v1/auth/jwks` lets third parties verify token signature, issuer, and
    expiry offline. If an external integration needs live session revocation
    status, add a server-side introspection endpoint that checks Mongo sessions.
+
+5. **Replace Vercel status polling with Vercel webhooks.**
+
+   The footer status can poll while a deployment is actively building, but
+   ready deployments should not keep spending Vercel API calls just to detect
+   a future build. Add a Vercel webhook endpoint for deployment created/ready/
+   failed events, persist the latest project status server-side, and have the
+   footer/dashboard read the cached status instead of polling Vercel directly.

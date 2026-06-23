@@ -31,6 +31,10 @@ Detailed PR notes:
 
 ### Changed
 
+- Changed `/vercel` to scan paged Vercel deployments for latest unique branch
+  deployments, added deployment timestamps plus compact filter/sort/branch-cap
+  controls and total branch counts, linked the footer status to `/vercel`, and
+  stopped idle ready-state footer polling. — _Codex (AI), 2026-06-23_
 - Added shared AGENTS/CLAUDE instructions requiring mirrored instruction-file
   updates and parent env-file seeding for `.test-branches` branch clones. —
   _Codex (AI), 2026-06-23_

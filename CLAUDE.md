@@ -15,6 +15,11 @@
   dev, build, or smoke checks. Preserve matching paths for root `.env*` files
   and nested app env files such as `remix/.env*`; keep these files untracked
   and never commit secrets.
+- For local Remix development, use the PM2-managed `tt-remix-9999` app on port
+  9999 and rely on rebuild/hot reloading for normal source edits. Do not
+  restart the PM2 Remix dev server after every change; restart only for env var
+  changes, dependency/native-binding changes, server config changes, a
+  crashed/stale process, or an explicit user request.
 - For layout or alignment changes, always verify the affected screen in a live
   browser window before finishing. Use screenshot evidence or measured element
   bounds across the relevant desktop/mobile viewport so centering, max-width,
