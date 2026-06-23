@@ -19,6 +19,13 @@
 - Added `/vercel` and `/api/v1/vercel/deployments` to show unique Vercel
   deployment URLs and states through the existing server-side Vercel token
   integration.
+- Updated `/vercel` to scan Vercel deployments in capped 20-row pages, show the
+  latest deployment per branch with created/ready timestamps, default to up to
+  all scanned branches, report total branches counted, and provide compact
+  filter/status/sort/branch-cap controls without extra API requests.
+- Updated the footer Vercel status indicator so local development can use
+  `VERCEL_API_TOKEN`, active builds poll every 5 seconds, ready/error states
+  stop polling, and a tiny inline dashboard icon links to `/vercel`.
 - Added `/crypto` and `/api/v1/crypto` tooling for generating key pairs,
   checking private/public key matches, verifying JWTs, and verifying signed
   messages across PEM, escaped PEM, base64 PEM, base64url PEM, and JWK JSON
@@ -45,6 +52,8 @@
   `APP_URL` or explicit host allowlist before real email delivery.
 - `TODO.md` tracks removing the legacy HS256 fallback after pre-ES256 cookies
   expire, and adding revocation-aware external token introspection if needed.
+- `TODO.md` tracks replacing ready-state Vercel API polling with deployment
+  webhooks and a cached server-side status.
 
 ### Verification
 

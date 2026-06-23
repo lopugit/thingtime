@@ -1,13 +1,30 @@
 import { json } from '@vercel/remix';
 
-import { getVercelDeploymentsOverview, isVercelStatusEnabled } from '~/api/utils/vercel/status';
+import {
+  getVercelDeploymentsOverview,
+  isVercelStatusEnabled,
+  normaliseDeploymentBranchLimit
+} from '~/api/utils/vercel/status';
 
-const getDeployments = async () => {
+const getBranchLimitFromRequest = (request: Request) => {
+  const url = new URL(request.url);
+
+  return normaliseDeploymentBranchLimit(
+    url.searchParams.get('branches') ||
+      url.searchParams.get('branchLimit') ||
+      url.searchParams.get('limit')
+  );
+};
+
+const getDeployments = async ({ request }: { request: Request }) => {
   if (!isVercelStatusEnabled()) {
     throw new Response('Not found', { status: 404 });
   }
 
-  const overview = await getVercelDeploymentsOverview();
+  const overview = await getVercelDeploymentsOverview({
+    limit: getBranchLimitFromRequest(request)
+  });
+
   return json(overview);
 };
 

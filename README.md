@@ -145,8 +145,10 @@ tokenless mode on Vercel, but full status, dashboard links, build state, last
 ready time, and active polling need a Vercel REST API token.
 
 Local development and preview deployments also expose `/vercel`, backed by
-`/api/v1/vercel/deployments`, to list unique deployment URLs and their current
-Vercel states using the same server-only token configuration.
+`/api/v1/vercel/deployments`, to scan recent Vercel pages for the latest
+deployment per unique branch with timestamps, preview links, deployment-detail
+links, current Vercel states, total branches counted, and an optional display
+cap using the same server-only token configuration.
 
 Add this as a sensitive Vercel project environment variable:
 
@@ -161,13 +163,13 @@ team and project that own the deployment. A persistent `403` from
 was created for the wrong account/team, has expired, or lacks project access.
 
 These Vercel variables are optional because the hosted Vercel runtime normally
-provides enough deployment metadata automatically:
+provides enough deployment metadata automatically, and token-backed deployment
+pages read the project name/slug from the Vercel API:
 
 ```sh
 VERCEL_PROJECT_ID="<project-id>"
 VERCEL_TEAM_ID="<team-id>"
 VERCEL_DASHBOARD_TEAM_SLUG="<team-or-scope-slug>"
-VERCEL_PROJECT_NAME="<project-slug>"
 ```
 
 Use `VERCEL_DASHBOARD_TEAM_SLUG` when tokenless dashboard links need to point to
