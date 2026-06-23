@@ -31,6 +31,9 @@ Detailed PR notes:
 
 ### Changed
 
+- Exposed the Vercel footer deployment status and `/vercel` dashboard in
+  production deployments as well as local development and previews. —
+  _Codex (AI), 2026-06-24_
 - Added shared AGENTS/CLAUDE PR-review instructions prioritizing code quality,
   performance, potential bugs, crashes, and security issues. — _Codex (AI),
   2026-06-23_

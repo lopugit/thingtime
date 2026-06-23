@@ -121,10 +121,13 @@ const setCachedJson = (
 };
 
 export const isVercelStatusEnabled = () => {
+  const vercelEnvironment = process.env.VERCEL_TARGET_ENV || process.env.VERCEL_ENV;
+
   return (
     process.env.NODE_ENV === 'development' ||
-    process.env.VERCEL_ENV === 'preview' ||
-    process.env.VERCEL_TARGET_ENV === 'preview'
+    vercelEnvironment === 'preview' ||
+    vercelEnvironment === 'production' ||
+    process.env.THINGTIME_SHOW_DEPLOYMENT_STATUS === 'true'
   );
 };
 
