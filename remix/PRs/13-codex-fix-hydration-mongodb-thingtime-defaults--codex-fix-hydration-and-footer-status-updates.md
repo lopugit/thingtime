@@ -1,8 +1,8 @@
 # PR #13 - Hydration, Vercel Status, and Deployment Hygiene
 
-Branch: `codex/fix-hydration-mongodb-thingtime-defaults`  
-PR: https://github.com/lopugit/thingtime/pull/13  
-Date: 2026-06-22  
+Branch: `codex/fix-hydration-mongodb-thingtime-defaults`
+PR: https://github.com/lopugit/thingtime/pull/13
+Date: 2026-06-22
 Author: Codex (AI), with Lopu testing and review
 
 ## Summary

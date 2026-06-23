@@ -16,6 +16,49 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### PR #16 - Auth And Lopu Hardening
+
+Detailed PR notes:
+[PRs/16-resolve-main-into-thingtime-dev-branch.md](PRs/16-resolve-main-into-thingtime-dev-branch.md)
+
+### Fixed
+
+- Hardened JWT auth so deployed runtimes fail closed without `JWT_SECRET`, and
+  live session checks now require the session `userId` to match the JWT `sub`.
+  — _Codex (AI), 2026-06-23_
+- Limited raw dev email-verification links to local development and Vercel
+  preview environments only. — _Codex (AI), 2026-06-23_
+
+### Changed
+
+- Changed `/vercel` to scan paged Vercel deployments for latest unique branch
+  deployments, added deployment timestamps plus compact filter/sort/branch-cap
+  controls and total branch counts, linked the footer status to `/vercel`, and
+  stopped idle ready-state footer polling. — _Codex (AI), 2026-06-23_
+- Added shared AGENTS/CLAUDE instructions requiring mirrored instruction-file
+  updates and parent env-file seeding for `.test-branches` branch clones. —
+  _Codex (AI), 2026-06-23_
+- Added shared AGENTS/CLAUDE instructions requiring live browser verification
+  for layout and alignment changes. — _Codex (AI), 2026-06-23_
+- Added a centered `/vercel` deployment URL dashboard backed by
+  `/api/v1/vercel/deployments`, and constrained both `/crypto` and `/vercel`
+  to viewport-safe centered page widths. — _Codex (AI), 2026-06-23_
+- Added shared AGENTS/CLAUDE runbook instructions so Codex and Claude both read
+  both files and avoid duplicating long agent rules. — _Codex (AI),
+  2026-06-23_
+- Added `/crypto` plus `/api/v1/crypto` key-generation and verification tools,
+  including format selectors for PEM, escaped PEM, base64 PEM, base64url PEM,
+  JWK JSON, and message encodings. — _Codex (AI), 2026-06-23_
+- Added a Remix `ensure-bcrypt` install/dev/build hook that repairs missing
+  `bcrypt_lib.node` native bindings before local Vite startup. — _Codex (AI),
+  2026-06-23_
+- Added ES256 JWT signing with a public JWKS endpoint at `/api/v1/auth/jwks`
+  for external verification, while keeping `JWT_SECRET` as a legacy HS256
+  migration fallback for existing sessions. — _Codex (AI), 2026-06-23_
+- Added a Mongo-backed rolling 10-per-hour IP quota for AI-backed Lopu musings;
+  over-limit or rate-limit-storage failures now stream the built-in fallback
+  library instead of calling weather or AI providers. — _Codex (AI), 2026-06-23_
+
 ### PR #13 - Remix Hydration, Vercel Status, And Deployment Hygiene
 
 Detailed PR notes:

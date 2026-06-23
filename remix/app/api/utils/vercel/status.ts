@@ -15,11 +15,110 @@ export type VercelDeploymentStatus = {
   lastReadyLabel?: string;
   lastReadyUrl?: string;
   latestDeploymentUrl?: string;
-  state: 'local' | 'ready' | 'building' | 'queued' | 'error' | 'unknown';
+  state:
+    | 'local'
+    | 'ready'
+    | 'building'
+    | 'queued'
+    | 'initializing'
+    | 'error'
+    | 'canceled'
+    | 'blocked'
+    | 'unknown';
+};
+
+export type VercelDeploymentSummary = {
+  branch?: string;
+  commitSha?: string;
+  createdAt?: string;
+  dashboardUrl?: string;
+  environment?: string;
+  id?: string;
+  readyAt?: string;
+  readyLabel?: string;
+  state: VercelDeploymentStatus['state'];
+  url: string;
+};
+
+export type VercelDeploymentsOverview = {
+  branchLimit: number | null;
+  configured: boolean;
+  deployments: VercelDeploymentSummary[];
+  deploymentPageCount: number;
+  deploymentScanCount: number;
+  deploymentScanLimit: number;
+  error?: string;
+  fetchedAt: string;
+  hasError: boolean;
+  label: string;
+  projectName?: string;
+  source: 'api' | 'local' | 'tokenless';
+  totalBranchCount: number;
+  uniqueUrlCount: number;
+  uniqueBranchCount: number;
 };
 
 const DEFAULT_VERCEL_PROJECT_ID = 'prj_ZAX9FhGC2alHMXMwTHX96ql3EQ8v';
 const DEFAULT_VERCEL_TEAM_ID = 'team_JsKhM6fVg9uo701feA0fLh9V';
+export const MAX_DEPLOYMENT_BRANCH_LIMIT = 100;
+export const DEFAULT_DEPLOYMENT_BRANCH_LIMIT: number | null = null;
+const DEFAULT_DEPLOYMENT_API_PAGE_SIZE = 20;
+const DEFAULT_DEPLOYMENT_MAX_PAGES = 10;
+const VERCEL_DEPLOYMENTS_CACHE_MS = 30000;
+const VERCEL_PROJECT_CACHE_MS = 300000;
+
+const deploymentPageCache = new Map<string, { data: any; expiresAt: number }>();
+const projectDataCache = new Map<string, { data: any; expiresAt: number }>();
+
+const getCachedJson = (cache: Map<string, { data: any; expiresAt: number }>, key: string) => {
+  const cached = cache.get(key);
+
+  if (!cached) {
+    return undefined;
+  }
+
+  if (cached.expiresAt <= Date.now()) {
+    cache.delete(key);
+    return undefined;
+  }
+
+  return cached.data;
+};
+
+export const normaliseDeploymentBranchLimit = (value?: number | string | null): number | null => {
+  if (value === undefined || value === null) {
+    return DEFAULT_DEPLOYMENT_BRANCH_LIMIT;
+  }
+
+  const text = typeof value === 'string' ? value.trim().toLowerCase() : String(value);
+
+  if (!text || text === 'all' || text === 'infinite' || text === 'infinity' || text === 'unlimited') {
+    return DEFAULT_DEPLOYMENT_BRANCH_LIMIT;
+  }
+
+  const parsed =
+    typeof value === 'number'
+      ? value
+      : Number.parseInt(text, 10);
+
+  if (!Number.isFinite(parsed)) {
+    return DEFAULT_DEPLOYMENT_BRANCH_LIMIT;
+  }
+
+  return Math.max(1, Math.min(MAX_DEPLOYMENT_BRANCH_LIMIT, Math.floor(parsed)));
+};
+
+const setCachedJson = (
+  cache: Map<string, { data: any; expiresAt: number }>,
+  key: string,
+  data: any,
+  ttlMs: number
+) => {
+  cache.set(key, {
+    data,
+    expiresAt: Date.now() + ttlMs
+  });
+};
 
 export const isVercelStatusEnabled = () => {
   return (
@@ -46,10 +145,19 @@ const normaliseState = (state?: string): VercelDeploymentStatus['state'] => {
   if (value === 'BUILDING') {
     return 'building';
   }
-  if (value === 'QUEUED' || value === 'INITIALIZING') {
+  if (value === 'QUEUED') {
     return 'queued';
   }
-  if (value === 'ERROR' || value === 'CANCELED') {
+  if (value === 'INITIALIZING') {
+    return 'initializing';
+  }
+  if (value === 'CANCELED' || value === 'CANCELLED') {
+    return 'canceled';
+  }
+  if (value === 'BLOCKED') {
+    return 'blocked';
+  }
+  if (value === 'ERROR') {
     return 'error';
   }
 
@@ -88,6 +196,134 @@ const getObjectValue = (value: unknown, key: string): unknown => {
 const getStringValue = (value: unknown, key: string): string | undefined => {
   const nested = getObjectValue(value, key);
   return typeof nested === 'string' && nested ? nested : undefined;
+};
+
+const getVercelApiHeaders = (token: string) => ({
+  Authorization: `Bearer ${token}`,
+  Accept: 'application/json'
+});
+
+const getVercelDeploymentsPage = async ({
+  limit,
+  until,
+  projectId,
+  projectName,
+  teamId,
+  token
+}: {
+  limit: number;
+  until?: string;
+  projectId?: string;
+  projectName?: string;
+  teamId?: string;
+  token: string;
+}) => {
+  const url = new URL('https://api.vercel.com/v6/deployments');
+  url.searchParams.set('limit', String(limit));
+
+  if (until) {
+    url.searchParams.set('until', until);
+  }
+
+  if (projectId) {
+    url.searchParams.set('projectId', projectId);
+  } else if (projectName) {
+    url.searchParams.set('app', projectName);
+  }
+
+  if (teamId) {
+    url.searchParams.set('teamId', teamId);
+  }
+
+  const initialCacheKey = url.toString();
+  const cached = getCachedJson(deploymentPageCache, initialCacheKey);
+
+  if (cached) {
+    return cached;
+  }
+
+  let response = await fetch(url.toString(), {
+    headers: getVercelApiHeaders(token)
+  });
+
+  if (response.status === 403 && teamId) {
+    url.searchParams.delete('teamId');
+    const teamlessCacheKey = url.toString();
+    const cachedTeamless = getCachedJson(deploymentPageCache, teamlessCacheKey);
+
+    if (cachedTeamless) {
+      return cachedTeamless;
+    }
+
+    response = await fetch(url.toString(), {
+      headers: getVercelApiHeaders(token)
+    });
+  }
+
+  if (!response.ok) {
+    throw new Error(`Vercel API returned ${response.status}`);
+  }
+
+  const data = await response.json();
+
+  setCachedJson(deploymentPageCache, initialCacheKey, data, VERCEL_DEPLOYMENTS_CACHE_MS);
+  setCachedJson(deploymentPageCache, url.toString(), data, VERCEL_DEPLOYMENTS_CACHE_MS);
+
+  return data;
+};
+
+const getVercelDeploymentsPages = async ({
+  maxPages,
+  pageSize,
+  projectId,
+  projectName,
+  teamId,
+  token
+}: {
+  maxPages: number;
+  pageSize: number;
+  projectId?: string;
+  projectName?: string;
+  teamId?: string;
+  token: string;
+}) => {
+  const deployments: unknown[] = [];
+  const seenCursors = new Set<string>();
+  let until: string | undefined;
+  let pageCount = 0;
+
+  for (let pageIndex = 0; pageIndex < maxPages; pageIndex += 1) {
+    const data = await getVercelDeploymentsPage({
+      limit: pageSize,
+      projectId,
+      projectName,
+      teamId,
+      token,
+      until
+    });
+    const pageDeployments = Array.isArray(data?.deployments) ? data.deployments : [];
+    const nextCursor = getObjectValue(getObjectValue(data, 'pagination'), 'next');
+
+    deployments.push(...pageDeployments);
+    pageCount += 1;
+
+    if (!nextCursor || pageDeployments.length === 0) {
+      break;
+    }
+
+    until = String(nextCursor);
+
+    if (seenCursors.has(until)) {
+      break;
+    }
+
+    seenCursors.add(until);
+  }
+
+  return {
+    deployments,
+    pageCount
+  };
 };
 
 const getDashboardOwnerSlug = (value: unknown): string | undefined => {
@@ -130,18 +366,26 @@ const getVercelProjectData = async ({
     projectUrl.searchParams.set('teamId', teamId);
   }
 
+  const cacheKey = projectUrl.toString();
+  const cached = getCachedJson(projectDataCache, cacheKey);
+
+  if (cached) {
+    return cached;
+  }
+
   const response = await fetch(projectUrl.toString(), {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: 'application/json'
-    }
+    headers: getVercelApiHeaders(token)
   });
 
   if (!response.ok) {
     return undefined;
   }
 
-  return response.json();
+  const data = await response.json();
+
+  setCachedJson(projectDataCache, cacheKey, data, VERCEL_PROJECT_CACHE_MS);
+
+  return data;
 };
 
 const getProjectDashboardUrl = ({
@@ -157,11 +401,57 @@ const getProjectDashboardUrl = ({
     return undefined;
   }
 
-  const baseUrl = `https://vercel.com/${ownerSlug}/${projectSlug}/deployments`;
-  return deploymentId ? `${baseUrl}/${deploymentId}` : baseUrl;
+  const baseUrl = `https://vercel.com/${ownerSlug}/${projectSlug}`;
+  return deploymentId ? `${baseUrl}/${deploymentId}` : `${baseUrl}/deployments`;
 };
 
-const getDashboardUrlFromDeploymentHost = (url?: string) => {
+const appendDeploymentIdToDashboardUrl = (dashboardUrl?: string, deploymentId?: string) => {
+  if (!dashboardUrl || !deploymentId) {
+    return dashboardUrl;
+  }
+
+  const cleanDashboardUrl = dashboardUrl.replace(/\/$/, '');
+
+  if (cleanDashboardUrl.endsWith(`/${deploymentId}`)) {
+    return cleanDashboardUrl;
+  }
+
+  const deploymentsIndex = cleanDashboardUrl.indexOf('/deployments');
+
+  if (deploymentsIndex >= 0) {
+    return `${cleanDashboardUrl.slice(0, deploymentsIndex)}/${deploymentId}`;
+  }
+
+  return `${cleanDashboardUrl}/${deploymentId}`;
+};
+
+const getOwnerSlugFromDeploymentHost = (host: string) => {
+  const parts = host.split('-');
+
+  return parts.at(-1) === 'projects' && parts.at(-2)
+    ? `${parts.at(-2)}-projects`
+    : process.env.VERCEL_DASHBOARD_TEAM_SLUG;
+};
+
+const getProjectSlugFromDeploymentHost = (host: string, ownerSlug?: string) => {
+  if (host.includes('-git-')) {
+    return host.split('-git-')[0];
+  }
+
+  const withoutOwner =
+    ownerSlug && host.endsWith(`-${ownerSlug}`)
+      ? host.slice(0, -(ownerSlug.length + 1))
+      : host;
+  const parts = withoutOwner.split('-').filter(Boolean);
+
+  if (parts.length > 1) {
+    return parts.slice(0, -1).join('-');
+  }
+
+  return withoutOwner || undefined;
+};
+
+const getDashboardUrlFromDeploymentHost = (url?: string, deploymentId?: string) => {
   const normalized = normaliseUrl(url);
 
   if (!normalized) {
@@ -170,26 +460,51 @@ const getDashboardUrlFromDeploymentHost = (url?: string) => {
 
   try {
     const host = new URL(normalized).hostname.replace(/\.vercel\.app$/i, '');
-    const repoSlug =
-      process.env.VERCEL_PROJECT_NAME ||
+    const ownerSlug = getOwnerSlugFromDeploymentHost(host);
+    const projectSlug =
       process.env.VERCEL_GIT_REPO_SLUG ||
       process.env.VERCEL_GIT_REPO ||
-      host.split('-git-')[0] ||
-      host.split('-')[0];
-    const parts = host.split('-');
-    const ownerSlug =
-      parts.at(-1) === 'projects' && parts.at(-2)
-        ? `${parts.at(-2)}-projects`
-        : process.env.VERCEL_DASHBOARD_TEAM_SLUG;
+      getProjectSlugFromDeploymentHost(host, ownerSlug);
 
-    if (!ownerSlug || !repoSlug) {
+    if (!ownerSlug || !projectSlug) {
       return undefined;
     }
 
-    return `https://vercel.com/${ownerSlug}/${repoSlug}/deployments`;
+    return getProjectDashboardUrl({
+      deploymentId,
+      ownerSlug,
+      projectSlug
+    });
   } catch {
     return undefined;
   }
+};
+
+const getDeploymentDashboardUrl = ({
+  deploymentId,
+  deploymentUrl,
+  ownerSlug,
+  projectSlug
+}: {
+  deploymentId?: string;
+  deploymentUrl?: string;
+  ownerSlug?: string;
+  projectSlug?: string;
+}) => {
+  const projectDashboardUrl = getProjectDashboardUrl({
+    deploymentId,
+    ownerSlug,
+    projectSlug
+  });
+
+  if (projectDashboardUrl) {
+    return projectDashboardUrl;
+  }
+
+  return appendDeploymentIdToDashboardUrl(
+    getDashboardUrlFromDeploymentHost(deploymentUrl, deploymentId),
+    deploymentId
+  );
 };
 
 const getTimestamp = (value: unknown): number | undefined => {
@@ -248,6 +563,53 @@ const getLastReadyDeployment = (deployments: unknown[]) => {
   return deployments.find((deployment) => normaliseState(
     getStringValue(deployment, 'state') || getStringValue(deployment, 'readyState')
   ) === 'ready');
+};
+
+const getDeploymentId = (deployment: unknown) => {
+  return getStringValue(deployment, 'uid') || getStringValue(deployment, 'id');
+};
+
+const getDeploymentBranch = (deployment: unknown) => {
+  const meta = getObjectValue(deployment, 'meta');
+  const gitSource = getObjectValue(deployment, 'gitSource');
+
+  return (
+    getStringValue(meta, 'githubCommitRef') ||
+    getStringValue(gitSource, 'ref') ||
+    getStringValue(deployment, 'target')
+  );
+};
+
+const getDeploymentCommitSha = (deployment: unknown) => {
+  const meta = getObjectValue(deployment, 'meta');
+  const gitSource = getObjectValue(deployment, 'gitSource');
+
+  return getStringValue(meta, 'githubCommitSha') || getStringValue(gitSource, 'sha');
+};
+
+const getDeploymentEnvironment = (deployment: unknown) => {
+  return getStringValue(deployment, 'target') || getStringValue(deployment, 'type');
+};
+
+const getDeploymentCreatedAt = (deployment: unknown) => {
+  return (
+    getTimestamp(getObjectValue(deployment, 'createdAt')) ||
+    getTimestamp(getObjectValue(deployment, 'created')) ||
+    getTimestamp(getObjectValue(deployment, 'buildingAt'))
+  );
+};
+
+const getDeploymentSummaryTimestamp = (deployment: VercelDeploymentSummary) => {
+  const createdAt = getTimestamp(deployment.createdAt);
+  const readyAt = getTimestamp(deployment.readyAt);
+
+  return createdAt || readyAt || 0;
+};
+
+const getBranchDeploymentKey = (deployment: VercelDeploymentSummary) => {
+  const branch = deployment.branch?.trim().toLowerCase();
+
+  return branch || `url:${deployment.url}`;
 };
 
 const getBuildProgressFromChecks = (checks: unknown): { progress?: number; phase?: string } => {
@@ -318,10 +680,16 @@ const formatBuildPhase = (phase?: string, state?: VercelDeploymentStatus['state'
   switch (state) {
     case 'queued':
       return 'Queued';
+    case 'initializing':
+      return 'Initializing';
     case 'building':
       return 'Building';
     case 'ready':
       return 'Ready';
+    case 'canceled':
+      return 'Canceled';
+    case 'blocked':
+      return 'Blocked';
     case 'error':
       return 'Error';
     case 'local':
@@ -383,12 +751,11 @@ export const getVercelDeploymentStatus = async (): Promise<VercelDeploymentStatu
     const token = process.env.VERCEL_API_TOKEN;
     const projectId = process.env.VERCEL_PROJECT_ID || DEFAULT_VERCEL_PROJECT_ID;
     const projectName =
-      process.env.VERCEL_PROJECT_NAME ||
       process.env.VERCEL_GIT_REPO_SLUG ||
       process.env.VERCEL_GIT_REPO;
     const teamId = process.env.VERCEL_TEAM_ID || process.env.VERCEL_ORG_ID || DEFAULT_VERCEL_TEAM_ID;
 
-    if (!process.env.VERCEL && !deploymentUrl) {
+    if (!token && !process.env.VERCEL && !deploymentUrl) {
       return {
         branch,
         commitSha,
@@ -411,41 +778,13 @@ export const getVercelDeploymentStatus = async (): Promise<VercelDeploymentStatu
       return fallback;
     }
 
-    const url = new URL('https://api.vercel.com/v6/deployments');
-    url.searchParams.set('limit', '20');
-
-    if (projectId) {
-      url.searchParams.set('projectId', projectId);
-    } else if (projectName) {
-      url.searchParams.set('app', projectName);
-    }
-
-    if (teamId) {
-      url.searchParams.set('teamId', teamId);
-    }
-
-    let response = await fetch(url.toString(), {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/json'
-      }
+    const data = await getVercelDeploymentsPage({
+      limit: DEFAULT_DEPLOYMENT_API_PAGE_SIZE,
+      projectId,
+      projectName,
+      teamId,
+      token
     });
-
-    if (response.status === 403 && teamId) {
-      url.searchParams.delete('teamId');
-      response = await fetch(url.toString(), {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/json'
-        }
-      });
-    }
-
-    if (!response.ok) {
-      throw new Error(`Vercel API returned ${response.status}`);
-    }
-
-    const data = await response.json();
     const projectData = await getVercelProjectData({
       projectId,
       projectName,
@@ -530,20 +869,11 @@ export const getVercelDeploymentStatus = async (): Promise<VercelDeploymentStatu
     const resolvedBuildProgress =
       state === 'ready'
         ? 100
-        : state === 'error'
+        : state === 'error' || state === 'blocked'
           ? 0
           : (stateProgress ?? undefined);
 
-    const labelState =
-      state === 'ready'
-        ? 'ready'
-        : state === 'building'
-          ? 'building'
-          : state === 'queued'
-            ? 'queued'
-            : state === 'error'
-              ? 'error'
-              : 'unknown';
+    const labelState = state === 'local' ? 'unknown' : state;
 
     return {
       ...fallback,
@@ -552,7 +882,7 @@ export const getVercelDeploymentStatus = async (): Promise<VercelDeploymentStatu
       buildPhase: phaseLabel,
       buildProgress: resolvedBuildProgress,
       configured: true,
-      hasError: state === 'error',
+      hasError: state === 'error' || state === 'blocked',
       lastReadyAt: lastReadyAt ? new Date(lastReadyAt).toISOString() : undefined,
       lastReadyLabel: formatRelativeTime(lastReadyAt),
       lastReadyUrl,
@@ -581,6 +911,179 @@ export const getVercelDeploymentStatus = async (): Promise<VercelDeploymentStatu
       hasError: true,
       label: 'Vercel: status unavailable',
       state: 'unknown'
+    };
+  }
+};
+
+export const getVercelDeploymentsOverview = async ({
+  limit = DEFAULT_DEPLOYMENT_BRANCH_LIMIT,
+  maxPages = DEFAULT_DEPLOYMENT_MAX_PAGES,
+  pageSize = DEFAULT_DEPLOYMENT_API_PAGE_SIZE
+}: {
+  limit?: number | string | null;
+  maxPages?: number;
+  pageSize?: number;
+} = {}): Promise<VercelDeploymentsOverview> => {
+  const branchLimit = normaliseDeploymentBranchLimit(limit);
+  const fetchedAt = new Date().toISOString();
+  const token = process.env.VERCEL_API_TOKEN;
+  const deploymentUrl = normaliseUrl(process.env.VERCEL_URL);
+  const projectId = process.env.VERCEL_PROJECT_ID || DEFAULT_VERCEL_PROJECT_ID;
+  const projectName =
+    process.env.VERCEL_GIT_REPO_SLUG ||
+    process.env.VERCEL_GIT_REPO;
+  const teamId = process.env.VERCEL_TEAM_ID || process.env.VERCEL_ORG_ID || DEFAULT_VERCEL_TEAM_ID;
+
+  const fallbackDeployments: VercelDeploymentSummary[] = deploymentUrl
+    ? [
+        {
+          branch: process.env.VERCEL_GIT_COMMIT_REF || process.env.THINGTIME_BRANCH_NAME,
+          createdAt: fetchedAt,
+          commitSha: process.env.VERCEL_GIT_COMMIT_SHA,
+          environment: process.env.VERCEL_TARGET_ENV || process.env.VERCEL_ENV,
+          state: (process.env.VERCEL_TARGET_ENV || process.env.VERCEL_ENV) ? 'ready' : 'unknown',
+          url: deploymentUrl
+        }
+      ]
+    : [];
+
+  if (!token) {
+    return {
+      branchLimit,
+      configured: false,
+      deployments: fallbackDeployments,
+      deploymentPageCount: 0,
+      deploymentScanCount: fallbackDeployments.length,
+      deploymentScanLimit: fallbackDeployments.length,
+      fetchedAt,
+      hasError: false,
+      label: fallbackDeployments.length ? 'Tokenless Vercel deployment' : 'Vercel API token not configured',
+      projectName,
+      source: fallbackDeployments.length ? 'tokenless' : 'local',
+      totalBranchCount: fallbackDeployments.length,
+      uniqueBranchCount: fallbackDeployments.length,
+      uniqueUrlCount: fallbackDeployments.length
+    };
+  }
+
+  try {
+    const apiPageSize = Math.max(1, Math.min(100, pageSize));
+    const apiMaxPages = Math.max(1, Math.min(10, maxPages));
+    const data = await getVercelDeploymentsPages({
+      maxPages: apiMaxPages,
+      pageSize: apiPageSize,
+      projectId,
+      projectName,
+      teamId,
+      token
+    });
+    const projectData = await getVercelProjectData({
+      projectId,
+      projectName,
+      teamId,
+      token
+    });
+    const dashboardOwnerSlug = getDashboardOwnerSlug(projectData);
+    const dashboardProjectSlug = getDashboardProjectSlug(projectData, projectName);
+    const deployments = data.deployments;
+    const seenBranches = new Set<string>();
+    const seenUrls = new Set<string>();
+
+    const allDeploymentSummaries = deployments.reduce<VercelDeploymentSummary[]>((items, deployment) => {
+      const url = normaliseUrl(getStringValue(deployment, 'url'));
+
+      if (!url) {
+        return items;
+      }
+
+      const id = getDeploymentId(deployment);
+      const readyAt = getDeploymentReadyAt(deployment);
+      const createdAt = getDeploymentCreatedAt(deployment);
+
+      const deploymentMeta = getObjectValue(deployment, 'meta');
+      const deploymentOwnerSlug =
+        dashboardOwnerSlug ||
+        getDashboardOwnerSlug(deploymentMeta) ||
+        getDashboardOwnerSlug(deployment);
+      const deploymentProjectSlug =
+        dashboardProjectSlug ||
+        getDashboardProjectSlug(getObjectValue(deployment, 'project'), projectName) ||
+        getStringValue(deployment, 'name') ||
+        projectName;
+
+      items.push({
+        branch: getDeploymentBranch(deployment),
+        commitSha: getDeploymentCommitSha(deployment),
+        createdAt: createdAt ? new Date(createdAt).toISOString() : undefined,
+        dashboardUrl: getDeploymentDashboardUrl({
+          deploymentUrl: url,
+          deploymentId: id,
+          ownerSlug: deploymentOwnerSlug,
+          projectSlug: deploymentProjectSlug
+        }),
+        environment: getDeploymentEnvironment(deployment),
+        id,
+        readyAt: readyAt ? new Date(readyAt).toISOString() : undefined,
+        readyLabel: formatRelativeTime(readyAt || createdAt),
+        state: normaliseState(getStringValue(deployment, 'state') || getStringValue(deployment, 'readyState')),
+        url
+      });
+
+      return items;
+    }, [])
+      .sort((left, right) => getDeploymentSummaryTimestamp(right) - getDeploymentSummaryTimestamp(left));
+
+    const allBranchDeploymentSummaries = allDeploymentSummaries.reduce<VercelDeploymentSummary[]>((items, deployment) => {
+      const branchKey = getBranchDeploymentKey(deployment);
+
+      if (seenBranches.has(branchKey)) {
+        return items;
+      }
+
+      seenBranches.add(branchKey);
+      seenUrls.add(deployment.url);
+      items.push(deployment);
+
+      return items;
+    }, []);
+    const deploymentSummaries = branchLimit === null
+      ? allBranchDeploymentSummaries
+      : allBranchDeploymentSummaries.slice(0, branchLimit);
+    const totalBranchCount = allBranchDeploymentSummaries.length;
+
+    return {
+      branchLimit,
+      configured: true,
+      deployments: deploymentSummaries,
+      deploymentPageCount: data.pageCount,
+      deploymentScanCount: deployments.length,
+      deploymentScanLimit: apiMaxPages * apiPageSize,
+      fetchedAt,
+      hasError: false,
+      label: `${deploymentSummaries.length} branch deployment${deploymentSummaries.length === 1 ? '' : 's'}`,
+      projectName: getDashboardProjectSlug(projectData, projectName),
+      source: 'api',
+      totalBranchCount,
+      uniqueBranchCount: totalBranchCount,
+      uniqueUrlCount: seenUrls.size
+    };
+  } catch (err: any) {
+    return {
+      branchLimit,
+      configured: true,
+      deployments: fallbackDeployments,
+      deploymentPageCount: 0,
+      deploymentScanCount: fallbackDeployments.length,
+      deploymentScanLimit: fallbackDeployments.length,
+      error: err?.message || String(err),
+      fetchedAt,
+      hasError: true,
+      label: 'Vercel deployments unavailable',
+      projectName,
+      source: fallbackDeployments.length ? 'tokenless' : 'api',
+      totalBranchCount: fallbackDeployments.length,
+      uniqueBranchCount: fallbackDeployments.length,
+      uniqueUrlCount: fallbackDeployments.length
     };
   }
 };

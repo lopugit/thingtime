@@ -7,6 +7,8 @@ import { Icon } from '../Icon/Icon';
 import { RainbowSkeleton } from '../Skeleton/RainbowSkeleton';
 import { ProfileDrawer } from './ProfileDrawer';
 import { useThingtime } from '../Thingtime/useThingtime';
+import { useCurrentUser } from '~/hooks/useCurrentUser';
+
 const BRANCH_NAME =
   typeof process !== 'undefined' && process.env?.THINGTIME_BRANCH_NAME
     ? process.env.THINGTIME_BRANCH_NAME
@@ -16,6 +18,8 @@ console.log('BRANCH_NAME:', BRANCH_NAME);
 
 export const Nav = (props) => {
   const { thingtime } = useThingtime();
+
+  const user = useCurrentUser();
 
   const [profileDrawerOpen, setProfileDrawerOpen] = React.useState(false);
 
@@ -75,7 +79,7 @@ export const Nav = (props) => {
         navigate(newPathname);
       }
     },
-    [pathname, navigate]
+    [pathname, navigate, thingtime]
   );
 
   const toggleEditor = React.useCallback(
@@ -175,14 +179,25 @@ export const Nav = (props) => {
               </Link>
             </Center> */}
             <Center cursor="pointer">
-              <Link to="/login">
-                <Flex flexDir={'row'} gap={2}>
-                  <Box fontSize="xs" opacity={0.5}>
-                    Login
-                  </Box>
-                  <Icon transform={['', 'scaleX(-100%)']} size="12px" name="🌈"></Icon>
-                </Flex>
-              </Link>
+              {user ? (
+                <Link to="/profile">
+                  <Flex flexDir={'row'} gap={2} alignItems="center">
+                    <Box fontSize="xs" fontWeight="600">
+                      {user.displayName || user.username}
+                    </Box>
+                    <Icon transform={['', 'scaleX(-100%)']} size="12px" name="🌈"></Icon>
+                  </Flex>
+                </Link>
+              ) : (
+                <Link to="/login">
+                  <Flex flexDir={'row'} gap={2}>
+                    <Box fontSize="xs" opacity={0.5}>
+                      Login
+                    </Box>
+                    <Icon transform={['', 'scaleX(-100%)']} size="12px" name="🌈"></Icon>
+                  </Flex>
+                </Link>
+              )}
             </Center>
             <Center display={['flex', 'none']} cursor="pointer">
               <Link to="/">

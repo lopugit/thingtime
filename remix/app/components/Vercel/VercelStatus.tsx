@@ -1,13 +1,13 @@
 import React from 'react';
-import { Box, Flex, Text } from '@chakra-ui/react';
+import { Box, Flex, Icon, Text } from '@chakra-ui/react';
 import { keyframes } from '@emotion/react';
+import { Rocket } from 'lucide-react';
 
 import type { VercelDeploymentStatus } from '~/api/utils/vercel/status';
 import { StatusRefreshButton } from '~/components/Status/StatusRefreshButton';
 
 const STATUS_ENDPOINT = '/api/v1/vercel/status';
 const ACTIVE_POLL_MS = 5000;
-const IDLE_POLL_MS = 60000;
 const STATUS_COLORS = {
   unavailable: '#A0AEC0',
   error: '#FC8181',
@@ -38,7 +38,8 @@ const getDisplayPhase = (phase?: string, state?: VercelDeploymentStatus['state']
     normalizedKey === state ||
     (state === 'ready' && (normalizedKey === 'ready' || normalizedKey === 'staged')) ||
     (state === 'building' && normalizedKey === 'building') ||
-    (state === 'queued' && normalizedKey === 'queued')
+    (state === 'queued' && normalizedKey === 'queued') ||
+    (state === 'initializing' && normalizedKey === 'initializing')
   ) {
     return undefined;
   }
@@ -83,16 +84,12 @@ export const VercelStatus = (props) => {
           setStatus(nextStatus);
           setError(null);
 
-          timeoutId = window.setTimeout(
-            requestStatus,
-            nextState === 'building' || nextState === 'queued' || nextState === 'unknown'
-              ? ACTIVE_POLL_MS
-              : IDLE_POLL_MS,
-          );
+          if (nextState === 'building' || nextState === 'queued' || nextState === 'initializing') {
+            timeoutId = window.setTimeout(requestStatus, ACTIVE_POLL_MS);
+          }
         } catch (err: any) {
           setStatus(null);
           setError(err?.message || String(err));
-          timeoutId = window.setTimeout(requestStatus, ACTIVE_POLL_MS);
         }
       };
 
@@ -100,7 +97,6 @@ export const VercelStatus = (props) => {
         if (isMounted) {
           setStatus(null);
           setError('Status request failed');
-          timeoutId = window.setTimeout(requestStatus, ACTIVE_POLL_MS);
         }
       };
 
@@ -129,17 +125,17 @@ export const VercelStatus = (props) => {
   const buildProgress = status?.buildProgress;
   const buildPhase = status?.buildPhase;
   const buildUrl = status?.buildPageUrl || status?.latestDeploymentUrl;
-  const isActive = checking || state === 'building' || state === 'queued';
-  const hasBuildProgress = typeof buildProgress === 'number' && (isActive || state === 'error');
+  const isActive = checking || state === 'building' || state === 'queued' || state === 'initializing';
+  const hasBuildProgress = typeof buildProgress === 'number' && (isActive || state === 'error' || state === 'blocked');
   const isUnavailable = Boolean(error || status?.hasError || state === 'unknown');
   const color =
     isUnavailable
       ? STATUS_COLORS.unavailable
-      : state === 'error'
+      : state === 'error' || state === 'blocked'
         ? STATUS_COLORS.error
       : state === 'ready'
         ? STATUS_COLORS.ready
-        : state === 'building' || state === 'queued'
+        : state === 'building' || state === 'queued' || state === 'initializing'
           ? STATUS_COLORS.active
           : state === 'local'
             ? STATUS_COLORS.local
@@ -192,6 +188,18 @@ export const VercelStatus = (props) => {
         statusContent
       )}
       {refreshButton}
+      <Box
+        as="a"
+        href="/vercel"
+        aria-label="Open Vercel deployments dashboard"
+        title="Open Vercel deployments dashboard"
+        color="#319795"
+        display="inline-flex"
+        alignItems="center"
+        opacity={0.85}
+      >
+        <Icon as={Rocket} boxSize="12px" />
+      </Box>
     </Flex>
   );
 
@@ -218,7 +226,7 @@ export const VercelStatus = (props) => {
         height="100%"
         width={getProgressLeft(buildProgress)}
         borderRadius="full"
-        backgroundColor={state === 'error' ? STATUS_COLORS.error : STATUS_COLORS.active}
+        backgroundColor={state === 'error' || state === 'blocked' ? STATUS_COLORS.error : STATUS_COLORS.active}
       />
       {state === 'error' ? (
         <Text

@@ -1,10 +1,12 @@
 import React from 'react';
 import { Box, Center, Flex, Text } from '@chakra-ui/react';
-import { Link, useRouteLoaderData } from '@remix-run/react';
+import { Link, useNavigate, useRouteLoaderData } from '@remix-run/react';
 
 import { Icon } from '../Icon/Icon';
 import { MongoStatus } from '../MongoDB/MongoStatus';
 import { VercelStatus } from '../Vercel/VercelStatus';
+import { useApi } from '~/hooks/useApi';
+import { useCurrentUser } from '~/hooks/useCurrentUser';
 
 const BRANCH_NAME =
   typeof process !== 'undefined' && process.env?.THINGTIME_BRANCH_NAME
@@ -23,9 +25,19 @@ export const Footer = (props) => {
 
   const year = new Date().getFullYear();
 
+  const user = useCurrentUser();
+  const api = useApi();
+  const navigate = useNavigate();
+
+  const handleLogout = React.useCallback(async () => {
+    await api.v1.auth.logout();
+    // the fetcher submit revalidates the root loader → user clears
+    navigate('/login');
+  }, [api, navigate]);
+
   return (
     <Center width="100%" paddingTop="900px" paddingBottom={[5, 12]} paddingX={4}>
-      <Flex width={['500px', '500px']} maxWidth="100%">
+      <Flex width={['500px', '500px']} maxWidth="100%" columnGap={[8, 16]}>
         {false && (
           <Flex flexDirection="column" rowGap={3}>
             <Flex flexDirection="column">
@@ -89,6 +101,42 @@ export const Footer = (props) => {
             <Icon name="unicorn" size="8px"></Icon>
             <Icon name="wizard" size="8px"></Icon>
           </Flex>
+        </Flex>
+
+        {/* account / user column */}
+        <Flex flexDirection="column" rowGap={3}>
+          <Flex flexDirection="row" fontSize="xs" alignItems="center">
+            <Icon name="rainbow" size="12px" chakras={{ pr: 1 }}></Icon>
+            {user ? user.displayName || user.username : 'Account'}
+          </Flex>
+          {user ? (
+            <>
+              <Link to="/profile">
+                <Text fontSize="xs">Profile</Text>
+              </Link>
+              <Box as="button" type="button" onClick={handleLogout} textAlign="left">
+                <Text fontSize="xs" opacity={0.7}>
+                  Log out
+                </Text>
+              </Box>
+              {!user.emailVerified && (
+                <Text fontSize="10px" opacity={0.6}>
+                  ✉️ email unverified
+                </Text>
+              )}
+            </>
+          ) : (
+            <>
+              <Link to="/login">
+                <Text fontSize="xs">Log in</Text>
+              </Link>
+              <Link to="/register">
+                <Text fontSize="xs" opacity={0.7}>
+                  Register
+                </Text>
+              </Link>
+            </>
+          )}
         </Flex>
       </Flex>
     </Center>

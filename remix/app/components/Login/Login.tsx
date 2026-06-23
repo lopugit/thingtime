@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { Flex, Button, FormControl, Input, Spinner, Link, InputGroup, InputRightElement, Box } from '@chakra-ui/react';
-import { useFetcher } from '@remix-run/react';
+import { Link as RemixLink, useFetcher, useNavigate } from '@remix-run/react';
 
 import { useApi } from '~/hooks/useApi';
 import { useThingtime } from '../Thingtime/useThingtime';
+import { useLopu } from '../Lopu/useLopu';
 import { Icon } from '../Icon/Icon';
 import { Thingtime } from '../Thingtime/Thingtime';
 
@@ -37,22 +38,53 @@ export const Login = (props) => {
 
 	const [loginResp, setLoginResp] = React.useState();
 
+	const lopu = useLopu();
+	const navigate = useNavigate();
+
+	// DevKit prefill: fills the form when devKit.loginPrefill changes (_ts)
+	const loginPrefill = thingtime?.devKit?.loginPrefill;
+	React.useEffect(() => {
+		if (loginPrefill?._ts) {
+			if (typeof loginPrefill.username === 'string') setUsername(loginPrefill.username);
+			if (typeof loginPrefill.password === 'string') setPassword(loginPrefill.password);
+			setPasswordVisible(true);
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [loginPrefill?._ts]);
+
 	const handleLogin = async (e) => {
 		e?.preventDefault();
 
 		setLoading(true);
 
-		// TODO: hash before sending to server
+		try {
+			const resp = await login({ username, password });
+			setLoginResp(resp);
 
-		// const hashedPassword = bcrypt.hashSync(password);
-
-		const loginResp = await login({ username, password });
-
-		setLoginResp(loginResp);
-
-		if (loginResp) {
-		} else {
-			console.error('no loginResp', loginResp);
+			if (resp?.ok) {
+				lopu({
+					title: `Welcome back, ${resp.user?.username || username}! ✨`,
+					status: 'success',
+					duration: 5000,
+				});
+				navigate('/');
+			} else {
+				lopu({
+					title: 'Login failed',
+					description: resp?.error || 'Invalid username or password',
+					status: 'error',
+					duration: 6000,
+				});
+			}
+		} catch (err) {
+			lopu({
+				title: 'Network error',
+				description: 'Could not reach the server. Please try again.',
+				status: 'error',
+				duration: 6000,
+			});
+		} finally {
+			setLoading(false);
 		}
 	};
 
@@ -171,6 +203,12 @@ export const Login = (props) => {
 					>
 						Login ✨
 					</Button>
+
+					<RemixLink to="/register">
+						<Box fontSize="xs" opacity={0.7}>
+							Need an account? Register
+						</Box>
+					</RemixLink>
 				</Flex>
 			</form>
 		</>

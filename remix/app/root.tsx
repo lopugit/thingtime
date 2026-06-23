@@ -15,6 +15,7 @@ import { ClientStyleContext, ServerStyleContext } from './Providers/Chakra/emoti
 import { ThingtimeProvider } from './Providers/ThingtimeProvider';
 import { json } from '@vercel/remix';
 import { DevKit } from './components/DevKit/DevKit';
+import { getCurrentUser } from './api/utils/auth/getCurrentUser';
 
 type DocumentProps = {
   children: React.ReactNode;
@@ -124,6 +125,7 @@ type RootLoaderData = {
   envFromCookie: Record<string, string | undefined>;
   devKitEnv: Record<string, string | undefined>;
   titlePrefix: string;
+  user: Awaited<ReturnType<typeof getCurrentUser>>;
 };
 
 const getDeploymentBranchName = () => {
@@ -178,12 +180,14 @@ export async function loader({ request }: { request: Request }) {
   processEnv.THINGTIME_SHOW_DEPLOYMENT_STATUS = shouldShowDeploymentStatus() ? 'true' : 'false';
 
   // .log everyone
+  const user = await getCurrentUser(request);
 
   return json(
     {
       envFromCookie: { ...processEnv },
       devKitEnv,
-      titlePrefix
+      titlePrefix,
+      user
     },
     {
       headers: {
