@@ -33,7 +33,7 @@ export ASC_KEY_ID="GJWC63X3DC"
 export ASC_ISSUER_ID="<app-store-connect-issuer-id>"
 export ASC_KEY_CONTENT="$(base64 -i /path/to/AuthKey_GJWC63X3DC.p8)"
 export DEVELOPMENT_TEAM="<apple-developer-team-id>"
-export PRODUCT_BUNDLE_IDENTIFIER="com.thingtime.ios"
+export PRODUCT_BUNDLE_IDENTIFIER="com.thingtime.appletime"
 
 bundle install
 bundle exec fastlane beta

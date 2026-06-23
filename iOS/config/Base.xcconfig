@@ -1,6 +1,6 @@
 // Shared build settings for the native Thingtime iOS app.
 // Keep secrets out of this file; inject signing values via Xcode or CI env.
 
-PRODUCT_BUNDLE_IDENTIFIER = com.thingtime.ios
+PRODUCT_BUNDLE_IDENTIFIER = com.thingtime.appletime
 DEVELOPMENT_TEAM =
 IPHONEOS_DEPLOYMENT_TARGET = 17.0
