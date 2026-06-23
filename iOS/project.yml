@@ -38,6 +38,7 @@ targets:
       path: Thingtime/Resources/Info.plist
       properties:
         CFBundleDisplayName: Thingtime
+        ThingtimeWebURL: $(THINGTIME_WEB_URL)
         ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:

@@ -855,8 +855,8 @@
     "semantic_hash": "6f47150939eacf6d3a89a87289013ea3"
   },
   "README.md": {
-    "mtime": 1782186283.8585503,
-    "ast_hash": "0fd0ffa68726836bdec09ea3443317d2",
+    "mtime": 1782238741.4299402,
+    "ast_hash": "7673848164ba38f9d54aa73b37b9f9a9",
     "semantic_hash": ""
   },
   "docs/Use Cases/car.md": {
@@ -1810,8 +1810,8 @@
     "semantic_hash": ""
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1782235931.2207077,
-    "ast_hash": "e8d836ef1f06534f2c4c3b3dad6310e5",
+    "mtime": 1782238741.4302075,
+    "ast_hash": "076d95c1eacbd44f0dd2e62fa57f65ba",
     "semantic_hash": ""
   },
   "remix/app/api/utils/vercel/status.ts": {
@@ -2085,8 +2085,8 @@
     "semantic_hash": ""
   },
   "iOS/Thingtime/Web/ThingtimeWebDestination.swift": {
-    "mtime": 1782212406.676467,
-    "ast_hash": "7b46b32c913fcc82103d8234a56ca687",
+    "mtime": 1782238741.4280725,
+    "ast_hash": "a8d566a8ff15b4d37fdc97c0d776c0dd",
     "semantic_hash": ""
   },
   "iOS/Thingtime/Web/ThingtimeWebView.swift": {
@@ -2100,8 +2100,8 @@
     "semantic_hash": ""
   },
   "iOS/ThingtimeTests/ThingtimeWebDestinationTests.swift": {
-    "mtime": 1782212406.677097,
-    "ast_hash": "40026d19b86088f85657ff724640abed",
+    "mtime": 1782238741.4284813,
+    "ast_hash": "358eb47aa7c6ab59f888b16af93377bc",
     "semantic_hash": ""
   },
   "iOS/scripts/_xcode-common.sh": {
@@ -2130,13 +2130,13 @@
     "semantic_hash": ""
   },
   "iOS/README.md": {
-    "mtime": 1782224193.5124178,
-    "ast_hash": "d494d6a2a81630aebeb59437288553b4",
+    "mtime": 1782238741.4296618,
+    "ast_hash": "a016389aca4ac879f360292b6b6af478",
     "semantic_hash": ""
   },
   "iOS/project.yml": {
-    "mtime": 1782224607.6774368,
-    "ast_hash": "b3ce4636264010465acf4aaa73421c58",
+    "mtime": 1782238741.4270813,
+    "ast_hash": "4991e18647d0d91db4757366aa10988d",
     "semantic_hash": ""
   },
   "remix/app/components/NativeBridge/NativeBridgeHost.tsx": {

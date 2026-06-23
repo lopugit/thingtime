@@ -510,7 +510,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "api_src_index_js_src_index",
-      "community": 34,
+      "community": 106,
       "norm_label": "index.js"
     },
     {
@@ -520,7 +520,7 @@
       "source_location": "L12",
       "_origin": "ast",
       "id": "src_index_app",
-      "community": 34,
+      "community": 106,
       "norm_label": "app"
     },
     {
@@ -530,7 +530,7 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "src_index_server",
-      "community": 34,
+      "community": 106,
       "norm_label": "server"
     },
     {
@@ -540,7 +540,7 @@
       "source_location": "L23",
       "_origin": "ast",
       "id": "src_index_smarts",
-      "community": 34,
+      "community": 106,
       "norm_label": "smarts"
     },
     {
@@ -550,7 +550,7 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "src_index_io",
-      "community": 34,
+      "community": 106,
       "norm_label": "io"
     },
     {
@@ -680,7 +680,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "app_thingtimeapp",
-      "community": 34,
+      "community": 106,
       "norm_label": "thingtimeapp.swift"
     },
     {
@@ -691,7 +691,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "swiftui",
-      "community": 34,
+      "community": 109,
       "norm_label": "swiftui"
     },
     {
@@ -701,7 +701,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "app_thingtimeapp_thingtimeapp",
-      "community": 34,
+      "community": 106,
       "norm_label": "thingtimeapp"
     },
     {
@@ -711,7 +711,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "scene",
-      "community": 34,
+      "community": 106,
       "norm_label": "scene"
     },
     {
@@ -746,13 +746,53 @@
       "norm_label": "thingtimewebdestination"
     },
     {
+      "label": "URL",
+      "file_type": "code",
+      "source_file": "iOS/Thingtime/Web/ThingtimeWebDestination.swift",
+      "source_location": "L6",
+      "_origin": "ast",
+      "id": "ios_thingtime_web_thingtimewebdestination_swift_url",
+      "community": 86,
+      "norm_label": "url"
+    },
+    {
+      "label": ".url()",
+      "file_type": "code",
+      "source_file": "iOS/Thingtime/Web/ThingtimeWebDestination.swift",
+      "source_location": "L10",
+      "_origin": "ast",
+      "id": "web_thingtimewebdestination_thingtimewebdestination_url",
+      "community": 86,
+      "norm_label": ".url()"
+    },
+    {
+      "label": "String",
+      "file_type": "code",
+      "source_file": "iOS/Thingtime/Web/ThingtimeWebDestination.swift",
+      "source_location": "L10",
+      "_origin": "ast",
+      "id": "ios_thingtime_web_thingtimewebdestination_swift_string",
+      "community": 86,
+      "norm_label": "string"
+    },
+    {
+      "label": "Any",
+      "file_type": "code",
+      "source_file": "iOS/Thingtime/Web/ThingtimeWebDestination.swift",
+      "source_location": "L10",
+      "_origin": "ast",
+      "id": "ios_thingtime_web_thingtimewebdestination_swift_any",
+      "community": 86,
+      "norm_label": "any"
+    },
+    {
       "label": "ThingtimeWebView.swift",
       "file_type": "code",
       "source_file": "iOS/Thingtime/Web/ThingtimeWebView.swift",
       "source_location": "L1",
       "_origin": "ast",
       "id": "web_thingtimewebview",
-      "community": 34,
+      "community": 109,
       "norm_label": "thingtimewebview.swift"
     },
     {
@@ -763,7 +803,7 @@
       "source_location": "L2",
       "_origin": "ast",
       "id": "webkit",
-      "community": 34,
+      "community": 109,
       "norm_label": "webkit"
     },
     {
@@ -773,7 +813,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "web_thingtimewebview_thingtimewebview",
-      "community": 34,
+      "community": 109,
       "norm_label": "thingtimewebview"
     },
     {
@@ -783,7 +823,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "view",
-      "community": 34,
+      "community": 109,
       "norm_label": "view"
     },
     {
@@ -793,7 +833,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "web_webview",
-      "community": 34,
+      "community": 109,
       "norm_label": "webview.swift"
     },
     {
@@ -803,7 +843,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "web_webview_webview",
-      "community": 34,
+      "community": 107,
       "norm_label": "webview"
     },
     {
@@ -813,7 +853,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "uiviewrepresentable",
-      "community": 34,
+      "community": 107,
       "norm_label": "uiviewrepresentable"
     },
     {
@@ -822,8 +862,8 @@
       "source_file": "iOS/Thingtime/Web/WebView.swift",
       "source_location": "L7",
       "_origin": "ast",
-      "id": "url",
-      "community": 34,
+      "id": "ios_thingtime_web_webview_swift_url",
+      "community": 107,
       "norm_label": "url"
     },
     {
@@ -833,7 +873,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "web_webview_webview_makecoordinator",
-      "community": 34,
+      "community": 107,
       "norm_label": ".makecoordinator()"
     },
     {
@@ -843,7 +883,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "coordinator",
-      "community": 34,
+      "community": 107,
       "norm_label": "coordinator"
     },
     {
@@ -853,7 +893,7 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "web_webview_webview_makeuiview",
-      "community": 34,
+      "community": 107,
       "norm_label": ".makeuiview()"
     },
     {
@@ -863,7 +903,7 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "context",
-      "community": 34,
+      "community": 107,
       "norm_label": "context"
     },
     {
@@ -873,7 +913,7 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "wkwebview",
-      "community": 34,
+      "community": 107,
       "norm_label": "wkwebview"
     },
     {
@@ -883,7 +923,7 @@
       "source_location": "L34",
       "_origin": "ast",
       "id": "web_webview_webview_updateuiview",
-      "community": 34,
+      "community": 107,
       "norm_label": ".updateuiview()"
     },
     {
@@ -992,7 +1032,7 @@
       "source_file": "iOS/Thingtime/Web/WebView.swift",
       "source_location": "L105",
       "_origin": "ast",
-      "id": "string",
+      "id": "ios_thingtime_web_webview_swift_string",
       "community": 34,
       "norm_label": "string"
     },
@@ -1002,7 +1042,7 @@
       "source_file": "iOS/Thingtime/Web/WebView.swift",
       "source_location": "L105",
       "_origin": "ast",
-      "id": "any",
+      "id": "ios_thingtime_web_webview_swift_any",
       "community": 34,
       "norm_label": "any"
     },
@@ -1023,7 +1063,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "thingtimetests_thingtimewebdestinationtests",
-      "community": 34,
+      "community": 106,
       "norm_label": "thingtimewebdestinationtests.swift"
     },
     {
@@ -1034,7 +1074,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "xctest",
-      "community": 34,
+      "community": 106,
       "norm_label": "xctest"
     },
     {
@@ -1045,7 +1085,7 @@
       "source_location": "L2",
       "_origin": "ast",
       "id": "thingtime",
-      "community": 34,
+      "community": 106,
       "norm_label": "thingtime"
     },
     {
@@ -1055,7 +1095,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "thingtimetests_thingtimewebdestinationtests_thingtimewebdestinationtests",
-      "community": 34,
+      "community": 86,
       "norm_label": "thingtimewebdestinationtests"
     },
     {
@@ -1065,7 +1105,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "xctestcase",
-      "community": 34,
+      "community": 86,
       "norm_label": "xctestcase"
     },
     {
@@ -1075,8 +1115,28 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "thingtimetests_thingtimewebdestinationtests_thingtimewebdestinationtests_testhomeurlloadsproductionthingtime",
-      "community": 34,
+      "community": 86,
       "norm_label": ".testhomeurlloadsproductionthingtime()"
+    },
+    {
+      "label": ".testConfiguredHTTPSURLCanOverrideHomeURL()",
+      "file_type": "code",
+      "source_file": "iOS/ThingtimeTests/ThingtimeWebDestinationTests.swift",
+      "source_location": "L11",
+      "_origin": "ast",
+      "id": "thingtimetests_thingtimewebdestinationtests_thingtimewebdestinationtests_testconfiguredhttpsurlcanoverridehomeurl",
+      "community": 86,
+      "norm_label": ".testconfiguredhttpsurlcanoverridehomeurl()"
+    },
+    {
+      "label": ".testInvalidConfiguredURLFallsBackToProduction()",
+      "file_type": "code",
+      "source_file": "iOS/ThingtimeTests/ThingtimeWebDestinationTests.swift",
+      "source_location": "L22",
+      "_origin": "ast",
+      "id": "thingtimetests_thingtimewebdestinationtests_thingtimewebdestinationtests_testinvalidconfiguredurlfallsbacktoproduction",
+      "community": 86,
+      "norm_label": ".testinvalidconfiguredurlfallsbacktoproduction()"
     },
     {
       "label": "_xcode-common.sh",
@@ -2567,7 +2627,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "components_imagegeneratoractionpanel",
-      "community": 10,
+      "community": 0,
       "norm_label": "imagegeneratoractionpanel.tsx"
     },
     {
@@ -4357,7 +4417,7 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "providers_thingtimeprovider_thingtimetypes",
-      "community": 7,
+      "community": 35,
       "norm_label": "thingtimetypes"
     },
     {
@@ -4607,7 +4667,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "auth_getcurrentuser_getcurrentuser",
-      "community": 16,
+      "community": 94,
       "norm_label": "getcurrentuser()"
     },
     {
@@ -5517,7 +5577,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "lopu_ratelimit",
-      "community": 73,
+      "community": 16,
       "norm_label": "ratelimit.ts"
     },
     {
@@ -5527,7 +5587,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "lopu_ratelimit_ratelimitresult",
-      "community": 73,
+      "community": 16,
       "norm_label": "ratelimitresult"
     },
     {
@@ -5537,7 +5597,7 @@
       "source_location": "L16",
       "_origin": "ast",
       "id": "lopu_ratelimit_firstheaderip",
-      "community": 73,
+      "community": 16,
       "norm_label": "firstheaderip()"
     },
     {
@@ -5547,7 +5607,7 @@
       "source_location": "L18",
       "_origin": "ast",
       "id": "lopu_ratelimit_getrequestip",
-      "community": 73,
+      "community": 16,
       "norm_label": "getrequestip()"
     },
     {
@@ -5557,7 +5617,7 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "lopu_ratelimit_haship",
-      "community": 73,
+      "community": 16,
       "norm_label": "haship()"
     },
     {
@@ -5567,7 +5627,7 @@
       "source_location": "L31",
       "_origin": "ast",
       "id": "lopu_ratelimit_activerequestsexpr",
-      "community": 73,
+      "community": 16,
       "norm_label": "activerequestsexpr()"
     },
     {
@@ -5577,7 +5637,7 @@
       "source_location": "L39",
       "_origin": "ast",
       "id": "lopu_ratelimit_resetfromrequests",
-      "community": 73,
+      "community": 16,
       "norm_label": "resetfromrequests()"
     },
     {
@@ -5587,7 +5647,7 @@
       "source_location": "L52",
       "_origin": "ast",
       "id": "lopu_ratelimit_consumelopumusingquota",
-      "community": 73,
+      "community": 16,
       "norm_label": "consumelopumusingquota()"
     },
     {
@@ -5707,7 +5767,7 @@
       "source_location": "L31",
       "_origin": "ast",
       "id": "mongodb_collections_getlopumusingratelimitscollection",
-      "community": 73,
+      "community": 16,
       "norm_label": "getlopumusingratelimitscollection()"
     },
     {
@@ -6387,7 +6447,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "api_submit",
-      "community": 35,
+      "community": 2,
       "norm_label": "submit.tsx"
     },
     {
@@ -6397,7 +6457,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "api_submit_submit",
-      "community": 35,
+      "community": 2,
       "norm_label": "submit()"
     },
     {
@@ -7157,7 +7217,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "rainbow_rainbow",
-      "community": 11,
+      "community": 108,
       "norm_label": "rainbow.tsx"
     },
     {
@@ -7167,7 +7227,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "rainbow_rainbow_rainbow",
-      "community": 11,
+      "community": 108,
       "norm_label": "rainbow()"
     },
     {
@@ -7177,7 +7237,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "safety_safe",
-      "community": 72,
+      "community": 110,
       "norm_label": "safe.tsx"
     },
     {
@@ -7187,7 +7247,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "safety_safe_safe",
-      "community": 72,
+      "community": 110,
       "norm_label": "safe()"
     },
     {
@@ -7687,7 +7747,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "functions_safe",
-      "community": 72,
+      "community": 110,
       "norm_label": "safe.tsx"
     },
     {
@@ -7697,7 +7757,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "functions_safe_safe",
-      "community": 72,
+      "community": 110,
       "norm_label": "safe()"
     },
     {
@@ -7707,7 +7767,7 @@
       "source_location": "L54",
       "_origin": "ast",
       "id": "functions_safe_getmeta",
-      "community": 72,
+      "community": 110,
       "norm_label": "getmeta()"
     },
     {
@@ -8037,7 +8097,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "hooks_useasyncfetcher",
-      "community": 35,
+      "community": 2,
       "norm_label": "useasyncfetcher.tsx"
     },
     {
@@ -8047,7 +8107,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "hooks_useasyncfetcher_useasyncfetcher",
-      "community": 35,
+      "community": 2,
       "norm_label": "useasyncfetcher()"
     },
     {
@@ -8127,7 +8187,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "hooks_useprops",
-      "community": 11,
+      "community": 108,
       "norm_label": "useprops.tsx"
     },
     {
@@ -8137,7 +8197,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "hooks_useprops_useprops",
-      "community": 11,
+      "community": 108,
       "norm_label": "useprops()"
     },
     {
@@ -8177,7 +8237,7 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "hooks_usethingtimemachine_patharray",
-      "community": 72,
+      "community": 7,
       "norm_label": "patharray"
     },
     {
@@ -8267,7 +8327,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "hooks_usetrace",
-      "community": 11,
+      "community": 108,
       "norm_label": "usetrace.tsx"
     },
     {
@@ -8277,7 +8337,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "hooks_usetrace_usetrace",
-      "community": 11,
+      "community": 108,
       "norm_label": "usetrace()"
     },
     {
@@ -8287,7 +8347,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "hooks_useuuid",
-      "community": 11,
+      "community": 108,
       "norm_label": "useuuid.tsx"
     },
     {
@@ -8297,7 +8357,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "hooks_useuuid_useuuid",
-      "community": 11,
+      "community": 108,
       "norm_label": "useuuid()"
     },
     {
@@ -8487,7 +8547,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "me_me",
-      "community": 16,
+      "community": 94,
       "norm_label": "_me.tsx"
     },
     {
@@ -8497,7 +8557,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "me_me_loader",
-      "community": 16,
+      "community": 94,
       "norm_label": "loader()"
     },
     {
@@ -8957,7 +9017,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "branding_index",
-      "community": 7,
+      "community": 111,
       "norm_label": "_index.tsx"
     },
     {
@@ -8967,7 +9027,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "branding_index_branding",
-      "community": 7,
+      "community": 111,
       "norm_label": "branding()"
     },
     {
@@ -8977,7 +9037,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "assets_all",
-      "community": 7,
+      "community": 111,
       "norm_label": "all.ts"
     },
     {
@@ -8987,7 +9047,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "assets_all_assets",
-      "community": 7,
+      "community": 111,
       "norm_label": "assets"
     },
     {
@@ -9257,7 +9317,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "routes_login_loader",
-      "community": 16,
+      "community": 94,
       "norm_label": "loader()"
     },
     {
@@ -9327,7 +9387,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "routes_ode_index",
-      "community": 35,
+      "community": 39,
       "norm_label": "index()"
     },
     {
@@ -9397,7 +9457,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "routes_register",
-      "community": 16,
+      "community": 94,
       "norm_label": "register.tsx"
     },
     {
@@ -9407,7 +9467,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "routes_register_loader",
-      "community": 16,
+      "community": 94,
       "norm_label": "loader()"
     },
     {
@@ -9417,7 +9477,7 @@
       "source_location": "L14",
       "_origin": "ast",
       "id": "routes_register_register",
-      "community": 16,
+      "community": 94,
       "norm_label": "register()"
     },
     {
@@ -9747,7 +9807,7 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "data_users_getusers",
-      "community": 2,
+      "community": 16,
       "norm_label": "getusers()"
     },
     {
@@ -9767,7 +9827,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "mongodb_setup_saveusers",
-      "community": 2,
+      "community": 16,
       "norm_label": "saveusers()"
     },
     {
@@ -9917,7 +9977,7 @@
       "source_location": "L59",
       "_origin": "ast",
       "id": "smarts_index_getparentpath",
-      "community": 72,
+      "community": 45,
       "norm_label": "getparentpath()"
     },
     {
@@ -12877,6 +12937,16 @@
       "norm_label": "public env exposure rule"
     },
     {
+      "label": "Native iOS TestFlight web URL",
+      "file_type": "document",
+      "source_file": "README.md",
+      "source_location": "L189",
+      "_origin": "ast",
+      "id": "readme_native_ios_testflight_web_url",
+      "community": 33,
+      "norm_label": "native ios testflight web url"
+    },
+    {
       "label": "TODO.md",
       "file_type": "document",
       "source_file": "TODO.md",
@@ -13900,7 +13970,7 @@
       "label": "PR #13 - Remix Hydration, Vercel Status, And Deployment Hygiene",
       "file_type": "document",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L68",
+      "source_location": "L71",
       "_origin": "ast",
       "id": "remix_changelog_pr_13_remix_hydration_vercel_status_and_deployment_hygiene",
       "community": 78,
@@ -13910,7 +13980,7 @@
       "label": "Added",
       "file_type": "document",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L73",
+      "source_location": "L76",
       "_origin": "ast",
       "id": "remix_changelog_added",
       "community": 78,
@@ -13920,9 +13990,9 @@
       "label": "Changed",
       "file_type": "document",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L84",
+      "source_location": "L87",
       "_origin": "ast",
-      "id": "remix_changelog_changed_84",
+      "id": "remix_changelog_changed_87",
       "community": 78,
       "norm_label": "changed"
     },
@@ -13930,9 +14000,9 @@
       "label": "Fixed",
       "file_type": "document",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L122",
+      "source_location": "L125",
       "_origin": "ast",
-      "id": "remix_changelog_fixed_122",
+      "id": "remix_changelog_fixed_125",
       "community": 78,
       "norm_label": "fixed"
     },
@@ -13940,7 +14010,7 @@
       "label": "Verified",
       "file_type": "document",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L133",
+      "source_location": "L136",
       "_origin": "ast",
       "id": "remix_changelog_verified",
       "community": 78,
@@ -13950,7 +14020,7 @@
       "label": "[1.0.0] - YYYY-MM-DD",
       "file_type": "document",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L143",
+      "source_location": "L146",
       "_origin": "ast",
       "id": "remix_changelog_1_0_0_yyyy_mm_dd",
       "community": 78,
@@ -14955,6 +15025,82 @@
       "target": "web_thingtimewebdestination_thingtimewebdestination"
     },
     {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "iOS/Thingtime/Web/ThingtimeWebDestination.swift",
+      "source_location": "L6",
+      "weight": 1.0,
+      "context": "field",
+      "source": "web_thingtimewebdestination_thingtimewebdestination",
+      "target": "ios_thingtime_web_thingtimewebdestination_swift_url",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "iOS/Thingtime/Web/ThingtimeWebDestination.swift",
+      "source_location": "L10",
+      "weight": 1.0,
+      "source": "web_thingtimewebdestination_thingtimewebdestination",
+      "target": "web_thingtimewebdestination_thingtimewebdestination_url",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "iOS/Thingtime/Web/ThingtimeWebDestination.swift",
+      "source_location": "L10",
+      "weight": 1.0,
+      "context": "return_type",
+      "source": "web_thingtimewebdestination_thingtimewebdestination_url",
+      "target": "ios_thingtime_web_thingtimewebdestination_swift_url",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "iOS/ThingtimeTests/ThingtimeWebDestinationTests.swift",
+      "source_location": "L12",
+      "weight": 1.0,
+      "source": "thingtimetests_thingtimewebdestinationtests_thingtimewebdestinationtests_testconfiguredhttpsurlcanoverridehomeurl",
+      "target": "web_thingtimewebdestination_thingtimewebdestination_url"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "iOS/ThingtimeTests/ThingtimeWebDestinationTests.swift",
+      "source_location": "L23",
+      "weight": 1.0,
+      "source": "thingtimetests_thingtimewebdestinationtests_thingtimewebdestinationtests_testinvalidconfiguredurlfallsbacktoproduction",
+      "target": "web_thingtimewebdestination_thingtimewebdestination_url"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "iOS/Thingtime/Web/ThingtimeWebDestination.swift",
+      "source_location": "L10",
+      "weight": 1.0,
+      "context": "parameter_type",
+      "source": "web_thingtimewebdestination_thingtimewebdestination_url",
+      "target": "ios_thingtime_web_thingtimewebdestination_swift_any",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "iOS/Thingtime/Web/ThingtimeWebDestination.swift",
+      "source_location": "L10",
+      "weight": 1.0,
+      "context": "parameter_type",
+      "source": "web_thingtimewebdestination_thingtimewebdestination_url",
+      "target": "ios_thingtime_web_thingtimewebdestination_swift_string",
+      "confidence_score": 1.0
+    },
+    {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "iOS/Thingtime/Web/ThingtimeWebView.swift",
@@ -15018,6 +15164,17 @@
       "target": "web_webview_webview"
     },
     {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "iOS/Thingtime/Web/WebView.swift",
+      "source_location": "L7",
+      "weight": 1.0,
+      "context": "field",
+      "source": "web_webview_webview",
+      "target": "ios_thingtime_web_webview_swift_url",
+      "confidence_score": 1.0
+    },
+    {
       "relation": "implements",
       "confidence": "EXTRACTED",
       "source_file": "iOS/Thingtime/Web/WebView.swift",
@@ -15026,17 +15183,6 @@
       "confidence_score": 1.0,
       "source": "web_webview_webview",
       "target": "uiviewrepresentable"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "source_file": "iOS/Thingtime/Web/WebView.swift",
-      "source_location": "L5",
-      "weight": 1.0,
-      "context": "field",
-      "confidence_score": 1.0,
-      "source": "web_webview_webview",
-      "target": "url"
     },
     {
       "relation": "method",
@@ -15296,23 +15442,23 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "iOS/Thingtime/Web/WebView.swift",
-      "source_location": "L100",
+      "source_location": "L105",
       "weight": 1.0,
       "context": "parameter_type",
-      "confidence_score": 1.0,
       "source": "web_webview_coordinator_sendtoweb",
-      "target": "any"
+      "target": "ios_thingtime_web_webview_swift_any",
+      "confidence_score": 1.0
     },
     {
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "iOS/Thingtime/Web/WebView.swift",
-      "source_location": "L100",
+      "source_location": "L105",
       "weight": 1.0,
       "context": "parameter_type",
-      "confidence_score": 1.0,
       "source": "web_webview_coordinator_sendtoweb",
-      "target": "string"
+      "target": "ios_thingtime_web_webview_swift_string",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -15329,12 +15475,12 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "iOS/Thingtime/Web/WebView.swift",
-      "source_location": "L119",
+      "source_location": "L124",
       "weight": 1.0,
       "context": "return_type",
-      "confidence_score": 1.0,
       "source": "web_webview_coordinator_jsoncompatiblevalue",
-      "target": "any"
+      "target": "ios_thingtime_web_webview_swift_any",
+      "confidence_score": 1.0
     },
     {
       "relation": "imports",
@@ -15372,11 +15518,31 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "iOS/ThingtimeTests/ThingtimeWebDestinationTests.swift",
+      "source_location": "L11",
+      "weight": 1.0,
+      "source": "thingtimetests_thingtimewebdestinationtests_thingtimewebdestinationtests",
+      "target": "thingtimetests_thingtimewebdestinationtests_thingtimewebdestinationtests_testconfiguredhttpsurlcanoverridehomeurl",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "iOS/ThingtimeTests/ThingtimeWebDestinationTests.swift",
       "source_location": "L5",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "thingtimetests_thingtimewebdestinationtests_thingtimewebdestinationtests",
       "target": "thingtimetests_thingtimewebdestinationtests_thingtimewebdestinationtests_testhomeurlloadsproductionthingtime"
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "iOS/ThingtimeTests/ThingtimeWebDestinationTests.swift",
+      "source_location": "L22",
+      "weight": 1.0,
+      "source": "thingtimetests_thingtimewebdestinationtests_thingtimewebdestinationtests",
+      "target": "thingtimetests_thingtimewebdestinationtests_thingtimewebdestinationtests_testinvalidconfiguredurlfallsbacktoproduction",
+      "confidence_score": 1.0
     },
     {
       "relation": "inherits",
@@ -39723,6 +39889,16 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
+      "source_location": "L189",
+      "weight": 1.0,
+      "source": "readme_setup_for_forks",
+      "target": "readme_native_ios_testflight_web_url",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "README.md",
       "source_location": "L101",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -40603,10 +40779,10 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L84",
+      "source_location": "L87",
       "weight": 1.0,
       "source": "remix_changelog_unreleased",
-      "target": "remix_changelog_changed_84",
+      "target": "remix_changelog_changed_87",
       "confidence_score": 1.0
     },
     {
@@ -40623,10 +40799,10 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L122",
+      "source_location": "L125",
       "weight": 1.0,
       "source": "remix_changelog_unreleased",
-      "target": "remix_changelog_fixed_122",
+      "target": "remix_changelog_fixed_125",
       "confidence_score": 1.0
     },
     {
@@ -40831,5 +41007,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "c36ad14a96a56fcf59a7ab6706a4a23347e16c93"
+  "built_at_commit": "7e93e1348c53114d58c342a13ad3677c0db63569"
 }

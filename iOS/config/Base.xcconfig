@@ -4,3 +4,4 @@
 PRODUCT_BUNDLE_IDENTIFIER = com.thingtime.appletime
 DEVELOPMENT_TEAM =
 IPHONEOS_DEPLOYMENT_TARGET = 17.0
+THINGTIME_WEB_URL = https:/$()/thingtime.com
