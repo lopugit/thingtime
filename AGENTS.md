@@ -45,6 +45,10 @@
   App Store Connect API key, issuer, team, and bundle identifier values through
   environment variables only; never commit `.p8` keys or account-specific
   signing secrets.
+- Prefer `iOS/scripts/testflight-beta.sh` for TestFlight uploads. It loads
+  ignored values from `iOS/.env` when present, then runs the Fastlane `beta`
+  lane from `iOS/`. Put `THINGTIME_WEB_URL` and Apple signing/API values in the
+  shell environment or `iOS/.env`; keep only placeholder examples in git.
 
 ## graphify
 

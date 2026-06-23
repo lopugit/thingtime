@@ -196,6 +196,13 @@ deployment by setting a non-secret build-time URL:
 export THINGTIME_WEB_URL="https://<vercel-branch-preview-host>"
 ```
 
-Then build from `iOS/` with `bundle exec fastlane beta`. The value is baked into
-that uploaded app build; future web changes on the same Vercel branch URL do not
-require a new iOS binary.
+For repeatable local uploads, copy `iOS/.env.example` to `iOS/.env`, fill in the
+TestFlight values, and run:
+
+```sh
+iOS/scripts/testflight-beta.sh
+```
+
+`iOS/.env` is ignored by git. The value is baked into that uploaded app build;
+future web changes on the same Vercel branch URL do not require a new iOS
+binary.

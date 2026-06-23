@@ -855,8 +855,8 @@
     "semantic_hash": "6f47150939eacf6d3a89a87289013ea3"
   },
   "README.md": {
-    "mtime": 1782238741.4299402,
-    "ast_hash": "7673848164ba38f9d54aa73b37b9f9a9",
+    "mtime": 1782239332.64881,
+    "ast_hash": "c75b26a932aa9d04e6320017bfd80aad",
     "semantic_hash": ""
   },
   "docs/Use Cases/car.md": {
@@ -995,13 +995,13 @@
     "semantic_hash": ""
   },
   "AGENTS.md": {
-    "mtime": 1782214902.8506322,
-    "ast_hash": "79d95bab4c1e3d99c680672a3c51e510",
+    "mtime": 1782239332.64841,
+    "ast_hash": "26e52cf791698b642828fb272a388e12",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1782214902.8510435,
-    "ast_hash": "c7d9c393a5dc8d05b6e7bf9c66d2c2e6",
+    "mtime": 1782239332.6485994,
+    "ast_hash": "f12ace94812b83db9775057f23b83509",
     "semantic_hash": ""
   },
   "raycast/assets/command-icon.png": {
@@ -1810,8 +1810,8 @@
     "semantic_hash": ""
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1782238741.4302075,
-    "ast_hash": "076d95c1eacbd44f0dd2e62fa57f65ba",
+    "mtime": 1782239332.6492236,
+    "ast_hash": "a8171eee4c49652b1c03666a909790a9",
     "semantic_hash": ""
   },
   "remix/app/api/utils/vercel/status.ts": {
@@ -2130,8 +2130,8 @@
     "semantic_hash": ""
   },
   "iOS/README.md": {
-    "mtime": 1782238741.4296618,
-    "ast_hash": "a016389aca4ac879f360292b6b6af478",
+    "mtime": 1782239332.6490073,
+    "ast_hash": "a510e9322039d7c51d72cc6e94b6c355",
     "semantic_hash": ""
   },
   "iOS/project.yml": {
@@ -2157,6 +2157,11 @@
   "iOS/Thingtime/Resources/Assets.xcassets/AppIcon.appiconset/icon-1024.png": {
     "mtime": 1782214832.7481,
     "ast_hash": "1fd2426bad97849dca6dcd8cd5bb1d89",
+    "semantic_hash": ""
+  },
+  "iOS/scripts/testflight-beta.sh": {
+    "mtime": 1782239332.6481593,
+    "ast_hash": "c0286e4042d72f863087d4901784ddea",
     "semantic_hash": ""
   }
 }

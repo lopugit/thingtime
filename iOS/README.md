@@ -26,18 +26,19 @@ Set `DEVELOPMENT_TEAM` in Xcode, CI, or `config/Base.xcconfig` for local signing
 
 ## TestFlight Upload
 
-The TestFlight lane expects App Store Connect and signing values from the environment:
+The TestFlight lane expects App Store Connect and signing values from the
+environment. For local uploads, copy the sample env file and keep the real
+values untracked:
 
 ```sh
-export ASC_KEY_ID="GJWC63X3DC"
-export ASC_ISSUER_ID="<app-store-connect-issuer-id>"
-export ASC_KEY_CONTENT="$(base64 -i /path/to/AuthKey_GJWC63X3DC.p8)"
-export DEVELOPMENT_TEAM="<apple-developer-team-id>"
-export PRODUCT_BUNDLE_IDENTIFIER="com.thingtime.appletime"
-export THINGTIME_WEB_URL="https://<vercel-branch-preview-host>"
-
+cp .env.example .env
 bundle install
-bundle exec fastlane beta
+./scripts/testflight-beta.sh
 ```
 
-Omit `THINGTIME_WEB_URL` to build against `https://thingtime.com`. Keep `.p8` keys, Apple IDs, team IDs, and API key contents out of git. App Store Connect accepts uploaded archives; it does not compile this repository from source unless a separate Xcode Cloud workflow is configured.
+Omit `THINGTIME_WEB_URL` to build against `https://thingtime.com`. The script
+loads `iOS/.env` when present and then runs `bundle exec fastlane beta`. Keep
+`.p8` keys, Apple IDs, team IDs, API key contents, and real preview URLs out of
+git unless they are intended public examples. App Store Connect accepts uploaded
+archives; it does not compile this repository from source unless a separate
+Xcode Cloud workflow is configured.

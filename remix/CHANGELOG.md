@@ -31,6 +31,9 @@ Detailed PR notes:
 
 ### Changed
 
+- Added an ignored `iOS/.env` TestFlight workflow and
+  `iOS/scripts/testflight-beta.sh` so native uploads can target preview web URLs
+  without committing branch-specific build values. — _Codex (AI), 2026-06-24_
 - Added a build-time iOS `THINGTIME_WEB_URL` override so TestFlight builds can
   point the native webview at a Vercel branch deployment while production still
   defaults to `https://thingtime.com`. — _Codex (AI), 2026-06-24_
