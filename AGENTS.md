@@ -41,6 +41,10 @@
   `iOS/project.yml` as the source of truth and run `xcodegen generate` inside
   `iOS/` before `xcodebuild` checks. Keep generated `.xcodeproj` files
   untracked.
+- Use `bundle exec fastlane beta` from `iOS/` for TestFlight uploads. Provide
+  App Store Connect API key, issuer, team, and bundle identifier values through
+  environment variables only; never commit `.p8` keys or account-specific
+  signing secrets.
 
 ## graphify
 

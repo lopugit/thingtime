@@ -1,0 +1,72 @@
+require "base64"
+require "tempfile"
+
+ENV["FASTLANE_XCODEBUILD_SETTINGS_TIMEOUT"] ||= "60"
+
+default_platform(:ios)
+
+SCHEME = "Thingtime"
+OUTPUT_DIRECTORY = "build"
+OUTPUT_NAME = "Thingtime.ipa"
+
+def api_key_xcargs
+  @asc_p8 ||= begin
+    f = Tempfile.new(["AuthKey_#{ENV.fetch('ASC_KEY_ID')}", ".p8"])
+    f.binmode
+    f.write(Base64.decode64(ENV.fetch("ASC_KEY_CONTENT")))
+    f.flush
+    f
+  end
+
+  "-allowProvisioningUpdates " \
+    "-authenticationKeyID #{ENV.fetch('ASC_KEY_ID')} " \
+    "-authenticationKeyIssuerID #{ENV.fetch('ASC_ISSUER_ID')} " \
+    "-authenticationKeyPath #{@asc_p8.path}"
+end
+
+platform :ios do
+  desc "Generate the Xcode project from project.yml"
+  lane :generate do
+    sh("which xcodegen > /dev/null || (echo 'Installing xcodegen...' && brew install xcodegen)")
+    sh("cd .. && xcodegen generate")
+  end
+
+  desc "Build a signed Release archive (.ipa)"
+  lane :build do
+    generate
+    setup_ci if ENV["CI"]
+
+    build_app(
+      scheme: SCHEME,
+      configuration: "Release",
+      output_directory: OUTPUT_DIRECTORY,
+      output_name: OUTPUT_NAME,
+      export_method: "app-store",
+      xcargs: "#{api_key_xcargs} DEVELOPMENT_TEAM=#{ENV.fetch('DEVELOPMENT_TEAM')}",
+      export_options: {
+        method: "app-store",
+        signingStyle: "automatic"
+      }
+    )
+  end
+
+  desc "Build and upload to TestFlight"
+  lane :beta do
+    build
+    upload_to_testflight(
+      api_key: app_store_api_key,
+      skip_waiting_for_build_processing: true,
+      distribute_external: false
+    )
+  end
+
+  private_lane :app_store_api_key do
+    app_store_connect_api_key(
+      key_id: ENV.fetch("ASC_KEY_ID"),
+      issuer_id: ENV.fetch("ASC_ISSUER_ID"),
+      key_content: ENV.fetch("ASC_KEY_CONTENT"),
+      is_key_content_base64: true,
+      in_house: false
+    )
+  end
+end

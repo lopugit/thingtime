@@ -2607,7 +2607,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "components_sizeselectionactionpanel",
-      "community": 0,
+      "community": 10,
       "norm_label": "sizeselectionactionpanel.tsx"
     },
     {
@@ -2757,7 +2757,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "operations_filteroperation",
-      "community": 0,
+      "community": 10,
       "norm_label": "filteroperation.ts"
     },
     {
@@ -2767,7 +2767,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "operations_filteroperation_applyfilter",
-      "community": 0,
+      "community": 10,
       "norm_label": "applyfilter()"
     },
     {
@@ -4357,7 +4357,7 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "providers_thingtimeprovider_thingtimetypes",
-      "community": 35,
+      "community": 7,
       "norm_label": "thingtimetypes"
     },
     {
@@ -5517,7 +5517,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "lopu_ratelimit",
-      "community": 16,
+      "community": 73,
       "norm_label": "ratelimit.ts"
     },
     {
@@ -5527,7 +5527,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "lopu_ratelimit_ratelimitresult",
-      "community": 16,
+      "community": 73,
       "norm_label": "ratelimitresult"
     },
     {
@@ -5537,7 +5537,7 @@
       "source_location": "L16",
       "_origin": "ast",
       "id": "lopu_ratelimit_firstheaderip",
-      "community": 16,
+      "community": 73,
       "norm_label": "firstheaderip()"
     },
     {
@@ -5547,7 +5547,7 @@
       "source_location": "L18",
       "_origin": "ast",
       "id": "lopu_ratelimit_getrequestip",
-      "community": 16,
+      "community": 73,
       "norm_label": "getrequestip()"
     },
     {
@@ -5557,7 +5557,7 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "lopu_ratelimit_haship",
-      "community": 16,
+      "community": 73,
       "norm_label": "haship()"
     },
     {
@@ -5567,7 +5567,7 @@
       "source_location": "L31",
       "_origin": "ast",
       "id": "lopu_ratelimit_activerequestsexpr",
-      "community": 16,
+      "community": 73,
       "norm_label": "activerequestsexpr()"
     },
     {
@@ -5577,7 +5577,7 @@
       "source_location": "L39",
       "_origin": "ast",
       "id": "lopu_ratelimit_resetfromrequests",
-      "community": 16,
+      "community": 73,
       "norm_label": "resetfromrequests()"
     },
     {
@@ -5587,7 +5587,7 @@
       "source_location": "L52",
       "_origin": "ast",
       "id": "lopu_ratelimit_consumelopumusingquota",
-      "community": 16,
+      "community": 73,
       "norm_label": "consumelopumusingquota()"
     },
     {
@@ -5707,7 +5707,7 @@
       "source_location": "L31",
       "_origin": "ast",
       "id": "mongodb_collections_getlopumusingratelimitscollection",
-      "community": 16,
+      "community": 73,
       "norm_label": "getlopumusingratelimitscollection()"
     },
     {
@@ -5847,7 +5847,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "mongodb_status_mongoconnectionstatus",
-      "community": 94,
+      "community": 104,
       "norm_label": "mongoconnectionstatus"
     },
     {
@@ -5957,7 +5957,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "vercel_status_verceldeploymentstatus",
-      "community": 94,
+      "community": 104,
       "norm_label": "verceldeploymentstatus"
     },
     {
@@ -6387,7 +6387,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "api_submit",
-      "community": 2,
+      "community": 35,
       "norm_label": "submit.tsx"
     },
     {
@@ -6397,7 +6397,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "api_submit_submit",
-      "community": 2,
+      "community": 35,
       "norm_label": "submit()"
     },
     {
@@ -6657,7 +6657,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "icon_icon",
-      "community": 94,
+      "community": 72,
       "norm_label": "icon.tsx"
     },
     {
@@ -6667,7 +6667,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "icon_icon_icon",
-      "community": 94,
+      "community": 72,
       "norm_label": "icon()"
     },
     {
@@ -6677,7 +6677,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "layout_main",
-      "community": 94,
+      "community": 45,
       "norm_label": "main.tsx"
     },
     {
@@ -6697,7 +6697,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "layout_topspacing",
-      "community": 46,
+      "community": 2,
       "norm_label": "topspacing.tsx"
     },
     {
@@ -6707,7 +6707,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "layout_topspacing_topspacing",
-      "community": 46,
+      "community": 2,
       "norm_label": "topspacing()"
     },
     {
@@ -6927,7 +6927,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "mongodb_mongostatus",
-      "community": 94,
+      "community": 104,
       "norm_label": "mongostatus.tsx"
     },
     {
@@ -6937,7 +6937,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "mongodb_mongostatus_status_colors",
-      "community": 94,
+      "community": 104,
       "norm_label": "status_colors"
     },
     {
@@ -6947,7 +6947,7 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "mongodb_mongostatus_pulse",
-      "community": 94,
+      "community": 104,
       "norm_label": "pulse"
     },
     {
@@ -6957,7 +6957,7 @@
       "source_location": "L23",
       "_origin": "ast",
       "id": "mongodb_mongostatus_mongostatus",
-      "community": 94,
+      "community": 104,
       "norm_label": "mongostatus()"
     },
     {
@@ -6967,7 +6967,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "mongodb_raw",
-      "community": 46,
+      "community": 35,
       "norm_label": "raw.tsx"
     },
     {
@@ -6977,7 +6977,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "mongodb_raw_raw",
-      "community": 46,
+      "community": 35,
       "norm_label": "raw()"
     },
     {
@@ -7057,7 +7057,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "nav_footer",
-      "community": 94,
+      "community": 45,
       "norm_label": "footer.tsx"
     },
     {
@@ -7067,7 +7067,7 @@
       "source_location": "L16",
       "_origin": "ast",
       "id": "nav_footer_footer",
-      "community": 94,
+      "community": 45,
       "norm_label": "footer()"
     },
     {
@@ -7077,7 +7077,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "nav_nav",
-      "community": 94,
+      "community": 45,
       "norm_label": "nav.tsx"
     },
     {
@@ -7087,7 +7087,7 @@
       "source_location": "L19",
       "_origin": "ast",
       "id": "nav_nav_nav",
-      "community": 94,
+      "community": 45,
       "norm_label": "nav()"
     },
     {
@@ -7097,7 +7097,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "nav_profiledrawer",
-      "community": 94,
+      "community": 45,
       "norm_label": "profiledrawer.tsx"
     },
     {
@@ -7107,7 +7107,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "nav_profiledrawer_profiledrawer",
-      "community": 94,
+      "community": 45,
       "norm_label": "profiledrawer()"
     },
     {
@@ -7157,7 +7157,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "rainbow_rainbow",
-      "community": 45,
+      "community": 11,
       "norm_label": "rainbow.tsx"
     },
     {
@@ -7167,7 +7167,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "rainbow_rainbow_rainbow",
-      "community": 45,
+      "community": 11,
       "norm_label": "rainbow()"
     },
     {
@@ -7177,7 +7177,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "safety_safe",
-      "community": 104,
+      "community": 72,
       "norm_label": "safe.tsx"
     },
     {
@@ -7187,7 +7187,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "safety_safe_safe",
-      "community": 104,
+      "community": 72,
       "norm_label": "safe()"
     },
     {
@@ -7197,7 +7197,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "skeleton_rainbowskeleton",
-      "community": 94,
+      "community": 45,
       "norm_label": "rainbowskeleton.tsx"
     },
     {
@@ -7207,7 +7207,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "skeleton_rainbowskeleton_rainbowskeleton",
-      "community": 94,
+      "community": 45,
       "norm_label": "rainbowskeleton()"
     },
     {
@@ -7237,7 +7237,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "status_statusrefreshbutton",
-      "community": 94,
+      "community": 104,
       "norm_label": "statusrefreshbutton.tsx"
     },
     {
@@ -7247,7 +7247,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "status_statusrefreshbutton_spin",
-      "community": 94,
+      "community": 104,
       "norm_label": "spin"
     },
     {
@@ -7257,7 +7257,7 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "status_statusrefreshbutton_statusrefreshbutton",
-      "community": 94,
+      "community": 104,
       "norm_label": "statusrefreshbutton()"
     },
     {
@@ -7447,7 +7447,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "vercel_vercelstatus",
-      "community": 94,
+      "community": 104,
       "norm_label": "vercelstatus.tsx"
     },
     {
@@ -7457,7 +7457,7 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "vercel_vercelstatus_status_colors",
-      "community": 94,
+      "community": 104,
       "norm_label": "status_colors"
     },
     {
@@ -7467,7 +7467,7 @@
       "source_location": "L19",
       "_origin": "ast",
       "id": "vercel_vercelstatus_pulse",
-      "community": 94,
+      "community": 104,
       "norm_label": "pulse"
     },
     {
@@ -7477,7 +7477,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "vercel_vercelstatus_getstatustext",
-      "community": 94,
+      "community": 104,
       "norm_label": "getstatustext()"
     },
     {
@@ -7487,7 +7487,7 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "vercel_vercelstatus_getdisplayphase",
-      "community": 94,
+      "community": 104,
       "norm_label": "getdisplayphase()"
     },
     {
@@ -7497,7 +7497,7 @@
       "source_location": "L50",
       "_origin": "ast",
       "id": "vercel_vercelstatus_getprogressleft",
-      "community": 94,
+      "community": 104,
       "norm_label": "getprogressleft()"
     },
     {
@@ -7507,7 +7507,7 @@
       "source_location": "L54",
       "_origin": "ast",
       "id": "vercel_vercelstatus_vercelstatus",
-      "community": 94,
+      "community": 104,
       "norm_label": "vercelstatus()"
     },
     {
@@ -7687,7 +7687,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "functions_safe",
-      "community": 104,
+      "community": 72,
       "norm_label": "safe.tsx"
     },
     {
@@ -7697,7 +7697,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "functions_safe_safe",
-      "community": 104,
+      "community": 72,
       "norm_label": "safe()"
     },
     {
@@ -7707,7 +7707,7 @@
       "source_location": "L54",
       "_origin": "ast",
       "id": "functions_safe_getmeta",
-      "community": 104,
+      "community": 72,
       "norm_label": "getmeta()"
     },
     {
@@ -7717,7 +7717,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "functions_sanitise",
-      "community": 45,
+      "community": 72,
       "norm_label": "sanitise.tsx"
     },
     {
@@ -7727,7 +7727,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "functions_sanitise_sanitise",
-      "community": 45,
+      "community": 72,
       "norm_label": "sanitise()"
     },
     {
@@ -8037,7 +8037,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "hooks_useasyncfetcher",
-      "community": 2,
+      "community": 35,
       "norm_label": "useasyncfetcher.tsx"
     },
     {
@@ -8047,7 +8047,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "hooks_useasyncfetcher_useasyncfetcher",
-      "community": 2,
+      "community": 35,
       "norm_label": "useasyncfetcher()"
     },
     {
@@ -8127,7 +8127,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "hooks_useprops",
-      "community": 45,
+      "community": 11,
       "norm_label": "useprops.tsx"
     },
     {
@@ -8137,7 +8137,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "hooks_useprops_useprops",
-      "community": 45,
+      "community": 11,
       "norm_label": "useprops()"
     },
     {
@@ -8177,7 +8177,7 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "hooks_usethingtimemachine_patharray",
-      "community": 7,
+      "community": 72,
       "norm_label": "patharray"
     },
     {
@@ -8267,7 +8267,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "hooks_usetrace",
-      "community": 45,
+      "community": 11,
       "norm_label": "usetrace.tsx"
     },
     {
@@ -8277,7 +8277,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "hooks_usetrace_usetrace",
-      "community": 45,
+      "community": 11,
       "norm_label": "usetrace()"
     },
     {
@@ -8287,7 +8287,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "hooks_useuuid",
-      "community": 45,
+      "community": 11,
       "norm_label": "useuuid.tsx"
     },
     {
@@ -8297,7 +8297,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "hooks_useuuid_useuuid",
-      "community": 45,
+      "community": 11,
       "norm_label": "useuuid()"
     },
     {
@@ -8437,7 +8437,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "routes_index_index",
-      "community": 35,
+      "community": 39,
       "norm_label": "index()"
     },
     {
@@ -8997,7 +8997,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "routes_branding_old",
-      "community": 46,
+      "community": 35,
       "norm_label": "branding_old.tsx"
     },
     {
@@ -9007,7 +9007,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "routes_branding_old_branding",
-      "community": 46,
+      "community": 35,
       "norm_label": "branding()"
     },
     {
@@ -9377,7 +9377,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "routes_raw",
-      "community": 46,
+      "community": 35,
       "norm_label": "raw.tsx"
     },
     {
@@ -9387,7 +9387,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "routes_raw_login",
-      "community": 46,
+      "community": 35,
       "norm_label": "login()"
     },
     {
@@ -9707,7 +9707,7 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "routes_welcome_loader",
-      "community": 16,
+      "community": 94,
       "norm_label": "loader()"
     },
     {
@@ -9917,7 +9917,7 @@
       "source_location": "L59",
       "_origin": "ast",
       "id": "smarts_index_getparentpath",
-      "community": 45,
+      "community": 72,
       "norm_label": "getparentpath()"
     },
     {
@@ -12490,7 +12490,7 @@
       "label": "graphify",
       "file_type": "document",
       "source_file": "AGENTS.md",
-      "source_location": "L45",
+      "source_location": "L49",
       "_origin": "ast",
       "id": "agents_graphify",
       "community": 44,
@@ -12500,7 +12500,7 @@
       "label": "Delivery messaging",
       "file_type": "document",
       "source_file": "AGENTS.md",
-      "source_location": "L56",
+      "source_location": "L60",
       "_origin": "ast",
       "id": "agents_delivery_messaging",
       "community": 44,
@@ -12530,7 +12530,7 @@
       "label": "Fundamentals (read first)",
       "file_type": "document",
       "source_file": "CLAUDE.md",
-      "source_location": "L34",
+      "source_location": "L38",
       "_origin": "ast",
       "id": "claude_fundamentals_read_first",
       "community": 49,
@@ -12540,7 +12540,7 @@
       "label": "graphify",
       "file_type": "document",
       "source_file": "CLAUDE.md",
-      "source_location": "L45",
+      "source_location": "L49",
       "_origin": "ast",
       "id": "claude_graphify",
       "community": 49,
@@ -13475,6 +13475,86 @@
       "id": "ios_readme_build_and_test",
       "community": 79,
       "norm_label": "build and test"
+    },
+    {
+      "label": "TestFlight Upload",
+      "file_type": "document",
+      "source_file": "iOS/README.md",
+      "source_location": "L27",
+      "_origin": "ast",
+      "id": "ios_readme_testflight_upload",
+      "community": 79,
+      "norm_label": "testflight upload"
+    },
+    {
+      "label": "README.md",
+      "file_type": "document",
+      "source_file": "iOS/fastlane/README.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "fastlane_readme",
+      "community": 105,
+      "norm_label": "readme.md"
+    },
+    {
+      "label": "Installation",
+      "file_type": "document",
+      "source_file": "iOS/fastlane/README.md",
+      "source_location": "L4",
+      "_origin": "ast",
+      "id": "fastlane_readme_installation",
+      "community": 105,
+      "norm_label": "installation"
+    },
+    {
+      "label": "Available Actions",
+      "file_type": "document",
+      "source_file": "iOS/fastlane/README.md",
+      "source_location": "L14",
+      "_origin": "ast",
+      "id": "fastlane_readme_available_actions",
+      "community": 105,
+      "norm_label": "available actions"
+    },
+    {
+      "label": "iOS",
+      "file_type": "document",
+      "source_file": "iOS/fastlane/README.md",
+      "source_location": "L16",
+      "_origin": "ast",
+      "id": "fastlane_readme_ios",
+      "community": 105,
+      "norm_label": "ios"
+    },
+    {
+      "label": "ios generate",
+      "file_type": "document",
+      "source_file": "iOS/fastlane/README.md",
+      "source_location": "L18",
+      "_origin": "ast",
+      "id": "fastlane_readme_ios_generate",
+      "community": 105,
+      "norm_label": "ios generate"
+    },
+    {
+      "label": "ios build",
+      "file_type": "document",
+      "source_file": "iOS/fastlane/README.md",
+      "source_location": "L26",
+      "_origin": "ast",
+      "id": "fastlane_readme_ios_build",
+      "community": 105,
+      "norm_label": "ios build"
+    },
+    {
+      "label": "ios beta",
+      "file_type": "document",
+      "source_file": "iOS/fastlane/README.md",
+      "source_location": "L34",
+      "_origin": "ast",
+      "id": "fastlane_readme_ios_beta",
+      "community": 105,
+      "norm_label": "ios beta"
     },
     {
       "label": "CHANGELOG.md",
@@ -15050,9 +15130,9 @@
       "source_location": "L83",
       "weight": 1.0,
       "context": "field",
+      "confidence_score": 1.0,
       "source": "web_webview_coordinator",
-      "target": "wkwebview",
-      "confidence_score": 1.0
+      "target": "wkwebview"
     },
     {
       "relation": "references",
@@ -15061,9 +15141,9 @@
       "source_location": "L85",
       "weight": 1.0,
       "context": "parameter_type",
+      "confidence_score": 1.0,
       "source": "web_webview_coordinator_webview",
-      "target": "wkwebview",
-      "confidence_score": 1.0
+      "target": "wkwebview"
     },
     {
       "relation": "references",
@@ -15092,9 +15172,9 @@
       "source_file": "iOS/Thingtime/Web/WebView.swift",
       "source_location": "L119",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "web_webview_coordinator",
-      "target": "web_webview_coordinator_jsoncompatiblevalue",
-      "confidence_score": 1.0
+      "target": "web_webview_coordinator_jsoncompatiblevalue"
     },
     {
       "relation": "method",
@@ -15102,9 +15182,9 @@
       "source_file": "iOS/Thingtime/Web/WebView.swift",
       "source_location": "L100",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "web_webview_coordinator",
-      "target": "web_webview_coordinator_sendtoweb",
-      "confidence_score": 1.0
+      "target": "web_webview_coordinator_sendtoweb"
     },
     {
       "relation": "method",
@@ -15112,9 +15192,9 @@
       "source_file": "iOS/Thingtime/Web/WebView.swift",
       "source_location": "L92",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "web_webview_coordinator",
-      "target": "web_webview_coordinator_usercontentcontroller",
-      "confidence_score": 1.0
+      "target": "web_webview_coordinator_usercontentcontroller"
     },
     {
       "relation": "method",
@@ -15122,9 +15202,9 @@
       "source_file": "iOS/Thingtime/Web/WebView.swift",
       "source_location": "L85",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "web_webview_coordinator",
-      "target": "web_webview_coordinator_webview",
-      "confidence_score": 1.0
+      "target": "web_webview_coordinator_webview"
     },
     {
       "relation": "implements",
@@ -15142,9 +15222,9 @@
       "source_file": "iOS/Thingtime/Web/WebView.swift",
       "source_location": "L82",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "web_webview_coordinator",
-      "target": "wkscriptmessagehandler",
-      "confidence_score": 1.0
+      "target": "wkscriptmessagehandler"
     },
     {
       "relation": "calls",
@@ -15153,9 +15233,9 @@
       "source_file": "iOS/Thingtime/Web/WebView.swift",
       "source_location": "L86",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "web_webview_coordinator_webview",
-      "target": "web_webview_coordinator_sendtoweb",
-      "confidence_score": 1.0
+      "target": "web_webview_coordinator_sendtoweb"
     },
     {
       "relation": "references",
@@ -15164,9 +15244,9 @@
       "source_location": "L85",
       "weight": 1.0,
       "context": "parameter_type",
+      "confidence_score": 1.0,
       "source": "web_webview_coordinator_webview",
-      "target": "wknavigation",
-      "confidence_score": 1.0
+      "target": "wknavigation"
     },
     {
       "relation": "calls",
@@ -15175,9 +15255,9 @@
       "source_file": "iOS/Thingtime/Web/WebView.swift",
       "source_location": "L96",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "web_webview_coordinator_usercontentcontroller",
-      "target": "web_webview_coordinator_jsoncompatiblevalue",
-      "confidence_score": 1.0
+      "target": "web_webview_coordinator_jsoncompatiblevalue"
     },
     {
       "relation": "calls",
@@ -15186,9 +15266,9 @@
       "source_file": "iOS/Thingtime/Web/WebView.swift",
       "source_location": "L95",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "web_webview_coordinator_usercontentcontroller",
-      "target": "web_webview_coordinator_sendtoweb",
-      "confidence_score": 1.0
+      "target": "web_webview_coordinator_sendtoweb"
     },
     {
       "relation": "references",
@@ -15197,9 +15277,9 @@
       "source_location": "L92",
       "weight": 1.0,
       "context": "parameter_type",
+      "confidence_score": 1.0,
       "source": "web_webview_coordinator_usercontentcontroller",
-      "target": "wkscriptmessage",
-      "confidence_score": 1.0
+      "target": "wkscriptmessage"
     },
     {
       "relation": "references",
@@ -15208,9 +15288,9 @@
       "source_location": "L92",
       "weight": 1.0,
       "context": "parameter_type",
+      "confidence_score": 1.0,
       "source": "web_webview_coordinator_usercontentcontroller",
-      "target": "wkusercontentcontroller",
-      "confidence_score": 1.0
+      "target": "wkusercontentcontroller"
     },
     {
       "relation": "references",
@@ -15219,9 +15299,9 @@
       "source_location": "L100",
       "weight": 1.0,
       "context": "parameter_type",
+      "confidence_score": 1.0,
       "source": "web_webview_coordinator_sendtoweb",
-      "target": "any",
-      "confidence_score": 1.0
+      "target": "any"
     },
     {
       "relation": "references",
@@ -15230,9 +15310,9 @@
       "source_location": "L100",
       "weight": 1.0,
       "context": "parameter_type",
+      "confidence_score": 1.0,
       "source": "web_webview_coordinator_sendtoweb",
-      "target": "string",
-      "confidence_score": 1.0
+      "target": "string"
     },
     {
       "relation": "calls",
@@ -15241,9 +15321,9 @@
       "source_file": "iOS/Thingtime/Web/WebView.swift",
       "source_location": "L103",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "web_webview_coordinator_sendtoweb",
-      "target": "web_webview_coordinator_jsoncompatiblevalue",
-      "confidence_score": 1.0
+      "target": "web_webview_coordinator_jsoncompatiblevalue"
     },
     {
       "relation": "references",
@@ -15252,9 +15332,9 @@
       "source_location": "L119",
       "weight": 1.0,
       "context": "return_type",
+      "confidence_score": 1.0,
       "source": "web_webview_coordinator_jsoncompatiblevalue",
-      "target": "any",
-      "confidence_score": 1.0
+      "target": "any"
     },
     {
       "relation": "imports",
@@ -31453,9 +31533,9 @@
       "source_file": "remix/app/root.tsx",
       "source_location": "L19",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "app_root",
-      "target": "nativebridge_nativebridgehost",
-      "confidence_score": 1.0
+      "target": "nativebridge_nativebridgehost"
     },
     {
       "relation": "contains",
@@ -31463,9 +31543,9 @@
       "source_file": "remix/app/components/NativeBridge/NativeBridgeHost.tsx",
       "source_location": "L10",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "nativebridge_nativebridgehost",
-      "target": "nativebridge_nativebridgehost_nativebridgehost",
-      "confidence_score": 1.0
+      "target": "nativebridge_nativebridgehost_nativebridgehost"
     },
     {
       "relation": "imports_from",
@@ -31474,9 +31554,9 @@
       "source_file": "remix/app/components/NativeBridge/NativeBridgeHost.tsx",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "nativebridge_nativebridgehost",
-      "target": "utils_nativebridge",
-      "confidence_score": 1.0
+      "target": "utils_nativebridge"
     },
     {
       "relation": "imports",
@@ -31485,9 +31565,9 @@
       "source_file": "remix/app/components/NativeBridge/NativeBridgeHost.tsx",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "nativebridge_nativebridgehost",
-      "target": "utils_nativebridge_postnativebridgemessage",
-      "confidence_score": 1.0
+      "target": "utils_nativebridge_postnativebridgemessage"
     },
     {
       "relation": "imports",
@@ -31496,9 +31576,9 @@
       "source_file": "remix/app/components/NativeBridge/NativeBridgeHost.tsx",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "nativebridge_nativebridgehost",
-      "target": "utils_nativebridge_thingtimebridgemessage",
-      "confidence_score": 1.0
+      "target": "utils_nativebridge_thingtimebridgemessage"
     },
     {
       "relation": "imports",
@@ -31507,9 +31587,9 @@
       "source_file": "remix/app/root.tsx",
       "source_location": "L19",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "app_root",
-      "target": "nativebridge_nativebridgehost_nativebridgehost",
-      "confidence_score": 1.0
+      "target": "nativebridge_nativebridgehost_nativebridgehost"
     },
     {
       "relation": "imports_from",
@@ -37883,9 +37963,9 @@
       "source_file": "remix/app/utils/nativeBridge.ts",
       "source_location": "L27",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "utils_nativebridge",
-      "target": "utils_nativebridge_getnativebridge",
-      "confidence_score": 1.0
+      "target": "utils_nativebridge_getnativebridge"
     },
     {
       "relation": "contains",
@@ -37893,9 +37973,9 @@
       "source_file": "remix/app/utils/nativeBridge.ts",
       "source_location": "L35",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "utils_nativebridge",
-      "target": "utils_nativebridge_isnativebridgeavailable",
-      "confidence_score": 1.0
+      "target": "utils_nativebridge_isnativebridgeavailable"
     },
     {
       "relation": "contains",
@@ -37903,9 +37983,9 @@
       "source_file": "remix/app/utils/nativeBridge.ts",
       "source_location": "L39",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "utils_nativebridge",
-      "target": "utils_nativebridge_postnativebridgemessage",
-      "confidence_score": 1.0
+      "target": "utils_nativebridge_postnativebridgemessage"
     },
     {
       "relation": "contains",
@@ -37913,9 +37993,9 @@
       "source_file": "remix/app/utils/nativeBridge.ts",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "utils_nativebridge",
-      "target": "utils_nativebridge_thingtimebridgemessage",
-      "confidence_score": 1.0
+      "target": "utils_nativebridge_thingtimebridgemessage"
     },
     {
       "relation": "contains",
@@ -37923,9 +38003,9 @@
       "source_file": "remix/app/utils/nativeBridge.ts",
       "source_location": "L8",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "utils_nativebridge",
-      "target": "utils_nativebridge_thingtimenativebridge",
-      "confidence_score": 1.0
+      "target": "utils_nativebridge_thingtimenativebridge"
     },
     {
       "relation": "contains",
@@ -37933,9 +38013,9 @@
       "source_file": "remix/app/utils/nativeBridge.ts",
       "source_location": "L19",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "utils_nativebridge",
-      "target": "utils_nativebridge_window",
-      "confidence_score": 1.0
+      "target": "utils_nativebridge_window"
     },
     {
       "relation": "calls",
@@ -37944,9 +38024,9 @@
       "source_file": "remix/app/utils/nativeBridge.ts",
       "source_location": "L36",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "utils_nativebridge_isnativebridgeavailable",
-      "target": "utils_nativebridge_getnativebridge",
-      "confidence_score": 1.0
+      "target": "utils_nativebridge_getnativebridge"
     },
     {
       "relation": "calls",
@@ -37955,9 +38035,9 @@
       "source_file": "remix/app/utils/nativeBridge.ts",
       "source_location": "L40",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "utils_nativebridge_postnativebridgemessage",
-      "target": "utils_nativebridge_getnativebridge",
-      "confidence_score": 1.0
+      "target": "utils_nativebridge_getnativebridge"
     },
     {
       "relation": "contains",
@@ -40162,6 +40242,76 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
+      "source_file": "iOS/README.md",
+      "source_location": "L27",
+      "weight": 1.0,
+      "source": "ios_readme_thingtime_ios",
+      "target": "ios_readme_testflight_upload",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "iOS/fastlane/README.md",
+      "source_location": "L14",
+      "weight": 1.0,
+      "source": "fastlane_readme",
+      "target": "fastlane_readme_available_actions",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "iOS/fastlane/README.md",
+      "source_location": "L4",
+      "weight": 1.0,
+      "source": "fastlane_readme",
+      "target": "fastlane_readme_installation",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "iOS/fastlane/README.md",
+      "source_location": "L16",
+      "weight": 1.0,
+      "source": "fastlane_readme_available_actions",
+      "target": "fastlane_readme_ios",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "iOS/fastlane/README.md",
+      "source_location": "L34",
+      "weight": 1.0,
+      "source": "fastlane_readme_ios",
+      "target": "fastlane_readme_ios_beta",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "iOS/fastlane/README.md",
+      "source_location": "L26",
+      "weight": 1.0,
+      "source": "fastlane_readme_ios",
+      "target": "fastlane_readme_ios_build",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "iOS/fastlane/README.md",
+      "source_location": "L18",
+      "weight": 1.0,
+      "source": "fastlane_readme_ios",
+      "target": "fastlane_readme_ios_generate",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
       "source_file": "raycast/CHANGELOG.md",
       "source_location": "L1",
       "weight": 1.0,
@@ -40681,5 +40831,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "7fd436ac298f13cba80149564d557bd1c88609b5"
+  "built_at_commit": "11c4cc85f0ee50b1859752c1dec51e95b560b23b"
 }

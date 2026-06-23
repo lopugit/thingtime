@@ -23,3 +23,20 @@ xcodegen generate
 ```
 
 Set `DEVELOPMENT_TEAM` in Xcode, CI, or `config/Base.xcconfig` for local signing. Do not commit personal signing credentials or secrets.
+
+## TestFlight Upload
+
+The TestFlight lane expects App Store Connect and signing values from the environment:
+
+```sh
+export ASC_KEY_ID="GJWC63X3DC"
+export ASC_ISSUER_ID="<app-store-connect-issuer-id>"
+export ASC_KEY_CONTENT="$(base64 -i /path/to/AuthKey_GJWC63X3DC.p8)"
+export DEVELOPMENT_TEAM="<apple-developer-team-id>"
+export PRODUCT_BUNDLE_IDENTIFIER="com.thingtime.ios"
+
+bundle install
+bundle exec fastlane beta
+```
+
+Keep `.p8` keys, Apple IDs, team IDs, and API key contents out of git. App Store Connect accepts uploaded archives; it does not compile this repository from source unless a separate Xcode Cloud workflow is configured.

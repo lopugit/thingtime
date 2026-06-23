@@ -1,0 +1,7 @@
+# App-level identifiers for fastlane. Values are pulled from environment
+# variables so the repo stays free of account-specific data.
+
+app_identifier(ENV["PRODUCT_BUNDLE_IDENTIFIER"] || "com.thingtime.ios")
+apple_id(ENV["APPLE_ID"])
+itc_team_id(ENV["ITC_TEAM_ID"])
+team_id(ENV["DEVELOPMENT_TEAM"])

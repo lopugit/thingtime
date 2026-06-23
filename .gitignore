@@ -34,6 +34,10 @@ iOS/build/
 iOS/*.xcarchive
 iOS/*.ipa
 iOS/*.dSYM
+iOS/fastlane/report.xml
+iOS/fastlane/Preview.html
+iOS/fastlane/screenshots/
+iOS/fastlane/test_output/
 iOS/xcuserdata/
 iOS/**/xcuserdata/
 iOS/Thingtime/Resources/Info.plist

@@ -995,13 +995,13 @@
     "semantic_hash": ""
   },
   "AGENTS.md": {
-    "mtime": 1782212406.678101,
-    "ast_hash": "7a741142b7ba60b552b04e3ec42edabe",
+    "mtime": 1782214902.8506322,
+    "ast_hash": "79d95bab4c1e3d99c680672a3c51e510",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1782212406.6783428,
-    "ast_hash": "10be8dce94417b6e42c8a5fdea810b23",
+    "mtime": 1782214902.8510435,
+    "ast_hash": "c7d9c393a5dc8d05b6e7bf9c66d2c2e6",
     "semantic_hash": ""
   },
   "raycast/assets/command-icon.png": {
@@ -2075,8 +2075,8 @@
     "semantic_hash": ""
   },
   "iOS/Thingtime/Resources/Assets.xcassets/AppIcon.appiconset/Contents.json": {
-    "mtime": 1782212406.6769514,
-    "ast_hash": "656e426612a7126f2dc91453413e7c4a",
+    "mtime": 1782214814.3808107,
+    "ast_hash": "cc0fa974a2eb9d06669de8f7d07455fc",
     "semantic_hash": ""
   },
   "iOS/Thingtime/Resources/Assets.xcassets/Contents.json": {
@@ -2130,8 +2130,8 @@
     "semantic_hash": ""
   },
   "iOS/README.md": {
-    "mtime": 1782212406.6776857,
-    "ast_hash": "1615f58f4efec982900339166822e6bc",
+    "mtime": 1782214638.050809,
+    "ast_hash": "7178ee98b55c157b612cdeaa8f37d723",
     "semantic_hash": ""
   },
   "iOS/project.yml": {
@@ -2147,6 +2147,16 @@
   "remix/app/utils/nativeBridge.ts": {
     "mtime": 1782213346.8908644,
     "ast_hash": "c64df66b18e07a8201e80def07e7cceb",
+    "semantic_hash": ""
+  },
+  "iOS/fastlane/README.md": {
+    "mtime": 1782214853.0293345,
+    "ast_hash": "0eb0960595104094b7d013521a46456b",
+    "semantic_hash": ""
+  },
+  "iOS/Thingtime/Resources/Assets.xcassets/AppIcon.appiconset/icon-1024.png": {
+    "mtime": 1782214832.7481,
+    "ast_hash": "1fd2426bad97849dca6dcd8cd5bb1d89",
     "semantic_hash": ""
   }
 }
