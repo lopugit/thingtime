@@ -29,6 +29,8 @@
   missing `bcrypt_lib.node` native binding before Vite starts.
 - `AGENTS.md` and `CLAUDE.md` now both instruct future agents to read both repo
   instruction files and avoid duplicating long shared runbook rules.
+- `AGENTS.md` and `CLAUDE.md` now require mirrored instruction-file updates
+  and parent env-file seeding when testing clones under `.test-branches`.
 - `AGENTS.md` and `CLAUDE.md` now require live browser verification for layout
   and alignment changes before marking them complete.
 - `/api/v1/lopu/musing` now checks a Mongo-backed rolling quota before making

@@ -31,6 +31,9 @@ Detailed PR notes:
 
 ### Changed
 
+- Added shared AGENTS/CLAUDE instructions requiring mirrored instruction-file
+  updates and parent env-file seeding for `.test-branches` branch clones. —
+  _Codex (AI), 2026-06-23_
 - Added shared AGENTS/CLAUDE instructions requiring live browser verification
   for layout and alignment changes. — _Codex (AI), 2026-06-23_
 - Added a centered `/vercel` deployment URL dashboard backed by
