@@ -2050,7 +2050,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "components_imagegeneratoractionpanel",
-      "community": 0,
+      "community": 10,
       "norm_label": "imagegeneratoractionpanel.tsx"
     },
     {
@@ -2090,7 +2090,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "components_sizeselectionactionpanel",
-      "community": 0,
+      "community": 10,
       "norm_label": "sizeselectionactionpanel.tsx"
     },
     {
@@ -4980,7 +4980,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "lopu_ratelimit",
-      "community": 16,
+      "community": 73,
       "norm_label": "ratelimit.ts"
     },
     {
@@ -4990,7 +4990,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "lopu_ratelimit_ratelimitresult",
-      "community": 16,
+      "community": 73,
       "norm_label": "ratelimitresult"
     },
     {
@@ -5000,7 +5000,7 @@
       "source_location": "L16",
       "_origin": "ast",
       "id": "lopu_ratelimit_firstheaderip",
-      "community": 16,
+      "community": 73,
       "norm_label": "firstheaderip()"
     },
     {
@@ -5010,7 +5010,7 @@
       "source_location": "L18",
       "_origin": "ast",
       "id": "lopu_ratelimit_getrequestip",
-      "community": 16,
+      "community": 73,
       "norm_label": "getrequestip()"
     },
     {
@@ -5020,7 +5020,7 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "lopu_ratelimit_haship",
-      "community": 16,
+      "community": 73,
       "norm_label": "haship()"
     },
     {
@@ -5030,7 +5030,7 @@
       "source_location": "L31",
       "_origin": "ast",
       "id": "lopu_ratelimit_activerequestsexpr",
-      "community": 16,
+      "community": 73,
       "norm_label": "activerequestsexpr()"
     },
     {
@@ -5040,7 +5040,7 @@
       "source_location": "L39",
       "_origin": "ast",
       "id": "lopu_ratelimit_resetfromrequests",
-      "community": 16,
+      "community": 73,
       "norm_label": "resetfromrequests()"
     },
     {
@@ -5050,7 +5050,7 @@
       "source_location": "L52",
       "_origin": "ast",
       "id": "lopu_ratelimit_consumelopumusingquota",
-      "community": 16,
+      "community": 73,
       "norm_label": "consumelopumusingquota()"
     },
     {
@@ -5170,7 +5170,7 @@
       "source_location": "L31",
       "_origin": "ast",
       "id": "mongodb_collections_getlopumusingratelimitscollection",
-      "community": 16,
+      "community": 73,
       "norm_label": "getlopumusingratelimitscollection()"
     },
     {
@@ -5564,10 +5564,40 @@
       "norm_label": "getstringvalue()"
     },
     {
-      "label": "getVercelApiHeaders()",
+      "label": "LIVE_STATUS_DEPLOYMENT_STATES",
       "file_type": "code",
       "source_file": "remix/app/api/utils/vercel/status.ts",
       "source_location": "L204",
+      "_origin": "ast",
+      "id": "vercel_status_live_status_deployment_states",
+      "community": 76,
+      "norm_label": "live_status_deployment_states"
+    },
+    {
+      "label": "getDeploymentState()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L213",
+      "_origin": "ast",
+      "id": "vercel_status_getdeploymentstate",
+      "community": 76,
+      "norm_label": "getdeploymentstate()"
+    },
+    {
+      "label": "isLiveStatusDeployment()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L219",
+      "_origin": "ast",
+      "id": "vercel_status_islivestatusdeployment",
+      "community": 76,
+      "norm_label": "islivestatusdeployment()"
+    },
+    {
+      "label": "getVercelApiHeaders()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L223",
       "_origin": "ast",
       "id": "vercel_status_getvercelapiheaders",
       "community": 76,
@@ -5577,7 +5607,7 @@
       "label": "getVercelDeploymentsPage()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/vercel/status.ts",
-      "source_location": "L209",
+      "source_location": "L228",
       "_origin": "ast",
       "id": "vercel_status_getverceldeploymentspage",
       "community": 76,
@@ -5587,7 +5617,7 @@
       "label": "getVercelDeploymentsPages()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/vercel/status.ts",
-      "source_location": "L278",
+      "source_location": "L297",
       "_origin": "ast",
       "id": "vercel_status_getverceldeploymentspages",
       "community": 76,
@@ -5597,7 +5627,7 @@
       "label": "getDashboardOwnerSlug()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/vercel/status.ts",
-      "source_location": "L332",
+      "source_location": "L351",
       "_origin": "ast",
       "id": "vercel_status_getdashboardownerslug",
       "community": 76,
@@ -5607,7 +5637,7 @@
       "label": "getDashboardProjectSlug()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/vercel/status.ts",
-      "source_location": "L345",
+      "source_location": "L364",
       "_origin": "ast",
       "id": "vercel_status_getdashboardprojectslug",
       "community": 76,
@@ -5617,7 +5647,7 @@
       "label": "getVercelProjectData()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/vercel/status.ts",
-      "source_location": "L349",
+      "source_location": "L368",
       "_origin": "ast",
       "id": "vercel_status_getvercelprojectdata",
       "community": 76,
@@ -5627,7 +5657,7 @@
       "label": "getProjectDashboardUrl()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/vercel/status.ts",
-      "source_location": "L394",
+      "source_location": "L413",
       "_origin": "ast",
       "id": "vercel_status_getprojectdashboardurl",
       "community": 76,
@@ -5637,7 +5667,7 @@
       "label": "appendDeploymentIdToDashboardUrl()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/vercel/status.ts",
-      "source_location": "L411",
+      "source_location": "L430",
       "_origin": "ast",
       "id": "vercel_status_appenddeploymentidtodashboardurl",
       "community": 76,
@@ -5647,7 +5677,7 @@
       "label": "getOwnerSlugFromDeploymentHost()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/vercel/status.ts",
-      "source_location": "L431",
+      "source_location": "L450",
       "_origin": "ast",
       "id": "vercel_status_getownerslugfromdeploymenthost",
       "community": 76,
@@ -5657,7 +5687,7 @@
       "label": "getProjectSlugFromDeploymentHost()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/vercel/status.ts",
-      "source_location": "L439",
+      "source_location": "L458",
       "_origin": "ast",
       "id": "vercel_status_getprojectslugfromdeploymenthost",
       "community": 76,
@@ -5667,7 +5697,7 @@
       "label": "getDashboardUrlFromDeploymentHost()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/vercel/status.ts",
-      "source_location": "L457",
+      "source_location": "L476",
       "_origin": "ast",
       "id": "vercel_status_getdashboardurlfromdeploymenthost",
       "community": 76,
@@ -5677,7 +5707,7 @@
       "label": "getDeploymentDashboardUrl()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/vercel/status.ts",
-      "source_location": "L486",
+      "source_location": "L505",
       "_origin": "ast",
       "id": "vercel_status_getdeploymentdashboardurl",
       "community": 76,
@@ -5687,7 +5717,7 @@
       "label": "getTimestamp()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/vercel/status.ts",
-      "source_location": "L513",
+      "source_location": "L532",
       "_origin": "ast",
       "id": "vercel_status_gettimestamp",
       "community": 76,
@@ -5697,7 +5727,7 @@
       "label": "getDeploymentReadyAt()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/vercel/status.ts",
-      "source_location": "L532",
+      "source_location": "L551",
       "_origin": "ast",
       "id": "vercel_status_getdeploymentreadyat",
       "community": 76,
@@ -5707,7 +5737,7 @@
       "label": "formatRelativeTime()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/vercel/status.ts",
-      "source_location": "L541",
+      "source_location": "L560",
       "_origin": "ast",
       "id": "vercel_status_formatrelativetime",
       "community": 76,
@@ -5717,17 +5747,27 @@
       "label": "getLastReadyDeployment()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/vercel/status.ts",
-      "source_location": "L565",
+      "source_location": "L584",
       "_origin": "ast",
       "id": "vercel_status_getlastreadydeployment",
       "community": 76,
       "norm_label": "getlastreadydeployment()"
     },
     {
+      "label": "isMatchingDeployment()",
+      "file_type": "code",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L588",
+      "_origin": "ast",
+      "id": "vercel_status_ismatchingdeployment",
+      "community": 76,
+      "norm_label": "ismatchingdeployment()"
+    },
+    {
       "label": "getDeploymentId()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/vercel/status.ts",
-      "source_location": "L571",
+      "source_location": "L608",
       "_origin": "ast",
       "id": "vercel_status_getdeploymentid",
       "community": 76,
@@ -5737,7 +5777,7 @@
       "label": "getDeploymentBranch()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/vercel/status.ts",
-      "source_location": "L575",
+      "source_location": "L612",
       "_origin": "ast",
       "id": "vercel_status_getdeploymentbranch",
       "community": 76,
@@ -5747,7 +5787,7 @@
       "label": "getDeploymentCommitSha()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/vercel/status.ts",
-      "source_location": "L586",
+      "source_location": "L623",
       "_origin": "ast",
       "id": "vercel_status_getdeploymentcommitsha",
       "community": 76,
@@ -5757,7 +5797,7 @@
       "label": "getDeploymentEnvironment()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/vercel/status.ts",
-      "source_location": "L593",
+      "source_location": "L630",
       "_origin": "ast",
       "id": "vercel_status_getdeploymentenvironment",
       "community": 76,
@@ -5767,7 +5807,7 @@
       "label": "getDeploymentCreatedAt()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/vercel/status.ts",
-      "source_location": "L597",
+      "source_location": "L634",
       "_origin": "ast",
       "id": "vercel_status_getdeploymentcreatedat",
       "community": 76,
@@ -5777,7 +5817,7 @@
       "label": "getDeploymentSummaryTimestamp()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/vercel/status.ts",
-      "source_location": "L605",
+      "source_location": "L642",
       "_origin": "ast",
       "id": "vercel_status_getdeploymentsummarytimestamp",
       "community": 76,
@@ -5787,7 +5827,7 @@
       "label": "getBranchDeploymentKey()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/vercel/status.ts",
-      "source_location": "L612",
+      "source_location": "L649",
       "_origin": "ast",
       "id": "vercel_status_getbranchdeploymentkey",
       "community": 76,
@@ -5797,7 +5837,7 @@
       "label": "getBuildProgressFromChecks()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/vercel/status.ts",
-      "source_location": "L618",
+      "source_location": "L655",
       "_origin": "ast",
       "id": "vercel_status_getbuildprogressfromchecks",
       "community": 76,
@@ -5807,7 +5847,7 @@
       "label": "formatBuildPhase()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/vercel/status.ts",
-      "source_location": "L678",
+      "source_location": "L715",
       "_origin": "ast",
       "id": "vercel_status_formatbuildphase",
       "community": 76,
@@ -5817,7 +5857,7 @@
       "label": "getTokenlessFallback()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/vercel/status.ts",
-      "source_location": "L705",
+      "source_location": "L742",
       "_origin": "ast",
       "id": "vercel_status_gettokenlessfallback",
       "community": 76,
@@ -5827,7 +5867,7 @@
       "label": "getVercelDeploymentStatus()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/vercel/status.ts",
-      "source_location": "L748",
+      "source_location": "L785",
       "_origin": "ast",
       "id": "vercel_status_getverceldeploymentstatus",
       "community": 76,
@@ -5837,7 +5877,7 @@
       "label": "getVercelDeploymentsOverview()",
       "file_type": "code",
       "source_file": "remix/app/api/utils/vercel/status.ts",
-      "source_location": "L921",
+      "source_location": "L958",
       "_origin": "ast",
       "id": "vercel_status_getverceldeploymentsoverview",
       "community": 76,
@@ -6040,7 +6080,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "commander_commanderv2",
-      "community": 45,
+      "community": 72,
       "norm_label": "commanderv2.tsx"
     },
     {
@@ -6050,7 +6090,7 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "commander_commanderv2_commanderv2",
-      "community": 45,
+      "community": 72,
       "norm_label": "commanderv2()"
     },
     {
@@ -6870,7 +6910,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "user_usercard",
-      "community": 94,
+      "community": 45,
       "norm_label": "usercard.tsx"
     },
     {
@@ -6880,7 +6920,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "user_usercard_usercard",
-      "community": 94,
+      "community": 45,
       "norm_label": "usercard()"
     },
     {
@@ -7500,7 +7540,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "hooks_usecurrentuser",
-      "community": 94,
+      "community": 45,
       "norm_label": "usecurrentuser.tsx"
     },
     {
@@ -7510,7 +7550,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "hooks_usecurrentuser_currentuser",
-      "community": 94,
+      "community": 45,
       "norm_label": "currentuser"
     },
     {
@@ -7520,7 +7560,7 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "hooks_usecurrentuser_usecurrentuser",
-      "community": 94,
+      "community": 45,
       "norm_label": "usecurrentuser()"
     },
     {
@@ -7550,7 +7590,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "hooks_usepath",
-      "community": 45,
+      "community": 72,
       "norm_label": "usepath.tsx"
     },
     {
@@ -7560,7 +7600,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "hooks_usepath_usepath",
-      "community": 45,
+      "community": 72,
       "norm_label": "usepath()"
     },
     {
@@ -8280,7 +8320,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "template_template",
-      "community": 2,
+      "community": 46,
       "norm_label": "_template.tsx"
     },
     {
@@ -8290,7 +8330,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "template_template_index",
-      "community": 2,
+      "community": 46,
       "norm_label": "index()"
     },
     {
@@ -8300,7 +8340,7 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "template_template_action",
-      "community": 2,
+      "community": 46,
       "norm_label": "action()"
     },
     {
@@ -8310,7 +8350,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "template_template_earlyreturn",
-      "community": 2,
+      "community": 46,
       "norm_label": "earlyreturn()"
     },
     {
@@ -8840,7 +8880,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "routes_register",
-      "community": 16,
+      "community": 94,
       "norm_label": "register.tsx"
     },
     {
@@ -8860,7 +8900,7 @@
       "source_location": "L14",
       "_origin": "ast",
       "id": "routes_register_register",
-      "community": 16,
+      "community": 94,
       "norm_label": "register()"
     },
     {
@@ -9140,7 +9180,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "routes_welcome",
-      "community": 94,
+      "community": 45,
       "norm_label": "welcome.tsx"
     },
     {
@@ -9160,7 +9200,7 @@
       "source_location": "L16",
       "_origin": "ast",
       "id": "routes_welcome_welcome",
-      "community": 94,
+      "community": 45,
       "norm_label": "welcome()"
     },
     {
@@ -11417,7 +11457,7 @@
         "kind": "bash_entrypoint"
       },
       "_origin": "ast",
-      "id": "users_lopu_things_code_lopugit_thingtime_test_branches_expose_vercel_prod_remix_scripts_pre_dev_sh__entry",
+      "id": "users_lopu_things_code_lopugit_thingtime_test_branches_ignore_cancelled_vercel_status_remix_scripts_pre_dev_sh__entry",
       "community": 53,
       "norm_label": "pre-dev.sh script"
     },
@@ -11635,7 +11675,7 @@
         "kind": "bash_entrypoint"
       },
       "_origin": "ast",
-      "id": "users_lopu_things_code_lopugit_thingtime_test_branches_expose_vercel_prod_remix_vercel_sh__entry",
+      "id": "users_lopu_things_code_lopugit_thingtime_test_branches_ignore_cancelled_vercel_status_remix_vercel_sh__entry",
       "community": 52,
       "norm_label": "vercel.sh script"
     },
@@ -13143,7 +13183,7 @@
       "label": "Changed",
       "file_type": "document",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L32",
+      "source_location": "L35",
       "_origin": "ast",
       "id": "remix_changelog_changed",
       "community": 78,
@@ -13153,7 +13193,7 @@
       "label": "PR #13 - Remix Hydration, Vercel Status, And Deployment Hygiene",
       "file_type": "document",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L68",
+      "source_location": "L71",
       "_origin": "ast",
       "id": "remix_changelog_pr_13_remix_hydration_vercel_status_and_deployment_hygiene",
       "community": 78,
@@ -13163,7 +13203,7 @@
       "label": "Added",
       "file_type": "document",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L73",
+      "source_location": "L76",
       "_origin": "ast",
       "id": "remix_changelog_added",
       "community": 78,
@@ -13173,9 +13213,9 @@
       "label": "Changed",
       "file_type": "document",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L84",
+      "source_location": "L87",
       "_origin": "ast",
-      "id": "remix_changelog_changed_84",
+      "id": "remix_changelog_changed_87",
       "community": 78,
       "norm_label": "changed"
     },
@@ -13183,9 +13223,9 @@
       "label": "Fixed",
       "file_type": "document",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L122",
+      "source_location": "L125",
       "_origin": "ast",
-      "id": "remix_changelog_fixed_122",
+      "id": "remix_changelog_fixed_125",
       "community": 78,
       "norm_label": "fixed"
     },
@@ -13193,7 +13233,7 @@
       "label": "Verified",
       "file_type": "document",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L133",
+      "source_location": "L136",
       "_origin": "ast",
       "id": "remix_changelog_verified",
       "community": 78,
@@ -13203,7 +13243,7 @@
       "label": "[1.0.0] - YYYY-MM-DD",
       "file_type": "document",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L143",
+      "source_location": "L146",
       "_origin": "ast",
       "id": "remix_changelog_1_0_0_yyyy_mm_dd",
       "community": 78,
@@ -26673,6 +26713,16 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L213",
+      "weight": 1.0,
+      "source": "vercel_status",
+      "target": "vercel_status_getdeploymentstate",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
       "source_location": "L542",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -26823,11 +26873,41 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L219",
+      "weight": 1.0,
+      "source": "vercel_status",
+      "target": "vercel_status_islivestatusdeployment",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L588",
+      "weight": 1.0,
+      "source": "vercel_status",
+      "target": "vercel_status_ismatchingdeployment",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
       "source_location": "L24",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "vercel_status",
       "target": "vercel_status_isvercelstatusenabled"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L204",
+      "weight": 1.0,
+      "source": "vercel_status",
+      "target": "vercel_status_live_status_deployment_states",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -27221,6 +27301,17 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L214",
+      "weight": 1.0,
+      "source": "vercel_status_getdeploymentstate",
+      "target": "vercel_status_normalisestate",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
       "source_location": "L118",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -27353,6 +27444,17 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L597",
+      "weight": 1.0,
+      "source": "vercel_status_ismatchingdeployment",
+      "target": "vercel_status_getobjectvalue",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
       "source_location": "L84",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -27419,11 +27521,55 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L215",
+      "weight": 1.0,
+      "source": "vercel_status_getdeploymentstate",
+      "target": "vercel_status_getstringvalue",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
       "source_location": "L488",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "vercel_status_getverceldeploymentstatus",
       "target": "vercel_status_getstringvalue"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L601",
+      "weight": 1.0,
+      "source": "vercel_status_ismatchingdeployment",
+      "target": "vercel_status_getstringvalue",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L852",
+      "weight": 1.0,
+      "source": "vercel_status_getverceldeploymentstatus",
+      "target": "vercel_status_getdeploymentstate",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/app/api/utils/vercel/status.ts",
+      "source_location": "L220",
+      "weight": 1.0,
+      "source": "vercel_status_islivestatusdeployment",
+      "target": "vercel_status_getdeploymentstate",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -37552,7 +37698,7 @@
       "source_location": "L1",
       "weight": 1.0,
       "source": "scripts_pre_dev",
-      "target": "users_lopu_things_code_lopugit_thingtime_test_branches_expose_vercel_prod_remix_scripts_pre_dev_sh__entry",
+      "target": "users_lopu_things_code_lopugit_thingtime_test_branches_ignore_cancelled_vercel_status_remix_scripts_pre_dev_sh__entry",
       "confidence_score": 1.0
     },
     {
@@ -37742,7 +37888,7 @@
       "source_location": "L1",
       "weight": 1.0,
       "source": "remix_vercel",
-      "target": "users_lopu_things_code_lopugit_thingtime_test_branches_expose_vercel_prod_remix_vercel_sh__entry",
+      "target": "users_lopu_things_code_lopugit_thingtime_test_branches_ignore_cancelled_vercel_status_remix_vercel_sh__entry",
       "confidence_score": 1.0
     },
     {
@@ -39029,10 +39175,10 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L84",
+      "source_location": "L87",
       "weight": 1.0,
       "source": "remix_changelog_unreleased",
-      "target": "remix_changelog_changed_84",
+      "target": "remix_changelog_changed_87",
       "confidence_score": 1.0
     },
     {
@@ -39049,10 +39195,10 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L122",
+      "source_location": "L125",
       "weight": 1.0,
       "source": "remix_changelog_unreleased",
-      "target": "remix_changelog_fixed_122",
+      "target": "remix_changelog_fixed_125",
       "confidence_score": 1.0
     },
     {
@@ -39257,5 +39403,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "7339469550d91313c9d44f23b7d3d886d05b982b"
+  "built_at_commit": "d3b530eed124b870bf2d9da8aa0549cf97bfd686"
 }
