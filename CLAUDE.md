@@ -10,6 +10,8 @@
 - When Lopu asks to add an instruction to `CLAUDE.md` or `AGENTS.md`, update
   the counterpart file as well so Claude and Codex keep using the same repo
   policy unless the requested rule is explicitly tool-specific.
+- For PR reviews, prioritize code quality, performance, potential bugs,
+  crashes, and especially security issues before style commentary.
 - When cloning or checking out branches under `.test-branches/`, copy the
   parent checkout's local env files into the clone before running install,
   dev, build, or smoke checks. Preserve matching paths for root `.env*` files

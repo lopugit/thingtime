@@ -10,6 +10,8 @@
 - When Lopu asks to add an instruction to `AGENTS.md` or `CLAUDE.md`, update
   the counterpart file as well so Codex and Claude keep using the same repo
   policy unless the requested rule is explicitly tool-specific.
+- For PR reviews, prioritize code quality, performance, potential bugs,
+  crashes, and especially security issues before style commentary.
 - Also read `CODEX.md` for persistent environment/runbook notes before running checks or pushing branches from this workspace.
 - On local desktop sessions, use the PM2 ecosystem configs for local dev servers instead of starting duplicate ad-hoc Remix servers. The local alias `pm` may be available for PM2; otherwise use `pm2`. The root `ecosystem.config.js` defines `thingtime-stack`, while `remix/ecosystem.config.js` defines the actual Remix dev app `tt-remix-9999` on port 9999. Prefer `npm run remix-pms` from the repo root or `cd remix && pm restart ecosystem.config.js --only tt-remix-9999` when starting or intentionally restarting Remix locally. Do not restart the PM2 Remix dev server after every source edit; it has rebuild/hot reloading. Restart only for env var changes, dependency/native-binding changes, server config changes, a crashed/stale process, or an explicit user request. Stop/restart the managed app before claiming a local dev-server state.
 - When cloning or checking out branches under `.test-branches/`, copy the
