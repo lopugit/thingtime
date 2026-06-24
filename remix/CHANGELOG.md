@@ -31,6 +31,9 @@ Detailed PR notes:
 
 ### Changed
 
+- Added a native iOS agent runbook documenting the Apple Developer environment,
+  App Store Connect API-key validation, signing, Xcode SDK, and TestFlight
+  upload flow. — _Codex (AI), 2026-06-24_
 - Bumped the native iOS build number to 2 for the next TestFlight upload. —
   _Codex (AI), 2026-06-24_
 - Disabled iOS export symbol packaging for the initial webview shell TestFlight

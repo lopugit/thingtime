@@ -995,13 +995,13 @@
     "semantic_hash": ""
   },
   "AGENTS.md": {
-    "mtime": 1782240133.08338,
-    "ast_hash": "d92af075a3f761dc9c387b392f4e413b",
+    "mtime": 1782270942.2025187,
+    "ast_hash": "4cfc2fee4778750902e8791b4a8b3bb2",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1782240133.083787,
-    "ast_hash": "9dcfbd1be8852f7f3d7df26fac80f487",
+    "mtime": 1782270942.2027998,
+    "ast_hash": "754d2d5ca831800837cfa96b2c0a2aa1",
     "semantic_hash": ""
   },
   "raycast/assets/command-icon.png": {
@@ -1810,8 +1810,8 @@
     "semantic_hash": ""
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1782243689.6879876,
-    "ast_hash": "85c86b196391c14becdd1de5ccca5ffa",
+    "mtime": 1782270907.3590593,
+    "ast_hash": "00e40d7ff8a2910c8a791290747a0649",
     "semantic_hash": ""
   },
   "remix/app/api/utils/vercel/status.ts": {
@@ -2162,6 +2162,16 @@
   "iOS/scripts/testflight-beta.sh": {
     "mtime": 1782239332.6481593,
     "ast_hash": "c0286e4042d72f863087d4901784ddea",
+    "semantic_hash": ""
+  },
+  "iOS/AGENTS.md": {
+    "mtime": 1782270942.202254,
+    "ast_hash": "d5b27c62b1e86cccbb54e0663359931c",
+    "semantic_hash": ""
+  },
+  "iOS/CLAUDE.md": {
+    "mtime": 1782270907.3585513,
+    "ast_hash": "5baf44a9a00fc70917d22cb564a2cc34",
     "semantic_hash": ""
   }
 }

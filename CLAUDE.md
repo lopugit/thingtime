@@ -30,6 +30,8 @@
   `iOS/project.yml` as the source of truth and run `xcodegen generate` inside
   `iOS/` before `xcodebuild` checks. Keep generated `.xcodeproj` files
   untracked.
+- Before TestFlight, signing, or Apple Developer auth work, read
+  `iOS/AGENTS.md` for the iOS-local App Store Connect env/key/profile flow.
 - Use `bundle exec fastlane beta` from `iOS/` for TestFlight uploads. Provide
   App Store Connect API key, issuer, team, and bundle identifier values through
   environment variables only; never commit `.p8` keys or account-specific
