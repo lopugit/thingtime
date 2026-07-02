@@ -23,6 +23,9 @@ Detailed PR notes:
 
 ### Fixed
 
+- Ignored canceled Vercel deployments when selecting the footer deployment
+  status so skip-rule cancellations do not mask the latest live deployment
+  state. — _Codex (AI), 2026-06-24_
 - Hardened JWT auth so deployed runtimes fail closed without `JWT_SECRET`, and
   live session checks now require the session `userId` to match the JWT `sub`.
   — _Codex (AI), 2026-06-23_
@@ -31,6 +34,9 @@ Detailed PR notes:
 
 ### Changed
 
+- Exposed the Vercel footer deployment status and `/vercel` dashboard in
+  production deployments as well as local development and previews. —
+  _Codex (AI), 2026-06-24_
 - Added a native iOS agent runbook documenting the Apple Developer environment,
   App Store Connect API-key validation, signing, Xcode SDK, and TestFlight
   upload flow. — _Codex (AI), 2026-06-24_

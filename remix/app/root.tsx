@@ -127,7 +127,14 @@ const getDeploymentBranchName = () => {
 };
 
 const shouldShowDeploymentStatus = () => {
-	return process.env.NODE_ENV === 'development' || process.env.VERCEL_ENV === 'preview' || process.env.VERCEL_TARGET_ENV === 'preview';
+	const vercelEnvironment = process.env.VERCEL_TARGET_ENV || process.env.VERCEL_ENV;
+
+	return (
+		process.env.NODE_ENV === 'development' ||
+		vercelEnvironment === 'preview' ||
+		vercelEnvironment === 'production' ||
+		process.env.THINGTIME_SHOW_DEPLOYMENT_STATUS === 'true'
+	);
 };
 
 export async function loader({ request }: { request: Request }) {

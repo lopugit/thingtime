@@ -140,15 +140,15 @@ the preset fallback responses instead of calling an AI provider.
 
 ## Vercel deployment status
 
-The footer can show live Vercel preview/build status. It works in a limited
+The footer can show live Vercel deployment/build status. It works in a limited
 tokenless mode on Vercel, but full status, dashboard links, build state, last
 ready time, and active polling need a Vercel REST API token.
 
-Local development and preview deployments also expose `/vercel`, backed by
-`/api/v1/vercel/deployments`, to scan recent Vercel pages for the latest
-deployment per unique branch with timestamps, preview links, deployment-detail
-links, current Vercel states, total branches counted, and an optional display
-cap using the same server-only token configuration.
+Local development, preview deployments, and production deployments expose
+`/vercel`, backed by `/api/v1/vercel/deployments`, to scan recent Vercel pages
+for the latest deployment per unique branch with timestamps, preview links,
+deployment-detail links, current Vercel states, total branches counted, and an
+optional display cap using the same server-only token configuration.
 
 Add this as a sensitive Vercel project environment variable:
 
