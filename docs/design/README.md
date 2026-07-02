@@ -12,10 +12,10 @@ directory. Rebuild any entry's bundle with `python3 inline-dc.py <folder>`.
 - `thingtime-launch-celebration/` — launch-day page, click for confetti
 - `thingtime-directions/` — exploration canvas: 8 landing directions in one
   scrollable doc (anchors `#1a`–`#1h`)
-- `thingtime-landing/` — the built-out landing (nav · hero · live demo ·
-  use cases · ecosystem · FAQ); links into `thingtime-app/`
+- `claude-design-mockup-v2-fable/` — the built-out landing (nav · hero ·
+  live demo · use cases · ecosystem · FAQ); links into `thingtime-app/`
 - `thingtime-app/` — app mockup: the thing editor (interactive demo,
-  path-bar commands); links back to `thingtime-landing/`
+  path-bar commands); links back to `claude-design-mockup-v2-fable/`
 - `thingtime-landing-1a-classic-centered/` — classic centered · waitlist-first · warm copy
 - `thingtime-landing-1b-product-split/` — product split · the demo IS the hero · confident copy
 - `thingtime-landing-1c-crowdfund-campaign/` — crowdfund campaign · backers-first · rallying copy
