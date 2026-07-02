@@ -2770,8 +2770,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Status/FooterStatusPanel.tsx": {
-    "mtime": 1782989550.5693643,
-    "ast_hash": "9b283b0ae67f6382c7c1799f223b6f00",
+    "mtime": 1783004098.5689917,
+    "ast_hash": "126ce07d9cbcac73fb7c1085377387c9",
     "semantic_hash": ""
   },
   "remix/app/components/Status/ServiceStatus.tsx": {

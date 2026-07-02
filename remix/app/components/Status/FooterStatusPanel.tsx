@@ -1,5 +1,5 @@
 import React from 'react';
-import { Flex, Select, Text } from '@chakra-ui/react';
+import { Box, Flex, Select } from '@chakra-ui/react';
 
 import { MongoStatus } from '../MongoDB/MongoStatus';
 import { VercelStatus } from '../Vercel/VercelStatus';
@@ -57,21 +57,67 @@ export const FooterStatusPanel = ({
 
   return (
     <Flex flexDirection="column" rowGap={2} alignItems="flex-start">
-      <Flex alignItems="center" columnGap={2}>
-        <Text fontSize="10px" opacity={0.5}>
-          status
-        </Text>
+      <Box
+        data-status-environment-control=""
+        width="auto"
+        minWidth="66px"
+        height="22px"
+        marginLeft="-4px"
+        backgroundColor="transparent"
+        borderWidth="1px"
+        borderStyle="solid"
+        borderColor="transparent"
+        borderRadius="6px"
+        transition="background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease"
+        _hover={{
+          backgroundColor: 'rgba(160, 174, 192, 0.12)',
+          borderColor: 'rgba(160, 174, 192, 0.35)'
+        }}
+        _focusWithin={{
+          backgroundColor: 'rgba(160, 174, 192, 0.16)',
+          borderColor: 'rgba(49, 151, 149, 0.42)',
+          boxShadow: '0 0 0 1px rgba(49, 151, 149, 0.22)'
+        }}
+      >
         <Select
           aria-label="Status environment"
+          icon={<span />}
+          iconSize="0"
+          variant="unstyled"
           size="xs"
           value={selectedEnvironment?.id || 'current'}
           onChange={(event) => setSelectedEnvironmentId(event.target.value as StatusEnvironmentId)}
-          width="142px"
-          height="22px"
+          width="100%"
+          minWidth="inherit"
+          height="20px"
+          paddingInlineStart={1}
+          paddingInlineEnd={1}
           fontSize="10px"
-          borderColor="rgba(160, 174, 192, 0.45)"
-          borderRadius="6px"
+          lineHeight="20px"
+          color="rgba(0, 0, 0, 0.58)"
+          backgroundColor="transparent"
+          border="0"
+          borderRadius="5px"
+          boxShadow="none"
+          cursor="pointer"
           title={selectedEnvironment?.title}
+          _hover={{
+            color: 'rgba(0, 0, 0, 0.86)'
+          }}
+          _focus={{
+            boxShadow: 'none',
+            color: 'rgba(0, 0, 0, 0.9)'
+          }}
+          sx={{
+            appearance: 'none',
+            backgroundImage: 'none',
+            '&::-ms-expand': {
+              display: 'none'
+            },
+            '& option': {
+              color: '#1A202C'
+            }
+          }}
         >
           {environments.map((environment) => (
             <option key={environment.id} value={environment.id}>
@@ -79,7 +125,7 @@ export const FooterStatusPanel = ({
             </option>
           ))}
         </Select>
-      </Flex>
+      </Box>
 
       <NitroStatus targetOrigin={targetOrigin} />
       <FrontendStatus targetOrigin={targetOrigin} />
