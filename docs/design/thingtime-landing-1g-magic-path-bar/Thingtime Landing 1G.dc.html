@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    html, body { margin: 0; padding: 0; background: #ffffff; }
+    @keyframes moving-rainbow{0%{background-position:0 0}100%{background-position:calc(100px + 200%) 0}
+  </style>
+  <link rel="stylesheet" href="ds/thingtime-bundle.css">
+  <script src="ds/react.js"></script>
+  <script src="ds/react-dom.js"></script>
+  <script src="ds/thingtime-bundle.js"></script>
+  <script src="ds/tt-elements.js"></script>
+</helmet>
+<div data-screen-label="1g Magic path bar" style="width:100%; max-width:980px; margin:0 auto; background:#ffffff; color:#1a1a1a; padding:64px 40px 56px; text-align:center;">
+          <tt-logo icon="" theme="nature" voxel-size="12" space="0px"></tt-logo>
+          <h1 style="margin:26px 0 0; font-size:52px; font-weight:900; letter-spacing:-0.035em;">The internet, but <span style="color:transparent; background:linear-gradient(to right, #f34a4a, #ffbc48, #58ca70, #47b5e6, #a555e8, #f34a4a); background-size:calc(100px + 200%); -webkit-background-clip:text; background-clip:text; animation:moving-rainbow 5s linear infinite;">yours</span>.</h1>
+          <p style="margin:16px auto 0; max-width:480px; font-size:17px; line-height:1.55; color:#4b4b4b;">Every thing gets an address. Type a path, get a GUI.</p>
+          <div style="margin:36px auto 0; width:720px; display:flex; align-items:center; gap:12px; border:3px solid #1a1a1a; box-shadow:8px 8px 0 #1a1a1a; padding:20px 24px; font-size:22px; font-family:ui-monospace,Menlo,monospace; text-align:left;">
+            <span style="color:#9a9a9a;">thingtime.com/</span><span style="font-weight:700;">you/car/repairs</span>
+            <span style="display:inline-block; width:3px; height:26px; background:hotpink; animation:tt-blink 1s step-end infinite;"></span>
+            <span style="margin-left:auto; font-size:20px;">✨</span>
+          </div>
+          <div style="margin-top:20px; display:flex; justify-content:center; gap:10px;">
+            <span style="border:2px solid #1a1a1a; padding:7px 14px; font-size:13.5px; font-weight:700;">🚗 /car — full service history</span>
+            <span style="border:2px solid #1a1a1a; padding:7px 14px; font-size:13.5px; font-weight:700;">🛠️ /drill — lend it out</span>
+            <span style="border:2px solid #1a1a1a; padding:7px 14px; font-size:13.5px; font-weight:700;">📓 /recipes — share the good ones</span>
+          </div>
+          <div style="margin-top:36px; font-size:14px; color:#8a8a8a;">Try one — no account needed · <span style="color:#6f3198; font-weight:700;">or claim your own path →</span></div>
+        </div>
+</x-dc>
+</body>
+</html>
