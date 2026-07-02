@@ -1,5 +1,13 @@
 import React from 'react';
-import { Box, Flex, Select } from '@chakra-ui/react';
+import {
+  Box,
+  Button,
+  Flex,
+  Menu,
+  MenuButton,
+  MenuItem,
+  MenuList
+} from '@chakra-ui/react';
 
 import { MongoStatus } from '../MongoDB/MongoStatus';
 import { VercelStatus } from '../Vercel/VercelStatus';
@@ -82,9 +90,9 @@ export const FooterStatusPanel = ({
   }, [defaultEnvironmentId, environments, selectedEnvironmentId]);
 
   const handleEnvironmentChange = React.useCallback(
-    (event: React.ChangeEvent<HTMLSelectElement>) => {
+    (environmentId: StatusEnvironmentId) => {
       setLoadedStoredSelection(true);
-      setSelectedEnvironmentId(event.target.value as StatusEnvironmentId);
+      setSelectedEnvironmentId(environmentId);
     },
     []
   );
@@ -112,80 +120,104 @@ export const FooterStatusPanel = ({
 
   return (
     <Flex flexDirection="column" rowGap={2} alignItems="flex-start">
-      <Box
-        data-status-environment-control=""
-        width="auto"
-        minWidth="118px"
-        maxWidth="236px"
-        height="22px"
-        marginLeft="16px"
-        backgroundColor="transparent"
-        borderWidth="1px"
-        borderStyle="solid"
-        borderColor="transparent"
-        borderRadius="6px"
-        transition="background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease"
-        _hover={{
-          backgroundColor: 'rgba(160, 174, 192, 0.12)',
-          borderColor: 'rgba(160, 174, 192, 0.35)'
-        }}
-        _focusWithin={{
-          backgroundColor: 'rgba(160, 174, 192, 0.16)',
-          borderColor: 'rgba(49, 151, 149, 0.42)',
-          boxShadow: '0 0 0 1px rgba(49, 151, 149, 0.22)'
-        }}
-      >
-        <Select
-          aria-label="Status environment"
-          icon={<span />}
-          iconSize="0"
-          variant="unstyled"
-          size="xs"
-          value={selectedEnvironment?.id || 'current'}
-          onChange={handleEnvironmentChange}
-          width="100%"
-          minWidth="inherit"
-          maxWidth="inherit"
-          height="20px"
-          paddingInlineStart={0}
-          paddingInlineEnd={1}
-          fontSize="10px"
-          lineHeight="20px"
-          color="rgba(0, 0, 0, 0.58)"
-          backgroundColor="transparent"
-          border="0"
-          borderRadius="5px"
-          boxShadow="none"
-          cursor="pointer"
-          title={selectedEnvironment?.title}
-          _hover={{
-            color: 'rgba(0, 0, 0, 0.86)'
-          }}
-          _focus={{
-            boxShadow: 'none',
-            color: 'rgba(0, 0, 0, 0.9)'
-          }}
-          sx={{
-            appearance: 'none',
-            backgroundImage: 'none',
-            '&::-ms-expand': {
-              display: 'none'
-            },
-            '& > option': {
-              color: '#1A202C'
-            },
-            '& option': {
-              color: '#1A202C'
-            }
-          }}
-        >
-          {environments.map((environment) => (
-            <option key={environment.id} value={environment.id}>
-              {environment.label}
-            </option>
-          ))}
-        </Select>
-      </Box>
+      <Menu placement="bottom-start" isLazy>
+        {({ isOpen }) => (
+          <>
+            <MenuButton
+              as={Button}
+              data-status-environment-control=""
+              aria-label="Status environment"
+              title={selectedEnvironment?.title}
+              variant="unstyled"
+              width="auto"
+              minWidth="118px"
+              maxWidth="236px"
+              height="22px"
+              minHeight="22px"
+              padding={0}
+              paddingInlineStart={0}
+              paddingInlineEnd={0}
+              display="inline-flex"
+              alignItems="center"
+              justifyContent="flex-start"
+              overflow="hidden"
+              color="rgba(0, 0, 0, 0.58)"
+              backgroundColor={isOpen ? 'rgba(160, 174, 192, 0.16)' : 'transparent'}
+              border="0"
+              borderRadius="6px"
+              boxShadow={
+                isOpen
+                  ? 'inset 0 0 0 1px rgba(49, 151, 149, 0.42), 0 0 0 1px rgba(49, 151, 149, 0.22)'
+                  : 'none'
+              }
+              cursor="pointer"
+              fontSize="10px"
+              fontWeight="400"
+              lineHeight="1"
+              textAlign="left"
+              transition="background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease"
+              _hover={{
+                backgroundColor: 'rgba(160, 174, 192, 0.12)',
+                boxShadow: 'inset 0 0 0 1px rgba(160, 174, 192, 0.35)',
+                color: 'rgba(0, 0, 0, 0.86)'
+              }}
+              _active={{
+                backgroundColor: 'rgba(160, 174, 192, 0.16)'
+              }}
+              _focus={{
+                boxShadow: isOpen
+                  ? 'inset 0 0 0 1px rgba(49, 151, 149, 0.42), 0 0 0 1px rgba(49, 151, 149, 0.22)'
+                  : 'none'
+              }}
+              _focusVisible={{
+                backgroundColor: 'rgba(160, 174, 192, 0.16)',
+                boxShadow:
+                  'inset 0 0 0 1px rgba(49, 151, 149, 0.42), 0 0 0 1px rgba(49, 151, 149, 0.22)',
+                color: 'rgba(0, 0, 0, 0.9)'
+              }}
+            >
+              <Box
+                as="span"
+                data-status-environment-label=""
+                display="inline-flex"
+                alignItems="center"
+                width="100%"
+                height="22px"
+                overflow="hidden"
+                whiteSpace="nowrap"
+                textOverflow="ellipsis"
+                lineHeight="1"
+              >
+                {selectedEnvironment?.label || 'Current Tab'}
+              </Box>
+            </MenuButton>
+            <MenuList
+              minWidth="160px"
+              maxWidth="280px"
+              paddingY={1}
+              borderRadius="6px"
+              fontSize="10px"
+              lineHeight="20px"
+              color="#1A202C"
+            >
+              {environments.map((environment) => (
+                <MenuItem
+                  key={environment.id}
+                  minHeight="22px"
+                  paddingY={0}
+                  paddingInlineStart={2}
+                  paddingInlineEnd={2}
+                  fontSize="10px"
+                  lineHeight="20px"
+                  onClick={() => handleEnvironmentChange(environment.id)}
+                >
+                  {environment.label}
+                </MenuItem>
+              ))}
+            </MenuList>
+          </>
+        )}
+      </Menu>
 
       <NitroStatus targetOrigin={targetOrigin} />
       <FrontendStatus targetOrigin={targetOrigin} />

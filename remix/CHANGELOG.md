@@ -18,6 +18,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- Made the compact footer environment selector text flush-left with the footer
+  column and vertically centered by replacing the native select with a custom
+  menu button. — _Codex (AI), 2026-07-03_
 - Made the footer environment selector default to `Current Tab` per browser
   origin, added a current branch deployment option, and reset status rows to
   checking immediately when the target environment changes. — _Codex (AI),

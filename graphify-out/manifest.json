@@ -2770,9 +2770,9 @@
     "semantic_hash": "e3f03129ecee02995c53dc506a4bee5b"
   },
   "remix/app/components/Status/FooterStatusPanel.tsx": {
-    "mtime": 1783009186.1866574,
-    "ast_hash": "024ad62a388294f0d9e5d92c7ae711fa",
-    "semantic_hash": "024ad62a388294f0d9e5d92c7ae711fa"
+    "mtime": 1783010692.5323179,
+    "ast_hash": "2c894d8a903295fdd74d2f5ac59eb639",
+    "semantic_hash": "2c894d8a903295fdd74d2f5ac59eb639"
   },
   "remix/app/components/Status/ServiceStatus.tsx": {
     "mtime": 1783009192.3921695,

@@ -23,8 +23,8 @@ Nitro API, frontend shell, Vercel deployment state, and MongoDB connection.
   the control.
 - Hid selector chrome at rest and only reveals its background/border treatment
   on hover or focus.
-- Aligned the selected environment text with the status row labels while keeping
-  the focus box aligned with the status rows.
+- Replaced the native select with a compact menu button so the selected
+  environment text is flush-left with the footer column and vertically centered.
 
 ## Health Checks
 
@@ -47,6 +47,8 @@ Nitro API, frontend shell, Vercel deployment state, and MongoDB connection.
 
 - Verified the footer selector layout in the local browser at desktop and
   mobile widths.
+- Verified the menu button alignment in Chrome with the selected text exactly
+  flush to the control's left edge and vertically centered.
 - Verified reload scroll restoration in the local browser.
 - Verified localhost MongoDB health returns connected after the local env is
   present and the PM2-managed dev app is restarted.
