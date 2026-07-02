@@ -300,7 +300,7 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "api_package_dependencies_mongodb",
-      "community": 11,
+      "community": 139,
       "norm_label": "mongodb"
     },
     {
@@ -3460,7 +3460,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_providers_chakra_chakrawrapper",
-      "community": 140,
+      "community": 119,
       "norm_label": "chakrawrapper.tsx"
     },
     {
@@ -3470,7 +3470,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "remix_app_providers_chakra_chakrawrapper_chakrawrapper",
-      "community": 140,
+      "community": 119,
       "norm_label": "chakrawrapper()"
     },
     {
@@ -3480,7 +3480,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_providers_chakra_components_button",
-      "community": 140,
+      "community": 119,
       "norm_label": "button.tsx"
     },
     {
@@ -3490,7 +3490,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "remix_app_providers_chakra_components_button_chakrabuttonprops",
-      "community": 140,
+      "community": 119,
       "norm_label": "chakrabuttonprops"
     },
     {
@@ -3500,7 +3500,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "remix_app_providers_chakra_components_button_chakrabutton",
-      "community": 140,
+      "community": 119,
       "norm_label": "chakrabutton"
     },
     {
@@ -3510,7 +3510,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_providers_chakra_colors",
-      "community": 140,
+      "community": 119,
       "norm_label": "colors.tsx"
     },
     {
@@ -3520,7 +3520,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "remix_app_providers_chakra_colors_greys",
-      "community": 140,
+      "community": 119,
       "norm_label": "greys"
     },
     {
@@ -3530,7 +3530,7 @@
       "source_location": "L12",
       "_origin": "ast",
       "id": "remix_app_providers_chakra_colors_g",
-      "community": 140,
+      "community": 119,
       "norm_label": "g"
     },
     {
@@ -3540,7 +3540,7 @@
       "source_location": "L23",
       "_origin": "ast",
       "id": "remix_app_providers_chakra_colors_chakrasdark",
-      "community": 140,
+      "community": 119,
       "norm_label": "chakrasdark"
     },
     {
@@ -3550,7 +3550,7 @@
       "source_location": "L40",
       "_origin": "ast",
       "id": "remix_app_providers_chakra_colors_chakraslight",
-      "community": 140,
+      "community": 119,
       "norm_label": "chakraslight"
     },
     {
@@ -3560,7 +3560,7 @@
       "source_location": "L59",
       "_origin": "ast",
       "id": "remix_app_providers_chakra_colors_chakras",
-      "community": 140,
+      "community": 119,
       "norm_label": "chakras"
     },
     {
@@ -3570,7 +3570,7 @@
       "source_location": "L68",
       "_origin": "ast",
       "id": "remix_app_providers_chakra_colors_colors",
-      "community": 140,
+      "community": 119,
       "norm_label": "colors"
     },
     {
@@ -3580,7 +3580,7 @@
       "source_location": "L90",
       "_origin": "ast",
       "id": "remix_app_providers_chakra_colors_adddark",
-      "community": 140,
+      "community": 119,
       "norm_label": "adddark()"
     },
     {
@@ -3700,7 +3700,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_providers_chakra_space",
-      "community": 140,
+      "community": 119,
       "norm_label": "space.tsx"
     },
     {
@@ -3710,7 +3710,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_providers_chakra_space_spaceobj",
-      "community": 140,
+      "community": 119,
       "norm_label": "spaceobj"
     },
     {
@@ -3720,7 +3720,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_providers_chakra_theme",
-      "community": 140,
+      "community": 119,
       "norm_label": "theme.tsx"
     },
     {
@@ -3730,7 +3730,7 @@
       "source_location": "L16",
       "_origin": "ast",
       "id": "remix_app_providers_chakra_theme_theme",
-      "community": 140,
+      "community": 119,
       "norm_label": "theme"
     },
     {
@@ -4000,7 +4000,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_api_http",
-      "community": 198,
+      "community": 41,
       "norm_label": "http.ts"
     },
     {
@@ -4010,7 +4010,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_api_http_jsoninit",
-      "community": 198,
+      "community": 41,
       "norm_label": "jsoninit"
     },
     {
@@ -4030,7 +4030,7 @@
       "source_location": "L18",
       "_origin": "ast",
       "id": "remix_app_api_http_redirect",
-      "community": 198,
+      "community": 41,
       "norm_label": "redirect()"
     },
     {
@@ -4510,7 +4510,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_users",
-      "community": 118,
+      "community": 42,
       "norm_label": "users.ts"
     },
     {
@@ -4520,7 +4520,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_users_userdoc",
-      "community": 118,
+      "community": 42,
       "norm_label": "userdoc"
     },
     {
@@ -4530,7 +4530,7 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_users_publicuser",
-      "community": 118,
+      "community": 42,
       "norm_label": "publicuser"
     },
     {
@@ -4540,7 +4540,7 @@
       "source_location": "L31",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_users_topublicuser",
-      "community": 118,
+      "community": 0,
       "norm_label": "topublicuser()"
     },
     {
@@ -4550,7 +4550,7 @@
       "source_location": "L41",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_users_finduserbyusername",
-      "community": 118,
+      "community": 42,
       "norm_label": "finduserbyusername()"
     },
     {
@@ -4590,7 +4590,7 @@
       "source_location": "L57",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_users_markemailverified",
-      "community": 198,
+      "community": 41,
       "norm_label": "markemailverified()"
     },
     {
@@ -4900,7 +4900,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_api_utils_getuser",
-      "community": 25,
+      "community": 139,
       "norm_label": "getuser.ts"
     },
     {
@@ -4910,7 +4910,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "remix_app_api_utils_getuser_getuser",
-      "community": 25,
+      "community": 139,
       "norm_label": "getuser()"
     },
     {
@@ -5200,7 +5200,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_api_utils_mongodb_client",
-      "community": 11,
+      "community": 139,
       "norm_label": "client.ts"
     },
     {
@@ -5210,7 +5210,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "remix_app_api_utils_mongodb_client_getclient",
-      "community": 11,
+      "community": 139,
       "norm_label": "getclient()"
     },
     {
@@ -5220,7 +5220,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_api_utils_mongodb_collection",
-      "community": 25,
+      "community": 139,
       "norm_label": "collection.ts"
     },
     {
@@ -5230,7 +5230,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "remix_app_api_utils_mongodb_collection_getcollection",
-      "community": 25,
+      "community": 139,
       "norm_label": "getcollection()"
     },
     {
@@ -5270,7 +5270,7 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "remix_app_api_utils_mongodb_collections_getuserscollection",
-      "community": 118,
+      "community": 29,
       "norm_label": "getuserscollection()"
     },
     {
@@ -5360,7 +5360,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_api_utils_mongodb_connection",
-      "community": 11,
+      "community": 139,
       "norm_label": "connection.ts"
     },
     {
@@ -5370,7 +5370,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "remix_app_api_utils_mongodb_connection_getconnection",
-      "community": 11,
+      "community": 139,
       "norm_label": "getconnection()"
     },
     {
@@ -5380,7 +5380,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_api_utils_mongodb_db",
-      "community": 25,
+      "community": 139,
       "norm_label": "db.ts"
     },
     {
@@ -5390,7 +5390,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "remix_app_api_utils_mongodb_db_getdb",
-      "community": 25,
+      "community": 139,
       "norm_label": "getdb()"
     },
     {
@@ -5400,7 +5400,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_api_utils_mongodb_mongodb",
-      "community": 11,
+      "community": 139,
       "norm_label": "mongodb.ts"
     },
     {
@@ -5410,7 +5410,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_api_utils_mongodb_mongodb_getmongodb",
-      "community": 11,
+      "community": 139,
       "norm_label": "getmongodb()"
     },
     {
@@ -5420,7 +5420,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_api_utils_mongodb_objectid",
-      "community": 11,
+      "community": 139,
       "norm_label": "objectid.ts"
     },
     {
@@ -5430,7 +5430,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "remix_app_api_utils_mongodb_objectid_getobjectid",
-      "community": 11,
+      "community": 139,
       "norm_label": "getobjectid()"
     },
     {
@@ -5470,7 +5470,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_api_utils_usercheckexists",
-      "community": 11,
+      "community": 139,
       "norm_label": "usercheckexists.ts"
     },
     {
@@ -5480,7 +5480,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "remix_app_api_utils_usercheckexists_usercheckexists",
-      "community": 11,
+      "community": 139,
       "norm_label": "usercheckexists()"
     },
     {
@@ -5490,7 +5490,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_api_utils_usercreatesession",
-      "community": 25,
+      "community": 139,
       "norm_label": "usercreatesession.ts"
     },
     {
@@ -5500,7 +5500,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "remix_app_api_utils_usercreatesession_usercreatesession",
-      "community": 25,
+      "community": 139,
       "norm_label": "usercreatesession()"
     },
     {
@@ -5530,7 +5530,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_api_utils_uservalidatepassword",
-      "community": 11,
+      "community": 139,
       "norm_label": "uservalidatepassword.ts"
     },
     {
@@ -5540,7 +5540,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "remix_app_api_utils_uservalidatepassword_uservalidatepassword",
-      "community": 11,
+      "community": 139,
       "norm_label": "uservalidatepassword()"
     },
     {
@@ -5620,7 +5620,7 @@
       "source_location": "L88",
       "_origin": "ast",
       "id": "remix_app_api_utils_vercel_status_normalisedeploymentbranchlimit",
-      "community": 60,
+      "community": 41,
       "norm_label": "normalisedeploymentbranchlimit()"
     },
     {
@@ -6030,7 +6030,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_components_api_submit",
-      "community": 137,
+      "community": 11,
       "norm_label": "submit.tsx"
     },
     {
@@ -6040,7 +6040,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "remix_app_components_api_submit_submit",
-      "community": 137,
+      "community": 11,
       "norm_label": "submit()"
     },
     {
@@ -6050,7 +6050,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_components_api_test",
-      "community": 31,
+      "community": 139,
       "norm_label": "test.tsx"
     },
     {
@@ -6060,7 +6060,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "remix_app_components_api_test_testapi",
-      "community": 31,
+      "community": 139,
       "norm_label": "testapi()"
     },
     {
@@ -6280,7 +6280,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_components_editor_editor",
-      "community": 31,
+      "community": 139,
       "norm_label": "editor.tsx"
     },
     {
@@ -6290,7 +6290,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "remix_app_components_editor_editor_editor",
-      "community": 31,
+      "community": 139,
       "norm_label": "editor()"
     },
     {
@@ -6320,7 +6320,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_components_layout_main",
-      "community": 9,
+      "community": 2,
       "norm_label": "main.tsx"
     },
     {
@@ -6330,7 +6330,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "remix_app_components_layout_main_main",
-      "community": 40,
+      "community": 2,
       "norm_label": "main()"
     },
     {
@@ -6340,7 +6340,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_components_layout_topspacing",
-      "community": 31,
+      "community": 148,
       "norm_label": "topspacing.tsx"
     },
     {
@@ -6350,7 +6350,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "remix_app_components_layout_topspacing_topspacing",
-      "community": 31,
+      "community": 148,
       "norm_label": "topspacing()"
     },
     {
@@ -6360,7 +6360,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_components_login_login",
-      "community": 2,
+      "community": 11,
       "norm_label": "login.tsx"
     },
     {
@@ -6370,7 +6370,7 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "remix_app_components_login_login_login",
-      "community": 2,
+      "community": 11,
       "norm_label": "login()"
     },
     {
@@ -6380,7 +6380,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_components_login_register",
-      "community": 2,
+      "community": 11,
       "norm_label": "register.tsx"
     },
     {
@@ -6390,7 +6390,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "remix_app_components_login_register_inputsx",
-      "community": 2,
+      "community": 11,
       "norm_label": "inputsx"
     },
     {
@@ -6400,7 +6400,7 @@
       "source_location": "L16",
       "_origin": "ast",
       "id": "remix_app_components_login_register_register",
-      "community": 2,
+      "community": 11,
       "norm_label": "register()"
     },
     {
@@ -6510,7 +6510,7 @@
       "source_location": "L184",
       "_origin": "ast",
       "id": "remix_app_components_lopu_uselopu_uselopu",
-      "community": 2,
+      "community": 11,
       "norm_label": "uselopu()"
     },
     {
@@ -6610,7 +6610,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_components_mongodb_raw",
-      "community": 137,
+      "community": 148,
       "norm_label": "raw.tsx"
     },
     {
@@ -6620,7 +6620,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "remix_app_components_mongodb_raw_raw",
-      "community": 137,
+      "community": 148,
       "norm_label": "raw()"
     },
     {
@@ -6700,7 +6700,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_components_nav_nav",
-      "community": 9,
+      "community": 2,
       "norm_label": "nav.tsx"
     },
     {
@@ -6710,7 +6710,7 @@
       "source_location": "L19",
       "_origin": "ast",
       "id": "remix_app_components_nav_nav_nav",
-      "community": 9,
+      "community": 2,
       "norm_label": "nav()"
     },
     {
@@ -6720,7 +6720,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_components_nav_profiledrawer",
-      "community": 9,
+      "community": 2,
       "norm_label": "profiledrawer.tsx"
     },
     {
@@ -6730,7 +6730,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "remix_app_components_nav_profiledrawer_profiledrawer",
-      "community": 9,
+      "community": 2,
       "norm_label": "profiledrawer()"
     },
     {
@@ -6780,7 +6780,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_components_rainbow_rainbow",
-      "community": 39,
+      "community": 7,
       "norm_label": "rainbow.tsx"
     },
     {
@@ -6790,7 +6790,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "remix_app_components_rainbow_rainbow_rainbow",
-      "community": 39,
+      "community": 7,
       "norm_label": "rainbow()"
     },
     {
@@ -6800,7 +6800,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_components_safety_safe",
-      "community": 34,
+      "community": 7,
       "norm_label": "safe.tsx"
     },
     {
@@ -6810,7 +6810,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "remix_app_components_safety_safe_safe",
-      "community": 34,
+      "community": 7,
       "norm_label": "safe()"
     },
     {
@@ -6820,7 +6820,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_components_skeleton_rainbowskeleton",
-      "community": 9,
+      "community": 2,
       "norm_label": "rainbowskeleton.tsx"
     },
     {
@@ -6830,7 +6830,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "remix_app_components_skeleton_rainbowskeleton_rainbowskeleton",
-      "community": 9,
+      "community": 2,
       "norm_label": "rainbowskeleton()"
     },
     {
@@ -6890,7 +6890,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_components_thingtime_settingsmenu",
-      "community": 2,
+      "community": 7,
       "norm_label": "settingsmenu.tsx"
     },
     {
@@ -6900,7 +6900,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "remix_app_components_thingtime_settingsmenu_settingsmenu",
-      "community": 2,
+      "community": 7,
       "norm_label": "settingsmenu()"
     },
     {
@@ -7260,7 +7260,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_functions_safe",
-      "community": 34,
+      "community": 7,
       "norm_label": "safe.tsx"
     },
     {
@@ -7270,7 +7270,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_functions_safe_safe",
-      "community": 34,
+      "community": 7,
       "norm_label": "safe()"
     },
     {
@@ -7280,7 +7280,7 @@
       "source_location": "L54",
       "_origin": "ast",
       "id": "remix_app_functions_safe_getmeta",
-      "community": 34,
+      "community": 7,
       "norm_label": "getmeta()"
     },
     {
@@ -7340,7 +7340,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_globals_globalstyles",
-      "community": 40,
+      "community": 119,
       "norm_label": "globalstyles.tsx"
     },
     {
@@ -7350,7 +7350,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "remix_app_globals_globalstyles_globalstyles",
-      "community": 40,
+      "community": 119,
       "norm_label": "globalstyles()"
     },
     {
@@ -7590,7 +7590,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_hooks_useapi",
-      "community": 2,
+      "community": 11,
       "norm_label": "useapi.tsx"
     },
     {
@@ -7600,7 +7600,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "remix_app_hooks_useapi_refreshrootdata",
-      "community": 2,
+      "community": 11,
       "norm_label": "refreshrootdata()"
     },
     {
@@ -7610,7 +7610,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "remix_app_hooks_useapi_useapi",
-      "community": 2,
+      "community": 11,
       "norm_label": "useapi()"
     },
     {
@@ -7620,7 +7620,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_hooks_useasyncfetcher",
-      "community": 137,
+      "community": 11,
       "norm_label": "useasyncfetcher.tsx"
     },
     {
@@ -7630,7 +7630,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "remix_app_hooks_useasyncfetcher_useasyncfetcher",
-      "community": 137,
+      "community": 11,
       "norm_label": "useasyncfetcher()"
     },
     {
@@ -7670,7 +7670,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_hooks_useicons",
-      "community": 40,
+      "community": 119,
       "norm_label": "useicons.tsx"
     },
     {
@@ -7680,7 +7680,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "remix_app_hooks_useicons_useicons",
-      "community": 40,
+      "community": 119,
       "norm_label": "useicons()"
     },
     {
@@ -7710,7 +7710,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_hooks_useprops",
-      "community": 39,
+      "community": 7,
       "norm_label": "useprops.tsx"
     },
     {
@@ -7720,7 +7720,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "remix_app_hooks_useprops_useprops",
-      "community": 39,
+      "community": 7,
       "norm_label": "useprops()"
     },
     {
@@ -7850,7 +7850,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_hooks_usetrace",
-      "community": 39,
+      "community": 7,
       "norm_label": "usetrace.tsx"
     },
     {
@@ -7860,7 +7860,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "remix_app_hooks_usetrace_usetrace",
-      "community": 39,
+      "community": 7,
       "norm_label": "usetrace()"
     },
     {
@@ -7870,7 +7870,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_hooks_useuuid",
-      "community": 39,
+      "community": 7,
       "norm_label": "useuuid.tsx"
     },
     {
@@ -7880,7 +7880,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "remix_app_hooks_useuuid_useuuid",
-      "community": 39,
+      "community": 7,
       "norm_label": "useuuid()"
     },
     {
@@ -7900,7 +7900,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "remix_app_root_data_server_rootloaderdata",
-      "community": 40,
+      "community": 119,
       "norm_label": "rootloaderdata"
     },
     {
@@ -7950,7 +7950,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_root",
-      "community": 40,
+      "community": 119,
       "norm_label": "root.tsx"
     },
     {
@@ -7960,7 +7960,7 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "remix_app_root_setthingtime",
-      "community": 40,
+      "community": 119,
       "norm_label": "setthingtime()"
     },
     {
@@ -7970,7 +7970,7 @@
       "source_location": "L39",
       "_origin": "ast",
       "id": "remix_app_root_app",
-      "community": 40,
+      "community": 119,
       "norm_label": "app()"
     },
     {
@@ -8100,7 +8100,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "remix_app_routes_index_index",
-      "community": 148,
+      "community": 9,
       "norm_label": "index()"
     },
     {
@@ -8210,7 +8210,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_auth_verify_email_verify_email",
-      "community": 198,
+      "community": 41,
       "norm_label": "_verify-email.tsx"
     },
     {
@@ -8220,7 +8220,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_auth_verify_email_verify_email_loader",
-      "community": 198,
+      "community": 41,
       "norm_label": "loader()"
     },
     {
@@ -8250,7 +8250,7 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_crypto_crypto_loader",
-      "community": 123,
+      "community": 41,
       "norm_label": "loader()"
     },
     {
@@ -8360,7 +8360,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_mongodb_populate_populate",
-      "community": 35,
+      "community": 139,
       "norm_label": "_populate.tsx"
     },
     {
@@ -8370,7 +8370,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_mongodb_populate_populate_index",
-      "community": 35,
+      "community": 139,
       "norm_label": "index()"
     },
     {
@@ -8380,7 +8380,7 @@
       "source_location": "L20",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_mongodb_populate_populate_actionexport",
-      "community": 35,
+      "community": 139,
       "norm_label": "actionexport()"
     },
     {
@@ -8390,7 +8390,7 @@
       "source_location": "L42",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_mongodb_populate_populate_earlyreturn",
-      "community": 35,
+      "community": 139,
       "norm_label": "earlyreturn()"
     },
     {
@@ -8400,7 +8400,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_mongodb_raw_results_raw_results",
-      "community": 25,
+      "community": 139,
       "norm_label": "_raw-results.tsx"
     },
     {
@@ -8410,7 +8410,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_mongodb_raw_results_raw_results_index",
-      "community": 25,
+      "community": 139,
       "norm_label": "index()"
     },
     {
@@ -8420,7 +8420,7 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_mongodb_raw_results_raw_results_actionexport",
-      "community": 25,
+      "community": 139,
       "norm_label": "actionexport()"
     },
     {
@@ -8430,7 +8430,7 @@
       "source_location": "L46",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_mongodb_raw_results_raw_results_earlyreturn",
-      "community": 25,
+      "community": 139,
       "norm_label": "earlyreturn()"
     },
     {
@@ -8440,7 +8440,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_mongodb_status_data_status_data",
-      "community": 139,
+      "community": 41,
       "norm_label": "_status-data.tsx"
     },
     {
@@ -8450,7 +8450,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_mongodb_status_data_status_data_loader",
-      "community": 139,
+      "community": 41,
       "norm_label": "loader()"
     },
     {
@@ -8500,7 +8500,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_template_template",
-      "community": 31,
+      "community": 139,
       "norm_label": "_template.tsx"
     },
     {
@@ -8510,7 +8510,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_template_template_index",
-      "community": 31,
+      "community": 139,
       "norm_label": "index()"
     },
     {
@@ -8520,7 +8520,7 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_template_template_action",
-      "community": 31,
+      "community": 139,
       "norm_label": "action()"
     },
     {
@@ -8530,7 +8530,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_template_template_earlyreturn",
-      "community": 31,
+      "community": 139,
       "norm_label": "earlyreturn()"
     },
     {
@@ -8540,7 +8540,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_vercel_deployments_deployments",
-      "community": 60,
+      "community": 41,
       "norm_label": "_deployments.tsx"
     },
     {
@@ -8550,7 +8550,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_vercel_deployments_deployments_getbranchlimitfromrequest",
-      "community": 60,
+      "community": 41,
       "norm_label": "getbranchlimitfromrequest()"
     },
     {
@@ -8560,7 +8560,7 @@
       "source_location": "L19",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_vercel_deployments_deployments_getdeployments",
-      "community": 60,
+      "community": 41,
       "norm_label": "getdeployments()"
     },
     {
@@ -8970,7 +8970,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "remix_app_routes_ode_index",
-      "community": 148,
+      "community": 9,
       "norm_label": "index()"
     },
     {
@@ -8990,7 +8990,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "remix_app_routes_profile_profile",
-      "community": 2,
+      "community": 11,
       "norm_label": "profile()"
     },
     {
@@ -9020,7 +9020,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_routes_raw",
-      "community": 137,
+      "community": 148,
       "norm_label": "raw.tsx"
     },
     {
@@ -9030,7 +9030,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "remix_app_routes_raw_login",
-      "community": 137,
+      "community": 148,
       "norm_label": "login()"
     },
     {
@@ -9040,7 +9040,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_routes_register",
-      "community": 148,
+      "community": 11,
       "norm_label": "register.tsx"
     },
     {
@@ -9050,7 +9050,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "remix_app_routes_register_register",
-      "community": 148,
+      "community": 11,
       "norm_label": "register()"
     },
     {
@@ -9330,7 +9330,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_scripts_mongodb_data_users",
-      "community": 35,
+      "community": 139,
       "norm_label": "users.ts"
     },
     {
@@ -9340,7 +9340,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "remix_app_scripts_mongodb_data_users_seeduser",
-      "community": 35,
+      "community": 139,
       "norm_label": "seeduser"
     },
     {
@@ -9350,7 +9350,7 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "remix_app_scripts_mongodb_data_users_getusers",
-      "community": 35,
+      "community": 139,
       "norm_label": "getusers()"
     },
     {
@@ -9360,7 +9360,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_scripts_mongodb_setup",
-      "community": 35,
+      "community": 139,
       "norm_label": "setup.ts"
     },
     {
@@ -9370,7 +9370,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "remix_app_scripts_mongodb_setup_saveusers",
-      "community": 35,
+      "community": 139,
       "norm_label": "saveusers()"
     },
     {
@@ -9380,7 +9380,7 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "remix_app_scripts_mongodb_setup_setup",
-      "community": 35,
+      "community": 139,
       "norm_label": "setup()"
     },
     {
@@ -10520,7 +10520,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_utils_index_stringliteraltorichtext",
-      "community": 119,
+      "community": 7,
       "norm_label": "stringliteraltorichtext()"
     },
     {
@@ -10614,10 +10614,20 @@
       "norm_label": "version"
     },
     {
-      "label": "scripts",
+      "label": "packageManager",
       "file_type": "code",
       "source_file": "remix/package.json",
       "source_location": "L5",
+      "_origin": "ast",
+      "id": "remix_package_packagemanager",
+      "community": 5,
+      "norm_label": "packagemanager"
+    },
+    {
+      "label": "scripts",
+      "file_type": "code",
+      "source_file": "remix/package.json",
+      "source_location": "L6",
       "_origin": "ast",
       "id": "remix_package_scripts",
       "community": 5,
@@ -10627,7 +10637,7 @@
       "label": "build",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L6",
+      "source_location": "L7",
       "_origin": "ast",
       "id": "remix_package_scripts_build",
       "community": 5,
@@ -10637,7 +10647,7 @@
       "label": "build:client",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L7",
+      "source_location": "L8",
       "_origin": "ast",
       "id": "remix_package_scripts_build_client",
       "community": 5,
@@ -10647,7 +10657,7 @@
       "label": "build:server",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L8",
+      "source_location": "L9",
       "_origin": "ast",
       "id": "remix_package_scripts_build_server",
       "community": 5,
@@ -10657,7 +10667,7 @@
       "label": "ensure-bcrypt",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L9",
+      "source_location": "L10",
       "_origin": "ast",
       "id": "remix_package_scripts_ensure_bcrypt",
       "community": 5,
@@ -10667,7 +10677,7 @@
       "label": "postinstall",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L10",
+      "source_location": "L11",
       "_origin": "ast",
       "id": "remix_package_scripts_postinstall",
       "community": 5,
@@ -10677,7 +10687,7 @@
       "label": "pre-dev",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L11",
+      "source_location": "L12",
       "_origin": "ast",
       "id": "remix_package_scripts_pre_dev",
       "community": 5,
@@ -10687,7 +10697,7 @@
       "label": "dev",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L12",
+      "source_location": "L13",
       "_origin": "ast",
       "id": "remix_package_scripts_dev",
       "community": 5,
@@ -10697,7 +10707,7 @@
       "label": "dev:nitro",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L13",
+      "source_location": "L14",
       "_origin": "ast",
       "id": "remix_package_scripts_dev_nitro",
       "community": 5,
@@ -10707,7 +10717,7 @@
       "label": "dev:vite",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L14",
+      "source_location": "L15",
       "_origin": "ast",
       "id": "remix_package_scripts_dev_vite",
       "community": 5,
@@ -10717,7 +10727,7 @@
       "label": "lint",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L15",
+      "source_location": "L16",
       "_origin": "ast",
       "id": "remix_package_scripts_lint",
       "community": 5,
@@ -10727,7 +10737,7 @@
       "label": "lint-fix",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L16",
+      "source_location": "L17",
       "_origin": "ast",
       "id": "remix_package_scripts_lint_fix",
       "community": 5,
@@ -10737,7 +10747,7 @@
       "label": "format",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L17",
+      "source_location": "L18",
       "_origin": "ast",
       "id": "remix_package_scripts_format",
       "community": 5,
@@ -10747,7 +10757,7 @@
       "label": "preview",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L18",
+      "source_location": "L19",
       "_origin": "ast",
       "id": "remix_package_scripts_preview",
       "community": 5,
@@ -10757,7 +10767,7 @@
       "label": "sync:nitro-template",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L19",
+      "source_location": "L20",
       "_origin": "ast",
       "id": "remix_package_scripts_sync_nitro_template",
       "community": 5,
@@ -10767,7 +10777,7 @@
       "label": "verify:vercel-output",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L20",
+      "source_location": "L21",
       "_origin": "ast",
       "id": "remix_package_scripts_verify_vercel_output",
       "community": 5,
@@ -10777,7 +10787,7 @@
       "label": "dependencies",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L22",
+      "source_location": "L23",
       "_origin": "ast",
       "id": "remix_package_dependencies",
       "community": 4,
@@ -10787,7 +10797,7 @@
       "label": "@anthropic-ai/sdk",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L23",
+      "source_location": "L24",
       "_origin": "ast",
       "id": "remix_package_dependencies_anthropic_ai_sdk",
       "community": 4,
@@ -10797,7 +10807,7 @@
       "label": "@chakra-ui/react",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L24",
+      "source_location": "L25",
       "_origin": "ast",
       "id": "remix_package_dependencies_chakra_ui_react",
       "community": 4,
@@ -10807,7 +10817,7 @@
       "label": "@chakra-ui/react-types",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L25",
+      "source_location": "L26",
       "_origin": "ast",
       "id": "remix_package_dependencies_chakra_ui_react_types",
       "community": 4,
@@ -10817,7 +10827,7 @@
       "label": "@editorjs/editorjs",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L26",
+      "source_location": "L27",
       "_origin": "ast",
       "id": "remix_package_dependencies_editorjs_editorjs",
       "community": 4,
@@ -10827,7 +10837,7 @@
       "label": "@emotion/cache",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L27",
+      "source_location": "L28",
       "_origin": "ast",
       "id": "remix_package_dependencies_emotion_cache",
       "community": 4,
@@ -10837,7 +10847,7 @@
       "label": "@emotion/react",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L28",
+      "source_location": "L29",
       "_origin": "ast",
       "id": "remix_package_dependencies_emotion_react",
       "community": 4,
@@ -10847,7 +10857,7 @@
       "label": "@emotion/server",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L29",
+      "source_location": "L30",
       "_origin": "ast",
       "id": "remix_package_dependencies_emotion_server",
       "community": 4,
@@ -10857,7 +10867,7 @@
       "label": "@fortawesome/fontawesome-svg-core",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L30",
+      "source_location": "L31",
       "_origin": "ast",
       "id": "remix_package_dependencies_fortawesome_fontawesome_svg_core",
       "community": 4,
@@ -10867,7 +10877,7 @@
       "label": "@fortawesome/free-regular-svg-icons",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L31",
+      "source_location": "L32",
       "_origin": "ast",
       "id": "remix_package_dependencies_fortawesome_free_regular_svg_icons",
       "community": 4,
@@ -10877,7 +10887,7 @@
       "label": "@fortawesome/free-solid-svg-icons",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L32",
+      "source_location": "L33",
       "_origin": "ast",
       "id": "remix_package_dependencies_fortawesome_free_solid_svg_icons",
       "community": 4,
@@ -10887,7 +10897,7 @@
       "label": "@fortawesome/react-fontawesome",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L33",
+      "source_location": "L34",
       "_origin": "ast",
       "id": "remix_package_dependencies_fortawesome_react_fontawesome",
       "community": 4,
@@ -10897,7 +10907,7 @@
       "label": "@monaco-editor/react",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L34",
+      "source_location": "L35",
       "_origin": "ast",
       "id": "remix_package_dependencies_monaco_editor_react",
       "community": 4,
@@ -10907,7 +10917,7 @@
       "label": "@vercel/analytics",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L35",
+      "source_location": "L36",
       "_origin": "ast",
       "id": "remix_package_dependencies_vercel_analytics",
       "community": 4,
@@ -10917,7 +10927,7 @@
       "label": "axios",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L36",
+      "source_location": "L37",
       "_origin": "ast",
       "id": "remix_package_dependencies_axios",
       "community": 4,
@@ -10927,7 +10937,7 @@
       "label": "bcrypt",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L37",
+      "source_location": "L38",
       "_origin": "ast",
       "id": "remix_package_dependencies_bcrypt",
       "community": 4,
@@ -10937,7 +10947,7 @@
       "label": "draft-js",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L38",
+      "source_location": "L39",
       "_origin": "ast",
       "id": "remix_package_dependencies_draft_js",
       "community": 4,
@@ -10947,7 +10957,7 @@
       "label": "emojis-list",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L39",
+      "source_location": "L40",
       "_origin": "ast",
       "id": "remix_package_dependencies_emojis_list",
       "community": 4,
@@ -10957,7 +10967,7 @@
       "label": "emotion",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L40",
+      "source_location": "L41",
       "_origin": "ast",
       "id": "remix_package_dependencies_emotion",
       "community": 4,
@@ -10967,7 +10977,7 @@
       "label": "flatted",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L41",
+      "source_location": "L42",
       "_origin": "ast",
       "id": "remix_package_dependencies_flatted",
       "community": 4,
@@ -10977,7 +10987,7 @@
       "label": "fuse.js",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L42",
+      "source_location": "L43",
       "_origin": "ast",
       "id": "remix_package_dependencies_fuse_js",
       "community": 4,
@@ -10987,7 +10997,7 @@
       "label": "gradient-path",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L43",
+      "source_location": "L44",
       "_origin": "ast",
       "id": "remix_package_dependencies_gradient_path",
       "community": 4,
@@ -10997,7 +11007,7 @@
       "label": "hex-to-rgba",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L44",
+      "source_location": "L45",
       "_origin": "ast",
       "id": "remix_package_dependencies_hex_to_rgba",
       "community": 4,
@@ -11007,7 +11017,7 @@
       "label": "isbot",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L45",
+      "source_location": "L46",
       "_origin": "ast",
       "id": "remix_package_dependencies_isbot",
       "community": 4,
@@ -11017,7 +11027,7 @@
       "label": "jose",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L46",
+      "source_location": "L47",
       "_origin": "ast",
       "id": "remix_package_dependencies_jose",
       "community": 4,
@@ -11027,7 +11037,7 @@
       "label": "localforage",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L47",
+      "source_location": "L48",
       "_origin": "ast",
       "id": "remix_package_dependencies_localforage",
       "community": 4,
@@ -11037,7 +11047,7 @@
       "label": "lodash-es",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L48",
+      "source_location": "L49",
       "_origin": "ast",
       "id": "remix_package_dependencies_lodash_es",
       "community": 4,
@@ -11047,7 +11057,7 @@
       "label": "lucide-react",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L49",
+      "source_location": "L50",
       "_origin": "ast",
       "id": "remix_package_dependencies_lucide_react",
       "community": 4,
@@ -11057,17 +11067,17 @@
       "label": "mongodb",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L50",
+      "source_location": "L51",
       "_origin": "ast",
       "id": "remix_package_dependencies_mongodb",
-      "community": 11,
+      "community": 139,
       "norm_label": "mongodb"
     },
     {
       "label": "nitro",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L51",
+      "source_location": "L52",
       "_origin": "ast",
       "id": "remix_package_dependencies_nitro",
       "community": 4,
@@ -11077,7 +11087,7 @@
       "label": "openai",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L52",
+      "source_location": "L53",
       "_origin": "ast",
       "id": "remix_package_dependencies_openai",
       "community": 4,
@@ -11087,7 +11097,7 @@
       "label": "prismjs",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L53",
+      "source_location": "L54",
       "_origin": "ast",
       "id": "remix_package_dependencies_prismjs",
       "community": 4,
@@ -11097,7 +11107,7 @@
       "label": "react",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L54",
+      "source_location": "L55",
       "_origin": "ast",
       "id": "remix_package_dependencies_react",
       "community": 4,
@@ -11107,7 +11117,7 @@
       "label": "react-click-away-listener",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L55",
+      "source_location": "L56",
       "_origin": "ast",
       "id": "remix_package_dependencies_react_click_away_listener",
       "community": 4,
@@ -11117,7 +11127,7 @@
       "label": "react-contenteditable",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L56",
+      "source_location": "L57",
       "_origin": "ast",
       "id": "remix_package_dependencies_react_contenteditable",
       "community": 4,
@@ -11127,7 +11137,7 @@
       "label": "react-dom",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L57",
+      "source_location": "L58",
       "_origin": "ast",
       "id": "remix_package_dependencies_react_dom",
       "community": 4,
@@ -11137,7 +11147,7 @@
       "label": "react-icons",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L58",
+      "source_location": "L59",
       "_origin": "ast",
       "id": "remix_package_dependencies_react_icons",
       "community": 4,
@@ -11147,7 +11157,7 @@
       "label": "react-router",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L59",
+      "source_location": "L60",
       "_origin": "ast",
       "id": "remix_package_dependencies_react_router",
       "community": 4,
@@ -11157,7 +11167,7 @@
       "label": "react-simple-code-editor",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L60",
+      "source_location": "L61",
       "_origin": "ast",
       "id": "remix_package_dependencies_react_simple_code_editor",
       "community": 4,
@@ -11167,7 +11177,7 @@
       "label": "react-sticky",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L61",
+      "source_location": "L62",
       "_origin": "ast",
       "id": "remix_package_dependencies_react_sticky",
       "community": 4,
@@ -11177,7 +11187,7 @@
       "label": "react-sticky-el",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L62",
+      "source_location": "L63",
       "_origin": "ast",
       "id": "remix_package_dependencies_react_sticky_el",
       "community": 4,
@@ -11187,7 +11197,7 @@
       "label": "react-visibility-sensor",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L63",
+      "source_location": "L64",
       "_origin": "ast",
       "id": "remix_package_dependencies_react_visibility_sensor",
       "community": 4,
@@ -11197,7 +11207,7 @@
       "label": "rxjs",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L64",
+      "source_location": "L65",
       "_origin": "ast",
       "id": "remix_package_dependencies_rxjs",
       "community": 4,
@@ -11207,7 +11217,7 @@
       "label": "sshpk",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L65",
+      "source_location": "L66",
       "_origin": "ast",
       "id": "remix_package_dependencies_sshpk",
       "community": 4,
@@ -11217,7 +11227,7 @@
       "label": "tinygradient",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L66",
+      "source_location": "L67",
       "_origin": "ast",
       "id": "remix_package_dependencies_tinygradient",
       "community": 4,
@@ -11227,7 +11237,7 @@
       "label": "uuid",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L67",
+      "source_location": "L68",
       "_origin": "ast",
       "id": "remix_package_dependencies_uuid",
       "community": 4,
@@ -11237,7 +11247,7 @@
       "label": "devDependencies",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L69",
+      "source_location": "L70",
       "_origin": "ast",
       "id": "remix_package_devdependencies",
       "community": 5,
@@ -11247,7 +11257,7 @@
       "label": "@vitejs/plugin-react",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L70",
+      "source_location": "L71",
       "_origin": "ast",
       "id": "remix_package_devdependencies_vitejs_plugin_react",
       "community": 5,
@@ -11257,7 +11267,7 @@
       "label": "@emotion/styled",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L71",
+      "source_location": "L72",
       "_origin": "ast",
       "id": "remix_package_devdependencies_emotion_styled",
       "community": 5,
@@ -11267,7 +11277,7 @@
       "label": "@shopify/eslint-plugin",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L72",
+      "source_location": "L73",
       "_origin": "ast",
       "id": "remix_package_devdependencies_shopify_eslint_plugin",
       "community": 5,
@@ -11277,7 +11287,7 @@
       "label": "@types/eslint",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L73",
+      "source_location": "L74",
       "_origin": "ast",
       "id": "remix_package_devdependencies_types_eslint",
       "community": 5,
@@ -11287,7 +11297,7 @@
       "label": "@types/node",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L74",
+      "source_location": "L75",
       "_origin": "ast",
       "id": "remix_package_devdependencies_types_node",
       "community": 5,
@@ -11297,7 +11307,7 @@
       "label": "@types/react",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L75",
+      "source_location": "L76",
       "_origin": "ast",
       "id": "remix_package_devdependencies_types_react",
       "community": 5,
@@ -11307,7 +11317,7 @@
       "label": "@types/react-dom",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L76",
+      "source_location": "L77",
       "_origin": "ast",
       "id": "remix_package_devdependencies_types_react_dom",
       "community": 5,
@@ -11317,7 +11327,7 @@
       "label": "@typescript-eslint/parser",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L77",
+      "source_location": "L78",
       "_origin": "ast",
       "id": "remix_package_devdependencies_typescript_eslint_parser",
       "community": 5,
@@ -11327,7 +11337,7 @@
       "label": "eslint",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L78",
+      "source_location": "L79",
       "_origin": "ast",
       "id": "remix_package_devdependencies_eslint",
       "community": 5,
@@ -11337,7 +11347,7 @@
       "label": "eslint-config-prettier",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L79",
+      "source_location": "L80",
       "_origin": "ast",
       "id": "remix_package_devdependencies_eslint_config_prettier",
       "community": 5,
@@ -11347,7 +11357,7 @@
       "label": "eslint-loader",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L80",
+      "source_location": "L81",
       "_origin": "ast",
       "id": "remix_package_devdependencies_eslint_loader",
       "community": 5,
@@ -11357,7 +11367,7 @@
       "label": "eslint-plugin-chakra-ui",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L81",
+      "source_location": "L82",
       "_origin": "ast",
       "id": "remix_package_devdependencies_eslint_plugin_chakra_ui",
       "community": 5,
@@ -11367,7 +11377,7 @@
       "label": "eslint-plugin-hydrogen",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L82",
+      "source_location": "L83",
       "_origin": "ast",
       "id": "remix_package_devdependencies_eslint_plugin_hydrogen",
       "community": 5,
@@ -11377,7 +11387,7 @@
       "label": "eslint-plugin-prettier",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L83",
+      "source_location": "L84",
       "_origin": "ast",
       "id": "remix_package_devdependencies_eslint_plugin_prettier",
       "community": 5,
@@ -11387,7 +11397,7 @@
       "label": "eslint-plugin-react",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L84",
+      "source_location": "L85",
       "_origin": "ast",
       "id": "remix_package_devdependencies_eslint_plugin_react",
       "community": 5,
@@ -11397,7 +11407,7 @@
       "label": "eslint-plugin-react-hooks",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L85",
+      "source_location": "L86",
       "_origin": "ast",
       "id": "remix_package_devdependencies_eslint_plugin_react_hooks",
       "community": 5,
@@ -11407,7 +11417,7 @@
       "label": "eslint-plugin-simple-import-sort",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L86",
+      "source_location": "L87",
       "_origin": "ast",
       "id": "remix_package_devdependencies_eslint_plugin_simple_import_sort",
       "community": 5,
@@ -11417,7 +11427,7 @@
       "label": "eslint-plugin-unused-imports",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L87",
+      "source_location": "L88",
       "_origin": "ast",
       "id": "remix_package_devdependencies_eslint_plugin_unused_imports",
       "community": 5,
@@ -11427,7 +11437,7 @@
       "label": "framer-motion",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L88",
+      "source_location": "L89",
       "_origin": "ast",
       "id": "remix_package_devdependencies_framer_motion",
       "community": 5,
@@ -11437,7 +11447,7 @@
       "label": "ts-node",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L89",
+      "source_location": "L90",
       "_origin": "ast",
       "id": "remix_package_devdependencies_ts_node",
       "community": 5,
@@ -11447,7 +11457,7 @@
       "label": "typescript",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L90",
+      "source_location": "L91",
       "_origin": "ast",
       "id": "remix_package_devdependencies_typescript",
       "community": 5,
@@ -11457,7 +11467,7 @@
       "label": "vite",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L91",
+      "source_location": "L92",
       "_origin": "ast",
       "id": "remix_package_devdependencies_vite",
       "community": 5,
@@ -11467,7 +11477,7 @@
       "label": "engines",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L93",
+      "source_location": "L94",
       "_origin": "ast",
       "id": "remix_package_engines",
       "community": 5,
@@ -11477,7 +11487,7 @@
       "label": "node",
       "file_type": "code",
       "source_file": "remix/package.json",
-      "source_location": "L94",
+      "source_location": "L95",
       "_origin": "ast",
       "id": "remix_package_engines_node",
       "community": 5,
@@ -13573,7 +13583,7 @@
       "label": "PR #16 - Auth And Lopu Hardening",
       "file_type": "document",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L43",
+      "source_location": "L46",
       "_origin": "ast",
       "id": "remix_changelog_pr_16_auth_and_lopu_hardening",
       "community": 78,
@@ -13583,7 +13593,7 @@
       "label": "Fixed",
       "file_type": "document",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L48",
+      "source_location": "L51",
       "_origin": "ast",
       "id": "remix_changelog_fixed",
       "community": 78,
@@ -13593,9 +13603,9 @@
       "label": "Changed",
       "file_type": "document",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L59",
+      "source_location": "L62",
       "_origin": "ast",
-      "id": "remix_changelog_changed_59",
+      "id": "remix_changelog_changed_62",
       "community": 78,
       "norm_label": "changed"
     },
@@ -13603,7 +13613,7 @@
       "label": "PR #13 - Remix Hydration, Vercel Status, And Deployment Hygiene",
       "file_type": "document",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L95",
+      "source_location": "L98",
       "_origin": "ast",
       "id": "remix_changelog_pr_13_remix_hydration_vercel_status_and_deployment_hygiene",
       "community": 78,
@@ -13613,7 +13623,7 @@
       "label": "Added",
       "file_type": "document",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L100",
+      "source_location": "L103",
       "_origin": "ast",
       "id": "remix_changelog_added",
       "community": 78,
@@ -13623,9 +13633,9 @@
       "label": "Changed",
       "file_type": "document",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L111",
+      "source_location": "L114",
       "_origin": "ast",
-      "id": "remix_changelog_changed_111",
+      "id": "remix_changelog_changed_114",
       "community": 78,
       "norm_label": "changed"
     },
@@ -13633,9 +13643,9 @@
       "label": "Fixed",
       "file_type": "document",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L149",
+      "source_location": "L152",
       "_origin": "ast",
-      "id": "remix_changelog_fixed_149",
+      "id": "remix_changelog_fixed_152",
       "community": 78,
       "norm_label": "fixed"
     },
@@ -13643,7 +13653,7 @@
       "label": "Verified",
       "file_type": "document",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L160",
+      "source_location": "L163",
       "_origin": "ast",
       "id": "remix_changelog_verified",
       "community": 78,
@@ -13653,7 +13663,7 @@
       "label": "[1.0.0] - YYYY-MM-DD",
       "file_type": "document",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L170",
+      "source_location": "L173",
       "_origin": "ast",
       "id": "remix_changelog_1_0_0_yyyy_mm_dd",
       "community": 78,
@@ -13853,7 +13863,7 @@
       "label": "Verification",
       "file_type": "document",
       "source_file": "remix/PRs/24-codex-migrate-remix-to-nitro--migrate-remix-app-to-nitro-and-react-router.md",
-      "source_location": "L20",
+      "source_location": "L22",
       "_origin": "ast",
       "id": "remix_prs_24_codex_migrate_remix_to_nitro_migrate_remix_app_to_nitro_and_react_router_verification",
       "community": 78,
@@ -13863,7 +13873,7 @@
       "label": "Known Issues",
       "file_type": "document",
       "source_file": "remix/PRs/24-codex-migrate-remix-to-nitro--migrate-remix-app-to-nitro-and-react-router.md",
-      "source_location": "L32",
+      "source_location": "L34",
       "_origin": "ast",
       "id": "remix_prs_24_codex_migrate_remix_to_nitro_migrate_remix_app_to_nitro_and_react_router_known_issues",
       "community": 78,
@@ -13916,7 +13926,7 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "remix_app_providers_chakra_space_space",
-      "community": 140,
+      "community": 119,
       "norm_label": "space"
     },
     {
@@ -20106,7 +20116,7 @@
       "source_location": "L5",
       "weight": 1.0,
       "source": "raycast_src_strip_exif",
-      "target": "remix_app_routes_crypto",
+      "target": "remix_app_routes_api_v1_crypto_crypto",
       "confidence_score": 1.0
     },
     {
@@ -26994,7 +27004,7 @@
       "relation": "imports",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L50",
+      "source_location": "L51",
       "weight": 1.0,
       "context": "import",
       "source": "remix_package_dependencies_mongodb",
@@ -37831,7 +37841,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L22",
+      "source_location": "L23",
       "weight": 1.0,
       "source": "remix_package",
       "target": "remix_package_dependencies",
@@ -37841,7 +37851,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L69",
+      "source_location": "L70",
       "weight": 1.0,
       "source": "remix_package",
       "target": "remix_package_devdependencies",
@@ -37851,10 +37861,20 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L93",
+      "source_location": "L94",
       "weight": 1.0,
       "source": "remix_package",
       "target": "remix_package_engines",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/package.json",
+      "source_location": "L5",
+      "weight": 1.0,
+      "source": "remix_package",
+      "target": "remix_package_packagemanager",
       "confidence_score": 1.0
     },
     {
@@ -37871,7 +37891,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L5",
+      "source_location": "L6",
       "weight": 1.0,
       "source": "remix_package",
       "target": "remix_package_scripts",
@@ -37901,7 +37921,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L6",
+      "source_location": "L7",
       "weight": 1.0,
       "source": "remix_package_scripts",
       "target": "remix_package_scripts_build",
@@ -37911,7 +37931,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L7",
+      "source_location": "L8",
       "weight": 1.0,
       "source": "remix_package_scripts",
       "target": "remix_package_scripts_build_client",
@@ -37921,7 +37941,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L8",
+      "source_location": "L9",
       "weight": 1.0,
       "source": "remix_package_scripts",
       "target": "remix_package_scripts_build_server",
@@ -37931,7 +37951,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L12",
+      "source_location": "L13",
       "weight": 1.0,
       "source": "remix_package_scripts",
       "target": "remix_package_scripts_dev",
@@ -37941,7 +37961,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L13",
+      "source_location": "L14",
       "weight": 1.0,
       "source": "remix_package_scripts",
       "target": "remix_package_scripts_dev_nitro",
@@ -37951,7 +37971,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L14",
+      "source_location": "L15",
       "weight": 1.0,
       "source": "remix_package_scripts",
       "target": "remix_package_scripts_dev_vite",
@@ -37961,7 +37981,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L9",
+      "source_location": "L10",
       "weight": 1.0,
       "source": "remix_package_scripts",
       "target": "remix_package_scripts_ensure_bcrypt",
@@ -37971,7 +37991,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L17",
+      "source_location": "L18",
       "weight": 1.0,
       "source": "remix_package_scripts",
       "target": "remix_package_scripts_format",
@@ -37981,7 +38001,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L15",
+      "source_location": "L16",
       "weight": 1.0,
       "source": "remix_package_scripts",
       "target": "remix_package_scripts_lint",
@@ -37991,7 +38011,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L16",
+      "source_location": "L17",
       "weight": 1.0,
       "source": "remix_package_scripts",
       "target": "remix_package_scripts_lint_fix",
@@ -38001,7 +38021,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L10",
+      "source_location": "L11",
       "weight": 1.0,
       "source": "remix_package_scripts",
       "target": "remix_package_scripts_postinstall",
@@ -38011,7 +38031,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L11",
+      "source_location": "L12",
       "weight": 1.0,
       "source": "remix_package_scripts",
       "target": "remix_package_scripts_pre_dev",
@@ -38021,7 +38041,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L18",
+      "source_location": "L19",
       "weight": 1.0,
       "source": "remix_package_scripts",
       "target": "remix_package_scripts_preview",
@@ -38031,7 +38051,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L19",
+      "source_location": "L20",
       "weight": 1.0,
       "source": "remix_package_scripts",
       "target": "remix_package_scripts_sync_nitro_template",
@@ -38041,7 +38061,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L20",
+      "source_location": "L21",
       "weight": 1.0,
       "source": "remix_package_scripts",
       "target": "remix_package_scripts_verify_vercel_output",
@@ -38051,7 +38071,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L23",
+      "source_location": "L24",
       "weight": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_anthropic_ai_sdk",
@@ -38061,7 +38081,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L36",
+      "source_location": "L37",
       "weight": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_axios",
@@ -38071,7 +38091,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L37",
+      "source_location": "L38",
       "weight": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_bcrypt",
@@ -38081,7 +38101,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L24",
+      "source_location": "L25",
       "weight": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_chakra_ui_react",
@@ -38091,7 +38111,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L25",
+      "source_location": "L26",
       "weight": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_chakra_ui_react_types",
@@ -38101,7 +38121,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L38",
+      "source_location": "L39",
       "weight": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_draft_js",
@@ -38111,7 +38131,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L26",
+      "source_location": "L27",
       "weight": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_editorjs_editorjs",
@@ -38121,7 +38141,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L39",
+      "source_location": "L40",
       "weight": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_emojis_list",
@@ -38131,7 +38151,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L40",
+      "source_location": "L41",
       "weight": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_emotion",
@@ -38141,7 +38161,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L27",
+      "source_location": "L28",
       "weight": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_emotion_cache",
@@ -38151,7 +38171,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L28",
+      "source_location": "L29",
       "weight": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_emotion_react",
@@ -38161,7 +38181,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L29",
+      "source_location": "L30",
       "weight": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_emotion_server",
@@ -38171,7 +38191,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L41",
+      "source_location": "L42",
       "weight": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_flatted",
@@ -38181,7 +38201,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L30",
+      "source_location": "L31",
       "weight": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_fortawesome_fontawesome_svg_core",
@@ -38191,7 +38211,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L31",
+      "source_location": "L32",
       "weight": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_fortawesome_free_regular_svg_icons",
@@ -38201,7 +38221,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L32",
+      "source_location": "L33",
       "weight": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_fortawesome_free_solid_svg_icons",
@@ -38211,7 +38231,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L33",
+      "source_location": "L34",
       "weight": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_fortawesome_react_fontawesome",
@@ -38221,7 +38241,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L42",
+      "source_location": "L43",
       "weight": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_fuse_js",
@@ -38231,7 +38251,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L43",
+      "source_location": "L44",
       "weight": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_gradient_path",
@@ -38241,7 +38261,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L44",
+      "source_location": "L45",
       "weight": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_hex_to_rgba",
@@ -38251,7 +38271,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L45",
+      "source_location": "L46",
       "weight": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_isbot",
@@ -38261,7 +38281,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L46",
+      "source_location": "L47",
       "weight": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_jose",
@@ -38271,7 +38291,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L47",
+      "source_location": "L48",
       "weight": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_localforage",
@@ -38281,7 +38301,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L48",
+      "source_location": "L49",
       "weight": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_lodash_es",
@@ -38291,7 +38311,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L49",
+      "source_location": "L50",
       "weight": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_lucide_react",
@@ -38301,7 +38321,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L34",
+      "source_location": "L35",
       "weight": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_monaco_editor_react",
@@ -38311,7 +38331,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L50",
+      "source_location": "L51",
       "weight": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_mongodb",
@@ -38321,7 +38341,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L51",
+      "source_location": "L52",
       "weight": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_nitro",
@@ -38331,7 +38351,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L52",
+      "source_location": "L53",
       "weight": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_openai",
@@ -38341,7 +38361,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L53",
+      "source_location": "L54",
       "weight": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_prismjs",
@@ -38351,7 +38371,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L54",
+      "source_location": "L55",
       "weight": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_react",
@@ -38361,7 +38381,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L55",
+      "source_location": "L56",
       "weight": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_react_click_away_listener",
@@ -38371,7 +38391,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L56",
+      "source_location": "L57",
       "weight": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_react_contenteditable",
@@ -38381,7 +38401,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L57",
+      "source_location": "L58",
       "weight": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_react_dom",
@@ -38391,7 +38411,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L58",
+      "source_location": "L59",
       "weight": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_react_icons",
@@ -38401,7 +38421,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L59",
+      "source_location": "L60",
       "weight": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_react_router",
@@ -38411,7 +38431,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L60",
+      "source_location": "L61",
       "weight": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_react_simple_code_editor",
@@ -38421,7 +38441,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L61",
+      "source_location": "L62",
       "weight": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_react_sticky",
@@ -38431,7 +38451,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L62",
+      "source_location": "L63",
       "weight": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_react_sticky_el",
@@ -38441,7 +38461,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L63",
+      "source_location": "L64",
       "weight": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_react_visibility_sensor",
@@ -38451,7 +38471,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L64",
+      "source_location": "L65",
       "weight": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_rxjs",
@@ -38461,7 +38481,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L65",
+      "source_location": "L66",
       "weight": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_sshpk",
@@ -38471,7 +38491,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L66",
+      "source_location": "L67",
       "weight": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_tinygradient",
@@ -38481,7 +38501,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L67",
+      "source_location": "L68",
       "weight": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_uuid",
@@ -38491,7 +38511,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L35",
+      "source_location": "L36",
       "weight": 1.0,
       "source": "remix_package_dependencies",
       "target": "remix_package_dependencies_vercel_analytics",
@@ -38501,7 +38521,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L71",
+      "source_location": "L72",
       "weight": 1.0,
       "source": "remix_package_devdependencies",
       "target": "remix_package_devdependencies_emotion_styled",
@@ -38511,7 +38531,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L78",
+      "source_location": "L79",
       "weight": 1.0,
       "source": "remix_package_devdependencies",
       "target": "remix_package_devdependencies_eslint",
@@ -38521,7 +38541,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L79",
+      "source_location": "L80",
       "weight": 1.0,
       "source": "remix_package_devdependencies",
       "target": "remix_package_devdependencies_eslint_config_prettier",
@@ -38531,7 +38551,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L80",
+      "source_location": "L81",
       "weight": 1.0,
       "source": "remix_package_devdependencies",
       "target": "remix_package_devdependencies_eslint_loader",
@@ -38541,7 +38561,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L81",
+      "source_location": "L82",
       "weight": 1.0,
       "source": "remix_package_devdependencies",
       "target": "remix_package_devdependencies_eslint_plugin_chakra_ui",
@@ -38551,7 +38571,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L82",
+      "source_location": "L83",
       "weight": 1.0,
       "source": "remix_package_devdependencies",
       "target": "remix_package_devdependencies_eslint_plugin_hydrogen",
@@ -38561,7 +38581,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L83",
+      "source_location": "L84",
       "weight": 1.0,
       "source": "remix_package_devdependencies",
       "target": "remix_package_devdependencies_eslint_plugin_prettier",
@@ -38571,7 +38591,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L84",
+      "source_location": "L85",
       "weight": 1.0,
       "source": "remix_package_devdependencies",
       "target": "remix_package_devdependencies_eslint_plugin_react",
@@ -38581,7 +38601,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L85",
+      "source_location": "L86",
       "weight": 1.0,
       "source": "remix_package_devdependencies",
       "target": "remix_package_devdependencies_eslint_plugin_react_hooks",
@@ -38591,7 +38611,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L86",
+      "source_location": "L87",
       "weight": 1.0,
       "source": "remix_package_devdependencies",
       "target": "remix_package_devdependencies_eslint_plugin_simple_import_sort",
@@ -38601,7 +38621,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L87",
+      "source_location": "L88",
       "weight": 1.0,
       "source": "remix_package_devdependencies",
       "target": "remix_package_devdependencies_eslint_plugin_unused_imports",
@@ -38611,7 +38631,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L88",
+      "source_location": "L89",
       "weight": 1.0,
       "source": "remix_package_devdependencies",
       "target": "remix_package_devdependencies_framer_motion",
@@ -38621,7 +38641,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L72",
+      "source_location": "L73",
       "weight": 1.0,
       "source": "remix_package_devdependencies",
       "target": "remix_package_devdependencies_shopify_eslint_plugin",
@@ -38631,7 +38651,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L89",
+      "source_location": "L90",
       "weight": 1.0,
       "source": "remix_package_devdependencies",
       "target": "remix_package_devdependencies_ts_node",
@@ -38641,7 +38661,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L73",
+      "source_location": "L74",
       "weight": 1.0,
       "source": "remix_package_devdependencies",
       "target": "remix_package_devdependencies_types_eslint",
@@ -38651,7 +38671,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L74",
+      "source_location": "L75",
       "weight": 1.0,
       "source": "remix_package_devdependencies",
       "target": "remix_package_devdependencies_types_node",
@@ -38661,7 +38681,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L75",
+      "source_location": "L76",
       "weight": 1.0,
       "source": "remix_package_devdependencies",
       "target": "remix_package_devdependencies_types_react",
@@ -38671,7 +38691,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L76",
+      "source_location": "L77",
       "weight": 1.0,
       "source": "remix_package_devdependencies",
       "target": "remix_package_devdependencies_types_react_dom",
@@ -38681,7 +38701,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L90",
+      "source_location": "L91",
       "weight": 1.0,
       "source": "remix_package_devdependencies",
       "target": "remix_package_devdependencies_typescript",
@@ -38691,7 +38711,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L77",
+      "source_location": "L78",
       "weight": 1.0,
       "source": "remix_package_devdependencies",
       "target": "remix_package_devdependencies_typescript_eslint_parser",
@@ -38701,7 +38721,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L91",
+      "source_location": "L92",
       "weight": 1.0,
       "source": "remix_package_devdependencies",
       "target": "remix_package_devdependencies_vite",
@@ -38711,7 +38731,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L70",
+      "source_location": "L71",
       "weight": 1.0,
       "source": "remix_package_devdependencies",
       "target": "remix_package_devdependencies_vitejs_plugin_react",
@@ -38721,7 +38741,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/package.json",
-      "source_location": "L94",
+      "source_location": "L95",
       "weight": 1.0,
       "source": "remix_package_engines",
       "target": "remix_package_engines_node",
@@ -40472,7 +40492,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L98",
+      "source_location": "L101",
       "weight": 1.0,
       "source": "remix_changelog",
       "target": "remix_prs_13_codex_fix_hydration_mongodb_thingtime_defaults_codex_fix_hydration_and_footer_status_updates",
@@ -40482,7 +40502,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L46",
+      "source_location": "L49",
       "weight": 1.0,
       "source": "remix_changelog",
       "target": "remix_prs_16_resolve_main_into_thingtime_dev_branch",
@@ -40502,7 +40522,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L170",
+      "source_location": "L173",
       "weight": 1.0,
       "source": "remix_changelog_changelog",
       "target": "remix_changelog_1_0_0_yyyy_mm_dd",
@@ -40522,7 +40542,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L100",
+      "source_location": "L103",
       "weight": 1.0,
       "source": "remix_changelog_unreleased",
       "target": "remix_changelog_added",
@@ -40542,27 +40562,27 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L111",
+      "source_location": "L114",
       "weight": 1.0,
       "source": "remix_changelog_unreleased",
-      "target": "remix_changelog_changed_111",
+      "target": "remix_changelog_changed_114",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L59",
+      "source_location": "L62",
       "weight": 1.0,
       "source": "remix_changelog_unreleased",
-      "target": "remix_changelog_changed_59",
+      "target": "remix_changelog_changed_62",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L48",
+      "source_location": "L51",
       "weight": 1.0,
       "source": "remix_changelog_unreleased",
       "target": "remix_changelog_fixed",
@@ -40572,17 +40592,17 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L149",
+      "source_location": "L152",
       "weight": 1.0,
       "source": "remix_changelog_unreleased",
-      "target": "remix_changelog_fixed_149",
+      "target": "remix_changelog_fixed_152",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L95",
+      "source_location": "L98",
       "weight": 1.0,
       "source": "remix_changelog_unreleased",
       "target": "remix_changelog_pr_13_remix_hydration_vercel_status_and_deployment_hygiene",
@@ -40592,7 +40612,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L43",
+      "source_location": "L46",
       "weight": 1.0,
       "source": "remix_changelog_unreleased",
       "target": "remix_changelog_pr_16_auth_and_lopu_hardening",
@@ -40612,7 +40632,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/CHANGELOG.md",
-      "source_location": "L160",
+      "source_location": "L163",
       "weight": 1.0,
       "source": "remix_changelog_unreleased",
       "target": "remix_changelog_verified",
@@ -40772,7 +40792,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/PRs/24-codex-migrate-remix-to-nitro--migrate-remix-app-to-nitro-and-react-router.md",
-      "source_location": "L32",
+      "source_location": "L34",
       "weight": 1.0,
       "source": "remix_prs_24_codex_migrate_remix_to_nitro_migrate_remix_app_to_nitro_and_react_router_pr_24_migrate_remix_app_to_nitro_and_react_router",
       "target": "remix_prs_24_codex_migrate_remix_to_nitro_migrate_remix_app_to_nitro_and_react_router_known_issues",
@@ -40792,7 +40812,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/PRs/24-codex-migrate-remix-to-nitro--migrate-remix-app-to-nitro-and-react-router.md",
-      "source_location": "L20",
+      "source_location": "L22",
       "weight": 1.0,
       "source": "remix_prs_24_codex_migrate_remix_to_nitro_migrate_remix_app_to_nitro_and_react_router_pr_24_migrate_remix_app_to_nitro_and_react_router",
       "target": "remix_prs_24_codex_migrate_remix_to_nitro_migrate_remix_app_to_nitro_and_react_router_verification",
@@ -40830,5 +40850,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "3bebcc7cfc9788c8c9f6dc6c44a2b6b42fd49364"
+  "built_at_commit": "dfa7f6e33b947863e2f3918663ae2e0a2caf20c9"
 }

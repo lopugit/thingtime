@@ -810,8 +810,8 @@
     "semantic_hash": ""
   },
   "remix/package.json": {
-    "mtime": 1782959912.6287565,
-    "ast_hash": "7c84c4e465e98c11721c743b7b39a642",
+    "mtime": 1782961314.8076699,
+    "ast_hash": "9325f3cb4466600f90eb0c2b73196995",
     "semantic_hash": ""
   },
   "remix/public/manifest.json": {
@@ -1800,8 +1800,8 @@
     "semantic_hash": ""
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1782961189.7961268,
-    "ast_hash": "08cb35071fe83ed962c2f8f1f056aaea",
+    "mtime": 1782961318.3006084,
+    "ast_hash": "888cd4533366e663b7f81f58890fab17",
     "semantic_hash": ""
   },
   "remix/app/api/utils/vercel/status.ts": {
@@ -2140,8 +2140,8 @@
     "semantic_hash": ""
   },
   "remix/PRs/24-codex-migrate-remix-to-nitro--migrate-remix-app-to-nitro-and-react-router.md": {
-    "mtime": 1782961193.47919,
-    "ast_hash": "e6e3c9d66348c6e8b79151c3f3d3f8e3",
+    "mtime": 1782961322.3690803,
+    "ast_hash": "230e74488809b669d7cd3e0c78835fa1",
     "semantic_hash": ""
   },
   "remix/vercel.json": {

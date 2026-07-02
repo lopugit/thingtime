@@ -2,6 +2,7 @@
   "private": true,
   "sideEffects": false,
   "version": "1.0.0",
+  "packageManager": "pnpm@10.12.1",
   "scripts": {
     "build": "npm run ensure-bcrypt && ./scripts/pre-dev.sh && npm run build:client && npm run sync:nitro-template && NITRO_PRESET=vercel npm run build:server && npm run verify:vercel-output",
     "build:client": "vite build",

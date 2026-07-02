@@ -39,6 +39,9 @@ Detailed PR notes:
 - Approved pnpm dependency build scripts for `bcrypt` and `core-js` so strict
   Vercel installs can complete while keeping unlisted lifecycle scripts blocked.
   — _Codex (AI), 2026-07-02_
+- Pinned the web package manager to `pnpm@10.12.1` so Vercel Corepack uses the
+  pnpm version that understands the migration's workspace policy settings. —
+  _Codex (AI), 2026-07-02_
 
 ### PR #16 - Auth And Lopu Hardening
 
