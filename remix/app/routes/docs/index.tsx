@@ -15,11 +15,11 @@ import {
 import { ArrowRight, Boxes, FileCode2 } from 'lucide-react';
 import { Link as RouterLink } from 'react-router';
 
-import { designEntries, getDesignEntryPreviewSrc } from './designEntries';
+import { designEntries } from './designEntries';
 
 const referenceLinks = [
   { label: 'Design mockups', to: '/docs/design', detail: `${designEntries.length} standalone bundles` },
-  { label: 'Static bundle index', to: '#static-bundles', detail: '/docs/design-bundles' }
+  { label: 'Static bundle browser', to: '/docs/design-bundles', detail: `${designEntries.length} HTML bundles` }
 ];
 
 export default function DocsIndex() {
@@ -53,7 +53,7 @@ export default function DocsIndex() {
               </Heading>
             </Flex>
             <Text color="gray.600" fontSize="sm" lineHeight="1.6" mb={5}>
-              Navigate the design exports added in PR #25, load each standalone HTML bundle, and open previews full screen.
+              Navigate the design exports, load each standalone HTML bundle, and open multiple previews at once.
             </Text>
             <Button
               as={RouterLink}
@@ -72,45 +72,22 @@ export default function DocsIndex() {
             <Flex align="center" gap={3} mb={4}>
               <Icon as={FileCode2} boxSize={5} color="#5c6ac4" />
               <Heading as="h3" fontSize="lg">
-                Static bundle index
+                Static bundle browser
               </Heading>
             </Flex>
             <Text color="gray.600" fontSize="sm" lineHeight="1.6" mb={5}>
-              The docs route serves every root-level export without moving or rewriting its generated HTML.
+              Browse every generated HTML bundle in a dedicated docs view without crowding the overview page.
             </Text>
-            <Stack spacing={0} borderTop="1px solid" borderColor="blackAlpha.200">
-              {designEntries.map((entry) => {
-                const previewSrc = getDesignEntryPreviewSrc(entry);
-
-                return (
-                  <ChakraLink
-                    key={entry.slug}
-                    href={previewSrc}
-                    isExternal
-                    _hover={{ textDecoration: 'none', bg: 'blackAlpha.50' }}
-                    borderBottom="1px solid"
-                    borderColor="blackAlpha.200"
-                    display="block"
-                    py={3}
-                  >
-                    <Flex align="center" gap={3} minW={0}>
-                      <Badge bg="#eef2f7" color="#374151" borderRadius="sm" flexShrink={0} px={2}>
-                        HTML
-                      </Badge>
-                      <Box minW={0}>
-                        <Text color="gray.900" fontSize="sm" fontWeight="650">
-                          {entry.title}
-                        </Text>
-                        <Text color="gray.500" fontSize="xs" fontFamily="mono" overflowWrap="anywhere">
-                          {previewSrc}
-                        </Text>
-                      </Box>
-                      <Icon as={ArrowRight} boxSize={4} color="gray.500" flexShrink={0} ml="auto" />
-                    </Flex>
-                  </ChakraLink>
-                );
-              })}
-            </Stack>
+            <Button
+              as={RouterLink}
+              to="/docs/design-bundles"
+              size="sm"
+              variant="outline"
+              borderColor="blackAlpha.300"
+              rightIcon={<Icon as={ArrowRight} boxSize={4} />}
+            >
+              Browse bundles
+            </Button>
           </Box>
         </SimpleGrid>
 
@@ -125,9 +102,8 @@ export default function DocsIndex() {
             {referenceLinks.map((item) => (
               <ChakraLink
                 key={item.to}
-                as={item.to.startsWith('#') ? 'a' : RouterLink}
-                href={item.to.startsWith('#') ? item.to : undefined}
-                to={item.to.startsWith('#') ? undefined : item.to}
+                as={RouterLink}
+                to={item.to}
                 _hover={{ textDecoration: 'none', bg: 'blackAlpha.50' }}
                 px={5}
                 py={4}

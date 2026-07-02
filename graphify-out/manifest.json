@@ -2080,8 +2080,8 @@
     "semantic_hash": "689aa489ed73d14667a3a4c2d3428fb4"
   },
   "remix/app/routes.tsx": {
-    "mtime": 1783011629.7774348,
-    "ast_hash": "67386dda3e1b974186b98e4b668de207",
+    "mtime": 1783014764.1715865,
+    "ast_hash": "67a09f444333c0465b16fdc50abf8b87",
     "semantic_hash": ""
   },
   "remix/nitro.config.ts": {
@@ -2820,13 +2820,13 @@
     "semantic_hash": ""
   },
   "remix/app/routes/docs/DocsLayout.tsx": {
-    "mtime": 1783012988.3273494,
-    "ast_hash": "2e264e90ee5fccb348db112858117d52",
+    "mtime": 1783014924.5992098,
+    "ast_hash": "ad4884b3d92aea6b86c5d01b71198375",
     "semantic_hash": ""
   },
   "remix/app/routes/docs/design.tsx": {
-    "mtime": 1783014140.2384682,
-    "ast_hash": "54d41c868c758f19c07aa66c6bdbcdb9",
+    "mtime": 1783014690.8626347,
+    "ast_hash": "b48a0e112e1f58895fc08b0bbf4d0d0e",
     "semantic_hash": ""
   },
   "remix/app/routes/docs/designEntries.ts": {
@@ -2835,8 +2835,18 @@
     "semantic_hash": ""
   },
   "remix/app/routes/docs/index.tsx": {
-    "mtime": 1783013708.630954,
-    "ast_hash": "e1ebbb3cac38bafdabdcc8020432263e",
+    "mtime": 1783014757.9245162,
+    "ast_hash": "d6457b3f13d076d15710edb94f3ae448",
+    "semantic_hash": ""
+  },
+  "remix/app/routes/docs/PreviewPane.tsx": {
+    "mtime": 1783014618.875708,
+    "ast_hash": "be47c83a75188b0432b09d4a346f8855",
+    "semantic_hash": ""
+  },
+  "remix/app/routes/docs/designBundles.tsx": {
+    "mtime": 1783014733.8955436,
+    "ast_hash": "526f89608bea68f57e92d03a97f7279d",
     "semantic_hash": ""
   }
 }

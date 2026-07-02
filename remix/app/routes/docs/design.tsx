@@ -14,15 +14,15 @@ import {
   Stack,
   Text
 } from '@chakra-ui/react';
-import { ArrowDownToLine, ArrowLeft, ExternalLink, Maximize2, Search, X } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Maximize2, Search, X } from 'lucide-react';
 import { useSearchParams } from 'react-router';
 
 import {
-  type DesignEntry,
   designEntries,
   getDesignEntryBySlug,
   getDesignEntryPreviewSrc
 } from './designEntries';
+import { PreviewFrame, ResizablePreviewPane } from './PreviewPane';
 
 const kindColors: Record<string, { bg: string; color: string }> = {
   Launch: { bg: '#d7f5df', color: '#0f5132' },
@@ -31,45 +31,23 @@ const kindColors: Record<string, { bg: string; color: string }> = {
   Direction: { bg: '#eef2f7', color: '#374151' }
 };
 
-type PreviewFrameProps = {
-  entry: DesignEntry;
-  expanded?: boolean;
-  height?: string;
-  previewSrc: string;
-  testId: string;
-};
-
-function PreviewFrame({ entry, expanded = false, height = '100%', previewSrc, testId }: PreviewFrameProps) {
-  return (
-    <iframe
-      data-testid={testId}
-      key={`${testId}-${entry.slug}`}
-      src={previewSrc}
-      title={`${entry.title} preview`}
-      allowFullScreen
-      style={{
-        border: 0,
-        display: 'block',
-        height: expanded ? 'calc(100vh - 56px)' : height,
-        marginTop: expanded ? '56px' : 0,
-        minHeight: 'inherit',
-        width: '100%'
-      }}
-    />
-  );
-}
+const DEFAULT_INLINE_PREVIEW_HEIGHT = 360;
+const DEFAULT_REFERENCE_PREVIEW_HEIGHT = 620;
 
 export default function DocsDesign() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [query, setQuery] = React.useState('');
-  const [expandedPreview, setExpandedPreview] = React.useState(false);
-  const previewRef = React.useRef<HTMLDivElement | null>(null);
-  const fullPreviewRef = React.useRef<HTMLDivElement | null>(null);
-  const pendingScrollSlugRef = React.useRef<string | null>(null);
-
   const selectedEntry =
     getDesignEntryBySlug(searchParams.get('entry')) || designEntries[0];
+  const [expandedEntrySlug, setExpandedEntrySlug] = React.useState<string | null>(null);
+  const [openPreviewSlugs, setOpenPreviewSlugs] = React.useState<string[]>(() => [selectedEntry.slug]);
+  const [inlinePreviewHeights, setInlinePreviewHeights] = React.useState<Record<string, number>>({});
+  const [referencePreviewHeight, setReferencePreviewHeight] = React.useState(DEFAULT_REFERENCE_PREVIEW_HEIGHT);
+  const pendingScrollSlugRef = React.useRef<string | null>(null);
+
   const previewSrc = getDesignEntryPreviewSrc(selectedEntry);
+  const expandedEntry = getDesignEntryBySlug(expandedEntrySlug);
+  const expandedPreviewSrc = expandedEntry ? getDesignEntryPreviewSrc(expandedEntry) : null;
   const filteredEntries = React.useMemo(() => {
     const normalisedQuery = query.trim().toLowerCase();
 
@@ -86,7 +64,13 @@ export default function DocsDesign() {
   }, [query]);
 
   React.useEffect(() => {
-    if (!expandedPreview) {
+    setOpenPreviewSlugs((currentSlugs) =>
+      currentSlugs.includes(selectedEntry.slug) ? currentSlugs : [...currentSlugs, selectedEntry.slug]
+    );
+  }, [selectedEntry.slug]);
+
+  React.useEffect(() => {
+    if (!expandedEntry) {
       return undefined;
     }
 
@@ -95,7 +79,7 @@ export default function DocsDesign() {
 
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        setExpandedPreview(false);
+        setExpandedEntrySlug(null);
       }
     };
 
@@ -105,7 +89,7 @@ export default function DocsDesign() {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener('keydown', closeOnEscape);
     };
-  }, [expandedPreview]);
+  }, [expandedEntry]);
 
   React.useEffect(() => {
     const slug = pendingScrollSlugRef.current;
@@ -124,19 +108,26 @@ export default function DocsDesign() {
     const next = new URLSearchParams(searchParams);
     next.set('entry', slug);
     pendingScrollSlugRef.current = slug;
+    setOpenPreviewSlugs((currentSlugs) =>
+      currentSlugs.includes(slug) ? currentSlugs : [...currentSlugs, slug]
+    );
     setSearchParams(next);
   };
 
-  const openFullscreen = () => {
-    setExpandedPreview(true);
+  const closeInlinePreview = (slug: string) => {
+    setOpenPreviewSlugs((currentSlugs) => currentSlugs.filter((openSlug) => openSlug !== slug));
+  };
+
+  const setInlinePreviewHeight = React.useCallback((slug: string, height: number) => {
+    setInlinePreviewHeights((currentHeights) => ({ ...currentHeights, [slug]: height }));
+  }, []);
+
+  const openFullscreen = (slug = selectedEntry.slug) => {
+    setExpandedEntrySlug(slug);
   };
 
   const closeExpandedPreview = () => {
-    setExpandedPreview(false);
-  };
-
-  const scrollToFullPreview = () => {
-    fullPreviewRef.current?.scrollIntoView({ block: 'start', inline: 'nearest' });
+    setExpandedEntrySlug(null);
   };
 
   const selectedKindColor = kindColors[selectedEntry.kind] || kindColors.Direction;
@@ -160,7 +151,7 @@ export default function DocsDesign() {
               Design
             </Badge>
             <Text color="gray.500" fontSize="sm" fontFamily="mono">
-              PR #25
+              {designEntries.length} bundles
             </Text>
           </Flex>
 
@@ -188,15 +179,16 @@ export default function DocsDesign() {
           >
             {filteredEntries.map((entry) => {
               const active = entry.slug === selectedEntry.slug;
+              const opened = openPreviewSlugs.includes(entry.slug);
               const kindColor = kindColors[entry.kind] || kindColors.Direction;
               const entryPreviewSrc = getDesignEntryPreviewSrc(entry);
 
               return (
                 <Box
                   key={entry.slug}
-                  bg={active ? 'white' : 'transparent'}
+                  bg={active || opened ? 'white' : 'transparent'}
                   border="1px solid"
-                  borderColor={active ? 'blackAlpha.300' : 'transparent'}
+                  borderColor={active ? 'blackAlpha.300' : opened ? 'blackAlpha.200' : 'transparent'}
                   borderRadius="md"
                   display="block"
                   maxW="100%"
@@ -232,7 +224,7 @@ export default function DocsDesign() {
                     </Text>
                   </Box>
 
-                  {active ? (
+                  {opened ? (
                     <Box
                       id={`design-inline-preview-${entry.slug}`}
                       data-testid={`design-inline-preview-${entry.slug}`}
@@ -259,36 +251,29 @@ export default function DocsDesign() {
                           <IconButton
                             aria-label={`Open ${entry.title} full screen`}
                             icon={<Icon as={Maximize2} boxSize={3.5} />}
-                            onClick={openFullscreen}
+                            onClick={() => openFullscreen(entry.slug)}
                             size="xs"
                             variant="outline"
                           />
                           <IconButton
-                            aria-label="Jump to full preview"
-                            display={{ base: 'none', xl: 'inline-flex' }}
-                            icon={<Icon as={ArrowDownToLine} boxSize={3.5} />}
-                            onClick={scrollToFullPreview}
+                            aria-label={`Close ${entry.title} preview`}
+                            icon={<Icon as={X} boxSize={3.5} />}
+                            onClick={() => closeInlinePreview(entry.slug)}
                             size="xs"
                             variant="outline"
                           />
                         </Flex>
                       </Flex>
 
-                      <Box
-                        bg="white"
-                        border="1px solid"
-                        borderColor="blackAlpha.200"
-                        borderRadius="sm"
-                        h={{ base: '360px', md: '430px', xl: '300px' }}
-                        overflow="hidden"
-                      >
-                        <PreviewFrame
-                          entry={entry}
-                          height="100%"
-                          previewSrc={entryPreviewSrc}
-                          testId={`design-inline-preview-frame-${entry.slug}`}
-                        />
-                      </Box>
+                      <ResizablePreviewPane
+                        height={inlinePreviewHeights[entry.slug] || DEFAULT_INLINE_PREVIEW_HEIGHT}
+                        maxHeight={1200}
+                        minHeight={220}
+                        onHeightChange={(height) => setInlinePreviewHeight(entry.slug, height)}
+                        previewSrc={entryPreviewSrc}
+                        testId={`design-inline-preview-frame-${entry.slug}`}
+                        title={entry.title}
+                      />
                     </Box>
                   ) : null}
                 </Box>
@@ -339,7 +324,7 @@ export default function DocsDesign() {
                 bg="#008060"
                 color="white"
                 _hover={{ bg: '#006e52' }}
-                onClick={openFullscreen}
+                onClick={() => openFullscreen(selectedEntry.slug)}
                 leftIcon={<Icon as={Maximize2} boxSize={4} />}
               >
                 Preview full screen
@@ -348,28 +333,20 @@ export default function DocsDesign() {
           </Flex>
         </Box>
 
-        <Box
-          ref={(node) => {
-            previewRef.current = node;
-            fullPreviewRef.current = node;
-          }}
-          bg="white"
-          border="1px solid"
-          borderColor="blackAlpha.300"
-          borderRadius="md"
-          overflow="hidden"
-          position="relative"
-          minH={{ base: '68vh', xl: 'calc(100vh - 260px)' }}
-        >
-          <PreviewFrame
-            entry={selectedEntry}
+        <Box position="relative">
+          <ResizablePreviewPane
+            height={referencePreviewHeight}
+            maxHeight={1400}
+            minHeight={320}
+            onHeightChange={setReferencePreviewHeight}
             previewSrc={previewSrc}
             testId="design-preview-frame"
+            title={selectedEntry.title}
           />
         </Box>
       </Stack>
 
-      {expandedPreview ? (
+      {expandedEntry && expandedPreviewSrc ? (
         <Box
           bg="white"
           h="100vh"
@@ -403,7 +380,7 @@ export default function DocsDesign() {
               Back / close preview
             </Button>
             <Text color="gray.600" flex="1" fontSize="sm" fontWeight="650" isTruncated>
-              {selectedEntry.title}
+              {expandedEntry.title}
             </Text>
             <IconButton
               aria-label="Close full screen preview"
@@ -413,10 +390,10 @@ export default function DocsDesign() {
             />
           </Flex>
           <PreviewFrame
-            entry={selectedEntry}
             expanded
-            previewSrc={previewSrc}
+            previewSrc={expandedPreviewSrc}
             testId="design-expanded-preview-frame"
+            title={expandedEntry.title}
           />
         </Box>
       ) : null}
@@ -458,7 +435,7 @@ export default function DocsDesign() {
                   aria-label="Open preview full screen"
                   icon={<Icon as={Maximize2} boxSize={4} />}
                   size="sm"
-                  onClick={openFullscreen}
+                  onClick={() => openFullscreen(selectedEntry.slug)}
                 />
                 <IconButton
                   as="a"

@@ -12,8 +12,10 @@ import {
   Stack,
   Text
 } from '@chakra-ui/react';
-import { BookOpen, Boxes, ChevronRight, GripVertical, Menu, PanelLeftClose, PanelLeftOpen, X } from 'lucide-react';
+import { BookOpen, Boxes, ChevronRight, FileCode2, GripVertical, Menu, PanelLeftClose, PanelLeftOpen, X } from 'lucide-react';
 import { Link as RouterLink, Outlet, useLocation } from 'react-router';
+
+import { designEntries } from './designEntries';
 
 const docsNav = [
   {
@@ -26,7 +28,13 @@ const docsNav = [
     label: 'Design mockups',
     to: '/docs/design',
     icon: Boxes,
-    description: 'PR #25 previews'
+    description: 'Standalone previews'
+  },
+  {
+    label: 'Static bundles',
+    to: '/docs/design-bundles',
+    icon: FileCode2,
+    description: `${designEntries.length} HTML bundles`
   }
 ];
 
@@ -131,6 +139,7 @@ export default function DocsLayout() {
 
   React.useEffect(() => {
     setMobileDrawerOpen(false);
+    window.scrollTo({ left: 0, top: 0 });
   }, [pathname]);
 
   const startDrawerResize = React.useCallback(
