@@ -16,6 +16,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Added
+
+- Added an environment-aware footer status selector for this tab, local,
+  development, staging, and production targets, with compact Nitro API,
+  frontend, Vercel, and MongoDB checks. — _Codex (AI), 2026-07-02_
+
 ### PR #24 - Nitro React Router Migration
 
 Detailed PR notes:

@@ -198,6 +198,21 @@ Vercel automatically provides variables such as `VERCEL`, `VERCEL_ENV`,
 `VERCEL_URL`, `VERCEL_BRANCH_URL`, `VERCEL_GIT_COMMIT_REF`, and
 `VERCEL_GIT_COMMIT_SHA` during deployments.
 
+The footer environment selector can compare public origins for this tab, local,
+development, staging, and production. These values are browser-visible
+`THINGTIME_` values, so use public origins only and never include tokens,
+passwords, or other secrets:
+
+```sh
+THINGTIME_PRODUCTION_STATUS_ORIGIN="https://thingtime.com"
+THINGTIME_DEV_STATUS_ORIGIN="https://dev.thingtime.com"
+THINGTIME_STAGING_STATUS_ORIGIN="https://staging.thingtime.com"
+THINGTIME_LOCAL_STATUS_ORIGIN="http://localhost:9999"
+```
+
+Unset values fall back to `https://thingtime.com`, `https://dev.thingtime.com`,
+`https://staging.thingtime.com`, and `http://localhost:9999`.
+
 ## Public env exposure rule
 
 Only variables with the `THINGTIME_` prefix are intentionally copied into the

@@ -3,8 +3,7 @@ import { Box, Center, Flex, Text } from '@chakra-ui/react';
 import { Link, useNavigate, useRouteLoaderData } from 'react-router';
 
 import { Icon } from '../Icon/Icon';
-import { MongoStatus } from '../MongoDB/MongoStatus';
-import { VercelStatus } from '../Vercel/VercelStatus';
+import { FooterStatusPanel } from '../Status/FooterStatusPanel';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 
@@ -91,10 +90,10 @@ export const Footer = (props) => {
             </Flex>
           )}
 
-          {showDeploymentStatus ? <VercelStatus></VercelStatus> : null}
-
-          {/* live MongoDB connection status, links to /mongodb-status */}
-          <MongoStatus></MongoStatus>
+          <FooterStatusPanel
+            envFromCookie={envFromCookie}
+            showDeploymentStatus={showDeploymentStatus}
+          />
 
           <Flex flexDirection="row" marginRight="auto">
             <Icon name="rainbow" size="8px"></Icon>
