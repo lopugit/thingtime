@@ -1,5 +1,6 @@
 export type StatusEnvironmentId =
   | 'current'
+  | 'branch'
   | 'local'
   | 'development'
   | 'staging'
@@ -44,6 +45,32 @@ const getFirstOrigin = (env: Record<string, string | undefined>, keys: string[])
   return undefined;
 };
 
+const getHostPrefix = (origin?: string) => {
+  if (!origin) {
+    return '[TAB]';
+  }
+
+  try {
+    const host = new URL(origin).hostname;
+
+    if (host === 'localhost' || host === '127.0.0.1') return '[LC]';
+    if (host.endsWith('.vercel.app')) return '[VC]';
+    if (host.endsWith('.ts.net')) return '[TS]';
+    if (host === 'thingtime.com') return '[PROD]';
+  } catch {
+    // Fall through to the generic branch prefix.
+  }
+
+  return '[ENV]';
+};
+
+const getBranchLabel = (branchName?: string, origin?: string) => {
+  const trimmed = branchName?.trim();
+  const safeBranch = trimmed && trimmed !== 'git/unknown' ? trimmed : 'Branch';
+
+  return `${getHostPrefix(origin)} ${safeBranch}`;
+};
+
 export const getStatusEnvironmentTargets = ({
   currentOrigin,
   envFromCookie
@@ -51,15 +78,39 @@ export const getStatusEnvironmentTargets = ({
   currentOrigin?: string;
   envFromCookie: Record<string, string | undefined>;
 }): StatusEnvironmentTarget[] => {
+  const normalizedCurrentOrigin = normaliseOrigin(currentOrigin);
   const branchOrigin = normaliseOrigin(envFromCookie.THINGTIME_VERCEL_BRANCH_URL);
+  const branchName = envFromCookie.THINGTIME_BRANCH_NAME;
+  const currentHost = (() => {
+    try {
+      return normalizedCurrentOrigin ? new URL(normalizedCurrentOrigin).hostname : undefined;
+    } catch {
+      return undefined;
+    }
+  })();
+  const currentIsVercel = Boolean(currentHost?.endsWith('.vercel.app'));
+  const resolvedBranchOrigin = branchOrigin || (currentIsVercel ? normalizedCurrentOrigin : undefined);
+  const branchTarget = resolvedBranchOrigin
+    ? [
+        {
+          id: 'branch' as const,
+          label: getBranchLabel(branchName, resolvedBranchOrigin),
+          origin: resolvedBranchOrigin,
+          title: branchName
+            ? `Checks the current branch deployment (${branchName})`
+            : 'Checks the current branch deployment'
+        }
+      ]
+    : [];
 
   return [
     {
       id: 'current',
-      label: 'This tab',
-      origin: normaliseOrigin(currentOrigin),
+      label: 'Current Tab',
+      origin: normalizedCurrentOrigin,
       title: 'Checks the URL loaded in this browser tab'
     },
+    ...branchTarget,
     {
       id: 'local',
       label: 'Local',
@@ -97,6 +148,29 @@ export const getStatusEnvironmentTargets = ({
       title: 'Checks the production URL'
     }
   ];
+};
+
+export const getDefaultStatusEnvironmentId = ({
+  currentOrigin,
+  envFromCookie
+}: {
+  currentOrigin?: string;
+  envFromCookie: Record<string, string | undefined>;
+}): StatusEnvironmentId => {
+  const normalizedCurrentOrigin = normaliseOrigin(currentOrigin);
+  const environments = getStatusEnvironmentTargets({ currentOrigin, envFromCookie });
+
+  if (
+    environments.some(
+      (environment) =>
+        environment.id === 'current' &&
+        environment.origin === normalizedCurrentOrigin
+    )
+  ) {
+    return 'current';
+  }
+
+  return environments[0]?.id || 'current';
 };
 
 export const getStatusEndpoint = (path: string, targetOrigin?: string) => {

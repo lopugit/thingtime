@@ -62,6 +62,9 @@ export const VercelStatus = (props: { chakras?: Record<string, unknown>; targetO
     let timeoutId: number | undefined;
     let xhr: XMLHttpRequest | undefined;
 
+    setStatus(null);
+    setError(null);
+
     const requestStatus = () => {
       xhr?.abort();
       xhr = new XMLHttpRequest();

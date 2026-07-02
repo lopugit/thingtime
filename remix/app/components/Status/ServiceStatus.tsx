@@ -38,6 +38,9 @@ export const ServiceStatus = ({
     let isMounted = true;
     const xhr = new XMLHttpRequest();
 
+    setStatus(null);
+    setError(null);
+
     xhr.open('GET', getStatusEndpoint(endpoint, targetOrigin));
     xhr.setRequestHeader('Accept', 'application/json');
 

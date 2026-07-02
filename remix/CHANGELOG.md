@@ -18,6 +18,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- Made the footer environment selector default to `Current Tab` per browser
+  origin, added a current branch deployment option, and reset status rows to
+  checking immediately when the target environment changes. — _Codex (AI),
+  2026-07-03_
 - Aligned the compact footer environment selector with the status rows, restored
   browser scroll position after reloads via React Router scroll restoration, and
   loaded ignored local env files into the Nitro/Vite dev launcher so localhost

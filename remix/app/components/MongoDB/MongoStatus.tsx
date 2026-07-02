@@ -30,6 +30,9 @@ export const MongoStatus = (props: { chakras?: Record<string, unknown>; targetOr
 
     const xhr = new XMLHttpRequest();
 
+    setStatus(null);
+    setError(null);
+
     xhr.open('GET', getStatusEndpoint(STATUS_ENDPOINT, props.targetOrigin));
     xhr.setRequestHeader('Accept', 'application/json');
 

@@ -14,6 +14,11 @@ Nitro API, frontend shell, Vercel deployment state, and MongoDB connection.
 
 - Added an environment selector for this tab, local, development, staging, and
   production status targets.
+- Renamed the self-targeting option to `Current Tab`.
+- Added a branch deployment option when the current branch URL is available.
+- Scoped the saved dropdown preference to the current browser origin and ignored
+  the old unscoped preference so previews do not accidentally default to a stale
+  local target.
 - Kept the selector compact and label-free so the selected environment text is
   the control.
 - Hid selector chrome at rest and only reveals its background/border treatment
@@ -27,6 +32,8 @@ Nitro API, frontend shell, Vercel deployment state, and MongoDB connection.
 - Reused the existing Vercel and MongoDB status rows so every environment uses
   the same compact status language.
 - Routed remote status checks through a constrained target-origin allowlist.
+- Clears stale status labels into checking state immediately when the selected
+  environment changes, then refetches the selected target.
 - Fixed local Nitro/Vite development so ignored env files are loaded before
   child processes start, allowing localhost MongoDB checks to see the same
   credentials as the rest of the local app.

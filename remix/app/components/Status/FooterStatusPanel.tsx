@@ -5,11 +5,17 @@ import { MongoStatus } from '../MongoDB/MongoStatus';
 import { VercelStatus } from '../Vercel/VercelStatus';
 import { FrontendStatus, NitroStatus } from './ServiceStatus';
 import {
+  getDefaultStatusEnvironmentId,
   getStatusEnvironmentTargets,
   type StatusEnvironmentId
 } from './statusEnvironment';
 
-const STORAGE_KEY = 'thingtime.footerStatusEnvironment';
+const STORAGE_KEY = 'thingtime.footerStatusEnvironment.v2';
+
+type StoredEnvironmentSelection = {
+  id?: StatusEnvironmentId;
+  origin?: string;
+};
 
 export const FooterStatusPanel = ({
   envFromCookie,
@@ -21,28 +27,11 @@ export const FooterStatusPanel = ({
   const [currentOrigin, setCurrentOrigin] = React.useState('');
   const [selectedEnvironmentId, setSelectedEnvironmentId] =
     React.useState<StatusEnvironmentId>('current');
+  const [loadedStoredSelection, setLoadedStoredSelection] = React.useState(false);
 
   React.useEffect(() => {
     setCurrentOrigin(window.location.origin);
-
-    try {
-      const stored = window.localStorage.getItem(STORAGE_KEY) as StatusEnvironmentId | null;
-
-      if (stored) {
-        setSelectedEnvironmentId(stored);
-      }
-    } catch {
-      // localStorage is optional for this tiny footer preference.
-    }
   }, []);
-
-  React.useEffect(() => {
-    try {
-      window.localStorage.setItem(STORAGE_KEY, selectedEnvironmentId);
-    } catch {
-      // localStorage is optional for this tiny footer preference.
-    }
-  }, [selectedEnvironmentId]);
 
   const environments = React.useMemo(() => {
     return getStatusEnvironmentTargets({
@@ -50,6 +39,72 @@ export const FooterStatusPanel = ({
       envFromCookie
     });
   }, [currentOrigin, envFromCookie]);
+  const defaultEnvironmentId = React.useMemo(() => {
+    return getDefaultStatusEnvironmentId({
+      currentOrigin,
+      envFromCookie
+    });
+  }, [currentOrigin, envFromCookie]);
+
+  React.useEffect(() => {
+    if (!currentOrigin || loadedStoredSelection) {
+      return;
+    }
+
+    let nextEnvironmentId = defaultEnvironmentId;
+
+    try {
+      const stored = JSON.parse(
+        window.localStorage.getItem(STORAGE_KEY) || 'null'
+      ) as StoredEnvironmentSelection | null;
+      const storedIsValidForThisOrigin =
+        stored?.origin === currentOrigin &&
+        environments.some((environment) => environment.id === stored.id);
+
+      if (storedIsValidForThisOrigin && stored?.id) {
+        nextEnvironmentId = stored.id;
+      }
+    } catch {
+      // localStorage is optional for this tiny footer preference.
+    }
+
+    setSelectedEnvironmentId(nextEnvironmentId);
+    setLoadedStoredSelection(true);
+  }, [currentOrigin, defaultEnvironmentId, environments, loadedStoredSelection]);
+
+  React.useEffect(() => {
+    if (
+      environments.length > 0 &&
+      !environments.some((environment) => environment.id === selectedEnvironmentId)
+    ) {
+      setSelectedEnvironmentId(defaultEnvironmentId);
+    }
+  }, [defaultEnvironmentId, environments, selectedEnvironmentId]);
+
+  const handleEnvironmentChange = React.useCallback(
+    (event: React.ChangeEvent<HTMLSelectElement>) => {
+      setLoadedStoredSelection(true);
+      setSelectedEnvironmentId(event.target.value as StatusEnvironmentId);
+    },
+    []
+  );
+
+  React.useEffect(() => {
+    if (!loadedStoredSelection || !currentOrigin) {
+      return;
+    }
+
+    try {
+      const stored: StoredEnvironmentSelection = {
+        id: selectedEnvironmentId,
+        origin: currentOrigin
+      };
+
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
+    } catch {
+      // localStorage is optional for this tiny footer preference.
+    }
+  }, [currentOrigin, loadedStoredSelection, selectedEnvironmentId]);
   const selectedEnvironment =
     environments.find((environment) => environment.id === selectedEnvironmentId) ||
     environments[0];
@@ -60,8 +115,10 @@ export const FooterStatusPanel = ({
       <Box
         data-status-environment-control=""
         width="auto"
-        minWidth="108px"
+        minWidth="118px"
+        maxWidth="236px"
         height="22px"
+        marginLeft="16px"
         backgroundColor="transparent"
         borderWidth="1px"
         borderStyle="solid"
@@ -85,11 +142,12 @@ export const FooterStatusPanel = ({
           variant="unstyled"
           size="xs"
           value={selectedEnvironment?.id || 'current'}
-          onChange={(event) => setSelectedEnvironmentId(event.target.value as StatusEnvironmentId)}
+          onChange={handleEnvironmentChange}
           width="100%"
           minWidth="inherit"
+          maxWidth="inherit"
           height="20px"
-          paddingInlineStart={4}
+          paddingInlineStart={0}
           paddingInlineEnd={1}
           fontSize="10px"
           lineHeight="20px"
@@ -112,6 +170,9 @@ export const FooterStatusPanel = ({
             backgroundImage: 'none',
             '&::-ms-expand': {
               display: 'none'
+            },
+            '& > option': {
+              color: '#1A202C'
             },
             '& option': {
               color: '#1A202C'
