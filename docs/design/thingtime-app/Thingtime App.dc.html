@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    html, body { margin: 0; padding: 0; background: #ffffff; }
+    @keyframes moving-rainbow { 0% { background-position: 0 0; } 100% { background-position: calc(100px + 200%) 0; } }
+  </style>
+  <link rel="stylesheet" href="ds/thingtime-bundle.css">
+  <script src="ds/react.js"></script>
+  <script src="ds/react-dom.js"></script>
+  <script src="ds/thingtime-bundle.js"></script>
+  <script src="ds/tt-elements.js"></script>
+</helmet>
+<div data-screen-label="App — thing editor" style="min-height:100vh; background:#ffffff; color:#1a1a1a; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif; display:flex; flex-direction:column;">
+  <canvas ref="{{ setCanvas }}" style="position:fixed; top:0; left:0; width:100vw; height:100vh; pointer-events:none; z-index:99;"></canvas>
+
+  <div style="height:6px; background:linear-gradient(to right, #f34a4a, #ffbc48, #58ca70, #47b5e6, #a555e8, #f34a4a); background-size:calc(100px + 200%); animation:moving-rainbow 5s linear infinite;"></div>
+
+  <nav style="display:flex; align-items:center; justify-content:space-between; gap:16px; padding:14px 24px; border-bottom:1px solid #ececec;">
+    <div style="display:flex; align-items:center; gap:12px;">
+      <a href="../thingtime-landing/Thingtime Landing.dc.html" style="display:flex; align-items:center; gap:10px; text-decoration:none; color:#1a1a1a;">
+        <tt-logo icon="" theme="nature" voxel-size="9" space="0px"></tt-logo>
+        <span style="font-weight:800; font-size:16px;">thingtime</span>
+      </a>
+      <span style="font-family:ui-monospace,Menlo,monospace; font-size:13px; color:#8a8a8a; background:#f7f7f7; padding:5px 10px;">{{ selPath }}</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:16px; font-size:13.5px; font-weight:600;">
+      <span onClick="{{ resetDemo }}" style="color:#8a8a8a; cursor:pointer;" style-hover="color:#1a1a1a;">↺ reset demo</span>
+      <a href="../thingtime-landing/Thingtime Landing.dc.html#back" style="color:#6f3198; text-decoration:none;">Back the launch 💖</a>
+      <div style="width:30px; height:30px; background:#fff5fa; border:2px solid #1a1a1a; display:flex; align-items:center; justify-content:center; font-size:15px;">🦄</div>
+    </div>
+  </nav>
+
+  <main style="flex:1; width:min(760px,100%); margin:0 auto; box-sizing:border-box; padding:36px 24px 140px;">
+    <div style="display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+      <h1 style="margin:0; font-size:30px; font-weight:900; letter-spacing:-0.02em;">Your things</h1>
+      <span style="font-size:13px; color:#8a8a8a;">{{ thingCount }} things · everything autosaves</span>
+    </div>
+
+    <div style="margin-top:22px; display:flex; flex-direction:column;">
+      <sc-for list="{{ visibleRows }}" as="row" hint-placeholder-count="10">
+        <div style="display:flex; align-items:center; gap:9px; font-size:15px; padding:7px 10px 7px {{ row.pad }};" style-hover="background:#fafafa;">
+          <sc-if value="{{ row.isBranch }}" hint-placeholder-val="{{ true }}">
+            <span onClick="{{ row.onToggle }}" style="color:#8a8a8a; cursor:pointer; width:16px; flex:none; user-select:none;">{{ row.caret }}</span>
+            <span onClick="{{ row.onToggle }}" style="font-weight:800; cursor:pointer; font-size:16px;">{{ row.label }}</span>
+            <span style="font-size:12px; font-weight:700; color:#8a8a8a; background:#f2f2f2; padding:1px 8px;">{{ row.count }}</span>
+            <span onClick="{{ row.onDelete }}" style="margin-left:auto; color:#e0e0e0; cursor:pointer; font-weight:700; padding:0 4px;" style-hover="color:#ed1c24;">×</span>
+          </sc-if>
+          <sc-if value="{{ row.isLeaf }}" hint-placeholder-val="{{ false }}">
+            <span style="width:9px; height:9px; background:{{ row.dot }}; flex:none;"></span>
+            <span style="font-weight:700; color:#6f3198; flex:none;">{{ row.label }}</span>
+            <span style="color:#c9c9c9;">·</span>
+            <sc-if value="{{ row.isEditing }}" hint-placeholder-val="{{ false }}">
+              <input value="{{ draft }}" onChange="{{ draftChange }}" onKeyDown="{{ draftKey }}" onBlur="{{ commitEdit }}" autoFocus="{{ true }}" style="flex:1; min-width:80px; border:2px solid hotpink; padding:3px 8px; font-size:14px; outline:none; font-family:inherit;"></input>
+            </sc-if>
+            <sc-if value="{{ row.notEditing }}" hint-placeholder-val="{{ true }}">
+              <span onClick="{{ row.onEdit }}" style="cursor:text; border-bottom:2px dashed transparent;" style-hover="border-bottom:2px dashed #ffa3b1;">{{ row.value }}</span>
+            </sc-if>
+            <span onClick="{{ row.onDelete }}" style="margin-left:auto; color:#e0e0e0; cursor:pointer; font-weight:700; padding:0 4px;" style-hover="color:#ed1c24;">×</span>
+          </sc-if>
+        </div>
+      </sc-for>
+    </div>
+
+    <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}">
+      <div style="margin-top:40px; text-align:center; color:#8a8a8a; font-size:15px;">No things yet — add one below 🦄</div>
+    </sc-if>
+  </main>
+
+  <div style="position:fixed; left:50%; bottom:26px; transform:translateX(-50%); width:min(640px,calc(100vw - 40px)); z-index:60;">
+    <div style="display:flex; align-items:center; gap:12px; background:#ffffff; border:3px solid #1a1a1a; box-shadow:8px 8px 0 #1a1a1a; padding:14px 18px;">
+      <span style="font-size:17px;">✨</span>
+      <input value="{{ magic }}" onChange="{{ magicChange }}" onKeyDown="{{ magicKey }}" placeholder="ask Thingtime anything…  try  plants: 3 alive, 1 vibing   or   party" style="flex:1; border:none; outline:none; font-size:15.5px; font-family:inherit; color:#1a1a1a; background:transparent;"></input>
+      <span style="font-family:ui-monospace,Menlo,monospace; font-size:11.5px; color:#c9c9c9; border:1.5px solid #e5e5e5; padding:2px 7px;">↵</span>
+    </div>
+    <div style="margin-top:8px; text-align:center; font-size:12px; color:#9a9a9a;">key: value adds a thing · <b>party</b> does what you think 🌈</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  colors = ['#59ff9c', '#59bdff', '#00b7ef', '#ed1c24', '#ffa3b1', '#6f3198', '#a8e61d', '#ffc20e', '#ff7e00', 'hotpink'];
+  parts = [];
+
+  state = { rows: null, editingId: null, draft: '', magic: '', selPath: 'user' };
+
+  seedRows() {
+    return [
+      { id: 'car', depth: 0, label: '🚗 car', branch: true, collapsed: false, parent: null },
+      { id: 'make', depth: 1, label: 'make', value: 'Subaru Outback', parent: 'car' },
+      { id: 'vin', depth: 1, label: 'vin', value: '4S4BSANC7K3…', parent: 'car' },
+      { id: 'repairs', depth: 1, label: 'repairs', branch: true, collapsed: false, parent: 'car' },
+      { id: 'r1', depth: 2, label: 'Oil change', value: '$89 · Mar 14', parent: 'repairs' },
+      { id: 'r2', depth: 2, label: 'Tires', value: '$412 · Jan 02', parent: 'repairs' },
+      { id: 'r3', depth: 2, label: 'Brake pads', value: '$260 · Jun 20', parent: 'repairs' },
+      { id: 'drill', depth: 0, label: '🛠️ drill', branch: true, collapsed: false, parent: null },
+      { id: 'd1', depth: 1, label: 'model', value: 'DeWalt DCD791', parent: 'drill' },
+      { id: 'd2', depth: 1, label: 'status', value: 'Lent to Sam', parent: 'drill' },
+      { id: 'd3', depth: 1, label: 'due back', value: 'Jul 6', parent: 'drill' },
+      { id: 'd4', depth: 1, label: 'fee', value: '$10 / weekend', parent: 'drill' },
+      { id: 'recipes', depth: 0, label: '📓 recipes', branch: true, collapsed: true, parent: null },
+      { id: 'p1', depth: 1, label: 'pancakes', value: 'fluffy · serves 4', parent: 'recipes' },
+      { id: 'p2', depth: 1, label: 'chili', value: 'smoky · serves 6', parent: 'recipes' },
+      { id: 'notes', depth: 0, label: '📝 notes', branch: true, collapsed: false, parent: null },
+      { id: 'n1', depth: 1, label: 'launch', value: 'WE ARE LIVE 🚀', parent: 'notes' }
+    ];
+  }
+
+  getRows() {
+    if (this.state.rows) return this.state.rows;
+    try {
+      const saved = JSON.parse(localStorage.getItem('tt-app-things-v1'));
+      if (Array.isArray(saved) && saved.length) return saved;
+    } catch (e) {}
+    return this.seedRows();
+  }
+
+  setRows(rows) {
+    this.setState({ rows });
+    try { localStorage.setItem('tt-app-things-v1', JSON.stringify(rows)); } catch (e) {}
+  }
+
+  resetDemo = () => {
+    try { localStorage.removeItem('tt-app-things-v1'); } catch (e) {}
+    this.setState({ rows: this.seedRows(), selPath: 'user', editingId: null });
+  };
+
+  componentDidMount() {
+    this.onResize = () => this.sizeCanvas();
+    window.addEventListener('resize', this.onResize);
+    this.raf = requestAnimationFrame(this.tick);
+  }
+
+  componentWillUnmount() {
+    cancelAnimationFrame(this.raf);
+    window.removeEventListener('resize', this.onResize);
+  }
+
+  setCanvas = (el) => {
+    this.canvas = el;
+    if (el) { this.ctx = el.getContext('2d'); this.sizeCanvas(); }
+  };
+
+  sizeCanvas() {
+    const c = this.canvas;
+    if (!c || !this.ctx) return;
+    const d = Math.min(window.devicePixelRatio || 1, 2);
+    c.width = window.innerWidth * d;
+    c.height = window.innerHeight * d;
+    this.ctx.setTransform(d, 0, 0, d, 0, 0);
+  }
+
+  burst(x, y, n) {
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = 3 + Math.random() * 6;
+      this.parts.push({
+        x, y,
+        vx: Math.cos(a) * sp,
+        vy: Math.sin(a) * sp - 4,
+        s: [7, 9, 11][Math.floor(Math.random() * 3)],
+        c: this.colors[Math.floor(Math.random() * this.colors.length)],
+        g: 0.14 + Math.random() * 0.07,
+        ph: Math.random() * 6.28,
+        life: 0
+      });
+    }
+  }
+
+  tick = () => {
+    this.raf = requestAnimationFrame(this.tick);
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const w = window.innerWidth, h = window.innerHeight;
+    ctx.clearRect(0, 0, w, h);
+    if (!this.parts.length) return;
+    const keep = [];
+    for (const p of this.parts) {
+      p.life++;
+      p.vy = Math.min(p.vy + p.g, 6.5);
+      p.x += p.vx + Math.sin((p.life + p.ph * 60) / 22) * 0.8;
+      p.y += p.vy;
+      p.vx *= 0.985;
+      if (p.y < h + 30 && p.life < 420) {
+        ctx.fillStyle = p.c;
+        ctx.fillRect(Math.round(p.x), Math.round(p.y), p.s, p.s);
+        keep.push(p);
+      }
+    }
+    this.parts = keep;
+  };
+
+  toggle(id) {
+    const rows = this.getRows().map((r) => (r.id === id ? { ...r, collapsed: !r.collapsed } : r));
+    this.setRows(rows);
+    this.setState({ selPath: this.pathOf(rows.find((r) => r.id === id), rows) });
+  }
+
+  pathOf(row, rows) {
+    if (!row) return 'user';
+    const names = [];
+    let cur = row;
+    while (cur) {
+      names.unshift(cur.id);
+      cur = rows.find((r) => r.id === cur.parent);
+    }
+    return 'user.' + names.join('.');
+  }
+
+  startEdit(row) {
+    this.setState({ editingId: row.id, draft: row.value, selPath: this.pathOf(row, this.getRows()) });
+  }
+
+  draftChange = (e) => this.setState({ draft: e.target.value });
+  draftKey = (e) => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') this.setState({ editingId: null }); };
+
+  commitEdit = () => {
+    const { editingId, draft } = this.state;
+    if (!editingId) return;
+    this.setRows(this.getRows().map((r) => (r.id === editingId ? { ...r, value: draft } : r)));
+    this.setState({ editingId: null });
+  };
+
+  deleteRow(id) {
+    const doomed = new Set([id]);
+    const rows = this.getRows();
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const r of rows) {
+        if (r.parent && doomed.has(r.parent) && !doomed.has(r.id)) { doomed.add(r.id); grew = true; }
+      }
+    }
+    this.setRows(rows.filter((r) => !doomed.has(r.id)));
+  }
+
+  magicChange = (e) => this.setState({ magic: e.target.value });
+
+  magicKey = (e) => {
+    if (e.key !== 'Enter') return;
+    const text = this.state.magic.trim();
+    if (!text) return;
+    const r = e.target.getBoundingClientRect();
+    if (/^party.*/i.test(text)) {
+      this.burst(window.innerWidth * 0.3, window.innerHeight * 0.35, 130);
+      this.burst(window.innerWidth * 0.7, window.innerHeight * 0.3, 130);
+      this.setState({ magic: '' });
+      return;
+    }
+    const ix = text.indexOf(':');
+    const label = ix > 0 ? text.slice(0, ix).trim() : text;
+    const value = ix > 0 ? text.slice(ix + 1).trim() : '✨';
+    this.setRows(this.getRows().concat([{ id: 'u' + Date.now(), depth: 0, label, value, parent: null }]));
+    this.setState({ magic: '' });
+    this.burst(r.left + r.width / 2, r.top, 50);
+  };
+
+  renderVals() {
+    const rows = this.getRows();
+    const collapsedIds = new Set(rows.filter((r) => r.branch && r.collapsed).map((r) => r.id));
+    const hidden = (r) => {
+      let cur = r;
+      while (cur && cur.parent) {
+        if (collapsedIds.has(cur.parent)) return true;
+        cur = rows.find((x) => x.id === cur.parent);
+      }
+      return false;
+    };
+    const dots = ['#59bdff', '#ffc20e', '#a8e61d', '#ffa3b1', '#59ff9c', '#ff7e00'];
+    let leafIx = 0;
+    const visibleRows = rows.filter((r) => !hidden(r)).map((r) => ({
+      ...r,
+      pad: 10 + r.depth * 24 + 'px',
+      isBranch: !!r.branch,
+      isLeaf: !r.branch,
+      isEditing: this.state.editingId === r.id,
+      notEditing: this.state.editingId !== r.id,
+      dot: dots[leafIx++ % dots.length],
+      caret: r.collapsed ? '▸' : '▾',
+      count: rows.filter((x) => x.parent === r.id).length,
+      onToggle: () => this.toggle(r.id),
+      onEdit: () => this.startEdit(r),
+      onDelete: () => this.deleteRow(r.id)
+    }));
+
+    return {
+      visibleRows,
+      isEmpty: rows.length === 0,
+      thingCount: rows.length,
+      selPath: this.state.selPath,
+      draft: this.state.draft,
+      draftChange: this.draftChange,
+      draftKey: this.draftKey,
+      commitEdit: this.commitEdit,
+      magic: this.state.magic,
+      magicChange: this.magicChange,
+      magicKey: this.magicKey,
+      setCanvas: this.setCanvas,
+      resetDemo: this.resetDemo
+    };
+  }
+}
+</script>
+</body>
+</html>

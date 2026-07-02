@@ -47,7 +47,11 @@ if css_tag in html:
 for f in order[:4]:
     html = re.sub(r'\n?[ \t]*<script src="%s"></script>' % re.escape(f), '', html)
 
-leftover = re.search(r'(src|href)="(?!https?://|#|mailto:)[^"]+"', html)
+# cross-entry navigation: links between dc sources become links between bundles
+html = re.sub(r'href="([^"]*/)?[^/"]+\.dc\.html(#[^"]*)?"',
+              lambda m: 'href="%sindex.html%s"' % (m.group(1) or '', m.group(2) or ''), html)
+
+leftover = re.search(r'(src|href)="(?!https?://|#|mailto:|(\.\./[^"]+/)?index\.html(#|"))[^"]+"', html)
 assert not leftover, f'local ref remains: {leftover.group(0)}'
 (folder / 'index.html').write_text(html, encoding='utf-8')
 print(f'{folder / "index.html"}: {len(html)} bytes')
