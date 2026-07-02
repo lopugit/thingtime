@@ -46,6 +46,10 @@ kept as a compatibility alias.
 
 Local branch metadata is managed automatically by `remix/scripts/pre-dev.sh`.
 That script updates `remix/.env.auto`; do not edit that generated block by hand.
+The local dev launcher loads `remix/.env`, `remix/.env.local`, and
+`remix/.env.auto` before spawning Nitro and Vite, so ignored private values like
+MongoDB credentials are available to local API status checks without committing
+secrets.
 
 Build and verify the Vercel output with:
 

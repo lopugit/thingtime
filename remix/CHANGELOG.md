@@ -16,6 +16,19 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Fixed
+
+- Aligned the compact footer environment selector with the status rows, restored
+  browser scroll position after reloads via React Router scroll restoration, and
+  loaded ignored local env files into the Nitro/Vite dev launcher so localhost
+  MongoDB status checks can see configured credentials. — _Codex (AI),
+  2026-07-03_
+
+### PR #26 - Environment-Aware Footer Status Checks
+
+Detailed PR notes:
+[PRs/26-codex-migrate-remix-to-nitro--add-environment-aware-footer-status-checks.md](PRs/26-codex-migrate-remix-to-nitro--add-environment-aware-footer-status-checks.md)
+
 ### Added
 
 - Added an environment-aware footer status selector for this tab, local,
