@@ -46,6 +46,10 @@ kept as a compatibility alias.
 
 Local branch metadata is managed automatically by `remix/scripts/pre-dev.sh`.
 That script updates `remix/.env.auto`; do not edit that generated block by hand.
+The local dev launcher loads `remix/.env`, `remix/.env.local`, and
+`remix/.env.auto` before spawning Nitro and Vite, so ignored private values like
+MongoDB credentials are available to local API status checks without committing
+secrets.
 
 Build and verify the Vercel output with:
 
@@ -197,6 +201,21 @@ a Vercel team slug that differs from the GitHub repository owner.
 Vercel automatically provides variables such as `VERCEL`, `VERCEL_ENV`,
 `VERCEL_URL`, `VERCEL_BRANCH_URL`, `VERCEL_GIT_COMMIT_REF`, and
 `VERCEL_GIT_COMMIT_SHA` during deployments.
+
+The footer environment selector can compare public origins for this tab, local,
+development, staging, and production. These values are browser-visible
+`THINGTIME_` values, so use public origins only and never include tokens,
+passwords, or other secrets:
+
+```sh
+THINGTIME_PRODUCTION_STATUS_ORIGIN="https://thingtime.com"
+THINGTIME_DEV_STATUS_ORIGIN="https://dev.thingtime.com"
+THINGTIME_STAGING_STATUS_ORIGIN="https://staging.thingtime.com"
+THINGTIME_LOCAL_STATUS_ORIGIN="http://localhost:9999"
+```
+
+Unset values fall back to `https://thingtime.com`, `https://dev.thingtime.com`,
+`https://staging.thingtime.com`, and `http://localhost:9999`.
 
 ## Public env exposure rule
 

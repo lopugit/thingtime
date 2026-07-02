@@ -5,8 +5,9 @@ import { Rocket } from 'lucide-react';
 
 import type { VercelDeploymentStatus } from '~/api/utils/vercel/status';
 import { StatusRefreshButton } from '~/components/Status/StatusRefreshButton';
+import { getStatusEndpoint, getStatusHref } from '~/components/Status/statusEnvironment';
 
-const STATUS_ENDPOINT = '/api/v1/vercel/status';
+const STATUS_ENDPOINT = '/api/v1/health/vercel';
 const ACTIVE_POLL_MS = 5000;
 const STATUS_COLORS = {
   unavailable: '#A0AEC0',
@@ -51,7 +52,7 @@ const getProgressLeft = (progress: number) => {
   return `${Math.max(0, Math.min(100, progress))}%`;
 };
 
-export const VercelStatus = (props) => {
+export const VercelStatus = (props: { chakras?: Record<string, unknown>; targetOrigin?: string }) => {
   const [status, setStatus] = React.useState<VercelDeploymentStatus | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [refreshTick, setRefreshTick] = React.useState(0);
@@ -61,11 +62,14 @@ export const VercelStatus = (props) => {
     let timeoutId: number | undefined;
     let xhr: XMLHttpRequest | undefined;
 
+    setStatus(null);
+    setError(null);
+
     const requestStatus = () => {
       xhr?.abort();
       xhr = new XMLHttpRequest();
 
-      xhr.open('GET', STATUS_ENDPOINT);
+      xhr.open('GET', getStatusEndpoint(STATUS_ENDPOINT, props.targetOrigin));
       xhr.setRequestHeader('Accept', 'application/json');
 
       xhr.onload = () => {
@@ -112,7 +116,7 @@ export const VercelStatus = (props) => {
         window.clearTimeout(timeoutId);
       }
     };
-  }, [refreshTick]);
+  }, [props.targetOrigin, refreshTick]);
 
   const refreshStatus = React.useCallback(() => {
     setStatus(null);
@@ -190,7 +194,8 @@ export const VercelStatus = (props) => {
       {refreshButton}
       <Box
         as="a"
-        href="/vercel"
+        href={getStatusHref(props.targetOrigin, '/vercel')}
+        target={props.targetOrigin ? '_blank' : undefined}
         aria-label="Open Vercel deployments dashboard"
         title="Open Vercel deployments dashboard"
         color="#319795"

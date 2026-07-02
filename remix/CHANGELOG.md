@@ -16,6 +16,32 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Fixed
+
+- Made the compact footer environment selector text flush-left with the footer
+  column and vertically centered by replacing the native select with a custom
+  menu button. — _Codex (AI), 2026-07-03_
+- Made the footer environment selector default to `Current Tab` per browser
+  origin, added a current branch deployment option, and reset status rows to
+  checking immediately when the target environment changes. — _Codex (AI),
+  2026-07-03_
+- Aligned the compact footer environment selector with the status rows, restored
+  browser scroll position after reloads via React Router scroll restoration, and
+  loaded ignored local env files into the Nitro/Vite dev launcher so localhost
+  MongoDB status checks can see configured credentials. — _Codex (AI),
+  2026-07-03_
+
+### PR #26 - Environment-Aware Footer Status Checks
+
+Detailed PR notes:
+[PRs/26-codex-migrate-remix-to-nitro--add-environment-aware-footer-status-checks.md](PRs/26-codex-migrate-remix-to-nitro--add-environment-aware-footer-status-checks.md)
+
+### Added
+
+- Added an environment-aware footer status selector for this tab, local,
+  development, staging, and production targets, with compact Nitro API,
+  frontend, Vercel, and MongoDB checks. — _Codex (AI), 2026-07-02_
+
 ### PR #24 - Nitro React Router Migration
 
 Detailed PR notes:

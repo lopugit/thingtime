@@ -1,4 +1,4 @@
-import { Outlet, useLoaderData, useRevalidator } from 'react-router';
+import { Outlet, ScrollRestoration, useLoaderData, useRevalidator } from 'react-router';
 import { Analytics } from '@vercel/analytics/react';
 import React from 'react';
 
@@ -87,6 +87,7 @@ export default function App() {
           <Outlet />
         </Main>
       </ThingtimeProvider>
+      <ScrollRestoration />
       {mounted ? <Analytics /> : null}
     </ChakraWrapper>
   );
