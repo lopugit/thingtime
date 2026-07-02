@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    html, body { margin: 0; padding: 0; background: #ffffff; }
+    @keyframes moving-rainbow{0%{background-position:0 0}100%{background-position:calc(100px + 200%) 0}
+  </style>
+  <link rel="stylesheet" href="ds/thingtime-bundle.css">
+  <script src="ds/react.js"></script>
+  <script src="ds/react-dom.js"></script>
+  <script src="ds/thingtime-bundle.js"></script>
+  <script src="ds/tt-elements.js"></script>
+</helmet>
+<div data-screen-label="1h Ultra minimal" style="width:100%; max-width:980px; margin:0 auto; background:#ffffff; color:#1a1a1a; display:flex; flex-direction:column;">
+          <div style="display:flex; flex-direction:column; align-items:center; text-align:center; padding:96px 40px 84px;">
+            <tt-logo theme="nature" voxel-size="17" space="0px"></tt-logo>
+            <p style="margin:44px 0 0; font-size:24px; font-weight:600; letter-spacing:-0.01em;">Store anything. Share everything.</p>
+            <div style="margin-top:30px; background:hotpink; color:#fff; font-weight:800; font-size:16px; padding:15px 26px; border:3px solid #1a1a1a; box-shadow:6px 6px 0 #1a1a1a;">Open Thingtime</div>
+            <div style="margin-top:16px; font-size:13.5px; color:#8a8a8a;">or <span style="color:#6f3198; font-weight:700;">back the launch 💖</span></div>
+          </div>
+          <div style="height:10px; background:linear-gradient(to right, #f34a4a, #ffbc48, #58ca70, #47b5e6, #a555e8, #f34a4a); background-size:calc(100px + 200%); animation:moving-rainbow 5s linear infinite;"></div>
+        </div>
+</x-dc>
+</body>
+</html>
