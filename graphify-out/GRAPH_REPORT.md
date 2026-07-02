@@ -1,16 +1,16 @@
-# Graph Report - ignore-cancelled-vercel-status  (2026-06-24)
+# Graph Report - add-ios-webview-shell  (2026-07-02)
 
 ## Corpus Check
-- 246 files · ~569,020 words
+- 272 files · ~588,741 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 1354 nodes · 2449 edges · 97 communities (80 shown, 17 thin omitted)
-- Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 21 edges (avg confidence: 0.8)
+- 1459 nodes · 2574 edges · 110 communities (88 shown, 22 thin omitted)
+- Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 23 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `d3b530ee`
+- Built from commit: `69bb0c6b`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -80,6 +80,7 @@
 - [[_COMMUNITY_Community 76|Community 76]]
 - [[_COMMUNITY_Community 77|Community 77]]
 - [[_COMMUNITY_Community 78|Community 78]]
+- [[_COMMUNITY_Community 79|Community 79]]
 - [[_COMMUNITY_Community 80|Community 80]]
 - [[_COMMUNITY_Community 81|Community 81]]
 - [[_COMMUNITY_Community 82|Community 82]]
@@ -98,6 +99,18 @@
 - [[_COMMUNITY_Community 96|Community 96]]
 - [[_COMMUNITY_Community 97|Community 97]]
 - [[_COMMUNITY_Community 98|Community 98]]
+- [[_COMMUNITY_Community 99|Community 99]]
+- [[_COMMUNITY_Community 100|Community 100]]
+- [[_COMMUNITY_Community 101|Community 101]]
+- [[_COMMUNITY_Community 102|Community 102]]
+- [[_COMMUNITY_Community 103|Community 103]]
+- [[_COMMUNITY_Community 104|Community 104]]
+- [[_COMMUNITY_Community 105|Community 105]]
+- [[_COMMUNITY_Community 108|Community 108]]
+- [[_COMMUNITY_Community 110|Community 110]]
+- [[_COMMUNITY_Community 111|Community 111]]
+- [[_COMMUNITY_Community 112|Community 112]]
+- [[_COMMUNITY_Community 114|Community 114]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `useThingtime()` - 38 edges
@@ -114,25 +127,25 @@
 ## Surprising Connections (you probably didn't know these)
 - `Index()` --calls--> `useThingtime()`  [INFERRED]
   remix/app/routes/_index.tsx → remix/app/components/Thingtime/useThingtime.tsx
+- `ThingtimeApp` --implements--> `app`  [EXTRACTED]
+  iOS/Thingtime/App/ThingtimeApp.swift → api/src/index.js
 - `action()` --calls--> `serializeAuthCookie()`  [INFERRED]
   remix/app/routes/api/v1/login/_login.tsx → remix/app/api/utils/auth/authCookie.ts
 - `action()` --calls--> `loginUser()`  [INFERRED]
   remix/app/routes/api/v1/login/_login.tsx → remix/app/api/utils/auth/loginUser.ts
 - `loader()` --calls--> `getMongoStatus()`  [INFERRED]
   remix/app/routes/api/v1/mongodb/status-data/_status-data.tsx → remix/app/api/utils/mongodb/status.ts
-- `action()` --calls--> `getMongoStatus()`  [INFERRED]
-  remix/app/routes/api/v1/mongodb/status/_status.tsx → remix/app/api/utils/mongodb/status.ts
 
 ## Import Cycles
-- 3-file cycle: `remix/app/api/utils/mongodb/connection.ts -> remix/app/routes/api/v1/mongodb/get-connection/_get-connection.tsx -> remix/app/api/utils/userCheckExists.ts -> remix/app/api/utils/mongodb/connection.ts`
 - 3-file cycle: `remix/app/api/utils/mongodb/connection.ts -> remix/app/routes/api/v1/mongodb/get-connection/_get-connection.tsx -> remix/app/api/utils/userValidatePassword.ts -> remix/app/api/utils/mongodb/connection.ts`
+- 3-file cycle: `remix/app/api/utils/mongodb/connection.ts -> remix/app/routes/api/v1/mongodb/get-connection/_get-connection.tsx -> remix/app/api/utils/userCheckExists.ts -> remix/app/api/utils/mongodb/connection.ts`
 - 3-file cycle: `remix/app/Providers/ThingtimeProvider.tsx -> remix/app/hooks/useThingtimeMachine.tsx -> remix/app/components/Thingtime/useThingtime.tsx -> remix/app/Providers/ThingtimeProvider.tsx`
 
-## Communities (97 total, 17 thin omitted)
+## Communities (110 total, 22 thin omitted)
 
 ### Community 0 - "Community 0"
-Cohesion: 0.06
-Nodes (85): openNewFinderWindow(), regexToReplacementConverter(), regexTrim(), any(), convert(), applyFilter(), flip(), optimize() (+77 more)
+Cohesion: 0.17
+Nodes (13): MongoStatus(), pulse, STATUS_COLORS, MongoConnectionStatus, spin, StatusRefreshButton(), VercelDeploymentStatus, getDisplayPhase() (+5 more)
 
 ### Community 1 - "Community 1"
 Cohesion: 0.22
@@ -160,15 +173,15 @@ Nodes (38): author, categories, commands, contributors, dependencies, fuse.js, m
 
 ### Community 7 - "Community 7"
 Cohesion: 0.09
-Nodes (24): assets, value, newTimeline(), ThingtimeLine(), Timeline, TimelineEvent, TimelineScaffold, Timemachine (+16 more)
+Nodes (23): assets, value, newTimeline(), PathArray, ThingtimeLine(), Timeline, TimelineEvent, TimelineScaffold (+15 more)
 
 ### Community 8 - "Community 8"
 Cohesion: 0.07
 Nodes (15): createObjectProperties(), deepForEach(), ee(), epp(), escapeEscapes(), escapePropertyPath(), forEachArray(), forEachObject() (+7 more)
 
 ### Community 9 - "Community 9"
-Cohesion: 0.06
-Nodes (38): Session, ClientCacheProvider(), createEmotionServerInstance, EmotionServerFactory, getExport(), handleRequest(), resolveEmotionServerFactory(), App() (+30 more)
+Cohesion: 0.19
+Nodes (15): ClientCacheProvider(), createEmotionServerInstance, EmotionServerFactory, getExport(), handleRequest(), resolveEmotionServerFactory(), createEmotionCache(), defaultEmotionCache (+7 more)
 
 ### Community 10 - "Community 10"
 Cohesion: 0.14
@@ -183,8 +196,8 @@ Cohesion: 0.08
 Nodes (25): author, bugs, url, dependencies, smarts, ts-node, typescript, description (+17 more)
 
 ### Community 13 - "Community 13"
-Cohesion: 0.22
-Nodes (9): scripts, build, dev, ensure-bcrypt, format, lint, lint-fix, postinstall (+1 more)
+Cohesion: 0.18
+Nodes (11): Session, App(), Document, DocumentProps, getDeploymentBranchName(), loader(), RootLoaderData, shouldShowDeploymentStatus() (+3 more)
 
 ### Community 14 - "Community 14"
 Cohesion: 0.11
@@ -195,8 +208,8 @@ Cohesion: 0.11
 Nodes (18): compilerOptions, allowJs, baseUrl, esModuleInterop, forceConsistentCasingInFileNames, isolatedModules, jsx, lib (+10 more)
 
 ### Community 16 - "Community 16"
-Cohesion: 0.07
-Nodes (62): authCookie, clearAuthCookie(), getAuthToken(), serializeAuthCookie(), shouldShowDevVerificationLink(), SendArgs, sendEmail(), sendVerificationEmail() (+54 more)
+Cohesion: 0.06
+Nodes (70): authCookie, clearAuthCookie(), getAuthToken(), serializeAuthCookie(), shouldShowDevVerificationLink(), SendArgs, sendEmail(), sendVerificationEmail() (+62 more)
 
 ### Community 17 - "Community 17"
 Cohesion: 0.18
@@ -234,6 +247,10 @@ Nodes (9): createScopedEval(), load(), parse(), parser(), play(), primitives(), 
 Cohesion: 0.25
 Nodes (9): deletesmart(), getsmart(), parsePropertyArray(), parsePropertyPath(), pathToArray(), pathToString(), ppa(), ppp() (+1 more)
 
+### Community 26 - "Community 26"
+Cohesion: 0.09
+Nodes (14): TestAPI(), Branding(), Logo(), Attention(), Hamburger(), Editor(), TopSpacing(), Raw() (+6 more)
+
 ### Community 27 - "Community 27"
 Cohesion: 0.25
 Nodes (7): env, es2020, node, extends, parser, plugins, root
@@ -259,16 +276,16 @@ Cohesion: 0.29
 Nodes (6): APIs, Bugs, Discuss, Encoding and Decoding Tools, Files, WebP Codec
 
 ### Community 33 - "Community 33"
-Cohesion: 0.17
-Nodes (11): Auth and Lopu AI, 💹 Donate on Indiegogo to save humanity 🩷, Force Push ? 👉👈, MongoDB, Or Donate on GoFundMe 💖, Public env exposure rule, Remix app, Setup for Forks (+3 more)
+Cohesion: 0.15
+Nodes (12): Auth and Lopu AI, 💹 Donate on Indiegogo to save humanity 🩷, Force Push ? 👉👈, MongoDB, Native iOS TestFlight web URL, Or Donate on GoFundMe 💖, Public env exposure rule, Remix app (+4 more)
 
 ### Community 34 - "Community 34"
-Cohesion: 0.40
-Nodes (4): app, io, server, smarts
+Cohesion: 0.10
+Nodes (19): Context, Coordinator, Any, String, URL, NSObject, SwiftUI, UIViewRepresentable (+11 more)
 
 ### Community 35 - "Community 35"
 Cohesion: 0.17
-Nodes (11): Submit(), useAsyncFetcher(), RawResult(), RawResultProps, Index(), ThingtimeURL(), EverythingTypes, ThingtimeTypes (+3 more)
+Nodes (11): Submit(), useAsyncFetcher(), ThingtimeContext, ThingtimeTypes, Index(), ThingtimeURL(), EverythingTypes, ThingtimeTypes (+3 more)
 
 ### Community 36 - "Community 36"
 Cohesion: 0.50
@@ -291,24 +308,24 @@ Cohesion: 0.50
 Nodes (3): Codex workspace notes, Delivery messaging, graphify
 
 ### Community 45 - "Community 45"
-Cohesion: 0.29
-Nodes (8): CurrentUser, useCurrentUser(), Footer(), Nav(), ProfileDrawer(), Welcome(), RainbowSkeleton(), UserCard()
+Cohesion: 0.06
+Nodes (85): openNewFinderWindow(), regexToReplacementConverter(), regexTrim(), any(), convert(), applyFilter(), flip(), optimize() (+77 more)
 
 ### Community 46 - "Community 46"
-Cohesion: 0.14
-Nodes (10): TestAPI(), Branding(), Logo(), Editor(), TopSpacing(), Raw(), RawResults(), checkerMatrix (+2 more)
+Cohesion: 0.47
+Nodes (3): sanitise(), usePath(), getParentPath()
 
 ### Community 49 - "Community 49"
 Cohesion: 0.50
 Nodes (3): Fundamentals (read first), graphify, Shared agent instructions
 
 ### Community 72 - "Community 72"
-Cohesion: 0.16
-Nodes (13): commanderArgs, CommanderV1(), CommanderV2(), sanitise(), usePath(), PathArray, MagicInput, MagicInputProps (+5 more)
+Cohesion: 0.17
+Nodes (14): commanderArgs, CommanderV1(), getMeta(), safe(), useThings(), MagicInput, MagicInputProps, Safe() (+6 more)
 
 ### Community 73 - "Community 73"
-Cohesion: 0.09
-Nodes (24): FALLBACK_MUSINGS, ALL_MODES, buildContextLine(), buildUserPrompt(), fetchWeather(), generateLopuMusing(), hasLopuAiProviderConfigured, LopuContext (+16 more)
+Cohesion: 0.11
+Nodes (16): FALLBACK_MUSINGS, ALL_MODES, buildContextLine(), buildUserPrompt(), fetchWeather(), generateLopuMusing(), hasLopuAiProviderConfigured, LopuContext (+8 more)
 
 ### Community 74 - "Community 74"
 Cohesion: 0.29
@@ -329,6 +346,10 @@ Nodes (7): extends, root, rules, no-unused-vars, @typescript-eslint/no-unused-va
 ### Community 78 - "Community 78"
 Cohesion: 0.17
 Nodes (11): [1.0.0] - YYYY-MM-DD, Added, Changed, Changed, Changelog, Fixed, Fixed, PR #13 - Remix Hydration, Vercel Status, And Deployment Hygiene (+3 more)
+
+### Community 79 - "Community 79"
+Cohesion: 0.40
+Nodes (4): Build And Test, Setup, TestFlight Upload, Thingtime iOS
 
 ### Community 80 - "Community 80"
 Cohesion: 0.13
@@ -355,8 +376,8 @@ Cohesion: 0.29
 Nodes (6): 05 — Authed DB Write (Create / Update / Delete) 🔴, Acceptance criteria, Goal, Plan, Security notes, What exists (to build on)
 
 ### Community 86 - "Community 86"
-Cohesion: 0.24
-Nodes (8): getMeta(), safe(), useThings(), Icon(), Safe(), SettingsMenu(), ThingtimeComponentProps, ThingtimeProps
+Cohesion: 0.05
+Nodes (15): ThingtimeApp, Foundation, Any, String, URL, Scene, app, io (+7 more)
 
 ### Community 87 - "Community 87"
 Cohesion: 0.33
@@ -383,36 +404,60 @@ Cohesion: 0.29
 Nodes (5): initial, install, path, repaired, { spawnSync }
 
 ### Community 93 - "Community 93"
-Cohesion: 0.17
-Nodes (13): MongoStatus(), pulse, STATUS_COLORS, MongoConnectionStatus, spin, StatusRefreshButton(), VercelDeploymentStatus, getDisplayPhase() (+5 more)
+Cohesion: 0.22
+Nodes (7): ChakraWrapper(), colors, space, spaceObj, theme, ChakraButton, ChakraButtonProps
 
 ### Community 94 - "Community 94"
 Cohesion: 0.12
-Nodes (17): DevKit(), spin, useApi(), Login(), inputSx, Register(), blink, CONTAINER_STYLE (+9 more)
+Nodes (19): DevKit(), spin, useApi(), Icon(), Login(), inputSx, Register(), blink (+11 more)
 
-### Community 98 - "Community 98"
+### Community 102 - "Community 102"
+Cohesion: 0.33
+Nodes (7): NativeBridgeHost(), getNativeBridge(), isNativeBridgeAvailable(), postNativeBridgeMessage(), ThingtimeBridgeMessage, ThingtimeNativeBridge, Window
+
+### Community 103 - "Community 103"
+Cohesion: 0.29
+Nodes (5): chakras, chakrasDark, chakrasLight, g, greys
+
+### Community 104 - "Community 104"
+Cohesion: 0.50
+Nodes (3): Apple Developer And TestFlight Flow, Common Command, Thingtime iOS Agent Runbook
+
+### Community 105 - "Community 105"
+Cohesion: 0.29
+Nodes (6): Available Actions, Installation, iOS, ios beta, ios build, ios generate
+
+### Community 108 - "Community 108"
+Cohesion: 0.27
+Nodes (9): CommanderV2(), CurrentUser, useCurrentUser(), Footer(), Nav(), ProfileDrawer(), Welcome(), RainbowSkeleton() (+1 more)
+
+### Community 111 - "Community 111"
+Cohesion: 0.22
+Nodes (9): scripts, build, dev, ensure-bcrypt, format, lint, lint-fix, postinstall (+1 more)
+
+### Community 112 - "Community 112"
 Cohesion: 0.25
 Nodes (7): engines, node, private, resolutions, @types/react, sideEffects, version
 
 ## Knowledge Gaps
-- **505 isolated node(s):** `extends`, `name`, `version`, `description`, `main` (+500 more)
+- **533 isolated node(s):** `extends`, `name`, `version`, `description`, `main` (+528 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **17 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **22 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `useThingtime()` connect `Community 35` to `Community 7`, `Community 72`, `Community 39`, `Community 45`, `Community 46`, `Community 86`, `Community 94`?**
-  _High betweenness centrality (0.022) - this node is a cross-community bridge._
+- **Why does `useThingtime()` connect `Community 35` to `Community 7`, `Community 72`, `Community 39`, `Community 108`, `Community 46`, `Community 26`, `Community 94`?**
+  _High betweenness centrality (0.018) - this node is a cross-community bridge._
 - **Why does `getMongoUri()` connect `Community 2` to `Community 16`?**
   _High betweenness centrality (0.007) - this node is a cross-community bridge._
-- **Why does `Thingtime()` connect `Community 39` to `Community 2`, `Community 35`, `Community 7`, `Community 72`, `Community 86`, `Community 94`?**
-  _High betweenness centrality (0.007) - this node is a cross-community bridge._
+- **Why does `Icon()` connect `Community 94` to `Community 72`, `Community 26`, `Community 108`?**
+  _High betweenness centrality (0.005) - this node is a cross-community bridge._
 - **Are the 2 inferred relationships involving `useThingtime()` (e.g. with `Login()` and `Index()`) actually correct?**
   _`useThingtime()` has 2 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 3 inferred relationships involving `getVercelDeploymentStatus()` (e.g. with `loader()` and `action()`) actually correct?**
   _`getVercelDeploymentStatus()` has 3 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `extends`, `name`, `version` to the rest of the system?**
-  _505 weakly-connected nodes found - possible documentation gaps or missing edges._
-- **Should `Community 0` be split into smaller, more focused modules?**
-  _Cohesion score 0.057566220823498555 - nodes in this community are weakly interconnected._
+  _533 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **Should `Community 2` be split into smaller, more focused modules?**
+  _Cohesion score 0.08636363636363636 - nodes in this community are weakly interconnected._
