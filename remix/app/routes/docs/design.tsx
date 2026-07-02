@@ -14,7 +14,7 @@ import {
   Stack,
   Text
 } from '@chakra-ui/react';
-import { ExternalLink, Maximize2, Search, X } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Maximize2, Search, X } from 'lucide-react';
 import { useSearchParams } from 'react-router';
 
 import {
@@ -54,38 +54,48 @@ export default function DocsDesign() {
     );
   }, [query]);
 
+  React.useEffect(() => {
+    if (!expandedPreview) {
+      return undefined;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setExpandedPreview(false);
+      }
+    };
+
+    window.addEventListener('keydown', closeOnEscape);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [expandedPreview]);
+
   const selectEntry = (slug: string) => {
     const next = new URLSearchParams(searchParams);
     next.set('entry', slug);
     setSearchParams(next);
   };
 
-  const openFullscreen = async () => {
-    if (previewRef.current?.requestFullscreen) {
-      try {
-        await previewRef.current.requestFullscreen();
-        return;
-      } catch {
-        setExpandedPreview(true);
-        return;
-      }
-    }
-
+  const openFullscreen = () => {
     setExpandedPreview(true);
   };
 
-  const closeExpandedPreview = async () => {
+  const closeExpandedPreview = () => {
     setExpandedPreview(false);
-
-    if (document.fullscreenElement && document.exitFullscreen) {
-      await document.exitFullscreen();
-    }
   };
 
   const selectedKindColor = kindColors[selectedEntry.kind] || kindColors.Direction;
 
   return (
     <Grid
+      w="100%"
+      overflow="hidden"
       templateColumns={{
         base: '1fr',
         xl: '280px minmax(0, 1fr)',
@@ -94,8 +104,8 @@ export default function DocsDesign() {
       columnGap={8}
       rowGap={6}
     >
-      <Box as="aside" minW={0}>
-        <Box position={{ base: 'relative', xl: 'sticky' }} top="96px">
+      <Box as="aside" minW={0} maxW="100%" overflow="hidden">
+        <Box position={{ base: 'relative', xl: 'sticky' }} top="96px" minW={0} maxW="100%">
           <Flex align="center" gap={2} mb={4}>
             <Badge bg="#d7f5df" color="#0f5132" borderRadius="sm" px={2}>
               Design
@@ -120,7 +130,13 @@ export default function DocsDesign() {
             />
           </Box>
 
-          <Stack spacing={1} maxH={{ base: 'none', xl: 'calc(100vh - 190px)' }} overflowY="auto" pr={{ base: 0, xl: 2 }}>
+          <Stack
+            spacing={1}
+            maxH={{ base: 'none', xl: 'calc(100vh - 190px)' }}
+            overflowX="hidden"
+            overflowY="auto"
+            pr={{ base: 0, xl: 2 }}
+          >
             {filteredEntries.map((entry) => {
               const active = entry.slug === selectedEntry.slug;
               const kindColor = kindColors[entry.kind] || kindColors.Direction;
@@ -137,16 +153,19 @@ export default function DocsDesign() {
                   borderColor={active ? 'blackAlpha.300' : 'transparent'}
                   borderRadius="md"
                   cursor="pointer"
+                  display="block"
+                  maxW="100%"
                   p={3}
                   textAlign="left"
                   transition="background 120ms ease, border-color 120ms ease"
+                  w="100%"
                   _hover={{ bg: 'white', borderColor: 'blackAlpha.200' }}
                 >
-                  <Flex align="center" gap={2} mb={2}>
-                    <Badge bg={kindColor.bg} color={kindColor.color} borderRadius="sm" px={2}>
+                  <Flex align="center" gap={2} mb={2} minW={0}>
+                    <Badge bg={kindColor.bg} color={kindColor.color} borderRadius="sm" flexShrink={0} px={2}>
                       {entry.kind}
                     </Badge>
-                    <Text color="gray.500" fontSize="xs" fontFamily="mono" overflowWrap="anywhere">
+                    <Text color="gray.500" flex="1" fontSize="xs" fontFamily="mono" minW={0} overflowWrap="anywhere">
                       {entry.slug}
                     </Text>
                   </Flex>
@@ -164,12 +183,12 @@ export default function DocsDesign() {
       </Box>
 
       <Stack spacing={5} minW={0}>
-        <Box borderBottom="1px solid" borderColor="blackAlpha.200" pb={5}>
-          <Flex align="center" gap={2} mb={4} wrap="wrap">
+        <Box borderBottom="1px solid" borderColor="blackAlpha.200" pb={5} minW={0}>
+          <Flex align="center" gap={2} mb={4} minW={0} wrap="wrap">
             <Badge bg={selectedKindColor.bg} color={selectedKindColor.color} borderRadius="sm" px={2}>
               {selectedEntry.kind}
             </Badge>
-            <Text color="gray.500" fontSize="sm" fontFamily="mono" overflowWrap="anywhere">
+            <Text color="gray.500" fontSize="sm" fontFamily="mono" minW={0} overflowWrap="anywhere">
               /docs/design?entry={selectedEntry.slug}
             </Text>
           </Flex>
@@ -207,7 +226,7 @@ export default function DocsDesign() {
                 onClick={openFullscreen}
                 leftIcon={<Icon as={Maximize2} boxSize={4} />}
               >
-                Fullscreen
+                Preview full screen
               </Button>
             </Flex>
           </Flex>
@@ -222,36 +241,45 @@ export default function DocsDesign() {
           overflow="hidden"
           position={expandedPreview ? 'fixed' : 'relative'}
           inset={expandedPreview ? 0 : undefined}
-          zIndex={expandedPreview ? 10000 : undefined}
+          zIndex={expandedPreview ? 12000 : undefined}
           h={expandedPreview ? '100vh' : undefined}
           w={expandedPreview ? '100vw' : undefined}
           minH={{ base: '68vh', xl: 'calc(100vh - 260px)' }}
-          sx={{
-            '&:fullscreen': {
-              border: '0',
-              borderRadius: '0',
-              height: '100vh',
-              width: '100vw'
-            },
-            '&:fullscreen iframe': {
-              borderRadius: '0',
-              height: '100vh'
-            }
-          }}
         >
           {expandedPreview ? (
-            <IconButton
-              aria-label="Close full-screen preview"
-              icon={<Icon as={X} boxSize={5} />}
-              position="absolute"
-              right={4}
-              top={4}
-              zIndex={2}
-              size="sm"
+            <Flex
+              align="center"
               bg="white"
-              boxShadow="0 8px 24px rgba(15, 23, 42, 0.18)"
-              onClick={closeExpandedPreview}
-            />
+              borderBottom="1px solid"
+              borderColor="blackAlpha.200"
+              gap={3}
+              h="56px"
+              left={0}
+              px={{ base: 3, md: 4 }}
+              position="absolute"
+              right={0}
+              top={0}
+              zIndex={2}
+            >
+              <Button
+                data-testid="design-preview-close"
+                leftIcon={<Icon as={ArrowLeft} boxSize={4} />}
+                onClick={closeExpandedPreview}
+                size="sm"
+                variant="outline"
+              >
+                Back / close preview
+              </Button>
+              <Text color="gray.600" flex="1" fontSize="sm" fontWeight="650" isTruncated>
+                {selectedEntry.title}
+              </Text>
+              <IconButton
+                aria-label="Close full-screen preview"
+                icon={<Icon as={X} boxSize={5} />}
+                size="sm"
+                onClick={closeExpandedPreview}
+              />
+            </Flex>
           ) : null}
           <iframe
             data-testid="design-preview-frame"
@@ -262,7 +290,8 @@ export default function DocsDesign() {
             style={{
               border: 0,
               display: 'block',
-              height: '100%',
+              height: expandedPreview ? 'calc(100vh - 56px)' : '100%',
+              marginTop: expandedPreview ? '56px' : 0,
               minHeight: 'inherit',
               width: '100%'
             }}

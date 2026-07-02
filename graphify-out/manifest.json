@@ -495,9 +495,9 @@
     "semantic_hash": "27bff4852d6ff45c5820a31822a9b3b9"
   },
   "remix/app/components/Nav/Footer.tsx": {
-    "mtime": 1783011258.4669316,
-    "ast_hash": "50f5a27f997a903839af3ae76afc714e",
-    "semantic_hash": "50f5a27f997a903839af3ae76afc714e"
+    "mtime": 1783012681.819084,
+    "ast_hash": "6fba0cba89f00ca7579ca531aab88b57",
+    "semantic_hash": ""
   },
   "remix/app/components/Nav/Nav.tsx": {
     "mtime": 1783011258.467278,
@@ -2820,13 +2820,13 @@
     "semantic_hash": ""
   },
   "remix/app/routes/docs/DocsLayout.tsx": {
-    "mtime": 1783011914.2708433,
-    "ast_hash": "93bbad8c236cef8ac8d627603cb5435d",
+    "mtime": 1783012988.3273494,
+    "ast_hash": "2e264e90ee5fccb348db112858117d52",
     "semantic_hash": ""
   },
   "remix/app/routes/docs/design.tsx": {
-    "mtime": 1783012015.2775495,
-    "ast_hash": "31ec99a63e8f428944b72d0c8d88e7e3",
+    "mtime": 1783012992.6804175,
+    "ast_hash": "52b4c9d1aae5a9fbc1c59a20eb30ef74",
     "semantic_hash": ""
   },
   "remix/app/routes/docs/designEntries.ts": {
