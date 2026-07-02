@@ -21,3 +21,10 @@ minimumReleaseAgeExclude:
   - "@rolldown/binding-wasm32-wasi@1.1.4"
   - "@rolldown/binding-win32-arm64-msvc@1.1.4"
   - "@rolldown/binding-win32-x64-msvc@1.1.4"
+
+# pnpm 10 blocks dependency lifecycle scripts until they are approved. Vercel
+# installs fail under strict build-script policy unless these known dependencies
+# are explicitly allowed to run their install hooks.
+onlyBuiltDependencies:
+  - bcrypt
+  - core-js

@@ -1,7 +1,7 @@
 # Graph Report - thingtime  (2026-07-02)
 
 ## Corpus Check
-- 261 files · ~570,590 words
+- 261 files · ~570,672 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -10,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `bc677593`
+- Built from commit: `3bebcc7c`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -425,12 +425,12 @@ Nodes (3): config, hasFilesystemRoute, indexHtml
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `json()` connect `json` to `getCurrentUser.ts`, `jwt.ts`, `contains`, `root-data.server.ts`, `loginUser.ts`, `_template.tsx`, `registerUser.ts`, `cryptoTools.server.ts`, `Pre-dev Script`?**
-  _High betweenness centrality (0.081) - this node is a cross-community bridge._
 - **Why does `dependencies` connect `Remix Dev/Lint Dependencies` to `getConnection`, `Raycast Manifest & Deps`?**
   _High betweenness centrality (0.073) - this node is a cross-community bridge._
 - **Why does `mongodb` connect `getConnection` to `Remix Dev/Lint Dependencies`?**
   _High betweenness centrality (0.071) - this node is a cross-community bridge._
+- **Why does `json()` connect `json` to `getCurrentUser.ts`, `jwt.ts`, `contains`, `root-data.server.ts`, `loginUser.ts`, `_template.tsx`, `registerUser.ts`, `cryptoTools.server.ts`, `Pre-dev Script`?**
+  _High betweenness centrality (0.046) - this node is a cross-community bridge._
 - **Are the 2 inferred relationships involving `useThingtime()` (e.g. with `Index()` and `Index()`) actually correct?**
   _`useThingtime()` has 2 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `extends`, `name`, `version` to the rest of the system?**

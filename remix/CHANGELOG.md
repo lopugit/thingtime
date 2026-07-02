@@ -36,6 +36,9 @@ Detailed PR notes:
   packages pulled by Vite 8.1.2 so Vercel preview installs can keep the latest
   Vite stack without disabling the broader supply-chain policy. — _Codex (AI),
   2026-07-02_
+- Approved pnpm dependency build scripts for `bcrypt` and `core-js` so strict
+  Vercel installs can complete while keeping unlisted lifecycle scripts blocked.
+  — _Codex (AI), 2026-07-02_
 
 ### PR #16 - Auth And Lopu Hardening
 

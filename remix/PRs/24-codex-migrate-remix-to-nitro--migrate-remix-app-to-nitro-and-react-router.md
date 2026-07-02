@@ -10,6 +10,8 @@
   the stale Remix framework preset.
 - Added exact pnpm release-age exceptions for the locked `rolldown@1.1.4`
   packages required by Vite 8.1.2, preserving the broader release-age policy.
+- Approved pnpm dependency build scripts for `bcrypt` and `core-js`, the
+  lifecycle hooks Vercel blocks during strict preview installs.
 - Updated PM2, root package scripts, README, AGENTS, and CLAUDE runbooks for
   the Vite `9999` plus Nitro `10000` local dev split.
 - Refreshed graphify outputs after the migration and added graphify/build
