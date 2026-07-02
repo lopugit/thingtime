@@ -18,7 +18,7 @@ if (!hasFilesystemRoute) {
 const routes = config.routes ?? [];
 const filesystemIndex = routes.findIndex((route) => route.handle === 'filesystem');
 const apiIndex = routes.findIndex((route) => route.src === '/api/(?:.*)');
-const rootIndex = routes.findIndex((route) => route.src === '/' && route.dest === '/index.html');
+const rootIndex = routes.findIndex((route) => route.src === '^/$' && route.dest === '/index.html');
 const spaIndex = routes.findIndex(
   (route) => route.src === '/(?:.*)' && route.dest === '/index.html'
 );
@@ -30,6 +30,10 @@ if (spaIndex === -1) {
 
 if (rootIndex === -1) {
   throw new Error('Vercel output config does not route / to /index.html.');
+}
+
+if (rootIndex > filesystemIndex) {
+  throw new Error('Vercel output checks filesystem routes before the / static shell rewrite.');
 }
 
 if (filesystemIndex > spaIndex) {

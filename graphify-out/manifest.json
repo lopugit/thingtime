@@ -2110,8 +2110,8 @@
     "semantic_hash": ""
   },
   "remix/scripts/verify-vercel-output.mjs": {
-    "mtime": 1782961721.05312,
-    "ast_hash": "f1f90fdee4acf79081d074268d0e30fa",
+    "mtime": 1782961921.3894145,
+    "ast_hash": "bf96448cf5b5d036275225907f1497c9",
     "semantic_hash": ""
   },
   "remix/server/routes/[...].ts": {
@@ -2155,8 +2155,8 @@
     "semantic_hash": ""
   },
   "remix/scripts/patch-vercel-output.mjs": {
-    "mtime": 1782961710.3164988,
-    "ast_hash": "e8f5d78e5a6849f7f06f58c89e27b5e5",
+    "mtime": 1782961916.8692257,
+    "ast_hash": "1354bb4f2f177738f6a1d3bc8475b089",
     "semantic_hash": ""
   }
 }

@@ -12,10 +12,10 @@ const apiCatchAllRoute = routes.find((route) => route.src === '/api/(?:.*)');
 const serverFallbackRoute = routes.find((route) => route.dest === '/__server');
 
 config.routes = [
+  { src: '^/$', dest: '/index.html' },
   filesystemRoute ?? { handle: 'filesystem' },
   apiRootDataRoute ?? { src: '/api/root-data', dest: '/api/root-data' },
   apiCatchAllRoute ?? { src: '/api/(?:.*)', dest: '/api/[...]' },
-  { src: '/', dest: '/index.html' },
   { src: '/(?:.*)', dest: '/index.html' }
 ];
 
