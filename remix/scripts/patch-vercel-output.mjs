@@ -15,6 +15,7 @@ config.routes = [
   filesystemRoute ?? { handle: 'filesystem' },
   apiRootDataRoute ?? { src: '/api/root-data', dest: '/api/root-data' },
   apiCatchAllRoute ?? { src: '/api/(?:.*)', dest: '/api/[...]' },
+  { src: '/', dest: '/index.html' },
   { src: '/(?:.*)', dest: '/index.html' }
 ];
 

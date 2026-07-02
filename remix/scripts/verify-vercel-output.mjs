@@ -18,6 +18,7 @@ if (!hasFilesystemRoute) {
 const routes = config.routes ?? [];
 const filesystemIndex = routes.findIndex((route) => route.handle === 'filesystem');
 const apiIndex = routes.findIndex((route) => route.src === '/api/(?:.*)');
+const rootIndex = routes.findIndex((route) => route.src === '/' && route.dest === '/index.html');
 const spaIndex = routes.findIndex(
   (route) => route.src === '/(?:.*)' && route.dest === '/index.html'
 );
@@ -27,12 +28,20 @@ if (spaIndex === -1) {
   throw new Error('Vercel output config does not route non-API app paths to /index.html.');
 }
 
+if (rootIndex === -1) {
+  throw new Error('Vercel output config does not route / to /index.html.');
+}
+
 if (filesystemIndex > spaIndex) {
   throw new Error('Vercel output checks the SPA fallback before static filesystem assets.');
 }
 
 if (apiIndex > spaIndex) {
   throw new Error('Vercel output checks the SPA fallback before API routes.');
+}
+
+if (rootIndex > spaIndex) {
+  throw new Error('Vercel output checks the catch-all SPA fallback before the / route.');
 }
 
 if (serverFallbackIndex !== -1 && serverFallbackIndex < spaIndex) {

@@ -1800,8 +1800,8 @@
     "semantic_hash": ""
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1782961517.2208595,
-    "ast_hash": "b9669f204089a0a1fc6d41b0a0e03715",
+    "mtime": 1782961728.279018,
+    "ast_hash": "38acef8e7c8ab56df6bf91a8a45de01d",
     "semantic_hash": ""
   },
   "remix/app/api/utils/vercel/status.ts": {
@@ -2110,8 +2110,8 @@
     "semantic_hash": ""
   },
   "remix/scripts/verify-vercel-output.mjs": {
-    "mtime": 1782961512.9140058,
-    "ast_hash": "41c016e6ae78f96465660ec4a18d414b",
+    "mtime": 1782961721.05312,
+    "ast_hash": "f1f90fdee4acf79081d074268d0e30fa",
     "semantic_hash": ""
   },
   "remix/server/routes/[...].ts": {
@@ -2140,8 +2140,8 @@
     "semantic_hash": ""
   },
   "remix/PRs/24-codex-migrate-remix-to-nitro--migrate-remix-app-to-nitro-and-react-router.md": {
-    "mtime": 1782961521.5284042,
-    "ast_hash": "c87cce1c8c425062cb46b05261e4e6ba",
+    "mtime": 1782961734.269263,
+    "ast_hash": "5a9c3d9e252a826e8b50342895c7777d",
     "semantic_hash": ""
   },
   "remix/vercel.json": {
@@ -2155,8 +2155,8 @@
     "semantic_hash": ""
   },
   "remix/scripts/patch-vercel-output.mjs": {
-    "mtime": 1782961499.2682245,
-    "ast_hash": "2e61b362a2b0f8620c223c948c5acf36",
+    "mtime": 1782961710.3164988,
+    "ast_hash": "e8f5d78e5a6849f7f06f58c89e27b5e5",
     "semantic_hash": ""
   }
 }

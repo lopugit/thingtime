@@ -300,7 +300,7 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "api_package_dependencies_mongodb",
-      "community": 41,
+      "community": 139,
       "norm_label": "mongodb"
     },
     {
@@ -510,7 +510,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "api_src_index",
-      "community": 198,
+      "community": 7,
       "norm_label": "index.js"
     },
     {
@@ -520,7 +520,7 @@
       "source_location": "L12",
       "_origin": "ast",
       "id": "api_src_index_app",
-      "community": 198,
+      "community": 7,
       "norm_label": "app"
     },
     {
@@ -530,7 +530,7 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "api_src_index_server",
-      "community": 198,
+      "community": 7,
       "norm_label": "server"
     },
     {
@@ -540,7 +540,7 @@
       "source_location": "L23",
       "_origin": "ast",
       "id": "api_src_index_smarts",
-      "community": 198,
+      "community": 7,
       "norm_label": "smarts"
     },
     {
@@ -550,7 +550,7 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "api_src_index_io",
-      "community": 198,
+      "community": 7,
       "norm_label": "io"
     },
     {
@@ -3460,7 +3460,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_providers_chakra_chakrawrapper",
-      "community": 25,
+      "community": 29,
       "norm_label": "chakrawrapper.tsx"
     },
     {
@@ -3470,7 +3470,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "remix_app_providers_chakra_chakrawrapper_chakrawrapper",
-      "community": 25,
+      "community": 29,
       "norm_label": "chakrawrapper()"
     },
     {
@@ -3730,7 +3730,7 @@
       "source_location": "L16",
       "_origin": "ast",
       "id": "remix_app_providers_chakra_theme_theme",
-      "community": 25,
+      "community": 29,
       "norm_label": "theme"
     },
     {
@@ -3850,7 +3850,7 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "remix_app_providers_thingtimeprovider_thingtimetypes",
-      "community": 119,
+      "community": 137,
       "norm_label": "thingtimetypes"
     },
     {
@@ -3930,7 +3930,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_api_cookies",
-      "community": 0,
+      "community": 47,
       "norm_label": "cookies.ts"
     },
     {
@@ -3940,7 +3940,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_api_cookies_cookieoptions",
-      "community": 0,
+      "community": 47,
       "norm_label": "cookieoptions"
     },
     {
@@ -3950,7 +3950,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "remix_app_api_cookies_parsecookieheader",
-      "community": 0,
+      "community": 47,
       "norm_label": "parsecookieheader()"
     },
     {
@@ -3960,7 +3960,7 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "remix_app_api_cookies_encodecookievalue",
-      "community": 0,
+      "community": 47,
       "norm_label": "encodecookievalue()"
     },
     {
@@ -3970,7 +3970,7 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "remix_app_api_cookies_decodecookievalue",
-      "community": 0,
+      "community": 47,
       "norm_label": "decodecookievalue()"
     },
     {
@@ -3980,7 +3980,7 @@
       "source_location": "L46",
       "_origin": "ast",
       "id": "remix_app_api_cookies_serializeoptions",
-      "community": 0,
+      "community": 47,
       "norm_label": "serializeoptions()"
     },
     {
@@ -3990,7 +3990,7 @@
       "source_location": "L58",
       "_origin": "ast",
       "id": "remix_app_api_cookies_createcookie",
-      "community": 0,
+      "community": 47,
       "norm_label": "createcookie()"
     },
     {
@@ -4000,7 +4000,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_api_http",
-      "community": 0,
+      "community": 34,
       "norm_label": "http.ts"
     },
     {
@@ -4010,7 +4010,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_api_http_jsoninit",
-      "community": 0,
+      "community": 34,
       "norm_label": "jsoninit"
     },
     {
@@ -4020,7 +4020,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "remix_app_api_http_json",
-      "community": 0,
+      "community": 34,
       "norm_label": "json()"
     },
     {
@@ -4030,7 +4030,7 @@
       "source_location": "L18",
       "_origin": "ast",
       "id": "remix_app_api_http_redirect",
-      "community": 0,
+      "community": 34,
       "norm_label": "redirect()"
     },
     {
@@ -4070,7 +4070,7 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_authcookie_serializeauthcookie",
-      "community": 0,
+      "community": 51,
       "norm_label": "serializeauthcookie()"
     },
     {
@@ -4090,7 +4090,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_devverification",
-      "community": 0,
+      "community": 35,
       "norm_label": "devverification.ts"
     },
     {
@@ -4100,7 +4100,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_devverification_shouldshowdevverificationlink",
-      "community": 0,
+      "community": 35,
       "norm_label": "shouldshowdevverificationlink()"
     },
     {
@@ -4110,7 +4110,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_email",
-      "community": 0,
+      "community": 35,
       "norm_label": "email.ts"
     },
     {
@@ -4120,7 +4120,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_email_sendargs",
-      "community": 0,
+      "community": 35,
       "norm_label": "sendargs"
     },
     {
@@ -4130,7 +4130,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_email_sendemail",
-      "community": 0,
+      "community": 35,
       "norm_label": "sendemail()"
     },
     {
@@ -4140,7 +4140,7 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_email_sendverificationemail",
-      "community": 0,
+      "community": 35,
       "norm_label": "sendverificationemail()"
     },
     {
@@ -4150,7 +4150,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_emailverifications",
-      "community": 0,
+      "community": 48,
       "norm_label": "emailverifications.ts"
     },
     {
@@ -4160,7 +4160,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_emailverifications_newtoken",
-      "community": 0,
+      "community": 48,
       "norm_label": "newtoken()"
     },
     {
@@ -4170,7 +4170,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_emailverifications_createemailverification",
-      "community": 0,
+      "community": 48,
       "norm_label": "createemailverification()"
     },
     {
@@ -4180,7 +4180,7 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_emailverifications_consumeresult",
-      "community": 0,
+      "community": 48,
       "norm_label": "consumeresult"
     },
     {
@@ -4190,7 +4190,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_emailverifications_consumeemailverification",
-      "community": 0,
+      "community": 48,
       "norm_label": "consumeemailverification()"
     },
     {
@@ -4220,7 +4220,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_jwt",
-      "community": 0,
+      "community": 41,
       "norm_label": "jwt.ts"
     },
     {
@@ -4230,7 +4230,7 @@
       "source_location": "L12",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_jwt_normalizepem",
-      "community": 0,
+      "community": 41,
       "norm_label": "normalizepem()"
     },
     {
@@ -4240,7 +4240,7 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_jwt_getprivatekeypem",
-      "community": 0,
+      "community": 41,
       "norm_label": "getprivatekeypem()"
     },
     {
@@ -4250,7 +4250,7 @@
       "source_location": "L24",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_jwt_getpublickeypem",
-      "community": 0,
+      "community": 41,
       "norm_label": "getpublickeypem()"
     },
     {
@@ -4260,7 +4260,7 @@
       "source_location": "L31",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_jwt_getjwtkeyid",
-      "community": 0,
+      "community": 41,
       "norm_label": "getjwtkeyid()"
     },
     {
@@ -4270,7 +4270,7 @@
       "source_location": "L33",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_jwt_getjwtissuer",
-      "community": 0,
+      "community": 41,
       "norm_label": "getjwtissuer()"
     },
     {
@@ -4280,7 +4280,7 @@
       "source_location": "L35",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_jwt_hasasymmetricjwtkeys",
-      "community": 0,
+      "community": 41,
       "norm_label": "hasasymmetricjwtkeys()"
     },
     {
@@ -4290,7 +4290,7 @@
       "source_location": "L37",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_jwt_getes256signingkey",
-      "community": 0,
+      "community": 41,
       "norm_label": "getes256signingkey()"
     },
     {
@@ -4300,7 +4300,7 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_jwt_getpublicjwk",
-      "community": 0,
+      "community": 41,
       "norm_label": "getpublicjwk()"
     },
     {
@@ -4310,7 +4310,7 @@
       "source_location": "L60",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_jwt_getes256verifykey",
-      "community": 0,
+      "community": 41,
       "norm_label": "getes256verifykey()"
     },
     {
@@ -4320,7 +4320,7 @@
       "source_location": "L76",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_jwt_getlegacysecret",
-      "community": 0,
+      "community": 41,
       "norm_label": "getlegacysecret()"
     },
     {
@@ -4330,7 +4330,7 @@
       "source_location": "L90",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_jwt_jwtclaims",
-      "community": 0,
+      "community": 41,
       "norm_label": "jwtclaims"
     },
     {
@@ -4340,7 +4340,7 @@
       "source_location": "L91",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_jwt_publicjwks",
-      "community": 0,
+      "community": 41,
       "norm_label": "publicjwks"
     },
     {
@@ -4350,7 +4350,7 @@
       "source_location": "L95",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_jwt_signjwt",
-      "community": 0,
+      "community": 41,
       "norm_label": "signjwt()"
     },
     {
@@ -4370,7 +4370,7 @@
       "source_location": "L146",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_jwt_getpublicjwks",
-      "community": 0,
+      "community": 41,
       "norm_label": "getpublicjwks()"
     },
     {
@@ -4380,7 +4380,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_loginuser",
-      "community": 0,
+      "community": 51,
       "norm_label": "loginuser.ts"
     },
     {
@@ -4390,7 +4390,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_loginuser_loginresult",
-      "community": 0,
+      "community": 51,
       "norm_label": "loginresult"
     },
     {
@@ -4400,7 +4400,7 @@
       "source_location": "L12",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_loginuser_loginuser",
-      "community": 0,
+      "community": 51,
       "norm_label": "loginuser()"
     },
     {
@@ -4410,7 +4410,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_registeruser",
-      "community": 0,
+      "community": 35,
       "norm_label": "registeruser.ts"
     },
     {
@@ -4420,7 +4420,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_registeruser_registerinput",
-      "community": 0,
+      "community": 35,
       "norm_label": "registerinput"
     },
     {
@@ -4430,7 +4430,7 @@
       "source_location": "L20",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_registeruser_registerresult",
-      "community": 0,
+      "community": 35,
       "norm_label": "registerresult"
     },
     {
@@ -4440,7 +4440,7 @@
       "source_location": "L24",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_registeruser_isemail",
-      "community": 0,
+      "community": 35,
       "norm_label": "isemail()"
     },
     {
@@ -4450,7 +4450,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_registeruser_registeruser",
-      "community": 0,
+      "community": 35,
       "norm_label": "registeruser()"
     },
     {
@@ -4510,7 +4510,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_users",
-      "community": 0,
+      "community": 51,
       "norm_label": "users.ts"
     },
     {
@@ -4520,7 +4520,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_users_userdoc",
-      "community": 0,
+      "community": 51,
       "norm_label": "userdoc"
     },
     {
@@ -4530,7 +4530,7 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_users_publicuser",
-      "community": 0,
+      "community": 51,
       "norm_label": "publicuser"
     },
     {
@@ -4550,7 +4550,7 @@
       "source_location": "L41",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_users_finduserbyusername",
-      "community": 0,
+      "community": 51,
       "norm_label": "finduserbyusername()"
     },
     {
@@ -4560,7 +4560,7 @@
       "source_location": "L44",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_users_finduserbyemail",
-      "community": 0,
+      "community": 35,
       "norm_label": "finduserbyemail()"
     },
     {
@@ -4580,7 +4580,7 @@
       "source_location": "L52",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_users_insertuser",
-      "community": 0,
+      "community": 35,
       "norm_label": "insertuser()"
     },
     {
@@ -4590,7 +4590,7 @@
       "source_location": "L57",
       "_origin": "ast",
       "id": "remix_app_api_utils_auth_users_markemailverified",
-      "community": 0,
+      "community": 34,
       "norm_label": "markemailverified()"
     },
     {
@@ -4900,7 +4900,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_api_utils_getuser",
-      "community": 35,
+      "community": 139,
       "norm_label": "getuser.ts"
     },
     {
@@ -4910,7 +4910,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "remix_app_api_utils_getuser_getuser",
-      "community": 35,
+      "community": 139,
       "norm_label": "getuser()"
     },
     {
@@ -5200,7 +5200,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_api_utils_mongodb_client",
-      "community": 41,
+      "community": 139,
       "norm_label": "client.ts"
     },
     {
@@ -5210,7 +5210,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "remix_app_api_utils_mongodb_client_getclient",
-      "community": 41,
+      "community": 139,
       "norm_label": "getclient()"
     },
     {
@@ -5220,7 +5220,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_api_utils_mongodb_collection",
-      "community": 35,
+      "community": 139,
       "norm_label": "collection.ts"
     },
     {
@@ -5230,7 +5230,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "remix_app_api_utils_mongodb_collection_getcollection",
-      "community": 35,
+      "community": 139,
       "norm_label": "getcollection()"
     },
     {
@@ -5240,7 +5240,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_api_utils_mongodb_collections",
-      "community": 0,
+      "community": 48,
       "norm_label": "collections.ts"
     },
     {
@@ -5250,7 +5250,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "remix_app_api_utils_mongodb_collections_getclientcached",
-      "community": 0,
+      "community": 48,
       "norm_label": "getclientcached()"
     },
     {
@@ -5260,7 +5260,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "remix_app_api_utils_mongodb_collections_getthingtimedb",
-      "community": 0,
+      "community": 48,
       "norm_label": "getthingtimedb()"
     },
     {
@@ -5270,7 +5270,7 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "remix_app_api_utils_mongodb_collections_getuserscollection",
-      "community": 0,
+      "community": 48,
       "norm_label": "getuserscollection()"
     },
     {
@@ -5290,7 +5290,7 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "remix_app_api_utils_mongodb_collections_getthingscollection",
-      "community": 0,
+      "community": 48,
       "norm_label": "getthingscollection()"
     },
     {
@@ -5300,7 +5300,7 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "remix_app_api_utils_mongodb_collections_getemailverificationscollection",
-      "community": 0,
+      "community": 48,
       "norm_label": "getemailverificationscollection()"
     },
     {
@@ -5310,7 +5310,7 @@
       "source_location": "L31",
       "_origin": "ast",
       "id": "remix_app_api_utils_mongodb_collections_getlopumusingratelimitscollection",
-      "community": 0,
+      "community": 48,
       "norm_label": "getlopumusingratelimitscollection()"
     },
     {
@@ -5360,7 +5360,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_api_utils_mongodb_connection",
-      "community": 41,
+      "community": 139,
       "norm_label": "connection.ts"
     },
     {
@@ -5370,7 +5370,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "remix_app_api_utils_mongodb_connection_getconnection",
-      "community": 34,
+      "community": 139,
       "norm_label": "getconnection()"
     },
     {
@@ -5380,7 +5380,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_api_utils_mongodb_db",
-      "community": 35,
+      "community": 139,
       "norm_label": "db.ts"
     },
     {
@@ -5390,7 +5390,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "remix_app_api_utils_mongodb_db_getdb",
-      "community": 35,
+      "community": 139,
       "norm_label": "getdb()"
     },
     {
@@ -5400,7 +5400,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_api_utils_mongodb_mongodb",
-      "community": 41,
+      "community": 139,
       "norm_label": "mongodb.ts"
     },
     {
@@ -5410,7 +5410,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_api_utils_mongodb_mongodb_getmongodb",
-      "community": 41,
+      "community": 139,
       "norm_label": "getmongodb()"
     },
     {
@@ -5420,7 +5420,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_api_utils_mongodb_objectid",
-      "community": 41,
+      "community": 139,
       "norm_label": "objectid.ts"
     },
     {
@@ -5430,7 +5430,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "remix_app_api_utils_mongodb_objectid_getobjectid",
-      "community": 41,
+      "community": 139,
       "norm_label": "getobjectid()"
     },
     {
@@ -5470,7 +5470,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_api_utils_usercheckexists",
-      "community": 34,
+      "community": 139,
       "norm_label": "usercheckexists.ts"
     },
     {
@@ -5480,7 +5480,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "remix_app_api_utils_usercheckexists_usercheckexists",
-      "community": 34,
+      "community": 139,
       "norm_label": "usercheckexists()"
     },
     {
@@ -5490,7 +5490,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_api_utils_usercreatesession",
-      "community": 35,
+      "community": 139,
       "norm_label": "usercreatesession.ts"
     },
     {
@@ -5500,7 +5500,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "remix_app_api_utils_usercreatesession_usercreatesession",
-      "community": 35,
+      "community": 139,
       "norm_label": "usercreatesession()"
     },
     {
@@ -5530,7 +5530,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_api_utils_uservalidatepassword",
-      "community": 34,
+      "community": 139,
       "norm_label": "uservalidatepassword.ts"
     },
     {
@@ -5540,7 +5540,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "remix_app_api_utils_uservalidatepassword_uservalidatepassword",
-      "community": 34,
+      "community": 139,
       "norm_label": "uservalidatepassword()"
     },
     {
@@ -5620,7 +5620,7 @@
       "source_location": "L88",
       "_origin": "ast",
       "id": "remix_app_api_utils_vercel_status_normalisedeploymentbranchlimit",
-      "community": 60,
+      "community": 34,
       "norm_label": "normalisedeploymentbranchlimit()"
     },
     {
@@ -5640,7 +5640,7 @@
       "source_location": "L123",
       "_origin": "ast",
       "id": "remix_app_api_utils_vercel_status_isvercelstatusenabled",
-      "community": 0,
+      "community": 34,
       "norm_label": "isvercelstatusenabled()"
     },
     {
@@ -6030,7 +6030,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_components_api_submit",
-      "community": 137,
+      "community": 40,
       "norm_label": "submit.tsx"
     },
     {
@@ -6040,7 +6040,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "remix_app_components_api_submit_submit",
-      "community": 137,
+      "community": 40,
       "norm_label": "submit()"
     },
     {
@@ -6050,7 +6050,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_components_api_test",
-      "community": 34,
+      "community": 139,
       "norm_label": "test.tsx"
     },
     {
@@ -6060,7 +6060,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "remix_app_components_api_test_testapi",
-      "community": 34,
+      "community": 139,
       "norm_label": "testapi()"
     },
     {
@@ -6070,7 +6070,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_components_branding_branding",
-      "community": 148,
+      "community": 55,
       "norm_label": "branding.tsx"
     },
     {
@@ -6080,7 +6080,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "remix_app_components_branding_branding_branding",
-      "community": 148,
+      "community": 55,
       "norm_label": "branding()"
     },
     {
@@ -6090,7 +6090,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_components_branding_logo",
-      "community": 148,
+      "community": 55,
       "norm_label": "logo.tsx"
     },
     {
@@ -6100,7 +6100,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "remix_app_components_branding_logo_logo",
-      "community": 148,
+      "community": 55,
       "norm_label": "logo()"
     },
     {
@@ -6220,7 +6220,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_components_commander_commanderv2",
-      "community": 7,
+      "community": 56,
       "norm_label": "commanderv2.tsx"
     },
     {
@@ -6230,7 +6230,7 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "remix_app_components_commander_commanderv2_commanderv2",
-      "community": 7,
+      "community": 56,
       "norm_label": "commanderv2()"
     },
     {
@@ -6280,7 +6280,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_components_editor_editor",
-      "community": 34,
+      "community": 139,
       "norm_label": "editor.tsx"
     },
     {
@@ -6290,7 +6290,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "remix_app_components_editor_editor_editor",
-      "community": 34,
+      "community": 139,
       "norm_label": "editor()"
     },
     {
@@ -6320,7 +6320,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_components_layout_main",
-      "community": 29,
+      "community": 9,
       "norm_label": "main.tsx"
     },
     {
@@ -6340,7 +6340,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_components_layout_topspacing",
-      "community": 148,
+      "community": 139,
       "norm_label": "topspacing.tsx"
     },
     {
@@ -6350,7 +6350,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "remix_app_components_layout_topspacing_topspacing",
-      "community": 148,
+      "community": 139,
       "norm_label": "topspacing()"
     },
     {
@@ -6610,7 +6610,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_components_mongodb_raw",
-      "community": 148,
+      "community": 137,
       "norm_label": "raw.tsx"
     },
     {
@@ -6620,7 +6620,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "remix_app_components_mongodb_raw_raw",
-      "community": 148,
+      "community": 137,
       "norm_label": "raw()"
     },
     {
@@ -6700,7 +6700,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_components_nav_nav",
-      "community": 29,
+      "community": 9,
       "norm_label": "nav.tsx"
     },
     {
@@ -6710,7 +6710,7 @@
       "source_location": "L19",
       "_origin": "ast",
       "id": "remix_app_components_nav_nav_nav",
-      "community": 29,
+      "community": 9,
       "norm_label": "nav()"
     },
     {
@@ -6720,7 +6720,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_components_nav_profiledrawer",
-      "community": 7,
+      "community": 9,
       "norm_label": "profiledrawer.tsx"
     },
     {
@@ -6730,7 +6730,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "remix_app_components_nav_profiledrawer_profiledrawer",
-      "community": 7,
+      "community": 9,
       "norm_label": "profiledrawer()"
     },
     {
@@ -6780,7 +6780,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_components_rainbow_rainbow",
-      "community": 39,
+      "community": 53,
       "norm_label": "rainbow.tsx"
     },
     {
@@ -6790,7 +6790,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "remix_app_components_rainbow_rainbow_rainbow",
-      "community": 39,
+      "community": 53,
       "norm_label": "rainbow()"
     },
     {
@@ -6820,7 +6820,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_components_skeleton_rainbowskeleton",
-      "community": 29,
+      "community": 9,
       "norm_label": "rainbowskeleton.tsx"
     },
     {
@@ -6830,7 +6830,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "remix_app_components_skeleton_rainbowskeleton_rainbowskeleton",
-      "community": 29,
+      "community": 9,
       "norm_label": "rainbowskeleton()"
     },
     {
@@ -6840,7 +6840,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_components_splash_splash",
-      "community": 7,
+      "community": 9,
       "norm_label": "splash.tsx"
     },
     {
@@ -6850,7 +6850,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "remix_app_components_splash_splash_splash",
-      "community": 7,
+      "community": 9,
       "norm_label": "splash()"
     },
     {
@@ -6890,7 +6890,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_components_thingtime_settingsmenu",
-      "community": 137,
+      "community": 2,
       "norm_label": "settingsmenu.tsx"
     },
     {
@@ -6900,7 +6900,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "remix_app_components_thingtime_settingsmenu_settingsmenu",
-      "community": 137,
+      "community": 2,
       "norm_label": "settingsmenu()"
     },
     {
@@ -6940,7 +6940,7 @@
       "source_location": "L40",
       "_origin": "ast",
       "id": "remix_app_components_thingtime_thingtime_thingtime",
-      "community": 7,
+      "community": 9,
       "norm_label": "thingtime()"
     },
     {
@@ -6950,7 +6950,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_components_thingtime_thingtimedemo",
-      "community": 7,
+      "community": 9,
       "norm_label": "thingtimedemo.tsx"
     },
     {
@@ -6960,7 +6960,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "remix_app_components_thingtime_thingtimedemo_thingtimedemo",
-      "community": 7,
+      "community": 9,
       "norm_label": "thingtimedemo()"
     },
     {
@@ -7210,7 +7210,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_cookies_server",
-      "community": 0,
+      "community": 47,
       "norm_label": "cookies.server.ts"
     },
     {
@@ -7220,7 +7220,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "remix_app_cookies_server_session",
-      "community": 0,
+      "community": 47,
       "norm_label": "session"
     },
     {
@@ -7290,7 +7290,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_functions_sanitise",
-      "community": 7,
+      "community": 56,
       "norm_label": "sanitise.tsx"
     },
     {
@@ -7300,7 +7300,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_functions_sanitise_sanitise",
-      "community": 7,
+      "community": 56,
       "norm_label": "sanitise()"
     },
     {
@@ -7590,7 +7590,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_hooks_useapi",
-      "community": 2,
+      "community": 40,
       "norm_label": "useapi.tsx"
     },
     {
@@ -7600,7 +7600,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "remix_app_hooks_useapi_refreshrootdata",
-      "community": 2,
+      "community": 40,
       "norm_label": "refreshrootdata()"
     },
     {
@@ -7620,7 +7620,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_hooks_useasyncfetcher",
-      "community": 2,
+      "community": 40,
       "norm_label": "useasyncfetcher.tsx"
     },
     {
@@ -7630,7 +7630,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "remix_app_hooks_useasyncfetcher_useasyncfetcher",
-      "community": 2,
+      "community": 40,
       "norm_label": "useasyncfetcher()"
     },
     {
@@ -7690,7 +7690,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_hooks_usepath",
-      "community": 7,
+      "community": 56,
       "norm_label": "usepath.tsx"
     },
     {
@@ -7700,7 +7700,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "remix_app_hooks_usepath_usepath",
-      "community": 7,
+      "community": 56,
       "norm_label": "usepath()"
     },
     {
@@ -7710,7 +7710,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_hooks_useprops",
-      "community": 39,
+      "community": 53,
       "norm_label": "useprops.tsx"
     },
     {
@@ -7720,7 +7720,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "remix_app_hooks_useprops_useprops",
-      "community": 39,
+      "community": 53,
       "norm_label": "useprops()"
     },
     {
@@ -7750,7 +7750,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_hooks_usethingtimemachine",
-      "community": 119,
+      "community": 54,
       "norm_label": "usethingtimemachine.tsx"
     },
     {
@@ -7770,7 +7770,7 @@
       "source_location": "L24",
       "_origin": "ast",
       "id": "remix_app_hooks_usethingtimemachine_timelineevent",
-      "community": 119,
+      "community": 54,
       "norm_label": "timelineevent"
     },
     {
@@ -7790,7 +7790,7 @@
       "source_location": "L302",
       "_origin": "ast",
       "id": "remix_app_hooks_usethingtimemachine_timeline",
-      "community": 119,
+      "community": 54,
       "norm_label": "timeline"
     },
     {
@@ -7800,7 +7800,7 @@
       "source_location": "L311",
       "_origin": "ast",
       "id": "remix_app_hooks_usethingtimemachine_timelinescaffold",
-      "community": 119,
+      "community": 54,
       "norm_label": "timelinescaffold"
     },
     {
@@ -7810,7 +7810,7 @@
       "source_location": "L320",
       "_origin": "ast",
       "id": "remix_app_hooks_usethingtimemachine_newtimeline",
-      "community": 119,
+      "community": 54,
       "norm_label": "newtimeline()"
     },
     {
@@ -7820,7 +7820,7 @@
       "source_location": "L379",
       "_origin": "ast",
       "id": "remix_app_hooks_usethingtimemachine_timemachine",
-      "community": 119,
+      "community": 54,
       "norm_label": "timemachine"
     },
     {
@@ -7830,7 +7830,7 @@
       "source_location": "L386",
       "_origin": "ast",
       "id": "remix_app_hooks_usethingtimemachine_timemachinescaffold",
-      "community": 119,
+      "community": 54,
       "norm_label": "timemachinescaffold"
     },
     {
@@ -7840,7 +7840,7 @@
       "source_location": "L392",
       "_origin": "ast",
       "id": "remix_app_hooks_usethingtimemachine_thingtimeline",
-      "community": 119,
+      "community": 54,
       "norm_label": "thingtimeline()"
     },
     {
@@ -7850,7 +7850,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_hooks_usetrace",
-      "community": 39,
+      "community": 53,
       "norm_label": "usetrace.tsx"
     },
     {
@@ -7860,7 +7860,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "remix_app_hooks_usetrace_usetrace",
-      "community": 39,
+      "community": 53,
       "norm_label": "usetrace()"
     },
     {
@@ -7870,7 +7870,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_hooks_useuuid",
-      "community": 39,
+      "community": 53,
       "norm_label": "useuuid.tsx"
     },
     {
@@ -7880,7 +7880,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "remix_app_hooks_useuuid_useuuid",
-      "community": 39,
+      "community": 53,
       "norm_label": "useuuid()"
     },
     {
@@ -7890,7 +7890,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_root_data_server",
-      "community": 0,
+      "community": 47,
       "norm_label": "root-data.server.ts"
     },
     {
@@ -7910,7 +7910,7 @@
       "source_location": "L12",
       "_origin": "ast",
       "id": "remix_app_root_data_server_getdeploymentbranchname",
-      "community": 0,
+      "community": 47,
       "norm_label": "getdeploymentbranchname()"
     },
     {
@@ -7920,7 +7920,7 @@
       "source_location": "L20",
       "_origin": "ast",
       "id": "remix_app_root_data_server_shouldshowdeploymentstatus",
-      "community": 0,
+      "community": 47,
       "norm_label": "shouldshowdeploymentstatus()"
     },
     {
@@ -7930,7 +7930,7 @@
       "source_location": "L31",
       "_origin": "ast",
       "id": "remix_app_root_data_server_loadrootdata",
-      "community": 0,
+      "community": 47,
       "norm_label": "loadrootdata()"
     },
     {
@@ -7940,7 +7940,7 @@
       "source_location": "L77",
       "_origin": "ast",
       "id": "remix_app_root_data_server_rootdataresponse",
-      "community": 0,
+      "community": 47,
       "norm_label": "rootdataresponse()"
     },
     {
@@ -8090,7 +8090,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_routes_index_tsx_remix_app_routes_index",
-      "community": 7,
+      "community": 9,
       "norm_label": "_index.tsx"
     },
     {
@@ -8100,7 +8100,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "remix_app_routes_index_index",
-      "community": 148,
+      "community": 9,
       "norm_label": "index()"
     },
     {
@@ -8110,7 +8110,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_auth_jwks_jwks",
-      "community": 0,
+      "community": 41,
       "norm_label": "_jwks.tsx"
     },
     {
@@ -8120,7 +8120,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_auth_jwks_jwks_loader",
-      "community": 0,
+      "community": 41,
       "norm_label": "loader()"
     },
     {
@@ -8170,7 +8170,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_auth_register_register",
-      "community": 0,
+      "community": 35,
       "norm_label": "_register.tsx"
     },
     {
@@ -8180,7 +8180,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_auth_register_register_action",
-      "community": 0,
+      "community": 35,
       "norm_label": "action()"
     },
     {
@@ -8190,7 +8190,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_auth_resend_verification_resend_verification",
-      "community": 0,
+      "community": 35,
       "norm_label": "_resend-verification.tsx"
     },
     {
@@ -8200,7 +8200,7 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_auth_resend_verification_resend_verification_action",
-      "community": 0,
+      "community": 35,
       "norm_label": "action()"
     },
     {
@@ -8210,7 +8210,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_auth_verify_email_verify_email",
-      "community": 0,
+      "community": 34,
       "norm_label": "_verify-email.tsx"
     },
     {
@@ -8220,7 +8220,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_auth_verify_email_verify_email_loader",
-      "community": 0,
+      "community": 34,
       "norm_label": "loader()"
     },
     {
@@ -8250,7 +8250,7 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_crypto_crypto_loader",
-      "community": 123,
+      "community": 34,
       "norm_label": "loader()"
     },
     {
@@ -8270,7 +8270,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_login_login",
-      "community": 0,
+      "community": 51,
       "norm_label": "_login.tsx"
     },
     {
@@ -8280,7 +8280,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_login_login_action",
-      "community": 0,
+      "community": 51,
       "norm_label": "action()"
     },
     {
@@ -8400,7 +8400,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_mongodb_raw_results_raw_results",
-      "community": 35,
+      "community": 139,
       "norm_label": "_raw-results.tsx"
     },
     {
@@ -8410,7 +8410,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_mongodb_raw_results_raw_results_index",
-      "community": 35,
+      "community": 139,
       "norm_label": "index()"
     },
     {
@@ -8420,7 +8420,7 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_mongodb_raw_results_raw_results_actionexport",
-      "community": 35,
+      "community": 139,
       "norm_label": "actionexport()"
     },
     {
@@ -8430,7 +8430,7 @@
       "source_location": "L46",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_mongodb_raw_results_raw_results_earlyreturn",
-      "community": 35,
+      "community": 139,
       "norm_label": "earlyreturn()"
     },
     {
@@ -8440,7 +8440,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_mongodb_status_data_status_data",
-      "community": 139,
+      "community": 34,
       "norm_label": "_status-data.tsx"
     },
     {
@@ -8450,7 +8450,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_mongodb_status_data_status_data_loader",
-      "community": 139,
+      "community": 34,
       "norm_label": "loader()"
     },
     {
@@ -8500,7 +8500,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_template_template",
-      "community": 34,
+      "community": 139,
       "norm_label": "_template.tsx"
     },
     {
@@ -8510,7 +8510,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_template_template_index",
-      "community": 34,
+      "community": 139,
       "norm_label": "index()"
     },
     {
@@ -8520,7 +8520,7 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_template_template_action",
-      "community": 34,
+      "community": 139,
       "norm_label": "action()"
     },
     {
@@ -8530,7 +8530,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_template_template_earlyreturn",
-      "community": 34,
+      "community": 139,
       "norm_label": "earlyreturn()"
     },
     {
@@ -8540,7 +8540,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_vercel_deployments_deployments",
-      "community": 60,
+      "community": 34,
       "norm_label": "_deployments.tsx"
     },
     {
@@ -8550,7 +8550,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_vercel_deployments_deployments_getbranchlimitfromrequest",
-      "community": 60,
+      "community": 34,
       "norm_label": "getbranchlimitfromrequest()"
     },
     {
@@ -8560,7 +8560,7 @@
       "source_location": "L19",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_vercel_deployments_deployments_getdeployments",
-      "community": 60,
+      "community": 34,
       "norm_label": "getdeployments()"
     },
     {
@@ -8570,7 +8570,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_vercel_status_data_status_data",
-      "community": 0,
+      "community": 34,
       "norm_label": "_status-data.tsx"
     },
     {
@@ -8580,7 +8580,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_vercel_status_data_status_data_loader",
-      "community": 0,
+      "community": 34,
       "norm_label": "loader()"
     },
     {
@@ -8590,7 +8590,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_vercel_status_status",
-      "community": 0,
+      "community": 34,
       "norm_label": "_status.tsx"
     },
     {
@@ -8600,7 +8600,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_vercel_status_status_loader",
-      "community": 0,
+      "community": 34,
       "norm_label": "loader()"
     },
     {
@@ -8610,7 +8610,7 @@
       "source_location": "L16",
       "_origin": "ast",
       "id": "remix_app_routes_api_v1_vercel_status_status_action",
-      "community": 0,
+      "community": 34,
       "norm_label": "action()"
     },
     {
@@ -8620,7 +8620,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_routes_branding_index",
-      "community": 148,
+      "community": 62,
       "norm_label": "_index.tsx"
     },
     {
@@ -8630,7 +8630,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "remix_app_routes_branding_index_branding",
-      "community": 148,
+      "community": 62,
       "norm_label": "branding()"
     },
     {
@@ -8640,7 +8640,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_routes_branding_assets_all",
-      "community": 148,
+      "community": 62,
       "norm_label": "all.ts"
     },
     {
@@ -8650,7 +8650,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_routes_branding_assets_all_assets",
-      "community": 148,
+      "community": 62,
       "norm_label": "assets"
     },
     {
@@ -8660,7 +8660,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_routes_branding_old",
-      "community": 148,
+      "community": 137,
       "norm_label": "branding_old.tsx"
     },
     {
@@ -8960,7 +8960,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_routes_ode",
-      "community": 7,
+      "community": 9,
       "norm_label": "ode.tsx"
     },
     {
@@ -8970,7 +8970,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "remix_app_routes_ode_index",
-      "community": 148,
+      "community": 9,
       "norm_label": "index()"
     },
     {
@@ -9000,7 +9000,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_routes_rainbow",
-      "community": 7,
+      "community": 9,
       "norm_label": "rainbow.$.tsx"
     },
     {
@@ -9010,7 +9010,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "remix_app_routes_rainbow_index",
-      "community": 7,
+      "community": 9,
       "norm_label": "index()"
     },
     {
@@ -9020,7 +9020,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_routes_raw",
-      "community": 148,
+      "community": 137,
       "norm_label": "raw.tsx"
     },
     {
@@ -9060,7 +9060,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_routes_scratchpads_svg_displacement_map",
-      "community": 148,
+      "community": 55,
       "norm_label": "svg-displacement-map.tsx"
     },
     {
@@ -9070,7 +9070,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "remix_app_routes_scratchpads_svg_displacement_map_scratchpad",
-      "community": 148,
+      "community": 55,
       "norm_label": "scratchpad()"
     },
     {
@@ -9080,7 +9080,7 @@
       "source_location": "L167",
       "_origin": "ast",
       "id": "remix_app_routes_scratchpads_svg_displacement_map_checkermatrix",
-      "community": 148,
+      "community": 55,
       "norm_label": "checkermatrix"
     },
     {
@@ -9330,7 +9330,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_scripts_mongodb_data_users",
-      "community": 40,
+      "community": 139,
       "norm_label": "users.ts"
     },
     {
@@ -9340,7 +9340,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "remix_app_scripts_mongodb_data_users_seeduser",
-      "community": 40,
+      "community": 139,
       "norm_label": "seeduser"
     },
     {
@@ -9350,7 +9350,7 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "remix_app_scripts_mongodb_data_users_getusers",
-      "community": 40,
+      "community": 139,
       "norm_label": "getusers()"
     },
     {
@@ -9360,7 +9360,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_app_scripts_mongodb_setup",
-      "community": 40,
+      "community": 139,
       "norm_label": "setup.ts"
     },
     {
@@ -9370,7 +9370,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "remix_app_scripts_mongodb_setup_saveusers",
-      "community": 40,
+      "community": 139,
       "norm_label": "saveusers()"
     },
     {
@@ -9380,7 +9380,7 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "remix_app_scripts_mongodb_setup_setup",
-      "community": 40,
+      "community": 139,
       "norm_label": "setup()"
     },
     {
@@ -9540,7 +9540,7 @@
       "source_location": "L59",
       "_origin": "ast",
       "id": "remix_app_smarts_index_getparentpath",
-      "community": 7,
+      "community": 56,
       "norm_label": "getparentpath()"
     },
     {
@@ -11080,7 +11080,7 @@
       "source_location": "L52",
       "_origin": "ast",
       "id": "remix_package_dependencies_mongodb",
-      "community": 41,
+      "community": 139,
       "norm_label": "mongodb"
     },
     {
@@ -11802,10 +11802,20 @@
       "norm_label": "apiindex"
     },
     {
-      "label": "spaIndex",
+      "label": "rootIndex",
       "file_type": "code",
       "source_file": "remix/scripts/verify-vercel-output.mjs",
       "source_location": "L21",
+      "_origin": "ast",
+      "id": "remix_scripts_verify_vercel_output_rootindex",
+      "community": 263,
+      "norm_label": "rootindex"
+    },
+    {
+      "label": "spaIndex",
+      "file_type": "code",
+      "source_file": "remix/scripts/verify-vercel-output.mjs",
+      "source_location": "L22",
       "_origin": "ast",
       "id": "remix_scripts_verify_vercel_output_spaindex",
       "community": 263,
@@ -11815,7 +11825,7 @@
       "label": "serverFallbackIndex",
       "file_type": "code",
       "source_file": "remix/scripts/verify-vercel-output.mjs",
-      "source_location": "L24",
+      "source_location": "L25",
       "_origin": "ast",
       "id": "remix_scripts_verify_vercel_output_serverfallbackindex",
       "community": 263,
@@ -11888,7 +11898,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "remix_server_routes_api_root_data_get",
-      "community": 0,
+      "community": 47,
       "norm_label": "root-data.get.ts"
     },
     {
@@ -39091,7 +39101,17 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/scripts/verify-vercel-output.mjs",
-      "source_location": "L24",
+      "source_location": "L21",
+      "weight": 1.0,
+      "source": "remix_scripts_verify_vercel_output",
+      "target": "remix_scripts_verify_vercel_output_rootindex",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "remix/scripts/verify-vercel-output.mjs",
+      "source_location": "L25",
       "weight": 1.0,
       "source": "remix_scripts_verify_vercel_output",
       "target": "remix_scripts_verify_vercel_output_serverfallbackindex",
@@ -39101,7 +39121,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "remix/scripts/verify-vercel-output.mjs",
-      "source_location": "L21",
+      "source_location": "L22",
       "weight": 1.0,
       "source": "remix_scripts_verify_vercel_output",
       "target": "remix_scripts_verify_vercel_output_spaindex",
@@ -41060,5 +41080,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "383d4288e011466faab45b282ef540698dea2038"
+  "built_at_commit": "c672217d55e2f50e303e02c932e6eb311c62a215"
 }
