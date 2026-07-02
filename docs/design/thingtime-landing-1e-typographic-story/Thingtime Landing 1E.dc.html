@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    html, body { margin: 0; padding: 0; background: #ffffff; }
+    @keyframes moving-rainbow{0%{background-position:0 0}100%{background-position:calc(100px + 200%) 0}
+  </style>
+  <link rel="stylesheet" href="ds/thingtime-bundle.css">
+  <script src="ds/react.js"></script>
+  <script src="ds/react-dom.js"></script>
+  <script src="ds/thingtime-bundle.js"></script>
+  <script src="ds/tt-elements.js"></script>
+</helmet>
+<div data-screen-label="1e Typographic story" style="width:100%; max-width:980px; margin:0 auto; background:#ffffff; color:#1a1a1a; padding:56px 56px 48px;">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <tt-logo icon="" theme="nature" voxel-size="8" space="0px"></tt-logo>
+            <span style="font-weight:800; font-size:15px;">thingtime</span>
+          </div>
+          <h1 style="margin:40px 0 0; font-size:88px; line-height:0.98; font-weight:900; letter-spacing:-0.045em;">Everything<br><span style="color:transparent; background:linear-gradient(to right, #f34a4a, #ffbc48, #58ca70, #47b5e6, #a555e8, #f34a4a); background-size:calc(100px + 200%); -webkit-background-clip:text; background-clip:text; animation:moving-rainbow 5s linear infinite;">is a thing.</span></h1>
+          <div style="margin-top:44px; display:flex; flex-direction:column; gap:0; max-width:760px;">
+            <div style="display:flex; align-items:baseline; gap:16px; padding:18px 0; border-top:2px solid #1a1a1a;">
+              <span style="width:12px; height:12px; background:#59bdff; flex:none; align-self:center;"></span>
+              <span style="font-size:22px; font-weight:800; width:180px; flex:none;">Your car 🚗</span>
+              <span style="font-size:16.5px; color:#4b4b4b; line-height:1.5;">Every oil change logged. Sell it with its whole history attached.</span>
+            </div>
+            <div style="display:flex; align-items:baseline; gap:16px; padding:18px 0; border-top:2px solid #1a1a1a;">
+              <span style="width:12px; height:12px; background:#a8e61d; flex:none; align-self:center;"></span>
+              <span style="font-size:22px; font-weight:800; width:180px; flex:none;">Your drill 🛠️</span>
+              <span style="font-size:16.5px; color:#4b4b4b; line-height:1.5;">Lend it out, track who has it, get paid for the weekend.</span>
+            </div>
+            <div style="display:flex; align-items:baseline; gap:16px; padding:18px 0; border-top:2px solid #1a1a1a; border-bottom:2px solid #1a1a1a;">
+              <span style="width:12px; height:12px; background:#ffa3b1; flex:none; align-self:center;"></span>
+              <span style="font-size:22px; font-weight:800; width:180px; flex:none;">Your ideas 📝</span>
+              <span style="font-size:16.5px; color:#4b4b4b; line-height:1.5;">Any shape you can imagine — one place, shareable as a link.</span>
+            </div>
+          </div>
+          <div style="margin-top:36px; display:flex; align-items:center; gap:22px;">
+            <span style="font-size:20px; font-weight:800; color:hotpink; border-bottom:4px solid hotpink; padding-bottom:2px;">Start keeping things →</span>
+            <span style="font-size:14px; color:#8a8a8a;">or <span style="font-weight:700; color:#6f3198;">back the launch 💖</span></span>
+          </div>
+        </div>
+</x-dc>
+</body>
+</html>
