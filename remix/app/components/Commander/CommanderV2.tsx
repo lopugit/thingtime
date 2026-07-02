@@ -1,7 +1,7 @@
 import React from 'react';
 import ClickAwayListener from 'react-click-away-listener';
 import { Center, Flex, Input } from '@chakra-ui/react';
-import { useLocation } from '@remix-run/react';
+import { useLocation } from 'react-router';
 import Fuse from 'fuse.js';
 
 import { Rainbow } from '../Rainbow/Rainbow';

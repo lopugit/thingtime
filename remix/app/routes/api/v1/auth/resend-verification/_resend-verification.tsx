@@ -1,4 +1,4 @@
-import { json } from '@vercel/remix';
+import { json } from '~/api/http';
 
 import { shouldShowDevVerificationLink } from '~/api/utils/auth/devVerification';
 import { sendVerificationEmail } from '~/api/utils/auth/email';

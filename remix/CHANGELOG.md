@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to the **Thingtime Remix app** are recorded here. The format
+All notable changes to the **Thingtime web app** are recorded here. The format
 is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with
 assistant and manual changes attributed so future PR archaeology is less cursed.
 
@@ -15,6 +15,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 ---
 
 ## [Unreleased]
+
+### PR #TBD - Nitro React Router Migration
+
+### Changed
+
+- Migrated the app runtime from Remix to a Nitro server plus React Router
+  non-framework Vite client, with PM2 running Vite on port 9999 and Nitro on
+  port 10000. — _Codex (AI), 2026-07-02_
+- Added Vercel output verification for the Nitro build so deployments must
+  include the generated Vite shell before the build is accepted. — _Codex (AI),
+  2026-07-02_
 
 ### PR #16 - Auth And Lopu Hardening
 

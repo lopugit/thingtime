@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Flex, Text } from '@chakra-ui/react';
 import { keyframes } from '@emotion/react';
-import { Link } from '@remix-run/react';
+import { Link } from 'react-router';
 
 import type { MongoConnectionStatus } from '~/api/utils/mongodb/status';
 import { StatusRefreshButton } from '~/components/Status/StatusRefreshButton';

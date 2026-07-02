@@ -17,16 +17,10 @@ import {
   Stack,
   Text
 } from '@chakra-ui/react';
-import { useLoaderData, useRevalidator, useSearchParams } from '@remix-run/react';
-import { json } from '@vercel/remix';
+import { useLoaderData, useRevalidator, useSearchParams } from 'react-router';
 import { Check, ChevronDown, ExternalLink, Filter, Globe2, RefreshCw, Rocket } from 'lucide-react';
 
-import {
-  getVercelDeploymentsOverview,
-  isVercelStatusEnabled,
-  normaliseDeploymentBranchLimit,
-  type VercelDeploymentSummary
-} from '~/api/utils/vercel/status';
+import type { VercelDeploymentsOverview, VercelDeploymentSummary } from '~/api/utils/vercel/status';
 
 const PAGE_MAX_WIDTH = '920px';
 type DeploymentSort = 'created-desc' | 'created-asc' | 'ready-desc' | 'state' | 'branch';
@@ -58,19 +52,6 @@ const BRANCH_LIMIT_OPTIONS = [
   { label: '10 branches', value: '10' },
   { label: '5 branches', value: '5' }
 ];
-
-export const loader = async ({ request }: { request: Request }) => {
-  if (!isVercelStatusEnabled()) {
-    throw new Response('Not found', { status: 404 });
-  }
-
-  const url = new URL(request.url);
-  const overview = await getVercelDeploymentsOverview({
-    limit: normaliseDeploymentBranchLimit(url.searchParams.get('branches'))
-  });
-
-  return json(overview);
-};
 
 const statusScheme = (state: VercelDeploymentSummary['state']) => {
   if (state === 'ready') return 'green';
@@ -275,7 +256,7 @@ const DeploymentRow = ({ deployment }: { deployment: VercelDeploymentSummary }) 
 );
 
 export default function VercelPage() {
-  const overview = useLoaderData<typeof loader>();
+  const overview = useLoaderData() as VercelDeploymentsOverview;
   const revalidator = useRevalidator();
   const [searchParams, setSearchParams] = useSearchParams();
   const checking = revalidator.state === 'loading';

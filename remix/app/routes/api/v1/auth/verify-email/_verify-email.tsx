@@ -1,4 +1,4 @@
-import { redirect } from '@vercel/remix';
+import { redirect } from '~/api/http';
 
 import { consumeEmailVerification } from '~/api/utils/auth/emailVerifications';
 import { markEmailVerified } from '~/api/utils/auth/users';
@@ -10,7 +10,7 @@ export const loader = async ({ request }: { request: Request }) => {
   if (!token) return redirect('/login?verify=missing');
 
   const result = await consumeEmailVerification(token);
-  if (!result.ok) return redirect(`/login?verify=${result.reason}`);
+  if (result.ok === false) return redirect(`/login?verify=${result.reason}`);
 
   await markEmailVerified(result.userId);
   return redirect('/login?verify=success');

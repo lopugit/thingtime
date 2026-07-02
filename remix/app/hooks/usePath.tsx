@@ -1,6 +1,6 @@
 import React from "react"
-import { useLocation } from "@remix-run/react"
-import { useNavigate } from "@remix-run/react"
+import { useLocation } from "react-router"
+import { useNavigate } from "react-router"
 export const usePath = (props?: any) => {
   const location = useLocation()
   const { pathname } = location

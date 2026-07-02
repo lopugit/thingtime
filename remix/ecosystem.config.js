@@ -1,8 +1,9 @@
 module.exports = {
   apps: [
     {
-      script: 'npm run dev -- --port 9999',
-      name: 'tt-remix-9999',
+      script: 'npm run dev',
+      cwd: __dirname,
+      name: 'tt-nitro-react-router-9999',
       namespace: 'thingtime',
       watch: ['ecosystem.config.js']
     },

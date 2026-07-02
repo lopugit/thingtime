@@ -1,6 +1,8 @@
 .DS_Store
 .vscode
 .env
+.ds-sync/
+ds-bundle/
 
 # Root node_modules
 node_modules
@@ -23,15 +25,16 @@ build/*
 public/build/*
 api/index.js
 api/index.js.map
+remix/.vercel/
+remix/dist/
+remix/server/assets/*
+!remix/server/assets/.gitignore
 
 tmp/*
 
 # graphify - keep queryable graph + report, ignore machine-specific temp & build artifacts
 graphify-out/.graphify_*
 graphify-out/cache/
-graphify-out/graph.html
-graphify-out/cost.json
-graphify-out/manifest.json
 # dated curated-graph backups created by `graphify update`
 graphify-out/[0-9]*/
 

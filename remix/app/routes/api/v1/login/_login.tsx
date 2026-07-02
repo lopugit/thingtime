@@ -1,4 +1,4 @@
-import { json } from '@vercel/remix';
+import { json } from '~/api/http';
 
 import { serializeAuthCookie } from '~/api/utils/auth/authCookie';
 import { loginUser } from '~/api/utils/auth/loginUser';
@@ -9,7 +9,7 @@ export const action = async ({ request }: { request: Request }) => {
   const { username, password } = await request.json().catch(() => ({}));
 
   const result = await loginUser({ username, password });
-  if (!result.ok) {
+  if (result.ok === false) {
     return json({ ok: false, error: result.error }, { status: result.status });
   }
 

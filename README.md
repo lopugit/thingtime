@@ -25,11 +25,14 @@ https://www.gofundme.com/f/thingtime
 Thingtime can run with mostly public configuration, but a few integrations need
 private environment variables in local development or on Vercel.
 
-## Remix app
+## Nitro + React Router app
 
-The Remix app lives in `remix/`.
+The web app lives in `remix/` for historical path compatibility, but it now
+runs as a React Router non-framework Vite client with Nitro API/server routes.
+Vite serves the browser app on port `9999` and proxies `/api` to the Nitro dev
+server on port `10000`.
 
-Install and run from the Remix directory:
+Install and run from the app directory:
 
 ```sh
 cd remix
@@ -37,8 +40,24 @@ corepack pnpm install
 corepack pnpm run dev
 ```
 
+From the repository root, `npm run web-pms` starts or restarts the PM2-managed
+dev app `tt-nitro-react-router-9999`. The older `npm run remix-pms` command is
+kept as a compatibility alias.
+
 Local branch metadata is managed automatically by `remix/scripts/pre-dev.sh`.
 That script updates `remix/.env.auto`; do not edit that generated block by hand.
+
+Build and verify the Vercel output with:
+
+```sh
+cd remix
+corepack pnpm run build
+```
+
+The build runs `vite build`, copies the Vite shell into Nitro's server assets,
+builds Nitro with `NITRO_PRESET=vercel`, and checks that
+`.vercel/output/static/index.html` contains the React shell before trusting the
+deployment artifact.
 
 ## MongoDB
 

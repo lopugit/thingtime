@@ -14,7 +14,7 @@ export const saveUsers = async () => {
 
   for (const user of users) {
     const result = await registerUser(user);
-    if (result.ok) {
+    if (result.ok === true) {
       created++;
     } else if (result.status === 409) {
       // already exists (username/email taken) — idempotent re-seed

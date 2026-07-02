@@ -1,14 +1,6 @@
 import { Badge, Box, Button, Container, Divider, Flex, Heading, Text } from '@chakra-ui/react';
-import { useLoaderData, useRevalidator } from '@remix-run/react';
-import { json } from '@vercel/remix';
-
-import { getMongoStatus } from '~/api/utils/mongodb/status';
-
-// Runs the MongoDB connection check through the Thingtime API layer.
-export const loader = async () => {
-  const status = await getMongoStatus();
-  return json(status);
-};
+import { useLoaderData, useRevalidator } from 'react-router';
+import type { MongoConnectionStatus } from '~/api/utils/mongodb/status';
 
 const Row = ({ label, value }: { label: string; value: React.ReactNode }) => (
   <Flex justifyContent="space-between" columnGap={6} py={2}>
@@ -22,7 +14,7 @@ const Row = ({ label, value }: { label: string; value: React.ReactNode }) => (
 );
 
 export default function MongoStatusPage() {
-  const status = useLoaderData<typeof loader>();
+  const status = useLoaderData() as MongoConnectionStatus;
   const revalidator = useRevalidator();
 
   const connected = status.connected;

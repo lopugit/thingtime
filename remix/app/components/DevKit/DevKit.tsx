@@ -1,6 +1,6 @@
 import { Box, Flex, Text } from '@chakra-ui/react';
 import { keyframes } from '@emotion/react';
-import { useNavigate, useRevalidator, useRouteLoaderData } from '@remix-run/react';
+import { useNavigate, useRevalidator, useRouteLoaderData } from 'react-router';
 import React from 'react';
 
 import { Icon } from '../Icon/Icon';

@@ -1,4 +1,5 @@
 import { exportJWK, importJWK, importPKCS8, importSPKI, SignJWT, jwtVerify } from 'jose';
+import type { JWK } from 'jose';
 
 const LEGACY_DEV_SECRET = 'dev-insecure-secret-change-me';
 const DEFAULT_KEY_ID = 'thingtime-es256-1';
@@ -66,7 +67,7 @@ const getEs256VerifyKey = () => {
   if (!getPrivateKeyPem()) return null;
 
   publicJwkPromise ??= getPublicJwk();
-  es256PublicKeyPromise ??= publicJwkPromise.then((jwk) => (jwk ? importJWK(jwk, 'ES256') : null));
+  es256PublicKeyPromise ??= publicJwkPromise.then((jwk) => (jwk ? importJWK(jwk as unknown as JWK, 'ES256') : null));
   return es256PublicKeyPromise;
 };
 

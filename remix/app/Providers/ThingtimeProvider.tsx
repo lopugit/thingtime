@@ -114,7 +114,7 @@ try {
 	// nothing
 }
 
-export const ThingtimeProvider = (props: any): JSX.Element => {
+export const ThingtimeProvider = (props: any): React.JSX.Element => {
 	const [_Everything, setEverything] = React.useState<ThingtimeTypes>({
 		thingtime: null,
 		set: null,

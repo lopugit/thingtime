@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Center, Flex, Text } from '@chakra-ui/react';
-import { Link, useNavigate, useRouteLoaderData } from '@remix-run/react';
+import { Link, useNavigate, useRouteLoaderData } from 'react-router';
 
 import { Icon } from '../Icon/Icon';
 import { MongoStatus } from '../MongoDB/MongoStatus';
