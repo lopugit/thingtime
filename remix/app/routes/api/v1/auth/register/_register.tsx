@@ -1,4 +1,4 @@
-import { json } from '@vercel/remix';
+import { json } from '~/api/http';
 
 import { serializeAuthCookie } from '~/api/utils/auth/authCookie';
 import { shouldShowDevVerificationLink } from '~/api/utils/auth/devVerification';
@@ -13,7 +13,7 @@ export const action = async ({ request }: { request: Request }) => {
 
   const result = await registerUser({ ...body, origin });
 
-  if (!result.ok) {
+  if (result.ok === false) {
     return json({ ok: false, error: result.error }, { status: result.status });
   }
 

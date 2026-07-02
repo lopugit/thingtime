@@ -58,7 +58,7 @@ export const VercelStatus = (props) => {
 
   React.useEffect(() => {
     let isMounted = true;
-    let timeoutId: ReturnType<typeof window.setTimeout> | undefined;
+    let timeoutId: number | undefined;
     let xhr: XMLHttpRequest | undefined;
 
     const requestStatus = () => {

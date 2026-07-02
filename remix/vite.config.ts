@@ -1,29 +1,31 @@
-import { vitePlugin as remix } from '@remix-run/dev';
+import { fileURLToPath, URL } from 'node:url';
+
+import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
-import tsconfigPaths from 'vite-tsconfig-paths';
-import { flatRoutes } from 'remix-flat-routes';
 
 export default defineConfig({
-	// define web socket port
-
-	server: {
-		port: 9999,
-		hmr: {
-			port: 9998
-		}
-	},
-	plugins: [
-		remix({
-			routes: async (defineRoutes) => {
-				return flatRoutes('routes', defineRoutes);
-			},
-
-			serverModuleFormat: 'cjs',
-
-			// app path
-			appDirectory: 'app'
-		}),
-		tsconfigPaths()
-	]
-	// plugins: [remix(), tsconfigPaths()]
+  build: {
+    outDir: 'dist',
+    sourcemap: true
+  },
+  resolve: {
+    alias: {
+      '~': fileURLToPath(new URL('./app', import.meta.url))
+    },
+    tsconfigPaths: true
+  },
+  server: {
+    host: '127.0.0.1',
+    port: 9999,
+    hmr: {
+      port: 9998
+    },
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:10000',
+        changeOrigin: true
+      }
+    }
+  },
+  plugins: [react()]
 });

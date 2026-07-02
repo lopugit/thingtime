@@ -1,5 +1,5 @@
 import { Flex, Text, Button } from '@chakra-ui/react';
-import { Link, useNavigate } from '@remix-run/react';
+import { Link, useNavigate } from 'react-router';
 
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';

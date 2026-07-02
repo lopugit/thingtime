@@ -4,11 +4,14 @@
   "description": "Thing Time",
   "main": "none",
   "scripts": {
-    "thingtime-stack": "npm run remix-pms ; npm run webserver",
+    "thingtime-stack": "npm run web-pms ; npm run webserver",
     "webserver": "pm2 restart webserver &> /dev/null",
-    "remix": "npm run dev --prefix remix",
-    "remix-pms": "which pm2 ; cd remix && pm2 restart ecosystem.config.js &> /dev/null",
-    "build-remix": "npm run build --prefix remix",
+    "web": "npm run dev --prefix remix",
+    "web-pms": "which pm2 ; cd remix && pm2 restart ecosystem.config.js &> /dev/null",
+    "build-web": "npm run build --prefix remix",
+    "remix": "npm run web",
+    "remix-pms": "npm run web-pms",
+    "build-remix": "npm run build-web",
     "next": "npm run dev --prefix next",
     "api": "npm run dev --prefix api",
     "postinstall": "pnpm i --prefix next ; pnpm i --prefix remix ; pnpm i --prefix raycast ; pnpm i --prefix api"

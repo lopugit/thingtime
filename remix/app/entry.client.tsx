@@ -1,14 +1,14 @@
 import { CacheProvider } from '@emotion/react';
-// import { RemixBrowser } from "remix";
-import { RemixBrowser } from '@remix-run/react';
-import React, { startTransition } from 'react';
-import { hydrateRoot } from 'react-dom/client';
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import { RouterProvider } from 'react-router';
 
 import {
   createEmotionCache,
   defaultEmotionCache
 } from './Providers/Chakra/createEmotionCache';
 import { ClientStyleContext } from './Providers/Chakra/emotionContext';
+import { router } from './routes';
 
 try {
   window.process = window.process || ({ env: {} } as any);
@@ -31,11 +31,16 @@ function ClientCacheProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-startTransition(() => {
-  hydrateRoot(
-    document,
+const root = document.getElementById('root');
+
+if (!root) {
+  throw new Error('Thingtime root element was not found.');
+}
+
+createRoot(root).render(
+  <React.StrictMode>
     <ClientCacheProvider>
-      <RemixBrowser />
+      <RouterProvider router={router} />
     </ClientCacheProvider>
-  );
-});
+  </React.StrictMode>
+);

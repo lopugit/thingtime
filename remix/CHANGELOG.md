@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to the **Thingtime Remix app** are recorded here. The format
+All notable changes to the **Thingtime web app** are recorded here. The format
 is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with
 assistant and manual changes attributed so future PR archaeology is less cursed.
 
@@ -15,6 +15,38 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 ---
 
 ## [Unreleased]
+
+### PR #24 - Nitro React Router Migration
+
+Detailed PR notes:
+[PRs/24-codex-migrate-remix-to-nitro--migrate-remix-app-to-nitro-and-react-router.md](PRs/24-codex-migrate-remix-to-nitro--migrate-remix-app-to-nitro-and-react-router.md)
+
+### Changed
+
+- Migrated the app runtime from Remix to a Nitro server plus React Router
+  non-framework Vite client, with PM2 running Vite on port 9999 and Nitro on
+  port 10000. — _Codex (AI), 2026-07-02_
+- Added Vercel output verification for the Nitro build so deployments must
+  include the generated Vite shell before the build is accepted. — _Codex (AI),
+  2026-07-02_
+- Added a Vercel project config override so preview deployments use the Nitro
+  build command instead of the previous Remix builder preset. — _Codex (AI),
+  2026-07-02_
+- Added exact pnpm release-age exceptions for the locked `rolldown@1.1.4`
+  packages pulled by Vite 8.1.2 so Vercel preview installs can keep the latest
+  Vite stack without disabling the broader supply-chain policy. — _Codex (AI),
+  2026-07-02_
+- Approved pnpm dependency build scripts for `bcrypt` and `core-js` so strict
+  Vercel installs can complete while keeping unlisted lifecycle scripts blocked.
+  — _Codex (AI), 2026-07-02_
+- Pinned the web package manager to `pnpm@10.12.1` so Vercel Corepack uses the
+  pnpm version that understands the migration's workspace policy settings. —
+  _Codex (AI), 2026-07-02_
+- Patched the Vercel build output so `/` and non-API app paths route to the
+  static Vite `index.html` shell before Nitro's server fallback, and made the
+  verifier assert that order. — _Codex (AI), 2026-07-02_
+- Added root Vercel deployment notes with project, production alias, preview
+  pattern, and the verified PR #24 preview URL. — _Codex (AI), 2026-07-02_
 
 ### PR #16 - Auth And Lopu Hardening
 

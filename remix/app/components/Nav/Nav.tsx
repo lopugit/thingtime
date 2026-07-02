@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Center, Flex, Text } from '@chakra-ui/react';
-import { Link, useLocation, useNavigate } from '@remix-run/react';
+import { Link, useLocation, useNavigate } from 'react-router';
 
 import { CommanderV2 } from '../Commander/CommanderV2';
 import { Icon } from '../Icon/Icon';

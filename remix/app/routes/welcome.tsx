@@ -1,17 +1,8 @@
 import { Flex, Text, Button, Box } from '@chakra-ui/react';
-import { useNavigate, useLocation } from '@remix-run/react';
-import { redirect } from '@vercel/remix';
+import { useNavigate, useLocation } from 'react-router';
 
-import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { UserCard, RAINBOW } from '~/components/User/UserCard';
-
-// Welcome is for signed-in users (you just registered, or you're logged in).
-// Anyone not signed in gets bounced to register.
-export async function loader({ request }: { request: Request }) {
-  if (!(await getCurrentUser(request))) return redirect('/register');
-  return null;
-}
 
 export default function Welcome() {
   const user = useCurrentUser();

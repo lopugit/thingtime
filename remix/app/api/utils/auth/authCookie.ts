@@ -1,4 +1,4 @@
-import { createCookie } from '@remix-run/node';
+import { createCookie } from '~/api/cookies';
 
 // httpOnly cookie that carries the signed JWT for browser sessions. The JWT is
 // already signed, so the cookie itself just needs to be httpOnly + secure. API
