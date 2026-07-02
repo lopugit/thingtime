@@ -2825,8 +2825,8 @@
     "semantic_hash": ""
   },
   "remix/app/routes/docs/design.tsx": {
-    "mtime": 1783012992.6804175,
-    "ast_hash": "52b4c9d1aae5a9fbc1c59a20eb30ef74",
+    "mtime": 1783014140.2384682,
+    "ast_hash": "54d41c868c758f19c07aa66c6bdbcdb9",
     "semantic_hash": ""
   },
   "remix/app/routes/docs/designEntries.ts": {
@@ -2835,8 +2835,8 @@
     "semantic_hash": ""
   },
   "remix/app/routes/docs/index.tsx": {
-    "mtime": 1783012015.2770083,
-    "ast_hash": "1763be7a93bc26b63c8e6e89b1415891",
+    "mtime": 1783013708.630954,
+    "ast_hash": "e1ebbb3cac38bafdabdcc8020432263e",
     "semantic_hash": ""
   }
 }

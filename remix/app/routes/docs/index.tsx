@@ -15,11 +15,11 @@ import {
 import { ArrowRight, Boxes, FileCode2 } from 'lucide-react';
 import { Link as RouterLink } from 'react-router';
 
-import { designEntries } from './designEntries';
+import { designEntries, getDesignEntryPreviewSrc } from './designEntries';
 
 const referenceLinks = [
   { label: 'Design mockups', to: '/docs/design', detail: `${designEntries.length} standalone bundles` },
-  { label: 'Static bundle base', to: '/docs/design-bundles/claude-design-mockup-v1/index.html', detail: '/docs/design-bundles' }
+  { label: 'Static bundle index', to: '#static-bundles', detail: '/docs/design-bundles' }
 ];
 
 export default function DocsIndex() {
@@ -72,21 +72,45 @@ export default function DocsIndex() {
             <Flex align="center" gap={3} mb={4}>
               <Icon as={FileCode2} boxSize={5} color="#5c6ac4" />
               <Heading as="h3" fontSize="lg">
-                Static bundles
+                Static bundle index
               </Heading>
             </Flex>
             <Text color="gray.600" fontSize="sm" lineHeight="1.6" mb={5}>
-              The docs route serves the existing root-level exports without moving or rewriting their generated HTML.
+              The docs route serves every root-level export without moving or rewriting its generated HTML.
             </Text>
-            <ChakraLink
-              href="/docs/design-bundles/claude-design-mockup-v1/index.html"
-              isExternal
-              color="#008060"
-              fontSize="sm"
-              fontWeight="650"
-            >
-              Open first bundle
-            </ChakraLink>
+            <Stack spacing={0} borderTop="1px solid" borderColor="blackAlpha.200">
+              {designEntries.map((entry) => {
+                const previewSrc = getDesignEntryPreviewSrc(entry);
+
+                return (
+                  <ChakraLink
+                    key={entry.slug}
+                    href={previewSrc}
+                    isExternal
+                    _hover={{ textDecoration: 'none', bg: 'blackAlpha.50' }}
+                    borderBottom="1px solid"
+                    borderColor="blackAlpha.200"
+                    display="block"
+                    py={3}
+                  >
+                    <Flex align="center" gap={3} minW={0}>
+                      <Badge bg="#eef2f7" color="#374151" borderRadius="sm" flexShrink={0} px={2}>
+                        HTML
+                      </Badge>
+                      <Box minW={0}>
+                        <Text color="gray.900" fontSize="sm" fontWeight="650">
+                          {entry.title}
+                        </Text>
+                        <Text color="gray.500" fontSize="xs" fontFamily="mono" overflowWrap="anywhere">
+                          {previewSrc}
+                        </Text>
+                      </Box>
+                      <Icon as={ArrowRight} boxSize={4} color="gray.500" flexShrink={0} ml="auto" />
+                    </Flex>
+                  </ChakraLink>
+                );
+              })}
+            </Stack>
           </Box>
         </SimpleGrid>
 
@@ -101,9 +125,9 @@ export default function DocsIndex() {
             {referenceLinks.map((item) => (
               <ChakraLink
                 key={item.to}
-                as={item.to.startsWith('/docs/design-bundles') ? 'a' : RouterLink}
-                href={item.to.startsWith('/docs/design-bundles') ? item.to : undefined}
-                to={item.to.startsWith('/docs/design-bundles') ? undefined : item.to}
+                as={item.to.startsWith('#') ? 'a' : RouterLink}
+                href={item.to.startsWith('#') ? item.to : undefined}
+                to={item.to.startsWith('#') ? undefined : item.to}
                 _hover={{ textDecoration: 'none', bg: 'blackAlpha.50' }}
                 px={5}
                 py={4}
