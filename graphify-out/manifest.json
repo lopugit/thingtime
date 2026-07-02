@@ -1800,8 +1800,8 @@
     "semantic_hash": ""
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1782959373.982595,
-    "ast_hash": "78378c2eca14d4e2e3a0250308acba94",
+    "mtime": 1782960613.0012956,
+    "ast_hash": "4768f0bee2fadc445312967276850773",
     "semantic_hash": ""
   },
   "remix/app/api/utils/vercel/status.ts": {
@@ -2137,6 +2137,11 @@
   "remix/index.html": {
     "mtime": 1782958765.7648957,
     "ast_hash": "2ad8d56d49c96084407f08fee6ea49d4",
+    "semantic_hash": ""
+  },
+  "remix/PRs/24-codex-migrate-remix-to-nitro--migrate-remix-app-to-nitro-and-react-router.md": {
+    "mtime": 1782960613.0021913,
+    "ast_hash": "6ce5b437bc65b13fccf765b144e3fa7b",
     "semantic_hash": ""
   }
 }

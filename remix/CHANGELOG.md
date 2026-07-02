@@ -16,7 +16,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-### PR #TBD - Nitro React Router Migration
+### PR #24 - Nitro React Router Migration
+
+Detailed PR notes:
+[PRs/24-codex-migrate-remix-to-nitro--migrate-remix-app-to-nitro-and-react-router.md](PRs/24-codex-migrate-remix-to-nitro--migrate-remix-app-to-nitro-and-react-router.md)
 
 ### Changed
 
