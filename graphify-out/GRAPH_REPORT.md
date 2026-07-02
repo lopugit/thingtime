@@ -1,20 +1,22 @@
 # Graph Report - thingtime  (2026-07-02)
 
 ## Corpus Check
-- 260 files · ~570,404 words
+- 261 files · ~570,465 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 1395 nodes · 2527 edges · 94 communities (74 shown, 20 thin omitted)
+- 1400 nodes · 2531 edges · 105 communities (85 shown, 20 thin omitted)
 - Extraction: 95% EXTRACTED · 5% INFERRED · 0% AMBIGUOUS · INFERRED: 116 edges (avg confidence: 0.51)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `7004269d`
+- Built from commit: `3eac692c`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
+- [[_COMMUNITY_getCurrentUser.ts|getCurrentUser.ts]]
+- [[_COMMUNITY_jwt.ts|jwt.ts]]
 - [[_COMMUNITY_Backend API Dependencies|Backend API Dependencies]]
 - [[_COMMUNITY_Remix Frontend Dependencies|Remix Frontend Dependencies]]
 - [[_COMMUNITY_Remix DevLint Dependencies|Remix Dev/Lint Dependencies]]
@@ -23,10 +25,13 @@
 - [[_COMMUNITY_Smarts Babel Codegen|Smarts Babel Codegen]]
 - [[_COMMUNITY_Remix Root & Session Setup|Remix Root & Session Setup]]
 - [[_COMMUNITY_Thingtime TimelineTimemachine|Thingtime Timeline/Timemachine]]
+- [[_COMMUNITY_root-data.server.ts|root-data.server.ts]]
+- [[_COMMUNITY_getConnection|getConnection]]
 - [[_COMMUNITY_Raw Result Display Components|Raw Result Display Components]]
 - [[_COMMUNITY_TypeScript Config (A)|TypeScript Config (A)]]
 - [[_COMMUNITY_TypeScript Config (B)|TypeScript Config (B)]]
 - [[_COMMUNITY_Remix Layout & Nav Components|Remix Layout & Nav Components]]
+- [[_COMMUNITY_VercelStatus.tsx|VercelStatus.tsx]]
 - [[_COMMUNITY_Commander V2 & Hooks|Commander V2 & Hooks]]
 - [[_COMMUNITY_TypeScript Config (C)|TypeScript Config (C)]]
 - [[_COMMUNITY_Rainbow Text & Splash Demo|Rainbow Text & Splash Demo]]
@@ -34,16 +39,24 @@
 - [[_COMMUNITY_Thingtime Context & Types|Thingtime Context & Types]]
 - [[_COMMUNITY_Smarts Context & Scoping|Smarts Context & Scoping]]
 - [[_COMMUNITY_Image Mod Extension Docs & Tools|Image Mod Extension Docs & Tools]]
+- [[_COMMUNITY__raw-results.tsx|_raw-results.tsx]]
 - [[_COMMUNITY_Raycast Command Type Defs|Raycast Command Type Defs]]
 - [[_COMMUNITY_Minimal Package Manifest|Minimal Package Manifest]]
 - [[_COMMUNITY_Smarts Parser & Eval|Smarts Parser & Eval]]
+- [[_COMMUNITY_collections.ts|collections.ts]]
 - [[_COMMUNITY_Reactive Navigation Components|Reactive Navigation Components]]
+- [[_COMMUNITY__template.tsx|_template.tsx]]
 - [[_COMMUNITY_ESLint Config|ESLint Config]]
 - [[_COMMUNITY_Smart Thing Access (getset)|Smart Thing Access (get/set)]]
 - [[_COMMUNITY_Smarts Serialization|Smarts Serialization]]
+- [[_COMMUNITY_setup.ts|setup.ts]]
 - [[_COMMUNITY_Smarts Object CloneMerge|Smarts Object Clone/Merge]]
 - [[_COMMUNITY_Thingtime Vision & Use Cases|Thingtime Vision & Use Cases]]
 - [[_COMMUNITY_Community 39|Community 39]]
+- [[_COMMUNITY_root.tsx|root.tsx]]
+- [[_COMMUNITY_json|json]]
+- [[_COMMUNITY_loginUser.ts|loginUser.ts]]
+- [[_COMMUNITY_vercel.json|vercel.json]]
 - [[_COMMUNITY_Remix Session Storage|Remix Session Storage]]
 - [[_COMMUNITY_Internet Speed Test Entry|Internet Speed Test Entry]]
 - [[_COMMUNITY_GH Logo (Purple Blobs)|GH Logo (Purple Blobs)]]
@@ -57,7 +70,6 @@
 - [[_COMMUNITY_Community 81|Community 81]]
 - [[_COMMUNITY_Community 88|Community 88]]
 - [[_COMMUNITY_Community 90|Community 90]]
-- [[_COMMUNITY_Community 93|Community 93]]
 - [[_COMMUNITY_Community 105|Community 105]]
 - [[_COMMUNITY_Community 111|Community 111]]
 - [[_COMMUNITY_Community 114|Community 114]]
@@ -71,7 +83,6 @@
 - [[_COMMUNITY_routes.tsx|routes.tsx]]
 - [[_COMMUNITY_ImagePatternGrid.tsx|ImagePatternGrid.tsx]]
 - [[_COMMUNITY_crypto.tsx|crypto.tsx]]
-- [[_COMMUNITY_vercel.tsx|vercel.tsx]]
 - [[_COMMUNITY_contains|contains]]
 - [[_COMMUNITY_entry.client.tsx|entry.client.tsx]]
 - [[_COMMUNITY_package.json|package.json]]
@@ -124,11 +135,19 @@
 - 1-file cycle: `remix/app/routes.tsx -> remix/app/routes.tsx`
 - 3-file cycle: `remix/app/Providers/ThingtimeProvider.tsx -> remix/app/hooks/useThingtimeMachine.tsx -> remix/app/components/Thingtime/useThingtime.tsx -> remix/app/Providers/ThingtimeProvider.tsx`
 
-## Communities (94 total, 20 thin omitted)
+## Communities (105 total, 20 thin omitted)
+
+### Community 0 - "getCurrentUser.ts"
+Cohesion: 0.24
+Nodes (13): authCookie, clearAuthCookie(), getAuthToken(), getCurrentUser(), verifyJwt(), createSession(), getLiveSession(), revokeSession() (+5 more)
+
+### Community 1 - "jwt.ts"
+Cohesion: 0.26
+Nodes (15): getEs256SigningKey(), getEs256VerifyKey(), getJwtIssuer(), getJwtKeyId(), getLegacySecret(), getPrivateKeyPem(), getPublicJwk(), getPublicJwks() (+7 more)
 
 ### Community 2 - "Backend API Dependencies"
-Cohesion: 0.19
-Nodes (12): Submit(), DevKit(), spin, Icon(), Login(), inputSx, Register(), useLopu() (+4 more)
+Cohesion: 0.17
+Nodes (16): DevKit(), spin, Icon(), Login(), inputSx, Register(), useLopu(), useLopuStream() (+8 more)
 
 ### Community 3 - "Remix Frontend Dependencies"
 Cohesion: 0.04
@@ -147,16 +166,24 @@ Cohesion: 0.05
 Nodes (38): author, categories, commands, contributors, dependencies, fuse.js, mathjs, @raycast/api (+30 more)
 
 ### Community 7 - "Smarts Babel Codegen"
-Cohesion: 0.19
-Nodes (14): commanderArgs, CommanderV1(), CommanderV2(), MagicInput, MagicInputProps, Thingtime(), ThingtimeComponentProps, ThingtimeProps (+6 more)
+Cohesion: 0.18
+Nodes (13): commanderArgs, CommanderV1(), CommanderV2(), MagicInput, MagicInputProps, ThingtimeComponentProps, ThingtimeProps, sanitise() (+5 more)
 
 ### Community 8 - "Remix Root & Session Setup"
 Cohesion: 0.18
 Nodes (16): addOpt(), anyOptsIn(), anyThingsIn(), optIn(), optIndex(), optsIn(), popOpt(), popOpts() (+8 more)
 
 ### Community 9 - "Thingtime Timeline/Timemachine"
-Cohesion: 0.22
-Nodes (7): ProfileDrawer(), RainbowText(), Splash(), TextAnimation1(), ThingtimeDemo(), Index(), Index()
+Cohesion: 0.19
+Nodes (8): Nav(), ProfileDrawer(), RainbowText(), RainbowSkeleton(), Splash(), TextAnimation1(), Thingtime(), ThingtimeDemo()
+
+### Community 10 - "root-data.server.ts"
+Cohesion: 0.19
+Nodes (7): CookieOptions, createCookie(), Session, getDeploymentBranchName(), loadRootData(), rootDataResponse(), shouldShowDeploymentStatus()
+
+### Community 11 - "getConnection"
+Cohesion: 0.25
+Nodes (8): mongodb, getClient(), getConnection(), getMongoDb(), getObjectId(), userCheckExists(), userValidatePassword(), mongodb
 
 ### Community 12 - "Raw Result Display Components"
 Cohesion: 0.07
@@ -173,6 +200,10 @@ Nodes (20): compilerOptions, allowJs, baseUrl, esModuleInterop, forceConsistentC
 ### Community 15 - "Remix Layout & Nav Components"
 Cohesion: 0.11
 Nodes (18): compilerOptions, allowJs, baseUrl, esModuleInterop, forceConsistentCasingInFileNames, isolatedModules, jsx, lib (+10 more)
+
+### Community 17 - "VercelStatus.tsx"
+Cohesion: 0.20
+Nodes (11): MongoStatus(), pulse, STATUS_COLORS, spin, StatusRefreshButton(), getDisplayPhase(), getProgressLeft(), getStatusText() (+3 more)
 
 ### Community 18 - "Commander V2 & Hooks"
 Cohesion: 0.13
@@ -202,6 +233,10 @@ Nodes (9): createScopedEval(), load(), parse(), parser(), play(), primitives(), 
 Cohesion: 0.25
 Nodes (9): deletesmart(), getsmart(), parsePropertyArray(), parsePropertyPath(), pathToArray(), pathToString(), ppa(), ppp() (+1 more)
 
+### Community 25 - "_raw-results.tsx"
+Cohesion: 0.30
+Nodes (6): getUser(), getCollection(), getDb(), userCreateSession(), actionExport(), earlyReturn()
+
 ### Community 26 - "Raycast Command Type Defs"
 Cohesion: 0.29
 Nodes (8): getThing(), popThing(), pushThing(), pushThings(), setThing(), setThings(), thingIn(), thingIndex()
@@ -214,9 +249,17 @@ Nodes (7): env, es2020, node, extends, parser, plugins, root
 Cohesion: 0.32
 Nodes (8): pause(), replacer(), safestring(), save(), serialize(), setKnown(), stringifier(), stringify()
 
+### Community 29 - "collections.ts"
+Cohesion: 0.33
+Nodes (9): consumeEmailVerification(), ConsumeResult, createEmailVerification(), newToken(), getClientCached(), getEmailVerificationsCollection(), getLopuMusingRateLimitsCollection(), getThingsCollection() (+1 more)
+
 ### Community 30 - "Reactive Navigation Components"
 Cohesion: 0.29
 Nodes (6): 2023-06-18, 2023-07-05, 2023-07-06, 2024-01-27, 2024-01-28, Image Modification DevLog - A more detailed changelog
+
+### Community 31 - "_template.tsx"
+Cohesion: 0.33
+Nodes (5): TestAPI(), Editor(), TopSpacing(), action(), earlyReturn()
 
 ### Community 32 - "ESLint Config"
 Cohesion: 0.33
@@ -230,6 +273,10 @@ Nodes (11): Auth and Lopu AI, 💹 Donate on Indiegogo to save humanity 🩷, Fo
 Cohesion: 0.70
 Nodes (3): Safe(), getMeta(), safe()
 
+### Community 35 - "setup.ts"
+Cohesion: 0.33
+Nodes (6): actionExport(), earlyReturn(), getUsers(), SeedUser, saveUsers(), setup()
+
 ### Community 37 - "Smarts Object Clone/Merge"
 Cohesion: 0.50
 Nodes (3): Commands, Features, Image Modification
@@ -242,6 +289,22 @@ Nodes (3): Deploy Your Own, Development, Remix
 Cohesion: 0.13
 Nodes (17): Rainbow(), averageSegmentJoins(), getData(), outlineStrokes(), strokeToFill(), constructor(), render(), Sample (+9 more)
 
+### Community 40 - "root.tsx"
+Cohesion: 0.31
+Nodes (5): Main(), GlobalStyles(), useIcons(), App(), RootLoaderData
+
+### Community 41 - "json"
+Cohesion: 0.62
+Nodes (5): json(), isVercelStatusEnabled(), loader(), action(), loader()
+
+### Community 42 - "loginUser.ts"
+Cohesion: 0.53
+Nodes (4): serializeAuthCookie(), LoginResult, loginUser(), action()
+
+### Community 43 - "vercel.json"
+Cohesion: 0.40
+Nodes (4): buildCommand, framework, installCommand, $schema
+
 ### Community 44 - "Remix Session Storage"
 Cohesion: 0.50
 Nodes (3): Codex workspace notes, Delivery messaging, graphify
@@ -251,8 +314,8 @@ Cohesion: 0.50
 Nodes (3): Fundamentals (read first), graphify, Shared agent instructions
 
 ### Community 60 - "Pre-dev Script"
-Cohesion: 0.09
-Nodes (52): json(), appendDeploymentIdToDashboardUrl(), clampPercent(), deploymentPageCache, formatBuildPhase(), formatRelativeTime(), getBuildProgressFromChecks(), getCachedJson() (+44 more)
+Cohesion: 0.06
+Nodes (63): { createRequestHandler }, appendDeploymentIdToDashboardUrl(), clampPercent(), deploymentPageCache, formatBuildPhase(), formatRelativeTime(), getBuildProgressFromChecks(), getCachedJson() (+55 more)
 
 ### Community 74 - "Community 74"
 Cohesion: 0.29
@@ -282,10 +345,6 @@ Nodes (5): 1. JWT secret fallback, 2. Production source maps, 3. Atomic email ve
 Cohesion: 0.40
 Nodes (4): Decision log, Decisions, Nikolaj Frey — Engineer Decisions, Recurring principles (the thinking method)
 
-### Community 93 - "Community 93"
-Cohesion: 0.27
-Nodes (8): Footer(), Nav(), RainbowSkeleton(), UserCard(), CurrentUser, useCurrentUser(), Profile(), Welcome()
-
 ### Community 111 - "Community 111"
 Cohesion: 0.06
 Nodes (84): Command(), convertFormats, formats, openNewFinderWindow(), regexToReplacementConverter(), regexTrim(), FORMATS, Command() (+76 more)
@@ -295,8 +354,8 @@ Cohesion: 0.07
 Nodes (16): babelPlugin(), createObjectProperties(), deepForEach(), ee(), epp(), escapeEscapes(), escapePropertyPath(), forEachArray() (+8 more)
 
 ### Community 118 - "registerUser.ts"
-Cohesion: 0.06
-Nodes (70): JsonInit, redirect(), authCookie, clearAuthCookie(), getAuthToken(), serializeAuthCookie(), shouldShowDevVerificationLink(), SendArgs (+62 more)
+Cohesion: 0.20
+Nodes (17): shouldShowDevVerificationLink(), SendArgs, sendEmail(), sendVerificationEmail(), isEmail(), RegisterInput, RegisterResult, registerUser() (+9 more)
 
 ### Community 119 - "ThingtimeProvider.tsx"
 Cohesion: 0.10
@@ -307,24 +366,24 @@ Cohesion: 0.13
 Nodes (32): base64UrlToBase64(), configuredPublicPem(), CRYPTO_STANDARDS, CryptoStandard, decodeBase64UrlText(), decodeKeyMaterial(), decodeSignature(), decodeText() (+24 more)
 
 ### Community 137 - "useThingtime"
-Cohesion: 0.17
-Nodes (11): RawResult(), RawResultProps, ThingtimeURL(), EverythingTypes, ThingtimeTypes, useThingtime(), useThingtimeScope, Button() (+3 more)
+Cohesion: 0.13
+Nodes (16): Submit(), Raw(), RawResult(), RawResultProps, RawResults(), ThingtimeURL(), EverythingTypes, ThingtimeTypes (+8 more)
 
 ### Community 139 - "_template.tsx"
-Cohesion: 0.05
-Nodes (41): mongodb, getUser(), getClient(), getCollection(), getMongoUri(), sanitiseMongoHost(), getConnection(), getDb() (+33 more)
+Cohesion: 0.17
+Nodes (10): getMongoUri(), sanitiseMongoHost(), getMongoStatus(), MongoConnectionStatus, actionExport(), earlyReturn(), loader(), action() (+2 more)
 
 ### Community 140 - "root.tsx"
-Cohesion: 0.06
-Nodes (24): CookieOptions, createCookie(), Main(), Session, GlobalStyles(), useIcons(), ChakraWrapper(), chakras (+16 more)
+Cohesion: 0.13
+Nodes (12): ChakraWrapper(), chakras, chakrasDark, chakrasLight, colors, g, greys, ChakraButton (+4 more)
 
 ### Community 145 - "musing.ts"
-Cohesion: 0.11
-Nodes (16): FALLBACK_MUSINGS, ALL_MODES, buildContextLine(), buildUserPrompt(), fetchWeather(), generateLopuMusing(), hasLopuAiProviderConfigured, LopuContext (+8 more)
+Cohesion: 0.09
+Nodes (24): FALLBACK_MUSINGS, ALL_MODES, buildContextLine(), buildUserPrompt(), fetchWeather(), generateLopuMusing(), hasLopuAiProviderConfigured, LopuContext (+16 more)
 
 ### Community 148 - "routes.tsx"
-Cohesion: 0.08
-Nodes (22): TestAPI(), Branding(), Logo(), Editor(), TopSpacing(), Raw(), RawResults(), action() (+14 more)
+Cohesion: 0.10
+Nodes (16): Branding(), Logo(), assets, Branding(), branding(), config, Edge(), fetchJson() (+8 more)
 
 ### Community 153 - "ImagePatternGrid.tsx"
 Cohesion: 0.14
@@ -334,13 +393,9 @@ Nodes (17): ImageGeneratorActionPanel(), SizeSelectionActionPanel(), generatePla
 Cohesion: 0.12
 Nodes (15): ApiResponse, CryptoPage(), CryptoStandard, encodingLabel(), formatJson(), generatedEnvValue(), generatedKeyValue(), JsonOutput() (+7 more)
 
-### Community 173 - "vercel.tsx"
-Cohesion: 0.11
-Nodes (16): { createRequestHandler }, VercelDeploymentsOverview, VercelDeploymentSummary, BRANCH_LIMIT_OPTIONS, buildDefaultSelectedStates(), buildStatusOptions(), dateLabel(), DeploymentRow() (+8 more)
-
 ### Community 198 - "contains"
-Cohesion: 0.40
-Nodes (4): app, io, server, smarts
+Cohesion: 0.24
+Nodes (8): app, io, server, smarts, JsonInit, redirect(), markEmailVerified(), loader()
 
 ### Community 202 - "entry.client.tsx"
 Cohesion: 0.19
@@ -363,23 +418,23 @@ Cohesion: 0.40
 Nodes (3): config, hasFilesystemRoute, indexHtml
 
 ## Knowledge Gaps
-- **521 isolated node(s):** `extends`, `name`, `version`, `description`, `main` (+516 more)
+- **525 isolated node(s):** `extends`, `name`, `version`, `description`, `main` (+520 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **20 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `json()` connect `Pre-dev Script` to `cryptoTools.server.ts`, `root.tsx`, `_template.tsx`, `registerUser.ts`?**
-  _High betweenness centrality (0.082) - this node is a cross-community bridge._
-- **Why does `dependencies` connect `Remix Dev/Lint Dependencies` to `_template.tsx`, `Raycast Manifest & Deps`?**
+- **Why does `json()` connect `json` to `getCurrentUser.ts`, `jwt.ts`, `contains`, `root-data.server.ts`, `loginUser.ts`, `_template.tsx`, `registerUser.ts`, `cryptoTools.server.ts`, `Pre-dev Script`?**
+  _High betweenness centrality (0.081) - this node is a cross-community bridge._
+- **Why does `dependencies` connect `Remix Dev/Lint Dependencies` to `getConnection`, `Raycast Manifest & Deps`?**
   _High betweenness centrality (0.073) - this node is a cross-community bridge._
-- **Why does `mongodb` connect `_template.tsx` to `Remix Dev/Lint Dependencies`?**
+- **Why does `mongodb` connect `getConnection` to `Remix Dev/Lint Dependencies`?**
   _High betweenness centrality (0.071) - this node is a cross-community bridge._
 - **Are the 2 inferred relationships involving `useThingtime()` (e.g. with `Index()` and `Index()`) actually correct?**
   _`useThingtime()` has 2 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `extends`, `name`, `version` to the rest of the system?**
-  _521 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _525 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Remix Frontend Dependencies` be split into smaller, more focused modules?**
   _Cohesion score 0.044444444444444446 - nodes in this community are weakly interconnected._
 - **Should `Remix Dev/Lint Dependencies` be split into smaller, more focused modules?**

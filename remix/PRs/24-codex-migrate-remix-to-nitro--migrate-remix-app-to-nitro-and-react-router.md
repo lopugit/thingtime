@@ -6,6 +6,8 @@
   Nitro server/API runtime.
 - Added Nitro API adapters for the existing route modules, a root-data endpoint,
   SPA fallback routes, and Vercel output verification.
+- Added a `vercel.json` override so Vercel uses the Nitro build path instead of
+  the stale Remix framework preset.
 - Updated PM2, root package scripts, README, AGENTS, and CLAUDE runbooks for
   the Vite `9999` plus Nitro `10000` local dev split.
 - Refreshed graphify outputs after the migration and added graphify/build

@@ -29,6 +29,9 @@ Detailed PR notes:
 - Added Vercel output verification for the Nitro build so deployments must
   include the generated Vite shell before the build is accepted. — _Codex (AI),
   2026-07-02_
+- Added a Vercel project config override so preview deployments use the Nitro
+  build command instead of the previous Remix builder preset. — _Codex (AI),
+  2026-07-02_
 
 ### PR #16 - Auth And Lopu Hardening
 
