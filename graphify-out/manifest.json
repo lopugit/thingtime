@@ -500,8 +500,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Nav/Nav.tsx": {
-    "mtime": 1782958943.7209454,
-    "ast_hash": "996c65661667fce7ca0c131960ef8a15",
+    "mtime": 1782963930.1091964,
+    "ast_hash": "2ca657642058073d6e8c1132631e34a7",
     "semantic_hash": ""
   },
   "remix/app/components/Nav/ProfileDrawer.tsx": {
@@ -610,9 +610,9 @@
     "semantic_hash": "7f1938dd65767c801825fc721151adbf"
   },
   "remix/app/globals/GlobalStyles.tsx": {
-    "mtime": 1782958444.9517288,
-    "ast_hash": "e920dc8bdfd99f869ecc9452f1137921",
-    "semantic_hash": "e920dc8bdfd99f869ecc9452f1137921"
+    "mtime": 1782963930.1095057,
+    "ast_hash": "b7cdb3037b397f8ac832fabc8712af27",
+    "semantic_hash": ""
   },
   "remix/app/gp/GradientPath.js": {
     "mtime": 1711197621.4926364,
@@ -695,8 +695,8 @@
     "semantic_hash": "c4054b1dfdb64ee989f94d84a82f34b0"
   },
   "remix/app/root.tsx": {
-    "mtime": 1782958790.4149194,
-    "ast_hash": "dcb24dae6fa2017a882717b8352a43b9",
+    "mtime": 1782963959.612656,
+    "ast_hash": "d60874dffc15e14d0de38872aad95db2",
     "semantic_hash": ""
   },
   "remix/app/routes/$.tsx": {
@@ -845,8 +845,8 @@
     "semantic_hash": "6f47150939eacf6d3a89a87289013ea3"
   },
   "README.md": {
-    "mtime": 1782959373.9817774,
-    "ast_hash": "a668dae16a37c3fc7ebac3fd30bcc700",
+    "mtime": 1782963930.1001427,
+    "ast_hash": "6882dff0a45347ef3122364b6a92ddab",
     "semantic_hash": ""
   },
   "docs/Use Cases/car.md": {
@@ -985,13 +985,13 @@
     "semantic_hash": ""
   },
   "AGENTS.md": {
-    "mtime": 1782959373.980229,
-    "ast_hash": "837f0925ed343bfd107a7f1eecf9c963",
+    "mtime": 1782963930.0997078,
+    "ast_hash": "73090685694bbce543317fec6cd10ed7",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1782959373.9810266,
-    "ast_hash": "ea7f7e53d7c6a89bb1af07fbbfad392b",
+    "mtime": 1782963930.0998888,
+    "ast_hash": "a884b4d0b6534321e63891aece686a86",
     "semantic_hash": ""
   },
   "raycast/assets/command-icon.png": {
@@ -1800,8 +1800,8 @@
     "semantic_hash": ""
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1782962206.3164835,
-    "ast_hash": "5481ceb1eadc8f34ab082c307497a62f",
+    "mtime": 1782963930.1088347,
+    "ast_hash": "35db4fb4b93b78557a8dc45608f93b8b",
     "semantic_hash": ""
   },
   "remix/app/api/utils/vercel/status.ts": {
@@ -2162,6 +2162,146 @@
   "VERCEL_DEPLOYMENTS.md": {
     "mtime": 1782962201.3812783,
     "ast_hash": "70dd0be4cbdd1a3ee0bb0f87fdf59108",
+    "semantic_hash": ""
+  },
+  ".design-sync/config.json": {
+    "mtime": 1782963930.0988064,
+    "ast_hash": "3b2e6ef9a094ff31aaf097ff90cff69f",
+    "semantic_hash": ""
+  },
+  ".design-sync/previews/Attention.tsx": {
+    "mtime": 1782963930.0989583,
+    "ast_hash": "7883a699953e5480a7753b6eb0db5e4f",
+    "semantic_hash": ""
+  },
+  ".design-sync/previews/Branding.tsx": {
+    "mtime": 1782963930.0990455,
+    "ast_hash": "fa31c74e4b50ea9c98290c8cebc83c9b",
+    "semantic_hash": ""
+  },
+  ".design-sync/previews/Hamburger.tsx": {
+    "mtime": 1782963930.0991318,
+    "ast_hash": "704b782b220b59f23ffdc9ee15bd66ae",
+    "semantic_hash": ""
+  },
+  ".design-sync/previews/Icon.tsx": {
+    "mtime": 1782963930.0992098,
+    "ast_hash": "74acacdbe1b5340110da46dcb45be330",
+    "semantic_hash": ""
+  },
+  ".design-sync/previews/Logo.tsx": {
+    "mtime": 1782963930.099291,
+    "ast_hash": "0aab97cae30fe18933fe7468a16b7e84",
+    "semantic_hash": ""
+  },
+  ".design-sync/previews/RainbowSkeleton.tsx": {
+    "mtime": 1782963930.0993853,
+    "ast_hash": "7a519ea5521d32044d8fe727aa146800",
+    "semantic_hash": ""
+  },
+  "iOS/Thingtime/App/ThingtimeApp.swift": {
+    "mtime": 1782963930.1048706,
+    "ast_hash": "b295a8944875ef6bbb2f3156dc973c1a",
+    "semantic_hash": ""
+  },
+  "iOS/Thingtime/Resources/Assets.xcassets/AppIcon.appiconset/Contents.json": {
+    "mtime": 1782963930.1050577,
+    "ast_hash": "cc0fa974a2eb9d06669de8f7d07455fc",
+    "semantic_hash": ""
+  },
+  "iOS/Thingtime/Resources/Assets.xcassets/Contents.json": {
+    "mtime": 1782963930.106926,
+    "ast_hash": "9deb2ada1cc834bbebf8bbad9c8978a1",
+    "semantic_hash": ""
+  },
+  "iOS/Thingtime/Web/ThingtimeWebDestination.swift": {
+    "mtime": 1782963930.1070373,
+    "ast_hash": "a8d566a8ff15b4d37fdc97c0d776c0dd",
+    "semantic_hash": ""
+  },
+  "iOS/Thingtime/Web/ThingtimeWebView.swift": {
+    "mtime": 1782963930.1071308,
+    "ast_hash": "5b2f5f6ee60f05c79e941484efd9f52d",
+    "semantic_hash": ""
+  },
+  "iOS/Thingtime/Web/WebView.swift": {
+    "mtime": 1782963930.107251,
+    "ast_hash": "d1a1a7323916ac3e91b9e72328c1aca2",
+    "semantic_hash": ""
+  },
+  "iOS/ThingtimeTests/ThingtimeWebDestinationTests.swift": {
+    "mtime": 1782963930.1073828,
+    "ast_hash": "358eb47aa7c6ab59f888b16af93377bc",
+    "semantic_hash": ""
+  },
+  "iOS/scripts/_xcode-common.sh": {
+    "mtime": 1782963930.1082025,
+    "ast_hash": "a0ba94e8c081700c3abc7ea88f62c5d4",
+    "semantic_hash": ""
+  },
+  "iOS/scripts/bootstrap.sh": {
+    "mtime": 1782963930.108302,
+    "ast_hash": "d587f9d58a6acc58239afc8df21792c4",
+    "semantic_hash": ""
+  },
+  "iOS/scripts/build.sh": {
+    "mtime": 1782963930.1083863,
+    "ast_hash": "b9e11255ea0b209a92286e08b37b28ce",
+    "semantic_hash": ""
+  },
+  "iOS/scripts/test.sh": {
+    "mtime": 1782963930.1084673,
+    "ast_hash": "9405519e7a2c14bf28b547df8adff278",
+    "semantic_hash": ""
+  },
+  "iOS/scripts/testflight-beta.sh": {
+    "mtime": 1782963930.108556,
+    "ast_hash": "c0286e4042d72f863087d4901784ddea",
+    "semantic_hash": ""
+  },
+  "remix/.ds-entry.tsx": {
+    "mtime": 1782963930.1086628,
+    "ast_hash": "0fc08d01f313736a4db7011bb80ba036",
+    "semantic_hash": ""
+  },
+  "remix/app/components/NativeBridge/NativeBridgeHost.tsx": {
+    "mtime": 1782963930.1089835,
+    "ast_hash": "0764e4a310e585e50d45dfc06b18bcbe",
+    "semantic_hash": ""
+  },
+  "remix/app/utils/nativeBridge.ts": {
+    "mtime": 1782963930.109795,
+    "ast_hash": "c64df66b18e07a8201e80def07e7cceb",
+    "semantic_hash": ""
+  },
+  "iOS/AGENTS.md": {
+    "mtime": 1782963930.1043644,
+    "ast_hash": "d5b27c62b1e86cccbb54e0663359931c",
+    "semantic_hash": ""
+  },
+  "iOS/CLAUDE.md": {
+    "mtime": 1782964123.1759713,
+    "ast_hash": "37cac14b33f5b165ca305b5a12fbd0b1",
+    "semantic_hash": ""
+  },
+  "iOS/README.md": {
+    "mtime": 1782963930.1047168,
+    "ast_hash": "cfd19758db6e5b8b4262843ba536a88b",
+    "semantic_hash": ""
+  },
+  "iOS/fastlane/README.md": {
+    "mtime": 1782963930.1079774,
+    "ast_hash": "0eb0960595104094b7d013521a46456b",
+    "semantic_hash": ""
+  },
+  "iOS/project.yml": {
+    "mtime": 1782963930.1080651,
+    "ast_hash": "7c77e398f553eb2416111c78329f8165",
+    "semantic_hash": ""
+  },
+  "iOS/Thingtime/Resources/Assets.xcassets/AppIcon.appiconset/icon-1024.png": {
+    "mtime": 1782963930.1068168,
+    "ast_hash": "1fd2426bad97849dca6dcd8cd5bb1d89",
     "semantic_hash": ""
   }
 }

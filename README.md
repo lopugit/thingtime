@@ -204,3 +204,24 @@ Only variables with the `THINGTIME_` prefix are intentionally copied into the
 browser-visible loader data, and variables containing `PRIVATE` are excluded.
 Keep secrets such as MongoDB passwords and Vercel API tokens unprefixed and
 server-only.
+
+## Native iOS TestFlight web URL
+
+The native iOS app lives in `iOS/` and defaults its embedded `WKWebView` to
+`https://thingtime.com`. TestFlight builds can target a Vercel branch or preview
+deployment by setting a non-secret build-time URL:
+
+```sh
+export THINGTIME_WEB_URL="https://<vercel-branch-preview-host>"
+```
+
+For repeatable local uploads, copy `iOS/.env.example` to `iOS/.env`, fill in the
+TestFlight values, and run:
+
+```sh
+iOS/scripts/testflight-beta.sh
+```
+
+`iOS/.env` is ignored by git. The value is baked into that uploaded app build;
+future web changes on the same Vercel branch URL do not require a new iOS
+binary.
