@@ -810,8 +810,8 @@
     "semantic_hash": ""
   },
   "remix/package.json": {
-    "mtime": 1782961314.8076699,
-    "ast_hash": "9325f3cb4466600f90eb0c2b73196995",
+    "mtime": 1782961506.020187,
+    "ast_hash": "7455537b197585bea1a7c9689aebc0af",
     "semantic_hash": ""
   },
   "remix/public/manifest.json": {
@@ -1800,8 +1800,8 @@
     "semantic_hash": ""
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1782961318.3006084,
-    "ast_hash": "888cd4533366e663b7f81f58890fab17",
+    "mtime": 1782961517.2208595,
+    "ast_hash": "b9669f204089a0a1fc6d41b0a0e03715",
     "semantic_hash": ""
   },
   "remix/app/api/utils/vercel/status.ts": {
@@ -2110,8 +2110,8 @@
     "semantic_hash": ""
   },
   "remix/scripts/verify-vercel-output.mjs": {
-    "mtime": 1782959000.4522147,
-    "ast_hash": "ba6f7b6e39d2b2de155651302f0e5d3c",
+    "mtime": 1782961512.9140058,
+    "ast_hash": "41c016e6ae78f96465660ec4a18d414b",
     "semantic_hash": ""
   },
   "remix/server/routes/[...].ts": {
@@ -2140,8 +2140,8 @@
     "semantic_hash": ""
   },
   "remix/PRs/24-codex-migrate-remix-to-nitro--migrate-remix-app-to-nitro-and-react-router.md": {
-    "mtime": 1782961322.3690803,
-    "ast_hash": "230e74488809b669d7cd3e0c78835fa1",
+    "mtime": 1782961521.5284042,
+    "ast_hash": "c87cce1c8c425062cb46b05261e4e6ba",
     "semantic_hash": ""
   },
   "remix/vercel.json": {
@@ -2152,6 +2152,11 @@
   "remix/pnpm-workspace.yaml": {
     "mtime": 1782961186.3944206,
     "ast_hash": "41b6cc09b5be593a59b592191045174b",
+    "semantic_hash": ""
+  },
+  "remix/scripts/patch-vercel-output.mjs": {
+    "mtime": 1782961499.2682245,
+    "ast_hash": "2e61b362a2b0f8620c223c948c5acf36",
     "semantic_hash": ""
   }
 }

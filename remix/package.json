@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "packageManager": "pnpm@10.12.1",
   "scripts": {
-    "build": "npm run ensure-bcrypt && ./scripts/pre-dev.sh && npm run build:client && npm run sync:nitro-template && NITRO_PRESET=vercel npm run build:server && npm run verify:vercel-output",
+    "build": "npm run ensure-bcrypt && ./scripts/pre-dev.sh && npm run build:client && npm run sync:nitro-template && NITRO_PRESET=vercel npm run build:server && npm run patch:vercel-output && npm run verify:vercel-output",
     "build:client": "vite build",
     "build:server": "nitro build",
     "ensure-bcrypt": "node scripts/ensure-bcrypt-binding.js",
@@ -16,6 +16,7 @@
     "lint": "eslint --ext .js,.ts,.jsx,.tsx .",
     "lint-fix": "eslint --ext .js,.ts,.jsx,.tsx . --fix",
     "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,css,scss,md}\"",
+    "patch:vercel-output": "node scripts/patch-vercel-output.mjs",
     "preview": "node .output/server/index.mjs",
     "sync:nitro-template": "node scripts/sync-nitro-template.mjs",
     "verify:vercel-output": "node scripts/verify-vercel-output.mjs"

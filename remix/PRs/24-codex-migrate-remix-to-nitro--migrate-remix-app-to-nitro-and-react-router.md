@@ -14,6 +14,8 @@
   lifecycle hooks Vercel blocks during strict preview installs.
 - Pinned the web package to `pnpm@10.12.1` so Vercel Corepack uses the same
   package-manager generation as local verification.
+- Patched the Vercel output routes so non-API app paths resolve to the static
+  Vite shell instead of Nitro's server fallback.
 - Updated PM2, root package scripts, README, AGENTS, and CLAUDE runbooks for
   the Vite `9999` plus Nitro `10000` local dev split.
 - Refreshed graphify outputs after the migration and added graphify/build
