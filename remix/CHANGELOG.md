@@ -32,6 +32,10 @@ Detailed PR notes:
 - Added a Vercel project config override so preview deployments use the Nitro
   build command instead of the previous Remix builder preset. — _Codex (AI),
   2026-07-02_
+- Added exact pnpm release-age exceptions for the locked `rolldown@1.1.4`
+  packages pulled by Vite 8.1.2 so Vercel preview installs can keep the latest
+  Vite stack without disabling the broader supply-chain policy. — _Codex (AI),
+  2026-07-02_
 
 ### PR #16 - Auth And Lopu Hardening
 
