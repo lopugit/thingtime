@@ -9,6 +9,9 @@ import type { RootLoaderData } from './root-data.server';
 import Branding from './routes/branding/_index';
 import BrandingOld from './routes/branding_old';
 import CryptoPage from './routes/crypto';
+import DocsLayout from './routes/docs/DocsLayout';
+import DocsDesign from './routes/docs/design';
+import DocsIndex from './routes/docs/index';
 import Edge from './routes/edge';
 import Index from './routes/_index';
 import Login from './routes/login';
@@ -83,6 +86,14 @@ export const router = createBrowserRouter([
       { path: 'branding', element: <Branding /> },
       { path: 'branding_old', element: <BrandingOld /> },
       { path: 'crypto', element: <CryptoPage /> },
+      {
+        path: 'docs',
+        element: <DocsLayout />,
+        children: [
+          { index: true, element: <DocsIndex /> },
+          { path: 'design', element: <DocsDesign /> }
+        ]
+      },
       { path: 'edge', element: <Edge /> },
       { path: 'login', element: <Login />, loader: requireGuest('/profile') },
       {
