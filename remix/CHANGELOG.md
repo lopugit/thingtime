@@ -45,6 +45,8 @@ Detailed PR notes:
 - Patched the Vercel build output so `/` and non-API app paths route to the
   static Vite `index.html` shell before Nitro's server fallback, and made the
   verifier assert that order. — _Codex (AI), 2026-07-02_
+- Added root Vercel deployment notes with project, production alias, preview
+  pattern, and the verified PR #24 preview URL. — _Codex (AI), 2026-07-02_
 
 ### PR #16 - Auth And Lopu Hardening
 
