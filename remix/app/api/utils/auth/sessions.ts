@@ -6,22 +6,38 @@ export type SessionDoc = {
   jti: string;
   userId: string;
   createdAt: Date;
-  expiresAt: Date;
+  expiresAt: Date | null;
   revokedAt: Date | null;
   type: 'tt.session';
+  purpose?: 'browser' | 'service';
+  meta?: Record<string, any>;
+};
+
+export type CreateSessionOptions = {
+  expiresAt?: Date | null;
+  purpose?: SessionDoc['purpose'];
+  meta?: Record<string, any>;
 };
 
 // Create a server-side session. The `jti` goes into the JWT so the token can be
 // revoked by flipping/deleting this record (FUNDAMENTALS.md §5).
-export const createSession = async (userId: string): Promise<SessionDoc> => {
+export const createSession = async (
+  userId: string,
+  options: CreateSessionOptions = {}
+): Promise<SessionDoc> => {
   const now = new Date();
   const session: SessionDoc = {
     jti: crypto.randomUUID(),
     userId,
     createdAt: now,
-    expiresAt: new Date(now.getTime() + THIRTY_DAYS_MS),
+    expiresAt:
+      options.expiresAt === undefined
+        ? new Date(now.getTime() + THIRTY_DAYS_MS)
+        : options.expiresAt,
     revokedAt: null,
-    type: 'tt.session'
+    type: 'tt.session',
+    purpose: options.purpose ?? 'browser',
+    meta: options.meta ?? {}
   };
   await (await getSessionsCollection()).insertOne(session);
   return session;

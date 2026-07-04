@@ -147,6 +147,47 @@ It does not tell external platforms whether the backing Mongo session has been
 revoked; add a server-side introspection endpoint before relying on live
 revocation checks outside Thingtime.
 
+### Service account provisioning
+
+Apps and backend services can create service-owned Thingtime accounts through:
+
+```sh
+POST /api/v1/auth/service-account
+```
+
+The endpoint is self-service: it does not require a server provisioning secret,
+but it does require a unique, valid email address. The account must verify that
+email within seven days. Until verification, the bearer token works only during
+that grace window; after the deadline, authenticated requests for the service
+account are rejected until the email is verified.
+
+```sh
+curl -X POST "https://thingtime.com/api/v1/auth/service-account" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "serviceName": "CodexTime",
+    "username": "codextime",
+    "email": "codextime-service@example.com",
+    "displayName": "CodexTime"
+  }'
+```
+
+The response includes an `accessToken` that the service can use as a normal
+Thingtime bearer token:
+
+```sh
+Authorization: Bearer <accessToken>
+```
+
+Service account tokens are intentionally non-expiring JWTs with revocable Mongo
+session records. The session `expiresAt` value is `null`, the JWT has no `exp`
+claim, and the account starts with a `storageAllowanceBytes` value of
+`5368709120` (5 GiB). The email-verification deadline is returned as
+`verificationRequiredBy`. Revoke the token by revoking or deleting its backing
+session document.
+
+See `docs/api/service-accounts.md` for the complete request and response shape.
+
 Lopu musings can optionally use Claude and/or OpenAI. Without these keys, the
 endpoint serves the built-in fallback library.
 

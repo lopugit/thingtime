@@ -11,6 +11,7 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/auth/me': () => import('../../../app/routes/api/v1/auth/me/_me'),
   'v1/auth/register': () => import('../../../app/routes/api/v1/auth/register/_register'),
   'v1/auth/resend-verification': () => import('../../../app/routes/api/v1/auth/resend-verification/_resend-verification'),
+  'v1/auth/service-account': () => import('../../../app/routes/api/v1/auth/service-account/_service-account'),
   'v1/auth/verify-email': () => import('../../../app/routes/api/v1/auth/verify-email/_verify-email'),
   'v1/crypto': () => import('../../../app/routes/api/v1/crypto/_crypto'),
   'v1/health/frontend': () => import('../../../app/routes/api/v1/health/frontend/_frontend'),

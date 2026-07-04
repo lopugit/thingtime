@@ -8,6 +8,7 @@ const apiRoutes = [
   'v1/auth/me',
   'v1/auth/register',
   'v1/auth/resend-verification',
+  'v1/auth/service-account',
   'v1/auth/verify-email',
   'v1/crypto',
   'v1/login',

@@ -16,6 +16,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Added
+
+- Added a self-service service-account provisioning API that creates
+  service-owned users, returns non-expiring bearer tokens, requires email
+  verification within seven days, and grants a default 5 GiB storage allowance
+  for backend integrations. — _Codex (AI), 2026-07-04_
+
 ### Fixed
 
 - Made the compact footer environment selector text flush-left with the footer
