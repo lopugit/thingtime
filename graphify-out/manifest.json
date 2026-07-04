@@ -725,8 +725,8 @@
     "semantic_hash": ""
   },
   "remix/.eslintrc.json": {
-    "mtime": 1782186283.8719008,
-    "ast_hash": "8e6e81089e345c2f44bbf2d1ee133aca",
+    "mtime": 1783184139.611951,
+    "ast_hash": "75993b3e63994e832f4d692d243ac6ec",
     "semantic_hash": ""
   },
   "remix/.prettierrc.js": {
@@ -1565,8 +1565,8 @@
     "semantic_hash": ""
   },
   "remix/package.json": {
-    "mtime": 1783011258.487706,
-    "ast_hash": "7455537b197585bea1a7c9689aebc0af",
+    "mtime": 1783184056.7423067,
+    "ast_hash": "e20f8b58d7777b5f2377a266408c45a0",
     "semantic_hash": ""
   },
   "remix/public/manifest.json": {
@@ -1675,8 +1675,8 @@
     "semantic_hash": ""
   },
   "TODO.md": {
-    "mtime": 1782186283.8591275,
-    "ast_hash": "4e17f2a38013334b412291be56cf54f7",
+    "mtime": 1783183831.1549096,
+    "ast_hash": "d9cf56999da902555f7fd28d398fbdbd",
     "semantic_hash": ""
   },
   "VERCEL_DEPLOYMENTS.md": {
@@ -1715,8 +1715,8 @@
     "semantic_hash": ""
   },
   "claude-todo/README.md": {
-    "mtime": 1782186283.8629053,
-    "ast_hash": "95c7edae2e7bf3e8b056c2695a5083dd",
+    "mtime": 1783183813.747318,
+    "ast_hash": "21444c8f82ae7580e45736e7d904c86e",
     "semantic_hash": ""
   },
   "docs/Use Cases/car.md": {
@@ -2872,6 +2872,11 @@
   "remix/app/components/Nav/Drawer/useDrawer.tsx": {
     "mtime": 1783182784.676218,
     "ast_hash": "dc8400c352b3d7c9949f0abb95bfda5b",
+    "semantic_hash": ""
+  },
+  "claude-todo/07-cross-tab-thingtime-sync.md": {
+    "mtime": 1783183811.753784,
+    "ast_hash": "b67b3485b720c9c58c78d600c103cdbc",
     "semantic_hash": ""
   }
 }
