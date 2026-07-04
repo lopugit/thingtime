@@ -12,14 +12,13 @@ import {
   Stack,
   Text
 } from '@chakra-ui/react';
-import { ArrowRight, Boxes, FileCode2 } from 'lucide-react';
+import { ArrowRight, Boxes } from 'lucide-react';
 import { Link as RouterLink } from 'react-router';
 
 import { designEntries } from './designEntries';
 
 const referenceLinks = [
-  { label: 'Design mockups', to: '/docs/design', detail: `${designEntries.length} standalone bundles` },
-  { label: 'Static bundle browser', to: '/docs/design-bundles', detail: `${designEntries.length} HTML bundles` }
+  { label: 'Design mockups', to: '/docs/design', detail: `${designEntries.length} standalone bundles` }
 ];
 
 export default function DocsIndex() {
@@ -44,7 +43,7 @@ export default function DocsIndex() {
           </Text>
         </Box>
 
-        <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
+        <SimpleGrid columns={{ base: 1 }} spacing={4}>
           <Box id="design-browser" bg="white" border="1px solid" borderColor="blackAlpha.200" borderRadius="md" p={5}>
             <Flex align="center" gap={3} mb={4}>
               <Icon as={Boxes} boxSize={5} color="#008060" />
@@ -65,28 +64,6 @@ export default function DocsIndex() {
               rightIcon={<Icon as={ArrowRight} boxSize={4} />}
             >
               Browse mockups
-            </Button>
-          </Box>
-
-          <Box id="static-bundles" bg="white" border="1px solid" borderColor="blackAlpha.200" borderRadius="md" p={5}>
-            <Flex align="center" gap={3} mb={4}>
-              <Icon as={FileCode2} boxSize={5} color="#5c6ac4" />
-              <Heading as="h3" fontSize="lg">
-                Static bundle browser
-              </Heading>
-            </Flex>
-            <Text color="gray.600" fontSize="sm" lineHeight="1.6" mb={5}>
-              Browse every generated HTML bundle in a dedicated docs view without crowding the overview page.
-            </Text>
-            <Button
-              as={RouterLink}
-              to="/docs/design-bundles"
-              size="sm"
-              variant="outline"
-              borderColor="blackAlpha.300"
-              rightIcon={<Icon as={ArrowRight} boxSize={4} />}
-            >
-              Browse bundles
             </Button>
           </Box>
         </SimpleGrid>
@@ -131,9 +108,6 @@ export default function DocsIndex() {
           <Stack spacing={3} fontSize="sm">
             <ChakraLink href="#design-browser" color="gray.700">
               Design browser
-            </ChakraLink>
-            <ChakraLink href="#static-bundles" color="gray.700">
-              Static bundles
             </ChakraLink>
           </Stack>
         </Box>

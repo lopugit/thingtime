@@ -13,7 +13,7 @@ import {
   Stack,
   Text
 } from '@chakra-ui/react';
-import { BookOpen, Boxes, ChevronRight, FileCode2, GripVertical, Menu, PanelLeftClose, PanelLeftOpen, Search, X } from 'lucide-react';
+import { BookOpen, Boxes, ChevronRight, GripVertical, Menu, PanelLeftClose, PanelLeftOpen, Search, X } from 'lucide-react';
 import { Link as RouterLink, Outlet, useLocation, useSearchParams } from 'react-router';
 
 import { designEntries, designKindColors, getDesignEntryBySlug } from './designEntries';
@@ -30,12 +30,6 @@ const docsNav = [
     to: '/docs/design',
     icon: Boxes,
     description: 'Standalone previews'
-  },
-  {
-    label: 'Static bundles',
-    to: '/docs/design-bundles',
-    icon: FileCode2,
-    description: `${designEntries.length} HTML bundles`
   }
 ];
 
