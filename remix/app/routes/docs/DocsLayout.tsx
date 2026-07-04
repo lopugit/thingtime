@@ -8,14 +8,15 @@ import {
   Heading,
   Icon,
   IconButton,
+  Input,
   Link as ChakraLink,
   Stack,
   Text
 } from '@chakra-ui/react';
-import { BookOpen, Boxes, ChevronRight, FileCode2, GripVertical, Menu, PanelLeftClose, PanelLeftOpen, X } from 'lucide-react';
-import { Link as RouterLink, Outlet, useLocation } from 'react-router';
+import { BookOpen, Boxes, ChevronRight, FileCode2, GripVertical, Menu, PanelLeftClose, PanelLeftOpen, Search, X } from 'lucide-react';
+import { Link as RouterLink, Outlet, useLocation, useSearchParams } from 'react-router';
 
-import { designEntries } from './designEntries';
+import { designEntries, designKindColors, getDesignEntryBySlug } from './designEntries';
 
 const docsNav = [
   {
@@ -42,6 +43,11 @@ const DEFAULT_DRAWER_WIDTH = 280;
 const MIN_DRAWER_WIDTH = 220;
 const MAX_DRAWER_WIDTH = 420;
 
+export type DocsOutletContext = {
+  desktopDrawerOpen: boolean;
+  openDesktopDrawer: () => void;
+};
+
 const isActivePath = (pathname: string, to: string) => {
   if (to === '/docs') {
     return pathname === '/docs';
@@ -50,8 +56,129 @@ const isActivePath = (pathname: string, to: string) => {
   return pathname === to || pathname.startsWith(`${to}/`);
 };
 
+const isDesignPath = (pathname: string) => pathname.startsWith('/docs/design');
+
 const clampDrawerWidth = (width: number) =>
   Math.min(MAX_DRAWER_WIDTH, Math.max(MIN_DRAWER_WIDTH, width));
+
+type DrawerDesignEntryListProps = {
+  onNavigate?: () => void;
+};
+
+function DrawerDesignEntryList({ onNavigate }: DrawerDesignEntryListProps) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [query, setQuery] = React.useState('');
+  const selectedEntry =
+    getDesignEntryBySlug(searchParams.get('entry')) || designEntries[0];
+
+  const filteredEntries = React.useMemo(() => {
+    const normalisedQuery = query.trim().toLowerCase();
+
+    if (!normalisedQuery) {
+      return designEntries;
+    }
+
+    return designEntries.filter((entry) =>
+      [entry.title, entry.slug, entry.kind, entry.summary]
+        .join(' ')
+        .toLowerCase()
+        .includes(normalisedQuery)
+    );
+  }, [query]);
+
+  const selectEntry = (slug: string) => {
+    const next = new URLSearchParams(searchParams);
+    next.set('entry', slug);
+    setSearchParams(next);
+    onNavigate?.();
+  };
+
+  return (
+    <Stack minH={0} spacing={3}>
+      <Flex align="center" gap={2}>
+        <Text color="gray.500" fontSize="xs" fontWeight="700" textTransform="uppercase">
+          Mockups
+        </Text>
+        <Text color="gray.500" fontFamily="mono" fontSize="xs">
+          {designEntries.length}
+        </Text>
+      </Flex>
+
+      <Box position="relative">
+        <Icon
+          as={Search}
+          boxSize={4}
+          color="gray.400"
+          left={3}
+          position="absolute"
+          top="50%"
+          transform="translateY(-50%)"
+          zIndex={1}
+        />
+        <Input
+          bg="white"
+          borderColor="blackAlpha.200"
+          borderRadius="md"
+          data-testid="design-filter-input"
+          fontSize="sm"
+          onChange={(event) => setQuery(event.target.value)}
+          pl={9}
+          placeholder="Filter mockups"
+          value={query}
+        />
+      </Box>
+
+      <Stack spacing={0.5}>
+        {filteredEntries.map((entry) => {
+          const active = entry.slug === selectedEntry.slug;
+          const kindColor = designKindColors[entry.kind] || designKindColors.Direction;
+
+          return (
+            <Box
+              key={entry.slug}
+              _hover={{ bg: active ? 'white' : 'blackAlpha.50' }}
+              as="button"
+              bg={active ? 'white' : 'transparent'}
+              borderLeft="3px solid"
+              borderLeftColor={active ? '#008060' : 'transparent'}
+              cursor="pointer"
+              data-testid={`design-entry-${entry.slug}`}
+              onClick={() => selectEntry(entry.slug)}
+              px={3}
+              py={2}
+              textAlign="left"
+              type="button"
+              w="100%"
+            >
+              <Flex align="center" gap={2} minW={0}>
+                <Badge
+                  bg={kindColor.bg}
+                  borderRadius="sm"
+                  color={kindColor.color}
+                  flexShrink={0}
+                  px={1.5}
+                >
+                  {entry.kind}
+                </Badge>
+                <Text fontSize="sm" fontWeight={active ? '700' : '600'} isTruncated minW={0}>
+                  {entry.title}
+                </Text>
+              </Flex>
+              <Text color="gray.500" fontFamily="mono" fontSize="xs" isTruncated mt={0.5}>
+                {entry.slug}
+              </Text>
+            </Box>
+          );
+        })}
+        {filteredEntries.length === 0 ? (
+          <Text color="gray.500" fontSize="xs" px={3} py={2}>
+            No mockups match “{query}”.
+          </Text>
+        ) : null}
+      </Stack>
+    </Stack>
+  );
+}
 
 type DocsDrawerContentProps = {
   closeTestId?: string;
@@ -127,15 +254,24 @@ function DocsDrawerContent({ closeTestId, onClose, pathname, showClose = false }
           );
         })}
       </Stack>
+
+      {isDesignPath(pathname) ? <DrawerDesignEntryList onNavigate={onClose} /> : null}
     </Stack>
   );
 }
 
 export default function DocsLayout() {
   const { pathname } = useLocation();
+  const designRoute = isDesignPath(pathname);
   const [drawerWidth, setDrawerWidth] = React.useState(DEFAULT_DRAWER_WIDTH);
   const [desktopDrawerOpen, setDesktopDrawerOpen] = React.useState(true);
   const [mobileDrawerOpen, setMobileDrawerOpen] = React.useState(false);
+
+  const openDesktopDrawer = React.useCallback(() => setDesktopDrawerOpen(true), []);
+  const outletContext = React.useMemo<DocsOutletContext>(
+    () => ({ desktopDrawerOpen, openDesktopDrawer }),
+    [desktopDrawerOpen, openDesktopDrawer]
+  );
 
   React.useEffect(() => {
     setMobileDrawerOpen(false);
@@ -180,10 +316,10 @@ export default function DocsLayout() {
           lg: desktopDrawerOpen ? `${drawerWidth}px minmax(0, 1fr)` : 'minmax(0, 1fr)'
         }}
         columnGap={{ base: 0, lg: desktopDrawerOpen ? 8 : 0 }}
-        maxW="1680px"
+        maxW={designRoute ? '100%' : '1680px'}
         mx="auto"
         px={{ base: 4, md: 6, xl: 8 }}
-        pb={16}
+        pb={designRoute ? { base: 4, lg: 6 } : 16}
         w="100%"
       >
         {desktopDrawerOpen ? (
@@ -198,7 +334,7 @@ export default function DocsLayout() {
             pr={6}
             w={`${drawerWidth}px`}
           >
-            <Box position="sticky" top="96px">
+            <Box maxH="calc(100vh - 112px)" overflowY="auto" position="sticky" pr={2} top="96px">
               <Flex justify="flex-end" mb={3}>
                 <IconButton
                   aria-label="Collapse docs navigation"
@@ -238,18 +374,19 @@ export default function DocsLayout() {
         ) : null}
 
         <Box as="main" minW={0}>
-          <Flex display={{ base: 'none', lg: 'flex' }} justify="flex-start" mb={4}>
-            <IconButton
-              aria-label="Open docs navigation"
-              display={desktopDrawerOpen ? 'none' : 'inline-flex'}
-              icon={<Icon as={PanelLeftOpen} boxSize={4} />}
-              onClick={() => setDesktopDrawerOpen(true)}
-              size="sm"
-              type="button"
-              variant="outline"
-            />
-          </Flex>
-          <Outlet />
+          {!desktopDrawerOpen && !designRoute ? (
+            <Flex display={{ base: 'none', lg: 'flex' }} justify="flex-start" mb={4}>
+              <IconButton
+                aria-label="Open docs navigation"
+                icon={<Icon as={PanelLeftOpen} boxSize={4} />}
+                onClick={openDesktopDrawer}
+                size="sm"
+                type="button"
+                variant="outline"
+              />
+            </Flex>
+          ) : null}
+          <Outlet context={outletContext} />
         </Box>
       </Grid>
 
@@ -285,13 +422,25 @@ export default function DocsLayout() {
         boxShadow="0 16px 48px rgba(15, 23, 42, 0.16)"
         display={{ base: 'flex', lg: 'none' }}
         gap={1}
-        left="50%"
-        maxW="calc(100vw - 24px)"
+        left={3}
+        maxW="calc(100vw - 96px)"
+        overflowX="auto"
         p={1}
         position="fixed"
-        transform="translateX(-50%)"
         zIndex={1300}
       >
+        <Button
+          borderRadius="999px"
+          data-testid="docs-mobile-menu"
+          flexShrink={0}
+          leftIcon={<Icon as={Menu} boxSize={4} />}
+          onClick={() => setMobileDrawerOpen(true)}
+          size="sm"
+          type="button"
+          variant="ghost"
+        >
+          Menu
+        </Button>
         {docsNav.map((item) => {
           const active = isActivePath(pathname, item.to);
 
@@ -304,9 +453,10 @@ export default function DocsLayout() {
               bg={active ? '#111827' : 'transparent'}
               borderRadius="999px"
               color={active ? 'white' : 'gray.700'}
+              flexShrink={0}
               fontSize="xs"
               fontWeight="700"
-              px={3}
+              px={2.5}
               py={2}
               whiteSpace="nowrap"
             >
@@ -314,17 +464,6 @@ export default function DocsLayout() {
             </ChakraLink>
           );
         })}
-        <Button
-          borderRadius="999px"
-          data-testid="docs-mobile-menu"
-          leftIcon={<Icon as={Menu} boxSize={4} />}
-          onClick={() => setMobileDrawerOpen(true)}
-          size="sm"
-          type="button"
-          variant="ghost"
-        >
-          Menu
-        </Button>
       </Flex>
     </Box>
   );
