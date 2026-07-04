@@ -1080,8 +1080,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Nav/Footer.tsx": {
-    "mtime": 1783156886.0758724,
-    "ast_hash": "50f5a27f997a903839af3ae76afc714e",
+    "mtime": 1783185450.4137104,
+    "ast_hash": "6fba0cba89f00ca7579ca531aab88b57",
     "semantic_hash": ""
   },
   "remix/app/components/Nav/Nav.tsx": {
@@ -1315,13 +1315,13 @@
     "semantic_hash": ""
   },
   "remix/app/root.tsx": {
-    "mtime": 1783156886.0763948,
-    "ast_hash": "4aa185dc0c57fb4681dcecff6acba1fd",
+    "mtime": 1783185450.4141896,
+    "ast_hash": "7ccd8db9b2064745eb079e4d5a432db6",
     "semantic_hash": ""
   },
   "remix/app/routes.tsx": {
-    "mtime": 1783184355.6019664,
-    "ast_hash": "3a95de21639aa0172d2f50e6a72ea71d",
+    "mtime": 1783185450.414428,
+    "ast_hash": "dd7be6ee92c79e20d5d198cabed01d0f",
     "semantic_hash": ""
   },
   "remix/app/routes/$.tsx": {
@@ -1555,8 +1555,8 @@
     "semantic_hash": ""
   },
   "remix/nitro.config.ts": {
-    "mtime": 1783158085.0851414,
-    "ast_hash": "d69ab93cd2584bdd6549f4e46a87824b",
+    "mtime": 1783185450.4157493,
+    "ast_hash": "b1fc8211fe5a270548832bca2e88953e",
     "semantic_hash": ""
   },
   "remix/package.json": {
@@ -1635,8 +1635,8 @@
     "semantic_hash": ""
   },
   "remix/vite.config.ts": {
-    "mtime": 1783159690.2475674,
-    "ast_hash": "07c5b3687121fb5873f522473b0fb74d",
+    "mtime": 1783185450.415925,
+    "ast_hash": "81266d15ef28662289ef7ab9a615a73e",
     "semantic_hash": ""
   },
   "tsconfig.json": {
@@ -1930,8 +1930,8 @@
     "semantic_hash": ""
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1783181963.3486955,
-    "ast_hash": "c21e0772078d718471c7ad756fc88fbd",
+    "mtime": 1783185450.4115598,
+    "ast_hash": "ab18c4f5cbf1f6bf4554c4f05107432a",
     "semantic_hash": ""
   },
   "remix/PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md": {
@@ -2872,6 +2872,36 @@
   "claude-todo/07-cross-tab-thingtime-sync.md": {
     "mtime": 1783183811.753784,
     "ast_hash": "b67b3485b720c9c58c78d600c103cdbc",
+    "semantic_hash": ""
+  },
+  "remix/app/routes/docs/DesignWorkspace.tsx": {
+    "mtime": 1783185450.414773,
+    "ast_hash": "f86be13da2a4e7384ffbbb92ae392aca",
+    "semantic_hash": ""
+  },
+  "remix/app/routes/docs/DocsLayout.tsx": {
+    "mtime": 1783185450.4150212,
+    "ast_hash": "a727e9bcbd171cb11ba818b42e3d2600",
+    "semantic_hash": ""
+  },
+  "remix/app/routes/docs/PreviewPane.tsx": {
+    "mtime": 1783185450.4151556,
+    "ast_hash": "478ed1591c60d4c3c697b33765b16a1a",
+    "semantic_hash": ""
+  },
+  "remix/app/routes/docs/design.tsx": {
+    "mtime": 1783185450.4152694,
+    "ast_hash": "0b8333e3dff4a1d91bf815422a5e969b",
+    "semantic_hash": ""
+  },
+  "remix/app/routes/docs/designEntries.ts": {
+    "mtime": 1783185450.4154022,
+    "ast_hash": "5972ac2712cc53276e8a11d3922ea25a",
+    "semantic_hash": ""
+  },
+  "remix/app/routes/docs/index.tsx": {
+    "mtime": 1783185450.415549,
+    "ast_hash": "d8db1b8f403e210f7749ce5fbb08562c",
     "semantic_hash": ""
   }
 }

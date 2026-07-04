@@ -89,6 +89,16 @@ export const drawerMenuItems: DrawerTopItem[] = [
 			{ id: 'branding-current', label: 'Branding', icon: '🌈', to: '/branding' },
 			{ id: 'branding-old', label: 'Branding (old)', icon: '📚', to: '/branding_old' }
 		]
+	},
+	{
+		id: 'docs',
+		label: 'Docs',
+		icon: '📚',
+		to: '/docs',
+		children: [
+			{ id: 'docs-index', label: 'Docs home', icon: '📖', to: '/docs' },
+			{ id: 'docs-design', label: 'Design mockups', icon: '🖼️', to: '/docs/design' }
+		]
 	}
 ];
 
