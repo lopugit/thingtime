@@ -1320,8 +1320,8 @@
     "semantic_hash": ""
   },
   "remix/app/routes.tsx": {
-    "mtime": 1783158085.0849423,
-    "ast_hash": "39fd5bb86aef4b13b4f4cec53890da8b",
+    "mtime": 1783184355.6019664,
+    "ast_hash": "3a95de21639aa0172d2f50e6a72ea71d",
     "semantic_hash": ""
   },
   "remix/app/routes/$.tsx": {
@@ -1502,11 +1502,6 @@
   "remix/app/routes/register.tsx": {
     "mtime": 1783011258.4841864,
     "ast_hash": "99e2476e64046c82166087669d4abc8b",
-    "semantic_hash": ""
-  },
-  "remix/app/routes/scratchpads/svg-displacement-map.tsx": {
-    "mtime": 1775501275.4415963,
-    "ast_hash": "d483a1f94e84953786c62d5b1e7aaf26",
     "semantic_hash": ""
   },
   "remix/app/routes/status.tsx": {
@@ -2865,8 +2860,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Nav/Drawer/drawerMenu.tsx": {
-    "mtime": 1783180762.5387945,
-    "ast_hash": "4ac42fdfc6e7502dc583368f2b082286",
+    "mtime": 1783184365.8394694,
+    "ast_hash": "265e10316af06c2c8c62800e3abbb699",
     "semantic_hash": ""
   },
   "remix/app/components/Nav/Drawer/useDrawer.tsx": {

@@ -78,13 +78,6 @@ export const drawerMenuItems: DrawerTopItem[] = [
 			{ id: 'dev-tests', label: 'API tests', icon: '✅', to: '/tests' },
 			{ id: 'dev-crypto', label: 'Crypto', icon: '🔒', to: '/crypto' },
 			{ id: 'dev-edge', label: 'Edge', icon: '🌍', to: '/edge' },
-			{
-				id: 'dev-svg-displacement',
-				label: 'SVG displacement',
-				icon: '🖼️',
-				to: '/scratchpads/svg-displacement-map',
-				group: 'Scratchpads'
-			}
 		]
 	},
 	{
