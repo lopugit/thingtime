@@ -1,4 +1,4 @@
-import { Outlet, ScrollRestoration, useLoaderData, useRevalidator } from 'react-router';
+import { Outlet, ScrollRestoration, useLoaderData, useLocation, useRevalidator } from 'react-router';
 import { Analytics } from '@vercel/analytics/react';
 import React from 'react';
 
@@ -40,6 +40,7 @@ try {
 export default function App() {
   const rootData = useLoaderData() as RootLoaderData;
   const { envFromCookie, titlePrefix } = rootData;
+  const { pathname } = useLocation();
   const revalidator = useRevalidator();
   const [mounted, setMounted] = React.useState(false);
 
@@ -62,9 +63,16 @@ export default function App() {
 
   React.useEffect(() => {
     if (typeof document !== 'undefined') {
-      document.title = titlePrefix ? `${titlePrefix} Thingtime` : 'Thingtime';
+      const baseTitle = titlePrefix ? `${titlePrefix} Thingtime` : 'Thingtime';
+      const routeTitle = pathname.startsWith('/docs/design')
+        ? `${baseTitle} docs - Design mockups`
+        : pathname === '/docs'
+          ? `${baseTitle} docs`
+          : baseTitle;
+
+      document.title = routeTitle;
     }
-  }, [titlePrefix]);
+  }, [pathname, titlePrefix]);
 
   React.useEffect(() => {
     const refreshRootData = () => {

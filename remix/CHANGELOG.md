@@ -38,6 +38,9 @@ Detailed PR notes:
 
 ### Added
 
+- Added `/docs` and `/docs/design` browser routes with a Shopify-style docs
+  layout, mockup navigation, and full-screen previews for the PR #25 design
+  bundles. — _Codex (AI), 2026-07-03_
 - Added an environment-aware footer status selector for this tab, local,
   development, staging, and production targets, with compact Nitro API,
   frontend, Vercel, and MongoDB checks. — _Codex (AI), 2026-07-02_
