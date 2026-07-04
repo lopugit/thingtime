@@ -69,14 +69,15 @@
     "uuid": "^9.0.0"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "^6.0.3",
     "@emotion/styled": "^11.13.0",
+    "@remix-run/eslint-config": "2.17.5",
     "@shopify/eslint-plugin": "^42.1.0",
     "@types/eslint": "^8.40.2",
     "@types/node": "^20.14.12",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@typescript-eslint/parser": "^5.60.1",
+    "@vitejs/plugin-react": "^6.0.3",
     "eslint": "^8.43.0",
     "eslint-config-prettier": "^8.8.0",
     "eslint-loader": "^4.0.2",

@@ -21,9 +21,9 @@ import Profile from './routes/profile';
 import Rainbow from './routes/rainbow.$';
 import Raw from './routes/raw';
 import Register from './routes/register';
-import ScratchpadSvgDisplacementMap from './routes/scratchpads/svg-displacement-map';
 import StatusPage from './routes/status';
 import ThingtimeUrl from './routes/$';
+import TestsPage from './routes/tests';
 import VercelPage from './routes/vercel';
 import Welcome from './routes/welcome';
 
@@ -106,7 +106,6 @@ export const router = createBrowserRouter([
       { path: 'rainbow/*', element: <Rainbow /> },
       { path: 'raw', element: <Raw /> },
       { path: 'register', element: <Register />, loader: requireGuest('/welcome') },
-      { path: 'scratchpads/svg-displacement-map', element: <ScratchpadSvgDisplacementMap /> },
       {
         path: 'status',
         element: <StatusPage />,
@@ -117,6 +116,7 @@ export const router = createBrowserRouter([
         element: <VercelPage />,
         loader: vercelDeploymentsLoader
       },
+      { path: 'tests', element: <TestsPage /> },
       { path: 'welcome', element: <Welcome />, loader: requireUser('/register') },
       { path: '*', element: <ThingtimeUrl /> }
     ]

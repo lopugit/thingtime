@@ -4,6 +4,16 @@ import { getLiveSession } from './sessions';
 import { findUserById, toPublicUser } from './users';
 import type { PublicUser } from './users';
 
+const SERVICE_EMAIL_VERIFICATION_GRACE_MS = 1000 * 60 * 60 * 24 * 7;
+
+const serviceEmailVerificationDueAt = (user: any) => {
+  if (user.emailVerificationRequiredBy) {
+    return new Date(user.emailVerificationRequiredBy).getTime();
+  }
+
+  return new Date(user.createdAt).getTime() + SERVICE_EMAIL_VERIFICATION_GRACE_MS;
+};
+
 // Resolve the authenticated user for a request, or null.
 // Verifies: JWT signature + exp → session is still live in Mongo → user exists.
 export const getCurrentUser = async (request: Request): Promise<PublicUser | null> => {
@@ -22,6 +32,13 @@ export const getCurrentUser = async (request: Request): Promise<PublicUser | nul
 
   const user = await findUserById(claims.sub);
   if (!user) return null;
+  if (
+    user.accountKind === 'service' &&
+    !user.emailVerified &&
+    serviceEmailVerificationDueAt(user) < Date.now()
+  ) {
+    return null;
+  }
 
   return toPublicUser(user);
 };

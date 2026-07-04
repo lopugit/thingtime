@@ -1,11 +1,10 @@
 import React from 'react';
-import { Box, Center, Flex, Text } from '@chakra-ui/react';
+import { Box, Center, Flex } from '@chakra-ui/react';
 import { Link, useLocation, useNavigate } from 'react-router';
 
 import { CommanderV2 } from '../Commander/CommanderV2';
 import { Icon } from '../Icon/Icon';
-import { RainbowSkeleton } from '../Skeleton/RainbowSkeleton';
-import { ProfileDrawer } from './ProfileDrawer';
+import { drawerWidthCss, useDrawer, useDrawerLiveWidth, useIsMobileViewport } from './Drawer/useDrawer';
 import { useThingtime } from '../Thingtime/useThingtime';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 
@@ -18,15 +17,20 @@ export const Nav = (props) => {
 
 	const user = useCurrentUser();
 
-	const [profileDrawerOpen, setProfileDrawerOpen] = React.useState(false);
+	const { loading, open, direction } = useDrawer();
+	const { width: drawerWidth, resizing } = useDrawerLiveWidth();
+	const isMobile = useIsMobileViewport();
 
 	const { pathname } = useLocation();
 
 	const navigate = useNavigate();
 
-	const toggleProfileDrawer = React.useCallback(() => {
-		setProfileDrawerOpen(!profileDrawerOpen);
-	}, [profileDrawerOpen]);
+	// follow the drawer: desktop split view offsets the fixed nav, mobile
+	// shifts it along with the page content (content never resizes there);
+	// widths go through the shared viewport-clamped CSS expression
+	const drawerCssWidth = drawerWidthCss(drawerWidth);
+	const desktopOpen = !isMobile && open;
+	const mobileOpen = isMobile && open;
 
 	const inEditorMode = React.useMemo(() => {
 		if (pathname.slice(0, 7) === '/editor') {
@@ -96,7 +100,18 @@ export const Nav = (props) => {
 
 	return (
 		<>
-			<Box position="fixed" zIndex={9999} top={0} right={0} left={0} maxWidth="100vw" paddingTop="var(--thingtime-safe-area-top)">
+			<Box
+				position="fixed"
+				zIndex={9999}
+				top={0}
+				right={direction === 'right' && desktopOpen ? drawerCssWidth : 0}
+				left={direction === 'left' && desktopOpen ? drawerCssWidth : 0}
+				transform={
+					mobileOpen ? (direction === 'left' ? `translateX(${drawerCssWidth})` : `translateX(calc(-1 * ${drawerCssWidth}))`) : 'none'
+				}
+				transition={loading || resizing ? 'none' : 'left 0.28s ease-out, right 0.28s ease-out, transform 0.28s ease-out'}
+				paddingTop="var(--thingtime-safe-area-top)"
+			>
 				<Flex
 					as="nav"
 					position="relative"
@@ -111,27 +126,21 @@ export const Nav = (props) => {
 					// bg='white'
 					// boxShadow={'0px 0px 10px rgba(0,0,0,0.1)'}
 				>
-					<Center className="nav-left-section" display={['none', 'flex']} height="100%" marginRight="auto">
+					<Center
+						className="nav-left-section"
+						display={['none', 'flex']}
+						height="100%"
+						marginRight="auto"
+						// leave room for the fixed drawer trigger button at the top
+						// left of the screen — needed unless the drawer is pinned
+						// on the left (then the nav starts right of the trigger)
+						paddingLeft={direction === 'left' && desktopOpen ? 0 : '34px'}
+					>
 						<Center transform="scaleX(-100%)" cursor="pointer">
 							<Link to="/">
 								<Icon size="12px" name="🦄"></Icon>
 							</Link>
 						</Center>
-
-						{/* Add the current git branch here for dev purposes */}
-						{/* Use https://github.com/lopugit/thingtime/tree/ as a link */}
-						{/* 14/06/2026 Took this out and moved to footer */}
-						{/* <Box
-              // link
-              as="a"
-              href={`https://github.com/lopugit/thingtime/tree/${branchName}`}
-              target="_blank"
-              marginLeft="8px"
-              fontSize="10px"
-              opacity={0.5}
-            >
-              🌱 {branchName}
-            </Box> */}
 					</Center>
 					<CommanderV2 global id="nav" rainbow={false}></CommanderV2>
 					<Center className="nav-right-section" columnGap={[3, 8]} height="100%" marginLeft="auto">
@@ -148,10 +157,6 @@ export const Nav = (props) => {
 									size="12px"
 									name="👀"
 								></Icon>
-								{/* <Icon
-                  size="12px"
-                  name={inEditorMode ? "glowing star" : "star"}
-                ></Icon> */}
 							</Center>
 						)}
 						{editorToggleable && (
@@ -163,18 +168,8 @@ export const Nav = (props) => {
 									size="12px"
 									name="🎨"
 								></Icon>
-								{/* <Icon
-                  size="12px"
-                  name={inEditMode ? "glowing star" : "star"}
-                ></Icon> */}
 							</Center>
 						)}
-						{/* TODO - Add conditional only show if loggedIn */}
-						{/* <Center transform={['', 'scaleX(-100%)']} cursor="pointer">
-              <Link to="/logout">
-                <Icon size="12px" name="🗝️"></Icon>
-              </Link>
-            </Center> */}
 						<Center cursor="pointer">
 							{user ? (
 								<Link to="/profile">
@@ -202,21 +197,8 @@ export const Nav = (props) => {
 							</Link>
 						</Center>
 					</Center>
-					{/* <RainbowSkeleton
-            marginLeft="auto"
-            width="25px"
-            height="25px"
-            cursor="pointer"
-            onClick={toggleProfileDrawer}
-            background="rgba(0,0,0,0.1)"
-            sx={{}}
-            borderRadius="999px"
-          ></RainbowSkeleton> */}
-					{/* <RainbowSkeleton w='40px' ml='auto' mr={"4px"}></RainbowSkeleton>
-          <RainbowSkeleton></RainbowSkeleton> */}
 				</Flex>
 			</Box>
-			{/* <ProfileDrawer isOpen={profileDrawerOpen}></ProfileDrawer> */}
 		</>
 	);
 };

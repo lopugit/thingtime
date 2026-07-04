@@ -92,17 +92,26 @@ export type PublicJwks = { keys: Array<Record<string, unknown>> };
 
 // Sign a JWT carrying the user id (sub) + session id (jti) so the session can
 // be revoked server-side (see sessions.ts).
-export const signJwt = async ({ sub, jti, expiresIn = '30d' }: { sub: string; jti: string; expiresIn?: string }) => {
+export const signJwt = async ({
+  sub,
+  jti,
+  expiresIn = '30d'
+}: {
+  sub: string;
+  jti: string;
+  expiresIn?: string | null;
+}) => {
   const es256Key = getEs256SigningKey();
   if (es256Key) {
-    return new SignJWT({})
+    const jwt = new SignJWT({})
       .setProtectedHeader({ alg: 'ES256', kid: getJwtKeyId(), typ: 'JWT' })
       .setIssuer(getJwtIssuer())
       .setSubject(sub)
       .setJti(jti)
-      .setIssuedAt()
-      .setExpirationTime(expiresIn)
-      .sign(await es256Key);
+      .setIssuedAt();
+
+    if (expiresIn !== null) jwt.setExpirationTime(expiresIn);
+    return jwt.sign(await es256Key);
   }
 
   const legacySecret = getLegacySecret({ allowDevFallback: true });
@@ -110,13 +119,14 @@ export const signJwt = async ({ sub, jti, expiresIn = '30d' }: { sub: string; jt
     throw new Error('[auth] JWT_PRIVATE_KEY or JWT_SECRET must be set before auth can run.');
   }
 
-  return new SignJWT({})
+  const jwt = new SignJWT({})
     .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
     .setSubject(sub)
     .setJti(jti)
-    .setIssuedAt()
-    .setExpirationTime(expiresIn)
-    .sign(legacySecret);
+    .setIssuedAt();
+
+  if (expiresIn !== null) jwt.setExpirationTime(expiresIn);
+  return jwt.sign(legacySecret);
 };
 
 export const verifyJwt = async (token: string): Promise<JwtClaims | null> => {

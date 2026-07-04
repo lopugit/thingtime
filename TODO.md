@@ -32,3 +32,18 @@
    a future build. Add a Vercel webhook endpoint for deployment created/ready/
    failed events, persist the latest project status server-side, and have the
    footer/dashboard read the cached status instead of polling Vercel directly.
+
+6. **Add cross-tab sync for persisted thingtime state.**
+
+   `ThingtimeProvider` (`remix/app/Providers/ThingtimeProvider.tsx`, persist
+   effect around lines 420–450) persists the ENTIRE thingtime object to
+   localforage on every state change, and loads it only once on mount. With
+   two tabs open on the same origin, each tab's writes clobber the other's
+   (last-writer-wins), and neither tab sees the other's changes until reload —
+   observed live: a second dev tab reverted drawer settings
+   (`thingtime.settings.drawer.*`) written by the first. Design and implement
+   cross-tab sync, e.g. a `BroadcastChannel('thingtime')` that publishes
+   changed paths and applies them in other tabs via the existing `setThingtime`
+   queue with `ignoreUndoRedo`, or storage-event-driven reload of changed
+   subtrees. Follow `FUNDAMENTALS.md` and keep the single persist path in
+   `ThingtimeProvider`. Full spec: `claude-todo/07-cross-tab-thingtime-sync.md`.

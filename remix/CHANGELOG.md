@@ -16,6 +16,29 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Added
+
+- Added a drawer-based nav system (Claude-desktop style): edge-flush resizable
+  drawer driven by `thingtime.settings.drawer.*` (open direction, top-level
+  item limit with a faint “More” reveal, dynamic grouped second-level menu,
+  click-and-hold drag reordering persisted to `userDrawerOrdering`, search
+  button honouring `searchClosesDrawer`, sticky avatar opening a desktop
+  centred settings modal / mobile slide-up sheet). Desktop hovers the trigger
+  for a popup preview and pins to a split view; mobile shifts (never resizes)
+  the page. Replaces the dead `ProfileDrawer`. Details in
+  [`PRs/28-codex-service-account-api--drawer-based-nav-revamp.md`](PRs/28-codex-service-account-api--drawer-based-nav-revamp.md).
+  — _Claude (AI), 2026-07-05_
+- Added the local Tailscale/Funnel hostname to Vite's allowed hosts and
+  documented the Thingtime `:9999` local/Tailscale dev URLs. — _Codex (AI),
+  2026-07-04_
+- Added a `/tests` frontend API test harness with group filters, individual
+  route checks, safe all-runs, optional mutating checks, and coverage for the
+  current API route map. — _Codex (AI), 2026-07-04_
+- Added a self-service service-account provisioning API that creates
+  service-owned users, returns non-expiring bearer tokens, requires email
+  verification within seven days, and grants a default 5 GiB storage allowance
+  for backend integrations. — _Codex (AI), 2026-07-04_
+
 ### Fixed
 
 - Made the compact footer environment selector text flush-left with the footer

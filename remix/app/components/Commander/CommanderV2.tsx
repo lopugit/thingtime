@@ -42,8 +42,10 @@ export const CommanderV2 = (props) => {
 
 	const [showContext, setShowContextState] = React.useState(false);
 
+	// mobile chrome allowance: 52px for the fixed drawer trigger on the left
+	// plus the original 108px reserved for the right-side nav icons
 	const mobileVW = React.useMemo(() => {
-		return 'calc(100vw - 108px)';
+		return 'calc(100vw - 160px)';
 	}, []);
 
 	const rainbowRepeats = 2;
@@ -412,7 +414,8 @@ export const CommanderV2 = (props) => {
 				// height="100%"
 				pointerEvents="none"
 				id="commander"
-				paddingX={1}
+				paddingLeft={['52px', 1]}
+				paddingRight={1}
 			>
 				<Flex
 					position="absolute"
