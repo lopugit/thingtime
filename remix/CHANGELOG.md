@@ -18,6 +18,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- Added a `/tests` frontend API test harness with group filters, individual
+  route checks, safe all-runs, optional mutating checks, and coverage for the
+  current API route map. — _Codex (AI), 2026-07-04_
 - Added a self-service service-account provisioning API that creates
   service-owned users, returns non-expiring bearer tokens, requires email
   verification within seven days, and grants a default 5 GiB storage allowance

@@ -21,6 +21,7 @@ import Register from './routes/register';
 import ScratchpadSvgDisplacementMap from './routes/scratchpads/svg-displacement-map';
 import StatusPage from './routes/status';
 import ThingtimeUrl from './routes/$';
+import TestsPage from './routes/tests';
 import VercelPage from './routes/vercel';
 import Welcome from './routes/welcome';
 
@@ -106,6 +107,7 @@ export const router = createBrowserRouter([
         element: <VercelPage />,
         loader: vercelDeploymentsLoader
       },
+      { path: 'tests', element: <TestsPage /> },
       { path: 'welcome', element: <Welcome />, loader: requireUser('/register') },
       { path: '*', element: <ThingtimeUrl /> }
     ]
