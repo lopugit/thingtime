@@ -1,6 +1,7 @@
 import { defineNitroConfig } from 'nitro/config';
 
 const publicDir = new URL('./dist', import.meta.url).pathname;
+const designDocsDir = new URL('../docs/design', import.meta.url).pathname;
 const apiHandler = './server/routes/api/[...].ts';
 const apiRoutes = [
   'v1/auth/jwks',
@@ -37,6 +38,11 @@ export default defineNitroConfig({
       baseURL: '/',
       dir: publicDir,
       maxAge: 60 * 60 * 24 * 365
+    },
+    {
+      baseURL: '/docs/design-bundles',
+      dir: designDocsDir,
+      maxAge: 60 * 60
     }
   ]
 });
