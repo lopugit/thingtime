@@ -44,6 +44,20 @@ export type ApiTestResult = {
   preview: string;
 };
 
+export type ApiTestRunOptions = {
+  bodyOverride?: unknown;
+  hasBodyOverride?: boolean;
+};
+
+export const resolveApiTestBody = (test: ApiTestDefinition, context: ApiTestContext) => {
+  return typeof test.body === 'function' ? test.body(context) : test.body;
+};
+
+export const formatRequestPayload = (value: unknown) => {
+  if (value === undefined) return '';
+  return typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+};
+
 export const expectStatus = (statuses: number[], details?: string): ApiTestExpectation => {
   return ({ response }) => {
     const pass = statuses.includes(response.status);
@@ -150,7 +164,8 @@ const redactPreviewValue = (value: unknown): unknown => {
 
 export const runApiTest = async (
   test: ApiTestDefinition,
-  context: ApiTestContext
+  context: ApiTestContext,
+  options: ApiTestRunOptions = {}
 ): Promise<ApiTestResult> => {
   const startedAt = performance.now();
   const controller = new AbortController();
@@ -158,7 +173,7 @@ export const runApiTest = async (
   const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const body = typeof test.body === 'function' ? test.body(context) : test.body;
+    const body = options.hasBodyOverride ? options.bodyOverride : resolveApiTestBody(test, context);
     const response = await fetch(test.path, {
       method: test.method,
       credentials: 'include',

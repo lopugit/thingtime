@@ -103,7 +103,7 @@ export const apiTests: ApiTestDefinition[] = [
   {
     id: 'auth-resend-verification-empty',
     name: 'Resend verification empty body',
-    description: 'The resend route avoids account enumeration and accepts an empty body.',
+    description: 'The resend route returns ok for empty input so account existence cannot be probed.',
     group: 'auth',
     method: 'POST',
     path: '/api/v1/auth/resend-verification',

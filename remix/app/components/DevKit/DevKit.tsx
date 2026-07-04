@@ -12,6 +12,53 @@ import { useCurrentUser } from '~/hooks/useCurrentUser';
 
 const RAINBOW_CONIC = 'conic-gradient(from 0deg, #47b5e6, #a555e8, #f34a4a, #ffbc48, #58ca70, #47b5e6)';
 const spin = keyframes`from { transform: rotate(0deg) } to { transform: rotate(360deg) }`;
+const DEVKIT_TRIGGER_STORAGE_KEY = 'thingtime.devKit.triggerPosition';
+const DEVKIT_TRIGGER_SIZE = 52;
+const DEVKIT_MARGIN = 8;
+const DEVKIT_PANEL_WIDTH = 260;
+const DEVKIT_PANEL_ESTIMATED_HEIGHT = 360;
+
+type FixedPosition = { left: number; top: number };
+
+const clamp = (value: number, min: number, max: number) => {
+  const upper = Math.max(min, max);
+  return Math.min(Math.max(value, min), upper);
+};
+
+const clampTriggerPosition = (position: FixedPosition): FixedPosition => ({
+  left: clamp(position.left, DEVKIT_MARGIN, window.innerWidth - DEVKIT_TRIGGER_SIZE - DEVKIT_MARGIN),
+  top: clamp(position.top, DEVKIT_MARGIN, window.innerHeight - DEVKIT_TRIGGER_SIZE - DEVKIT_MARGIN)
+});
+
+const clampPanelPosition = (position: FixedPosition): FixedPosition => ({
+  left: clamp(position.left, 12, window.innerWidth - DEVKIT_PANEL_WIDTH - 12),
+  top: clamp(position.top, 12, window.innerHeight - 80)
+});
+
+const panelPositionNearTrigger = (triggerPos: FixedPosition | null): FixedPosition => {
+  if (!triggerPos) {
+    return { left: Math.max(12, window.innerWidth - 292), top: 80 };
+  }
+
+  return clampPanelPosition({
+    left: triggerPos.left - DEVKIT_PANEL_WIDTH + DEVKIT_TRIGGER_SIZE,
+    top: clamp(triggerPos.top - 8, 12, window.innerHeight - DEVKIT_PANEL_ESTIMATED_HEIGHT)
+  });
+};
+
+const readStoredTriggerPosition = () => {
+  try {
+    const raw = window.localStorage.getItem(DEVKIT_TRIGGER_STORAGE_KEY);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw);
+    if (typeof parsed?.left !== 'number' || typeof parsed?.top !== 'number') return null;
+
+    return clampTriggerPosition({ left: parsed.left, top: parsed.top });
+  } catch {
+    return null;
+  }
+};
 
 const DevAction = ({ onClick, children }: { onClick: () => void; children: React.ReactNode }) => (
   <Box
@@ -45,9 +92,11 @@ export const DevKit = (_props) => {
   const [mounted, setMounted] = React.useState(false);
   const [open, setOpen] = React.useState(false);
   const [pos, setPos] = React.useState<{ left: number; top: number } | null>(null);
+  const [triggerPos, setTriggerPos] = React.useState<FixedPosition | null>(null);
 
   React.useEffect(() => {
     setMounted(true);
+    setTriggerPos(readStoredTriggerPosition());
 
     try {
       window.env = env;
@@ -58,15 +107,96 @@ export const DevKit = (_props) => {
 
   React.useEffect(() => {
     if (open && pos === null && typeof window !== 'undefined') {
-      setPos({ left: Math.max(12, window.innerWidth - 292), top: 80 });
+      setPos(panelPositionNearTrigger(triggerPos));
     }
-  }, [open, pos]);
+  }, [open, pos, triggerPos]);
+
+  React.useEffect(() => {
+    if (!mounted || !triggerPos) return;
+
+    try {
+      window.localStorage.setItem(DEVKIT_TRIGGER_STORAGE_KEY, JSON.stringify(triggerPos));
+    } catch {}
+  }, [mounted, triggerPos]);
+
+  React.useEffect(() => {
+    if (!mounted) return undefined;
+
+    const clampVisiblePositions = () => {
+      setTriggerPos((current) => (current ? clampTriggerPosition(current) : current));
+      setPos((current) => (current ? clampPanelPosition(current) : current));
+    };
+
+    window.addEventListener('resize', clampVisiblePositions);
+    return () => window.removeEventListener('resize', clampVisiblePositions);
+  }, [mounted]);
 
   const deployEnv = envFromCookie.THINGTIME_VERCEL_ENV || env.NODE_ENV;
   const explicitlyOff = env.devKit === false || env.devKit === 'false';
   const devKit = !explicitlyOff && (deployEnv !== 'production' || !!env.devKit);
 
   const dragRef = React.useRef<{ dx: number; dy: number } | null>(null);
+  const triggerRef = React.useRef<HTMLDivElement | null>(null);
+  const triggerDragRef = React.useRef<{
+    startX: number;
+    startY: number;
+    originLeft: number;
+    originTop: number;
+    moved: boolean;
+  } | null>(null);
+  const suppressTriggerClickRef = React.useRef(false);
+
+  const startTriggerDrag = React.useCallback((clientX: number, clientY: number) => {
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    triggerDragRef.current = {
+      startX: clientX,
+      startY: clientY,
+      originLeft: rect.left,
+      originTop: rect.top,
+      moved: false
+    };
+  }, []);
+
+  const moveTriggerDrag = React.useCallback((clientX: number, clientY: number) => {
+    const drag = triggerDragRef.current;
+    if (!drag) return;
+
+    const deltaX = clientX - drag.startX;
+    const deltaY = clientY - drag.startY;
+    if (!drag.moved && Math.hypot(deltaX, deltaY) < 4) return;
+
+    drag.moved = true;
+    setTriggerPos(clampTriggerPosition({ left: drag.originLeft + deltaX, top: drag.originTop + deltaY }));
+  }, []);
+
+  const endTriggerDrag = React.useCallback(() => {
+    const moved = !!triggerDragRef.current?.moved;
+    triggerDragRef.current = null;
+
+    if (moved) {
+      suppressTriggerClickRef.current = true;
+      window.setTimeout(() => {
+        suppressTriggerClickRef.current = false;
+      }, 0);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    if (!mounted) return undefined;
+
+    const onWindowMouseMove = (event: MouseEvent) => moveTriggerDrag(event.clientX, event.clientY);
+    const onWindowMouseUp = () => endTriggerDrag();
+
+    window.addEventListener('mousemove', onWindowMouseMove);
+    window.addEventListener('mouseup', onWindowMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', onWindowMouseMove);
+      window.removeEventListener('mouseup', onWindowMouseUp);
+    };
+  }, [endTriggerDrag, mounted, moveTriggerDrag]);
+
   const onPointerDown = (e: React.PointerEvent) => {
     if (!pos) return;
     dragRef.current = { dx: e.clientX - pos.left, dy: e.clientY - pos.top };
@@ -76,12 +206,57 @@ export const DevKit = (_props) => {
   };
   const onPointerMove = (e: React.PointerEvent) => {
     if (!dragRef.current) return;
-    const left = Math.min(Math.max(0, e.clientX - dragRef.current.dx), window.innerWidth - 60);
-    const top = Math.min(Math.max(0, e.clientY - dragRef.current.dy), window.innerHeight - 40);
-    setPos({ left, top });
+    setPos(clampPanelPosition({ left: e.clientX - dragRef.current.dx, top: e.clientY - dragRef.current.dy }));
   };
   const onPointerUp = () => {
     dragRef.current = null;
+  };
+
+  const onTriggerPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    startTriggerDrag(e.clientX, e.clientY);
+
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {}
+  };
+
+  const onTriggerPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    moveTriggerDrag(e.clientX, e.clientY);
+  };
+
+  const onTriggerPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {}
+
+    endTriggerDrag();
+  };
+
+  const onTriggerMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (triggerDragRef.current) return;
+    startTriggerDrag(e.clientX, e.clientY);
+  };
+
+  const toggleOpenFromTrigger = React.useCallback(
+    (event?: React.MouseEvent | React.KeyboardEvent) => {
+      if (suppressTriggerClickRef.current) {
+        event?.preventDefault();
+        return;
+      }
+
+      if (!open && pos === null) {
+        setPos(panelPositionNearTrigger(triggerPos));
+      }
+
+      setOpen((current) => !current);
+    },
+    [open, pos, triggerPos]
+  );
+
+  const onTriggerKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault();
+    toggleOpenFromTrigger(e);
   };
 
   const prefillRegister = React.useCallback(() => {
@@ -210,12 +385,25 @@ export const DevKit = (_props) => {
         className="tt.devKit"
         position="fixed"
         zIndex={99999}
-        bottom="calc(env(safe-area-inset-bottom, 0px) + 20px)"
-        right="calc(env(safe-area-inset-right, 0px) + 20px)"
+        left={triggerPos ? `${triggerPos.left}px` : undefined}
+        top={triggerPos ? `${triggerPos.top}px` : undefined}
+        bottom={triggerPos ? undefined : 'calc(env(safe-area-inset-bottom, 0px) + 20px)'}
+        right={triggerPos ? undefined : 'calc(env(safe-area-inset-right, 0px) + 20px)'}
       >
         <Flex
-          onClick={() => setOpen((o) => !o)}
-          cursor="pointer"
+          ref={triggerRef}
+          role="button"
+          tabIndex={0}
+          aria-label="Move or open DevKit"
+          aria-pressed={open}
+          onClick={toggleOpenFromTrigger}
+          onKeyDown={onTriggerKeyDown}
+          onPointerDown={onTriggerPointerDown}
+          onPointerMove={onTriggerPointerMove}
+          onPointerUp={onTriggerPointerUp}
+          onPointerCancel={onTriggerPointerUp}
+          onMouseDown={onTriggerMouseDown}
+          cursor="grab"
           position="relative"
           width="52px"
           height="52px"
@@ -227,6 +415,7 @@ export const DevKit = (_props) => {
           opacity={open ? 1 : 0.9}
           _active={{ transform: 'scale(0.92)' }}
           transition="transform 100ms ease"
+          sx={{ userSelect: 'none', touchAction: 'none' }}
         >
           <Icon name="👨‍💻"></Icon>
           <Box

@@ -10,12 +10,20 @@ import {
   Select,
   SimpleGrid,
   Stack,
-  Text
+  Text,
+  Textarea
 } from '@chakra-ui/react';
-import { CheckCircle2, Play, RotateCcw, XCircle } from 'lucide-react';
+import { CheckCircle2, ChevronDown, ChevronRight, Play, RotateCcw, XCircle } from 'lucide-react';
 
 import { apiTestGroups, apiTests } from '~/tests/api/apiTests';
-import { runApiTest, type ApiTestDefinition, type ApiTestResult } from '~/tests/api/apiTestRunner';
+import {
+  formatRequestPayload,
+  resolveApiTestBody,
+  runApiTest,
+  type ApiTestContext,
+  type ApiTestDefinition,
+  type ApiTestResult
+} from '~/tests/api/apiTestRunner';
 
 const PAGE_MAX_WIDTH = '1120px';
 
@@ -23,6 +31,8 @@ type ResultMap = Record<string, ApiTestResult>;
 type RunOptions = {
   allowMutating?: boolean;
 };
+
+const EMPTY_BODY_LABEL = 'No request body.';
 
 const groupLabel = (group: string) => group.charAt(0).toUpperCase() + group.slice(1);
 
@@ -45,12 +55,37 @@ const testMatches = (test: ApiTestDefinition, group: string, query: string, incl
     .includes(needle);
 };
 
+const createApiTestContext = (): ApiTestContext => ({
+  origin: typeof window === 'undefined' ? '' : window.location.origin
+});
+
+const createInitialPayloadTexts = () => {
+  const context = createApiTestContext();
+
+  return Object.fromEntries(
+    apiTests.map((test) => [test.id, formatRequestPayload(resolveApiTestBody(test, context))])
+  );
+};
+
+const createPayloadParseResult = (test: ApiTestDefinition, message: string, rawPayload: string): ApiTestResult => ({
+  id: test.id,
+  status: 'fail',
+  httpStatus: null,
+  durationMs: 0,
+  details: `Request payload JSON is invalid: ${message}`,
+  preview: rawPayload
+});
+
 export default function TestsPage() {
   const [group, setGroup] = React.useState('all');
   const [query, setQuery] = React.useState('');
   const [includeMutating, setIncludeMutating] = React.useState(false);
   const [runningIds, setRunningIds] = React.useState<Set<string>>(new Set());
   const [results, setResults] = React.useState<ResultMap>({});
+  const [payloadTexts, setPayloadTexts] = React.useState<Record<string, string>>(() => createInitialPayloadTexts());
+  const [editedPayloadIds, setEditedPayloadIds] = React.useState<Set<string>>(new Set());
+  const [expandedPayloadIds, setExpandedPayloadIds] = React.useState<Set<string>>(new Set());
+  const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set());
 
   const visibleTests = React.useMemo(
     () => apiTests.filter((test) => testMatches(test, group, query, includeMutating)),
@@ -64,24 +99,98 @@ export default function TestsPage() {
     return { passed, failed, total: visibleResults.length };
   }, [results, visibleTests]);
 
+  const togglePayload = React.useCallback((testId: string) => {
+    setExpandedPayloadIds((current) => {
+      const next = new Set(current);
+      if (next.has(testId)) next.delete(testId);
+      else next.add(testId);
+      return next;
+    });
+  }, []);
+
+  const toggleSelected = React.useCallback((testId: string, selected: boolean) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (selected) next.add(testId);
+      else next.delete(testId);
+      return next;
+    });
+  }, []);
+
+  const resetPayload = React.useCallback((test: ApiTestDefinition) => {
+    const text = formatRequestPayload(resolveApiTestBody(test, createApiTestContext()));
+    setPayloadTexts((current) => ({ ...current, [test.id]: text }));
+    setEditedPayloadIds((current) => {
+      const next = new Set(current);
+      next.delete(test.id);
+      return next;
+    });
+  }, []);
+
+  const updatePayloadText = React.useCallback((testId: string, value: string) => {
+    setPayloadTexts((current) => ({ ...current, [testId]: value }));
+    setEditedPayloadIds((current) => new Set([...current, testId]));
+  }, []);
+
+  const getRunBody = React.useCallback(
+    (test: ApiTestDefinition, context: ApiTestContext) => {
+      if (test.body === undefined) return { ok: true as const, body: undefined };
+
+      if (editedPayloadIds.has(test.id)) {
+        const rawPayload = payloadTexts[test.id] ?? '';
+        const trimmedPayload = rawPayload.trim();
+        if (!trimmedPayload) return { ok: true as const, body: undefined };
+
+        try {
+          return { ok: true as const, body: JSON.parse(trimmedPayload) };
+        } catch (error) {
+          return {
+            ok: false as const,
+            result: createPayloadParseResult(test, error instanceof Error ? error.message : String(error), rawPayload)
+          };
+        }
+      }
+
+      const body = resolveApiTestBody(test, context);
+      const text = formatRequestPayload(body);
+      setPayloadTexts((current) => (current[test.id] === text ? current : { ...current, [test.id]: text }));
+      return { ok: true as const, body };
+    },
+    [editedPayloadIds, payloadTexts]
+  );
+
   const runTests = React.useCallback(async (tests: ApiTestDefinition[], options: RunOptions = {}) => {
     const allowMutating = options.allowMutating ?? includeMutating;
     const runnable = tests.filter((test) => allowMutating || !test.mutates);
-    const context = { origin: window.location.origin };
+    const context = createApiTestContext();
 
     for (const test of runnable) {
       setRunningIds((current) => new Set([...current, test.id]));
-      const result = await runApiTest(test, context);
-      setResults((current) => ({ ...current, [test.id]: result }));
-      setRunningIds((current) => {
-        const next = new Set(current);
-        next.delete(test.id);
-        return next;
-      });
+      try {
+        const payload = getRunBody(test, context);
+        const result = payload.ok
+          ? await runApiTest(test, context, {
+              bodyOverride: payload.body,
+              hasBodyOverride: test.body !== undefined
+            })
+          : payload.result;
+        setResults((current) => ({ ...current, [test.id]: result }));
+      } finally {
+        setRunningIds((current) => {
+          const next = new Set(current);
+          next.delete(test.id);
+          return next;
+        });
+      }
     }
-  }, [includeMutating]);
+  }, [getRunBody, includeMutating]);
 
   const runOne = React.useCallback((test: ApiTestDefinition) => runTests([test], { allowMutating: true }), [runTests]);
+
+  const runSelected = React.useCallback(() => {
+    const selectedTests = apiTests.filter((test) => selectedIds.has(test.id));
+    return runTests(selectedTests, { allowMutating: true });
+  }, [runTests, selectedIds]);
 
   const runGroup = React.useCallback((testGroup: string) => {
     const groupTests = apiTests.filter((test) => test.group === testGroup);
@@ -100,13 +209,16 @@ export default function TestsPage() {
           <Box>
             <Heading size="lg" letterSpacing="0">API tests</Heading>
             <Text mt={2} color="gray.600" fontSize="sm">
-              Run all safe API checks, a filtered subset, a route group, or one test at a time.
+              Run all safe API checks, selected tests, a filtered subset, a route group, or one test at a time.
             </Text>
           </Box>
 
           <Flex gap={2} wrap="wrap">
             <Button leftIcon={<Play size={16} />} colorScheme="gray" onClick={() => runTests(visibleTests)} isDisabled={!visibleTests.length}>
               Run visible
+            </Button>
+            <Button leftIcon={<Play size={16} />} colorScheme="blue" onClick={runSelected} isDisabled={!selectedIds.size}>
+              Run selected
             </Button>
             <Button leftIcon={<Play size={16} />} variant="outline" onClick={() => runTests(apiTests, { allowMutating: false })}>
               Run all safe
@@ -140,6 +252,7 @@ export default function TestsPage() {
             <Badge colorScheme="green">{summary.passed} passed</Badge>
             <Badge colorScheme={summary.failed ? 'red' : 'gray'}>{summary.failed} failed</Badge>
             <Badge colorScheme="gray">{visibleTests.length} visible</Badge>
+            <Badge colorScheme={selectedIds.size ? 'blue' : 'gray'}>{selectedIds.size} selected</Badge>
           </Flex>
         </SimpleGrid>
 
@@ -149,6 +262,11 @@ export default function TestsPage() {
               Run {groupLabel(testGroup)}
             </Button>
           ))}
+          {selectedIds.size ? (
+            <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>
+              Clear selected
+            </Button>
+          ) : null}
         </Flex>
 
         <Stack spacing={3}>
@@ -156,11 +274,21 @@ export default function TestsPage() {
             const result = results[test.id];
             const running = runningIds.has(test.id);
             const Icon = result?.status === 'pass' ? CheckCircle2 : result?.status === 'fail' ? XCircle : Play;
+            const payloadExpanded = expandedPayloadIds.has(test.id);
+            const hasEditableBody = test.body !== undefined;
+            const payloadText = payloadTexts[test.id] ?? '';
+            const selected = selectedIds.has(test.id);
 
             return (
               <Box key={test.id} border="1px solid" borderColor="gray.200" borderRadius="8px" p={4}>
                 <Flex justify="space-between" align={{ base: 'flex-start', md: 'center' }} gap={3} direction={{ base: 'column', md: 'row' }}>
                   <Flex gap={3} align="flex-start">
+                    <Checkbox
+                      isChecked={selected}
+                      onChange={(event) => toggleSelected(test.id, event.target.checked)}
+                      aria-label={`Select ${test.name}`}
+                      pt="2px"
+                    />
                     <Box color={statusColor(result?.status)} pt="2px">
                       <Icon size={18} />
                     </Box>
@@ -181,8 +309,59 @@ export default function TestsPage() {
                   </Button>
                 </Flex>
 
+                <Box mt={3} pl={{ base: 0, md: 14 }}>
+                  <Flex gap={2} align="center" wrap="wrap">
+                    <Button
+                      size="xs"
+                      variant="ghost"
+                      leftIcon={payloadExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                      onClick={() => togglePayload(test.id)}
+                    >
+                      Payload
+                    </Button>
+                    {hasEditableBody ? (
+                      <Button size="xs" variant="ghost" onClick={() => resetPayload(test)}>
+                        Reset
+                      </Button>
+                    ) : null}
+                    {editedPayloadIds.has(test.id) ? <Badge colorScheme="blue">edited</Badge> : null}
+                  </Flex>
+
+                  {payloadExpanded ? (
+                    hasEditableBody ? (
+                      <Textarea
+                        mt={2}
+                        value={payloadText}
+                        onChange={(event) => updatePayloadText(test.id, event.target.value)}
+                        spellCheck={false}
+                        fontFamily="mono"
+                        fontSize="xs"
+                        minH="128px"
+                        resize="vertical"
+                        bg="gray.50"
+                        borderColor="gray.200"
+                        whiteSpace="pre"
+                        overflowX="auto"
+                      />
+                    ) : (
+                      <Box
+                        as="pre"
+                        mt={2}
+                        p={3}
+                        borderRadius="6px"
+                        bg="gray.50"
+                        color="gray.500"
+                        fontSize="xs"
+                        overflowX="auto"
+                      >
+                        {EMPTY_BODY_LABEL}
+                      </Box>
+                    )
+                  ) : null}
+                </Box>
+
                 {result ? (
-                  <Box mt={3} pl={{ base: 0, md: 8 }}>
+                  <Box mt={3} pl={{ base: 0, md: 14 }}>
                     <Flex gap={2} wrap="wrap" align="center">
                       <Badge colorScheme={result.status === 'pass' ? 'green' : 'red'}>{result.status}</Badge>
                       <Badge colorScheme="gray">HTTP {result.httpStatus ?? 'n/a'}</Badge>
@@ -199,6 +378,7 @@ export default function TestsPage() {
                         color="gray.700"
                         fontSize="xs"
                         overflowX="auto"
+                        overflowY="auto"
                         maxH="180px"
                       >
                         {result.preview}
