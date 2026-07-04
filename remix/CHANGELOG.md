@@ -18,6 +18,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- Added the local Tailscale/Funnel hostname to Vite's allowed hosts and
+  documented the Thingtime `:9999` local/Tailscale dev URLs. — _Codex (AI),
+  2026-07-04_
 - Added a `/tests` frontend API test harness with group filters, individual
   route checks, safe all-runs, optional mutating checks, and coverage for the
   current API route map. — _Codex (AI), 2026-07-04_

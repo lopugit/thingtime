@@ -17,6 +17,8 @@ export default defineConfig({
   server: {
     host: '127.0.0.1',
     port: 9999,
+    strictPort: true,
+    allowedHosts: ['lopus-macbook-pro-2.tail9606f9.ts.net'],
     hmr: {
       port: 9998
     },

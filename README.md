@@ -32,6 +32,16 @@ runs as a React Router non-framework Vite client with Nitro API/server routes.
 Vite serves the browser app on port `9999` and proxies `/api` to the Nitro dev
 server on port `10000`.
 
+Local development URLs on Lopu's Mac:
+
+- Local: `http://localhost:9999`
+- Tailnet/Funnel: `https://lopus-macbook-pro-2.tail9606f9.ts.net:9999`
+
+The Tailnet/Funnel mapping for Thingtime should proxy
+`lopus-macbook-pro-2.tail9606f9.ts.net:9999` to `127.0.0.1:9999`. Vite's
+`server.allowedHosts` includes `lopus-macbook-pro-2.tail9606f9.ts.net` so this
+host does not trip Vite's blocked-host protection.
+
 Install and run from the app directory:
 
 ```sh
