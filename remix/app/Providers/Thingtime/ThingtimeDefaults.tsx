@@ -413,6 +413,20 @@ const defaultValues = {
         hideSuggestionsOnToggle: true
       }
     },
+    drawer: {
+      open: false,
+      width: 300,
+      opens: {
+        direction: 'left'
+      },
+      toplevelitems: {
+        limit: 5
+      },
+      searchClosesDrawer: true,
+      userDrawerOrdering: {},
+      selectedItem: 'home',
+      collapsedGroups: {}
+    },
     connectionUrls: ['mongodb://localhost:27017']
   },
   Content: {

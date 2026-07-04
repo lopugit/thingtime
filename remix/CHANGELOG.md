@@ -18,6 +18,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- Added a drawer-based nav system (Claude-desktop style): edge-flush resizable
+  drawer driven by `thingtime.settings.drawer.*` (open direction, top-level
+  item limit with a faint “More” reveal, dynamic grouped second-level menu,
+  click-and-hold drag reordering persisted to `userDrawerOrdering`, search
+  button honouring `searchClosesDrawer`, sticky avatar opening a desktop
+  centred settings modal / mobile slide-up sheet). Desktop hovers the trigger
+  for a popup preview and pins to a split view; mobile shifts (never resizes)
+  the page. Replaces the dead `ProfileDrawer`. Details in
+  [`PRs/28-codex-service-account-api--drawer-based-nav-revamp.md`](PRs/28-codex-service-account-api--drawer-based-nav-revamp.md).
+  — _Claude (AI), 2026-07-05_
 - Added the local Tailscale/Funnel hostname to Vite's allowed hosts and
   documented the Thingtime `:9999` local/Tailscale dev URLs. — _Codex (AI),
   2026-07-04_
