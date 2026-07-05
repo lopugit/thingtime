@@ -39,8 +39,8 @@ export const Footer = (props) => {
       width="100%"
       paddingTop="900px"
       paddingBottom={[
-        'calc(64px + var(--thingtime-safe-area-bottom))',
-        'calc(48px + var(--thingtime-safe-area-bottom))'
+        'calc(128px + var(--thingtime-safe-area-bottom))',
+        'calc(72px + var(--thingtime-safe-area-bottom))'
       ]}
       paddingX={4}
     >

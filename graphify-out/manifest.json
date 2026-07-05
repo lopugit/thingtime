@@ -430,9 +430,9 @@
     "semantic_hash": "e16e20da5a50083a2e3a88506340af00"
   },
   "iOS/Thingtime/Web/WebView.swift": {
-    "mtime": 1783259530.8005729,
-    "ast_hash": "d3924d951b1b2999756dd253b4442512",
-    "semantic_hash": "d3924d951b1b2999756dd253b4442512"
+    "mtime": 1783260839.3379111,
+    "ast_hash": "5860ebf0e217f4fe57be5fd13db931b8",
+    "semantic_hash": "5860ebf0e217f4fe57be5fd13db931b8"
   },
   "iOS/ThingtimeTests/ThingtimeWebDestinationTests.swift": {
     "mtime": 1783254002.8683414,
@@ -1080,9 +1080,9 @@
     "semantic_hash": "0764e4a310e585e50d45dfc06b18bcbe"
   },
   "remix/app/components/Nav/Footer.tsx": {
-    "mtime": 1783259530.8018014,
-    "ast_hash": "37264b07b6d5d5b14bb51dc04285dbf3",
-    "semantic_hash": "37264b07b6d5d5b14bb51dc04285dbf3"
+    "mtime": 1783260844.9195604,
+    "ast_hash": "76a04025b1f6467d4e43ed4e3c0eb992",
+    "semantic_hash": "76a04025b1f6467d4e43ed4e3c0eb992"
   },
   "remix/app/components/Nav/Nav.tsx": {
     "mtime": 1783242355.3295279,

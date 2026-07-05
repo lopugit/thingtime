@@ -30,6 +30,21 @@ TestFlight screenshots exposed three mobile polish bugs:
 - Native build `4` carries the WKWebView gesture/background/inset fixes for
   TestFlight.
 
+## Follow-up safe-area polish
+
+Build `4` still exposed two iOS-only safe-area bugs when testing the production
+Thingtime destination:
+
+- At the bottom scroll limit, the fixed web nav could slide into the iOS status
+  area because the page-level safe-area CSS value was not stable enough inside
+  the native `WKWebView`. The native shell now writes the current UIKit safe-area
+  inset values into the page's CSS variables after layout and after navigation.
+- The production footer could still sit behind the home indicator because the
+  app may load `thingtime.com`, not only the current Vercel branch. The native
+  `WKWebView` now reserves a larger bottom scroll inset, and the branch preview
+  footer keeps extra CSS bottom padding too.
+- Native build `5` carries this safe-area follow-up for TestFlight.
+
 ## TestFlight upload
 
 Build `1.0 (3)` was uploaded to App Store Connect with Fastlane and is visible

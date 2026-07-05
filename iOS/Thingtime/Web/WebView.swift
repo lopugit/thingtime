@@ -29,7 +29,7 @@ struct WebView: UIViewRepresentable {
             webView.underPageBackgroundColor = .white
         }
         webView.scrollView.contentInsetAdjustmentBehavior = .never
-        webView.applyThingtimeScrollInsets()
+        webView.applyThingtimeScrollInsets(forceSafeAreaUpdate: true)
         context.coordinator.loadedRootURL = url
         webView.load(URLRequest(url: url))
         return webView
@@ -95,6 +95,8 @@ struct WebView: UIViewRepresentable {
         var loadedRootURL: URL?
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            (webView as? ThingtimeWKWebView)?.applyThingtimeScrollInsets(forceSafeAreaUpdate: true)
+
             sendToWeb(type: "native-ready", payload: [
                 "platform": "ios",
                 "version": "1.0.0"
@@ -139,7 +141,8 @@ struct WebView: UIViewRepresentable {
 }
 
 private final class ThingtimeWKWebView: WKWebView {
-    private let footerScrollPadding: CGFloat = 16
+    private let footerScrollPadding: CGFloat = 112
+    private var lastAppliedSafeAreaInsets: UIEdgeInsets?
 
     override func layoutSubviews() {
         super.layoutSubviews()
@@ -151,8 +154,9 @@ private final class ThingtimeWKWebView: WKWebView {
         applyThingtimeScrollInsets()
     }
 
-    func applyThingtimeScrollInsets() {
-        let bottomInset = safeAreaInsets.bottom + footerScrollPadding
+    func applyThingtimeScrollInsets(forceSafeAreaUpdate: Bool = false) {
+        let currentSafeAreaInsets = self.safeAreaInsets
+        let bottomInset = currentSafeAreaInsets.bottom + footerScrollPadding
 
         var contentInset = scrollView.contentInset
         contentInset.top = 0
@@ -162,8 +166,54 @@ private final class ThingtimeWKWebView: WKWebView {
         scrollView.contentInset = contentInset
 
         var indicatorInsets = scrollView.verticalScrollIndicatorInsets
-        indicatorInsets.top = 0
+        indicatorInsets.top = currentSafeAreaInsets.top
         indicatorInsets.bottom = bottomInset
         scrollView.verticalScrollIndicatorInsets = indicatorInsets
+
+        applyNativeSafeAreaVariables(currentSafeAreaInsets, force: forceSafeAreaUpdate)
+    }
+
+    private func applyNativeSafeAreaVariables(_ insets: UIEdgeInsets, force: Bool) {
+        if !force, let lastAppliedSafeAreaInsets, lastAppliedSafeAreaInsets.isApproximatelyEqual(to: insets) {
+            return
+        }
+
+        lastAppliedSafeAreaInsets = insets
+
+        let script = """
+        (() => {
+          const root = document.documentElement;
+          if (!root) return;
+          const values = {
+            top: '\(Self.cssPixels(insets.top))',
+            right: '\(Self.cssPixels(insets.right))',
+            bottom: '\(Self.cssPixels(insets.bottom))',
+            left: '\(Self.cssPixels(insets.left))'
+          };
+          root.style.setProperty('--thingtime-native-safe-area-top', values.top);
+          root.style.setProperty('--thingtime-native-safe-area-right', values.right);
+          root.style.setProperty('--thingtime-native-safe-area-bottom', values.bottom);
+          root.style.setProperty('--thingtime-native-safe-area-left', values.left);
+          root.style.setProperty('--thingtime-safe-area-top', values.top);
+          root.style.setProperty('--thingtime-safe-area-right', values.right);
+          root.style.setProperty('--thingtime-safe-area-bottom', values.bottom);
+          root.style.setProperty('--thingtime-safe-area-left', values.left);
+        })();
+        """
+
+        evaluateJavaScript(script, completionHandler: nil)
+    }
+
+    private static func cssPixels(_ value: CGFloat) -> String {
+        "\(Int(ceil(value)))px"
+    }
+}
+
+private extension UIEdgeInsets {
+    func isApproximatelyEqual(to other: UIEdgeInsets) -> Bool {
+        abs(top - other.top) < 0.5
+            && abs(right - other.right) < 0.5
+            && abs(bottom - other.bottom) < 0.5
+            && abs(left - other.left) < 0.5
     }
 }

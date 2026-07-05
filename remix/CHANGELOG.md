@@ -51,6 +51,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- Tightened the iOS WebKit safe-area follow-up: the native shell now pushes
+  stable safe-area CSS variables into every loaded page, reserves a larger
+  bottom scroll inset for the footer, and bumps the native build number to `5`
+  for the next TestFlight build. Details in
+  [`PRs/30-codex-ios-deployment-url-picker--add-ios-web-destination-picker.md`](PRs/30-codex-ios-deployment-url-picker--add-ios-web-destination-picker.md).
+  — _Codex (AI), 2026-07-06_
 - Fixed iOS WebKit/mobile drawer polish from TestFlight: the native
   left-edge swipe recognizer no longer blocks taps on the web drawer icon, the
   collapsed drawer trigger has an edge-to-edge hit target, footer scrolling gets
