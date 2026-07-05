@@ -103,14 +103,13 @@ export const Nav = (props) => {
 			<Box
 				position="fixed"
 				zIndex={9999}
-				top={0}
+				top="var(--thingtime-safe-area-top, 0px)"
 				right={direction === 'right' && desktopOpen ? drawerCssWidth : 0}
 				left={direction === 'left' && desktopOpen ? drawerCssWidth : 0}
 				transform={
 					mobileOpen ? (direction === 'left' ? `translateX(${drawerCssWidth})` : `translateX(calc(-1 * ${drawerCssWidth}))`) : 'none'
 				}
 				transition={loading || resizing ? 'none' : 'left 0.28s ease-out, right 0.28s ease-out, transform 0.28s ease-out'}
-				paddingTop="var(--thingtime-safe-area-top)"
 			>
 				<Flex
 					as="nav"

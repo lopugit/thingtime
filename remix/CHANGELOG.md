@@ -51,6 +51,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- Kept the iOS WebKit nav below the native status area at the bottom scroll
+  limit by offsetting the fixed nav layer with the native safe-area top value
+  instead of padding inside a `top: 0` layer, and hardened the native safe-area
+  resolver against full-screen `WKWebView` inset edge cases. Bumped the native
+  build number to `6` for TestFlight. Details in
+  [`PRs/30-codex-ios-deployment-url-picker--add-ios-web-destination-picker.md`](PRs/30-codex-ios-deployment-url-picker--add-ios-web-destination-picker.md).
+  — _Codex (AI), 2026-07-06_
 - Tightened the iOS WebKit safe-area follow-up: the native shell now pushes
   stable safe-area CSS variables into every loaded page, reserves a larger
   bottom scroll inset for the footer, and bumps the native build number to `5`

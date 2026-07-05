@@ -155,7 +155,7 @@ private final class ThingtimeWKWebView: WKWebView {
     }
 
     func applyThingtimeScrollInsets(forceSafeAreaUpdate: Bool = false) {
-        let currentSafeAreaInsets = self.safeAreaInsets
+        let currentSafeAreaInsets = resolvedSafeAreaInsets()
         let bottomInset = currentSafeAreaInsets.bottom + footerScrollPadding
 
         var contentInset = scrollView.contentInset
@@ -171,6 +171,23 @@ private final class ThingtimeWKWebView: WKWebView {
         scrollView.verticalScrollIndicatorInsets = indicatorInsets
 
         applyNativeSafeAreaVariables(currentSafeAreaInsets, force: forceSafeAreaUpdate)
+    }
+
+    private func resolvedSafeAreaInsets() -> UIEdgeInsets {
+        var insets = safeAreaInsets
+
+        if let windowInsets = window?.safeAreaInsets {
+            insets.top = max(insets.top, windowInsets.top)
+            insets.right = max(insets.right, windowInsets.right)
+            insets.bottom = max(insets.bottom, windowInsets.bottom)
+            insets.left = max(insets.left, windowInsets.left)
+        }
+
+        if insets.top < 1, let statusBarHeight = window?.windowScene?.statusBarManager?.statusBarFrame.height {
+            insets.top = max(insets.top, statusBarHeight)
+        }
+
+        return insets
     }
 
     private func applyNativeSafeAreaVariables(_ insets: UIEdgeInsets, force: Bool) {

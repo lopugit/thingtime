@@ -45,6 +45,19 @@ Thingtime destination:
   footer keeps extra CSS bottom padding too.
 - Native build `5` carries this safe-area follow-up for TestFlight.
 
+## Follow-up nav safe-area polish
+
+Build `5` made the footer fully reachable at the bottom scroll limit, but the
+fixed web nav could still disappear into the iOS status area once the page was
+scrolled all the way down. The web nav now offsets the fixed layer itself with
+`top: var(--thingtime-safe-area-top, 0px)` instead of padding inside a
+`top: 0` layer, so iOS keeps the whole nav below the native menu/status bar.
+The native `WKWebView` safe-area resolver also falls back to the host window's
+safe-area values and status-bar height before pushing CSS variables into the
+page.
+
+Native build `6` carries this nav safe-area follow-up for TestFlight.
+
 ## TestFlight upload
 
 Build `1.0 (3)` was uploaded to App Store Connect with Fastlane and is visible
