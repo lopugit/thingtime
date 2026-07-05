@@ -15,7 +15,8 @@ artifacts and should stay untracked.
 - Required upload env:
   - `ASC_KEY_ID`: App Store Connect API key ID for the individual Apple account
     that can see the Thingtime app.
-  - `ASC_ISSUER_ID`: issuer ID from App Store Connect Users and Access.
+  - `ASC_ISSUER_ID`: issuer ID from App Store Connect Users and Access, or
+    blank for an individual App Store Connect API key.
   - `ASC_KEY_CONTENT`: base64-encoded `.p8` contents. The current Fastlane lane
     expects key content, not a key filepath.
   - `DEVELOPMENT_TEAM`: Apple developer team/App ID prefix used for Thingtime.
@@ -24,9 +25,10 @@ artifacts and should stay untracked.
     `https://thingtime.com`, or set it to a Vercel branch deployment for
     TestFlight preview builds.
 - Before spending time on signing problems, verify App Store Connect auth. The
-  key, issuer, and `.p8` must be able to call the App Store Connect API and
-  list the Thingtime app by bundle ID. A 401 from Apple means the key ID,
-  issuer ID, or `.p8` file do not match, even if the filename looks right.
+  key, issuer when applicable, and `.p8` must be able to call the App Store
+  Connect API and list the Thingtime app by bundle ID. A 401 from Apple means
+  the key ID, issuer ID, or `.p8` file do not match, even if the filename looks
+  right.
 - Do not reuse LiDAR-project keys, issuer IDs, bundle IDs, or provisioning
   assumptions. Thingtime's app record is the source of truth for this app.
 - If several local `.p8` files exist, test each candidate key against App Store
@@ -40,6 +42,12 @@ artifacts and should stay untracked.
   xcodebuild -runFirstLaunch
   xcrun --sdk iphoneos --show-sdk-version
   ```
+
+- App Store Connect may reject uploads built with an unsupported beta SDK or
+  non-RC beta Xcode as `90534 Unsupported SDK or Xcode version`. Rebuild and
+  upload with a supported release or RC Xcode by setting `DEVELOPER_DIR` for
+  the upload command, for example
+  `/Applications/Xcode.app/Contents/Developer`.
 
 - The Fastlane lane syncs an Apple Distribution certificate and App Store
   provisioning profile through the App Store Connect API before archiving. Use

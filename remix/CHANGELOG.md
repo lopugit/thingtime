@@ -18,6 +18,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- Updated the iOS TestFlight lane and runbook so App Store Connect individual
+  API keys can leave `ASC_ISSUER_ID` blank, documented the supported-Xcode
+  retry for App Store Connect `90534` upload rejections, and bumped/uploaded
+  native build `3`. — _Codex (AI), 2026-07-05_
 - Added an iOS web destination drawer that opens from the left edge, fetches
   Vercel deployment options from `/api/v1/vercel/deployments`, and lets native
   builds switch the WebKit view between Thingtime.com, the configured build URL,

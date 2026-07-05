@@ -52,6 +52,13 @@ of git unless they are intended public examples. App Store Connect accepts
 uploaded archives; it does not compile this repository from source unless a
 separate Xcode Cloud workflow is configured.
 
+Set `ASC_ISSUER_ID` to the issuer ID for team App Store Connect API keys, or
+leave it blank when using an individual App Store Connect API key.
+
+Use a supported release or RC Xcode for uploads. If App Store Connect rejects
+the upload with `90534 Unsupported SDK or Xcode version`, rebuild with a
+supported `DEVELOPER_DIR`, such as `/Applications/Xcode.app/Contents/Developer`.
+
 If automatic App Store export reports that no profile was found, set
 `PROVISIONING_PROFILE_SPECIFIER` to the installed App Store provisioning profile
 name for `PRODUCT_BUNDLE_IDENTIFIER`. The Fastlane lane will keep automatic
