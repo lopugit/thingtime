@@ -420,14 +420,14 @@
     "semantic_hash": "9deb2ada1cc834bbebf8bbad9c8978a1"
   },
   "iOS/Thingtime/Web/ThingtimeWebDestination.swift": {
-    "mtime": 1783242704.7862062,
-    "ast_hash": "0166f6db19eb1216162b1921b0b311f0",
-    "semantic_hash": "0166f6db19eb1216162b1921b0b311f0"
+    "mtime": 1783254002.8673205,
+    "ast_hash": "bfa0f85ea09ec888a404e48e0022bc9b",
+    "semantic_hash": "bfa0f85ea09ec888a404e48e0022bc9b"
   },
   "iOS/Thingtime/Web/ThingtimeWebView.swift": {
-    "mtime": 1783242545.3254821,
-    "ast_hash": "9cfe4a91f0b5981329c1d99df490254b",
-    "semantic_hash": "9cfe4a91f0b5981329c1d99df490254b"
+    "mtime": 1783254014.8949254,
+    "ast_hash": "59088ff3314f7129c68f93744dfc6f4f",
+    "semantic_hash": "59088ff3314f7129c68f93744dfc6f4f"
   },
   "iOS/Thingtime/Web/WebView.swift": {
     "mtime": 1783242545.3252294,
@@ -435,9 +435,9 @@
     "semantic_hash": "3f979249a32877ad72072173fba18612"
   },
   "iOS/ThingtimeTests/ThingtimeWebDestinationTests.swift": {
-    "mtime": 1783242545.32573,
-    "ast_hash": "4d9e46da3bed498a4549f6770d401bc0",
-    "semantic_hash": "4d9e46da3bed498a4549f6770d401bc0"
+    "mtime": 1783254002.8683414,
+    "ast_hash": "5e85a53ba2e6cfbec8e91650f0abedea",
+    "semantic_hash": "5e85a53ba2e6cfbec8e91650f0abedea"
   },
   "iOS/scripts/_xcode-common.sh": {
     "mtime": 1782963930.1082025,
@@ -1707,12 +1707,12 @@
   "claude-todo/06-pr-12-review-actions.md": {
     "mtime": 1782186283.8627315,
     "ast_hash": "f9e471f7dabd01d6c7fc7b13e37d5c57",
-    "semantic_hash": ""
+    "semantic_hash": "f9e471f7dabd01d6c7fc7b13e37d5c57"
   },
   "claude-todo/README.md": {
     "mtime": 1783242355.287124,
     "ast_hash": "af66431be52ffbf95cc804019436da77",
-    "semantic_hash": ""
+    "semantic_hash": "af66431be52ffbf95cc804019436da77"
   },
   "docs/Use Cases/car.md": {
     "mtime": 1677486421.8399172,
@@ -1737,12 +1737,12 @@
   "docs/design/claude-design-mockup-v1/index.html": {
     "mtime": 1783011258.2234426,
     "ast_hash": "5da800320593e079c93a7e7c31201f7a",
-    "semantic_hash": ""
+    "semantic_hash": "5da800320593e079c93a7e7c31201f7a"
   },
   "docs/design/claude-design-mockup-v1/questionnaire.md": {
     "mtime": 1783011258.227726,
     "ast_hash": "7603cb6044d894296d162c1be7ffb580",
-    "semantic_hash": ""
+    "semantic_hash": "7603cb6044d894296d162c1be7ffb580"
   },
   "docs/design/claude-design-mockup-v1/source/Thingtime.dc.html": {
     "mtime": 1783011258.228302,
@@ -1757,12 +1757,12 @@
   "docs/design/claude-design-mockup-v2-fable/index.html": {
     "mtime": 1783011258.2906814,
     "ast_hash": "b30bdffa46a0292feeff05a908b7cfa2",
-    "semantic_hash": ""
+    "semantic_hash": "b30bdffa46a0292feeff05a908b7cfa2"
   },
   "docs/design/claude-design-mockup-v2-fable/questionnaire.md": {
     "mtime": 1783011258.291646,
     "ast_hash": "a9051d48255d35360bdc1d6aea17464a",
-    "semantic_hash": ""
+    "semantic_hash": "a9051d48255d35360bdc1d6aea17464a"
   },
   "docs/design/thingtime-app/Thingtime App.dc.html": {
     "mtime": 1783011258.2924447,
@@ -1772,7 +1772,7 @@
   "docs/design/thingtime-app/index.html": {
     "mtime": 1783011258.2995455,
     "ast_hash": "b6fcbd95b5d8b32c7d9bf1c1756b8566",
-    "semantic_hash": ""
+    "semantic_hash": "b6fcbd95b5d8b32c7d9bf1c1756b8566"
   },
   "docs/design/thingtime-directions/README.md": {
     "mtime": 1783011258.3001363,
@@ -1797,7 +1797,7 @@
   "docs/design/thingtime-landing-1a-classic-centered/index.html": {
     "mtime": 1783011258.3157706,
     "ast_hash": "7734cf8eaf6e01286ed59cf23d9b0779",
-    "semantic_hash": ""
+    "semantic_hash": "7734cf8eaf6e01286ed59cf23d9b0779"
   },
   "docs/design/thingtime-landing-1b-product-split/Thingtime Landing 1B.dc.html": {
     "mtime": 1783011258.316263,
@@ -1807,7 +1807,7 @@
   "docs/design/thingtime-landing-1b-product-split/index.html": {
     "mtime": 1783011258.3229945,
     "ast_hash": "b43e31506c97a30319f3920cf16a49ef",
-    "semantic_hash": ""
+    "semantic_hash": "b43e31506c97a30319f3920cf16a49ef"
   },
   "docs/design/thingtime-landing-1c-crowdfund-campaign/Thingtime Landing 1C.dc.html": {
     "mtime": 1783011258.3237078,
@@ -1817,7 +1817,7 @@
   "docs/design/thingtime-landing-1c-crowdfund-campaign/index.html": {
     "mtime": 1783011258.3308165,
     "ast_hash": "fe5d06a711bd818c7feb4a1c1fa40d1f",
-    "semantic_hash": ""
+    "semantic_hash": "fe5d06a711bd818c7feb4a1c1fa40d1f"
   },
   "docs/design/thingtime-landing-1d-developer-first/Thingtime Landing 1D.dc.html": {
     "mtime": 1783011258.3315432,
@@ -1827,7 +1827,7 @@
   "docs/design/thingtime-landing-1d-developer-first/index.html": {
     "mtime": 1783011258.3387103,
     "ast_hash": "66141bc411c6f9e273a898cc86a1918d",
-    "semantic_hash": ""
+    "semantic_hash": "66141bc411c6f9e273a898cc86a1918d"
   },
   "docs/design/thingtime-landing-1e-typographic-story/Thingtime Landing 1E.dc.html": {
     "mtime": 1783011258.3393981,
@@ -1837,7 +1837,7 @@
   "docs/design/thingtime-landing-1e-typographic-story/index.html": {
     "mtime": 1783011258.3464472,
     "ast_hash": "6bbdce830003309319814fa91af0a4e6",
-    "semantic_hash": ""
+    "semantic_hash": "6bbdce830003309319814fa91af0a4e6"
   },
   "docs/design/thingtime-landing-1f-ecosystem-map/Thingtime Landing 1F.dc.html": {
     "mtime": 1783011258.3470447,
@@ -1847,7 +1847,7 @@
   "docs/design/thingtime-landing-1f-ecosystem-map/index.html": {
     "mtime": 1783011258.3538451,
     "ast_hash": "8f9a4568c37ece0f297bdc3e6094a556",
-    "semantic_hash": ""
+    "semantic_hash": "8f9a4568c37ece0f297bdc3e6094a556"
   },
   "docs/design/thingtime-landing-1g-magic-path-bar/Thingtime Landing 1G.dc.html": {
     "mtime": 1783011258.3544242,
@@ -1857,7 +1857,7 @@
   "docs/design/thingtime-landing-1g-magic-path-bar/index.html": {
     "mtime": 1783011258.3616254,
     "ast_hash": "5035496ee14beceba441ba580881f35b",
-    "semantic_hash": ""
+    "semantic_hash": "5035496ee14beceba441ba580881f35b"
   },
   "docs/design/thingtime-landing-1h-ultra-minimal-voxel/Thingtime Landing 1H.dc.html": {
     "mtime": 1783011258.3623524,
@@ -1867,7 +1867,7 @@
   "docs/design/thingtime-landing-1h-ultra-minimal-voxel/index.html": {
     "mtime": 1783011258.3692935,
     "ast_hash": "5c4da8eacb9d20fc7aae2c45f1692425",
-    "semantic_hash": ""
+    "semantic_hash": "5c4da8eacb9d20fc7aae2c45f1692425"
   },
   "docs/design/thingtime-launch-celebration/README.md": {
     "mtime": 1783011258.3700762,
@@ -1882,12 +1882,12 @@
   "docs/design/thingtime-launch-celebration/index.html": {
     "mtime": 1783011258.3778906,
     "ast_hash": "172d7fdc887bf9658af2bb4e3ec54706",
-    "semantic_hash": ""
+    "semantic_hash": "172d7fdc887bf9658af2bb4e3ec54706"
   },
   "iOS/AGENTS.md": {
-    "mtime": 1782963930.1043644,
-    "ast_hash": "d5b27c62b1e86cccbb54e0663359931c",
-    "semantic_hash": ""
+    "mtime": 1783243148.0994837,
+    "ast_hash": "ebf186dba0c6d3fc1795c0e13c901e52",
+    "semantic_hash": "ebf186dba0c6d3fc1795c0e13c901e52"
   },
   "iOS/CLAUDE.md": {
     "mtime": 1783011258.4581,
@@ -2908,5 +2908,10 @@
     "mtime": 1783242355.2868133,
     "ast_hash": "76ffda1d73e7f9d06b0fffa769564845",
     "semantic_hash": "76ffda1d73e7f9d06b0fffa769564845"
+  },
+  "iOS/Thingtime/Web/ThingtimeWebDeploymentsClient.swift": {
+    "mtime": 1783254002.867686,
+    "ast_hash": "156e3e1f6b9eae5dbd22507a6f76a2d0",
+    "semantic_hash": "156e3e1f6b9eae5dbd22507a6f76a2d0"
   }
 }

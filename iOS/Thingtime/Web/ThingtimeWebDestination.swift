@@ -5,7 +5,7 @@ enum ThingtimeWebDestination {
         enum Source: Equatable {
             case production
             case configured
-            case customVercel
+            case vercelDeployment
         }
 
         let id: String
@@ -13,6 +13,23 @@ enum ThingtimeWebDestination {
         let subtitle: String
         let url: URL
         let source: Source
+    }
+
+    struct DeploymentSummary: Decodable, Equatable {
+        let branch: String?
+        let commitSha: String?
+        let createdAt: String?
+        let dashboardUrl: String?
+        let environment: String?
+        let id: String?
+        let readyAt: String?
+        let readyLabel: String?
+        let state: String
+        let url: String
+    }
+
+    struct DeploymentsOverview: Decodable, Equatable {
+        let deployments: [DeploymentSummary]
     }
 
     private static let productionHome = URL(string: "https://thingtime.com")!
@@ -39,7 +56,7 @@ enum ThingtimeWebDestination {
 
     static func availableDestinations(
         from infoDictionary: [String: Any]? = Bundle.main.infoDictionary,
-        customDeploymentURLString: String? = nil
+        vercelDeployments: [DeploymentSummary] = []
     ) -> [Destination] {
         var destinations = [production]
 
@@ -47,8 +64,10 @@ enum ThingtimeWebDestination {
             append(configuredDestination, to: &destinations)
         }
 
-        if let customDestination = customVercelDestination(from: customDeploymentURLString) {
-            append(customDestination, to: &destinations)
+        for deployment in vercelDeployments {
+            if let destination = vercelDeploymentDestination(from: deployment) {
+                append(destination, to: &destinations)
+            }
         }
 
         return destinations
@@ -74,17 +93,38 @@ enum ThingtimeWebDestination {
         return url
     }
 
-    static func customVercelDestination(from rawURL: String?) -> Destination? {
-        guard let url = customVercelURL(from: rawURL) else {
+    static func deploymentsAPIURL(limit: Int = 50) -> URL {
+        var components = URLComponents(url: productionHome, resolvingAgainstBaseURL: false)!
+        components.path = "/api/v1/vercel/deployments"
+        components.queryItems = [
+            URLQueryItem(name: "limit", value: String(limit))
+        ]
+
+        return components.url!
+    }
+
+    static func vercelDeploymentDestination(from deployment: DeploymentSummary) -> Destination? {
+        guard
+            let url = validatedHTTPSURL(from: deployment.url)
+        else {
             return nil
         }
 
+        let title = nonEmpty(deployment.branch) ?? "Vercel deployment"
+        let subtitle = [
+            deployment.state,
+            nonEmpty(deployment.readyLabel),
+            url.host
+        ]
+            .compactMap(nonEmpty)
+            .joined(separator: " - ")
+
         return Destination(
             id: normalizedIdentifier(for: url),
-            title: "Vercel deployment",
-            subtitle: url.host ?? url.absoluteString,
+            title: title,
+            subtitle: subtitle.isEmpty ? url.absoluteString : subtitle,
             url: url,
-            source: .customVercel
+            source: .vercelDeployment
         )
     }
 
@@ -102,28 +142,6 @@ enum ThingtimeWebDestination {
         )
 
         return destination.id == production.id ? production : destination
-    }
-
-    private static func customVercelURL(from rawURL: String?) -> URL? {
-        guard let rawURL else {
-            return nil
-        }
-
-        let trimmedURL = rawURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedURL.isEmpty else {
-            return nil
-        }
-
-        let candidateURL = trimmedURL.contains("://") ? trimmedURL : "https://\(trimmedURL)"
-
-        guard
-            let url = url(from: ["ThingtimeWebURL": candidateURL]),
-            isVercelDeployment(url)
-        else {
-            return nil
-        }
-
-        return url
     }
 
     private static func isVercelDeployment(_ url: URL) -> Bool {
@@ -160,5 +178,30 @@ enum ThingtimeWebDestination {
         }
 
         return absoluteString
+    }
+
+    private static func validatedHTTPSURL(from rawURL: String) -> URL? {
+        let trimmedURL = rawURL.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard
+            !trimmedURL.isEmpty,
+            let url = URL(string: trimmedURL),
+            url.scheme == "https",
+            url.host?.isEmpty == false
+        else {
+            return nil
+        }
+
+        return url
+    }
+
+    private static func nonEmpty(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard let trimmed, !trimmed.isEmpty else {
+            return nil
+        }
+
+        return trimmed
     }
 }

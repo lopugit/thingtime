@@ -3,19 +3,26 @@ import SwiftUI
 struct ThingtimeWebView: View {
     private enum StorageKey {
         static let selectedDestinationID = "thingtime.webDestination.selectedID"
-        static let customVercelURL = "thingtime.webDestination.customVercelURL"
     }
 
-    @AppStorage(StorageKey.selectedDestinationID) private var selectedDestinationID = ThingtimeWebDestination.defaultDestinationID
-    @AppStorage(StorageKey.customVercelURL) private var customDeploymentURLString = ""
+    enum DeploymentsLoadState: Equatable {
+        case idle
+        case loading
+        case loaded
+        case failed(String)
+    }
 
-    @State private var customDeploymentDraft = ""
+    private let deploymentsClient = ThingtimeWebDeploymentsClient()
+
+    @AppStorage(StorageKey.selectedDestinationID) private var selectedDestinationID = ThingtimeWebDestination.defaultDestinationID
+
+    @State private var vercelDeployments: [ThingtimeWebDestination.DeploymentSummary] = []
     @State private var isDestinationPickerOpen = false
-    @State private var validationMessage: String?
+    @State private var deploymentsLoadState = DeploymentsLoadState.idle
 
     private var destinations: [ThingtimeWebDestination.Destination] {
         ThingtimeWebDestination.availableDestinations(
-            customDeploymentURLString: customDeploymentURLString
+            vercelDeployments: vercelDeployments
         )
     }
 
@@ -44,11 +51,10 @@ struct ThingtimeWebView: View {
                 DestinationPickerDrawer(
                     destinations: destinations,
                     selectedDestinationID: selectedDestination.id,
-                    customDeploymentDraft: $customDeploymentDraft,
-                    validationMessage: $validationMessage,
+                    deploymentsLoadState: deploymentsLoadState,
                     safeAreaInsets: proxy.safeAreaInsets,
                     onSelect: select,
-                    onSaveCustomDeployment: saveCustomDeployment,
+                    onRefreshDeployments: refreshDeployments,
                     onClose: closeDestinationPicker
                 )
                 .frame(width: max(drawerWidth, 280))
@@ -67,11 +73,13 @@ struct ThingtimeWebView: View {
             }
             .animation(.easeOut(duration: 0.22), value: isDestinationPickerOpen)
             .onAppear(perform: prepareDestinationState)
+            .task {
+                await refreshDeploymentsIfNeeded()
+            }
             .onChange(of: selectedDestinationID) { _, _ in
                 ensureSelectedDestinationIsAvailable()
             }
-            .onChange(of: customDeploymentURLString) { _, newValue in
-                customDeploymentDraft = newValue
+            .onChange(of: vercelDeployments) { _, _ in
                 ensureSelectedDestinationIsAvailable()
             }
         }
@@ -94,10 +102,6 @@ struct ThingtimeWebView: View {
     }
 
     private func prepareDestinationState() {
-        if customDeploymentDraft.isEmpty {
-            customDeploymentDraft = customDeploymentURLString
-        }
-
         ensureSelectedDestinationIsAvailable()
     }
 
@@ -112,10 +116,12 @@ struct ThingtimeWebView: View {
     }
 
     private func openDestinationPicker() {
-        validationMessage = nil
-
         withAnimation(.easeOut(duration: 0.22)) {
             isDestinationPickerOpen = true
+        }
+
+        Task {
+            await refreshDeploymentsIfNeeded()
         }
     }
 
@@ -127,34 +133,39 @@ struct ThingtimeWebView: View {
 
     private func select(_ destination: ThingtimeWebDestination.Destination) {
         selectedDestinationID = destination.id
-        validationMessage = nil
         closeDestinationPicker()
     }
 
-    private func saveCustomDeployment() {
-        guard let destination = ThingtimeWebDestination.customVercelDestination(from: customDeploymentDraft) else {
-            validationMessage = "Use a valid https://*.vercel.app URL."
+    @MainActor
+    private func refreshDeploymentsIfNeeded() async {
+        guard deploymentsLoadState == .idle else {
             return
         }
 
-        customDeploymentURLString = destination.url.absoluteString
-        customDeploymentDraft = destination.url.absoluteString
-        selectedDestinationID = destination.id
-        validationMessage = nil
-        closeDestinationPicker()
+        await refreshDeployments()
+    }
+
+    @MainActor
+    private func refreshDeployments() async {
+        deploymentsLoadState = .loading
+
+        do {
+            vercelDeployments = try await deploymentsClient.fetchDeployments()
+            deploymentsLoadState = .loaded
+        } catch {
+            deploymentsLoadState = .failed("Could not load Vercel deployments.")
+        }
     }
 }
 
 private struct DestinationPickerDrawer: View {
     let destinations: [ThingtimeWebDestination.Destination]
     let selectedDestinationID: String
-
-    @Binding var customDeploymentDraft: String
-    @Binding var validationMessage: String?
+    let deploymentsLoadState: ThingtimeWebView.DeploymentsLoadState
 
     let safeAreaInsets: EdgeInsets
     let onSelect: (ThingtimeWebDestination.Destination) -> Void
-    let onSaveCustomDeployment: () -> Void
+    let onRefreshDeployments: () async -> Void
     let onClose: () -> Void
 
     var body: some View {
@@ -164,6 +175,20 @@ private struct DestinationPickerDrawer: View {
                     .font(.headline)
 
                 Spacer()
+
+                Button {
+                    Task {
+                        await onRefreshDeployments()
+                    }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 15, weight: .semibold))
+                        .frame(width: 34, height: 34)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(deploymentsLoadState == .loading)
+                .accessibilityLabel("Refresh Vercel deployments")
 
                 Button(action: onClose) {
                     Image(systemName: "xmark")
@@ -183,35 +208,7 @@ private struct DestinationPickerDrawer: View {
 
             Divider()
 
-            VStack(alignment: .leading, spacing: 10) {
-                Label("Vercel deployment", systemImage: "paperplane")
-                    .font(.subheadline.weight(.semibold))
-
-                HStack(spacing: 8) {
-                    TextField("https://branch.vercel.app", text: $customDeploymentDraft)
-                        .keyboardType(.URL)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .textFieldStyle(.roundedBorder)
-                        .submitLabel(.done)
-                        .onSubmit(onSaveCustomDeployment)
-
-                    Button(action: onSaveCustomDeployment) {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 15, weight: .bold))
-                            .frame(width: 38, height: 38)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .accessibilityLabel("Save Vercel deployment")
-                }
-
-                if let validationMessage {
-                    Text(validationMessage)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                }
-            }
+            deploymentStatusView
 
             Spacer(minLength: 0)
         }
@@ -265,6 +262,28 @@ private struct DestinationPickerDrawer: View {
         .accessibilityLabel("\(destination.title), \(destination.subtitle)")
     }
 
+    @ViewBuilder
+    private var deploymentStatusView: some View {
+        switch deploymentsLoadState {
+        case .idle:
+            EmptyView()
+        case .loading:
+            Label("Loading deployments", systemImage: "arrow.triangle.2.circlepath")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        case .loaded:
+            if !destinations.contains(where: { $0.source == .vercelDeployment }) {
+                Label("No Vercel deployments", systemImage: "tray")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        case .failed(let message):
+            Label(message, systemImage: "exclamationmark.triangle")
+                .font(.caption)
+                .foregroundStyle(.red)
+        }
+    }
+
     private func rowBackground(for destination: ThingtimeWebDestination.Destination) -> Color {
         destination.id == selectedDestinationID ? Color.primary.opacity(0.1) : Color.primary.opacity(0.04)
     }
@@ -275,7 +294,7 @@ private struct DestinationPickerDrawer: View {
             return "globe"
         case .configured:
             return "shippingbox"
-        case .customVercel:
+        case .vercelDeployment:
             return "paperplane"
         }
     }

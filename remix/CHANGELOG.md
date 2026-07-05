@@ -18,9 +18,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
-- Added an iOS web destination drawer that opens from the left edge and lets
-  native builds switch the WebKit view between Thingtime.com, the configured
-  build URL, and a saved Vercel deployment URL. — _Codex (AI), 2026-07-05_
+- Added an iOS web destination drawer that opens from the left edge, fetches
+  Vercel deployment options from `/api/v1/vercel/deployments`, and lets native
+  builds switch the WebKit view between Thingtime.com, the configured build URL,
+  and returned deployment URLs. — _Codex (AI), 2026-07-05_
 - Added a drawer-based nav system (Claude-desktop style): edge-flush resizable
   drawer driven by `thingtime.settings.drawer.*` (open direction, top-level
   item limit with a faint “More” reveal, dynamic grouped second-level menu,

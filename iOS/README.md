@@ -6,8 +6,9 @@ The first version is intentionally small: a SwiftUI app that embeds Thingtime
 in a native `WKWebView`. It defaults to `https://thingtime.com` and can be
 pointed at a Vercel preview or branch deployment for TestFlight builds. A
 left-edge swipe opens the in-app web destination drawer, where production,
-the configured build URL, and a saved `https://*.vercel.app` deployment can be
-selected without rebuilding the app. It does not include any LiDAR, ARKit,
+the configured build URL, and deployments returned by
+`/api/v1/vercel/deployments` can be selected without rebuilding the app. It
+does not include any LiDAR, ARKit,
 scanning, mesh, storage, or export functionality.
 
 ## Setup
