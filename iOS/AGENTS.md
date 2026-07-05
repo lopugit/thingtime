@@ -68,3 +68,14 @@ cp .env.example .env
 export ASC_KEY_CONTENT="$(base64 -i /path/to/AuthKey_KEYID.p8)"
 scripts/testflight-beta.sh
 ```
+
+## Simulator Testing
+
+- `scripts/test.sh` defaults through the shared build destination, which may be
+  a generic simulator destination. If Xcode rejects that for tests with "Tests
+  must be run on a concrete device", pick an available simulator with
+  `xcrun simctl list devices available` and rerun, for example:
+
+  ```sh
+  DEST='platform=iOS Simulator,id=<simulator-uuid>' ./scripts/test.sh
+  ```

@@ -27,12 +27,15 @@ struct WebView: UIViewRepresentable {
         webView.scrollView.contentInsetAdjustmentBehavior = .never
         webView.scrollView.contentInset = .zero
         webView.scrollView.scrollIndicatorInsets = .zero
+        context.coordinator.loadedRootURL = url
         webView.load(URLRequest(url: url))
         return webView
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
-        guard webView.url == nil else { return }
+        guard context.coordinator.loadedRootURL != url else { return }
+
+        context.coordinator.loadedRootURL = url
         webView.load(URLRequest(url: url))
     }
 
@@ -86,6 +89,7 @@ struct WebView: UIViewRepresentable {
 
     final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         weak var webView: WKWebView?
+        var loadedRootURL: URL?
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             sendToWeb(type: "native-ready", payload: [

@@ -2,7 +2,13 @@
 
 Native iOS shell for Thingtime.
 
-The first version is intentionally small: a SwiftUI app that embeds Thingtime in a native `WKWebView`. It defaults to `https://thingtime.com` and can be pointed at a Vercel preview or branch deployment for TestFlight builds. It does not include any LiDAR, ARKit, scanning, mesh, storage, or export functionality.
+The first version is intentionally small: a SwiftUI app that embeds Thingtime
+in a native `WKWebView`. It defaults to `https://thingtime.com` and can be
+pointed at a Vercel preview or branch deployment for TestFlight builds. A
+left-edge swipe opens the in-app web destination drawer, where production,
+the configured build URL, and a saved `https://*.vercel.app` deployment can be
+selected without rebuilding the app. It does not include any LiDAR, ARKit,
+scanning, mesh, storage, or export functionality.
 
 ## Setup
 
@@ -36,12 +42,14 @@ bundle install
 ./scripts/testflight-beta.sh
 ```
 
-Omit `THINGTIME_WEB_URL` to build against `https://thingtime.com`. The script
+Omit `THINGTIME_WEB_URL` to build against `https://thingtime.com`. Set it to a
+public `https://*.vercel.app` preview or branch deployment when a TestFlight
+build should include that deployment as a selectable drawer option. The script
 loads `iOS/.env` when present and then runs `bundle exec fastlane beta`. Keep
-`.p8` keys, Apple IDs, team IDs, API key contents, and real preview URLs out of
-git unless they are intended public examples. App Store Connect accepts uploaded
-archives; it does not compile this repository from source unless a separate
-Xcode Cloud workflow is configured.
+`.p8` keys, Apple IDs, team IDs, API key contents, and private preview URLs out
+of git unless they are intended public examples. App Store Connect accepts
+uploaded archives; it does not compile this repository from source unless a
+separate Xcode Cloud workflow is configured.
 
 If automatic App Store export reports that no profile was found, set
 `PROVISIONING_PROFILE_SPECIFIER` to the installed App Store provisioning profile
