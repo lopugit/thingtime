@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import WebKit
 
 struct WebView: UIViewRepresentable {
@@ -17,16 +18,18 @@ struct WebView: UIViewRepresentable {
         configuration.userContentController.addUserScript(Self.bridgeUserScript)
         configuration.userContentController.add(context.coordinator, name: Self.nativeMessageHandlerName)
 
-        let webView = WKWebView(frame: .zero, configuration: configuration)
+        let webView = ThingtimeWKWebView(frame: .zero, configuration: configuration)
         context.coordinator.webView = webView
         webView.navigationDelegate = context.coordinator
         webView.allowsBackForwardNavigationGestures = true
-        webView.isOpaque = false
-        webView.backgroundColor = .clear
-        webView.scrollView.backgroundColor = .clear
+        webView.isOpaque = true
+        webView.backgroundColor = .white
+        webView.scrollView.backgroundColor = .white
+        if #available(iOS 15.0, *) {
+            webView.underPageBackgroundColor = .white
+        }
         webView.scrollView.contentInsetAdjustmentBehavior = .never
-        webView.scrollView.contentInset = .zero
-        webView.scrollView.scrollIndicatorInsets = .zero
+        webView.applyThingtimeScrollInsets()
         context.coordinator.loadedRootURL = url
         webView.load(URLRequest(url: url))
         return webView
@@ -132,5 +135,35 @@ struct WebView: UIViewRepresentable {
 
             return String(describing: value)
         }
+    }
+}
+
+private final class ThingtimeWKWebView: WKWebView {
+    private let footerScrollPadding: CGFloat = 16
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        applyThingtimeScrollInsets()
+    }
+
+    override func safeAreaInsetsDidChange() {
+        super.safeAreaInsetsDidChange()
+        applyThingtimeScrollInsets()
+    }
+
+    func applyThingtimeScrollInsets() {
+        let bottomInset = safeAreaInsets.bottom + footerScrollPadding
+
+        var contentInset = scrollView.contentInset
+        contentInset.top = 0
+        contentInset.left = 0
+        contentInset.right = 0
+        contentInset.bottom = bottomInset
+        scrollView.contentInset = contentInset
+
+        var indicatorInsets = scrollView.verticalScrollIndicatorInsets
+        indicatorInsets.top = 0
+        indicatorInsets.bottom = bottomInset
+        scrollView.verticalScrollIndicatorInsets = indicatorInsets
     }
 }

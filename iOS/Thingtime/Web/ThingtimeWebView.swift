@@ -62,15 +62,9 @@ struct ThingtimeWebView: View {
                 .offset(x: isDestinationPickerOpen ? 0 : -max(drawerWidth, 280))
                 .gesture(closeDrawerGesture)
                 .ignoresSafeArea(.container, edges: [.top, .bottom, .leading])
-
-                if !isDestinationPickerOpen {
-                    Color.clear
-                        .frame(width: 32)
-                        .contentShape(Rectangle())
-                        .gesture(openDrawerGesture)
-                        .accessibilityHidden(true)
-                }
             }
+            .background(Color.white.ignoresSafeArea())
+            .simultaneousGesture(openDrawerGesture(leadingEdgeWidth: 28))
             .animation(.easeOut(duration: 0.22), value: isDestinationPickerOpen)
             .onAppear(perform: prepareDestinationState)
             .task {
@@ -85,9 +79,11 @@ struct ThingtimeWebView: View {
         }
     }
 
-    private var openDrawerGesture: some Gesture {
+    private func openDrawerGesture(leadingEdgeWidth: CGFloat) -> some Gesture {
         DragGesture(minimumDistance: 18)
             .onEnded { value in
+                guard !isDestinationPickerOpen else { return }
+                guard value.startLocation.x <= leadingEdgeWidth else { return }
                 guard value.translation.width > 56 else { return }
                 openDestinationPicker()
             }

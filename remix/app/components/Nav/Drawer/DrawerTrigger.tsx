@@ -82,11 +82,11 @@ export const DrawerTrigger = () => {
 				type="button"
 				position="fixed"
 				zIndex={DRAWER_TRIGGER_Z}
-				top="calc(var(--thingtime-safe-area-top) + 10px)"
-				left="12px"
-				width="32px"
-				height="32px"
-				borderRadius="8px"
+				top="calc(var(--thingtime-safe-area-top) + 4px)"
+				left="0"
+				width="56px"
+				height="44px"
+				borderRadius="0 8px 8px 0"
 				background="transparent"
 				_hover={{ background: 'greys.lightt' }}
 				opacity={0.75}
@@ -94,6 +94,10 @@ export const DrawerTrigger = () => {
 				cursor="pointer"
 				title={open ? 'Close menu' : 'Open menu'}
 				aria-label={open ? 'Close menu' : 'Open menu'}
+				sx={{
+					WebkitTapHighlightColor: 'transparent',
+					touchAction: 'manipulation'
+				}}
 				onClick={onClick}
 				onMouseEnter={onTriggerMouseEnter}
 				onMouseLeave={onTriggerMouseLeave}

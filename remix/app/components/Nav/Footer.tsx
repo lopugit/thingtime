@@ -35,7 +35,15 @@ export const Footer = (props) => {
   }, [api, navigate]);
 
   return (
-    <Center width="100%" paddingTop="900px" paddingBottom={[5, 12]} paddingX={4}>
+    <Center
+      width="100%"
+      paddingTop="900px"
+      paddingBottom={[
+        'calc(64px + var(--thingtime-safe-area-bottom))',
+        'calc(48px + var(--thingtime-safe-area-bottom))'
+      ]}
+      paddingX={4}
+    >
       <Flex
         alignItems="flex-start"
         columnGap={[8, 12]}

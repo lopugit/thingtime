@@ -13,6 +13,23 @@ Invalid deployment API URLs are rejected, duplicate destinations collapse to a
 single option, and `THINGTIME_WEB_URL` remains useful as the build-configured
 preview URL.
 
+## Follow-up polish
+
+TestFlight screenshots exposed three mobile polish bugs:
+
+- The invisible native left-edge swipe strip covered the first 32px of the
+  webview, so taps on the far-left side of the web drawer icon were intercepted
+  and never reached the web app. The edge-swipe gesture now runs as a
+  simultaneous parent gesture gated by `startLocation.x`, so web taps pass
+  through normally.
+- The web drawer trigger's visible icon stayed in the same place, but its
+  tappable area now reaches the left viewport edge.
+- The native `WKWebView` and footer now reserve bottom safe-area space, and the
+  webview/under-page background is white so top/bottom rubber-band overscroll
+  matches the page instead of flashing black.
+- Native build `4` carries the WKWebView gesture/background/inset fixes for
+  TestFlight.
+
 ## TestFlight upload
 
 Build `1.0 (3)` was uploaded to App Store Connect with Fastlane and is visible

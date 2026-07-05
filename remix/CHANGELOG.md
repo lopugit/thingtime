@@ -51,6 +51,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- Fixed iOS WebKit/mobile drawer polish from TestFlight: the native
+  left-edge swipe recognizer no longer blocks taps on the web drawer icon, the
+  collapsed drawer trigger has an edge-to-edge hit target, footer scrolling gets
+  bottom safe-area breathing room, and WKWebView overscroll now uses the page's
+  white background instead of showing black. Bumped the native build number to
+  `4` for the follow-up TestFlight build. Details in
+  [`PRs/30-codex-ios-deployment-url-picker--add-ios-web-destination-picker.md`](PRs/30-codex-ios-deployment-url-picker--add-ios-web-destination-picker.md).
+  — _Codex (AI), 2026-07-05_
 - Made the compact footer environment selector text flush-left with the footer
   column and vertically centered by replacing the native select with a custom
   menu button. — _Codex (AI), 2026-07-03_
