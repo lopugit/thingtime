@@ -5,11 +5,12 @@ import { GradientPath } from "~/gp/GradientPath"
 import { useProps } from "~/hooks/useProps"
 import { useTrace } from "~/hooks/useTrace"
 import { useUuid } from "~/hooks/useUuid"
+import { RAINBOW_PALETTE } from "~/theme/rainbow"
 
 export const Rainbow = (allProps: any): React.JSX.Element => {
   // return allProps.children
 
-  const rainbow = ["#f34a4a", "#ffbc48", "#58ca70", "#47b5e6", "#a555e8"]
+  const rainbow = [...RAINBOW_PALETTE]
 
   const props = useProps(allProps)
 

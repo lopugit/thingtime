@@ -39,7 +39,14 @@ export default function Index() {
     >
       {/* <Box paddingTop={200}></Box> */}
       {/* <Splash></Splash> */}
-      <Center width="100vw" maxWidth="100%" minHeight="100vh" paddingY={100}>
+      <Center
+        width="100vw"
+        maxWidth="100%"
+        minHeight="100vh"
+        paddingTop="calc(var(--thingtime-safe-area-top, 0px) + 108px)"
+        paddingBottom={[16, 24]}
+        paddingX={["18px", "24px"]}
+      >
         <Thingtime width="700px" valuePl={0} thing={ode}></Thingtime>
       </Center>
     </Flex>

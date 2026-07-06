@@ -1,7 +1,6 @@
-import { Suspense, useState } from 'react';
+import { useState } from 'react';
 import { useThingtime } from '../Thingtime/useThingtime';
-import { Flex, Heading, Box, Button } from '@chakra-ui/react';
-import Editor from '@monaco-editor/react';
+import { Flex, Heading, Text } from '@chakra-ui/react';
 import { RawResult } from './RawResult';
 
 export const RawResults = () => {
@@ -17,10 +16,21 @@ export const RawResults = () => {
 
   return (
     <Flex w="100%" position="relative" minH="50vh" maxW="container" flexDir={'column'}>
-      <Heading size="sm" pb={8}>
+      <Text
+        fontFamily="mono"
+        fontSize="11px"
+        fontWeight={600}
+        letterSpacing="0.14em"
+        textTransform="uppercase"
+        color="var(--tt-muted, #9a9aa6)"
+        pb={2}
+      >
+        MongoDB
+      </Text>
+      <Heading size="md" color="var(--tt-ink, #16161a)" letterSpacing="-0.02em" pb={6}>
         Raw Results
       </Heading>
-      <Flex flexDir={'column'}>
+      <Flex flexDir={'column'} rowGap={4}>
         {results.map((result, index) => {
           return <RawResult key={index + 'rawResult'} result={result} />;
         })}

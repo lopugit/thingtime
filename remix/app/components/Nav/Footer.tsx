@@ -44,6 +44,7 @@ export const Footer = (props) => {
         'calc(72px + var(--thingtime-safe-area-bottom))'
       ]}
       paddingX={4}
+      color="var(--tt-text, #5a5a66)"
     >
       <Flex
         alignItems="flex-start"
@@ -63,7 +64,7 @@ export const Footer = (props) => {
               </Flex>
               <Link to={`mailto:${investmentEmail}`}>
                 <Flex flexDirection="row">
-                  <Text color="green">{investmentEmail}</Text>
+                  <Text color="var(--tt-positive, #2f8f4f)">{investmentEmail}</Text>
                 </Flex>
               </Link>
             </Flex>
@@ -74,19 +75,30 @@ export const Footer = (props) => {
         )}
         <Flex flex="1 1 160px" flexDirection="column" minWidth="140px" rowGap={3}>
           <Flex flexDirection="column">
-            <Flex flexDirection="row" fontSize="xs">
+            <Flex
+              alignItems="center"
+              flexDirection="row"
+              fontFamily="mono"
+              fontSize="10px"
+              fontWeight={600}
+              letterSpacing="0.1em"
+              textTransform="uppercase"
+              color="var(--tt-muted, #9a9aa6)"
+            >
               <Icon name="mail" size="12px" chakras={{ pr: 1 }}></Icon>
               Contact
               {/* <Icon name="money bag" size="10px" chakras={{ pl: 1 }}></Icon> */}
             </Flex>
             <Link to={`mailto:${contactEmail}`}>
               <Flex flexDirection="row">
-                <Text>{contactEmail}</Text>
+                <Text fontSize="xs" color="var(--tt-text, #5a5a66)">
+                  {contactEmail}
+                </Text>
               </Flex>
             </Link>
           </Flex>
           <Flex alignItems="center" flexDirection="row" fontSize="xs">
-            <Text>
+            <Text color="var(--tt-muted, #9a9aa6)">
               {/* copyright message */}© {year} Thingtime
             </Text>
           </Flex>
@@ -98,8 +110,9 @@ export const Footer = (props) => {
                 as="a"
                 href={`https://github.com/lopugit/thingtime/tree/${branchName}`}
                 target="_blank"
+                fontFamily="mono"
                 fontSize="10px"
-                opacity={0.5}
+                color="var(--tt-faint, #b6b6c0)"
               >
                 🌱 {branchName}
               </Box>
@@ -120,15 +133,26 @@ export const Footer = (props) => {
 
         {/* docs column */}
         <Flex flex="1 1 140px" flexDirection="column" minWidth="130px" rowGap={3}>
-          <Flex flexDirection="row" fontSize="xs" alignItems="center">
+          <Flex
+            alignItems="center"
+            flexDirection="row"
+            fontFamily="mono"
+            fontSize="10px"
+            fontWeight={600}
+            letterSpacing="0.1em"
+            textTransform="uppercase"
+            color="var(--tt-muted, #9a9aa6)"
+          >
             <Icon name="book-open" size="12px" chakras={{ pr: 1 }}></Icon>
             Docs
           </Flex>
           <Link to="/docs/">
-            <Text fontSize="xs">Docs home</Text>
+            <Text fontSize="xs" color="var(--tt-text, #5a5a66)">
+              Docs home
+            </Text>
           </Link>
           <Link to="/docs/design">
-            <Text fontSize="xs" opacity={0.7}>
+            <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
               Design mockups
             </Text>
           </Link>
@@ -136,22 +160,33 @@ export const Footer = (props) => {
 
         {/* account / user column */}
         <Flex flex="1 1 140px" flexDirection="column" minWidth="130px" rowGap={3}>
-          <Flex flexDirection="row" fontSize="xs" alignItems="center">
+          <Flex
+            alignItems="center"
+            flexDirection="row"
+            fontFamily="mono"
+            fontSize="10px"
+            fontWeight={600}
+            letterSpacing="0.1em"
+            textTransform="uppercase"
+            color="var(--tt-muted, #9a9aa6)"
+          >
             <Icon name="rainbow" size="12px" chakras={{ pr: 1 }}></Icon>
             {user ? user.displayName || user.username : 'Account'}
           </Flex>
           {user ? (
             <>
               <Link to="/profile">
-                <Text fontSize="xs">Profile</Text>
+                <Text fontSize="xs" color="var(--tt-text, #5a5a66)">
+                  Profile
+                </Text>
               </Link>
               <Box as="button" type="button" onClick={handleLogout} textAlign="left">
-                <Text fontSize="xs" opacity={0.7}>
+                <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
                   Log out
                 </Text>
               </Box>
               {!user.emailVerified && (
-                <Text fontSize="10px" opacity={0.6}>
+                <Text fontSize="10px" color="var(--tt-muted, #9a9aa6)">
                   ✉️ email unverified
                 </Text>
               )}
@@ -159,10 +194,12 @@ export const Footer = (props) => {
           ) : (
             <>
               <Link to="/login">
-                <Text fontSize="xs">Log in</Text>
+                <Text fontSize="xs" color="var(--tt-text, #5a5a66)">
+                  Log in
+                </Text>
               </Link>
               <Link to="/register">
-                <Text fontSize="xs" opacity={0.7}>
+                <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
                   Register
                 </Text>
               </Link>

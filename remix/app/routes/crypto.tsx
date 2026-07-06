@@ -117,10 +117,19 @@ const ToolPanel = ({
   badge?: string;
   children: React.ReactNode;
 }) => (
-  <Box borderWidth="1px" borderColor="gray.200" borderRadius="md" p={5} bg="white" w="100%" minW={0}>
+  <Box
+    borderWidth="1px"
+    borderColor="var(--tt-border, #E2E8F0)"
+    borderRadius="var(--tt-radius-md, 12px)"
+    p={5}
+    bg="var(--tt-card, #ffffff)"
+    boxShadow="var(--tt-shadow-card, 0 1px 2px rgba(0, 0, 0, 0.05))"
+    w="100%"
+    minW={0}
+  >
     <Flex alignItems="center" justifyContent="space-between" gap={3} mb={4}>
       <Flex alignItems="center" gap={2}>
-        <Icon as={icon} boxSize={5} color="teal.500" />
+        <Icon as={icon} boxSize={5} color="var(--tt-link, #319795)" />
         <Heading size="sm">{title}</Heading>
       </Flex>
       {badge ? <Badge colorScheme="teal">{badge}</Badge> : null}
@@ -266,12 +275,12 @@ export default function CryptoPage() {
   }, [message, messageEncoding, signature, signatureEncoding, signatureKeyEncoding, signaturePrivateKey, signaturePublicKey, signatureStandard]);
 
   return (
-    <Box minH="100vh" w="100%" minW={0} bg="gray.50" pt={{ base: 28, md: 32 }} pb={{ base: 6, md: 10 }} px={{ base: 3, md: 12 }} display="flex" justifyContent="center">
+    <Box minH="100vh" w="100%" minW={0} bg="var(--tt-surface, #fafafb)" pt={{ base: 28, md: 32 }} pb={{ base: 6, md: 10 }} px={{ base: 3, md: 12 }} display="flex" justifyContent="center">
       <Box as="main" data-testid="crypto-shell" maxW={PAGE_MAX_WIDTH} w="100%">
         <Flex alignItems="center" justifyContent="center" gap={4} mb={6} flexDirection="column" textAlign="center">
           <Box minW={0}>
             <Heading size="lg">Crypto</Heading>
-            <Text color="gray.600" fontSize="sm" mt={1}>
+            <Text color="var(--tt-muted, #718096)" fontSize="sm" mt={1} fontFamily="mono">
               `/api/v1/crypto`
             </Text>
           </Box>
@@ -310,7 +319,7 @@ export default function CryptoPage() {
                   <Input value={issuer} onChange={(event) => setIssuer(event.target.value)} />
                 </FormControl>
               </Grid>
-              <Button leftIcon={<Icon as={RefreshCw} boxSize={4} />} colorScheme="teal" onClick={generateKeys} isLoading={loadingGenerate} width="fit-content">
+              <Button leftIcon={<Icon as={RefreshCw} boxSize={4} />} onClick={generateKeys} isLoading={loadingGenerate} width="fit-content">
                 Generate
               </Button>
               {generateError ? (
@@ -367,7 +376,7 @@ export default function CryptoPage() {
                   <Input value={jwtSecret} onChange={(event) => setJwtSecret(event.target.value)} type="password" />
                 </FormControl>
               </Grid>
-              <Button leftIcon={<Icon as={ShieldCheck} boxSize={4} />} colorScheme="teal" onClick={verifyJwt} isLoading={loadingJwt} width="fit-content">
+              <Button leftIcon={<Icon as={ShieldCheck} boxSize={4} />} onClick={verifyJwt} isLoading={loadingJwt} width="fit-content">
                 Verify JWT
               </Button>
               {jwtError ? (
@@ -402,7 +411,7 @@ export default function CryptoPage() {
                   <Textarea value={matchPublicKey} onChange={(event) => setMatchPublicKey(event.target.value)} minH="140px" fontFamily="mono" fontSize="xs" />
                 </FormControl>
               </Grid>
-              <Button leftIcon={<Icon as={Link2} boxSize={4} />} colorScheme="teal" onClick={matchKeys} isLoading={loadingMatch} width="fit-content">
+              <Button leftIcon={<Icon as={Link2} boxSize={4} />} onClick={matchKeys} isLoading={loadingMatch} width="fit-content">
                 Match keys
               </Button>
               {matchError ? (
@@ -477,7 +486,7 @@ export default function CryptoPage() {
                   <Textarea value={signaturePrivateKey} onChange={(event) => setSignaturePrivateKey(event.target.value)} minH="110px" fontFamily="mono" fontSize="xs" />
                 </FormControl>
               </Grid>
-              <Button leftIcon={<Icon as={FileCheck2} boxSize={4} />} colorScheme="teal" onClick={verifySignature} isLoading={loadingSignature} width="fit-content">
+              <Button leftIcon={<Icon as={FileCheck2} boxSize={4} />} onClick={verifySignature} isLoading={loadingSignature} width="fit-content">
                 Verify signature
               </Button>
               {signatureError ? (

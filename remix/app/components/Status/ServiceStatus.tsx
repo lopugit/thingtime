@@ -7,8 +7,8 @@ import { StatusRefreshButton } from './StatusRefreshButton';
 import { getStatusEndpoint, getStatusHref } from './statusEnvironment';
 
 const STATUS_COLORS = {
-  unavailable: '#A0AEC0',
-  ready: '#48BB78'
+  unavailable: 'var(--tt-muted, #A0AEC0)',
+  ready: 'var(--tt-positive, #48BB78)'
 };
 
 const pulse = keyframes`
@@ -108,7 +108,7 @@ export const ServiceStatus = ({
             borderRadius="full"
             backgroundColor={color}
             border="1px solid"
-            borderColor={isUnavailable ? '#4A5568' : color}
+            borderColor={isUnavailable ? 'var(--tt-text, #4A5568)' : color}
             boxSizing="border-box"
             display="inline-block"
             flexShrink={0}

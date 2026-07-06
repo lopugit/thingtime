@@ -186,7 +186,7 @@ export const MagicInput = React.forwardRef<HTMLDivElement, MagicInputProps & Rec
 				display={inputValue || !isClientSide ? 'none' : 'block'}
 				width="100%"
 				maxWidth="100%"
-				color="greys.dark"
+				color="var(--tt-muted, #9a9aa6)"
 				pointerEvents="none"
 			>
 				{props?.placeholder || 'Imagine..'}

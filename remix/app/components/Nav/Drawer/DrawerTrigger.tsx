@@ -88,7 +88,7 @@ export const DrawerTrigger = () => {
 				height="44px"
 				borderRadius="0 8px 8px 0"
 				background="transparent"
-				_hover={{ background: 'greys.lightt' }}
+				_hover={{ background: 'var(--tt-surface-hover, #ececee)' }}
 				opacity={0.75}
 				transition="background 0.2s ease-out, opacity 0.2s ease-out"
 				cursor="pointer"
@@ -117,11 +117,11 @@ export const DrawerTrigger = () => {
 					maxWidth="86vw"
 					maxHeight="72vh"
 					display="flex"
-					background="white"
+					background="var(--tt-card, #ffffff)"
 					border="1px solid"
-					borderColor="greys.light"
-					borderRadius="14px"
-					boxShadow="0px 10px 34px rgba(0,0,0,0.14)"
+					borderColor="var(--tt-border, #ececef)"
+					borderRadius="var(--tt-radius-lg, 16px)"
+					boxShadow="var(--tt-shadow-popover, 0 16px 40px -12px rgba(20, 20, 40, 0.3))"
 					overflow="hidden"
 					onMouseEnter={onPopupMouseEnter}
 					onMouseLeave={scheduleClose}

@@ -2,12 +2,12 @@ import { useCallback } from 'react';
 import { Box, Flex, Text, useToast } from '@chakra-ui/react';
 import { keyframes } from '@emotion/react';
 
+import { RAINBOW, RAINBOW_PALETTE } from '~/theme/rainbow';
+
 // 🦄 Lopu — the Thingtime AI. A minimal, modern toast: a rainbow gradient
 // "unicorn vomit" border around a clean white card, shown as a little message
 // from Lopu, below the fixed nav. `useLopu` shows a one-shot toast; the streaming
 // variant `useLopuStream` pops instantly and types the response in live.
-
-const RAINBOW = 'linear-gradient(120deg, #47b5e6, #a555e8, #f34a4a, #ffbc48, #58ca70, #47b5e6)';
 
 // A full-viewport flex container centers the card via flow (immune to the
 // ancestor-transform quirk that broke translateX(-50%) centering). translateY
@@ -24,7 +24,8 @@ const CONTAINER_STYLE = {
   pointerEvents: 'none'
 } as const;
 
-const blink = keyframes`0%, 100% { opacity: 1 } 50% { opacity: 0 }`;
+// Blinking caret/ellipsis uses the shared global `tt-blink` keyframes
+// (defined once in GlobalStyles).
 
 // Tiny rainbow countdown ring (bottom-right) that drains over the toast's
 // remaining lifetime, then vanishes — a gentle "time left to read" cue. r=5 →
@@ -41,11 +42,14 @@ const CountdownRing = ({ ms }: { ms: number }) => (
   >
     <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
       <defs>
+        {/* SVG gradient stops can't read CSS var() — use the palette hexes,
+            ordered to match the RAINBOW border gradient (blue → purple → red → amber → green). */}
         <linearGradient id="lopu-ring" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#47b5e6" />
-          <stop offset="35%" stopColor="#a555e8" />
-          <stop offset="65%" stopColor="#f34a4a" />
-          <stop offset="100%" stopColor="#58ca70" />
+          <stop offset="0%" stopColor={RAINBOW_PALETTE[3]} />
+          <stop offset="25%" stopColor={RAINBOW_PALETTE[4]} />
+          <stop offset="50%" stopColor={RAINBOW_PALETTE[0]} />
+          <stop offset="75%" stopColor={RAINBOW_PALETTE[1]} />
+          <stop offset="100%" stopColor={RAINBOW_PALETTE[2]} />
         </linearGradient>
       </defs>
       <circle cx="7" cy="7" r="5" fill="none" stroke="#edf2f7" strokeWidth="2" />
@@ -92,13 +96,19 @@ const LopuToast = ({
     role="status"
     pointerEvents="auto"
     p="2px"
-    borderRadius="20px"
-    backgroundImage={RAINBOW}
-    boxShadow="0 10px 34px rgba(0,0,0,0.14)"
+    borderRadius="var(--tt-radius-xl, 20px)"
+    background={RAINBOW}
+    boxShadow="var(--tt-shadow-toast, 0 14px 38px rgba(20,20,40,0.18))"
     width="360px"
     maxWidth="calc(100vw - 24px)"
   >
-    <Box bg="white" borderRadius="18px" px={4} py={3} position="relative">
+    <Box
+      bg="var(--tt-card, #ffffff)"
+      borderRadius="calc(var(--tt-radius-xl, 20px) - 2px)"
+      px={4}
+      py={3}
+      position="relative"
+    >
       <Flex align="center" gap={2} mb={title || description || loading ? 1.5 : 0}>
         <Text fontSize="md" lineHeight={1}>
           🦄
@@ -106,12 +116,19 @@ const LopuToast = ({
         <Text
           fontWeight="800"
           fontSize="sm"
-          backgroundImage={RAINBOW}
+          background={RAINBOW}
           sx={{ WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent' }}
         >
           Lopu
         </Text>
-        <Text fontSize="10px" opacity={0.4} fontWeight="500">
+        <Text
+          fontFamily="mono"
+          fontSize="10px"
+          fontWeight="500"
+          letterSpacing="0.1em"
+          textTransform="uppercase"
+          color="var(--tt-muted, #9a9aa6)"
+        >
           Thingtime AI
         </Text>
         <Box flex={1} />
@@ -128,28 +145,33 @@ const LopuToast = ({
           borderRadius="full"
           fontSize="xs"
           lineHeight={1}
-          color="gray.400"
-          _hover={{ color: 'gray.700', bg: 'gray.100' }}
-          transition="all 120ms"
+          color="var(--tt-faint, #b6b6c0)"
+          _hover={{ color: 'var(--tt-ink, #16161a)', bg: 'var(--tt-surface-alt, #f5f5f7)' }}
+          transition="all 140ms ease"
         >
           ✕
         </Box>
       </Flex>
 
       {loading && !title ? (
-        <Text fontSize="sm" fontWeight="500" color="gray.400" fontStyle="italic">
+        <Text fontSize="sm" fontWeight="500" color="var(--tt-muted, #9a9aa6)" fontStyle="italic">
           Lopu is thinking
-          <Box as="span" sx={{ animation: `${blink} 1s steps(1) infinite` }}>
+          <Box as="span" sx={{ animation: 'tt-blink 1s steps(1) infinite' }}>
             …
           </Box>
         </Text>
       ) : (
         title && (
-          <Text fontSize="sm" fontWeight="600" color="gray.800">
+          <Text fontSize="sm" fontWeight="600" color="var(--tt-ink, #16161a)">
             {statusEmoji(status)}
             {title}
             {loading && (
-              <Box as="span" ml="1px" color="gray.400" sx={{ animation: `${blink} 1s steps(1) infinite` }}>
+              <Box
+                as="span"
+                ml="1px"
+                color="var(--tt-faint, #b6b6c0)"
+                sx={{ animation: 'tt-blink 1s steps(1) infinite' }}
+              >
                 ▍
               </Box>
             )}
@@ -157,7 +179,7 @@ const LopuToast = ({
         )
       )}
       {description && (
-        <Text fontSize="xs" color="gray.500" mt="2px">
+        <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)" mt="2px">
           {description}
         </Text>
       )}

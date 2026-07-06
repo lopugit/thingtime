@@ -324,12 +324,12 @@ export const ReorderableList = (props: ReorderableListProps) => {
 						position="relative"
 						zIndex={isActive ? 1 : undefined}
 						sx={{ touchAction: 'pan-y' }}
-						borderRadius="8px"
+						borderRadius="var(--tt-radius-sm, 9px)"
 						transform={transform}
 						transition={transition}
-						boxShadow={isActive ? '0px 4px 14px rgba(0,0,0,0.14)' : undefined}
+						boxShadow={isActive ? 'var(--tt-shadow-popover, 0 16px 40px -12px rgba(20, 20, 40, 0.3))' : undefined}
 						opacity={isActive ? 0.95 : undefined}
-						background={isActive ? 'white' : undefined}
+						background={isActive ? 'var(--tt-card, #ffffff)' : undefined}
 						cursor={isActive ? 'grabbing' : undefined}
 						onClickCapture={onItemClickCapture}
 						onPointerDown={(e) => onItemPointerDown(e, item.id)}

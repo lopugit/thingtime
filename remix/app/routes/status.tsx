@@ -32,7 +32,7 @@ export default function StatusPage() {
             width="14px"
             height="14px"
             borderRadius="full"
-            bg={status.state === 'ready' ? 'green.400' : status.state === 'building' || status.state === 'queued' ? 'yellow.400' : status.state === 'local' ? 'gray.500' : 'red.400'}
+            bg={status.state === 'ready' ? 'var(--tt-positive, #48BB78)' : status.state === 'building' || status.state === 'queued' ? 'var(--tt-warning, #ECC94B)' : status.state === 'local' ? 'var(--tt-muted, #718096)' : 'var(--tt-danger, #FC8181)'}
           />
           <Heading size="lg">Vercel Deployment Status</Heading>
         </Flex>
@@ -41,7 +41,7 @@ export default function StatusPage() {
           <Badge colorScheme={badgeScheme} px={3} py={1} borderRadius="md">
             {status.label}
           </Badge>
-          <Text color="gray.500" fontSize="sm">
+          <Text color="var(--tt-muted, #718096)" fontSize="sm">
             Sourced from server endpoint <Text as="span" fontFamily="mono">/api/v1/vercel/status</Text>
           </Text>
         </Flex>
@@ -49,30 +49,30 @@ export default function StatusPage() {
         <Divider />
 
         <Flex justify="space-between">
-          <Text color="gray.500" fontSize="sm">
+          <Text color="var(--tt-muted, #718096)" fontSize="sm">
             Branch
           </Text>
           <Text fontFamily="mono" fontSize="sm">{value(status.branch)}</Text>
         </Flex>
         <Flex justify="space-between">
-          <Text color="gray.500" fontSize="sm">
+          <Text color="var(--tt-muted, #718096)" fontSize="sm">
             Commit
           </Text>
           <Text fontFamily="mono" fontSize="sm">{value(status.commitSha)}</Text>
         </Flex>
         <Flex justify="space-between">
-          <Text color="gray.500" fontSize="sm">
+          <Text color="var(--tt-muted, #718096)" fontSize="sm">
             Environment
           </Text>
           <Text fontSize="sm">{value(status.environment)}</Text>
         </Flex>
         <Flex justify="space-between">
-          <Text color="gray.500" fontSize="sm">
+          <Text color="var(--tt-muted, #718096)" fontSize="sm">
             Deployment URL
           </Text>
           <Text fontFamily="mono" fontSize="sm" textAlign="right" maxW="65%">
             {status.deploymentUrl ? (
-              <Link href={status.deploymentUrl} color="teal.500" isExternal>
+              <Link href={status.deploymentUrl} color="var(--tt-link, #319795)" isExternal>
                 {status.deploymentUrl}
               </Link>
             ) : (
@@ -81,12 +81,12 @@ export default function StatusPage() {
           </Text>
         </Flex>
         <Flex justify="space-between">
-          <Text color="gray.500" fontSize="sm">
+          <Text color="var(--tt-muted, #718096)" fontSize="sm">
             Latest Deployment URL
           </Text>
           <Text fontFamily="mono" fontSize="sm" textAlign="right" maxW="65%">
             {status.latestDeploymentUrl ? (
-              <Link href={status.latestDeploymentUrl} color="teal.500" isExternal>
+              <Link href={status.latestDeploymentUrl} color="var(--tt-link, #319795)" isExternal>
                 {status.latestDeploymentUrl}
               </Link>
             ) : (
@@ -95,12 +95,12 @@ export default function StatusPage() {
           </Text>
         </Flex>
         <Flex justify="space-between">
-          <Text color="gray.500" fontSize="sm">
+          <Text color="var(--tt-muted, #718096)" fontSize="sm">
             Build page
           </Text>
           <Text fontFamily="mono" fontSize="sm" textAlign="right" maxW="65%">
             {status.buildPageUrl ? (
-              <Link href={status.buildPageUrl} color="teal.500" isExternal>
+              <Link href={status.buildPageUrl} color="var(--tt-link, #319795)" isExternal>
                 Open build info
               </Link>
             ) : (
@@ -109,7 +109,7 @@ export default function StatusPage() {
           </Text>
         </Flex>
         <Flex justify="space-between">
-          <Text color="gray.500" fontSize="sm">
+          <Text color="var(--tt-muted, #718096)" fontSize="sm">
             Build phase
           </Text>
           <Text fontFamily="mono" fontSize="sm" textAlign="right">
@@ -117,7 +117,7 @@ export default function StatusPage() {
           </Text>
         </Flex>
         <Flex justify="space-between">
-          <Text color="gray.500" fontSize="sm">
+          <Text color="var(--tt-muted, #718096)" fontSize="sm">
             Build progress
           </Text>
           <Text fontFamily="mono" fontSize="sm" textAlign="right">
@@ -126,13 +126,13 @@ export default function StatusPage() {
         </Flex>
         {status.state === 'building' || status.state === 'queued' ? <Progress value={buildProgress} size="sm" max={100} min={0} isIndeterminate={status.buildProgress === undefined} /> : null}
         <Flex justify="space-between">
-          <Text color="gray.500" fontSize="sm">
+          <Text color="var(--tt-muted, #718096)" fontSize="sm">
             Vercel API configured
           </Text>
           <Text fontSize="sm">{status.configured ? 'yes' : 'no'}</Text>
         </Flex>
         {status.error ? (
-          <Text color="red.400" fontSize="sm" whiteSpace="pre-wrap">
+          <Text color="var(--tt-danger, #FC8181)" fontSize="sm" whiteSpace="pre-wrap">
             {status.error}
           </Text>
         ) : null}

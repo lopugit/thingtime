@@ -1,4 +1,4 @@
-import { Box, Button, Container, Flex, Heading } from '@chakra-ui/react';
+import { Box, Button, Container, Flex, Heading, Text } from '@chakra-ui/react';
 
 import tt from '../tt';
 import React from 'react';
@@ -40,12 +40,33 @@ export const Submit = (props) => {
   const connectionUrls = thingtime?.settings?.connectionUrls || ['mongodb://localhost:27017'];
 
   return (
-    <Container py={64} px={0} mx={0}>
+    <Container py={16} px={0} mx={0}>
       <Flex gap={12} flexDir="column">
-        <Heading mb={6}>{routeName}</Heading>
-        <Heading as={'h2'} size={'md'} mb={4}>
-          {pathname}
-        </Heading>
+        <Flex flexDir="column" rowGap={2}>
+          <Text
+            fontFamily="mono"
+            fontSize="11px"
+            fontWeight={600}
+            letterSpacing="0.14em"
+            textTransform="uppercase"
+            color="var(--tt-muted, #9a9aa6)"
+          >
+            API Route
+          </Text>
+          <Heading size="lg" color="var(--tt-ink, #16161a)" letterSpacing="-0.02em">
+            {routeName}
+          </Heading>
+          <Heading
+            as={'h2'}
+            size={'sm'}
+            fontFamily="mono"
+            fontWeight={500}
+            letterSpacing="0"
+            color="var(--tt-muted, #9a9aa6)"
+          >
+            {pathname}
+          </Heading>
+        </Flex>
 
         <Thingtime path={'settings.connectionUrls'} edit></Thingtime>
 

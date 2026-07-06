@@ -141,13 +141,15 @@ export const FooterStatusPanel = ({
               alignItems="center"
               justifyContent="flex-start"
               overflow="hidden"
-              color="rgba(0, 0, 0, 0.58)"
-              backgroundColor={isOpen ? 'rgba(160, 174, 192, 0.16)' : 'transparent'}
+              color="var(--tt-text, rgba(0, 0, 0, 0.58))"
+              backgroundColor={
+                isOpen ? 'var(--tt-surface-hover, rgba(160, 174, 192, 0.16))' : 'transparent'
+              }
               border="0"
-              borderRadius="6px"
+              borderRadius="var(--tt-radius-xs, 6px)"
               boxShadow={
                 isOpen
-                  ? 'inset 0 0 0 1px rgba(49, 151, 149, 0.42), 0 0 0 1px rgba(49, 151, 149, 0.22)'
+                  ? 'inset 0 0 0 1px color-mix(in srgb, var(--tt-link, #319795) 42%, transparent), 0 0 0 1px color-mix(in srgb, var(--tt-link, #319795) 22%, transparent)'
                   : 'none'
               }
               cursor="pointer"
@@ -155,25 +157,25 @@ export const FooterStatusPanel = ({
               fontWeight="400"
               lineHeight="1"
               textAlign="left"
-              transition="background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease"
+              transition="background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease"
               _hover={{
-                backgroundColor: 'rgba(160, 174, 192, 0.12)',
-                boxShadow: 'inset 0 0 0 1px rgba(160, 174, 192, 0.35)',
-                color: 'rgba(0, 0, 0, 0.86)'
+                backgroundColor: 'var(--tt-surface-alt, rgba(160, 174, 192, 0.12))',
+                boxShadow: 'inset 0 0 0 1px var(--tt-border, rgba(160, 174, 192, 0.35))',
+                color: 'var(--tt-ink, rgba(0, 0, 0, 0.86))'
               }}
               _active={{
-                backgroundColor: 'rgba(160, 174, 192, 0.16)'
+                backgroundColor: 'var(--tt-surface-hover, rgba(160, 174, 192, 0.16))'
               }}
               _focus={{
                 boxShadow: isOpen
-                  ? 'inset 0 0 0 1px rgba(49, 151, 149, 0.42), 0 0 0 1px rgba(49, 151, 149, 0.22)'
+                  ? 'inset 0 0 0 1px color-mix(in srgb, var(--tt-link, #319795) 42%, transparent), 0 0 0 1px color-mix(in srgb, var(--tt-link, #319795) 22%, transparent)'
                   : 'none'
               }}
               _focusVisible={{
-                backgroundColor: 'rgba(160, 174, 192, 0.16)',
+                backgroundColor: 'var(--tt-surface-hover, rgba(160, 174, 192, 0.16))',
                 boxShadow:
-                  'inset 0 0 0 1px rgba(49, 151, 149, 0.42), 0 0 0 1px rgba(49, 151, 149, 0.22)',
-                color: 'rgba(0, 0, 0, 0.9)'
+                  'inset 0 0 0 1px color-mix(in srgb, var(--tt-link, #319795) 42%, transparent), 0 0 0 1px color-mix(in srgb, var(--tt-link, #319795) 22%, transparent)',
+                color: 'var(--tt-ink, rgba(0, 0, 0, 0.9))'
               }}
             >
               <Box
@@ -195,10 +197,12 @@ export const FooterStatusPanel = ({
               minWidth="160px"
               maxWidth="280px"
               paddingY={1}
-              borderRadius="6px"
+              borderRadius="var(--tt-radius-xs, 6px)"
+              borderColor="var(--tt-border, #ececef)"
+              boxShadow="var(--tt-shadow-popover, 0 16px 40px -12px rgba(20, 20, 40, 0.3))"
               fontSize="10px"
               lineHeight="20px"
-              color="#1A202C"
+              color="var(--tt-ink, #1A202C)"
             >
               {environments.map((environment) => (
                 <MenuItem

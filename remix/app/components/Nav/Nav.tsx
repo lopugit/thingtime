@@ -9,10 +9,6 @@ import { drawerWidthCss, useDrawer, useDrawerLiveWidth, useIsMobileViewport } fr
 import { useThingtime } from '../Thingtime/useThingtime';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 
-const BRANCH_NAME = typeof process !== 'undefined' && process.env?.THINGTIME_BRANCH_NAME ? process.env.THINGTIME_BRANCH_NAME : 'git/unknown';
-
-console.log('BRANCH_NAME:', BRANCH_NAME);
-
 export const Nav = (props) => {
 	const { thingtime } = useThingtime();
 
@@ -112,9 +108,13 @@ export const Nav = (props) => {
 					mobileOpen ? (direction === 'left' ? `translateX(${drawerCssWidth})` : `translateX(calc(-1 * ${drawerCssWidth}))`) : 'none'
 					}
 					transition={loading || resizing ? 'none' : 'left 0.28s ease-out, right 0.28s ease-out, transform 0.28s ease-out'}
+					background="color-mix(in srgb, var(--tt-card, #ffffff) 78%, transparent)"
+					borderBottom="1px solid var(--tt-border, #ececef)"
 					sx={{
+						backdropFilter: 'blur(14px)',
+						WebkitBackdropFilter: 'blur(14px)',
 						'html.thingtime-native-webview &': {
-							background: 'white',
+							background: 'var(--tt-card, white)',
 							isolation: 'isolate',
 							position: 'fixed',
 							top: 'var(--thingtime-safe-area-top, 0px)'

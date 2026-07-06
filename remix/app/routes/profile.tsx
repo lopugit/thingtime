@@ -30,27 +30,47 @@ export default function Profile() {
 
   if (!user) {
     return (
-      <Flex minHeight="100vh" width="100%" align="center" justify="center" direction="column" gap={4}>
-        <Text>You're not logged in.</Text>
+      <Flex
+        minHeight="100vh"
+        width="100%"
+        align="center"
+        justify="center"
+        direction="column"
+        gap={4}
+        background="var(--tt-surface, #fafafb)"
+      >
+        <Text color="var(--tt-text, #5a5a66)">You're not logged in.</Text>
         <Link to="/login">
-          <Text color="blue.400">Log in →</Text>
+          <Text color="var(--tt-link, #2f8fd6)" fontWeight="600">
+            Log in →
+          </Text>
         </Link>
       </Flex>
     );
   }
 
   return (
-    <Flex minHeight="100vh" width="100%" align="center" justify="center" direction="column" px={4}>
+    <Flex
+      minHeight="100vh"
+      width="100%"
+      align="center"
+      justify="center"
+      direction="column"
+      px={4}
+      background="var(--tt-surface, #fafafb)"
+    >
       <UserCard user={user}>
         <Button
           mt={2}
           onClick={handleLogout}
           color="white"
-          fontWeight="bold"
-          backgroundImage={RAINBOW}
-          backgroundSize="calc(100px + 400%)"
+          fontFamily="heading"
+          fontWeight="600"
+          background={RAINBOW}
+          backgroundSize="calc(100px + 200%)"
+          sx={{ animation: 'var(--tt-rainbow-anim, moving-rainbow 5s linear infinite)' }}
           _hover={{ opacity: 0.9 }}
-          borderRadius={10}
+          borderRadius="var(--tt-radius-md, 12px)"
         >
           Log out 🗝️
         </Button>
@@ -60,10 +80,10 @@ export default function Profile() {
             size="sm"
             variant="outline"
             onClick={handleResend}
-            color="purple.500"
-            borderColor="purple.200"
-            _hover={{ bg: 'purple.50' }}
-            borderRadius={10}
+            color="var(--tt-rainbow-5, #a555e8)"
+            borderColor="var(--tt-border, #ececef)"
+            _hover={{ bg: 'var(--tt-surface-alt, #f5f5f7)' }}
+            borderRadius="var(--tt-radius-md, 12px)"
           >
             Resend verification email 📬
           </Button>

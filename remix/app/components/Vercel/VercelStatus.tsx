@@ -10,11 +10,11 @@ import { getStatusEndpoint, getStatusHref } from '~/components/Status/statusEnvi
 const STATUS_ENDPOINT = '/api/v1/health/vercel';
 const ACTIVE_POLL_MS = 5000;
 const STATUS_COLORS = {
-  unavailable: '#A0AEC0',
-  error: '#FC8181',
-  ready: '#48BB78',
-  active: '#ECC94B',
-  local: '#A0AEC0',
+  unavailable: 'var(--tt-muted, #A0AEC0)',
+  error: 'var(--tt-danger, #FC8181)',
+  ready: 'var(--tt-positive, #48BB78)',
+  active: 'var(--tt-warning, #ECC94B)',
+  local: 'var(--tt-muted, #A0AEC0)',
 };
 
 const pulse = keyframes`
@@ -164,7 +164,7 @@ export const VercelStatus = (props: { chakras?: Record<string, unknown>; targetO
         borderRadius="full"
         backgroundColor={color}
         border="1px solid"
-        borderColor={isUnavailable ? '#4A5568' : color}
+        borderColor={isUnavailable ? 'var(--tt-text, #4A5568)' : color}
         boxSizing="border-box"
         display="inline-block"
         flexShrink={0}
@@ -198,7 +198,7 @@ export const VercelStatus = (props: { chakras?: Record<string, unknown>; targetO
         target={props.targetOrigin ? '_blank' : undefined}
         aria-label="Open Vercel deployments dashboard"
         title="Open Vercel deployments dashboard"
-        color="#319795"
+        color="var(--tt-link, #319795)"
         display="inline-flex"
         alignItems="center"
         opacity={0.85}
@@ -219,8 +219,8 @@ export const VercelStatus = (props: { chakras?: Record<string, unknown>; targetO
       width="56px"
       height="3px"
       borderRadius="full"
-      backgroundColor="rgba(237, 242, 247, 0.9)"
-      boxShadow="inset 0 0 0 1px rgba(160, 174, 192, 0.4)"
+      backgroundColor="var(--tt-surface-alt, rgba(237, 242, 247, 0.9))"
+      boxShadow="inset 0 0 0 1px var(--tt-border, rgba(160, 174, 192, 0.4))"
       overflow="visible"
       marginLeft="16px"
     >

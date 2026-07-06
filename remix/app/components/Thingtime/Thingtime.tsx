@@ -554,6 +554,18 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 						<AtomicWrapper paddingLeft={pl} className="thingtime-loading">
 							<button
 								type="button"
+								style={{
+									background: 'var(--tt-card, #ffffff)',
+									border: '1px dashed var(--tt-faint, #b6b6c0)',
+									borderRadius: 'var(--tt-radius-sm, 9px)',
+									color: 'var(--tt-muted, #9a9aa6)',
+									cursor: 'pointer',
+									fontFamily: 'var(--tt-font-body, inherit)',
+									fontSize: '12.5px',
+									fontWeight: 600,
+									padding: '5px 11px',
+									transition: 'all 150ms ease'
+								}}
 								onClick={() => {
 									setLoadTargetCount((prev) =>
 										Math.min(Math.max(prev, visibleKeyCount) + (thingtime?.settings?.keyGateLength || 5), keysToUse.length)
@@ -981,6 +993,8 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 						chakras={{
 							maxWidth: '100%',
 							paddingLeft: props?.pathPl || pl,
+							color: 'var(--tt-muted, #9a9aa6)',
+							fontFamily: 'mono',
 							fontSize: '12px',
 							wordBreak: 'break-all'
 						}}
@@ -1131,7 +1145,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 										}
 									}}
 								>
-									<Box fontSize="12px" lineHeight="1">
+									<Box color="var(--tt-faint, #b6b6c0)" fontSize="12px" lineHeight="1">
 										{isCollapsed ? '▸' : '▾'}
 									</Box>
 								</Flex>
@@ -1205,9 +1219,11 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 									bottom="100%"
 									left={0}
 									display={showFullPathContext ? 'flex' : 'none'}
-									fontSize="sm"
-									background="greys.light"
-									borderRadius={6}
+									color="var(--tt-muted, #9a9aa6)"
+									fontFamily="mono"
+									fontSize="12px"
+									background="var(--tt-surface-alt, #f5f5f7)"
+									borderRadius="var(--tt-radius-xs, 7px)"
 									pointerEvents="none"
 									paddingX={3}
 									paddingY={1}
@@ -1217,7 +1233,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 								<Icon
 									_focus={{
 										outline: 'none !important',
-										textShadow: '0px 0px 10px green'
+										textShadow: '0px 0px 10px var(--tt-positive, #2f8f4f)'
 									}}
 									onKeyDown={(e) => {
 										if (e?.key === 'Enter') {
@@ -1256,7 +1272,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 				)}
 				{!loading && thingtimeChildren && isCollapsed && (
 					<Box className="thingtimeChildrenCollapsed" paddingLeft={multiplyPl(2)} paddingY={2} opacity={0.6}>
-						<Flex fontSize="12px" userSelect="none">
+						<Flex color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="12px" userSelect="none">
 							{thing instanceof Array ? `[…] ${thing.length}` : `{…} ${keys?.length || 0}`}
 						</Flex>
 					</Box>

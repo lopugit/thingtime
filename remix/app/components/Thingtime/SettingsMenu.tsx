@@ -190,9 +190,10 @@ export const SettingsMenu = (props) => {
 						flexDirection="column"
 						// rowGap={basePadding / 3}
 						overflow="scroll"
-						background="greys.lightt"
-						borderRadius={4}
-						// boxShadow={props?.boxShadow || '0px 2px 7px 0px rgba(0,0,0,0.2)'}
+						background="var(--tt-card, #ffffff)"
+						border="1px solid var(--tt-border, #ececef)"
+						borderRadius="var(--tt-radius-md, 12px)"
+						boxShadow={props?.boxShadow || 'var(--tt-shadow-popover, 0 16px 40px -12px rgba(20, 20, 40, 0.3))'}
 						// paddingY={basePadding}
 						// vertical spacing for all child items
 						paddingTop={basePadding}
@@ -210,7 +211,7 @@ export const SettingsMenu = (props) => {
 							// paddingRight={basePadding}
 							paddingLeft={basePadding}
 							_hover={{
-								background: 'greys.light'
+								background: 'var(--tt-surface-alt, #f5f5f7)'
 							}}
 							cursor="pointer"
 							onClick={() => setEditMode((prev) => !prev)}
@@ -231,7 +232,7 @@ export const SettingsMenu = (props) => {
 									// paddingRight={basePadding}
 									paddingLeft={basePadding}
 									_hover={{
-										background: 'greys.light'
+										background: 'var(--tt-surface-alt, #f5f5f7)'
 									}}
 									cursor="pointer"
 									// paddingX={basePadding * 1}
@@ -248,7 +249,7 @@ export const SettingsMenu = (props) => {
 										// rowGap={basePadding}
 										overflowY="scroll"
 										maxHeight="300px"
-										background="greys.lightt"
+										background="var(--tt-card, #ffffff)"
 										cursor="pointer"
 										paddingY="0"
 									>
@@ -259,7 +260,7 @@ export const SettingsMenu = (props) => {
 													width="100%"
 													_hover={{
 														'&>div': {
-															background: 'greys.light'
+															background: 'var(--tt-surface-alt, #f5f5f7)'
 														}
 													}}
 													cursor="pointer"
@@ -310,7 +311,7 @@ export const SettingsMenu = (props) => {
 										alignItems="center"
 										flexDirection="row"
 										_hover={{
-											background: 'greys.light'
+											background: 'var(--tt-surface-alt, #f5f5f7)'
 										}}
 										cursor="pointer"
 										onClick={onDelete}
