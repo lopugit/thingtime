@@ -19,41 +19,6 @@
     "ast_hash": "64d1ded9263ec58e53f941a5a8cbb70c",
     "semantic_hash": "64d1ded9263ec58e53f941a5a8cbb70c"
   },
-  ".design-sync/config.json": {
-    "mtime": 1782963930.0988064,
-    "ast_hash": "3b2e6ef9a094ff31aaf097ff90cff69f",
-    "semantic_hash": "3b2e6ef9a094ff31aaf097ff90cff69f"
-  },
-  ".design-sync/previews/Attention.tsx": {
-    "mtime": 1782963930.0989583,
-    "ast_hash": "7883a699953e5480a7753b6eb0db5e4f",
-    "semantic_hash": "7883a699953e5480a7753b6eb0db5e4f"
-  },
-  ".design-sync/previews/Branding.tsx": {
-    "mtime": 1782963930.0990455,
-    "ast_hash": "fa31c74e4b50ea9c98290c8cebc83c9b",
-    "semantic_hash": "fa31c74e4b50ea9c98290c8cebc83c9b"
-  },
-  ".design-sync/previews/Hamburger.tsx": {
-    "mtime": 1782963930.0991318,
-    "ast_hash": "704b782b220b59f23ffdc9ee15bd66ae",
-    "semantic_hash": "704b782b220b59f23ffdc9ee15bd66ae"
-  },
-  ".design-sync/previews/Icon.tsx": {
-    "mtime": 1782963930.0992098,
-    "ast_hash": "74acacdbe1b5340110da46dcb45be330",
-    "semantic_hash": "74acacdbe1b5340110da46dcb45be330"
-  },
-  ".design-sync/previews/Logo.tsx": {
-    "mtime": 1782963930.099291,
-    "ast_hash": "0aab97cae30fe18933fe7468a16b7e84",
-    "semantic_hash": "0aab97cae30fe18933fe7468a16b7e84"
-  },
-  ".design-sync/previews/RainbowSkeleton.tsx": {
-    "mtime": 1782963930.0993853,
-    "ast_hash": "7a519ea5521d32044d8fe727aa146800",
-    "semantic_hash": "7a519ea5521d32044d8fe727aa146800"
-  },
   ".eslintrc.json": {
     "mtime": 1712979642.7062294,
     "ast_hash": "9b8be5ef96ddd69ecd1ddc1554c61a88",
@@ -63,31 +28,6 @@
     "mtime": 1774026863.7272317,
     "ast_hash": "957a9d8b4abad479fccf834840f4f673",
     "semantic_hash": "957a9d8b4abad479fccf834840f4f673"
-  },
-  "api/.eslintrc.js": {
-    "mtime": 1651574453.0,
-    "ast_hash": "71e8658e113aa4d7c1a306e6993de187",
-    "semantic_hash": "71e8658e113aa4d7c1a306e6993de187"
-  },
-  "api/package.json": {
-    "mtime": 1678257834.787055,
-    "ast_hash": "82cf65071cba84da44c9e21950b30725",
-    "semantic_hash": "82cf65071cba84da44c9e21950b30725"
-  },
-  "api/src/index.js": {
-    "mtime": 1652436512.0,
-    "ast_hash": "1a6fc5f5ed25278ea0f7ad021b1c381f",
-    "semantic_hash": "1a6fc5f5ed25278ea0f7ad021b1c381f"
-  },
-  "api/src/package.json": {
-    "mtime": 1649158232.0,
-    "ast_hash": "b456fc8f5badbbcf6e8ec92ffe4e3342",
-    "semantic_hash": "b456fc8f5badbbcf6e8ec92ffe4e3342"
-  },
-  "api/src/test.js": {
-    "mtime": 1649158111.0,
-    "ast_hash": "593d3ec884132548e4c181678c5d5b16",
-    "semantic_hash": "593d3ec884132548e4c181678c5d5b16"
   },
   "docs/design/claude-design-mockup-v1/source/support.js": {
     "mtime": 1783011258.2319813,
@@ -782,7 +722,7 @@
   "remix/app/Providers/Thingtime/ThingtimeDefaults.tsx": {
     "mtime": 1783361720.5191104,
     "ast_hash": "7809cf3c765343cee2607080dc449554",
-    "semantic_hash": ""
+    "semantic_hash": "7809cf3c765343cee2607080dc449554"
   },
   "remix/app/Providers/Thingtime/defaults/cmdWatcher.ts": {
     "mtime": 1774026863.7317188,
@@ -1012,7 +952,7 @@
   "remix/app/components/DevKit/DevKit.tsx": {
     "mtime": 1783361720.519833,
     "ast_hash": "6b7e316d5f390dde00ebf36f1618e224",
-    "semantic_hash": ""
+    "semantic_hash": "6b7e316d5f390dde00ebf36f1618e224"
   },
   "remix/app/components/Editor/Editor.tsx": {
     "mtime": 1721802184.488731,
@@ -1222,7 +1162,7 @@
   "remix/app/globals/GlobalStyles.tsx": {
     "mtime": 1783361720.523394,
     "ast_hash": "73680d3418d3719ab533f77f348dd983",
-    "semantic_hash": ""
+    "semantic_hash": "73680d3418d3719ab533f77f348dd983"
   },
   "remix/app/gp/GradientPath.js": {
     "mtime": 1711197621.4926364,
@@ -1317,7 +1257,7 @@
   "remix/app/root.tsx": {
     "mtime": 1783361720.5237038,
     "ast_hash": "fd6719fc675887e31d890584276c8ec4",
-    "semantic_hash": ""
+    "semantic_hash": "fd6719fc675887e31d890584276c8ec4"
   },
   "remix/app/routes.tsx": {
     "mtime": 1783242355.3305786,
@@ -1669,50 +1609,10 @@
     "ast_hash": "6e44fc1dbe3892e910ee1baae104884f",
     "semantic_hash": "6e44fc1dbe3892e910ee1baae104884f"
   },
-  "TODO.md": {
-    "mtime": 1783242355.2862043,
-    "ast_hash": "d9cf56999da902555f7fd28d398fbdbd",
-    "semantic_hash": "d9cf56999da902555f7fd28d398fbdbd"
-  },
   "VERCEL_DEPLOYMENTS.md": {
     "mtime": 1783011258.1491916,
     "ast_hash": "70dd0be4cbdd1a3ee0bb0f87fdf59108",
     "semantic_hash": "70dd0be4cbdd1a3ee0bb0f87fdf59108"
-  },
-  "claude-todo/01-mongodb-connection-status.md": {
-    "mtime": 1782186283.8603058,
-    "ast_hash": "b6444b596845e36dc1a78262852139e8",
-    "semantic_hash": "b6444b596845e36dc1a78262852139e8"
-  },
-  "claude-todo/02-db-populate-seeding.md": {
-    "mtime": 1782186283.8610358,
-    "ast_hash": "e6d874c567a72465f26ea761d5321e3e",
-    "semantic_hash": "e6d874c567a72465f26ea761d5321e3e"
-  },
-  "claude-todo/03-auth-login-register.md": {
-    "mtime": 1782186283.8612509,
-    "ast_hash": "89e88d66a3f6f449640623c07d3aadd1",
-    "semantic_hash": "89e88d66a3f6f449640623c07d3aadd1"
-  },
-  "claude-todo/04-authed-db-read-query.md": {
-    "mtime": 1782186283.861942,
-    "ast_hash": "259aac4b2892b51afb447617242552cc",
-    "semantic_hash": "259aac4b2892b51afb447617242552cc"
-  },
-  "claude-todo/05-authed-db-write.md": {
-    "mtime": 1782186283.8625169,
-    "ast_hash": "b97d3b6f1f49cceb549732eee937c2f2",
-    "semantic_hash": "b97d3b6f1f49cceb549732eee937c2f2"
-  },
-  "claude-todo/06-pr-12-review-actions.md": {
-    "mtime": 1782186283.8627315,
-    "ast_hash": "f9e471f7dabd01d6c7fc7b13e37d5c57",
-    "semantic_hash": "f9e471f7dabd01d6c7fc7b13e37d5c57"
-  },
-  "claude-todo/README.md": {
-    "mtime": 1783242355.287124,
-    "ast_hash": "af66431be52ffbf95cc804019436da77",
-    "semantic_hash": "af66431be52ffbf95cc804019436da77"
   },
   "docs/Use Cases/car.md": {
     "mtime": 1677486421.8399172,
@@ -2849,11 +2749,6 @@
     "ast_hash": "dc8400c352b3d7c9949f0abb95bfda5b",
     "semantic_hash": "dc8400c352b3d7c9949f0abb95bfda5b"
   },
-  "claude-todo/07-cross-tab-thingtime-sync.md": {
-    "mtime": 1783361806.110205,
-    "ast_hash": "e9fdcad79869dedace3c5910757452a4",
-    "semantic_hash": ""
-  },
   "remix/app/routes/docs/DesignWorkspace.tsx": {
     "mtime": 1783242355.3315701,
     "ast_hash": "f86be13da2a4e7384ffbbb92ae392aca",
@@ -2884,11 +2779,6 @@
     "ast_hash": "d8db1b8f403e210f7749ce5fbb08562c",
     "semantic_hash": "d8db1b8f403e210f7749ce5fbb08562c"
   },
-  "claude-todo/08-drawer-nav-editor-polish.md": {
-    "mtime": 1783242355.2868133,
-    "ast_hash": "76ffda1d73e7f9d06b0fffa769564845",
-    "semantic_hash": "76ffda1d73e7f9d06b0fffa769564845"
-  },
   "iOS/Thingtime/Web/ThingtimeWebDeploymentsClient.swift": {
     "mtime": 1783361720.5131168,
     "ast_hash": "156e3e1f6b9eae5dbd22507a6f76a2d0",
@@ -2902,7 +2792,7 @@
   "remix/app/components/VisualSettings/VisualSettingsHost.tsx": {
     "mtime": 1783361720.5230105,
     "ast_hash": "25bcf1e189d558ee9ffb4d7e5302c39e",
-    "semantic_hash": ""
+    "semantic_hash": "25bcf1e189d558ee9ffb4d7e5302c39e"
   },
   "AI_Advice.md": {
     "mtime": 1783361728.5495975,
@@ -2984,27 +2874,107 @@
     "ast_hash": "dc2ce6fe28aa8dc064fa14809e5bd039",
     "semantic_hash": ""
   },
-  "guidelines/human-ai/app-design/html-examples/gold-standard-ai-era-value-moats-light-v5-balanced-cards.html": {
+  "deprecated/api/.eslintrc.js": {
+    "mtime": 1651574453.0,
+    "ast_hash": "71e8658e113aa4d7c1a306e6993de187",
+    "semantic_hash": "71e8658e113aa4d7c1a306e6993de187"
+  },
+  "deprecated/api/package.json": {
+    "mtime": 1678257834.787055,
+    "ast_hash": "82cf65071cba84da44c9e21950b30725",
+    "semantic_hash": "82cf65071cba84da44c9e21950b30725"
+  },
+  "deprecated/api/src/index.js": {
+    "mtime": 1652436512.0,
+    "ast_hash": "1a6fc5f5ed25278ea0f7ad021b1c381f",
+    "semantic_hash": "1a6fc5f5ed25278ea0f7ad021b1c381f"
+  },
+  "deprecated/api/src/package.json": {
+    "mtime": 1649158232.0,
+    "ast_hash": "b456fc8f5badbbcf6e8ec92ffe4e3342",
+    "semantic_hash": "b456fc8f5badbbcf6e8ec92ffe4e3342"
+  },
+  "deprecated/api/src/test.js": {
+    "mtime": 1649158111.0,
+    "ast_hash": "593d3ec884132548e4c181678c5d5b16",
+    "semantic_hash": "593d3ec884132548e4c181678c5d5b16"
+  },
+  "graphifyExtract.sh": {
+    "mtime": 1783364629.2668188,
+    "ast_hash": "e75c52eb63080cfe04789e63c3630021",
+    "semantic_hash": ""
+  },
+  "TODO/TODO.md": {
+    "mtime": 1783242355.2862043,
+    "ast_hash": "d9cf56999da902555f7fd28d398fbdbd",
+    "semantic_hash": ""
+  },
+  "TODO/claude-todo/01-mongodb-connection-status.md": {
+    "mtime": 1782186283.8603058,
+    "ast_hash": "b6444b596845e36dc1a78262852139e8",
+    "semantic_hash": ""
+  },
+  "TODO/claude-todo/02-db-populate-seeding.md": {
+    "mtime": 1782186283.8610358,
+    "ast_hash": "e6d874c567a72465f26ea761d5321e3e",
+    "semantic_hash": ""
+  },
+  "TODO/claude-todo/03-auth-login-register.md": {
+    "mtime": 1782186283.8612509,
+    "ast_hash": "89e88d66a3f6f449640623c07d3aadd1",
+    "semantic_hash": ""
+  },
+  "TODO/claude-todo/04-authed-db-read-query.md": {
+    "mtime": 1782186283.861942,
+    "ast_hash": "259aac4b2892b51afb447617242552cc",
+    "semantic_hash": ""
+  },
+  "TODO/claude-todo/05-authed-db-write.md": {
+    "mtime": 1782186283.8625169,
+    "ast_hash": "b97d3b6f1f49cceb549732eee937c2f2",
+    "semantic_hash": ""
+  },
+  "TODO/claude-todo/06-pr-12-review-actions.md": {
+    "mtime": 1782186283.8627315,
+    "ast_hash": "f9e471f7dabd01d6c7fc7b13e37d5c57",
+    "semantic_hash": ""
+  },
+  "TODO/claude-todo/07-cross-tab-thingtime-sync.md": {
+    "mtime": 1783361806.110205,
+    "ast_hash": "e9fdcad79869dedace3c5910757452a4",
+    "semantic_hash": ""
+  },
+  "TODO/claude-todo/08-drawer-nav-editor-polish.md": {
+    "mtime": 1783242355.2868133,
+    "ast_hash": "76ffda1d73e7f9d06b0fffa769564845",
+    "semantic_hash": ""
+  },
+  "TODO/claude-todo/README.md": {
+    "mtime": 1783242355.287124,
+    "ast_hash": "af66431be52ffbf95cc804019436da77",
+    "semantic_hash": ""
+  },
+  "docs/design-inspiration/human-ai/html-examples/gold-standard-ai-era-value-moats-light-v5-balanced-cards.html": {
     "mtime": 1783361728.9544194,
     "ast_hash": "aa4f12f6e680d02e2a68edf7bed7fd80",
     "semantic_hash": ""
   },
-  "guidelines/human-ai/app-design/html-examples/gold-standard-ai-era-value-moats-light-v5-premium-balanced-cards.html": {
+  "docs/design-inspiration/human-ai/html-examples/gold-standard-ai-era-value-moats-light-v5-premium-balanced-cards.html": {
     "mtime": 1783361728.9657674,
     "ast_hash": "dda13f29629227492b9cfc19e219d1b4",
     "semantic_hash": ""
   },
-  "guidelines/human-ai/app-design/html-examples/gold-standard-v2-ai-moats-thingtime-report-dark.html": {
+  "docs/design-inspiration/human-ai/html-examples/gold-standard-v2-ai-moats-thingtime-report-dark.html": {
     "mtime": 1783361728.9749556,
     "ast_hash": "59f8351ed84a0cbcb7d22b931abffa01",
     "semantic_hash": ""
   },
-  "guidelines/human-ai/app-design/html-examples/silver-standard-ai-era-moats-gradient-overflow-text-legibility-bug.html": {
+  "docs/design-inspiration/human-ai/html-examples/silver-standard-ai-era-moats-gradient-overflow-text-legibility-bug.html": {
     "mtime": 1783361728.9755206,
     "ast_hash": "25fe648db8498facaf0d1659cc3472ac",
     "semantic_hash": ""
   },
-  "guidelines/human-ai/app-design/image-examples/gold-star-flashy-saas-theme-design.jpg": {
+  "docs/design-inspiration/human-ai/image-examples/gold-star-flashy-saas-theme-design.jpg": {
     "mtime": 1783361728.9773316,
     "ast_hash": "17f9d65ca49d887be58ba6bfdc3f5a35",
     "semantic_hash": ""
