@@ -18,6 +18,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- Added a committed `.githooks/post-commit` workflow that auto-commits
+  `remix/.env.auto` after ordinary commits when that generated file changes,
+  plus a root `install-git-hooks` script for `core.hooksPath` setup. — _Codex
+  (AI), 2026-07-06_
 - Added native iOS destination-drawer URL context menus: touch and hold any
   Thingtime/Vercel URL row to copy the URL, open it externally in the browser,
   or share it. Bumped the native build number to `7` for TestFlight. Details in
