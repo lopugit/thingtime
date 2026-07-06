@@ -33,7 +33,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   theme snapshot script to avoid theme flash. Design token spec lives in
   [`docs/design/DESIGN_LANGUAGE.md`](../docs/design/DESIGN_LANGUAGE.md); PR
   details in
-  [`PRs/claude-vigilant-moser--design-refactor-theming.md`](../PRs/claude-vigilant-moser--design-refactor-theming.md).
+  [`PRs/32-claude-vigilant-moser--design-refactor-theming.md`](../PRs/32-claude-vigilant-moser--design-refactor-theming.md).
   — _Claude (AI), 2026-07-07_
 - Dev runbook: `remix/vite.config.ts` now honours `THINGTIME_VITE_PORT`,
   `THINGTIME_VITE_HMR_PORT`, and `THINGTIME_API_PROXY_TARGET` env vars so
