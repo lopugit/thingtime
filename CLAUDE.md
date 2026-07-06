@@ -15,8 +15,13 @@
 - When cloning or checking out branches under `.test-branches/`, copy the
   parent checkout's local env files into the clone before running install,
   dev, build, or smoke checks. Preserve matching paths for root `.env*` files
-  and nested app env files such as `remix/.env*`; keep these files untracked
-  and never commit secrets.
+  and nested app env files such as `remix/.env*`; keep secret-bearing env files
+  untracked and never commit secrets. `remix/.env.auto` is the tracked generated
+  exception handled by the post-commit hook.
+- Committed git hooks live in `.githooks/`; enable them in a checkout with
+  `npm run install-git-hooks` or `git config core.hooksPath .githooks`. The
+  post-commit hook intentionally auto-commits `remix/.env.auto` when that file
+  changes after a commit, using a recursion guard around its generated commit.
 - For local web development, use the PM2-managed `tt-nitro-react-router-9999`
   app. Vite serves the React Router non-framework shell on port 9999 and
   proxies `/api` to Nitro on port 10000. Use `npm run web-pms` from the repo
@@ -39,6 +44,11 @@
   `iOS/project.yml` as the source of truth and run `xcodegen generate` inside
   `iOS/` before `xcodebuild` checks. Keep generated `.xcodeproj` files
   untracked.
+- When simulator-validating a non-default web URL, pass `THINGTIME_WEB_URL` as
+  an explicit `xcodebuild` build setting (for example
+  `xcodebuild ... THINGTIME_WEB_URL=http://127.0.0.1:9999 build`) and verify the
+  built app's `Info.plist`; shell environment alone can be overridden by the
+  xcconfig default.
 - Before TestFlight, signing, or Apple Developer auth work, read
   `iOS/AGENTS.md` for the iOS-local App Store Connect env/key/profile flow.
 - Use `bundle exec fastlane beta` from `iOS/` for TestFlight uploads. Provide

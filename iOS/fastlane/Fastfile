@@ -19,10 +19,19 @@ def api_key_xcargs
     f
   end
 
-  "-allowProvisioningUpdates " \
-    "-authenticationKeyID #{ENV.fetch('ASC_KEY_ID')} " \
-    "-authenticationKeyIssuerID #{ENV.fetch('ASC_ISSUER_ID')} " \
+  args = [
+    "-allowProvisioningUpdates",
+    "-authenticationKeyID #{ENV.fetch('ASC_KEY_ID')}",
     "-authenticationKeyPath #{@asc_p8.path}"
+  ]
+  issuer_id = asc_issuer_id
+  args << "-authenticationKeyIssuerID #{issuer_id}" if issuer_id
+  args.join(" ")
+end
+
+def asc_issuer_id
+  issuer_id = ENV["ASC_ISSUER_ID"].to_s.strip
+  issuer_id.empty? ? nil : issuer_id
 end
 
 def thingtime_web_url_xcarg
@@ -126,7 +135,7 @@ platform :ios do
   private_lane :app_store_api_key do
     app_store_connect_api_key(
       key_id: ENV.fetch("ASC_KEY_ID"),
-      issuer_id: ENV.fetch("ASC_ISSUER_ID"),
+      issuer_id: asc_issuer_id,
       key_content: ENV.fetch("ASC_KEY_CONTENT"),
       is_key_content_base64: true,
       in_house: false

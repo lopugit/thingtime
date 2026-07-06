@@ -1,8 +1,6 @@
 import { Flex } from '@chakra-ui/react';
 
 import { Footer } from '../Nav/Footer';
-import { Nav } from '../Nav/Nav';
-import { DrawerSystem } from '../Nav/Drawer/DrawerSystem';
 import { drawerWidthCss, useDrawer, useDrawerLiveWidth, useIsMobileViewport } from '../Nav/Drawer/useDrawer';
 
 export const Main = (props) => {
@@ -42,7 +40,6 @@ export const Main = (props) => {
 			// tracks the drawer's 0.28s ease-out, and follows live resize exactly
 			transition={loading || resizing ? 'none' : 'padding 0.28s ease-out'}
 		>
-			<Nav />
 			<Flex
 				className="mainShiftContainer"
 				flexDirection="column"
@@ -67,7 +64,6 @@ export const Main = (props) => {
 				</Flex>
 				<Footer></Footer>
 			</Flex>
-			<DrawerSystem></DrawerSystem>
 		</Flex>
 	);
 };

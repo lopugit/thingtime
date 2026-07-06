@@ -18,6 +18,30 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- Added `thingtime.settings.visual.bottomPadding`, which drives the native iOS
+  footer bottom padding and the derived DevKit floating trigger bottom offset.
+  Details in
+  [`PRs/30-codex-ios-deployment-url-picker--add-ios-web-destination-picker.md`](../PRs/30-codex-ios-deployment-url-picker--add-ios-web-destination-picker.md).
+  — _Codex (AI), 2026-07-07_
+- Added a committed `.githooks/post-commit` workflow that auto-commits
+  `remix/.env.auto` after ordinary commits when that generated file changes,
+  plus a root `install-git-hooks` script for `core.hooksPath` setup. — _Codex
+  (AI), 2026-07-06_
+- Added native iOS destination-drawer URL context menus: touch and hold any
+  Thingtime/Vercel URL row to copy the URL, open it externally in the browser,
+  or share it. Bumped the native build number to `7` for TestFlight. Details in
+  [`PRs/30-codex-ios-deployment-url-picker--add-ios-web-destination-picker.md`](../PRs/30-codex-ios-deployment-url-picker--add-ios-web-destination-picker.md).
+  — _Codex (AI), 2026-07-06_
+- Updated the iOS TestFlight lane and runbook so App Store Connect individual
+  API keys can leave `ASC_ISSUER_ID` blank, documented the supported-Xcode
+  retry for App Store Connect `90534` upload rejections, and bumped/uploaded
+  native build `3`. Details in
+  [`PRs/30-codex-ios-deployment-url-picker--add-ios-web-destination-picker.md`](../PRs/30-codex-ios-deployment-url-picker--add-ios-web-destination-picker.md).
+  — _Codex (AI), 2026-07-05_
+- Added an iOS web destination drawer that opens from the left edge, fetches
+  Vercel deployment options from `/api/v1/vercel/deployments`, and lets native
+  builds switch the WebKit view between Thingtime.com, the configured build URL,
+  and returned deployment URLs. — _Codex (AI), 2026-07-05_
 - Added a drawer-based nav system (Claude-desktop style): edge-flush resizable
   drawer driven by `thingtime.settings.drawer.*` (open direction, top-level
   item limit with a faint “More” reveal, dynamic grouped second-level menu,
@@ -26,7 +50,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   centred settings modal / mobile slide-up sheet). Desktop hovers the trigger
   for a popup preview and pins to a split view; mobile shifts (never resizes)
   the page. Replaces the dead `ProfileDrawer`. Details in
-  [`PRs/28-codex-service-account-api--drawer-based-nav-revamp.md`](PRs/28-codex-service-account-api--drawer-based-nav-revamp.md).
+  [`PRs/28-codex-service-account-api--drawer-based-nav-revamp.md`](../PRs/28-codex-service-account-api--drawer-based-nav-revamp.md).
   — _Claude (AI), 2026-07-05_
 - Added the local Tailscale/Funnel hostname to Vite's allowed hosts and
   documented the Thingtime `:9999` local/Tailscale dev URLs. — _Codex (AI),
@@ -39,8 +63,55 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   verification within seven days, and grants a default 5 GiB storage allowance
   for backend integrations. — _Codex (AI), 2026-07-04_
 
+### Changed
+
+- Moved PR-specific notes from `remix/PRs/` to the repo-root `PRs/`
+  directory and updated changelog/runbook links to the new convention. —
+  _Codex (AI), 2026-07-07_
+
 ### Fixed
 
+- Tightened the native iOS WebView footer bottom padding so the account footer
+  no longer leaves a large blank tail at full scroll, and re-clamped the DevKit
+  floating trigger against native safe-area values so saved positions stay fully
+  visible above the home indicator. Details in
+  [`PRs/30-codex-ios-deployment-url-picker--add-ios-web-destination-picker.md`](../PRs/30-codex-ios-deployment-url-picker--add-ios-web-destination-picker.md).
+  — _Codex (AI), 2026-07-06_
+- Fixed the iOS WebKit bottom-scroll nav disappearance by rendering the fixed
+  web chrome outside the scrollable `Main` layout container, disabling native
+  WKWebView rubber-band bounce, removing the native bottom content inset that
+  created a fake scroll range, and giving the native web footer real CSS bottom
+  padding above the home indicator. Bumped the native build number to `9` for
+  TestFlight. Details in
+  [`PRs/30-codex-ios-deployment-url-picker--add-ios-web-destination-picker.md`](../PRs/30-codex-ios-deployment-url-picker--add-ios-web-destination-picker.md).
+  — _Codex (AI), 2026-07-06_
+- Fixed the remaining iOS WebKit bottom-scroll nav overlap by keeping the
+  native `WKWebView` below the top safe area instead of full-screening it
+  behind the status bar, while preserving the bottom safe-area/footer inset.
+  Bumped the native build number to `8` for TestFlight. Details in
+  [`PRs/30-codex-ios-deployment-url-picker--add-ios-web-destination-picker.md`](../PRs/30-codex-ios-deployment-url-picker--add-ios-web-destination-picker.md).
+  — _Codex (AI), 2026-07-06_
+- Kept the iOS WebKit nav below the native status area at the bottom scroll
+  limit by offsetting the fixed nav layer with the native safe-area top value
+  instead of padding inside a `top: 0` layer, and hardened the native safe-area
+  resolver against full-screen `WKWebView` inset edge cases. Bumped the native
+  build number to `6` for TestFlight. Details in
+  [`PRs/30-codex-ios-deployment-url-picker--add-ios-web-destination-picker.md`](../PRs/30-codex-ios-deployment-url-picker--add-ios-web-destination-picker.md).
+  — _Codex (AI), 2026-07-06_
+- Tightened the iOS WebKit safe-area follow-up: the native shell now pushes
+  stable safe-area CSS variables into every loaded page, reserves a larger
+  bottom scroll inset for the footer, and bumps the native build number to `5`
+  for the next TestFlight build. Details in
+  [`PRs/30-codex-ios-deployment-url-picker--add-ios-web-destination-picker.md`](../PRs/30-codex-ios-deployment-url-picker--add-ios-web-destination-picker.md).
+  — _Codex (AI), 2026-07-06_
+- Fixed iOS WebKit/mobile drawer polish from TestFlight: the native
+  left-edge swipe recognizer no longer blocks taps on the web drawer icon, the
+  collapsed drawer trigger has an edge-to-edge hit target, footer scrolling gets
+  bottom safe-area breathing room, and WKWebView overscroll now uses the page's
+  white background instead of showing black. Bumped the native build number to
+  `4` for the follow-up TestFlight build. Details in
+  [`PRs/30-codex-ios-deployment-url-picker--add-ios-web-destination-picker.md`](../PRs/30-codex-ios-deployment-url-picker--add-ios-web-destination-picker.md).
+  — _Codex (AI), 2026-07-05_
 - Made the compact footer environment selector text flush-left with the footer
   column and vertically centered by replacing the native select with a custom
   menu button. — _Codex (AI), 2026-07-03_
@@ -57,7 +128,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 ### PR #26 - Environment-Aware Footer Status Checks
 
 Detailed PR notes:
-[PRs/26-codex-migrate-remix-to-nitro--add-environment-aware-footer-status-checks.md](PRs/26-codex-migrate-remix-to-nitro--add-environment-aware-footer-status-checks.md)
+[PRs/26-codex-migrate-remix-to-nitro--add-environment-aware-footer-status-checks.md](../PRs/26-codex-migrate-remix-to-nitro--add-environment-aware-footer-status-checks.md)
 
 ### Added
 
@@ -71,7 +142,7 @@ Detailed PR notes:
 ### PR #24 - Nitro React Router Migration
 
 Detailed PR notes:
-[PRs/24-codex-migrate-remix-to-nitro--migrate-remix-app-to-nitro-and-react-router.md](PRs/24-codex-migrate-remix-to-nitro--migrate-remix-app-to-nitro-and-react-router.md)
+[PRs/24-codex-migrate-remix-to-nitro--migrate-remix-app-to-nitro-and-react-router.md](../PRs/24-codex-migrate-remix-to-nitro--migrate-remix-app-to-nitro-and-react-router.md)
 
 ### Changed
 
@@ -103,7 +174,7 @@ Detailed PR notes:
 ### PR #16 - Auth And Lopu Hardening
 
 Detailed PR notes:
-[PRs/16-resolve-main-into-thingtime-dev-branch.md](PRs/16-resolve-main-into-thingtime-dev-branch.md)
+[PRs/16-resolve-main-into-thingtime-dev-branch.md](../PRs/16-resolve-main-into-thingtime-dev-branch.md)
 
 ### Fixed
 
@@ -178,7 +249,7 @@ Detailed PR notes:
 ### PR #13 - Remix Hydration, Vercel Status, And Deployment Hygiene
 
 Detailed PR notes:
-[PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md](PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md)
+[PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md](../PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md)
 
 ### Added
 

@@ -18,8 +18,13 @@
 - When cloning or checking out branches under `.test-branches/`, copy the
   parent checkout's local env files into the clone before running install,
   dev, build, or smoke checks. Preserve matching paths for root `.env*` files
-  and nested app env files such as `remix/.env*`; keep these files untracked
-  and never commit secrets.
+  and nested app env files such as `remix/.env*`; keep secret-bearing env files
+  untracked and never commit secrets. `remix/.env.auto` is the tracked generated
+  exception handled by the post-commit hook.
+- Committed git hooks live in `.githooks/`; enable them in a checkout with
+  `npm run install-git-hooks` or `git config core.hooksPath .githooks`. The
+  post-commit hook intentionally auto-commits `remix/.env.auto` when that file
+  changes after a commit, using a recursion guard around its generated commit.
 - If local web dev 500s with a missing `bcrypt_lib.node` native binding, run `corepack pnpm --dir remix run ensure-bcrypt`, then restart the PM2-managed `tt-nitro-react-router-9999` app. The app `postinstall`, `dev`, and `build` scripts also run this check automatically.
 - For rendered browser validation in Codex Desktop, prefer the in-app Browser first when it is available. If localhost is blocked there, or the user explicitly asks for Chrome, use the Codex Chrome tab control workflow (`chrome:control-chrome`) before falling back to standalone Playwright. Keep Chrome checks read-only unless the user requested an action, and do not inspect cookies, local storage, passwords, or profile data.
 - For layout or alignment changes, always verify the affected screen in a live
@@ -42,6 +47,11 @@
   `iOS/project.yml` as the source of truth and run `xcodegen generate` inside
   `iOS/` before `xcodebuild` checks. Keep generated `.xcodeproj` files
   untracked.
+- When simulator-validating a non-default web URL, pass `THINGTIME_WEB_URL` as
+  an explicit `xcodebuild` build setting (for example
+  `xcodebuild ... THINGTIME_WEB_URL=http://127.0.0.1:9999 build`) and verify the
+  built app's `Info.plist`; shell environment alone can be overridden by the
+  xcconfig default.
 - Before TestFlight, signing, or Apple Developer auth work, read
   `iOS/AGENTS.md` for the iOS-local App Store Connect env/key/profile flow.
 - Use `bundle exec fastlane beta` from `iOS/` for TestFlight uploads. Provide
@@ -83,6 +93,6 @@ Rules:
   runbook workflow changes, add a concise dated entry to `remix/CHANGELOG.md`
   under `[Unreleased]` before finishing.
 - For large PRs or PRs with several rounds of debugging, add or update a
-  PR-specific note in `remix/PRs/` named with the PR number, branch slug, and
-  PR title slug, then keep `remix/CHANGELOG.md` as a concise grouped summary
-  that links to the detailed PR note.
+  PR-specific note in the root `PRs/` directory named with the PR number,
+  branch slug, and PR title slug, then keep `remix/CHANGELOG.md` as a concise
+  grouped summary that links to the detailed PR note.
