@@ -13,6 +13,7 @@ import { ThingtimeProvider } from './Providers/ThingtimeProvider';
 import { DevKit } from './components/DevKit/DevKit';
 import { NativeBridgeHost } from './components/NativeBridge/NativeBridgeHost';
 import { VisualSettingsHost } from './components/VisualSettings/VisualSettingsHost';
+import { ThemeHost } from './components/ThemeSettings/ThemeHost';
 
 const setThingtime = (glob: any) => {
   try {
@@ -93,6 +94,7 @@ export default function App() {
       <GlobalStyles />
       <ThingtimeProvider>
         <VisualSettingsHost />
+        <ThemeHost />
         {mounted ? <NativeBridgeHost /> : null}
         <DevKit />
         <Nav />

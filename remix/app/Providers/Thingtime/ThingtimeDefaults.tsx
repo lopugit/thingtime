@@ -381,6 +381,15 @@ export const thingtimeNewData = {};
 
 const versions = [
   {
+    version: 26,
+    settings: {
+      theme: {
+        preset: 'Thingtime',
+        overrides: {}
+      }
+    }
+  },
+  {
     version: 25,
     settings: {
       connectionUrls: ['mongodb://localhost:27017']
@@ -429,6 +438,10 @@ const defaultValues = {
       userDrawerOrdering: {},
       selectedItem: 'home',
       collapsedGroups: {}
+    },
+    theme: {
+      preset: 'Thingtime',
+      overrides: {}
     },
     connectionUrls: ['mongodb://localhost:27017']
   },

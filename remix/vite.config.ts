@@ -101,15 +101,17 @@ export default defineConfig({
   },
   server: {
     host: '127.0.0.1',
-    port: 9999,
+    // Overridable so secondary checkouts/worktrees can run beside the
+    // canonical 9999/10000 pair without port collisions.
+    port: Number(process.env.THINGTIME_VITE_PORT) || 9999,
     strictPort: true,
     allowedHosts: ['lopus-macbook-pro-2.tail9606f9.ts.net'],
     hmr: {
-      port: 9998
+      port: Number(process.env.THINGTIME_VITE_HMR_PORT) || 9998
     },
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:10000',
+        target: process.env.THINGTIME_API_PROXY_TARGET || 'http://127.0.0.1:10000',
         changeOrigin: true
       }
     }

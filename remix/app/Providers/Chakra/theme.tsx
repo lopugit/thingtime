@@ -15,6 +15,13 @@ import { ChakraButton } from './Components/Button';
 
 export const theme = extendTheme({
   colors,
+  // Design-language fonts resolve through the runtime theme CSS variables
+  // (Space Grotesk / Hanken Grotesk / JetBrains Mono by default).
+  fonts: {
+    heading: "var(--tt-font-heading, 'Space Grotesk', system-ui, sans-serif)",
+    body: "var(--tt-font-body, 'Hanken Grotesk', system-ui, sans-serif)",
+    mono: "var(--tt-font-mono, 'JetBrains Mono', ui-monospace, Menlo, monospace)"
+  },
   // edit Input defaultProps
   space,
   sizes: space,
@@ -92,7 +99,7 @@ export const theme = extendTheme({
         track: {
           background: 'grays.medium',
           _checked: {
-            background: 'chakras.throat'
+            background: 'var(--tt-rainbow-3, #58ca70)'
           }
         }
       }
