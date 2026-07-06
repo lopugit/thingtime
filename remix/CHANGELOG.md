@@ -60,6 +60,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- Fixed the remaining iOS WebKit bottom-scroll nav overlap by keeping the
+  native `WKWebView` below the top safe area instead of full-screening it
+  behind the status bar, while preserving the bottom safe-area/footer inset.
+  Bumped the native build number to `8` for TestFlight. Details in
+  [`PRs/30-codex-ios-deployment-url-picker--add-ios-web-destination-picker.md`](PRs/30-codex-ios-deployment-url-picker--add-ios-web-destination-picker.md).
+  — _Codex (AI), 2026-07-06_
 - Kept the iOS WebKit nav below the native status area at the bottom scroll
   limit by offsetting the fixed nav layer with the native safe-area top value
   instead of padding inside a `top: 0` layer, and hardened the native safe-area

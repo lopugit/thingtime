@@ -70,6 +70,23 @@ a long-press context menu for URL actions:
 
 Native build `7` carries this context-menu follow-up for TestFlight.
 
+## Follow-up native safe-area containment
+
+Build `7` still let the web nav hide under the iOS status/menu area at the
+bottom scroll limit because the native `WKWebView` itself was full-screened
+behind both the top and bottom safe areas. The web CSS variables helped in
+ordinary scroll positions, but bottom rubber-band/scroll-limit behavior inside
+WKWebView could still paint the fixed web nav underneath the native status bar.
+
+The native shell now keeps the web view below the top safe area and only ignores
+the bottom safe area. The injected safe-area CSS resolver is also overlap-aware:
+it reports top inset only if the web view actually overlaps the unsafe top
+region, while still reporting bottom overlap so the footer remains reachable
+above the home indicator.
+
+Native build `8` carries this native safe-area containment follow-up for
+TestFlight.
+
 ## TestFlight upload
 
 Build `1.0 (3)` was uploaded to App Store Connect with Fastlane and is visible

@@ -39,7 +39,7 @@ struct ThingtimeWebView: View {
 
             ZStack(alignment: .leading) {
                 WebView(url: selectedDestination.url)
-                    .ignoresSafeArea(.container, edges: [.top, .bottom])
+                    .ignoresSafeArea(.container, edges: [.bottom])
 
                 if isDestinationPickerOpen {
                     Color.black.opacity(0.2)

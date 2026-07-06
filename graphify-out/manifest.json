@@ -1,8 +1,8 @@
 {
   "AGENTS.md": {
-    "mtime": 1783011258.1280878,
-    "ast_hash": "73090685694bbce543317fec6cd10ed7",
-    "semantic_hash": "73090685694bbce543317fec6cd10ed7"
+    "mtime": 1783316400.2005005,
+    "ast_hash": "1b3e86a6b87fdd0768f0683699d1a0a3",
+    "semantic_hash": "1b3e86a6b87fdd0768f0683699d1a0a3"
   },
   ".claude/settings.json": {
     "mtime": 1781775648.4450881,
@@ -425,14 +425,14 @@
     "semantic_hash": "bfa0f85ea09ec888a404e48e0022bc9b"
   },
   "iOS/Thingtime/Web/ThingtimeWebView.swift": {
-    "mtime": 1783314274.158474,
-    "ast_hash": "6e07a127a0dd36b6740405879906f3a5",
-    "semantic_hash": "6e07a127a0dd36b6740405879906f3a5"
+    "mtime": 1783318874.1391926,
+    "ast_hash": "d7ba50f78d222eccfcc748eced1b5e46",
+    "semantic_hash": "d7ba50f78d222eccfcc748eced1b5e46"
   },
   "iOS/Thingtime/Web/WebView.swift": {
-    "mtime": 1783269456.9507945,
-    "ast_hash": "fc33b3339ea92658d6417544dd23e427",
-    "semantic_hash": "fc33b3339ea92658d6417544dd23e427"
+    "mtime": 1783318874.1395977,
+    "ast_hash": "69e7f9397fe35871e20b02563d9378ca",
+    "semantic_hash": "69e7f9397fe35871e20b02563d9378ca"
   },
   "iOS/ThingtimeTests/ThingtimeWebDestinationTests.swift": {
     "mtime": 1783254002.8683414,
@@ -1645,9 +1645,9 @@
     "semantic_hash": "6f47150939eacf6d3a89a87289013ea3"
   },
   "CLAUDE.md": {
-    "mtime": 1783011258.1366591,
-    "ast_hash": "a884b4d0b6534321e63891aece686a86",
-    "semantic_hash": "a884b4d0b6534321e63891aece686a86"
+    "mtime": 1783316400.2009792,
+    "ast_hash": "a751d8d0fa288789ef6af09208675d5c",
+    "semantic_hash": "a751d8d0fa288789ef6af09208675d5c"
   },
   "CODEX.md": {
     "mtime": 1782186283.857307,

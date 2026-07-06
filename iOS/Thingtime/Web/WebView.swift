@@ -176,14 +176,21 @@ private final class ThingtimeWKWebView: WKWebView {
     private func resolvedSafeAreaInsets() -> UIEdgeInsets {
         var insets = safeAreaInsets
 
-        if let windowInsets = window?.safeAreaInsets {
-            insets.top = max(insets.top, windowInsets.top)
-            insets.right = max(insets.right, windowInsets.right)
-            insets.bottom = max(insets.bottom, windowInsets.bottom)
-            insets.left = max(insets.left, windowInsets.left)
+        guard let window else {
+            return insets
         }
 
-        if insets.top < 1, let statusBarHeight = window?.windowScene?.statusBarManager?.statusBarFrame.height {
+        let windowInsets = window.safeAreaInsets
+        let frameInWindow = convert(bounds, to: window)
+        let bottomUnsafeStart = window.bounds.height - windowInsets.bottom
+        let rightUnsafeStart = window.bounds.width - windowInsets.right
+
+        insets.top = max(insets.top, windowInsets.top - frameInWindow.minY, 0)
+        insets.right = max(insets.right, frameInWindow.maxX - rightUnsafeStart, 0)
+        insets.bottom = max(insets.bottom, frameInWindow.maxY - bottomUnsafeStart, 0)
+        insets.left = max(insets.left, windowInsets.left - frameInWindow.minX, 0)
+
+        if insets.top < 1, frameInWindow.minY < 1, let statusBarHeight = window.windowScene?.statusBarManager?.statusBarFrame.height {
             insets.top = max(insets.top, statusBarHeight)
         }
 
