@@ -780,9 +780,9 @@
     "semantic_hash": "572d3abeb8deb5a1067e39f8693492a7"
   },
   "remix/app/Providers/Thingtime/ThingtimeDefaults.tsx": {
-    "mtime": 1783242355.3186586,
-    "ast_hash": "ae32f57273b97e5f724cd786d0262657",
-    "semantic_hash": "ae32f57273b97e5f724cd786d0262657"
+    "mtime": 1783348324.7504032,
+    "ast_hash": "7809cf3c765343cee2607080dc449554",
+    "semantic_hash": ""
   },
   "remix/app/Providers/Thingtime/defaults/cmdWatcher.ts": {
     "mtime": 1774026863.7317188,
@@ -1010,8 +1010,8 @@
     "semantic_hash": "0f695943dfea89df85387f1703b09f67"
   },
   "remix/app/components/DevKit/DevKit.tsx": {
-    "mtime": 1783341053.321197,
-    "ast_hash": "08fd9d3fb0f092eb478f75f100965c4a",
+    "mtime": 1783348324.7497878,
+    "ast_hash": "6b7e316d5f390dde00ebf36f1618e224",
     "semantic_hash": ""
   },
   "remix/app/components/Editor/Editor.tsx": {
@@ -1220,9 +1220,9 @@
     "semantic_hash": "7f1938dd65767c801825fc721151adbf"
   },
   "remix/app/globals/GlobalStyles.tsx": {
-    "mtime": 1783340657.7662916,
-    "ast_hash": "210a794d19ec7bbb70ef0ce6ef12de7e",
-    "semantic_hash": "210a794d19ec7bbb70ef0ce6ef12de7e"
+    "mtime": 1783348324.7491374,
+    "ast_hash": "73680d3418d3719ab533f77f348dd983",
+    "semantic_hash": ""
   },
   "remix/app/gp/GradientPath.js": {
     "mtime": 1711197621.4926364,
@@ -1315,9 +1315,9 @@
     "semantic_hash": "689aa489ed73d14667a3a4c2d3428fb4"
   },
   "remix/app/root.tsx": {
-    "mtime": 1783328842.6540859,
-    "ast_hash": "fc6bb46bdb9e8e74bc6e88fbfdddd3d2",
-    "semantic_hash": "fc6bb46bdb9e8e74bc6e88fbfdddd3d2"
+    "mtime": 1783348324.7507303,
+    "ast_hash": "fd6719fc675887e31d890584276c8ec4",
+    "semantic_hash": ""
   },
   "remix/app/routes.tsx": {
     "mtime": 1783242355.3305786,
@@ -1930,8 +1930,8 @@
     "semantic_hash": "f162fbffa18046af73dfca08802a536f"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1783340770.3171725,
-    "ast_hash": "10d1f12decf1cf287fb9ab46f0cba654",
+    "mtime": 1783348324.751082,
+    "ast_hash": "6e6896be8daf0b5ec6a0b390c9b64a3a",
     "semantic_hash": ""
   },
   "remix/PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md": {
@@ -2920,8 +2920,13 @@
     "semantic_hash": "0508a39c49fb667ee05e8d321ade0a7e"
   },
   "remix/PRs/30-codex-ios-deployment-url-picker--add-ios-web-destination-picker.md": {
-    "mtime": 1783340776.483979,
-    "ast_hash": "2735f64dcea48fdac2feeba314606b1f",
+    "mtime": 1783348324.7514303,
+    "ast_hash": "765087fff180f830c4ecfdffb6ec47eb",
+    "semantic_hash": ""
+  },
+  "remix/app/components/VisualSettings/VisualSettingsHost.tsx": {
+    "mtime": 1783348271.1961246,
+    "ast_hash": "25bcf1e189d558ee9ffb4d7e5302c39e",
     "semantic_hash": ""
   }
 }

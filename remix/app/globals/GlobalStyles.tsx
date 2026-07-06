@@ -9,6 +9,8 @@ export const GlobalStyles = () => {
 					'--thingtime-safe-area-right': 'env(safe-area-inset-right, 0px)',
 					'--thingtime-safe-area-bottom': 'env(safe-area-inset-bottom, 0px)',
 					'--thingtime-safe-area-left': 'env(safe-area-inset-left, 0px)',
+					'--thingtime-visual-bottom-padding': '72px',
+					'--thingtime-visual-devkit-bottom-offset': '36px',
 					'--thingtime-devkit-bottom-offset': '20px'
 				},
 				html: {
@@ -27,13 +29,14 @@ export const GlobalStyles = () => {
 					}
 				},
 				'html.thingtime-native-webview': {
-					'--thingtime-devkit-bottom-offset': '36px'
+					'--thingtime-devkit-bottom-offset': 'var(--thingtime-visual-devkit-bottom-offset, 36px)'
 				},
 				'html.thingtime-native-webview .drawerTrigger': {
 					display: 'none'
 				},
 				'html.thingtime-native-webview .thingtimeFooter': {
-					paddingBottom: 'calc(72px + var(--thingtime-safe-area-bottom, 0px)) !important'
+					paddingBottom:
+						'calc(var(--thingtime-visual-bottom-padding, 72px) + var(--thingtime-safe-area-bottom, 0px)) !important'
 				},
 				'input[data-com-onepassword-filled="light"]': {
 					// Doesn't seem to work..?

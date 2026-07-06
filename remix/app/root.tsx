@@ -12,6 +12,7 @@ import { ChakraWrapper } from './Providers/Chakra/ChakraWrapper';
 import { ThingtimeProvider } from './Providers/ThingtimeProvider';
 import { DevKit } from './components/DevKit/DevKit';
 import { NativeBridgeHost } from './components/NativeBridge/NativeBridgeHost';
+import { VisualSettingsHost } from './components/VisualSettings/VisualSettingsHost';
 
 const setThingtime = (glob: any) => {
   try {
@@ -91,6 +92,7 @@ export default function App() {
     <ChakraWrapper>
       <GlobalStyles />
       <ThingtimeProvider>
+        <VisualSettingsHost />
         {mounted ? <NativeBridgeHost /> : null}
         <DevKit />
         <Nav />

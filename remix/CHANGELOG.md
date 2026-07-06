@@ -18,6 +18,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- Added `thingtime.settings.visual.bottomPadding`, which drives the native iOS
+  footer bottom padding and the derived DevKit floating trigger bottom offset.
+  Details in
+  [`PRs/30-codex-ios-deployment-url-picker--add-ios-web-destination-picker.md`](PRs/30-codex-ios-deployment-url-picker--add-ios-web-destination-picker.md).
+  — _Codex (AI), 2026-07-07_
 - Added a committed `.githooks/post-commit` workflow that auto-commits
   `remix/.env.auto` after ordinary commits when that generated file changes,
   plus a root `install-git-hooks` script for `core.hooksPath` setup. — _Codex

@@ -405,6 +405,9 @@ export const mergedVersions = versions.reduce((acc, version) => {
 
 const defaultValues = {
   settings: {
+    visual: {
+      bottomPadding: 72
+    },
     commander: {
       nav: {
         commanderActive: false,

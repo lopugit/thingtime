@@ -124,6 +124,14 @@ were previously low enough to leave only the small rainbow badge visible near
 the bottom of the WebView, and keeps the default trigger fully above the home
 indicator.
 
+## Follow-up configurable bottom spacing
+
+The native-only bottom spacing is now controlled by
+`thingtime.settings.visual.bottomPadding`. The default remains `72`, matching
+the current footer spacing, and the native DevKit bottom offset is derived from
+that value with the existing safe minimum so saved trigger positions stay above
+the home indicator.
+
 ## TestFlight upload
 
 Build `1.0 (3)` was uploaded to App Store Connect with Fastlane and is visible

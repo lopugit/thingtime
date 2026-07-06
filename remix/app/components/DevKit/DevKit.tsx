@@ -42,8 +42,11 @@ const isNativeWebView = () => document.documentElement.classList.contains('thing
 
 const getDevKitBottomGuard = () => {
   const safeAreaBottom = readRootPixelValue('--thingtime-safe-area-bottom');
-  const configuredOffset = readRootPixelValue('--thingtime-devkit-bottom-offset');
-  const minimumOffset = isNativeWebView() ? DEVKIT_NATIVE_BOTTOM_MIN_OFFSET : DEVKIT_MARGIN;
+  const native = isNativeWebView();
+  const configuredOffset = native
+    ? readRootPixelValue('--thingtime-visual-devkit-bottom-offset') || readRootPixelValue('--thingtime-devkit-bottom-offset')
+    : readRootPixelValue('--thingtime-devkit-bottom-offset');
+  const minimumOffset = native ? DEVKIT_NATIVE_BOTTOM_MIN_OFFSET : DEVKIT_MARGIN;
   const offset = Math.max(configuredOffset, minimumOffset);
 
   return Math.max(DEVKIT_MARGIN, safeAreaBottom + offset);
@@ -164,6 +167,7 @@ export const DevKit = (_props) => {
     window.addEventListener('resize', clampVisiblePositions);
     window.addEventListener('thingtime:native-bridge-ready', clampVisiblePositions);
     window.addEventListener('thingtime:native-message', clampVisiblePositions);
+    window.addEventListener('thingtime:visual-settings-change', clampVisiblePositions);
     window.visualViewport?.addEventListener('resize', clampVisiblePositions);
     window.visualViewport?.addEventListener('scroll', clampVisiblePositions);
 
@@ -177,6 +181,7 @@ export const DevKit = (_props) => {
       window.removeEventListener('resize', clampVisiblePositions);
       window.removeEventListener('thingtime:native-bridge-ready', clampVisiblePositions);
       window.removeEventListener('thingtime:native-message', clampVisiblePositions);
+      window.removeEventListener('thingtime:visual-settings-change', clampVisiblePositions);
       window.visualViewport?.removeEventListener('resize', clampVisiblePositions);
       window.visualViewport?.removeEventListener('scroll', clampVisiblePositions);
       reclampTimers.forEach((timer) => window.clearTimeout(timer));
