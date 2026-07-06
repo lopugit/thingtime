@@ -111,6 +111,19 @@ Local simulator validation must pass `THINGTIME_WEB_URL` as an explicit
 Native build `9` carries this fixed chrome scroll-isolation follow-up for
 TestFlight.
 
+## Follow-up footer/devkit bottom spacing
+
+Build `9` fixed the disappearing nav, but the native-only footer padding left
+too much blank space below the account links at full scroll. The web footer now
+uses a smaller native-only bottom pad (`72px + safe-area`) so the final footer
+section sits closer to the iOS home indicator without being clipped.
+
+The DevKit floating trigger also now clamps against the native safe-area CSS
+variables and the current visual viewport. This repairs saved positions that
+were previously low enough to leave only the small rainbow badge visible near
+the bottom of the WebView, and keeps the default trigger fully above the home
+indicator.
+
 ## TestFlight upload
 
 Build `1.0 (3)` was uploaded to App Store Connect with Fastlane and is visible

@@ -17,6 +17,7 @@ const DEVKIT_TRIGGER_SIZE = 52;
 const DEVKIT_MARGIN = 8;
 const DEVKIT_PANEL_WIDTH = 260;
 const DEVKIT_PANEL_ESTIMATED_HEIGHT = 360;
+const DEVKIT_NATIVE_BOTTOM_MIN_OFFSET = 36;
 
 type FixedPosition = { left: number; top: number };
 
@@ -25,14 +26,47 @@ const clamp = (value: number, min: number, max: number) => {
   return Math.min(Math.max(value, min), upper);
 };
 
-const clampTriggerPosition = (position: FixedPosition): FixedPosition => ({
-  left: clamp(position.left, DEVKIT_MARGIN, window.innerWidth - DEVKIT_TRIGGER_SIZE - DEVKIT_MARGIN),
-  top: clamp(position.top, DEVKIT_MARGIN, window.innerHeight - DEVKIT_TRIGGER_SIZE - DEVKIT_MARGIN)
+const readRootPixelValue = (propertyName: string) => {
+  const raw = window.getComputedStyle(document.documentElement).getPropertyValue(propertyName).trim();
+  const parsed = Number.parseFloat(raw);
+
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const getViewportSize = () => ({
+  width: window.visualViewport?.width || window.innerWidth,
+  height: window.visualViewport?.height || window.innerHeight
 });
 
+const isNativeWebView = () => document.documentElement.classList.contains('thingtime-native-webview');
+
+const getDevKitBottomGuard = () => {
+  const safeAreaBottom = readRootPixelValue('--thingtime-safe-area-bottom');
+  const configuredOffset = readRootPixelValue('--thingtime-devkit-bottom-offset');
+  const minimumOffset = isNativeWebView() ? DEVKIT_NATIVE_BOTTOM_MIN_OFFSET : DEVKIT_MARGIN;
+  const offset = Math.max(configuredOffset, minimumOffset);
+
+  return Math.max(DEVKIT_MARGIN, safeAreaBottom + offset);
+};
+
+const getDevKitRightGuard = () => {
+  const safeAreaRight = readRootPixelValue('--thingtime-safe-area-right');
+
+  return Math.max(DEVKIT_MARGIN, safeAreaRight + DEVKIT_MARGIN);
+};
+
+const clampTriggerPosition = (position: FixedPosition): FixedPosition => {
+  const viewport = getViewportSize();
+
+  return {
+    left: clamp(position.left, DEVKIT_MARGIN, viewport.width - DEVKIT_TRIGGER_SIZE - getDevKitRightGuard()),
+    top: clamp(position.top, DEVKIT_MARGIN, viewport.height - DEVKIT_TRIGGER_SIZE - getDevKitBottomGuard())
+  };
+};
+
 const clampPanelPosition = (position: FixedPosition): FixedPosition => ({
-  left: clamp(position.left, 12, window.innerWidth - DEVKIT_PANEL_WIDTH - 12),
-  top: clamp(position.top, 12, window.innerHeight - 80)
+  left: clamp(position.left, 12, getViewportSize().width - DEVKIT_PANEL_WIDTH - 12),
+  top: clamp(position.top, 12, getViewportSize().height - 80)
 });
 
 const panelPositionNearTrigger = (triggerPos: FixedPosition | null): FixedPosition => {
@@ -128,7 +162,25 @@ export const DevKit = (_props) => {
     };
 
     window.addEventListener('resize', clampVisiblePositions);
-    return () => window.removeEventListener('resize', clampVisiblePositions);
+    window.addEventListener('thingtime:native-bridge-ready', clampVisiblePositions);
+    window.addEventListener('thingtime:native-message', clampVisiblePositions);
+    window.visualViewport?.addEventListener('resize', clampVisiblePositions);
+    window.visualViewport?.addEventListener('scroll', clampVisiblePositions);
+
+    const reclampTimers = [
+      window.setTimeout(clampVisiblePositions, 0),
+      window.setTimeout(clampVisiblePositions, 150),
+      window.setTimeout(clampVisiblePositions, 600)
+    ];
+
+    return () => {
+      window.removeEventListener('resize', clampVisiblePositions);
+      window.removeEventListener('thingtime:native-bridge-ready', clampVisiblePositions);
+      window.removeEventListener('thingtime:native-message', clampVisiblePositions);
+      window.visualViewport?.removeEventListener('resize', clampVisiblePositions);
+      window.visualViewport?.removeEventListener('scroll', clampVisiblePositions);
+      reclampTimers.forEach((timer) => window.clearTimeout(timer));
+    };
   }, [mounted]);
 
   const deployEnv = envFromCookie.THINGTIME_VERCEL_ENV || env.NODE_ENV;
@@ -387,8 +439,12 @@ export const DevKit = (_props) => {
         zIndex={99999}
         left={triggerPos ? `${triggerPos.left}px` : undefined}
         top={triggerPos ? `${triggerPos.top}px` : undefined}
-        bottom={triggerPos ? undefined : 'calc(env(safe-area-inset-bottom, 0px) + 20px)'}
-        right={triggerPos ? undefined : 'calc(env(safe-area-inset-right, 0px) + 20px)'}
+        bottom={
+          triggerPos
+            ? undefined
+            : 'calc(var(--thingtime-safe-area-bottom, env(safe-area-inset-bottom, 0px)) + var(--thingtime-devkit-bottom-offset, 20px))'
+        }
+        right={triggerPos ? undefined : 'calc(var(--thingtime-safe-area-right, env(safe-area-inset-right, 0px)) + 20px)'}
       >
         <Flex
           ref={triggerRef}

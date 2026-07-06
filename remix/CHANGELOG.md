@@ -60,6 +60,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- Tightened the native iOS WebView footer bottom padding so the account footer
+  no longer leaves a large blank tail at full scroll, and re-clamped the DevKit
+  floating trigger against native safe-area values so saved positions stay fully
+  visible above the home indicator. Details in
+  [`PRs/30-codex-ios-deployment-url-picker--add-ios-web-destination-picker.md`](PRs/30-codex-ios-deployment-url-picker--add-ios-web-destination-picker.md).
+  — _Codex (AI), 2026-07-06_
 - Fixed the iOS WebKit bottom-scroll nav disappearance by rendering the fixed
   web chrome outside the scrollable `Main` layout container, disabling native
   WKWebView rubber-band bounce, removing the native bottom content inset that
