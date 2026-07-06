@@ -19,6 +19,18 @@ final class ThingtimeWebDestinationTests: XCTestCase {
         )
     }
 
+    func testConfiguredLoopbackHTTPURLCanOverrideHomeURLInDebugBuilds() {
+        let url = ThingtimeWebDestination.url(
+            from: ["ThingtimeWebURL": "http://127.0.0.1:9999"]
+        )
+
+        #if DEBUG
+        XCTAssertEqual(url?.absoluteString, "http://127.0.0.1:9999")
+        #else
+        XCTAssertNil(url)
+        #endif
+    }
+
     func testInvalidConfiguredURLFallsBackToProduction() {
         XCTAssertNil(ThingtimeWebDestination.url(from: ["ThingtimeWebURL": "http://thingtime.com"]))
         XCTAssertNil(ThingtimeWebDestination.url(from: ["ThingtimeWebURL": "$(THINGTIME_WEB_URL)"]))

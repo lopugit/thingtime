@@ -5,6 +5,8 @@ import React from 'react';
 import type { RootLoaderData } from './root-data.server';
 import { GlobalStyles } from './globals/GlobalStyles';
 import { Main } from './components/Layout/Main';
+import { Nav } from './components/Nav/Nav';
+import { DrawerSystem } from './components/Nav/Drawer/DrawerSystem';
 import { useIcons } from './hooks/useIcons';
 import { ChakraWrapper } from './Providers/Chakra/ChakraWrapper';
 import { ThingtimeProvider } from './Providers/ThingtimeProvider';
@@ -91,9 +93,11 @@ export default function App() {
       <ThingtimeProvider>
         {mounted ? <NativeBridgeHost /> : null}
         <DevKit />
+        <Nav />
         <Main>
           <Outlet />
         </Main>
+        <DrawerSystem />
       </ThingtimeProvider>
       <ScrollRestoration />
       {mounted ? <Analytics /> : null}

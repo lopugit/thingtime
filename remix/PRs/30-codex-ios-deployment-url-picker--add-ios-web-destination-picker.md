@@ -87,6 +87,30 @@ above the home indicator.
 Native build `8` carries this native safe-area containment follow-up for
 TestFlight.
 
+## Follow-up fixed chrome scroll isolation
+
+Build `8` kept the native `WKWebView` below the status bar, but repeated
+bottom-edge scrolling could still make the web nav disappear. A simulator
+reproduction with repeated real swipes showed that the footer stayed visible
+while the fixed web chrome was clipped away, which pointed at the fixed React
+chrome living inside the scrollable `Main` layout subtree and at the native
+bottom `contentInset` creating an extra scroll range that WebKit fixed/sticky
+chrome could not track.
+
+The web nav and drawer system now render as root-level siblings of the
+scrollable `Main` content. In native WebView, the fixed top nav gets an in-row
+drawer button while the old floating drawer trigger is hidden, rubber-band
+bounce is disabled, the native bottom content inset is removed, and the footer
+gets native-only CSS bottom padding so the account links sit above the home
+indicator using real document height instead of a native-only inset.
+
+Local simulator validation must pass `THINGTIME_WEB_URL` as an explicit
+`xcodebuild` build setting; shell environment alone can leave the built
+`Info.plist` pointed at Thingtime.com through the Debug xcconfig default.
+
+Native build `9` carries this fixed chrome scroll-isolation follow-up for
+TestFlight.
+
 ## TestFlight upload
 
 Build `1.0 (3)` was uploaded to App Store Connect with Fastlane and is visible

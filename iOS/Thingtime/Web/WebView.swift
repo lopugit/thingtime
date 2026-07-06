@@ -28,6 +28,9 @@ struct WebView: UIViewRepresentable {
         if #available(iOS 15.0, *) {
             webView.underPageBackgroundColor = .white
         }
+        webView.scrollView.bounces = false
+        webView.scrollView.alwaysBounceVertical = false
+        webView.scrollView.alwaysBounceHorizontal = false
         webView.scrollView.contentInsetAdjustmentBehavior = .never
         webView.applyThingtimeScrollInsets(forceSafeAreaUpdate: true)
         context.coordinator.loadedRootURL = url
@@ -47,6 +50,16 @@ struct WebView: UIViewRepresentable {
         (() => {
           if (window.thingtimeNativeBridge) {
             return;
+          }
+
+          document.documentElement?.classList.add('thingtime-native-webview');
+          const markNativeBody = () => {
+            document.body?.classList.add('thingtime-native-webview-body');
+          };
+          if (document.body) {
+            markNativeBody();
+          } else {
+            document.addEventListener('DOMContentLoaded', markNativeBody, { once: true });
           }
 
           const listeners = new Set();
@@ -141,7 +154,6 @@ struct WebView: UIViewRepresentable {
 }
 
 private final class ThingtimeWKWebView: WKWebView {
-    private let footerScrollPadding: CGFloat = 112
     private var lastAppliedSafeAreaInsets: UIEdgeInsets?
 
     override func layoutSubviews() {
@@ -156,18 +168,17 @@ private final class ThingtimeWKWebView: WKWebView {
 
     func applyThingtimeScrollInsets(forceSafeAreaUpdate: Bool = false) {
         let currentSafeAreaInsets = resolvedSafeAreaInsets()
-        let bottomInset = currentSafeAreaInsets.bottom + footerScrollPadding
 
         var contentInset = scrollView.contentInset
         contentInset.top = 0
         contentInset.left = 0
         contentInset.right = 0
-        contentInset.bottom = bottomInset
+        contentInset.bottom = 0
         scrollView.contentInset = contentInset
 
         var indicatorInsets = scrollView.verticalScrollIndicatorInsets
         indicatorInsets.top = currentSafeAreaInsets.top
-        indicatorInsets.bottom = bottomInset
+        indicatorInsets.bottom = currentSafeAreaInsets.bottom
         scrollView.verticalScrollIndicatorInsets = indicatorInsets
 
         applyNativeSafeAreaVariables(currentSafeAreaInsets, force: forceSafeAreaUpdate)

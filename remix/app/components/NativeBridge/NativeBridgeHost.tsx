@@ -9,6 +9,14 @@ import {
 
 export function NativeBridgeHost() {
   React.useEffect(() => {
+    if (!window.thingtimeNativeBridge?.isNativeWebView) {
+      return;
+    }
+
+    document.documentElement.classList.add('thingtime-native-webview');
+  }, []);
+
+  React.useEffect(() => {
     const sendReadyMessage = () => {
       postNativeBridgeMessage({
         type: 'web-ready',

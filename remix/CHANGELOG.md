@@ -60,6 +60,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- Fixed the iOS WebKit bottom-scroll nav disappearance by rendering the fixed
+  web chrome outside the scrollable `Main` layout container, disabling native
+  WKWebView rubber-band bounce, removing the native bottom content inset that
+  created a fake scroll range, and giving the native web footer real CSS bottom
+  padding above the home indicator. Bumped the native build number to `9` for
+  TestFlight. Details in
+  [`PRs/30-codex-ios-deployment-url-picker--add-ios-web-destination-picker.md`](PRs/30-codex-ios-deployment-url-picker--add-ios-web-destination-picker.md).
+  — _Codex (AI), 2026-07-06_
 - Fixed the remaining iOS WebKit bottom-scroll nav overlap by keeping the
   native `WKWebView` below the top safe area instead of full-screening it
   behind the status bar, while preserving the bottom safe-area/footer inset.

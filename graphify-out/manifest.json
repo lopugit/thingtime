@@ -1,8 +1,8 @@
 {
   "AGENTS.md": {
-    "mtime": 1783316400.2005005,
-    "ast_hash": "1b3e86a6b87fdd0768f0683699d1a0a3",
-    "semantic_hash": "1b3e86a6b87fdd0768f0683699d1a0a3"
+    "mtime": 1783331019.0329154,
+    "ast_hash": "64ea492f76200d338d58fc9e982e4ca2",
+    "semantic_hash": ""
   },
   ".claude/settings.json": {
     "mtime": 1781775648.4450881,
@@ -420,9 +420,9 @@
     "semantic_hash": "9deb2ada1cc834bbebf8bbad9c8978a1"
   },
   "iOS/Thingtime/Web/ThingtimeWebDestination.swift": {
-    "mtime": 1783254002.8673205,
-    "ast_hash": "bfa0f85ea09ec888a404e48e0022bc9b",
-    "semantic_hash": "bfa0f85ea09ec888a404e48e0022bc9b"
+    "mtime": 1783329547.7862332,
+    "ast_hash": "c21fb8f27b2671a1e29bf7fa59f8109d",
+    "semantic_hash": "c21fb8f27b2671a1e29bf7fa59f8109d"
   },
   "iOS/Thingtime/Web/ThingtimeWebView.swift": {
     "mtime": 1783318874.1391926,
@@ -430,14 +430,14 @@
     "semantic_hash": "d7ba50f78d222eccfcc748eced1b5e46"
   },
   "iOS/Thingtime/Web/WebView.swift": {
-    "mtime": 1783318874.1395977,
-    "ast_hash": "69e7f9397fe35871e20b02563d9378ca",
-    "semantic_hash": "69e7f9397fe35871e20b02563d9378ca"
+    "mtime": 1783330830.958535,
+    "ast_hash": "9baaf49b730a3024679fd453e0ad34ff",
+    "semantic_hash": "9baaf49b730a3024679fd453e0ad34ff"
   },
   "iOS/ThingtimeTests/ThingtimeWebDestinationTests.swift": {
-    "mtime": 1783254002.8683414,
-    "ast_hash": "5e85a53ba2e6cfbec8e91650f0abedea",
-    "semantic_hash": "5e85a53ba2e6cfbec8e91650f0abedea"
+    "mtime": 1783329547.786641,
+    "ast_hash": "d9f45fdb8b48a814353c876e64f4047c",
+    "semantic_hash": "d9f45fdb8b48a814353c876e64f4047c"
   },
   "iOS/scripts/_xcode-common.sh": {
     "mtime": 1782963930.1082025,
@@ -1025,9 +1025,9 @@
     "semantic_hash": "cae6440674fb81b25e0366aab9a0300c"
   },
   "remix/app/components/Layout/Main.tsx": {
-    "mtime": 1783242355.3227143,
-    "ast_hash": "c218e3ce35b456a3bda340ca36b3f3d7",
-    "semantic_hash": "c218e3ce35b456a3bda340ca36b3f3d7"
+    "mtime": 1783329260.6745832,
+    "ast_hash": "4f9cc4477b72329763da96154fbc31e0",
+    "semantic_hash": "4f9cc4477b72329763da96154fbc31e0"
   },
   "remix/app/components/Layout/TopSpacing.tsx": {
     "mtime": 1714560030.8628676,
@@ -1075,19 +1075,19 @@
     "semantic_hash": "27bff4852d6ff45c5820a31822a9b3b9"
   },
   "remix/app/components/NativeBridge/NativeBridgeHost.tsx": {
-    "mtime": 1782963930.1089835,
-    "ast_hash": "0764e4a310e585e50d45dfc06b18bcbe",
-    "semantic_hash": "0764e4a310e585e50d45dfc06b18bcbe"
+    "mtime": 1783330842.3222106,
+    "ast_hash": "81c9cb1c09c7e0dde734fd9c8177d09a",
+    "semantic_hash": "81c9cb1c09c7e0dde734fd9c8177d09a"
   },
   "remix/app/components/Nav/Footer.tsx": {
-    "mtime": 1783260844.9195604,
-    "ast_hash": "76a04025b1f6467d4e43ed4e3c0eb992",
-    "semantic_hash": "76a04025b1f6467d4e43ed4e3c0eb992"
+    "mtime": 1783330450.9360106,
+    "ast_hash": "e89d5362d72e5f35ffabb63a6a15a161",
+    "semantic_hash": "e89d5362d72e5f35ffabb63a6a15a161"
   },
   "remix/app/components/Nav/Nav.tsx": {
-    "mtime": 1783269456.9501095,
-    "ast_hash": "6e9ff02be2c1a044998a297c4229c359",
-    "semantic_hash": "6e9ff02be2c1a044998a297c4229c359"
+    "mtime": 1783331308.039934,
+    "ast_hash": "c756586e5b1e4418424830e372121f7c",
+    "semantic_hash": ""
   },
   "remix/app/components/Nav/ReactiveNav.tsx": {
     "mtime": 1711197621.4924142,
@@ -1220,9 +1220,9 @@
     "semantic_hash": "7f1938dd65767c801825fc721151adbf"
   },
   "remix/app/globals/GlobalStyles.tsx": {
-    "mtime": 1782963930.1095057,
-    "ast_hash": "b7cdb3037b397f8ac832fabc8712af27",
-    "semantic_hash": "b7cdb3037b397f8ac832fabc8712af27"
+    "mtime": 1783331297.8057203,
+    "ast_hash": "16503fb7efc213e24cf2d0d8ac6ca471",
+    "semantic_hash": ""
   },
   "remix/app/gp/GradientPath.js": {
     "mtime": 1711197621.4926364,
@@ -1315,9 +1315,9 @@
     "semantic_hash": "689aa489ed73d14667a3a4c2d3428fb4"
   },
   "remix/app/root.tsx": {
-    "mtime": 1783242355.330285,
-    "ast_hash": "7ccd8db9b2064745eb079e4d5a432db6",
-    "semantic_hash": "7ccd8db9b2064745eb079e4d5a432db6"
+    "mtime": 1783328842.6540859,
+    "ast_hash": "fc6bb46bdb9e8e74bc6e88fbfdddd3d2",
+    "semantic_hash": "fc6bb46bdb9e8e74bc6e88fbfdddd3d2"
   },
   "remix/app/routes.tsx": {
     "mtime": 1783242355.3305786,
@@ -1645,9 +1645,9 @@
     "semantic_hash": "6f47150939eacf6d3a89a87289013ea3"
   },
   "CLAUDE.md": {
-    "mtime": 1783316400.2009792,
-    "ast_hash": "a751d8d0fa288789ef6af09208675d5c",
-    "semantic_hash": "a751d8d0fa288789ef6af09208675d5c"
+    "mtime": 1783331030.1114225,
+    "ast_hash": "e232de2e9c921d5b9125cf7f0019a103",
+    "semantic_hash": ""
   },
   "CODEX.md": {
     "mtime": 1782186283.857307,
@@ -1900,14 +1900,14 @@
     "semantic_hash": "d7e30ffd7a6aaacb8e089658672a601e"
   },
   "iOS/fastlane/README.md": {
-    "mtime": 1782963930.1079774,
+    "mtime": 1783319250.405574,
     "ast_hash": "0eb0960595104094b7d013521a46456b",
     "semantic_hash": "0eb0960595104094b7d013521a46456b"
   },
   "iOS/project.yml": {
-    "mtime": 1783314274.1590343,
-    "ast_hash": "dfc22284ea5dda28d13370bdb156bf0c",
-    "semantic_hash": "dfc22284ea5dda28d13370bdb156bf0c"
+    "mtime": 1783328842.6561065,
+    "ast_hash": "bfdcb326b4ed64788449c4bc4f62390d",
+    "semantic_hash": ""
   },
   "raycast/CHANGELOG.md": {
     "mtime": 1707726320.3607578,
@@ -1930,9 +1930,9 @@
     "semantic_hash": "f162fbffa18046af73dfca08802a536f"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1783242545.3261333,
-    "ast_hash": "69a551fa44bbf4870740d7a2573fa3b1",
-    "semantic_hash": "69a551fa44bbf4870740d7a2573fa3b1"
+    "mtime": 1783331042.8612149,
+    "ast_hash": "b3822467a0e6b2deb231953e94dd0c99",
+    "semantic_hash": ""
   },
   "remix/PRs/13-codex-fix-hydration-mongodb-thingtime-defaults--codex-fix-hydration-and-footer-status-updates.md": {
     "mtime": 1782186283.8726785,
@@ -2920,8 +2920,8 @@
     "semantic_hash": "0508a39c49fb667ee05e8d321ade0a7e"
   },
   "remix/PRs/30-codex-ios-deployment-url-picker--add-ios-web-destination-picker.md": {
-    "mtime": 1783314274.1599731,
-    "ast_hash": "7a83061d7fcb76ef580ce934f3ab512f",
-    "semantic_hash": "7a83061d7fcb76ef580ce934f3ab512f"
+    "mtime": 1783331055.7495346,
+    "ast_hash": "d36b830b6e7b85f313ad27d21e67c1c8",
+    "semantic_hash": ""
   }
 }

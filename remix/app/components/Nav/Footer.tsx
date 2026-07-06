@@ -36,6 +36,7 @@ export const Footer = (props) => {
 
   return (
     <Center
+      className="thingtimeFooter"
       width="100%"
       paddingTop="900px"
       paddingBottom={[

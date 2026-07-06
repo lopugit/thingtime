@@ -1,5 +1,6 @@
 import React from 'react';
 import { Box, Center, Flex } from '@chakra-ui/react';
+import { PanelLeft } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router';
 
 import { CommanderV2 } from '../Commander/CommanderV2';
@@ -17,7 +18,7 @@ export const Nav = (props) => {
 
 	const user = useCurrentUser();
 
-	const { loading, open, direction } = useDrawer();
+	const { loading, open, toggleOpen, direction } = useDrawer();
 	const { width: drawerWidth, resizing } = useDrawerLiveWidth();
 	const isMobile = useIsMobileViewport();
 
@@ -101,6 +102,7 @@ export const Nav = (props) => {
 	return (
 		<>
 			<Box
+				className="thingtimeTopNav"
 				position="fixed"
 				zIndex={9999}
 				top="var(--thingtime-safe-area-top, 0px)"
@@ -108,9 +110,17 @@ export const Nav = (props) => {
 				left={direction === 'left' && desktopOpen ? drawerCssWidth : 0}
 				transform={
 					mobileOpen ? (direction === 'left' ? `translateX(${drawerCssWidth})` : `translateX(calc(-1 * ${drawerCssWidth}))`) : 'none'
-				}
-				transition={loading || resizing ? 'none' : 'left 0.28s ease-out, right 0.28s ease-out, transform 0.28s ease-out'}
-			>
+					}
+					transition={loading || resizing ? 'none' : 'left 0.28s ease-out, right 0.28s ease-out, transform 0.28s ease-out'}
+					sx={{
+						'html.thingtime-native-webview &': {
+							background: 'white',
+							isolation: 'isolate',
+							position: 'fixed',
+							top: 'var(--thingtime-safe-area-top, 0px)'
+						}
+					}}
+				>
 				<Flex
 					as="nav"
 					position="relative"
@@ -125,6 +135,31 @@ export const Nav = (props) => {
 					// bg='white'
 					// boxShadow={'0px 0px 10px rgba(0,0,0,0.1)'}
 				>
+					<Center
+						className="nav-native-drawer-button"
+						as="button"
+						type="button"
+						position="absolute"
+						left={0}
+						top={0}
+						bottom={0}
+						width="56px"
+						display="none"
+						cursor="pointer"
+						opacity={0.75}
+						aria-label={open ? 'Close menu' : 'Open menu'}
+						title={open ? 'Close menu' : 'Open menu'}
+						sx={{
+							WebkitTapHighlightColor: 'transparent',
+							touchAction: 'manipulation',
+							'html.thingtime-native-webview &': {
+								display: 'flex'
+							}
+						}}
+						onClick={toggleOpen}
+					>
+						<PanelLeft size={16} strokeWidth={1.9} />
+					</Center>
 					<Center
 						className="nav-left-section"
 						display={['none', 'flex']}

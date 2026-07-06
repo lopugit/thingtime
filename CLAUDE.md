@@ -38,6 +38,11 @@
   `iOS/project.yml` as the source of truth and run `xcodegen generate` inside
   `iOS/` before `xcodebuild` checks. Keep generated `.xcodeproj` files
   untracked.
+- When simulator-validating a non-default web URL, pass `THINGTIME_WEB_URL` as
+  an explicit `xcodebuild` build setting (for example
+  `xcodebuild ... THINGTIME_WEB_URL=http://127.0.0.1:9999 build`) and verify the
+  built app's `Info.plist`; shell environment alone can be overridden by the
+  xcconfig default.
 - Before TestFlight, signing, or Apple Developer auth work, read
   `iOS/AGENTS.md` for the iOS-local App Store Connect env/key/profile flow.
 - Use `bundle exec fastlane beta` from `iOS/` for TestFlight uploads. Provide

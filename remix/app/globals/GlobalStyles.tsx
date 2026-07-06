@@ -17,18 +17,24 @@ export const GlobalStyles = () => {
 						minHeight: '100dvh'
 					}
 				},
-				body: {
-					background: 'white',
-					minHeight: '100%',
-					margin: 0,
-					'@supports (height: 100dvh)': {
-						minHeight: '100dvh'
+					body: {
+						background: 'white',
+						minHeight: '100%',
+						margin: 0,
+						'@supports (height: 100dvh)': {
+							minHeight: '100dvh'
+						}
+					},
+					'html.thingtime-native-webview .drawerTrigger': {
+						display: 'none'
+					},
+					'html.thingtime-native-webview .thingtimeFooter': {
+						paddingBottom: 'calc(360px + var(--thingtime-safe-area-bottom, 0px)) !important'
+					},
+					'input[data-com-onepassword-filled="light"]': {
+						// Doesn't seem to work..?
+						background: 'pink !important'
 					}
-				},
-				'input[data-com-onepassword-filled="light"]': {
-					// Doesn't seem to work..?
-					background: 'pink !important'
-				}
 			}}
 		/>
 	);

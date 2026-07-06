@@ -84,8 +84,7 @@ enum ThingtimeWebDestination {
             !trimmedURL.isEmpty,
             !trimmedURL.hasPrefix("$("),
             let url = URL(string: trimmedURL),
-            url.scheme == "https",
-            url.host?.isEmpty == false
+            isAllowedConfiguredURL(url)
         else {
             return nil
         }
@@ -150,6 +149,24 @@ enum ThingtimeWebDestination {
         }
 
         return host == "vercel.app" || host.hasSuffix(".vercel.app")
+    }
+
+    private static func isAllowedConfiguredURL(_ url: URL) -> Bool {
+        guard let scheme = url.scheme?.lowercased(), let host = url.host?.lowercased(), !host.isEmpty else {
+            return false
+        }
+
+        if scheme == "https" {
+            return true
+        }
+
+        #if DEBUG
+        if scheme == "http", ["localhost", "127.0.0.1", "::1"].contains(host) {
+            return true
+        }
+        #endif
+
+        return false
     }
 
     private static func append(_ destination: Destination, to destinations: inout [Destination]) {
