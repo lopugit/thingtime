@@ -1,5 +1,5 @@
 import { Flex, Heading } from '@chakra-ui/react';
-import { useLocation } from '@remix-run/react';
+import { useLocation } from 'react-router';
 import { getCollection } from '~/api/utils/mongodb/collection';
 import { getConnection } from '~/api/utils/mongodb/connection';
 import { Submit } from '~/components/API/Submit';

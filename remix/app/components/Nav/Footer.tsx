@@ -1,10 +1,9 @@
 import React from 'react';
 import { Box, Center, Flex, Text } from '@chakra-ui/react';
-import { Link, useNavigate, useRouteLoaderData } from '@remix-run/react';
+import { Link, useNavigate, useRouteLoaderData } from 'react-router';
 
 import { Icon } from '../Icon/Icon';
-import { MongoStatus } from '../MongoDB/MongoStatus';
-import { VercelStatus } from '../Vercel/VercelStatus';
+import { FooterStatusPanel } from '../Status/FooterStatusPanel';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 
@@ -37,7 +36,14 @@ export const Footer = (props) => {
 
   return (
     <Center width="100%" paddingTop="900px" paddingBottom={[5, 12]} paddingX={4}>
-      <Flex width={['500px', '500px']} maxWidth="100%" columnGap={[8, 16]}>
+      <Flex
+        alignItems="flex-start"
+        columnGap={[8, 12]}
+        flexWrap="wrap"
+        maxWidth="100%"
+        rowGap={8}
+        width={['100%', '760px']}
+      >
         {false && (
           <Flex flexDirection="column" rowGap={3}>
             <Flex flexDirection="column">
@@ -57,7 +63,7 @@ export const Footer = (props) => {
             </Flex>
           </Flex>
         )}
-        <Flex flexDirection="column" rowGap={3}>
+        <Flex flex="1 1 160px" flexDirection="column" minWidth="140px" rowGap={3}>
           <Flex flexDirection="column">
             <Flex flexDirection="row" fontSize="xs">
               <Icon name="mail" size="12px" chakras={{ pr: 1 }}></Icon>
@@ -91,10 +97,10 @@ export const Footer = (props) => {
             </Flex>
           )}
 
-          {showDeploymentStatus ? <VercelStatus></VercelStatus> : null}
-
-          {/* live MongoDB connection status, links to /mongodb-status */}
-          <MongoStatus></MongoStatus>
+          <FooterStatusPanel
+            envFromCookie={envFromCookie}
+            showDeploymentStatus={showDeploymentStatus}
+          />
 
           <Flex flexDirection="row" marginRight="auto">
             <Icon name="rainbow" size="8px"></Icon>
@@ -103,8 +109,24 @@ export const Footer = (props) => {
           </Flex>
         </Flex>
 
+        {/* docs column */}
+        <Flex flex="1 1 140px" flexDirection="column" minWidth="130px" rowGap={3}>
+          <Flex flexDirection="row" fontSize="xs" alignItems="center">
+            <Icon name="book-open" size="12px" chakras={{ pr: 1 }}></Icon>
+            Docs
+          </Flex>
+          <Link to="/docs/">
+            <Text fontSize="xs">Docs home</Text>
+          </Link>
+          <Link to="/docs/design">
+            <Text fontSize="xs" opacity={0.7}>
+              Design mockups
+            </Text>
+          </Link>
+        </Flex>
+
         {/* account / user column */}
-        <Flex flexDirection="column" rowGap={3}>
+        <Flex flex="1 1 140px" flexDirection="column" minWidth="130px" rowGap={3}>
           <Flex flexDirection="row" fontSize="xs" alignItems="center">
             <Icon name="rainbow" size="12px" chakras={{ pr: 1 }}></Icon>
             {user ? user.displayName || user.username : 'Account'}

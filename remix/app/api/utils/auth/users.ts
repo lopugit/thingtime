@@ -14,6 +14,10 @@ export type UserDoc = {
   emailVerified: boolean;
   createdAt: Date;
   updatedAt: Date;
+  accountKind?: 'user' | 'service';
+  emailVerificationRequiredBy?: Date | null;
+  storageAllowanceBytes?: number;
+  storageUsedBytes?: number;
   meta: Record<string, any>;
 };
 
@@ -26,6 +30,10 @@ export type PublicUser = {
   displayName: string | null;
   emailVerified: boolean;
   createdAt: string;
+  accountKind: 'user' | 'service';
+  emailVerificationRequiredBy: string | null;
+  storageAllowanceBytes: number | null;
+  storageUsedBytes: number | null;
 };
 
 export const toPublicUser = (user: any): PublicUser => ({
@@ -35,7 +43,13 @@ export const toPublicUser = (user: any): PublicUser => ({
   email: user.email,
   displayName: user.displayName ?? null,
   emailVerified: !!user.emailVerified,
-  createdAt: new Date(user.createdAt).toISOString()
+  createdAt: new Date(user.createdAt).toISOString(),
+  accountKind: user.accountKind === 'service' ? 'service' : 'user',
+  emailVerificationRequiredBy: user.emailVerificationRequiredBy
+    ? new Date(user.emailVerificationRequiredBy).toISOString()
+    : null,
+  storageAllowanceBytes: typeof user.storageAllowanceBytes === 'number' ? user.storageAllowanceBytes : null,
+  storageUsedBytes: typeof user.storageUsedBytes === 'number' ? user.storageUsedBytes : null
 });
 
 export const findUserByUsername = async (username: string) =>

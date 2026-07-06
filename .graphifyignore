@@ -1,0 +1,10 @@
+/.ds-sync/
+/.ds-sync/**
+/ds-bundle/
+/ds-bundle/**
+/remix/.vercel/
+/remix/.vercel/**
+/remix/dist/
+/remix/dist/**
+/remix/server/assets/
+/remix/server/assets/**

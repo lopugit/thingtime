@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Flex, Button, FormControl, Input, InputGroup, InputRightElement, Box, Text } from '@chakra-ui/react';
-import { Link as RemixLink, useNavigate } from '@remix-run/react';
+import { Link as RouterLink, useNavigate } from 'react-router';
 
 import { useApi } from '~/hooks/useApi';
 import { useThingtime } from '../Thingtime/useThingtime';
@@ -181,11 +181,11 @@ export const Register = (props) => {
           </Flex>
         )}
 
-        <RemixLink to="/login">
+        <RouterLink to="/login">
           <Text fontSize="xs" opacity={0.7}>
             Already have an account? Log in
           </Text>
-        </RemixLink>
+        </RouterLink>
       </Flex>
     </form>
   );

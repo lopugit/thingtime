@@ -13,13 +13,14 @@
 - For PR reviews, prioritize code quality, performance, potential bugs,
   crashes, and especially security issues before style commentary.
 - Also read `CODEX.md` for persistent environment/runbook notes before running checks or pushing branches from this workspace.
-- On local desktop sessions, use the PM2 ecosystem configs for local dev servers instead of starting duplicate ad-hoc Remix servers. The local alias `pm` may be available for PM2; otherwise use `pm2`. The root `ecosystem.config.js` defines `thingtime-stack`, while `remix/ecosystem.config.js` defines the actual Remix dev app `tt-remix-9999` on port 9999. Prefer `npm run remix-pms` from the repo root or `cd remix && pm restart ecosystem.config.js --only tt-remix-9999` when starting or intentionally restarting Remix locally. Do not restart the PM2 Remix dev server after every source edit; it has rebuild/hot reloading. Restart only for env var changes, dependency/native-binding changes, server config changes, a crashed/stale process, or an explicit user request. Stop/restart the managed app before claiming a local dev-server state.
+- On local desktop sessions, use the PM2 ecosystem configs for local dev servers instead of starting duplicate ad-hoc app servers. The local alias `pm` may be available for PM2; otherwise use `pm2`. The root `ecosystem.config.js` defines `thingtime-stack`, while `remix/ecosystem.config.js` defines the Nitro + React Router dev app `tt-nitro-react-router-9999`, with Vite on port 9999 and Nitro on port 10000. Prefer `npm run web-pms` from the repo root, or the compatibility alias `npm run remix-pms`, when starting the local web app; use `cd remix && pm restart ecosystem.config.js --only tt-nitro-react-router-9999` when intentionally restarting it. Do not restart the PM2-managed web dev app after every source edit; it has rebuild/hot reloading. Restart only for env var changes, dependency/native-binding changes, server config changes, a crashed/stale process, or an explicit user request. Stop/restart the managed app before claiming a local dev-server state.
+- Codex-managed worktrees use the root `.worktreeinclude` to copy ignored local setup into new managed worktrees. Keep tracked files out of `.worktreeinclude`, but preserve intentional ignored carryover paths for env files, dependency installs, and local generated state needed for validation. The current dependency directories alone are roughly 1.5 GB when present, and generated-output patterns can make managed worktrees larger.
 - When cloning or checking out branches under `.test-branches/`, copy the
   parent checkout's local env files into the clone before running install,
   dev, build, or smoke checks. Preserve matching paths for root `.env*` files
   and nested app env files such as `remix/.env*`; keep these files untracked
   and never commit secrets.
-- If Remix dev 500s with a missing `bcrypt_lib.node` native binding, run `corepack pnpm --dir remix run ensure-bcrypt`, then restart the PM2-managed `tt-remix-9999` app. The Remix `postinstall`, `dev`, and `build` scripts also run this check automatically.
+- If local web dev 500s with a missing `bcrypt_lib.node` native binding, run `corepack pnpm --dir remix run ensure-bcrypt`, then restart the PM2-managed `tt-nitro-react-router-9999` app. The app `postinstall`, `dev`, and `build` scripts also run this check automatically.
 - For rendered browser validation in Codex Desktop, prefer the in-app Browser first when it is available. If localhost is blocked there, or the user explicitly asks for Chrome, use the Codex Chrome tab control workflow (`chrome:control-chrome`) before falling back to standalone Playwright. Keep Chrome checks read-only unless the user requested an action, and do not inspect cookies, local storage, passwords, or profile data.
 - For layout or alignment changes, always verify the affected screen in a live
   browser window before finishing. Use screenshot evidence or measured element
@@ -37,6 +38,30 @@
   dashboard owner slug; that value is the Git provider owner. Prefer Vercel API
   project/deployment data when `VERCEL_API_TOKEN` is available, or an explicit
   `VERCEL_DASHBOARD_TEAM_SLUG` env var for tokenless dashboard links.
+- The native iOS app lives in `iOS/` and uses XcodeGen; treat
+  `iOS/project.yml` as the source of truth and run `xcodegen generate` inside
+  `iOS/` before `xcodebuild` checks. Keep generated `.xcodeproj` files
+  untracked.
+- Before TestFlight, signing, or Apple Developer auth work, read
+  `iOS/AGENTS.md` for the iOS-local App Store Connect env/key/profile flow.
+- Use `bundle exec fastlane beta` from `iOS/` for TestFlight uploads. Provide
+  App Store Connect API key, issuer, team, and bundle identifier values through
+  environment variables only; never commit `.p8` keys or account-specific
+  signing secrets.
+- Prefer `iOS/scripts/testflight-beta.sh` for TestFlight uploads. It loads
+  ignored values from `iOS/.env` when present, then runs the Fastlane `beta`
+  lane from `iOS/`. Put `THINGTIME_WEB_URL` and Apple signing/API values in the
+  shell environment or `iOS/.env`; keep only placeholder examples in git.
+- If iOS TestFlight export fails with `Cloud signing permission error` or `No
+  profiles for '<bundle id>' were found` while an App Store provisioning
+  profile is already installed, set `PROVISIONING_PROFILE_SPECIFIER` to that
+  profile name. The Fastlane lane keeps automatic signing by default and uses
+  manual export mapping only when this variable is present.
+- The iOS Fastlane build lane syncs an Apple Distribution certificate and App
+  Store provisioning profile via the App Store Connect API key before
+  archiving. Use `SKIP_CERT_SYNC=1` or `SKIP_PROFILE_SYNC=1` only when the
+  correct signing asset is already installed and that sync should be skipped
+  intentionally.
 
 ## graphify
 

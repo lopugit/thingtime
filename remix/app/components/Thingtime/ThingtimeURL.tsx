@@ -2,7 +2,7 @@ import React from 'react';
 // import { Sticky, StickyContainer } from "react-sticky"
 import Sticky from 'react-sticky-el';
 import { Box, Flex } from '@chakra-ui/react';
-import { useLocation, useMatches } from '@remix-run/react';
+import { useLocation, useMatches } from 'react-router';
 
 import { Thingtime } from './Thingtime';
 import { useThingtime } from './useThingtime';

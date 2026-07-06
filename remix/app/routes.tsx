@@ -1,0 +1,124 @@
+import {
+  createBrowserRouter,
+  redirect,
+  type LoaderFunctionArgs
+} from 'react-router';
+
+import App from './root';
+import type { RootLoaderData } from './root-data.server';
+import Branding from './routes/branding/_index';
+import BrandingOld from './routes/branding_old';
+import CryptoPage from './routes/crypto';
+import DocsLayout from './routes/docs/DocsLayout';
+import DocsDesign from './routes/docs/design';
+import DocsIndex from './routes/docs/index';
+import Edge from './routes/edge';
+import Index from './routes/_index';
+import Login from './routes/login';
+import MongoStatusPage from './routes/mongodb-status';
+import Ode from './routes/ode';
+import Profile from './routes/profile';
+import Rainbow from './routes/rainbow.$';
+import Raw from './routes/raw';
+import Register from './routes/register';
+import StatusPage from './routes/status';
+import ThingtimeUrl from './routes/$';
+import TestsPage from './routes/tests';
+import VercelPage from './routes/vercel';
+import Welcome from './routes/welcome';
+
+const fetchJson = async <T,>(url: string, init: RequestInit = {}) => {
+  const response = await fetch(url, {
+    ...init,
+    credentials: 'include',
+    headers: {
+      Accept: 'application/json',
+      ...init.headers
+    }
+  });
+
+  if (!response.ok) {
+    throw new Response(await response.text(), { status: response.status });
+  }
+
+  return (await response.json()) as T;
+};
+
+const rootLoader = async ({ request }: LoaderFunctionArgs) => {
+  const url = new URL(request.url);
+  return fetchJson<RootLoaderData>(`/api/root-data${url.search}`);
+};
+
+const currentUserLoader = async () => {
+  const response = await fetchJson<{ user: RootLoaderData['user'] }>('/api/v1/auth/me');
+  return response.user;
+};
+
+const requireGuest = (redirectTo: string) => async () => {
+  if (await currentUserLoader()) {
+    throw redirect(redirectTo);
+  }
+
+  return null;
+};
+
+const requireUser = (redirectTo: string) => async () => {
+  if (!(await currentUserLoader())) {
+    throw redirect(redirectTo);
+  }
+
+  return null;
+};
+
+const vercelDeploymentsLoader = async ({ request }: LoaderFunctionArgs) => {
+  const url = new URL(request.url);
+  return fetchJson(`/api/v1/vercel/deployments${url.search}`);
+};
+
+export const router = createBrowserRouter([
+  {
+    id: 'root',
+    path: '/',
+    element: <App />,
+    loader: rootLoader,
+    children: [
+      { index: true, element: <Index /> },
+      { path: 'branding', element: <Branding /> },
+      { path: 'branding_old', element: <BrandingOld /> },
+      { path: 'crypto', element: <CryptoPage /> },
+      {
+        path: 'docs',
+        element: <DocsLayout />,
+        children: [
+          { index: true, element: <DocsIndex /> },
+          { path: 'design', element: <DocsDesign /> }
+        ]
+      },
+      { path: 'edge', element: <Edge /> },
+      { path: 'login', element: <Login />, loader: requireGuest('/profile') },
+      {
+        path: 'mongodb-status',
+        element: <MongoStatusPage />,
+        loader: () => fetchJson('/api/v1/mongodb/status-data')
+      },
+      { path: 'ode', element: <Ode /> },
+      { path: 'profile', element: <Profile /> },
+      { path: 'rainbow/*', element: <Rainbow /> },
+      { path: 'raw', element: <Raw /> },
+      { path: 'register', element: <Register />, loader: requireGuest('/welcome') },
+      {
+        path: 'status',
+        element: <StatusPage />,
+        loader: () => fetchJson('/api/v1/vercel/status')
+      },
+      {
+        path: 'vercel',
+        element: <VercelPage />,
+        loader: vercelDeploymentsLoader
+      },
+      { path: 'tests', element: <TestsPage /> },
+      { path: 'welcome', element: <Welcome />, loader: requireUser('/register') },
+      { path: '*', element: <ThingtimeUrl /> }
+    ]
+  }
+]);

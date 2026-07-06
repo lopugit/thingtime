@@ -1,5 +1,5 @@
 import { Flex } from '@chakra-ui/react';
-import { useLocation } from '@remix-run/react';
+import { useLocation } from 'react-router';
 import { getMongoUri, sanitiseMongoHost } from '~/api/utils/mongodb/config';
 import { Submit } from '~/components/API/Submit';
 

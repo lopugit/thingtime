@@ -5,14 +5,22 @@ const TWENTY_FOUR_HOURS_MS = 1000 * 60 * 60 * 24;
 const newToken = () => (crypto.randomUUID() + crypto.randomUUID()).replace(/-/g, '');
 
 // Issue a single-use, time-limited email verification token.
-export const createEmailVerification = async ({ userId, email }: { userId: string; email: string }) => {
+export const createEmailVerification = async ({
+  userId,
+  email,
+  expiresInMs = TWENTY_FOUR_HOURS_MS
+}: {
+  userId: string;
+  email: string;
+  expiresInMs?: number;
+}) => {
   const now = new Date();
   const doc = {
     token: newToken(),
     userId,
     email: email.trim().toLowerCase(),
     createdAt: now,
-    expiresAt: new Date(now.getTime() + TWENTY_FOUR_HOURS_MS),
+    expiresAt: new Date(now.getTime() + expiresInMs),
     consumedAt: null as Date | null
   };
   await (await getEmailVerificationsCollection()).insertOne(doc);

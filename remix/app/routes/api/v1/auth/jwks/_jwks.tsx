@@ -1,4 +1,4 @@
-import { json } from '@vercel/remix';
+import { json } from '~/api/http';
 
 import { getPublicJwks, hasAsymmetricJwtKeys } from '~/api/utils/auth/jwt';
 

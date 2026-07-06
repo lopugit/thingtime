@@ -1,6 +1,6 @@
 import { Flex } from '@chakra-ui/react';
-import { useLocation } from '@remix-run/react';
-import { json } from '@vercel/remix';
+import { useLocation } from 'react-router';
+import { json } from '~/api/http';
 import { getMongoStatus } from '~/api/utils/mongodb/status';
 import { Submit } from '~/components/API/Submit';
 

@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    html, body { margin: 0; padding: 0; background: #ffffff; }
+    @keyframes moving-rainbow{0%{background-position:0 0}100%{background-position:calc(100px + 200%) 0}
+  </style>
+  <link rel="stylesheet" href="ds/thingtime-bundle.css">
+  <script src="ds/react.js"></script>
+  <script src="ds/react-dom.js"></script>
+  <script src="ds/thingtime-bundle.js"></script>
+  <script src="ds/tt-elements.js"></script>
+</helmet>
+<div data-screen-label="1a Classic centered" style="width:100%; max-width:980px; margin:0 auto; background:#ffffff; color:#1a1a1a;">
+          <div style="display:flex; align-items:center; justify-content:space-between; padding:20px 32px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <tt-logo icon="" theme="nature" voxel-size="9" space="0px"></tt-logo>
+              <span style="font-weight:800; font-size:16px;">thingtime</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:22px; font-size:14px; font-weight:600; color:#4b4b4b;">
+              <span>Use cases</span><span>Developers</span><span>Donate</span>
+              <span style="background:#1a1a1a; color:#fff; font-weight:700; padding:8px 14px;">Sign in</span>
+            </div>
+          </div>
+          <div style="display:flex; flex-direction:column; align-items:center; text-align:center; padding:56px 40px 48px;">
+            <tt-logo icon="" theme="nature" voxel-size="15" space="0px"></tt-logo>
+            <h1 style="margin:28px 0 0; font-size:58px; line-height:1.02; font-weight:900; letter-spacing:-0.03em;">A <span style="color:transparent; background:linear-gradient(to right, #f34a4a, #ffbc48, #58ca70, #47b5e6, #a555e8, #f34a4a); background-size:calc(100px + 200%); -webkit-background-clip:text; background-clip:text; animation:moving-rainbow 5s linear infinite;">GUI for the internet</span>.</h1>
+            <p style="margin:20px 0 0; max-width:540px; font-size:19px; line-height:1.55; color:#4b4b4b; text-wrap:pretty;">Thingtime keeps anything you care about — notes, cars, tools, ideas — as living, shareable things.</p>
+            <div style="margin-top:32px; display:flex; gap:12px;">
+              <div style="width:300px; border:3px solid #1a1a1a; padding:14px 16px; font-size:15px; color:#9a9a9a; text-align:left;">you@anywhere.com</div>
+              <div style="background:hotpink; color:#fff; font-weight:800; font-size:15px; padding:14px 22px; border:3px solid #1a1a1a; box-shadow:5px 5px 0 #1a1a1a; display:flex; align-items:center;">Join the waitlist 🚀</div>
+            </div>
+            <div style="margin-top:14px; font-size:13px; color:#8a8a8a;">Free while in beta · no spam, only rainbows</div>
+          </div>
+          <div style="border-top:1px solid #ececec; padding:20px 32px 26px; display:flex; align-items:center; justify-content:center; gap:14px;">
+            <span style="font-size:12px; font-weight:800; letter-spacing:0.16em; color:#8a8a8a;">WORKS EVERYWHERE</span>
+            <span style="border:2px solid #1a1a1a; padding:6px 12px; font-size:13px; font-weight:700;">🌐 Web</span>
+            <span style="border:2px solid #1a1a1a; padding:6px 12px; font-size:13px; font-weight:700;">📱 iOS</span>
+            <span style="border:2px solid #1a1a1a; padding:6px 12px; font-size:13px; font-weight:700;">⌨️ Raycast</span>
+            <span style="border:2px solid #1a1a1a; padding:6px 12px; font-size:13px; font-weight:700;">🔌 API</span>
+          </div>
+        </div>
+</x-dc>
+</body>
+</html>

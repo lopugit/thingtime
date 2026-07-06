@@ -17,15 +17,48 @@
   dev, build, or smoke checks. Preserve matching paths for root `.env*` files
   and nested app env files such as `remix/.env*`; keep these files untracked
   and never commit secrets.
-- For local Remix development, use the PM2-managed `tt-remix-9999` app on port
-  9999 and rely on rebuild/hot reloading for normal source edits. Do not
-  restart the PM2 Remix dev server after every change; restart only for env var
-  changes, dependency/native-binding changes, server config changes, a
-  crashed/stale process, or an explicit user request.
+- For local web development, use the PM2-managed `tt-nitro-react-router-9999`
+  app. Vite serves the React Router non-framework shell on port 9999 and
+  proxies `/api` to Nitro on port 10000. Use `npm run web-pms` from the repo
+  root, or the compatibility alias `npm run remix-pms`, and rely on
+  rebuild/hot reloading for normal source edits. Do not restart the PM2 web dev
+  server after every change; restart only for env var changes,
+  dependency/native-binding changes, server config changes, a crashed/stale
+  process, or an explicit user request.
+- Codex-managed worktrees use the root `.worktreeinclude` to copy ignored local
+  setup into new managed worktrees. Keep tracked files out of `.worktreeinclude`,
+  but preserve intentional ignored carryover paths for env files, dependency
+  installs, and local generated state needed for validation. The current
+  dependency directories alone are roughly 1.5 GB when present, and
+  generated-output patterns can make managed worktrees larger.
 - For layout or alignment changes, always verify the affected screen in a live
   browser window before finishing. Use screenshot evidence or measured element
   bounds across the relevant desktop/mobile viewport so centering, max-width,
   overflow, and overlap behavior match the request.
+- The native iOS app lives in `iOS/` and uses XcodeGen; treat
+  `iOS/project.yml` as the source of truth and run `xcodegen generate` inside
+  `iOS/` before `xcodebuild` checks. Keep generated `.xcodeproj` files
+  untracked.
+- Before TestFlight, signing, or Apple Developer auth work, read
+  `iOS/AGENTS.md` for the iOS-local App Store Connect env/key/profile flow.
+- Use `bundle exec fastlane beta` from `iOS/` for TestFlight uploads. Provide
+  App Store Connect API key, issuer, team, and bundle identifier values through
+  environment variables only; never commit `.p8` keys or account-specific
+  signing secrets.
+- Prefer `iOS/scripts/testflight-beta.sh` for TestFlight uploads. It loads
+  ignored values from `iOS/.env` when present, then runs the Fastlane `beta`
+  lane from `iOS/`. Put `THINGTIME_WEB_URL` and Apple signing/API values in the
+  shell environment or `iOS/.env`; keep only placeholder examples in git.
+- If iOS TestFlight export fails with `Cloud signing permission error` or `No
+  profiles for '<bundle id>' were found` while an App Store provisioning
+  profile is already installed, set `PROVISIONING_PROFILE_SPECIFIER` to that
+  profile name. The Fastlane lane keeps automatic signing by default and uses
+  manual export mapping only when this variable is present.
+- The iOS Fastlane build lane syncs an Apple Distribution certificate and App
+  Store provisioning profile via the App Store Connect API key before
+  archiving. Use `SKIP_CERT_SYNC=1` or `SKIP_PROFILE_SYNC=1` only when the
+  correct signing asset is already installed and that sync should be skipped
+  intentionally.
 
 ## Fundamentals (read first)
 

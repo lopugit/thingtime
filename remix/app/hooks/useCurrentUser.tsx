@@ -1,4 +1,4 @@
-import { useRouteLoaderData } from '@remix-run/react';
+import { useRouteLoaderData } from 'react-router';
 
 export type CurrentUser = {
   id: string;
@@ -8,6 +8,10 @@ export type CurrentUser = {
   displayName: string | null;
   emailVerified: boolean;
   createdAt: string;
+  accountKind: 'user' | 'service';
+  emailVerificationRequiredBy: string | null;
+  storageAllowanceBytes: number | null;
+  storageUsedBytes: number | null;
 } | null;
 
 // Reads the authenticated user resolved by the root loader (getCurrentUser).

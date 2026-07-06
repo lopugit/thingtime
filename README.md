@@ -25,11 +25,24 @@ https://www.gofundme.com/f/thingtime
 Thingtime can run with mostly public configuration, but a few integrations need
 private environment variables in local development or on Vercel.
 
-## Remix app
+## Nitro + React Router app
 
-The Remix app lives in `remix/`.
+The web app lives in `remix/` for historical path compatibility, but it now
+runs as a React Router non-framework Vite client with Nitro API/server routes.
+Vite serves the browser app on port `9999` and proxies `/api` to the Nitro dev
+server on port `10000`.
 
-Install and run from the Remix directory:
+Local development URLs on Lopu's Mac:
+
+- Local: `http://localhost:9999`
+- Tailnet/Funnel: `https://lopus-macbook-pro-2.tail9606f9.ts.net:9999`
+
+The Tailnet/Funnel mapping for Thingtime should proxy
+`lopus-macbook-pro-2.tail9606f9.ts.net:9999` to `127.0.0.1:9999`. Vite's
+`server.allowedHosts` includes `lopus-macbook-pro-2.tail9606f9.ts.net` so this
+host does not trip Vite's blocked-host protection.
+
+Install and run from the app directory:
 
 ```sh
 cd remix
@@ -37,8 +50,28 @@ corepack pnpm install
 corepack pnpm run dev
 ```
 
+From the repository root, `npm run web-pms` starts or restarts the PM2-managed
+dev app `tt-nitro-react-router-9999`. The older `npm run remix-pms` command is
+kept as a compatibility alias.
+
 Local branch metadata is managed automatically by `remix/scripts/pre-dev.sh`.
 That script updates `remix/.env.auto`; do not edit that generated block by hand.
+The local dev launcher loads `remix/.env`, `remix/.env.local`, and
+`remix/.env.auto` before spawning Nitro and Vite, so ignored private values like
+MongoDB credentials are available to local API status checks without committing
+secrets.
+
+Build and verify the Vercel output with:
+
+```sh
+cd remix
+corepack pnpm run build
+```
+
+The build runs `vite build`, copies the Vite shell into Nitro's server assets,
+builds Nitro with `NITRO_PRESET=vercel`, and checks that
+`.vercel/output/static/index.html` contains the React shell before trusting the
+deployment artifact.
 
 ## MongoDB
 
@@ -124,6 +157,47 @@ It does not tell external platforms whether the backing Mongo session has been
 revoked; add a server-side introspection endpoint before relying on live
 revocation checks outside Thingtime.
 
+### Service account provisioning
+
+Apps and backend services can create service-owned Thingtime accounts through:
+
+```sh
+POST /api/v1/auth/service-account
+```
+
+The endpoint is self-service: it does not require a server provisioning secret,
+but it does require a unique, valid email address. The account must verify that
+email within seven days. Until verification, the bearer token works only during
+that grace window; after the deadline, authenticated requests for the service
+account are rejected until the email is verified.
+
+```sh
+curl -X POST "https://thingtime.com/api/v1/auth/service-account" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "serviceName": "CodexTime",
+    "username": "codextime",
+    "email": "codextime-service@example.com",
+    "displayName": "CodexTime"
+  }'
+```
+
+The response includes an `accessToken` that the service can use as a normal
+Thingtime bearer token:
+
+```sh
+Authorization: Bearer <accessToken>
+```
+
+Service account tokens are intentionally non-expiring JWTs with revocable Mongo
+session records. The session `expiresAt` value is `null`, the JWT has no `exp`
+claim, and the account starts with a `storageAllowanceBytes` value of
+`5368709120` (5 GiB). The email-verification deadline is returned as
+`verificationRequiredBy`. Revoke the token by revoking or deleting its backing
+session document.
+
+See `docs/api/service-accounts.md` for the complete request and response shape.
+
 Lopu musings can optionally use Claude and/or OpenAI. Without these keys, the
 endpoint serves the built-in fallback library.
 
@@ -140,15 +214,15 @@ the preset fallback responses instead of calling an AI provider.
 
 ## Vercel deployment status
 
-The footer can show live Vercel preview/build status. It works in a limited
+The footer can show live Vercel deployment/build status. It works in a limited
 tokenless mode on Vercel, but full status, dashboard links, build state, last
 ready time, and active polling need a Vercel REST API token.
 
-Local development and preview deployments also expose `/vercel`, backed by
-`/api/v1/vercel/deployments`, to scan recent Vercel pages for the latest
-deployment per unique branch with timestamps, preview links, deployment-detail
-links, current Vercel states, total branches counted, and an optional display
-cap using the same server-only token configuration.
+Local development, preview deployments, and production deployments expose
+`/vercel`, backed by `/api/v1/vercel/deployments`, to scan recent Vercel pages
+for the latest deployment per unique branch with timestamps, preview links,
+deployment-detail links, current Vercel states, total branches counted, and an
+optional display cap using the same server-only token configuration.
 
 Add this as a sensitive Vercel project environment variable:
 
@@ -179,9 +253,45 @@ Vercel automatically provides variables such as `VERCEL`, `VERCEL_ENV`,
 `VERCEL_URL`, `VERCEL_BRANCH_URL`, `VERCEL_GIT_COMMIT_REF`, and
 `VERCEL_GIT_COMMIT_SHA` during deployments.
 
+The footer environment selector can compare public origins for this tab, local,
+development, staging, and production. These values are browser-visible
+`THINGTIME_` values, so use public origins only and never include tokens,
+passwords, or other secrets:
+
+```sh
+THINGTIME_PRODUCTION_STATUS_ORIGIN="https://thingtime.com"
+THINGTIME_DEV_STATUS_ORIGIN="https://dev.thingtime.com"
+THINGTIME_STAGING_STATUS_ORIGIN="https://staging.thingtime.com"
+THINGTIME_LOCAL_STATUS_ORIGIN="http://localhost:9999"
+```
+
+Unset values fall back to `https://thingtime.com`, `https://dev.thingtime.com`,
+`https://staging.thingtime.com`, and `http://localhost:9999`.
+
 ## Public env exposure rule
 
 Only variables with the `THINGTIME_` prefix are intentionally copied into the
 browser-visible loader data, and variables containing `PRIVATE` are excluded.
 Keep secrets such as MongoDB passwords and Vercel API tokens unprefixed and
 server-only.
+
+## Native iOS TestFlight web URL
+
+The native iOS app lives in `iOS/` and defaults its embedded `WKWebView` to
+`https://thingtime.com`. TestFlight builds can target a Vercel branch or preview
+deployment by setting a non-secret build-time URL:
+
+```sh
+export THINGTIME_WEB_URL="https://<vercel-branch-preview-host>"
+```
+
+For repeatable local uploads, copy `iOS/.env.example` to `iOS/.env`, fill in the
+TestFlight values, and run:
+
+```sh
+iOS/scripts/testflight-beta.sh
+```
+
+`iOS/.env` is ignored by git. The value is baked into that uploaded app build;
+future web changes on the same Vercel branch URL do not require a new iOS
+binary.

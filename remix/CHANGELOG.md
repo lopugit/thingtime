@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to the **Thingtime Remix app** are recorded here. The format
+All notable changes to the **Thingtime web app** are recorded here. The format
 is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), with
 assistant and manual changes attributed so future PR archaeology is less cursed.
 
@@ -16,6 +16,90 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Added
+
+- Added a drawer-based nav system (Claude-desktop style): edge-flush resizable
+  drawer driven by `thingtime.settings.drawer.*` (open direction, top-level
+  item limit with a faint “More” reveal, dynamic grouped second-level menu,
+  click-and-hold drag reordering persisted to `userDrawerOrdering`, search
+  button honouring `searchClosesDrawer`, sticky avatar opening a desktop
+  centred settings modal / mobile slide-up sheet). Desktop hovers the trigger
+  for a popup preview and pins to a split view; mobile shifts (never resizes)
+  the page. Replaces the dead `ProfileDrawer`. Details in
+  [`PRs/28-codex-service-account-api--drawer-based-nav-revamp.md`](PRs/28-codex-service-account-api--drawer-based-nav-revamp.md).
+  — _Claude (AI), 2026-07-05_
+- Added the local Tailscale/Funnel hostname to Vite's allowed hosts and
+  documented the Thingtime `:9999` local/Tailscale dev URLs. — _Codex (AI),
+  2026-07-04_
+- Added a `/tests` frontend API test harness with group filters, individual
+  route checks, safe all-runs, optional mutating checks, and coverage for the
+  current API route map. — _Codex (AI), 2026-07-04_
+- Added a self-service service-account provisioning API that creates
+  service-owned users, returns non-expiring bearer tokens, requires email
+  verification within seven days, and grants a default 5 GiB storage allowance
+  for backend integrations. — _Codex (AI), 2026-07-04_
+
+### Fixed
+
+- Made the compact footer environment selector text flush-left with the footer
+  column and vertically centered by replacing the native select with a custom
+  menu button. — _Codex (AI), 2026-07-03_
+- Made the footer environment selector default to `Current Tab` per browser
+  origin, added a current branch deployment option, and reset status rows to
+  checking immediately when the target environment changes. — _Codex (AI),
+  2026-07-03_
+- Aligned the compact footer environment selector with the status rows, restored
+  browser scroll position after reloads via React Router scroll restoration, and
+  loaded ignored local env files into the Nitro/Vite dev launcher so localhost
+  MongoDB status checks can see configured credentials. — _Codex (AI),
+  2026-07-03_
+
+### PR #26 - Environment-Aware Footer Status Checks
+
+Detailed PR notes:
+[PRs/26-codex-migrate-remix-to-nitro--add-environment-aware-footer-status-checks.md](PRs/26-codex-migrate-remix-to-nitro--add-environment-aware-footer-status-checks.md)
+
+### Added
+
+- Added `/docs` and `/docs/design` browser routes with a Shopify-style docs
+  layout, mockup navigation, and full-screen previews for the PR #25 design
+  bundles. — _Codex (AI), 2026-07-03_
+- Added an environment-aware footer status selector for this tab, local,
+  development, staging, and production targets, with compact Nitro API,
+  frontend, Vercel, and MongoDB checks. — _Codex (AI), 2026-07-02_
+
+### PR #24 - Nitro React Router Migration
+
+Detailed PR notes:
+[PRs/24-codex-migrate-remix-to-nitro--migrate-remix-app-to-nitro-and-react-router.md](PRs/24-codex-migrate-remix-to-nitro--migrate-remix-app-to-nitro-and-react-router.md)
+
+### Changed
+
+- Migrated the app runtime from Remix to a Nitro server plus React Router
+  non-framework Vite client, with PM2 running Vite on port 9999 and Nitro on
+  port 10000. — _Codex (AI), 2026-07-02_
+- Added Vercel output verification for the Nitro build so deployments must
+  include the generated Vite shell before the build is accepted. — _Codex (AI),
+  2026-07-02_
+- Added a Vercel project config override so preview deployments use the Nitro
+  build command instead of the previous Remix builder preset. — _Codex (AI),
+  2026-07-02_
+- Added exact pnpm release-age exceptions for the locked `rolldown@1.1.4`
+  packages pulled by Vite 8.1.2 so Vercel preview installs can keep the latest
+  Vite stack without disabling the broader supply-chain policy. — _Codex (AI),
+  2026-07-02_
+- Approved pnpm dependency build scripts for `bcrypt` and `core-js` so strict
+  Vercel installs can complete while keeping unlisted lifecycle scripts blocked.
+  — _Codex (AI), 2026-07-02_
+- Pinned the web package manager to `pnpm@10.12.1` so Vercel Corepack uses the
+  pnpm version that understands the migration's workspace policy settings. —
+  _Codex (AI), 2026-07-02_
+- Patched the Vercel build output so `/` and non-API app paths route to the
+  static Vite `index.html` shell before Nitro's server fallback, and made the
+  verifier assert that order. — _Codex (AI), 2026-07-02_
+- Added root Vercel deployment notes with project, production alias, preview
+  pattern, and the verified PR #24 preview URL. — _Codex (AI), 2026-07-02_
+
 ### PR #16 - Auth And Lopu Hardening
 
 Detailed PR notes:
@@ -23,6 +107,9 @@ Detailed PR notes:
 
 ### Fixed
 
+- Ignored canceled Vercel deployments when selecting the footer deployment
+  status so skip-rule cancellations do not mask the latest live deployment
+  state. — _Codex (AI), 2026-06-24_
 - Hardened JWT auth so deployed runtimes fail closed without `JWT_SECRET`, and
   live session checks now require the session `userId` to match the JWT `sub`.
   — _Codex (AI), 2026-06-23_
@@ -31,6 +118,32 @@ Detailed PR notes:
 
 ### Changed
 
+- Exposed the Vercel footer deployment status and `/vercel` dashboard in
+  production deployments as well as local development and previews. —
+  _Codex (AI), 2026-06-24_
+- Added a native iOS agent runbook documenting the Apple Developer environment,
+  App Store Connect API-key validation, signing, Xcode SDK, and TestFlight
+  upload flow. — _Codex (AI), 2026-06-24_
+- Bumped the native iOS build number to 2 for the next TestFlight upload. —
+  _Codex (AI), 2026-06-24_
+- Disabled iOS export symbol packaging for the initial webview shell TestFlight
+  build to avoid the local Xcode beta `rsync --extended-attributes` packaging
+  failure. — _Codex (AI), 2026-06-24_
+- Added an optional iOS `PROVISIONING_PROFILE_SPECIFIER` export fallback so
+  TestFlight uploads can use an installed App Store profile when Xcode automatic
+  export cannot create or find one. — _Codex (AI), 2026-06-24_
+- Added iOS Fastlane distribution-certificate and App Store profile syncing
+  before TestFlight builds so fresh local keychains can recover signing assets
+  from the App Store Connect API key. — _Codex (AI), 2026-06-24_
+- Added an ignored `iOS/.env` TestFlight workflow and
+  `iOS/scripts/testflight-beta.sh` so native uploads can target preview web URLs
+  without committing branch-specific build values. — _Codex (AI), 2026-06-24_
+- Added a build-time iOS `THINGTIME_WEB_URL` override so TestFlight builds can
+  point the native webview at a Vercel branch deployment while production still
+  defaults to `https://thingtime.com`. — _Codex (AI), 2026-06-24_
+- Added iOS webview safe-area support with `viewport-fit=cover`, full-bleed
+  native WKWebView rendering, and status-bar-aware Remix nav padding. —
+  _Codex (AI), 2026-06-24_
 - Added shared AGENTS/CLAUDE PR-review instructions prioritizing code quality,
   performance, potential bugs, crashes, and security issues. — _Codex (AI),
   2026-06-23_
@@ -118,14 +231,14 @@ Detailed PR notes:
 
 ### Fixed
 
-| # | Problem | Fix | Author | Date |
-|---|---------|-----|--------|------|
-| 6 | Vercel and MongoDB footer refresh icons rendered but did not trigger a recheck. | Wired the shared refresh button to call its callback, prevent link bubbling, and show a small loading spin. | Codex (AI) | 2026-06-23 |
-| 1 | Emotion hydration caused `insertBefore` crashes, flash-of-unstyled content, boxed icons, and update-depth risk. | Hydrate the Remix document with server-rendered Emotion style tags in the React tree and perform the Emotion handoff pre-paint. | Codex (AI) | 2026-06-22 |
-| 2 | Vercel serverless wrapped Emotion CJS modules differently than local default imports expected. | Resolve `@emotion/cache` and `@emotion/server/create-instance` across direct, default, named, and nested default export shapes. | Codex (AI) | 2026-06-22 |
-| 3 | Vercel previews could show `git/unknown`, and repeated branch-head deployments could rebuild unchanged SHAs. | Prefer Vercel git env vars for branch display and document/test an Ignored Build Step duplicate-SHA guard. | Codex (AI) | 2026-06-22 |
-| 4 | Local dev-server and PR validation workflow details were scattered across chat. | Document PM2-managed Remix restarts, PR-specific notes, and verification in project docs. | Codex (AI) | 2026-06-22 |
-| 5 | `smarts.merge(..., { clone: true })` behavior was at risk during PR cleanup. | Verified the clone path still deep-clones nested values without mutating the source object. | Codex (AI) | 2026-06-22 |
+| #   | Problem                                                                                                         | Fix                                                                                                                             | Author     | Date       |
+| --- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ---------- | ---------- |
+| 6   | Vercel and MongoDB footer refresh icons rendered but did not trigger a recheck.                                 | Wired the shared refresh button to call its callback, prevent link bubbling, and show a small loading spin.                     | Codex (AI) | 2026-06-23 |
+| 1   | Emotion hydration caused `insertBefore` crashes, flash-of-unstyled content, boxed icons, and update-depth risk. | Hydrate the Remix document with server-rendered Emotion style tags in the React tree and perform the Emotion handoff pre-paint. | Codex (AI) | 2026-06-22 |
+| 2   | Vercel serverless wrapped Emotion CJS modules differently than local default imports expected.                  | Resolve `@emotion/cache` and `@emotion/server/create-instance` across direct, default, named, and nested default export shapes. | Codex (AI) | 2026-06-22 |
+| 3   | Vercel previews could show `git/unknown`, and repeated branch-head deployments could rebuild unchanged SHAs.    | Prefer Vercel git env vars for branch display and document/test an Ignored Build Step duplicate-SHA guard.                      | Codex (AI) | 2026-06-22 |
+| 4   | Local dev-server and PR validation workflow details were scattered across chat.                                 | Document PM2-managed Remix restarts, PR-specific notes, and verification in project docs.                                       | Codex (AI) | 2026-06-22 |
+| 5   | `smarts.merge(..., { clone: true })` behavior was at risk during PR cleanup.                                    | Verified the clone path still deep-clones nested values without mutating the source object.                                     | Codex (AI) | 2026-06-22 |
 
 ### Verified
 

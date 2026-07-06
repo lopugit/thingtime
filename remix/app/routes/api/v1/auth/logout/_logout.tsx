@@ -1,4 +1,4 @@
-import { json } from '@vercel/remix';
+import { json } from '~/api/http';
 
 import { clearAuthCookie, getAuthToken } from '~/api/utils/auth/authCookie';
 import { verifyJwt } from '~/api/utils/auth/jwt';

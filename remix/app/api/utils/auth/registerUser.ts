@@ -5,7 +5,8 @@ import { sendVerificationEmail } from './email';
 import { signJwt } from './jwt';
 import { hashPassword } from './passwords';
 import { createSession } from './sessions';
-import { findUserByEmail, findUserByUsername, insertUser, PublicUser, toPublicUser } from './users';
+import { findUserByEmail, findUserByUsername, insertUser, toPublicUser } from './users';
+import type { PublicUser, UserDoc } from './users';
 
 export type RegisterInput = {
   username: string;
@@ -21,11 +22,28 @@ export type RegisterResult =
   | { ok: false; status: number; error: string }
   | { ok: true; user: PublicUser; jwt: string; verificationLink: string };
 
+export type CreateUserAccountInput = {
+  username: string;
+  password: string;
+  email: string;
+  displayName?: string | null;
+  emailVerified?: boolean;
+  accountKind?: 'user' | 'service';
+  emailVerificationRequiredBy?: Date | null;
+  storageAllowanceBytes?: number;
+  storageUsedBytes?: number;
+  meta?: Record<string, any>;
+};
+
+export type CreateUserAccountResult =
+  | { ok: false; status: number; error: string }
+  | { ok: true; user: any; publicUser: PublicUser };
+
 const isEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 
-// Single creation path for users — used by the register route AND by seeding,
-// so a seeded user is identical to a real signup (FUNDAMENTALS.md §2).
-export const registerUser = async (input: RegisterInput): Promise<RegisterResult> => {
+// Single insertion path for user accounts. Browser registration, service
+// account provisioning, and seeding share this validation + schema path.
+export const createUserAccount = async (input: CreateUserAccountInput): Promise<CreateUserAccountResult> => {
   const username = (input.username || '').trim().toLowerCase();
   const email = (input.email || '').trim().toLowerCase();
   const password = input.password || '';
@@ -41,19 +59,28 @@ export const registerUser = async (input: RegisterInput): Promise<RegisterResult
   if (await findUserByEmail(email)) return { ok: false, status: 409, error: 'Email already registered' };
 
   const now = new Date();
+  const userDoc: UserDoc = {
+    ttid: username,
+    username,
+    email,
+    passwordHash: await hashPassword(password),
+    displayName: input.displayName ?? null,
+    emailVerified: input.emailVerified ?? false,
+    createdAt: now,
+    updatedAt: now,
+    accountKind: input.accountKind ?? 'user',
+    meta: input.meta ?? {}
+  };
+
+  if (input.emailVerificationRequiredBy !== undefined) {
+    userDoc.emailVerificationRequiredBy = input.emailVerificationRequiredBy;
+  }
+  if (input.storageAllowanceBytes !== undefined) userDoc.storageAllowanceBytes = input.storageAllowanceBytes;
+  if (input.storageUsedBytes !== undefined) userDoc.storageUsedBytes = input.storageUsedBytes;
+
   let user;
   try {
-    user = await insertUser({
-      ttid: username,
-      username,
-      email,
-      passwordHash: await hashPassword(password),
-      displayName: input.displayName ?? null,
-      emailVerified: false,
-      createdAt: now,
-      updatedAt: now,
-      meta: input.meta ?? {}
-    });
+    user = await insertUser(userDoc);
   } catch (err: any) {
     // a unique index caught a duplicate that raced past the checks above
     if (err?.code === 11000) {
@@ -63,6 +90,23 @@ export const registerUser = async (input: RegisterInput): Promise<RegisterResult
     throw err;
   }
 
+  return { ok: true, user, publicUser: toPublicUser(user) };
+};
+
+// Single creation path for users — used by the register route AND by seeding,
+// so a seeded user is identical to a real signup (FUNDAMENTALS.md §2).
+export const registerUser = async (input: RegisterInput): Promise<RegisterResult> => {
+  const created = await createUserAccount({
+    username: input.username,
+    password: input.password,
+    email: input.email,
+    displayName: input.displayName,
+    meta: input.meta
+  });
+
+  if (created.ok === false) return created;
+
+  const user = created.user;
   const userId = String(user._id);
 
   // session + JWT (logs the user in immediately; emailVerified stays false)
@@ -70,6 +114,7 @@ export const registerUser = async (input: RegisterInput): Promise<RegisterResult
   const jwt = await signJwt({ sub: userId, jti: session.jti });
 
   // email verification token + (stubbed) send
+  const email = user.email;
   const verification = await createEmailVerification({ userId, email });
   const origin = input.origin || process.env.APP_URL || 'http://localhost:9999';
   const verificationLink = `${origin}/api/v1/auth/verify-email?token=${verification.token}`;

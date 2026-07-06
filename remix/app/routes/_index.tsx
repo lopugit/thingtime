@@ -1,6 +1,5 @@
 import { Box, Flex } from '@chakra-ui/react';
 
-import { ProfileDrawer } from '~/components/Nav/ProfileDrawer';
 import { Splash } from '~/components/Splash/Splash';
 import { Thingtime } from '~/components/Thingtime/Thingtime';
 import { ThingtimeDemo } from '~/components/Thingtime/ThingtimeDemo';
@@ -36,7 +35,6 @@ export default function Index() {
         chakras={{ marginY: 200 }}
         width="600px"
       ></Thingtime> */}
-			<ProfileDrawer></ProfileDrawer>
 		</Flex>
 	);
 }

@@ -1,22 +1,12 @@
 import { Box, Button, Container, Divider, Flex, Heading, Text, Badge, Link, Progress } from '@chakra-ui/react';
-import { json } from '@vercel/remix';
-import { useLoaderData, useRevalidator } from '@remix-run/react';
+import { useLoaderData, useRevalidator } from 'react-router';
 
-import { getVercelDeploymentStatus, isVercelStatusEnabled } from '~/api/utils/vercel/status';
-
-export const loader = async () => {
-  if (!isVercelStatusEnabled()) {
-    throw new Response('Not found', { status: 404 });
-  }
-
-  const status = await getVercelDeploymentStatus();
-  return json(status);
-};
+import type { VercelDeploymentStatus } from '~/api/utils/vercel/status';
 
 const value = (raw?: string | null) => raw || '—';
 
 export default function StatusPage() {
-  const status = useLoaderData<typeof loader>();
+  const status = useLoaderData() as VercelDeploymentStatus;
   const revalidator = useRevalidator();
 
   const badgeScheme =

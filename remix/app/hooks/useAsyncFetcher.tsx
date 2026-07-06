@@ -1,44 +1,49 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useFetcher } from '@remix-run/react';
+import { useCallback, useState } from 'react';
 
 export function useAsyncFetcher() {
-  let resolveRef = useRef<any>();
-  let promiseRef = useRef<Promise<any>>();
-  let fetcher = useFetcher();
-
-  if (!promiseRef.current) {
-    promiseRef.current = new Promise((resolve) => {
-      resolveRef.current = resolve;
-    });
-  }
-
-  const resetResolver = useCallback(() => {
-    promiseRef.current = new Promise((resolve) => {
-      resolveRef.current = resolve;
-    });
-  }, [promiseRef, resolveRef]);
-  
   const [defaultOpts, setDefaultOpts] = useState({
     method: 'POST',
     encType: 'application/json'
-  })
+  });
 
   const submit = useCallback(
-    async (data, opts) => {
-      // @ts-ignore
-      fetcher.submit(data, { ...defaultOpts, ...opts });
-      return promiseRef.current;
+    async (data, opts: { action: string; method?: string; encType?: string }) => {
+      const nextOpts = { ...defaultOpts, ...opts };
+      const headers = new Headers();
+      let body: BodyInit | undefined;
+
+      if (nextOpts.encType === 'application/json') {
+        headers.set('Content-Type', 'application/json');
+        body = JSON.stringify(data || {});
+      } else {
+        const formData = new FormData();
+        Object.entries(data || {}).forEach(([key, value]) => {
+          if (value !== undefined && value !== null) {
+            formData.set(key, String(value));
+          }
+        });
+        body = formData;
+      }
+
+      const response = await fetch(nextOpts.action, {
+        method: nextOpts.method || 'POST',
+        credentials: 'include',
+        headers,
+        body
+      });
+      const contentType = response.headers.get('Content-Type') || '';
+      const payload = contentType.includes('application/json')
+        ? await response.json()
+        : await response.text();
+
+      if (!response.ok) {
+        throw payload;
+      }
+
+      return payload;
     },
-    [fetcher, promiseRef]
+    [defaultOpts]
   );
 
-  useEffect(() => {
-    if (fetcher.data && fetcher.state === 'idle') {
-      resolveRef.current(fetcher.data);
-      resetResolver();
-    }
-  }, [fetcher, resetResolver]);
-  
-  
-  return { ...fetcher, submit };
+  return { submit, setDefaultOpts };
 }

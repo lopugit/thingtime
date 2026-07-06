@@ -1,6 +1,10 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback } from 'react';
 
 import { useAsyncFetcher } from './useAsyncFetcher';
+
+const refreshRootData = () => {
+  window.dispatchEvent(new Event('thingtime:root-data-refresh'));
+};
 
 export function useApi() {
   const asyncFetcher = useAsyncFetcher();
@@ -11,6 +15,7 @@ export function useApi() {
         const { username, password } = args;
 
         const ret = asyncFetcher.submit({ username, password }, { action: '/api/v1/login' });
+        ret.then(refreshRootData).catch(() => {});
         return ret;
       },
       [asyncFetcher]
@@ -23,6 +28,7 @@ export function useApi() {
             { username, password, email, displayName },
             { action: '/api/v1/auth/register' }
           );
+          ret.then(refreshRootData).catch(() => {});
           return ret;
         },
         [asyncFetcher]
@@ -31,6 +37,7 @@ export function useApi() {
         async (args) => {
           const { email } = args;
           const ret = asyncFetcher.submit({ email }, { action: '/api/v1/auth/resend-verification' });
+          ret.then(refreshRootData).catch(() => {});
           return ret;
         },
         [asyncFetcher]
@@ -38,6 +45,7 @@ export function useApi() {
       logout: useCallback(
         async () => {
           const ret = asyncFetcher.submit({}, { action: '/api/v1/auth/logout' });
+          ret.then(refreshRootData).catch(() => {});
           return ret;
         },
         [asyncFetcher]
