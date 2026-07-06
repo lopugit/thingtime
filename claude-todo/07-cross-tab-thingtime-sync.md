@@ -69,7 +69,7 @@ by a stale tab writing its old in-memory tree.
 ## Notes
 
 - Origin: spotted during the drawer nav revamp
-  (`remix/PRs/28-codex-service-account-api--drawer-based-nav-revamp.md`);
+  (`PRs/28-codex-service-account-api--drawer-based-nav-revamp.md`);
   pre-existing behaviour, not introduced by that PR.
 - Repo rule: run `graphify query "<question>"` from the repo root before
   exploring raw source; `graphify explain "ThingtimeProvider"` is a good

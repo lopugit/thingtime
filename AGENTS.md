@@ -93,6 +93,6 @@ Rules:
   runbook workflow changes, add a concise dated entry to `remix/CHANGELOG.md`
   under `[Unreleased]` before finishing.
 - For large PRs or PRs with several rounds of debugging, add or update a
-  PR-specific note in `remix/PRs/` named with the PR number, branch slug, and
-  PR title slug, then keep `remix/CHANGELOG.md` as a concise grouped summary
-  that links to the detailed PR note.
+  PR-specific note in the root `PRs/` directory named with the PR number,
+  branch slug, and PR title slug, then keep `remix/CHANGELOG.md` as a concise
+  grouped summary that links to the detailed PR note.
