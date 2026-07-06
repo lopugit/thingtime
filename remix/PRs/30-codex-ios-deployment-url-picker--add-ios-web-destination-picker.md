@@ -58,6 +58,18 @@ page.
 
 Native build `6` carries this nav safe-area follow-up for TestFlight.
 
+## Follow-up URL context menu
+
+The native destination drawer now keeps tap-to-select on each URL row, and adds
+a long-press context menu for URL actions:
+
+- Copy URL writes the destination URL to the iOS pasteboard.
+- Open in Browser opens the destination externally through the system URL
+  handler.
+- Share presents the native share sheet for the destination URL.
+
+Native build `7` carries this context-menu follow-up for TestFlight.
+
 ## TestFlight upload
 
 Build `1.0 (3)` was uploaded to App Store Connect with Fastlane and is visible

@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct ThingtimeWebView: View {
     private enum StorageKey {
@@ -155,6 +156,8 @@ struct ThingtimeWebView: View {
 }
 
 private struct DestinationPickerDrawer: View {
+    @Environment(\.openURL) private var openURL
+
     let destinations: [ThingtimeWebDestination.Destination]
     let selectedDestinationID: String
     let deploymentsLoadState: ThingtimeWebView.DeploymentsLoadState
@@ -256,6 +259,24 @@ private struct DestinationPickerDrawer: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(destination.title), \(destination.subtitle)")
+        .accessibilityHint("Touch and hold for URL actions")
+        .contextMenu {
+            Button {
+                UIPasteboard.general.string = destination.url.absoluteString
+            } label: {
+                Label("Copy URL", systemImage: "doc.on.doc")
+            }
+
+            Button {
+                openURL(destination.url)
+            } label: {
+                Label("Open in Browser", systemImage: "safari")
+            }
+
+            ShareLink(item: destination.url) {
+                Label("Share", systemImage: "square.and.arrow.up")
+            }
+        }
     }
 
     @ViewBuilder

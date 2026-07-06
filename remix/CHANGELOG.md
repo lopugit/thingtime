@@ -18,6 +18,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- Added native iOS destination-drawer URL context menus: touch and hold any
+  Thingtime/Vercel URL row to copy the URL, open it externally in the browser,
+  or share it. Bumped the native build number to `7` for TestFlight. Details in
+  [`PRs/30-codex-ios-deployment-url-picker--add-ios-web-destination-picker.md`](PRs/30-codex-ios-deployment-url-picker--add-ios-web-destination-picker.md).
+  — _Codex (AI), 2026-07-06_
 - Updated the iOS TestFlight lane and runbook so App Store Connect individual
   API keys can leave `ASC_ISSUER_ID` blank, documented the supported-Xcode
   retry for App Store Connect `90534` upload rejections, and bumped/uploaded
