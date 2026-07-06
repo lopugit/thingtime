@@ -30,6 +30,12 @@
   server after every change; restart only for env var changes,
   dependency/native-binding changes, server config changes, a crashed/stale
   process, or an explicit user request.
+- Codex-managed worktrees use the root `.worktreeinclude` to copy ignored local
+  setup into new managed worktrees. Keep tracked files out of `.worktreeinclude`,
+  but preserve intentional ignored carryover paths for env files, dependency
+  installs, and local generated state needed for validation. The current
+  dependency directories alone are roughly 1.5 GB when present, and
+  generated-output patterns can make managed worktrees larger.
 - For layout or alignment changes, always verify the affected screen in a live
   browser window before finishing. Use screenshot evidence or measured element
   bounds across the relevant desktop/mobile viewport so centering, max-width,
