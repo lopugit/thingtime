@@ -54,6 +54,7 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		children: [
 			{ id: 'account-profile', label: 'Profile', icon: '👤', to: '/profile', authOnly: true },
 			{ id: 'account-welcome', label: 'Welcome', icon: '✨', to: '/welcome', authOnly: true },
+			{ id: 'account-themes', label: 'Themes', icon: '🎨', to: '/themes' },
 			{ id: 'account-login', label: 'Log in', icon: '🗝️', to: '/login', guestOnly: true },
 			{ id: 'account-register', label: 'Register', icon: '➕', to: '/register', guestOnly: true }
 		]

@@ -6,7 +6,9 @@ export type ApiTestGroup =
   | 'mongodb'
   | 'root'
   | 'template'
-  | 'vercel';
+  | 'themes'
+  | 'vercel'
+  | 'waitlist';
 
 export type ApiTestResultStatus = 'pass' | 'fail';
 

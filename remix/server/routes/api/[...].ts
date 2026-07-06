@@ -26,9 +26,14 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/mongodb/status': () => import('../../../app/routes/api/v1/mongodb/status/_status'),
   'v1/mongodb/status-data': () => import('../../../app/routes/api/v1/mongodb/status-data/_status-data'),
   'v1/template': () => import('../../../app/routes/api/v1/template/_template'),
+  'v1/themes': () => import('../../../app/routes/api/v1/themes/_themes'),
+  'v1/themes/active': () => import('../../../app/routes/api/v1/themes/active/_active'),
+  'v1/themes/delete': () => import('../../../app/routes/api/v1/themes/delete/_delete'),
+  'v1/themes/shared': () => import('../../../app/routes/api/v1/themes/shared/_shared'),
   'v1/vercel/deployments': () => import('../../../app/routes/api/v1/vercel/deployments/_deployments'),
   'v1/vercel/status': () => import('../../../app/routes/api/v1/vercel/status/_status'),
-  'v1/vercel/status-data': () => import('../../../app/routes/api/v1/vercel/status-data/_status-data')
+  'v1/vercel/status-data': () => import('../../../app/routes/api/v1/vercel/status-data/_status-data'),
+  'v1/waitlist': () => import('../../../app/routes/api/v1/waitlist/_waitlist')
 };
 
 const normalizePath = (value: unknown, url?: string) => {

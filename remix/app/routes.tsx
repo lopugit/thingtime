@@ -24,6 +24,7 @@ import Register from './routes/register';
 import StatusPage from './routes/status';
 import ThingtimeUrl from './routes/$';
 import TestsPage from './routes/tests';
+import Themes from './routes/themes';
 import VercelPage from './routes/vercel';
 import Welcome from './routes/welcome';
 
@@ -117,6 +118,7 @@ export const router = createBrowserRouter([
         loader: vercelDeploymentsLoader
       },
       { path: 'tests', element: <TestsPage /> },
+      { path: 'themes', element: <Themes /> },
       { path: 'welcome', element: <Welcome />, loader: requireUser('/register') },
       { path: '*', element: <ThingtimeUrl /> }
     ]

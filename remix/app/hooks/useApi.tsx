@@ -6,6 +6,15 @@ const refreshRootData = () => {
   window.dispatchEvent(new Event('thingtime:root-data-refresh'));
 };
 
+// GET helper mirroring useAsyncFetcher semantics: parses JSON and throws the
+// parsed payload on !ok so callers catch { ok: false, error } shapes.
+const getJson = async (url: string) => {
+  const response = await fetch(url, { credentials: 'include' });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw data;
+  return data;
+};
+
 export function useApi() {
   const asyncFetcher = useAsyncFetcher();
 
@@ -61,6 +70,41 @@ export function useApi() {
           const ret = asyncFetcher.submit({ query }, { action: '/api/v1/mongodb/raw-results' });
           return ret;
         },
+        [asyncFetcher]
+      )
+    },
+    themes: {
+      list: useCallback(async () => getJson('/api/v1/themes'), []),
+      getShared: useCallback(
+        async (args) => getJson(`/api/v1/themes/shared?id=${encodeURIComponent(args?.id || '')}`),
+        []
+      ),
+      save: useCallback(
+        async (args) => {
+          const { id, name, theme, visibility } = args;
+          return asyncFetcher.submit({ id, name, theme, visibility }, { action: '/api/v1/themes' });
+        },
+        [asyncFetcher]
+      ),
+      remove: useCallback(
+        async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/themes/delete' }),
+        [asyncFetcher]
+      ),
+      setActive: useCallback(
+        async (args) => {
+          const ret = asyncFetcher.submit(
+            { themeId: args?.themeId ?? null },
+            { action: '/api/v1/themes/active' }
+          );
+          ret.then(refreshRootData).catch(() => {});
+          return ret;
+        },
+        [asyncFetcher]
+      )
+    },
+    waitlist: {
+      join: useCallback(
+        async (args) => asyncFetcher.submit({ email: args?.email }, { action: '/api/v1/waitlist' }),
         [asyncFetcher]
       )
     }
