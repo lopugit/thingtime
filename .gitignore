@@ -1,6 +1,15 @@
 .DS_Store
 .vscode
 .env
+.env.local
+.env.development
+.env.test
+.env.staging
+.env.production
+.cache/
+.vercel/
+.output/
+dist/
 .ds-sync/
 ds-bundle/
 
