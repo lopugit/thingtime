@@ -87,13 +87,25 @@ export const useThingContextMenu = (options: UseThingContextMenuOptions = {}) =>
 		setOpen(true);
 	}, [cancelScheduledClose]);
 
-	// spread on the element whose hover opens the menu
+	// spread on the element whose hover opens the menu. Hovering the trigger
+	// never hijacks a menu that is already open in another presentation
+	// (e.g. a right-click menu positioned at the pointer).
 	const hoverTriggerProps = React.useMemo(
 		() => ({
-			onMouseEnter: openPopover,
-			onMouseLeave: scheduleClose
+			onMouseEnter: () => {
+				if (open && presentation !== 'popover') {
+					return;
+				}
+				openPopover();
+			},
+			onMouseLeave: () => {
+				if (open && presentation !== 'popover') {
+					return;
+				}
+				scheduleClose();
+			}
 		}),
-		[openPopover, scheduleClose]
+		[open, presentation, openPopover, scheduleClose]
 	);
 
 	// spread on the element whose right-click opens the menu

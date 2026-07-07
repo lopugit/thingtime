@@ -758,6 +758,18 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	);
 
 	const deleteValue = React.useCallback(() => {
+		// array parents stay arrays — spreading them into an object would
+		// corrupt the parent shape
+		if (parent instanceof Array) {
+			const index = Number(path);
+			const clone = parent.filter((item, idx) => idx !== index);
+
+			setThingtime(parentPath, clone, {
+				namespace: 'user'
+			});
+			return;
+		}
+
 		// use parent path to clone parent object but without this key
 		const clone = { ...parent };
 

@@ -62,6 +62,28 @@ const cloneValue = (value: unknown): unknown => {
 	}
 };
 
+// strip prototype-polluting keys from parsed clipboard JSON before it enters
+// the thingtime tree
+const sanitizePastedValue = (value: unknown): unknown => {
+	if (!value || typeof value !== 'object') {
+		return value;
+	}
+
+	if (Array.isArray(value)) {
+		return value.map(sanitizePastedValue);
+	}
+
+	const out: Record<string, unknown> = {};
+	Object.keys(value as Record<string, unknown>).forEach((key) => {
+		if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+			return;
+		}
+		out[key] = sanitizePastedValue((value as Record<string, unknown>)[key]);
+	});
+
+	return out;
+};
+
 const serializeThing = (thing: unknown): string => {
 	if (typeof thing === 'string') {
 		return thing;
@@ -143,6 +165,17 @@ export const ThingContextMenuTrigger = (props: ThingContextMenuTriggerProps) => 
 		}
 
 		const handler = (e: MouseEvent) => {
+			// leave the browser's native menu on editable targets (paste,
+			// spellcheck) and on selected text (copy)
+			const target = e.target as HTMLElement | null;
+			const editable = target?.closest?.('input, textarea, [contenteditable="true"], [contenteditable=""], .magic-input-focusable');
+			const selection = window.getSelection?.();
+
+			if (editable || (selection && !selection.isCollapsed)) {
+				e.stopPropagation();
+				return;
+			}
+
 			e.preventDefault();
 			e.stopPropagation();
 			menu.openAtPointer(e);
@@ -267,7 +300,7 @@ export const ThingContextMenuTrigger = (props: ThingContextMenuTriggerProps) => 
 			let value: unknown = text;
 
 			try {
-				value = JSON.parse(text);
+				value = sanitizePastedValue(JSON.parse(text));
 			} catch {
 				// plain string paste is fine
 			}
@@ -311,6 +344,16 @@ export const ThingContextMenuTrigger = (props: ThingContextMenuTriggerProps) => 
 					setEditMode?.((prev) => !prev);
 					break;
 				case 'change-type':
+					// wrapping needs a container value to wrap into
+					if (payload.wrap && (payload.type as { value?: unknown } | undefined)?.value == null) {
+						lopu({
+							title: 'This type cannot wrap here 🤔',
+							description: 'It has no container value to wrap the current value into.',
+							status: 'warning',
+							duration: 5000
+						});
+						break;
+					}
 					onType?.({ type: payload.type, wrap: payload.wrap });
 					break;
 				case 'add-child':

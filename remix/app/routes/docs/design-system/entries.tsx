@@ -155,8 +155,9 @@ export const designSystemEntries: DesignSystemEntry[] = [
 		accessibility: [
 			'The surface is role="menu"; actions are role="menuitem"; radio-style options are role="menuitemradio" with aria-checked.',
 			'Drill parents expose aria-haspopup="menu"; the back row is a focusable menuitem labelled Back.',
-			'Focus is roving: arrow keys move between every row of the current level including the back row; focus lands on the first row after each drill or pop.',
-			'The modal presentation focuses the first item on open; Escape pops one level, then closes at the root.',
+			'Focus is roving: arrow keys move between every row of the current level including the back row; drilling lands focus on the first action (not the back row).',
+			'Hover/right-click menus never steal focus on open — a window-level fallback still honours Escape (back/close) and pulls focus in on ArrowDown/ArrowUp; the modal focuses the first item and traps Tab.',
+			'Right-click passes through to the browser menu on editable targets and selected text, so native paste/spellcheck/copy keep working inside value editors.',
 			'Hover popovers stay open while the pointer is over the surface and linger ~555ms after leaving, so travel gaps don’t dismiss them.',
 			'Right-click maps to long-press on touch via the native contextmenu event; the trigger icon also opens on tap.',
 			'Drag and resize use pointer events with generous handles (whole header / 15px grip) and never trap keyboard users — every capability they gate is also reachable without them.',
@@ -168,7 +169,8 @@ export const designSystemEntries: DesignSystemEntry[] = [
 			{ keys: 'Enter / Space', action: 'Activate the focused row (leaf fires, parent drills in)' },
 			{ keys: '→', action: 'Drill into the focused parent' },
 			{ keys: '← ', action: 'Back one level' },
-			{ keys: 'Esc', action: 'Back one level, then close at the root' }
+			{ keys: 'Esc', action: 'Back one level, then close at the root (works before focus enters the menu too)' },
+			{ keys: 'Tab', action: 'Trapped inside the modal presentation; cycles rows' }
 		],
 		tokens: [
 			{ token: '--tt-card', usedFor: 'Menu surface background', preview: 'color' },

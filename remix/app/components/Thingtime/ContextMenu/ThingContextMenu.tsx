@@ -99,16 +99,15 @@ export const ThingContextMenu = (props: ThingContextMenuProps) => {
 	// trigger sits near the right edge
 	const [popoverShift, setPopoverShift] = React.useState(0);
 
-	// fresh open = default drill state, home position, natural size
+	// reset on every open/close so a closed (still-mounted) menu never paints
+	// one stale frame of old drill/drag/size state when it reopens
 	React.useEffect(() => {
-		if (open) {
-			setStack(resolveDrillPath(model, defaultDrillPath));
-			setDragOffset({ x: 0, y: 0 });
-			setMenuWidth(width);
-			setMenuHeight(null);
-			setPopoverShift(0);
-			setLevelTick(0);
-		}
+		setStack(resolveDrillPath(model, defaultDrillPath));
+		setDragOffset({ x: 0, y: 0 });
+		setMenuWidth(width);
+		setMenuHeight(null);
+		setPopoverShift(0);
+		setLevelTick(0);
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [open]);
 
@@ -186,7 +185,8 @@ export const ThingContextMenu = (props: ThingContextMenuProps) => {
 			x: Math.max(CONTEXT_MENU_MARGIN, Math.min(position.x, maxX)),
 			y: Math.max(CONTEXT_MENU_MARGIN, Math.min(position.y, maxY))
 		});
-	}, [open, presentation, position?.x, position?.y]);
+		// menuWidth/menuHeight: re-clamp after the grip resizes the surface
+	}, [open, presentation, position?.x, position?.y, menuWidth, menuHeight]);
 
 	const focusItemAt = React.useCallback((index: number) => {
 		const surface = surfaceRef.current;
@@ -220,10 +220,11 @@ export const ThingContextMenu = (props: ThingContextMenuProps) => {
 
 	// drilling keeps the window size steady: lock the current height the first
 	// time the user leaves the root level, so deeper/shorter levels scroll
-	// inside the same frame instead of resizing it
+	// inside the same frame instead of resizing it. Tiny root levels (the
+	// new-child variant has one row) still lock to a usable minimum.
 	const lockHeight = React.useCallback(() => {
 		if (menuHeight === null && surfaceRef.current) {
-			setMenuHeight(surfaceRef.current.offsetHeight);
+			setMenuHeight(Math.max(surfaceRef.current.offsetHeight, MIN_MENU_HEIGHT));
 		}
 	}, [menuHeight]);
 
@@ -236,16 +237,18 @@ export const ThingContextMenu = (props: ThingContextMenuProps) => {
 			lockHeight();
 			setStack((prev) => [...prev, action]);
 			setLevelTick((tick) => tick + 1);
-			setTimeout(() => focusItemAt(0), 30);
+			// index 0 is the back row after a drill; land on the first action
+			setTimeout(() => focusItemAt(1), 30);
 		},
 		[lockHeight, focusItemAt]
 	);
 
 	const popLevel = React.useCallback(() => {
-		setStack((prev) => (prev.length ? prev.slice(0, -1) : prev));
+		const next = stack.length ? stack.slice(0, -1) : stack;
+		setStack(next);
 		setLevelTick((tick) => tick + 1);
-		setTimeout(() => focusItemAt(0), 30);
-	}, [focusItemAt]);
+		setTimeout(() => focusItemAt(next.length ? 1 : 0), 30);
+	}, [stack, focusItemAt]);
 
 	const onSurfaceKeyDown = React.useCallback(
 		(e: React.KeyboardEvent) => {
@@ -266,6 +269,10 @@ export const ThingContextMenu = (props: ThingContextMenuProps) => {
 					e.preventDefault();
 					popLevel();
 				}
+			} else if (e.key === 'Tab' && presentation === 'modal') {
+				// the modal traps Tab inside the surface
+				e.preventDefault();
+				moveFocus(e.shiftKey ? -1 : 1);
 			} else if (e.key === 'Escape') {
 				e.preventDefault();
 				if (stack.length) {
@@ -275,7 +282,7 @@ export const ThingContextMenu = (props: ThingContextMenuProps) => {
 				}
 			}
 		},
-		[moveFocus, focusItemAt, stack.length, popLevel, onClose]
+		[moveFocus, focusItemAt, presentation, stack.length, popLevel, onClose]
 	);
 
 	// focus the first item on modal open so Escape/arrows work immediately
@@ -285,6 +292,43 @@ export const ThingContextMenu = (props: ThingContextMenuProps) => {
 			return () => clearTimeout(timer);
 		}
 	}, [open, presentation, focusItemAt]);
+
+	// popover/context menus open without stealing focus, so keyboard must
+	// still work before focus enters the surface: Escape pops/closes and
+	// arrows pull focus into the menu from anywhere on the page
+	React.useEffect(() => {
+		if (!open) {
+			return;
+		}
+
+		const onWindowKeyDown = (e: KeyboardEvent) => {
+			const surface = surfaceRef.current;
+			if (!surface || surface.contains(document.activeElement)) {
+				return;
+			}
+
+			if (e.key === 'Escape') {
+				e.preventDefault();
+				if (stack.length) {
+					popLevel();
+				} else {
+					onClose?.();
+				}
+			} else if (e.key === 'ArrowDown') {
+				e.preventDefault();
+				focusItemAt(stack.length ? 1 : 0);
+			} else if (e.key === 'ArrowUp') {
+				e.preventDefault();
+				focusItemAt(-1);
+			}
+		};
+
+		window.addEventListener('keydown', onWindowKeyDown);
+
+		return () => {
+			window.removeEventListener('keydown', onWindowKeyDown);
+		};
+	}, [open, stack.length, popLevel, onClose, focusItemAt]);
 
 	const fireAction = React.useCallback(
 		(section: ThingContextSection, action: ThingContextAction) => {
@@ -317,6 +361,53 @@ export const ThingContextMenu = (props: ThingContextMenuProps) => {
 	// drag (header) + resize (bottom-right grip)
 	// ------------------------------------------------------------------
 
+	// one gesture at a time; torn down on pointerup/pointercancel, window
+	// blur, and unmount so listeners never leak or leave a stuck drag
+	const gestureTeardownRef = React.useRef<(() => void) | null>(null);
+
+	React.useEffect(() => {
+		return () => {
+			gestureTeardownRef.current?.();
+		};
+	}, []);
+
+	const startPointerGesture = React.useCallback(
+		(e: React.PointerEvent, onMove: (move: PointerEvent) => void) => {
+			gestureTeardownRef.current?.();
+
+			const pointerId = e.pointerId;
+
+			const handleMove = (move: PointerEvent) => {
+				if (move.pointerId !== pointerId) {
+					return;
+				}
+				onMove(move);
+			};
+
+			const teardown = () => {
+				window.removeEventListener('pointermove', handleMove);
+				window.removeEventListener('pointerup', stop);
+				window.removeEventListener('pointercancel', stop);
+				window.removeEventListener('blur', teardown);
+				gestureTeardownRef.current = null;
+			};
+
+			const stop = (ev: PointerEvent) => {
+				if (ev.pointerId !== pointerId) {
+					return;
+				}
+				teardown();
+			};
+
+			window.addEventListener('pointermove', handleMove);
+			window.addEventListener('pointerup', stop);
+			window.addEventListener('pointercancel', stop);
+			window.addEventListener('blur', teardown);
+			gestureTeardownRef.current = teardown;
+		},
+		[]
+	);
+
 	const startDrag = React.useCallback(
 		(e: React.PointerEvent) => {
 			// buttons in the header (pin/close) stay clickable
@@ -330,19 +421,11 @@ export const ThingContextMenu = (props: ThingContextMenuProps) => {
 			const startY = e.clientY;
 			const origin = { ...dragOffset };
 
-			const handleMove = (move: PointerEvent) => {
+			startPointerGesture(e, (move) => {
 				setDragOffset({ x: origin.x + move.clientX - startX, y: origin.y + move.clientY - startY });
-			};
-
-			const stop = () => {
-				window.removeEventListener('pointermove', handleMove);
-				window.removeEventListener('pointerup', stop);
-			};
-
-			window.addEventListener('pointermove', handleMove);
-			window.addEventListener('pointerup', stop);
+			});
 		},
-		[dragOffset]
+		[dragOffset, startPointerGesture]
 	);
 
 	const startResize = React.useCallback(
@@ -355,21 +438,16 @@ export const ThingContextMenu = (props: ThingContextMenuProps) => {
 			const startY = e.clientY;
 			const startWidth = surface?.offsetWidth || menuWidth;
 			const startHeight = surface?.offsetHeight || 0;
+			// never allow resizing past the viewport
+			const maxWidth = Math.min(MAX_MENU_WIDTH, window.innerWidth - CONTEXT_MENU_MARGIN * 2);
+			const maxHeight = Math.min(MAX_MENU_HEIGHT, window.innerHeight - CONTEXT_MENU_MARGIN * 2);
 
-			const handleMove = (move: PointerEvent) => {
-				setMenuWidth(Math.min(MAX_MENU_WIDTH, Math.max(MIN_MENU_WIDTH, startWidth + move.clientX - startX)));
-				setMenuHeight(Math.min(MAX_MENU_HEIGHT, Math.max(MIN_MENU_HEIGHT, startHeight + move.clientY - startY)));
-			};
-
-			const stop = () => {
-				window.removeEventListener('pointermove', handleMove);
-				window.removeEventListener('pointerup', stop);
-			};
-
-			window.addEventListener('pointermove', handleMove);
-			window.addEventListener('pointerup', stop);
+			startPointerGesture(e, (move) => {
+				setMenuWidth(Math.min(maxWidth, Math.max(MIN_MENU_WIDTH, startWidth + move.clientX - startX)));
+				setMenuHeight(Math.min(maxHeight, Math.max(MIN_MENU_HEIGHT, startHeight + move.clientY - startY)));
+			});
 		},
-		[menuWidth]
+		[menuWidth, startPointerGesture]
 	);
 
 	// ------------------------------------------------------------------

@@ -37,6 +37,13 @@ export const MagicInput = React.forwardRef<HTMLDivElement, MagicInputProps & Rec
 	const contentEditableRef = React.useRef(null);
 	const editValueRef = React.useRef({});
 
+	// values are plain text: escape them before the newline -> <br/> pass so
+	// dangerouslySetInnerHTML can never execute markup smuggled into a value
+	// (pasted, API-loaded, or shared)
+	const escapeHtml = React.useCallback((value: string) => {
+		return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+	}, []);
+
 	const fullPath = React.useMemo(() => {
 		const ret = props?.fullPath || props?.path;
 
@@ -52,10 +59,12 @@ export const MagicInput = React.forwardRef<HTMLDivElement, MagicInputProps & Rec
 
 	const [contentEditableValue, setContentEditableValue] = React.useState(props?.value || props?.placeholder);
 
-	const updateContentEditableValue = React.useCallback((value) => {
+	const updateContentEditableValue = React.useCallback((rawValue) => {
 		// replace all new line occurences in value with <div><br></div>
 
-		console.log('MagicInput updating contentEditableValue with value', value);
+		console.log('MagicInput updating contentEditableValue with value', rawValue);
+
+		const value = typeof rawValue === 'string' ? escapeHtml(rawValue) : rawValue;
 
 		// extract all series of new lines
 		const newlines = value?.split?.(/[^\n]/)?.filter((v) => v !== '');
