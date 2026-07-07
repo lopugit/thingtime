@@ -1310,7 +1310,7 @@ export const buildPlatformExamples = (
     'import json',
     'from urllib import request',
     '',
-    ...(hasBody ? [`payload = ${prettyBody.replace(/\n/g, '\n')}`, ''] : []),
+    ...(hasBody ? [`payload = ${prettyBody}`, ''] : []),
     `req = request.Request(`,
     `    ${JSON.stringify(url)},`,
     ...(hasBody ? ['    data=json.dumps(payload).encode("utf-8"),'] : []),
