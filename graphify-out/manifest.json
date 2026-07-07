@@ -1080,8 +1080,8 @@
     "semantic_hash": "92d444e302d23d08505fc8d2c8624a24"
   },
   "remix/app/components/Thingtime/Thingtime.tsx": {
-    "mtime": 1783438760.426228,
-    "ast_hash": "0757fdb2afe1a6b1a1ff231522090d1a",
+    "mtime": 1783439861.8898928,
+    "ast_hash": "3aea605003b16e01b00979c36c5cf0f8",
     "semantic_hash": ""
   },
   "remix/app/components/Thingtime/ThingtimeDemo.tsx": {
@@ -3075,8 +3075,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Thingtime/ContextMenu/ThingContextMenu.tsx": {
-    "mtime": 1783438718.010305,
-    "ast_hash": "5044c4661a6c2202d552dbc12ab9e788",
+    "mtime": 1783439878.6095457,
+    "ast_hash": "c21c36dfc4453bf76cb24be35e2927d7",
     "semantic_hash": ""
   },
   "remix/app/components/Thingtime/ContextMenu/contextMenuModel.ts": {
@@ -3095,13 +3095,13 @@
     "semantic_hash": ""
   },
   "remix/app/routes/docs/design-system/ThingContextMenuStories.tsx": {
-    "mtime": 1783436258.7575068,
-    "ast_hash": "02fd7f7ea4399702c284c89a9c4be7e3",
+    "mtime": 1783439997.5484123,
+    "ast_hash": "d291d1baef4650fe86bb82d730047f4c",
     "semantic_hash": ""
   },
   "remix/app/routes/docs/design-system/entries.tsx": {
-    "mtime": 1783438944.8030946,
-    "ast_hash": "6c10183d466488744bead33f30371709",
+    "mtime": 1783440009.1049154,
+    "ast_hash": "962a6e9d090272594de5e86236239cc8",
     "semantic_hash": ""
   },
   "remix/app/routes/docs/design-system/index.tsx": {
@@ -3110,8 +3110,13 @@
     "semantic_hash": ""
   },
   "remix/app/components/Thingtime/ContextMenu/ThingContextMenuTrigger.tsx": {
-    "mtime": 1783438746.2645676,
-    "ast_hash": "a973af427a07d1586792feb3201868b2",
+    "mtime": 1783439943.942501,
+    "ast_hash": "b962d368c434242195bbfb3965f97269",
+    "semantic_hash": ""
+  },
+  "remix/app/components/Thingtime/thingZones.ts": {
+    "mtime": 1783439856.6940253,
+    "ast_hash": "04f619961c2607fa0e42335fe49c2b04",
     "semantic_hash": ""
   }
 }
