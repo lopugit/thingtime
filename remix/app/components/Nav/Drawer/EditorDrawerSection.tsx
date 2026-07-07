@@ -1,14 +1,19 @@
 import React from 'react';
-import { Box, Flex, Text } from '@chakra-ui/react';
+import ClickAwayListener from 'react-click-away-listener';
+import { Box, Flex, Input, Text } from '@chakra-ui/react';
 import { useLocation, useNavigate } from 'react-router';
 
 import { useLopu } from '../../Lopu/useLopu';
+import { ThingContextMenu } from '../../Thingtime/ContextMenu/ThingContextMenu';
+import type { ThingContextMenuModel } from '../../Thingtime/ContextMenu/contextMenuModel';
+import { useThingContextMenu } from '../../Thingtime/ContextMenu/useThingContextMenu';
 import { useThingtime } from '../../Thingtime/useThingtime';
 import { buildThingModeUrl, parseThingMode, parseThingPath } from '../../Thingtime/thingRoute';
 
 // Drawer section for managing the editor: lists the mounted editor's windows
 // (minimise/close), minimised windows (restore), and saved layout configs
-// (open/save/delete). Commands reach the mounted EditorSplit over the shared
+// (open/save/rename/duplicate/delete — right-click a config for its own
+// Thing Context Menu). Commands reach the mounted EditorSplit over the shared
 // events bus ('editor-command'); configs persist in settings.editor.configs.
 
 type LiveWindow = {
@@ -101,6 +106,12 @@ export const EditorDrawerSection = (props: { onNavigate?: () => void }) => {
 		};
 	}, []);
 
+	// config right-click menu + inline rename
+	const configMenu = useThingContextMenu();
+	const [menuConfigName, setMenuConfigName] = React.useState<string | null>(null);
+	const [renaming, setRenaming] = React.useState<string | null>(null);
+	const [renameDraft, setRenameDraft] = React.useState('');
+
 	const editorMounted = parseThingMode(pathname) === 'editor';
 	const editorSettings = thingtime?.settings?.editor;
 
@@ -136,6 +147,16 @@ export const EditorDrawerSection = (props: { onNavigate?: () => void }) => {
 		[editorMounted, emit, setThingtime, navigate, pathname, props.onNavigate]
 	);
 
+	const removeConfig = React.useCallback(
+		(name: string) => {
+			const next = { ...configs };
+			delete next[name];
+			setThingtime('settings.editor.configs', next, { namespace: 'editor' });
+			lopu({ title: 'Config deleted 🗑️', description: `"${name}" was removed from settings.editor.configs.`, status: 'info', duration: 5000 });
+		},
+		[configs, setThingtime, lopu]
+	);
+
 	const deleteConfig = React.useCallback(
 		(name: string) => {
 			// first click arms, second click (within 3s) deletes
@@ -148,13 +169,145 @@ export const EditorDrawerSection = (props: { onNavigate?: () => void }) => {
 				return;
 			}
 
-			const next = { ...configs };
-			delete next[name];
-			setThingtime('settings.editor.configs', next, { namespace: 'editor' });
 			setArmedDelete(null);
-			lopu({ title: 'Config deleted 🗑️', description: `"${name}" was removed from settings.editor.configs.`, status: 'info', duration: 5000 });
+			removeConfig(name);
 		},
-		[armedDelete, configs, setThingtime, lopu]
+		[armedDelete, removeConfig]
+	);
+
+	const startRename = React.useCallback((name: string) => {
+		setRenaming(name);
+		setRenameDraft(name);
+	}, []);
+
+	const commitRename = React.useCallback(
+		(oldName: string) => {
+			const nextName = renameDraft.trim();
+			setRenaming(null);
+
+			if (!nextName || nextName === oldName) {
+				return;
+			}
+
+			if (Object.hasOwnProperty.call(configs, nextName)) {
+				lopu({ title: 'Name already taken 🤔', description: `A config called "${nextName}" already exists.`, status: 'warning', duration: 5000 });
+				return;
+			}
+
+			// rebuild preserving order so the renamed config keeps its spot
+			const next: Record<string, unknown> = {};
+			Object.keys(configs).forEach((key) => {
+				next[key === oldName ? nextName : key] = configs[key];
+			});
+
+			setThingtime('settings.editor.configs', next, { namespace: 'editor' });
+			lopu({ title: 'Config renamed ✏️', description: `"${oldName}" is now "${nextName}".`, status: 'success', duration: 4000 });
+		},
+		[renameDraft, configs, setThingtime, lopu]
+	);
+
+	const duplicateConfig = React.useCallback(
+		(name: string) => {
+			let copyName = `${name} copy`;
+			let increment = 1;
+			while (Object.hasOwnProperty.call(configs, copyName) && increment <= 999) {
+				increment++;
+				copyName = `${name} copy ${increment}`;
+			}
+
+			let clone: unknown = configs[name];
+			try {
+				clone = JSON.parse(JSON.stringify(configs[name]));
+			} catch {
+				// layouts are plain JSON; fall back to the original reference
+			}
+
+			setThingtime('settings.editor.configs', { ...configs, [copyName]: clone }, { namespace: 'editor' });
+			lopu({ title: 'Config duplicated 🐑', description: `"${copyName}" sits beside the original.`, status: 'success', duration: 4000 });
+		},
+		[configs, setThingtime, lopu]
+	);
+
+	// the config context menu: same surface as thing menus, config verbs
+	const configMenuModel = React.useMemo<ThingContextMenuModel>(() => {
+		if (!menuConfigName) {
+			return { sections: [] };
+		}
+
+		return {
+			sections: [
+				{
+					id: 'config',
+					actions: [
+						{
+							id: 'open-config',
+							command: 'open-config',
+							label: 'Open layout',
+							icon: '📐',
+							hint: editorMounted ? 'Apply to this editor' : 'Open the editor with this layout'
+						},
+						{ id: 'rename-config', command: 'rename-config', label: 'Rename…', icon: '✏️', hint: 'Edit the config name' },
+						{ id: 'duplicate-config', command: 'duplicate-config', label: 'Duplicate', icon: '🐑' },
+						...(editorMounted
+							? [
+									{
+										id: 'overwrite-config',
+										command: 'overwrite-config',
+										label: 'Overwrite with current layout',
+										icon: '💾',
+										hint: 'Replace the saved windows'
+									}
+							  ]
+							: [])
+					]
+				},
+				{
+					id: 'danger',
+					actions: [{ id: 'delete-config', command: 'delete-config', label: 'Delete', icon: '🗑️', danger: true }]
+				}
+			]
+		};
+	}, [menuConfigName, editorMounted]);
+
+	const onConfigMenuAction = React.useCallback(
+		({ action }: { action: { command?: string } }) => {
+			const name = menuConfigName;
+
+			if (!name) {
+				return;
+			}
+
+			switch (action.command) {
+				case 'open-config':
+					openConfig(name);
+					break;
+				case 'rename-config':
+					startRename(name);
+					break;
+				case 'duplicate-config':
+					duplicateConfig(name);
+					break;
+				case 'overwrite-config':
+					emit({ command: 'overwrite-config', name });
+					break;
+				case 'delete-config':
+					removeConfig(name);
+					break;
+				default:
+					break;
+			}
+		},
+		[menuConfigName, openConfig, startRename, duplicateConfig, emit, removeConfig]
+	);
+
+	const onConfigContextMenu = React.useCallback(
+		(e: React.MouseEvent, name: string) => {
+			e.preventDefault();
+			e.stopPropagation();
+			setMenuConfigName(name);
+			configMenu.openAtPointer(e);
+		},
+		[configMenu.openAtPointer]
 	);
 
 	return (
@@ -237,31 +390,85 @@ export const EditorDrawerSection = (props: { onNavigate?: () => void }) => {
 			)}
 
 			{configNames.length > 0 && <SectionLabel>Configs</SectionLabel>}
-			{configNames.map((name) => (
-				<Flex key={name} {...rowStyles} title={`Open "${name}"`} {...rowA11y(`Open config ${name}`, () => openConfig(name))}>
-					<Text fontSize="10px" flexShrink={0}>
-						📐
-					</Text>
-					<Text fontSize="xs" noOfLines={1} minWidth={0}>
-						{name}
-					</Text>
-					<Flex marginLeft="auto" columnGap="3px">
-						<Flex
-							{...rowActionStyles}
-							color={armedDelete === name ? 'var(--tt-danger, #d6455a)' : rowActionStyles.color}
-							fontWeight={armedDelete === name ? 700 : 400}
-							title={armedDelete === name ? 'Click again to delete' : `Delete "${name}"`}
-							aria-label={armedDelete === name ? `Confirm delete ${name}` : `Delete ${name}`}
-							onClick={(e) => {
-								e.stopPropagation();
-								deleteConfig(name);
+			{configNames.map((name) =>
+				renaming === name ? (
+					<Flex key={name} {...rowStyles} cursor="default">
+						<Text fontSize="10px" flexShrink={0}>
+							📐
+						</Text>
+						<Input
+							autoFocus
+							value={renameDraft}
+							onChange={(e) => setRenameDraft(e.target.value)}
+							onBlur={() => commitRename(name)}
+							onKeyDown={(e) => {
+								if (e.key === 'Enter') {
+									commitRename(name);
+								} else if (e.key === 'Escape') {
+									setRenaming(null);
+								}
 							}}
-						>
-							{armedDelete === name ? 'sure?' : '×'}
+							onClick={(e) => e.stopPropagation()}
+							aria-label={`Rename config ${name}`}
+							variant="unstyled"
+							fontSize="xs"
+							height="20px"
+							paddingX="4px"
+							background="var(--tt-card, #ffffff)"
+							borderRadius="5px"
+							boxShadow="0 0 0 1.5px var(--tt-accent, hotpink)"
+						/>
+					</Flex>
+				) : (
+					<Flex
+						key={name}
+						{...rowStyles}
+						title={`Open "${name}" — right-click for options`}
+						{...rowA11y(`Open config ${name}`, () => openConfig(name))}
+						onContextMenu={(e) => onConfigContextMenu(e, name)}
+					>
+						<Text fontSize="10px" flexShrink={0}>
+							📐
+						</Text>
+						<Text fontSize="xs" noOfLines={1} minWidth={0}>
+							{name}
+						</Text>
+						<Flex marginLeft="auto" columnGap="3px">
+							<Flex
+								{...rowActionStyles}
+								color={armedDelete === name ? 'var(--tt-danger, #d6455a)' : rowActionStyles.color}
+								fontWeight={armedDelete === name ? 700 : 400}
+								title={armedDelete === name ? 'Click again to delete' : `Delete "${name}"`}
+								aria-label={armedDelete === name ? `Confirm delete ${name}` : `Delete ${name}`}
+								onClick={(e) => {
+									e.stopPropagation();
+									deleteConfig(name);
+								}}
+							>
+								{armedDelete === name ? 'sure?' : '×'}
+							</Flex>
 						</Flex>
 					</Flex>
-				</Flex>
-			))}
+				)
+			)}
+
+			{/* config context menu — the Thing Context Menu surface, config verbs */}
+			<ClickAwayListener
+				onClickAway={() => {
+					if (configMenu.open) {
+						configMenu.closeMenu();
+					}
+				}}
+			>
+				<Box>
+					<ThingContextMenu
+						{...configMenu.menuProps}
+						model={configMenuModel}
+						meta={{ path: menuConfigName ? `settings.editor.configs.${menuConfigName}` : 'settings.editor.configs', type: 'layout config' }}
+						onAction={onConfigMenuAction}
+					/>
+				</Box>
+			</ClickAwayListener>
 		</Box>
 	);
 };

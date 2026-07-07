@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Flex, Input } from '@chakra-ui/react';
-import { Columns2, Eye, Paintbrush, PictureInPicture2, Rows2 } from 'lucide-react';
+import { Columns2, Eye, Paintbrush, PictureInPicture, PictureInPicture2, Rows2 } from 'lucide-react';
 
 import { useLopu } from '../Lopu/useLopu';
 import { Thingtime } from './Thingtime';
@@ -13,13 +13,16 @@ import { useThingtime } from './useThingtime';
 // each window carries its own thing path, view/edit mode, and content mode
 // (Aa reader view / {} code view — both are the Thingtime component; {} adds
 // developer chrome). Windows have macOS-style traffic lights (close /
-// minimise / maximise), can pop out into floating windows (drag + resize +
-// dock back), and scroll independently.
+// minimise / maximise), pop out into floating frames (which are themselves
+// sub-splittable trees, draggable, resizable, and dockable back in), and
+// scroll independently. Dragging any window toolbar moves the window: docked
+// windows show a skeleton ghost, and hovering another window previews the
+// half it will dock into (left/right/top/bottom) before dropping.
 //
-// The live layout mirrors into thingtime.settings.editor.live (debounced) so
-// the drawer's Editor section can list and manage windows, and named layouts
-// persist under thingtime.settings.editor.configs. The drawer drives the
-// mounted editor over the shared events bus with 'editor-command' events.
+// The live layout mirrors into thingtime.settings.editor.live (deduped,
+// ignoreUndoRedo) so the drawer's Editor section can list and manage windows,
+// and named layouts persist under thingtime.settings.editor.configs. The
+// drawer drives the mounted editor over the events bus ('editor-command').
 
 // Aa = reader view; {} = code view — both render the Thingtime component,
 // the code view just adds developer chrome (type icons, key counts, [n]
@@ -47,8 +50,10 @@ export type EditorBranch = {
 
 export type EditorNode = EditorLeaf | EditorBranch;
 
+// a popped-out frame: its own sub-splittable tree + viewport geometry
 export type FloatingWindow = {
-	leaf: EditorLeaf;
+	id: string;
+	node: EditorNode;
 	x: number;
 	y: number;
 	width: number;
@@ -61,9 +66,25 @@ export type EditorLayoutSnapshot = {
 	minimised: EditorLeaf[];
 };
 
+export type DropSide = 'left' | 'right' | 'top' | 'bottom';
+
+type DropTarget = { kind: 'leaf'; leafId: string; side: DropSide } | { kind: 'root' } | null;
+
+type WindowDragState = {
+	kind: 'docked' | 'frame';
+	sourceId: string; // leaf id (docked) or frame id (frame)
+	label: string;
+	x: number;
+	y: number;
+	// docked drags activate after a small movement threshold
+	active: boolean;
+};
+
 const MIN_RATIO = 0.12;
 const MAX_RATIO = 0.88;
 const FLOATING_Z_INDEX = 1250;
+const DRAG_GHOST_Z_INDEX = 1350;
+const DRAG_THRESHOLD_PX = 6;
 
 const uid = () => Math.random().toString(36).slice(2, 9);
 
@@ -161,8 +182,44 @@ const collectLeaves = (node: EditorNode | null): EditorLeaf[] => {
 	return node.kind === 'leaf' ? [node] : [...collectLeaves(node.a), ...collectLeaves(node.b)];
 };
 
-// configs live in settings.editor.configs where the {} editor can produce
-// arbitrary shapes — sanitize before anything reaches render state
+const findLeaf = (node: EditorNode | null, id: string): EditorLeaf | null => {
+	return collectLeaves(node).find((leaf) => leaf.id === id) || null;
+};
+
+// replace the target leaf with a split of (dropped node | target), the
+// dropped node taking the chosen half
+const insertAtLeaf = (tree: EditorNode | null, targetId: string, node: EditorNode, side: DropSide): EditorNode | null => {
+	if (!tree) {
+		return node;
+	}
+
+	const walk = (current: EditorNode): EditorNode => {
+		if (current.kind === 'leaf') {
+			if (current.id !== targetId) {
+				return current;
+			}
+
+			const direction = side === 'left' || side === 'right' ? 'row' : 'column';
+			const droppedFirst = side === 'left' || side === 'top';
+
+			return {
+				id: uid(),
+				kind: 'split',
+				direction,
+				ratio: 0.5,
+				a: droppedFirst ? node : current,
+				b: droppedFirst ? current : node
+			};
+		}
+
+		return { ...current, a: walk(current.a), b: walk(current.b) };
+	};
+
+	return walk(tree);
+};
+
+// configs live in settings.editor.configs, which is ordinary thing data —
+// sanitize before anything reaches render state
 const sanitizeLeafData = (raw: any): EditorLeaf | null => {
 	if (!raw || raw.kind !== 'leaf' || typeof raw.path !== 'string' || !raw.path) {
 		return null;
@@ -216,7 +273,7 @@ const sanitizeNodeData = (raw: any): EditorNode | null => {
 	return null;
 };
 
-// keep floating windows reachable: clamp geometry into the viewport
+// keep floating frames reachable: clamp geometry into the viewport
 const clampFloatingGeometry = (win: FloatingWindow): FloatingWindow => ({
 	...win,
 	width: Math.max(300, Math.min(Number(win.width) || 440, window.innerWidth - 24)),
@@ -226,17 +283,21 @@ const clampFloatingGeometry = (win: FloatingWindow): FloatingWindow => ({
 });
 
 const sanitizeFloatingData = (raw: any): FloatingWindow | null => {
-	const leaf = sanitizeLeafData(raw?.leaf);
+	// legacy frames stored a single `leaf`; current frames store a `node` tree
+	const node = sanitizeNodeData(raw?.node ?? raw?.leaf);
 
-	if (!leaf) {
+	if (!node) {
 		return null;
 	}
 
-	return clampFloatingGeometry({ leaf, x: raw.x, y: raw.y, width: raw.width, height: raw.height });
-};
-
-const findLeaf = (node: EditorNode | null, id: string): EditorLeaf | null => {
-	return collectLeaves(node).find((leaf) => leaf.id === id) || null;
+	return clampFloatingGeometry({
+		id: typeof raw?.id === 'string' && raw.id ? raw.id : uid(),
+		node,
+		x: raw?.x,
+		y: raw?.y,
+		width: raw?.width,
+		height: raw?.height
+	});
 };
 
 // pointer gesture helper (pointer-id filtered, cancel/blur teardown) --------
@@ -274,6 +335,8 @@ const startPointerGesture = (e: React.PointerEvent, onMove: (move: PointerEvent)
 
 // window chrome ------------------------------------------------------------
 
+type WindowContext = 'main' | 'frame' | 'maximised';
+
 type WindowActions = {
 	onPatch: (id: string, patch: Partial<EditorLeaf>) => void;
 	onSplit: (id: string, direction: 'row' | 'column') => void;
@@ -282,6 +345,7 @@ type WindowActions = {
 	onMaximise: (id: string) => void;
 	onPopOut: (id: string) => void;
 	onDockIn: (id: string) => void;
+	onStartWindowDrag: (e: React.PointerEvent, leafId: string, label: string) => void;
 	maximisedId: string | null;
 };
 
@@ -393,13 +457,64 @@ const ContentModeToggle = (props: { mode: EditorContentMode; onChange: (mode: Ed
 	</Flex>
 );
 
-const EditorWindow = (props: {
-	leaf: EditorLeaf;
-	actions: WindowActions;
-	floating?: boolean;
-	onToolbarPointerDown?: (e: React.PointerEvent) => void;
-}) => {
-	const { leaf, actions, floating } = props;
+// skeleton window (used by drop previews and the drag ghost)
+const SkeletonWindow = (props: { label?: string }) => (
+	<Flex
+		flexDirection="column"
+		width="100%"
+		height="100%"
+		border="1.5px dashed var(--tt-accent, hotpink)"
+		borderRadius="var(--tt-radius-md, 12px)"
+		background="var(--tt-accent-tint, #fff5fa)"
+		overflow="hidden"
+		sx={{
+			'@keyframes tt-skeleton-pulse': {
+				'0%, 100%': { opacity: 0.45 },
+				'50%': { opacity: 0.9 }
+			}
+		}}
+	>
+		<Flex
+			alignItems="center"
+			columnGap="5px"
+			flexShrink={0}
+			paddingX="9px"
+			paddingY="6px"
+			borderBottom="1px dashed var(--tt-accent, hotpink)"
+			opacity={0.75}
+		>
+			<Box width="8px" height="8px" borderRadius="2.5px" background="var(--tt-rainbow-1, #f34a4a)" />
+			<Box width="8px" height="8px" borderRadius="2.5px" background="var(--tt-rainbow-2, #ffbc48)" />
+			<Box width="8px" height="8px" borderRadius="2.5px" background="var(--tt-rainbow-3, #58ca70)" />
+			{props.label && (
+				<Box
+					marginLeft="4px"
+					fontFamily="var(--tt-font-mono, monospace)"
+					fontSize="9.5px"
+					color="var(--tt-accent, hotpink)"
+					noOfLines={1}
+				>
+					{props.label}
+				</Box>
+			)}
+		</Flex>
+		<Flex flexDirection="column" rowGap="7px" padding="10px">
+			{['72%', '54%', '63%'].map((width, idx) => (
+				<Box
+					key={idx}
+					width={width}
+					height="7px"
+					borderRadius="4px"
+					background="var(--tt-accent, hotpink)"
+					sx={{ animation: `tt-skeleton-pulse 1.2s ease-in-out ${idx * 0.15}s infinite` }}
+				/>
+			))}
+		</Flex>
+	</Flex>
+);
+
+const EditorWindow = (props: { leaf: EditorLeaf; actions: WindowActions; context: WindowContext; dropSide?: DropSide | null }) => {
+	const { leaf, actions, context } = props;
 	const { getThingtime, thingtime } = useThingtime();
 
 	const [pathDraft, setPathDraft] = React.useState(leaf.path);
@@ -422,10 +537,29 @@ const EditorWindow = (props: {
 	}, [getThingtime, leaf.path, thingtime]);
 
 	const maximised = actions.maximisedId === leaf.id;
+	const inFrame = context === 'frame';
+
+	const onToolbarPointerDown = React.useCallback(
+		(e: React.PointerEvent) => {
+			// frames delegate toolbar drags to the frame itself
+			if (context !== 'main') {
+				return;
+			}
+
+			if ((e.target as HTMLElement)?.closest?.('button, input, [contenteditable]')) {
+				return;
+			}
+
+			actions.onStartWindowDrag(e, leaf.id, leaf.path);
+		},
+		[context, actions, leaf.id, leaf.path]
+	);
 
 	return (
 		<Flex
 			className="editor-window"
+			data-tt-editor-leaf={context === 'main' ? leaf.id : undefined}
+			position="relative"
 			flexDirection="column"
 			width="100%"
 			height="100%"
@@ -433,7 +567,8 @@ const EditorWindow = (props: {
 			minHeight={0}
 			background="var(--tt-card, #ffffff)"
 		>
-			{/* window toolbar: traffic lights + path + content mode + controls */}
+			{/* window toolbar: traffic lights + path + content mode + controls.
+			The empty middle is the drag handle for moving the window. */}
 			<Flex
 				className="editor-window-toolbar"
 				alignItems="center"
@@ -443,16 +578,16 @@ const EditorWindow = (props: {
 				paddingY="4px"
 				borderBottom="1px solid var(--tt-border-light, #f0f0f2)"
 				background="var(--tt-surface, #fafafb)"
-				cursor={floating ? 'grab' : undefined}
-				sx={floating ? { touchAction: 'none', '&:active': { cursor: 'grabbing' } } : undefined}
-				onPointerDown={props.onToolbarPointerDown}
+				cursor={context === 'maximised' ? undefined : 'grab'}
+				sx={context === 'maximised' ? undefined : { touchAction: 'none', '&:active': { cursor: 'grabbing' } }}
+				onPointerDown={onToolbarPointerDown}
 			>
 				<TrafficLights
 					onClose={() => actions.onClose(leaf.id)}
 					onMinimise={() => actions.onMinimise(leaf.id)}
-					onGreen={() => (floating ? actions.onDockIn(leaf.id) : actions.onMaximise(leaf.id))}
-					greenGlyph={floating ? '◱' : maximised ? '−' : '+'}
-					greenTitle={floating ? 'Dock back into the layout' : maximised ? 'Restore layout' : 'Maximise window'}
+					onGreen={() => (inFrame ? actions.onDockIn(leaf.id) : actions.onMaximise(leaf.id))}
+					greenGlyph={inFrame ? '◱' : maximised ? '−' : '+'}
+					greenTitle={inFrame ? 'Pop back into the layout' : maximised ? 'Restore layout' : 'Maximise window'}
 				/>
 				<Input
 					value={pathDraft}
@@ -472,11 +607,17 @@ const EditorWindow = (props: {
 					_focus={{ color: 'var(--tt-ink, #16161a)' }}
 					paddingX="6px"
 					height="22px"
-					minWidth={0}
+					// content-sized, not full width — the leftover toolbar space
+					// stays free for dragging the window
+					width={`${Math.min(Math.max(pathDraft.length + 3, 10), 42)}ch`}
+					maxWidth="55%"
+					flexShrink={1}
 					background="transparent"
 					borderRadius="var(--tt-radius-xs, 7px)"
 					_hover={{ background: 'var(--tt-surface-hover, #ececee)' }}
 				/>
+				{/* free drag area; pushes the controls to the right edge */}
+				<Box className="editor-toolbar-drag-space" flex="1" minWidth="10px" alignSelf="stretch" />
 				<ContentModeToggle mode={leaf.contentMode} onChange={(mode) => actions.onPatch(leaf.id, { contentMode: mode })} />
 				<Flex
 					{...toolbarButtonStyles}
@@ -486,16 +627,24 @@ const EditorWindow = (props: {
 				>
 					{leaf.edit ? <Paintbrush size={13} strokeWidth={2} /> : <Eye size={13} strokeWidth={2} />}
 				</Flex>
-				{!floating && (
+				<Flex {...toolbarButtonStyles} title="Split horizontally (side by side)" onClick={() => actions.onSplit(leaf.id, 'row')}>
+					<Columns2 size={13} strokeWidth={2} />
+				</Flex>
+				<Flex {...toolbarButtonStyles} title="Split vertically (stacked)" onClick={() => actions.onSplit(leaf.id, 'column')}>
+					<Rows2 size={13} strokeWidth={2} />
+				</Flex>
+				{!inFrame && context !== 'maximised' && (
+					<Flex {...toolbarButtonStyles} title="Pop out into a floating window" onClick={() => actions.onPopOut(leaf.id)}>
+						<PictureInPicture2 size={13} strokeWidth={2} />
+					</Flex>
+				)}
+				{inFrame && (
 					<>
-						<Flex {...toolbarButtonStyles} title="Split horizontally (side by side)" onClick={() => actions.onSplit(leaf.id, 'row')}>
-							<Columns2 size={13} strokeWidth={2} />
-						</Flex>
-						<Flex {...toolbarButtonStyles} title="Split vertically (stacked)" onClick={() => actions.onSplit(leaf.id, 'column')}>
-							<Rows2 size={13} strokeWidth={2} />
-						</Flex>
-						<Flex {...toolbarButtonStyles} title="Pop out into a floating window" onClick={() => actions.onPopOut(leaf.id)}>
+						<Flex {...toolbarButtonStyles} title="Pop out into its own floating window" onClick={() => actions.onPopOut(leaf.id)}>
 							<PictureInPicture2 size={13} strokeWidth={2} />
+						</Flex>
+						<Flex {...toolbarButtonStyles} title="Pop back into the layout" onClick={() => actions.onDockIn(leaf.id)}>
+							<PictureInPicture size={13} strokeWidth={2} />
 						</Flex>
 					</>
 				)}
@@ -513,14 +662,37 @@ const EditorWindow = (props: {
 					debugId={`EditorWindow-${leaf.id}`}
 				/>
 			</Box>
+
+			{/* drop preview: the half this drag would dock into */}
+			{props.dropSide && (
+				<Box
+					className="editor-drop-preview"
+					position="absolute"
+					pointerEvents="none"
+					zIndex={5}
+					left={props.dropSide === 'right' ? '50%' : 0}
+					top={props.dropSide === 'bottom' ? '50%' : 0}
+					width={props.dropSide === 'left' || props.dropSide === 'right' ? '50%' : '100%'}
+					height={props.dropSide === 'top' || props.dropSide === 'bottom' ? '50%' : '100%'}
+					padding="7px"
+				>
+					<SkeletonWindow />
+				</Box>
+			)}
 		</Flex>
 	);
 };
 
 // recursive renderer -------------------------------------------------------
 
-const EditorNodeView = (props: { node: EditorNode; actions: WindowActions; onRatio: (id: string, ratio: number) => void }) => {
-	const { node, actions, onRatio } = props;
+const EditorNodeView = (props: {
+	node: EditorNode;
+	actions: WindowActions;
+	onRatio: (id: string, ratio: number) => void;
+	context: WindowContext;
+	dropTarget?: DropTarget;
+}) => {
+	const { node, actions, onRatio, context, dropTarget } = props;
 
 	const startDividerDrag = React.useCallback(
 		(e: React.PointerEvent, branch: EditorBranch) => {
@@ -545,7 +717,9 @@ const EditorNodeView = (props: { node: EditorNode; actions: WindowActions; onRat
 	);
 
 	if (node.kind === 'leaf') {
-		return <EditorWindow leaf={node} actions={actions} />;
+		const dropSide = dropTarget && dropTarget.kind === 'leaf' && dropTarget.leafId === node.id ? dropTarget.side : null;
+
+		return <EditorWindow leaf={node} actions={actions} context={context} dropSide={dropSide} />;
 	}
 
 	const isRow = node.direction === 'row';
@@ -553,7 +727,7 @@ const EditorNodeView = (props: { node: EditorNode; actions: WindowActions; onRat
 	return (
 		<Flex flexDirection={isRow ? 'row' : 'column'} width="100%" height="100%" minWidth={0} minHeight={0}>
 			<Box flex={node.ratio} minWidth={0} minHeight={0} overflow="hidden">
-				<EditorNodeView node={node.a} actions={actions} onRatio={onRatio} />
+				<EditorNodeView node={node.a} actions={actions} onRatio={onRatio} context={context} dropTarget={dropTarget} />
 			</Box>
 			<Box
 				className="editor-split-divider"
@@ -568,42 +742,40 @@ const EditorNodeView = (props: { node: EditorNode; actions: WindowActions; onRat
 				onPointerDown={(e) => startDividerDrag(e, node)}
 			/>
 			<Box flex={1 - node.ratio} minWidth={0} minHeight={0} overflow="hidden">
-				<EditorNodeView node={node.b} actions={actions} onRatio={onRatio} />
+				<EditorNodeView node={node.b} actions={actions} onRatio={onRatio} context={context} dropTarget={dropTarget} />
 			</Box>
 		</Flex>
 	);
 };
 
-// floating (popped-out) windows ---------------------------------------------
+// floating (popped-out) frames ----------------------------------------------
 
 const FloatingWindowView = (props: {
 	win: FloatingWindow;
 	actions: WindowActions;
 	onGeometry: (id: string, patch: Partial<FloatingWindow>) => void;
+	onStartFrameDrag: (e: React.PointerEvent, frameId: string) => void;
+	onRatio: (id: string, ratio: number) => void;
+	dragging: boolean;
 }) => {
-	const { win, actions, onGeometry } = props;
+	const { win, actions, onGeometry, onStartFrameDrag, onRatio, dragging } = props;
 
-	const startDrag = React.useCallback(
+	const onFramePointerDown = React.useCallback(
 		(e: React.PointerEvent) => {
-			// keep toolbar controls usable
-			if ((e.target as HTMLElement)?.closest?.('button, input, [contenteditable]')) {
+			// any toolbar inside the frame drags the whole frame (controls stay usable)
+			const target = e.target as HTMLElement | null;
+
+			if (!target?.closest?.('.editor-window-toolbar')) {
+				return;
+			}
+			if (target?.closest?.('button, input, [contenteditable]')) {
 				return;
 			}
 
 			e.preventDefault();
-
-			const startX = e.clientX;
-			const startY = e.clientY;
-			const origin = { x: win.x, y: win.y };
-
-			startPointerGesture(e, (move) => {
-				onGeometry(win.leaf.id, {
-					x: Math.max(0, Math.min(origin.x + move.clientX - startX, window.innerWidth - 120)),
-					y: Math.max(0, Math.min(origin.y + move.clientY - startY, window.innerHeight - 60))
-				});
-			});
+			onStartFrameDrag(e, win.id);
 		},
-		[win.leaf.id, win.x, win.y, onGeometry]
+		[onStartFrameDrag, win.id]
 	);
 
 	const startResize = React.useCallback(
@@ -616,13 +788,13 @@ const FloatingWindowView = (props: {
 			const origin = { width: win.width, height: win.height };
 
 			startPointerGesture(e, (move) => {
-				onGeometry(win.leaf.id, {
+				onGeometry(win.id, {
 					width: Math.max(300, Math.min(origin.width + move.clientX - startX, window.innerWidth - 24)),
 					height: Math.max(220, Math.min(origin.height + move.clientY - startY, window.innerHeight - 24))
 				});
 			});
 		},
-		[win.leaf.id, win.width, win.height, onGeometry]
+		[win.id, win.width, win.height, onGeometry]
 	);
 
 	return (
@@ -640,9 +812,14 @@ const FloatingWindowView = (props: {
 			borderRadius="var(--tt-radius-md, 12px)"
 			boxShadow="var(--tt-shadow-panel, 0 24px 60px -28px rgba(20, 20, 40, 0.28))"
 			overflow="hidden"
+			// while dragged, let hit-testing see the windows underneath
+			pointerEvents={dragging ? 'none' : undefined}
+			opacity={dragging ? 0.85 : 1}
+			transition="opacity 0.15s ease"
+			onPointerDown={onFramePointerDown}
 		>
 			<Box flex="1" minHeight={0}>
-				<EditorWindow leaf={win.leaf} actions={actions} floating onToolbarPointerDown={startDrag} />
+				<EditorNodeView node={win.node} actions={actions} onRatio={onRatio} context="frame" />
 			</Box>
 			<Box
 				aria-hidden
@@ -691,12 +868,24 @@ export const EditorSplit = (props: { initialPath: string }) => {
 	const [minimised, setMinimised] = React.useState<EditorLeaf[]>([]);
 	const [maximisedId, setMaximisedId] = React.useState<string | null>(null);
 
-	// refs so events-bus command handlers never act on stale state
+	// window drag-docking state (ghost + skeleton drop previews)
+	const [windowDrag, setWindowDrag] = React.useState<WindowDragState | null>(null);
+	const [dropTarget, setDropTarget] = React.useState<DropTarget>(null);
+
+	const rootRef = React.useRef<HTMLDivElement | null>(null);
+
+	// refs so gesture/event handlers never act on stale state
 	const layoutRef = React.useRef({ tree, floating, minimised });
 
 	React.useEffect(() => {
 		layoutRef.current = { tree, floating, minimised };
 	}, [tree, floating, minimised]);
+
+	const dropTargetRef = React.useRef<DropTarget>(null);
+
+	React.useEffect(() => {
+		dropTargetRef.current = dropTarget;
+	}, [dropTarget]);
 
 	const configs = thingtime?.settings?.editor?.configs || {};
 	const configsRef = React.useRef(configs);
@@ -710,15 +899,14 @@ export const EditorSplit = (props: { initialPath: string }) => {
 			return;
 		}
 
-		// configs are user-editable data ({} editor writes anywhere) — never
-		// trust their shape
+		// configs are user-editable data — never trust their shape
 		setTree(sanitizeNodeData(layout.tree));
 		setFloating((Array.isArray(layout.floating) ? layout.floating : []).map(sanitizeFloatingData).filter(Boolean) as FloatingWindow[]);
 		setMinimised((Array.isArray(layout.minimised) ? layout.minimised : []).map(sanitizeLeafData).filter(Boolean) as EditorLeaf[]);
 		setMaximisedId(null);
 	}, []);
 
-	// viewport shrinks (window resize) never strand floating windows offscreen
+	// viewport shrinks (window resize) never strand floating frames offscreen
 	React.useEffect(() => {
 		const onResize = () => {
 			setFloating((prev) => prev.map(clampFloatingGeometry));
@@ -761,10 +949,18 @@ export const EditorSplit = (props: { initialPath: string }) => {
 
 	React.useEffect(() => {
 		const write = () => {
+			const summarise = (leaf: EditorLeaf, location: 'docked' | 'floating') => ({
+				id: leaf.id,
+				path: leaf.path,
+				edit: leaf.edit,
+				contentMode: leaf.contentMode,
+				location
+			});
+
 			const payload = {
 				windows: [
-					...collectLeaves(tree).map((leaf) => ({ id: leaf.id, path: leaf.path, edit: leaf.edit, contentMode: leaf.contentMode, location: 'docked' })),
-					...floating.map((win) => ({ id: win.leaf.id, path: win.leaf.path, edit: win.leaf.edit, contentMode: win.leaf.contentMode, location: 'floating' }))
+					...collectLeaves(tree).map((leaf) => summarise(leaf, 'docked')),
+					...floating.flatMap((win) => collectLeaves(win.node).map((leaf) => summarise(leaf, 'floating')))
 				],
 				minimised: minimised.map((leaf) => ({ id: leaf.id, path: leaf.path, edit: leaf.edit, contentMode: leaf.contentMode }))
 			};
@@ -791,25 +987,49 @@ export const EditorSplit = (props: { initialPath: string }) => {
 	}, [tree, floating, minimised]);
 
 	// ------------------------------------------------------------------
-	// window operations (shared by toolbars and drawer commands)
+	// window operations (shared by toolbars, drags, and drawer commands)
 	// ------------------------------------------------------------------
 
-	const patchLeaf = React.useCallback((id: string, patch: Partial<EditorLeaf>) => {
-		setTree((prev) => updateLeaf(prev, id, patch));
-		setFloating((prev) => prev.map((win) => (win.leaf.id === id ? { ...win, leaf: { ...win.leaf, ...patch } } : win)));
-		setMinimised((prev) => prev.map((leaf) => (leaf.id === id ? { ...leaf, ...patch } : leaf)));
+	// apply a tree transform to the main tree and every floating frame;
+	// frames whose tree empties out are removed
+	const mapAllTrees = React.useCallback((fn: (node: EditorNode | null) => EditorNode | null) => {
+		setTree((prev) => fn(prev));
+		setFloating((prev) =>
+			prev
+				.map((win) => ({ ...win, node: fn(win.node) }))
+				.filter((win): win is FloatingWindow => !!win.node)
+		);
 	}, []);
 
-	const splitById = React.useCallback((id: string, direction: 'row' | 'column') => {
-		setTree((prev) => splitLeaf(prev, id, direction));
+	const findLeafEverywhere = React.useCallback((id: string): EditorLeaf | null => {
+		const { tree: currentTree, floating: currentFloating } = layoutRef.current;
+
+		return findLeaf(currentTree, id) || currentFloating.map((win) => findLeaf(win.node, id)).find(Boolean) || null;
 	}, []);
 
-	const closeById = React.useCallback((id: string) => {
-		setTree((prev) => removeLeaf(prev, id));
-		setFloating((prev) => prev.filter((win) => win.leaf.id !== id));
-		setMinimised((prev) => prev.filter((leaf) => leaf.id !== id));
-		setMaximisedId((prev) => (prev === id ? null : prev));
-	}, []);
+	const patchLeaf = React.useCallback(
+		(id: string, patch: Partial<EditorLeaf>) => {
+			mapAllTrees((node) => updateLeaf(node, id, patch));
+			setMinimised((prev) => prev.map((leaf) => (leaf.id === id ? { ...leaf, ...patch } : leaf)));
+		},
+		[mapAllTrees]
+	);
+
+	const splitById = React.useCallback(
+		(id: string, direction: 'row' | 'column') => {
+			mapAllTrees((node) => splitLeaf(node, id, direction));
+		},
+		[mapAllTrees]
+	);
+
+	const closeById = React.useCallback(
+		(id: string) => {
+			mapAllTrees((node) => removeLeaf(node, id));
+			setMinimised((prev) => prev.filter((leaf) => leaf.id !== id));
+			setMaximisedId((prev) => (prev === id ? null : prev));
+		},
+		[mapAllTrees]
+	);
 
 	const dockLeaf = React.useCallback((leaf: EditorLeaf) => {
 		// docking always exits maximise so the arriving window is visible
@@ -823,19 +1043,20 @@ export const EditorSplit = (props: { initialPath: string }) => {
 		});
 	}, []);
 
-	const minimiseById = React.useCallback((id: string) => {
-		const { tree: currentTree, floating: currentFloating } = layoutRef.current;
-		const leaf = findLeaf(currentTree, id) || currentFloating.find((win) => win.leaf.id === id)?.leaf;
+	const minimiseById = React.useCallback(
+		(id: string) => {
+			const leaf = findLeafEverywhere(id);
 
-		if (!leaf) {
-			return;
-		}
+			if (!leaf) {
+				return;
+			}
 
-		setTree((prev) => removeLeaf(prev, id));
-		setFloating((prev) => prev.filter((win) => win.leaf.id !== id));
-		setMinimised((prev) => (prev.some((item) => item.id === id) ? prev : [...prev, leaf]));
-		setMaximisedId((prev) => (prev === id ? null : prev));
-	}, []);
+			mapAllTrees((node) => removeLeaf(node, id));
+			setMinimised((prev) => (prev.some((item) => item.id === id) ? prev : [...prev, leaf]));
+			setMaximisedId((prev) => (prev === id ? null : prev));
+		},
+		[findLeafEverywhere, mapAllTrees]
+	);
 
 	const restoreById = React.useCallback(
 		(id: string) => {
@@ -851,41 +1072,49 @@ export const EditorSplit = (props: { initialPath: string }) => {
 		[dockLeaf]
 	);
 
-	const popOutById = React.useCallback((id: string) => {
-		const leaf = findLeaf(layoutRef.current.tree, id);
-
-		if (!leaf) {
-			return;
-		}
-
-		setTree((prev) => removeLeaf(prev, id));
-		setMaximisedId((prev) => (prev === id ? null : prev));
-		setFloating((prev) => {
-			const offset = 90 + prev.length * 28;
-
-			return [
-				...prev,
-				{
-					leaf,
-					x: Math.max(12, Math.min(offset, window.innerWidth - 560)),
-					y: Math.max(70, Math.min(offset, window.innerHeight - 460)),
-					width: Math.min(540, window.innerWidth - 48),
-					height: Math.min(420, window.innerHeight - 120)
-				}
-			];
-		});
-	}, []);
-
-	const dockInById = React.useCallback(
+	const popOutById = React.useCallback(
 		(id: string) => {
-			const win = layoutRef.current.floating.find((item) => item.leaf.id === id);
+			const leaf = findLeafEverywhere(id);
 
-			if (!win) {
+			if (!leaf) {
 				return;
 			}
 
-			setFloating((prev) => prev.filter((item) => item.leaf.id !== id));
-			dockLeaf(win.leaf);
+			mapAllTrees((node) => removeLeaf(node, id));
+			setMaximisedId((prev) => (prev === id ? null : prev));
+			setFloating((prev) => {
+				const offset = 90 + prev.length * 28;
+
+				return [
+					...prev,
+					clampFloatingGeometry({
+						id: uid(),
+						node: leaf,
+						x: offset,
+						y: offset,
+						width: 540,
+						height: 420
+					})
+				];
+			});
+		},
+		[findLeafEverywhere, mapAllTrees]
+	);
+
+	const dockInById = React.useCallback(
+		(id: string) => {
+			const leaf = layoutRef.current.floating.map((win) => findLeaf(win.node, id)).find(Boolean);
+
+			if (!leaf) {
+				return;
+			}
+
+			setFloating((prev) =>
+				prev
+					.map((win) => ({ ...win, node: removeLeaf(win.node, id) }))
+					.filter((win): win is FloatingWindow => !!win.node)
+			);
+			dockLeaf(leaf);
 		},
 		[dockLeaf]
 	);
@@ -898,6 +1127,192 @@ export const EditorSplit = (props: { initialPath: string }) => {
 		dockLeaf(makeLeaf(props.initialPath, true));
 	}, [dockLeaf, props.initialPath]);
 
+	// ------------------------------------------------------------------
+	// drag-docking: move windows/frames by their toolbars, preview the half
+	// they will land in, drop to dock
+	// ------------------------------------------------------------------
+
+	const resolveDropTarget = React.useCallback((x: number, y: number, excludeLeafId?: string): DropTarget => {
+		const el = document.elementFromPoint(x, y) as HTMLElement | null;
+		const leafEl = el?.closest?.('[data-tt-editor-leaf]') as HTMLElement | null;
+
+		if (leafEl) {
+			const leafId = leafEl.getAttribute('data-tt-editor-leaf') || '';
+
+			if (!leafId || leafId === excludeLeafId) {
+				return null;
+			}
+
+			const rect = leafEl.getBoundingClientRect();
+			const dx = (x - rect.left) / Math.max(rect.width, 1);
+			const dy = (y - rect.top) / Math.max(rect.height, 1);
+			const edges: [DropSide, number][] = [
+				['left', dx],
+				['right', 1 - dx],
+				['top', dy],
+				['bottom', 1 - dy]
+			];
+
+			edges.sort((a, b) => a[1] - b[1]);
+
+			return { kind: 'leaf', leafId, side: edges[0][0] };
+		}
+
+		// an empty workspace accepts drops directly
+		if (!layoutRef.current.tree) {
+			const rootRect = rootRef.current?.getBoundingClientRect();
+
+			if (rootRect && x >= rootRect.left && x <= rootRect.right && y >= rootRect.top && y <= rootRect.bottom) {
+				return { kind: 'root' };
+			}
+		}
+
+		return null;
+	}, []);
+
+	const moveLeafToTarget = React.useCallback(
+		(leafId: string, target: NonNullable<DropTarget>) => {
+			const leaf = findLeafEverywhere(leafId);
+
+			if (!leaf) {
+				return;
+			}
+
+			setTree((prev) => {
+				const removed = removeLeaf(prev, leafId);
+
+				return target.kind === 'root' ? leaf : insertAtLeaf(removed, target.leafId, leaf, target.side);
+			});
+			setFloating((prev) =>
+				prev
+					.map((win) => ({ ...win, node: removeLeaf(win.node, leafId) }))
+					.filter((win): win is FloatingWindow => !!win.node)
+			);
+			setMaximisedId(null);
+		},
+		[findLeafEverywhere]
+	);
+
+	const moveFrameToTarget = React.useCallback((frameId: string, target: NonNullable<DropTarget>) => {
+		const frame = layoutRef.current.floating.find((win) => win.id === frameId);
+
+		if (!frame) {
+			return;
+		}
+
+		setFloating((prev) => prev.filter((win) => win.id !== frameId));
+		setMaximisedId(null);
+		setTree((prev) => (target.kind === 'root' ? frame.node : insertAtLeaf(prev, target.leafId, frame.node, target.side)));
+	}, []);
+
+	const windowDragRef = React.useRef<WindowDragState | null>(null);
+
+	const setWindowDragBoth = React.useCallback((next: WindowDragState | null) => {
+		windowDragRef.current = next;
+		setWindowDrag(next);
+	}, []);
+
+	const completeWindowDrag = React.useCallback(() => {
+		const drag = windowDragRef.current;
+		const target = dropTargetRef.current;
+
+		if (drag && drag.active && target) {
+			if (drag.kind === 'docked') {
+				moveLeafToTarget(drag.sourceId, target);
+			} else {
+				moveFrameToTarget(drag.sourceId, target);
+			}
+		}
+
+		setWindowDragBoth(null);
+		setDropTarget(null);
+	}, [moveLeafToTarget, moveFrameToTarget, setWindowDragBoth]);
+
+	// docked windows: toolbar drag shows a skeleton ghost + drop previews
+	const startWindowDrag = React.useCallback(
+		(e: React.PointerEvent, leafId: string, label: string) => {
+			e.preventDefault();
+
+			const startX = e.clientX;
+			const startY = e.clientY;
+
+			setWindowDragBoth({ kind: 'docked', sourceId: leafId, label, x: startX, y: startY, active: false });
+
+			startPointerGesture(
+				e,
+				(move) => {
+					const current = windowDragRef.current;
+
+					if (!current) {
+						return;
+					}
+
+					const active =
+						current.active || Math.hypot(move.clientX - startX, move.clientY - startY) > DRAG_THRESHOLD_PX;
+
+					setWindowDragBoth({ ...current, x: move.clientX, y: move.clientY, active });
+					setDropTarget(active ? resolveDropTarget(move.clientX, move.clientY, leafId) : null);
+				},
+				completeWindowDrag
+			);
+		},
+		[setWindowDragBoth, resolveDropTarget, completeWindowDrag]
+	);
+
+	// floating frames: the frame follows the pointer and can dock on drop
+	const startFrameDrag = React.useCallback(
+		(e: React.PointerEvent, frameId: string) => {
+			const frame = layoutRef.current.floating.find((win) => win.id === frameId);
+
+			if (!frame) {
+				return;
+			}
+
+			const startX = e.clientX;
+			const startY = e.clientY;
+			const origin = { x: frame.x, y: frame.y };
+
+			setWindowDragBoth({ kind: 'frame', sourceId: frameId, label: '', x: startX, y: startY, active: true });
+
+			startPointerGesture(
+				e,
+				(move) => {
+					setFloating((prev) =>
+						prev.map((win) =>
+							win.id === frameId
+								? {
+										...win,
+										x: Math.max(0, Math.min(origin.x + move.clientX - startX, window.innerWidth - 120)),
+										y: Math.max(0, Math.min(origin.y + move.clientY - startY, window.innerHeight - 60))
+								  }
+								: win
+						)
+					);
+					setWindowDragBoth({ kind: 'frame', sourceId: frameId, label: '', x: move.clientX, y: move.clientY, active: true });
+					setDropTarget(resolveDropTarget(move.clientX, move.clientY));
+				},
+				completeWindowDrag
+			);
+		},
+		[setWindowDragBoth, resolveDropTarget, completeWindowDrag]
+	);
+
+	// ------------------------------------------------------------------
+	// configs
+	// ------------------------------------------------------------------
+
+	// write the current layout into a named config (used by save + overwrite)
+	const writeConfigNamed = React.useCallback((name: string) => {
+		const existing = configsRef.current || {};
+		const { tree: currentTree, floating: currentFloating, minimised: currentMinimised } = layoutRef.current;
+
+		setThingtimeRef.current(
+			'settings.editor.configs',
+			{ ...existing, [name]: { tree: currentTree, floating: currentFloating, minimised: currentMinimised } },
+			{ namespace: 'editor' }
+		);
+	}, []);
+
 	const saveConfig = React.useCallback(() => {
 		const existing = configsRef.current || {};
 		let index = 1;
@@ -907,13 +1322,7 @@ export const EditorSplit = (props: { initialPath: string }) => {
 			name = `Layout ${index}`;
 		}
 
-		const { tree: currentTree, floating: currentFloating, minimised: currentMinimised } = layoutRef.current;
-
-		setThingtimeRef.current(
-			'settings.editor.configs',
-			{ ...existing, [name]: { tree: currentTree, floating: currentFloating, minimised: currentMinimised } },
-			{ namespace: 'editor' }
-		);
+		writeConfigNamed(name);
 
 		lopu({
 			title: `Layout saved 💾`,
@@ -921,7 +1330,25 @@ export const EditorSplit = (props: { initialPath: string }) => {
 			status: 'success',
 			duration: 6000
 		});
-	}, [lopu]);
+	}, [writeConfigNamed, lopu]);
+
+	const overwriteConfig = React.useCallback(
+		(name: string) => {
+			if (!Object.hasOwnProperty.call(configsRef.current || {}, name)) {
+				return;
+			}
+
+			writeConfigNamed(name);
+
+			lopu({
+				title: 'Layout overwritten 💾',
+				description: `"${name}" now holds the current window layout.`,
+				status: 'success',
+				duration: 5000
+			});
+		},
+		[writeConfigNamed, lopu]
+	);
 
 	// drawer → editor commands over the shared events bus
 	React.useEffect(() => {
@@ -943,6 +1370,9 @@ export const EditorSplit = (props: { initialPath: string }) => {
 				case 'save-config':
 					saveConfig();
 					break;
+				case 'overwrite-config':
+					overwriteConfig(event.name);
+					break;
 				case 'apply-config': {
 					const config = configsRef.current?.[event.name];
 					if (config) {
@@ -961,7 +1391,7 @@ export const EditorSplit = (props: { initialPath: string }) => {
 		return () => {
 			subscription?.unsubscribe?.();
 		};
-	}, [events, restoreById, minimiseById, closeById, saveConfig, applyLayout, addWindow]);
+	}, [events, restoreById, minimiseById, closeById, saveConfig, overwriteConfig, applyLayout, addWindow]);
 
 	const actions = React.useMemo<WindowActions>(
 		() => ({
@@ -972,24 +1402,32 @@ export const EditorSplit = (props: { initialPath: string }) => {
 			onMaximise: toggleMaximise,
 			onPopOut: popOutById,
 			onDockIn: dockInById,
+			onStartWindowDrag: startWindowDrag,
 			maximisedId
 		}),
-		[patchLeaf, splitById, closeById, minimiseById, toggleMaximise, popOutById, dockInById, maximisedId]
+		[patchLeaf, splitById, closeById, minimiseById, toggleMaximise, popOutById, dockInById, startWindowDrag, maximisedId]
 	);
 
-	const onRatio = React.useCallback((id: string, ratio: number) => {
-		setTree((prev) => setRatio(prev, id, ratio));
-	}, []);
+	const onRatio = React.useCallback(
+		(id: string, ratio: number) => {
+			mapAllTrees((node) => setRatio(node, id, ratio));
+		},
+		[mapAllTrees]
+	);
 
 	const onFloatingGeometry = React.useCallback((id: string, patch: Partial<FloatingWindow>) => {
-		setFloating((prev) => prev.map((win) => (win.leaf.id === id ? { ...win, ...patch } : win)));
+		setFloating((prev) => prev.map((win) => (win.id === id ? { ...win, ...patch } : win)));
 	}, []);
 
+	// maximise applies to docked windows (frame leaves dock via green instead)
 	const maximisedLeaf = maximisedId ? findLeaf(tree, maximisedId) : null;
+
+	const draggingDocked = windowDrag?.kind === 'docked' && windowDrag.active;
 
 	return (
 		<>
 			<Box
+				ref={rootRef}
 				className="editor-split-root"
 				width="100%"
 				height="calc(100vh - 92px)"
@@ -998,11 +1436,12 @@ export const EditorSplit = (props: { initialPath: string }) => {
 				borderRadius="var(--tt-radius-md, 12px)"
 				overflow="hidden"
 				background="var(--tt-card, #ffffff)"
+				position="relative"
 			>
 				{maximisedLeaf ? (
-					<EditorWindow leaf={maximisedLeaf} actions={actions} />
+					<EditorWindow leaf={maximisedLeaf} actions={actions} context="maximised" />
 				) : tree ? (
-					<EditorNodeView node={tree} actions={actions} onRatio={onRatio} />
+					<EditorNodeView node={tree} actions={actions} onRatio={onRatio} context="main" dropTarget={dropTarget} />
 				) : (
 					<Flex
 						alignItems="center"
@@ -1033,13 +1472,42 @@ export const EditorSplit = (props: { initialPath: string }) => {
 						<Box fontSize="11px" fontFamily="var(--tt-font-mono, monospace)">
 							minimised windows live in the drawer&apos;s Editor section
 						</Box>
+						{/* whole-root drop preview when dragging over an empty workspace */}
+						{dropTarget?.kind === 'root' && (
+							<Box position="absolute" inset={0} pointerEvents="none" padding="10px">
+								<SkeletonWindow label={windowDrag?.label || undefined} />
+							</Box>
+						)}
 					</Flex>
 				)}
 			</Box>
 
 			{floating.map((win) => (
-				<FloatingWindowView key={win.leaf.id} win={win} actions={actions} onGeometry={onFloatingGeometry} />
+				<FloatingWindowView
+					key={win.id}
+					win={win}
+					actions={actions}
+					onGeometry={onFloatingGeometry}
+					onStartFrameDrag={startFrameDrag}
+					onRatio={onRatio}
+					dragging={windowDrag?.kind === 'frame' && windowDrag.sourceId === win.id}
+				/>
 			))}
+
+			{/* skeleton ghost following the pointer while dragging a docked window */}
+			{draggingDocked && (
+				<Box
+					position="fixed"
+					left={`${windowDrag.x + 14}px`}
+					top={`${windowDrag.y + 14}px`}
+					width="150px"
+					height="96px"
+					zIndex={DRAG_GHOST_Z_INDEX}
+					pointerEvents="none"
+				>
+					<SkeletonWindow label={windowDrag.label} />
+				</Box>
+			)}
 		</>
 	);
 };
