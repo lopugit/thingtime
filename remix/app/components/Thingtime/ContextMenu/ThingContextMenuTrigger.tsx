@@ -103,11 +103,7 @@ export const ThingContextMenuTrigger = (props: ThingContextMenuTriggerProps) => 
 	const lopu = useLopu();
 	const menu = useThingContextMenu();
 
-	const [menuUuid, setMenuUuid] = React.useState<string | null>(null);
-
-	React.useEffect(() => {
-		setMenuUuid(Math.random().toString(36).substring(7));
-	}, []);
+	const menuUuid = React.useId();
 
 	const pinnedRef = React.useRef(menu.pinned);
 
