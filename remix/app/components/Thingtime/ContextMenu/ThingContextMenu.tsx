@@ -95,6 +95,9 @@ export const ThingContextMenu = (props: ThingContextMenuProps) => {
 	const [dragOffset, setDragOffset] = React.useState({ x: 0, y: 0 });
 	const [menuWidth, setMenuWidth] = React.useState(width);
 	const [menuHeight, setMenuHeight] = React.useState<number | null>(null);
+	// horizontal correction keeping popovers inside the viewport when the
+	// trigger sits near the right edge
+	const [popoverShift, setPopoverShift] = React.useState(0);
 
 	// fresh open = default drill state, home position, natural size
 	React.useEffect(() => {
@@ -103,10 +106,56 @@ export const ThingContextMenu = (props: ThingContextMenuProps) => {
 			setDragOffset({ x: 0, y: 0 });
 			setMenuWidth(width);
 			setMenuHeight(null);
+			setPopoverShift(0);
 			setLevelTick(0);
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [open]);
+
+	// measure and nudge the popover back inside the viewport; incremental
+	// (rect already includes the current shift) so it converges, and shifted
+	// menus drift home again when the viewport grants slack (window resizes)
+	const reclampPopover = React.useCallback(() => {
+		const surface = surfaceRef.current;
+		if (!surface) {
+			return;
+		}
+
+		const rect = surface.getBoundingClientRect();
+		const maxRight = window.innerWidth - CONTEXT_MENU_MARGIN;
+
+		setPopoverShift((shift) => {
+			const overflowRight = rect.right - maxRight;
+			const overflowLeft = CONTEXT_MENU_MARGIN - rect.left;
+
+			if (overflowRight > 0) {
+				return shift - overflowRight;
+			}
+			if (overflowLeft > 0) {
+				return shift + overflowLeft;
+			}
+			if (shift < 0) {
+				return Math.min(0, shift + (maxRight - rect.right));
+			}
+			if (shift > 0) {
+				return Math.max(0, shift - (rect.left - CONTEXT_MENU_MARGIN));
+			}
+			return shift;
+		});
+	}, []);
+
+	React.useEffect(() => {
+		if (!open || presentation !== 'popover') {
+			return;
+		}
+
+		reclampPopover();
+		window.addEventListener('resize', reclampPopover);
+
+		return () => {
+			window.removeEventListener('resize', reclampPopover);
+		};
+	}, [open, presentation, menuWidth, reclampPopover]);
 
 	const currentLevel = stack.length ? stack[stack.length - 1] : null;
 	const currentSections = currentLevel?.submenu?.sections || model.sections;
@@ -422,7 +471,11 @@ export const ThingContextMenu = (props: ThingContextMenuProps) => {
 			boxShadow="var(--tt-shadow-popover, 0 16px 40px -12px rgba(20, 20, 40, 0.3))"
 			position="relative"
 			overflow="hidden"
-			transform={dragOffset.x || dragOffset.y ? `translate(${dragOffset.x}px, ${dragOffset.y}px)` : undefined}
+			transform={
+				dragOffset.x || dragOffset.y || popoverShift
+					? `translate(${dragOffset.x + popoverShift}px, ${dragOffset.y}px)`
+					: undefined
+			}
 			role="menu"
 			aria-label={meta?.path ? `Options for ${meta.path}` : 'Thing options'}
 			onKeyDown={onSurfaceKeyDown}
