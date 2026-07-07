@@ -775,9 +775,9 @@
     "semantic_hash": "940d343c623400cd75941f9ff394a356"
   },
   "remix/app/api/utils/auth/registerUser.ts": {
-    "mtime": 1783369835.6148305,
-    "ast_hash": "1f55ebd0369c6009b5e5fc1ab0326e50",
-    "semantic_hash": "1f55ebd0369c6009b5e5fc1ab0326e50"
+    "mtime": 1783428323.6040373,
+    "ast_hash": "486a7304472aa617a413d2682646bf08",
+    "semantic_hash": ""
   },
   "remix/app/api/utils/auth/serviceAccounts.ts": {
     "mtime": 1783369835.6150703,
@@ -790,9 +790,9 @@
     "semantic_hash": "beac198714a3203970a2a5e34e480124"
   },
   "remix/app/api/utils/auth/users.ts": {
-    "mtime": 1783369835.6155782,
-    "ast_hash": "55480bb8886bda70c8a728e575bd45b0",
-    "semantic_hash": "55480bb8886bda70c8a728e575bd45b0"
+    "mtime": 1783428293.942909,
+    "ast_hash": "1dfc875a7900ef3a3ecb355e569d1b71",
+    "semantic_hash": ""
   },
   "remix/app/api/utils/crypto/cryptoTools.server.ts": {
     "mtime": 1783369835.6160707,
@@ -1205,9 +1205,9 @@
     "semantic_hash": "f02c507a6951916ccdc99db2ef4ff1cd"
   },
   "remix/app/hooks/useCurrentUser.tsx": {
-    "mtime": 1783369835.653892,
-    "ast_hash": "968208bbb5816b3ccf2b833010801ebd",
-    "semantic_hash": "968208bbb5816b3ccf2b833010801ebd"
+    "mtime": 1783428354.0356014,
+    "ast_hash": "3910b8e454628f4e311677653cbbd281",
+    "semantic_hash": ""
   },
   "remix/app/hooks/useIcons.tsx": {
     "mtime": 1783369835.6541102,
@@ -1345,8 +1345,8 @@
     "semantic_hash": ""
   },
   "remix/app/routes/api/v1/mongodb/raw-results/_raw-results.tsx": {
-    "mtime": 1783370042.3939528,
-    "ast_hash": "dfc2e682f1af490d706fe22a394ce7b9",
+    "mtime": 1783428348.139507,
+    "ast_hash": "e9f7f5c9a0323dbc7c448bcdfe1a2eda",
     "semantic_hash": ""
   },
   "remix/app/routes/api/v1/mongodb/status-data/_status-data.tsx": {
@@ -1600,9 +1600,9 @@
     "semantic_hash": "459fb3a271e5340a04d5f7275dfd1195"
   },
   "README.md": {
-    "mtime": 1783369835.2260127,
-    "ast_hash": "6e44fc1dbe3892e910ee1baae104884f",
-    "semantic_hash": "6e44fc1dbe3892e910ee1baae104884f"
+    "mtime": 1783428357.0001278,
+    "ast_hash": "1053a1a29ab0d11ca00f2cc28d8bfcf9",
+    "semantic_hash": ""
   },
   "VERCEL_DEPLOYMENTS.md": {
     "mtime": 1783369835.2308125,
@@ -2975,8 +2975,8 @@
     "semantic_hash": ""
   },
   "remix/app/api/utils/auth/requireAuthenticatedDevUser.ts": {
-    "mtime": 1783370018.0199683,
-    "ast_hash": "daa8f3539ad4c70c8ffa6cdd38ef6007",
+    "mtime": 1783428336.9193783,
+    "ast_hash": "edc303fff092dd0f0f99b5795e8ada72",
     "semantic_hash": ""
   }
 }

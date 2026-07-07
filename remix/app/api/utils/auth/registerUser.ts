@@ -5,7 +5,7 @@ import { sendVerificationEmail } from './email';
 import { signJwt } from './jwt';
 import { hashPassword } from './passwords';
 import { createSession } from './sessions';
-import { findUserByEmail, findUserByUsername, insertUser, toPublicUser } from './users';
+import { findUserByEmail, findUserByUsername, insertUser, normalizeUserRoles, toPublicUser } from './users';
 import type { PublicUser, UserDoc } from './users';
 
 export type RegisterInput = {
@@ -29,6 +29,7 @@ export type CreateUserAccountInput = {
   displayName?: string | null;
   emailVerified?: boolean;
   accountKind?: 'user' | 'service';
+  roles?: string[];
   emailVerificationRequiredBy?: Date | null;
   storageAllowanceBytes?: number;
   storageUsedBytes?: number;
@@ -69,6 +70,7 @@ export const createUserAccount = async (input: CreateUserAccountInput): Promise<
     createdAt: now,
     updatedAt: now,
     accountKind: input.accountKind ?? 'user',
+    roles: normalizeUserRoles(input.roles),
     meta: input.meta ?? {}
   };
 

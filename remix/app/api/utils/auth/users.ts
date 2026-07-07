@@ -2,6 +2,10 @@ import { ObjectId } from 'mongodb';
 
 import { getUsersCollection } from '../mongodb/collections';
 
+export const THINGTIME_ADMIN_ROLE = 'thingtime.admin';
+
+export type UserRole = string;
+
 // Canonical user document (thingtime.users). See FUNDAMENTALS.md §3 + the user
 // schema in claude-todo/03-auth-login-register.md.
 export type UserDoc = {
@@ -15,6 +19,7 @@ export type UserDoc = {
   createdAt: Date;
   updatedAt: Date;
   accountKind?: 'user' | 'service';
+  roles?: UserRole[];
   emailVerificationRequiredBy?: Date | null;
   storageAllowanceBytes?: number;
   storageUsedBytes?: number;
@@ -31,10 +36,29 @@ export type PublicUser = {
   emailVerified: boolean;
   createdAt: string;
   accountKind: 'user' | 'service';
+  roles: UserRole[];
   emailVerificationRequiredBy: string | null;
   storageAllowanceBytes: number | null;
   storageUsedBytes: number | null;
 };
+
+export const normalizeUserRoles = (roles: unknown): UserRole[] => {
+  if (!Array.isArray(roles)) return [];
+
+  return Array.from(
+    new Set(
+      roles
+        .filter((role): role is string => typeof role === 'string')
+        .map((role) => role.trim())
+        .filter(Boolean)
+    )
+  );
+};
+
+export const userHasRole = (
+  user: Pick<PublicUser, 'roles'> | null | undefined,
+  role: UserRole
+) => !!user && normalizeUserRoles(user.roles).includes(role);
 
 export const toPublicUser = (user: any): PublicUser => ({
   id: String(user._id),
@@ -45,6 +69,7 @@ export const toPublicUser = (user: any): PublicUser => ({
   emailVerified: !!user.emailVerified,
   createdAt: new Date(user.createdAt).toISOString(),
   accountKind: user.accountKind === 'service' ? 'service' : 'user',
+  roles: normalizeUserRoles(user.roles),
   emailVerificationRequiredBy: user.emailVerificationRequiredBy
     ? new Date(user.emailVerificationRequiredBy).toISOString()
     : null,

@@ -1,6 +1,7 @@
 import { Flex, Heading } from '@chakra-ui/react';
 import { useLocation } from 'react-router';
-import { requireAuthenticatedDevUser } from '~/api/utils/auth/requireAuthenticatedDevUser';
+import { requireAuthenticatedDevOrRole } from '~/api/utils/auth/requireAuthenticatedDevUser';
+import { THINGTIME_ADMIN_ROLE } from '~/api/utils/auth/users';
 import { getCollection } from '~/api/utils/mongodb/collection';
 import { getConnection } from '~/api/utils/mongodb/connection';
 import { Submit } from '~/components/API/Submit';
@@ -19,7 +20,9 @@ export default function Index() {
 }
 
 const actionExport = async ({ request }: { request: Request }) => {
-  const access = await requireAuthenticatedDevUser(request, 'MongoDB raw results');
+  const access = await requireAuthenticatedDevOrRole(request, 'MongoDB raw results', {
+    allowedRoles: [THINGTIME_ADMIN_ROLE]
+  });
   if (access.ok === false) return access.response;
 
   // literally just run the setup.ts script

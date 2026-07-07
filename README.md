@@ -96,6 +96,24 @@ placeholder:
 MONGODB_CONNECTION_STRING="mongodb://localhost:27017/thingtime"
 ```
 
+### Admin raw MongoDB access
+
+The raw MongoDB results endpoint (`POST /api/v1/mongodb/raw-results`) remains
+available to signed-in users in local development and Vercel preview
+environments. In production or any other deployment, grant an authenticated user
+the `thingtime.admin` role in MongoDB to allow that endpoint:
+
+```js
+db.users.updateOne(
+  { email: '<admin@example.com>' },
+  { $addToSet: { roles: 'thingtime.admin' } }
+);
+```
+
+Roles are read from the `users.roles` array on each authenticated request.
+Removing the role revokes raw MongoDB endpoint access without issuing a new
+JWT.
+
 ## Auth and Lopu AI
 
 JWT-backed browser sessions prefer ES256 asymmetric signing so other platforms

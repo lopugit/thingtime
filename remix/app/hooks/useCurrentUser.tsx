@@ -9,6 +9,7 @@ export type CurrentUser = {
   emailVerified: boolean;
   createdAt: string;
   accountKind: 'user' | 'service';
+  roles: string[];
   emailVerificationRequiredBy: string | null;
   storageAllowanceBytes: number | null;
   storageUsedBytes: number | null;
