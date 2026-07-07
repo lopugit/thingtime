@@ -3105,8 +3105,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Thingtime/EditorSplit.tsx": {
-    "mtime": 1783457027.3704605,
-    "ast_hash": "f19e17117e79e95065c6f82b537196fa",
+    "mtime": 1783458926.0865324,
+    "ast_hash": "ee1e9dc54d110bd52300f7c8e1995e42",
     "semantic_hash": ""
   },
   ".claude/launch.json": {
@@ -3125,8 +3125,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Nav/Drawer/EditorDrawerSection.tsx": {
-    "mtime": 1783456418.0902162,
-    "ast_hash": "564d2c665962ef59181e2bcb0b7f8c8f",
+    "mtime": 1783459007.10602,
+    "ast_hash": "eccde4627c86d489fcfaf871ab475a52",
     "semantic_hash": ""
   },
   "remix/app/components/Thingtime/jsonValue.ts": {
