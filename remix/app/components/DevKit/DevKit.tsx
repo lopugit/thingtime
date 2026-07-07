@@ -6,11 +6,10 @@ import React from 'react';
 import { Icon } from '../Icon/Icon';
 import { useLopu, useLopuStream } from '../Lopu/useLopu';
 import { useThingtime } from '../Thingtime/useThingtime';
-import { RAINBOW } from '../User/UserCard';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { RAINBOW, RAINBOW_CONIC } from '~/theme/rainbow';
 
-const RAINBOW_CONIC = 'conic-gradient(from 0deg, #47b5e6, #a555e8, #f34a4a, #ffbc48, #58ca70, #47b5e6)';
 const spin = keyframes`from { transform: rotate(0deg) } to { transform: rotate(360deg) }`;
 const DEVKIT_TRIGGER_STORAGE_KEY = 'thingtime.devKit.triggerPosition';
 const DEVKIT_TRIGGER_SIZE = 52;
@@ -106,10 +105,10 @@ const DevAction = ({ onClick, children }: { onClick: () => void; children: React
     width="100%"
     px={3}
     py={2}
-    borderRadius="8px"
+    borderRadius="var(--tt-radius-sm, 9px)"
     fontSize="sm"
-    _hover={{ bg: 'gray.100' }}
-    transition="background 120ms"
+    _hover={{ bg: 'var(--tt-surface-alt, #f5f5f7)' }}
+    transition="background 140ms ease"
   >
     {children}
   </Box>
@@ -367,11 +366,10 @@ export const DevKit = (_props) => {
           top={`${pos.top}px`}
           zIndex={100000}
           width="260px"
-          bg="white"
-          borderRadius="14px"
-          boxShadow="0 12px 38px rgba(0,0,0,0.22)"
-          border="1px solid"
-          borderColor="gray.200"
+          bg="var(--tt-card, #ffffff)"
+          borderRadius="var(--tt-radius-lg, 16px)"
+          boxShadow="var(--tt-shadow-popover, 0 16px 40px -12px rgba(20,20,40,0.3))"
+          border="1px solid var(--tt-border, #ececef)"
           overflow="hidden"
         >
           <Flex
@@ -382,7 +380,7 @@ export const DevKit = (_props) => {
             gap={2}
             px={3}
             py={2}
-            backgroundImage={RAINBOW}
+            background={RAINBOW}
             color="white"
             cursor="grab"
             _active={{ cursor: 'grabbing' }}
@@ -407,18 +405,45 @@ export const DevKit = (_props) => {
           </Flex>
 
           <Flex direction="column" p={2} gap={1}>
-            <Text px={3} pt={1} fontSize="10px" fontWeight="700" color="gray.400" textTransform="uppercase">
+            <Text
+              px={3}
+              pt={1}
+              fontFamily="mono"
+              fontSize="10px"
+              fontWeight="700"
+              letterSpacing="0.12em"
+              color="var(--tt-muted, #9a9aa6)"
+              textTransform="uppercase"
+            >
               Forms
             </Text>
             <DevAction onClick={prefillRegister}>📝 Prefill register form</DevAction>
             <DevAction onClick={prefillLogin}>🔑 Prefill login form</DevAction>
 
-            <Text px={3} pt={2} fontSize="10px" fontWeight="700" color="gray.400" textTransform="uppercase">
+            <Text
+              px={3}
+              pt={2}
+              fontFamily="mono"
+              fontSize="10px"
+              fontWeight="700"
+              letterSpacing="0.12em"
+              color="var(--tt-muted, #9a9aa6)"
+              textTransform="uppercase"
+            >
               Lopu
             </Text>
             <DevAction onClick={pushMusing}>🔮 Push a Lopu musing</DevAction>
 
-            <Text px={3} pt={2} fontSize="10px" fontWeight="700" color="gray.400" textTransform="uppercase">
+            <Text
+              px={3}
+              pt={2}
+              fontFamily="mono"
+              fontSize="10px"
+              fontWeight="700"
+              letterSpacing="0.12em"
+              color="var(--tt-muted, #9a9aa6)"
+              textTransform="uppercase"
+            >
               Account {user ? `· ${user.username}` : ''}
             </Text>
             {user ? (
@@ -469,7 +494,7 @@ export const DevKit = (_props) => {
           width="52px"
           height="52px"
           borderRadius="full"
-          bg="gray.800"
+          bg="var(--tt-ink, #16161a)"
           boxShadow="lg"
           alignItems="center"
           justifyContent="center"
@@ -488,7 +513,7 @@ export const DevKit = (_props) => {
             borderRadius="full"
             border="2px solid"
             borderColor="white"
-            backgroundImage={mounted ? RAINBOW_CONIC : 'none'}
+            background={mounted ? RAINBOW_CONIC : 'none'}
             bg={mounted ? undefined : 'gray.400'}
             boxShadow={mounted ? '0 0 8px rgba(165,85,232,0.7)' : 'none'}
             sx={mounted ? { animation: `${spin} 4s linear infinite` } : undefined}

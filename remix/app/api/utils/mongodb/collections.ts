@@ -30,6 +30,8 @@ export const getThingsCollection = async () => (await getThingtimeDb()).collecti
 export const getEmailVerificationsCollection = async () => (await getThingtimeDb()).collection('emailVerifications');
 export const getLopuMusingRateLimitsCollection = async () =>
   (await getThingtimeDb()).collection('lopuMusingRateLimits');
+export const getThemesCollection = async () => (await getThingtimeDb()).collection('themes');
+export const getWaitlistCollection = async () => (await getThingtimeDb()).collection('waitlist');
 
 // Idempotently create server-side collections + their indexes. createIndex
 // creates the collection if it doesn't exist yet, so this also bootstraps an
@@ -51,7 +53,10 @@ export const ensureIndexes = async () => {
         db.collection('emailVerifications').createIndex({ token: 1 }, { unique: true }),
         db.collection('emailVerifications').createIndex({ userId: 1 }),
         db.collection('lopuMusingRateLimits').createIndex({ key: 1 }, { unique: true }),
-        db.collection('lopuMusingRateLimits').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
+        db.collection('lopuMusingRateLimits').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+        db.collection('themes').createIndex({ shareId: 1 }, { unique: true }),
+        db.collection('themes').createIndex({ ownerId: 1 }),
+        db.collection('waitlist').createIndex({ email: 1 }, { unique: true })
       ]);
     })().catch((err) => {
       // don't cache a failed run — let the next call retry

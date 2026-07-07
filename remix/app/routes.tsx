@@ -11,6 +11,7 @@ import BrandingOld from './routes/branding_old';
 import CryptoPage from './routes/crypto';
 import DocsLayout from './routes/docs/DocsLayout';
 import DocsDesign from './routes/docs/design';
+import DocsDesignSystem from './routes/docs/design-system/index';
 import DocsIndex from './routes/docs/index';
 import Edge from './routes/edge';
 import Index from './routes/_index';
@@ -24,6 +25,7 @@ import Register from './routes/register';
 import StatusPage from './routes/status';
 import ThingtimeUrl from './routes/$';
 import TestsPage from './routes/tests';
+import Themes from './routes/themes';
 import VercelPage from './routes/vercel';
 import Welcome from './routes/welcome';
 
@@ -91,7 +93,8 @@ export const router = createBrowserRouter([
         element: <DocsLayout />,
         children: [
           { index: true, element: <DocsIndex /> },
-          { path: 'design', element: <DocsDesign /> }
+          { path: 'design', element: <DocsDesign /> },
+          { path: 'design-system', element: <DocsDesignSystem /> }
         ]
       },
       { path: 'edge', element: <Edge /> },
@@ -117,6 +120,7 @@ export const router = createBrowserRouter([
         loader: vercelDeploymentsLoader
       },
       { path: 'tests', element: <TestsPage /> },
+      { path: 'themes', element: <Themes /> },
       { path: 'welcome', element: <Welcome />, loader: requireUser('/register') },
       { path: '*', element: <ThingtimeUrl /> }
     ]

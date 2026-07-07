@@ -12,6 +12,7 @@ export type CurrentUser = {
   emailVerificationRequiredBy: string | null;
   storageAllowanceBytes: number | null;
   storageUsedBytes: number | null;
+  activeThemeId: string | null;
 } | null;
 
 // Reads the authenticated user resolved by the root loader (getCurrentUser).

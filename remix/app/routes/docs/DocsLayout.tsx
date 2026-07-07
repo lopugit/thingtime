@@ -13,10 +13,11 @@ import {
   Stack,
   Text
 } from '@chakra-ui/react';
-import { BookOpen, Boxes, ChevronRight, GripVertical, Menu, PanelLeftClose, PanelLeftOpen, Search, X } from 'lucide-react';
+import { BookOpen, Boxes, ChevronRight, Component, GripVertical, Menu, PanelLeftClose, PanelLeftOpen, Search, X } from 'lucide-react';
 import { Link as RouterLink, Outlet, useLocation, useSearchParams } from 'react-router';
 
 import { designEntries, designKindColors, getDesignEntryBySlug } from './designEntries';
+import { designSystemEntries, designSystemStatusColors, getDesignSystemEntryBySlug } from './design-system/entries';
 
 const docsNav = [
   {
@@ -30,6 +31,12 @@ const docsNav = [
     to: '/docs/design',
     icon: Boxes,
     description: 'Standalone previews'
+  },
+  {
+    label: 'Design system',
+    to: '/docs/design-system',
+    icon: Component,
+    description: 'Component library'
   }
 ];
 
@@ -50,7 +57,11 @@ const isActivePath = (pathname: string, to: string) => {
   return pathname === to || pathname.startsWith(`${to}/`);
 };
 
-const isDesignPath = (pathname: string) => pathname.startsWith('/docs/design');
+const isDesignPath = (pathname: string) =>
+  pathname === '/docs/design' || pathname.startsWith('/docs/design/');
+
+const isDesignSystemPath = (pathname: string) =>
+  pathname === '/docs/design-system' || pathname.startsWith('/docs/design-system/');
 
 const clampDrawerWidth = (width: number) =>
   Math.min(MAX_DRAWER_WIDTH, Math.max(MIN_DRAWER_WIDTH, width));
@@ -90,10 +101,17 @@ function DrawerDesignEntryList({ onNavigate }: DrawerDesignEntryListProps) {
   return (
     <Stack minH={0} spacing={3}>
       <Flex align="center" gap={2}>
-        <Text color="gray.500" fontSize="xs" fontWeight="700" textTransform="uppercase">
+        <Text
+          color="var(--tt-muted, #9a9aa6)"
+          fontFamily="mono"
+          fontSize="11px"
+          fontWeight="600"
+          letterSpacing="0.14em"
+          textTransform="uppercase"
+        >
           Mockups
         </Text>
-        <Text color="gray.500" fontFamily="mono" fontSize="xs">
+        <Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="xs">
           {designEntries.length}
         </Text>
       </Flex>
@@ -102,7 +120,7 @@ function DrawerDesignEntryList({ onNavigate }: DrawerDesignEntryListProps) {
         <Icon
           as={Search}
           boxSize={4}
-          color="gray.400"
+          color="var(--tt-faint, #b6b6c0)"
           left={3}
           position="absolute"
           top="50%"
@@ -110,9 +128,9 @@ function DrawerDesignEntryList({ onNavigate }: DrawerDesignEntryListProps) {
           zIndex={1}
         />
         <Input
-          bg="white"
-          borderColor="blackAlpha.200"
-          borderRadius="md"
+          bg="var(--tt-card, #ffffff)"
+          borderColor="var(--tt-border, #ececef)"
+          borderRadius="var(--tt-radius-sm, 9px)"
           data-testid="design-filter-input"
           fontSize="sm"
           onChange={(event) => setQuery(event.target.value)}
@@ -130,17 +148,18 @@ function DrawerDesignEntryList({ onNavigate }: DrawerDesignEntryListProps) {
           return (
             <Box
               key={entry.slug}
-              _hover={{ bg: active ? 'white' : 'blackAlpha.50' }}
+              _hover={{ bg: active ? 'var(--tt-card, #ffffff)' : 'var(--tt-surface-hover, #ececee)' }}
               as="button"
-              bg={active ? 'white' : 'transparent'}
+              bg={active ? 'var(--tt-card, #ffffff)' : 'transparent'}
               borderLeft="3px solid"
-              borderLeftColor={active ? '#008060' : 'transparent'}
+              borderLeftColor={active ? 'var(--tt-docs-accent, #008060)' : 'transparent'}
               cursor="pointer"
               data-testid={`design-entry-${entry.slug}`}
               onClick={() => selectEntry(entry.slug)}
               px={3}
               py={2}
               textAlign="left"
+              transition="background 140ms ease, border-color 140ms ease"
               type="button"
               w="100%"
             >
@@ -158,17 +177,99 @@ function DrawerDesignEntryList({ onNavigate }: DrawerDesignEntryListProps) {
                   {entry.title}
                 </Text>
               </Flex>
-              <Text color="gray.500" fontFamily="mono" fontSize="xs" isTruncated mt={0.5}>
+              <Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="xs" isTruncated mt={0.5}>
                 {entry.slug}
               </Text>
             </Box>
           );
         })}
         {filteredEntries.length === 0 ? (
-          <Text color="gray.500" fontSize="xs" px={3} py={2}>
+          <Text color="var(--tt-muted, #9a9aa6)" fontSize="xs" px={3} py={2}>
             No mockups match “{query}”.
           </Text>
         ) : null}
+      </Stack>
+    </Stack>
+  );
+}
+
+type DrawerDesignSystemListProps = {
+  onNavigate?: () => void;
+};
+
+function DrawerDesignSystemList({ onNavigate }: DrawerDesignSystemListProps) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedEntry =
+    getDesignSystemEntryBySlug(searchParams.get('component')) || designSystemEntries[0];
+
+  const selectEntry = (slug: string) => {
+    const next = new URLSearchParams(searchParams);
+    next.set('component', slug);
+    setSearchParams(next);
+    onNavigate?.();
+  };
+
+  return (
+    <Stack minH={0} spacing={3}>
+      <Flex align="center" gap={2}>
+        <Text
+          color="var(--tt-muted, #9a9aa6)"
+          fontFamily="mono"
+          fontSize="11px"
+          fontWeight="600"
+          letterSpacing="0.14em"
+          textTransform="uppercase"
+        >
+          Components
+        </Text>
+        <Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="xs">
+          {designSystemEntries.length}
+        </Text>
+      </Flex>
+
+      <Stack spacing={0.5}>
+        {designSystemEntries.map((entry) => {
+          const active = entry.slug === selectedEntry.slug;
+          const statusColor = designSystemStatusColors[entry.status];
+
+          return (
+            <Box
+              key={entry.slug}
+              _hover={{ bg: active ? 'var(--tt-card, #ffffff)' : 'var(--tt-surface-hover, #ececee)' }}
+              as="button"
+              bg={active ? 'var(--tt-card, #ffffff)' : 'transparent'}
+              borderLeft="3px solid"
+              borderLeftColor={active ? 'var(--tt-docs-accent, #008060)' : 'transparent'}
+              cursor="pointer"
+              data-testid={`design-system-entry-${entry.slug}`}
+              onClick={() => selectEntry(entry.slug)}
+              px={3}
+              py={2}
+              textAlign="left"
+              transition="background 140ms ease, border-color 140ms ease"
+              type="button"
+              w="100%"
+            >
+              <Flex align="center" gap={2} minW={0}>
+                <Badge
+                  bg={statusColor.bg}
+                  borderRadius="sm"
+                  color={statusColor.color}
+                  flexShrink={0}
+                  px={1.5}
+                >
+                  {entry.status}
+                </Badge>
+                <Text fontSize="sm" fontWeight={active ? '700' : '600'} isTruncated minW={0}>
+                  {entry.title}
+                </Text>
+              </Flex>
+              <Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="xs" isTruncated mt={0.5}>
+                {entry.slug}
+              </Text>
+            </Box>
+          );
+        })}
       </Stack>
     </Stack>
   );
@@ -187,10 +288,22 @@ function DocsDrawerContent({ closeTestId, onClose, pathname, showClose = false }
       <Flex align="center" gap={3} justify="space-between">
         <Box minW={0}>
           <Flex align="center" gap={2} mb={2}>
-            <Text fontSize="xs" fontWeight="700" letterSpacing="0" textTransform="uppercase" color="gray.500">
+            <Text
+              color="var(--tt-muted, #9a9aa6)"
+              fontFamily="mono"
+              fontSize="11px"
+              fontWeight="600"
+              letterSpacing="0.14em"
+              textTransform="uppercase"
+            >
               Thingtime
             </Text>
-            <Badge bg="#d7f5df" color="#0f5132" borderRadius="sm" px={2}>
+            <Badge
+              bg="var(--tt-docs-accent-soft, #d7f5df)"
+              borderRadius="sm"
+              color="var(--tt-docs-accent-ink, #0f5132)"
+              px={2}
+            >
               Docs
             </Badge>
           </Flex>
@@ -222,15 +335,16 @@ function DocsDrawerContent({ closeTestId, onClose, pathname, showClose = false }
               key={item.to}
               as={RouterLink}
               to={item.to}
-              _hover={{ textDecoration: 'none', bg: 'blackAlpha.50' }}
-              bg={active ? 'white' : 'transparent'}
+              _hover={{ textDecoration: 'none', bg: 'var(--tt-surface-hover, #ececee)' }}
+              bg={active ? 'var(--tt-card, #ffffff)' : 'transparent'}
               borderLeft="3px solid"
-              borderColor={active ? '#008060' : 'transparent'}
-              color={active ? '#111827' : 'gray.700'}
+              borderColor={active ? 'var(--tt-docs-accent, #008060)' : 'transparent'}
+              color={active ? 'var(--tt-ink, #16161a)' : 'var(--tt-text, #5a5a66)'}
               display="block"
               onClick={onClose}
               px={3}
               py={2.5}
+              transition="background 140ms ease, color 140ms ease"
             >
               <Flex align="center" gap={3} minW={0}>
                 <Icon as={item.icon} boxSize={4} flexShrink={0} />
@@ -238,7 +352,7 @@ function DocsDrawerContent({ closeTestId, onClose, pathname, showClose = false }
                   <Text fontSize="sm" fontWeight="650" lineHeight="1.25">
                     {item.label}
                   </Text>
-                  <Text fontSize="xs" color="gray.500" lineHeight="1.25">
+                  <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)" lineHeight="1.25">
                     {item.description}
                   </Text>
                 </Box>
@@ -250,6 +364,7 @@ function DocsDrawerContent({ closeTestId, onClose, pathname, showClose = false }
       </Stack>
 
       {isDesignPath(pathname) ? <DrawerDesignEntryList onNavigate={onClose} /> : null}
+      {isDesignSystemPath(pathname) ? <DrawerDesignSystemList onNavigate={onClose} /> : null}
     </Stack>
   );
 }
@@ -296,8 +411,8 @@ export default function DocsLayout() {
 
   return (
     <Box
-      bg="#f7f7f5"
-      color="#1f2933"
+      bg="var(--tt-surface, #f7f7f5)"
+      color="var(--tt-ink, #1f2933)"
       minH="100vh"
       overflowX="hidden"
       pb={{ base: '96px', lg: 0 }}
@@ -320,7 +435,7 @@ export default function DocsLayout() {
           <Box
             as="aside"
             borderRight="1px solid"
-            borderColor="blackAlpha.200"
+            borderColor="var(--tt-border, #ececef)"
             display={{ base: 'none', lg: 'block' }}
             minW={0}
             pb={0}
@@ -386,9 +501,9 @@ export default function DocsLayout() {
 
       <Box
         as="aside"
-        bg="#f7f7f5"
+        bg="var(--tt-surface, #f7f7f5)"
         bottom={0}
-        boxShadow="0 20px 80px rgba(15, 23, 42, 0.22)"
+        boxShadow="var(--tt-shadow-panel, 0 24px 60px -28px rgba(20, 20, 40, 0.28))"
         data-testid="docs-mobile-drawer"
         display={{ base: mobileDrawerOpen ? 'block' : 'none', lg: 'none' }}
         left={0}
@@ -408,12 +523,12 @@ export default function DocsLayout() {
 
       <Flex
         align="center"
-        bg="white"
+        bg="var(--tt-card, #ffffff)"
         border="1px solid"
-        borderColor="blackAlpha.200"
+        borderColor="var(--tt-border, #ececef)"
         borderRadius="999px"
         bottom="max(14px, env(safe-area-inset-bottom))"
-        boxShadow="0 16px 48px rgba(15, 23, 42, 0.16)"
+        boxShadow="var(--tt-shadow-popover, 0 16px 40px -12px rgba(20, 20, 40, 0.3))"
         display={{ base: 'flex', lg: 'none' }}
         gap={1}
         left={3}
@@ -444,14 +559,15 @@ export default function DocsLayout() {
               as={RouterLink}
               to={item.to}
               _hover={{ textDecoration: 'none' }}
-              bg={active ? '#111827' : 'transparent'}
+              bg={active ? 'var(--tt-ink, #111827)' : 'transparent'}
               borderRadius="999px"
-              color={active ? 'white' : 'gray.700'}
+              color={active ? 'white' : 'var(--tt-text, #5a5a66)'}
               flexShrink={0}
               fontSize="xs"
               fontWeight="700"
               px={2.5}
               py={2}
+              transition="background 140ms ease, color 140ms ease"
               whiteSpace="nowrap"
             >
               {item.label}

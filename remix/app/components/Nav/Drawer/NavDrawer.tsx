@@ -148,11 +148,11 @@ export const NavDrawer = (props: NavDrawerProps) => {
 			left={direction === 'left' ? 0 : undefined}
 			right={direction === 'right' ? 0 : undefined}
 			width={drawerWidthCss(shownWidth)}
-			background="white"
+			background="var(--tt-card, #ffffff)"
 			borderRight={direction === 'left' ? '1px solid' : undefined}
 			borderLeft={direction === 'right' ? '1px solid' : undefined}
-			borderColor="greys.light"
-			boxShadow={open ? '0px 0px 24px rgba(0,0,0,0.08)' : 'none'}
+			borderColor="var(--tt-border, #ececef)"
+			boxShadow={open ? 'var(--tt-shadow-panel, 0 24px 60px -28px rgba(20, 20, 40, 0.28))' : 'none'}
 			transform={open ? 'translateX(0)' : closedTransform}
 			// while closed the off-screen panel must not be focusable/tabbable;
 			// the visibility delay lets the slide-out animation finish first

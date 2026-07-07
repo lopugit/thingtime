@@ -320,6 +320,86 @@ export const apiTests: ApiTestDefinition[] = [
     path: '/api/v1/vercel/deployments?limit=5',
     timeoutMs: 20000,
     expect: expectStatus([200, 404], 'Vercel deployments route responded with enabled or intentionally hidden status.')
+  },
+  {
+    id: 'themes-list-guarded',
+    name: 'Themes list requires auth',
+    description: 'Listing saved themes without a session is rejected with a 401 error shape.',
+    group: 'themes',
+    method: 'GET',
+    path: '/api/v1/themes',
+    expect: expectJson([200, 401], (body) => body?.ok === true || (body?.ok === false && typeof body?.error === 'string'), 'Themes list returned themes for a session or a 401 error shape anonymously.')
+  },
+  {
+    id: 'themes-save-guarded',
+    name: 'Theme save requires auth',
+    description: 'Saving a theme without a session is rejected (401) or accepted for a logged-in tester (ok shape).',
+    group: 'themes',
+    method: 'POST',
+    path: '/api/v1/themes',
+    mutates: true,
+    body: { name: 'API test theme', visibility: 'private', theme: { colors: { accent: '#ff7e00' } } },
+    expect: expectJson(
+      [200, 401],
+      (body) => (body?.ok === true && body?.theme?.id) || (body?.ok === false && typeof body?.error === 'string'),
+      'Theme save either persisted (session) or was rejected with an error shape (anonymous).'
+    )
+  },
+  {
+    id: 'themes-shared-not-found',
+    name: 'Shared theme unknown id',
+    description: 'Unknown share ids resolve to a 404 error shape without leaking private themes.',
+    group: 'themes',
+    method: 'GET',
+    path: '/api/v1/themes/shared?id=not-a-real-theme-id',
+    expect: expectJson([404], (body) => body?.ok === false && typeof body?.error === 'string', 'Unknown shared theme id returned a 404 error shape.')
+  },
+  {
+    id: 'themes-active-guarded',
+    name: 'Active theme requires auth',
+    description: 'Setting the active theme without a session is rejected with a 401 error shape.',
+    group: 'themes',
+    method: 'POST',
+    path: '/api/v1/themes/active',
+    mutates: true,
+    body: { themeId: null },
+    expect: expectJson(
+      [200, 401],
+      (body) => body?.ok === true || (body?.ok === false && typeof body?.error === 'string'),
+      'Active theme endpoint enforced auth (or cleared for a session).'
+    )
+  },
+  {
+    id: 'themes-delete-guarded',
+    name: 'Theme delete requires auth',
+    description: 'Deleting a theme without a session (or an unknown id) is rejected with an error shape.',
+    group: 'themes',
+    method: 'POST',
+    path: '/api/v1/themes/delete',
+    mutates: true,
+    body: { id: 'not-a-real-theme-id' },
+    expect: expectJson([401, 404], (body) => body?.ok === false && typeof body?.error === 'string', 'Theme delete was rejected with an error shape.')
+  },
+  {
+    id: 'waitlist-invalid-email',
+    name: 'Waitlist rejects invalid email',
+    description: 'The waitlist validates email addresses before writing anything.',
+    group: 'waitlist',
+    method: 'POST',
+    path: '/api/v1/waitlist',
+    body: { email: 'not-an-email' },
+    expect: expectJson([400], (body) => body?.ok === false && typeof body?.error === 'string', 'Invalid email rejected with a 400 error shape.')
+  },
+  {
+    id: 'waitlist-join',
+    name: 'Waitlist join',
+    description: 'Joining the waitlist through the real endpoint succeeds (idempotent fixed test email, no collection growth on re-runs).',
+    group: 'waitlist',
+    method: 'POST',
+    path: '/api/v1/waitlist',
+    mutates: true,
+    body: { email: 'tt-api-test-waitlist@example.invalid' },
+    expect: expectJson([200, 429], (body) => body?.ok === true || typeof body?.error === 'string', 'Waitlist join succeeded (or was rate-limited with an error shape).')
   }
 ];
 

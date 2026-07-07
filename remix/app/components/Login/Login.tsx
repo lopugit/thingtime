@@ -3,12 +3,30 @@ import { Flex, Button, FormControl, Input, Spinner, InputGroup, InputRightElemen
 import { Link as RouterLink, useNavigate } from 'react-router';
 
 import { useApi } from '~/hooks/useApi';
+import { RAINBOW, RAINBOW_TEXT } from '~/theme/rainbow';
 import { useThingtime } from '../Thingtime/useThingtime';
 import { useLopu } from '../Lopu/useLopu';
 import { Icon } from '../Icon/Icon';
 import { Thingtime } from '../Thingtime/Thingtime';
 
 // import bcrypt from 'bcrypt';
+
+// Prism input look: soft alt-surface fill, hairline focus border (the theme
+// suppresses focus rings globally, so focus reads as a subtle bg shift).
+const inputSx = {
+	background: 'var(--tt-surface-alt, #f5f5f7)',
+	border: '1px solid transparent',
+	borderRadius: 'var(--tt-radius-sm, 9px)',
+	outline: 'none',
+	transition: 'background 150ms ease, border-color 150ms ease',
+	'&::placeholder': {
+		color: 'var(--tt-muted, #9a9aa6)'
+	},
+	'&:focus': {
+		background: 'var(--tt-card, #ffffff)',
+		borderColor: 'var(--tt-border, #ececef)'
+	}
+};
 
 export const Login = (props) => {
 	const { thingtime } = useThingtime();
@@ -103,19 +121,15 @@ export const Login = (props) => {
 					{persistent}
 					<Spinner
 						sx={{
-							'@keyframes moving-rainbow': {
-								'0%': { backgroundPosition: '0 0' },
-								'100%': { backgroundPosition: 'calc(100px + 400%) 0' }
-							},
 							'@keyframes rotate': {
 								'0%': { transform: 'rotate(0deg)' },
 								'100%': { transform: 'rotate(360deg)' }
 							},
-							animation: 'rotate 2s linear infinite, moving-rainbow 40s infinite linear'
+							animation: 'rotate 2s linear infinite, var(--tt-rainbow-anim, moving-rainbow 5s linear infinite)'
 						}}
-						bgGradient="linear-gradient(to right, #47b5e6, #a555e8, #f34a4a, #ffbc48, #58ca70, #47b5e6)"
+						background={RAINBOW}
 						// rainbow gradient border
-						backgroundSize="calc(100px + 400%)"
+						backgroundSize="calc(100px + 200%)"
 						color="transparent"
 						size="xl"
 					/>
@@ -127,19 +141,50 @@ export const Login = (props) => {
 	return (
 		<>
 			<form onSubmit={handleLogin}>
-				<Flex flexDirection="column" gap={4} width="255px" maxWidth="100%">
+				<Flex
+					flexDirection="column"
+					gap={4}
+					width="340px"
+					maxWidth="100%"
+					background="var(--tt-card, #ffffff)"
+					border="1px solid var(--tt-border, #ececef)"
+					borderRadius="var(--tt-radius-xl, 20px)"
+					boxShadow="var(--tt-shadow-panel, 0 24px 60px -28px rgba(20, 20, 40, 0.28))"
+					padding={9}
+				>
+					<Flex flexDirection="column" gap={1} paddingBottom={1}>
+						<Box
+							fontFamily="mono"
+							fontSize="11px"
+							fontWeight="600"
+							letterSpacing="0.14em"
+							textTransform="uppercase"
+							color="var(--tt-muted, #9a9aa6)"
+						>
+							Thingtime · Login
+						</Box>
+						<Box
+							as="h1"
+							fontFamily="heading"
+							fontSize="2xl"
+							fontWeight="700"
+							letterSpacing="-0.02em"
+							background={RAINBOW_TEXT}
+							backgroundSize="calc(100px + 200%)"
+							sx={{
+								WebkitBackgroundClip: 'text',
+								backgroundClip: 'text',
+								WebkitTextFillColor: 'transparent',
+								animation: 'var(--tt-rainbow-anim, moving-rainbow 5s linear infinite)'
+							}}
+						>
+							Welcome back ✨
+						</Box>
+					</Flex>
+
 					<FormControl>
 						<Input
-							sx={{
-								'&::placeholder': {
-									color: 'greys.dark'
-									// color: "white",
-								}
-							}}
-							background="grey"
-							border="none"
-							borderRadius="5px"
-							outline="none"
+							sx={inputSx}
 							onChange={(e) => setUsername(e?.target?.value)}
 							placeholder="💌 Username"
 							type="username"
@@ -150,16 +195,7 @@ export const Login = (props) => {
 					<FormControl>
 						<InputGroup>
 							<Input
-								sx={{
-									'&::placeholder': {
-										color: 'greys.dark'
-										// color: "white",
-									}
-								}}
-								background="grey"
-								border="none"
-								borderRadius="5px"
-								outline="none"
+								sx={inputSx}
 								onChange={(e) => setPassword(e?.target?.value)}
 								placeholder="Password 🔑"
 								type={passwordVisible ? 'text' : 'password'}
@@ -176,23 +212,19 @@ export const Login = (props) => {
 
 					<Button
 						sx={{
-							'@keyframes moving-rainbow': {
-								'0%': { backgroundPosition: '0 0' },
-								'100%': { backgroundPosition: 'calc(100px + 400%) 0' }
-							},
-							animation: 'moving-rainbow 40s infinite linear'
+							animation: 'var(--tt-rainbow-anim, moving-rainbow 5s linear infinite)'
 						}}
 						type="submit"
-						display="Flex"
-						justifyContent="flex-start"
+						display="flex"
+						justifyContent="center"
 						width="100%"
 						color="white"
-						fontWeight="bold"
-						background="chakras.violet"
-						backgroundSize="calc(100px + 400%)"
+						fontFamily="heading"
+						fontWeight="600"
 						// Add rainbow animation background gradient right to left
-						bgGradient="linear-gradient(to right, #47b5e6, #a555e8, #f34a4a, #ffbc48, #58ca70, #47b5e6)"
-						borderRadius={6}
+						background={RAINBOW}
+						backgroundSize="calc(100px + 200%)"
+						borderRadius="var(--tt-radius-md, 12px)"
 						_hover={{
 							opacity: 0.9
 						}}
@@ -205,7 +237,12 @@ export const Login = (props) => {
 					</Button>
 
 					<RouterLink to="/register">
-						<Box fontSize="xs" opacity={0.7}>
+						<Box
+							fontSize="xs"
+							color="var(--tt-muted, #9a9aa6)"
+							transition="color 150ms ease"
+							_hover={{ color: 'var(--tt-text, #5a5a66)' }}
+						>
 							Need an account? Register
 						</Box>
 					</RouterLink>

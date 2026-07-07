@@ -34,6 +34,7 @@ export type PublicUser = {
   emailVerificationRequiredBy: string | null;
   storageAllowanceBytes: number | null;
   storageUsedBytes: number | null;
+  activeThemeId: string | null;
 };
 
 export const toPublicUser = (user: any): PublicUser => ({
@@ -49,7 +50,8 @@ export const toPublicUser = (user: any): PublicUser => ({
     ? new Date(user.emailVerificationRequiredBy).toISOString()
     : null,
   storageAllowanceBytes: typeof user.storageAllowanceBytes === 'number' ? user.storageAllowanceBytes : null,
-  storageUsedBytes: typeof user.storageUsedBytes === 'number' ? user.storageUsedBytes : null
+  storageUsedBytes: typeof user.storageUsedBytes === 'number' ? user.storageUsedBytes : null,
+  activeThemeId: typeof user.meta?.activeThemeId === 'string' ? user.meta.activeThemeId : null
 });
 
 export const findUserByUsername = async (username: string) =>
@@ -73,5 +75,14 @@ export const markEmailVerified = async (userId: string) => {
   await (await getUsersCollection()).updateOne(
     { _id: new ObjectId(userId) },
     { $set: { emailVerified: true, updatedAt: new Date() } }
+  );
+};
+
+// Set (or clear, with null) the user's active theme shareId in meta.
+export const setUserActiveTheme = async (userId: string, themeShareId: string | null) => {
+  if (!ObjectId.isValid(userId)) return;
+  await (await getUsersCollection()).updateOne(
+    { _id: new ObjectId(userId) },
+    { $set: { 'meta.activeThemeId': themeShareId, updatedAt: new Date() } }
   );
 };

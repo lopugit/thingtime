@@ -23,7 +23,7 @@ import { CommanderV2 } from '../Commander/CommanderV2';
 import { Icon } from '../Icon/Icon';
 import { MagicInput } from '../MagicInput/MagicInput';
 import { Safe } from '../Safety/Safe';
-import { SettingsMenu } from './SettingsMenu';
+import { ThingContextMenuTrigger } from './ContextMenu/ThingContextMenuTrigger';
 import { useThingtime } from './useThingtime';
 
 import { useThings } from '~/hooks/useThings';
@@ -554,6 +554,18 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 						<AtomicWrapper paddingLeft={pl} className="thingtime-loading">
 							<button
 								type="button"
+								style={{
+									background: 'var(--tt-card, #ffffff)',
+									border: '1px dashed var(--tt-faint, #b6b6c0)',
+									borderRadius: 'var(--tt-radius-sm, 9px)',
+									color: 'var(--tt-muted, #9a9aa6)',
+									cursor: 'pointer',
+									fontFamily: 'var(--tt-font-body, inherit)',
+									fontSize: '12.5px',
+									fontWeight: 600,
+									padding: '5px 11px',
+									transition: 'all 150ms ease'
+								}}
 								onClick={() => {
 									setLoadTargetCount((prev) =>
 										Math.min(Math.max(prev, visibleKeyCount) + (thingtime?.settings?.keyGateLength || 5), keysToUse.length)
@@ -746,6 +758,18 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	);
 
 	const deleteValue = React.useCallback(() => {
+		// array parents stay arrays — spreading them into an object would
+		// corrupt the parent shape
+		if (parent instanceof Array) {
+			const index = Number(path);
+			const clone = parent.filter((item, idx) => idx !== index);
+
+			setThingtime(parentPath, clone, {
+				namespace: 'user'
+			});
+			return;
+		}
+
 		// use parent path to clone parent object but without this key
 		const clone = { ...parent };
 
@@ -981,6 +1005,8 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 						chakras={{
 							maxWidth: '100%',
 							paddingLeft: props?.pathPl || pl,
+							color: 'var(--tt-muted, #9a9aa6)',
+							fontFamily: 'mono',
 							fontSize: '12px',
 							wordBreak: 'break-all'
 						}}
@@ -1131,12 +1157,14 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 										}
 									}}
 								>
-									<Box fontSize="12px" lineHeight="1">
+									<Box color="var(--tt-faint, #b6b6c0)" fontSize="12px" lineHeight="1">
 										{isCollapsed ? '▸' : '▾'}
 									</Box>
 								</Flex>
 							)}
-							<Flex className="thingPathDom-raw">{pathDom}</Flex>
+							<Flex className="thingPathDom-raw" data-tt-zone="key">
+								{pathDom}
+							</Flex>
 							{editMode && (
 								<Box
 									className="thingTypeIcon"
@@ -1151,16 +1179,23 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 							)}
 							{pathDom && (
 								<Flex className="thingPathDom" flexDirection="row" columnGap={1} marginTop={-1} paddingLeft={1}>
-									<SettingsMenu
+									<ThingContextMenuTrigger
+										editMode={editMode}
 										setEditMode={setEditMode}
 										transition="all 0.2s ease-in-out"
 										opacity={showContextIcon ? 1 : 0}
 										uuid={uuid}
 										fullPath={fullPath}
+										path={path}
+										parent={parent}
+										parentPath={parentPath}
+										thing={thing}
+										thingType={type}
 										readonly={!editMode}
 										onType={onChangeType}
 										onDelete={deleteValue}
-									></SettingsMenu>
+										contextTargetRef={thingtimeRef}
+									></ThingContextMenuTrigger>
 								</Flex>
 							)}
 						</Flex>
@@ -1170,8 +1205,10 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 				{/* this value will show in a few cases */}
 				{/* Basic types like String, Number, etc.. non-object values */}
 				{/* it will also show if the Thing has standard React children */}
+				{/* overflowX auto (not scroll): scroll reserves a permanent
+				scrollbar track that renders as a stray line under every value */}
 				{!loading && !thingtimeChildren && atomicValue && (
-					<Box className="atomicValue" width={'100%'} overflowX={'scroll'}>
+					<Box className="atomicValue" data-tt-zone="value" width={'100%'} overflowX={'auto'}>
 						{atomicValue}
 					</Box>
 				)}
@@ -1205,9 +1242,11 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 									bottom="100%"
 									left={0}
 									display={showFullPathContext ? 'flex' : 'none'}
-									fontSize="sm"
-									background="greys.light"
-									borderRadius={6}
+									color="var(--tt-muted, #9a9aa6)"
+									fontFamily="mono"
+									fontSize="12px"
+									background="var(--tt-surface-alt, #f5f5f7)"
+									borderRadius="var(--tt-radius-xs, 7px)"
 									pointerEvents="none"
 									paddingX={3}
 									paddingY={1}
@@ -1217,7 +1256,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 								<Icon
 									_focus={{
 										outline: 'none !important',
-										textShadow: '0px 0px 10px green'
+										textShadow: '0px 0px 10px var(--tt-positive, #2f8f4f)'
 									}}
 									onKeyDown={(e) => {
 										if (e?.key === 'Enter') {
@@ -1236,16 +1275,19 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 										e?.nativeEvent?.stopImmediatePropagation();
 									}}
 								>
-									<SettingsMenu
+									<ThingContextMenuTrigger
+										variant="new-child"
+										editMode={editMode}
 										setEditMode={setEditMode}
 										transition="all 0.2s ease-in-out"
 										opacity={showNewContextIcon ? 1 : 0}
 										uuid={uuid}
 										iconSize={10}
 										fullPath={fullPath}
+										thingType={type}
 										readonly={!editMode}
-										onType={addNewChild}
-									></SettingsMenu>
+										onAddChild={addNewChild}
+									></ThingContextMenuTrigger>
 								</Flex>
 
 								{/* <Icon size={7} name="plus"></Icon>
@@ -1256,7 +1298,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 				)}
 				{!loading && thingtimeChildren && isCollapsed && (
 					<Box className="thingtimeChildrenCollapsed" paddingLeft={multiplyPl(2)} paddingY={2} opacity={0.6}>
-						<Flex fontSize="12px" userSelect="none">
+						<Flex color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="12px" userSelect="none">
 							{thing instanceof Array ? `[…] ${thing.length}` : `{…} ${keys?.length || 0}`}
 						</Flex>
 					</Box>

@@ -11,7 +11,10 @@ export type DesignEntry = {
 export const DESIGN_ASSET_BASE = '/docs/design-bundles';
 
 export const designKindColors: Record<DesignEntryKind, { bg: string; color: string }> = {
-  Launch: { bg: '#d7f5df', color: '#0f5132' },
+  Launch: {
+    bg: 'var(--tt-docs-accent-soft, #d7f5df)',
+    color: 'var(--tt-docs-accent-ink, #0f5132)'
+  },
   Explorer: { bg: '#e8e9ff', color: '#2f356b' },
   App: { bg: '#fef3c7', color: '#78350f' },
   Direction: { bg: '#eef2f7', color: '#374151' }

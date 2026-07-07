@@ -18,6 +18,30 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- 🌈 **2026 design refactor**: adopted the Claude Design mockups
+  (`docs/design/claude-design-mockup-v1` product UI + `claude-design-mockup-v2-fable`
+  landing) across the whole app. New runtime theming system — every design token
+  is a `--tt-*` CSS custom property (`app/theme/tokens.ts`, `ThemeHost`), with
+  presets (Thingtime/Fable/Prism/Midnight), a Theming section in the settings
+  modal, and a full Theme Studio at `/themes` (edit colours/fonts/general feel,
+  save + share themes by link). New API: `/api/v1/themes` (+`/shared`, `/active`,
+  `/delete`) and `/api/v1/waitlist`, with `themes`/`waitlist` collections and
+  browser API tests. The front page is rebuilt to match the v2-fable landing
+  (hero + waitlist, live `Content` demo card, use cases, ecosystem, dark
+  developers section, back-the-launch, FAQ, confetti). Fonts (Space Grotesk /
+  Hanken Grotesk / JetBrains Mono) now load from `index.html`, with a pre-paint
+  theme snapshot script to avoid theme flash. Design token spec lives in
+  [`docs/design/DESIGN_LANGUAGE.md`](../docs/design/DESIGN_LANGUAGE.md); PR
+  details in
+  [`PRs/32-claude-vigilant-moser--design-refactor-theming.md`](../PRs/32-claude-vigilant-moser--design-refactor-theming.md).
+  — _Claude (AI), 2026-07-07_
+- Dev runbook: local dev ports resolve through the shared
+  `remix/scripts/worktree-ports.cjs` module (worktree-derived defaults;
+  `TT_WEB_PORT`, `TT_HMR_PORT`, `TT_API_PORT` overrides) so secondary
+  checkouts/worktrees run beside the canonical 9999/10000 pair. Originally
+  shipped on this branch as `THINGTIME_VITE_PORT`/`THINGTIME_VITE_HMR_PORT`/
+  `THINGTIME_API_PROXY_TARGET`; unified with main's system on merge.
+  — _Claude (AI), 2026-07-07_
 - Added `thingtime.settings.visual.bottomPadding`, which drives the native iOS
   footer bottom padding and the derived DevKit floating trigger bottom offset.
   Details in

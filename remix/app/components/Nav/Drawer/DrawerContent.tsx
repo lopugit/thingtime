@@ -1,9 +1,11 @@
 import React from 'react';
 import { Box, Center, Flex, Text } from '@chakra-ui/react';
-import { useLocation, useNavigate } from 'react-router';
+import { useLocation, useMatches, useNavigate } from 'react-router';
 import { ChevronDown, Search } from 'lucide-react';
 
 import { Icon } from '../../Icon/Icon';
+import { RAINBOW } from '~/theme/rainbow';
+import { ROOT_THING_PATH, buildThingModeUrl, parseThingMode, parseThingPath } from '../../Thingtime/thingRoute';
 import { ReorderableList } from './ReorderableList';
 import { applyDrawerOrdering, buildDrawerSubSections, drawerMenuItems, filterDrawerItemsByAuth } from './drawerMenu';
 import { useDrawer, useIsMobileViewport } from './useDrawer';
@@ -31,11 +33,7 @@ export const UserAvatarCircle = (props: { size?: string; fontSize?: string }) =>
 			width={props?.size || '28px'}
 			height={props?.size || '28px'}
 			borderRadius="999px"
-			background={
-				user
-					? 'linear-gradient(120deg, #f5576c 0%, #ffc371 30%, #66BB6A 60%, #42A5F5 80%, #AB47BC 100%)'
-					: 'greys.light'
-			}
+			background={user ? RAINBOW : 'var(--tt-surface-alt, #f5f5f7)'}
 			color="white"
 			fontSize={props?.fontSize || 'xs'}
 			fontWeight={700}
@@ -67,6 +65,15 @@ export const DrawerContent = (props: DrawerContentProps) => {
 	const isMobile = useIsMobileViewport();
 	const navigate = useNavigate();
 	const { pathname } = useLocation();
+	const matches = useMatches();
+
+	// true when the current page is the catch-all thing route (it's the only
+	// route with a '*' param), so mode switches know whether a thing path is
+	// on screen to preserve
+	const onThingRoute = React.useMemo(() => {
+		const lastMatch = matches[matches.length - 1];
+		return typeof lastMatch?.params?.['*'] === 'string';
+	}, [matches]);
 
 	const [showAllTop, setShowAllTop] = React.useState(false);
 
@@ -185,12 +192,21 @@ export const DrawerContent = (props: DrawerContentProps) => {
 
 	const onSubItemClick = React.useCallback(
 		(item) => {
-			if (item.to) {
+			if (item.mode) {
+				// mode items switch the mode for the thing path currently on
+				// screen instead of opening the mode prefix as a thing path;
+				// clicking the active non-view mode toggles back to view
+				const currentMode = onThingRoute ? parseThingMode(pathname) : null;
+				const thingPath = onThingRoute ? parseThingPath(pathname) : ROOT_THING_PATH;
+				const nextMode = item.mode === currentMode && item.mode !== 'view' ? 'view' : item.mode;
+
+				navigate(buildThingModeUrl(nextMode, thingPath));
+			} else if (item.to) {
 				navigate(item.to);
 			}
 			onNavigate?.();
 		},
-		[navigate, onNavigate]
+		[navigate, onNavigate, onThingRoute, pathname]
 	);
 
 	const onTopReorder = React.useCallback(
@@ -255,9 +271,10 @@ export const DrawerContent = (props: DrawerContentProps) => {
 				marginX={2}
 				paddingX={3}
 				paddingY="7px"
-				borderRadius="8px"
-				background={selected ? 'greys.light' : 'transparent'}
-				_hover={{ background: selected ? 'greys.light' : 'greys.lightt' }}
+				borderRadius="var(--tt-radius-sm, 9px)"
+				background={selected ? 'var(--tt-surface-alt, #f5f5f7)' : 'transparent'}
+				_hover={{ background: selected ? 'var(--tt-surface-alt, #f5f5f7)' : 'var(--tt-surface-hover, #ececee)' }}
+				transition="background 0.15s ease"
 				cursor="pointer"
 				onClick={() => onTopItemClick(item)}
 			>
@@ -270,7 +287,7 @@ export const DrawerContent = (props: DrawerContentProps) => {
 	};
 
 	const subRow = (item) => {
-		const active = isActivePath(item.to);
+		const active = item.mode ? onThingRoute && parseThingMode(pathname) === item.mode : isActivePath(item.to);
 
 		return (
 			<Flex
@@ -280,9 +297,10 @@ export const DrawerContent = (props: DrawerContentProps) => {
 				paddingX={3}
 				paddingY="6px"
 				paddingLeft={item.group ? 6 : 3}
-				borderRadius="8px"
-				background={active ? 'greys.light' : 'transparent'}
-				_hover={{ background: active ? 'greys.light' : 'greys.lightt' }}
+				borderRadius="var(--tt-radius-sm, 9px)"
+				background={active ? 'var(--tt-surface-alt, #f5f5f7)' : 'transparent'}
+				_hover={{ background: active ? 'var(--tt-surface-alt, #f5f5f7)' : 'var(--tt-surface-hover, #ececee)' }}
+				transition="background 0.15s ease"
 				cursor="pointer"
 				onClick={() => onSubItemClick(item)}
 			>
@@ -321,9 +339,10 @@ export const DrawerContent = (props: DrawerContentProps) => {
 					marginLeft="auto"
 					width="30px"
 					height="30px"
-					borderRadius="8px"
+					borderRadius="var(--tt-radius-sm, 9px)"
 					opacity={0.6}
-					_hover={{ opacity: 1, background: 'greys.lightt' }}
+					_hover={{ opacity: 1, background: 'var(--tt-surface-hover, #ececee)' }}
+					transition="background 0.15s ease, opacity 0.15s ease"
 					cursor="pointer"
 					title="Search"
 					onClick={onSearchClick}
@@ -352,9 +371,10 @@ export const DrawerContent = (props: DrawerContentProps) => {
 							marginX={2}
 							paddingX={3}
 							paddingY="5px"
-							borderRadius="8px"
+							borderRadius="var(--tt-radius-sm, 9px)"
 							opacity={0.45}
-							_hover={{ opacity: 0.85, background: 'greys.lightt' }}
+							_hover={{ opacity: 0.85, background: 'var(--tt-surface-hover, #ececee)' }}
+							transition="background 0.15s ease, opacity 0.15s ease"
 							cursor="pointer"
 							onClick={() => setShowAllTop((prev) => !prev)}
 						>
@@ -373,11 +393,12 @@ export const DrawerContent = (props: DrawerContentProps) => {
 							paddingX={5}
 							paddingTop={5}
 							paddingBottom={1}
+							fontFamily="mono"
 							fontSize="10px"
 							fontWeight={600}
 							letterSpacing="0.08em"
 							textTransform="uppercase"
-							opacity={0.45}
+							color="var(--tt-muted, #9a9aa6)"
 						>
 							{selectedTopItem?.label}
 						</Text>
@@ -407,9 +428,10 @@ export const DrawerContent = (props: DrawerContentProps) => {
 											marginX={2}
 											paddingX={3}
 											paddingY="5px"
-											borderRadius="8px"
+											borderRadius="var(--tt-radius-sm, 9px)"
 											opacity={0.7}
-											_hover={{ opacity: 1, background: 'greys.lightt' }}
+											_hover={{ opacity: 1, background: 'var(--tt-surface-hover, #ececee)' }}
+											transition="background 0.15s ease, opacity 0.15s ease"
 											cursor="pointer"
 											onClick={() => toggleGroupCollapsed(groupKey)}
 										>
@@ -421,7 +443,14 @@ export const DrawerContent = (props: DrawerContentProps) => {
 											>
 												<ChevronDown size={12} strokeWidth={2} />
 											</Box>
-											<Text fontSize="xs" fontWeight={600}>
+											<Text
+												fontFamily="mono"
+												fontSize="10px"
+												fontWeight={600}
+												letterSpacing="0.08em"
+												textTransform="uppercase"
+												color="var(--tt-muted, #9a9aa6)"
+											>
 												{section.group}
 											</Text>
 										</Flex>
@@ -451,9 +480,10 @@ export const DrawerContent = (props: DrawerContentProps) => {
 				paddingX={3}
 				paddingY="10px"
 				borderTop="1px solid"
-				borderColor="greys.light"
-				background="white"
-				_hover={{ background: 'greys.lightt' }}
+				borderColor="var(--tt-border, #ececef)"
+				background="var(--tt-card, #ffffff)"
+				_hover={{ background: 'var(--tt-surface-hover, #ececee)' }}
+				transition="background 0.15s ease"
 				cursor="pointer"
 				onClick={onAvatarClick}
 			>

@@ -131,10 +131,11 @@ export function DesignWorkspace({ testIdPrefix }: DesignWorkspaceProps) {
     >
       <Flex
         align="center"
-        bg="white"
+        bg="var(--tt-card, #ffffff)"
         border="1px solid"
-        borderColor="blackAlpha.200"
-        borderRadius="md"
+        borderColor="var(--tt-border, #ececef)"
+        borderRadius="var(--tt-radius-md, 12px)"
+        boxShadow="var(--tt-shadow-card, 0 1px 2px rgba(0, 0, 0, 0.05))"
         columnGap={1}
         flexShrink={0}
         px={2}
@@ -161,7 +162,7 @@ export function DesignWorkspace({ testIdPrefix }: DesignWorkspaceProps) {
             data-testid={`${testIdPrefix}-entry-switcher`}
             maxW={{ base: '100%', sm: '360px' }}
             px={2}
-            rightIcon={<Icon as={ChevronDown} boxSize={4} color="gray.500" />}
+            rightIcon={<Icon as={ChevronDown} boxSize={4} color="var(--tt-muted, #9a9aa6)" />}
             size="sm"
             type="button"
             variant="ghost"
@@ -191,7 +192,7 @@ export function DesignWorkspace({ testIdPrefix }: DesignWorkspaceProps) {
                 <MenuItem
                   key={entry.slug}
                   alignItems="flex-start"
-                  bg={active ? 'blackAlpha.50' : 'transparent'}
+                  bg={active ? 'var(--tt-surface-alt, #f5f5f7)' : 'transparent'}
                   data-testid={`${testIdPrefix}-switch-${entry.slug}`}
                   gap={2}
                   onClick={() => selectEntry(entry.slug)}
@@ -210,7 +211,7 @@ export function DesignWorkspace({ testIdPrefix }: DesignWorkspaceProps) {
                     <Text fontSize="sm" fontWeight={active ? '700' : '600'}>
                       {entry.title}
                     </Text>
-                    <Text color="gray.500" fontFamily="mono" fontSize="xs" isTruncated>
+                    <Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="xs" isTruncated>
                       {entry.slug}
                     </Text>
                   </Box>
@@ -230,7 +231,7 @@ export function DesignWorkspace({ testIdPrefix }: DesignWorkspaceProps) {
             type="button"
             variant="ghost"
           />
-          <Text color="gray.500" fontFamily="mono" fontSize="xs" whiteSpace="nowrap">
+          <Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="xs" whiteSpace="nowrap">
             {selectedIndex + 1} / {designEntries.length}
           </Text>
           <IconButton
@@ -245,7 +246,7 @@ export function DesignWorkspace({ testIdPrefix }: DesignWorkspaceProps) {
         </Flex>
 
         <Text
-          color="gray.500"
+          color="var(--tt-muted, #9a9aa6)"
           display={{ base: 'none', xl: 'block' }}
           flex="1"
           fontFamily="mono"
@@ -284,14 +285,14 @@ export function DesignWorkspace({ testIdPrefix }: DesignWorkspaceProps) {
                   </Badge>
                   <Text fontWeight="700">{selectedEntry.title}</Text>
                 </Flex>
-                <Text color="gray.700" lineHeight="1.6">
+                <Text color="var(--tt-text, #5a5a66)" lineHeight="1.6">
                   {selectedEntry.summary}
                 </Text>
-                <Text color="gray.600" fontSize="xs" lineHeight="1.6">
+                <Text color="var(--tt-muted, #9a9aa6)" fontSize="xs" lineHeight="1.6">
                   {selectedEntry.notes}
                 </Text>
                 <ChakraLink
-                  color="#008060"
+                  color="var(--tt-docs-accent, #008060)"
                   fontFamily="mono"
                   fontSize="xs"
                   href={previewSrc}
@@ -307,8 +308,8 @@ export function DesignWorkspace({ testIdPrefix }: DesignWorkspaceProps) {
 
         <Flex
           align="center"
-          bg="blackAlpha.50"
-          borderRadius="md"
+          bg="var(--tt-surface-alt, #f5f5f7)"
+          borderRadius="11px"
           flexShrink={0}
           gap={0.5}
           p={0.5}
@@ -317,12 +318,19 @@ export function DesignWorkspace({ testIdPrefix }: DesignWorkspaceProps) {
             <Tooltip key={preset.key} label={preset.label}>
               <IconButton
                 aria-label={preset.label}
-                bg={frameWidthKey === preset.key ? 'white' : 'transparent'}
-                boxShadow={frameWidthKey === preset.key ? 'sm' : 'none'}
+                bg={frameWidthKey === preset.key ? 'var(--tt-card, #ffffff)' : 'transparent'}
+                borderRadius="var(--tt-radius-sm, 9px)"
+                boxShadow={
+                  frameWidthKey === preset.key
+                    ? '0 0 0 1px var(--tt-border, #ececef), var(--tt-shadow-card, 0 1px 2px rgba(0, 0, 0, 0.05))'
+                    : 'none'
+                }
+                color={frameWidthKey === preset.key ? 'var(--tt-ink, #16161a)' : 'var(--tt-muted, #9a9aa6)'}
                 data-testid={`${testIdPrefix}-frame-width-${preset.key}`}
                 icon={<Icon as={preset.icon} boxSize={4} />}
                 onClick={() => setFrameWidthKey(preset.key)}
                 size="sm"
+                transition="background 140ms ease, box-shadow 140ms ease, color 140ms ease"
                 type="button"
                 variant="ghost"
               />
@@ -355,8 +363,9 @@ export function DesignWorkspace({ testIdPrefix }: DesignWorkspaceProps) {
           />
         </Tooltip>
         <Button
-          _hover={{ bg: '#006e52' }}
-          bg="#008060"
+          _hover={{ bg: 'var(--tt-docs-accent-hover, #006e52)' }}
+          bg="var(--tt-docs-accent, #008060)"
+          borderRadius="var(--tt-radius-sm, 9px)"
           color="white"
           data-testid={`${testIdPrefix}-preview-fullscreen`}
           flexShrink={0}
@@ -370,10 +379,10 @@ export function DesignWorkspace({ testIdPrefix }: DesignWorkspaceProps) {
       </Flex>
 
       <Flex
-        bg="#e8ecf1"
+        bg="var(--tt-surface-alt, #e8ecf1)"
         border="1px solid"
-        borderColor="blackAlpha.200"
-        borderRadius="md"
+        borderColor="var(--tt-border, #ececef)"
+        borderRadius="var(--tt-radius-lg, 16px)"
         flex="1"
         justify="center"
         minH={0}
@@ -382,11 +391,11 @@ export function DesignWorkspace({ testIdPrefix }: DesignWorkspaceProps) {
         py={frameWidth ? { base: 2, md: 4 } : 0}
       >
         <Box
-          bg="white"
+          bg="var(--tt-card, #ffffff)"
           border={frameWidth ? '1px solid' : 'none'}
-          borderColor="blackAlpha.200"
-          borderRadius={frameWidth ? 'md' : 'none'}
-          boxShadow={frameWidth ? '0 12px 40px rgba(15, 23, 42, 0.12)' : 'none'}
+          borderColor="var(--tt-border, #ececef)"
+          borderRadius={frameWidth ? 'var(--tt-radius-md, 12px)' : 'none'}
+          boxShadow={frameWidth ? 'var(--tt-shadow-panel, 0 24px 60px -28px rgba(20, 20, 40, 0.28))' : 'none'}
           h="100%"
           maxW="100%"
           overflow="hidden"
@@ -403,7 +412,7 @@ export function DesignWorkspace({ testIdPrefix }: DesignWorkspaceProps) {
 
       {expandedPreview ? (
         <Box
-          bg="white"
+          bg="var(--tt-card, #ffffff)"
           h="100vh"
           inset={0}
           overflow="hidden"
@@ -413,9 +422,9 @@ export function DesignWorkspace({ testIdPrefix }: DesignWorkspaceProps) {
         >
           <Flex
             align="center"
-            bg="white"
+            bg="var(--tt-card, #ffffff)"
             borderBottom="1px solid"
-            borderColor="blackAlpha.200"
+            borderColor="var(--tt-border, #ececef)"
             gap={3}
             h="56px"
             left={0}
@@ -435,7 +444,7 @@ export function DesignWorkspace({ testIdPrefix }: DesignWorkspaceProps) {
             >
               Back / close preview
             </Button>
-            <Text color="gray.600" flex="1" fontSize="sm" fontWeight="650" isTruncated>
+            <Text color="var(--tt-text, #5a5a66)" flex="1" fontSize="sm" fontWeight="650" isTruncated>
               {selectedEntry.title}
             </Text>
             <IconButton

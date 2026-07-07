@@ -4,7 +4,13 @@ import type { MongoConnectionStatus } from '~/api/utils/mongodb/status';
 
 const Row = ({ label, value }: { label: string; value: React.ReactNode }) => (
   <Flex justifyContent="space-between" columnGap={6} py={2}>
-    <Text color="gray.500" fontSize="sm">
+    <Text
+      color="var(--tt-muted, #718096)"
+      fontFamily="mono"
+      fontSize="11px"
+      letterSpacing="0.12em"
+      textTransform="uppercase"
+    >
       {label}
     </Text>
     <Text fontSize="sm" fontFamily="mono" textAlign="right" wordBreak="break-word">
@@ -28,7 +34,7 @@ export default function MongoStatusPage() {
             width="14px"
             height="14px"
             borderRadius="full"
-            backgroundColor={connected ? 'green.400' : 'red.400'}
+            backgroundColor={connected ? 'var(--tt-positive, #48BB78)' : 'var(--tt-danger, #FC8181)'}
             flexShrink={0}
           />
           <Heading size="lg">MongoDB Connection Status</Heading>
@@ -45,7 +51,7 @@ export default function MongoStatusPage() {
           {connected ? 'Connected' : 'Disconnected'}
         </Badge>
 
-        <Text color="gray.500" fontSize="sm">
+        <Text color="var(--tt-muted, #718096)" fontSize="sm">
           This page checks the live MongoDB connection through the Thingtime API
           (<Text as="span" fontFamily="mono">/api/v1/mongodb/status</Text>).
         </Text>
@@ -62,7 +68,7 @@ export default function MongoStatusPage() {
             <Row
               label="Error"
               value={
-                <Text as="span" color="red.400" fontSize="xs">
+                <Text as="span" color="var(--tt-danger, #FC8181)" fontSize="xs">
                   {status.error}
                 </Text>
               }

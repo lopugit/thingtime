@@ -36,6 +36,10 @@ Single Mongo database `thingtime` with these collections:
 | `users`    | user accounts (hashed passwords + signup metadata) |
 | `sessions` | server-side sessions / JWT records (for revocation) |
 | `things`   | the actual Thingtime data |
+| `emailVerifications` | pending email-verification tokens |
+| `lopuMusingRateLimits` | rate-limit windows for Lopu musings |
+| `themes`   | saved user themes (shareable by `shareId`; see `/api/v1/themes`) |
+| `waitlist` | launch waitlist emails (`/api/v1/waitlist`) |
 
 (Replaces the earlier inconsistent `auth.users` vs `thingtime.things` split.)
 

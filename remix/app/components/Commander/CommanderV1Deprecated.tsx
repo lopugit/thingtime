@@ -421,15 +421,15 @@ export const CommanderV1 = (props: commanderArgs) => {
 					ref={inputRef}
 					sx={{
 						'&::placeholder': {
-							color: 'greys.dark'
+							color: 'var(--tt-muted, #9a9aa6)'
 							// color: "white",
 						}
 					}}
 					width="100%"
 					height="100%"
-					background="grey"
+					background="var(--tt-surface-alt, #f5f5f7)"
 					border="none"
-					borderRadius="5px"
+					borderRadius="var(--tt-radius-xs, 7px)"
 					outline="none"
 					onChange={onInputChange}
 					onFocus={openCommander}
@@ -487,7 +487,7 @@ export const CommanderV1 = (props: commanderArgs) => {
 								maxWidth={[mobileVW, '100%']}
 								height="100%"
 								padding="1px"
-								borderRadius="6px"
+								borderRadius="var(--tt-radius-sm, 9px)"
 								pointerEvents="all"
 								outline="none"
 							>
@@ -537,8 +537,9 @@ export const CommanderV1 = (props: commanderArgs) => {
 							maxWidth="100%"
 							maxHeight="300px"
 							marginBottom={3}
-							background="grey"
-							borderRadius="12px"
+							background="var(--tt-surface-alt, #f5f5f7)"
+							borderRadius="var(--tt-radius-md, 12px)"
+							boxShadow="var(--tt-shadow-popover, 0 16px 40px -12px rgba(20, 20, 40, 0.3))"
 							pointerEvents="all"
 							id="commander-suggestions"
 							onMouseLeave={() => setHoveredSuggestion(null)}
@@ -548,14 +549,18 @@ export const CommanderV1 = (props: commanderArgs) => {
 								return (
 									<Flex
 										key={i}
-										background={hoveredSuggestion === i ? 'greys.lightt' : null}
+										background={hoveredSuggestion === i ? 'var(--tt-surface-hover, #ececee)' : null}
 										_hover={{
-											background: 'greys.lightt'
+											background: 'var(--tt-surface-hover, #ececee)'
 										}}
 										cursor="pointer"
+										fontFamily="mono"
+										fontSize="13px"
+										color="var(--tt-text, #5a5a66)"
 										onClick={() => selectSuggestion(i)}
 										onMouseEnter={() => setHoveredSuggestion(i)}
 										paddingX={4}
+										paddingY={1}
 									>
 										{suggestion}
 									</Flex>
@@ -563,7 +568,15 @@ export const CommanderV1 = (props: commanderArgs) => {
 							})}
 						</Flex>
 						{showContext && props?.context && (
-							<Flex display={showContext ? 'flex' : 'none'} maxWidth="100%" background="grey" borderRadius="12px" pointerEvents="all" paddingY={3}>
+							<Flex
+								display={showContext ? 'flex' : 'none'}
+								maxWidth="100%"
+								background="var(--tt-surface-alt, #f5f5f7)"
+								borderRadius="var(--tt-radius-md, 12px)"
+								boxShadow="var(--tt-shadow-popover, 0 16px 40px -12px rgba(20, 20, 40, 0.3))"
+								pointerEvents="all"
+								paddingY={3}
+							>
 								<Thingtime width="600px" path={contextPath} thing={contextValue}></Thingtime>
 							</Flex>
 						)}

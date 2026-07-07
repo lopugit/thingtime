@@ -37,9 +37,9 @@ const EMPTY_BODY_LABEL = 'No request body.';
 const groupLabel = (group: string) => group.charAt(0).toUpperCase() + group.slice(1);
 
 const statusColor = (status?: string) => {
-  if (status === 'pass') return '#0F766E';
-  if (status === 'fail') return '#B91C1C';
-  return '#52525B';
+  if (status === 'pass') return 'var(--tt-positive, #0F766E)';
+  if (status === 'fail') return 'var(--tt-danger, #B91C1C)';
+  return 'var(--tt-muted, #52525B)';
 };
 
 const testMatches = (test: ApiTestDefinition, group: string, query: string, includeMutating: boolean) => {
@@ -208,7 +208,7 @@ export default function TestsPage() {
         >
           <Box>
             <Heading size="lg" letterSpacing="0">API tests</Heading>
-            <Text mt={2} color="gray.600" fontSize="sm">
+            <Text mt={2} color="var(--tt-text, #4A5568)" fontSize="sm">
               Run all safe API checks, selected tests, a filtered subset, a route group, or one test at a time.
             </Text>
           </Box>
@@ -231,7 +231,7 @@ export default function TestsPage() {
 
         <SimpleGrid columns={{ base: 1, md: 4 }} spacing={3}>
           <Box>
-            <Text fontSize="xs" fontWeight="700" color="gray.600" mb={1}>Group</Text>
+            <Text fontSize="11px" fontWeight="600" fontFamily="mono" letterSpacing="0.12em" textTransform="uppercase" color="var(--tt-muted, #718096)" mb={1}>Group</Text>
             <Select value={group} onChange={(event) => setGroup(event.target.value)}>
               <option value="all">All groups</option>
               {apiTestGroups.map((testGroup) => (
@@ -240,7 +240,7 @@ export default function TestsPage() {
             </Select>
           </Box>
           <Box>
-            <Text fontSize="xs" fontWeight="700" color="gray.600" mb={1}>Search</Text>
+            <Text fontSize="11px" fontWeight="600" fontFamily="mono" letterSpacing="0.12em" textTransform="uppercase" color="var(--tt-muted, #718096)" mb={1}>Search</Text>
             <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="route, group, or test" />
           </Box>
           <Flex align="end">
@@ -280,7 +280,15 @@ export default function TestsPage() {
             const selected = selectedIds.has(test.id);
 
             return (
-              <Box key={test.id} border="1px solid" borderColor="gray.200" borderRadius="8px" p={4}>
+              <Box
+                key={test.id}
+                border="1px solid"
+                borderColor="var(--tt-border, #E2E8F0)"
+                borderRadius="var(--tt-radius-sm, 9px)"
+                bg="var(--tt-card, #ffffff)"
+                boxShadow="var(--tt-shadow-card, 0 1px 2px rgba(0, 0, 0, 0.05))"
+                p={4}
+              >
                 <Flex justify="space-between" align={{ base: 'flex-start', md: 'center' }} gap={3} direction={{ base: 'column', md: 'row' }}>
                   <Flex gap={3} align="flex-start">
                     <Checkbox
@@ -299,8 +307,8 @@ export default function TestsPage() {
                         <Badge colorScheme={test.method === 'GET' ? 'blue' : 'purple'}>{test.method}</Badge>
                         {test.mutates ? <Badge colorScheme="orange">mutates</Badge> : null}
                       </Flex>
-                      <Text mt={1} fontSize="sm" color="gray.600">{test.description}</Text>
-                      <Text mt={1} fontSize="xs" color="gray.500">{test.path}</Text>
+                      <Text mt={1} fontSize="sm" color="var(--tt-text, #4A5568)">{test.description}</Text>
+                      <Text mt={1} fontSize="xs" color="var(--tt-muted, #718096)" fontFamily="mono">{test.path}</Text>
                     </Box>
                   </Flex>
 
@@ -338,8 +346,8 @@ export default function TestsPage() {
                         fontSize="xs"
                         minH="128px"
                         resize="vertical"
-                        bg="gray.50"
-                        borderColor="gray.200"
+                        bg="var(--tt-surface-alt, #F7FAFC)"
+                        borderColor="var(--tt-border, #E2E8F0)"
                         whiteSpace="pre"
                         overflowX="auto"
                       />
@@ -348,9 +356,9 @@ export default function TestsPage() {
                         as="pre"
                         mt={2}
                         p={3}
-                        borderRadius="6px"
-                        bg="gray.50"
-                        color="gray.500"
+                        borderRadius="var(--tt-radius-xs, 7px)"
+                        bg="var(--tt-surface-alt, #F7FAFC)"
+                        color="var(--tt-muted, #718096)"
                         fontSize="xs"
                         overflowX="auto"
                       >
@@ -373,9 +381,9 @@ export default function TestsPage() {
                         as="pre"
                         mt={2}
                         p={3}
-                        borderRadius="6px"
-                        bg="gray.50"
-                        color="gray.700"
+                        borderRadius="var(--tt-radius-xs, 7px)"
+                        bg="var(--tt-surface-alt, #F7FAFC)"
+                        color="var(--tt-text, #2D3748)"
                         fontSize="xs"
                         overflowX="auto"
                         overflowY="auto"

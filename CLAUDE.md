@@ -40,7 +40,10 @@
   `npm run web-ports:all`, stop/remove with `npm run web-pms-stop`, override
   ports with `TT_WEB_PORT`/`TT_HMR_PORT`/`TT_API_PORT`. Canonical runbook detail
   lives in `AGENTS.md` ("Worktree dev servers") and
-  `remix/scripts/worktree-ports.cjs`.
+  `remix/scripts/worktree-ports.cjs`. When preview/testing tooling needs to own
+  the dev-server process, run a second foreground stack beside PM2 on a free
+  port trio with the same `TT_*` overrides and keep tooling-specific launch
+  config untracked.
 - Codex-managed worktrees use the root `.worktreeinclude` to copy ignored local
   setup into new managed worktrees. Keep tracked files out of `.worktreeinclude`,
   but preserve intentional ignored carryover paths for env files, dependency

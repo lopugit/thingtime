@@ -6,8 +6,10 @@ import { X } from 'lucide-react';
 import { UserAvatarCircle } from './DrawerContent';
 import { DRAWER_MODAL_OVERLAY_Z, DRAWER_MODAL_Z, useDrawer, useIsMobileViewport } from './useDrawer';
 import { useLopu } from '../../Lopu/useLopu';
+import { ColorControl } from '../../ThemeSettings/controls';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useTtTheme } from '~/hooks/useTtTheme';
 
 // User/app settings surface opened from the drawer's avatar button.
 // Desktop: centre-aligned floating modal. Mobile: full-width slide-up sheet
@@ -31,6 +33,8 @@ export const UserSettingsModal = () => {
 	const api = useApi();
 	const navigate = useNavigate();
 	const lopu = useLopu();
+	const { theme, preset, hasOverrides, appliedThemeShareId, builtinThemes, setPreset, setColor, setGeneral, resetOverrides } =
+		useTtTheme();
 
 	// two-frame mount so the open transition animates from the hidden state
 	const [visible, setVisible] = React.useState(false);
@@ -112,6 +116,18 @@ export const UserSettingsModal = () => {
 		resetOrdering();
 		lopu({ title: 'Menu order reset ✨', status: 'success', duration: 6000 });
 	}, [resetOrdering, lopu]);
+
+	// Match ThemeStudio.applyPreset: picking a preset also clears the
+	// server-side active theme so cross-device pickup doesn't resurrect it.
+	const handlePreset = React.useCallback(
+		(name: string) => {
+			setPreset(name);
+			if (user) {
+				api.v1.themes.setActive({ themeId: null }).catch(() => {});
+			}
+		},
+		[setPreset, user, api]
+	);
 
 	if (!accountModalOpen) {
 		return null;
@@ -255,6 +271,78 @@ export const UserSettingsModal = () => {
 					'Restore the default drag-reordered menu layout'
 				)}
 			</Flex>
+
+			{/* theming */}
+			<Flex flexDirection="column" rowGap={0}>
+				<Text
+					paddingBottom={2}
+					fontSize="10px"
+					fontWeight={600}
+					letterSpacing="0.08em"
+					textTransform="uppercase"
+					opacity={0.45}
+				>
+					Theming
+				</Text>
+
+				{settingRow(
+					'Theme',
+					<Flex columnGap={1} flexWrap="wrap" justifyContent="flex-end">
+						{builtinThemes.map((builtin) => {
+							const active = preset === builtin.name && !hasOverrides && !appliedThemeShareId;
+							return (
+								<Button
+									key={builtin.name}
+									size="xs"
+									variant={active ? 'solid' : 'ghost'}
+									onClick={() => handlePreset(builtin.name)}
+								>
+									{builtin.name}
+								</Button>
+							);
+						})}
+					</Flex>,
+					appliedThemeShareId ? `Custom theme applied: ${theme.name}` : 'Pick a base look'
+				)}
+
+				{settingRow('Accent colour', <ColorControl value={theme.colors.accent} onChange={(v) => setColor('accent', v)} />, 'CTAs and highlights')}
+
+				{settingRow(
+					'Shadows',
+					<Flex columnGap={1}>
+						<Button size="xs" variant={theme.general.shadow === 'soft' ? 'solid' : 'ghost'} onClick={() => setGeneral('shadow', 'soft')}>
+							Soft
+						</Button>
+						<Button size="xs" variant={theme.general.shadow === 'hard' ? 'solid' : 'ghost'} onClick={() => setGeneral('shadow', 'hard')}>
+							Hard 🧱
+						</Button>
+					</Flex>,
+					'Soft blur or hard offset'
+				)}
+
+				{settingRow(
+					'Motion',
+					<Switch isChecked={theme.general.motion} onChange={(e) => setGeneral('motion', e.target.checked)}></Switch>,
+					'Rainbow + decorative animation'
+				)}
+
+				{settingRow(
+					'Theme Studio',
+					<Button size="xs" variant="outline" onClick={() => handleGoTo('/themes')}>
+						Open 🎨
+					</Button>,
+					'Full editor: colours, fonts, save + share themes'
+				)}
+
+				{hasOverrides &&
+					settingRow(
+						'Customisations',
+						<Button size="xs" variant="outline" onClick={() => resetOverrides()}>
+							Reset
+						</Button>,
+						'Back to the selected preset'
+					)}
+			</Flex>
 		</Flex>
 	);
 
@@ -288,8 +376,8 @@ export const UserSettingsModal = () => {
 							height: '88dvh'
 						}
 					}}
-					background="white"
-					borderTopRadius="20px"
+					background="var(--tt-card, white)"
+					borderTopRadius="var(--tt-radius-xl, 20px)"
 					boxShadow="0px -8px 30px rgba(0,0,0,0.18)"
 					transform={visible ? 'translateY(0)' : 'translateY(100%)'}
 					transition="transform 0.28s ease-out"
@@ -313,9 +401,9 @@ export const UserSettingsModal = () => {
 						width="560px"
 						maxWidth="100%"
 						maxHeight="86vh"
-						background="white"
-						borderRadius="16px"
-						boxShadow="0px 18px 60px rgba(0,0,0,0.22)"
+						background="var(--tt-card, white)"
+						borderRadius="var(--tt-radius-lg, 16px)"
+						boxShadow="var(--tt-shadow-panel, 0px 18px 60px rgba(0,0,0,0.22))"
 						transform={visible ? 'scale(1)' : 'scale(0.96)'}
 						opacity={visible ? 1 : 0}
 						transition="transform 0.22s ease-out, opacity 0.22s ease-out"

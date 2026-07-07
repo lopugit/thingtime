@@ -24,9 +24,14 @@ const apiRoutes = [
   'v1/mongodb/status',
   'v1/mongodb/status-data',
   'v1/template',
+  'v1/themes',
+  'v1/themes/active',
+  'v1/themes/delete',
+  'v1/themes/shared',
   'v1/vercel/deployments',
   'v1/vercel/status',
-  'v1/vercel/status-data'
+  'v1/vercel/status-data',
+  'v1/waitlist'
 ];
 
 export default defineNitroConfig({

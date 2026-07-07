@@ -1,8 +1,11 @@
 import { Box, Flex, Text } from '@chakra-ui/react';
 
 import type { CurrentUser } from '~/hooks/useCurrentUser';
+import { RAINBOW } from '~/theme/rainbow';
 
-export const RAINBOW = 'linear-gradient(120deg, #47b5e6, #a555e8, #f34a4a, #ffbc48, #58ca70, #47b5e6)';
+// Canonical gradient now lives in ~/theme/rainbow (runtime-themed via CSS
+// vars); re-exported here for existing importers (welcome, profile, DevKit).
+export { RAINBOW };
 
 // Rainbow-bordered white card showing a user's identity. `children` is the
 // action area (e.g. a Log out button, a Continue button).
@@ -10,12 +13,12 @@ export const UserCard = ({ user, children }: { user: NonNullable<CurrentUser>; c
   <Box
     p="2px"
     borderRadius="22px"
-    backgroundImage={RAINBOW}
+    background={RAINBOW}
     maxWidth="360px"
     width="100%"
-    boxShadow="0 10px 34px rgba(0,0,0,0.12)"
+    boxShadow="var(--tt-shadow-toast, 0 10px 34px rgba(0,0,0,0.12))"
   >
-    <Flex bg="white" borderRadius="20px" p={6} direction="column" gap={3}>
+    <Flex bg="var(--tt-card, white)" borderRadius="20px" p={6} direction="column" gap={3}>
       <Text fontSize="3xl" lineHeight={1}>
         🦄
       </Text>

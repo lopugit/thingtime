@@ -47,6 +47,11 @@
   TT_* overrides. If a worktree stack crash-loops with missing packages (e.g.
   `Cannot find package 'rolldown'`), the copied `remix/node_modules` is
   incomplete — run `corepack pnpm --dir remix install` and restart.
+  When preview/testing tooling needs to own the dev-server process (it usually
+  cannot attach to the PM2-managed port), run a second foreground stack beside
+  PM2 on a free trio: `TT_WEB_PORT=<web> TT_HMR_PORT=<hmr> TT_API_PORT=<api>
+  npm --prefix remix run dev`. Keep any tooling config that hardcodes worktree
+  ports (for example `.claude/launch.json`) untracked.
 - Codex-managed worktrees use the root `.worktreeinclude` to copy ignored local setup into new managed worktrees. Keep tracked files out of `.worktreeinclude`, but preserve intentional ignored carryover paths for env files, dependency installs, and local generated state needed for validation. The current dependency directories alone are roughly 1.5 GB when present, and generated-output patterns can make managed worktrees larger.
 - When cloning or checking out branches under `.test-branches/`, copy the
   parent checkout's local env files into the clone before running install,
