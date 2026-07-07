@@ -485,7 +485,7 @@ function EndpointDocs({
         </Box>
         <Box>
           <Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="11px" fontWeight="700" mb={1}>
-            Docs endpoint
+            Docs JSON endpoint
           </Text>
           <Text fontFamily="mono" fontSize="sm" overflowWrap="anywhere">
             {doc.docsEndpoint}
