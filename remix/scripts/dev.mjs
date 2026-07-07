@@ -2,6 +2,10 @@
 
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+const { resolveDevContext } = require('./worktree-ports.cjs');
 
 const parseEnvValue = (value) => {
   const trimmed = value.trim();
@@ -48,6 +52,17 @@ const loadLocalEnv = () => {
 };
 
 loadLocalEnv();
+
+const devContext = resolveDevContext(process.cwd());
+
+process.env.TT_WEB_PORT = String(devContext.ports.web);
+process.env.TT_HMR_PORT = String(devContext.ports.hmr);
+process.env.TT_API_PORT = String(devContext.ports.api);
+
+console.log(
+  `[dev] ${devContext.worktree ? `worktree ${devContext.worktree}` : 'main checkout'}: ` +
+    `vite :${devContext.ports.web} (hmr :${devContext.ports.hmr}), nitro :${devContext.ports.api}`
+);
 
 const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const children = [

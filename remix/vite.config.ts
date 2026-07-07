@@ -1,4 +1,5 @@
 import { createReadStream, existsSync, statSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { extname, isAbsolute, join, normalize, relative } from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
 
@@ -7,6 +8,10 @@ import { defineConfig } from 'vite';
 
 const designDocsBase = '/docs/design-bundles';
 const designDocsDir = fileURLToPath(new URL('../docs/design', import.meta.url));
+
+const require = createRequire(import.meta.url);
+const { resolveDevContext } = require('./scripts/worktree-ports.cjs');
+const { ports: devPorts } = resolveDevContext(fileURLToPath(new URL('.', import.meta.url)));
 const mimeTypes: Record<string, string> = {
   '.css': 'text/css; charset=utf-8',
   '.html': 'text/html; charset=utf-8',
@@ -101,17 +106,15 @@ export default defineConfig({
   },
   server: {
     host: '127.0.0.1',
-    // Overridable so secondary checkouts/worktrees can run beside the
-    // canonical 9999/10000 pair without port collisions.
-    port: Number(process.env.THINGTIME_VITE_PORT) || 9999,
+    port: devPorts.web,
     strictPort: true,
     allowedHosts: ['lopus-macbook-pro-2.tail9606f9.ts.net'],
     hmr: {
-      port: Number(process.env.THINGTIME_VITE_HMR_PORT) || 9998
+      port: devPorts.hmr
     },
     proxy: {
       '/api': {
-        target: process.env.THINGTIME_API_PROXY_TARGET || 'http://127.0.0.1:10000',
+        target: `http://127.0.0.1:${devPorts.api}`,
         changeOrigin: true
       }
     }

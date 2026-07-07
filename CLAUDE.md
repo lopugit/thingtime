@@ -30,6 +30,13 @@
   server after every change; restart only for env var changes,
   dependency/native-binding changes, server config changes, a crashed/stale
   process, or an explicit user request.
+- Linked git worktrees are worktree-aware for local web dev: `npm run web-pms`
+  from a worktree spawns its own PM2 app `tt-wt-<worktree>-<web-port>` on a
+  deterministic port trio derived from the worktree directory name, running
+  beside the main stack. Inspect ports with `npm run web-ports`, stop/remove
+  with `npm run web-pms-stop`, override with
+  `TT_WEB_PORT`/`TT_HMR_PORT`/`TT_API_PORT`. Canonical runbook detail lives in
+  `AGENTS.md` ("Worktree dev servers") and `remix/scripts/worktree-ports.cjs`.
 - Codex-managed worktrees use the root `.worktreeinclude` to copy ignored local
   setup into new managed worktrees. Keep tracked files out of `.worktreeinclude`,
   but preserve intentional ignored carryover paths for env files, dependency

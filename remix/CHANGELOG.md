@@ -35,10 +35,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   details in
   [`PRs/32-claude-vigilant-moser--design-refactor-theming.md`](../PRs/32-claude-vigilant-moser--design-refactor-theming.md).
   — _Claude (AI), 2026-07-07_
-- Dev runbook: `remix/vite.config.ts` now honours `THINGTIME_VITE_PORT`,
-  `THINGTIME_VITE_HMR_PORT`, and `THINGTIME_API_PROXY_TARGET` env vars so
-  secondary checkouts/worktrees can run beside the canonical 9999/10000 pair
-  (defaults unchanged). — _Claude (AI), 2026-07-07_
+- Dev runbook: local dev ports resolve through the shared
+  `remix/scripts/worktree-ports.cjs` module (worktree-derived defaults;
+  `TT_WEB_PORT`, `TT_HMR_PORT`, `TT_API_PORT` overrides) so secondary
+  checkouts/worktrees run beside the canonical 9999/10000 pair. Originally
+  shipped on this branch as `THINGTIME_VITE_PORT`/`THINGTIME_VITE_HMR_PORT`/
+  `THINGTIME_API_PROXY_TARGET`; unified with main's system on merge.
+  — _Claude (AI), 2026-07-07_
 - Added `thingtime.settings.visual.bottomPadding`, which drives the native iOS
   footer bottom padding and the derived DevKit floating trigger bottom offset.
   Details in

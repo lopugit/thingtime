@@ -8,6 +8,8 @@
     "webserver": "pm2 restart webserver &> /dev/null",
     "web": "npm run dev --prefix remix",
     "web-pms": "which pm2 ; cd remix && pm2 restart ecosystem.config.js &> /dev/null",
+    "web-pms-stop": "pm2 delete \"$(node remix/scripts/worktree-ports.cjs --pm2-name)\"",
+    "web-ports": "node remix/scripts/worktree-ports.cjs",
     "build-web": "npm run build --prefix remix",
     "remix": "npm run web",
     "remix-pms": "npm run web-pms",

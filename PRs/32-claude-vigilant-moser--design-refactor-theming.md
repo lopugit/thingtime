@@ -89,9 +89,11 @@ shareable themes, and a rebuilt landing page. ~90 files, 4.4k insertions.
   `@remix-run/eslint-config` → `eslint-scope`); agents verified with scoped
   `tsc --noEmit` (0 errors in changed files) + Vite compile checks, and one
   cross-checked against the main checkout's eslint (no new findings).
-- `THINGTIME_VITE_PORT` / `THINGTIME_VITE_HMR_PORT` / `THINGTIME_API_PROXY_TARGET`
-  env overrides added to `vite.config.ts` for side-by-side worktree dev
-  (defaults unchanged).
+- Side-by-side worktree dev originally shipped here as `THINGTIME_VITE_PORT` /
+  `THINGTIME_VITE_HMR_PORT` / `THINGTIME_API_PROXY_TARGET` env overrides in
+  `vite.config.ts`; unified on merge with main's shared
+  `remix/scripts/worktree-ports.cjs` module (worktree-derived defaults,
+  `TT_WEB_PORT` / `TT_HMR_PORT` / `TT_API_PORT` overrides).
 - Invalid-credential login shows the pre-existing "Network error" toast (the
   fetcher throws on 401 before the `resp.ok` branch) — behavior preserved, not
   introduced here.
