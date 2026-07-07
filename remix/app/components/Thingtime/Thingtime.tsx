@@ -1,21 +1,7 @@
 import React from 'react';
 import ContentEditable from 'react-contenteditable';
 import * as Chakras from '@chakra-ui/react';
-import {
-	Box,
-	Center,
-	Flex,
-	Input,
-	NumberDecrementStepper,
-	NumberIncrementStepper,
-	NumberInput,
-	NumberInputField,
-	NumberInputStepper,
-	Select,
-	Spinner,
-	Switch,
-	Textarea
-} from '@chakra-ui/react';
+import { Box, Center, Flex, Input, Select, Spinner, Switch, Textarea } from '@chakra-ui/react';
 
 import { CommanderV1 } from '../Commander/CommanderV1Deprecated';
 import { CommanderV2 } from '../Commander/CommanderV2';
@@ -33,6 +19,120 @@ import { safeJoin, safeSplit } from '~/utils';
 type ThingtimeProps = {
 	debugId?: string;
 	thingtimeMachineNamespace?: string;
+};
+
+const numberStepButtonStyles = {
+	alignItems: 'center',
+	justifyContent: 'center',
+	width: '30px',
+	height: '30px',
+	border: '1px solid var(--tt-border, #ececef)',
+	borderRadius: 'var(--tt-radius-sm, 9px)',
+	background: 'var(--tt-card, #ffffff)',
+	color: 'var(--tt-muted, #9a9aa6)',
+	fontSize: '15px',
+	lineHeight: 1,
+	cursor: 'pointer',
+	userSelect: 'none',
+	transition: 'background 0.15s ease, color 0.15s ease, transform 0.1s ease',
+	_hover: { background: 'var(--tt-surface-hover, #ececee)', color: 'var(--tt-ink, #16161a)' },
+	_active: { transform: 'scale(0.94)' }
+} as const;
+
+// Number editor: light rounded input with − / + steppers (the design-mockup
+// pattern), replacing the heavy bordered Chakra NumberInput. Keeps a local
+// draft so partial input ('-', '1.', '') doesn't fight the committed value.
+const NumberValueInput = (props: { value: number; onValueChange: (value: number) => void }) => {
+	const { value, onValueChange } = props;
+
+	const [draft, setDraft] = React.useState(String(value ?? 0));
+	const focusedRef = React.useRef(false);
+
+	React.useEffect(() => {
+		if (!focusedRef.current && String(value) !== draft) {
+			setDraft(String(value ?? 0));
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [value]);
+
+	const commitText = React.useCallback(
+		(text: string) => {
+			const parsed = Number(text);
+			if (text.trim() !== '' && !Number.isNaN(parsed) && parsed !== value) {
+				onValueChange(parsed);
+			}
+		},
+		[onValueChange, value]
+	);
+
+	const step = React.useCallback(
+		(delta: number) => {
+			// an emptied field steps from the committed value, not from
+			// Number('') === 0
+			const current = draft.trim() === '' ? NaN : Number(draft);
+			const next = (Number.isNaN(current) ? value || 0 : current) + delta;
+			setDraft(String(next));
+			onValueChange(next);
+		},
+		[draft, value, onValueChange]
+	);
+
+	return (
+		<Flex className="tt-number-input" alignItems="center" columnGap="7px">
+			<Box
+				as="input"
+				value={draft}
+				inputMode="decimal"
+				aria-label="Number value"
+				width={`${Math.max(String(draft).length, 1) + 3}ch`}
+				minWidth="5ch"
+				maxWidth="100%"
+				paddingX="12px"
+				paddingY="4px"
+				border="1px solid var(--tt-border, #ececef)"
+				borderRadius="var(--tt-radius-sm, 9px)"
+				background="var(--tt-card, #ffffff)"
+				fontSize="inherit"
+				fontFamily="inherit"
+				outline="none"
+				transition="border-color 0.15s ease, box-shadow 0.15s ease"
+				_focus={{
+					borderColor: 'var(--tt-faint, #b6b6c0)',
+					boxShadow: '0 0 0 3px var(--tt-accent-tint, #fff5fa)'
+				}}
+				onFocus={() => {
+					focusedRef.current = true;
+				}}
+				onBlur={(e) => {
+					focusedRef.current = false;
+					commitText((e.target as HTMLInputElement).value);
+					setDraft(String(value ?? 0));
+				}}
+				onChange={(e) => {
+					const text = (e.target as HTMLInputElement).value;
+					setDraft(text);
+					commitText(text);
+				}}
+				onKeyDown={(e) => {
+					if (e.key === 'Enter') {
+						(e.target as HTMLElement).blur?.();
+					} else if (e.key === 'ArrowUp') {
+						e.preventDefault();
+						step(e.shiftKey ? 10 : 1);
+					} else if (e.key === 'ArrowDown') {
+						e.preventDefault();
+						step(e.shiftKey ? -10 : -1);
+					}
+				}}
+			/>
+			<Flex as="button" type="button" aria-label="Decrease" title="Decrease (shift: −10)" {...numberStepButtonStyles} onClick={(e) => step(e.shiftKey ? -10 : -1)}>
+				−
+			</Flex>
+			<Flex as="button" type="button" aria-label="Increase" title="Increase (shift: +10)" {...numberStepButtonStyles} onClick={(e) => step(e.shiftKey ? 10 : 1)}>
+				+
+			</Flex>
+		</Flex>
+	);
 };
 
 // join any with ThingtimeProps
@@ -78,6 +178,10 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	}, [props?.depth]);
 
 	const [editMode, setEditMode] = React.useState(props?.edit === true ? true : false);
+
+	// {} code view: same tree, more developer chrome (type icons, key counts,
+	// [n] array indices, boolean pills). Propagates to children.
+	const codeView = props?.codeView === true;
 
 	// watch props.editMode and if it changes then set editMode to props.editMode
 	React.useEffect(() => {
@@ -344,6 +448,24 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		} else if (type === 'number') {
 			return thing;
 		} else if (type === 'boolean') {
+			if (codeView) {
+				// developer view: literal value as a coloured pill
+				return (
+					<Box
+						as="span"
+						paddingX="8px"
+						paddingY="2px"
+						borderRadius="var(--tt-radius-xs, 7px)"
+						background={thing ? 'var(--tt-positive-tint, #e4f6ea)' : 'var(--tt-surface-alt, #f5f5f7)'}
+						color={thing ? 'var(--tt-positive, #2f8f4f)' : 'var(--tt-muted, #9a9aa6)'}
+						fontFamily="var(--tt-font-mono, monospace)"
+						fontSize="15px"
+					>
+						{thing ? 'true' : 'false'}
+					</Box>
+				);
+			}
+
 			return thing ? 'true' : 'false';
 		} else if (type === 'object') {
 			if (thing === null) {
@@ -375,7 +497,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		} else {
 			return 'Something..';
 		}
-	}, [thing, thingDep, type, chakraChild, keys]);
+	}, [thing, thingDep, type, chakraChild, keys, codeView]);
 
 	const renderChakra = React.useMemo(() => {
 		if (!editMode && chakra && render) {
@@ -535,6 +657,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 								key={idx}
 								seen={nextSeen}
 								edit={editMode}
+								codeView={codeView}
 								render={render}
 								circular={seen?.includes?.(nextThing)}
 								depth={depth + 1}
@@ -591,6 +714,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		thingtime?.settings?.keyGateLength,
 		seen,
 		editMode,
+		codeView,
 		render,
 		depth,
 		safeJoin(fullPath),
@@ -815,37 +939,9 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 
 			if (type === 'number') {
 				debug.number = true;
-				// this helps render numbers better
-				const numberPxLength = thing?.toString()?.length * 13 + 30;
 				return (
 					<AtomicWrapper paddingLeft={pl} className="number-atomic-wrapper">
-						<Flex>
-							<NumberInput
-								alignItems="center"
-								justifyContent="center"
-								onChange={(value) => {
-									// setTimeout(() => {
-									try {
-										const number = Number(value);
-										updateValue({ value: number });
-									} catch {
-										// something went wrong casting to number
-									}
-									// }, 1);
-								}}
-								value={thing}
-							>
-								<NumberInputField width={numberPxLength + 'px'} />
-								<NumberInputStepper transform="scale(0.9)">
-									<NumberIncrementStepper
-									// transform="scale(0.7)"
-									/>
-									<NumberDecrementStepper
-									// transform="scale(0.7)"
-									/>
-								</NumberInputStepper>
-							</NumberInput>
-						</Flex>
+						<NumberValueInput value={thing} onValueChange={(next) => updateValue({ value: next })} />
 					</AtomicWrapper>
 				);
 			}
@@ -917,8 +1013,11 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	}, [safeJoin(props?.path)]);
 
 	const renderedPath = React.useMemo(() => {
+		// code view labels array elements by index, [0] style
+		const codeHumanPath = codeView && props?.parent instanceof Array ? `[${humanPath}]` : humanPath;
+
 		if (editMode) {
-			return humanPath;
+			return codeHumanPath;
 		}
 
 		if (humanPath?.includes?.('hidden')) {
@@ -930,8 +1029,8 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 			return humanPath.split?.('unique')?.[0];
 		}
 
-		return humanPath;
-	}, [humanPath, editMode]);
+		return codeHumanPath;
+	}, [humanPath, editMode, codeView, props?.parent]);
 
 	// updatePath updateKey updatePathname updatePropName
 	const updatePath = React.useCallback(
@@ -1165,7 +1264,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 							<Flex className="thingPathDom-raw" data-tt-zone="key">
 								{pathDom}
 							</Flex>
-							{editMode && (
+							{(editMode || codeView) && (
 								<Box
 									className="thingTypeIcon"
 									// marginTop={-3}
@@ -1176,6 +1275,25 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 								>
 									{typeIcon}
 								</Box>
+							)}
+							{codeView && hasCollapsibleChildren && (
+								<Flex
+									className="thingKeyCount"
+									alignItems="center"
+									marginTop={-1}
+									marginLeft={2}
+									paddingX="8px"
+									paddingY="1px"
+									background="var(--tt-surface-alt, #f5f5f7)"
+									borderRadius="999px"
+									color="var(--tt-muted, #9a9aa6)"
+									fontFamily="var(--tt-font-mono, monospace)"
+									fontSize="11px"
+									whiteSpace="nowrap"
+									userSelect="none"
+								>
+									{thing instanceof Array ? `${thing.length} item${thing.length === 1 ? '' : 's'}` : `${keys?.length || 0} key${keys?.length === 1 ? '' : 's'}`}
+								</Flex>
 							)}
 							{pathDom && (
 								<Flex className="thingPathDom" flexDirection="row" columnGap={1} marginTop={-1} paddingLeft={1}>
