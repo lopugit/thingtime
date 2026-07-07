@@ -14,6 +14,22 @@
   crashes, and especially security issues before style commentary.
 - Also read `CODEX.md` for persistent environment/runbook notes before running checks or pushing branches from this workspace.
 - On local desktop sessions, use the PM2 ecosystem configs for local dev servers instead of starting duplicate ad-hoc app servers. The local alias `pm` may be available for PM2; otherwise use `pm2`. The root `ecosystem.config.js` defines `thingtime-stack`, while `remix/ecosystem.config.js` defines the Nitro + React Router dev app `tt-nitro-react-router-9999`, with Vite on port 9999 and Nitro on port 10000. Prefer `npm run web-pms` from the repo root, or the compatibility alias `npm run remix-pms`, when starting the local web app; use `cd remix && pm restart ecosystem.config.js --only tt-nitro-react-router-9999` when intentionally restarting it. Do not restart the PM2-managed web dev app after every source edit; it has rebuild/hot reloading. Restart only for env var changes, dependency/native-binding changes, server config changes, a crashed/stale process, or an explicit user request. Stop/restart the managed app before claiming a local dev-server state.
+- Worktree dev servers: `remix/scripts/worktree-ports.cjs` is the single source
+  of truth for local dev ports and the PM2 dev app name. The main checkout
+  keeps Vite 9999 / HMR 9998 / Nitro 10000 and the app name
+  `tt-nitro-react-router-9999`; a linked git worktree gets a deterministic
+  trio (11000-19899, hashed from the worktree directory name) and the app name
+  `tt-wt-<worktree>-<web-port>`, so `npm run web-pms` works unchanged from a
+  worktree and runs beside the main stack. `remix/vite.config.ts`,
+  `remix/scripts/dev.mjs`, `remix/scripts/dev-nitro.cjs`, and
+  `remix/ecosystem.config.js` all resolve ports through this module;
+  `TT_WEB_PORT`/`TT_HMR_PORT`/`TT_API_PORT` env vars override it. Inspect the
+  current checkout's ports with `npm run web-ports`; stop/remove its PM2 dev
+  app with `npm run web-pms-stop`. If a derived port is already taken, Vite
+  fails fast (strictPort) — set the TT_* overrides. If a worktree stack
+  crash-loops with missing packages (e.g. `Cannot find package 'rolldown'`),
+  the copied `remix/node_modules` is incomplete — run
+  `corepack pnpm --dir remix install` and restart.
 - Codex-managed worktrees use the root `.worktreeinclude` to copy ignored local setup into new managed worktrees. Keep tracked files out of `.worktreeinclude`, but preserve intentional ignored carryover paths for env files, dependency installs, and local generated state needed for validation. The current dependency directories alone are roughly 1.5 GB when present, and generated-output patterns can make managed worktrees larger.
 - When cloning or checking out branches under `.test-branches/`, copy the
   parent checkout's local env files into the clone before running install,

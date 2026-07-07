@@ -16,7 +16,13 @@ export type BasicServiceHealthStatus = {
 };
 
 const REQUEST_TIMEOUT_MS = 3500;
-const LOCAL_STATUS_PORTS = new Set(['9999', '10000']);
+// Canonical local dev ports plus any worktree-derived overrides (set by
+// remix/scripts/worktree-ports.cjs via dev.mjs / PM2 env).
+const LOCAL_STATUS_PORTS = new Set(
+  ['9999', '10000', process.env.TT_WEB_PORT, process.env.TT_API_PORT].filter(
+    (port): port is string => Boolean(port)
+  )
+);
 
 export const normaliseOrigin = (value?: string | null) => {
   const raw = value?.trim();
