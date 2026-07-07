@@ -82,11 +82,11 @@ export const DrawerTrigger = () => {
 				type="button"
 				position="fixed"
 				zIndex={DRAWER_TRIGGER_Z}
-				top="calc(var(--thingtime-safe-area-top) + 4px)"
-				left="0"
-				width="56px"
-				height="44px"
-				borderRadius="0 8px 8px 0"
+				top="calc(var(--thingtime-safe-area-top) + 8px)"
+				left="8px"
+				width="36px"
+				height="36px"
+				borderRadius="8px"
 				background="transparent"
 				_hover={{ background: 'var(--tt-surface-hover, #ececee)' }}
 				opacity={0.75}

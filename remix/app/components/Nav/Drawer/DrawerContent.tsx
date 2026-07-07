@@ -248,6 +248,11 @@ export const DrawerContent = (props: DrawerContentProps) => {
 		[openSearch, onNavigate]
 	);
 
+	const onBrandClick = React.useCallback(() => {
+		navigate('/');
+		onNavigate?.();
+	}, [navigate, onNavigate]);
+
 	const onAvatarClick = React.useCallback(() => {
 		setAccountModalOpen(true);
 		if (variant === 'popup') {
@@ -328,7 +333,22 @@ export const DrawerContent = (props: DrawerContentProps) => {
 				paddingTop="12px"
 				paddingBottom="8px"
 			>
-				<Flex alignItems="center" columnGap={2} minWidth={0}>
+				<Flex
+					as="button"
+					type="button"
+					alignItems="center"
+					columnGap={2}
+					minWidth={0}
+					marginLeft="-8px"
+					paddingX={2}
+					paddingY="4px"
+					borderRadius="var(--tt-radius-sm, 9px)"
+					_hover={{ background: 'var(--tt-surface-hover, #ececee)' }}
+					transition="background 0.15s ease"
+					cursor="pointer"
+					title="Home"
+					onClick={onBrandClick}
+				>
 					<Icon name="unicorn" size="13px"></Icon>
 					<Text fontSize="sm" fontWeight={600} whiteSpace="nowrap">
 						Thingtime

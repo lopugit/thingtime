@@ -1,10 +1,11 @@
-import { Flex, Text, Button } from '@chakra-ui/react';
+import { Box, Flex, Text, Button } from '@chakra-ui/react';
 import { Link, useNavigate } from 'react-router';
 
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { UserCard, RAINBOW } from '~/components/User/UserCard';
+import { RAINBOW_TEXT } from '~/theme/rainbow';
 
 export default function Profile() {
   const user = useCurrentUser();
@@ -39,11 +40,48 @@ export default function Profile() {
         gap={4}
         background="var(--tt-surface, #fafafb)"
       >
-        <Text color="var(--tt-text, #5a5a66)">You're not logged in.</Text>
+        <Box
+          fontFamily="heading"
+          fontSize="xs"
+          fontWeight="600"
+          letterSpacing="0.14em"
+          textTransform="uppercase"
+          color="var(--tt-muted, #9a9aa6)"
+        >
+          Thingtime · Profile
+        </Box>
+        <Box
+          as="h1"
+          fontFamily="heading"
+          fontSize="2xl"
+          fontWeight="700"
+          letterSpacing="-0.02em"
+          background={RAINBOW_TEXT}
+          backgroundSize="calc(100px + 200%)"
+          sx={{
+            WebkitBackgroundClip: 'text',
+            backgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            animation: 'var(--tt-rainbow-anim, moving-rainbow 5s linear infinite)'
+          }}
+        >
+          You're not logged in ✨
+        </Box>
+        <Text color="var(--tt-text, #5a5a66)">Log in to see your things.</Text>
         <Link to="/login">
-          <Text color="var(--tt-link, #2f8fd6)" fontWeight="600">
-            Log in →
-          </Text>
+          <Button
+            mt={2}
+            color="white"
+            fontFamily="heading"
+            fontWeight="600"
+            background={RAINBOW}
+            backgroundSize="calc(100px + 200%)"
+            sx={{ animation: 'var(--tt-rainbow-anim, moving-rainbow 5s linear infinite)' }}
+            _hover={{ opacity: 0.9 }}
+            borderRadius="var(--tt-radius-md, 12px)"
+          >
+            Log in 🗝️ →
+          </Button>
         </Link>
       </Flex>
     );
