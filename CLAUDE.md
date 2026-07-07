@@ -31,12 +31,19 @@
   dependency/native-binding changes, server config changes, a crashed/stale
   process, or an explicit user request.
 - Linked git worktrees are worktree-aware for local web dev: `npm run web-pms`
-  from a worktree spawns its own PM2 app `tt-wt-<worktree>-<web-port>` on a
-  deterministic port trio derived from the worktree directory name, running
-  beside the main stack. Inspect ports with `npm run web-ports`, stop/remove
-  with `npm run web-pms-stop`, override with
-  `TT_WEB_PORT`/`TT_HMR_PORT`/`TT_API_PORT`. Canonical runbook detail lives in
-  `AGENTS.md` ("Worktree dev servers") and `remix/scripts/worktree-ports.cjs`.
+  from a worktree spawns its own PM2 app `tt-wt-<worktree>-<web-port>-<time>`
+  (clock-time suffix, e.g. `-1005am`) on a deterministic port trio derived from
+  the worktree directory name, running beside the main stack. `web-pms` is the
+  blessed start/restart command — never raw `pm2 restart ecosystem.config.js`,
+  which would duplicate the timestamped app. Inspect this checkout with
+  `npm run web-ports`, list every dev app PM2 knows about with
+  `npm run web-ports:all`, stop/remove with `npm run web-pms-stop`, override
+  ports with `TT_WEB_PORT`/`TT_HMR_PORT`/`TT_API_PORT`. Canonical runbook detail
+  lives in `AGENTS.md` ("Worktree dev servers") and
+  `remix/scripts/worktree-ports.cjs`. When preview/testing tooling needs to own
+  the dev-server process, run a second foreground stack beside PM2 on a free
+  port trio with the same `TT_*` overrides and keep tooling-specific launch
+  config untracked.
 - Codex-managed worktrees use the root `.worktreeinclude` to copy ignored local
   setup into new managed worktrees. Keep tracked files out of `.worktreeinclude`,
   but preserve intentional ignored carryover paths for env files, dependency

@@ -13,28 +13,45 @@
 - For PR reviews, prioritize code quality, performance, potential bugs,
   crashes, and especially security issues before style commentary.
 - Also read `CODEX.md` for persistent environment/runbook notes before running checks or pushing branches from this workspace.
-- On local desktop sessions, use the PM2 ecosystem configs for local dev servers instead of starting duplicate ad-hoc app servers. The local alias `pm` may be available for PM2; otherwise use `pm2`. The root `ecosystem.config.js` defines `thingtime-stack`, while `remix/ecosystem.config.js` defines the Nitro + React Router dev app `tt-nitro-react-router-9999`, with Vite on port 9999 and Nitro on port 10000. Prefer `npm run web-pms` from the repo root, or the compatibility alias `npm run remix-pms`, when starting the local web app; use `cd remix && pm restart ecosystem.config.js --only tt-nitro-react-router-9999` when intentionally restarting it. Do not restart the PM2-managed web dev app after every source edit; it has rebuild/hot reloading. Restart only for env var changes, dependency/native-binding changes, server config changes, a crashed/stale process, or an explicit user request. Stop/restart the managed app before claiming a local dev-server state.
+- On local desktop sessions, use the PM2 ecosystem configs for local dev servers instead of starting duplicate ad-hoc app servers. The local alias `pm` may be available for PM2; otherwise use `pm2`. The root `ecosystem.config.js` defines `thingtime-stack`, while `remix/ecosystem.config.js` defines the Nitro + React Router dev app `tt-nitro-react-router-9999`, with Vite on port 9999 and Nitro on port 10000. Prefer `npm run web-pms` from the repo root, or the compatibility alias `npm run remix-pms`, to start or restart the local web app — it is now the blessed lifecycle command (it cleans up the previous timestamped app and starts a fresh one). Do **not** use a raw `pm2 restart ecosystem.config.js`: the app name carries a clock-time suffix that is re-stamped on each config load, so a raw restart would spawn a duplicate instead of restarting in place. Do not restart the PM2-managed web dev app after every source edit; it has rebuild/hot reloading. Restart only for env var changes, dependency/native-binding changes, server config changes, a crashed/stale process, or an explicit user request. Stop/restart the managed app before claiming a local dev-server state.
 - Worktree dev servers: `remix/scripts/worktree-ports.cjs` is the single source
-  of truth for local dev ports and the PM2 dev app name. The main checkout
-  keeps Vite 9999 / HMR 9998 / Nitro 10000 and the app name
-  `tt-nitro-react-router-9999`; a linked git worktree gets a deterministic
-  trio (11000-19899, hashed from the worktree directory name) and the app name
-  `tt-wt-<worktree>-<web-port>`, so `npm run web-pms` works unchanged from a
-  worktree and runs beside the main stack. `remix/vite.config.ts`,
-  `remix/scripts/dev.mjs`, `remix/scripts/dev-nitro.cjs`, and
-  `remix/ecosystem.config.js` all resolve ports through this module;
-  `TT_WEB_PORT`/`TT_HMR_PORT`/`TT_API_PORT` env vars override it. Inspect the
-  current checkout's ports with `npm run web-ports`; stop/remove its PM2 dev
-  app with `npm run web-pms-stop`. If a derived port is already taken, Vite
-  fails fast (strictPort) — set the TT_* overrides. If a worktree stack
-  crash-loops with missing packages (e.g. `Cannot find package 'rolldown'`),
-  the copied `remix/node_modules` is incomplete — run
-  `corepack pnpm --dir remix install` and restart. When preview/testing
-  tooling needs to own the dev-server process (it usually cannot attach to
-  the PM2-managed port), run a second foreground stack beside PM2 on a free
-  trio: `TT_WEB_PORT=<web> TT_HMR_PORT=<hmr> TT_API_PORT=<api> npm --prefix
-  remix run dev`. Keep any tooling config that hardcodes worktree ports (for
-  example `.claude/launch.json`) untracked.
+  of truth for local dev ports, the PM2 dev app name, and the full PM2 app
+  definition (`pm2AppConfig`, which `remix/ecosystem.config.js` and
+  `remix/scripts/dev-pm2.cjs` both consume). The main checkout keeps Vite 9999 /
+  HMR 9998 / Nitro 10000; a linked git worktree gets a deterministic port trio
+  (11000-19899, hashed from the worktree directory name). Ports are
+  deterministic and stable across restarts. The PM2 **name** is
+  `tt-nitro-react-router-9999` (main) or `tt-wt-<worktree>-<web-port>`
+  (worktree), plus a clock-time suffix (e.g. `-1005am`, 12-hour, colon-free)
+  showing when the app was last started. `remix/vite.config.ts`,
+  `remix/scripts/dev.mjs`, and `remix/scripts/dev-nitro.cjs` resolve ports
+  through the same module; `TT_WEB_PORT`/`TT_HMR_PORT`/`TT_API_PORT` env vars
+  override. The port shown in the app **name** is always the deterministic
+  derived port (the stable identity used for cleanup); a `TT_WEB_PORT` override
+  changes the port the stack actually binds but not the name/base, so
+  start/stop still match and never orphan.
+  - `npm run web-pms` — start/restart this checkout's stack (deletes any prior
+    app sharing the stable base name, then starts a freshly time-stamped one, so
+    restarts never orphan a process).
+  - `npm run web-pms-stop` — remove this checkout's PM2 dev app (matches on the
+    stable base, any timestamp).
+  - `npm run web-ports` — print this checkout's derived ports and names.
+  - `npm run web-ports:all` — list every thingtime dev app PM2 knows about
+    across worktrees, with ports, status, and start time.
+  - `node remix/scripts/dev-pm2.cjs start --cwd <other-worktree>/remix` — start
+    another worktree's stack under PM2 with a correctly derived, time-stamped
+    name even if that checkout predates this tooling (the name is assigned at
+    pm2-start time).
+
+  If a derived port is already taken, Vite fails fast (strictPort) — set the
+  TT_* overrides. If a worktree stack crash-loops with missing packages (e.g.
+  `Cannot find package 'rolldown'`), the copied `remix/node_modules` is
+  incomplete — run `corepack pnpm --dir remix install` and restart.
+  When preview/testing tooling needs to own the dev-server process (it usually
+  cannot attach to the PM2-managed port), run a second foreground stack beside
+  PM2 on a free trio: `TT_WEB_PORT=<web> TT_HMR_PORT=<hmr> TT_API_PORT=<api>
+  npm --prefix remix run dev`. Keep any tooling config that hardcodes worktree
+  ports (for example `.claude/launch.json`) untracked.
 - Codex-managed worktrees use the root `.worktreeinclude` to copy ignored local setup into new managed worktrees. Keep tracked files out of `.worktreeinclude`, but preserve intentional ignored carryover paths for env files, dependency installs, and local generated state needed for validation. The current dependency directories alone are roughly 1.5 GB when present, and generated-output patterns can make managed worktrees larger.
 - When cloning or checking out branches under `.test-branches/`, copy the
   parent checkout's local env files into the clone before running install,

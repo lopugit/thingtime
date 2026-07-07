@@ -73,6 +73,7 @@ export const designSystemEntries: DesignSystemEntry[] = [
 			'Sections — Mode, then Type, Value, Clipboard, Sharing, and Danger last. Section order is fixed by the model so muscle memory transfers between presentations.',
 			'Action rows — emoji icon, label, optional hint line, optional shortcut label, a ✓ on the selected radio option, and a ▸ when the action drills into a submenu.',
 			'Drill levels — submenus never fly out or indent: the whole surface navigates down a level, infinitely deep, inside one window. The size locks on the first drill; levels scroll inside the frame.',
+			'Zones — every atomic thing has virtual bounding boxes (thingZones): key, value, and the whole thing. Right-click resolves the zone it hit (badged in the header; key-zone clicks lead with key verbs) and the same boxes are the geometry layer for drag/drop.',
 			'Resize grip — bottom-right corner resizes the window; content scrolls inside whatever size it gets.',
 			'Danger zone — destructive actions render in --tt-danger, always in the last section, separated by a divider.'
 		],
@@ -121,6 +122,15 @@ export const designSystemEntries: DesignSystemEntry[] = [
 				]
 			},
 			{
+				title: 'thingZones (virtual bounding boxes)',
+				source: 'remix/app/components/Thingtime/thingZones.ts',
+				rows: [
+					{ name: 'data-tt-zone', type: "'key' | 'value'", description: 'DOM markers Thingtime stamps on the property-name row and the atomic value box; everything else in a thing is the thing zone.' },
+					{ name: 'resolveThingZone(target, thing)', type: '(Element, Element) => ThingZone', description: 'Hit-test an event target against one thing’s zones (nested things own their zones — the deepest handler wins first).' },
+					{ name: 'getThingZoneBoxes(thing)', type: '(HTMLElement) => { key?, value?, thing }', description: 'Measure the zone boxes in viewport coordinates; the thing box is the key + value union — the atomic thing’s virtual bounding box, ready for drag/drop.' }
+				]
+			},
+			{
 				title: 'buildThingContextMenuModel()',
 				source: 'remix/app/components/Thingtime/ContextMenu/contextMenuModel.ts',
 				rows: [
@@ -157,7 +167,7 @@ export const designSystemEntries: DesignSystemEntry[] = [
 			'Drill parents expose aria-haspopup="menu"; the back row is a focusable menuitem labelled Back.',
 			'Focus is roving: arrow keys move between every row of the current level including the back row; drilling lands focus on the first action (not the back row).',
 			'Hover/right-click menus never steal focus on open — a window-level fallback still honours Escape (back/close) and pulls focus in on ArrowDown/ArrowUp; the modal focuses the first item and traps Tab.',
-			'Right-click passes through to the browser menu on editable targets and selected text, so native paste/spellcheck/copy keep working inside value editors.',
+			'Right-click opens the thing menu everywhere — including property names and values — except on selected text or an editor the user was already focused in, where the native menu (copy, caret paste, spellcheck) passes through.',
 			'Hover popovers stay open while the pointer is over the surface and linger ~555ms after leaving, so travel gaps don’t dismiss them.',
 			'Right-click maps to long-press on touch via the native contextmenu event; the trigger icon also opens on tap.',
 			'Drag and resize use pointer events with generous handles (whole header / 15px grip) and never trap keyboard users — every capability they gate is also reachable without them.',

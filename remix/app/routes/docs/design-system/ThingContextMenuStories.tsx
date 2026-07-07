@@ -6,6 +6,8 @@ import { ThingContextMenu } from '~/components/Thingtime/ContextMenu/ThingContex
 import type { ThingContextMenuAction } from '~/components/Thingtime/ContextMenu/ThingContextMenu';
 import { buildThingContextMenuModel } from '~/components/Thingtime/ContextMenu/contextMenuModel';
 import { useThingContextMenu } from '~/components/Thingtime/ContextMenu/useThingContextMenu';
+import { getThingZoneBoxes, resolveThingZone } from '~/components/Thingtime/thingZones';
+import type { ThingZone, ThingZoneBox, ThingZoneBoxes } from '~/components/Thingtime/thingZones';
 
 // Live stories for the Thing Context Menu design-system entry.
 // Every story is self-contained: it builds its own model, wires the hook the
@@ -100,6 +102,128 @@ const RightClickStory = () => {
 				{...menu.menuProps}
 				model={model}
 				meta={{ path: 'garden.flowers', type: 'string' }}
+				onAction={(fired) => setLastAction(formatAction(fired))}
+			/>
+			<StoryActionLog value={lastAction} />
+		</Box>
+	);
+};
+
+const ZONE_COLORS: Record<ThingZone, string> = {
+	key: 'var(--tt-accent, hotpink)',
+	value: 'var(--tt-link, #2f8fd6)',
+	thing: 'var(--tt-muted, #9a9aa6)'
+};
+
+const ZonesStory = () => {
+	const [lastAction, setLastAction] = React.useState<string | null>(null);
+	const [zone, setZone] = React.useState<ThingZone>('thing');
+	const [boxes, setBoxes] = React.useState<ThingZoneBoxes | null>(null);
+	const rowRef = React.useRef<HTMLDivElement | null>(null);
+	const menu = useThingContextMenu();
+
+	// mirror the live trigger: key-zone right-clicks lead with key verbs
+	const model = React.useMemo(() => {
+		const base = buildThingContextMenuModel({ editMode: true });
+
+		if (zone !== 'key') {
+			return base;
+		}
+
+		return {
+			sections: [
+				{
+					id: 'key-zone',
+					label: 'Key',
+					actions: [
+						{ id: 'rename-key', command: 'rename-key', label: 'Rename key…', icon: '✏️', hint: 'Edit the property name' },
+						{ id: 'copy-key', command: 'copy-key', label: 'Copy key', icon: '📋', hint: 'flowers' }
+					]
+				},
+				...base.sections
+			]
+		};
+	}, [zone]);
+
+	// measure the virtual bounding boxes relative to the fixture
+	const measure = React.useCallback(() => {
+		const rowEl = rowRef.current;
+		const zoneBoxes = getThingZoneBoxes(rowEl);
+
+		if (!rowEl || !zoneBoxes) {
+			return;
+		}
+
+		const origin = rowEl.getBoundingClientRect();
+		const relative = (box?: ThingZoneBox) => box && { ...box, x: box.x - origin.x, y: box.y - origin.y };
+
+		setBoxes({ key: relative(zoneBoxes.key), value: relative(zoneBoxes.value), thing: relative(zoneBoxes.thing)! });
+	}, []);
+
+	React.useEffect(() => {
+		measure();
+		window.addEventListener('resize', measure);
+
+		return () => {
+			window.removeEventListener('resize', measure);
+		};
+	}, [measure]);
+
+	const overlay = (box: ThingZoneBox | undefined, color: string, dashed?: boolean, pad = 0) =>
+		box && (
+			<Box
+				position="absolute"
+				left={`${box.x - pad}px`}
+				top={`${box.y - pad}px`}
+				width={`${box.width + pad * 2}px`}
+				height={`${box.height + pad * 2}px`}
+				border={`1.5px ${dashed ? 'dashed' : 'solid'} ${color}`}
+				borderRadius="var(--tt-radius-xs, 7px)"
+				pointerEvents="none"
+			/>
+		);
+
+	return (
+		<Box>
+			<Box
+				ref={rowRef}
+				position="relative"
+				display="inline-block"
+				padding="14px"
+				cursor="context-menu"
+				onContextMenu={(e) => {
+					e.preventDefault();
+					setZone(resolveThingZone(e.target as Element, rowRef.current));
+					menu.openAtPointer(e);
+				}}
+			>
+				<Text data-tt-zone="key" width="fit-content" fontFamily="var(--tt-font-mono, monospace)" fontSize="12px" color="var(--tt-muted, #9a9aa6)">
+					garden.flowers
+				</Text>
+				<Text data-tt-zone="value" width="fit-content" fontSize="20px">
+					Roses, tulips, sunflowers
+				</Text>
+				{overlay(boxes?.thing, ZONE_COLORS.thing, true, 8)}
+				{overlay(boxes?.key, ZONE_COLORS.key)}
+				{overlay(boxes?.value, ZONE_COLORS.value)}
+			</Box>
+
+			<Flex columnGap="14px" marginTop="6px" wrap="wrap">
+				{(['key', 'value', 'thing'] as ThingZone[]).map((z) => (
+					<Flex key={z} alignItems="center" columnGap="6px">
+						<Box width="10px" height="10px" border={`1.5px ${z === 'thing' ? 'dashed' : 'solid'} ${ZONE_COLORS[z]}`} borderRadius="3px" />
+						<Text fontFamily="var(--tt-font-mono, monospace)" fontSize="10px" color="var(--tt-muted, #9a9aa6)" textTransform="uppercase" letterSpacing="0.08em">
+							{z}
+							{zone === z ? ' ←' : ''}
+						</Text>
+					</Flex>
+				))}
+			</Flex>
+
+			<ThingContextMenu
+				{...menu.menuProps}
+				model={model}
+				meta={{ path: 'garden.flowers', type: 'string', zone }}
 				onAction={(fired) => setLastAction(formatAction(fired))}
 			/>
 			<StoryActionLog value={lastAction} />
@@ -257,6 +381,14 @@ export const thingContextMenuStories: DesignSystemStory[] = [
 			'Any thing surface can open the same menu at the pointer with onContextMenu — in the live app the whole thing row is wired, and the deepest thing under the pointer wins. The surface clamps itself inside the viewport.',
 		render: RightClickStory,
 		note: 'On touch devices the native long-press maps to the same contextmenu event.'
+	},
+	{
+		id: 'zones',
+		title: 'Zones — virtual bounding boxes',
+		description:
+			'Every atomic thing exposes three zones, each with its own box: the key (property name), the value, and the whole thing (key + value union). Right-click each area of the fixture: the menu header badges the zone you hit, and key-zone clicks lead with key verbs (Rename key…, Copy key). The outlines are measured live by getThingZoneBoxes().',
+		render: ZonesStory,
+		note: 'The same boxes back drag/drop next: resolveThingZone(target, thing) for hit-testing, getThingZoneBoxes(thing) for geometry.'
 	},
 	{
 		id: 'programmatic-modal',
