@@ -1,9 +1,8 @@
 import React from 'react';
-import { Box, Flex, Input, Textarea } from '@chakra-ui/react';
+import { Box, Flex, Input } from '@chakra-ui/react';
 import { Columns2, Eye, Paintbrush, PictureInPicture2, Rows2 } from 'lucide-react';
 
 import { useLopu } from '../Lopu/useLopu';
-import { parseThingValueJson, stringifyThingValue } from './jsonValue';
 import { Thingtime } from './Thingtime';
 import { useThingtime } from './useThingtime';
 
@@ -12,16 +11,20 @@ import { useThingtime } from './useThingtime';
 // The layout is a binary tree — every window (leaf) can split horizontally
 // (side by side) or vertically (stacked), any divider drags to resize, and
 // each window carries its own thing path, view/edit mode, and content mode
-// (Aa pretty editor / {} raw JSON). Windows have macOS-style traffic lights
-// (close / minimise / maximise), can pop out into floating windows (drag +
-// resize + dock back), and scroll independently.
+// (Aa reader view / {} code view — both are the Thingtime component; {} adds
+// developer chrome). Windows have macOS-style traffic lights (close /
+// minimise / maximise), can pop out into floating windows (drag + resize +
+// dock back), and scroll independently.
 //
 // The live layout mirrors into thingtime.settings.editor.live (debounced) so
 // the drawer's Editor section can list and manage windows, and named layouts
 // persist under thingtime.settings.editor.configs. The drawer drives the
 // mounted editor over the shared events bus with 'editor-command' events.
 
-export type EditorContentMode = 'things' | 'json';
+// Aa = reader view; {} = code view — both render the Thingtime component,
+// the code view just adds developer chrome (type icons, key counts, [n]
+// indices, value pills) via Thingtime's codeView prop
+export type EditorContentMode = 'reader' | 'code';
 
 export type EditorLeaf = {
 	id: string;
@@ -69,7 +72,7 @@ const makeLeaf = (path: string, edit: boolean): EditorLeaf => ({
 	kind: 'leaf',
 	path,
 	edit,
-	contentMode: 'things'
+	contentMode: 'reader'
 });
 
 // immutable tree ops -------------------------------------------------------
@@ -170,7 +173,8 @@ const sanitizeLeafData = (raw: any): EditorLeaf | null => {
 		kind: 'leaf',
 		path: raw.path,
 		edit: !!raw.edit,
-		contentMode: raw.contentMode === 'json' ? 'json' : 'things'
+		// 'json' was the pre-rework name for the code view
+		contentMode: raw.contentMode === 'code' || raw.contentMode === 'json' ? 'code' : 'reader'
 	};
 };
 
@@ -347,7 +351,7 @@ const TrafficLights = (props: {
 	</Flex>
 );
 
-// Aa / {} — pretty editor vs raw JSON (the claude-design-mockup-v1 pattern)
+// Aa / {} — reader view vs code view (the claude-design-mockup-v1 pattern)
 const ContentModeToggle = (props: { mode: EditorContentMode; onChange: (mode: EditorContentMode) => void }) => (
 	<Flex
 		className="editor-content-mode"
@@ -358,7 +362,7 @@ const ContentModeToggle = (props: { mode: EditorContentMode; onChange: (mode: Ed
 		background="var(--tt-surface-alt, #f5f5f7)"
 		borderRadius="var(--tt-radius-sm, 9px)"
 	>
-		{(['things', 'json'] as EditorContentMode[]).map((mode) => {
+		{(['reader', 'code'] as EditorContentMode[]).map((mode) => {
 			const active = props.mode === mode;
 
 			return (
@@ -366,7 +370,8 @@ const ContentModeToggle = (props: { mode: EditorContentMode; onChange: (mode: Ed
 					key={mode}
 					as="button"
 					type="button"
-					title={mode === 'things' ? 'Pretty editor' : 'Raw JSON'}
+					title={mode === 'reader' ? 'Reader view' : 'Code view (developer chrome)'}
+					aria-pressed={active}
 					alignItems="center"
 					justifyContent="center"
 					height="19px"
@@ -376,179 +381,17 @@ const ContentModeToggle = (props: { mode: EditorContentMode; onChange: (mode: Ed
 					color={active ? 'var(--tt-card, #ffffff)' : 'var(--tt-muted, #9a9aa6)'}
 					fontSize="10.5px"
 					fontWeight={700}
-					fontFamily={mode === 'json' ? 'var(--tt-font-mono, monospace)' : 'inherit'}
+					fontFamily={mode === 'code' ? 'var(--tt-font-mono, monospace)' : 'inherit'}
 					cursor="pointer"
 					transition="background 0.15s ease, color 0.15s ease"
 					onClick={() => props.onChange(mode)}
 				>
-					{mode === 'things' ? 'Aa' : '{}'}
+					{mode === 'reader' ? 'Aa' : '{}'}
 				</Flex>
 			);
 		})}
 	</Flex>
 );
-
-// dirty {} drafts survive window remounts (maximise/split/dock swap element
-// types and remount the window) — keyed by window id + path so a path change
-// never leaks a draft onto another thing
-const jsonDrafts = new Map<string, { draft: string; dirty: boolean }>();
-
-// raw {} editor for a window: JSON in, JSON out through setThingtime
-const JsonEditorBody = (props: { path: string; draftKey: string }) => {
-	const { getThingtime, setThingtime, thingtime } = useThingtime();
-	const lopu = useLopu();
-
-	const thing = React.useMemo(() => {
-		return getThingtime(props.path);
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [getThingtime, props.path, thingtime]);
-
-	// null = the value can't round-trip through JSON (circular references)
-	const pretty = React.useMemo(() => stringifyThingValue(thing), [thing]);
-
-	const [draft, setDraft] = React.useState(() => jsonDrafts.get(props.draftKey)?.draft ?? pretty ?? '');
-	const [dirty, setDirty] = React.useState(() => jsonDrafts.get(props.draftKey)?.dirty ?? false);
-	const [error, setError] = React.useState<string | null>(null);
-
-	React.useEffect(() => {
-		if (!dirty && pretty !== null) {
-			setDraft(pretty);
-		}
-	}, [pretty, dirty]);
-
-	React.useEffect(() => {
-		if (dirty) {
-			jsonDrafts.set(props.draftKey, { draft, dirty });
-		} else {
-			jsonDrafts.delete(props.draftKey);
-		}
-	}, [props.draftKey, draft, dirty]);
-
-	const apply = React.useCallback(() => {
-		const parsed = parseThingValueJson(draft);
-
-		if (!parsed.ok) {
-			setError(parsed.error);
-			return;
-		}
-
-		setThingtime(props.path, parsed.value, { namespace: 'user' });
-		setError(null);
-		setDirty(false);
-		jsonDrafts.delete(props.draftKey);
-		lopu({ title: 'Applied {} edit 🧬', description: props.path, status: 'success', duration: 3000 });
-	}, [draft, props.path, props.draftKey, setThingtime, lopu]);
-
-	// circular values (e.g. the thingtime root's self-links) have no faithful
-	// JSON form — say so instead of showing a lossy placeholder
-	if (pretty === null && !dirty) {
-		return (
-			<Flex alignItems="center" justifyContent="center" height="100%" paddingX="20px">
-				<Box
-					fontFamily="var(--tt-font-mono, monospace)"
-					fontSize="11.5px"
-					color="var(--tt-muted, #9a9aa6)"
-					textAlign="center"
-					lineHeight="1.7"
-				>
-					This thing contains circular references, so it can&apos;t be edited as raw JSON.
-					<br />
-					Point the window at a deeper path, or use the Aa editor.
-				</Box>
-			</Flex>
-		);
-	}
-
-	return (
-		<Flex flexDirection="column" height="100%" minHeight={0}>
-			<Textarea
-				value={draft}
-				onChange={(e) => {
-					setDraft(e.target.value);
-					setDirty(true);
-					setError(null);
-				}}
-				onKeyDown={(e) => {
-					if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-						e.preventDefault();
-						apply();
-					}
-				}}
-				spellCheck={false}
-				aria-label={`Raw JSON for ${props.path}`}
-				flex="1"
-				minHeight={0}
-				resize="none"
-				border="none"
-				outline="none"
-				_focus={{ boxShadow: 'none' }}
-				borderRadius="0"
-				paddingX="16px"
-				paddingY="12px"
-				fontFamily="var(--tt-font-mono, monospace)"
-				fontSize="12px"
-				lineHeight="1.6"
-				color="var(--tt-ink, #16161a)"
-				background="var(--tt-card, #ffffff)"
-			/>
-			{(dirty || error) && (
-				<Flex
-					alignItems="center"
-					columnGap="8px"
-					flexShrink={0}
-					paddingX="10px"
-					paddingY="6px"
-					borderTop="1px solid var(--tt-border-light, #f0f0f2)"
-					background="var(--tt-surface, #fafafb)"
-				>
-					<Flex
-						as="button"
-						type="button"
-						alignItems="center"
-						paddingX="10px"
-						height="24px"
-						borderRadius="var(--tt-radius-sm, 9px)"
-						background="var(--tt-ink, #16161a)"
-						color="var(--tt-card, #ffffff)"
-						fontSize="11px"
-						fontWeight={700}
-						cursor="pointer"
-						_hover={{ opacity: 0.85 }}
-						onClick={apply}
-					>
-						Apply ⌘↵
-					</Flex>
-					<Flex
-						as="button"
-						type="button"
-						alignItems="center"
-						paddingX="8px"
-						height="24px"
-						borderRadius="var(--tt-radius-sm, 9px)"
-						color="var(--tt-muted, #9a9aa6)"
-						fontSize="11px"
-						fontWeight={600}
-						cursor="pointer"
-						_hover={{ background: 'var(--tt-surface-hover, #ececee)' }}
-						onClick={() => {
-							setDraft(pretty ?? '');
-							setDirty(false);
-							setError(null);
-							jsonDrafts.delete(props.draftKey);
-						}}
-					>
-						Revert
-					</Flex>
-					{error && (
-						<Box fontFamily="var(--tt-font-mono, monospace)" fontSize="10.5px" color="var(--tt-danger, #d6455a)" noOfLines={1}>
-							{error}
-						</Box>
-					)}
-				</Flex>
-			)}
-		</Flex>
-	);
-};
 
 const EditorWindow = (props: {
 	leaf: EditorLeaf;
@@ -658,22 +501,18 @@ const EditorWindow = (props: {
 				)}
 			</Flex>
 
-			{/* window body: its own scroll context */}
-			{leaf.contentMode === 'json' ? (
-				<Box flex="1" minHeight={0}>
-					<JsonEditorBody key={`${leaf.id}:${leaf.path}`} path={leaf.path} draftKey={`${leaf.id}:${leaf.path}`} />
-				</Box>
-			) : (
-				<Box flex="1" minHeight={0} overflow="auto" paddingX="18px" paddingY="16px">
-					<Thingtime
-						key={`${leaf.id}:${leaf.path}`}
-						path={leaf.path}
-						thing={thing}
-						edit={leaf.edit}
-						debugId={`EditorWindow-${leaf.id}`}
-					/>
-				</Box>
-			)}
+			{/* window body: its own scroll context. Aa and {} are the same
+			Thingtime tree — {} adds developer chrome via codeView */}
+			<Box flex="1" minHeight={0} overflow="auto" paddingX="18px" paddingY="16px">
+				<Thingtime
+					key={`${leaf.id}:${leaf.path}`}
+					path={leaf.path}
+					thing={thing}
+					edit={leaf.edit}
+					codeView={leaf.contentMode === 'code'}
+					debugId={`EditorWindow-${leaf.id}`}
+				/>
+			</Box>
 		</Flex>
 	);
 };
@@ -970,13 +809,6 @@ export const EditorSplit = (props: { initialPath: string }) => {
 		setFloating((prev) => prev.filter((win) => win.leaf.id !== id));
 		setMinimised((prev) => prev.filter((leaf) => leaf.id !== id));
 		setMaximisedId((prev) => (prev === id ? null : prev));
-
-		// closed windows drop their unsaved {} drafts
-		Array.from(jsonDrafts.keys()).forEach((key) => {
-			if (key.startsWith(`${id}:`)) {
-				jsonDrafts.delete(key);
-			}
-		});
 	}, []);
 
 	const dockLeaf = React.useCallback((leaf: EditorLeaf) => {

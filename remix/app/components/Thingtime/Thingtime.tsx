@@ -179,6 +179,10 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 
 	const [editMode, setEditMode] = React.useState(props?.edit === true ? true : false);
 
+	// {} code view: same tree, more developer chrome (type icons, key counts,
+	// [n] array indices, boolean pills). Propagates to children.
+	const codeView = props?.codeView === true;
+
 	// watch props.editMode and if it changes then set editMode to props.editMode
 	React.useEffect(() => {
 		if (typeof props?.edit === 'boolean') {
@@ -444,6 +448,24 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		} else if (type === 'number') {
 			return thing;
 		} else if (type === 'boolean') {
+			if (codeView) {
+				// developer view: literal value as a coloured pill
+				return (
+					<Box
+						as="span"
+						paddingX="8px"
+						paddingY="2px"
+						borderRadius="var(--tt-radius-xs, 7px)"
+						background={thing ? 'var(--tt-positive-tint, #e4f6ea)' : 'var(--tt-surface-alt, #f5f5f7)'}
+						color={thing ? 'var(--tt-positive, #2f8f4f)' : 'var(--tt-muted, #9a9aa6)'}
+						fontFamily="var(--tt-font-mono, monospace)"
+						fontSize="15px"
+					>
+						{thing ? 'true' : 'false'}
+					</Box>
+				);
+			}
+
 			return thing ? 'true' : 'false';
 		} else if (type === 'object') {
 			if (thing === null) {
@@ -475,7 +497,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		} else {
 			return 'Something..';
 		}
-	}, [thing, thingDep, type, chakraChild, keys]);
+	}, [thing, thingDep, type, chakraChild, keys, codeView]);
 
 	const renderChakra = React.useMemo(() => {
 		if (!editMode && chakra && render) {
@@ -635,6 +657,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 								key={idx}
 								seen={nextSeen}
 								edit={editMode}
+								codeView={codeView}
 								render={render}
 								circular={seen?.includes?.(nextThing)}
 								depth={depth + 1}
@@ -691,6 +714,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		thingtime?.settings?.keyGateLength,
 		seen,
 		editMode,
+		codeView,
 		render,
 		depth,
 		safeJoin(fullPath),
@@ -989,8 +1013,11 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	}, [safeJoin(props?.path)]);
 
 	const renderedPath = React.useMemo(() => {
+		// code view labels array elements by index, [0] style
+		const codeHumanPath = codeView && props?.parent instanceof Array ? `[${humanPath}]` : humanPath;
+
 		if (editMode) {
-			return humanPath;
+			return codeHumanPath;
 		}
 
 		if (humanPath?.includes?.('hidden')) {
@@ -1002,8 +1029,8 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 			return humanPath.split?.('unique')?.[0];
 		}
 
-		return humanPath;
-	}, [humanPath, editMode]);
+		return codeHumanPath;
+	}, [humanPath, editMode, codeView, props?.parent]);
 
 	// updatePath updateKey updatePathname updatePropName
 	const updatePath = React.useCallback(
@@ -1237,7 +1264,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 							<Flex className="thingPathDom-raw" data-tt-zone="key">
 								{pathDom}
 							</Flex>
-							{editMode && (
+							{(editMode || codeView) && (
 								<Box
 									className="thingTypeIcon"
 									// marginTop={-3}
@@ -1248,6 +1275,25 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 								>
 									{typeIcon}
 								</Box>
+							)}
+							{codeView && hasCollapsibleChildren && (
+								<Flex
+									className="thingKeyCount"
+									alignItems="center"
+									marginTop={-1}
+									marginLeft={2}
+									paddingX="8px"
+									paddingY="1px"
+									background="var(--tt-surface-alt, #f5f5f7)"
+									borderRadius="999px"
+									color="var(--tt-muted, #9a9aa6)"
+									fontFamily="var(--tt-font-mono, monospace)"
+									fontSize="11px"
+									whiteSpace="nowrap"
+									userSelect="none"
+								>
+									{thing instanceof Array ? `${thing.length} item${thing.length === 1 ? '' : 's'}` : `${keys?.length || 0} key${keys?.length === 1 ? '' : 's'}`}
+								</Flex>
 							)}
 							{pathDom && (
 								<Flex className="thingPathDom" flexDirection="row" columnGap={1} marginTop={-1} paddingLeft={1}>
