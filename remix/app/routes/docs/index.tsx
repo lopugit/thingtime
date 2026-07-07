@@ -12,13 +12,16 @@ import {
   Stack,
   Text
 } from '@chakra-ui/react';
-import { ArrowRight, Boxes, Component } from 'lucide-react';
+import { ArrowRight, Boxes, Component, ServerCog } from 'lucide-react';
 import { Link as RouterLink } from 'react-router';
+
+import { apiEndpointDocs } from '~/docs/apiDocs';
 
 import { designEntries } from './designEntries';
 import { designSystemEntries } from './design-system/entries';
 
 const referenceLinks = [
+  { label: 'API reference', to: '/docs/api', detail: `${apiEndpointDocs.length} endpoints with JSON -docs routes` },
   { label: 'Design mockups', to: '/docs/design', detail: `${designEntries.length} standalone bundles` },
   { label: 'Design system', to: '/docs/design-system', detail: `${designSystemEntries.length} component ${designSystemEntries.length === 1 ? 'entry' : 'entries'}` }
 ];
@@ -58,6 +61,39 @@ export default function DocsIndex() {
         </Box>
 
         <SimpleGrid columns={{ base: 1 }} spacing={4}>
+          <Box
+            id="api-reference"
+            bg="var(--tt-card, #ffffff)"
+            border="1px solid"
+            borderColor="var(--tt-border, #ececef)"
+            borderRadius="var(--tt-radius-lg, 16px)"
+            boxShadow="var(--tt-shadow-card, 0 1px 2px rgba(0, 0, 0, 0.05))"
+            p={5}
+          >
+            <Flex align="center" gap={3} mb={4}>
+              <Icon as={ServerCog} boxSize={5} color="var(--tt-docs-accent, #008060)" />
+              <Heading as="h3" fontSize="lg">
+                API reference
+              </Heading>
+            </Flex>
+            <Text color="var(--tt-text, #5a5a66)" fontSize="sm" lineHeight="1.6" mb={5}>
+              Browse every Thingtime API endpoint with request steps, payload examples, response shapes, and curl,
+              wget, Node.js, Python, and Ruby snippets generated from the live docs registry.
+            </Text>
+            <Button
+              as={RouterLink}
+              to="/docs/api"
+              size="sm"
+              bg="var(--tt-docs-accent, #008060)"
+              borderRadius="var(--tt-radius-sm, 9px)"
+              color="white"
+              _hover={{ bg: 'var(--tt-docs-accent-hover, #006e52)' }}
+              rightIcon={<Icon as={ArrowRight} boxSize={4} />}
+            >
+              Browse API
+            </Button>
+          </Box>
+
           <Box
             id="design-browser"
             bg="var(--tt-card, #ffffff)"
@@ -184,6 +220,9 @@ export default function DocsIndex() {
             On this page
           </Text>
           <Stack spacing={3} fontSize="sm">
+            <ChakraLink href="#api-reference" color="var(--tt-text, #5a5a66)">
+              API reference
+            </ChakraLink>
             <ChakraLink href="#design-browser" color="var(--tt-text, #5a5a66)">
               Design browser
             </ChakraLink>

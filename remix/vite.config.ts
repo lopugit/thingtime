@@ -8,6 +8,8 @@ import { defineConfig } from 'vite';
 
 const designDocsBase = '/docs/design-bundles';
 const designDocsDir = fileURLToPath(new URL('../docs/design', import.meta.url));
+const thingtimeProductionOrigin = 'https://thingtime.com';
+const mongoPasswordPlaceholder = '<db_password>';
 
 const require = createRequire(import.meta.url);
 const { resolveDevContext } = require('./scripts/worktree-ports.cjs');
@@ -28,6 +30,42 @@ const isPathInside = (parent: string, child: string) => {
 
   return relativePath === '' || (!relativePath.startsWith('..') && !isAbsolute(relativePath));
 };
+
+const hasUsableLocalApiEnv = () => {
+  const connectionString = process.env.MONGODB_CONNECTION_STRING?.trim();
+
+  if (!connectionString) return false;
+  if (connectionString.includes(mongoPasswordPlaceholder) && !process.env.MONGO_PASS?.trim()) {
+    return false;
+  }
+
+  if (
+    process.env.NODE_ENV === 'production' &&
+    !process.env.JWT_PRIVATE_KEY?.trim() &&
+    !process.env.JWT_SECRET?.trim()
+  ) {
+    return false;
+  }
+
+  return true;
+};
+
+const rewriteProxyCookieForLocalDev = (cookie: string) => {
+  return cookie
+    .split(';')
+    .map((part) => part.trim())
+    .filter((part, index) => {
+      if (index === 0) return true;
+
+      const lower = part.toLowerCase();
+      return !lower.startsWith('domain=') && lower !== 'secure';
+    })
+    .join('; ');
+};
+
+const localApiTarget = `http://127.0.0.1:${devPorts.api}`;
+const shouldUseProductionApiProxy = !hasUsableLocalApiEnv();
+const apiProxyTarget = shouldUseProductionApiProxy ? thingtimeProductionOrigin : localApiTarget;
 
 const designDocsStaticPlugin = () => ({
   name: 'thingtime-design-docs-static',
@@ -114,8 +152,24 @@ export default defineConfig({
     },
     proxy: {
       '/api': {
-        target: `http://127.0.0.1:${devPorts.api}`,
-        changeOrigin: true
+        target: apiProxyTarget,
+        changeOrigin: true,
+        configure(proxy) {
+          if (!shouldUseProductionApiProxy) return;
+
+          proxy.on('proxyReq', (proxyReq) => {
+            proxyReq.setHeader('x-thingtime-api-fallback', 'vite-dev');
+          });
+
+          proxy.on('proxyRes', (proxyRes) => {
+            const setCookie = proxyRes.headers['set-cookie'];
+            if (!setCookie) return;
+
+            proxyRes.headers['set-cookie'] = Array.isArray(setCookie)
+              ? setCookie.map(rewriteProxyCookieForLocalDev)
+              : [rewriteProxyCookieForLocalDev(setCookie)];
+          });
+        }
       }
     }
   },

@@ -1,5 +1,8 @@
 import { defineHandler } from 'nitro/h3';
 
+import { createApiDocPayload, getApiDocByPath } from '../../../app/docs/apiDocs';
+import { proxyApiRequestToFallback, shouldProxyApiToFallback } from '../../utils/apiFallback';
+
 type RouteModule = {
   loader?: (args: { request: Request; params?: Record<string, string> }) => Promise<unknown> | unknown;
   action?: (args: { request: Request; params?: Record<string, string> }) => Promise<unknown> | unknown;
@@ -59,6 +62,18 @@ const normalizePath = (value: unknown, url?: string) => {
   return pathname.replace(/^\/api\/?/, '').replace(/^\/+|\/+$/g, '');
 };
 
+const jsonResponse = (value: unknown, init: ResponseInit = {}) => {
+  const headers = new Headers(init.headers);
+  if (!headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json; charset=utf-8');
+  }
+
+  return new Response(JSON.stringify(value), {
+    ...init,
+    headers
+  });
+};
+
 const normalizeResponse = (value: unknown) => {
   if (value instanceof Response) {
     return value;
@@ -85,15 +100,33 @@ const normalizeResponse = (value: unknown) => {
     });
   }
 
-  return new Response(JSON.stringify(value ?? null), {
-    headers: {
-      'Content-Type': 'application/json; charset=utf-8'
-    }
-  });
+  return jsonResponse(value ?? null);
 };
 
 export default defineHandler(async (event) => {
   const path = normalizePath(event.context.params?.path, event.req.url);
+  const method = event.req.method.toUpperCase();
+
+  if (path.endsWith('-docs')) {
+    if (method !== 'GET' && method !== 'HEAD' && method !== 'POST') {
+      return new Response('Method not allowed', {
+        status: 405,
+        headers: { Allow: 'GET, POST' }
+      });
+    }
+
+    const doc = getApiDocByPath(path);
+    if (!doc) {
+      return jsonResponse({ ok: false, error: 'API docs not found' }, { status: 404 });
+    }
+
+    return jsonResponse(createApiDocPayload(doc, new URL(event.req.url).origin));
+  }
+
+  if (shouldProxyApiToFallback(event.req)) {
+    return proxyApiRequestToFallback(event.req);
+  }
+
   const loadModule = routeModules[path];
 
   if (!loadModule) {
@@ -101,7 +134,6 @@ export default defineHandler(async (event) => {
   }
 
   const route = await loadModule();
-  const method = event.req.method.toUpperCase();
   const handler = method === 'GET' || method === 'HEAD' ? route.loader : route.action;
 
   if (!handler) {
