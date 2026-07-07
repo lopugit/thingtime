@@ -13,10 +13,11 @@ import {
   Stack,
   Text
 } from '@chakra-ui/react';
-import { BookOpen, Boxes, ChevronRight, GripVertical, Menu, PanelLeftClose, PanelLeftOpen, Search, X } from 'lucide-react';
+import { BookOpen, Boxes, ChevronRight, Component, GripVertical, Menu, PanelLeftClose, PanelLeftOpen, Search, X } from 'lucide-react';
 import { Link as RouterLink, Outlet, useLocation, useSearchParams } from 'react-router';
 
 import { designEntries, designKindColors, getDesignEntryBySlug } from './designEntries';
+import { designSystemEntries, designSystemStatusColors, getDesignSystemEntryBySlug } from './design-system/entries';
 
 const docsNav = [
   {
@@ -30,6 +31,12 @@ const docsNav = [
     to: '/docs/design',
     icon: Boxes,
     description: 'Standalone previews'
+  },
+  {
+    label: 'Design system',
+    to: '/docs/design-system',
+    icon: Component,
+    description: 'Component library'
   }
 ];
 
@@ -50,7 +57,11 @@ const isActivePath = (pathname: string, to: string) => {
   return pathname === to || pathname.startsWith(`${to}/`);
 };
 
-const isDesignPath = (pathname: string) => pathname.startsWith('/docs/design');
+const isDesignPath = (pathname: string) =>
+  pathname === '/docs/design' || pathname.startsWith('/docs/design/');
+
+const isDesignSystemPath = (pathname: string) =>
+  pathname === '/docs/design-system' || pathname.startsWith('/docs/design-system/');
 
 const clampDrawerWidth = (width: number) =>
   Math.min(MAX_DRAWER_WIDTH, Math.max(MIN_DRAWER_WIDTH, width));
@@ -182,6 +193,88 @@ function DrawerDesignEntryList({ onNavigate }: DrawerDesignEntryListProps) {
   );
 }
 
+type DrawerDesignSystemListProps = {
+  onNavigate?: () => void;
+};
+
+function DrawerDesignSystemList({ onNavigate }: DrawerDesignSystemListProps) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedEntry =
+    getDesignSystemEntryBySlug(searchParams.get('component')) || designSystemEntries[0];
+
+  const selectEntry = (slug: string) => {
+    const next = new URLSearchParams(searchParams);
+    next.set('component', slug);
+    setSearchParams(next);
+    onNavigate?.();
+  };
+
+  return (
+    <Stack minH={0} spacing={3}>
+      <Flex align="center" gap={2}>
+        <Text
+          color="var(--tt-muted, #9a9aa6)"
+          fontFamily="mono"
+          fontSize="11px"
+          fontWeight="600"
+          letterSpacing="0.14em"
+          textTransform="uppercase"
+        >
+          Components
+        </Text>
+        <Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="xs">
+          {designSystemEntries.length}
+        </Text>
+      </Flex>
+
+      <Stack spacing={0.5}>
+        {designSystemEntries.map((entry) => {
+          const active = entry.slug === selectedEntry.slug;
+          const statusColor = designSystemStatusColors[entry.status];
+
+          return (
+            <Box
+              key={entry.slug}
+              _hover={{ bg: active ? 'var(--tt-card, #ffffff)' : 'var(--tt-surface-hover, #ececee)' }}
+              as="button"
+              bg={active ? 'var(--tt-card, #ffffff)' : 'transparent'}
+              borderLeft="3px solid"
+              borderLeftColor={active ? 'var(--tt-docs-accent, #008060)' : 'transparent'}
+              cursor="pointer"
+              data-testid={`design-system-entry-${entry.slug}`}
+              onClick={() => selectEntry(entry.slug)}
+              px={3}
+              py={2}
+              textAlign="left"
+              transition="background 140ms ease, border-color 140ms ease"
+              type="button"
+              w="100%"
+            >
+              <Flex align="center" gap={2} minW={0}>
+                <Badge
+                  bg={statusColor.bg}
+                  borderRadius="sm"
+                  color={statusColor.color}
+                  flexShrink={0}
+                  px={1.5}
+                >
+                  {entry.status}
+                </Badge>
+                <Text fontSize="sm" fontWeight={active ? '700' : '600'} isTruncated minW={0}>
+                  {entry.title}
+                </Text>
+              </Flex>
+              <Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="xs" isTruncated mt={0.5}>
+                {entry.slug}
+              </Text>
+            </Box>
+          );
+        })}
+      </Stack>
+    </Stack>
+  );
+}
+
 type DocsDrawerContentProps = {
   closeTestId?: string;
   onClose?: () => void;
@@ -271,6 +364,7 @@ function DocsDrawerContent({ closeTestId, onClose, pathname, showClose = false }
       </Stack>
 
       {isDesignPath(pathname) ? <DrawerDesignEntryList onNavigate={onClose} /> : null}
+      {isDesignSystemPath(pathname) ? <DrawerDesignSystemList onNavigate={onClose} /> : null}
     </Stack>
   );
 }

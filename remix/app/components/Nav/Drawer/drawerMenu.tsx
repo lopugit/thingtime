@@ -103,7 +103,8 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		to: '/docs',
 		children: [
 			{ id: 'docs-index', label: 'Docs home', icon: '📖', to: '/docs' },
-			{ id: 'docs-design', label: 'Design mockups', icon: '🖼️', to: '/docs/design' }
+			{ id: 'docs-design', label: 'Design mockups', icon: '🖼️', to: '/docs/design' },
+			{ id: 'docs-design-system', label: 'Design system', icon: '🧩', to: '/docs/design-system' }
 		]
 	}
 ];

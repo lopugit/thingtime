@@ -11,6 +11,7 @@ import BrandingOld from './routes/branding_old';
 import CryptoPage from './routes/crypto';
 import DocsLayout from './routes/docs/DocsLayout';
 import DocsDesign from './routes/docs/design';
+import DocsDesignSystem from './routes/docs/design-system/index';
 import DocsIndex from './routes/docs/index';
 import Edge from './routes/edge';
 import Index from './routes/_index';
@@ -92,7 +93,8 @@ export const router = createBrowserRouter([
         element: <DocsLayout />,
         children: [
           { index: true, element: <DocsIndex /> },
-          { path: 'design', element: <DocsDesign /> }
+          { path: 'design', element: <DocsDesign /> },
+          { path: 'design-system', element: <DocsDesignSystem /> }
         ]
       },
       { path: 'edge', element: <Edge /> },

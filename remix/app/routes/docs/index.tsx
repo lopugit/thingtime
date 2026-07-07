@@ -12,13 +12,15 @@ import {
   Stack,
   Text
 } from '@chakra-ui/react';
-import { ArrowRight, Boxes } from 'lucide-react';
+import { ArrowRight, Boxes, Component } from 'lucide-react';
 import { Link as RouterLink } from 'react-router';
 
 import { designEntries } from './designEntries';
+import { designSystemEntries } from './design-system/entries';
 
 const referenceLinks = [
-  { label: 'Design mockups', to: '/docs/design', detail: `${designEntries.length} standalone bundles` }
+  { label: 'Design mockups', to: '/docs/design', detail: `${designEntries.length} standalone bundles` },
+  { label: 'Design system', to: '/docs/design-system', detail: `${designSystemEntries.length} component ${designSystemEntries.length === 1 ? 'entry' : 'entries'}` }
 ];
 
 export default function DocsIndex() {
@@ -87,6 +89,39 @@ export default function DocsIndex() {
               Browse mockups
             </Button>
           </Box>
+
+          <Box
+            id="design-system"
+            bg="var(--tt-card, #ffffff)"
+            border="1px solid"
+            borderColor="var(--tt-border, #ececef)"
+            borderRadius="var(--tt-radius-lg, 16px)"
+            boxShadow="var(--tt-shadow-card, 0 1px 2px rgba(0, 0, 0, 0.05))"
+            p={5}
+          >
+            <Flex align="center" gap={3} mb={4}>
+              <Icon as={Component} boxSize={5} color="var(--tt-docs-accent, #008060)" />
+              <Heading as="h3" fontSize="lg">
+                Design system
+              </Heading>
+            </Flex>
+            <Text color="var(--tt-text, #5a5a66)" fontSize="sm" lineHeight="1.6" mb={5}>
+              Storybook-style component library: live stories, API reference, usage guidelines, accessibility notes,
+              and theme tokens for Thingtime components — starting with the Thing Context Menu.
+            </Text>
+            <Button
+              as={RouterLink}
+              to="/docs/design-system"
+              size="sm"
+              bg="var(--tt-docs-accent, #008060)"
+              borderRadius="var(--tt-radius-sm, 9px)"
+              color="white"
+              _hover={{ bg: 'var(--tt-docs-accent-hover, #006e52)' }}
+              rightIcon={<Icon as={ArrowRight} boxSize={4} />}
+            >
+              Browse components
+            </Button>
+          </Box>
         </SimpleGrid>
 
         <Box
@@ -151,6 +186,9 @@ export default function DocsIndex() {
           <Stack spacing={3} fontSize="sm">
             <ChakraLink href="#design-browser" color="var(--tt-text, #5a5a66)">
               Design browser
+            </ChakraLink>
+            <ChakraLink href="#design-system" color="var(--tt-text, #5a5a66)">
+              Design system
             </ChakraLink>
           </Stack>
         </Box>

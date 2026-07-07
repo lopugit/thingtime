@@ -156,6 +156,11 @@ export const Footer = (props) => {
               Design mockups
             </Text>
           </Link>
+          <Link to="/docs/design-system">
+            <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
+              Design system
+            </Text>
+          </Link>
         </Flex>
 
         {/* account / user column */}
