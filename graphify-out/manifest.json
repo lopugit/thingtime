@@ -1,7 +1,7 @@
 {
   "AGENTS.md": {
-    "mtime": 1783427200.582972,
-    "ast_hash": "a2e0010cd243df4cda1f15de79b3aa89",
+    "mtime": 1783432803.2223635,
+    "ast_hash": "bdb19a6399b44c1129527e6d5aa53d72",
     "semantic_hash": ""
   },
   ".claude/settings.json": {
@@ -420,8 +420,8 @@
     "semantic_hash": "7a9487375978d8001acd93869df362b0"
   },
   "package.json": {
-    "mtime": 1783426894.7908833,
-    "ast_hash": "ab1eddfb282803308f19b2c3d9b49220",
+    "mtime": 1783430338.0014498,
+    "ast_hash": "6ab8460b9cf5ae8d27fe62c5a9c044a5",
     "semantic_hash": ""
   },
   "raycast/.eslintrc.json": {
@@ -1490,8 +1490,8 @@
     "semantic_hash": "c64df66b18e07a8201e80def07e7cceb"
   },
   "remix/ecosystem.config.js": {
-    "mtime": 1783426883.9760568,
-    "ast_hash": "62eace4d4a501497ca45d35a56e298de",
+    "mtime": 1783430346.9185903,
+    "ast_hash": "a3d225b37e5a348b268a63fff5c0b7e7",
     "semantic_hash": ""
   },
   "remix/nitro.config.ts": {
@@ -1585,8 +1585,8 @@
     "semantic_hash": "6f47150939eacf6d3a89a87289013ea3"
   },
   "CLAUDE.md": {
-    "mtime": 1783427176.7016623,
-    "ast_hash": "042db2b7b7c84a41300c11a30ada9d1c",
+    "mtime": 1783430465.1779637,
+    "ast_hash": "a11482fb34b26bfd47089379e2e60115",
     "semantic_hash": ""
   },
   "CODEX.md": {
@@ -2980,8 +2980,8 @@
     "semantic_hash": ""
   },
   ".claude/launch.json": {
-    "mtime": 1783427092.5854967,
-    "ast_hash": "586a0e9f0de5be93c02500d89a61af24",
+    "mtime": 1783428746.7919524,
+    "ast_hash": "aa9c98f786a4331575e10ee21b02e390",
     "semantic_hash": ""
   }
 }
