@@ -1,7 +1,7 @@
 {
   "AGENTS.md": {
-    "mtime": 1783430650.0289543,
-    "ast_hash": "7289ec5a1fd9f925f869b3f8c6076923",
+    "mtime": 1783439674.5731192,
+    "ast_hash": "a0092f1a175afbd36920a63b32614bce",
     "semantic_hash": ""
   },
   ".claude/settings.json": {
@@ -1580,8 +1580,8 @@
     "semantic_hash": "6f47150939eacf6d3a89a87289013ea3"
   },
   "CLAUDE.md": {
-    "mtime": 1783430655.655651,
-    "ast_hash": "10425b68483e77ec3d7c9a8e1811077d",
+    "mtime": 1783439674.5736885,
+    "ast_hash": "1d934114c161416ea476a72a495cc223",
     "semantic_hash": ""
   },
   "CODEX.md": {
@@ -1600,8 +1600,8 @@
     "semantic_hash": "459fb3a271e5340a04d5f7275dfd1195"
   },
   "README.md": {
-    "mtime": 1783430644.6071362,
-    "ast_hash": "f472b604f95fa354bd1819245794c0b7",
+    "mtime": 1783439674.5724227,
+    "ast_hash": "a6874969bc6a97009d1a5dc91c25f0eb",
     "semantic_hash": ""
   },
   "VERCEL_DEPLOYMENTS.md": {
@@ -1825,8 +1825,8 @@
     "semantic_hash": "f162fbffa18046af73dfca08802a536f"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1783430660.3331113,
-    "ast_hash": "7e0d17b48ecb0520676e83b916973f24",
+    "mtime": 1783439674.5740643,
+    "ast_hash": "74d6edf3ced500a85fa705e4e9b7f865",
     "semantic_hash": ""
   },
   "remix/README.md": {
@@ -3002,6 +3002,16 @@
   "remix/app/api/utils/email/types.ts": {
     "mtime": 1783430535.200314,
     "ast_hash": "ff66e642cf6835e54cba6dac5f4af65f",
+    "semantic_hash": ""
+  },
+  "PRs/35-codex-email-ses-mongodb--add-mongo-backed-ses-email-delivery.md": {
+    "mtime": 1783439674.574498,
+    "ast_hash": "b1552516ca56908efb3afdd58ec29774",
+    "semantic_hash": ""
+  },
+  "docs/email-owned-architecture.md": {
+    "mtime": 1783439674.571828,
+    "ast_hash": "eb5b651e67f68e463d028d1c960e673c",
     "semantic_hash": ""
   }
 }

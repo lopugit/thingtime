@@ -151,6 +151,12 @@ Current auth signup and service-account verification emails use this pipeline
 through `sendVerificationEmail`. Use `sendEmailOtp` for future email code
 flows, and `sendNewsletterEmail` for newsletter sends.
 
+The long-term provider-independent roadmap lives in
+[`docs/email-owned-architecture.md`](docs/email-owned-architecture.md). Keep
+future SES, queue, inbound, self-hosted SMTP, and sender-reputation work aligned
+with that architecture so Thingtime can move delivery providers without changing
+feature callers.
+
 ## Auth and Lopu AI
 
 JWT-backed browser sessions prefer ES256 asymmetric signing so other platforms

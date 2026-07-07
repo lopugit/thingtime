@@ -18,6 +18,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- Added a long-term owned email architecture TODO covering provider-independent
+  outbox delivery, event ingestion, inbound mail, self-hosted SMTP relay
+  milestones, and sender-reputation safeguards. — _Codex (AI), 2026-07-08_
 - Added a Mongo-backed Thingtime email delivery service with console and Amazon
   SES providers, outbound message recording, suppression/unsubscribe
   collections, and SES environment setup docs. — _Codex (AI), 2026-07-07_
