@@ -31,7 +31,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   delete); seeding creates demo users, posts, reactions, comments and two demo
   algorithms through the same utils the routes use (FUNDAMENTALS §2). New API
   routes registered in `nitro.config.ts` + `server/routes/api/[...].ts`; API
-  tests added under `things`/`algorithms`/`profile` groups. — Claude (AI), 2026-07-08
+  tests added under `things`/`algorithms`/`profile` groups. Full detail (data
+  model, ranking maths, 20 adversarially-verified review fixes) in
+  [`PRs/40-claude-feed-algorithms-profile-516506--feed-personal-algorithms-profiles-settings.md`](../PRs/40-claude-feed-algorithms-profile-516506--feed-personal-algorithms-profiles-settings.md).
+  — Claude (AI), 2026-07-08
 
 - 🌈 **2026 design refactor**: adopted the Claude Design mockups
   (`docs/design/claude-design-mockup-v1` product UI + `claude-design-mockup-v2-fable`
