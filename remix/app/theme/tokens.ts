@@ -333,7 +333,9 @@ export const resolveTheme = (
 
 const px = (n: number) => `${Math.round(n * 100) / 100}px`
 
-export const rainbowGradient = (rainbow: string[], angle = '120deg') =>
+// 90deg so the tile wraps seamlessly under moving-rainbow background-position
+// animation — diagonal angles phase-shift at the tile edge and show a join.
+export const rainbowGradient = (rainbow: string[], angle = '90deg') =>
   `linear-gradient(${angle}, ${rainbow[3]}, ${rainbow[4]}, ${rainbow[0]}, ${rainbow[1]}, ${rainbow[2]}, ${rainbow[3]})`
 
 export const rainbowTextGradient = (rainbow: string[]) =>
