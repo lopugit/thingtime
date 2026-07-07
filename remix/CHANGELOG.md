@@ -18,6 +18,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- Added zero-env API fallback for fresh local/sandbox development: when local
+  MongoDB/auth env is absent, Vite and Nitro forward same-origin API requests to
+  `https://thingtime.com` with the same method, path, query, cookies, headers,
+  and payload, rewriting upstream auth cookies for local HTTP. — _Codex (AI),
+  2026-07-08_
 - Added API self-documentation: every registered Thingtime API endpoint now has
   a matching `-docs` JSON route that responds to GET or POST, and `/docs/api`
   documents endpoint behavior, steps, payload/response examples, and curl,

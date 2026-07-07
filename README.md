@@ -30,7 +30,11 @@ private environment variables in local development or on Vercel.
 The web app lives in `remix/` for historical path compatibility, but it now
 runs as a React Router non-framework Vite client with Nitro API/server routes.
 Vite serves the browser app on port `9999` and proxies `/api` to the Nitro dev
-server on port `10000`.
+server on port `10000` when local backend env is configured. If the local
+MongoDB/auth env is absent, the dev proxy sends `/api` requests to
+`https://thingtime.com` instead so a fresh clone can still log in, create
+service-account tokens, and use the production-backed API without copying any
+private `.env` files.
 
 Local development URLs on Lopu's Mac:
 
@@ -59,7 +63,9 @@ That script updates `remix/.env.auto`; do not edit that generated block by hand.
 The local dev launcher loads `remix/.env`, `remix/.env.local`, and
 `remix/.env.auto` before spawning Nitro and Vite, so ignored private values like
 MongoDB credentials are available to local API status checks without committing
-secrets.
+secrets. These files are optional for normal app usage; set them only when you
+want to override the default production-backed API fallback or run the backend
+self-sufficiently against your own services.
 
 Build and verify the Vercel output with:
 
@@ -93,10 +99,15 @@ Node.js, Python, and Ruby snippets. The browser reference lives at
 
 ## MongoDB
 
-MongoDB powers the app status checks and database-backed API routes.
+MongoDB powers the app status checks and database-backed API routes. Local
+development does not require MongoDB env by default: when
+`MONGODB_CONNECTION_STRING` is missing, Vite and Nitro forward same-origin API
+requests to `https://thingtime.com` with the same method, path, query, headers,
+cookies, and payload. Upstream auth cookies are rewritten for local HTTP so
+zero-env localhost login can persist through the proxy.
 
-Set these variables in `remix/.env` for local development, and in your Vercel
-project environment variables for deployed previews/production:
+Set these variables only when you want this checkout or deployment to serve API
+requests from its own MongoDB instead of falling back to Thingtime production:
 
 ```sh
 MONGODB_CONNECTION_STRING="mongodb+srv://<user>:<db_password>@<cluster>/<database>?retryWrites=true&w=majority"

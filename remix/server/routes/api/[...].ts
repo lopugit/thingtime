@@ -1,6 +1,7 @@
 import { defineHandler } from 'nitro/h3';
 
 import { createApiDocPayload, getApiDocByPath } from '../../../app/docs/apiDocs';
+import { proxyApiRequestToFallback, shouldProxyApiToFallback } from '../../utils/apiFallback';
 
 type RouteModule = {
   loader?: (args: { request: Request; params?: Record<string, string> }) => Promise<unknown> | unknown;
@@ -107,6 +108,10 @@ export default defineHandler(async (event) => {
     }
 
     return jsonResponse(createApiDocPayload(doc, new URL(event.req.url).origin));
+  }
+
+  if (shouldProxyApiToFallback(event.req)) {
+    return proxyApiRequestToFallback(event.req);
   }
 
   const loadModule = routeModules[path];

@@ -10,6 +10,8 @@ PR: https://github.com/lopugit/thingtime/pull/39
 - Added `/docs/api` as a browsable API reference with endpoint details, steps, payload examples, response examples, and curl/wget/node/python/ruby snippets.
 - Added generated Docs group smoke tests to `/tests`.
 - Updated Nitro route config so the new docs routes are explicitly registered.
+- Added zero-env API fallback so fresh local/sandbox runs proxy same-origin API
+  calls to `https://thingtime.com` when MongoDB/auth env is absent.
 
 ## Validation
 
@@ -18,6 +20,8 @@ PR: https://github.com/lopugit/thingtime/pull/39
 - Local docs matrix: 29 documented endpoints checked over `GET` and `POST`, 58 total checks, 0 failures.
 - Browser checked `/docs/api` on desktop and mobile, including full-page scroll and filtered endpoint state.
 - Browser checked `/tests` Docs group; 58 passed, 0 failed.
+- Zero-env fallback checks cover the env detector, Nitro proxy helper, and live
+  production-backed API responses from local fallback requests.
 
 ## Notes
 
