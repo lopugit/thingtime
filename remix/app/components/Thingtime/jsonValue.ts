@@ -23,9 +23,10 @@ export const sanitizeParsedJson = (value: unknown): unknown => {
 	return out;
 };
 
-// pretty-print any thing value; undefined/functions/circulars degrade to a
-// readable placeholder instead of throwing
-export const stringifyThingValue = (value: unknown): string => {
+// pretty-print any thing value; returns null when the value can't round-trip
+// through JSON (circular references like the thingtime root's self-links), so
+// editors can show a notice instead of a lossy placeholder
+export const stringifyThingValue = (value: unknown): string | null => {
 	if (value === undefined) {
 		return '';
 	}
@@ -33,7 +34,7 @@ export const stringifyThingValue = (value: unknown): string => {
 	try {
 		return JSON.stringify(value, null, 2) ?? String(value);
 	} catch {
-		return String(value);
+		return null;
 	}
 };
 

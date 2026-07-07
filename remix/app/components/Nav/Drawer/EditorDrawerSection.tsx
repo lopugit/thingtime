@@ -2,6 +2,7 @@ import React from 'react';
 import { Box, Flex, Text } from '@chakra-ui/react';
 import { useLocation, useNavigate } from 'react-router';
 
+import { useLopu } from '../../Lopu/useLopu';
 import { useThingtime } from '../../Thingtime/useThingtime';
 import { buildThingModeUrl, parseThingMode, parseThingPath } from '../../Thingtime/thingRoute';
 
@@ -27,15 +28,34 @@ const rowStyles = {
 	paddingY: '5px',
 	borderRadius: 'var(--tt-radius-sm, 9px)',
 	_hover: { background: 'var(--tt-surface-hover, #ececee)' },
+	_focusVisible: { outline: '2px solid var(--tt-accent, hotpink)', outlineOffset: '-2px' },
 	transition: 'background 0.15s ease',
 	cursor: 'pointer'
 } as const;
 
+// keyboard/screen-reader semantics for clickable rows (they can contain
+// nested action buttons, so they can't be <button>s themselves)
+const rowA11y = (label: string, onActivate: () => void) => ({
+	role: 'button',
+	tabIndex: 0,
+	'aria-label': label,
+	onClick: onActivate,
+	onKeyDown: (e: React.KeyboardEvent) => {
+		if (e.key === 'Enter' || e.key === ' ') {
+			e.preventDefault();
+			onActivate();
+		}
+	}
+});
+
 const rowActionStyles = {
+	as: 'button' as const,
+	type: 'button' as const,
 	alignItems: 'center',
 	justifyContent: 'center',
-	width: '18px',
+	minWidth: '18px',
 	height: '18px',
+	paddingX: '2px',
 	borderRadius: '5px',
 	color: 'var(--tt-faint, #b6b6c0)',
 	fontSize: '11px',
@@ -43,7 +63,8 @@ const rowActionStyles = {
 	cursor: 'pointer',
 	flexShrink: 0,
 	transition: 'background 0.15s ease, color 0.15s ease',
-	_hover: { background: 'var(--tt-border-light, #f0f0f2)', color: 'var(--tt-ink, #16161a)' }
+	_hover: { background: 'var(--tt-border-light, #f0f0f2)', color: 'var(--tt-ink, #16161a)' },
+	_focusVisible: { outline: '2px solid var(--tt-accent, hotpink)', outlineOffset: '1px' }
 } as const;
 
 const SectionLabel = (props: { children: React.ReactNode }) => (
@@ -64,8 +85,21 @@ const SectionLabel = (props: { children: React.ReactNode }) => (
 
 export const EditorDrawerSection = (props: { onNavigate?: () => void }) => {
 	const { thingtime, setThingtime, events } = useThingtime();
+	const lopu = useLopu();
 	const navigate = useNavigate();
 	const { pathname } = useLocation();
+
+	// deleting a config takes two clicks: the first arms for a moment
+	const [armedDelete, setArmedDelete] = React.useState<string | null>(null);
+	const armedTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+	React.useEffect(() => {
+		return () => {
+			if (armedTimerRef.current) {
+				clearTimeout(armedTimerRef.current);
+			}
+		};
+	}, []);
 
 	const editorMounted = parseThingMode(pathname) === 'editor';
 	const editorSettings = thingtime?.settings?.editor;
@@ -104,11 +138,23 @@ export const EditorDrawerSection = (props: { onNavigate?: () => void }) => {
 
 	const deleteConfig = React.useCallback(
 		(name: string) => {
+			// first click arms, second click (within 3s) deletes
+			if (armedDelete !== name) {
+				setArmedDelete(name);
+				if (armedTimerRef.current) {
+					clearTimeout(armedTimerRef.current);
+				}
+				armedTimerRef.current = setTimeout(() => setArmedDelete(null), 3000);
+				return;
+			}
+
 			const next = { ...configs };
 			delete next[name];
 			setThingtime('settings.editor.configs', next, { namespace: 'editor' });
+			setArmedDelete(null);
+			lopu({ title: 'Config deleted 🗑️', description: `"${name}" was removed from settings.editor.configs.`, status: 'info', duration: 5000 });
 		},
-		[configs, setThingtime]
+		[armedDelete, configs, setThingtime, lopu]
 	);
 
 	return (
@@ -128,7 +174,7 @@ export const EditorDrawerSection = (props: { onNavigate?: () => void }) => {
 			</Text>
 
 			{!editorMounted && (
-				<Flex {...rowStyles} onClick={openEditor}>
+				<Flex {...rowStyles} {...rowA11y('Open editor', openEditor)}>
 					<Text fontSize="xs">💻 Open editor</Text>
 				</Flex>
 			)}
@@ -157,7 +203,12 @@ export const EditorDrawerSection = (props: { onNavigate?: () => void }) => {
 
 					{minimised.length > 0 && <SectionLabel>Minimised</SectionLabel>}
 					{minimised.map((win) => (
-						<Flex key={win.id} {...rowStyles} title="Restore window" onClick={() => emit({ command: 'restore-window', id: win.id })}>
+						<Flex
+							key={win.id}
+							{...rowStyles}
+							title="Restore window"
+							{...rowA11y(`Restore window ${win.path}`, () => emit({ command: 'restore-window', id: win.id }))}
+						>
 							<Text fontSize="10px" flexShrink={0}>
 								▢
 							</Text>
@@ -172,12 +223,12 @@ export const EditorDrawerSection = (props: { onNavigate?: () => void }) => {
 						</Flex>
 					))}
 
-					<Flex {...rowStyles} onClick={() => emit({ command: 'new-window' })}>
+					<Flex {...rowStyles} {...rowA11y('New editor window', () => emit({ command: 'new-window' }))}>
 						<Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
 							＋ New window
 						</Text>
 					</Flex>
-					<Flex {...rowStyles} onClick={() => emit({ command: 'save-config' })}>
+					<Flex {...rowStyles} {...rowA11y('Save layout as config', () => emit({ command: 'save-config' }))}>
 						<Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
 							💾 Save layout as config
 						</Text>
@@ -187,7 +238,7 @@ export const EditorDrawerSection = (props: { onNavigate?: () => void }) => {
 
 			{configNames.length > 0 && <SectionLabel>Configs</SectionLabel>}
 			{configNames.map((name) => (
-				<Flex key={name} {...rowStyles} title={`Open "${name}"`} onClick={() => openConfig(name)}>
+				<Flex key={name} {...rowStyles} title={`Open "${name}"`} {...rowA11y(`Open config ${name}`, () => openConfig(name))}>
 					<Text fontSize="10px" flexShrink={0}>
 						📐
 					</Text>
@@ -197,13 +248,16 @@ export const EditorDrawerSection = (props: { onNavigate?: () => void }) => {
 					<Flex marginLeft="auto" columnGap="3px">
 						<Flex
 							{...rowActionStyles}
-							title={`Delete "${name}"`}
+							color={armedDelete === name ? 'var(--tt-danger, #d6455a)' : rowActionStyles.color}
+							fontWeight={armedDelete === name ? 700 : 400}
+							title={armedDelete === name ? 'Click again to delete' : `Delete "${name}"`}
+							aria-label={armedDelete === name ? `Confirm delete ${name}` : `Delete ${name}`}
 							onClick={(e) => {
 								e.stopPropagation();
 								deleteConfig(name);
 							}}
 						>
-							×
+							{armedDelete === name ? 'sure?' : '×'}
 						</Flex>
 					</Flex>
 				</Flex>

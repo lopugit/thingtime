@@ -67,7 +67,9 @@ const NumberValueInput = (props: { value: number; onValueChange: (value: number)
 
 	const step = React.useCallback(
 		(delta: number) => {
-			const current = Number(draft);
+			// an emptied field steps from the committed value, not from
+			// Number('') === 0
+			const current = draft.trim() === '' ? NaN : Number(draft);
 			const next = (Number.isNaN(current) ? value || 0 : current) + delta;
 			setDraft(String(next));
 			onValueChange(next);

@@ -158,6 +158,79 @@ const collectLeaves = (node: EditorNode | null): EditorLeaf[] => {
 	return node.kind === 'leaf' ? [node] : [...collectLeaves(node.a), ...collectLeaves(node.b)];
 };
 
+// configs live in settings.editor.configs where the {} editor can produce
+// arbitrary shapes — sanitize before anything reaches render state
+const sanitizeLeafData = (raw: any): EditorLeaf | null => {
+	if (!raw || raw.kind !== 'leaf' || typeof raw.path !== 'string' || !raw.path) {
+		return null;
+	}
+
+	return {
+		id: typeof raw.id === 'string' && raw.id ? raw.id : uid(),
+		kind: 'leaf',
+		path: raw.path,
+		edit: !!raw.edit,
+		contentMode: raw.contentMode === 'json' ? 'json' : 'things'
+	};
+};
+
+const sanitizeNodeData = (raw: any): EditorNode | null => {
+	if (!raw) {
+		return null;
+	}
+
+	if (raw.kind === 'leaf') {
+		return sanitizeLeafData(raw);
+	}
+
+	if (raw.kind === 'split') {
+		const a = sanitizeNodeData(raw.a);
+		const b = sanitizeNodeData(raw.b);
+
+		if (!a && !b) {
+			return null;
+		}
+		if (!a) {
+			return b;
+		}
+		if (!b) {
+			return a;
+		}
+
+		const ratio = typeof raw.ratio === 'number' && !Number.isNaN(raw.ratio) ? raw.ratio : 0.5;
+
+		return {
+			id: typeof raw.id === 'string' && raw.id ? raw.id : uid(),
+			kind: 'split',
+			direction: raw.direction === 'column' ? 'column' : 'row',
+			ratio: Math.min(MAX_RATIO, Math.max(MIN_RATIO, ratio)),
+			a,
+			b
+		};
+	}
+
+	return null;
+};
+
+// keep floating windows reachable: clamp geometry into the viewport
+const clampFloatingGeometry = (win: FloatingWindow): FloatingWindow => ({
+	...win,
+	width: Math.max(300, Math.min(Number(win.width) || 440, window.innerWidth - 24)),
+	height: Math.max(220, Math.min(Number(win.height) || 380, window.innerHeight - 24)),
+	x: Math.max(0, Math.min(Number(win.x) || 90, window.innerWidth - 120)),
+	y: Math.max(0, Math.min(Number(win.y) || 90, window.innerHeight - 60))
+});
+
+const sanitizeFloatingData = (raw: any): FloatingWindow | null => {
+	const leaf = sanitizeLeafData(raw?.leaf);
+
+	if (!leaf) {
+		return null;
+	}
+
+	return clampFloatingGeometry({ leaf, x: raw.x, y: raw.y, width: raw.width, height: raw.height });
+};
+
 const findLeaf = (node: EditorNode | null, id: string): EditorLeaf | null => {
 	return collectLeaves(node).find((leaf) => leaf.id === id) || null;
 };
@@ -229,6 +302,7 @@ const TrafficLight = (props: { color: string; glyph: string; title: string; onCl
 		title={props.title}
 		alignItems="center"
 		justifyContent="center"
+		position="relative"
 		width="12px"
 		height="12px"
 		flexShrink={0}
@@ -241,6 +315,9 @@ const TrafficLight = (props: { color: string; glyph: string; title: string; onCl
 		cursor="pointer"
 		transition="transform 0.1s ease"
 		_active={{ transform: 'scale(0.9)' }}
+		// the visual stays 12px; the hit target is ~20px
+		_before={{ content: '""', position: 'absolute', inset: '-4px' }}
+		_focusVisible={{ outline: '2px solid var(--tt-accent, hotpink)', outlineOffset: '1px' }}
 		onClick={props.onClick}
 	>
 		<Box as="span" className="traffic-glyph" opacity={0} transition="opacity 0.12s ease">
@@ -259,10 +336,10 @@ const TrafficLights = (props: {
 	<Flex
 		className="editor-traffic-lights"
 		alignItems="center"
-		columnGap="5px"
+		columnGap="6px"
 		flexShrink={0}
 		paddingRight="4px"
-		sx={{ '&:hover .traffic-glyph': { opacity: 1 } }}
+		sx={{ '&:hover .traffic-glyph, &:focus-within .traffic-glyph': { opacity: 1 } }}
 	>
 		<TrafficLight color="var(--tt-rainbow-1, #f34a4a)" glyph="×" title="Close window" onClick={props.onClose} />
 		<TrafficLight color="var(--tt-rainbow-2, #ffbc48)" glyph="−" title="Minimise window" onClick={props.onMinimise} />
@@ -311,8 +388,13 @@ const ContentModeToggle = (props: { mode: EditorContentMode; onChange: (mode: Ed
 	</Flex>
 );
 
+// dirty {} drafts survive window remounts (maximise/split/dock swap element
+// types and remount the window) — keyed by window id + path so a path change
+// never leaks a draft onto another thing
+const jsonDrafts = new Map<string, { draft: string; dirty: boolean }>();
+
 // raw {} editor for a window: JSON in, JSON out through setThingtime
-const JsonEditorBody = (props: { path: string }) => {
+const JsonEditorBody = (props: { path: string; draftKey: string }) => {
 	const { getThingtime, setThingtime, thingtime } = useThingtime();
 	const lopu = useLopu();
 
@@ -321,15 +403,26 @@ const JsonEditorBody = (props: { path: string }) => {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [getThingtime, props.path, thingtime]);
 
-	const [draft, setDraft] = React.useState(() => stringifyThingValue(thing));
-	const [dirty, setDirty] = React.useState(false);
+	// null = the value can't round-trip through JSON (circular references)
+	const pretty = React.useMemo(() => stringifyThingValue(thing), [thing]);
+
+	const [draft, setDraft] = React.useState(() => jsonDrafts.get(props.draftKey)?.draft ?? pretty ?? '');
+	const [dirty, setDirty] = React.useState(() => jsonDrafts.get(props.draftKey)?.dirty ?? false);
 	const [error, setError] = React.useState<string | null>(null);
 
 	React.useEffect(() => {
-		if (!dirty) {
-			setDraft(stringifyThingValue(thing));
+		if (!dirty && pretty !== null) {
+			setDraft(pretty);
 		}
-	}, [thing, dirty]);
+	}, [pretty, dirty]);
+
+	React.useEffect(() => {
+		if (dirty) {
+			jsonDrafts.set(props.draftKey, { draft, dirty });
+		} else {
+			jsonDrafts.delete(props.draftKey);
+		}
+	}, [props.draftKey, draft, dirty]);
 
 	const apply = React.useCallback(() => {
 		const parsed = parseThingValueJson(draft);
@@ -342,8 +435,29 @@ const JsonEditorBody = (props: { path: string }) => {
 		setThingtime(props.path, parsed.value, { namespace: 'user' });
 		setError(null);
 		setDirty(false);
+		jsonDrafts.delete(props.draftKey);
 		lopu({ title: 'Applied {} edit 🧬', description: props.path, status: 'success', duration: 3000 });
-	}, [draft, props.path, setThingtime, lopu]);
+	}, [draft, props.path, props.draftKey, setThingtime, lopu]);
+
+	// circular values (e.g. the thingtime root's self-links) have no faithful
+	// JSON form — say so instead of showing a lossy placeholder
+	if (pretty === null && !dirty) {
+		return (
+			<Flex alignItems="center" justifyContent="center" height="100%" paddingX="20px">
+				<Box
+					fontFamily="var(--tt-font-mono, monospace)"
+					fontSize="11.5px"
+					color="var(--tt-muted, #9a9aa6)"
+					textAlign="center"
+					lineHeight="1.7"
+				>
+					This thing contains circular references, so it can&apos;t be edited as raw JSON.
+					<br />
+					Point the window at a deeper path, or use the Aa editor.
+				</Box>
+			</Flex>
+		);
+	}
 
 	return (
 		<Flex flexDirection="column" height="100%" minHeight={0}>
@@ -417,9 +531,10 @@ const JsonEditorBody = (props: { path: string }) => {
 						cursor="pointer"
 						_hover={{ background: 'var(--tt-surface-hover, #ececee)' }}
 						onClick={() => {
-							setDraft(stringifyThingValue(thing));
+							setDraft(pretty ?? '');
 							setDirty(false);
 							setError(null);
+							jsonDrafts.delete(props.draftKey);
 						}}
 					>
 						Revert
@@ -546,7 +661,7 @@ const EditorWindow = (props: {
 			{/* window body: its own scroll context */}
 			{leaf.contentMode === 'json' ? (
 				<Box flex="1" minHeight={0}>
-					<JsonEditorBody path={leaf.path} />
+					<JsonEditorBody key={`${leaf.id}:${leaf.path}`} path={leaf.path} draftKey={`${leaf.id}:${leaf.path}`} />
 				</Box>
 			) : (
 				<Box flex="1" minHeight={0} overflow="auto" paddingX="18px" paddingY="16px">
@@ -726,6 +841,11 @@ export const EditorSplit = (props: { initialPath: string }) => {
 	const { thingtime, setThingtime, events } = useThingtime();
 	const lopu = useLopu();
 
+	// setThingtime's identity changes on every thingtime write — read it
+	// through a ref so effects that write settings never re-trigger themselves
+	const setThingtimeRef = React.useRef(setThingtime);
+	setThingtimeRef.current = setThingtime;
+
 	// default layout: rendered view beside an editable view of the same thing
 	const [tree, setTree] = React.useState<EditorNode | null>(() => defaultTree(props.initialPath));
 	const [floating, setFloating] = React.useState<FloatingWindow[]>([]);
@@ -751,10 +871,25 @@ export const EditorSplit = (props: { initialPath: string }) => {
 			return;
 		}
 
-		setTree((layout.tree as EditorNode) ?? null);
-		setFloating(Array.isArray(layout.floating) ? layout.floating : []);
-		setMinimised(Array.isArray(layout.minimised) ? layout.minimised : []);
+		// configs are user-editable data ({} editor writes anywhere) — never
+		// trust their shape
+		setTree(sanitizeNodeData(layout.tree));
+		setFloating((Array.isArray(layout.floating) ? layout.floating : []).map(sanitizeFloatingData).filter(Boolean) as FloatingWindow[]);
+		setMinimised((Array.isArray(layout.minimised) ? layout.minimised : []).map(sanitizeLeafData).filter(Boolean) as EditorLeaf[]);
 		setMaximisedId(null);
+	}, []);
+
+	// viewport shrinks (window resize) never strand floating windows offscreen
+	React.useEffect(() => {
+		const onResize = () => {
+			setFloating((prev) => prev.map(clampFloatingGeometry));
+		};
+
+		window.addEventListener('resize', onResize);
+
+		return () => {
+			window.removeEventListener('resize', onResize);
+		};
 	}, []);
 
 	// the drawer opens a saved config by name, then navigates here
@@ -766,35 +901,55 @@ export const EditorSplit = (props: { initialPath: string }) => {
 			return;
 		}
 
+		openedConfigRef.current = true;
+
 		const config = configsRef.current?.[pendingConfigName];
 
 		if (config) {
-			openedConfigRef.current = true;
 			applyLayout(config);
-			setThingtime('settings.editor.openConfig', null, { namespace: 'editor' });
 		}
-	}, [pendingConfigName, applyLayout, setThingtime]);
 
-	// mirror the live layout into settings (debounced) for the drawer
+		// always clear the flag — a stale name must not re-fire on the next mount
+		setThingtimeRef.current('settings.editor.openConfig', null, { namespace: 'editor', ignoreUndoRedo: true });
+	}, [pendingConfigName, applyLayout]);
+
+	// mirror the live layout into settings for the drawer: first write lands
+	// immediately (so the drawer never shows a previous session's windows),
+	// later ones debounce. Reads setThingtime via ref and skips identical
+	// payloads — never re-triggers itself, never touches the undo timeline.
+	const lastMirrorRef = React.useRef<string>('');
+	const firstMirrorRef = React.useRef(true);
+
 	React.useEffect(() => {
-		const timer = setTimeout(() => {
-			const windows = [
-				...collectLeaves(tree).map((leaf) => ({ id: leaf.id, path: leaf.path, edit: leaf.edit, contentMode: leaf.contentMode, location: 'docked' })),
-				...floating.map((win) => ({ id: win.leaf.id, path: win.leaf.path, edit: win.leaf.edit, contentMode: win.leaf.contentMode, location: 'floating' }))
-			];
+		const write = () => {
+			const payload = {
+				windows: [
+					...collectLeaves(tree).map((leaf) => ({ id: leaf.id, path: leaf.path, edit: leaf.edit, contentMode: leaf.contentMode, location: 'docked' })),
+					...floating.map((win) => ({ id: win.leaf.id, path: win.leaf.path, edit: win.leaf.edit, contentMode: win.leaf.contentMode, location: 'floating' }))
+				],
+				minimised: minimised.map((leaf) => ({ id: leaf.id, path: leaf.path, edit: leaf.edit, contentMode: leaf.contentMode }))
+			};
 
-			setThingtime(
-				'settings.editor.live',
-				{
-					windows,
-					minimised: minimised.map((leaf) => ({ id: leaf.id, path: leaf.path, edit: leaf.edit, contentMode: leaf.contentMode }))
-				},
-				{ namespace: 'editor' }
-			);
-		}, 600);
+			const serialized = JSON.stringify(payload);
+
+			if (serialized === lastMirrorRef.current) {
+				return;
+			}
+
+			lastMirrorRef.current = serialized;
+			setThingtimeRef.current('settings.editor.live', payload, { namespace: 'editor', ignoreUndoRedo: true });
+		};
+
+		if (firstMirrorRef.current) {
+			firstMirrorRef.current = false;
+			write();
+			return;
+		}
+
+		const timer = setTimeout(write, 600);
 
 		return () => clearTimeout(timer);
-	}, [tree, floating, minimised, setThingtime]);
+	}, [tree, floating, minimised]);
 
 	// ------------------------------------------------------------------
 	// window operations (shared by toolbars and drawer commands)
@@ -815,9 +970,18 @@ export const EditorSplit = (props: { initialPath: string }) => {
 		setFloating((prev) => prev.filter((win) => win.leaf.id !== id));
 		setMinimised((prev) => prev.filter((leaf) => leaf.id !== id));
 		setMaximisedId((prev) => (prev === id ? null : prev));
+
+		// closed windows drop their unsaved {} drafts
+		Array.from(jsonDrafts.keys()).forEach((key) => {
+			if (key.startsWith(`${id}:`)) {
+				jsonDrafts.delete(key);
+			}
+		});
 	}, []);
 
 	const dockLeaf = React.useCallback((leaf: EditorLeaf) => {
+		// docking always exits maximise so the arriving window is visible
+		setMaximisedId(null);
 		setTree((prev) => {
 			if (!prev) {
 				return leaf;
@@ -913,7 +1077,7 @@ export const EditorSplit = (props: { initialPath: string }) => {
 
 		const { tree: currentTree, floating: currentFloating, minimised: currentMinimised } = layoutRef.current;
 
-		setThingtime(
+		setThingtimeRef.current(
 			'settings.editor.configs',
 			{ ...existing, [name]: { tree: currentTree, floating: currentFloating, minimised: currentMinimised } },
 			{ namespace: 'editor' }
@@ -925,7 +1089,7 @@ export const EditorSplit = (props: { initialPath: string }) => {
 			status: 'success',
 			duration: 6000
 		});
-	}, [setThingtime, lopu]);
+	}, [lopu]);
 
 	// drawer → editor commands over the shared events bus
 	React.useEffect(() => {
