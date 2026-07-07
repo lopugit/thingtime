@@ -3133,5 +3133,10 @@
     "mtime": 1783456082.7965178,
     "ast_hash": "0afa4b35f5e8032223493be1df022c1f",
     "semantic_hash": ""
+  },
+  "PRs/39-codex-api-docs-endpoints--add-api-self-documentation-routes.md": {
+    "mtime": 1783457296.5258496,
+    "ast_hash": "edbfa7078ed632aa3cea1b7082143896",
+    "semantic_hash": ""
   }
 }
