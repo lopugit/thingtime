@@ -1162,7 +1162,9 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 									</Box>
 								</Flex>
 							)}
-							<Flex className="thingPathDom-raw">{pathDom}</Flex>
+							<Flex className="thingPathDom-raw" data-tt-zone="key">
+								{pathDom}
+							</Flex>
 							{editMode && (
 								<Box
 									className="thingTypeIcon"
@@ -1206,7 +1208,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 				{/* overflowX auto (not scroll): scroll reserves a permanent
 				scrollbar track that renders as a stray line under every value */}
 				{!loading && !thingtimeChildren && atomicValue && (
-					<Box className="atomicValue" width={'100%'} overflowX={'auto'}>
+					<Box className="atomicValue" data-tt-zone="value" width={'100%'} overflowX={'auto'}>
 						{atomicValue}
 					</Box>
 				)}

@@ -37,8 +37,9 @@ export interface ThingContextMenuProps {
 	model: ThingContextMenuModel;
 	open: boolean;
 	presentation?: ThingContextMenuPresentation;
-	// thing being acted on; rendered in the header
-	meta?: { path?: string; type?: string };
+	// thing being acted on; rendered in the header. zone names which virtual
+	// bounding box was targeted ('key' | 'value' | 'thing' — see thingZones)
+	meta?: { path?: string; type?: string; zone?: string };
 	// pointer position for the 'context' presentation
 	position?: { x: number; y: number };
 	pinned?: boolean;
@@ -578,15 +579,34 @@ export const ThingContextMenu = (props: ThingContextMenuProps) => {
 				onPointerDown={startDrag}
 			>
 				<Box minWidth={0}>
-					<Text
-						fontFamily="var(--tt-font-mono, monospace)"
-						fontSize="11px"
-						color="var(--tt-muted, #9a9aa6)"
-						noOfLines={1}
-						wordBreak="break-all"
-					>
-						{meta?.path || 'thingtime'}
-					</Text>
+					<Flex alignItems="center" columnGap="6px" minWidth={0}>
+						<Text
+							fontFamily="var(--tt-font-mono, monospace)"
+							fontSize="11px"
+							color="var(--tt-muted, #9a9aa6)"
+							noOfLines={1}
+							wordBreak="break-all"
+						>
+							{meta?.path || 'thingtime'}
+						</Text>
+						{meta?.zone && meta.zone !== 'thing' && (
+							<Text
+								flexShrink={0}
+								paddingX="5px"
+								paddingY="1px"
+								background="var(--tt-accent-tint, #fff5fa)"
+								borderRadius="var(--tt-radius-xs, 7px)"
+								fontFamily="var(--tt-font-mono, monospace)"
+								fontSize="9px"
+								fontWeight={600}
+								letterSpacing="0.08em"
+								textTransform="uppercase"
+								color="var(--tt-accent, hotpink)"
+							>
+								{meta.zone}
+							</Text>
+						)}
+					</Flex>
 					{meta?.type && (
 						<Text
 							fontFamily="var(--tt-font-mono, monospace)"

@@ -6,6 +6,8 @@ import { Icon } from '../../Icon/Icon';
 import { useLopu } from '../../Lopu/useLopu';
 import { useThingtime } from '../useThingtime';
 import { buildThingModeUrl } from '../thingRoute';
+import { resolveThingZone } from '../thingZones';
+import type { ThingZone } from '../thingZones';
 import { ThingContextMenu } from './ThingContextMenu';
 import type { ThingContextMenuAction } from './ThingContextMenu';
 import {
@@ -155,8 +157,17 @@ export const ThingContextMenuTrigger = (props: ThingContextMenuTriggerProps) => 
 		};
 	}, [events, menuUuid, menu.closeMenu]);
 
+	// which virtual bounding box (thingZones) the last right-click hit
+	const [targetZone, setTargetZone] = React.useState<ThingZone>('thing');
+
+	// activeElement as it was before the right-click's pointerdown — browsers
+	// focus editors on right-mousedown, so this is the only reliable way to
+	// know whether the user was already editing when they right-clicked
+	const prePointerFocusRef = React.useRef<Element | null>(null);
+
 	// right-click on the thing row opens the same menu at the pointer; the
-	// deepest thing wins via stopPropagation
+	// deepest thing wins via stopPropagation. Zones make the click precise:
+	// the key row, the value box, or the whole thing.
 	React.useEffect(() => {
 		const el = contextTargetRef?.current;
 
@@ -164,26 +175,40 @@ export const ThingContextMenuTrigger = (props: ThingContextMenuTriggerProps) => 
 			return;
 		}
 
-		const handler = (e: MouseEvent) => {
-			// leave the browser's native menu on editable targets (paste,
-			// spellcheck) and on selected text (copy)
-			const target = e.target as HTMLElement | null;
-			const editable = target?.closest?.('input, textarea, [contenteditable="true"], [contenteditable=""], .magic-input-focusable');
-			const selection = window.getSelection?.();
+		const onPointerDown = (ev: PointerEvent) => {
+			if (ev.button === 2 || ev.pointerType !== 'mouse') {
+				prePointerFocusRef.current = document.activeElement;
+			}
+		};
 
-			if (editable || (selection && !selection.isCollapsed)) {
+		const handler = (e: MouseEvent) => {
+			// the browser menu survives exactly two cases: selected text
+			// (copy) and an editor the user was already focused in before the
+			// right-click (caret paste, spellcheck)
+			const target = e.target as HTMLElement | null;
+			const selection = window.getSelection?.();
+			const hasSelection = !!selection && !selection.isCollapsed && selection.toString().length > 0;
+			const editable = target?.closest?.('input, textarea, [contenteditable="true"], [contenteditable=""]') as HTMLElement | null;
+			const previousFocus = prePointerFocusRef.current;
+			const editorWasFocused =
+				!!editable && !!previousFocus && (previousFocus === editable || editable.contains(previousFocus));
+
+			if (hasSelection || editorWasFocused) {
 				e.stopPropagation();
 				return;
 			}
 
 			e.preventDefault();
 			e.stopPropagation();
+			setTargetZone(resolveThingZone(target, el));
 			menu.openAtPointer(e);
 		};
 
+		el.addEventListener('pointerdown', onPointerDown, true);
 		el.addEventListener('contextmenu', handler);
 
 		return () => {
+			el.removeEventListener('pointerdown', onPointerDown, true);
 			el.removeEventListener('contextmenu', handler);
 		};
 	}, [contextTargetRef, variant, menu.openAtPointer]);
@@ -233,13 +258,34 @@ export const ThingContextMenuTrigger = (props: ThingContextMenuTriggerProps) => 
 			};
 		}
 
-		return buildThingContextMenuModel({
+		const base = buildThingContextMenuModel({
 			editMode,
 			readonly,
 			canDelete: !!onDelete,
 			types
 		});
-	}, [variant, editMode, readonly, onDelete, types]);
+
+		// right-clicking the key zone leads with key-specific verbs
+		if (targetZone === 'key' && typeof path === 'string' && path) {
+			return {
+				sections: [
+					{
+						id: 'key-zone',
+						label: 'Key',
+						actions: [
+							...(!readonly
+								? [{ id: 'rename-key', command: 'rename-key', label: 'Rename key…', icon: '✏️', hint: 'Edit the property name' }]
+								: []),
+							{ id: 'copy-key', command: 'copy-key', label: 'Copy key', icon: '📋', hint: path }
+						]
+					},
+					...base.sections
+				]
+			};
+		}
+
+		return base;
+	}, [variant, editMode, readonly, onDelete, types, targetZone, path]);
 
 	// ------------------------------------------------------------------
 	// live command implementations
@@ -371,6 +417,19 @@ export const ThingContextMenuTrigger = (props: ThingContextMenuTriggerProps) => 
 				case 'modify':
 					modifyThing();
 					break;
+				case 'rename-key':
+					setEditMode?.(() => true);
+					setTimeout(() => {
+						const input = document.querySelector<HTMLElement>(`.uuid-${uuid} .thingPathDom-raw .magic-input-focusable`);
+						input?.focus?.();
+					}, 120);
+					break;
+				case 'copy-key':
+					navigator.clipboard
+						.writeText(String(path ?? ''))
+						.then(() => lopu({ title: 'Key copied 📋', description: `"${path}" is on your clipboard.`, status: 'success', duration: 4000 }))
+						.catch(() => lopu({ title: 'Could not copy 😅', description: 'Clipboard access was blocked.', status: 'error' }));
+					break;
 				case 'duplicate':
 					duplicateThing();
 					break;
@@ -419,20 +478,27 @@ export const ThingContextMenuTrigger = (props: ThingContextMenuTriggerProps) => 
 		<ClickAwayListener onClickAway={onClickAway}>
 			<Center className="thing-context-menu-trigger" position="relative">
 				<Flex
-					{...menu.hoverTriggerProps}
 					paddingLeft={1}
 					opacity={menu.open ? 1 : opacity}
 					transition={transition || 'all 0.2s ease-in-out'}
 					cursor="pointer"
 					title="Options"
-					onClick={menu.openPopover}
+					onMouseEnter={() => {
+						setTargetZone('thing');
+						menu.hoverTriggerProps.onMouseEnter();
+					}}
+					onMouseLeave={menu.hoverTriggerProps.onMouseLeave}
+					onClick={() => {
+						setTargetZone('thing');
+						menu.openPopover();
+					}}
 				>
 					<Icon name="wizard" size={iconSize}></Icon>
 				</Flex>
 				<ThingContextMenu
 					{...menu.menuProps}
 					model={model}
-					meta={{ path: dottedPath, type: thingType }}
+					meta={{ path: dottedPath, type: thingType, zone: targetZone }}
 					onAction={onAction}
 				/>
 			</Center>
