@@ -72,7 +72,13 @@ export default function App() {
         ? `${baseTitle} docs - Design mockups`
         : pathname === '/docs'
           ? `${baseTitle} docs`
-          : baseTitle;
+          : pathname === '/feed'
+            ? `${baseTitle} - Feed`
+            : pathname.startsWith('/profile')
+              ? `${baseTitle} - Profile`
+              : pathname === '/settings'
+                ? `${baseTitle} - Settings`
+                : baseTitle;
 
       document.title = routeTitle;
     }

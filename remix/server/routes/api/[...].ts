@@ -6,6 +6,11 @@ type RouteModule = {
 };
 
 const routeModules: Record<string, () => Promise<RouteModule>> = {
+  'v1/algorithms': () => import('../../../app/routes/api/v1/algorithms/_algorithms'),
+  'v1/algorithms/active': () => import('../../../app/routes/api/v1/algorithms/active/_active'),
+  'v1/algorithms/delete': () => import('../../../app/routes/api/v1/algorithms/delete/_delete'),
+  'v1/algorithms/track': () => import('../../../app/routes/api/v1/algorithms/track/_track'),
+  'v1/algorithms/update': () => import('../../../app/routes/api/v1/algorithms/update/_update'),
   'v1/auth/jwks': () => import('../../../app/routes/api/v1/auth/jwks/_jwks'),
   'v1/auth/logout': () => import('../../../app/routes/api/v1/auth/logout/_logout'),
   'v1/auth/me': () => import('../../../app/routes/api/v1/auth/me/_me'),
@@ -30,6 +35,14 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/themes/active': () => import('../../../app/routes/api/v1/themes/active/_active'),
   'v1/themes/delete': () => import('../../../app/routes/api/v1/themes/delete/_delete'),
   'v1/themes/shared': () => import('../../../app/routes/api/v1/themes/shared/_shared'),
+  'v1/things': () => import('../../../app/routes/api/v1/things/_things'),
+  'v1/things/comment': () => import('../../../app/routes/api/v1/things/comment/_comment'),
+  'v1/things/delete': () => import('../../../app/routes/api/v1/things/delete/_delete'),
+  'v1/things/feed': () => import('../../../app/routes/api/v1/things/feed/_feed'),
+  'v1/things/react': () => import('../../../app/routes/api/v1/things/react/_react'),
+  'v1/things/share': () => import('../../../app/routes/api/v1/things/share/_share'),
+  'v1/things/user': () => import('../../../app/routes/api/v1/things/user/_user'),
+  'v1/users/profile': () => import('../../../app/routes/api/v1/users/profile/_profile'),
   'v1/vercel/deployments': () => import('../../../app/routes/api/v1/vercel/deployments/_deployments'),
   'v1/vercel/status': () => import('../../../app/routes/api/v1/vercel/status/_status'),
   'v1/vercel/status-data': () => import('../../../app/routes/api/v1/vercel/status-data/_status-data'),

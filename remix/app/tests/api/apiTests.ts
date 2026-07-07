@@ -381,6 +381,230 @@ export const apiTests: ApiTestDefinition[] = [
     expect: expectJson([401, 404], (body) => body?.ok === false && typeof body?.error === 'string', 'Theme delete was rejected with an error shape.')
   },
   {
+    id: 'things-feed-public',
+    name: 'Feed lists public posts',
+    description: 'The feed route responds anonymously with a posts page shape.',
+    group: 'things',
+    method: 'GET',
+    path: '/api/v1/things/feed?limit=5',
+    expect: expectJson(
+      [200],
+      (body) =>
+        body?.ok === true &&
+        Array.isArray(body?.posts) &&
+        Object.prototype.hasOwnProperty.call(body, 'nextCursor') &&
+        typeof body?.ranked === 'boolean',
+      'Feed returned a posts page with cursor + ranked flag.'
+    )
+  },
+  {
+    id: 'things-feed-filtered',
+    name: 'Feed honours type filter',
+    description: 'Filtering by marketplace type returns only marketplace posts.',
+    group: 'things',
+    method: 'GET',
+    path: '/api/v1/things/feed?types=marketplace&circles=public&limit=5',
+    expect: expectJson(
+      [200],
+      (body) => body?.ok === true && Array.isArray(body?.posts) && body.posts.every((post: any) => post?.type === 'marketplace'),
+      'Filtered feed only contained marketplace posts.'
+    )
+  },
+  {
+    id: 'things-create-guarded',
+    name: 'Post create requires auth',
+    description: 'Creating a post without a session is rejected (401) or accepted for a logged-in tester.',
+    group: 'things',
+    method: 'POST',
+    path: '/api/v1/things',
+    mutates: true,
+    body: { type: 'text', text: 'API test post from the tests page 🧪', visibility: 'private' },
+    expect: expectJson(
+      [200, 401],
+      (body) => (body?.ok === true && body?.post?.id) || (body?.ok === false && typeof body?.error === 'string'),
+      'Post create either persisted (session) or was rejected with an error shape (anonymous).'
+    )
+  },
+  {
+    id: 'things-user-missing-username',
+    name: 'User posts require a username',
+    description: 'The user-posts route validates the username parameter.',
+    group: 'things',
+    method: 'GET',
+    path: '/api/v1/things/user',
+    expect: expectJson([400], (body) => body?.ok === false && typeof body?.error === 'string', 'Missing username rejected with a 400 error shape.')
+  },
+  {
+    id: 'things-user-unknown',
+    name: 'User posts unknown user',
+    description: 'Unknown usernames resolve to a 404 error shape.',
+    group: 'things',
+    method: 'GET',
+    path: '/api/v1/things/user?username=definitely-not-a-real-user-xyz',
+    expect: expectJson([404], (body) => body?.ok === false && typeof body?.error === 'string', 'Unknown user returned a 404 error shape.')
+  },
+  {
+    id: 'things-react-guarded',
+    name: 'Reactions are guarded',
+    description: 'Reacting without a session (or to an unknown post) is rejected with an error shape.',
+    group: 'things',
+    method: 'POST',
+    path: '/api/v1/things/react',
+    body: { id: 'not-a-real-post-id', emoji: '👍' },
+    expect: expectJson([401, 404], (body) => body?.ok === false && typeof body?.error === 'string', 'Reaction was rejected with an error shape.')
+  },
+  {
+    id: 'things-comment-guarded',
+    name: 'Comments are guarded',
+    description: 'Commenting without a session (or on an unknown post) is rejected with an error shape.',
+    group: 'things',
+    method: 'POST',
+    path: '/api/v1/things/comment',
+    body: { id: 'not-a-real-post-id', text: 'API test comment' },
+    expect: expectJson([401, 404], (body) => body?.ok === false && typeof body?.error === 'string', 'Comment was rejected with an error shape.')
+  },
+  {
+    id: 'things-share-guarded',
+    name: 'Shares are guarded',
+    description: 'Sharing without a session (or an unknown post) is rejected with an error shape.',
+    group: 'things',
+    method: 'POST',
+    path: '/api/v1/things/share',
+    body: { id: 'not-a-real-post-id' },
+    expect: expectJson([401, 404], (body) => body?.ok === false && typeof body?.error === 'string', 'Share was rejected with an error shape.')
+  },
+  {
+    id: 'things-delete-guarded',
+    name: 'Post delete is guarded',
+    description: 'Deleting without a session (or an unknown/unowned post) is rejected with an error shape.',
+    group: 'things',
+    method: 'POST',
+    path: '/api/v1/things/delete',
+    body: { id: 'not-a-real-post-id' },
+    expect: expectJson([401, 404], (body) => body?.ok === false && typeof body?.error === 'string', 'Post delete was rejected with an error shape.')
+  },
+  {
+    id: 'algorithms-list-guarded',
+    name: 'Algorithms list requires auth',
+    description: 'Listing feed algorithms without a session is rejected with a 401 error shape.',
+    group: 'algorithms',
+    method: 'GET',
+    path: '/api/v1/algorithms',
+    expect: expectJson(
+      [200, 401],
+      (body) =>
+        (body?.ok === true && Array.isArray(body?.algorithms)) ||
+        (body?.ok === false && typeof body?.error === 'string'),
+      'Algorithms list returned algorithms for a session or a 401 error shape anonymously.'
+    )
+  },
+  {
+    id: 'algorithms-create-validates',
+    name: 'Algorithm create validates name',
+    description: 'Creating an algorithm without a name is rejected before anything is written.',
+    group: 'algorithms',
+    method: 'POST',
+    path: '/api/v1/algorithms',
+    body: { name: '' },
+    expect: expectJson([400, 401], (body) => body?.ok === false && typeof body?.error === 'string', 'Nameless algorithm rejected with an error shape.')
+  },
+  {
+    id: 'algorithms-active-guarded',
+    name: 'Active algorithm requires auth',
+    description: 'Switching the active algorithm without a session is rejected with a 401 error shape.',
+    group: 'algorithms',
+    method: 'POST',
+    path: '/api/v1/algorithms/active',
+    mutates: true,
+    body: { algorithmId: null },
+    expect: expectJson(
+      [200, 401],
+      (body) => body?.ok === true || (body?.ok === false && typeof body?.error === 'string'),
+      'Active algorithm endpoint enforced auth (or cleared for a session).'
+    )
+  },
+  {
+    id: 'algorithms-track-validates',
+    name: 'Tracking validates events',
+    description: 'Tracking without events is rejected before any training happens.',
+    group: 'algorithms',
+    method: 'POST',
+    path: '/api/v1/algorithms/track',
+    body: { events: [] },
+    expect: expectJson([400, 401], (body) => body?.ok === false && typeof body?.error === 'string', 'Empty event batch rejected with an error shape.')
+  },
+  {
+    id: 'algorithms-update-guarded',
+    name: 'Algorithm update is guarded',
+    description: 'Updating without a session (or an unknown id) is rejected with an error shape.',
+    group: 'algorithms',
+    method: 'POST',
+    path: '/api/v1/algorithms/update',
+    body: { id: 'not-a-real-algorithm-id', name: 'renamed' },
+    expect: expectJson([401, 404], (body) => body?.ok === false && typeof body?.error === 'string', 'Algorithm update was rejected with an error shape.')
+  },
+  {
+    id: 'algorithms-delete-guarded',
+    name: 'Algorithm delete is guarded',
+    description: 'Deleting without a session (or an unknown id) is rejected with an error shape.',
+    group: 'algorithms',
+    method: 'POST',
+    path: '/api/v1/algorithms/delete',
+    body: { id: 'not-a-real-algorithm-id' },
+    expect: expectJson([401, 404], (body) => body?.ok === false && typeof body?.error === 'string', 'Algorithm delete was rejected with an error shape.')
+  },
+  {
+    id: 'profile-get-missing-username',
+    name: 'Public profile requires a username',
+    description: 'The public profile route validates the username parameter.',
+    group: 'profile',
+    method: 'GET',
+    path: '/api/v1/users/profile',
+    expect: expectJson([400], (body) => body?.ok === false && typeof body?.error === 'string', 'Missing username rejected with a 400 error shape.')
+  },
+  {
+    id: 'profile-get-unknown',
+    name: 'Public profile unknown user',
+    description: 'Unknown usernames resolve to a 404 error shape.',
+    group: 'profile',
+    method: 'GET',
+    path: '/api/v1/users/profile?username=definitely-not-a-real-user-xyz',
+    expect: expectJson([404], (body) => body?.ok === false && typeof body?.error === 'string', 'Unknown profile returned a 404 error shape.')
+  },
+  {
+    id: 'profile-get-never-leaks-email',
+    name: 'Public profile never leaks email',
+    description: 'A seeded public profile responds without email/verification/storage fields.',
+    group: 'profile',
+    method: 'GET',
+    path: '/api/v1/users/profile?username=rick.deckard',
+    expect: expectJson(
+      [200, 404],
+      (body) =>
+        (body?.ok === true &&
+          body?.profile?.username === 'rick.deckard' &&
+          !Object.prototype.hasOwnProperty.call(body.profile, 'email') &&
+          !Object.prototype.hasOwnProperty.call(body.profile, 'emailVerified')) ||
+        (body?.ok === false && typeof body?.error === 'string'),
+      'Seeded profile exposed only public fields (or 404 when unseeded).'
+    )
+  },
+  {
+    id: 'profile-update-guarded',
+    name: 'Profile update requires auth',
+    description: 'Updating profile fields without a session is rejected with a 401 error shape.',
+    group: 'profile',
+    method: 'POST',
+    path: '/api/v1/users/profile',
+    mutates: true,
+    body: { bio: 'API test bio 🧪' },
+    expect: expectJson(
+      [200, 401],
+      (body) => body?.ok === true || (body?.ok === false && typeof body?.error === 'string'),
+      'Profile update either persisted (session) or was rejected with an error shape (anonymous).'
+    )
+  },
+  {
     id: 'waitlist-invalid-email',
     name: 'Waitlist rejects invalid email',
     description: 'The waitlist validates email addresses before writing anything.',

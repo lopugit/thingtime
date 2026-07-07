@@ -14,8 +14,10 @@ import DocsDesign from './routes/docs/design';
 import DocsDesignSystem from './routes/docs/design-system/index';
 import DocsIndex from './routes/docs/index';
 import Edge from './routes/edge';
+import Feed from './routes/feed';
 import Index from './routes/_index';
 import Login from './routes/login';
+import SettingsRoute from './routes/settings';
 import MongoStatusPage from './routes/mongodb-status';
 import Ode from './routes/ode';
 import Profile from './routes/profile';
@@ -98,6 +100,7 @@ export const router = createBrowserRouter([
         ]
       },
       { path: 'edge', element: <Edge /> },
+      { path: 'feed', element: <Feed /> },
       { path: 'login', element: <Login />, loader: requireGuest('/profile') },
       {
         path: 'mongodb-status',
@@ -106,6 +109,7 @@ export const router = createBrowserRouter([
       },
       { path: 'ode', element: <Ode /> },
       { path: 'profile', element: <Profile /> },
+      { path: 'profile/:username', element: <Profile /> },
       { path: 'rainbow/*', element: <Rainbow /> },
       { path: 'raw', element: <Raw /> },
       { path: 'register', element: <Register />, loader: requireGuest('/welcome') },
@@ -119,6 +123,7 @@ export const router = createBrowserRouter([
         element: <VercelPage />,
         loader: vercelDeploymentsLoader
       },
+      { path: 'settings', element: <SettingsRoute /> },
       { path: 'tests', element: <TestsPage /> },
       { path: 'themes', element: <Themes /> },
       { path: 'welcome', element: <Welcome />, loader: requireUser('/register') },
