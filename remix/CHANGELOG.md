@@ -18,6 +18,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- Added visible docs-path ladders under each `/docs/api` endpoint title, with
+  share-link buttons for the reference, category, and endpoint URL depths. —
+  _Codex (AI), 2026-07-08_
 - Added dedicated `/docs/api/:group` category pages and
   `/docs/api/:group/:docId` endpoint pages, while keeping the global
   `/docs/api#api-*` deeplinks. Endpoint copy-link buttons now copy a URL for

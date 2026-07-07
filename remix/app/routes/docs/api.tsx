@@ -41,6 +41,12 @@ const CODE_ACCENT = 'var(--tt-accent, hotpink)';
 
 type CodeLanguage = 'json' | 'shell' | 'javascript' | 'python' | 'ruby' | 'text';
 
+type DocsPathLink = {
+  copyHref: string;
+  label: string;
+  path: string;
+};
+
 const formatJson = (value: unknown) => {
   if (value === undefined) return '';
   if (typeof value === 'string') return value;
@@ -81,6 +87,36 @@ const groupApiDocs = (docs: ApiEndpointDoc[]) =>
 
     return groups;
   }, []);
+
+const copyToClipboard = async (value: string) => {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value);
+      return true;
+    }
+  } catch {
+    // Fall through to the legacy path for sandboxed preview browsers.
+  }
+
+  try {
+    const textarea = document.createElement('textarea');
+    textarea.value = value;
+    textarea.setAttribute('readonly', '');
+    textarea.style.left = '-9999px';
+    textarea.style.opacity = '0';
+    textarea.style.position = 'fixed';
+    textarea.style.top = '0';
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    textarea.setSelectionRange(0, textarea.value.length);
+    const copied = document.execCommand('copy');
+    document.body.removeChild(textarea);
+    return copied;
+  } catch {
+    return false;
+  }
+};
 
 const languageForPlatform = (platform: string): CodeLanguage => {
   if (platform === 'curl' || platform === 'wget') return 'shell';
@@ -161,9 +197,12 @@ function CopyCodeButton({ code, label = 'Copy code' }: { code: string; label?: s
 
   const copy = React.useCallback(async () => {
     try {
-      await navigator.clipboard?.writeText(code);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1100);
+      const copiedValue = await copyToClipboard(code);
+
+      if (copiedValue) {
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1100);
+      }
     } catch {
       // Clipboard access can be unavailable in sandboxed preview browsers.
     }
@@ -184,15 +223,27 @@ function CopyCodeButton({ code, label = 'Copy code' }: { code: string; label?: s
   );
 }
 
-function CopyDocLinkButton({ href }: { href: string }) {
+function CopyDocLinkButton({
+  href,
+  label = 'Copy doc deeplink',
+  size = 'sm',
+  variant = 'outline'
+}: {
+  href: string;
+  label?: string;
+  size?: 'xs' | 'sm';
+  variant?: 'ghost' | 'outline';
+}) {
   const [copied, setCopied] = React.useState(false);
 
   const copy = React.useCallback(async () => {
     try {
-      if (!navigator.clipboard?.writeText) return;
-      await navigator.clipboard.writeText(href);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1100);
+      const copiedValue = await copyToClipboard(href);
+
+      if (copiedValue) {
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1100);
+      }
     } catch {
       // Clipboard access can be unavailable in sandboxed preview browsers.
     }
@@ -200,14 +251,55 @@ function CopyDocLinkButton({ href }: { href: string }) {
 
   return (
     <IconButton
-      aria-label={copied ? 'Copied doc deeplink' : 'Copy doc deeplink'}
+      aria-label={copied ? `Copied ${label}` : label}
       icon={<Icon as={copied ? Check : Link2} boxSize={4} />}
       onClick={copy}
-      size="sm"
-      title={copied ? 'Copied doc link' : 'Copy doc link'}
+      size={size}
+      title={copied ? 'Copied doc link' : label}
       type="button"
-      variant="outline"
+      variant={variant}
     />
+  );
+}
+
+function DocsPathLinks({ links }: { links: DocsPathLink[] }) {
+  return (
+    <Stack mt={3} spacing={1.5}>
+      {links.map((link) => (
+        <Flex align="center" gap={2} key={link.path} minW={0} wrap="nowrap">
+          <Text
+            color="var(--tt-muted, #9a9aa6)"
+            flexShrink={0}
+            fontFamily="mono"
+            fontSize="10px"
+            fontWeight="700"
+            letterSpacing="0.1em"
+            textTransform="uppercase"
+            w={{ base: '76px', md: '86px' }}
+          >
+            {link.label}
+          </Text>
+          <ChakraLink
+            as={RouterLink}
+            color="var(--tt-text, #5a5a66)"
+            fontFamily="mono"
+            fontSize={{ base: '11px', md: '12px' }}
+            minW={0}
+            overflowWrap="anywhere"
+            to={link.path}
+            _hover={{ color: 'var(--tt-ink, #16161a)', textDecoration: 'none' }}
+          >
+            {link.path}
+          </ChakraLink>
+          <CopyDocLinkButton
+            href={link.copyHref}
+            label={`Copy ${link.label.toLowerCase()} docs URL`}
+            size="xs"
+            variant="ghost"
+          />
+        </Flex>
+      ))}
+    </Stack>
   );
 }
 
@@ -318,7 +410,17 @@ function PlatformExamples({ platforms }: { platforms: Array<[string, string]> })
   );
 }
 
-function EndpointDocs({ copyHref, doc, origin }: { copyHref: string; doc: ApiEndpointDoc; origin: string }) {
+function EndpointDocs({
+  copyHref,
+  doc,
+  origin,
+  pathLinks
+}: {
+  copyHref: string;
+  doc: ApiEndpointDoc;
+  origin: string;
+  pathLinks: DocsPathLink[];
+}) {
   const platformExamples = React.useMemo(() => buildPlatformExamples(doc, origin), [doc, origin]);
   const platforms = Object.entries(platformExamples);
 
@@ -355,6 +457,7 @@ function EndpointDocs({ copyHref, doc, origin }: { copyHref: string; doc: ApiEnd
           <Heading as="h3" fontSize={{ base: 'xl', md: '2xl' }} letterSpacing="0">
             {doc.title}
           </Heading>
+          <DocsPathLinks links={pathLinks} />
           <Text color="var(--tt-text, #5a5a66)" fontSize="sm" lineHeight="1.7" mt={2}>
             {doc.summary}
           </Text>
@@ -568,6 +671,26 @@ export default function DocsApi() {
     },
     [origin, routeDoc, routeGroup]
   );
+  const pathLinksForDoc = React.useCallback(
+    (doc: ApiEndpointDoc): DocsPathLink[] => [
+      {
+        copyHref: `${origin}/docs/api`,
+        label: 'Reference',
+        path: '/docs/api'
+      },
+      {
+        copyHref: `${origin}${groupPagePath(doc.group)}`,
+        label: 'Category',
+        path: groupPagePath(doc.group)
+      },
+      {
+        copyHref: `${origin}${docPagePath(doc)}`,
+        label: 'Endpoint',
+        path: docPagePath(doc)
+      }
+    ],
+    [origin]
+  );
 
   React.useEffect(() => {
     if (!hash.startsWith('#api-')) return;
@@ -735,7 +858,13 @@ export default function DocsApi() {
 
               <Stack spacing={5}>
                 {section.docs.map((doc) => (
-                  <EndpointDocs copyHref={copyHrefForDoc(doc)} key={doc.id} doc={doc} origin={origin} />
+                  <EndpointDocs
+                    copyHref={copyHrefForDoc(doc)}
+                    doc={doc}
+                    key={doc.id}
+                    origin={origin}
+                    pathLinks={pathLinksForDoc(doc)}
+                  />
                 ))}
               </Stack>
             </Box>

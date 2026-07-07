@@ -21,6 +21,9 @@ PR: https://github.com/lopugit/thingtime/pull/39
   `/docs/api/:group/:docId` endpoint pages; the copy-link icon now copies a
   route appropriate to the current view while preserving the global
   `/docs/api#api-*` deeplink behavior.
+- Added visible docs-path ladders under every endpoint title, with reference,
+  category, and endpoint path rows plus adjacent share-link icons for each URL
+  depth.
 
 ## Validation
 
@@ -40,6 +43,10 @@ PR: https://github.com/lopugit/thingtime/pull/39
 - Browser checked `/docs/api`, `/docs/api/auth`, and
   `/docs/api/auth/auth-service-account`; dynamic copy links produced the global
   hash URL, category hash URL, and dedicated endpoint URL respectively.
+- Browser checked `/docs/api#api-mongodb-populate` on desktop and 390px mobile;
+  path rows render for `/docs/api`, `/docs/api/mongodb`, and
+  `/docs/api/mongodb/mongodb-populate`, the category row navigates to
+  `/docs/api/mongodb`, and no horizontal overflow appears.
 
 ## Notes
 
