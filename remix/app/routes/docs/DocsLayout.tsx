@@ -78,6 +78,8 @@ const clampDrawerWidth = (width: number) =>
   Math.min(MAX_DRAWER_WIDTH, Math.max(MIN_DRAWER_WIDTH, width));
 
 const groupLabel = (group: string) => group.charAt(0).toUpperCase() + group.slice(1);
+const apiGroupPath = (group: string) => `/docs/api/${group}`;
+const apiDocPath = (doc: ApiEndpointDoc) => `${apiGroupPath(doc.group)}/${doc.id}`;
 
 const groupedApiDocs = apiEndpointDocs.reduce<Array<{ group: string; docs: ApiEndpointDoc[] }>>(
   (groups, doc) => {
@@ -228,22 +230,27 @@ type DrawerApiEndpointListProps = {
 function DrawerApiEndpointList({ onNavigate }: DrawerApiEndpointListProps) {
   const location = useLocation();
   const activeHash = location.hash.replace(/^#/, '');
+  const activePathname = location.pathname;
 
   return (
     <Stack data-testid="docs-api-endpoint-menu" spacing={4} pl={4}>
       {groupedApiDocs.map((group) => (
         <Box key={group.group}>
           <Flex align="center" gap={2} mb={1.5}>
-            <Text
+            <ChakraLink
+              as={RouterLink}
               color="var(--tt-muted, #9a9aa6)"
               fontFamily="mono"
               fontSize="10px"
               fontWeight="700"
               letterSpacing="0.14em"
+              onClick={onNavigate}
+              to={apiGroupPath(group.group)}
               textTransform="uppercase"
+              _hover={{ color: 'var(--tt-ink, #16161a)', textDecoration: 'none' }}
             >
               {groupLabel(group.group)}
-            </Text>
+            </ChakraLink>
             <Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="10px">
               {group.docs.length}
             </Text>
@@ -252,21 +259,23 @@ function DrawerApiEndpointList({ onNavigate }: DrawerApiEndpointListProps) {
           <Stack spacing={0.5}>
             {group.docs.map((doc) => {
               const hash = `api-${doc.id}`;
-              const active = activeHash === hash;
+              const docPath = apiDocPath(doc);
+              const active = activeHash === hash || activePathname === docPath;
 
               return (
                 <ChakraLink
                   key={doc.id}
+                  as={RouterLink}
                   _hover={{ bg: 'var(--tt-surface-hover, #ececee)', textDecoration: 'none' }}
                   bg={active ? 'var(--tt-card, #ffffff)' : 'transparent'}
                   borderLeft="2px solid"
                   borderLeftColor={active ? 'var(--tt-docs-accent, #008060)' : 'transparent'}
                   color={active ? 'var(--tt-ink, #16161a)' : 'var(--tt-text, #5a5a66)'}
                   display="block"
-                  href={`/docs/api#${hash}`}
                   onClick={onNavigate}
                   px={2}
                   py={1.5}
+                  to={docPath}
                   transition="background 140ms ease, border-color 140ms ease, color 140ms ease"
                 >
                   <Text fontSize="xs" fontWeight={active ? '750' : '650'} isTruncated lineHeight="1.25">

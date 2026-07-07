@@ -18,6 +18,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- Added dedicated `/docs/api/:group` category pages and
+  `/docs/api/:group/:docId` endpoint pages, while keeping the global
+  `/docs/api#api-*` deeplinks. Endpoint copy-link buttons now copy a URL for
+  the current view: global hash link, category hash link, or dedicated endpoint
+  page. — _Codex (AI), 2026-07-08_
 - Added grouped endpoint navigation to the `/docs/api` drawer: each API route
   now has its own deep-linkable submenu item under a group heading, and the API
   reference body/side index mirror those grouped sections. — _Codex (AI),

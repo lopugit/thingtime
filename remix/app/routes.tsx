@@ -95,6 +95,8 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: <DocsIndex /> },
           { path: 'api', element: <DocsApi /> },
+          { path: 'api/:group', element: <DocsApi /> },
+          { path: 'api/:group/:docId', element: <DocsApi /> },
           { path: 'design', element: <DocsDesign /> },
           { path: 'design-system', element: <DocsDesignSystem /> }
         ]

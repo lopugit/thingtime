@@ -17,6 +17,10 @@ PR: https://github.com/lopugit/thingtime/pull/39
 - Added grouped `/docs/api` drawer navigation so every documented endpoint has
   a deep-linkable submenu item under its API group, with matching grouped
   sections in the page body and side index.
+- Added dedicated `/docs/api/:group` category pages and
+  `/docs/api/:group/:docId` endpoint pages; the copy-link icon now copies a
+  route appropriate to the current view while preserving the global
+  `/docs/api#api-*` deeplink behavior.
 
 ## Validation
 
@@ -33,6 +37,9 @@ PR: https://github.com/lopugit/thingtime/pull/39
   endpoint links render under group headings, the service-account link updates
   the URL to `#api-auth-service-account` and scrolls to the correct card, and
   no horizontal overflow appears.
+- Browser checked `/docs/api`, `/docs/api/auth`, and
+  `/docs/api/auth/auth-service-account`; dynamic copy links produced the global
+  hash URL, category hash URL, and dedicated endpoint URL respectively.
 
 ## Notes
 

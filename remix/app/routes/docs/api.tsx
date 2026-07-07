@@ -15,7 +15,7 @@ import {
   Stack,
   Text
 } from '@chakra-ui/react';
-import { ArrowUpRight, Check, Code2, Copy, Search, ServerCog, TerminalSquare } from 'lucide-react';
+import { ArrowUpRight, Check, Code2, Copy, Link2, Search, ServerCog, TerminalSquare } from 'lucide-react';
 
 import {
   apiEndpointDocs,
@@ -23,10 +23,13 @@ import {
   type ApiEndpointDoc,
   type ApiHttpMethod
 } from '~/docs/apiDocs';
-import { useLocation } from 'react-router';
+import { Link as RouterLink, useLocation, useParams } from 'react-router';
 
 const methodColor = (method: ApiHttpMethod) => (method === 'GET' ? 'blue' : 'purple');
 const groupLabel = (group: string) => group.charAt(0).toUpperCase() + group.slice(1);
+const groupPagePath = (group: string) => `/docs/api/${group}`;
+const docPagePath = (doc: ApiEndpointDoc) => `${groupPagePath(doc.group)}/${doc.id}`;
+const docHashPath = (doc: ApiEndpointDoc) => `/docs/api#api-${doc.id}`;
 const CODE_BG = '#0b0b0f';
 const CODE_BORDER = 'var(--tt-dark-border, #2a2a33)';
 const CODE_TEXT = '#e6e6ec';
@@ -181,6 +184,33 @@ function CopyCodeButton({ code, label = 'Copy code' }: { code: string; label?: s
   );
 }
 
+function CopyDocLinkButton({ href }: { href: string }) {
+  const [copied, setCopied] = React.useState(false);
+
+  const copy = React.useCallback(async () => {
+    try {
+      if (!navigator.clipboard?.writeText) return;
+      await navigator.clipboard.writeText(href);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1100);
+    } catch {
+      // Clipboard access can be unavailable in sandboxed preview browsers.
+    }
+  }, [href]);
+
+  return (
+    <IconButton
+      aria-label={copied ? 'Copied doc deeplink' : 'Copy doc deeplink'}
+      icon={<Icon as={copied ? Check : Link2} boxSize={4} />}
+      onClick={copy}
+      size="sm"
+      title={copied ? 'Copied doc link' : 'Copy doc link'}
+      type="button"
+      variant="outline"
+    />
+  );
+}
+
 function CodeBlock({
   children,
   language = 'text',
@@ -288,7 +318,7 @@ function PlatformExamples({ platforms }: { platforms: Array<[string, string]> })
   );
 }
 
-function EndpointDocs({ doc, origin }: { doc: ApiEndpointDoc; origin: string }) {
+function EndpointDocs({ copyHref, doc, origin }: { copyHref: string; doc: ApiEndpointDoc; origin: string }) {
   const platformExamples = React.useMemo(() => buildPlatformExamples(doc, origin), [doc, origin]);
   const platforms = Object.entries(platformExamples);
 
@@ -330,16 +360,19 @@ function EndpointDocs({ doc, origin }: { doc: ApiEndpointDoc; origin: string }) 
           </Text>
         </Box>
 
-        <Button
-          as={ChakraLink}
-          href={doc.docsEndpoint}
-          isExternal
-          leftIcon={<Icon as={ArrowUpRight} boxSize={4} />}
-          size="sm"
-          variant="outline"
-        >
-          JSON docs
-        </Button>
+        <Flex gap={2}>
+          <CopyDocLinkButton href={copyHref} />
+          <Button
+            as={ChakraLink}
+            href={doc.docsEndpoint}
+            isExternal
+            leftIcon={<Icon as={ArrowUpRight} boxSize={4} />}
+            size="sm"
+            variant="outline"
+          >
+            JSON docs
+          </Button>
+        </Flex>
       </Flex>
 
       <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={3} mt={5}>
@@ -484,15 +517,57 @@ function EndpointDocs({ doc, origin }: { doc: ApiEndpointDoc; origin: string }) 
 
 export default function DocsApi() {
   const { hash } = useLocation();
+  const params = useParams();
   const [group, setGroup] = React.useState('all');
   const [query, setQuery] = React.useState('');
   const origin = typeof window === 'undefined' ? 'https://thingtime.com' : window.location.origin;
   const groups = React.useMemo(() => Array.from(new Set(apiEndpointDocs.map((doc) => doc.group))), []);
+  const routeGroup = params.group || '';
+  const routeDocId = params.docId || '';
+  const routeGroupDocs = React.useMemo(
+    () => (routeGroup ? apiEndpointDocs.filter((doc) => doc.group === routeGroup) : []),
+    [routeGroup]
+  );
+  const routeDoc = React.useMemo(
+    () => (routeDocId ? routeGroupDocs.find((doc) => doc.id === routeDocId) : undefined),
+    [routeDocId, routeGroupDocs]
+  );
+  const routeNotFound = Boolean(routeGroup && routeGroupDocs.length === 0) || Boolean(routeDocId && !routeDoc);
   const visibleDocs = React.useMemo(
-    () => apiEndpointDocs.filter((doc) => endpointMatches(doc, group, query)),
-    [group, query]
+    () => {
+      if (routeNotFound) return [];
+      if (routeDoc) return [routeDoc];
+      if (routeGroup) return routeGroupDocs.filter((doc) => endpointMatches(doc, 'all', query));
+
+      return apiEndpointDocs.filter((doc) => endpointMatches(doc, group, query));
+    },
+    [group, query, routeDoc, routeGroup, routeGroupDocs, routeNotFound]
   );
   const groupedVisibleDocs = React.useMemo(() => groupApiDocs(visibleDocs), [visibleDocs]);
+  const pagePath = routeDoc
+    ? docPagePath(routeDoc)
+    : routeGroup
+      ? groupPagePath(routeGroup)
+      : '/docs/api';
+  const pageTitle = routeDoc
+    ? routeDoc.title
+    : routeGroup
+      ? `${groupLabel(routeGroup)} API endpoints`
+      : 'Thingtime API reference';
+  const pageDescription = routeDoc
+    ? `Dedicated endpoint docs for ${routeDoc.endpoint}. Use the link button on this card to copy this endpoint page.`
+    : routeGroup
+      ? `Only ${groupLabel(routeGroup)} endpoints are shown on this category page.`
+      : 'Every documented endpoint also serves JSON docs at the same path with -docs appended.';
+  const copyHrefForDoc = React.useCallback(
+    (doc: ApiEndpointDoc) => {
+      if (routeDoc) return `${origin}${docPagePath(doc)}`;
+      if (routeGroup) return `${origin}${groupPagePath(routeGroup)}#api-${doc.id}`;
+
+      return `${origin}${docHashPath(doc)}`;
+    },
+    [origin, routeDoc, routeGroup]
+  );
 
   React.useEffect(() => {
     if (!hash.startsWith('#api-')) return;
@@ -532,7 +607,7 @@ export default function DocsApi() {
               API
             </Badge>
             <Text color="var(--tt-muted, #9a9aa6)" fontSize="sm" fontFamily="mono">
-              /docs/api
+              {pagePath}
             </Text>
           </Flex>
 
@@ -544,78 +619,123 @@ export default function DocsApi() {
             lineHeight="1.02"
             maxW="840px"
           >
-            Thingtime API reference
+            {routeNotFound ? 'API docs not found' : pageTitle}
           </Heading>
           <Text color="var(--tt-text, #5a5a66)" fontSize={{ base: 'md', md: 'lg' }} lineHeight="1.7" mt={5} maxW="840px">
-            Every documented endpoint also serves JSON docs at the same path with <Box as="span" fontFamily="mono">-docs</Box> appended.
+            {routeNotFound ? 'The requested API docs page does not match a documented category or endpoint.' : pageDescription}
           </Text>
+          {routeGroup ? (
+            <Flex gap={2} mt={5} wrap="wrap">
+              <Button as={RouterLink} size="sm" to="/docs/api" variant="outline">
+                All API docs
+              </Button>
+              {routeDoc ? (
+                <Button as={RouterLink} size="sm" to={groupPagePath(routeDoc.group)} variant="outline">
+                  {groupLabel(routeDoc.group)} category
+                </Button>
+              ) : null}
+            </Flex>
+          ) : null}
         </Box>
 
-        <SimpleGrid columns={{ base: 1, lg: 3 }} spacing={3}>
-          <Box>
-            <Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="11px" fontWeight="700" mb={1}>
-              Group
-            </Text>
-            <Select value={group} onChange={(event) => setGroup(event.target.value)}>
-              <option value="all">All groups</option>
-              {groups.map((item) => (
-                <option key={item} value={item}>
-                  {groupLabel(item)}
-                </option>
-              ))}
-            </Select>
-          </Box>
-          <Box gridColumn={{ base: 'auto', lg: 'span 2' }}>
-            <Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="11px" fontWeight="700" mb={1}>
-              Search
-            </Text>
-            <Box position="relative">
-              <Icon
-                as={Search}
-                boxSize={4}
-                color="var(--tt-faint, #b6b6c0)"
-                left={3}
-                position="absolute"
-                top="50%"
-                transform="translateY(-50%)"
-                zIndex={1}
-              />
-              <Input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="endpoint, method, group, or capability"
-                pl={9}
-              />
+        {!routeDoc && !routeNotFound ? (
+          <SimpleGrid columns={{ base: 1, lg: 3 }} spacing={3}>
+            {!routeGroup ? (
+              <Box>
+                <Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="11px" fontWeight="700" mb={1}>
+                  Group
+                </Text>
+                <Select value={group} onChange={(event) => setGroup(event.target.value)}>
+                  <option value="all">All groups</option>
+                  {groups.map((item) => (
+                    <option key={item} value={item}>
+                      {groupLabel(item)}
+                    </option>
+                  ))}
+                </Select>
+              </Box>
+            ) : (
+              <Box>
+                <Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="11px" fontWeight="700" mb={1}>
+                  Category
+                </Text>
+                <Button as={RouterLink} justifyContent="flex-start" to="/docs/api" variant="outline" w="100%">
+                  {groupLabel(routeGroup)}
+                </Button>
+              </Box>
+            )}
+            <Box gridColumn={{ base: 'auto', lg: 'span 2' }}>
+              <Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="11px" fontWeight="700" mb={1}>
+                Search
+              </Text>
+              <Box position="relative">
+                <Icon
+                  as={Search}
+                  boxSize={4}
+                  color="var(--tt-faint, #b6b6c0)"
+                  left={3}
+                  position="absolute"
+                  top="50%"
+                  transform="translateY(-50%)"
+                  zIndex={1}
+                />
+                <Input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="endpoint, method, group, or capability"
+                  pl={9}
+                />
+              </Box>
             </Box>
-          </Box>
-        </SimpleGrid>
+          </SimpleGrid>
+        ) : null}
 
         <Flex gap={2} wrap="wrap">
           <Badge colorScheme="green">{visibleDocs.length} endpoints</Badge>
-          <Badge colorScheme="gray">{apiEndpointDocs.length} total</Badge>
+          <Badge colorScheme="gray">{routeGroup ? `${routeGroupDocs.length} in category` : `${apiEndpointDocs.length} total`}</Badge>
           <Badge colorScheme="gray">{apiEndpointDocs.length * 2} docs smoke tests</Badge>
         </Flex>
+
+        {routeNotFound ? (
+          <Box
+            bg="var(--tt-card, #ffffff)"
+            border="1px solid"
+            borderColor="var(--tt-border, #ececef)"
+            borderRadius="var(--tt-radius-lg, 16px)"
+            p={{ base: 4, md: 5 }}
+          >
+            <Text color="var(--tt-text, #5a5a66)" fontSize="sm" lineHeight="1.7">
+              Try the full API reference or choose a category from the docs drawer.
+            </Text>
+            <Button as={RouterLink} mt={4} size="sm" to="/docs/api" variant="outline">
+              All API docs
+            </Button>
+          </Box>
+        ) : null}
 
         <Stack spacing={7}>
           {groupedVisibleDocs.map((section) => (
             <Box as="section" key={section.group} minW={0}>
               <Flex align="center" gap={2} mb={3} wrap="wrap">
-                <Text
+                <ChakraLink
+                  as={RouterLink}
                   color="var(--tt-muted, #9a9aa6)"
                   fontFamily="mono"
                   fontSize="11px"
                   fontWeight="700"
                   letterSpacing="0.14em"
+                  to={groupPagePath(section.group)}
                   textTransform="uppercase"
+                  _hover={{ color: 'var(--tt-ink, #16161a)', textDecoration: 'none' }}
                 >
                   {groupLabel(section.group)}
-                </Text>
+                </ChakraLink>
                 <Badge colorScheme="green">{section.docs.length}</Badge>
               </Flex>
 
               <Stack spacing={5}>
                 {section.docs.map((doc) => (
-                  <EndpointDocs key={doc.id} doc={doc} origin={origin} />
+                  <EndpointDocs copyHref={copyHrefForDoc(doc)} key={doc.id} doc={doc} origin={origin} />
                 ))}
               </Stack>
             </Box>
@@ -645,20 +765,28 @@ export default function DocsApi() {
           <Stack spacing={4} fontSize="sm" maxH="calc(100vh - 160px)" overflowY="auto" pr={2}>
             {groupedVisibleDocs.map((section) => (
               <Box key={section.group}>
-                <Text
+                <ChakraLink
+                  as={RouterLink}
                   color="var(--tt-muted, #9a9aa6)"
                   fontFamily="mono"
                   fontSize="10px"
                   fontWeight="700"
                   letterSpacing="0.14em"
                   mb={1.5}
+                  to={groupPagePath(section.group)}
                   textTransform="uppercase"
+                  _hover={{ color: 'var(--tt-ink, #16161a)', textDecoration: 'none' }}
                 >
                   {groupLabel(section.group)}
-                </Text>
+                </ChakraLink>
                 <Stack spacing={2}>
                   {section.docs.map((doc) => (
-                    <ChakraLink key={doc.id} href={`#api-${doc.id}`} color="var(--tt-text, #5a5a66)">
+                    <ChakraLink
+                      key={doc.id}
+                      as={RouterLink}
+                      color="var(--tt-text, #5a5a66)"
+                      to={routeGroup ? docPagePath(doc) : docHashPath(doc)}
+                    >
                       <Text fontWeight="650">{doc.title}</Text>
                       <Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="xs" overflowWrap="anywhere">
                         {doc.endpoint}
