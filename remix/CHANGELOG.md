@@ -18,6 +18,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- Added grouped endpoint navigation to the `/docs/api` drawer: each API route
+  now has its own deep-linkable submenu item under a group heading, and the API
+  reference body/side index mirror those grouped sections. — _Codex (AI),
+  2026-07-08_
 - Updated `/docs/api` so platform examples use a tabbed code view, and all API
   docs snippets share the homepage developer-block styling with dark panels,
   line numbers, lightweight syntax colouring, and copy controls. — _Codex

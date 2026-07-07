@@ -14,6 +14,9 @@ PR: https://github.com/lopugit/thingtime/pull/39
   calls to `https://thingtime.com` when MongoDB/auth env is absent.
 - Converted `/docs/api` platform examples into a tabbed code view and made all
   docs snippets share the homepage developer-block styling.
+- Added grouped `/docs/api` drawer navigation so every documented endpoint has
+  a deep-linkable submenu item under its API group, with matching grouped
+  sections in the page body and side index.
 
 ## Validation
 
@@ -26,6 +29,10 @@ PR: https://github.com/lopugit/thingtime/pull/39
   production-backed API responses from local fallback requests.
 - Browser checked the `/docs/api` tabbed examples on desktop and mobile,
   including switching the visible platform tab.
+- Browser checked the grouped `/docs/api` drawer on desktop and at 390px mobile:
+  endpoint links render under group headings, the service-account link updates
+  the URL to `#api-auth-service-account` and scrolls to the correct card, and
+  no horizontal overflow appears.
 
 ## Notes
 

@@ -23,6 +23,7 @@ import {
   type ApiEndpointDoc,
   type ApiHttpMethod
 } from '~/docs/apiDocs';
+import { useLocation } from 'react-router';
 
 const methodColor = (method: ApiHttpMethod) => (method === 'GET' ? 'blue' : 'purple');
 const groupLabel = (group: string) => group.charAt(0).toUpperCase() + group.slice(1);
@@ -64,6 +65,19 @@ const endpointMatches = (doc: ApiEndpointDoc, group: string, query: string) => {
     .toLowerCase()
     .includes(needle);
 };
+
+const groupApiDocs = (docs: ApiEndpointDoc[]) =>
+  docs.reduce<Array<{ group: string; docs: ApiEndpointDoc[] }>>((groups, doc) => {
+    const existing = groups.find((item) => item.group === doc.group);
+
+    if (existing) {
+      existing.docs.push(doc);
+    } else {
+      groups.push({ group: doc.group, docs: [doc] });
+    }
+
+    return groups;
+  }, []);
 
 const languageForPlatform = (platform: string): CodeLanguage => {
   if (platform === 'curl' || platform === 'wget') return 'shell';
@@ -287,6 +301,7 @@ function EndpointDocs({ doc, origin }: { doc: ApiEndpointDoc; origin: string }) 
       borderRadius="var(--tt-radius-lg, 16px)"
       boxShadow="var(--tt-shadow-card, 0 1px 2px rgba(0, 0, 0, 0.05))"
       p={{ base: 4, md: 5 }}
+      scrollMarginTop="112px"
     >
       <Flex align="flex-start" gap={4} justify="space-between" wrap="wrap">
         <Box minW={0}>
@@ -468,14 +483,40 @@ function EndpointDocs({ doc, origin }: { doc: ApiEndpointDoc; origin: string }) 
 }
 
 export default function DocsApi() {
+  const { hash } = useLocation();
   const [group, setGroup] = React.useState('all');
   const [query, setQuery] = React.useState('');
   const origin = typeof window === 'undefined' ? 'https://thingtime.com' : window.location.origin;
-  const groups = React.useMemo(() => Array.from(new Set(apiEndpointDocs.map((doc) => doc.group))).sort(), []);
+  const groups = React.useMemo(() => Array.from(new Set(apiEndpointDocs.map((doc) => doc.group))), []);
   const visibleDocs = React.useMemo(
     () => apiEndpointDocs.filter((doc) => endpointMatches(doc, group, query)),
     [group, query]
   );
+  const groupedVisibleDocs = React.useMemo(() => groupApiDocs(visibleDocs), [visibleDocs]);
+
+  React.useEffect(() => {
+    if (!hash.startsWith('#api-')) return;
+
+    const targetId = decodeURIComponent(hash.slice(1));
+    const targetDoc = apiEndpointDocs.find((doc) => `api-${doc.id}` === targetId);
+
+    if (!targetDoc) return;
+
+    setGroup((currentGroup) =>
+      currentGroup === 'all' || currentGroup === targetDoc.group ? currentGroup : 'all'
+    );
+    setQuery((currentQuery) => (endpointMatches(targetDoc, 'all', currentQuery) ? currentQuery : ''));
+  }, [hash]);
+
+  React.useEffect(() => {
+    if (!hash) return;
+
+    const targetId = decodeURIComponent(hash.slice(1));
+
+    window.requestAnimationFrame(() => {
+      document.getElementById(targetId)?.scrollIntoView({ block: 'start' });
+    });
+  }, [hash, visibleDocs]);
 
   return (
     <Grid templateColumns={{ base: '1fr', '2xl': 'minmax(0, 1fr) 280px' }} columnGap={8} rowGap={8}>
@@ -555,9 +596,29 @@ export default function DocsApi() {
           <Badge colorScheme="gray">{apiEndpointDocs.length * 2} docs smoke tests</Badge>
         </Flex>
 
-        <Stack spacing={5}>
-          {visibleDocs.map((doc) => (
-            <EndpointDocs key={doc.id} doc={doc} origin={origin} />
+        <Stack spacing={7}>
+          {groupedVisibleDocs.map((section) => (
+            <Box as="section" key={section.group} minW={0}>
+              <Flex align="center" gap={2} mb={3} wrap="wrap">
+                <Text
+                  color="var(--tt-muted, #9a9aa6)"
+                  fontFamily="mono"
+                  fontSize="11px"
+                  fontWeight="700"
+                  letterSpacing="0.14em"
+                  textTransform="uppercase"
+                >
+                  {groupLabel(section.group)}
+                </Text>
+                <Badge colorScheme="green">{section.docs.length}</Badge>
+              </Flex>
+
+              <Stack spacing={5}>
+                {section.docs.map((doc) => (
+                  <EndpointDocs key={doc.id} doc={doc} origin={origin} />
+                ))}
+              </Stack>
+            </Box>
           ))}
         </Stack>
       </Stack>
@@ -581,14 +642,31 @@ export default function DocsApi() {
           >
             Endpoints
           </Text>
-          <Stack spacing={2} fontSize="sm" maxH="calc(100vh - 160px)" overflowY="auto" pr={2}>
-            {visibleDocs.map((doc) => (
-              <ChakraLink key={doc.id} href={`#api-${doc.id}`} color="var(--tt-text, #5a5a66)">
-                <Text fontWeight="650">{doc.title}</Text>
-                <Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="xs" overflowWrap="anywhere">
-                  {doc.endpoint}
+          <Stack spacing={4} fontSize="sm" maxH="calc(100vh - 160px)" overflowY="auto" pr={2}>
+            {groupedVisibleDocs.map((section) => (
+              <Box key={section.group}>
+                <Text
+                  color="var(--tt-muted, #9a9aa6)"
+                  fontFamily="mono"
+                  fontSize="10px"
+                  fontWeight="700"
+                  letterSpacing="0.14em"
+                  mb={1.5}
+                  textTransform="uppercase"
+                >
+                  {groupLabel(section.group)}
                 </Text>
-              </ChakraLink>
+                <Stack spacing={2}>
+                  {section.docs.map((doc) => (
+                    <ChakraLink key={doc.id} href={`#api-${doc.id}`} color="var(--tt-text, #5a5a66)">
+                      <Text fontWeight="650">{doc.title}</Text>
+                      <Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="xs" overflowWrap="anywhere">
+                        {doc.endpoint}
+                      </Text>
+                    </ChakraLink>
+                  ))}
+                </Stack>
+              </Box>
             ))}
           </Stack>
         </Box>

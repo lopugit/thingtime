@@ -13,8 +13,10 @@ import {
   Stack,
   Text
 } from '@chakra-ui/react';
-import { BookOpen, Boxes, ChevronRight, Component, GripVertical, Menu, PanelLeftClose, PanelLeftOpen, Search, ServerCog, X } from 'lucide-react';
+import { BookOpen, Boxes, ChevronDown, ChevronRight, Component, GripVertical, Menu, PanelLeftClose, PanelLeftOpen, Search, ServerCog, X } from 'lucide-react';
 import { Link as RouterLink, Outlet, useLocation, useSearchParams } from 'react-router';
+
+import { apiEndpointDocs, type ApiEndpointDoc } from '~/docs/apiDocs';
 
 import { designEntries, designKindColors, getDesignEntryBySlug } from './designEntries';
 import { designSystemEntries, designSystemStatusColors, getDesignSystemEntryBySlug } from './design-system/entries';
@@ -69,8 +71,28 @@ const isDesignPath = (pathname: string) =>
 const isDesignSystemPath = (pathname: string) =>
   pathname === '/docs/design-system' || pathname.startsWith('/docs/design-system/');
 
+const isApiPath = (pathname: string) =>
+  pathname === '/docs/api' || pathname.startsWith('/docs/api/');
+
 const clampDrawerWidth = (width: number) =>
   Math.min(MAX_DRAWER_WIDTH, Math.max(MIN_DRAWER_WIDTH, width));
+
+const groupLabel = (group: string) => group.charAt(0).toUpperCase() + group.slice(1);
+
+const groupedApiDocs = apiEndpointDocs.reduce<Array<{ group: string; docs: ApiEndpointDoc[] }>>(
+  (groups, doc) => {
+    const existing = groups.find((item) => item.group === doc.group);
+
+    if (existing) {
+      existing.docs.push(doc);
+    } else {
+      groups.push({ group: doc.group, docs: [doc] });
+    }
+
+    return groups;
+  },
+  []
+);
 
 type DrawerDesignEntryListProps = {
   onNavigate?: () => void;
@@ -199,6 +221,70 @@ function DrawerDesignEntryList({ onNavigate }: DrawerDesignEntryListProps) {
   );
 }
 
+type DrawerApiEndpointListProps = {
+  onNavigate?: () => void;
+};
+
+function DrawerApiEndpointList({ onNavigate }: DrawerApiEndpointListProps) {
+  const location = useLocation();
+  const activeHash = location.hash.replace(/^#/, '');
+
+  return (
+    <Stack data-testid="docs-api-endpoint-menu" spacing={4} pl={4}>
+      {groupedApiDocs.map((group) => (
+        <Box key={group.group}>
+          <Flex align="center" gap={2} mb={1.5}>
+            <Text
+              color="var(--tt-muted, #9a9aa6)"
+              fontFamily="mono"
+              fontSize="10px"
+              fontWeight="700"
+              letterSpacing="0.14em"
+              textTransform="uppercase"
+            >
+              {groupLabel(group.group)}
+            </Text>
+            <Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="10px">
+              {group.docs.length}
+            </Text>
+          </Flex>
+
+          <Stack spacing={0.5}>
+            {group.docs.map((doc) => {
+              const hash = `api-${doc.id}`;
+              const active = activeHash === hash;
+
+              return (
+                <ChakraLink
+                  key={doc.id}
+                  _hover={{ bg: 'var(--tt-surface-hover, #ececee)', textDecoration: 'none' }}
+                  bg={active ? 'var(--tt-card, #ffffff)' : 'transparent'}
+                  borderLeft="2px solid"
+                  borderLeftColor={active ? 'var(--tt-docs-accent, #008060)' : 'transparent'}
+                  color={active ? 'var(--tt-ink, #16161a)' : 'var(--tt-text, #5a5a66)'}
+                  display="block"
+                  href={`/docs/api#${hash}`}
+                  onClick={onNavigate}
+                  px={2}
+                  py={1.5}
+                  transition="background 140ms ease, border-color 140ms ease, color 140ms ease"
+                >
+                  <Text fontSize="xs" fontWeight={active ? '750' : '650'} isTruncated lineHeight="1.25">
+                    {doc.title}
+                  </Text>
+                  <Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="10px" isTruncated mt={0.5}>
+                    {doc.endpoint}
+                  </Text>
+                </ChakraLink>
+              );
+            })}
+          </Stack>
+        </Box>
+      ))}
+    </Stack>
+  );
+}
+
 type DrawerDesignSystemListProps = {
   onNavigate?: () => void;
 };
@@ -289,6 +375,14 @@ type DocsDrawerContentProps = {
 };
 
 function DocsDrawerContent({ closeTestId, onClose, pathname, showClose = false }: DocsDrawerContentProps) {
+  const [apiOpen, setApiOpen] = React.useState(isApiPath(pathname));
+
+  React.useEffect(() => {
+    if (isApiPath(pathname)) {
+      setApiOpen(true);
+    }
+  }, [pathname]);
+
   return (
     <Stack spacing={6} minH="100%" p={{ base: 5, lg: 0 }}>
       <Flex align="center" gap={3} justify="space-between">
@@ -335,36 +429,60 @@ function DocsDrawerContent({ closeTestId, onClose, pathname, showClose = false }
       <Stack spacing={1}>
         {docsNav.map((item) => {
           const active = isActivePath(pathname, item.to);
+          const isApiItem = item.to === '/docs/api';
+          const expanded = isApiItem && apiOpen;
 
           return (
-            <ChakraLink
-              key={item.to}
-              as={RouterLink}
-              to={item.to}
-              _hover={{ textDecoration: 'none', bg: 'var(--tt-surface-hover, #ececee)' }}
-              bg={active ? 'var(--tt-card, #ffffff)' : 'transparent'}
-              borderLeft="3px solid"
-              borderColor={active ? 'var(--tt-docs-accent, #008060)' : 'transparent'}
-              color={active ? 'var(--tt-ink, #16161a)' : 'var(--tt-text, #5a5a66)'}
-              display="block"
-              onClick={onClose}
-              px={3}
-              py={2.5}
-              transition="background 140ms ease, color 140ms ease"
-            >
-              <Flex align="center" gap={3} minW={0}>
-                <Icon as={item.icon} boxSize={4} flexShrink={0} />
-                <Box minW={0}>
-                  <Text fontSize="sm" fontWeight="650" lineHeight="1.25">
-                    {item.label}
-                  </Text>
-                  <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)" lineHeight="1.25">
-                    {item.description}
-                  </Text>
-                </Box>
-                <Icon as={ChevronRight} boxSize={3.5} ml="auto" opacity={active ? 1 : 0.25} />
+            <Box key={item.to}>
+              <Flex
+                _hover={{ bg: 'var(--tt-surface-hover, #ececee)' }}
+                bg={active ? 'var(--tt-card, #ffffff)' : 'transparent'}
+                borderLeft="3px solid"
+                borderColor={active ? 'var(--tt-docs-accent, #008060)' : 'transparent'}
+                color={active ? 'var(--tt-ink, #16161a)' : 'var(--tt-text, #5a5a66)'}
+                transition="background 140ms ease, color 140ms ease"
+              >
+                <ChakraLink
+                  as={RouterLink}
+                  to={item.to}
+                  _hover={{ textDecoration: 'none' }}
+                  display="block"
+                  flex="1"
+                  minW={0}
+                  onClick={onClose}
+                  px={3}
+                  py={2.5}
+                >
+                  <Flex align="center" gap={3} minW={0}>
+                    <Icon as={item.icon} boxSize={4} flexShrink={0} />
+                    <Box minW={0}>
+                      <Text fontSize="sm" fontWeight="650" lineHeight="1.25">
+                        {item.label}
+                      </Text>
+                      <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)" lineHeight="1.25">
+                        {item.description}
+                      </Text>
+                    </Box>
+                  </Flex>
+                </ChakraLink>
+                <IconButton
+                  aria-expanded={expanded}
+                  aria-label={expanded ? `Collapse ${item.label} endpoints` : `Expand ${item.label} endpoints`}
+                  display={isApiItem ? 'inline-flex' : 'none'}
+                  icon={<Icon as={expanded ? ChevronDown : ChevronRight} boxSize={3.5} />}
+                  onClick={() => setApiOpen((value) => !value)}
+                  size="sm"
+                  type="button"
+                  variant="ghost"
+                />
+                {!isApiItem ? <Icon as={ChevronRight} boxSize={3.5} mr={3} mt={3} opacity={active ? 1 : 0.25} /> : null}
               </Flex>
-            </ChakraLink>
+              {expanded ? (
+                <Box borderLeft="1px solid" borderColor="var(--tt-border, #ececef)" ml={5} mt={3} pb={2}>
+                  <DrawerApiEndpointList onNavigate={onClose} />
+                </Box>
+              ) : null}
+            </Box>
           );
         })}
       </Stack>
