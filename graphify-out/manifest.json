@@ -2,7 +2,7 @@
   "AGENTS.md": {
     "mtime": 1783455689.0214796,
     "ast_hash": "4695f294bf5092c7e6dc412cd5bea615",
-    "semantic_hash": ""
+    "semantic_hash": "4695f294bf5092c7e6dc412cd5bea615"
   },
   ".claude/settings.json": {
     "mtime": 1781775648.4450881,
@@ -1572,7 +1572,7 @@
   "CLAUDE.md": {
     "mtime": 1783455689.047207,
     "ast_hash": "4366fe8a26e854030a687d38bc455f2b",
-    "semantic_hash": ""
+    "semantic_hash": "4366fe8a26e854030a687d38bc455f2b"
   },
   "CODEX.md": {
     "mtime": 1782186283.857307,
@@ -1587,12 +1587,12 @@
   "FUNDAMENTALS.md": {
     "mtime": 1783455689.048654,
     "ast_hash": "d7578585f51702530bbc3efb7649119f",
-    "semantic_hash": ""
+    "semantic_hash": "d7578585f51702530bbc3efb7649119f"
   },
   "README.md": {
-    "mtime": 1783456913.0413997,
-    "ast_hash": "57c7bc06b5cefa9b700fe3801fe7b892",
-    "semantic_hash": ""
+    "mtime": 1783457813.9748902,
+    "ast_hash": "9a4a43b3420036f7bb63e0dfdc43a62e",
+    "semantic_hash": "9a4a43b3420036f7bb63e0dfdc43a62e"
   },
   "VERCEL_DEPLOYMENTS.md": {
     "mtime": 1783011258.1491916,
@@ -1827,7 +1827,7 @@
   "remix/index.html": {
     "mtime": 1783455689.702487,
     "ast_hash": "56d23d024faea11317d1d15971287ab1",
-    "semantic_hash": ""
+    "semantic_hash": "56d23d024faea11317d1d15971287ab1"
   },
   "remix/pnpm-workspace.yaml": {
     "mtime": 1783011258.4899554,
@@ -2922,7 +2922,7 @@
   "TODO/claude-todo/06-pr-12-review-actions.md": {
     "mtime": 1782186283.8627315,
     "ast_hash": "f9e471f7dabd01d6c7fc7b13e37d5c57",
-    "semantic_hash": ""
+    "semantic_hash": "f9e471f7dabd01d6c7fc7b13e37d5c57"
   },
   "TODO/claude-todo/07-cross-tab-thingtime-sync.md": {
     "mtime": 1783361806.110205,
@@ -2937,7 +2937,7 @@
   "TODO/claude-todo/README.md": {
     "mtime": 1783242355.287124,
     "ast_hash": "af66431be52ffbf95cc804019436da77",
-    "semantic_hash": ""
+    "semantic_hash": "af66431be52ffbf95cc804019436da77"
   },
   "docs/design-inspiration/human-ai/html-examples/gold-standard-ai-era-value-moats-light-v5-balanced-cards.html": {
     "mtime": 1783361728.9544194,
@@ -3047,7 +3047,7 @@
   "docs/design/DESIGN_LANGUAGE.md": {
     "mtime": 1783455689.0549445,
     "ast_hash": "d9fa8d0e415349e6d73a91b107885d9d",
-    "semantic_hash": ""
+    "semantic_hash": "d9fa8d0e415349e6d73a91b107885d9d"
   },
   "remix/app/components/ThemeSettings/controls.tsx": {
     "mtime": 1783455689.6221654,
@@ -3057,7 +3057,7 @@
   "PRs/32-claude-vigilant-moser--design-refactor-theming.md": {
     "mtime": 1783455689.0492306,
     "ast_hash": "be525a339b93f42b38e0323c3eaa3f7a",
-    "semantic_hash": ""
+    "semantic_hash": "be525a339b93f42b38e0323c3eaa3f7a"
   },
   "remix/app/components/Thingtime/ContextMenu/ThingContextMenu.tsx": {
     "mtime": 1783455689.6226006,
@@ -3125,9 +3125,9 @@
     "semantic_hash": "40c3df156d0faca8bddecf75c04137eb"
   },
   "remix/app/routes/docs/api.tsx": {
-    "mtime": 1783456166.8958673,
-    "ast_hash": "148dc075d5a8eb83e9bcbcd14f564c4e",
-    "semantic_hash": "148dc075d5a8eb83e9bcbcd14f564c4e"
+    "mtime": 1783458670.397439,
+    "ast_hash": "7f1928b2a96984f1829e466f9449ec28",
+    "semantic_hash": "7f1928b2a96984f1829e466f9449ec28"
   },
   "remix/server/routes/api/root-data-docs.ts": {
     "mtime": 1783456082.7965178,

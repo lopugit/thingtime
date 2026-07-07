@@ -12,6 +12,8 @@ PR: https://github.com/lopugit/thingtime/pull/39
 - Updated Nitro route config so the new docs routes are explicitly registered.
 - Added zero-env API fallback so fresh local/sandbox runs proxy same-origin API
   calls to `https://thingtime.com` when MongoDB/auth env is absent.
+- Converted `/docs/api` platform examples into a tabbed code view and made all
+  docs snippets share the homepage developer-block styling.
 
 ## Validation
 
@@ -22,6 +24,8 @@ PR: https://github.com/lopugit/thingtime/pull/39
 - Browser checked `/tests` Docs group; 58 passed, 0 failed.
 - Zero-env fallback checks cover the env detector, Nitro proxy helper, and live
   production-backed API responses from local fallback requests.
+- Browser checked the `/docs/api` tabbed examples on desktop and mobile,
+  including switching the visible platform tab.
 
 ## Notes
 

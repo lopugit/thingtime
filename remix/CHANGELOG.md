@@ -18,6 +18,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- Updated `/docs/api` so platform examples use a tabbed code view, and all API
+  docs snippets share the homepage developer-block styling with dark panels,
+  line numbers, lightweight syntax colouring, and copy controls. — _Codex
+  (AI), 2026-07-08_
 - Added zero-env API fallback for fresh local/sandbox development: when local
   MongoDB/auth env is absent, Vite and Nitro forward same-origin API requests to
   `https://thingtime.com` with the same method, path, query, cookies, headers,
