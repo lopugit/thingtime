@@ -8,9 +8,10 @@ import { RAINBOW_PALETTE } from './tokens'
 
 export { RAINBOW_PALETTE }
 
-/** 120deg looping gradient — borders, buttons, cards (UserCard/Lopu style). */
+/** 90deg looping gradient — borders, buttons, cards (UserCard/Lopu style).
+ * Horizontal so the tile wraps seamlessly under moving-rainbow animation. */
 export const RAINBOW =
-  'var(--tt-gradient-rainbow, linear-gradient(120deg, #47b5e6, #a555e8, #f34a4a, #ffbc48, #58ca70, #47b5e6))'
+  'var(--tt-gradient-rainbow, linear-gradient(90deg, #47b5e6, #a555e8, #f34a4a, #ffbc48, #58ca70, #47b5e6))'
 
 /** 90deg red-first looping gradient — animated headline text (rainbowText). */
 export const RAINBOW_TEXT =
