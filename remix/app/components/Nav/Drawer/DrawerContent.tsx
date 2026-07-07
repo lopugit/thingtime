@@ -1,10 +1,11 @@
 import React from 'react';
 import { Box, Center, Flex, Text } from '@chakra-ui/react';
-import { useLocation, useNavigate } from 'react-router';
+import { useLocation, useMatches, useNavigate } from 'react-router';
 import { ChevronDown, Search } from 'lucide-react';
 
 import { Icon } from '../../Icon/Icon';
 import { RAINBOW } from '~/theme/rainbow';
+import { ROOT_THING_PATH, buildThingModeUrl, parseThingMode, parseThingPath } from '../../Thingtime/thingRoute';
 import { ReorderableList } from './ReorderableList';
 import { applyDrawerOrdering, buildDrawerSubSections, drawerMenuItems, filterDrawerItemsByAuth } from './drawerMenu';
 import { useDrawer, useIsMobileViewport } from './useDrawer';
@@ -64,6 +65,15 @@ export const DrawerContent = (props: DrawerContentProps) => {
 	const isMobile = useIsMobileViewport();
 	const navigate = useNavigate();
 	const { pathname } = useLocation();
+	const matches = useMatches();
+
+	// true when the current page is the catch-all thing route (it's the only
+	// route with a '*' param), so mode switches know whether a thing path is
+	// on screen to preserve
+	const onThingRoute = React.useMemo(() => {
+		const lastMatch = matches[matches.length - 1];
+		return typeof lastMatch?.params?.['*'] === 'string';
+	}, [matches]);
 
 	const [showAllTop, setShowAllTop] = React.useState(false);
 
@@ -182,12 +192,21 @@ export const DrawerContent = (props: DrawerContentProps) => {
 
 	const onSubItemClick = React.useCallback(
 		(item) => {
-			if (item.to) {
+			if (item.mode) {
+				// mode items switch the mode for the thing path currently on
+				// screen instead of opening the mode prefix as a thing path;
+				// clicking the active non-view mode toggles back to view
+				const currentMode = onThingRoute ? parseThingMode(pathname) : null;
+				const thingPath = onThingRoute ? parseThingPath(pathname) : ROOT_THING_PATH;
+				const nextMode = item.mode === currentMode && item.mode !== 'view' ? 'view' : item.mode;
+
+				navigate(buildThingModeUrl(nextMode, thingPath));
+			} else if (item.to) {
 				navigate(item.to);
 			}
 			onNavigate?.();
 		},
-		[navigate, onNavigate]
+		[navigate, onNavigate, onThingRoute, pathname]
 	);
 
 	const onTopReorder = React.useCallback(
@@ -268,7 +287,7 @@ export const DrawerContent = (props: DrawerContentProps) => {
 	};
 
 	const subRow = (item) => {
-		const active = isActivePath(item.to);
+		const active = item.mode ? onThingRoute && parseThingMode(pathname) === item.mode : isActivePath(item.to);
 
 		return (
 			<Flex

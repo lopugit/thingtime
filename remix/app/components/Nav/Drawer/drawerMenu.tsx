@@ -2,11 +2,16 @@
 // their ordering is stored in thingtime.settings.drawer.userDrawerOrdering
 // keyed by list id ('toplevel' or a top-level item id).
 
+import type { ThingMode } from '../../Thingtime/thingRoute';
+
 export interface DrawerSubItem {
 	id: string;
 	label: string;
 	icon?: string;
 	to?: string;
+	// mode items switch the thing mode for the current thing path instead of
+	// navigating to `to` (`to` stays as the selection-sync/highlight fallback)
+	mode?: ThingMode;
 	// optional group name; grouped items render under an expand/collapse header
 	group?: string;
 	// visibility filters against the current user
@@ -40,9 +45,9 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		icon: '📦',
 		to: '/things',
 		children: [
-			{ id: 'things-view', label: 'View', icon: '👀', to: '/things', group: 'Modes' },
-			{ id: 'things-edit', label: 'Edit', icon: '🎨', to: '/edit', group: 'Modes' },
-			{ id: 'things-editor', label: 'Editor', icon: '💻', to: '/editor', group: 'Modes' },
+			{ id: 'things-view', label: 'View', icon: '👀', to: '/things', mode: 'view', group: 'Modes' },
+			{ id: 'things-edit', label: 'Edit', icon: '🎨', to: '/edit', mode: 'edit', group: 'Modes' },
+			{ id: 'things-editor', label: 'Editor', icon: '💻', to: '/editor', mode: 'editor', group: 'Modes' },
 			{ id: 'things-raw', label: 'Raw results', icon: '🔍', to: '/raw' }
 		]
 	},

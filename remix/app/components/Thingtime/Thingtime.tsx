@@ -1184,8 +1184,10 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 				{/* this value will show in a few cases */}
 				{/* Basic types like String, Number, etc.. non-object values */}
 				{/* it will also show if the Thing has standard React children */}
+				{/* overflowX auto (not scroll): scroll reserves a permanent
+				scrollbar track that renders as a stray line under every value */}
 				{!loading && !thingtimeChildren && atomicValue && (
-					<Box className="atomicValue" width={'100%'} overflowX={'scroll'}>
+					<Box className="atomicValue" width={'100%'} overflowX={'auto'}>
 						{atomicValue}
 					</Box>
 				)}

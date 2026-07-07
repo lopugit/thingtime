@@ -5,6 +5,7 @@ import { Box, Flex } from '@chakra-ui/react';
 import { useLocation, useMatches } from 'react-router';
 
 import { Thingtime } from './Thingtime';
+import { parseThingMode, parseThingPath } from './thingRoute';
 import { useThingtime } from './useThingtime';
 import { ThingtimeTypes } from '~/Providers/ThingtimeProvider';
 import { v4 as uuidv4 } from 'uuid';
@@ -22,28 +23,11 @@ export const ThingtimeURL = (props) => {
   const path = React.useMemo(() => {
     console.log('ThingtimeURL location', location);
 
-    // const sanitisation = ["/things", "/edit", "/editor", "/code", "/coder"]
-
-    // // strip the leading /path1/path2 path1 section from the path
-    // let pathPartOne = location?.pathname?.split("/")[2]
-
-    // // remove all sanitsation strings from path
-    // sanitisation.forEach((sanitisationString) => {
-    //   pathPartOne = pathPartOne?.replace(sanitisationString, "")
-    // })
-
-    // strip the leading /path1/path2 path1 section from the path
-    const pathPartOne = location?.pathname?.split('/')[2];
-
-    // if pathPartOne is undefined, split and use [1]
-    const pathPartTwo = location?.pathname?.split('/')[1];
-
-    // TODO: maybe do this path part one / two thing a bit cleaner??
-
-    const path = pathPartOne?.replace(/\//g, '.') || pathPartTwo?.replace(/\//g, '.');
-
-    return path || 'thingtime';
-  }, [location]);
+    // mode prefixes ('/things', '/edit', '/editor') are stripped by the shared
+    // parser, so '/edit' shows the root thing in edit mode rather than a thing
+    // literally named 'edit'
+    return parseThingPath(location?.pathname || pathname);
+  }, [location, pathname]);
 
   const thing = React.useMemo(() => {
     console.log('[tt][ThingtimeURL.tsx/thing] getting new thing from path', path);
@@ -56,21 +40,14 @@ export const ThingtimeURL = (props) => {
     return ret;
   }, [path, getThingtime]);
 
-  const inEditorMode = React.useMemo(() => {
-    if (pathname.slice(0, 7) === '/editor') {
-      return true;
-    }
-
-    return false;
+  const mode = React.useMemo(() => {
+    return parseThingMode(pathname);
   }, [pathname]);
 
-  const inEditMode = React.useMemo(() => {
-    if (pathname.slice(0, 5) === '/edit') {
-      return true;
-    }
+  const inEditorMode = mode === 'editor';
 
-    return false;
-  }, [pathname]);
+  // editor mode keeps the edit surface active alongside the preview pane
+  const inEditMode = mode === 'edit' || mode === 'editor';
 
   const containerRef = React.useRef(null);
   const editorRef = React.useRef(null);
