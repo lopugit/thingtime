@@ -1,12 +1,19 @@
 #!/usr/bin/env node
 'use strict';
 
-// Single source of truth for local dev ports and the PM2 dev app name.
+// Single source of truth for local dev ports, the PM2 dev app name, and the
+// full PM2 app definition.
 // Main checkout keeps the canonical 9999 (vite) / 9998 (hmr) / 10000 (nitro).
 // Linked git worktrees get a deterministic port trio derived from the
 // worktree directory name, so several worktree stacks can run beside the
 // main PM2-managed stack without colliding.
 // Explicit TT_WEB_PORT / TT_HMR_PORT / TT_API_PORT env vars always win.
+//
+// Ports are deterministic (a pure hash of the worktree name) so a stack keeps
+// the same ports across restarts. The PM2 *name* additionally carries a
+// clock-time suffix (e.g. -1005am) so `pm2 list` shows when each app was last
+// started; the stable base (pm2NameBase) is what start/stop match on for
+// cleanup, so re-stamping the time never orphans the previous process.
 
 const { execSync } = require('node:child_process');
 const path = require('node:path');
@@ -72,7 +79,35 @@ const envPort = (name) => {
   return Number.isInteger(value) && value > 0 ? value : undefined;
 };
 
-const resolveDevContext = (dir = __dirname) => {
+const pad2 = (value) => String(value).padStart(2, '0');
+
+// 12-hour clock, colon-free so it is safe in PM2 log filenames: 10:05 -> 1005am.
+const formatClock = (now) => {
+  const minutes = now.getMinutes();
+  const meridiem = now.getHours() < 12 ? 'am' : 'pm';
+  const hour12 = now.getHours() % 12 || 12;
+
+  return `${pad2(hour12)}${pad2(minutes)}${meridiem}`;
+};
+
+// The clock-time suffix shape appended to every dev app name.
+const CLOCK_SUFFIX = /-\d{3,4}(?:am|pm)$/;
+
+// A thingtime dev app by name (for display/listing) — prefix match so it
+// still matches once the clock suffix is appended (tt-nitro-react-router-9999
+// or tt-nitro-react-router-9999-1005am, tt-wt-<worktree>-<port>-1005am, ...).
+const isDevAppName = (name) => /^(?:tt-nitro-react-router-|tt-wt-)/.test(name);
+
+// Whether a running app belongs to a specific stable base — the base itself,
+// or the base plus exactly a clock suffix. Anchoring on the clock shape (not a
+// bare `-` prefix) stops a worktree base from matching a sibling whose
+// directory name merely starts with it (e.g. `foo` vs `foo-11500-bar`).
+const isDevAppForBase = (name, base) =>
+  name === base ||
+  (name.startsWith(`${base}-`) && /^\d{3,4}(?:am|pm)$/.test(name.slice(base.length + 1)));
+
+const resolveDevContext = (dir = __dirname, opts = {}) => {
+  const now = opts.now instanceof Date ? opts.now : new Date();
   const worktree = getWorktreeName(dir);
   const defaults = worktree ? worktreePorts(worktree) : DEFAULT_PORTS;
   const ports = {
@@ -80,15 +115,52 @@ const resolveDevContext = (dir = __dirname) => {
     hmr: envPort('TT_HMR_PORT') ?? defaults.hmr,
     api: envPort('TT_API_PORT') ?? defaults.api
   };
+  // The base is the stable identity used for start/stop cleanup, so it must be
+  // a pure function of the worktree name — use the deterministic default port,
+  // never the TT_WEB_PORT-overridable ports.web (which would let an override
+  // orphan the previous app instead of replacing it).
+  const pm2NameBase = worktree ? `tt-wt-${worktree}-${defaults.web}` : DEFAULT_PM2_NAME;
 
   return {
     worktree,
     ports,
-    pm2Name: worktree ? `tt-wt-${worktree}-${ports.web}` : DEFAULT_PM2_NAME
+    pm2NameBase,
+    pm2Name: `${pm2NameBase}-${formatClock(now)}`
   };
 };
 
-module.exports = { DEFAULT_PORTS, getWorktreeName, resolveDevContext };
+// The full PM2 app definition, shared by ecosystem.config.js and dev-pm2.cjs
+// so there is one source of truth for how a dev app is launched.
+const pm2AppConfig = (remixDir = __dirname, opts = {}) => {
+  const context = resolveDevContext(remixDir, opts);
+
+  return {
+    // Canonical PM2 form (script + args) rather than a single 'npm run dev'
+    // string; the latter only works via PM2's non-Windows bash -c fallback.
+    script: 'npm',
+    args: 'run dev',
+    cwd: remixDir,
+    name: context.pm2Name,
+    namespace: 'thingtime',
+    watch: ['ecosystem.config.js'],
+    env: {
+      TT_WEB_PORT: String(context.ports.web),
+      TT_HMR_PORT: String(context.ports.hmr),
+      TT_API_PORT: String(context.ports.api)
+    }
+  };
+};
+
+module.exports = {
+  CLOCK_SUFFIX,
+  DEFAULT_PORTS,
+  formatClock,
+  getWorktreeName,
+  isDevAppForBase,
+  isDevAppName,
+  pm2AppConfig,
+  resolveDevContext
+};
 
 if (require.main === module) {
   const context = resolveDevContext(process.cwd());
@@ -96,11 +168,13 @@ if (require.main === module) {
   const output =
     flag === '--pm2-name'
       ? context.pm2Name
-      : flag === '--web-port'
-        ? String(context.ports.web)
-        : flag === '--api-port'
-          ? String(context.ports.api)
-          : JSON.stringify(context, null, 2);
+      : flag === '--pm2-name-base'
+        ? context.pm2NameBase
+        : flag === '--web-port'
+          ? String(context.ports.web)
+          : flag === '--api-port'
+            ? String(context.ports.api)
+            : JSON.stringify(context, null, 2);
 
   process.stdout.write(`${output}\n`);
 }
