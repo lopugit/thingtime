@@ -44,7 +44,7 @@ type CodeLanguage = 'json' | 'shell' | 'javascript' | 'python' | 'ruby' | 'text'
 type DocsPathLink = {
   copyHref: string;
   label: string;
-  path: string;
+  to: string;
 };
 
 const formatJson = (value: unknown) => {
@@ -248,12 +248,16 @@ function CopyDocLinkButton({
       // Clipboard access can be unavailable in sandboxed preview browsers.
     }
   }, [href]);
+  const compact = size === 'xs';
 
   return (
     <IconButton
       aria-label={copied ? `Copied ${label}` : label}
-      icon={<Icon as={copied ? Check : Link2} boxSize={4} />}
+      h={compact ? '18px' : undefined}
+      icon={<Icon as={copied ? Check : Link2} boxSize={compact ? 3 : 4} />}
+      minW={compact ? '18px' : undefined}
       onClick={copy}
+      p={compact ? 0 : undefined}
       size={size}
       title={copied ? 'Copied doc link' : label}
       type="button"
@@ -264,32 +268,22 @@ function CopyDocLinkButton({
 
 function DocsPathLinks({ links }: { links: DocsPathLink[] }) {
   return (
-    <Stack mt={3} spacing={1.5}>
+    <Flex align="center" gap={1} mt={2.5} minW={0} wrap="nowrap">
       {links.map((link) => (
-        <Flex align="center" gap={2} key={link.path} minW={0} wrap="nowrap">
-          <Text
-            color="var(--tt-muted, #9a9aa6)"
-            flexShrink={0}
-            fontFamily="mono"
-            fontSize="10px"
-            fontWeight="700"
-            letterSpacing="0.1em"
-            textTransform="uppercase"
-            w={{ base: '76px', md: '86px' }}
-          >
-            {link.label}
-          </Text>
+        <Flex align="center" gap={0.5} key={link.to} minW={0}>
           <ChakraLink
             as={RouterLink}
-            color="var(--tt-text, #5a5a66)"
+            color="var(--tt-muted, #6f6f7a)"
             fontFamily="mono"
-            fontSize={{ base: '11px', md: '12px' }}
+            fontSize={{ base: '11px', md: '13px' }}
+            fontWeight="700"
             minW={0}
             overflowWrap="anywhere"
-            to={link.path}
+            whiteSpace="nowrap"
+            to={link.to}
             _hover={{ color: 'var(--tt-ink, #16161a)', textDecoration: 'none' }}
           >
-            {link.path}
+            {link.label}
           </ChakraLink>
           <CopyDocLinkButton
             href={link.copyHref}
@@ -299,7 +293,7 @@ function DocsPathLinks({ links }: { links: DocsPathLink[] }) {
           />
         </Flex>
       ))}
-    </Stack>
+    </Flex>
   );
 }
 
@@ -433,8 +427,10 @@ function EndpointDocs({
       borderRadius="var(--tt-radius-lg, 16px)"
       boxShadow="var(--tt-shadow-card, 0 1px 2px rgba(0, 0, 0, 0.05))"
       p={{ base: 4, md: 5 }}
+      position="relative"
       scrollMarginTop="112px"
     >
+      <Box aria-hidden="true" h="1px" id={doc.id} position="absolute" top="-112px" w="1px" />
       <Flex align="flex-start" gap={4} justify="space-between" wrap="wrap">
         <Box minW={0}>
           <Flex align="center" gap={2} mb={2} wrap="wrap">
@@ -674,29 +670,24 @@ export default function DocsApi() {
   const pathLinksForDoc = React.useCallback(
     (doc: ApiEndpointDoc): DocsPathLink[] => [
       {
-        copyHref: `${origin}/docs/api`,
-        label: 'Reference',
-        path: '/docs/api'
-      },
-      {
-        copyHref: `${origin}${groupPagePath(doc.group)}`,
-        label: 'Category',
-        path: groupPagePath(doc.group)
+        copyHref: `${origin}${groupPagePath(doc.group)}#${doc.id}`,
+        label: doc.group,
+        to: `${groupPagePath(doc.group)}#${doc.id}`
       },
       {
         copyHref: `${origin}${docPagePath(doc)}`,
-        label: 'Endpoint',
-        path: docPagePath(doc)
+        label: doc.id,
+        to: docPagePath(doc)
       }
     ],
     [origin]
   );
 
   React.useEffect(() => {
-    if (!hash.startsWith('#api-')) return;
+    if (!hash) return;
 
     const targetId = decodeURIComponent(hash.slice(1));
-    const targetDoc = apiEndpointDocs.find((doc) => `api-${doc.id}` === targetId);
+    const targetDoc = apiEndpointDocs.find((doc) => `api-${doc.id}` === targetId || doc.id === targetId);
 
     if (!targetDoc) return;
 

@@ -3125,9 +3125,9 @@
     "semantic_hash": "40c3df156d0faca8bddecf75c04137eb"
   },
   "remix/app/routes/docs/api.tsx": {
-    "mtime": 1783462803.525654,
-    "ast_hash": "13836b3dfe7f6770f0a2717395a4cea5",
-    "semantic_hash": "13836b3dfe7f6770f0a2717395a4cea5"
+    "mtime": 1783463790.101878,
+    "ast_hash": "a8ef8efbb5531e1f49b561fa4ec4ac10",
+    "semantic_hash": "a8ef8efbb5531e1f49b561fa4ec4ac10"
   },
   "remix/server/routes/api/root-data-docs.ts": {
     "mtime": 1783462630.4659107,
