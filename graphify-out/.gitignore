@@ -6,3 +6,5 @@
 .needs_update
 # Regenerable extraction cache (rebuilt by `graphify update`)
 cache/
+# Deterministic local reflection scratch output
+reflections/

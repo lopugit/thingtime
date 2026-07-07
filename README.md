@@ -73,6 +73,24 @@ builds Nitro with `NITRO_PRESET=vercel`, and checks that
 `.vercel/output/static/index.html` contains the React shell before trusting the
 deployment artifact.
 
+## API self-documentation
+
+Every registered Thingtime API endpoint exposes a JSON documentation endpoint
+by appending `-docs` to the API path. The docs endpoint accepts both GET and
+POST so sandboxed tools can discover the contract without caring which method
+the real endpoint uses:
+
+```sh
+curl http://localhost:9999/api/v1/auth/service-account-docs
+curl -X POST http://localhost:9999/api/v1/auth/service-account-docs -d '{}'
+```
+
+Each response includes the original endpoint, accepted methods, auth notes,
+step-by-step usage, payload and response examples, and generated curl, wget,
+Node.js, Python, and Ruby snippets. The browser reference lives at
+`/docs/api`, and the docs smoke tests live in the `/tests` page under the
+`Docs` group.
+
 ## MongoDB
 
 MongoDB powers the app status checks and database-backed API routes.

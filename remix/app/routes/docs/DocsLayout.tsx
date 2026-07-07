@@ -13,7 +13,7 @@ import {
   Stack,
   Text
 } from '@chakra-ui/react';
-import { BookOpen, Boxes, ChevronRight, Component, GripVertical, Menu, PanelLeftClose, PanelLeftOpen, Search, X } from 'lucide-react';
+import { BookOpen, Boxes, ChevronRight, Component, GripVertical, Menu, PanelLeftClose, PanelLeftOpen, Search, ServerCog, X } from 'lucide-react';
 import { Link as RouterLink, Outlet, useLocation, useSearchParams } from 'react-router';
 
 import { designEntries, designKindColors, getDesignEntryBySlug } from './designEntries';
@@ -25,6 +25,12 @@ const docsNav = [
     to: '/docs',
     icon: BookOpen,
     description: 'Docs home'
+  },
+  {
+    label: 'API reference',
+    to: '/docs/api',
+    icon: ServerCog,
+    description: 'Endpoint docs'
   },
   {
     label: 'Design mockups',
@@ -420,6 +426,7 @@ export default function DocsLayout() {
       w="100%"
     >
       <Grid
+        boxSizing="border-box"
         templateColumns={{
           base: 'minmax(0, 1fr)',
           lg: desktopDrawerOpen ? `${drawerWidth}px minmax(0, 1fr)` : 'minmax(0, 1fr)'

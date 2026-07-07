@@ -18,6 +18,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- Added API self-documentation: every registered Thingtime API endpoint now has
+  a matching `-docs` JSON route that responds to GET or POST, and `/docs/api`
+  documents endpoint behavior, steps, payload/response examples, and curl,
+  wget, Node.js, Python, and Ruby examples from the shared docs registry. —
+  _Codex (AI), 2026-07-08_
 - 🌈 **2026 design refactor**: adopted the Claude Design mockups
   (`docs/design/claude-design-mockup-v1` product UI + `claude-design-mockup-v2-fable`
   landing) across the whole app. New runtime theming system — every design token

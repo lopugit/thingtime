@@ -5,6 +5,7 @@ import {
   expectStatus,
   type ApiTestDefinition
 } from './apiTestRunner';
+import { apiEndpointDocs } from '~/docs/apiDocs';
 
 const uniqueServiceAccountBody = () => {
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -32,6 +33,33 @@ const decodeJwtPayload = (token: unknown) => {
     return null;
   }
 };
+
+const apiDocsSmokeTests: ApiTestDefinition[] = apiEndpointDocs.flatMap((doc) =>
+  (['GET', 'POST'] as const).map((method) => ({
+    id: `docs-${doc.id}-${method.toLowerCase()}`,
+    name: `${doc.title} docs ${method}`,
+    description: `${method} ${doc.docsEndpoint} returns the JSON docs object for ${doc.endpoint}.`,
+    group: 'docs',
+    method,
+    path: doc.docsEndpoint,
+    body: method === 'POST' ? {} : undefined,
+    expect: expectJson(
+      [200],
+      (body) =>
+        body?.ok === true &&
+        body?.docs?.endpoint === doc.endpoint &&
+        body?.docs?.docsEndpoint === doc.docsEndpoint &&
+        Array.isArray(body?.docs?.steps) &&
+        body.docs.steps.length > 0 &&
+        body?.docs?.platformExamples?.curl &&
+        body?.docs?.platformExamples?.node &&
+        body?.docs?.platformExamples?.python &&
+        body?.docs?.platformExamples?.ruby &&
+        body?.docs?.platformExamples?.wget,
+      `${method} docs route returned endpoint docs and platform examples.`
+    )
+  }))
+);
 
 export const apiTests: ApiTestDefinition[] = [
   {
@@ -400,7 +428,8 @@ export const apiTests: ApiTestDefinition[] = [
     mutates: true,
     body: { email: 'tt-api-test-waitlist@example.invalid' },
     expect: expectJson([200, 429], (body) => body?.ok === true || typeof body?.error === 'string', 'Waitlist join succeeded (or was rate-limited with an error shape).')
-  }
+  },
+  ...apiDocsSmokeTests
 ];
 
 export const apiTestGroups = Array.from(new Set(apiTests.map((test) => test.group))).sort();
