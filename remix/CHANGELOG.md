@@ -18,6 +18,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- Added a root `electron/` desktop package that rebuilds the `remix/` Vite
+  client and Nitro server with the Node server preset, stages the output for
+  Electron, and packages an app shell that starts the bundled Nitro server on
+  loopback before opening the desktop window. — _Codex (AI), 2026-07-08_
 - 🌈 **2026 design refactor**: adopted the Claude Design mockups
   (`docs/design/claude-design-mockup-v1` product UI + `claude-design-mockup-v2-fable`
   landing) across the whole app. New runtime theming system — every design token

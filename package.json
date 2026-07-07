@@ -12,12 +12,15 @@
     "web-ports": "node remix/scripts/worktree-ports.cjs",
     "web-ports:all": "node remix/scripts/dev-pm2.cjs list",
     "build-web": "npm run build --prefix remix",
+    "electron": "pnpm --dir electron dev",
+    "build-electron": "pnpm --dir electron build",
+    "dist-electron": "pnpm --dir electron dist",
     "remix": "npm run web",
     "remix-pms": "npm run web-pms",
     "build-remix": "npm run build-web",
     "next": "npm run dev --prefix next",
     "api": "npm run dev --prefix api",
-    "postinstall": "pnpm i --prefix next ; pnpm i --prefix remix ; pnpm i --prefix raycast ; pnpm i --prefix api",
+    "postinstall": "pnpm i --prefix next ; pnpm i --prefix remix ; pnpm i --prefix raycast ; pnpm i --prefix api ; pnpm i --prefix electron",
     "install-git-hooks": "git config core.hooksPath .githooks"
   },
   "repository": {

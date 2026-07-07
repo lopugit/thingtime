@@ -38,6 +38,9 @@ remix/.vercel/
 remix/dist/
 remix/server/assets/*
 !remix/server/assets/.gitignore
+electron/dist/
+electron/release/
+electron/node_modules/
 
 tmp/*
 
