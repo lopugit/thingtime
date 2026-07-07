@@ -6,6 +6,7 @@ import { Icon } from '../../Icon/Icon';
 import { useLopu } from '../../Lopu/useLopu';
 import { useThingtime } from '../useThingtime';
 import { buildThingModeUrl } from '../thingRoute';
+import { sanitizeParsedJson } from '../jsonValue';
 import { resolveThingZone } from '../thingZones';
 import type { ThingZone } from '../thingZones';
 import { ThingContextMenu } from './ThingContextMenu';
@@ -62,28 +63,6 @@ const cloneValue = (value: unknown): unknown => {
 	} catch {
 		return JSON.parse(JSON.stringify(value));
 	}
-};
-
-// strip prototype-polluting keys from parsed clipboard JSON before it enters
-// the thingtime tree
-const sanitizePastedValue = (value: unknown): unknown => {
-	if (!value || typeof value !== 'object') {
-		return value;
-	}
-
-	if (Array.isArray(value)) {
-		return value.map(sanitizePastedValue);
-	}
-
-	const out: Record<string, unknown> = {};
-	Object.keys(value as Record<string, unknown>).forEach((key) => {
-		if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
-			return;
-		}
-		out[key] = sanitizePastedValue((value as Record<string, unknown>)[key]);
-	});
-
-	return out;
 };
 
 const serializeThing = (thing: unknown): string => {
@@ -342,7 +321,7 @@ export const ThingContextMenuTrigger = (props: ThingContextMenuTriggerProps) => 
 			let value: unknown = text;
 
 			try {
-				value = sanitizePastedValue(JSON.parse(text));
+				value = sanitizeParsedJson(JSON.parse(text));
 			} catch {
 				// plain string paste is fine
 			}

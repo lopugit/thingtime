@@ -6,6 +6,7 @@ import { ChevronDown, Search } from 'lucide-react';
 import { Icon } from '../../Icon/Icon';
 import { RAINBOW } from '~/theme/rainbow';
 import { ROOT_THING_PATH, buildThingModeUrl, parseThingMode, parseThingPath } from '../../Thingtime/thingRoute';
+import { EditorDrawerSection } from './EditorDrawerSection';
 import { ReorderableList } from './ReorderableList';
 import { applyDrawerOrdering, buildDrawerSubSections, drawerMenuItems, filterDrawerItemsByAuth } from './drawerMenu';
 import { useDrawer, useIsMobileViewport } from './useDrawer';
@@ -489,6 +490,9 @@ export const DrawerContent = (props: DrawerContentProps) => {
 						</Flex>
 					</>
 				)}
+
+				{/* editor window/config management, shown with the Things menu */}
+				{selectedTopItem?.id === 'things' && <EditorDrawerSection onNavigate={onNavigate} />}
 			</Box>
 
 			{/* sticky account footer */}
