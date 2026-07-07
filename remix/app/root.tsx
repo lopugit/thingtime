@@ -11,6 +11,7 @@ import { useIcons } from './hooks/useIcons';
 import { ChakraWrapper } from './Providers/Chakra/ChakraWrapper';
 import { ThingtimeProvider } from './Providers/ThingtimeProvider';
 import { DevKit } from './components/DevKit/DevKit';
+import { ElectronBridgeHost } from './components/Electron/ElectronBridgeHost';
 import { NativeBridgeHost } from './components/NativeBridge/NativeBridgeHost';
 import { VisualSettingsHost } from './components/VisualSettings/VisualSettingsHost';
 import { ThemeHost } from './components/ThemeSettings/ThemeHost';
@@ -95,6 +96,7 @@ export default function App() {
       <ThingtimeProvider>
         <VisualSettingsHost />
         <ThemeHost />
+        {mounted ? <ElectronBridgeHost /> : null}
         {mounted ? <NativeBridgeHost /> : null}
         <DevKit />
         <Nav />

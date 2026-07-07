@@ -1240,8 +1240,8 @@
     "semantic_hash": "689aa489ed73d14667a3a4c2d3428fb4"
   },
   "remix/app/root.tsx": {
-    "mtime": 1783465214.2234633,
-    "ast_hash": "ecf42ffc389e243d90dc3b86e82882c6",
+    "mtime": 1783466714.5198452,
+    "ast_hash": "5889adb10860feea9936fa8e97da5618",
     "semantic_hash": ""
   },
   "remix/app/routes.tsx": {
@@ -1815,8 +1815,8 @@
     "semantic_hash": "f162fbffa18046af73dfca08802a536f"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1783465452.6068766,
-    "ast_hash": "7f819e64d4a62cf0c89ab9c54fcd3105",
+    "mtime": 1783466812.813366,
+    "ast_hash": "c5ef5d9febc867047ee0825e56b4a9c6",
     "semantic_hash": ""
   },
   "remix/README.md": {
@@ -2720,8 +2720,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Nav/Drawer/UserSettingsModal.tsx": {
-    "mtime": 1783465214.2122629,
-    "ast_hash": "38c71e411d98f24bf013fd70ccd42dd1",
+    "mtime": 1783467681.5274966,
+    "ast_hash": "ccc5d41d2489ef8b6a9ac133599d4f25",
     "semantic_hash": ""
   },
   "remix/app/components/Nav/Drawer/drawerMenu.tsx": {
@@ -3140,8 +3140,18 @@
     "semantic_hash": ""
   },
   "electron/README.md": {
-    "mtime": 1783465652.4681048,
-    "ast_hash": "ef56847c16d191acfc7d1df0981f9966",
+    "mtime": 1783466808.5512002,
+    "ast_hash": "b629a42ccb22926c9d32842d12aeeca7",
+    "semantic_hash": ""
+  },
+  "remix/app/components/Electron/ElectronBridgeHost.tsx": {
+    "mtime": 1783467772.0793176,
+    "ast_hash": "62588d06c79798d905575965f16ec8f8",
+    "semantic_hash": ""
+  },
+  "remix/app/utils/electronBridge.ts": {
+    "mtime": 1783466699.293625,
+    "ast_hash": "299a8a23d4b89047d73bdd9469ee3910",
     "semantic_hash": ""
   }
 }

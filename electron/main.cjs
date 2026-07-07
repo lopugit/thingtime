@@ -1,16 +1,30 @@
 const fs = require('node:fs');
+const crypto = require('node:crypto');
 const http = require('node:http');
 const net = require('node:net');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 
-const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, shell, Menu } = require('electron');
 
 const repoRoot = path.resolve(__dirname, '..');
 const localWebOutput = path.join(__dirname, 'dist', 'web', '.output');
+const productionUrl = 'https://thingtime.com/';
+const clearElectronUrlParam = 'thingtimeDesktopClearUrl';
 
 let appOrigin = null;
+let activeContentOrigin = null;
 let mainWindow = null;
+let sessionHash = null;
+
+function getSessionHash() {
+  if (!sessionHash) {
+    const seed = `${app.getName()}|${app.getPath('userData')}`;
+    sessionHash = crypto.createHash('sha256').update(seed).digest('hex').slice(0, 12);
+  }
+
+  return sessionHash;
+}
 
 function readEnvValue(rawValue) {
   let value = rawValue.trim();
@@ -177,19 +191,122 @@ async function startNitroServer() {
   return origin;
 }
 
-function isAppUrl(targetUrl) {
+function normalizeDesktopUrl(rawUrl) {
+  const value = String(rawUrl || '').trim();
+
+  if (!value) {
+    throw new Error('Enter a URL to load in Thingtime desktop.');
+  }
+
+  let url;
+
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error('Enter a valid URL, including http:// or https://.');
+  }
+
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new Error('Thingtime desktop can only load http:// or https:// URLs.');
+  }
+
+  return url.href;
+}
+
+function isAllowedContentUrl(targetUrl) {
   if (!targetUrl || targetUrl === 'about:blank') {
     return true;
   }
 
   try {
-    return new URL(targetUrl).origin === appOrigin;
+    const origin = new URL(targetUrl).origin;
+    return origin === appOrigin || origin === activeContentOrigin;
   } catch {
     return false;
   }
 }
 
+function getDesktopInfo() {
+  return {
+    appVersion: app.getVersion(),
+    contentOrigin: activeContentOrigin || appOrigin,
+    currentUrl: mainWindow?.webContents.getURL() || appOrigin,
+    isPackaged: app.isPackaged,
+    origin: appOrigin,
+    platform: process.platform,
+    sessionHash: getSessionHash()
+  };
+}
+
+async function loadDesktopUrl(rawUrl) {
+  if (!mainWindow) {
+    throw new Error('Thingtime desktop window is not ready yet.');
+  }
+
+  const targetUrl = normalizeDesktopUrl(rawUrl);
+  activeContentOrigin = new URL(targetUrl).origin;
+  await mainWindow.loadURL(targetUrl);
+
+  return getDesktopInfo();
+}
+
+function showLoadUrlError(error) {
+  dialog.showErrorBox('Thingtime URL failed', error instanceof Error ? error.message : String(error));
+}
+
+function loadMenuUrl(url) {
+  loadDesktopUrl(url).catch(showLoadUrlError);
+}
+
+function withClearSavedUrlParam(rawUrl) {
+  const url = new URL(rawUrl);
+  url.searchParams.set(clearElectronUrlParam, '1');
+  return url.href;
+}
+
+function createApplicationMenu() {
+  const template = [
+    ...(process.platform === 'darwin'
+      ? [
+          {
+            label: app.name,
+            submenu: [{ role: 'about' }, { type: 'separator' }, { role: 'quit' }]
+          }
+        ]
+      : []),
+    {
+      label: 'Thingtime',
+      submenu: [
+        {
+          label: 'Load Bundled App',
+          accelerator: 'CommandOrControl+Alt+L',
+          click: () => {
+            if (appOrigin) {
+              loadMenuUrl(withClearSavedUrlParam(appOrigin));
+            }
+          }
+        },
+        {
+          label: 'Load Production',
+          accelerator: 'CommandOrControl+Alt+P',
+          click: () => loadMenuUrl(productionUrl)
+        },
+        { type: 'separator' },
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { role: 'toggleDevTools' }
+      ]
+    },
+    { role: 'editMenu' },
+    { role: 'windowMenu' }
+  ];
+
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
 function createWindow(startUrl) {
+  activeContentOrigin = new URL(startUrl).origin;
+
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 860,
@@ -210,8 +327,9 @@ function createWindow(startUrl) {
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (isAppUrl(url)) {
-      return { action: 'allow' };
+    if (isAllowedContentUrl(url)) {
+      mainWindow.loadURL(url);
+      return { action: 'deny' };
     }
 
     shell.openExternal(url);
@@ -219,7 +337,7 @@ function createWindow(startUrl) {
   });
 
   mainWindow.webContents.on('will-navigate', (event, url) => {
-    if (isAppUrl(url)) {
+    if (isAllowedContentUrl(url)) {
       return;
     }
 
@@ -230,11 +348,8 @@ function createWindow(startUrl) {
   mainWindow.loadURL(startUrl);
 }
 
-ipcMain.handle('thingtime-desktop:get-info', () => ({
-  appVersion: app.getVersion(),
-  origin: appOrigin,
-  platform: process.platform
-}));
+ipcMain.handle('thingtime-desktop:get-info', () => getDesktopInfo());
+ipcMain.handle('thingtime-desktop:load-url', (_event, url) => loadDesktopUrl(url));
 
 const singleInstanceLock = app.requestSingleInstanceLock();
 
@@ -255,7 +370,10 @@ if (!singleInstanceLock) {
 
   app.whenReady()
     .then(startNitroServer)
-    .then((origin) => createWindow(origin))
+    .then((origin) => {
+      createWindow(origin);
+      createApplicationMenu();
+    })
     .catch((error) => {
       dialog.showErrorBox('Thingtime failed to start', error instanceof Error ? error.message : String(error));
       app.quit();

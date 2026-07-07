@@ -32,8 +32,18 @@ packaged artifacts and can use the host machine's signing/notarization setup.
 
 The Electron main process starts the bundled Nitro server on a free
 `127.0.0.1` port and opens the desktop window to that local origin. External
-links are opened with the OS browser. The renderer keeps `nodeIntegration`
-disabled and uses a small preload bridge for desktop metadata only.
+links are opened with the OS browser unless the user has explicitly switched
+the desktop window to that URL's origin. The renderer keeps `nodeIntegration`
+disabled and uses a small preload bridge for desktop metadata and validated URL
+switching only.
+
+The drawer settings modal shows an **Electron** section inside the desktop app.
+It writes the selected destination to
+`thingtime.settings.electron.${sessionHash}URL`, where `sessionHash` is derived
+from Electron's app data path for this install. Blank/unset means "use the
+bundled local app". The app also exposes a Thingtime menu with **Load Bundled
+App** and **Load Production** entries so users can recover if they load a URL
+that does not include the switcher UI.
 
 In local development, the Electron shell loads `remix/.env`, `remix/.env.local`,
 and `remix/.env.auto` before starting Nitro so the desktop app sees the same

@@ -18,6 +18,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- Added an Electron desktop URL switcher that stores the selected destination
+  at `thingtime.settings.electron.${sessionHash}URL`, auto-loads that saved URL
+  on launch, and adds desktop menu fallbacks for bundled/prod loading. —
+  _Codex (AI), 2026-07-08_
 - Added a root `electron/` desktop package that rebuilds the `remix/` Vite
   client and Nitro server with the Node server preset, stages the output for
   Electron, and packages an app shell that starts the bundled Nitro server on
