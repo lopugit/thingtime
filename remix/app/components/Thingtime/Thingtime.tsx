@@ -23,7 +23,7 @@ import { CommanderV2 } from '../Commander/CommanderV2';
 import { Icon } from '../Icon/Icon';
 import { MagicInput } from '../MagicInput/MagicInput';
 import { Safe } from '../Safety/Safe';
-import { SettingsMenu } from './SettingsMenu';
+import { ThingContextMenuTrigger } from './ContextMenu/ThingContextMenuTrigger';
 import { useThingtime } from './useThingtime';
 
 import { useThings } from '~/hooks/useThings';
@@ -1165,16 +1165,23 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 							)}
 							{pathDom && (
 								<Flex className="thingPathDom" flexDirection="row" columnGap={1} marginTop={-1} paddingLeft={1}>
-									<SettingsMenu
+									<ThingContextMenuTrigger
+										editMode={editMode}
 										setEditMode={setEditMode}
 										transition="all 0.2s ease-in-out"
 										opacity={showContextIcon ? 1 : 0}
 										uuid={uuid}
 										fullPath={fullPath}
+										path={path}
+										parent={parent}
+										parentPath={parentPath}
+										thing={thing}
+										thingType={type}
 										readonly={!editMode}
 										onType={onChangeType}
 										onDelete={deleteValue}
-									></SettingsMenu>
+										contextTargetRef={thingtimeRef}
+									></ThingContextMenuTrigger>
 								</Flex>
 							)}
 						</Flex>
@@ -1254,16 +1261,19 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 										e?.nativeEvent?.stopImmediatePropagation();
 									}}
 								>
-									<SettingsMenu
+									<ThingContextMenuTrigger
+										variant="new-child"
+										editMode={editMode}
 										setEditMode={setEditMode}
 										transition="all 0.2s ease-in-out"
 										opacity={showNewContextIcon ? 1 : 0}
 										uuid={uuid}
 										iconSize={10}
 										fullPath={fullPath}
+										thingType={type}
 										readonly={!editMode}
-										onType={addNewChild}
-									></SettingsMenu>
+										onAddChild={addNewChild}
+									></ThingContextMenuTrigger>
 								</Flex>
 
 								{/* <Icon size={7} name="plus"></Icon>
