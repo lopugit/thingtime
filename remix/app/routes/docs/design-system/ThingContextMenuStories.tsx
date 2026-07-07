@@ -12,8 +12,8 @@ import { useThingContextMenu } from '~/components/Thingtime/ContextMenu/useThing
 // way a real caller would, and logs the actions it receives.
 
 const formatAction = (fired: ThingContextMenuAction) => {
-	const optionSuffix = fired.option ? ` → ${fired.option.label || fired.option.key}` : '';
-	return `${fired.section.id}/${fired.action.id}${optionSuffix}`;
+	const trail = [...fired.path, fired.action.id].join(' › ');
+	return fired.action.command ? `${fired.action.command} ← ${trail}` : trail;
 };
 
 const StoryActionLog = ({ value }: { value: string | null }) => (
@@ -32,7 +32,9 @@ const StoryActionLog = ({ value }: { value: string | null }) => (
 		<Text fontWeight={600} letterSpacing="0.08em" textTransform="uppercase" fontSize="9px">
 			onAction
 		</Text>
-		<Text color={value ? 'var(--tt-ink, #16161a)' : 'var(--tt-faint, #b6b6c0)'}>{value || 'nothing fired yet'}</Text>
+		<Text color={value ? 'var(--tt-ink, #16161a)' : 'var(--tt-faint, #b6b6c0)'} noOfLines={1}>
+			{value || 'nothing fired yet'}
+		</Text>
 	</Flex>
 );
 
@@ -132,12 +134,14 @@ const ModalStory = () => {
 // statically-open surface for anatomy-style stories: the popover presentation
 // inside a reserved-height relative wrapper
 const StaticMenu = (props: {
-	expanded?: string;
+	drillPath?: string[];
 	readonly?: boolean;
 	selectedPermissionKey?: string;
 	minHeight?: string;
+	pinned?: boolean;
 	onAction: (fired: ThingContextMenuAction) => void;
 }) => {
+	const [pinned, setPinned] = React.useState(props.pinned ?? false);
 	const model = React.useMemo(
 		() =>
 			buildThingContextMenuModel({
@@ -158,11 +162,24 @@ const StaticMenu = (props: {
 					presentation="popover"
 					model={model}
 					meta={{ path: 'garden.flowers', type: props.readonly ? 'string (readonly)' : 'string' }}
-					defaultExpandedActionId={props.expanded}
+					defaultDrillPath={props.drillPath}
 					closeOnAction={false}
+					pinned={pinned}
+					onPinnedChange={setPinned}
 					onAction={props.onAction}
 				/>
 			</Box>
+		</Box>
+	);
+};
+
+const DrilldownStory = () => {
+	const [lastAction, setLastAction] = React.useState<string | null>(null);
+
+	return (
+		<Box>
+			<StaticMenu minHeight="470px" onAction={(fired) => setLastAction(formatAction(fired))} />
+			<StoryActionLog value={lastAction} />
 		</Box>
 	);
 };
@@ -172,7 +189,7 @@ const TypesSubmenuStory = () => {
 
 	return (
 		<Box>
-			<StaticMenu expanded="change-type" minHeight="500px" onAction={(fired) => setLastAction(formatAction(fired))} />
+			<StaticMenu drillPath={['change-type']} minHeight="470px" onAction={(fired) => setLastAction(formatAction(fired))} />
 			<StoryActionLog value={lastAction} />
 		</Box>
 	);
@@ -184,11 +201,22 @@ const PermissionsStory = () => {
 	return (
 		<Box>
 			<StaticMenu
-				expanded="permissions"
+				drillPath={['permissions']}
 				selectedPermissionKey="shared"
-				minHeight="520px"
+				minHeight="380px"
 				onAction={(fired) => setLastAction(formatAction(fired))}
 			/>
+			<StoryActionLog value={lastAction} />
+		</Box>
+	);
+};
+
+const DragResizeStory = () => {
+	const [lastAction, setLastAction] = React.useState<string | null>(null);
+
+	return (
+		<Box>
+			<StaticMenu pinned minHeight="500px" onAction={(fired) => setLastAction(formatAction(fired))} />
 			<StoryActionLog value={lastAction} />
 		</Box>
 	);
@@ -218,15 +246,15 @@ export const thingContextMenuStories: DesignSystemStory[] = [
 		id: 'hover-trigger',
 		title: 'Hover trigger (popover)',
 		description:
-			'The default in-canvas access: hovering the wizard icon next to a thing path opens the menu under the trigger. It lingers briefly so the pointer can travel into it, and the pin keeps it open while you work.',
+			'The default in-canvas access: hovering (or tapping) the wizard icon next to a thing path opens the menu under the trigger. It lingers briefly so the pointer can travel into it, and the pin keeps it open while you work.',
 		render: HoverTriggerStory,
-		note: 'This is the SettingsMenu behaviour today, upgraded to the full action model.'
+		note: 'This is exactly what ships on every thing header in the live app.'
 	},
 	{
 		id: 'right-click',
 		title: 'Right-click (context)',
 		description:
-			'Any thing surface can open the same menu at the pointer with onContextMenu. The surface clamps itself inside the viewport, so edge and corner clicks stay fully visible.',
+			'Any thing surface can open the same menu at the pointer with onContextMenu — in the live app the whole thing row is wired, and the deepest thing under the pointer wins. The surface clamps itself inside the viewport.',
 		render: RightClickStory,
 		note: 'On touch devices the native long-press maps to the same contextmenu event.'
 	},
@@ -238,18 +266,34 @@ export const thingContextMenuStories: DesignSystemStory[] = [
 		render: ModalStory
 	},
 	{
-		id: 'types-submenu',
-		title: 'Change type submenu',
+		id: 'drilldown',
+		title: 'Infinite drilldown, one window',
 		description:
-			'The Type section expands inline (no flyout) listing JavaScript types first, then custom Thingtime types. Wrappable types (like Thingtime Logo) can wrap the current value instead of replacing it.',
+			'Submenus never fly out or indent: activating a parent drills the whole surface down a level with a back row, as deep as the model goes (try Change type → Thingtime Logo → Replace/Wrap, or Apply template → More templates). The window locks its size on the first drill — deeper levels scroll inside the same frame instead of resizing or spawning surfaces.',
+		render: DrilldownStory,
+		note: 'Keyboard: → drills into the focused parent, ← or Esc goes back, arrows move between rows.'
+	},
+	{
+		id: 'types-submenu',
+		title: 'Change type options',
+		description:
+			'The Type level lists real options — JavaScript types first, then custom Thingtime types from settings. Wrappable types (like Thingtime Logo) drill one level further to choose Replace value or Wrap current value.',
 		render: TypesSubmenuStory
 	},
 	{
 		id: 'permissions',
-		title: 'Permissions submenu',
+		title: 'Permissions options',
 		description:
-			'Permissions render as a radio-style submenu (menuitemradio) with the current level checked. Share… copies a link; Permissions… changes who the link works for.',
+			'Permissions render as radio-style options (menuitemradio) with the current level checked. Shared with… drills a level deeper to manage invites — three levels down, still the same window.',
 		render: PermissionsStory
+	},
+	{
+		id: 'drag-resize',
+		title: 'Drag + resize (pinned)',
+		description:
+			'The header is a drag handle — made for pinned mode, so a pinned menu can be moved out of the way and kept around like a little tool palette. The bottom-right grip resizes the window; content scrolls inside whatever size you give it.',
+		render: DragResizeStory,
+		note: 'This story starts pinned: drag the header, resize from the corner, fire actions without closing.'
 	},
 	{
 		id: 'readonly',

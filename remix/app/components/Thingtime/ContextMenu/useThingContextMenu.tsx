@@ -67,10 +67,12 @@ export const useThingContextMenu = (options: UseThingContextMenuOptions = {}) =>
 		setOpen(true);
 	}, [cancelScheduledClose]);
 
+	// accepts React or native mouse events (duck-typed) so it can back both
+	// onContextMenu props and addEventListener('contextmenu', …) wiring
 	const openAtPointer = React.useCallback(
-		(e: React.MouseEvent) => {
-			e.preventDefault();
-			e.stopPropagation();
+		(e: { preventDefault?: () => void; stopPropagation?: () => void; clientX: number; clientY: number }) => {
+			e.preventDefault?.();
+			e.stopPropagation?.();
 			cancelScheduledClose();
 			setPresentation('context');
 			setPosition({ x: e.clientX, y: e.clientY });

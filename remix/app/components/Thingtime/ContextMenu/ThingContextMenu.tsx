@@ -2,23 +2,26 @@ import React from 'react';
 import { Box, Flex, Text } from '@chakra-ui/react';
 
 import { Icon } from '../../Icon/Icon';
-import type {
-	ThingContextAction,
-	ThingContextMenuModel,
-	ThingContextSection,
-	ThingContextSubmenu
-} from './contextMenuModel';
+import type { ThingContextAction, ThingContextMenuModel, ThingContextSection } from './contextMenuModel';
+import { resolveDrillPath } from './contextMenuModel';
 
-// Thing Context Menu — design-system reference implementation.
+// Thing Context Menu — design-system reference implementation, live in the
+// Thingtime UI via ThingContextMenuTrigger.
 //
 // One menu surface, three presentations:
 //   'popover'  anchored under a hover/click trigger (wrap in position:relative)
 //   'context'  fixed at a pointer position (right-click / long-press)
-//   'modal'    centered over a scrim (programmatic, e.g. from a button)
+//   'modal'    centred over a scrim (programmatic, e.g. from a button)
+//
+// Submenus never fly out or indent: activating a parent drills the whole
+// surface down one level (with a back row), infinitely deep, inside a single
+// window whose size stays put — the level body scrolls instead. The surface
+// is draggable by its header (made for pinned mode) and resizable from the
+// bottom-right grip.
 //
 // The surface renders a ThingContextMenuModel (see contextMenuModel.ts) and
-// reports every activation through onAction — it owns no thing state itself,
-// so the same component serves the live app, the docs stories, and tests.
+// reports every leaf activation through onAction — it owns no thing state, so
+// the same component serves the live app, the docs stories, and tests.
 // Documented at /docs/design-system?component=thing-context-menu.
 
 export type ThingContextMenuPresentation = 'popover' | 'context' | 'modal';
@@ -26,8 +29,8 @@ export type ThingContextMenuPresentation = 'popover' | 'context' | 'modal';
 export type ThingContextMenuAction = {
 	action: ThingContextAction;
 	section: ThingContextSection;
-	// present when the activation came from a submenu option
-	option?: { key: string; label?: string };
+	// drill path (action ids) the leaf was reached through
+	path: string[];
 };
 
 export interface ThingContextMenuProps {
@@ -42,20 +45,25 @@ export interface ThingContextMenuProps {
 	onPinnedChange?: (pinned: boolean) => void;
 	onAction?: (args: ThingContextMenuAction) => void;
 	onClose?: () => void;
-	// close automatically after a non-submenu action fires (default true)
+	// close automatically after a leaf action fires (default true)
 	closeOnAction?: boolean;
-	// open with this action's submenu already expanded (docs/tests)
-	defaultExpandedActionId?: string;
-	// keep the menu open while the pointer is over it (hover presentations)
+	// open with this drill path already applied (docs/tests)
+	defaultDrillPath?: string[];
+	// hover-linger wiring; supplied by useThingContextMenu for popovers
 	onSurfaceMouseEnter?: () => void;
 	onSurfaceMouseLeave?: () => void;
-	width?: string;
+	width?: number;
 	zIndex?: number;
 }
 
 const FOCUSABLE_ITEM_CLASS = 'thing-context-menu-item';
 
 const CONTEXT_MENU_MARGIN = 8;
+const MIN_MENU_WIDTH = 228;
+const MAX_MENU_WIDTH = 520;
+const MIN_MENU_HEIGHT = 220;
+const MAX_MENU_HEIGHT = 680;
+const DEFAULT_MENU_WIDTH = 264;
 
 export const ThingContextMenu = (props: ThingContextMenuProps) => {
 	const {
@@ -69,22 +77,40 @@ export const ThingContextMenu = (props: ThingContextMenuProps) => {
 		onAction,
 		onClose,
 		closeOnAction = true,
-		defaultExpandedActionId = null,
+		defaultDrillPath,
 		onSurfaceMouseEnter,
 		onSurfaceMouseLeave,
-		width = '264px',
+		width = DEFAULT_MENU_WIDTH,
 		zIndex = 1400
 	} = props;
 
 	const surfaceRef = React.useRef<HTMLDivElement>(null);
-	const [expandedActionId, setExpandedActionId] = React.useState<string | null>(defaultExpandedActionId);
 
-	// fresh open = submenus back to their default state
+	// drill navigation — a stack of submenu-carrying actions
+	const [stack, setStack] = React.useState<ThingContextAction[]>(() => resolveDrillPath(model, defaultDrillPath));
+	// bumps on every push/pop to retrigger the level slide animation
+	const [levelTick, setLevelTick] = React.useState(0);
+
+	// drag offset (header) + explicit size (resize grip / drill height lock)
+	const [dragOffset, setDragOffset] = React.useState({ x: 0, y: 0 });
+	const [menuWidth, setMenuWidth] = React.useState(width);
+	const [menuHeight, setMenuHeight] = React.useState<number | null>(null);
+
+	// fresh open = default drill state, home position, natural size
 	React.useEffect(() => {
 		if (open) {
-			setExpandedActionId(defaultExpandedActionId);
+			setStack(resolveDrillPath(model, defaultDrillPath));
+			setDragOffset({ x: 0, y: 0 });
+			setMenuWidth(width);
+			setMenuHeight(null);
+			setLevelTick(0);
 		}
-	}, [open, defaultExpandedActionId]);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [open]);
+
+	const currentLevel = stack.length ? stack[stack.length - 1] : null;
+	const currentSections = currentLevel?.submenu?.sections || model.sections;
+	const currentPath = React.useMemo(() => stack.map((action) => action.id), [stack]);
 
 	// clamp the context presentation inside the viewport
 	const [clampedPosition, setClampedPosition] = React.useState(position);
@@ -111,7 +137,7 @@ export const ThingContextMenu = (props: ThingContextMenuProps) => {
 			x: Math.max(CONTEXT_MENU_MARGIN, Math.min(position.x, maxX)),
 			y: Math.max(CONTEXT_MENU_MARGIN, Math.min(position.y, maxY))
 		});
-	}, [open, presentation, position?.x, position?.y, expandedActionId]);
+	}, [open, presentation, position?.x, position?.y]);
 
 	const focusItemAt = React.useCallback((index: number) => {
 		const surface = surfaceRef.current;
@@ -143,6 +169,35 @@ export const ThingContextMenu = (props: ThingContextMenuProps) => {
 		[focusItemAt]
 	);
 
+	// drilling keeps the window size steady: lock the current height the first
+	// time the user leaves the root level, so deeper/shorter levels scroll
+	// inside the same frame instead of resizing it
+	const lockHeight = React.useCallback(() => {
+		if (menuHeight === null && surfaceRef.current) {
+			setMenuHeight(surfaceRef.current.offsetHeight);
+		}
+	}, [menuHeight]);
+
+	const pushLevel = React.useCallback(
+		(action: ThingContextAction) => {
+			if (!action.submenu) {
+				return;
+			}
+
+			lockHeight();
+			setStack((prev) => [...prev, action]);
+			setLevelTick((tick) => tick + 1);
+			setTimeout(() => focusItemAt(0), 30);
+		},
+		[lockHeight, focusItemAt]
+	);
+
+	const popLevel = React.useCallback(() => {
+		setStack((prev) => (prev.length ? prev.slice(0, -1) : prev));
+		setLevelTick((tick) => tick + 1);
+		setTimeout(() => focusItemAt(0), 30);
+	}, [focusItemAt]);
+
 	const onSurfaceKeyDown = React.useCallback(
 		(e: React.KeyboardEvent) => {
 			if (e.key === 'ArrowDown') {
@@ -157,20 +212,24 @@ export const ThingContextMenu = (props: ThingContextMenuProps) => {
 			} else if (e.key === 'End') {
 				e.preventDefault();
 				focusItemAt(-1);
+			} else if (e.key === 'ArrowLeft') {
+				if (stack.length) {
+					e.preventDefault();
+					popLevel();
+				}
 			} else if (e.key === 'Escape') {
 				e.preventDefault();
-				if (expandedActionId) {
-					setExpandedActionId(null);
+				if (stack.length) {
+					popLevel();
 				} else {
 					onClose?.();
 				}
 			}
 		},
-		[moveFocus, focusItemAt, expandedActionId, onClose]
+		[moveFocus, focusItemAt, stack.length, popLevel, onClose]
 	);
 
-	// focus the first item when a keyboard-less open happens in modal mode so
-	// Escape/arrows work immediately
+	// focus the first item on modal open so Escape/arrows work immediately
 	React.useEffect(() => {
 		if (open && presentation === 'modal') {
 			const timer = setTimeout(() => focusItemAt(0), 30);
@@ -179,175 +238,172 @@ export const ThingContextMenu = (props: ThingContextMenuProps) => {
 	}, [open, presentation, focusItemAt]);
 
 	const fireAction = React.useCallback(
-		(section: ThingContextSection, action: ThingContextAction, option?: { key: string; label?: string }) => {
+		(section: ThingContextSection, action: ThingContextAction) => {
 			if (action.disabled) {
 				return;
 			}
 
-			onAction?.({ action, section, option });
+			onAction?.({ action, section, path: currentPath });
 
 			if (closeOnAction && !pinned) {
 				onClose?.();
 			}
 		},
-		[onAction, closeOnAction, pinned, onClose]
+		[onAction, currentPath, closeOnAction, pinned, onClose]
 	);
 
 	const onItemActivate = React.useCallback(
 		(section: ThingContextSection, action: ThingContextAction) => {
 			if (action.submenu) {
-				setExpandedActionId((prev) => (prev === action.id ? null : action.id));
+				pushLevel(action);
 				return;
 			}
 
 			fireAction(section, action);
 		},
-		[fireAction]
+		[pushLevel, fireAction]
 	);
 
-	const renderSubmenu = (section: ThingContextSection, action: ThingContextAction, submenu: ThingContextSubmenu) => {
-		const selectedKey = submenu.kind === 'permissions' ? submenu.selectedKey : undefined;
+	// ------------------------------------------------------------------
+	// drag (header) + resize (bottom-right grip)
+	// ------------------------------------------------------------------
+
+	const startDrag = React.useCallback(
+		(e: React.PointerEvent) => {
+			// buttons in the header (pin/close) stay clickable
+			if ((e.target as HTMLElement)?.closest?.('button')) {
+				return;
+			}
+
+			e.preventDefault();
+
+			const startX = e.clientX;
+			const startY = e.clientY;
+			const origin = { ...dragOffset };
+
+			const handleMove = (move: PointerEvent) => {
+				setDragOffset({ x: origin.x + move.clientX - startX, y: origin.y + move.clientY - startY });
+			};
+
+			const stop = () => {
+				window.removeEventListener('pointermove', handleMove);
+				window.removeEventListener('pointerup', stop);
+			};
+
+			window.addEventListener('pointermove', handleMove);
+			window.addEventListener('pointerup', stop);
+		},
+		[dragOffset]
+	);
+
+	const startResize = React.useCallback(
+		(e: React.PointerEvent) => {
+			e.preventDefault();
+			e.stopPropagation();
+
+			const surface = surfaceRef.current;
+			const startX = e.clientX;
+			const startY = e.clientY;
+			const startWidth = surface?.offsetWidth || menuWidth;
+			const startHeight = surface?.offsetHeight || 0;
+
+			const handleMove = (move: PointerEvent) => {
+				setMenuWidth(Math.min(MAX_MENU_WIDTH, Math.max(MIN_MENU_WIDTH, startWidth + move.clientX - startX)));
+				setMenuHeight(Math.min(MAX_MENU_HEIGHT, Math.max(MIN_MENU_HEIGHT, startHeight + move.clientY - startY)));
+			};
+
+			const stop = () => {
+				window.removeEventListener('pointermove', handleMove);
+				window.removeEventListener('pointerup', stop);
+			};
+
+			window.addEventListener('pointermove', handleMove);
+			window.addEventListener('pointerup', stop);
+		},
+		[menuWidth]
+	);
+
+	// ------------------------------------------------------------------
+	// rows
+	// ------------------------------------------------------------------
+
+	const renderAction = (section: ThingContextSection, action: ThingContextAction) => {
+		const isRadio = action.selected !== undefined;
 
 		return (
 			<Flex
-				aria-label={`${action.label} options`}
-				className="thing-context-menu-submenu"
-				flexDirection="column"
+				key={action.id}
+				className={FOCUSABLE_ITEM_CLASS}
+				alignItems="center"
+				columnGap="9px"
 				marginX="6px"
-				marginBottom="4px"
-				maxHeight="240px"
-				overflowY="auto"
-				background="var(--tt-surface, #fafafb)"
-				border="1px solid var(--tt-border-light, #f0f0f2)"
+				paddingX="8px"
+				paddingY="6px"
 				borderRadius="var(--tt-radius-sm, 9px)"
-				role="group"
+				opacity={action.disabled ? 0.4 : 1}
+				color={action.danger ? 'var(--tt-danger, #d6455a)' : 'inherit'}
+				background={action.selected ? 'var(--tt-surface-alt, #f5f5f7)' : 'transparent'}
+				_hover={{
+					background: action.danger ? 'rgba(214, 69, 90, 0.08)' : 'var(--tt-surface-alt, #f5f5f7)'
+				}}
+				_focusVisible={{
+					outline: 'none',
+					background: action.danger ? 'rgba(214, 69, 90, 0.08)' : 'var(--tt-surface-alt, #f5f5f7)'
+				}}
+				transition="background 0.15s ease"
+				cursor={action.disabled ? 'not-allowed' : 'pointer'}
+				role={isRadio ? 'menuitemradio' : 'menuitem'}
+				aria-checked={isRadio ? action.selected : undefined}
+				aria-disabled={action.disabled || undefined}
+				aria-haspopup={action.submenu ? 'menu' : undefined}
+				tabIndex={-1}
+				onClick={() => onItemActivate(section, action)}
+				onKeyDown={(e) => {
+					if (e.key === 'Enter' || e.key === ' ') {
+						e.preventDefault();
+						onItemActivate(section, action);
+					} else if (e.key === 'ArrowRight' && action.submenu) {
+						e.preventDefault();
+						pushLevel(action);
+					}
+				}}
 			>
-				{submenu.options.map((option) => {
-					const selected = selectedKey === option.key;
-					const description = 'description' in option ? option.description : undefined;
-
-					return (
-						<Flex
-							key={option.key}
-							className={FOCUSABLE_ITEM_CLASS}
-							alignItems="center"
-							columnGap="8px"
-							paddingX="10px"
-							paddingY="6px"
-							borderRadius="var(--tt-radius-xs, 7px)"
-							background={selected ? 'var(--tt-surface-alt, #f5f5f7)' : 'transparent'}
-							_hover={{ background: 'var(--tt-surface-alt, #f5f5f7)' }}
-							_focusVisible={{ outline: 'none', background: 'var(--tt-surface-alt, #f5f5f7)' }}
-							transition="background 0.15s ease"
-							cursor="pointer"
-							role="menuitemradio"
-							aria-checked={selectedKey === undefined ? undefined : selected}
-							tabIndex={-1}
-							onClick={() => fireAction(section, action, { key: option.key, label: option.label })}
-							onKeyDown={(e) => {
-								if (e.key === 'Enter' || e.key === ' ') {
-									e.preventDefault();
-									fireAction(section, action, { key: option.key, label: option.label });
-								}
-							}}
-						>
-							<Icon name={option.icon || option.key} size="12px"></Icon>
-							<Box minWidth={0}>
-								<Text fontSize="xs" fontWeight={selected ? 600 : 400}>
-									{option.label || option.key}
-								</Text>
-								{description && (
-									<Text fontSize="10px" color="var(--tt-muted, #9a9aa6)" lineHeight="1.3">
-										{description}
-									</Text>
-								)}
-							</Box>
-							{selected && (
-								<Box marginLeft="auto">
-									<Icon name="check" size="10px"></Icon>
-								</Box>
-							)}
-						</Flex>
-					);
-				})}
-			</Flex>
-		);
-	};
-
-	const renderAction = (section: ThingContextSection, action: ThingContextAction) => {
-		const expanded = expandedActionId === action.id;
-
-		return (
-			<React.Fragment key={action.id}>
-				<Flex
-					className={FOCUSABLE_ITEM_CLASS}
-					alignItems="center"
-					columnGap="9px"
-					marginX="6px"
-					paddingX="8px"
-					paddingY="6px"
-					borderRadius="var(--tt-radius-sm, 9px)"
-					opacity={action.disabled ? 0.4 : 1}
-					color={action.danger ? 'var(--tt-danger, #d6455a)' : 'inherit'}
-					background="transparent"
-					_hover={{
-						background: action.danger ? 'rgba(214, 69, 90, 0.08)' : 'var(--tt-surface-alt, #f5f5f7)'
-					}}
-					_focusVisible={{
-						outline: 'none',
-						background: action.danger ? 'rgba(214, 69, 90, 0.08)' : 'var(--tt-surface-alt, #f5f5f7)'
-					}}
-					transition="background 0.15s ease"
-					cursor={action.disabled ? 'not-allowed' : 'pointer'}
-					role="menuitem"
-					aria-disabled={action.disabled || undefined}
-					aria-haspopup={action.submenu ? 'menu' : undefined}
-					aria-expanded={action.submenu ? expanded : undefined}
-					tabIndex={-1}
-					onClick={() => onItemActivate(section, action)}
-					onKeyDown={(e) => {
-						if (e.key === 'Enter' || e.key === ' ') {
-							e.preventDefault();
-							onItemActivate(section, action);
-						} else if (e.key === 'ArrowRight' && action.submenu && !expanded) {
-							e.preventDefault();
-							setExpandedActionId(action.id);
-						} else if (e.key === 'ArrowLeft' && action.submenu && expanded) {
-							e.preventDefault();
-							setExpandedActionId(null);
-						}
-					}}
-				>
-					<Icon name={action.icon} size="12px"></Icon>
-					<Box minWidth={0}>
-						<Text fontSize="xs" fontWeight={500} noOfLines={1}>
-							{action.label}
+				<Icon name={action.icon} size="12px"></Icon>
+				<Box minWidth={0}>
+					<Text fontSize="xs" fontWeight={action.selected ? 600 : 500} noOfLines={1}>
+						{action.label}
+					</Text>
+					{action.hint && (
+						<Text fontSize="10px" color="var(--tt-muted, #9a9aa6)" lineHeight="1.3" noOfLines={1}>
+							{action.hint}
 						</Text>
-						{action.hint && (
-							<Text fontSize="10px" color="var(--tt-muted, #9a9aa6)" lineHeight="1.3" noOfLines={1}>
-								{action.hint}
-							</Text>
-						)}
+					)}
+				</Box>
+				{action.selected && (
+					<Box marginLeft="auto">
+						<Icon name="check" size="10px"></Icon>
 					</Box>
-					{action.kbd && (
-						<Text marginLeft="auto" fontFamily="var(--tt-font-mono, monospace)" fontSize="10px" color="var(--tt-faint, #b6b6c0)">
-							{action.kbd}
-						</Text>
-					)}
-					{action.submenu && (
-						<Box
-							marginLeft={action.kbd ? '6px' : 'auto'}
-							color="var(--tt-faint, #b6b6c0)"
-							fontSize="10px"
-							transform={expanded ? 'rotate(90deg)' : 'none'}
-							transition="transform 0.15s ease"
-						>
-							▸
-						</Box>
-					)}
-				</Flex>
-				{action.submenu && expanded && renderSubmenu(section, action, action.submenu)}
-			</React.Fragment>
+				)}
+				{action.kbd && (
+					<Text
+						marginLeft={action.selected ? '6px' : 'auto'}
+						fontFamily="var(--tt-font-mono, monospace)"
+						fontSize="10px"
+						color="var(--tt-faint, #b6b6c0)"
+					>
+						{action.kbd}
+					</Text>
+				)}
+				{action.submenu && (
+					<Box
+						marginLeft={action.kbd || action.selected ? '6px' : 'auto'}
+						color="var(--tt-faint, #b6b6c0)"
+						fontSize="10px"
+					>
+						▸
+					</Box>
+				)}
+			</Flex>
 		);
 	};
 
@@ -356,15 +412,17 @@ export const ThingContextMenu = (props: ThingContextMenuProps) => {
 			ref={surfaceRef}
 			className="thing-context-menu"
 			flexDirection="column"
-			width={width}
+			width={`${menuWidth}px`}
+			height={menuHeight ? `${menuHeight}px` : undefined}
 			maxWidth="calc(100vw - 16px)"
-			maxHeight={presentation === 'modal' ? 'min(70vh, 560px)' : 'min(80vh, 480px)'}
-			overflowY="auto"
+			maxHeight={menuHeight ? 'calc(100vh - 16px)' : presentation === 'modal' ? 'min(70vh, 560px)' : 'min(80vh, 480px)'}
 			background="var(--tt-card, #ffffff)"
 			border="1px solid var(--tt-border, #ececef)"
 			borderRadius="var(--tt-radius-md, 12px)"
 			boxShadow="var(--tt-shadow-popover, 0 16px 40px -12px rgba(20, 20, 40, 0.3))"
-			paddingBottom="6px"
+			position="relative"
+			overflow="hidden"
+			transform={dragOffset.x || dragOffset.y ? `translate(${dragOffset.x}px, ${dragOffset.y}px)` : undefined}
 			role="menu"
 			aria-label={meta?.path ? `Options for ${meta.path}` : 'Thing options'}
 			onKeyDown={onSurfaceKeyDown}
@@ -372,15 +430,21 @@ export const ThingContextMenu = (props: ThingContextMenuProps) => {
 			onMouseLeave={onSurfaceMouseLeave}
 			onContextMenu={(e) => e.preventDefault()}
 		>
-			{/* header: thing path + type + pin/close */}
+			{/* header: thing path + type + pin/close; drag handle for the surface */}
 			<Flex
+				className="thing-context-menu-header"
 				alignItems="center"
 				columnGap="8px"
+				flexShrink={0}
 				paddingX="14px"
 				paddingTop="10px"
 				paddingBottom="8px"
 				borderBottom="1px solid var(--tt-border-light, #f0f0f2)"
-				marginBottom="4px"
+				cursor="grab"
+				sx={{ touchAction: 'none', '&:active': { cursor: 'grabbing' } }}
+				userSelect="none"
+				title="Drag to move"
+				onPointerDown={startDrag}
 			>
 				<Box minWidth={0}>
 					<Text
@@ -437,27 +501,111 @@ export const ThingContextMenu = (props: ThingContextMenuProps) => {
 				</Flex>
 			</Flex>
 
-			{model.sections.map((section, sectionIdx) => (
-				<React.Fragment key={section.id}>
-					{sectionIdx > 0 && <Box borderTop="1px solid var(--tt-border-light, #f0f0f2)" marginY="4px" />}
-					{section.label && (
-						<Text
-							paddingX="14px"
-							paddingTop="4px"
-							paddingBottom="2px"
-							fontFamily="var(--tt-font-mono, monospace)"
-							fontSize="9px"
-							fontWeight={600}
-							letterSpacing="0.1em"
-							textTransform="uppercase"
-							color="var(--tt-muted, #9a9aa6)"
-						>
-							{section.label}
-						</Text>
-					)}
-					{section.actions.map((action) => renderAction(section, action))}
-				</React.Fragment>
-			))}
+			{/* back row when drilled below the root level */}
+			{currentLevel && (
+				<Flex
+					className={`thing-context-menu-back ${FOCUSABLE_ITEM_CLASS}`}
+					alignItems="center"
+					columnGap="7px"
+					flexShrink={0}
+					paddingX="14px"
+					paddingY="7px"
+					borderBottom="1px solid var(--tt-border-light, #f0f0f2)"
+					background="var(--tt-surface, #fafafb)"
+					_hover={{ background: 'var(--tt-surface-alt, #f5f5f7)' }}
+					_focusVisible={{ outline: 'none', background: 'var(--tt-surface-alt, #f5f5f7)' }}
+					transition="background 0.15s ease"
+					cursor="pointer"
+					role="menuitem"
+					aria-label="Back"
+					tabIndex={-1}
+					onClick={popLevel}
+					onKeyDown={(e) => {
+						if (e.key === 'Enter' || e.key === ' ') {
+							e.preventDefault();
+							popLevel();
+						}
+					}}
+				>
+					<Text fontSize="12px" color="var(--tt-muted, #9a9aa6)" lineHeight="1">
+						‹
+					</Text>
+					<Text fontSize="xs" fontWeight={600} noOfLines={1}>
+						{currentLevel.submenu?.title || currentLevel.label}
+					</Text>
+					<Text
+						marginLeft="auto"
+						fontFamily="var(--tt-font-mono, monospace)"
+						fontSize="9px"
+						letterSpacing="0.08em"
+						textTransform="uppercase"
+						color="var(--tt-faint, #b6b6c0)"
+					>
+						Back
+					</Text>
+				</Flex>
+			)}
+
+			{/* the current drill level; scrolls inside the fixed frame */}
+			<Flex
+				key={levelTick}
+				className="thing-context-menu-level"
+				flexDirection="column"
+				flex="1"
+				minHeight={0}
+				overflowY="auto"
+				paddingTop={currentLevel ? '4px' : '4px'}
+				paddingBottom="6px"
+				sx={{
+					'@keyframes tt-drill-in': {
+						from: { opacity: 0.4, transform: 'translateX(6px)' },
+						to: { opacity: 1, transform: 'translateX(0)' }
+					},
+					animation: levelTick ? 'tt-drill-in 140ms ease' : undefined
+				}}
+			>
+				{currentSections.map((section, sectionIdx) => (
+					<React.Fragment key={section.id}>
+						{sectionIdx > 0 && <Box borderTop="1px solid var(--tt-border-light, #f0f0f2)" marginY="4px" flexShrink={0} />}
+						{section.label && (
+							<Text
+								paddingX="14px"
+								paddingTop="4px"
+								paddingBottom="2px"
+								fontFamily="var(--tt-font-mono, monospace)"
+								fontSize="9px"
+								fontWeight={600}
+								letterSpacing="0.1em"
+								textTransform="uppercase"
+								color="var(--tt-muted, #9a9aa6)"
+							>
+								{section.label}
+							</Text>
+						)}
+						{section.actions.map((action) => renderAction(section, action))}
+					</React.Fragment>
+				))}
+			</Flex>
+
+			{/* resize grip */}
+			<Box
+				className="thing-context-menu-resize"
+				aria-hidden
+				position="absolute"
+				right="1px"
+				bottom="1px"
+				width="15px"
+				height="15px"
+				cursor="nwse-resize"
+				color="var(--tt-faint, #b6b6c0)"
+				sx={{ touchAction: 'none' }}
+				title="Drag to resize"
+				onPointerDown={startResize}
+			>
+				<svg viewBox="0 0 14 14" width="14" height="14">
+					<path d="M12 6 L6 12 M12 10 L10 12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" fill="none" />
+				</svg>
+			</Box>
 		</Flex>
 	);
 
