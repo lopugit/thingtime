@@ -33,6 +33,19 @@ const decodeJwtPayload = (token: unknown) => {
   }
 };
 
+const expectProtectedMongoDevRoute = (passDetails: string) =>
+  expectJson(
+    [200, 401, 403, 500],
+    (body, response) => {
+      if (response.status === 401 || response.status === 403) {
+        return body?.ok === false && typeof body?.error === 'string' && body.error.length > 0;
+      }
+
+      return true;
+    },
+    passDetails
+  );
+
 export const apiTests: ApiTestDefinition[] = [
   {
     id: 'root-data',
@@ -267,7 +280,7 @@ export const apiTests: ApiTestDefinition[] = [
     path: '/api/v1/mongodb/raw-results',
     body: {},
     timeoutMs: 15000,
-    expect: expectStatus([200, 500], 'MongoDB raw-results route responded.')
+    expect: expectProtectedMongoDevRoute('MongoDB raw-results route responded or returned the protected-route guard.')
   },
   {
     id: 'mongodb-populate',
@@ -279,7 +292,7 @@ export const apiTests: ApiTestDefinition[] = [
     mutates: true,
     body: {},
     timeoutMs: 30000,
-    expect: expectStatus([200, 500], 'MongoDB populate route responded.')
+    expect: expectProtectedMongoDevRoute('MongoDB populate route responded or returned the protected-route guard.')
   },
   {
     id: 'template-action',

@@ -1,9 +1,9 @@
 import { Flex, Heading } from '@chakra-ui/react';
 import { useLocation } from 'react-router';
+import { requireAuthenticatedDevUser } from '~/api/utils/auth/requireAuthenticatedDevUser';
 import { getCollection } from '~/api/utils/mongodb/collection';
 import { getConnection } from '~/api/utils/mongodb/connection';
 import { Submit } from '~/components/API/Submit';
-import setup from '~/scripts/mongodb/setup';
 
 const routeName = 'Raw Results';
 
@@ -18,7 +18,10 @@ export default function Index() {
   );
 }
 
-const actionExport = async ({ request }) => {
+const actionExport = async ({ request }: { request: Request }) => {
+  const access = await requireAuthenticatedDevUser(request, 'MongoDB raw results');
+  if (access.ok === false) return access.response;
+
   // literally just run the setup.ts script
 
   const connection = await getConnection();

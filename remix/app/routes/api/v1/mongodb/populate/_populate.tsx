@@ -1,5 +1,6 @@
 import { Flex, Heading } from '@chakra-ui/react';
 import { useLocation } from 'react-router';
+import { requireAuthenticatedDevUser } from '~/api/utils/auth/requireAuthenticatedDevUser';
 import { Submit } from '~/components/API/Submit';
 import setup from '~/scripts/mongodb/setup';
 
@@ -17,7 +18,10 @@ export default function Index() {
   );
 }
 
-const actionExport = async ({ request }) => {
+const actionExport = async ({ request }: { request: Request }) => {
+  const access = await requireAuthenticatedDevUser(request, 'MongoDB populate');
+  if (access.ok === false) return access.response;
+
   // literally just run the setup.ts script
 
 
