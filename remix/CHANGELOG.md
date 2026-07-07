@@ -18,6 +18,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- Added a Mongo-backed Thingtime email delivery service with console and Amazon
+  SES providers, outbound message recording, suppression/unsubscribe
+  collections, and SES environment setup docs. — _Codex (AI), 2026-07-07_
 - Added `thingtime.settings.visual.bottomPadding`, which drives the native iOS
   footer bottom padding and the derived DevKit floating trigger bottom offset.
   Details in

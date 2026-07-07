@@ -43,6 +43,10 @@
   installs, and local generated state needed for validation. The current
   dependency directories alone are roughly 1.5 GB when present, and
   generated-output patterns can make managed worktrees larger.
+- Thingtime email delivery must go through the Mongo-backed email service under
+  `remix/app/api/utils/email/`; do not bypass it with direct SES/SMTP calls.
+  Keep SES credentials in local/Vercel env vars only, and keep fork-safe setup
+  notes in `README.md`.
 - For layout or alignment changes, always verify the affected screen in a live
   browser window before finishing. Use screenshot evidence or measured element
   bounds across the relevant desktop/mobile viewport so centering, max-width,
