@@ -69,9 +69,16 @@
   browser window before finishing. Use screenshot evidence or measured element
   bounds across the relevant desktop/mobile viewport so centering, max-width,
   overflow, and overlap behavior match the request.
-- When a task reveals a repeatable workflow, validation command, deployment
-  setting, project convention, or other future-use instruction, add it to this
-  `AGENTS.md` runbook before finishing so future agents do it by default.
+- New `/api/v1/...` endpoints must be registered in THREE places or Nitro
+  404s them: the route file (`remix/app/routes/api/v1/.../_name.tsx` exporting
+  `loader` for GET / `action` for POST), the import map in
+  `remix/server/routes/api/[...].ts`, and the `apiRoutes` list in
+  `remix/nitro.config.ts`. Copy the themes family for conventions: utils in
+  `remix/app/api/utils/...` returning `{ ok:false, status, error } |
+  { ok:true, ... }` unions, `json` from `~/api/http` (use `readJsonBody` for
+  size-capped mutation bodies), auth via `getCurrentUser(request)`, public
+  projections that whitelist fields, new collections + indexes in
+  `ensureIndexes()` and the FUNDAMENTALS §3 table.
 - When adding or changing a feature that depends on private/non-public
   configuration, external dashboards, secrets, deploy settings, or environment
   variables, also document the fork-safe setup steps in `README.md`. Use

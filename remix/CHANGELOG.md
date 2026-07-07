@@ -18,6 +18,24 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- 📰 **Feed, feed algorithms, profiles + settings**: new Facebook-style `/feed`
+  page rendering public things by type (text / image / marketplace posts with
+  reactions, comments, shares), an algorithm dropdown backed by per-user
+  doomscroll-trained feed algorithms (create/branch/switch/save-session, new
+  `feedAlgorithms` collection + `/api/v1/algorithms` family, active pick in
+  `users.meta.activeFeedAlgorithmId`), minimalist filters (post type / circles /
+  date), a full profile page (banner, bio, avatar, user posts feed, public view
+  at `/profile/:username`, new `/api/v1/users/profile`) and a dedicated
+  `/settings` page. Feed posts live in the `things` collection as `kind:'post'`
+  docs behind the new `/api/v1/things` family (feed/user/react/comment/share/
+  delete); seeding creates demo users, posts, reactions, comments and two demo
+  algorithms through the same utils the routes use (FUNDAMENTALS §2). New API
+  routes registered in `nitro.config.ts` + `server/routes/api/[...].ts`; API
+  tests added under `things`/`algorithms`/`profile` groups. Full detail (data
+  model, ranking maths, 20 adversarially-verified review fixes) in
+  [`PRs/40-claude-feed-algorithms-profile-516506--feed-personal-algorithms-profiles-settings.md`](../PRs/40-claude-feed-algorithms-profile-516506--feed-personal-algorithms-profiles-settings.md).
+  — Claude (AI), 2026-07-08
+
 - Added compact one-line docs crumbs under each `/docs/api` endpoint title.
   The group crumb links/copies `/docs/api/:group#:docId`, while the endpoint
   crumb links/copies `/docs/api/:group/:docId`. — _Codex (AI), 2026-07-08_
