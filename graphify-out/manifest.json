@@ -1592,7 +1592,7 @@
   "README.md": {
     "mtime": 1783465452.6022937,
     "ast_hash": "c075c4258813cadd12fb7d0e482b845c",
-    "semantic_hash": ""
+    "semantic_hash": "c075c4258813cadd12fb7d0e482b845c"
   },
   "VERCEL_DEPLOYMENTS.md": {
     "mtime": 1783465213.89444,
@@ -1817,7 +1817,7 @@
   "remix/CHANGELOG.md": {
     "mtime": 1783468748.644411,
     "ast_hash": "6b77b0aafd52c0c6861ae13c64a84cda",
-    "semantic_hash": ""
+    "semantic_hash": "6b77b0aafd52c0c6861ae13c64a84cda"
   },
   "remix/README.md": {
     "mtime": 1783465214.197742,
@@ -3142,7 +3142,7 @@
   "electron/README.md": {
     "mtime": 1783468748.6441429,
     "ast_hash": "80082ddcb42d5f44768cd24416ab24bc",
-    "semantic_hash": ""
+    "semantic_hash": "80082ddcb42d5f44768cd24416ab24bc"
   },
   "remix/app/components/Electron/ElectronBridgeHost.tsx": {
     "mtime": 1783468682.220251,
