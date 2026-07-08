@@ -1145,9 +1145,9 @@
     "semantic_hash": "7f1938dd65767c801825fc721151adbf"
   },
   "remix/app/globals/GlobalStyles.tsx": {
-    "mtime": 1783469743.3059843,
-    "ast_hash": "6cc280ce414e7a8927f42f87eda87d34",
-    "semantic_hash": "6cc280ce414e7a8927f42f87eda87d34"
+    "mtime": 1783470448.5344949,
+    "ast_hash": "7496b69641d9ab0085017028e2163b72",
+    "semantic_hash": "7496b69641d9ab0085017028e2163b72"
   },
   "remix/app/gp/GradientPath.js": {
     "mtime": 1783465214.2216923,
@@ -3140,14 +3140,14 @@
     "semantic_hash": "56a49379c573500c4a0e61652e57c03a"
   },
   "electron/README.md": {
-    "mtime": 1783468748.6441429,
-    "ast_hash": "80082ddcb42d5f44768cd24416ab24bc",
-    "semantic_hash": "80082ddcb42d5f44768cd24416ab24bc"
+    "mtime": 1783469929.43095,
+    "ast_hash": "b05c9473f614e15dc4e43c5b4764ec6f",
+    "semantic_hash": "b05c9473f614e15dc4e43c5b4764ec6f"
   },
   "remix/app/components/Electron/ElectronBridgeHost.tsx": {
-    "mtime": 1783469732.5294223,
-    "ast_hash": "edd685bcf2f8ebbc6d2130a49050c467",
-    "semantic_hash": "edd685bcf2f8ebbc6d2130a49050c467"
+    "mtime": 1783470448.5341034,
+    "ast_hash": "9175e47ba80e4a656fef18b986639cec",
+    "semantic_hash": "9175e47ba80e4a656fef18b986639cec"
   },
   "remix/app/utils/electronBridge.ts": {
     "mtime": 1783469724.348283,

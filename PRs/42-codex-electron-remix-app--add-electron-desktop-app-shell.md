@@ -30,7 +30,7 @@ The current app downloads the bundle and reveals it in Finder. It does not silen
 - `mdfind 'kMDItemFSName == "Thingtime.app"'` found `/Users/lopu/Applications/Thingtime.app`.
 - `open -Ra Thingtime` resolved successfully.
 - Installed-app CDP smoke test confirmed `window.thingtimeDesktop.getInfo`, `checkForUpdates`, and `downloadUpdateBundle` are exposed. Since the repo has no published latest Electron release yet, `checkForUpdates` returns `status: "unavailable"` with a clear message.
-- Installed-app CDP titlebar smoke test confirmed `html.thingtime-electron-desktop`, a 52px titlebar reserve, drawer trigger bounds at `x=96, y=8`, top nav bounds at `y=0`, and opened drawer content beginning at `y=52`.
+- Installed-app CDP titlebar smoke test confirmed `html.thingtime-electron-desktop`, a 52px titlebar reserve, widened titlebar CSS variables (`leftInset=140px`, `navStart=196px`), drawer trigger bounds at `x=148, y=8`, home/unicorn link bounds at `x=214`, top nav bounds at `y=0` with `-webkit-app-region: drag`, and the real command input marked `no-drag`.
 - A normal macOS `screencapture` attempt from the Codex environment failed with `could not create image from display`, so native-control visual proof is covered by live Electron window bounds plus renderer screenshot.
 
 ## Known Follow-Ups

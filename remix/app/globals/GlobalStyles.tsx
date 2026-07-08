@@ -86,7 +86,7 @@ export const GlobalStyles = () => {
 					WebkitAppRegion: 'drag',
 					userSelect: 'none'
 				},
-				'html.thingtime-electron-desktop .thingtimeTopNav a, html.thingtime-electron-desktop .thingtimeTopNav button, html.thingtime-electron-desktop .thingtimeTopNav input, html.thingtime-electron-desktop .thingtimeTopNav textarea, html.thingtime-electron-desktop .thingtimeTopNav select, html.thingtime-electron-desktop .thingtimeTopNav [role="button"], html.thingtime-electron-desktop .thingtimeTopNav [contenteditable="true"], html.thingtime-electron-desktop .thingtimeTopNav #commander, html.thingtime-electron-desktop .drawerTrigger':
+				'html.thingtime-electron-desktop .thingtimeTopNav a, html.thingtime-electron-desktop .thingtimeTopNav button, html.thingtime-electron-desktop .thingtimeTopNav input, html.thingtime-electron-desktop .thingtimeTopNav textarea, html.thingtime-electron-desktop .thingtimeTopNav select, html.thingtime-electron-desktop .thingtimeTopNav [role="button"], html.thingtime-electron-desktop .thingtimeTopNav [contenteditable="true"], html.thingtime-electron-desktop .drawerTrigger':
 					{
 						WebkitAppRegion: 'no-drag',
 						userSelect: 'auto'

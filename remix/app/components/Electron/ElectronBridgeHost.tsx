@@ -78,8 +78,8 @@ export function ElectronBridgeHost() {
 		}
 
 		root.style.setProperty('--thingtime-electron-titlebar-height', `${titlebar?.height || 52}px`);
-		root.style.setProperty('--thingtime-electron-titlebar-left-inset', `${titlebar?.leftInset || 88}px`);
-		root.style.setProperty('--thingtime-electron-titlebar-nav-start', `${titlebar?.navStart || 132}px`);
+		root.style.setProperty('--thingtime-electron-titlebar-left-inset', `${titlebar?.leftInset || 140}px`);
+		root.style.setProperty('--thingtime-electron-titlebar-nav-start', `${titlebar?.navStart || 196}px`);
 
 		return () => {
 			root.classList.remove('thingtime-electron-desktop');

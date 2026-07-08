@@ -113,6 +113,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- Inset the Electron titlebar drawer trigger and home affordance past the
+  macOS traffic-light controls, and restored top-strip window dragging by
+  keeping only real interactive controls marked as no-drag. Details in
+  [`PRs/42-codex-electron-remix-app--add-electron-desktop-app-shell.md`](../PRs/42-codex-electron-remix-app--add-electron-desktop-app-shell.md).
+  — _Codex (AI), 2026-07-08_
 - Tightened the native iOS WebView footer bottom padding so the account footer
   no longer leaves a large blank tail at full scroll, and re-clamped the DevKit
   floating trigger against native safe-area values so saved positions stay fully
