@@ -36,6 +36,50 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   client and Nitro server with the Node server preset, stages the output for
   Electron, and packages an app shell that starts the bundled Nitro server on
   loopback before opening the desktop window. — _Codex (AI), 2026-07-08_
+- 📰 **Feed, feed algorithms, profiles + settings**: new Facebook-style `/feed`
+  page rendering public things by type (text / image / marketplace posts with
+  reactions, comments, shares), an algorithm dropdown backed by per-user
+  doomscroll-trained feed algorithms (create/branch/switch/save-session, new
+  `feedAlgorithms` collection + `/api/v1/algorithms` family, active pick in
+  `users.meta.activeFeedAlgorithmId`), minimalist filters (post type / circles /
+  date), a full profile page (banner, bio, avatar, user posts feed, public view
+  at `/profile/:username`, new `/api/v1/users/profile`) and a dedicated
+  `/settings` page. Feed posts live in the `things` collection as `kind:'post'`
+  docs behind the new `/api/v1/things` family (feed/user/react/comment/share/
+  delete); seeding creates demo users, posts, reactions, comments and two demo
+  algorithms through the same utils the routes use (FUNDAMENTALS §2). New API
+  routes registered in `nitro.config.ts` + `server/routes/api/[...].ts`; API
+  tests added under `things`/`algorithms`/`profile` groups. Full detail (data
+  model, ranking maths, 20 adversarially-verified review fixes) in
+  [`PRs/40-claude-feed-algorithms-profile-516506--feed-personal-algorithms-profiles-settings.md`](../PRs/40-claude-feed-algorithms-profile-516506--feed-personal-algorithms-profiles-settings.md).
+  — Claude (AI), 2026-07-08
+
+- Added compact one-line docs crumbs under each `/docs/api` endpoint title.
+  The group crumb links/copies `/docs/api/:group#:docId`, while the endpoint
+  crumb links/copies `/docs/api/:group/:docId`. — _Codex (AI), 2026-07-08_
+- Added dedicated `/docs/api/:group` category pages and
+  `/docs/api/:group/:docId` endpoint pages, while keeping the global
+  `/docs/api#api-*` deeplinks. Endpoint copy-link buttons now copy a URL for
+  the current view: global hash link, category hash link, or dedicated endpoint
+  page. — _Codex (AI), 2026-07-08_
+- Added grouped endpoint navigation to the `/docs/api` drawer: each API route
+  now has its own deep-linkable submenu item under a group heading, and the API
+  reference body/side index mirror those grouped sections. — _Codex (AI),
+  2026-07-08_
+- Updated `/docs/api` so platform examples use a tabbed code view, and all API
+  docs snippets share the homepage developer-block styling with dark panels,
+  line numbers, lightweight syntax colouring, and copy controls. — _Codex
+  (AI), 2026-07-08_
+- Added zero-env API fallback for fresh local/sandbox development: when local
+  MongoDB/auth env is absent, Vite and Nitro forward same-origin API requests to
+  `https://thingtime.com` with the same method, path, query, cookies, headers,
+  and payload, rewriting upstream auth cookies for local HTTP. — _Codex (AI),
+  2026-07-08_
+- Added API self-documentation: every registered Thingtime API endpoint now has
+  a matching `-docs` JSON route that responds to GET or POST, and `/docs/api`
+  documents endpoint behavior, steps, payload/response examples, and curl,
+  wget, Node.js, Python, and Ruby examples from the shared docs registry. —
+  _Codex (AI), 2026-07-08_
 - 🌈 **2026 design refactor**: adopted the Claude Design mockups
   (`docs/design/claude-design-mockup-v1` product UI + `claude-design-mockup-v2-fable`
   landing) across the whole app. New runtime theming system — every design token

@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Thingtime · Raise your feed brain</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Hanken+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --tt-rainbow-1:#f34a4a; --tt-rainbow-2:#ffbc48; --tt-rainbow-3:#58ca70;
+    --tt-rainbow-4:#47b5e6; --tt-rainbow-5:#a555e8;
+    --tt-ink:#16161a; --tt-text:#5a5a66; --tt-muted:#9a9aa6; --tt-faint:#b6b6c0;
+    --tt-border:#ececef; --tt-border-light:#f0f0f2; --tt-surface:#fafafb;
+    --tt-surface-alt:#f5f5f7; --tt-card:#ffffff;
+    --tt-heading:'Space Grotesk',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    --tt-body:'Hanken Grotesk',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    --tt-mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+    --tt-gradient:linear-gradient(90deg,#f34a4a,#ffbc48,#58ca70,#47b5e6,#a555e8,#f34a4a);
+    --tt-border-grad:linear-gradient(120deg,#47b5e6,#a555e8,#f34a4a,#ffbc48,#58ca70,#47b5e6);
+  }
+  * { box-sizing:border-box; }
+  html,body { margin:0; padding:0; }
+  body {
+    font-family:var(--tt-body); background:var(--tt-surface); color:var(--tt-text);
+    -webkit-font-smoothing:antialiased; line-height:1.55;
+  }
+  .wrap { max-width:980px; margin:0 auto; padding:56px 24px 80px; }
+  .brand { display:flex; align-items:center; gap:10px; margin-bottom:44px; }
+  .voxel { width:34px; height:34px; display:grid; grid-template-columns:repeat(3,1fr);
+    grid-template-rows:repeat(3,1fr); gap:2px; background:var(--tt-card);
+    border:1px solid var(--tt-border); border-radius:8px; padding:4px;
+    box-shadow:0 1px 2px rgba(0,0,0,.05); }
+  .voxel i { border-radius:2px; }
+  .voxel i:nth-child(2){ background:var(--tt-rainbow-4); }
+  .voxel i:nth-child(4){ background:var(--tt-rainbow-3); }
+  .voxel i:nth-child(5){ background:var(--tt-rainbow-2); }
+  .voxel i:nth-child(6){ background:var(--tt-rainbow-5); }
+  .voxel i:nth-child(8){ background:var(--tt-rainbow-1); }
+  .brand b { font-family:var(--tt-heading); font-weight:700; font-size:19px;
+    letter-spacing:-.02em; color:var(--tt-ink); }
+  .brand span { font-family:var(--tt-mono); font-size:11px; color:var(--tt-muted);
+    letter-spacing:.14em; text-transform:uppercase; margin-left:auto; }
+
+  .eyebrow { font-family:var(--tt-mono); font-weight:600; font-size:12px;
+    letter-spacing:.16em; text-transform:uppercase; color:var(--tt-rainbow-5); margin-bottom:14px; }
+  h1 { font-family:var(--tt-heading); font-weight:700; letter-spacing:-.035em;
+    font-size:clamp(38px,6vw,60px); line-height:1.02; color:var(--tt-ink); margin:0 0 18px; }
+  h1 .grad { background:var(--tt-gradient); background-size:200% auto;
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    animation:pan 7s linear infinite; }
+  @keyframes pan { to { background-position:200% center; } }
+  .lede { font-size:19px; max-width:640px; color:var(--tt-text); margin:0 0 8px; }
+  .lede b { color:var(--tt-ink); font-weight:700; }
+
+  /* interactive scrubber panel */
+  .panel { margin-top:44px; background:var(--tt-card); border:1px solid var(--tt-border);
+    border-radius:20px; padding:34px 34px 30px; box-shadow:0 24px 60px -34px rgba(20,20,40,.24); }
+  .panel-top { display:flex; align-items:center; justify-content:space-between; gap:20px; flex-wrap:wrap; }
+  .pill { display:inline-flex; align-items:center; gap:9px; background:var(--tt-surface-alt);
+    border:1px solid var(--tt-border); border-radius:999px; padding:9px 16px 9px 13px;
+    font-weight:600; font-size:14.5px; color:var(--tt-ink); }
+  .dot { width:11px; height:11px; border-radius:50%; position:relative; flex:0 0 auto;
+    background:var(--tt-rainbow-3); box-shadow:0 0 0 0 rgba(88,202,112,.5); }
+  .dot.pulse { animation:pulse 1.7s ease-out infinite; }
+  @keyframes pulse { 0%{box-shadow:0 0 0 0 var(--glow);} 70%{box-shadow:0 0 0 9px transparent;} 100%{box-shadow:0 0 0 0 transparent;} }
+  .stage-emoji { font-size:19px; line-height:1; filter:saturate(1.1); }
+  .count { font-family:var(--tt-mono); font-size:13px; color:var(--tt-muted); }
+  .count b { color:var(--tt-ink); font-size:15px; }
+
+  .tooltip { margin-top:22px; background:var(--tt-ink); color:#f4f4f6; border-radius:12px;
+    padding:13px 16px; font-size:14px; display:inline-flex; gap:9px; align-items:center;
+    box-shadow:0 16px 40px -12px rgba(20,20,40,.4); }
+  .tooltip .k { font-family:var(--tt-mono); font-size:12px; color:#c9b8f0; }
+
+  .slider-row { margin-top:26px; }
+  .slider-row label { font-family:var(--tt-mono); font-size:11.5px; letter-spacing:.12em;
+    text-transform:uppercase; color:var(--tt-muted); display:block; margin-bottom:12px; }
+  input[type=range]{ -webkit-appearance:none; width:100%; height:8px; border-radius:999px;
+    background:var(--tt-gradient); background-size:100% 100%; outline:none; }
+  input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; width:26px; height:26px;
+    border-radius:50%; background:#fff; border:3px solid var(--tt-ink);
+    box-shadow:0 4px 14px rgba(0,0,0,.22); cursor:pointer; margin-top:-1px; }
+  input[type=range]::-moz-range-thumb{ width:22px; height:22px; border-radius:50%;
+    background:#fff; border:3px solid var(--tt-ink); cursor:pointer; }
+  .ticks { display:flex; justify-content:space-between; margin-top:10px;
+    font-family:var(--tt-mono); font-size:11px; color:var(--tt-faint); }
+
+  /* stage cards */
+  .stages { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-top:44px; }
+  @media (max-width:720px){ .stages { grid-template-columns:repeat(2,1fr);} }
+  .stage { background:var(--tt-card); border:1px solid var(--tt-border); border-radius:16px;
+    padding:22px 18px 20px; transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+    position:relative; overflow:hidden; }
+  .stage .bar { position:absolute; left:0; top:0; height:4px; width:100%; opacity:.9; }
+  .stage.active { transform:translateY(-4px); box-shadow:0 20px 44px -26px rgba(20,20,40,.4);
+    border-color:transparent; }
+  .stage .big { font-size:40px; line-height:1; }
+  .stage h3 { font-family:var(--tt-heading); font-weight:600; font-size:17px; letter-spacing:-.02em;
+    color:var(--tt-ink); margin:14px 0 4px; }
+  .stage .thr { font-family:var(--tt-mono); font-size:11.5px; color:var(--tt-muted); }
+  .stage p { font-size:13.5px; color:var(--tt-text); margin:12px 0 0; min-height:56px; }
+
+  /* lopu milestone toast */
+  .toast-demo { margin-top:48px; }
+  .toast-demo .eyebrow { color:var(--tt-muted); }
+  .toast { max-width:370px; background:var(--tt-border-grad); border-radius:18px; padding:2px;
+    box-shadow:0 14px 38px rgba(20,20,40,.18); animation:toastin .5s cubic-bezier(.2,.9,.3,1); }
+  @keyframes toastin { from{ opacity:0; transform:translateY(-8px) scale(.98);} to{opacity:1;transform:none;} }
+  .toast-inner { background:var(--tt-card); border-radius:16px; padding:15px 17px; }
+  .toast-head { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+  .toast-head .uni { font-size:17px; }
+  .toast-head .name { font-family:var(--tt-heading); font-weight:700; font-size:14px;
+    background:var(--tt-gradient); background-size:200% auto; -webkit-background-clip:text;
+    background-clip:text; color:transparent; animation:pan 7s linear infinite; }
+  .toast-head .sub { font-family:var(--tt-mono); font-size:10.5px; color:var(--tt-muted);
+    text-transform:uppercase; letter-spacing:.1em; margin-left:2px; }
+  .toast .t { font-weight:700; font-size:13.5px; color:var(--tt-ink); }
+  .toast .d { font-size:12px; color:var(--tt-muted); margin-top:2px; }
+
+  .foot { margin-top:56px; padding-top:22px; border-top:1px solid var(--tt-border);
+    font-size:13px; color:var(--tt-muted); }
+  .foot code { font-family:var(--tt-mono); font-size:12px; background:var(--tt-surface-alt);
+    border:1px solid var(--tt-border); border-radius:6px; padding:1px 6px; color:var(--tt-text); }
+  .foot .row { margin-top:8px; }
+
+  @media (prefers-reduced-motion:reduce){ *{ animation:none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">
+    <div class="voxel"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    <b>thingtime</b>
+    <span>design concept · algorithm growth</span>
+  </div>
+
+  <div class="eyebrow">The doomscroll trainer, made visible</div>
+  <h1>Raise your <span class="grad">feed brain.</span></h1>
+  <p class="lede">Every scroll trains your feed algorithm — but today the only sign of life
+  is a pulsing dot. What if the algorithm visibly <b>grew up</b> as you fed it: from an egg,
+  to a hatchling, to a mind of its own?</p>
+
+  <div class="panel">
+    <div class="panel-top">
+      <div class="pill" id="menuPill" title="This is the AlgorithmMenu trigger">
+        <span class="dot pulse" id="dot" style="--glow:rgba(88,202,112,.5)"></span>
+        <span class="stage-emoji" id="pillEmoji">🥚</span>
+        <span id="pillLabel">My Feed</span>
+      </div>
+      <div class="count"><b id="countNum">0</b> signals trained</div>
+    </div>
+
+    <div class="tooltip">
+      <span class="k">tooltip</span>
+      <span id="tipText">Still an egg 🥚 — scroll to start teaching it what you love.</span>
+    </div>
+
+    <div class="slider-row">
+      <label>Drag to feed the algorithm — <span id="stageName">Egg</span></label>
+      <input type="range" id="slider" min="0" max="2600" value="0" step="10" />
+      <div class="ticks"><span>0</span><span>100</span><span>500</span><span>2000+</span></div>
+    </div>
+  </div>
+
+  <div class="stages" id="stages">
+    <div class="stage" data-min="0" style="--c:var(--tt-rainbow-1)">
+      <span class="bar" style="background:var(--tt-rainbow-1)"></span>
+      <div class="big">🥚</div>
+      <h3>Egg</h3>
+      <div class="thr">0–99 signals</div>
+      <p>"Still an egg 🥚 — scroll to start teaching it what you love."</p>
+    </div>
+    <div class="stage" data-min="100" style="--c:var(--tt-rainbow-2)">
+      <span class="bar" style="background:var(--tt-rainbow-2)"></span>
+      <div class="big">🐣</div>
+      <h3>Hatching</h3>
+      <div class="thr">100–499 signals</div>
+      <p>"It's hatching 🐣 — starting to notice your taste in types and tags."</p>
+    </div>
+    <div class="stage" data-min="500" style="--c:var(--tt-rainbow-3)">
+      <span class="bar" style="background:var(--tt-rainbow-3)"></span>
+      <div class="big">🐥</div>
+      <h3>Fledgling</h3>
+      <div class="thr">500–1999 signals</div>
+      <p>"Finding its wings 🐥 — ranking with real confidence now."</p>
+    </div>
+    <div class="stage" data-min="2000" style="--c:var(--tt-rainbow-5)">
+      <span class="bar" style="background:var(--tt-rainbow-5)"></span>
+      <div class="big">🧠</div>
+      <h3>Thinking</h3>
+      <div class="thr">2000+ signals</div>
+      <p>"Thinking for itself 🧠✨ — this feed is unmistakably yours."</p>
+    </div>
+  </div>
+
+  <div class="toast-demo">
+    <div class="eyebrow">And every milestone gets a Lopu fanfare</div>
+    <div class="toast">
+      <div class="toast-inner">
+        <div class="toast-head">
+          <span class="uni">🦄</span><span class="name">Lopu</span><span class="sub">Thingtime AI</span>
+        </div>
+        <div class="t" id="toastTitle">Your algorithm just hatched! 🐣</div>
+        <div class="d">It's learned enough to start finding its own taste. Keep scrolling.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">
+    Hooks into what already exists: the pulsing <code>Learning as you scroll 🧠</code> dot
+    (<code>AlgorithmMenu.tsx</code>), the "untrained" label in <code>AlgorithmManager.tsx</code>,
+    and the signal counter in <code>useFeedEngagement.ts</code>. Milestone toasts route through
+    <code>useLopu()</code>. Thresholds are deterministic — no RNG.
+    <div class="row">Motion respects <code>prefers-reduced-motion</code> / the theme's <code>general.motion</code> gate.</div>
+  </div>
+</div>
+
+<script>
+  var stagesData = [
+    { min:0,    emoji:'🥚', name:'Egg',       glow:'rgba(243,74,74,.5)',  color:'#f34a4a',
+      tip:'Still an egg 🥚 — scroll to start teaching it what you love.', toast:'Your algorithm is waking up 🥚' },
+    { min:100,  emoji:'🐣', name:'Hatching',  glow:'rgba(255,188,72,.5)', color:'#ffbc48',
+      tip:"It's hatching 🐣 — starting to notice your taste in types and tags.", toast:'Your algorithm just hatched! 🐣' },
+    { min:500,  emoji:'🐥', name:'Fledgling', glow:'rgba(88,202,112,.5)', color:'#58ca70',
+      tip:'Finding its wings 🐥 — ranking with real confidence now.', toast:'Finding its wings 🐥' },
+    { min:2000, emoji:'🧠', name:'Thinking',  glow:'rgba(165,85,232,.5)', color:'#a555e8',
+      tip:'Thinking for itself 🧠✨ — this feed is unmistakably yours.', toast:'It thinks for itself now 🧠✨' }
+  ];
+  function stageFor(n){ var s=stagesData[0]; for(var i=0;i<stagesData.length;i++){ if(n>=stagesData[i].min) s=stagesData[i]; } return s; }
+  var slider=document.getElementById('slider'), dot=document.getElementById('dot'),
+      pillEmoji=document.getElementById('pillEmoji'), tipText=document.getElementById('tipText'),
+      countNum=document.getElementById('countNum'), stageName=document.getElementById('stageName'),
+      toastTitle=document.getElementById('toastTitle'), stageEls=document.querySelectorAll('.stage');
+  var lastMin=-1;
+  function render(){
+    var n=parseInt(slider.value,10), s=stageFor(n);
+    countNum.textContent=n.toLocaleString();
+    pillEmoji.textContent=s.emoji; tipText.textContent=s.tip; stageName.textContent=s.name;
+    dot.style.setProperty('--glow', s.glow); dot.style.background=s.color;
+    for(var i=0;i<stageEls.length;i++){
+      var m=parseInt(stageEls[i].getAttribute('data-min'),10), on=(m===s.min);
+      stageEls[i].classList.toggle('active', on);
+      stageEls[i].style.boxShadow = on ? '0 20px 44px -26px '+s.color+'88' : '';
+      stageEls[i].style.borderColor = on ? s.color : '';
+    }
+    if(s.min!==lastMin){ lastMin=s.min; toastTitle.textContent=s.toast; }
+  }
+  slider.addEventListener('input', render);
+  render();
+</script>
+</body>
+</html>

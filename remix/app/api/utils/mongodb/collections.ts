@@ -32,6 +32,7 @@ export const getLopuMusingRateLimitsCollection = async () =>
   (await getThingtimeDb()).collection('lopuMusingRateLimits');
 export const getThemesCollection = async () => (await getThingtimeDb()).collection('themes');
 export const getWaitlistCollection = async () => (await getThingtimeDb()).collection('waitlist');
+export const getFeedAlgorithmsCollection = async () => (await getThingtimeDb()).collection('feedAlgorithms');
 
 // Idempotently create server-side collections + their indexes. createIndex
 // creates the collection if it doesn't exist yet, so this also bootstraps an
@@ -56,7 +57,15 @@ export const ensureIndexes = async () => {
         db.collection('lopuMusingRateLimits').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
         db.collection('themes').createIndex({ shareId: 1 }, { unique: true }),
         db.collection('themes').createIndex({ ownerId: 1 }),
-        db.collection('waitlist').createIndex({ email: 1 }, { unique: true })
+        db.collection('waitlist').createIndex({ email: 1 }, { unique: true }),
+        // feed posts live in `things` under kind:'post' (see api/utils/things);
+        // shareId is included so the (createdAt desc, shareId asc) page sort is
+        // fully index-provided instead of an in-memory sort per request
+        db.collection('things').createIndex({ shareId: 1 }, { unique: true, sparse: true }),
+        db.collection('things').createIndex({ kind: 1, visibility: 1, createdAt: -1, shareId: 1 }),
+        db.collection('things').createIndex({ kind: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
+        db.collection('feedAlgorithms').createIndex({ shareId: 1 }, { unique: true }),
+        db.collection('feedAlgorithms').createIndex({ ownerId: 1 })
       ]);
     })().catch((err) => {
       // don't cache a failed run — let the next call retry

@@ -18,6 +18,8 @@ future Claude sessions (use alongside `graphify-out/` for codebase orientation).
 | 05 | Authed DB write (create/update/delete) | 🔴 Not started | [05-authed-db-write.md](./05-authed-db-write.md) |
 | 07 | Cross-tab sync for persisted thingtime state | 🔴 Not started | [07-cross-tab-thingtime-sync.md](./07-cross-tab-thingtime-sync.md) |
 | 08 | Drawer nav & editor UX follow-ups (draggable groups, brand link, `/branding` + SVG→PNG, API tests, hover key-path context) | 🔴 Not started | [08-drawer-nav-editor-polish.md](./08-drawer-nav-editor-polish.md) |
+| 09 | Security hardening (unauth admin/data endpoints, auth rate limiting, persisted-state `eval`/CSP, Date.parse corruption) | 🔴 Not started · ⚠️ has urgent items | [09-security-hardening.md](./09-security-hardening.md) |
+| 10 | Delight & growth ideas (sharing loops, theme gallery, algorithm-growth design, Commander/DevKit power-ups, easter eggs) | 🌱 Idea bank · some eggs shipped | [10-delight-and-growth-ideas.md](./10-delight-and-growth-ideas.md) |
 
 ## Conventions (see `FUNDAMENTALS.md`)
 

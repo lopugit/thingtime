@@ -446,7 +446,7 @@ export const UserSettingsModal = () => {
 						)}
 					</Box>
 				</Flex>
-				<Flex columnGap={2}>
+				<Flex columnGap={2} rowGap={2} flexWrap="wrap">
 					{user ? (
 						<>
 							<Button size="xs" variant="outline" onClick={() => handleGoTo('/profile')}>
@@ -466,6 +466,9 @@ export const UserSettingsModal = () => {
 							</Button>
 						</>
 					)}
+					<Button size="xs" variant="outline" onClick={() => handleGoTo('/settings')}>
+						All settings ⚙️
+					</Button>
 				</Flex>
 			</Flex>
 
