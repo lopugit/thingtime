@@ -12,7 +12,6 @@ import { RAINBOW_TEXT } from '~/theme/rainbow';
 
 import { BrutalButton } from './BrutalButton';
 import { burstAtEvent, burstConfetti } from './confetti';
-import { ConfettiCanvas } from './ConfettiCanvas';
 
 /* ------------------------------------------------------------------ */
 /* Shared bits                                                         */
@@ -963,7 +962,7 @@ export const Landing = () => (
 			'& .thing, & .thing *': { whiteSpace: 'pre-wrap' }
 		}}
 	>
-		<ConfettiCanvas />
+		{/* ConfettiCanvas is now mounted app-wide in root.tsx (one canvas for all pages). */}
 		<LandingNav />
 		<Hero />
 		<DemoSection />

@@ -14,6 +14,8 @@ import { DevKit } from './components/DevKit/DevKit';
 import { NativeBridgeHost } from './components/NativeBridge/NativeBridgeHost';
 import { VisualSettingsHost } from './components/VisualSettings/VisualSettingsHost';
 import { ThemeHost } from './components/ThemeSettings/ThemeHost';
+import { ConfettiCanvas } from './components/Landing/ConfettiCanvas';
+import { EasterEggs } from './components/EasterEggs/EasterEggs';
 
 const setThingtime = (glob: any) => {
   try {
@@ -108,6 +110,9 @@ export default function App() {
           <Outlet />
         </Main>
         <DrawerSystem />
+        {/* App-wide confetti canvas + easter eggs (🥚 party mode, window.tt). */}
+        <ConfettiCanvas />
+        {mounted ? <EasterEggs /> : null}
       </ThingtimeProvider>
       <ScrollRestoration />
       {mounted ? <Analytics /> : null}

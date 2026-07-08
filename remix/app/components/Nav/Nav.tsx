@@ -8,6 +8,40 @@ import { Icon } from '../Icon/Icon';
 import { drawerWidthCss, useDrawer, useDrawerLiveWidth, useIsMobileViewport } from './Drawer/useDrawer';
 import { useThingtime } from '../Thingtime/useThingtime';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useLopu } from '../Lopu/useLopu';
+import { motionOK, partyConfetti } from '~/eggs/eggs';
+
+// 🥚 Easter egg: rapid 7-click streak on the nav 🦄 makes it gallop.
+const GALLOP_STREAK = 7;
+const STREAK_WINDOW_MS = 1500;
+
+const useUnicornGallop = () => {
+	const lopu = useLopu();
+	const count = React.useRef(0);
+	const last = React.useRef(0);
+	const [galloping, setGalloping] = React.useState(false);
+
+	const onLogoClick = React.useCallback(() => {
+		const now = Date.now();
+		count.current = now - last.current < STREAK_WINDOW_MS ? count.current + 1 : 1;
+		last.current = now;
+		if (count.current >= GALLOP_STREAK) {
+			count.current = 0;
+			if (motionOK()) {
+				setGalloping(true);
+				window.setTimeout(() => setGalloping(false), 1100);
+			}
+			partyConfetti(4);
+			lopu({
+				title: 'You found the gallop 🦄💨',
+				description: 'Seven clicks of pure curiosity. Ride on, explorer.',
+				status: 'success'
+			});
+		}
+	}, [lopu]);
+
+	return { onLogoClick, galloping };
+};
 
 export const Nav = (props) => {
 	const { thingtime } = useThingtime();
@@ -17,6 +51,9 @@ export const Nav = (props) => {
 	const { loading, open, toggleOpen, direction } = useDrawer();
 	const { width: drawerWidth, resizing } = useDrawerLiveWidth();
 	const isMobile = useIsMobileViewport();
+
+	const { onLogoClick, galloping } = useUnicornGallop();
+	const gallopSx = galloping ? { animation: 'tt-gallop 1.1s ease-in-out' } : undefined;
 
 	const { pathname } = useLocation();
 
@@ -170,7 +207,7 @@ export const Nav = (props) => {
 						// on the left (then the nav starts right of the trigger)
 						paddingLeft={direction === 'left' && desktopOpen ? 0 : '34px'}
 					>
-						<Center transform="scaleX(-100%)" cursor="pointer">
+						<Center transform="scaleX(-100%)" cursor="pointer" onClick={onLogoClick} sx={gallopSx}>
 							<Link to="/">
 								<Icon size="12px" name="🦄"></Icon>
 							</Link>
@@ -225,7 +262,7 @@ export const Nav = (props) => {
 								</Link>
 							)}
 						</Center>
-						<Center display={['flex', 'none']} cursor="pointer">
+						<Center display={['flex', 'none']} cursor="pointer" onClick={onLogoClick} sx={gallopSx}>
 							<Link to="/">
 								<Icon size="12px" name="🦄"></Icon>
 							</Link>

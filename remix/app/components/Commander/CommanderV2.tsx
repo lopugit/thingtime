@@ -1,16 +1,18 @@
 import React from 'react';
 import ClickAwayListener from 'react-click-away-listener';
 import { Center, Flex, Input } from '@chakra-ui/react';
-import { useLocation } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import Fuse from 'fuse.js';
 
 import { Rainbow } from '../Rainbow/Rainbow';
 import { Thingtime } from '../Thingtime/Thingtime';
 import { useThingtime } from '../Thingtime/useThingtime';
+import { useLopu } from '../Lopu/useLopu';
 
 import { sanitise } from '~/functions/sanitise';
 import { usePath } from '~/hooks/usePath';
 import { getParentPath } from '~/smarts';
+import { SECRET_WORDS, partyMode, rainbowFlash, pickSparkle } from '~/eggs/eggs';
 
 export const CommanderV2 = (props) => {
 	const { thingtime, setThingtime, getThingtime, thingtimeRef, paths } = useThingtime();
@@ -19,6 +21,9 @@ export const CommanderV2 = (props) => {
 	console.log('thingtime.settings.commander.nav.commanderActive', thingtime?.settings?.commander?.nav?.commanderActive);
 
 	const { mode, changePath } = usePath();
+
+	const navigate = useNavigate();
+	const lopu = useLopu();
 
 	const commanderId = React.useMemo(() => {
 		return props?.id || 'global';
@@ -243,6 +248,30 @@ export const CommanderV2 = (props) => {
 	}, [thingtime?.settings?.commander, commanderSettings?.commanderActive, commanderId, closeCommander, openCommander]);
 
 	const executeCommand = React.useCallback(() => {
+		// 🥚 Easter egg: secret words typed into the Commander and Entered.
+		const secret = (inputValue || '').trim().toLowerCase();
+		const secretWord = commanderActive ? SECRET_WORDS[secret] : undefined;
+		if (secretWord) {
+			setInputValue('');
+			setHoveredSuggestion(null);
+			closeCommander();
+			if (secretWord === 'ode') {
+				navigate('/ode');
+			} else if (secretWord === 'rainbow') {
+				rainbowFlash();
+				lopu({ title: '🌈 Rainbow!', description: pickSparkle(), status: 'success' });
+			} else {
+				// unicorn / party / konami / lopu → the full celebration
+				partyMode();
+				lopu({
+					title: secretWord === 'lopu' ? '🦄 Lopu says hi' : '🦄✨ You said the magic word',
+					description: pickSparkle(),
+					status: 'success'
+				});
+			}
+			return;
+		}
+
 		// if selection is active then select it
 		const curSuggestionIdx = hoveredSuggestion;
 		if (curSuggestionIdx !== null) {
@@ -323,7 +352,11 @@ export const CommanderV2 = (props) => {
 		getThingtime,
 		setThingtime,
 		setContextPath,
-		setShowContext
+		setShowContext,
+		inputValue,
+		closeCommander,
+		navigate,
+		lopu
 	]);
 
 	const allCommanderKeyListener = React.useCallback(
