@@ -6,6 +6,9 @@ import { Icon } from '../Icon/Icon';
 import { FooterStatusPanel } from '../Status/FooterStatusPanel';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useLopu } from '../Lopu/useLopu';
+import { burstAtEvent } from '../Landing/confetti';
+import { motionOK, pickIncantation } from '~/eggs/eggs';
 
 const BRANCH_NAME =
   typeof process !== 'undefined' && process.env?.THINGTIME_BRANCH_NAME
@@ -27,6 +30,16 @@ export const Footer = (props) => {
   const user = useCurrentUser();
   const api = useApi();
   const navigate = useNavigate();
+  const lopu = useLopu();
+
+  // 🥚 Easter egg: the decorative footer wizard actually casts spells.
+  const castSpell = React.useCallback(
+    (e: React.MouseEvent) => {
+      if (motionOK()) burstAtEvent(e as any, 40);
+      lopu({ title: pickIncantation(), description: '🧙 The footer wizard waves a tiny wand.', status: 'info' });
+    },
+    [lopu]
+  );
 
   const handleLogout = React.useCallback(async () => {
     await api.v1.auth.logout();
@@ -127,7 +140,14 @@ export const Footer = (props) => {
           <Flex flexDirection="row" marginRight="auto">
             <Icon name="rainbow" size="8px"></Icon>
             <Icon name="unicorn" size="8px"></Icon>
-            <Icon name="wizard" size="8px"></Icon>
+            <Icon
+              name="wizard"
+              size="8px"
+              cursor="pointer"
+              title="✨"
+              aria-label="Cast a spell"
+              onClick={castSpell}
+            ></Icon>
           </Flex>
         </Flex>
 

@@ -69,6 +69,15 @@ export const GlobalStyles = () => {
 					'0%, 100%': { transform: 'translateY(0)' },
 					'50%': { transform: 'translateY(6px)' }
 				},
+				// 🥚 Easter egg: the nav unicorn's victory gallop (7-click streak).
+				'@keyframes tt-gallop': {
+					'0%': { transform: 'translateX(0) rotate(0deg)' },
+					'15%': { transform: 'translateX(14px) rotate(-8deg) translateY(-3px)' },
+					'40%': { transform: 'translateX(60px) rotate(6deg) translateY(0)' },
+					'60%': { transform: 'translateX(30px) rotate(-6deg) translateY(-4px)' },
+					'80%': { transform: 'translateX(8px) rotate(4deg)' },
+					'100%': { transform: 'translateX(0) rotate(0deg)' }
+				},
 				'html.thingtime-native-webview': {
 					'--thingtime-devkit-bottom-offset': 'var(--thingtime-visual-devkit-bottom-offset, 36px)'
 				},
