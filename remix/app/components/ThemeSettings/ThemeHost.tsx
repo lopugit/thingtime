@@ -3,6 +3,7 @@ import React from 'react';
 import { useThingtime } from '../Thingtime/useThingtime';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { useTtTheme } from '../../hooks/useTtTheme';
+import { buildCustomCss } from '../../theme/customise';
 import {
 	CURATED_FONTS,
 	themeToCssVars,
@@ -10,6 +11,7 @@ import {
 } from '../../theme/tokens';
 
 const FONT_LINK_ID = 'tt-theme-fonts';
+const CUSTOM_CSS_ID = 'tt-custom-css';
 
 /** Families already loaded statically from index.html. */
 const STATIC_FONTS = new Set(['Space Grotesk', 'Hanken Grotesk', 'JetBrains Mono']);
@@ -29,9 +31,28 @@ const googleFontsHref = (families: string[]) =>
  * extra Google fonts the theme asks for, and broadcasts a change event.
  */
 export const ThemeHost = () => {
-	const { theme, preset, hasOverrides, appliedThemeShareId, applyThemeDoc } = useTtTheme();
+	const { theme, preset, hasOverrides, appliedThemeShareId, applyThemeDoc, custom } = useTtTheme();
 	const { loading } = useThingtime();
 	const user = useCurrentUser();
+
+	// Per-option custom CSS (the customise popovers) — scoped to each option's
+	// registered selector and injected as one stylesheet. Personal only; never
+	// part of saved/shared theme documents.
+	const customCss = React.useMemo(() => buildCustomCss(custom), [custom]);
+
+	React.useEffect(() => {
+		let styleEl = document.getElementById(CUSTOM_CSS_ID) as HTMLStyleElement | null;
+		if (!customCss) {
+			if (styleEl) styleEl.remove();
+			return;
+		}
+		if (!styleEl) {
+			styleEl = document.createElement('style');
+			styleEl.id = CUSTOM_CSS_ID;
+			document.head.appendChild(styleEl);
+		}
+		if (styleEl.textContent !== customCss) styleEl.textContent = customCss;
+	}, [customCss]);
 
 	// Cross-device pickup: when the user has an active saved theme and this
 	// device's theme settings are still pristine defaults, apply it once.

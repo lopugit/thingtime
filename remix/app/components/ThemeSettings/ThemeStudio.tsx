@@ -8,7 +8,7 @@ import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useTtTheme } from '~/hooks/useTtTheme';
 import { RAINBOW } from '~/theme/rainbow';
 
-import { ColorControl, isHexColor } from './controls';
+import { ColorControl, CustomisePanel, CustomiseToggle, isHexColor } from './controls';
 import { CURATED_FONTS, themeToCssVars, TtTheme } from '~/theme/tokens';
 
 const MONO = 'var(--tt-font-mono, ui-monospace, Menlo, monospace)';
@@ -73,23 +73,34 @@ export const ThemePreviewCard = React.memo(({ theme, active }: { theme: TtTheme;
 });
 ThemePreviewCard.displayName = 'ThemePreviewCard';
 
-const Row = ({ label, hint, children }: any) => (
-	<Flex alignItems="center" justifyContent="space-between" gap="16px" paddingY="10px" flexWrap="wrap">
-		<Box minWidth="140px">
-			<Text fontSize="sm" fontWeight={600} color="var(--tt-ink, #16161a)">
-				{label}
-			</Text>
-			{hint ? (
-				<Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
-					{hint}
-				</Text>
-			) : null}
+const Row = ({ label, hint, customKey, children }: any) => {
+	// each option can expand its customise panel (custom classes/CSS) below
+	const [customOpen, setCustomOpen] = React.useState(false);
+
+	return (
+		<Box>
+			<Flex alignItems="center" justifyContent="space-between" gap="16px" paddingY="10px" flexWrap="wrap">
+				<Box minWidth="140px">
+					<Flex alignItems="center" gap="6px">
+						<Text fontSize="sm" fontWeight={600} color="var(--tt-ink, #16161a)">
+							{label}
+						</Text>
+						{customKey ? <CustomiseToggle open={customOpen} onToggle={() => setCustomOpen((o) => !o)} /> : null}
+					</Flex>
+					{hint ? (
+						<Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
+							{hint}
+						</Text>
+					) : null}
+				</Box>
+				<Flex alignItems="center" gap="8px" flexWrap="wrap">
+					{children}
+				</Flex>
+			</Flex>
+			{customKey && customOpen ? <CustomisePanel targetKey={customKey} /> : null}
 		</Box>
-		<Flex alignItems="center" gap="8px" flexWrap="wrap">
-			{children}
-		</Flex>
-	</Flex>
-);
+	);
+};
 
 const FontSelect = ({ value, onChange }: { value: string; onChange: (v: string) => void }) => (
 	<Box
@@ -222,6 +233,7 @@ export const ThemeStudio = () => {
 		setRainbowStop,
 		setFont,
 		setGeneral,
+		setWindows,
 		resetOverrides,
 		applyThemeDoc
 	} = useTtTheme();
@@ -328,7 +340,7 @@ export const ThemeStudio = () => {
 			const res = await api.v1.themes.save({
 				id: updatingApplied ? appliedThemeShareId : undefined,
 				name,
-				theme: { name, colors: theme.colors, fonts: theme.fonts, general: theme.general },
+				theme: { name, colors: theme.colors, fonts: theme.fonts, general: theme.general, windows: theme.windows },
 				visibility: savePublic ? 'public' : 'private'
 			});
 			lopu({ title: `Theme "${name}" saved 🎨`, description: savePublic ? 'It’s shareable — copy the link from My themes.' : 'Saved privately.', status: 'success' });
@@ -389,14 +401,14 @@ export const ThemeStudio = () => {
 				</Text>
 				<Box borderTop="1px solid var(--tt-border-light, #f0f0f2)">
 					{COLOR_FIELDS.map((field) => (
-						<Row key={field.key} label={field.label} hint={field.hint}>
+						<Row key={field.key} label={field.label} hint={field.hint} customKey={`color.${field.key}`}>
 							<ColorControl
 								value={(theme.colors as any)[field.key]}
 								onChange={(v) => setColor(field.key, v)}
 							/>
 						</Row>
 					))}
-					<Row label="Rainbow" hint="the five brand stops">
+					<Row label="Rainbow" hint="the five brand stops" customKey="color.rainbow">
 						<Flex gap="6px">
 							{theme.colors.rainbow.map((stop, index) => (
 								<Box key={index} position="relative" width="28px" height="28px" borderRadius="var(--tt-radius-xs, 7px)" overflow="hidden" border="1px solid var(--tt-border, #ececef)">
@@ -425,16 +437,16 @@ export const ThemeStudio = () => {
 					Fonts
 				</Text>
 				<Box borderTop="1px solid var(--tt-border-light, #f0f0f2)">
-					<Row label="Headings" hint="Space Grotesk by default">
+					<Row label="Headings" hint="Space Grotesk by default" customKey="font.heading">
 						<FontSelect value={theme.fonts.heading} onChange={(v) => setFont('heading', v)} />
 					</Row>
-					<Row label="Body" hint="Hanken Grotesk by default">
+					<Row label="Body" hint="Hanken Grotesk by default" customKey="font.body">
 						<FontSelect value={theme.fonts.body} onChange={(v) => setFont('body', v)} />
 					</Row>
-					<Row label="Code" hint="JetBrains Mono by default">
+					<Row label="Code" hint="JetBrains Mono by default" customKey="font.mono">
 						<FontSelect value={theme.fonts.mono} onChange={(v) => setFont('mono', v)} />
 					</Row>
-					<Row label="Landing display" hint="the big landing headlines">
+					<Row label="Landing display" hint="the big landing headlines" customKey="font.display">
 						<FontSelect value={theme.fonts.display} onChange={(v) => setFont('display', v)} />
 					</Row>
 				</Box>
@@ -444,7 +456,7 @@ export const ThemeStudio = () => {
 					General
 				</Text>
 				<Box borderTop="1px solid var(--tt-border-light, #f0f0f2)">
-					<Row label="Corner radius" hint="0 = sharp and brutal">
+					<Row label="Corner radius" hint="0 = sharp and brutal" customKey="general.radius">
 						<StepControl
 							value={g.radiusScale}
 							onChange={(v: number) => setGeneral('radiusScale', v)}
@@ -454,7 +466,7 @@ export const ThemeStudio = () => {
 							format={(v: number) => `${v}×`}
 						/>
 					</Row>
-					<Row label="Border weight">
+					<Row label="Border weight" customKey="general.borderWidth">
 						<StepControl
 							value={g.borderWidth}
 							onChange={(v: number) => setGeneral('borderWidth', v)}
@@ -464,7 +476,7 @@ export const ThemeStudio = () => {
 							format={(v: number) => `${v}px`}
 						/>
 					</Row>
-					<Row label="Shadows">
+					<Row label="Shadows" customKey="general.shadow">
 						<Flex background="var(--tt-surface-alt, #f5f5f7)" borderRadius="var(--tt-radius-md, 12px)" padding="4px" gap="4px">
 							<PillButton active={g.shadow === 'soft'} onClick={() => setGeneral('shadow', 'soft')}>
 								Soft
@@ -474,10 +486,10 @@ export const ThemeStudio = () => {
 							</PillButton>
 						</Flex>
 					</Row>
-					<Row label="Motion" hint="rainbow animations">
+					<Row label="Motion" hint="rainbow animations" customKey="general.motion">
 						<Switch isChecked={g.motion} onChange={(e) => setGeneral('motion', e.target.checked)} />
 					</Row>
-					<Row label="Animation speed">
+					<Row label="Animation speed" customKey="general.animSpeed">
 						<StepControl
 							value={g.animSpeed}
 							onChange={(v: number) => setGeneral('animSpeed', v)}
@@ -487,9 +499,38 @@ export const ThemeStudio = () => {
 							format={(v: number) => `${v}ms`}
 						/>
 					</Row>
-					<Row label="Reset" hint="back to the preset's defaults">
+					<Row label="Reset" hint="back to the preset's defaults (clears custom CSS too)">
 						<ActionButton onClick={() => resetOverrides()}>Reset customisations</ActionButton>
 					</Row>
+				</Box>
+
+				{/* Window buttons (editor traffic lights) */}
+				<Text {...sectionHeaderStyle} marginTop={10} marginBottom={2}>
+					Window buttons
+				</Text>
+				<Box borderTop="1px solid var(--tt-border-light, #f0f0f2)">
+					{(
+						[
+							{ key: 'close', label: 'Close', hint: 'the red light', colorKey: 'closeColor', radiusKey: 'closeRadius', fallback: theme.colors.rainbow[0] },
+							{ key: 'minimise', label: 'Minimise', hint: 'the amber light', colorKey: 'minimiseColor', radiusKey: 'minimiseRadius', fallback: theme.colors.rainbow[1] },
+							{ key: 'maximise', label: 'Expand', hint: 'the green light', colorKey: 'maximiseColor', radiusKey: 'maximiseRadius', fallback: theme.colors.rainbow[2] }
+						] as const
+					).map((button) => (
+						<Row key={button.key} label={button.label} hint={button.hint} customKey={`windows.${button.key}`}>
+							<ColorControl
+								value={theme.windows[button.colorKey] || button.fallback}
+								onChange={(v) => setWindows(button.colorKey, v)}
+							/>
+							<StepControl
+								value={theme.windows[button.radiusKey]}
+								onChange={(v: number) => setWindows(button.radiusKey, v)}
+								min={0}
+								max={12}
+								step={0.5}
+								format={(v: number) => `${v}px`}
+							/>
+						</Row>
+					))}
 				</Box>
 
 				{/* Save + share */}

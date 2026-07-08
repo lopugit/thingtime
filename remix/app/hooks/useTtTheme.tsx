@@ -1,6 +1,7 @@
 import React from 'react';
 
 import { useThingtime } from '../components/Thingtime/useThingtime';
+import { sanitizeCustomClasses, TtCustomEntry, TtCustomMap } from '../theme/customise';
 import {
 	BUILTIN_THEMES,
 	getBuiltinTheme,
@@ -14,6 +15,8 @@ export interface TtThemeSettings {
 	overrides?: TtThemePatch;
 	appliedThemeName?: string;
 	appliedThemeShareId?: string;
+	/** Per-option custom classes/CSS — personal, never part of shared themes. */
+	custom?: TtCustomMap;
 }
 
 /**
@@ -27,6 +30,7 @@ export const useTtTheme = () => {
 	const settings: TtThemeSettings = thingtime?.settings?.theme || {};
 	const preset = typeof settings.preset === 'string' ? settings.preset : 'Thingtime';
 	const overrides = settings.overrides || {};
+	const custom: TtCustomMap = settings.custom && typeof settings.custom === 'object' ? settings.custom : {};
 
 	const theme: TtTheme = React.useMemo(
 		() => resolveTheme(getBuiltinTheme(preset), overrides),
@@ -46,13 +50,15 @@ export const useTtTheme = () => {
 
 	const setPreset = React.useCallback(
 		(name: string) => {
+			// switching preset resets token overrides but keeps personal
+			// custom classes/CSS — they're orthogonal escape hatches
 			setThingtime(
 				'settings.theme',
-				{ preset: name, overrides: {} },
+				{ preset: name, overrides: {}, custom },
 				{ ignoreUndoRedo: true, namespace: 'theme' },
 			);
 		},
-		[setThingtime],
+		[setThingtime, custom],
 	);
 
 	const setColor = React.useCallback(
@@ -79,6 +85,38 @@ export const useTtTheme = () => {
 		[setThemeSetting],
 	);
 
+	const setWindows = React.useCallback(
+		(key: string, value: unknown) => setThemeSetting(`overrides.windows.${key}`, value),
+		[setThemeSetting],
+	);
+
+	/** Merge a patch into settings.theme.custom[key] (null clears the entry). */
+	// writes in the same tick merge through pendingCustomRef so a second
+	// setCustomEntry can't clobber the first before state catches up
+	const pendingCustomRef = React.useRef<TtCustomMap | null>(null);
+
+	React.useEffect(() => {
+		pendingCustomRef.current = null;
+	});
+
+	const setCustomEntry = React.useCallback(
+		(key: string, patch: Partial<TtCustomEntry> | null) => {
+			// option keys contain dots ('windows.close'), so always write the
+			// whole map — never a dot-path that setThingtime would split
+			const base = pendingCustomRef.current || custom;
+			const next = { ...base };
+			if (patch === null) {
+				delete next[key];
+			} else {
+				next[key] = { ...(base[key] || {}), ...patch };
+			}
+			pendingCustomRef.current = next;
+			setThemeSetting('custom', next);
+		},
+		[setThemeSetting, custom],
+	);
+
+	// resetOverrides is the nuclear "back to defaults" — it clears custom too
 	const resetOverrides = React.useCallback(() => {
 		setThingtime(
 			'settings.theme',
@@ -97,17 +135,19 @@ export const useTtTheme = () => {
 					overrides: doc,
 					appliedThemeName: doc?.name,
 					appliedThemeShareId: meta?.shareId,
+					custom,
 				},
 				{ ignoreUndoRedo: true, namespace: 'theme' },
 			);
 		},
-		[setThingtime],
+		[setThingtime, custom],
 	);
 
 	return {
 		theme,
 		preset,
 		overrides,
+		custom,
 		appliedThemeName: settings.appliedThemeName,
 		appliedThemeShareId: settings.appliedThemeShareId,
 		builtinThemes: BUILTIN_THEMES,
@@ -117,7 +157,21 @@ export const useTtTheme = () => {
 		setRainbowStop,
 		setFont,
 		setGeneral,
+		setWindows,
+		setCustomEntry,
 		resetOverrides,
 		applyThemeDoc,
 	};
+};
+
+/**
+ * Custom classes for one element-backed theming option — components attach
+ * these to the live element so user CSS (from the customise popover or
+ * anywhere else) can hook it.
+ */
+export const useTtCustomClasses = (key: string): string => {
+	const { thingtime } = useThingtime();
+	const entry = thingtime?.settings?.theme?.custom?.[key];
+
+	return React.useMemo(() => sanitizeCustomClasses(entry?.classes), [entry?.classes]);
 };
