@@ -1815,8 +1815,8 @@
     "semantic_hash": "f162fbffa18046af73dfca08802a536f"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1783499714.9109652,
-    "ast_hash": "9be70c508c14b3dcc39cfcb9e62e6701",
+    "mtime": 1783500773.1379962,
+    "ast_hash": "a2996fe005c6ae221953f5d5c3a33ddc",
     "semantic_hash": ""
   },
   "remix/README.md": {
@@ -3370,8 +3370,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/electron-release.yml": {
-    "mtime": 1783500175.5832348,
-    "ast_hash": "7051bdbc1540feec38d082e8ddc325fc",
+    "mtime": 1783500773.13745,
+    "ast_hash": "5f90109ca47ad97f2e5b24c3f4fd5bd7",
     "semantic_hash": ""
   },
   "TODO/claude-todo/09-security-hardening.md": {
