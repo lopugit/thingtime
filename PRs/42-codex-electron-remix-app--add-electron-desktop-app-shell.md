@@ -10,6 +10,7 @@ PR: https://github.com/lopugit/thingtime/pull/42
 - Adds the desktop URL switcher at `thingtime.settings.electron.${sessionHash}URL`, with bundled/prod menu fallbacks.
 - Adds Electron settings for update checks and release bundle downloads. The app checks recent GitHub releases for `Electron App Release`, picks the best matching macOS bundle asset, and downloads it to `~/Downloads`.
 - Adds `pnpm --dir electron install:local` and root `npm run install-electron`, which copy the built app to `~/Applications/Thingtime.app`, register it with LaunchServices, and ask Spotlight to index it.
+- Adds Codex-style macOS titlebar integration: Electron hides the native titlebar, exposes titlebar metrics to the renderer, and the web nav/drawer reserve the traffic-light area while making the top strip draggable.
 
 ## Release Asset Convention
 
@@ -29,6 +30,8 @@ The current app downloads the bundle and reveals it in Finder. It does not silen
 - `mdfind 'kMDItemFSName == "Thingtime.app"'` found `/Users/lopu/Applications/Thingtime.app`.
 - `open -Ra Thingtime` resolved successfully.
 - Installed-app CDP smoke test confirmed `window.thingtimeDesktop.getInfo`, `checkForUpdates`, and `downloadUpdateBundle` are exposed. Since the repo has no published latest Electron release yet, `checkForUpdates` returns `status: "unavailable"` with a clear message.
+- Installed-app CDP titlebar smoke test confirmed `html.thingtime-electron-desktop`, a 52px titlebar reserve, drawer trigger bounds at `x=96, y=8`, top nav bounds at `y=0`, and opened drawer content beginning at `y=52`.
+- A normal macOS `screencapture` attempt from the Codex environment failed with `could not create image from display`, so native-control visual proof is covered by live Electron window bounds plus renderer screenshot.
 
 ## Known Follow-Ups
 

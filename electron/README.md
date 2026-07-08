@@ -41,6 +41,12 @@ the desktop window to that URL's origin. The renderer keeps `nodeIntegration`
 disabled and uses a small preload bridge for desktop metadata and validated URL
 switching only.
 
+On macOS, the desktop window uses a hidden native titlebar so the web UI can
+occupy the titlebar row. The preload metadata exposes titlebar measurements;
+the renderer applies `html.thingtime-electron-desktop` and reserves the traffic
+light area before placing the drawer trigger and top nav content. The top nav is
+marked draggable, with inputs, links, and buttons marked non-draggable.
+
 The drawer settings modal shows an **Electron** section inside the desktop app.
 It writes the selected destination to
 `thingtime.settings.electron.${sessionHash}URL`, where `sessionHash` is derived

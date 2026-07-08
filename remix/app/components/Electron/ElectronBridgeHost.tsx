@@ -64,6 +64,32 @@ export function ElectronBridgeHost() {
 	}, []);
 
 	React.useEffect(() => {
+		const root = document.documentElement;
+		const titlebar = desktopInfo?.titlebar;
+		const enabled = !!titlebar?.enabled;
+
+		root.classList.toggle('thingtime-electron-desktop', enabled);
+
+		if (!enabled) {
+			root.style.removeProperty('--thingtime-electron-titlebar-height');
+			root.style.removeProperty('--thingtime-electron-titlebar-left-inset');
+			root.style.removeProperty('--thingtime-electron-titlebar-nav-start');
+			return;
+		}
+
+		root.style.setProperty('--thingtime-electron-titlebar-height', `${titlebar?.height || 52}px`);
+		root.style.setProperty('--thingtime-electron-titlebar-left-inset', `${titlebar?.leftInset || 88}px`);
+		root.style.setProperty('--thingtime-electron-titlebar-nav-start', `${titlebar?.navStart || 132}px`);
+
+		return () => {
+			root.classList.remove('thingtime-electron-desktop');
+			root.style.removeProperty('--thingtime-electron-titlebar-height');
+			root.style.removeProperty('--thingtime-electron-titlebar-left-inset');
+			root.style.removeProperty('--thingtime-electron-titlebar-nav-start');
+		};
+	}, [desktopInfo?.titlebar]);
+
+	React.useEffect(() => {
 		const sessionHash = desktopInfo?.sessionHash;
 
 		if (loading || !sessionHash || !hasClearElectronUrlRequest()) {

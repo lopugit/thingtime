@@ -6,6 +6,14 @@ export type ThingtimeDesktopInfo = {
 	origin?: string | null;
 	platform?: string;
 	sessionHash?: string;
+	titlebar?: {
+		enabled?: boolean;
+		height?: number;
+		leftInset?: number;
+		navStart?: number;
+		style?: string;
+		trafficLightPosition?: { x?: number; y?: number } | null;
+	};
 	updateFeedUrl?: string | null;
 };
 

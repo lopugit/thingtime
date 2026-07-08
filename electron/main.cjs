@@ -16,6 +16,12 @@ const electronReleaseLabel = process.env.THINGTIME_DESKTOP_RELEASE_LABEL || 'Ele
 const updateFeedUrl =
   process.env.THINGTIME_DESKTOP_UPDATE_FEED_URL ||
   'https://api.github.com/repos/lopugit/thingtime/releases?per_page=20';
+const macTitlebar = {
+  height: 52,
+  leftInset: 88,
+  navStart: 132,
+  trafficLightPosition: { x: 14, y: 17 }
+};
 
 let appOrigin = null;
 let activeContentOrigin = null;
@@ -610,6 +616,21 @@ function getDesktopInfo() {
     origin: appOrigin,
     platform: process.platform,
     sessionHash: getSessionHash(),
+    titlebar:
+      process.platform === 'darwin'
+        ? {
+            enabled: true,
+            style: 'hidden',
+            ...macTitlebar
+          }
+        : {
+            enabled: false,
+            height: 0,
+            leftInset: 0,
+            navStart: 34,
+            style: 'default',
+            trafficLightPosition: null
+          },
     updateFeedUrl
   };
 }
@@ -683,13 +704,23 @@ function createApplicationMenu() {
 function createWindow(startUrl) {
   activeContentOrigin = new URL(startUrl).origin;
 
+  const macWindowChrome =
+    process.platform === 'darwin'
+      ? {
+          titleBarStyle: 'hidden',
+          trafficLightPosition: macTitlebar.trafficLightPosition
+        }
+      : {};
+
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 860,
     minWidth: 920,
     minHeight: 640,
+    backgroundColor: '#ffffff',
     show: false,
     title: 'Thingtime',
+    ...macWindowChrome,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,

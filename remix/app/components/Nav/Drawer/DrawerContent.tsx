@@ -320,7 +320,8 @@ export const DrawerContent = (props: DrawerContentProps) => {
 
 	// the fixed trigger button floats over the panel header when the drawer
 	// opens from the left — reserve room so the brand row is not covered
-	const headerPaddingLeft = variant === 'panel' && direction === 'left' ? '52px' : '16px';
+	const headerPaddingLeft =
+		variant === 'panel' && direction === 'left' ? 'calc(var(--thingtime-electron-titlebar-left-inset, 0px) + 52px)' : '16px';
 
 	return (
 		<Flex className="drawerContent" flexDirection="column" width="100%" height="100%" minHeight={0}>

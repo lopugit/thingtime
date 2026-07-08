@@ -26,7 +26,10 @@ export const GlobalStyles = () => {
 					'--thingtime-safe-area-left': 'env(safe-area-inset-left, 0px)',
 					'--thingtime-visual-bottom-padding': '72px',
 					'--thingtime-visual-devkit-bottom-offset': '36px',
-					'--thingtime-devkit-bottom-offset': '20px'
+					'--thingtime-devkit-bottom-offset': '20px',
+					'--thingtime-electron-titlebar-height': '0px',
+					'--thingtime-electron-titlebar-left-inset': '0px',
+					'--thingtime-electron-titlebar-nav-start': '34px'
 				},
 				html: {
 					background: 'var(--tt-page-bg, white)',
@@ -79,6 +82,15 @@ export const GlobalStyles = () => {
 					paddingBottom:
 						'calc(var(--thingtime-visual-bottom-padding, 72px) + var(--thingtime-safe-area-bottom, 0px)) !important'
 				},
+				'html.thingtime-electron-desktop .thingtimeTopNav': {
+					WebkitAppRegion: 'drag',
+					userSelect: 'none'
+				},
+				'html.thingtime-electron-desktop .thingtimeTopNav a, html.thingtime-electron-desktop .thingtimeTopNav button, html.thingtime-electron-desktop .thingtimeTopNav input, html.thingtime-electron-desktop .thingtimeTopNav textarea, html.thingtime-electron-desktop .thingtimeTopNav select, html.thingtime-electron-desktop .thingtimeTopNav [role="button"], html.thingtime-electron-desktop .thingtimeTopNav [contenteditable="true"], html.thingtime-electron-desktop .thingtimeTopNav #commander, html.thingtime-electron-desktop .drawerTrigger':
+					{
+						WebkitAppRegion: 'no-drag',
+						userSelect: 'auto'
+					},
 				'input[data-com-onepassword-filled="light"]': {
 					// Doesn't seem to work..?
 					background: 'pink !important'

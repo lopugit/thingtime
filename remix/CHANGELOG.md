@@ -18,6 +18,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- Added Codex-style Electron macOS window chrome: the native titlebar is hidden,
+  traffic lights sit over the web surface, and the top nav/drawer reserve the
+  titlebar control area so the app feels flush with the window edge. — _Codex
+  (AI), 2026-07-08_
 - Added Electron update-check/download settings with a per-install auto-check
   toggle at `thingtime.settings.electron.${sessionHash}AutoUpdateEnabled`, plus
   a GitHub release resolver that fetches the latest `Electron App Release`

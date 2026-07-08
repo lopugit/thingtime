@@ -130,7 +130,8 @@ export const Nav = (props) => {
 					width="100%"
 					maxWidth="100%"
 					marginY={1}
-					paddingX="18px"
+					paddingLeft="18px"
+					paddingRight="18px"
 					paddingY="14px"
 					// bg='white'
 					// boxShadow={'0px 0px 10px rgba(0,0,0,0.1)'}
@@ -168,7 +169,7 @@ export const Nav = (props) => {
 						// leave room for the fixed drawer trigger button at the top
 						// left of the screen — needed unless the drawer is pinned
 						// on the left (then the nav starts right of the trigger)
-						paddingLeft={direction === 'left' && desktopOpen ? 0 : '34px'}
+						paddingLeft={direction === 'left' && desktopOpen ? 0 : 'var(--thingtime-electron-titlebar-nav-start, 34px)'}
 					>
 						<Center transform="scaleX(-100%)" cursor="pointer">
 							<Link to="/">
