@@ -15,6 +15,7 @@
     "electron": "pnpm --dir electron dev",
     "build-electron": "pnpm --dir electron build",
     "dist-electron": "pnpm --dir electron dist",
+    "install-electron": "pnpm --dir electron install:local",
     "remix": "npm run web",
     "remix-pms": "npm run web-pms",
     "build-remix": "npm run build-web",

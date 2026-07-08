@@ -21,12 +21,16 @@ pnpm --dir electron build:web
 pnpm --dir electron verify:web
 pnpm --dir electron dev
 pnpm --dir electron dist
+pnpm --dir electron install:local
 ```
 
 `build:web` runs the Remix/Nitro build with `NITRO_PRESET=node_server`, then
 copies `remix/.output` into `electron/dist/web/.output`. `build` creates an
 unsigned unpacked Electron app through `electron-builder --dir`; `dist` creates
 packaged artifacts and can use the host machine's signing/notarization setup.
+`install:local` copies the latest unsigned macOS app bundle to
+`~/Applications/Thingtime.app`, registers it with LaunchServices, and asks
+Spotlight to import it so Raycast/Spotlight can discover the app.
 
 ## Runtime
 
@@ -44,6 +48,14 @@ from Electron's app data path for this install. Blank/unset means "use the
 bundled local app". The app also exposes a Thingtime menu with **Load Bundled
 App** and **Load Production** entries so users can recover if they load a URL
 that does not include the switcher UI.
+
+The same settings surface includes an **Updates** section. Auto-check is stored
+at `thingtime.settings.electron.${sessionHash}AutoUpdateEnabled` and defaults to
+on. The current build checks recent GitHub releases for one named or describing
+`Electron App Release`, then downloads the best matching app bundle asset from
+that release into `~/Downloads`. Prefer release assets with names or labels that
+include `Electron App Release`, `Thingtime`, `Electron`, and a macOS bundle
+extension such as `.dmg`, `.zip`, or `.pkg`.
 
 In local development, the Electron shell loads `remix/.env`, `remix/.env.local`,
 and `remix/.env.auto` before starting Nitro so the desktop app sees the same

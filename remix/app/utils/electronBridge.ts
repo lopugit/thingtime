@@ -6,9 +6,35 @@ export type ThingtimeDesktopInfo = {
 	origin?: string | null;
 	platform?: string;
 	sessionHash?: string;
+	updateFeedUrl?: string | null;
+};
+
+export type ThingtimeDesktopUpdateAsset = {
+	contentType?: string | null;
+	downloadUrl?: string | null;
+	label?: string | null;
+	name?: string | null;
+	size?: number | null;
+};
+
+export type ThingtimeDesktopUpdateInfo = {
+	asset?: ThingtimeDesktopUpdateAsset | null;
+	checkedAt?: string;
+	currentVersion?: string;
+	downloadedAt?: string;
+	downloadPath?: string;
+	feedUrl?: string | null;
+	latestVersion?: string | null;
+	message?: string;
+	releaseName?: string | null;
+	releaseUrl?: string | null;
+	status?: 'available' | 'error' | 'unavailable' | 'up-to-date';
+	updateAvailable?: boolean;
 };
 
 export type ThingtimeDesktopBridge = {
+	checkForUpdates?: () => Promise<ThingtimeDesktopUpdateInfo>;
+	downloadUpdateBundle?: () => Promise<ThingtimeDesktopUpdateInfo>;
 	getInfo?: () => Promise<ThingtimeDesktopInfo>;
 	loadUrl?: (url: string) => Promise<ThingtimeDesktopInfo>;
 	navigateToUrl?: (url: string) => Promise<ThingtimeDesktopInfo>;
@@ -26,8 +52,11 @@ declare global {
 }
 
 export const electronUrlSettingKey = (sessionHash: string) => `${sessionHash}URL`;
+export const electronAutoUpdateSettingKey = (sessionHash: string) => `${sessionHash}AutoUpdateEnabled`;
 
 export const electronUrlSettingPath = (sessionHash: string) => `settings.electron.${electronUrlSettingKey(sessionHash)}`;
+export const electronAutoUpdateSettingPath = (sessionHash: string) =>
+	`settings.electron.${electronAutoUpdateSettingKey(sessionHash)}`;
 
 export const getElectronBridge = () => {
 	if (typeof window === 'undefined') {
@@ -44,6 +73,15 @@ export const getElectronSettingUrl = (thingtime: any, sessionHash?: string | nul
 
 	const value = thingtime?.settings?.electron?.[electronUrlSettingKey(sessionHash)];
 	return typeof value === 'string' ? value : '';
+};
+
+export const getElectronAutoUpdateEnabled = (thingtime: any, sessionHash?: string | null) => {
+	if (!sessionHash) {
+		return true;
+	}
+
+	const value = thingtime?.settings?.electron?.[electronAutoUpdateSettingKey(sessionHash)];
+	return typeof value === 'boolean' ? value : true;
 };
 
 export const normalizeElectronUrl = (rawUrl?: string | null) => {
@@ -77,4 +115,3 @@ export const loadElectronUrl = (bridge: ThingtimeDesktopBridge, url: string) => 
 
 	return Promise.reject(new Error('Thingtime desktop URL loading is unavailable.'));
 };
-

@@ -3,6 +3,7 @@ import React from 'react';
 import { useThingtime } from '../Thingtime/useThingtime';
 import {
 	electronUrlSettingPath,
+	getElectronAutoUpdateEnabled,
 	getElectronBridge,
 	getElectronSettingUrl,
 	loadElectronUrl,
@@ -35,6 +36,7 @@ export function ElectronBridgeHost() {
 	const [desktopInfo, setDesktopInfo] = React.useState<ThingtimeDesktopInfo | null>(null);
 	const appliedUrlRef = React.useRef<string | null>(null);
 	const clearingSavedUrlRef = React.useRef(false);
+	const updateCheckSessionRef = React.useRef<string | null>(null);
 
 	React.useEffect(() => {
 		const bridge = getElectronBridge();
@@ -117,6 +119,31 @@ export function ElectronBridgeHost() {
 				console.warn('Unable to load saved Thingtime desktop URL', error);
 			});
 	}, [desktopInfo?.currentUrl, desktopInfo?.sessionHash, loading, thingtime]);
+
+	React.useEffect(() => {
+		const bridge = getElectronBridge();
+		const sessionHash = desktopInfo?.sessionHash;
+
+		if (!bridge?.checkForUpdates || loading || !sessionHash || updateCheckSessionRef.current === sessionHash) {
+			return;
+		}
+
+		if (!getElectronAutoUpdateEnabled(thingtime, sessionHash)) {
+			return;
+		}
+
+		updateCheckSessionRef.current = sessionHash;
+
+		bridge
+			.checkForUpdates()
+			.then((info) => {
+				window.dispatchEvent(new CustomEvent('thingtime:electron-update-info', { detail: info }));
+			})
+			.catch((error) => {
+				updateCheckSessionRef.current = null;
+				console.warn('Unable to check Thingtime desktop updates', error);
+			});
+	}, [desktopInfo?.sessionHash, loading, thingtime]);
 
 	return null;
 }

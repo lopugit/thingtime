@@ -14,13 +14,16 @@ import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useTtTheme } from '~/hooks/useTtTheme';
 import {
+	electronAutoUpdateSettingPath,
 	electronUrlSettingKey,
 	electronUrlSettingPath,
+	getElectronAutoUpdateEnabled,
 	getElectronBridge,
 	getElectronSettingUrl,
 	loadElectronUrl,
 	normalizeElectronUrl,
-	type ThingtimeDesktopInfo
+	type ThingtimeDesktopInfo,
+	type ThingtimeDesktopUpdateInfo
 } from '~/utils/electronBridge';
 
 // User/app settings surface opened from the drawer's avatar button.
@@ -76,10 +79,15 @@ export const UserSettingsModal = () => {
 	const [desktopInfo, setDesktopInfo] = React.useState<ThingtimeDesktopInfo | null>(null);
 	const [electronUrlDraft, setElectronUrlDraft] = React.useState('');
 	const [electronUrlLoading, setElectronUrlLoading] = React.useState(false);
+	const [electronUpdateInfo, setElectronUpdateInfo] = React.useState<ThingtimeDesktopUpdateInfo | null>(null);
+	const [electronUpdateLoading, setElectronUpdateLoading] = React.useState(false);
+	const [electronUpdateDownloadLoading, setElectronUpdateDownloadLoading] = React.useState(false);
 	const electronUrlInputRef = React.useRef<HTMLInputElement | null>(null);
 	const electronSessionHash = desktopInfo?.sessionHash || '';
 	const electronStoredUrl = getElectronSettingUrl(thingtime, electronSessionHash);
+	const electronAutoUpdateEnabled = getElectronAutoUpdateEnabled(thingtime, electronSessionHash);
 	const electronSettingPathLabel = electronSessionHash ? electronUrlSettingPath(electronSessionHash) : '';
+	const electronAutoUpdatePathLabel = electronSessionHash ? electronAutoUpdateSettingPath(electronSessionHash) : '';
 
 	React.useEffect(() => {
 		if (!accountModalOpen) {
@@ -215,6 +223,22 @@ export const UserSettingsModal = () => {
 		setElectronUrlDraft(savedUrl || currentUrl || originUrl);
 	}, [accountModalOpen, desktopInfo?.currentUrl, desktopInfo?.origin, desktopInfo, electronStoredUrl]);
 
+	React.useEffect(() => {
+		if (!accountModalOpen) {
+			return;
+		}
+
+		const onElectronUpdateInfo = (event: Event) => {
+			setElectronUpdateInfo((event as CustomEvent<ThingtimeDesktopUpdateInfo>).detail);
+		};
+
+		window.addEventListener('thingtime:electron-update-info', onElectronUpdateInfo);
+
+		return () => {
+			window.removeEventListener('thingtime:electron-update-info', onElectronUpdateInfo);
+		};
+	}, [accountModalOpen]);
+
 	const handleElectronUrlLoad = React.useCallback(
 		async (rawUrl: string, options?: { clearSavedUrl?: boolean }) => {
 			const bridge = getElectronBridge();
@@ -273,6 +297,94 @@ export const UserSettingsModal = () => {
 		},
 		[desktopInfo, lopu, setThingtime]
 	);
+
+	const handleElectronAutoUpdateChange = React.useCallback(
+		(enabled: boolean) => {
+			if (!electronSessionHash) {
+				return;
+			}
+
+			setThingtime(electronAutoUpdateSettingPath(electronSessionHash), enabled, {
+				ignoreUndoRedo: true,
+				namespace: 'electron'
+			});
+		},
+		[electronSessionHash, setThingtime]
+	);
+
+	const handleElectronUpdateCheck = React.useCallback(async () => {
+		const bridge = getElectronBridge();
+
+		if (!bridge?.checkForUpdates) {
+			lopu({
+				title: 'Update checks unavailable',
+				description: 'This Thingtime desktop build does not expose update checks.',
+				status: 'error',
+				duration: 6000
+			});
+			return;
+		}
+
+		setElectronUpdateLoading(true);
+
+		try {
+			const info = await bridge.checkForUpdates();
+			setElectronUpdateInfo(info);
+			lopu({
+				title: info.updateAvailable ? 'Update available' : info.status === 'error' ? 'Update check failed' : 'Update check complete',
+				description: info.message,
+				status: info.status === 'error' ? 'error' : info.updateAvailable ? 'info' : 'success',
+				duration: 7000
+			});
+		} catch (error) {
+			console.error('Unable to check Thingtime desktop updates', error);
+			lopu({
+				title: 'Update check failed',
+				description: error instanceof Error ? error.message : 'Thingtime desktop could not check for updates.',
+				status: 'error',
+				duration: 7000
+			});
+		} finally {
+			setElectronUpdateLoading(false);
+		}
+	}, [lopu]);
+
+	const handleElectronUpdateDownload = React.useCallback(async () => {
+		const bridge = getElectronBridge();
+
+		if (!bridge?.downloadUpdateBundle) {
+			lopu({
+				title: 'Update downloads unavailable',
+				description: 'This Thingtime desktop build does not expose update downloads.',
+				status: 'error',
+				duration: 6000
+			});
+			return;
+		}
+
+		setElectronUpdateDownloadLoading(true);
+
+		try {
+			const info = await bridge.downloadUpdateBundle();
+			setElectronUpdateInfo(info);
+			lopu({
+				title: 'Electron bundle downloaded',
+				description: info.downloadPath || info.message,
+				status: 'success',
+				duration: 9000
+			});
+		} catch (error) {
+			console.error('Unable to download Thingtime desktop update', error);
+			lopu({
+				title: 'Update download failed',
+				description: error instanceof Error ? error.message : 'Thingtime desktop could not download the release bundle.',
+				status: 'error',
+				duration: 8000
+			});
+		} finally {
+			setElectronUpdateDownloadLoading(false);
+		}
+	}, [lopu]);
 
 	if (!accountModalOpen) {
 		return null;
@@ -426,10 +538,62 @@ export const UserSettingsModal = () => {
 									Clear
 								</Button>
 							)}
+							</Flex>
+						</Flex>
+						<Flex flexDirection="column" rowGap={2} paddingTop={2} borderTop="1px solid" borderColor="blackAlpha.100">
+							<Flex alignItems="center" columnGap={4}>
+								<Box minWidth={0}>
+									<Text fontSize="sm">Updates</Text>
+									<Text fontSize="xs" opacity={0.55} wordBreak="break-all">
+										{electronAutoUpdatePathLabel}
+									</Text>
+								</Box>
+								<Switch
+									marginLeft="auto"
+									isChecked={electronAutoUpdateEnabled}
+									onChange={(event) => handleElectronAutoUpdateChange(event.target.checked)}
+								></Switch>
+							</Flex>
+							<Text fontSize="xs" opacity={0.55} wordBreak="break-word">
+								{electronUpdateInfo?.message ||
+									`Current version ${desktopInfo.appVersion || 'unknown'}. Downloads use the latest GitHub release asset for Electron App Release.`}
+							</Text>
+							{electronUpdateInfo?.asset?.name && (
+								<Text fontSize="xs" opacity={0.55} wordBreak="break-all">
+									{electronUpdateInfo.asset.name}
+								</Text>
+							)}
+							{electronUpdateInfo?.downloadPath && (
+								<Text fontSize="xs" opacity={0.55} wordBreak="break-all">
+									{electronUpdateInfo.downloadPath}
+								</Text>
+							)}
+							<Flex alignItems="center" columnGap={2} rowGap={2} flexWrap="wrap">
+								<Button size="xs" variant="outline" isLoading={electronUpdateLoading} onClick={handleElectronUpdateCheck}>
+									Check
+								</Button>
+								<Button
+									size="xs"
+									variant="solid"
+									isLoading={electronUpdateDownloadLoading}
+									onClick={handleElectronUpdateDownload}
+								>
+									Download
+								</Button>
+								{electronUpdateInfo?.releaseUrl && (
+									<Button as="a" size="xs" variant="ghost" href={electronUpdateInfo.releaseUrl} target="_blank" rel="noreferrer">
+										Release
+									</Button>
+								)}
+								{electronUpdateInfo?.checkedAt && (
+									<Text fontSize="xs" opacity={0.5}>
+										{new Date(electronUpdateInfo.checkedAt).toLocaleString()}
+									</Text>
+								)}
+							</Flex>
 						</Flex>
 					</Flex>
-				</Flex>
-			)}
+				)}
 
 			{/* drawer preferences */}
 			<Flex flexDirection="column" rowGap={0}>

@@ -18,6 +18,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- Added Electron update-check/download settings with a per-install auto-check
+  toggle at `thingtime.settings.electron.${sessionHash}AutoUpdateEnabled`, plus
+  a GitHub release resolver that fetches the latest `Electron App Release`
+  macOS bundle asset into `~/Downloads` and a local installer that registers
+  `~/Applications/Thingtime.app` for Spotlight/Raycast discovery. — _Codex
+  (AI), 2026-07-08_
 - Added an Electron desktop URL switcher that stores the selected destination
   at `thingtime.settings.electron.${sessionHash}URL`, auto-loads that saved URL
   on launch, and adds desktop menu fallbacks for bundled/prod loading. —
