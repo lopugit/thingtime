@@ -128,6 +128,9 @@ Rules:
 - If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
 - After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+- graphify-out/graph.json + manifest.json are an atomic pair from one update run (manifest.json records which files are already analyzed). On any merge conflict under graphify-out/, take ONE side for the whole directory (`git checkout --ours -- graphify-out/` or `--theirs`, never mixed per-file), then run `graphify update .` and commit the refreshed outputs with the merge.
+- Recovery for a poisoned pair (graph missing data for files `graphify update` reports as unchanged): delete graphify-out/manifest.json and run `graphify update .` — everything re-extracts (AST is free; semantic extraction is served from the tracked content-addressed cache in graphify-out/cache/semantic/) and a consistent pair is rewritten. `graphify update --force` bypasses the fewer-nodes guard after large deletions/refactors.
+- graphify-out/graph.html is untracked derived viz — regenerate with `graphify export html`, never `git add` it. graphify-out/cache/semantic/ IS tracked (content-addressed, merge-safe); cache/ast/ and cache/stat-index.json stay local.
 
 ## Delivery messaging
 

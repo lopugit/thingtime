@@ -91,7 +91,9 @@ iOS/xcuserdata/
 iOS/**/xcuserdata/
 iOS/Thingtime/Resources/Info.plist
 
-# Graphify scratch and dated backups
+# Graphify local scratch. cache/semantic is tracked so only the local cache
+# pieces carry over; dated [0-9]*/ backup dirs (~200MB) are deliberately not
+# copied into worktrees.
 graphify-out/.graphify_*
-graphify-out/cache/
-graphify-out/[0-9]*/
+graphify-out/cache/ast/
+graphify-out/cache/stat-index.json
