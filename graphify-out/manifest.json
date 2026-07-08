@@ -1815,8 +1815,8 @@
     "semantic_hash": "f162fbffa18046af73dfca08802a536f"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1783501380.5198495,
-    "ast_hash": "9bd5d590647d1da163e0b68460b8d135",
+    "mtime": 1783520919.701169,
+    "ast_hash": "f829ae69e3b68289d1c1c29371dd73cf",
     "semantic_hash": ""
   },
   "remix/README.md": {
@@ -3315,8 +3315,8 @@
     "semantic_hash": ""
   },
   "electron/package.json": {
-    "mtime": 1783499998.4028172,
-    "ast_hash": "a7233f0f4cf5c8efb5da7525a17a3be7",
+    "mtime": 1783520919.7003362,
+    "ast_hash": "62e63d5b4fba43cc7492517cbdea997b",
     "semantic_hash": ""
   },
   "electron/scripts/build-web.mjs": {

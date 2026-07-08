@@ -171,6 +171,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- Fixed Electron release packaging on GitHub Actions by giving the Electron
+  package explicit repository metadata, preventing electron-builder from
+  crashing after producing macOS assets when it cannot infer the GitHub repo
+  from the runner checkout. — _Codex (AI), 2026-07-09_
 - Aligned the Electron desktop titlebar and drawer with the Codex-style macOS
   layout: compact drawer/home/search controls now sit in the titlebar, the
   titlebar stays at the compact Electron height, the control row no longer

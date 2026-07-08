@@ -4,6 +4,11 @@
   "private": true,
   "description": "Thingtime desktop app shell for the Remix/Nitro web app.",
   "main": "main.cjs",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lopugit/thingtime.git",
+    "directory": "electron"
+  },
   "packageManager": "pnpm@10.12.1",
   "scripts": {
     "build": "pnpm run build:web && pnpm run verify:web && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --dir",
