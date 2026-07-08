@@ -46,7 +46,10 @@
   If a derived port is already taken, Vite fails fast (strictPort) — set the
   TT_* overrides. If a worktree stack crash-loops with missing packages (e.g.
   `Cannot find package 'rolldown'`), the copied `remix/node_modules` is
-  incomplete — run `corepack pnpm --dir remix install` and restart.
+  incomplete — run `corepack pnpm --dir remix install` and restart. If that
+  plain install finishes in under a second reporting done but the package is
+  still missing, the copied store's links are stale while pnpm thinks state is
+  current — rerun with `corepack pnpm --dir remix install --force`.
   When preview/testing tooling needs to own the dev-server process (it usually
   cannot attach to the PM2-managed port), run a second foreground stack beside
   PM2 on a free trio: `TT_WEB_PORT=<web> TT_HMR_PORT=<hmr> TT_API_PORT=<api>
