@@ -8,6 +8,12 @@ const repoRoot = path.resolve(electronDir, '..');
 const remixDir = path.join(repoRoot, 'remix');
 const stagedWebDir = path.join(electronDir, 'dist', 'web');
 const remixOutputDir = path.join(remixDir, '.output');
+const desktopReleaseMetadata = {
+  baseVersion: process.env.THINGTIME_ELECTRON_BASE_VERSION || null,
+  buildNumber: process.env.THINGTIME_ELECTRON_BUILD_NUMBER || null,
+  tag: process.env.THINGTIME_ELECTRON_RELEASE_TAG || null,
+  version: process.env.THINGTIME_ELECTRON_RELEASE_VERSION || null
+};
 
 const corepackCommand = process.platform === 'win32' ? 'corepack.cmd' : 'corepack';
 const pnpmExecPath = process.env.npm_execpath && process.env.npm_execpath.includes('pnpm')
@@ -67,6 +73,7 @@ await writeFile(
   `${JSON.stringify(
     {
       builtAt: new Date().toISOString(),
+      desktopRelease: desktopReleaseMetadata.version ? desktopReleaseMetadata : null,
       gitBranch: readGitValue(['rev-parse', '--abbrev-ref', 'HEAD']),
       gitCommit: readGitValue(['rev-parse', '--short', 'HEAD']),
       nitroPreset: 'node_server'

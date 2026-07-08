@@ -9,12 +9,20 @@ PR: https://github.com/lopugit/thingtime/pull/42
 - Starts the bundled Nitro server on loopback at runtime and loads it through a hardened Electron window with `contextIsolation`, no `nodeIntegration`, a small preload bridge, and origin-checked navigation.
 - Adds the desktop URL switcher at `thingtime.settings.electron.${sessionHash}URL`, with bundled/prod menu fallbacks.
 - Adds Electron settings for update checks and release bundle downloads. The app checks recent GitHub releases for `Electron App Release`, picks the best matching macOS bundle asset, and downloads it to `~/Downloads`.
+- Adds the main-branch `Electron App Release` workflow. On pushes to `main` that change `electron/**`, GitHub Actions builds the desktop bundle, tags the main commit as `electron-v<base>+build.<run-number>`, generates release notes, and uploads the macOS bundle assets without committing a source version bump.
 - Adds `pnpm --dir electron install:local` and root `npm run install-electron`, which copy the built app to `~/Applications/Thingtime.app`, register it with LaunchServices, and ask Spotlight to index it.
 - Adds Codex-style macOS titlebar integration: Electron hides the native titlebar, exposes titlebar metrics to the renderer, and the web nav/drawer reserve the traffic-light area while making the top strip draggable.
 
 ## Release Asset Convention
 
 For update downloads, attach a macOS artifact to a GitHub release named or described with `Electron App Release`. Preferred asset naming includes `Electron App Release`, `Thingtime`, `Electron`, and one of `.dmg`, `.zip`, or `.pkg`.
+
+The CI release workflow follows that convention automatically. It reads the
+base version from `electron/package.json`, appends SemVer build metadata from
+the GitHub Actions run number (for example `0.1.0+build.10423`), and creates a
+tag prefixed with `electron-v` on the merged `main` commit. The source
+`version` stays unchanged unless Lopu explicitly requests a real base-version
+bump.
 
 The current app downloads the bundle and reveals it in Finder. It does not silently replace the running app; install-in-place automation should wait until signed release artifacts and a clear replace/relaunch flow exist.
 

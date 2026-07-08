@@ -25,6 +25,7 @@ const macTitlebar = {
 
 let appOrigin = null;
 let activeContentOrigin = null;
+let webBuildMetadata = null;
 let mainWindow = null;
 let sessionHash = null;
 
@@ -97,6 +98,28 @@ function getWebOutputDir() {
   }
 
   return localWebOutput;
+}
+
+function readWebBuildMetadata() {
+  if (webBuildMetadata) {
+    return webBuildMetadata;
+  }
+
+  const metadataPath = path.join(path.dirname(getWebOutputDir()), 'metadata.json');
+
+  try {
+    const parsed = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+    webBuildMetadata = parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    webBuildMetadata = {};
+  }
+
+  return webBuildMetadata;
+}
+
+function getCurrentAppVersion() {
+  const releaseVersion = readWebBuildMetadata()?.desktopRelease?.version;
+  return normalizeVersionString(releaseVersion) || app.getVersion();
 }
 
 function getFreePort() {
@@ -225,41 +248,54 @@ function normalizeDesktopUrl(rawUrl) {
 }
 
 function normalizeVersionString(version) {
-  return String(version || '')
-    .trim()
-    .replace(/^v/i, '')
-    .split(/[+-]/)[0]
-    .trim();
+  const value = String(version || '').trim();
+  const match = value.match(/(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)/);
+
+  return (match ? match[1] : value.replace(/^v/i, '')).trim();
+}
+
+function parseVersionInfo(version) {
+  const normalized = normalizeVersionString(version);
+  const [withoutBuildMetadata, buildMetadata = ''] = normalized.split('+');
+  const core = withoutBuildMetadata.split('-')[0];
+  const coreParts = core.split('.').map((part) => {
+    const parsed = Number.parseInt(part, 10);
+    return Number.isFinite(parsed) ? parsed : 0;
+  });
+  const buildMatch = buildMetadata.match(/(?:^|[.-])build[.-]?(\d+)|(\d+)/i);
+  const buildNumber = buildMatch ? Number.parseInt(buildMatch[1] || buildMatch[2], 10) : 0;
+
+  return {
+    buildNumber: Number.isFinite(buildNumber) ? buildNumber : 0,
+    coreParts,
+    version: normalized
+  };
 }
 
 function compareVersions(leftVersion, rightVersion) {
-  const leftParts = normalizeVersionString(leftVersion).split('.');
-  const rightParts = normalizeVersionString(rightVersion).split('.');
-  const length = Math.max(leftParts.length, rightParts.length);
+  const left = parseVersionInfo(leftVersion);
+  const right = parseVersionInfo(rightVersion);
+  const length = Math.max(left.coreParts.length, right.coreParts.length, 3);
 
   for (let index = 0; index < length; index += 1) {
-    const leftRaw = leftParts[index] || '0';
-    const rightRaw = rightParts[index] || '0';
-    const leftNumber = Number.parseInt(leftRaw, 10);
-    const rightNumber = Number.parseInt(rightRaw, 10);
+    const leftNumber = left.coreParts[index] || 0;
+    const rightNumber = right.coreParts[index] || 0;
 
-    if (Number.isFinite(leftNumber) && Number.isFinite(rightNumber)) {
-      if (leftNumber > rightNumber) {
-        return 1;
-      }
-
-      if (leftNumber < rightNumber) {
-        return -1;
-      }
-
-      continue;
+    if (leftNumber > rightNumber) {
+      return 1;
     }
 
-    const lexical = leftRaw.localeCompare(rightRaw, undefined, { numeric: true, sensitivity: 'base' });
-
-    if (lexical !== 0) {
-      return lexical > 0 ? 1 : -1;
+    if (leftNumber < rightNumber) {
+      return -1;
     }
+  }
+
+  if (left.buildNumber > right.buildNumber) {
+    return 1;
+  }
+
+  if (left.buildNumber < right.buildNumber) {
+    return -1;
   }
 
   return 0;
@@ -272,7 +308,7 @@ function requestJson(url, redirectCount = 0) {
       {
         headers: {
           Accept: 'application/vnd.github+json',
-          'User-Agent': `Thingtime/${app.getVersion()}`
+          'User-Agent': `Thingtime/${getCurrentAppVersion()}`
         }
       },
       (response) => {
@@ -418,7 +454,7 @@ function selectElectronRelease(rawReleases) {
 async function resolveUpdateRelease() {
   const releases = await requestJson(updateFeedUrl);
   const { asset, release } = selectElectronRelease(releases);
-  const currentVersion = app.getVersion();
+  const currentVersion = getCurrentAppVersion();
   const latestVersion = normalizeVersionString(release?.tag_name || release?.name);
   const updateAvailable = latestVersion ? compareVersions(latestVersion, currentVersion) > 0 : false;
 
@@ -462,7 +498,7 @@ async function checkForUpdates() {
     return {
       asset: null,
       checkedAt: new Date().toISOString(),
-      currentVersion: app.getVersion(),
+      currentVersion: getCurrentAppVersion(),
       feedUrl: updateFeedUrl,
       latestVersion: null,
       message: error instanceof Error ? error.message : String(error),
@@ -518,7 +554,7 @@ function downloadFile(url, targetPath, redirectCount = 0) {
       {
         headers: {
           Accept: 'application/octet-stream',
-          'User-Agent': `Thingtime/${app.getVersion()}`
+          'User-Agent': `Thingtime/${getCurrentAppVersion()}`
         }
       },
       (response) => {
@@ -609,7 +645,7 @@ function isAllowedContentUrl(targetUrl) {
 
 function getDesktopInfo() {
   return {
-    appVersion: app.getVersion(),
+    appVersion: getCurrentAppVersion(),
     contentOrigin: activeContentOrigin || appOrigin,
     currentUrl: mainWindow?.webContents.getURL() || appOrigin,
     isPackaged: app.isPackaged,

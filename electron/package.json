@@ -10,6 +10,7 @@
     "build:web": "node scripts/build-web.mjs",
     "dev": "pnpm run build:web && pnpm run verify:web && electron .",
     "dist": "pnpm run build:web && pnpm run verify:web && electron-builder",
+    "dist:unsigned": "pnpm run build:web && pnpm run verify:web && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --publish never -c.mac.identity=null",
     "install:local": "node scripts/install-local-app.mjs",
     "start": "electron .",
     "verify:web": "node scripts/verify-web-build.mjs"

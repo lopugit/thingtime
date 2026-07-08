@@ -18,6 +18,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- Added a main-branch GitHub Actions release workflow for the Electron app. On
+  pushes to `main` that change `electron/**`, it builds the macOS bundle,
+  creates an `electron-v<base>+build.<run-number>` tag, generates GitHub release
+  notes, and uploads the bundle assets while leaving the source base version
+  unchanged. Electron packaged builds now store that CI metadata so update
+  checks can compare build-metadata releases correctly. Details in
+  [`PRs/42-codex-electron-remix-app--add-electron-desktop-app-shell.md`](../PRs/42-codex-electron-remix-app--add-electron-desktop-app-shell.md).
+  — _Codex (AI), 2026-07-08_
 - Added Codex-style Electron macOS window chrome: the native titlebar is hidden,
   traffic lights sit over the web surface, and the top nav/drawer reserve the
   titlebar control area so the app feels flush with the window edge. — _Codex

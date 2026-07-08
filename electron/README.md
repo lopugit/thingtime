@@ -21,6 +21,7 @@ pnpm --dir electron build:web
 pnpm --dir electron verify:web
 pnpm --dir electron dev
 pnpm --dir electron dist
+pnpm --dir electron dist:unsigned
 pnpm --dir electron install:local
 ```
 
@@ -28,6 +29,9 @@ pnpm --dir electron install:local
 copies `remix/.output` into `electron/dist/web/.output`. `build` creates an
 unsigned unpacked Electron app through `electron-builder --dir`; `dist` creates
 packaged artifacts and can use the host machine's signing/notarization setup.
+`dist:unsigned` creates packaged artifacts with signing and publishing disabled,
+which is the command used by the GitHub release workflow before uploading the
+bundle to Releases.
 `install:local` copies the latest unsigned macOS app bundle to
 `~/Applications/Thingtime.app`, registers it with LaunchServices, and asks
 Spotlight to import it so Raycast/Spotlight can discover the app.
@@ -62,6 +66,23 @@ on. The current build checks recent GitHub releases for one named or describing
 that release into `~/Downloads`. Prefer release assets with names or labels that
 include `Electron App Release`, `Thingtime`, `Electron`, and a macOS bundle
 extension such as `.dmg`, `.zip`, or `.pkg`.
+
+## GitHub Releases
+
+`.github/workflows/electron-release.yml` publishes the Electron bundle from
+`main`. It runs after a push to `main` that changes `electron/**`, builds the
+desktop app on macOS, creates a tag like
+`electron-v0.1.0+build.10423`, and attaches the generated `.dmg`, `.zip`, or
+`.pkg` assets to a GitHub Release titled `Thingtime Electron App Release
+0.1.0+build.10423`.
+
+The base version is read from `electron/package.json` and is not changed by CI.
+The workflow appends SemVer build metadata from the GitHub Actions run number
+for automated builds only. Change the base version in `electron/package.json`
+only when a human intentionally asks for a real product version bump. The
+packaged app stores the full CI release version in `electron/dist/web/metadata.json`
+so the updater can distinguish `0.1.0+build.10423` from `0.1.0+build.10424`
+without requiring source-controlled version churn.
 
 In local development, the Electron shell loads `remix/.env`, `remix/.env.local`,
 and `remix/.env.auto` before starting Nitro so the desktop app sees the same
