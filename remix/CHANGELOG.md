@@ -18,6 +18,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- Updated the Electron release workflow to run on Node 24 so the Remix/Nitro
+  bundle build matches the app's declared `node: 24.x` engine during
+  post-merge GitHub Releases. — _Codex (AI), 2026-07-08_
 - Added a main-branch GitHub Actions release workflow for the Electron app. On
   pushes to `main` that change `electron/**`, it builds the macOS bundle,
   creates an `electron-v<base>+build.<run-number>` tag, generates GitHub release
