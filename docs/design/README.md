@@ -16,6 +16,12 @@ directory. Rebuild any entry's bundle with `python3 inline-dc.py <folder>`.
   live demo · use cases · ecosystem · FAQ); links into `thingtime-app/`
 - `thingtime-app/` — app mockup: the thing editor (interactive demo,
   path-bar commands); links back to `claude-design-mockup-v2-fable/`
+- `thingtime-algorithm-growth/` — design concept: the doomscroll-trained feed
+  algorithm visibly matures 🥚 → 🐣 → 🐥 → 🧠 (interactive scrubber; Prism look).
+  Hand-authored self-contained `index.html` (no `.dc.html` source).
+- `thingtime-theme-gallery/` — design concept: a browsable, one-click-apply
+  public theme gallery; each card is a live mini preview in its own theme.
+  Hand-authored self-contained `index.html` (no `.dc.html` source).
 - `thingtime-landing-1a-classic-centered/` — classic centered · waitlist-first · warm copy
 - `thingtime-landing-1b-product-split/` — product split · the demo IS the hero · confident copy
 - `thingtime-landing-1c-crowdfund-campaign/` — crowdfund campaign · backers-first · rallying copy

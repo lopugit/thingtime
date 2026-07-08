@@ -22,6 +22,20 @@ export const designKindColors: Record<DesignEntryKind, { bg: string; color: stri
 
 export const designEntries: DesignEntry[] = [
   {
+    slug: 'thingtime-algorithm-growth',
+    title: 'Algorithm growth — raise your feed brain',
+    kind: 'App',
+    summary: 'Design concept: the doomscroll-trained feed algorithm visibly matures 🥚 → 🐣 → 🐥 → 🧠.',
+    notes: 'Interactive scrubber ties signal count to an evolving AlgorithmMenu dot + Lopu milestone toasts.'
+  },
+  {
+    slug: 'thingtime-theme-gallery',
+    title: 'Theme gallery — /themes/gallery',
+    kind: 'App',
+    summary: 'Design concept: a browsable, one-click-apply public gallery for shareable themes.',
+    notes: 'Each card renders a live mini "thing" preview in its own theme; built on the existing themes/shared API.'
+  },
+  {
     slug: 'claude-design-mockup-v1',
     title: 'Claude design mockup v1',
     kind: 'Launch',
