@@ -1815,8 +1815,8 @@
     "semantic_hash": "f162fbffa18046af73dfca08802a536f"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1783501216.2823808,
-    "ast_hash": "9be70c508c14b3dcc39cfcb9e62e6701",
+    "mtime": 1783501693.2089381,
+    "ast_hash": "a2996fe005c6ae221953f5d5c3a33ddc",
     "semantic_hash": ""
   },
   "remix/README.md": {
@@ -2770,9 +2770,9 @@
     "semantic_hash": "156e3e1f6b9eae5dbd22507a6f76a2d0"
   },
   ".githooks/post-commit": {
-    "mtime": 1783501215.496923,
-    "ast_hash": "0508a39c49fb667ee05e8d321ade0a7e",
-    "semantic_hash": "0508a39c49fb667ee05e8d321ade0a7e"
+    "mtime": 1783501573.569708,
+    "ast_hash": "8a9a78a922e88133e7671d96340e2778",
+    "semantic_hash": ""
   },
   "remix/app/components/VisualSettings/VisualSettingsHost.tsx": {
     "mtime": 1783501216.333752,
@@ -3370,8 +3370,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/electron-release.yml": {
-    "mtime": 1783501215.498193,
-    "ast_hash": "7051bdbc1540feec38d082e8ddc325fc",
+    "mtime": 1783501693.178098,
+    "ast_hash": "5f90109ca47ad97f2e5b24c3f4fd5bd7",
     "semantic_hash": ""
   },
   "TODO/claude-todo/09-security-hardening.md": {
@@ -3397,6 +3397,11 @@
   "PLANS/codexCRUDImplementation.md": {
     "mtime": 1783501469.8770783,
     "ast_hash": "d436e6eb652e0d7e7e44522d9a7723d3",
+    "semantic_hash": ""
+  },
+  ".githooks/post-checkout": {
+    "mtime": 1783501573.569893,
+    "ast_hash": "18ce593685d2799611e4db5604ba2025",
     "semantic_hash": ""
   }
 }
