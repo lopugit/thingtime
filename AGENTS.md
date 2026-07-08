@@ -57,12 +57,13 @@
   parent checkout's local env files into the clone before running install,
   dev, build, or smoke checks. Preserve matching paths for root `.env*` files
   and nested app env files such as `remix/.env*`; keep secret-bearing env files
-  untracked and never commit secrets. `remix/.env.auto` is the tracked generated
-  exception handled by the post-commit hook.
+  untracked and never commit secrets. `remix/.env.auto` is untracked and
+  generated; `remix/scripts/pre-dev.sh` rewrites it on the next dev/build run.
 - Committed git hooks live in `.githooks/`; enable them in a checkout with
-  `npm run install-git-hooks` or `git config core.hooksPath .githooks`. The
-  post-commit hook intentionally auto-commits `remix/.env.auto` when that file
-  changes after a commit, using a recursion guard around its generated commit.
+  `npm run install-git-hooks` or `git config core.hooksPath .githooks`. There
+  are currently no active hooks. Branch awareness needs no hook: local
+  checkouts generate untracked `remix/.env.auto` via `pre-dev.sh`, and Vercel
+  reads `VERCEL_GIT_COMMIT_REF` from the system env at build and runtime.
 - If local web dev 500s with a missing `bcrypt_lib.node` native binding, run `corepack pnpm --dir remix run ensure-bcrypt`, then restart the PM2-managed `tt-nitro-react-router-9999` app. The app `postinstall`, `dev`, and `build` scripts also run this check automatically.
 - For rendered browser validation in Codex Desktop, prefer the in-app Browser first when it is available. If localhost is blocked there, or the user explicitly asks for Chrome, use the Codex Chrome tab control workflow (`chrome:control-chrome`) before falling back to standalone Playwright. Keep Chrome checks read-only unless the user requested an action, and do not inspect cookies, local storage, passwords, or profile data.
 - For layout or alignment changes, always verify the affected screen in a live

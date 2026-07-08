@@ -115,6 +115,19 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- Branch awareness no longer depends on a committed env file: `remix/.env.auto`
+  is now untracked/gitignored and generated locally by
+  `remix/scripts/pre-dev.sh`; the `.githooks/post-commit` auto-commit hook and
+  the unreferenced legacy `remix/vercel.sh` are removed. Vercel deployments
+  read the `VERCEL_GIT_COMMIT_REF` system env var (already preferred by
+  `root-data.server.ts` at runtime), so previews stay branch-aware while
+  `.env.auto` merge conflicts become structurally impossible. `pre-dev.sh` now
+  warns instead of failing the Vercel build when the ref is missing. Existing
+  checkouts with a locally modified `.env.auto` may hit a one-time
+  modify/delete conflict when pulling this change — resolve by keeping the
+  local file untracked (`git rm --cached remix/.env.auto`). Also routed
+  `graphify-out/graph.json` through the graphify union merge driver via
+  `.gitattributes`. — _Claude (AI), 2026-07-08_
 - Moved PR-specific notes from `remix/PRs/` to the repo-root `PRs/`
   directory and updated changelog/runbook links to the new convention. —
   _Codex (AI), 2026-07-07_

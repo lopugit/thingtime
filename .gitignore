@@ -2,6 +2,7 @@
 .vscode
 .env
 .env.local
+.env.auto
 .env.development
 .env.test
 .env.staging
