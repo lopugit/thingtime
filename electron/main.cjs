@@ -18,8 +18,8 @@ const updateFeedUrl =
   'https://api.github.com/repos/lopugit/thingtime/releases?per_page=20';
 const macTitlebar = {
   height: 52,
-  leftInset: 140,
-  navStart: 196,
+  leftInset: 88,
+  navStart: 132,
   trafficLightPosition: { x: 14, y: 17 }
 };
 

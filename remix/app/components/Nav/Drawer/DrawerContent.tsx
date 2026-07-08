@@ -327,6 +327,7 @@ export const DrawerContent = (props: DrawerContentProps) => {
 		<Flex className="drawerContent" flexDirection="column" width="100%" height="100%" minHeight={0}>
 			{/* header: brand + search (top right) */}
 			<Flex
+				className="drawerContentHeader"
 				alignItems="center"
 				flexShrink={0}
 				paddingLeft={headerPaddingLeft}
@@ -374,7 +375,7 @@ export const DrawerContent = (props: DrawerContentProps) => {
 			</Flex>
 
 			{/* scrollable menus */}
-			<Box flex={1} minHeight={0} overflowY="auto" paddingBottom={2}>
+			<Box className="drawerMenuScroll" flex={1} minHeight={0} overflowY="auto" paddingBottom={2}>
 				{/* top-level items (limited, with faint More) */}
 				<Flex flexDirection="column" rowGap="1px" paddingTop={1}>
 					<ReorderableList

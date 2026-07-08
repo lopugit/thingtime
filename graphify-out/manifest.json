@@ -935,9 +935,9 @@
     "semantic_hash": "38a74a715168968f164df649dab425f6"
   },
   "remix/app/components/Commander/CommanderV2.tsx": {
-    "mtime": 1783465214.2063067,
-    "ast_hash": "9334cf510d0def73fc9c58412f96208a",
-    "semantic_hash": "9334cf510d0def73fc9c58412f96208a"
+    "mtime": 1783473938.609096,
+    "ast_hash": "70cc1ce584c144f91723108e4615fc38",
+    "semantic_hash": "70cc1ce584c144f91723108e4615fc38"
   },
   "remix/app/components/DevKit/DevKit.tsx": {
     "mtime": 1783465214.2067654,
@@ -1015,9 +1015,9 @@
     "semantic_hash": "b68a2db1083e0b989059fc4bb03fce30"
   },
   "remix/app/components/Nav/Nav.tsx": {
-    "mtime": 1783469748.6014311,
-    "ast_hash": "23bd5edf0964454ef48adc4192f58ebc",
-    "semantic_hash": "23bd5edf0964454ef48adc4192f58ebc"
+    "mtime": 1783477617.948662,
+    "ast_hash": "dd6598464fc47288b0d549d948d20309",
+    "semantic_hash": "dd6598464fc47288b0d549d948d20309"
   },
   "remix/app/components/Nav/ReactiveNav.tsx": {
     "mtime": 1783465214.2139585,
@@ -1145,9 +1145,9 @@
     "semantic_hash": "7f1938dd65767c801825fc721151adbf"
   },
   "remix/app/globals/GlobalStyles.tsx": {
-    "mtime": 1783470448.5344949,
-    "ast_hash": "7496b69641d9ab0085017028e2163b72",
-    "semantic_hash": "7496b69641d9ab0085017028e2163b72"
+    "mtime": 1783477985.3914776,
+    "ast_hash": "4a1f4def315ff60fd50834bd0e4bb238",
+    "semantic_hash": "4a1f4def315ff60fd50834bd0e4bb238"
   },
   "remix/app/gp/GradientPath.js": {
     "mtime": 1783465214.2216923,
@@ -2695,9 +2695,9 @@
     "semantic_hash": "53a71f98474892c5c4cd6265e82c27fe"
   },
   "remix/app/components/Nav/Drawer/DrawerContent.tsx": {
-    "mtime": 1783469765.2321546,
-    "ast_hash": "62c4eca0910fe8e32eb0ad32d1df610e",
-    "semantic_hash": "62c4eca0910fe8e32eb0ad32d1df610e"
+    "mtime": 1783473793.9829533,
+    "ast_hash": "00297c0203f07178f1a5a71e46f0b204",
+    "semantic_hash": "00297c0203f07178f1a5a71e46f0b204"
   },
   "remix/app/components/Nav/Drawer/DrawerSystem.tsx": {
     "mtime": 1783465214.211329,
@@ -3145,9 +3145,9 @@
     "semantic_hash": "b05c9473f614e15dc4e43c5b4764ec6f"
   },
   "remix/app/components/Electron/ElectronBridgeHost.tsx": {
-    "mtime": 1783470448.5341034,
-    "ast_hash": "9175e47ba80e4a656fef18b986639cec",
-    "semantic_hash": "9175e47ba80e4a656fef18b986639cec"
+    "mtime": 1783473762.566288,
+    "ast_hash": "edd685bcf2f8ebbc6d2130a49050c467",
+    "semantic_hash": "edd685bcf2f8ebbc6d2130a49050c467"
   },
   "remix/app/utils/electronBridge.ts": {
     "mtime": 1783469724.348283,

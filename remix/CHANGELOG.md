@@ -113,6 +113,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- Aligned the Electron desktop titlebar and drawer with the Codex-style macOS
+  layout: compact drawer/home/search controls now sit in the titlebar, the
+  titlebar stays at the compact Electron height, the control row no longer
+  shifts when the drawer opens, the drawer starts directly with menu items,
+  inactive commander search no longer occupies titlebar space, and the topbar
+  drag region covers the inner nav layers. Details in
+  [`PRs/42-codex-electron-remix-app--add-electron-desktop-app-shell.md`](../PRs/42-codex-electron-remix-app--add-electron-desktop-app-shell.md).
+  — _Codex (AI), 2026-07-08_
 - Inset the Electron titlebar drawer trigger and home affordance past the
   macOS traffic-light controls, and restored top-strip window dragging by
   keeping only real interactive controls marked as no-drag. Details in
