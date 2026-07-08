@@ -26,7 +26,10 @@ export const GlobalStyles = () => {
 					'--thingtime-safe-area-left': 'env(safe-area-inset-left, 0px)',
 					'--thingtime-visual-bottom-padding': '72px',
 					'--thingtime-visual-devkit-bottom-offset': '36px',
-					'--thingtime-devkit-bottom-offset': '20px'
+					'--thingtime-devkit-bottom-offset': '20px',
+					'--thingtime-electron-titlebar-height': '0px',
+					'--thingtime-electron-titlebar-left-inset': '0px',
+					'--thingtime-electron-titlebar-nav-start': '34px'
 				},
 				html: {
 					background: 'var(--tt-page-bg, white)',
@@ -87,6 +90,75 @@ export const GlobalStyles = () => {
 				'html.thingtime-native-webview .thingtimeFooter': {
 					paddingBottom:
 						'calc(var(--thingtime-visual-bottom-padding, 72px) + var(--thingtime-safe-area-bottom, 0px)) !important'
+				},
+				'html.thingtime-electron-desktop .thingtimeTopNav': {
+					zIndex: '10050 !important',
+					left: '0 !important',
+					right: '0 !important',
+					transform: 'none !important',
+					height: 'var(--thingtime-electron-titlebar-height, 52px) !important',
+					minHeight: 'var(--thingtime-electron-titlebar-height, 52px) !important',
+					WebkitAppRegion: 'drag',
+					userSelect: 'none'
+				},
+				'html.thingtime-electron-desktop .thingtimeTopNavInner, html.thingtime-electron-desktop .thingtimeTopNav #commander, html.thingtime-electron-desktop .thingtimeTopNav .nav-left-section, html.thingtime-electron-desktop .thingtimeTopNav .nav-right-section':
+					{
+						WebkitAppRegion: 'drag',
+						userSelect: 'none'
+					},
+				'html.thingtime-electron-desktop .thingtimeTopNavInner': {
+					height: 'var(--thingtime-electron-titlebar-height, 52px) !important',
+					minHeight: 'var(--thingtime-electron-titlebar-height, 52px) !important',
+					marginTop: '0 !important',
+					marginBottom: '0 !important',
+					paddingTop: '0 !important',
+					paddingBottom: '0 !important',
+					paddingLeft: '0 !important',
+					paddingRight: '0 !important'
+				},
+				'html.thingtime-electron-desktop .drawerTrigger': {
+					zIndex: '10070 !important',
+					top: 'calc(var(--thingtime-safe-area-top, 0px) + 8px) !important',
+					left: 'var(--thingtime-electron-titlebar-left-inset, 88px) !important',
+					width: '36px !important',
+					height: '36px !important'
+				},
+				'html.thingtime-electron-desktop .thingtimeTopNav .nav-left-section': {
+					position: 'fixed',
+					top: 'calc(var(--thingtime-safe-area-top, 0px) + 8px)',
+					left: 'var(--thingtime-electron-titlebar-nav-start, 132px)',
+					height: '36px',
+					alignItems: 'center',
+					columnGap: '8px',
+					paddingLeft: '0 !important',
+					zIndex: 10060
+				},
+				'html.thingtime-electron-desktop .thingtimeTopNav .electron-titlebar-home-button, html.thingtime-electron-desktop .thingtimeTopNav .electron-titlebar-search-button':
+					{
+						width: '36px',
+						height: '36px',
+						borderRadius: '8px'
+					},
+				'html.thingtime-electron-desktop .thingtimeTopNav .electron-titlebar-home-button > a': {
+					display: 'flex',
+					alignItems: 'center',
+					justifyContent: 'center',
+					width: '100%',
+					height: '100%'
+				},
+				'html.thingtime-electron-desktop .thingtimeTopNav a, html.thingtime-electron-desktop .thingtimeTopNav button, html.thingtime-electron-desktop .thingtimeTopNav input, html.thingtime-electron-desktop .thingtimeTopNav textarea, html.thingtime-electron-desktop .thingtimeTopNav select, html.thingtime-electron-desktop .thingtimeTopNav [role="button"], html.thingtime-electron-desktop .thingtimeTopNav [contenteditable="true"], html.thingtime-electron-desktop .drawerTrigger':
+					{
+						WebkitAppRegion: 'no-drag',
+						userSelect: 'auto'
+					},
+				'html.thingtime-electron-desktop .drawerContentHeader': {
+					display: 'none'
+				},
+				'html.thingtime-electron-desktop .drawerMenuScroll': {
+					paddingTop: '18px'
+				},
+				'html.thingtime-electron-desktop #commander[data-commander-active="false"] #commander-suggestions': {
+					display: 'none'
 				},
 				'input[data-com-onepassword-filled="light"]': {
 					// Doesn't seem to work..?
