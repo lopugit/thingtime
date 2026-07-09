@@ -1303,53 +1303,6 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 							onMouseEnter={() => setShowContextIcon(true)}
 							onMouseLeave={() => setShowContextIcon(false)}
 						>
-							{hasCollapsibleChildren && (
-								<Flex
-									className="thingCaretToggle"
-									role="button"
-									aria-label={isCollapsed ? 'Expand' : 'Collapse'}
-									aria-expanded={!isCollapsed}
-									alignItems="center"
-									justifyContent="center"
-									cursor="pointer"
-									userSelect="none"
-									tabIndex={0}
-									position="absolute"
-									// hug the key text: the path input is padded by pathPl/pl,
-									// so the caret sits just inside that inset instead of
-									// floating at the row's far-left edge
-									left={
-										props?.pathPl
-											? `calc(${props.pathPl} - 15px)`
-											: pl.map((p) => `calc(${p * 0.25}rem - 15px)`)
-									}
-									width="14px"
-									height="100%"
-									// hidden until the row is hovered (collapsed nodes keep
-									// their caret so the fold stays visible); touch devices
-									// have no hover, so the caret always shows there
-									opacity={isCollapsed ? 0.9 : showContextIcon ? 0.7 : 0}
-									transition="opacity 0.15s ease"
-									sx={{ '@media (hover: none)': { opacity: 0.65 } }}
-									_focusVisible={{ opacity: 1, outline: '2px solid var(--tt-accent, hotpink)', outlineOffset: '-2px' }}
-									onClick={(e) => {
-										e?.preventDefault?.();
-										e?.stopPropagation?.();
-										e?.nativeEvent?.stopImmediatePropagation?.();
-										setIsCollapsed((prev) => !prev);
-									}}
-									onKeyDown={(e) => {
-										if (e?.key === 'Enter' || e?.key === ' ') {
-											e?.preventDefault?.();
-											setIsCollapsed((prev) => !prev);
-										}
-									}}
-								>
-									<Box color="var(--tt-faint, #b6b6c0)" fontSize="11px" lineHeight="1">
-										{isCollapsed ? '▸' : '▾'}
-									</Box>
-								</Flex>
-							)}
 							<Flex className="thingPathDom-raw" data-tt-zone="key">
 								{pathDom}
 							</Flex>
@@ -1394,7 +1347,6 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 									title="Expand"
 									aria-label="Expand collapsed children"
 									alignItems="center"
-									marginTop={-1}
 									marginLeft={2}
 									paddingX="8px"
 									paddingY="1px"
@@ -1418,12 +1370,46 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 								</Flex>
 							)}
 							{pathDom && (
-								<Flex className="thingPathDom" flexDirection="row" columnGap={1} marginTop={-1} paddingLeft={1}>
+								<Flex className="thingPathDom" flexDirection="row" alignItems="center" columnGap="2px" paddingLeft={1}>
+									{/* hover quick actions: collapse/expand beside the context
+									icon (the row's "double whammy") — always in layout so
+									nothing shifts, revealed on row hover */}
+									{hasCollapsibleChildren && (
+										<Flex
+											className="thingCollapseQuick"
+											as="button"
+											type="button"
+											aria-label={isCollapsed ? 'Expand' : 'Collapse'}
+											aria-expanded={!isCollapsed}
+											title={isCollapsed ? 'Expand' : 'Collapse'}
+											alignItems="center"
+											justifyContent="center"
+											width="20px"
+											height="20px"
+											flexShrink={0}
+											borderRadius="var(--tt-radius-xs, 7px)"
+											color="var(--tt-muted, #9a9aa6)"
+											cursor="pointer"
+											opacity={showContextIcon ? 1 : 0}
+											transition="opacity 0.15s ease, background 0.15s ease, color 0.15s ease"
+											sx={{ '@media (hover: none)': { opacity: 0.55 } }}
+											_hover={{ background: 'var(--tt-surface-hover, #ececee)', color: 'var(--tt-ink, #16161a)' }}
+											_focusVisible={{ opacity: 1, outline: '2px solid var(--tt-accent, hotpink)', outlineOffset: '-2px' }}
+											onClick={(e) => {
+												e?.preventDefault?.();
+												e?.stopPropagation?.();
+												setIsCollapsed((prev) => !prev);
+											}}
+										>
+											<Icon name={isCollapsed ? '▸' : '▾'} lucide={isCollapsed ? 'chevron-right' : 'chevron-down'} size="14px" />
+										</Flex>
+									)}
 									<ThingContextMenuTrigger
 										editMode={editMode}
 										setEditMode={setEditMode}
 										transition="all 0.2s ease-in-out"
 										opacity={showContextIcon ? 1 : 0}
+										iconSize={13}
 										uuid={uuid}
 										fullPath={fullPath}
 										path={path}

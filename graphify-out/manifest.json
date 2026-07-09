@@ -1070,8 +1070,8 @@
     "semantic_hash": "92d444e302d23d08505fc8d2c8624a24"
   },
   "remix/app/components/Thingtime/Thingtime.tsx": {
-    "mtime": 1783614385.6602936,
-    "ast_hash": "1c6fa8c8519e19ce1dac91a53b188c18",
+    "mtime": 1783616490.3541348,
+    "ast_hash": "0830a5c617f351b6d7367f5f9fe3e9f0",
     "semantic_hash": ""
   },
   "remix/app/components/Thingtime/ThingtimeDemo.tsx": {
@@ -3095,8 +3095,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Thingtime/EditorSplit.tsx": {
-    "mtime": 1783614397.8639927,
-    "ast_hash": "78ffc0857473d1baf586311b5ce9c782",
+    "mtime": 1783616499.1874392,
+    "ast_hash": "9857063cfaaca847757bb8e9c4c1feb8",
     "semantic_hash": ""
   },
   ".claude/settings.local.json": {
