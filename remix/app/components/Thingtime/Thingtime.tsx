@@ -1311,7 +1311,10 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 									userSelect="none"
 									tabIndex={0}
 									position="absolute"
-									left="-14px"
+									// hug the key text: the path input is padded by pl, so the
+									// caret sits just inside that inset instead of floating at
+									// the row's far-left edge
+									left={pl.map((p) => `calc(${p * 0.25}rem - 15px)`)}
 									width="14px"
 									height="100%"
 									// hidden until the row is hovered (collapsed nodes keep

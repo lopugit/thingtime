@@ -175,3 +175,14 @@ export const useTtCustomClasses = (key: string): string => {
 
 	return React.useMemo(() => sanitizeCustomClasses(entry?.classes), [entry?.classes]);
 };
+
+/**
+ * The active icon language without a full theme resolve — cheap enough for
+ * the hundreds of Icon instances a tree can render. Reads the override
+ * directly; every builtin preset defaults to 'emoji'.
+ */
+export const useTtIconStyle = (): 'emoji' | 'lucide' => {
+	const { thingtime } = useThingtime();
+
+	return thingtime?.settings?.theme?.overrides?.general?.iconStyle === 'lucide' ? 'lucide' : 'emoji';
+};

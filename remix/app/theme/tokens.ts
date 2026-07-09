@@ -64,6 +64,8 @@ export interface TtThemeGeneral {
   motion: boolean
   /** Base UI transition speed in ms (tt.Button already reads a speed). */
   animSpeed: number
+  /** UI icon language: playful emoji or coloured Lucide line icons. */
+  iconStyle: 'emoji' | 'lucide'
 }
 
 export interface TtThemeWindows {
@@ -185,6 +187,7 @@ export const THINGTIME_THEME: TtTheme = {
     shadow: 'soft',
     motion: true,
     animSpeed: 200,
+    iconStyle: 'emoji',
   },
   windows: {
     closeColor: '',
@@ -219,6 +222,7 @@ export const FABLE_THEME: TtTheme = {
     shadow: 'hard',
     motion: true,
     animSpeed: 120,
+    iconStyle: 'emoji',
   },
 }
 
@@ -346,6 +350,7 @@ export const resolveTheme = (
     if (general.shadow === 'soft' || general.shadow === 'hard') out.general.shadow = general.shadow
     if (typeof general.motion === 'boolean') out.general.motion = general.motion
     out.general.animSpeed = clampNumber(general.animSpeed, 0, 2000, out.general.animSpeed)
+    if (general.iconStyle === 'emoji' || general.iconStyle === 'lucide') out.general.iconStyle = general.iconStyle
   }
 
   const windows = patch.windows

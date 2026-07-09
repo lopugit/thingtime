@@ -950,9 +950,9 @@
     "semantic_hash": ""
   },
   "remix/app/components/Icon/Icon.tsx": {
-    "mtime": 1783499002.0065234,
-    "ast_hash": "cae6440674fb81b25e0366aab9a0300c",
-    "semantic_hash": "cae6440674fb81b25e0366aab9a0300c"
+    "mtime": 1783612929.2952914,
+    "ast_hash": "2e062dea1efb56837d20ba8641a91f7c",
+    "semantic_hash": ""
   },
   "remix/app/components/Layout/Main.tsx": {
     "mtime": 1783499002.0072255,
@@ -1070,8 +1070,8 @@
     "semantic_hash": "92d444e302d23d08505fc8d2c8624a24"
   },
   "remix/app/components/Thingtime/Thingtime.tsx": {
-    "mtime": 1783610827.23984,
-    "ast_hash": "45a3b7c5198aa8b0c446fda6ac7bc046",
+    "mtime": 1783612743.1180851,
+    "ast_hash": "265cdd304673dd05816808793031000b",
     "semantic_hash": ""
   },
   "remix/app/components/Thingtime/ThingtimeDemo.tsx": {
@@ -2990,13 +2990,13 @@
     "semantic_hash": ""
   },
   "remix/app/components/ThemeSettings/ThemeStudio.tsx": {
-    "mtime": 1783500440.7969456,
-    "ast_hash": "83566f8ccbedc9c87fd40061a2985968",
+    "mtime": 1783612959.7536073,
+    "ast_hash": "d382f773d4c6d3a348a2bafb428c51aa",
     "semantic_hash": ""
   },
   "remix/app/hooks/useTtTheme.tsx": {
-    "mtime": 1783501141.332986,
-    "ast_hash": "d31e93427db078fcb59728a17396d6d9",
+    "mtime": 1783612945.9792202,
+    "ast_hash": "d340814025f204d0da97d8869eeb0702",
     "semantic_hash": ""
   },
   "remix/app/routes/api/v1/themes/_themes.tsx": {
@@ -3270,8 +3270,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Nav/Drawer/EditorDrawerSection.tsx": {
-    "mtime": 1783499002.009718,
-    "ast_hash": "eccde4627c86d489fcfaf871ab475a52",
+    "mtime": 1783613023.9890246,
+    "ast_hash": "1cf32195edc58bf88d8fbd3e9cead80b",
     "semantic_hash": ""
   },
   "remix/app/components/Thingtime/jsonValue.ts": {
@@ -3325,8 +3325,8 @@
     "semantic_hash": ""
   },
   "remix/app/theme/customise.ts": {
-    "mtime": 1783609260.3050745,
-    "ast_hash": "2a280421c17c41b18eff104329c84c0a",
+    "mtime": 1783612963.3009338,
+    "ast_hash": "2bfc420cb38ec1be2013a2cb21160f94",
     "semantic_hash": ""
   },
   "TODO/claude-todo/09-security-hardening.md": {
@@ -3397,6 +3397,11 @@
   "electron/README.md": {
     "mtime": 1783604361.2093391,
     "ast_hash": "3d57a3bf3d49fe9504a59f1b34aa8bee",
+    "semantic_hash": ""
+  },
+  "remix/app/theme/icons.tsx": {
+    "mtime": 1783612831.0476816,
+    "ast_hash": "bafebb196a9eeb261256db4aee762002",
     "semantic_hash": ""
   }
 }

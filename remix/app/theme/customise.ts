@@ -55,6 +55,7 @@ export const TT_CUSTOM_TARGETS: Record<string, TtCustomTarget> = {
   'font.display': root('Landing display font', '--tt-font-display'),
   'general.radius': root('Corner radius', '--tt-radius-xs…2xl'),
   'general.borderWidth': root('Border weight', '--tt-border-w'),
+  'general.icons': root('Icons'),
   'general.shadow': root('Shadows', '--tt-shadow-card/panel/popover'),
   'general.motion': root('Motion', '--tt-rainbow-anim'),
   'general.animSpeed': root('Animation speed', '--tt-anim-speed'),

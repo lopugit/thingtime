@@ -486,6 +486,16 @@ export const ThemeStudio = () => {
 							</PillButton>
 						</Flex>
 					</Row>
+					<Row label="Icons" hint="playful emoji or coloured line icons" customKey="general.icons">
+						<Flex background="var(--tt-surface-alt, #f5f5f7)" borderRadius="var(--tt-radius-md, 12px)" padding="4px" gap="4px">
+							<PillButton active={g.iconStyle !== 'lucide'} onClick={() => setGeneral('iconStyle', 'emoji')}>
+								Emoji 🥳
+							</PillButton>
+							<PillButton active={g.iconStyle === 'lucide'} onClick={() => setGeneral('iconStyle', 'lucide')}>
+								Lucide ✦
+							</PillButton>
+						</Flex>
+					</Row>
 					<Row label="Motion" hint="rainbow animations" customKey="general.motion">
 						<Switch isChecked={g.motion} onChange={(e) => setGeneral('motion', e.target.checked)} />
 					</Row>
