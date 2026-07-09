@@ -3,6 +3,7 @@ export type ApiTestGroup =
   | 'auth'
   | 'crypto'
   | 'docs'
+  | 'embed'
   | 'health'
   | 'lopu'
   | 'mongodb'

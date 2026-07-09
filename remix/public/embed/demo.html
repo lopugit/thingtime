@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Thingtime embed demo</title>
+		<script>
+			const titlePrefix = location.hostname.endsWith('.ts.net') ? '[TS]' : ['localhost', '127.0.0.1', '::1'].includes(location.hostname) ? '[LC]' : '[DV]';
+			document.title = `${titlePrefix} Thingtime embed demo`;
+		</script>
+		<style>
+			* {
+				box-sizing: border-box;
+			}
+			body {
+				background: #f5f5f5;
+				color: #18181b;
+				font-family: Inter, system-ui, sans-serif;
+				margin: 0;
+			}
+			main {
+				margin: 0 auto;
+				max-width: 960px;
+				padding: 48px 20px 120px;
+			}
+			h1 {
+				font-size: clamp(34px, 7vw, 72px);
+				letter-spacing: -0.055em;
+				line-height: 0.96;
+				margin: 0 0 18px;
+			}
+			p {
+				color: #71717a;
+				font-size: 18px;
+				max-width: 650px;
+			}
+			.grid {
+				display: grid;
+				gap: 18px;
+				grid-template-columns: repeat(2, minmax(0, 1fr));
+				margin-top: 34px;
+			}
+			.card {
+				background: #fff;
+				border: 1px solid #e4e4e7;
+				border-radius: 18px;
+				box-shadow: 0 12px 40px rgba(0, 0, 0, 0.06);
+				min-width: 0;
+				padding: 20px;
+			}
+			.card h2 {
+				font-size: 13px;
+				letter-spacing: 0.08em;
+				margin: 0 0 12px;
+				text-transform: uppercase;
+			}
+			.integrity {
+				background: #ecfdf3;
+				border: 1px solid #abefc6;
+				border-radius: 999px;
+				color: #067647;
+				display: inline-block;
+				font-size: 12px;
+				font-weight: 750;
+				margin-top: 18px;
+				padding: 7px 10px;
+			}
+			@media (max-width: 700px) {
+				.grid {
+					grid-template-columns: 1fr;
+				}
+				main {
+					padding-top: 28px;
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<main>
+			<h1>One thing.<br />Mounted twice.</h1>
+			<p>Edit either card or the Thingtime popup. Every view stays connected to the same state.</p>
+			<output id="host-integrity" class="integrity" aria-live="polite">Checking host isolation…</output>
+			<div class="grid">
+				<section class="card">
+					<h2>Whole thing</h2>
+					<div data-thingtime-mount data-thingtime-label="Website capabilities"></div>
+				</section>
+				<section class="card">
+					<h2>Nested mount</h2>
+					<div data-thingtime-mount="capabilities" data-thingtime-label="Capabilities"></div>
+				</section>
+			</div>
+		</main>
+		<script>
+			// Host-integrity canaries: the embed must leave common globals owned by
+			// the website exactly as it found them.
+			window.process = { owner: 'demo-host', env: { DEMO: 'untouched' } };
+			window.meta = { owner: 'demo-host' };
+			window.tt = { owner: 'demo-host' };
+			window.thingtime = { owner: 'demo-host' };
+			window.smarts = { owner: 'demo-host' };
+			window.__thingtimeXss = false;
+		</script>
+		<script
+			src="/embed/thingtime.min.js"
+			data-thingtime-name="Website capabilities"
+			data-thingtime-initial='{"headline":"Hello from Thingtime","enabled":true,"capabilities":{"editing":true,"saving":"secure popup","mounts":2}}'
+			data-thingtime-open="true"
+		></script>
+		<script>
+			const originalThing = window.Thingtime.get();
+			const mutableSnapshot = window.Thingtime.get();
+			mutableSnapshot.headline = 'This must stay isolated';
+			const snapshotsAreImmutable = window.Thingtime.get('headline') === originalThing.headline;
+			let laterSubscriberRan = false;
+			const unsubscribeThrowing = window.Thingtime.subscribe(() => {
+				throw new Error('Intentional isolation canary');
+			});
+			const unsubscribeLater = window.Thingtime.subscribe(() => {
+				laterSubscriberRan = true;
+			});
+			window.Thingtime.configure({ initialValue: { ...originalThing, headline: 'Subscriber canary' } });
+			window.Thingtime.configure({ initialValue: originalThing });
+			unsubscribeThrowing();
+			unsubscribeLater();
+			window.Thingtime.replace({
+				chakra: 'Box',
+				props: {
+					dangerouslySetInnerHTML: {
+						__html: '<img src=x onerror="window.__thingtimeXss=true">'
+					}
+				}
+			});
+			window.Thingtime.replace(originalThing);
+			let prototypePathBlocked = false;
+			try {
+				window.Thingtime.set('__proto__.polluted', true);
+			} catch {
+				prototypePathBlocked = true;
+			}
+			const hostIntegrityPassed =
+				window.process?.owner === 'demo-host' &&
+				window.process?.env?.DEMO === 'untouched' &&
+				window.meta?.owner === 'demo-host' &&
+				window.tt?.owner === 'demo-host' &&
+				window.thingtime?.owner === 'demo-host' &&
+				window.smarts?.owner === 'demo-host' &&
+				window.Thingtime?.version === '0.1.0' &&
+				snapshotsAreImmutable &&
+				laterSubscriberRan &&
+				window.__thingtimeXss === false &&
+				prototypePathBlocked &&
+				{}.polluted === undefined;
+			const hostIntegrity = document.querySelector('#host-integrity');
+			hostIntegrity.dataset.passed = String(hostIntegrityPassed);
+			hostIntegrity.textContent = hostIntegrityPassed ? '✓ Host globals untouched' : 'Host isolation check failed';
+		</script>
+	</body>
+</html>

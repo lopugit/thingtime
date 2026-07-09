@@ -27,14 +27,14 @@ export const ThingtimeContext = createContext<EverythingTypes | null>(null);
 
 // wrap flatted parse and stringify with a function reviver and replacer
 
-const reviver = (key: string, value: any) => {
+const reviver = (allowFunctionRevival: boolean) => (key: string, value: any) => {
 	// if value is a Date, return it as a Date object
 	if (typeof value === 'string' && !isNaN(Date.parse(value))) {
 		return new Date(value);
 	}
 
 	// if value is a function, return it as a function
-	if (value?.ttype === 'function') {
+	if (allowFunctionRevival && value?.ttype === 'function') {
 		try {
 			const func = eval(value.code);
 			if (typeof func === 'function') {
@@ -86,9 +86,9 @@ const replacer = (key: string, value: any) => {
 	return value;
 };
 
-const parse = (text: string): any => {
+const parse = (text: string, allowFunctionRevival = true): any => {
 	try {
-		return parseAux(text, reviver);
+		return parseAux(text, reviver(allowFunctionRevival));
 	} catch (err) {
 		console.error('There was an error parsing the thingtime data:', err);
 		return null;
@@ -104,17 +104,12 @@ const stringify = (data: any): string => {
 	}
 };
 
-try {
-	window.smarts = smarts;
-	window.flatted = {
-		parse,
-		stringify
-	};
-} catch (err) {
-	// nothing
-}
-
 export const ThingtimeProvider = (props: any): React.JSX.Element => {
+	const storageKey = props?.storageKey || 'thingtime';
+	const persistLocal = props?.persistLocal !== false;
+	const exposeGlobals = props?.exposeGlobals !== false;
+	const allowFunctionRevival = props?.allowFunctionRevival !== false;
+
 	const [_Everything, setEverything] = React.useState<ThingtimeTypes>({
 		thingtime: null,
 		set: null,
@@ -149,6 +144,17 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 	const undoRedo = useThingtimeLine(Everything);
 
 	stateRef.current.undoRedo = undoRedo;
+
+	React.useEffect(() => {
+		if (!exposeGlobals) return;
+
+		try {
+			window.smarts = smarts;
+			window.flatted = { parse, stringify };
+		} catch {
+			// Global tools are best-effort outside a browser.
+		}
+	}, [exposeGlobals]);
 
 	const setThingtimeObjectWrapper = React.useCallback((newThingtimeArg) => {
 		const newThingtime = {
@@ -371,14 +377,14 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 
 		(async () => {
 			try {
-				const localStorageThingtime = await localforage.getItem('thingtime');
+				const localStorageThingtime = persistLocal ? await localforage.getItem(storageKey) : null;
 
 				console.log('[tt][ThingtimeProvider.tsx] localStorageThingtime', localStorageThingtime);
 
 				if (localStorageThingtime) {
 					const parsed =
 						typeof localStorageThingtime === 'string'
-							? parse(localStorageThingtime)
+							? parse(localStorageThingtime, allowFunctionRevival)
 							: localStorageThingtime;
 
 					if (parsed) {
@@ -414,28 +420,30 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 
 			setLoading(false);
 		})();
-	}, [restoreThingtime]);
+	}, [allowFunctionRevival, persistLocal, restoreThingtime, storageKey]);
 
 	// thingtime change listener
 	React.useEffect(() => {
-		try {
-			window.setThingtime = setThingtime;
-			window.getThingtime = getThingtime;
-			window.thingtime = thingtimeState;
-			window.tt = thingtimeState;
-			window.events = events;
-		} catch {
-			// nothing
+		if (exposeGlobals) {
+			try {
+				window.setThingtime = setThingtime;
+				window.getThingtime = getThingtime;
+				window.thingtime = thingtimeState;
+				window.tt = thingtimeState;
+				window.events = events;
+			} catch {
+				// Global state is best-effort outside a browser.
+			}
 		}
 
-		if (stateRef.current.initialized) {
+		if (persistLocal && stateRef.current.initialized) {
 			try {
 				console.log('[tt][ThingtimeProvider.tsx] setting thingtime to localStorage', thingtimeState);
 				// setTimeout(() => {
 				const stringified = stringify(thingtimeState);
 				// TODO: check if doing this asynchronously is safe...
 				// or causing issues in general....
-				localforage.setItem('thingtime', stringified);
+				localforage.setItem(storageKey, stringified);
 				// }, 600)
 			} catch (err) {
 				console.error('There was an error saving thingtime to localStorage', err);
@@ -447,7 +455,7 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 		thingtimeRef.current = thingtimeState;
 
 		// not sure why this used to have @undoRedoEventKeyShortcutEventListener here.. ?
-	}, [setThingtime, events, getThingtime, thingtimeState, setThingtimeObjectWrapper]);
+	}, [events, exposeGlobals, getThingtime, persistLocal, setThingtime, setThingtimeObjectWrapper, storageKey, thingtimeState]);
 
 	if (thingtimeState) {
 		// @ts-expect-error property get/set does not exist or something?

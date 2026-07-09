@@ -147,6 +147,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	const props = {
 		...args
 	};
+	const safeEmbed = props?.safeEmbed === true;
 
 	const [thingtimeMachineNamespace, setThingtimeMachineNamespace] = React.useState(props?.thingtimeMachineNamespace || 'user');
 	const [timelineNamespace, setTimelineNamespace] = React.useState('user');
@@ -318,10 +319,12 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 
 		// store this thing in the global db
 		// Massive security leak issue
-		try {
-			window.meta.things[safeJoin(fullPathReturn)] = props?.thing;
-		} catch {
-			// nothing
+		if (!safeEmbed) {
+			try {
+				window.meta.things[safeJoin(fullPathReturn)] = props?.thing;
+			} catch {
+				// nothing
+			}
 		}
 
 		return fullPathReturn;
@@ -355,8 +358,8 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	}, [getThingtime, props?.thing, safeJoin(props?.path), uuid, childrenRef.current]);
 
 	const chakra = React.useMemo(() => {
-		return !editMode && typeof thing?.chakra === 'string' && thing?.chakra;
-	}, [thing?.chakra, editMode]);
+		return !safeEmbed && !editMode && typeof thing?.chakra === 'string' && thing?.chakra;
+	}, [thing?.chakra, editMode, safeEmbed]);
 
 	const parentPath = React.useMemo(() => {
 		const parentPath = fullPath?.slice(0, -1);
@@ -605,6 +608,8 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 
 	// if Thingtime object has "exec" then execute and set thing to returned data
 	React.useEffect(() => {
+		if (safeEmbed) return;
+
 		(async () => {
 			if (thing?.exec && typeof thing?.exec === 'function') {
 				try {
@@ -617,7 +622,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 				}
 			}
 		})();
-	}, [thingDep, safeJoin(fullPath), setThingtime]);
+	}, [safeEmbed, thingDep, safeJoin(fullPath), setThingtime]);
 
 	const AtomicWrapper = React.useCallback((args) => {
 		return (
@@ -740,6 +745,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 								// pre-padded containers (editor windows) slim the key
 								// gutter for the whole tree, not just the root
 								pathPl={props?.pathPl}
+								safeEmbed={safeEmbed}
 							></Thingtime>
 						);
 					})}
@@ -789,6 +795,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		depth,
 		safeJoin(fullPath),
 		chakra,
+		safeEmbed,
 		collapseScope,
 		props?.pathPl
 	]);
@@ -1248,32 +1255,34 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 
 	// should be absolute last
 	React.useEffect(() => {
-		try {
-			window.meta.things[uuid] = {
-				thing: props?.thing,
-				props,
-				state: {
-					chakra,
-					chakraChild,
-					circular,
-					depth,
-					fullPath,
-					parent,
-					parentPath,
-					path
-				}
-			};
-		} catch {
-			// nothing
+		if (!safeEmbed) {
+			try {
+				window.meta.things[uuid] = {
+					thing: props?.thing,
+					props,
+					state: {
+						chakra,
+						chakraChild,
+						circular,
+						depth,
+						fullPath,
+						parent,
+						parentPath,
+						path
+					}
+				};
+			} catch {
+				// nothing
+			}
 		}
-	}, [thing, props, uuid, chakra, chakraChild, circular, depth, safeJoin(fullPath), parent, parentPath, path]);
+	}, [thing, props, uuid, chakra, chakraChild, circular, depth, safeEmbed, safeJoin(fullPath), parent, parentPath, path]);
 
 	if (chakra || chakraChild) {
 		return thingtimeChildren;
 	}
 	// log chakra and chakraChild
 	return (
-		<Safe {...props} depth={depth} uuid={uuid}>
+		<Safe {...props} disabled={safeEmbed} depth={depth} uuid={uuid}>
 			<Flex
 				ref={thingtimeRef}
 				position="relative"

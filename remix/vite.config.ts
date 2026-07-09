@@ -8,6 +8,7 @@ import { defineConfig } from 'vite';
 
 const designDocsBase = '/docs/design-bundles';
 const designDocsDir = fileURLToPath(new URL('../docs/design', import.meta.url));
+const embedBundlePath = fileURLToPath(new URL('./dist/embed/thingtime.min.js', import.meta.url));
 const thingtimeProductionOrigin = 'https://thingtime.com';
 const mongoPasswordPlaceholder = '<db_password>';
 
@@ -131,6 +132,26 @@ const designDocsStaticPlugin = () => ({
   }
 });
 
+const embedBundleDevPlugin = () => ({
+  name: 'thingtime-embed-bundle-dev',
+  configureServer(server) {
+    server.middlewares.use((req, res, next) => {
+      if (req.url?.split('?')[0] !== '/embed/thingtime.min.js' || !existsSync(embedBundlePath)) {
+        next();
+        return;
+      }
+
+      const stats = statSync(embedBundlePath);
+      res.statusCode = 200;
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('Content-Length', String(stats.size));
+      res.setHeader('Content-Type', 'text/javascript; charset=utf-8');
+      createReadStream(embedBundlePath).pipe(res);
+    });
+  }
+});
+
 export default defineConfig({
   build: {
     outDir: 'dist',
@@ -173,5 +194,5 @@ export default defineConfig({
       }
     }
   },
-  plugins: [react(), designDocsStaticPlugin()]
+  plugins: [react(), designDocsStaticPlugin(), embedBundleDevPlugin()]
 });

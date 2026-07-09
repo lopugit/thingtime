@@ -18,6 +18,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- Added the Thingtime Embed SDK: a verified single-file minified IIFE with
+  JSON-only Shadow DOM mounts, shared get/set/subscription and undo/redo state,
+  a responsive injected popup, a first-party full-editor/save bridge, public
+  cross-origin reads, version-safe `kind: 'embed'` persistence, and an
+  interactive safety-canary demo. See
+  [`docs/THINGTIME_EMBED.md`](../docs/THINGTIME_EMBED.md). — _Codex (AI),
+  2026-07-10_
+
 - Updated the Electron release workflow trigger so merges that modify
   `.github/workflows/electron-release.yml` also spawn the release workflow,
   covering workflow-only release pipeline fixes. — _Codex (AI), 2026-07-08_

@@ -5,7 +5,8 @@
   "packageManager": "pnpm@10.12.1",
   "scripts": {
     "build": "npm run ensure-bcrypt && ./scripts/pre-dev.sh && npm run build:client && npm run sync:nitro-template && NITRO_PRESET=vercel npm run build:server && npm run patch:vercel-output && npm run verify:vercel-output",
-    "build:client": "vite build",
+    "build:client": "vite build && npm run build:embed",
+    "build:embed": "vite build --config vite.embed.config.ts && npm run verify:embed",
     "build:server": "nitro build",
     "ensure-bcrypt": "node scripts/ensure-bcrypt-binding.js",
     "postinstall": "node scripts/ensure-bcrypt-binding.js",
@@ -19,7 +20,8 @@
     "patch:vercel-output": "node scripts/patch-vercel-output.mjs",
     "preview": "node .output/server/index.mjs",
     "sync:nitro-template": "node scripts/sync-nitro-template.mjs",
-    "verify:vercel-output": "node scripts/verify-vercel-output.mjs"
+    "verify:vercel-output": "node scripts/verify-vercel-output.mjs",
+    "verify:embed": "node scripts/verify-embed-bundle.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.105.0",

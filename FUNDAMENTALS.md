@@ -35,7 +35,7 @@ Single Mongo database `thingtime` with these collections:
 | ---------- | ----- |
 | `users`    | user accounts (hashed passwords + signup metadata + profile fields: bio/avatarUrl/bannerUrl) |
 | `sessions` | server-side sessions / JWT records (for revocation) |
-| `things`   | the actual Thingtime data — feed posts live here as `kind: 'post'` docs (see `/api/v1/things`) |
+| `things`   | the actual Thingtime data — feed posts use `kind: 'post'`; cross-site embedded things use `kind: 'embed'` |
 | `emailVerifications` | pending email-verification tokens |
 | `lopuMusingRateLimits` | rate-limit windows for Lopu musings |
 | `themes`   | saved user themes (shareable by `shareId`; see `/api/v1/themes`) |

@@ -3,6 +3,7 @@ import { defineNitroConfig } from 'nitro/config';
 import { apiV1DocsRouteKeys, apiV1RouteKeys } from './app/docs/apiDocs.ts';
 
 const publicDir = new URL('./dist', import.meta.url).pathname;
+const embedDir = new URL('./dist/embed', import.meta.url).pathname;
 const designDocsDir = new URL('../docs/design', import.meta.url).pathname;
 const apiHandler = './server/routes/api/[...].ts';
 const apiRoutes = [...apiV1RouteKeys, ...apiV1DocsRouteKeys];
@@ -12,6 +13,13 @@ export default defineNitroConfig({
   compatibilityDate: '2026-07-02',
   routes: Object.fromEntries(apiRoutes.map((route) => [`/api/${route}`, apiHandler])),
   publicAssets: [
+    {
+      baseURL: '/embed',
+      dir: embedDir,
+      // The SDK uses a stable copy-paste URL; revalidate it frequently so an
+      // old browser cache cannot pin an incompatible protocol for a year.
+      maxAge: 60 * 5
+    },
     {
       baseURL: '/',
       dir: publicDir,

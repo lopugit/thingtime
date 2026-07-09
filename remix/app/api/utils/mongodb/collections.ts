@@ -64,6 +64,7 @@ export const ensureIndexes = async () => {
         db.collection('things').createIndex({ shareId: 1 }, { unique: true, sparse: true }),
         db.collection('things').createIndex({ kind: 1, visibility: 1, createdAt: -1, shareId: 1 }),
         db.collection('things').createIndex({ kind: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
+        db.collection('things').createIndex({ kind: 1, ownerId: 1, updatedAt: -1, shareId: 1 }),
         db.collection('feedAlgorithms').createIndex({ shareId: 1 }, { unique: true }),
         db.collection('feedAlgorithms').createIndex({ ownerId: 1 })
       ]);
