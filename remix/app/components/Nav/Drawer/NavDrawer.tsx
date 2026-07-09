@@ -162,7 +162,7 @@ export const NavDrawer = (props: NavDrawerProps) => {
 					? 'none'
 					: `transform 0.28s ease-out, box-shadow 0.28s ease-out${open ? '' : ', visibility 0s linear 0.28s'}`
 			}
-			paddingTop="var(--thingtime-safe-area-top)"
+			paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--thingtime-electron-titlebar-height, 0px))"
 			paddingBottom="var(--thingtime-safe-area-bottom)"
 			display="flex"
 			flexDirection="column"

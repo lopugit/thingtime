@@ -16,12 +16,13 @@
   parent checkout's local env files into the clone before running install,
   dev, build, or smoke checks. Preserve matching paths for root `.env*` files
   and nested app env files such as `remix/.env*`; keep secret-bearing env files
-  untracked and never commit secrets. `remix/.env.auto` is the tracked generated
-  exception handled by the post-commit hook.
+  untracked and never commit secrets. `remix/.env.auto` is untracked and
+  generated; `remix/scripts/pre-dev.sh` rewrites it on the next dev/build run.
 - Committed git hooks live in `.githooks/`; enable them in a checkout with
-  `npm run install-git-hooks` or `git config core.hooksPath .githooks`. The
-  post-commit hook intentionally auto-commits `remix/.env.auto` when that file
-  changes after a commit, using a recursion guard around its generated commit.
+  `npm run install-git-hooks` or `git config core.hooksPath .githooks`. There
+  are currently no active hooks. Branch awareness needs no hook: local
+  checkouts generate untracked `remix/.env.auto` via `pre-dev.sh`, and Vercel
+  reads `VERCEL_GIT_COMMIT_REF` from the system env at build and runtime.
 - For local web development, use the PM2-managed `tt-nitro-react-router-9999`
   app. Vite serves the React Router non-framework shell on port 9999 and
   proxies `/api` to Nitro on port 10000. Use `npm run web-pms` from the repo
@@ -104,3 +105,6 @@ Rules:
 - If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
 - After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+- graphify-out/graph.json + manifest.json are an atomic pair from one update run (manifest.json records which files are already analyzed). On any merge conflict under graphify-out/, take ONE side for the whole directory (`git checkout --ours -- graphify-out/` or `--theirs`, never mixed per-file), then run `graphify update .` and commit the refreshed outputs with the merge.
+- Recovery for a poisoned pair (graph missing data for files `graphify update` reports as unchanged): delete graphify-out/manifest.json and run `graphify update .` — everything re-extracts (AST is free; semantic extraction is served from the tracked content-addressed cache in graphify-out/cache/semantic/) and a consistent pair is rewritten. `graphify update --force` bypasses the fewer-nodes guard after large deletions/refactors.
+- graphify-out/graph.html is untracked derived viz — regenerate with `graphify export html`, never `git add` it. graphify-out/cache/semantic/ IS tracked (content-addressed, merge-safe); cache/ast/ and cache/stat-index.json stay local.

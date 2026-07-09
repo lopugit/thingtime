@@ -59,7 +59,9 @@ dev app `tt-nitro-react-router-9999`. The older `npm run remix-pms` command is
 kept as a compatibility alias.
 
 Local branch metadata is managed automatically by `remix/scripts/pre-dev.sh`.
-That script updates `remix/.env.auto`; do not edit that generated block by hand.
+That script writes the untracked, generated `remix/.env.auto`; do not edit that
+generated block by hand. On Vercel no file is involved: the branch comes from
+the `VERCEL_GIT_COMMIT_REF` system env var at build and runtime.
 The local dev launcher loads `remix/.env`, `remix/.env.local`, and
 `remix/.env.auto` before spawning Nitro and Vite, so ignored private values like
 MongoDB credentials are available to local API status checks without committing
@@ -78,6 +80,31 @@ The build runs `vite build`, copies the Vite shell into Nitro's server assets,
 builds Nitro with `NITRO_PRESET=vercel`, and checks that
 `.vercel/output/static/index.html` contains the React shell before trusting the
 deployment artifact.
+
+## Electron desktop app
+
+The desktop shell lives in `electron/` and packages the same `remix/` web app
+with Electron. It builds the Vite client and Nitro server with
+`NITRO_PRESET=node_server`, stages the output in `electron/dist/web`, then
+launches the bundled Nitro server on `127.0.0.1` inside the Electron app.
+
+Build the unpacked desktop app from the repository root with:
+
+```sh
+pnpm --dir electron install
+npm run build-electron
+```
+
+For local desktop smoke testing:
+
+```sh
+pnpm --dir electron dev
+```
+
+The local Electron shell reads `remix/.env`, `remix/.env.local`, and
+`remix/.env.auto` before starting Nitro. Keep real MongoDB, auth, Vercel, and AI
+tokens in ignored env files or the launch environment only; commit placeholder
+examples in docs, not secrets.
 
 ## API self-documentation
 

@@ -18,6 +18,38 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- Updated the Electron release workflow trigger so merges that modify
+  `.github/workflows/electron-release.yml` also spawn the release workflow,
+  covering workflow-only release pipeline fixes. — _Codex (AI), 2026-07-08_
+- Updated the Electron release workflow to run on Node 24 so the Remix/Nitro
+  bundle build matches the app's declared `node: 24.x` engine during
+  post-merge GitHub Releases. — _Codex (AI), 2026-07-08_
+- Added a main-branch GitHub Actions release workflow for the Electron app. On
+  pushes to `main` that change `electron/**`, it builds the macOS bundle,
+  creates an `electron-v<base>+build.<run-number>` tag, generates GitHub release
+  notes, and uploads the bundle assets while leaving the source base version
+  unchanged. Electron packaged builds now store that CI metadata so update
+  checks can compare build-metadata releases correctly. Details in
+  [`PRs/42-codex-electron-remix-app--add-electron-desktop-app-shell.md`](../PRs/42-codex-electron-remix-app--add-electron-desktop-app-shell.md).
+  — _Codex (AI), 2026-07-08_
+- Added Codex-style Electron macOS window chrome: the native titlebar is hidden,
+  traffic lights sit over the web surface, and the top nav/drawer reserve the
+  titlebar control area so the app feels flush with the window edge. — _Codex
+  (AI), 2026-07-08_
+- Added Electron update-check/download settings with a per-install auto-check
+  toggle at `thingtime.settings.electron.${sessionHash}AutoUpdateEnabled`, plus
+  a GitHub release resolver that fetches the latest `Electron App Release`
+  macOS bundle asset into `~/Downloads` and a local installer that registers
+  `~/Applications/Thingtime.app` for Spotlight/Raycast discovery. — _Codex
+  (AI), 2026-07-08_
+- Added an Electron desktop URL switcher that stores the selected destination
+  at `thingtime.settings.electron.${sessionHash}URL`, auto-loads that saved URL
+  on launch, and adds desktop menu fallbacks for bundled/prod loading. —
+  _Codex (AI), 2026-07-08_
+- Added a root `electron/` desktop package that rebuilds the `remix/` Vite
+  client and Nitro server with the Node server preset, stages the output for
+  Electron, and packages an app shell that starts the bundled Nitro server on
+  loopback before opening the desktop window. — _Codex (AI), 2026-07-08_
 - 📰 **Feed, feed algorithms, profiles + settings**: new Facebook-style `/feed`
   page rendering public things by type (text / image / marketplace posts with
   reactions, comments, shares), an algorithm dropdown backed by per-user
@@ -133,12 +165,42 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- Branch awareness no longer depends on a committed env file: `remix/.env.auto`
+  is now untracked/gitignored and generated locally by
+  `remix/scripts/pre-dev.sh`; the `.githooks/post-commit` auto-commit hook and
+  the unreferenced legacy `remix/vercel.sh` are removed. Vercel deployments
+  read the `VERCEL_GIT_COMMIT_REF` system env var (already preferred by
+  `root-data.server.ts` at runtime), so previews stay branch-aware while
+  `.env.auto` merge conflicts become structurally impossible. `pre-dev.sh` now
+  warns instead of failing the Vercel build when the ref is missing. Existing
+  checkouts with a locally modified `.env.auto` may hit a one-time
+  modify/delete conflict when pulling this change — resolve by keeping the
+  local file untracked (`git rm --cached remix/.env.auto`). Also routed
+  `graphify-out/graph.json` through the graphify union merge driver via
+  `.gitattributes`. — _Claude (AI), 2026-07-08_
 - Moved PR-specific notes from `remix/PRs/` to the repo-root `PRs/`
   directory and updated changelog/runbook links to the new convention. —
   _Codex (AI), 2026-07-07_
 
 ### Fixed
 
+- Fixed Electron release packaging on GitHub Actions by giving the Electron
+  package explicit repository metadata, preventing electron-builder from
+  crashing after producing macOS assets when it cannot infer the GitHub repo
+  from the runner checkout. — _Codex (AI), 2026-07-09_
+- Aligned the Electron desktop titlebar and drawer with the Codex-style macOS
+  layout: compact drawer/home/search controls now sit in the titlebar, the
+  titlebar stays at the compact Electron height, the control row no longer
+  shifts when the drawer opens, the drawer starts directly with menu items,
+  inactive commander search no longer occupies titlebar space, and the topbar
+  drag region covers the inner nav layers. Details in
+  [`PRs/42-codex-electron-remix-app--add-electron-desktop-app-shell.md`](../PRs/42-codex-electron-remix-app--add-electron-desktop-app-shell.md).
+  — _Codex (AI), 2026-07-08_
+- Inset the Electron titlebar drawer trigger and home affordance past the
+  macOS traffic-light controls, and restored top-strip window dragging by
+  keeping only real interactive controls marked as no-drag. Details in
+  [`PRs/42-codex-electron-remix-app--add-electron-desktop-app-shell.md`](../PRs/42-codex-electron-remix-app--add-electron-desktop-app-shell.md).
+  — _Codex (AI), 2026-07-08_
 - Tightened the native iOS WebView footer bottom padding so the account footer
   no longer leaves a large blank tail at full scroll, and re-clamped the DevKit
   floating trigger against native safe-area values so saved positions stay fully

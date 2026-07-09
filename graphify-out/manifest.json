@@ -1,7 +1,7 @@
 {
   "AGENTS.md": {
-    "mtime": 1783499001.7377102,
-    "ast_hash": "abd5d5cf9e0f62ac6f7db8ac222265e4",
+    "mtime": 1783604361.2083542,
+    "ast_hash": "66ab33a204d74e6f8601851448479935",
     "semantic_hash": ""
   },
   ".claude/settings.json": {
@@ -415,8 +415,8 @@
     "semantic_hash": "7a9487375978d8001acd93869df362b0"
   },
   "package.json": {
-    "mtime": 1783499001.920141,
-    "ast_hash": "6ab8460b9cf5ae8d27fe62c5a9c044a5",
+    "mtime": 1783604361.3395157,
+    "ast_hash": "9fe9c856d88f90565655cd7e35b65434",
     "semantic_hash": ""
   },
   "raycast/.eslintrc.json": {
@@ -935,8 +935,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Commander/CommanderV2.tsx": {
-    "mtime": 1783499002.003257,
-    "ast_hash": "6079dc20eb39bbd772dd8359d5d92346",
+    "mtime": 1783604361.3400466,
+    "ast_hash": "309003725c739a448641bb107a6f0090",
     "semantic_hash": ""
   },
   "remix/app/components/DevKit/DevKit.tsx": {
@@ -1015,8 +1015,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Nav/Nav.tsx": {
-    "mtime": 1783499002.0112762,
-    "ast_hash": "e4de94a171deec0e27fac004bc08c91f",
+    "mtime": 1783604361.3412902,
+    "ast_hash": "5dff80ef5ee1663f82e120c4a9ae69d7",
     "semantic_hash": ""
   },
   "remix/app/components/Nav/ReactiveNav.tsx": {
@@ -1145,8 +1145,8 @@
     "semantic_hash": "7f1938dd65767c801825fc721151adbf"
   },
   "remix/app/globals/GlobalStyles.tsx": {
-    "mtime": 1783499002.0213218,
-    "ast_hash": "1eb45bd1073eab53eda61d6757980edd",
+    "mtime": 1783604361.3414965,
+    "ast_hash": "842ac432071c2e195cfd392cd82bfb9d",
     "semantic_hash": ""
   },
   "remix/app/gp/GradientPath.js": {
@@ -1240,8 +1240,8 @@
     "semantic_hash": "689aa489ed73d14667a3a4c2d3428fb4"
   },
   "remix/app/root.tsx": {
-    "mtime": 1783499002.0235717,
-    "ast_hash": "f89557293d84e671a0356cce76e60c80",
+    "mtime": 1783604361.3416862,
+    "ast_hash": "5e172b1ac332861692c018b4894c251b",
     "semantic_hash": ""
   },
   "remix/app/routes.tsx": {
@@ -1510,9 +1510,9 @@
     "semantic_hash": "1354bb4f2f177738f6a1d3bc8475b089"
   },
   "remix/scripts/pre-dev.sh": {
-    "mtime": 1783499002.095097,
-    "ast_hash": "549533995246ded1a298959fb64d162a",
-    "semantic_hash": "549533995246ded1a298959fb64d162a"
+    "mtime": 1783604361.342012,
+    "ast_hash": "6a0ec4c3fe550da587825ca0a043e3ff",
+    "semantic_hash": ""
   },
   "remix/scripts/sync-nitro-template.mjs": {
     "mtime": 1783499002.095172,
@@ -1554,11 +1554,6 @@
     "ast_hash": "950a24b857c8b01f88bd22a25b38e8f4",
     "semantic_hash": "950a24b857c8b01f88bd22a25b38e8f4"
   },
-  "remix/vercel.sh": {
-    "mtime": 1783499002.0975516,
-    "ast_hash": "a1ebd44301edf723b9f533db965b5b58",
-    "semantic_hash": "a1ebd44301edf723b9f533db965b5b58"
-  },
   "remix/vite.config.ts": {
     "mtime": 1783499002.0977757,
     "ast_hash": "90b9b4975bcd62f7e35edc1a39a8c41b",
@@ -1570,8 +1565,8 @@
     "semantic_hash": "6f47150939eacf6d3a89a87289013ea3"
   },
   "CLAUDE.md": {
-    "mtime": 1783499001.7150295,
-    "ast_hash": "4366fe8a26e854030a687d38bc455f2b",
+    "mtime": 1783604361.2087133,
+    "ast_hash": "c1b038f78ea8930050aeb74a1d86d275",
     "semantic_hash": ""
   },
   "CODEX.md": {
@@ -1590,8 +1585,8 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1783499001.7412045,
-    "ast_hash": "9a4a43b3420036f7bb63e0dfdc43a62e",
+    "mtime": 1783604361.2091618,
+    "ast_hash": "dad16ae49ecc565f863a7b4d1ff28561",
     "semantic_hash": ""
   },
   "VERCEL_DEPLOYMENTS.md": {
@@ -1815,8 +1810,8 @@
     "semantic_hash": "f162fbffa18046af73dfca08802a536f"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1783499001.9954891,
-    "ast_hash": "3b2921eabf6a29f8aab74f18a61e7069",
+    "mtime": 1783604361.3397808,
+    "ast_hash": "a80be772d8afb642d822530713560a19",
     "semantic_hash": ""
   },
   "remix/README.md": {
@@ -2695,8 +2690,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Nav/Drawer/DrawerContent.tsx": {
-    "mtime": 1783499002.009014,
-    "ast_hash": "87edf3410280508b64335f88e0ad721c",
+    "mtime": 1783604361.3404856,
+    "ast_hash": "00297c0203f07178f1a5a71e46f0b204",
     "semantic_hash": ""
   },
   "remix/app/components/Nav/Drawer/DrawerSystem.tsx": {
@@ -2705,13 +2700,13 @@
     "semantic_hash": "b63942cd8b7106ed252f386b2c05e566"
   },
   "remix/app/components/Nav/Drawer/DrawerTrigger.tsx": {
-    "mtime": 1783499002.009431,
-    "ast_hash": "dd1b4975ce4b89569b3f1fe903e6221c",
+    "mtime": 1783604361.3406723,
+    "ast_hash": "0c4cda614416a229910529e75f1ec04b",
     "semantic_hash": ""
   },
   "remix/app/components/Nav/Drawer/NavDrawer.tsx": {
-    "mtime": 1783499002.010032,
-    "ast_hash": "519e2d89ded4dc9068014ff08c2b9f89",
+    "mtime": 1783604361.3408644,
+    "ast_hash": "dbcae288c3a12d49a33b7aa209eca627",
     "semantic_hash": ""
   },
   "remix/app/components/Nav/Drawer/ReorderableList.tsx": {
@@ -2720,8 +2715,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Nav/Drawer/UserSettingsModal.tsx": {
-    "mtime": 1783499002.0103679,
-    "ast_hash": "8202acae62f9b2660528811b60fa567c",
+    "mtime": 1783604361.3410819,
+    "ast_hash": "5e9764231e1ebe8a6fdcf76f7f58107b",
     "semantic_hash": ""
   },
   "remix/app/components/Nav/Drawer/drawerMenu.tsx": {
@@ -2768,11 +2763,6 @@
     "mtime": 1783499001.9117575,
     "ast_hash": "156e3e1f6b9eae5dbd22507a6f76a2d0",
     "semantic_hash": "156e3e1f6b9eae5dbd22507a6f76a2d0"
-  },
-  ".githooks/post-commit": {
-    "mtime": 1783499001.7368157,
-    "ast_hash": "0508a39c49fb667ee05e8d321ade0a7e",
-    "semantic_hash": "0508a39c49fb667ee05e8d321ade0a7e"
   },
   "remix/app/components/VisualSettings/VisualSettingsHost.tsx": {
     "mtime": 1783499002.019116,
@@ -3357,6 +3347,56 @@
   "docs/design/thingtime-theme-gallery/index.html": {
     "mtime": 1783499001.828385,
     "ast_hash": "3682a002c99ff959c04ffa06157937d4",
+    "semantic_hash": ""
+  },
+  "electron/package.json": {
+    "mtime": 1783604361.2098398,
+    "ast_hash": "62e63d5b4fba43cc7492517cbdea997b",
+    "semantic_hash": ""
+  },
+  "electron/scripts/build-web.mjs": {
+    "mtime": 1783604361.2107258,
+    "ast_hash": "f7e49446cb601e825552b59ebb46371f",
+    "semantic_hash": ""
+  },
+  "electron/scripts/install-local-app.mjs": {
+    "mtime": 1783604361.2108536,
+    "ast_hash": "7c8943130d16b475779fc0b2c7265149",
+    "semantic_hash": ""
+  },
+  "electron/scripts/verify-web-build.mjs": {
+    "mtime": 1783604361.2109785,
+    "ast_hash": "56a49379c573500c4a0e61652e57c03a",
+    "semantic_hash": ""
+  },
+  "remix/app/components/Electron/ElectronBridgeHost.tsx": {
+    "mtime": 1783604361.340257,
+    "ast_hash": "edd685bcf2f8ebbc6d2130a49050c467",
+    "semantic_hash": ""
+  },
+  "remix/app/utils/electronBridge.ts": {
+    "mtime": 1783604361.3418288,
+    "ast_hash": "39964a4c685e80e62894a7b40dc07b69",
+    "semantic_hash": ""
+  },
+  ".githooks/README.md": {
+    "mtime": 1783604361.2069552,
+    "ast_hash": "a71d4009ea2ac03af56a3cb93b10187d",
+    "semantic_hash": ""
+  },
+  ".github/workflows/electron-release.yml": {
+    "mtime": 1783604361.2072248,
+    "ast_hash": "86ebce48c0b766c8d7fd1458f2892837",
+    "semantic_hash": ""
+  },
+  "PRs/42-codex-electron-remix-app--add-electron-desktop-app-shell.md": {
+    "mtime": 1783604361.2088647,
+    "ast_hash": "cef236b2909fd206dd16da39d183a8a6",
+    "semantic_hash": ""
+  },
+  "electron/README.md": {
+    "mtime": 1783604361.2093391,
+    "ast_hash": "3d57a3bf3d49fe9504a59f1b34aa8bee",
     "semantic_hash": ""
   }
 }
