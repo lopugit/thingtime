@@ -39,7 +39,7 @@ explicit bearer clients remain supported.
 
 - `corepack pnpm --dir remix run build`
 - Embed verifier: exactly one classic JavaScript asset, no CSS, source map, or
-  auxiliary chunk; 1,697,159 bytes and 484,842 bytes gzip.
+  auxiliary chunk; approximately 1.70 MB and 485 KB gzip.
 - Full Nitro/Vercel output verifier confirmed the Vite shell, embed bundle,
   bridge/demo files, filesystem routing, and SPA fallback.
 - Targeted ESLint completed with zero errors; existing legacy hook warnings
