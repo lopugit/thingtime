@@ -710,8 +710,8 @@
     "semantic_hash": ""
   },
   "remix/app/Providers/Thingtime/ThingtimeDefaults.tsx": {
-    "mtime": 1783639585.0093112,
-    "ast_hash": "8fb4f8a4eecc6afce0904c90c0902e33",
+    "mtime": 1783640179.1009126,
+    "ast_hash": "5747fdd030e36ed8588bd0364aaf5586",
     "semantic_hash": ""
   },
   "remix/app/Providers/Thingtime/defaults/cmdWatcher.ts": {
@@ -2690,8 +2690,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Nav/Drawer/DrawerContent.tsx": {
-    "mtime": 1783639585.0249987,
-    "ast_hash": "00297c0203f07178f1a5a71e46f0b204",
+    "mtime": 1783640179.1029296,
+    "ast_hash": "675dfd13eb7308534c5f3310825d6800",
     "semantic_hash": ""
   },
   "remix/app/components/Nav/Drawer/DrawerSystem.tsx": {
@@ -2715,8 +2715,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Nav/Drawer/UserSettingsModal.tsx": {
-    "mtime": 1783639585.0265825,
-    "ast_hash": "5e9764231e1ebe8a6fdcf76f7f58107b",
+    "mtime": 1783640179.1046312,
+    "ast_hash": "3fd1f549d85d1906e410d1b50730bce9",
     "semantic_hash": ""
   },
   "remix/app/components/Nav/Drawer/drawerMenu.tsx": {
@@ -2725,9 +2725,9 @@
     "semantic_hash": ""
   },
   "remix/app/components/Nav/Drawer/useDrawer.tsx": {
-    "mtime": 1783639585.026907,
-    "ast_hash": "dc8400c352b3d7c9949f0abb95bfda5b",
-    "semantic_hash": "dc8400c352b3d7c9949f0abb95bfda5b"
+    "mtime": 1783640179.1064348,
+    "ast_hash": "e875c4647b751da2886f2ac2e31a0806",
+    "semantic_hash": ""
   },
   "remix/app/routes/docs/DesignWorkspace.tsx": {
     "mtime": 1783639585.0499215,
@@ -3145,8 +3145,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Settings/SettingsPage.tsx": {
-    "mtime": 1783639585.029101,
-    "ast_hash": "b744047b62b82161bc273d7d76d0215e",
+    "mtime": 1783640179.10689,
+    "ast_hash": "1146d13434239543a521de8c959b068c",
     "semantic_hash": ""
   },
   "remix/app/components/Settings/SettingsSection.tsx": {

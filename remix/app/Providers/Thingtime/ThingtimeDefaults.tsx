@@ -432,7 +432,7 @@ const defaultValues = {
         direction: 'left'
       },
       toplevelitems: {
-        limit: 5
+        limit: 'unlimited'
       },
       searchClosesDrawer: true,
       userDrawerOrdering: {},
