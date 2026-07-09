@@ -75,6 +75,35 @@ live tree's editors (MagicInput, exported NumberValueInput, Switch):
   `core.hooksPath`) — left uncommitted there deliberately: the hook pins a
   machine-specific Python path, so committing is a separate decision.
 
+## Second wave — 60 kinds + Editor.js (same branch)
+
+- Kind renderers scaled 11 → **60**, modelled on widely-used internet data
+  types, split into category files sharing `kindPrimitives.tsx`:
+  Media 14 (incl. video + rich-text), Social 9, Commerce 11, Planning 10,
+  Knowledge 8, Life 2, Data 3, World 1, Builder 1, plus the original core.
+  Every kind has a seed doc in `sampleKindThings.ts`; the docs gallery and
+  registry table group by category. Verified live: 60 cards render, grouped,
+  no console errors, no horizontal overflow at 375px.
+- **Editor.js across the board** — `components/Editor/LongTextEditor.tsx`:
+  strings > ~160 chars (or multi-line) edit as block documents and serialise
+  back to plain markdown-ish strings (deterministic round-trip:
+  `## `/`- `/`1. `/`- [x]`/`> `/`---`); `{ blocks }` values edit natively
+  (rich-text kind renders them). Wired into Thingtime.tsx (tree edit mode),
+  concepts LeafValueEditor, and Feed PostComposer (replaces the textarea;
+  posts still store plain strings). Debounced raw-input fallback save covers
+  mutations editor.js change tracking misses.
+- End-to-end verified in browser: checklist toggle in the docs story updated
+  the serialised string; composed a post in the block editor on /feed with a
+  freshly registered user (via the real /api/v1/auth/register) and the post
+  landed in the feed with the Lopu "Posted ✨" toast.
+- Deps added (pinned, lockfile committed): @editorjs/editorjs, header, list,
+  quote, checklist, delimiter.
+- Debug note: `delimiter` blocks warned "Tool not found" until
+  @editorjs/delimiter was installed and registered; synthetic
+  `execCommand`/`InputEvent` text does not trigger editor.js `onChange`
+  (real interactions do) — the raw-input fallback save also makes automated
+  testing possible.
+
 ## Follow-ups (ideas)
 
 - Mount FocusCardsViewer as the mobile presentation of /things; Columns as a
