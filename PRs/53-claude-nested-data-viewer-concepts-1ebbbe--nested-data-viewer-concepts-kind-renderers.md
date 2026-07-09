@@ -132,6 +132,31 @@ live tree's editors (MagicInput, exported NumberValueInput, Switch):
   quick check is `npm --prefix remix run build:client` (~1s) + grep
   `remix/dist/assets/*.js` for a distinctive string.
 
+## Round 4 — rich-text fidelity, read-only toggle, quote restyle, full suite
+
+- View/Edit switch now drives Editor.js native read-only mode
+  (`readonly` prop on LongTextEditor; init `readOnly` + live
+  `editor.readOnly.toggle()`).
+- Inline formatting (b/i/u/s/a/mark/code) renders through a parser-based
+  allowlist sanitiser in RichTextBlocks (unknown tags unwrap, only safe-
+  protocol hrefs survive, forced noopener). Adversarially verified in-
+  browser: `<img onerror>`, `<script>`, `javascript:` links inert.
+- List-tool v2 shapes ({ content, meta.checked, items } + style
+  'checklist', nested) render as real checkboxes and serialise as
+  "- [x]" lines.
+- Quote blocks restyled (user report: giant bordered box + ~160px
+  min-height are stock @editorjs/quote CSS) — now accent left rule,
+  italic, natural height, quiet caption; code/table editor chrome themed.
+- Full practical Editor.js suite installed and wired: + table, code,
+  warning, embed, simple-image blocks; marker/inline-code/underline
+  inline tools. String round-trip extended: ``` fences (parsed before
+  paragraph splitting), pipe tables (+ heading separator), ![]() images,
+  ⚠️ callouts. Rich-text kind renders all of them safely (embeds are
+  link-out cards, never iframes; image URLs allowlisted).
+- New `blockTypes` prop (13 tools, per-field enable/disable) with a live
+  chip-toggle docs story; forwarded through concepts LeafValueEditor.
+  Editor re-initialises with the exact toolset, content carried across.
+
 ## Follow-ups (ideas)
 
 - Mount FocusCardsViewer as the mobile presentation of /things; Columns as a
