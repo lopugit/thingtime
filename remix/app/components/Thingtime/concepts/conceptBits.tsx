@@ -4,6 +4,7 @@ import { Box, Flex, Switch, Text } from '@chakra-ui/react';
 import { MagicInput } from '~/components/MagicInput/MagicInput';
 import { NumberValueInput } from '~/components/Thingtime/Thingtime';
 import { LongTextEditor, isLongText } from '~/components/Editor/LongTextEditor';
+import type { LongTextBlockTypes } from '~/components/Editor/LongTextEditor';
 import { RenderThing, resolveKindRenderer } from '~/components/Kinds';
 
 import { thingTypeOf } from './conceptData';
@@ -59,6 +60,8 @@ export const LeafValueEditor = (props: {
 	edit?: boolean;
 	onValueChange?: (value: unknown) => void;
 	fontSize?: string;
+	// forwarded to LongTextEditor: enable/disable block tools per field
+	blockTypes?: LongTextBlockTypes;
 }) => {
 	const { value, edit, onValueChange } = props;
 	const type = thingTypeOf(value);
@@ -93,7 +96,7 @@ export const LeafValueEditor = (props: {
 	if (type === 'string') {
 		// long text gets the block editor (Editor.js) instead of a one-line input
 		if (edit && isLongText(value)) {
-			return <LongTextEditor value={value} onValueChange={(next) => onValueChange?.(next)} />;
+			return <LongTextEditor value={value} blockTypes={props.blockTypes} onValueChange={(next) => onValueChange?.(next)} />;
 		}
 
 		return (

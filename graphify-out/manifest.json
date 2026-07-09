@@ -1485,8 +1485,8 @@
     "semantic_hash": ""
   },
   "remix/package.json": {
-    "mtime": 1783614859.11974,
-    "ast_hash": "b6cb02b163dc7abc2a4ad42304a5ccfd",
+    "mtime": 1783638444.7038078,
+    "ast_hash": "88e356ae964458cb34c5d1de6bded580",
     "semantic_hash": ""
   },
   "remix/public/manifest.json": {
@@ -3450,8 +3450,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Thingtime/concepts/conceptBits.tsx": {
-    "mtime": 1783614443.026469,
-    "ast_hash": "1fc39a353a8dc35eb7dd5a4f9b8dc3ee",
+    "mtime": 1783638634.6899664,
+    "ast_hash": "89a3aa61901ebb9388449c1b25136cd3",
     "semantic_hash": ""
   },
   "remix/app/components/Thingtime/concepts/conceptData.ts": {
@@ -3470,13 +3470,13 @@
     "semantic_hash": ""
   },
   "remix/app/routes/docs/concepts/ConceptStories.tsx": {
-    "mtime": 1783637150.3390672,
-    "ast_hash": "9f8e4dd183f1a2bc2d8301d4e0abacca",
+    "mtime": 1783638682.1021965,
+    "ast_hash": "5b1361346ccb8de684b9f46e9d283723",
     "semantic_hash": ""
   },
   "remix/app/routes/docs/concepts/entries.tsx": {
-    "mtime": 1783614619.5666976,
-    "ast_hash": "f6572a1db6442226576151204e25929e",
+    "mtime": 1783638698.369671,
+    "ast_hash": "c0a0b1c42544453a65222506b13cef30",
     "semantic_hash": ""
   },
   "remix/app/routes/docs/concepts/index.tsx": {
@@ -3485,8 +3485,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Editor/LongTextEditor.tsx": {
-    "mtime": 1783637118.8269203,
-    "ast_hash": "4866bd3f1cfa933e1141e4dadcf0e88d",
+    "mtime": 1783638578.9076715,
+    "ast_hash": "c188522876a73af6db15863eaf50af37",
     "semantic_hash": ""
   },
   "remix/app/components/Kinds/kindPrimitives.tsx": {
@@ -3505,8 +3505,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Kinds/kindRenderersMedia.tsx": {
-    "mtime": 1783637100.3389494,
-    "ast_hash": "76943863857a79937d9d9cf48973555d",
+    "mtime": 1783638613.6293488,
+    "ast_hash": "73c45023f73e4c967635c40a83c3098f",
     "semantic_hash": ""
   },
   "remix/app/components/Kinds/kindRenderersPlanning.tsx": {

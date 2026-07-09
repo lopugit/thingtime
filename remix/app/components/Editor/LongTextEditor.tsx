@@ -6,11 +6,16 @@ import { Box } from '@chakra-ui/react';
 // Two modes, decided by the value's shape (single source of truth: the data):
 //  - string mode: a long plain string is converted to blocks for editing and
 //    serialised back to a markdown-ish plain string on every change, so the
-//    stored thing stays a friendly string (paragraphs, "## " headings, "- "
-//    lists, "- [ ]" checklists, "> " quotes, "---" dividers round-trip).
+//    stored thing stays a friendly string. Paragraphs, "## " headings, "- "
+//    lists, "- [x]" checklists, "> " quotes, "---" dividers, ``` code fences,
+//    "| a | b |" tables, "![caption](url)" images, and "⚠️ title — message"
+//    callouts all round-trip.
 //  - block mode: a value that already is an Editor.js doc ({ blocks: [...] })
 //    is edited natively and emitted back as { ...value, blocks } — this is the
 //    'rich-text' kind, renderable read-only by the kind registry.
+//
+// The full practical Editor.js suite is available; the `blockTypes` prop lets
+// any field enable/disable individual block + inline tools.
 //
 // Editor.js is browser-only, so the library and its tools load via dynamic
 // import inside an effect; SSR and non-DOM environments never touch it.
@@ -18,6 +23,42 @@ import { Box } from '@chakra-ui/react';
 export type EditorJsDoc = { blocks: Array<{ type: string; data: Record<string, unknown> }> } & Record<string, unknown>;
 
 export type LongTextValue = string | EditorJsDoc;
+
+// every togglable tool: block tools + the extra inline tools
+// (paragraph and the core bold/italic/link inline tools are always on)
+export type LongTextBlockType =
+	| 'header'
+	| 'list'
+	| 'checklist'
+	| 'quote'
+	| 'delimiter'
+	| 'table'
+	| 'code'
+	| 'warning'
+	| 'embed'
+	| 'image'
+	| 'marker'
+	| 'inlineCode'
+	| 'underline';
+
+// enable/disable any tool per field: absent or true = enabled
+export type LongTextBlockTypes = Partial<Record<LongTextBlockType, boolean>>;
+
+export const LONG_TEXT_BLOCK_TYPES: LongTextBlockType[] = [
+	'header',
+	'list',
+	'checklist',
+	'quote',
+	'delimiter',
+	'table',
+	'code',
+	'warning',
+	'embed',
+	'image',
+	'marker',
+	'inlineCode',
+	'underline'
+];
 
 // the "is this string long enough to deserve a block editor" heuristic used
 // across the board (tree, concepts, composer)
@@ -27,7 +68,7 @@ export const isLongText = (value: unknown): value is string =>
 export const isEditorJsDoc = (value: unknown): value is EditorJsDoc =>
 	Boolean(value) && typeof value === 'object' && !Array.isArray(value) && Array.isArray((value as EditorJsDoc).blocks);
 
-// ————— inline html ↔ text (editor.js allows <b>/<i>/<a> inside blocks) —————
+// ————— inline html ↔ text (editor.js allows <b>/<i>/<a>/<mark>… inline) —————
 
 const stripInlineHtml = (html: unknown): string =>
 	String(html ?? '')
@@ -43,89 +84,166 @@ const escapeInline = (text: string): string => text.replace(/&/g, '&amp;').repla
 
 // ————— plain text → blocks —————
 
-export const textToBlocks = (text: string): EditorJsDoc['blocks'] => {
-	const blocks: EditorJsDoc['blocks'] = [];
-	// paragraphs split on blank lines; single newlines survive inside list runs
-	const chunks = text.split(/\n{2,}/);
+const TABLE_ROW = /^\|(.+)\|\s*$/;
+const TABLE_SEPARATOR_CELL = /^\s*:?-{2,}:?\s*$/;
+const IMAGE_LINE = /^!\[([^\]]*)\]\(([^)\s]+)\)\s*$/;
+const WARNING_LINE = /^⚠️\s+(.+?)(?:\s+—\s+(.*))?$/;
 
-	for (const chunk of chunks) {
-		const lines = chunk.split('\n').filter((line) => line.trim() !== '');
-		if (!lines.length) continue;
+const splitTableRow = (line: string): string[] =>
+	line
+		.replace(/^\||\|\s*$/g, '')
+		.split('|')
+		.map((cell) => cell.trim());
 
-		let buffer: string[] = [];
-		const flushParagraph = () => {
-			if (buffer.length) {
-				blocks.push({ type: 'paragraph', data: { text: escapeInline(buffer.join('\n')) } });
-				buffer = [];
-			}
-		};
-
-		let listRun: { ordered: boolean; items: string[] } | null = null;
-		const flushList = () => {
-			if (listRun) {
-				blocks.push({ type: 'list', data: { style: listRun.ordered ? 'ordered' : 'unordered', items: listRun.items.map(escapeInline) } });
-				listRun = null;
-			}
-		};
-
-		let checklistRun: Array<{ text: string; checked: boolean }> | null = null;
-		const flushChecklist = () => {
-			if (checklistRun) {
-				blocks.push({ type: 'checklist', data: { items: checklistRun.map((item) => ({ text: escapeInline(item.text), checked: item.checked })) } });
-				checklistRun = null;
-			}
-		};
-
-		for (const line of lines) {
-			const header = line.match(/^(#{1,6})\s+(.*)$/);
-			const check = line.match(/^-\s\[( |x|X)\]\s+(.*)$/);
-			const bullet = line.match(/^[-*]\s+(.*)$/);
-			const ordered = line.match(/^\d+[.)]\s+(.*)$/);
-			const quote = line.match(/^>\s?(.*)$/);
-
-			if (header) {
-				flushParagraph();
-				flushList();
-				flushChecklist();
-				blocks.push({ type: 'header', data: { text: escapeInline(header[2]), level: Math.min(header[1].length, 4) } });
-			} else if (line.trim() === '---') {
-				flushParagraph();
-				flushList();
-				flushChecklist();
-				blocks.push({ type: 'delimiter', data: {} });
-			} else if (check) {
-				flushParagraph();
-				flushList();
-				checklistRun = checklistRun || [];
-				checklistRun.push({ text: check[2], checked: check[1].toLowerCase() === 'x' });
-			} else if (bullet) {
-				flushParagraph();
-				flushChecklist();
-				if (listRun && listRun.ordered) flushList();
-				listRun = listRun || { ordered: false, items: [] };
-				listRun.items.push(bullet[1]);
-			} else if (ordered) {
-				flushParagraph();
-				flushChecklist();
-				if (listRun && !listRun.ordered) flushList();
-				listRun = listRun || { ordered: true, items: [] };
-				listRun.items.push(ordered[1]);
-			} else if (quote) {
-				flushParagraph();
-				flushList();
-				flushChecklist();
-				blocks.push({ type: 'quote', data: { text: escapeInline(quote[1]), caption: '' } });
-			} else {
-				flushList();
-				flushChecklist();
-				buffer.push(line);
-			}
+// parse one blank-line-delimited chunk of non-fence lines into blocks
+const parseChunkLines = (lines: string[], blocks: EditorJsDoc['blocks']) => {
+	let buffer: string[] = [];
+	const flushParagraph = () => {
+		if (buffer.length) {
+			blocks.push({ type: 'paragraph', data: { text: escapeInline(buffer.join('\n')) } });
+			buffer = [];
 		}
+	};
 
+	let listRun: { ordered: boolean; items: string[] } | null = null;
+	const flushList = () => {
+		if (listRun) {
+			blocks.push({ type: 'list', data: { style: listRun.ordered ? 'ordered' : 'unordered', items: listRun.items.map(escapeInline) } });
+			listRun = null;
+		}
+	};
+
+	let checklistRun: Array<{ text: string; checked: boolean }> | null = null;
+	const flushChecklist = () => {
+		if (checklistRun) {
+			blocks.push({ type: 'checklist', data: { items: checklistRun.map((item) => ({ text: escapeInline(item.text), checked: item.checked })) } });
+			checklistRun = null;
+		}
+	};
+
+	let tableRun: string[][] | null = null;
+	let tableHasHeadings = false;
+	const flushTable = () => {
+		if (tableRun && tableRun.length) {
+			blocks.push({
+				type: 'table',
+				data: { withHeadings: tableHasHeadings, content: tableRun.map((row) => row.map(escapeInline)) }
+			});
+		}
+		tableRun = null;
+		tableHasHeadings = false;
+	};
+
+	const flushAll = () => {
 		flushParagraph();
 		flushList();
 		flushChecklist();
+		flushTable();
+	};
+
+	for (const line of lines) {
+		const header = line.match(/^(#{1,6})\s+(.*)$/);
+		const check = line.match(/^-\s\[( |x|X)\]\s+(.*)$/);
+		const bullet = line.match(/^[-*]\s+(.*)$/);
+		const ordered = line.match(/^\d+[.)]\s+(.*)$/);
+		const quote = line.match(/^>\s?(.*)$/);
+		const tableRow = line.match(TABLE_ROW);
+		const image = line.match(IMAGE_LINE);
+		const warning = line.match(WARNING_LINE);
+
+		if (tableRow) {
+			flushParagraph();
+			flushList();
+			flushChecklist();
+			const cells = splitTableRow(line);
+			if (tableRun && cells.every((cell) => TABLE_SEPARATOR_CELL.test(cell))) {
+				// markdown heading separator: marks the previous row as headings
+				tableHasHeadings = true;
+				continue;
+			}
+			tableRun = tableRun || [];
+			tableRun.push(cells);
+			continue;
+		}
+		flushTable();
+
+		if (header) {
+			flushAll();
+			blocks.push({ type: 'header', data: { text: escapeInline(header[2]), level: Math.min(header[1].length, 4) } });
+		} else if (line.trim() === '---') {
+			flushAll();
+			blocks.push({ type: 'delimiter', data: {} });
+		} else if (image) {
+			flushAll();
+			blocks.push({ type: 'image', data: { url: image[2], caption: escapeInline(image[1]) } });
+		} else if (warning && line.startsWith('⚠️')) {
+			flushAll();
+			blocks.push({ type: 'warning', data: { title: escapeInline(warning[1]), message: escapeInline(warning[2] || '') } });
+		} else if (check) {
+			flushParagraph();
+			flushList();
+			checklistRun = checklistRun || [];
+			checklistRun.push({ text: check[2], checked: check[1].toLowerCase() === 'x' });
+		} else if (bullet) {
+			flushParagraph();
+			flushChecklist();
+			if (listRun && listRun.ordered) flushList();
+			listRun = listRun || { ordered: false, items: [] };
+			listRun.items.push(bullet[1]);
+		} else if (ordered) {
+			flushParagraph();
+			flushChecklist();
+			if (listRun && !listRun.ordered) flushList();
+			listRun = listRun || { ordered: true, items: [] };
+			listRun.items.push(ordered[1]);
+		} else if (quote) {
+			flushAll();
+			blocks.push({ type: 'quote', data: { text: escapeInline(quote[1]), caption: '' } });
+		} else {
+			flushList();
+			flushChecklist();
+			buffer.push(line);
+		}
 	}
+
+	flushAll();
+};
+
+export const textToBlocks = (text: string): EditorJsDoc['blocks'] => {
+	const blocks: EditorJsDoc['blocks'] = [];
+	const lines = text.split('\n');
+
+	// fences first — code bodies may contain blank lines and block syntax
+	let chunk: string[] = [];
+	const flushChunk = () => {
+		const meaningful = chunk.filter((line) => line.trim() !== '');
+		if (meaningful.length) parseChunkLines(meaningful, blocks);
+		chunk = [];
+	};
+
+	for (let i = 0; i < lines.length; i++) {
+		const line = lines[i];
+
+		if (/^```/.test(line.trim())) {
+			flushChunk();
+			const codeLines: string[] = [];
+			i++;
+			while (i < lines.length && !/^```\s*$/.test(lines[i].trim())) {
+				codeLines.push(lines[i]);
+				i++;
+			}
+			blocks.push({ type: 'code', data: { code: codeLines.join('\n') } });
+			continue;
+		}
+
+		if (line.trim() === '') {
+			flushChunk();
+			continue;
+		}
+
+		chunk.push(line);
+	}
+	flushChunk();
 
 	return blocks.length ? blocks : [{ type: 'paragraph', data: { text: escapeInline(text) } }];
 };
@@ -181,9 +299,37 @@ export const blocksToText = (blocks: EditorJsDoc['blocks']): string =>
 			if (block.type === 'delimiter') {
 				return '---';
 			}
+			if (block.type === 'code') {
+				return `\`\`\`\n${String(data.code ?? '')}\n\`\`\``;
+			}
+			if (block.type === 'table') {
+				const content = (Array.isArray(data.content) ? data.content : []) as unknown[][];
+				if (!content.length) return '';
+				const rows = content.map((row) => `| ${(Array.isArray(row) ? row : []).map((cell) => stripInlineHtml(cell)).join(' | ')} |`);
+				if (data.withHeadings === true && content[0]) {
+					rows.splice(1, 0, `| ${content[0].map(() => '---').join(' | ')} |`);
+				}
+				return rows.join('\n');
+			}
+			if (block.type === 'warning') {
+				const title = stripInlineHtml(data.title);
+				const message = stripInlineHtml(data.message);
+				return `⚠️ ${title}${message ? ` — ${message}` : ''}`;
+			}
+			if (block.type === 'image') {
+				const file = (data.file || {}) as Record<string, unknown>;
+				const url = String(data.url ?? file.url ?? '');
+				if (!url) return stripInlineHtml(data.caption);
+				return `![${stripInlineHtml(data.caption)}](${url})`;
+			}
+			if (block.type === 'embed') {
+				const source = String(data.source ?? data.embed ?? '');
+				const caption = stripInlineHtml(data.caption);
+				return source ? `${source}${caption ? `\n${caption}` : ''}` : caption;
+			}
 			return stripInlineHtml(data.text);
 		})
-		.filter((chunk) => chunk.trim() !== '')
+		.filter((piece) => piece.trim() !== '')
 		.join('\n\n');
 
 // ————— the component —————
@@ -196,9 +342,11 @@ export type LongTextEditorProps = {
 	// editor.js native read-only mode: same block layout, no editing chrome.
 	// Live-toggleable — the docs View/Edit switch flips it on the fly.
 	readonly?: boolean;
+	// enable/disable individual tools for this field (absent/true = enabled)
+	blockTypes?: LongTextBlockTypes;
 };
 
-export const LongTextEditor = (props: LongTextEditorProps) => {
+const LongTextEditorInner = (props: LongTextEditorProps) => {
 	const holderRef = React.useRef<HTMLDivElement | null>(null);
 	const editorRef = React.useRef<any>(null);
 	const destroyedRef = React.useRef(false);
@@ -207,6 +355,7 @@ export const LongTextEditor = (props: LongTextEditorProps) => {
 	const valueRef = React.useRef(props.value);
 	const onChangeRef = React.useRef(props.onValueChange);
 	const readonlyRef = React.useRef(Boolean(props.readonly));
+	const blockTypesRef = React.useRef(props.blockTypes);
 	// remember the last text we emitted so prop echoes don't reset the editor
 	const lastEmittedRef = React.useRef<string | null>(null);
 	const rawInputCleanupRef = React.useRef<(() => void) | null>(null);
@@ -214,6 +363,7 @@ export const LongTextEditor = (props: LongTextEditorProps) => {
 	React.useEffect(() => {
 		valueRef.current = props.value;
 		onChangeRef.current = props.onValueChange;
+		blockTypesRef.current = props.blockTypes;
 	});
 
 	// flip editor.js read-only mode when the prop changes after mount
@@ -238,13 +388,36 @@ export const LongTextEditor = (props: LongTextEditorProps) => {
 		(async () => {
 			if (!holderRef.current) return;
 
-			const [{ default: EditorJS }, { default: Header }, { default: List }, { default: Quote }, { default: Checklist }, { default: Delimiter }] = await Promise.all([
+			const [
+				{ default: EditorJS },
+				{ default: Header },
+				{ default: List },
+				{ default: Quote },
+				{ default: Checklist },
+				{ default: Delimiter },
+				{ default: Table },
+				{ default: CodeTool },
+				{ default: Warning },
+				{ default: Embed },
+				{ default: SimpleImage },
+				{ default: Marker },
+				{ default: InlineCode },
+				{ default: Underline }
+			] = await Promise.all([
 				import('@editorjs/editorjs'),
 				import('@editorjs/header'),
 				import('@editorjs/list'),
 				import('@editorjs/quote'),
 				import('@editorjs/checklist'),
-				import('@editorjs/delimiter')
+				import('@editorjs/delimiter'),
+				import('@editorjs/table'),
+				import('@editorjs/code'),
+				import('@editorjs/warning'),
+				import('@editorjs/embed'),
+				import('@editorjs/simple-image'),
+				import('@editorjs/marker'),
+				import('@editorjs/inline-code'),
+				import('@editorjs/underline')
 			]);
 
 			if (cancelled || !holderRef.current) return;
@@ -252,19 +425,33 @@ export const LongTextEditor = (props: LongTextEditorProps) => {
 			const initial = valueRef.current;
 			const blocks = isEditorJsDoc(initial) ? initial.blocks : textToBlocks(String(initial ?? ''));
 
+			const enabled = (tool: LongTextBlockType) => blockTypesRef.current?.[tool] !== false;
+
+			const tools: Record<string, unknown> = {
+				...(enabled('header') ? { header: { class: Header as any, inlineToolbar: true, config: { levels: [1, 2, 3, 4], defaultLevel: 2 } } } : {}),
+				...(enabled('list') ? { list: { class: List as any, inlineToolbar: true } } : {}),
+				...(enabled('quote') ? { quote: { class: Quote as any, inlineToolbar: true } } : {}),
+				...(enabled('checklist') ? { checklist: { class: Checklist as any, inlineToolbar: true } } : {}),
+				...(enabled('delimiter') ? { delimiter: Delimiter as any } : {}),
+				...(enabled('table') ? { table: { class: Table as any, inlineToolbar: true } } : {}),
+				...(enabled('code') ? { code: CodeTool as any } : {}),
+				...(enabled('warning')
+					? { warning: { class: Warning as any, inlineToolbar: true, config: { titlePlaceholder: 'Heads up', messagePlaceholder: 'What should people know?' } } }
+					: {}),
+				...(enabled('embed') ? { embed: Embed as any } : {}),
+				...(enabled('image') ? { image: SimpleImage as any } : {}),
+				...(enabled('marker') ? { marker: Marker as any } : {}),
+				...(enabled('inlineCode') ? { inlineCode: InlineCode as any } : {}),
+				...(enabled('underline') ? { underline: Underline as any } : {})
+			};
+
 			const editor = new EditorJS({
 				holder: holderRef.current,
 				data: { blocks },
 				placeholder: props.placeholder || 'Imagine..',
 				minHeight: 0,
 				readOnly: readonlyRef.current,
-				tools: {
-					header: { class: Header as any, inlineToolbar: true, config: { levels: [1, 2, 3, 4], defaultLevel: 2 } },
-					list: { class: List as any, inlineToolbar: true },
-					quote: { class: Quote as any, inlineToolbar: true },
-					checklist: { class: Checklist as any, inlineToolbar: true },
-					delimiter: Delimiter as any
-				},
+				tools: tools as any,
 				onChange: async () => {
 					try {
 						const saved = await editor.save();
@@ -361,8 +548,60 @@ export const LongTextEditor = (props: LongTextEditorProps) => {
 				'.codex-editor__redactor': { paddingBottom: '0 !important' },
 				'.ce-block__content, .ce-toolbar__content': { maxWidth: '100%' },
 				'.ce-toolbar__plus, .ce-toolbar__settings-btn': { color: 'var(--tt-muted, #9a9aa6)' },
-				'.ce-paragraph[data-placeholder]:empty::before': { color: 'var(--tt-faint, #b6b6c0)' }
+				'.ce-paragraph[data-placeholder]:empty::before': { color: 'var(--tt-faint, #b6b6c0)' },
+				// quotes should look like quotes, not bordered boxes: kill the
+				// stock cdx-input chrome + ~160px min-height, use the accent rule
+				'.cdx-quote__text': {
+					minHeight: '0 !important',
+					border: 'none',
+					boxShadow: 'none',
+					borderRadius: 0,
+					borderLeft: '3px solid var(--tt-accent, hotpink)',
+					padding: '2px 0 2px 12px',
+					fontStyle: 'italic',
+					color: 'var(--tt-ink, #16161a)'
+				},
+				'.cdx-quote__caption': {
+					border: 'none',
+					boxShadow: 'none',
+					padding: '2px 0 0 15px',
+					fontSize: '12px',
+					color: 'var(--tt-muted, #9a9aa6)'
+				},
+				'.cdx-quote__caption[data-placeholder]:empty::before': { color: 'var(--tt-faint, #b6b6c0)', opacity: 0.8 },
+				// code blocks: mono, calm, ours
+				'.ce-code__textarea': {
+					background: 'var(--tt-ink, #16161a)',
+					color: '#e6e6ea',
+					border: 'none',
+					borderRadius: 'var(--tt-radius-sm, 9px)',
+					fontFamily: 'var(--tt-font-mono, monospace)',
+					fontSize: '12.5px',
+					minHeight: '80px'
+				},
+				// tables inherit theme borders
+				'.tc-table, .tc-row, .tc-cell': { borderColor: 'var(--tt-border, #ececef)' },
+				'.tc-cell': { fontSize: '14px' }
 			}}
 		/>
 	);
+};
+
+// Outer wrapper: changing `blockTypes` needs an editor re-init (editor.js
+// cannot swap tools live), so we remount the inner editor keyed by the
+// enabled-tool set while carrying the latest edited value across the remount.
+export const LongTextEditor = (props: LongTextEditorProps) => {
+	const latestRef = React.useRef<LongTextValue | null>(null);
+
+	const configKey = LONG_TEXT_BLOCK_TYPES.filter((tool) => props.blockTypes?.[tool] !== false).join(',');
+
+	const handleChange = React.useCallback(
+		(next: LongTextValue) => {
+			latestRef.current = next;
+			props.onValueChange?.(next);
+		},
+		[props.onValueChange]
+	);
+
+	return <LongTextEditorInner {...props} key={configKey} value={latestRef.current ?? props.value} onValueChange={handleChange} />;
 };

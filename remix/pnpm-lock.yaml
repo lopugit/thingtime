@@ -20,21 +20,45 @@ importers:
       '@editorjs/checklist':
         specifier: ^1.6.0
         version: 1.6.0
+      '@editorjs/code':
+        specifier: ^2.9.4
+        version: 2.9.4
       '@editorjs/delimiter':
         specifier: ^1.4.2
         version: 1.4.2
       '@editorjs/editorjs':
         specifier: ^2.27.2
         version: 2.31.6
+      '@editorjs/embed':
+        specifier: ^2.8.0
+        version: 2.8.0
       '@editorjs/header':
         specifier: ^2.8.9
         version: 2.8.9
+      '@editorjs/inline-code':
+        specifier: ^1.5.2
+        version: 1.5.2
       '@editorjs/list':
         specifier: ^2.0.9
         version: 2.0.9
+      '@editorjs/marker':
+        specifier: ^1.4.0
+        version: 1.4.0
       '@editorjs/quote':
         specifier: ^2.7.6
         version: 2.7.6
+      '@editorjs/simple-image':
+        specifier: ^1.6.0
+        version: 1.6.0
+      '@editorjs/table':
+        specifier: ^2.4.5
+        version: 2.4.5
+      '@editorjs/underline':
+        specifier: ^1.2.1
+        version: 1.2.1
+      '@editorjs/warning':
+        specifier: ^1.4.1
+        version: 1.4.1
       '@emotion/cache':
         specifier: ^11.11.0
         version: 11.14.0
@@ -412,6 +436,9 @@ packages:
   '@codexteam/icons@0.0.5':
     resolution: {integrity: sha512-s6H2KXhLz2rgbMZSkRm8dsMJvyUNZsEjxobBEg9ztdrb1B2H3pEzY6iTwI4XUPJWJ3c3qRKwV4TrO3J5jUdoQA==}
 
+  '@codexteam/icons@0.0.6':
+    resolution: {integrity: sha512-L7Q5PET8PjKcBT5wp7VR+FCjwCi5PUp7rd/XjsgQ0CI5FJz0DphyHGRILMuDUdCW2MQT9NHbVr4QP31vwAkS/A==}
+
   '@codexteam/icons@0.3.3':
     resolution: {integrity: sha512-cp7mkZPgmBuSxigTm3Vb+DtVHYeX7qXfQd7o05vcLD8Ag5WvRlol2QSn5P10k0CDAJwmkH9nQGQLBycErS9lsQ==}
 
@@ -425,6 +452,9 @@ packages:
   '@editorjs/checklist@1.6.0':
     resolution: {integrity: sha512-hRNP36DInr73mSK3noHBQeoQb7DA12ANfqTXufEkTgQzx+k4mRJ0HdeGukTIR4JbwjHJ9ecUBnnQqIEGnxCFEg==}
 
+  '@editorjs/code@2.9.4':
+    resolution: {integrity: sha512-c0zyWodNqjL/0WI67sZvACIOFU9IAHG0UeeIpjss8pZGGNBum+UWkh7nKULK0SYvaOrdPdlWWqjuFU1TFA5jUA==}
+
   '@editorjs/delimiter@1.4.2':
     resolution: {integrity: sha512-S8q2LpeYdYkVShLp7K8c4HLthDHBevLw+sT+iO0+SH0oMvFmld9SUon3DFzMQ2gG07EOdZGRZ958+sVxyvFjZw==}
 
@@ -437,6 +467,10 @@ packages:
   '@editorjs/editorjs@2.31.6':
     resolution: {integrity: sha512-j2nxuFCD3DnoJDUD0hPO5tirpuQ6sWmmuHATl3EI7fG1it3Ml7jk0WJtu3E+TRLBd7zfNeJhDThbP3LnBEn2GA==}
 
+  '@editorjs/embed@2.8.0':
+    resolution: {integrity: sha512-GkgL07M1GmRXq+vtYPkP9RLoij19mIMeyr5GrNo/0Km2XHmvDz2h6KHsDbiHXbq/5hZ5UgWi86kr+/aK165OBg==}
+    engines: {node: '>=24.0.0'}
+
   '@editorjs/header@2.8.9':
     resolution: {integrity: sha512-eBL9/PLDKiE9ADZycmgps3PLz9Lw8w6rPFXr0mfHuhHQI/ynP/q1vLpyruBrRCflTLD2Dlj5nYPoJjL5mP/MFw==}
 
@@ -446,11 +480,29 @@ packages:
   '@editorjs/helpers@1.2.2':
     resolution: {integrity: sha512-saDNARvY3xd70H4KE0eBq2hlV0Z7SpfI1/1iVqyVt5PqhlEOIR5rWJFH4c63BHTa6BfiR/+PMl1n7X/X7SlptQ==}
 
+  '@editorjs/inline-code@1.5.2':
+    resolution: {integrity: sha512-IpEvwMTP3q89T/6vTi3ACoSMOcTdywtMsci1w19+Z/lxQn/NVuVah++ro93wQ/1ZVTyCr+TPUCchxwzY1/xaMg==}
+
   '@editorjs/list@2.0.9':
     resolution: {integrity: sha512-rUTgDSt5wygD3Dp24bNyp6vvye/Xf4UWju0ZuvWeP13Z4cu2z1Jb5JFSTEhCou72XUGuf4xVhtsd8cm/bwUS1g==}
 
+  '@editorjs/marker@1.4.0':
+    resolution: {integrity: sha512-5ipEXfL44jTTRzgNp/p/YjMO7jT08S5z4V8qA3FFJTfdhKgQyM3mvP1zpdYKw47ZZpVWMCncvk5Nto3BxihEtg==}
+
   '@editorjs/quote@2.7.6':
     resolution: {integrity: sha512-D01KUMSDj2r+6Z+xjDkQqI+y6URpeHCvj0+P4pah+GtkG040lWjFb2H4pgHFXuol2cbfyAoraYSw85fuPheCvw==}
+
+  '@editorjs/simple-image@1.6.0':
+    resolution: {integrity: sha512-WvdGfQPlozwZd3PXQrJnRXk6gEYbv1U2vRupYJ6lTd3/UsLInXYUX5jSFcnGB5ZMH3bd0JDZfcb4d4Sv1/1big==}
+
+  '@editorjs/table@2.4.5':
+    resolution: {integrity: sha512-pF48R2wc5m0c+N+RjtCLXBGZd23Rl7EjfSFpmcSViwNsu5RwMgYGrEiQ8mzVh98mbvYQwXm/NYBi9DEUUs970A==}
+
+  '@editorjs/underline@1.2.1':
+    resolution: {integrity: sha512-LjJ01ia6Pj0Z/elifycp9+T1bQs0eXNnIcEYKOlk0sGHLy88DPcBOh9oz1i+uWarZ4AjGsvSMaptpWe+yQNsjQ==}
+
+  '@editorjs/warning@1.4.1':
+    resolution: {integrity: sha512-7A+irJ6gIh6li4DC7qw/NiWCThlBgtoPUeeIVdldVjoATAu+a1GjS+w/5L24ReacgQJNPVQPPCoMaS1nB83agw==}
 
   '@emnapi/core@1.10.0':
     resolution: {integrity: sha512-yq6OkJ4p82CAfPl0u9mQebQHKPJkY7WrIuk205cTYnYe+k2Z8YBh11FrbRG/H6ihirqcacOgl2BIO8oyMQLeXw==}
@@ -4175,6 +4227,8 @@ snapshots:
 
   '@codexteam/icons@0.0.5': {}
 
+  '@codexteam/icons@0.0.6': {}
+
   '@codexteam/icons@0.3.3': {}
 
   '@cspotcode/source-map-support@0.8.1':
@@ -4186,6 +4240,10 @@ snapshots:
       '@editorjs/dom': 1.1.0
 
   '@editorjs/checklist@1.6.0':
+    dependencies:
+      '@codexteam/icons': 0.3.3
+
+  '@editorjs/code@2.9.4':
     dependencies:
       '@codexteam/icons': 0.3.3
 
@@ -4207,6 +4265,10 @@ snapshots:
       codex-notifier: 1.1.2
       codex-tooltip: 1.0.6
 
+  '@editorjs/embed@2.8.0':
+    dependencies:
+      '@editorjs/editorjs': 2.31.6
+
   '@editorjs/header@2.8.9':
     dependencies:
       '@codexteam/icons': 0.0.5
@@ -4218,14 +4280,39 @@ snapshots:
     dependencies:
       codex-tooltip: 1.0.6
 
+  '@editorjs/inline-code@1.5.2':
+    dependencies:
+      '@codexteam/icons': 0.3.3
+
   '@editorjs/list@2.0.9':
     dependencies:
       '@codexteam/icons': 0.3.3
+
+  '@editorjs/marker@1.4.0':
+    dependencies:
+      '@codexteam/icons': 0.0.5
 
   '@editorjs/quote@2.7.6':
     dependencies:
       '@codexteam/icons': 0.3.3
       '@editorjs/dom': 0.0.5
+
+  '@editorjs/simple-image@1.6.0':
+    dependencies:
+      '@codexteam/icons': 0.0.6
+
+  '@editorjs/table@2.4.5':
+    dependencies:
+      '@codexteam/icons': 0.0.6
+
+  '@editorjs/underline@1.2.1':
+    dependencies:
+      '@codexteam/icons': 0.3.3
+
+  '@editorjs/warning@1.4.1':
+    dependencies:
+      '@codexteam/icons': 0.3.3
+      '@editorjs/editorjs': 2.31.6
 
   '@emnapi/core@1.10.0':
     dependencies:

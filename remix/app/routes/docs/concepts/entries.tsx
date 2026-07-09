@@ -222,7 +222,8 @@ export const conceptEntries: ConceptEntry[] = [
 			'Long text is where one-line inputs stop being honest: people write plans, notes, and stories, not values. The block editor (Editor.js) gives every long string real paragraphs, headings, lists, checklists, and quotes — while the stored thing stays a plain, readable string via a deterministic blocks↔text round-trip. Data stays simple; editing stops being cramped. And when a value already is a block document ({ blocks: [...] }), it edits natively and renders through the rich-text kind.',
 		desktop: [
 			'Any string over ~160 characters (or containing a newline) opens as a block document in edit mode — in the Thingtime tree, Focus, Columns, Document, and Form.',
-			'The + menu and inline toolbar offer header, list, checklist, and quote blocks; everything serialises to markdown-ish plain text ("## ", "- ", "- [x]", "> ", "---").',
+			'The full suite ships: headings, lists, checklists, quotes, dividers, tables, code, callouts, embeds, images — plus highlight, inline-code, and underline inline tools. Everything serialises to markdown-ish plain text ("## ", "- [x]", "> ", "| a | b |", "```", "⚠️", "![]()", "---").',
+			'The blockTypes prop enables/disables any tool per field, so a field\'s metadata can define what its text may contain.',
 			'The feed composer (What\'s on your mind?) is the block editor by default — posts still store plain text.'
 		],
 		mobile: [
@@ -237,7 +238,7 @@ export const conceptEntries: ConceptEntry[] = [
 		],
 		source: 'remix/app/components/Editor/LongTextEditor.tsx',
 		adoption:
-			'Already wired across the board: Thingtime.tsx (tree edit mode), concepts/LeafValueEditor (all five viewers), and Feed/PostComposer. New surfaces just render <LongTextEditor value={text} onValueChange={...}/>.',
+			'Already wired across the board: Thingtime.tsx (tree edit mode), concepts/LeafValueEditor (all five viewers), and Feed/PostComposer. New surfaces just render <LongTextEditor value={text} onValueChange={...} blockTypes={{ table: false }}/> — omit blockTypes for the full suite.',
 		stories: longTextStories
 	},
 	{

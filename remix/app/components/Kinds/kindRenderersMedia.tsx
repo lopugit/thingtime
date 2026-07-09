@@ -573,6 +573,111 @@ export const RichTextBlocks = ({ blocks }: { blocks: RichTextBlock[] }) => (
 					</Text>
 				);
 			}
+			if (block.type === 'code') {
+				return (
+					<Box
+						key={idx}
+						as="pre"
+						background="var(--tt-ink, #16161a)"
+						borderRadius="var(--tt-radius-sm, 9px)"
+						color="#e6e6ea"
+						fontFamily="var(--tt-font-mono, monospace)"
+						fontSize="12.5px"
+						lineHeight="1.6"
+						overflowX="auto"
+						padding={3}
+						whiteSpace="pre"
+					>
+						{toStringOr(block.data.code)}
+					</Box>
+				);
+			}
+			if (block.type === 'table') {
+				const content = toArray(block.data.content) as unknown[][];
+				const withHeadings = block.data.withHeadings === true;
+				return (
+					<Box key={idx} overflowX="auto">
+						<Box as="table" width="100%" style={{ borderCollapse: 'collapse' }}>
+							<Box as="tbody">
+								{content.map((row, rowIdx) => (
+									<Box as="tr" key={rowIdx} background={withHeadings && rowIdx === 0 ? 'var(--tt-surface, #fafafb)' : 'transparent'}>
+										{toArray(row).map((cell, cellIdx) => (
+											<Box
+												as={withHeadings && rowIdx === 0 ? 'th' : 'td'}
+												key={cellIdx}
+												border="1px solid var(--tt-border, #ececef)"
+												paddingX={2.5}
+												paddingY={1.5}
+												textAlign="left"
+											>
+												<Text
+													color={withHeadings && rowIdx === 0 ? 'var(--tt-ink, #16161a)' : 'var(--tt-text, #5a5a66)'}
+													fontSize="sm"
+													fontWeight={withHeadings && rowIdx === 0 ? 750 : 500}
+													sx={inlineMarkupSx}
+													dangerouslySetInnerHTML={{ __html: sanitizeInlineHtml(cell) }}
+												/>
+											</Box>
+										))}
+									</Box>
+								))}
+							</Box>
+						</Box>
+					</Box>
+				);
+			}
+			if (block.type === 'warning') {
+				return (
+					<Flex key={idx} background="#fdf6e3" border="1px solid #f2e2b8" borderRadius="var(--tt-radius-md, 12px)" columnGap={2.5} padding={3}>
+						<Text fontSize="md" aria-hidden>
+							⚠️
+						</Text>
+						<Box minWidth={0}>
+							<Text color="#78350f" fontSize="sm" fontWeight={800} sx={inlineMarkupSx} dangerouslySetInnerHTML={{ __html: sanitizeInlineHtml(block.data.title) }} />
+							{block.data.message ? (
+								<Text color="#8a6d3b" fontSize="sm" lineHeight="1.5" sx={inlineMarkupSx} dangerouslySetInnerHTML={{ __html: sanitizeInlineHtml(block.data.message) }} />
+							) : null}
+						</Box>
+					</Flex>
+				);
+			}
+			if (block.type === 'image') {
+				const file = (block.data.file || {}) as Record<string, unknown>;
+				const url = toStringOr(block.data.url, toStringOr(file.url));
+				const caption = inlineText(block.data.caption);
+				const safeUrl = /^(https?:\/\/|\/(?!\/))/i.test(url.trim());
+				if (!safeUrl) return null;
+				return (
+					<Box key={idx}>
+						<Box as="img" src={url} alt={caption || 'image'} borderRadius="var(--tt-radius-md, 12px)" maxWidth="100%" />
+						{caption ? <MutedMono>{caption}</MutedMono> : null}
+					</Box>
+				);
+			}
+			if (block.type === 'embed') {
+				const source = toStringOr(block.data.source, toStringOr(block.data.embed));
+				const caption = inlineText(block.data.caption);
+				const safeUrl = /^https?:\/\//i.test(source.trim());
+				if (!safeUrl) return null;
+				// link-out card, never an iframe — embeds stay sandboxed to a click
+				return (
+					<Box key={idx} as="a" href={source} target="_blank" rel="noopener noreferrer" display="block" _hover={{ textDecoration: 'none' }}>
+						<Flex alignItems="center" background="var(--tt-surface, #fafafb)" border="1px solid var(--tt-border-light, #f0f0f2)" borderRadius="var(--tt-radius-md, 12px)" columnGap={2.5} padding={3}>
+							<Text fontSize="md" aria-hidden>
+								▶️
+							</Text>
+							<Box minWidth={0}>
+								<Text color="var(--tt-link, #2f8fd6)" fontSize="sm" fontWeight={700} noOfLines={1}>
+									{toStringOr(block.data.service, 'Embedded media')} ↗
+								</Text>
+								<Text color="var(--tt-muted, #9a9aa6)" fontSize="xs" noOfLines={1}>
+									{caption || source}
+								</Text>
+							</Box>
+						</Flex>
+					</Box>
+				);
+			}
 			// paragraph + anything unknown with a text field
 			return (
 				<Text

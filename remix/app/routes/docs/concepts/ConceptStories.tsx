@@ -2,8 +2,8 @@ import React from 'react';
 import { Box, Flex, Grid, Text, Textarea } from '@chakra-ui/react';
 
 import { RenderThing, getKindRenderer, getKindRenderers, sampleKindThings } from '~/components/Kinds';
-import { LongTextEditor } from '~/components/Editor/LongTextEditor';
-import type { LongTextValue } from '~/components/Editor/LongTextEditor';
+import { LONG_TEXT_BLOCK_TYPES, LongTextEditor } from '~/components/Editor/LongTextEditor';
+import type { LongTextBlockType, LongTextBlockTypes, LongTextValue } from '~/components/Editor/LongTextEditor';
 import {
 	FocusCardsViewer,
 	FormSheetViewer,
@@ -308,6 +308,17 @@ The monstera doubled over winter — time to size up before the roots stage a br
 
 > Growth is just nested time.
 
+| plant | water |
+| --- | --- |
+| Monstera | weekly |
+| Basil | daily |
+
+\`\`\`
+const monty = { happy: true };
+\`\`\`
+
+⚠️ Root check — lift the pot every Sunday.
+
 ---
 
 Water lightly for the first week.`;
@@ -378,6 +389,77 @@ const RichTextThingStory = ({ edit }: ConceptStoryArgs) => {
 	);
 };
 
+const BLOCK_TYPE_META: Record<LongTextBlockType, { label: string; emoji: string }> = {
+	header: { label: 'Headings', emoji: '🔠' },
+	list: { label: 'Lists', emoji: '📚' },
+	checklist: { label: 'Checklists', emoji: '☑️' },
+	quote: { label: 'Quotes', emoji: '💬' },
+	delimiter: { label: 'Dividers', emoji: '➖' },
+	table: { label: 'Tables', emoji: '🧮' },
+	code: { label: 'Code', emoji: '⌨️' },
+	warning: { label: 'Callouts', emoji: '⚠️' },
+	embed: { label: 'Embeds', emoji: '▶️' },
+	image: { label: 'Images', emoji: '🖼️' },
+	marker: { label: 'Highlight', emoji: '🖍️' },
+	inlineCode: { label: 'Inline code', emoji: '🔤' },
+	underline: { label: 'Underline', emoji: '🖊️' }
+};
+
+const BLOCK_PICKER_SEED = `## Every block, one field
+
+| tool | vibe |
+| --- | --- |
+| tables | spreadsheety |
+| callouts | loud |
+
+\`\`\`
+blocks: { table: false } // ...and it's gone
+\`\`\`
+
+⚠️ Heads up — toggle the chips above and watch the + menu shrink.
+
+> Fields decide what their text can contain.`;
+
+const BlockPickerStory = ({ edit }: ConceptStoryArgs) => {
+	const [blockTypes, setBlockTypes] = React.useState<LongTextBlockTypes>({});
+	const enabledCount = LONG_TEXT_BLOCK_TYPES.filter((tool) => blockTypes[tool] !== false).length;
+
+	return (
+		<Box>
+			<Flex columnGap={1.5} flexWrap="wrap" marginBottom={3} rowGap={1.5}>
+				{LONG_TEXT_BLOCK_TYPES.map((tool) => {
+					const enabled = blockTypes[tool] !== false;
+					return (
+						<Box
+							key={tool}
+							as="button"
+							type="button"
+							background={enabled ? 'var(--tt-positive-tint, #e4f6ea)' : 'var(--tt-surface-alt, #f5f5f7)'}
+							border={enabled ? '1px solid var(--tt-positive, #2f8f4f)' : '1px solid var(--tt-border, #ececef)'}
+							borderRadius="999px"
+							color={enabled ? 'var(--tt-positive, #2f8f4f)' : 'var(--tt-muted, #9a9aa6)'}
+							cursor="pointer"
+							data-testid={`block-toggle-${tool}`}
+							fontSize="12px"
+							fontWeight={700}
+							paddingX="10px"
+							paddingY="3px"
+							textDecoration={enabled ? 'none' : 'line-through'}
+							onClick={() => setBlockTypes((prev) => ({ ...prev, [tool]: prev[tool] === false }))}
+						>
+							{BLOCK_TYPE_META[tool].emoji} {BLOCK_TYPE_META[tool].label}
+						</Box>
+					);
+				})}
+				<Text color="var(--tt-muted, #9a9aa6)" fontFamily="var(--tt-font-mono, monospace)" fontSize="11px" alignSelf="center">
+					{enabledCount}/{LONG_TEXT_BLOCK_TYPES.length} tools on
+				</Text>
+			</Flex>
+			<LongTextEditor value={BLOCK_PICKER_SEED} blockTypes={blockTypes} readonly={!edit} onValueChange={() => {}} />
+		</Box>
+	);
+};
+
 export const longTextStories: ConceptStory[] = [
 	{
 		id: 'long-text-string',
@@ -396,6 +478,15 @@ export const longTextStories: ConceptStory[] = [
 		defaultEdit: true,
 		render: (args) => <RichTextThingStory {...args} />,
 		note: 'Select text in the editor for the inline toolbar (bold/italic/link) — formatting carries into the rendered panel live.'
+	},
+	{
+		id: 'long-text-block-picker',
+		title: 'Choose your blocks (per field)',
+		description:
+			'The full Editor.js suite is on by default — headings, lists, checklists, quotes, dividers, tables, code, callouts, embeds, images, plus highlight/inline-code/underline inline tools. The blockTypes prop turns any of them off per field: toggle the chips and the editor re-initialises with exactly that toolset (content carries over; disabled types degrade gracefully).',
+		defaultEdit: true,
+		render: (args) => <BlockPickerStory {...args} />,
+		note: 'Open the + menu after toggling — disabled tools vanish from it. A field\'s metadata can carry this config, so "notes allow everything, titles allow nothing" becomes data.'
 	}
 ];
 
