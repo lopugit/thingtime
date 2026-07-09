@@ -1,6 +1,7 @@
 import { ObjectId } from 'mongodb';
 
 import { getUsersCollection } from '../mongodb/collections';
+import { isAdminUsername } from './admin';
 
 // Canonical user document (thingtime.users). See FUNDAMENTALS.md §3 + the user
 // schema in claude-todo/03-auth-login-register.md.
@@ -42,6 +43,8 @@ export type PublicUser = {
   storageUsedBytes: number | null;
   activeThemeId: string | null;
   activeFeedAlgorithmId: string | null;
+  // computed from the THINGTIME_PRIVATE_ADMIN_USERNAMES allowlist, never stored
+  isAdmin: boolean;
 };
 
 // Minimal projection safe to show OTHER users (public profiles, post authors).
@@ -75,7 +78,8 @@ export const toPublicUser = (user: any): PublicUser => ({
   storageUsedBytes: typeof user.storageUsedBytes === 'number' ? user.storageUsedBytes : null,
   activeThemeId: typeof user.meta?.activeThemeId === 'string' ? user.meta.activeThemeId : null,
   activeFeedAlgorithmId:
-    typeof user.meta?.activeFeedAlgorithmId === 'string' ? user.meta.activeFeedAlgorithmId : null
+    typeof user.meta?.activeFeedAlgorithmId === 'string' ? user.meta.activeFeedAlgorithmId : null,
+  isAdmin: isAdminUsername(user.username)
 });
 
 export const toPublicProfile = (user: any): PublicProfile => ({

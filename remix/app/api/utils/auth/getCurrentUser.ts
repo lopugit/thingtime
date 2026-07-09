@@ -3,6 +3,7 @@ import { verifyJwt } from './jwt';
 import { getLiveSession } from './sessions';
 import { findUserById, toPublicUser } from './users';
 import type { PublicUser } from './users';
+import { isAdminUsername } from './admin';
 
 const SERVICE_EMAIL_VERIFICATION_GRACE_MS = 1000 * 60 * 60 * 24 * 7;
 
@@ -41,4 +42,15 @@ export const getCurrentUser = async (request: Request): Promise<PublicUser | nul
   }
 
   return toPublicUser(user);
+};
+
+// Resolves the authed user only when they are an admin (see admin.ts). Routes:
+//   const admin = await requireAdmin(request);
+//   if (!admin) return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
+// A logged-in non-admin gets the same 401 as a logged-out caller — admin
+// endpoints don't confirm they exist to non-admins.
+export const requireAdmin = async (request: Request): Promise<PublicUser | null> => {
+  const user = await getCurrentUser(request);
+  if (!user || !isAdminUsername(user.username)) return null;
+  return user;
 };
