@@ -157,6 +157,37 @@ live tree's editors (MagicInput, exported NumberValueInput, Switch):
   chip-toggle docs story; forwarded through concepts LeafValueEditor.
   Editor re-initialises with the exact toolset, content carried across.
 
+## Round 5 — safe full customisation (🎨 Style tune)
+
+- User ask: "complete customisation with font colours, custom sizes,
+  etc — safely?" Answer shipped: style as validated DATA, never raw CSS.
+- `components/Editor/styleTokens.ts`: the validators — hex or exact
+  theme-var allowlist colours, 10–72px clamped sizes, curated font
+  stacks (body/serif/mono/rounded), align enums; tokens compile to React
+  style objects only.
+- `components/Editor/StyleTune.ts`: Editor.js block tune in every
+  block's ⋮ settings menu (10 swatches / 6 sizes / 4 fonts / 3 aligns +
+  reset); data at `block.tunes.style`; live editor styling via wrap();
+  14th `blockTypes` toggle.
+- Gotcha found live: editor.js's settings popover **clones** custom tune
+  HTML, silently dropping addEventListener bindings (panel visible,
+  clicks dead). Fix: attribute-driven event delegation — one global
+  capture listener + blockId→tune registry; active states repaint on
+  whichever panel copy was clicked.
+- Rich-text kind re-validates tokens at render, so hostile stored docs
+  (color:'red;position:fixed', size:9999, font:'comic-sans') come out
+  neutralised — proven in the new docs story's seed and live checks
+  (default colour, static position, clamped 72px).
+- Editor instances now register in the `window.meta` debug db
+  (Thingtime.tsx convention) so tests/devtools can drive editor.js APIs.
+- Verified end-to-end in browser: settings popover → purple + 2XL +
+  center → editor block styled inline → saved → rendered panel purple
+  32px centered. Production bundle carries the tune.
+- Design note: font-family/size/colour deliberately did NOT ship as
+  inline marks (span-level) — block-level tokens keep serialization
+  honest and the sanitizer closed; inline colour spans remain a possible
+  future custom inline tool.
+
 ## Follow-ups (ideas)
 
 - Mount FocusCardsViewer as the mobile presentation of /things; Columns as a
