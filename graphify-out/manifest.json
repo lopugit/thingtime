@@ -3470,8 +3470,8 @@
     "semantic_hash": ""
   },
   "remix/app/routes/docs/concepts/ConceptStories.tsx": {
-    "mtime": 1783614590.1042182,
-    "ast_hash": "15b265e8abc4445b1f0abf8c7652ff82",
+    "mtime": 1783637150.3390672,
+    "ast_hash": "9f8e4dd183f1a2bc2d8301d4e0abacca",
     "semantic_hash": ""
   },
   "remix/app/routes/docs/concepts/entries.tsx": {
@@ -3485,8 +3485,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Editor/LongTextEditor.tsx": {
-    "mtime": 1783615086.7435951,
-    "ast_hash": "460a65a30f83f511e29a0b056cf0ad0e",
+    "mtime": 1783637118.8269203,
+    "ast_hash": "4866bd3f1cfa933e1141e4dadcf0e88d",
     "semantic_hash": ""
   },
   "remix/app/components/Kinds/kindPrimitives.tsx": {
@@ -3505,8 +3505,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Kinds/kindRenderersMedia.tsx": {
-    "mtime": 1783635244.857264,
-    "ast_hash": "ec6a0fdea7f2831c563c7b43608ac826",
+    "mtime": 1783637100.3389494,
+    "ast_hash": "76943863857a79937d9d9cf48973555d",
     "semantic_hash": ""
   },
   "remix/app/components/Kinds/kindRenderersPlanning.tsx": {
@@ -3520,8 +3520,8 @@
     "semantic_hash": ""
   },
   "PRs/53-claude-nested-data-viewer-concepts-1ebbbe--nested-data-viewer-concepts-kind-renderers.md": {
-    "mtime": 1783615310.3736796,
-    "ast_hash": "0e78c9a6e928d305fff63bfa6802f0ba",
+    "mtime": 1783635446.3493938,
+    "ast_hash": "b3c7af34ad3d36640803028bcc99fca1",
     "semantic_hash": ""
   }
 }

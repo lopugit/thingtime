@@ -434,6 +434,99 @@ const inlineText = (html: unknown): string =>
 		.replace(/&quot;/g, '"')
 		.replace(/&nbsp;/g, ' ');
 
+const escapeHtmlText = (text: string): string => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const escapeAttr = (text: string): string => escapeHtmlText(text).replace(/"/g, '&quot;');
+
+const ALLOWED_INLINE_TAGS = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'S', 'A', 'MARK', 'CODE', 'BR']);
+
+// Allowlist sanitiser for editor.js inline markup so bold/italic/links/marks
+// actually render (instead of being stripped) without opening an XSS door:
+// parser-based, unknown tags unwrap to their text, every attribute drops
+// except a safe-protocol href, event handlers can never survive.
+export const sanitizeInlineHtml = (html: unknown): string => {
+	const raw = toStringOr(html);
+	if (!raw) return '';
+	if (typeof document === 'undefined' || typeof DOMParser === 'undefined') {
+		return escapeHtmlText(inlineText(raw));
+	}
+
+	const parsed = new DOMParser().parseFromString(`<div>${raw}</div>`, 'text/html');
+
+	const walk = (node: Node): string => {
+		if (node.nodeType === Node.TEXT_NODE) return escapeHtmlText(node.textContent || '');
+		if (node.nodeType !== Node.ELEMENT_NODE) return '';
+
+		const el = node as HTMLElement;
+		const inner = Array.from(el.childNodes).map(walk).join('');
+		const tag = el.tagName;
+
+		if (!ALLOWED_INLINE_TAGS.has(tag)) return inner;
+		if (tag === 'BR') return '<br/>';
+		if (tag === 'A') {
+			const href = (el.getAttribute('href') || '').trim();
+			const safe = /^(https?:|mailto:|tel:|\/(?!\/)|#)/i.test(href);
+			return safe ? `<a href="${escapeAttr(href)}" target="_blank" rel="noopener noreferrer">${inner}</a>` : inner;
+		}
+
+		const lower = tag.toLowerCase();
+		return `<${lower}>${inner}</${lower}>`;
+	};
+
+	return Array.from(parsed.body.firstChild?.childNodes ?? [])
+		.map(walk)
+		.join('');
+};
+
+// theme styling for the sanitised inline tags
+const inlineMarkupSx = {
+	'b, strong': { fontWeight: 800, color: 'inherit' },
+	'i, em': { fontStyle: 'italic' },
+	u: { textDecoration: 'underline' },
+	s: { textDecoration: 'line-through' },
+	a: { color: 'var(--tt-link, #2f8fd6)', textDecoration: 'underline' },
+	mark: { background: 'var(--tt-accent-tint, #fff5fa)', color: 'var(--tt-accent, hotpink)', borderRadius: '4px', padding: '0 3px' },
+	code: { fontFamily: 'var(--tt-font-mono, monospace)', fontSize: '0.9em', background: 'var(--tt-surface-alt, #f5f5f7)', borderRadius: '4px', padding: '0 4px' }
+} as const;
+
+// one normalised shape for every list flavour: the standalone Checklist tool
+// ({ text, checked }) and List v2 ({ content, meta: { checked }, items })
+type NormalizedListItem = { html: string; checked: boolean | null; children: NormalizedListItem[] };
+
+const normalizeListItems = (items: unknown[], checklist: boolean): NormalizedListItem[] =>
+	items.map((item) => {
+		const record = (item || {}) as Record<string, unknown>;
+		const meta = (record.meta || {}) as Record<string, unknown>;
+		return {
+			html: sanitizeInlineHtml(typeof item === 'string' ? item : record.text ?? record.content),
+			checked: checklist ? record.checked === true || meta.checked === true : null,
+			children: normalizeListItems(toArray(record.items), checklist)
+		};
+	});
+
+const ListLevel = ({ items, ordered, depth }: { items: NormalizedListItem[]; ordered: boolean; depth: number }) => (
+	<Flex flexDirection="column" paddingLeft={depth ? 4 : 0} rowGap={1}>
+		{items.map((item, idx) => (
+			<React.Fragment key={idx}>
+				<Flex columnGap={2} alignItems="baseline">
+					<Text color={item.checked ? 'var(--tt-positive, #2f8f4f)' : 'var(--tt-muted, #9a9aa6)'} fontSize="sm">
+						{item.checked !== null ? (item.checked ? '☑' : '☐') : ordered ? `${idx + 1}.` : '•'}
+					</Text>
+					<Text
+						color="var(--tt-text, #5a5a66)"
+						fontSize="sm"
+						lineHeight="1.55"
+						opacity={item.checked ? 0.6 : 1}
+						sx={inlineMarkupSx}
+						textDecoration={item.checked ? 'line-through' : 'none'}
+						dangerouslySetInnerHTML={{ __html: item.html }}
+					/>
+				</Flex>
+				{item.children.length ? <ListLevel items={item.children} ordered={ordered} depth={depth + 1} /> : null}
+			</React.Fragment>
+		))}
+	</Flex>
+);
+
 export const RichTextBlocks = ({ blocks }: { blocks: RichTextBlock[] }) => (
 	<Flex flexDirection="column" rowGap={2}>
 		{blocks.map((block, idx) => {
@@ -441,41 +534,34 @@ export const RichTextBlocks = ({ blocks }: { blocks: RichTextBlock[] }) => (
 				const level = toNumberOr(block.data.level, 2) || 2;
 				const sizes: Record<number, string> = { 1: 'xl', 2: 'lg', 3: 'md', 4: 'sm', 5: 'sm', 6: 'xs' };
 				return (
-					<Text key={idx} color="var(--tt-ink, #16161a)" fontSize={sizes[level] || 'md'} fontWeight={800} lineHeight="1.25">
-						{inlineText(block.data.text)}
-					</Text>
+					<Text
+						key={idx}
+						color="var(--tt-ink, #16161a)"
+						fontSize={sizes[level] || 'md'}
+						fontWeight={800}
+						lineHeight="1.25"
+						sx={inlineMarkupSx}
+						dangerouslySetInnerHTML={{ __html: sanitizeInlineHtml(block.data.text) }}
+					/>
 				);
 			}
 			if (block.type === 'list' || block.type === 'checklist') {
-				const items = toArray(block.data.items);
-				const checklist = block.type === 'checklist';
-				const ordered = toStringOr(block.data.style) === 'ordered';
-				return (
-					<Flex key={idx} flexDirection="column" rowGap={1}>
-						{items.map((item, itemIdx) => {
-							const record = (item || {}) as Record<string, unknown>;
-							const text = typeof item === 'string' ? item : inlineText(record.text ?? record.content);
-							const checked = record.checked === true;
-							return (
-								<Flex key={itemIdx} columnGap={2} alignItems="baseline">
-									<Text color="var(--tt-muted, #9a9aa6)" fontSize="sm">
-										{checklist ? (checked ? '☑' : '☐') : ordered ? `${itemIdx + 1}.` : '•'}
-									</Text>
-									<Text color="var(--tt-text, #5a5a66)" fontSize="sm" lineHeight="1.55" textDecoration={checked ? 'line-through' : 'none'}>
-										{text}
-									</Text>
-								</Flex>
-							);
-						})}
-					</Flex>
-				);
+				const style = toStringOr(block.data.style);
+				const checklist = block.type === 'checklist' || style === 'checklist';
+				const items = normalizeListItems(toArray(block.data.items), checklist);
+				return <ListLevel key={idx} items={items} ordered={style === 'ordered'} depth={0} />;
 			}
 			if (block.type === 'quote') {
 				return (
 					<Box key={idx} borderLeft="3px solid var(--tt-accent, hotpink)" paddingLeft={3}>
-						<Text color="var(--tt-ink, #16161a)" fontSize="sm" fontStyle="italic" lineHeight="1.6">
-							{inlineText(block.data.text)}
-						</Text>
+						<Text
+							color="var(--tt-ink, #16161a)"
+							fontSize="sm"
+							fontStyle="italic"
+							lineHeight="1.6"
+							sx={inlineMarkupSx}
+							dangerouslySetInnerHTML={{ __html: sanitizeInlineHtml(block.data.text) }}
+						/>
 						{block.data.caption ? <MutedMono>— {inlineText(block.data.caption)}</MutedMono> : null}
 					</Box>
 				);
@@ -489,9 +575,15 @@ export const RichTextBlocks = ({ blocks }: { blocks: RichTextBlock[] }) => (
 			}
 			// paragraph + anything unknown with a text field
 			return (
-				<Text key={idx} color="var(--tt-text, #5a5a66)" fontSize="sm" lineHeight="1.65" whiteSpace="pre-wrap">
-					{inlineText(block.data.text)}
-				</Text>
+				<Text
+					key={idx}
+					color="var(--tt-text, #5a5a66)"
+					fontSize="sm"
+					lineHeight="1.65"
+					whiteSpace="pre-wrap"
+					sx={inlineMarkupSx}
+					dangerouslySetInnerHTML={{ __html: sanitizeInlineHtml(block.data.text) }}
+				/>
 			);
 		})}
 	</Flex>

@@ -147,15 +147,27 @@ export const blocksToText = (blocks: EditorJsDoc['blocks']): string =>
 				return `${'#'.repeat(level)} ${stripInlineHtml(data.text)}`;
 			}
 			if (block.type === 'list') {
-				const ordered = data.style === 'ordered';
-				const items = Array.isArray(data.items) ? data.items : [];
-				return items
-					.map((item, idx) => {
-						const record = (item || {}) as Record<string, unknown>;
-						const text = stripInlineHtml(typeof item === 'string' ? item : record.text ?? record.content);
-						return ordered ? `${idx + 1}. ${text}` : `- ${text}`;
-					})
-					.join('\n');
+				// List v2 items are { content, meta: { checked }, items: [...] };
+				// v1 items are plain strings — serialise both, nesting by indent
+				const style = String(data.style ?? 'unordered');
+				const serializeItems = (items: unknown[], depth: number): string =>
+					items
+						.map((item, idx) => {
+							const record = (item || {}) as Record<string, unknown>;
+							const meta = (record.meta || {}) as Record<string, unknown>;
+							const text = stripInlineHtml(typeof item === 'string' ? item : record.text ?? record.content);
+							const indent = '  '.repeat(depth);
+							const line =
+								style === 'checklist'
+									? `${indent}- [${record.checked === true || meta.checked === true ? 'x' : ' '}] ${text}`
+									: style === 'ordered'
+										? `${indent}${idx + 1}. ${text}`
+										: `${indent}- ${text}`;
+							const children = Array.isArray(record.items) && record.items.length ? `\n${serializeItems(record.items, depth + 1)}` : '';
+							return line + children;
+						})
+						.join('\n');
+				return serializeItems(Array.isArray(data.items) ? data.items : [], 0);
 			}
 			if (block.type === 'checklist') {
 				return checklistItems(data)
@@ -181,6 +193,9 @@ export type LongTextEditorProps = {
 	onValueChange?: (next: LongTextValue) => void;
 	placeholder?: string;
 	minHeight?: string;
+	// editor.js native read-only mode: same block layout, no editing chrome.
+	// Live-toggleable — the docs View/Edit switch flips it on the fly.
+	readonly?: boolean;
 };
 
 export const LongTextEditor = (props: LongTextEditorProps) => {
@@ -191,6 +206,7 @@ export const LongTextEditor = (props: LongTextEditorProps) => {
 	const blockModeRef = React.useRef(isEditorJsDoc(props.value));
 	const valueRef = React.useRef(props.value);
 	const onChangeRef = React.useRef(props.onValueChange);
+	const readonlyRef = React.useRef(Boolean(props.readonly));
 	// remember the last text we emitted so prop echoes don't reset the editor
 	const lastEmittedRef = React.useRef<string | null>(null);
 	const rawInputCleanupRef = React.useRef<(() => void) | null>(null);
@@ -199,6 +215,21 @@ export const LongTextEditor = (props: LongTextEditorProps) => {
 		valueRef.current = props.value;
 		onChangeRef.current = props.onValueChange;
 	});
+
+	// flip editor.js read-only mode when the prop changes after mount
+	React.useEffect(() => {
+		readonlyRef.current = Boolean(props.readonly);
+		const editor = editorRef.current;
+		if (!editor) return;
+		Promise.resolve(editor.isReady)
+			.then(() => {
+				if (destroyedRef.current || !editorRef.current) return;
+				if (editor.readOnly && editor.readOnly.isEnabled !== readonlyRef.current) {
+					return editor.readOnly.toggle(readonlyRef.current);
+				}
+			})
+			.catch(() => {});
+	}, [props.readonly]);
 
 	React.useEffect(() => {
 		destroyedRef.current = false;
@@ -226,6 +257,7 @@ export const LongTextEditor = (props: LongTextEditorProps) => {
 				data: { blocks },
 				placeholder: props.placeholder || 'Imagine..',
 				minHeight: 0,
+				readOnly: readonlyRef.current,
 				tools: {
 					header: { class: Header as any, inlineToolbar: true, config: { levels: [1, 2, 3, 4], defaultLevel: 2 } },
 					list: { class: List as any, inlineToolbar: true },

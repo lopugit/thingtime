@@ -312,7 +312,7 @@ The monstera doubled over winter — time to size up before the roots stage a br
 
 Water lightly for the first week.`;
 
-const LongTextStringStory = (_args: ConceptStoryArgs) => {
+const LongTextStringStory = ({ edit }: ConceptStoryArgs) => {
 	const [value, setValue] = React.useState<LongTextValue>(LONG_TEXT_SEED);
 
 	return (
@@ -321,7 +321,7 @@ const LongTextStringStory = (_args: ConceptStoryArgs) => {
 				<Text color="var(--tt-muted, #9a9aa6)" fontFamily="var(--tt-font-mono, monospace)" fontSize="11px" fontWeight={700} marginBottom={1.5}>
 					the block editor (what people touch)
 				</Text>
-				<LongTextEditor value={LONG_TEXT_SEED} onValueChange={setValue} />
+				<LongTextEditor value={LONG_TEXT_SEED} onValueChange={setValue} readonly={!edit} />
 			</Box>
 			<Box minWidth={0}>
 				<Text color="var(--tt-muted, #9a9aa6)" fontFamily="var(--tt-font-mono, monospace)" fontSize="11px" fontWeight={700} marginBottom={1.5}>
@@ -352,12 +352,12 @@ const RICH_TEXT_SEED = {
 	kind: 'rich-text',
 	blocks: [
 		{ type: 'header', data: { text: 'A thing made of blocks', level: 2 } },
-		{ type: 'paragraph', data: { text: 'This document IS a thing — the blocks array lives in Mongo like any other JSON.' } },
-		{ type: 'list', data: { style: 'unordered', items: ['Edit it here with Editor.js', 'Render it anywhere with the rich-text kind'] } }
+		{ type: 'paragraph', data: { text: 'This document <b>IS</b> a thing — the <i>blocks</i> array lives in Mongo like any other JSON.' } },
+		{ type: 'list', data: { style: 'unordered', items: ['Edit it here with <b>Editor.js</b>', 'Render it anywhere with the <mark>rich-text</mark> kind'] } }
 	]
 };
 
-const RichTextThingStory = (_args: ConceptStoryArgs) => {
+const RichTextThingStory = ({ edit }: ConceptStoryArgs) => {
 	const [doc, setDoc] = React.useState<LongTextValue>(RICH_TEXT_SEED as LongTextValue);
 
 	return (
@@ -366,7 +366,7 @@ const RichTextThingStory = (_args: ConceptStoryArgs) => {
 				<Text color="var(--tt-muted, #9a9aa6)" fontFamily="var(--tt-font-mono, monospace)" fontSize="11px" fontWeight={700} marginBottom={1.5}>
 					editing the thing (block mode)
 				</Text>
-				<LongTextEditor value={RICH_TEXT_SEED as LongTextValue} onValueChange={setDoc} />
+				<LongTextEditor value={RICH_TEXT_SEED as LongTextValue} onValueChange={setDoc} readonly={!edit} />
 			</Box>
 			<Box minWidth={0}>
 				<Text color="var(--tt-muted, #9a9aa6)" fontFamily="var(--tt-font-mono, monospace)" fontSize="11px" fontWeight={700} marginBottom={1.5}>
@@ -384,15 +384,18 @@ export const longTextStories: ConceptStory[] = [
 		title: 'Long strings become block documents',
 		description:
 			'Any string longer than a line opens in Editor.js — headings, lists, checklists, quotes — and serialises back to one plain, readable string on every keystroke. The thing in Mongo never stops being simple JSON. This exact editor is now wired into the tree, every viewer concept, and the feed composer.',
+		defaultEdit: true,
 		render: (args) => <LongTextStringStory {...args} />,
-		note: 'Type "## " for a heading or use the + menu — then watch the stored string keep up on the right.'
+		note: 'Type "## " for a heading or use the + menu — then watch the stored string keep up on the right. Flip to 👀 View for the read-only render of the same document.'
 	},
 	{
 		id: 'long-text-rich-thing',
 		title: 'Rich text as a kind',
 		description:
-			'A value that already is an Editor.js document ({ blocks: [...] }) edits natively and renders through the rich-text kind renderer — write once, display anywhere a RenderThing mounts.',
-		render: (args) => <RichTextThingStory {...args} />
+			'A value that already is an Editor.js document ({ blocks: [...] }) edits natively — bold, italics, links, and marks included — and renders through the rich-text kind renderer via a sanitising allowlist. Write once, display anywhere a RenderThing mounts.',
+		defaultEdit: true,
+		render: (args) => <RichTextThingStory {...args} />,
+		note: 'Select text in the editor for the inline toolbar (bold/italic/link) — formatting carries into the rendered panel live.'
 	}
 ];
 
