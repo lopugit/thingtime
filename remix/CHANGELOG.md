@@ -22,9 +22,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   JSON-only Shadow DOM mounts, shared get/set/subscription and undo/redo state,
   a responsive injected popup, a first-party full-editor/save bridge, public
   cross-origin reads, version-safe `kind: 'embed'` persistence, and an
-  interactive safety-canary demo. See
-  [`docs/THINGTIME_EMBED.md`](../docs/THINGTIME_EMBED.md). — _Codex (AI),
-  2026-07-10_
+  interactive safety-canary demo. See the
+  [embed guide](../docs/THINGTIME_EMBED.md) and
+  [PR 57 notes](../PRs/57-codex-thingtime-embed-sdk--share-thingtime-through-a-single-file-embed-sdk.md).
+  — _Codex (AI), 2026-07-10_
 
 - Updated the Electron release workflow trigger so merges that modify
   `.github/workflows/electron-release.yml` also spawn the release workflow,
