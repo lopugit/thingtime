@@ -104,6 +104,34 @@ live tree's editors (MagicInput, exported NumberValueInput, Switch):
   (real interactions do) — the raw-input fallback save also makes automated
   testing possible.
 
+## Round 3 — empty registry on Vercel (tree-shaking)
+
+- Symptom (user report): the Vercel preview's kind gallery showed only the
+  mono `kind: '…'` labels with no rendered cards, all grouped under
+  "OTHER 60"; localhost dev was perfect.
+- Root cause: `remix/package.json` sets `"sideEffects": false`. The kind
+  renderers registered via side-effect imports (`import './kindRenderersX'`
+  running `registerKindRenderer()` at module scope) — the production
+  bundler (vite 8 / rolldown) dropped those modules AND skipped the
+  index.ts barrel body (re-export glue), shipping an empty registry. Dev
+  serves modules unbundled, hiding it. Confirmed by bundle grep: sample
+  strings FOUND, renderer titles MISSING.
+- First attempt (explicit `registerXKinds()` calls at index.ts top level)
+  still got dropped — consumers' imports are rewired directly to source
+  modules, so barrel bodies never execute under `sideEffects: false`.
+- Fix: lazy `ensureBuiltinKinds()` inside `kindRegistry.tsx`, invoked on
+  the read paths (`getKindRenderers` / `getKindRenderer` /
+  `resolveKindRenderer`) and on `registerKindRenderer` (builtins first, so
+  early custom kinds still override). The renderer-file ↔ registry import
+  cycle is safe: register calls only run post-evaluation.
+- Verified: `npm run build:client` bundle now contains "Text post",
+  "Marketplace listing", "Boarding-pass style", "Plant care" (previously
+  missing); dev gallery unchanged (60 cards, 9 categories, clean console);
+  deployed preview re-verified after the Vercel rebuild.
+- Repo lesson: never rely on module side effects for registries here —
+  quick check is `npm --prefix remix run build:client` (~1s) + grep
+  `remix/dist/assets/*.js` for a distinctive string.
+
 ## Follow-ups (ideas)
 
 - Mount FocusCardsViewer as the mobile presentation of /things; Columns as a
