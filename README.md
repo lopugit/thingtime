@@ -79,6 +79,31 @@ builds Nitro with `NITRO_PRESET=vercel`, and checks that
 `.vercel/output/static/index.html` contains the React shell before trusting the
 deployment artifact.
 
+## Electron desktop app
+
+The desktop shell lives in `electron/` and packages the same `remix/` web app
+with Electron. It builds the Vite client and Nitro server with
+`NITRO_PRESET=node_server`, stages the output in `electron/dist/web`, then
+launches the bundled Nitro server on `127.0.0.1` inside the Electron app.
+
+Build the unpacked desktop app from the repository root with:
+
+```sh
+pnpm --dir electron install
+npm run build-electron
+```
+
+For local desktop smoke testing:
+
+```sh
+pnpm --dir electron dev
+```
+
+The local Electron shell reads `remix/.env`, `remix/.env.local`, and
+`remix/.env.auto` before starting Nitro. Keep real MongoDB, auth, Vercel, and AI
+tokens in ignored env files or the launch environment only; commit placeholder
+examples in docs, not secrets.
+
 ## API self-documentation
 
 Every registered Thingtime API endpoint exposes a JSON documentation endpoint
