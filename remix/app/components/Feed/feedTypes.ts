@@ -46,6 +46,8 @@ export type PostComment = {
 export type PublicPost = {
   id: string;
   type: PostType;
+  // Thingtime Schema ids applied to the thing, e.g. ['post'] or ['post','share']
+  thingtime: string[];
   author: FeedAuthor | null;
   visibility: PostVisibility;
   text: string;

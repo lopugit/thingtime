@@ -58,12 +58,18 @@ export const ensureIndexes = async () => {
         db.collection('themes').createIndex({ shareId: 1 }, { unique: true }),
         db.collection('themes').createIndex({ ownerId: 1 }),
         db.collection('waitlist').createIndex({ email: 1 }, { unique: true }),
-        // feed posts live in `things` under kind:'post' (see api/utils/things);
+        // everything in `things` is a thing (see api/utils/things + app/schemas);
         // shareId is included so the (createdAt desc, shareId asc) page sort is
-        // fully index-provided instead of an in-memory sort per request
+        // fully index-provided instead of an in-memory sort per request. The
+        // kind-prefixed indexes serve v1-era docs until the things migration
+        // runs; the thingtime-prefixed ones serve v2 (multikey on the schema-id
+        // array), and targetId serves comment/reaction/share lookups.
         db.collection('things').createIndex({ shareId: 1 }, { unique: true, sparse: true }),
         db.collection('things').createIndex({ kind: 1, visibility: 1, createdAt: -1, shareId: 1 }),
         db.collection('things').createIndex({ kind: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
+        db.collection('things').createIndex({ thingtime: 1, visibility: 1, createdAt: -1, shareId: 1 }),
+        db.collection('things').createIndex({ thingtime: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
+        db.collection('things').createIndex({ targetId: 1, thingtime: 1, createdAt: 1, shareId: 1 }),
         db.collection('feedAlgorithms').createIndex({ shareId: 1 }, { unique: true }),
         db.collection('feedAlgorithms').createIndex({ ownerId: 1 })
       ]);
