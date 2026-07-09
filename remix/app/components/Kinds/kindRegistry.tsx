@@ -29,6 +29,8 @@ export type KindRenderer<Props = any> = {
 	title: string;
 	emoji: string;
 	description: string;
+	// gallery/registry grouping: 'Social', 'Media', 'Commerce', 'Planning', …
+	category?: string;
 	aliases?: string[];
 	// structural matcher for kind-less things (return true when the shape fits)
 	match?: (thing: Record<string, unknown>) => boolean;

@@ -24,6 +24,8 @@ export const makeSampleWorld = (): Record<string, unknown> => ({
 			evening: '6:30pm',
 			'skip when raining': true
 		},
+		journal:
+			'## Repotting plan\n\nThe monstera doubled over winter — time to size up before the roots stage a breakout.\n\n- [x] Buy 30cm terracotta pot\n- [ ] Fresh potting mix\n- [ ] Bribe Monty with plant food\n\n> Growth is just nested time.',
 		dashboard: {
 			kind: 'dashboard',
 			title: 'Garden health',

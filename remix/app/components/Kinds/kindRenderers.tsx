@@ -5,114 +5,12 @@ import { HtmlThingRenderer } from './HtmlThingRenderer';
 import type { HtmlThingNode } from './HtmlThingRenderer';
 import { registerKindRenderer } from './kindRegistry';
 import type { KindRenderContext } from './kindRegistry';
+import { Avatar, KindBadge, KindCard, MutedMono, Sparkline, formatPrice, maybeTimeAgo, toArray, toNumberOr, toStringOr } from './kindPrimitives';
 
-import { timeAgo } from '~/components/Feed/feedTypes';
-
-// The built-in kind renderers: the templates a feed/search/page can use to
-// render things by kind. Every renderer is registered at the bottom of this
-// file; importing '~/components/Kinds' makes them all resolvable.
-
-// ————— shared chrome —————
-
-const cardShell = {
-	background: 'var(--tt-card, #ffffff)',
-	border: '1px solid var(--tt-border, #ececef)',
-	borderRadius: 'var(--tt-radius-lg, 16px)',
-	boxShadow: 'var(--tt-shadow-card, 0 1px 2px rgba(0,0,0,0.05))',
-	overflow: 'hidden',
-	width: '100%'
-} as const;
-
-const KindCard = (props: { children: React.ReactNode; padding?: number | string }) => (
-	<Box {...cardShell} padding={props.padding ?? 4}>
-		{props.children}
-	</Box>
-);
-
-const KindBadge = (props: { children: React.ReactNode; tone?: 'default' | 'positive' | 'danger' | 'accent' }) => {
-	const tones = {
-		default: { bg: 'var(--tt-surface-alt, #f5f5f7)', color: 'var(--tt-muted, #9a9aa6)' },
-		positive: { bg: 'var(--tt-positive-tint, #e4f6ea)', color: 'var(--tt-positive, #2f8f4f)' },
-		danger: { bg: '#fdecef', color: 'var(--tt-danger, #d6455a)' },
-		accent: { bg: 'var(--tt-accent-tint, #fff5fa)', color: 'var(--tt-accent, hotpink)' }
-	} as const;
-	const tone = tones[props.tone || 'default'];
-
-	return (
-		<Box
-			as="span"
-			background={tone.bg}
-			borderRadius="999px"
-			color={tone.color}
-			fontSize="11px"
-			fontWeight={700}
-			paddingX="8px"
-			paddingY="2px"
-			whiteSpace="nowrap"
-		>
-			{props.children}
-		</Box>
-	);
-};
-
-const MutedMono = (props: { children: React.ReactNode }) => (
-	<Text as="span" color="var(--tt-muted, #9a9aa6)" fontFamily="var(--tt-font-mono, monospace)" fontSize="11px">
-		{props.children}
-	</Text>
-);
-
-const Avatar = (props: { name: string; src?: string | null; size?: number }) => {
-	const size = props.size ?? 36;
-
-	if (props.src) {
-		return (
-			<Box
-				as="img"
-				alt={props.name}
-				src={props.src}
-				borderRadius="999px"
-				flexShrink={0}
-				height={`${size}px`}
-				objectFit="cover"
-				width={`${size}px`}
-			/>
-		);
-	}
-
-	return (
-		<Flex
-			alignItems="center"
-			background="var(--tt-accent-tint, #fff5fa)"
-			borderRadius="999px"
-			color="var(--tt-accent, hotpink)"
-			flexShrink={0}
-			fontSize={`${Math.round(size * 0.42)}px`}
-			fontWeight={800}
-			height={`${size}px`}
-			justifyContent="center"
-			width={`${size}px`}
-		>
-			{(props.name || '?').trim().charAt(0).toUpperCase()}
-		</Flex>
-	);
-};
-
-const toStringOr = (value: unknown, fallback = ''): string =>
-	typeof value === 'string' || typeof value === 'number' ? String(value) : fallback;
-
-const toNumberOr = (value: unknown, fallback: number | null = null): number | null => {
-	const parsed = typeof value === 'string' ? Number(value) : value;
-	return typeof parsed === 'number' && Number.isFinite(parsed) ? parsed : fallback;
-};
-
-const toArray = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
-
-const maybeTimeAgo = (value: unknown): string => {
-	const iso = toStringOr(value);
-	if (!iso) return '';
-	const stamp = timeAgo(iso);
-	return stamp || iso;
-};
+// The original core kind renderers: the templates a feed/search/page can use
+// to render things by kind. Category files (kindRenderersMedia/Social/
+// Commerce/Planning/Knowledge) extend the gallery; importing
+// '~/components/Kinds' registers everything.
 
 // ————— 📝 post —————
 
@@ -273,15 +171,6 @@ type ListingValue = {
 	seller: string;
 };
 
-const formatPrice = (price: number | null, currency: string): string => {
-	if (price === null) return 'Price on ask';
-	try {
-		return new Intl.NumberFormat(undefined, { style: 'currency', currency: currency || 'USD', maximumFractionDigits: 0 }).format(price);
-	} catch {
-		return `${currency || '$'}${price}`;
-	}
-};
-
 const ListingRenderer = ({ value }: { value: ListingValue; context: KindRenderContext }) => (
 	<KindCard padding={0}>
 		<Flex flexWrap="wrap">
@@ -345,35 +234,6 @@ type DashboardMetric = {
 type DashboardValue = {
 	title: string;
 	metrics: DashboardMetric[];
-};
-
-const Sparkline = ({ series, positive }: { series: number[]; positive: boolean }) => {
-	if (series.length < 2) return null;
-
-	const min = Math.min(...series);
-	const max = Math.max(...series);
-	const range = max - min || 1;
-	const points = series
-		.map((value, idx) => {
-			const x = (idx / (series.length - 1)) * 100;
-			const y = 28 - ((value - min) / range) * 24 + 2;
-			return `${x.toFixed(1)},${y.toFixed(1)}`;
-		})
-		.join(' ');
-
-	return (
-		<Box as="svg" viewBox="0 0 100 32" width="100%" height="32px" preserveAspectRatio="none" aria-hidden>
-			<polyline
-				points={points}
-				fill="none"
-				stroke={positive ? 'var(--tt-positive, #2f8f4f)' : 'var(--tt-danger, #d6455a)'}
-				strokeWidth="2"
-				strokeLinecap="round"
-				strokeLinejoin="round"
-				vectorEffect="non-scaling-stroke"
-			/>
-		</Box>
-	);
 };
 
 const DashboardRenderer = ({ value }: { value: DashboardValue; context: KindRenderContext }) => (
@@ -876,6 +736,7 @@ registerKindRenderer({
 	kind: 'post',
 	title: 'Text post',
 	emoji: '📝',
+	category: 'Social',
 	description: 'A social text post — author, message, tags, and reactions.',
 	aliases: ['text-post', 'text', 'note'],
 	match: (thing) => typeof thing.text === 'string' && ('author' in thing || 'reactionCounts' in thing || 'reactions' in thing),
@@ -907,6 +768,7 @@ registerKindRenderer({
 	kind: 'video',
 	title: 'Video',
 	emoji: '🎥',
+	category: 'Media',
 	description: 'A watchable video — player or poster with title, channel, and duration.',
 	aliases: ['movie', 'clip'],
 	match: (thing) => typeof thing.videoUrl === 'string' || (typeof thing.src === 'string' && String(thing.src).match(/\.(mp4|webm|mov)($|\?)/i) !== null),
@@ -933,6 +795,7 @@ registerKindRenderer({
 	kind: 'listing',
 	title: 'Marketplace listing',
 	emoji: '🏪',
+	category: 'Commerce',
 	description: 'Something for sale — price, condition, location, and seller.',
 	aliases: ['marketplace', 'for-sale', 'product'],
 	match: (thing) => ('price' in thing && ('title' in thing || 'name' in thing)) || 'listing' in thing,
@@ -962,6 +825,7 @@ registerKindRenderer({
 	kind: 'dashboard',
 	title: 'Dashboard',
 	emoji: '📊',
+	category: 'Data',
 	description: 'Stat tiles with trends and sparklines, built from plain numbers.',
 	aliases: ['stats', 'metrics'],
 	match: (thing) => Array.isArray(thing.metrics),
@@ -990,6 +854,7 @@ registerKindRenderer({
 	kind: 'place',
 	title: 'Place',
 	emoji: '📍',
+	category: 'World',
 	description: 'Geo data as a friendly map card — pin, address, coordinates.',
 	aliases: ['geo', 'location', 'map-pin'],
 	match: (thing) => ('lat' in thing && ('lng' in thing || 'lon' in thing)) || 'coordinates' in thing,
@@ -1014,6 +879,7 @@ registerKindRenderer({
 	kind: 'news-analysis',
 	title: 'News analysis',
 	emoji: '🗞️',
+	category: 'Knowledge',
 	description: 'Political/news analysis — bias spectrum, claim checks, and perspectives.',
 	aliases: ['news', 'analysis', 'fact-check'],
 	match: (thing) => typeof thing.headline === 'string' && (Array.isArray(thing.claims) || Array.isArray(thing.perspectives) || 'bias' in thing),
@@ -1051,6 +917,7 @@ registerKindRenderer({
 	kind: 'comparison',
 	title: 'Comparison',
 	emoji: '⚖️',
+	category: 'Data',
 	description: 'Compare any list of things across shared criteria — table on desktop, cards on mobile.',
 	aliases: ['compare', 'versus'],
 	match: (thing) => Array.isArray(thing.items) && toArray(thing.items).every((item) => item && typeof item === 'object'),
@@ -1088,6 +955,7 @@ registerKindRenderer({
 	kind: 'chart',
 	title: 'Chart',
 	emoji: '📈',
+	category: 'Data',
 	description: 'Bar or line chart from a plain list of labels and numbers.',
 	aliases: ['graph'],
 	match: (thing) => Array.isArray(thing.values) && toArray(thing.values).every((v) => typeof v === 'number'),
@@ -1110,6 +978,7 @@ registerKindRenderer({
 	kind: 'profile',
 	title: 'Profile card',
 	emoji: '👤',
+	category: 'Social',
 	description: 'A person or account — avatar, banner, bio, and stats.',
 	aliases: ['user', 'person', 'account'],
 	match: (thing) => typeof thing.username === 'string' && ('bio' in thing || 'displayName' in thing || 'avatarUrl' in thing),
@@ -1139,6 +1008,7 @@ registerKindRenderer({
 	kind: 'recipe',
 	title: 'Recipe',
 	emoji: '🍳',
+	category: 'Life',
 	description: 'Everyday structured data — ingredients and steps, side by side.',
 	aliases: ['meal', 'dish'],
 	match: (thing) => Array.isArray(thing.ingredients) && Array.isArray(thing.steps),
@@ -1163,6 +1033,7 @@ registerKindRenderer({
 	kind: 'element',
 	title: 'Element (html/css as data)',
 	emoji: '🧱',
+	category: 'Builder',
 	description: 'Build any component as pure JSON — tag, props, children — rendered through a sanitising gate.',
 	aliases: ['html', 'component', 'page'],
 	match: (thing) => typeof thing.tag === 'string',

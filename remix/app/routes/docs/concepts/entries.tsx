@@ -6,6 +6,7 @@ import {
 	formStories,
 	galaxyStories,
 	kindGalleryStories,
+	longTextStories,
 	pipelineStories
 } from './ConceptStories';
 
@@ -14,7 +15,7 @@ import {
 // (components/Thingtime/concepts + components/Kinds), so adopting one is a
 // wiring job, not a rebuild.
 
-export type ConceptEntryStatus = 'Concept' | 'Gallery' | 'Architecture';
+export type ConceptEntryStatus = 'Concept' | 'Gallery' | 'Architecture' | 'Adopted';
 
 export type ConceptEntry = {
 	slug: string;
@@ -38,7 +39,8 @@ export type ConceptEntry = {
 export const conceptStatusColors: Record<ConceptEntryStatus, { bg: string; color: string }> = {
 	Concept: { bg: '#e8e9ff', color: '#2f356b' },
 	Gallery: { bg: '#fde2f1', color: '#8a2f61' },
-	Architecture: { bg: '#fef3c7', color: '#78350f' }
+	Architecture: { bg: '#fef3c7', color: '#78350f' },
+	Adopted: { bg: 'var(--tt-docs-accent-soft, #d7f5df)', color: 'var(--tt-docs-accent-ink, #0f5132)' }
 };
 
 export const conceptEntries: ConceptEntry[] = [
@@ -187,9 +189,9 @@ export const conceptEntries: ConceptEntry[] = [
 		title: 'Kind gallery — things that know how to look',
 		emoji: '🎨',
 		status: 'Gallery',
-		summary: 'Eleven data-type renderers — post, video, listing, dashboard, place, news analysis, comparison, chart, profile, recipe, element.',
+		summary: '60 data-type renderers across Social, Media, Commerce, Planning, Knowledge, Life, and Builder — modelled on the shapes the internet already uses everywhere.',
 		why:
-			'The other half of "data for everyone": once a thing carries (or matches) a kind, it stops looking like data at all. These are the templates a feed, a search result page, or a shared link can pick from automatically. Templates adapt many shapes (polymorphism) instead of demanding one schema, so real, messy, user-grown things still render.',
+			'The other half of "data for everyone": once a thing carries (or matches) a kind, it stops looking like data at all. These are the templates a feed, a search result page, or a shared link can pick from automatically — posts, videos, products, orders, flights, weather, polls, workouts, definitions, changelogs, and fifty more, each modelled on a data shape people already know from the wider internet. Templates adapt many shapes (polymorphism) instead of demanding one schema, so real, messy, user-grown things still render.',
 		desktop: [
 			'Cards are container-responsive: the same component renders in a feed column, a search grid, or full-width.',
 			'Comparison renders as a real table on wide containers; dashboard tiles use auto-fit grids and SVG sparklines.',
@@ -209,6 +211,34 @@ export const conceptEntries: ConceptEntry[] = [
 		adoption:
 			'Wire into the feed: in PostList, try <RenderThing thing={post} fallback={<PostCard …/>}/> — kinds render themselves, everything else keeps today\'s card. Search results and /things pages can use the same dispatcher.',
 		stories: kindGalleryStories
+	},
+	{
+		slug: 'long-text-editor',
+		title: 'Long text — a block editor everywhere',
+		emoji: '📝',
+		status: 'Adopted',
+		summary: 'Editor.js block editing for every long-text input: the tree, all viewer concepts, and the feed composer.',
+		why:
+			'Long text is where one-line inputs stop being honest: people write plans, notes, and stories, not values. The block editor (Editor.js) gives every long string real paragraphs, headings, lists, checklists, and quotes — while the stored thing stays a plain, readable string via a deterministic blocks↔text round-trip. Data stays simple; editing stops being cramped. And when a value already is a block document ({ blocks: [...] }), it edits natively and renders through the rich-text kind.',
+		desktop: [
+			'Any string over ~160 characters (or containing a newline) opens as a block document in edit mode — in the Thingtime tree, Focus, Columns, Document, and Form.',
+			'The + menu and inline toolbar offer header, list, checklist, and quote blocks; everything serialises to markdown-ish plain text ("## ", "- ", "- [x]", "> ", "---").',
+			'The feed composer (What\'s on your mind?) is the block editor by default — posts still store plain text.'
+		],
+		mobile: [
+			'Editor.js is touch-native: the + block menu and toolbar work as tap targets, and blocks reflow at any width.',
+			'Short strings keep the one-line magic input, so quick edits stay quick on a phone.',
+			'The stored string stays readable in every view mode — no rich-text lock-in on small screens.'
+		],
+		editing: [
+			'String mode: string in → string out, on every change. The editor owns the text while mounted; remount (key) to replace it externally.',
+			'Block mode: { blocks: [...] } in → { blocks: [...] } out, preserving sibling fields like kind: "rich-text".',
+			'Pressing Enter inside a one-line value creates a newline — which upgrades that value to the block editor on its next edit.'
+		],
+		source: 'remix/app/components/Editor/LongTextEditor.tsx',
+		adoption:
+			'Already wired across the board: Thingtime.tsx (tree edit mode), concepts/LeafValueEditor (all five viewers), and Feed/PostComposer. New surfaces just render <LongTextEditor value={text} onValueChange={...}/>.',
+		stories: longTextStories
 	},
 	{
 		slug: 'render-pipeline',

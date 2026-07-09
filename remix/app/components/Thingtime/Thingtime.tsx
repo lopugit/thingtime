@@ -6,6 +6,7 @@ import { Box, Center, Flex, Input, Select, Spinner, Switch, Textarea } from '@ch
 import { CommanderV1 } from '../Commander/CommanderV1Deprecated';
 import { CommanderV2 } from '../Commander/CommanderV2';
 // import { Magic } from "../Commander/Magic"
+import { LongTextEditor, isLongText } from '../Editor/LongTextEditor';
 import { Icon } from '../Icon/Icon';
 import { MagicInput } from '../MagicInput/MagicInput';
 import { Safe } from '../Safety/Safe';
@@ -950,6 +951,17 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 
 			if (type === 'string') {
 				debug.string = true;
+
+				// long text gets the block editor (Editor.js); short strings keep
+				// the one-line magic input
+				if (isLongText(thing)) {
+					return (
+						<AtomicWrapper paddingLeft={pl} className="string-atomic-wrapper long-text">
+							<LongTextEditor value={thing} onValueChange={(next) => updateValue({ value: next })}></LongTextEditor>
+						</AtomicWrapper>
+					);
+				}
+
 				return (
 					<AtomicWrapper paddingLeft={pl} className="string-atomic-wrapper">
 						<MagicInput value={thing} placeholder="Imagine.." onValueChange={updateValue}></MagicInput>

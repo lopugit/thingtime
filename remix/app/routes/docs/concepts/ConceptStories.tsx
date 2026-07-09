@@ -1,7 +1,9 @@
 import React from 'react';
 import { Box, Flex, Grid, Text, Textarea } from '@chakra-ui/react';
 
-import { RenderThing, getKindRenderers, sampleKindThings } from '~/components/Kinds';
+import { RenderThing, getKindRenderer, getKindRenderers, sampleKindThings } from '~/components/Kinds';
+import { LongTextEditor } from '~/components/Editor/LongTextEditor';
+import type { LongTextValue } from '~/components/Editor/LongTextEditor';
 import {
 	FocusCardsViewer,
 	FormSheetViewer,
@@ -196,24 +198,55 @@ export const galaxyStories: ConceptStory[] = [
 
 // ————— kind gallery stories —————
 
-const KindGalleryStory = ({ variant }: ConceptStoryArgs) => (
-	<Grid gap={4} templateColumns={variant === 'mobile' ? '1fr' : 'repeat(auto-fill, minmax(320px, 1fr))'}>
-		{sampleKindThings.map((sample) => (
-			<Box key={sample.kind}>
-				<Text
-					color="var(--tt-muted, #9a9aa6)"
-					fontFamily="var(--tt-font-mono, monospace)"
-					fontSize="11px"
-					fontWeight={700}
-					marginBottom={1.5}
-				>
-					kind: '{sample.kind}'
-				</Text>
-				<RenderThing thing={sample.thing} context={{ size: variant === 'mobile' ? 'compact' : 'card' }} />
-			</Box>
-		))}
-	</Grid>
-);
+const GALLERY_CATEGORY_ORDER = ['Social', 'Media', 'Commerce', 'Planning', 'Knowledge', 'Life', 'World', 'Data', 'Builder'];
+
+const KindGalleryStory = ({ variant }: ConceptStoryArgs) => {
+	const groups = React.useMemo(() => {
+		const byCategory = new Map<string, typeof sampleKindThings>();
+		sampleKindThings.forEach((sample) => {
+			const category = getKindRenderer(sample.kind)?.category || 'Other';
+			byCategory.set(category, [...(byCategory.get(category) || []), sample]);
+		});
+		return [...byCategory.entries()].sort(
+			(a, b) =>
+				(GALLERY_CATEGORY_ORDER.indexOf(a[0]) + 100 * Number(GALLERY_CATEGORY_ORDER.indexOf(a[0]) < 0)) -
+				(GALLERY_CATEGORY_ORDER.indexOf(b[0]) + 100 * Number(GALLERY_CATEGORY_ORDER.indexOf(b[0]) < 0))
+		);
+	}, []);
+
+	return (
+		<Flex flexDirection="column" rowGap={6}>
+			{groups.map(([category, samples]) => (
+				<Box key={category}>
+					<Flex alignItems="baseline" columnGap={2} marginBottom={3}>
+						<Text color="var(--tt-ink, #16161a)" fontSize="sm" fontWeight={850} letterSpacing="0.1em" textTransform="uppercase">
+							{category}
+						</Text>
+						<Text color="var(--tt-muted, #9a9aa6)" fontFamily="var(--tt-font-mono, monospace)" fontSize="11px">
+							{samples.length}
+						</Text>
+					</Flex>
+					<Grid gap={4} templateColumns={variant === 'mobile' ? '1fr' : 'repeat(auto-fill, minmax(320px, 1fr))'}>
+						{samples.map((sample) => (
+							<Box key={sample.kind}>
+								<Text
+									color="var(--tt-muted, #9a9aa6)"
+									fontFamily="var(--tt-font-mono, monospace)"
+									fontSize="11px"
+									fontWeight={700}
+									marginBottom={1.5}
+								>
+									kind: '{sample.kind}'
+								</Text>
+								<RenderThing thing={sample.thing} context={{ size: variant === 'mobile' ? 'compact' : 'card' }} />
+							</Box>
+						))}
+					</Grid>
+				</Box>
+			))}
+		</Flex>
+	);
+};
 
 const PolymorphismStory = (_args: ConceptStoryArgs) => {
 	// one feed post shaped like PublicPost carrying a listing — the listing
@@ -260,6 +293,106 @@ export const kindGalleryStories: ConceptStory[] = [
 		description:
 			'Renderers adapt data instead of demanding a schema. A feed post carrying a listing renders through the listing template, and a bare { lat, lng } object resolves the place template by shape alone — no kind field required.',
 		render: (args) => <PolymorphismStory {...args} />
+	}
+];
+
+// ————— long-text editor stories —————
+
+const LONG_TEXT_SEED = `## Repotting plan
+
+The monstera doubled over winter — time to size up before the roots stage a breakout.
+
+- [x] Buy 30cm terracotta pot
+- [ ] Fresh potting mix
+- [ ] Bribe Monty with plant food
+
+> Growth is just nested time.
+
+---
+
+Water lightly for the first week.`;
+
+const LongTextStringStory = (_args: ConceptStoryArgs) => {
+	const [value, setValue] = React.useState<LongTextValue>(LONG_TEXT_SEED);
+
+	return (
+		<Grid gap={4} templateColumns="repeat(auto-fit, minmax(280px, 1fr))">
+			<Box>
+				<Text color="var(--tt-muted, #9a9aa6)" fontFamily="var(--tt-font-mono, monospace)" fontSize="11px" fontWeight={700} marginBottom={1.5}>
+					the block editor (what people touch)
+				</Text>
+				<LongTextEditor value={LONG_TEXT_SEED} onValueChange={setValue} />
+			</Box>
+			<Box minWidth={0}>
+				<Text color="var(--tt-muted, #9a9aa6)" fontFamily="var(--tt-font-mono, monospace)" fontSize="11px" fontWeight={700} marginBottom={1.5}>
+					the stored value (still one plain string)
+				</Text>
+				<Box
+					as="pre"
+					background="var(--tt-surface, #fafafb)"
+					border="1px dashed var(--tt-border, #ececef)"
+					borderRadius="var(--tt-radius-md, 12px)"
+					color="var(--tt-text, #5a5a66)"
+					fontFamily="var(--tt-font-mono, monospace)"
+					fontSize="12px"
+					lineHeight="1.6"
+					minHeight="120px"
+					overflowX="auto"
+					padding={4}
+					whiteSpace="pre-wrap"
+				>
+					{typeof value === 'string' ? value : JSON.stringify(value, null, 2)}
+				</Box>
+			</Box>
+		</Grid>
+	);
+};
+
+const RICH_TEXT_SEED = {
+	kind: 'rich-text',
+	blocks: [
+		{ type: 'header', data: { text: 'A thing made of blocks', level: 2 } },
+		{ type: 'paragraph', data: { text: 'This document IS a thing — the blocks array lives in Mongo like any other JSON.' } },
+		{ type: 'list', data: { style: 'unordered', items: ['Edit it here with Editor.js', 'Render it anywhere with the rich-text kind'] } }
+	]
+};
+
+const RichTextThingStory = (_args: ConceptStoryArgs) => {
+	const [doc, setDoc] = React.useState<LongTextValue>(RICH_TEXT_SEED as LongTextValue);
+
+	return (
+		<Grid gap={4} templateColumns="repeat(auto-fit, minmax(280px, 1fr))">
+			<Box>
+				<Text color="var(--tt-muted, #9a9aa6)" fontFamily="var(--tt-font-mono, monospace)" fontSize="11px" fontWeight={700} marginBottom={1.5}>
+					editing the thing (block mode)
+				</Text>
+				<LongTextEditor value={RICH_TEXT_SEED as LongTextValue} onValueChange={setDoc} />
+			</Box>
+			<Box minWidth={0}>
+				<Text color="var(--tt-muted, #9a9aa6)" fontFamily="var(--tt-font-mono, monospace)" fontSize="11px" fontWeight={700} marginBottom={1.5}>
+					rendered by the rich-text kind (live)
+				</Text>
+				<RenderThing thing={doc} />
+			</Box>
+		</Grid>
+	);
+};
+
+export const longTextStories: ConceptStory[] = [
+	{
+		id: 'long-text-string',
+		title: 'Long strings become block documents',
+		description:
+			'Any string longer than a line opens in Editor.js — headings, lists, checklists, quotes — and serialises back to one plain, readable string on every keystroke. The thing in Mongo never stops being simple JSON. This exact editor is now wired into the tree, every viewer concept, and the feed composer.',
+		render: (args) => <LongTextStringStory {...args} />,
+		note: 'Type "## " for a heading or use the + menu — then watch the stored string keep up on the right.'
+	},
+	{
+		id: 'long-text-rich-thing',
+		title: 'Rich text as a kind',
+		description:
+			'A value that already is an Editor.js document ({ blocks: [...] }) edits natively and renders through the rich-text kind renderer — write once, display anywhere a RenderThing mounts.',
+		render: (args) => <RichTextThingStory {...args} />
 	}
 ];
 
@@ -342,7 +475,7 @@ const RegistryStory = (_args: ConceptStoryArgs) => (
 		<Box as="table" width="100%" style={{ borderCollapse: 'collapse' }}>
 			<Box as="thead">
 				<Box as="tr">
-					{['Kind', 'Aliases', 'Resolves by shape when…'].map((label) => (
+					{['Kind', 'Category', 'Aliases', 'Resolves by shape when…'].map((label) => (
 						<Box as="th" key={label} borderBottom="1px solid var(--tt-border, #ececef)" paddingX={2} paddingY={1.5} textAlign="left">
 							<Text color="var(--tt-muted, #9a9aa6)" fontSize="11px" fontWeight={700} letterSpacing="0.06em" textTransform="uppercase">
 								{label}
@@ -357,6 +490,11 @@ const RegistryStory = (_args: ConceptStoryArgs) => (
 						<Box as="td" paddingX={2} paddingY={2} whiteSpace="nowrap">
 							<Text fontSize="sm" fontWeight={750} color="var(--tt-ink, #16161a)">
 								{renderer.emoji} {renderer.kind}
+							</Text>
+						</Box>
+						<Box as="td" paddingX={2} paddingY={2} whiteSpace="nowrap">
+							<Text color="var(--tt-muted, #9a9aa6)" fontSize="xs" fontWeight={700}>
+								{renderer.category || '—'}
 							</Text>
 						</Box>
 						<Box as="td" paddingX={2} paddingY={2}>
