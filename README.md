@@ -228,6 +228,14 @@ THINGTIME_ADMIN_USERNAMES="lopu"
 THINGTIME_ADMIN_EMAILS="lopu@example.com"
 ```
 
+**Prefer `THINGTIME_ADMIN_USER_IDS`.** The Mongo `_id` is assigned by the server
+and cannot be chosen at signup, so it is the only fully non-claimable anchor.
+`THINGTIME_ADMIN_EMAILS` and `THINGTIME_ADMIN_USERNAMES` are honoured only for an
+account that has **verified its email** — that closes the email path (you cannot
+verify an address you do not control), but a username allowlist still trusts
+whoever registers that handle first, so only allowlist a username for an account
+you know already exists.
+
 The request must be sent with an authenticated admin cookie or
 `Authorization: Bearer <admin-token>`. It still requires a unique, valid email
 address for the service account. The account must verify that email within seven

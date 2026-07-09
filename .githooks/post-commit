@@ -12,22 +12,23 @@ fi
 
 cd "$repo_root"
 
+# Capture the files THIS commit actually touched BEFORE the remix/.env.auto
+# self-commit below can advance HEAD. The graphify rebuild at the end reads this
+# so it indexes the real change set rather than the generated env-auto commit
+# (git diff HEAD~1 HEAD run after the self-commit would only see .env.auto).
+THINGTIME_POST_COMMIT_CHANGED=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || git diff --name-only HEAD 2>/dev/null || true)
+export THINGTIME_POST_COMMIT_CHANGED
+
+# --- remix/.env.auto auto-commit (recursion-guarded) ------------------------
+# Structured as an if-block (not early `exit 0`s) so that whether or not
+# .env.auto changed, control always falls through to the graphify rebuild below.
 target="remix/.env.auto"
-if [[ ! -e "$target" ]]; then
-  exit 0
+if [[ -e "$target" ]] && ! { git diff --quiet -- "$target" && git diff --cached --quiet -- "$target"; }; then
+  git add -- "$target"
+  if ! git diff --cached --quiet -- "$target"; then
+    THINGTIME_ENV_AUTO_POST_COMMIT=1 git commit --no-verify -m "Commit generated remix env auto"
+  fi
 fi
-
-if git diff --quiet -- "$target" && git diff --cached --quiet -- "$target"; then
-  exit 0
-fi
-
-git add -- "$target"
-
-if git diff --cached --quiet -- "$target"; then
-  exit 0
-fi
-
-THINGTIME_ENV_AUTO_POST_COMMIT=1 git commit --no-verify -m "Commit generated remix env auto"
 
 # graphify-hook-start
 # Auto-rebuilds the knowledge graph after each commit (code files only, no LLM needed).
@@ -54,7 +55,12 @@ GIT_DIR=$(git rev-parse --git-dir 2>/dev/null)
 
 [ "${GRAPHIFY_SKIP_HOOK:-0}" = "1" ] && exit 0
 
-CHANGED=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || git diff --name-only HEAD 2>/dev/null)
+# Prefer the change set captured above (before the env-auto self-commit moved
+# HEAD); fall back to a fresh diff for direct invocations where it is unset.
+CHANGED="${THINGTIME_POST_COMMIT_CHANGED:-}"
+if [ -z "$CHANGED" ]; then
+    CHANGED=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || git diff --name-only HEAD 2>/dev/null || true)
+fi
 if [ -z "$CHANGED" ]; then
     exit 0
 fi
@@ -66,10 +72,11 @@ if [ -z "$_NON_GRAPH" ]; then
 fi
 
 # Detect the correct Python interpreter (handles uv tool, pipx, venv, system installs).
-# _PINNED was recorded at hook-install time; tried first so the hook works even
-# when the graphify launcher is not on PATH (common in GUI clients and CI).
+# GRAPHIFY_PYTHON_PINNED (if exported) is tried first so the hook works even when
+# the graphify launcher is not on PATH (common in GUI clients and CI). Kept out
+# of the tracked file so no machine-specific home path is committed.
 GRAPHIFY_PYTHON=""
-_PINNED='/Users/lopu/.local/share/uv/tools/graphifyy/bin/python'
+_PINNED="${GRAPHIFY_PYTHON_PINNED:-}"
 if [ -n "$_PINNED" ] && [ -x "$_PINNED" ] && "$_PINNED" -c "import graphify" 2>/dev/null; then
     GRAPHIFY_PYTHON="$_PINNED"
 fi

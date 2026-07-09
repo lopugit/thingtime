@@ -321,7 +321,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     auth: {
       mode: 'session-or-bearer',
       description:
-        'Requires an authenticated admin user allowlisted by THINGTIME_ADMIN_USER_IDS, THINGTIME_ADMIN_USERNAMES, or THINGTIME_ADMIN_EMAILS.'
+        'Requires an authenticated admin user allowlisted by THINGTIME_ADMIN_USER_IDS (preferred, non-claimable), THINGTIME_ADMIN_EMAILS, or THINGTIME_ADMIN_USERNAMES (email/username matches require a verified account).'
     },
     methods: ['POST'],
     steps: [
@@ -380,7 +380,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ],
     notes: [
       'The bearer token expires after THINGTIME_SERVICE_TOKEN_TTL_DAYS, defaulting to 30 days and capped at 90 days.',
-      'Configure admins with THINGTIME_ADMIN_USER_IDS, THINGTIME_ADMIN_USERNAMES, or THINGTIME_ADMIN_EMAILS.'
+      'Configure admins with THINGTIME_ADMIN_USER_IDS (preferred — the Mongo _id is non-claimable), THINGTIME_ADMIN_EMAILS, or THINGTIME_ADMIN_USERNAMES. Email/username allowlist matches are honoured only for a verified account.'
     ]
   }),
   endpoint({
@@ -728,7 +728,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     auth: {
       mode: 'session-or-bearer',
       description:
-        'Requires an authenticated admin user allowlisted by THINGTIME_ADMIN_USER_IDS, THINGTIME_ADMIN_USERNAMES, or THINGTIME_ADMIN_EMAILS.'
+        'Requires an authenticated admin user allowlisted by THINGTIME_ADMIN_USER_IDS (preferred, non-claimable), THINGTIME_ADMIN_EMAILS, or THINGTIME_ADMIN_USERNAMES (email/username matches require a verified account).'
     },
     methods: ['POST'],
     steps: [
@@ -771,7 +771,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     auth: {
       mode: 'session-or-bearer',
       description:
-        'Requires an authenticated admin user allowlisted by THINGTIME_ADMIN_USER_IDS, THINGTIME_ADMIN_USERNAMES, or THINGTIME_ADMIN_EMAILS.'
+        'Requires an authenticated admin user allowlisted by THINGTIME_ADMIN_USER_IDS (preferred, non-claimable), THINGTIME_ADMIN_EMAILS, or THINGTIME_ADMIN_USERNAMES (email/username matches require a verified account).'
     },
     methods: ['POST'],
     steps: [

@@ -57,6 +57,15 @@ export const readJsonBody = async (request: Request, maxBytes: number): Promise<
   }
 };
 
+// For routes that take no request body but should still shed abusive oversized
+// payloads: drains + caps the body via readJsonBody (which throws a 413 json()
+// Response over the cap) and discards the parsed result. Named so the intent is
+// obvious at the call site — otherwise a discarded `await readJsonBody(...)`
+// reads like dead code a maintainer might delete along with the only guard.
+export const rejectOversizeBody = async (request: Request, maxBytes: number): Promise<void> => {
+  await readJsonBody(request, maxBytes);
+};
+
 export const redirect = (url: string, init: number | ResponseInit = 302) => {
   const responseInit: ResponseInit = typeof init === 'number' ? { status: init } : init;
   const headers = new Headers(responseInit.headers);

@@ -37,10 +37,11 @@ GIT_DIR=$(git rev-parse --git-dir 2>/dev/null)
 [ -f "$GIT_DIR/CHERRY_PICK_HEAD" ] && exit 0
 
 # Detect the correct Python interpreter (handles uv tool, pipx, venv, system installs).
-# _PINNED was recorded at hook-install time; tried first so the hook works even
-# when the graphify launcher is not on PATH (common in GUI clients and CI).
+# GRAPHIFY_PYTHON_PINNED (if exported) is tried first so the hook works even
+# when the graphify launcher is not on PATH (common in GUI clients and CI). Kept
+# out of the tracked file so no machine-specific home path is committed.
 GRAPHIFY_PYTHON=""
-_PINNED='/Users/lopu/.local/share/uv/tools/graphifyy/bin/python'
+_PINNED="${GRAPHIFY_PYTHON_PINNED:-}"
 if [ -n "$_PINNED" ] && [ -x "$_PINNED" ] && "$_PINNED" -c "import graphify" 2>/dev/null; then
     GRAPHIFY_PYTHON="$_PINNED"
 fi
