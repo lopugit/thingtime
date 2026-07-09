@@ -88,6 +88,12 @@
   variables, also document the fork-safe setup steps in `README.md`. Use
   placeholder values only; never copy real tokens, passwords, project secrets,
   or account-specific credentials into public docs.
+- Thingtime email delivery must go through the Mongo-backed email service under
+  `remix/app/api/utils/email/`; do not bypass it with direct SES/SMTP calls.
+  Keep SES credentials in local/Vercel env vars only, and keep fork-safe setup
+  notes in `README.md`. Long-term owned email architecture and TODOs live in
+  `docs/email-owned-architecture.md`; keep SES, queue, inbound, self-hosted
+  SMTP, and sender-reputation changes aligned with that document.
 - For Vercel dashboard links, do not use `VERCEL_GIT_REPO_OWNER` as the
   dashboard owner slug; that value is the Git provider owner. Prefer Vercel API
   project/deployment data when `VERCEL_API_TOKEN` is available, or an explicit

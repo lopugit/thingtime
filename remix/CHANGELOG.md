@@ -18,6 +18,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- Added `/tests` email delivery checks for signup verification, service-account
+  verification, and the OTP email helper, plus `SES_SANDBOX=1` throttling so
+  sandbox runs wait one second between email sends. — _Codex (AI), 2026-07-09_
+- Added a long-term owned email architecture TODO covering provider-independent
+  outbox delivery, event ingestion, inbound mail, self-hosted SMTP relay
+  milestones, and sender-reputation safeguards. — _Codex (AI), 2026-07-08_
+- Added a Mongo-backed Thingtime email delivery service with console and Amazon
+  SES providers, outbound message recording, suppression/unsubscribe
+  collections, and SES environment setup docs. — _Codex (AI), 2026-07-07_
 - Updated the Electron release workflow trigger so merges that modify
   `.github/workflows/electron-release.yml` also spawn the release workflow,
   covering workflow-only release pipeline fixes. — _Codex (AI), 2026-07-08_
