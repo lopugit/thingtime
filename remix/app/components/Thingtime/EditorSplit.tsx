@@ -21,7 +21,8 @@ import { useThingtime } from './useThingtime';
 // the pointer and hovering another window previews the half it will dock into
 // (left/right/top/bottom) before dropping. Dragging a floating frame just
 // MOVES it — placing a frame into the layout is explicit: drag its grip
-// handle, or hold ⌘/Ctrl mid-drag (a hint pill by the pointer says so).
+// handle (the touch path — no modifier needed), or hold ⌘/Ctrl mid-drag.
+// A hint pill by the pointer teaches whichever path fits the input device.
 // Toolbar controls collapse behind a single "…" expander (hover to peek,
 // click to pin) so the toolbar stays clean at small widths.
 //
@@ -89,6 +90,8 @@ type WindowDragState = {
 	// whether this drag places into the layout (docked drags always do;
 	// frame drags only from the grip handle or while ⌘/Ctrl is held)
 	docking: boolean;
+	// touch drags have no modifier key — hints point at the grip instead
+	touch: boolean;
 };
 
 const MIN_RATIO = 0.12;
@@ -686,6 +689,9 @@ const EditorWindow = (props: { leaf: EditorLeaf; actions: WindowActions; context
 						aria-label="Drag to place this window into the layout"
 						title={`Drag to place into the layout — or hold ${MOD_KEY} while dragging the window`}
 						cursor="grab"
+						position="relative"
+						// the visual stays 24px; the touch target is ~36px
+						_before={{ content: '""', position: 'absolute', inset: '-6px' }}
 						sx={{ touchAction: 'none', '&:active': { cursor: 'grabbing' } }}
 					>
 						<Grip size={13} strokeWidth={2} />
@@ -1365,7 +1371,16 @@ export const EditorSplit = (props: { initialPath: string }) => {
 			const startX = e.clientX;
 			const startY = e.clientY;
 
-			setWindowDragBoth({ kind: 'docked', sourceId: leafId, label, x: startX, y: startY, active: false, docking: true });
+			setWindowDragBoth({
+				kind: 'docked',
+				sourceId: leafId,
+				label,
+				x: startX,
+				y: startY,
+				active: false,
+				docking: true,
+				touch: e.pointerType === 'touch'
+			});
 
 			startPointerGesture(
 				e,
@@ -1399,12 +1414,22 @@ export const EditorSplit = (props: { initialPath: string }) => {
 			}
 
 			const dockIntent = !!opts?.dock;
+			const touch = e.pointerType === 'touch';
 			const startX = e.clientX;
 			const startY = e.clientY;
 			const origin = { x: frame.x, y: frame.y };
 			const initialDocking = dockIntent || e.metaKey || e.ctrlKey;
 
-			setWindowDragBoth({ kind: 'frame', sourceId: frameId, label: '', x: startX, y: startY, active: true, docking: initialDocking });
+			setWindowDragBoth({
+				kind: 'frame',
+				sourceId: frameId,
+				label: '',
+				x: startX,
+				y: startY,
+				active: true,
+				docking: initialDocking,
+				touch
+			});
 			setDropTarget(initialDocking ? resolveDropTarget(startX, startY) : null);
 
 			// pressing/releasing ⌘/Ctrl toggles docking without pointer movement
@@ -1445,7 +1470,16 @@ export const EditorSplit = (props: { initialPath: string }) => {
 
 					const docking = dockIntent || move.metaKey || move.ctrlKey;
 
-					setWindowDragBoth({ kind: 'frame', sourceId: frameId, label: '', x: move.clientX, y: move.clientY, active: true, docking });
+					setWindowDragBoth({
+						kind: 'frame',
+						sourceId: frameId,
+						label: '',
+						x: move.clientX,
+						y: move.clientY,
+						active: true,
+						docking,
+						touch
+					});
 					setDropTarget(docking ? resolveDropTarget(move.clientX, move.clientY) : null);
 				},
 				() => {
@@ -1706,11 +1740,22 @@ export const EditorSplit = (props: { initialPath: string }) => {
 					boxShadow="var(--tt-shadow-popover, 0 16px 40px -12px rgba(20, 20, 40, 0.3))"
 					transition="background 0.15s ease"
 				>
-					{windowDrag.docking
-						? dropTarget
-							? 'release to place here'
-							: 'drag over a window to place'
-						: `hold ${MOD_KEY} to place into the layout`}
+					{windowDrag.docking ? (
+						dropTarget ? (
+							'release to place here'
+						) : (
+							'drag over a window to place'
+						)
+					) : windowDrag.touch ? (
+						// no modifier key on touch — point at the grip handle instead
+						<>
+							drag the
+							<Grip size={11} strokeWidth={2.5} />
+							grip to place into the layout
+						</>
+					) : (
+						`hold ${MOD_KEY} to place into the layout`
+					)}
 				</Flex>
 			)}
 		</>
