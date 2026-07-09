@@ -745,8 +745,8 @@
     "semantic_hash": "a02fb31201ad9cf9d435523912960e52"
   },
   "remix/app/api/utils/auth/email.ts": {
-    "mtime": 1783610051.1217697,
-    "ast_hash": "5b50cb36ff5ab12d8727721f3ab86127",
+    "mtime": 1783610679.179021,
+    "ast_hash": "fe718b94ee642f3c321215ee0ad4c775",
     "semantic_hash": ""
   },
   "remix/app/api/utils/auth/emailVerifications.ts": {
@@ -765,9 +765,9 @@
     "semantic_hash": "c6abb963acd80e4c5ede1ae00bec0976"
   },
   "remix/app/api/utils/auth/loginUser.ts": {
-    "mtime": 1783609089.636892,
-    "ast_hash": "940d343c623400cd75941f9ff394a356",
-    "semantic_hash": "940d343c623400cd75941f9ff394a356"
+    "mtime": 1783611589.8668902,
+    "ast_hash": "ca65c711b8903ac2e68faae9793243e0",
+    "semantic_hash": ""
   },
   "remix/app/api/utils/auth/registerUser.ts": {
     "mtime": 1783609089.6370847,
@@ -830,8 +830,8 @@
     "semantic_hash": "f65b01f4781159ee3b8a0a9da33d1f5a"
   },
   "remix/app/api/utils/mongodb/collections.ts": {
-    "mtime": 1783610051.1239219,
-    "ast_hash": "3f38b47ab5a9ab461a9ffc244905c4ff",
+    "mtime": 1783610582.3651123,
+    "ast_hash": "01f30aed41f6286d7c20d59c6c2fd34b",
     "semantic_hash": ""
   },
   "remix/app/api/utils/mongodb/config.ts": {
@@ -1315,9 +1315,9 @@
     "semantic_hash": "5b1f94bc4a3a6b3ee4c9b47690f56aab"
   },
   "remix/app/routes/api/v1/login/_login.tsx": {
-    "mtime": 1783609089.6956453,
-    "ast_hash": "8275fe669badc2505d4d3df7f458ac5d",
-    "semantic_hash": "8275fe669badc2505d4d3df7f458ac5d"
+    "mtime": 1783611591.2650323,
+    "ast_hash": "c4bc91cf461db212273db9404aa92aad",
+    "semantic_hash": ""
   },
   "remix/app/routes/api/v1/lopu/musing/_musing.tsx": {
     "mtime": 1783609089.696,
@@ -1530,8 +1530,8 @@
     "semantic_hash": "3e068c437e00eacf7136b9836e06d3a0"
   },
   "remix/server/routes/api/[...].ts": {
-    "mtime": 1783610051.1275246,
-    "ast_hash": "e8204a55fe466c3a424e6670b9e0c741",
+    "mtime": 1783610793.740971,
+    "ast_hash": "c3ca2f057332d228acca8feb8eadefeb",
     "semantic_hash": ""
   },
   "remix/server/routes/api/root-data.get.ts": {
@@ -1580,13 +1580,13 @@
     "semantic_hash": ""
   },
   "FUNDAMENTALS.md": {
-    "mtime": 1783609089.2653122,
-    "ast_hash": "527d0aebeb02ffecfc0b86c5a6314f4e",
+    "mtime": 1783611058.8195653,
+    "ast_hash": "74ab3a329d698c535046186e50516c99",
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1783610051.0742083,
-    "ast_hash": "828a06219bf80d7c33447eb1c59901a4",
+    "mtime": 1783611095.9665992,
+    "ast_hash": "3463aa963868ca178164ef070f598a7f",
     "semantic_hash": ""
   },
   "VERCEL_DEPLOYMENTS.md": {
@@ -1810,8 +1810,8 @@
     "semantic_hash": "f162fbffa18046af73dfca08802a536f"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1783610166.5493283,
-    "ast_hash": "acacdf4ca5f799b649b6369b0f271767",
+    "mtime": 1783611813.8827353,
+    "ast_hash": "c8d237d32f0d4fb4072f1cc1bd837c31",
     "semantic_hash": ""
   },
   "remix/README.md": {
@@ -2680,13 +2680,13 @@
     "semantic_hash": ""
   },
   "remix/app/tests/api/apiTestRunner.ts": {
-    "mtime": 1783610120.5940883,
-    "ast_hash": "f6d0028f96aa794e636ea136664979d6",
+    "mtime": 1783610933.4996905,
+    "ast_hash": "24158216f1aa056d1ea04cd5ea7028d8",
     "semantic_hash": ""
   },
   "remix/app/tests/api/apiTests.ts": {
-    "mtime": 1783610051.125395,
-    "ast_hash": "779228d5415977ba951c96e6f1185b9d",
+    "mtime": 1783611039.0341008,
+    "ast_hash": "be541f07091fba2bed607756b6b2663d",
     "semantic_hash": ""
   },
   "remix/app/components/Nav/Drawer/DrawerContent.tsx": {
@@ -3280,8 +3280,8 @@
     "semantic_hash": ""
   },
   "remix/app/docs/apiDocs.ts": {
-    "mtime": 1783610010.811197,
-    "ast_hash": "18c5642f5c7b460b59c76a09e0ca60f5",
+    "mtime": 1783610924.6311843,
+    "ast_hash": "779b8e44b6fc10d9c2de8384c244347e",
     "semantic_hash": ""
   },
   "remix/app/routes/docs/api.tsx": {
@@ -3450,8 +3450,8 @@
     "semantic_hash": ""
   },
   "remix/app/api/utils/email/templates.ts": {
-    "mtime": 1783610051.1231673,
-    "ast_hash": "a801588ed40ce2a375a3a200a7a6ad7e",
+    "mtime": 1783610673.331285,
+    "ast_hash": "c61fcf5d5c5f0ece3356e563eb7f5ab9",
     "semantic_hash": ""
   },
   "remix/app/api/utils/email/testConfig.ts": {
@@ -3482,6 +3482,76 @@
   "docs/email-owned-architecture.md": {
     "mtime": 1783610051.0745082,
     "ast_hash": "eb5b651e67f68e463d028d1c960e673c",
+    "semantic_hash": ""
+  },
+  "remix/app/api/utils/auth/authOtps.ts": {
+    "mtime": 1783610650.3635514,
+    "ast_hash": "e91ebe1c41b6ac47017ebbde45d35b03",
+    "semantic_hash": ""
+  },
+  "remix/app/api/utils/auth/passwordResets.ts": {
+    "mtime": 1783610662.0528407,
+    "ast_hash": "276368330d01929412b33d36efcbae14",
+    "semantic_hash": ""
+  },
+  "remix/app/api/utils/auth/twoFactor.ts": {
+    "mtime": 1783610729.245182,
+    "ast_hash": "460edac8c335c9e1802b68f7165331c6",
+    "semantic_hash": ""
+  },
+  "remix/app/api/utils/crud/records.ts": {
+    "mtime": 1783610528.2336285,
+    "ast_hash": "cedd0109f79382950388d1665b05117b",
+    "semantic_hash": ""
+  },
+  "remix/app/api/utils/crud/search.ts": {
+    "mtime": 1783610554.7556133,
+    "ast_hash": "a3aff8320be672a3211dffe1c60aced8",
+    "semantic_hash": ""
+  },
+  "remix/app/routes/api/v1/auth/password-reset/confirm/_confirm.tsx": {
+    "mtime": 1783610742.684928,
+    "ast_hash": "9ae1b6ab19e03c747d296be714334515",
+    "semantic_hash": ""
+  },
+  "remix/app/routes/api/v1/auth/two-factor/_two-factor.tsx": {
+    "mtime": 1783610747.1501005,
+    "ast_hash": "62fa938880baaf97f8de3c4c23de6e94",
+    "semantic_hash": ""
+  },
+  "remix/app/routes/api/v1/crud/records/_records.tsx": {
+    "mtime": 1783610604.642315,
+    "ast_hash": "7913d9726cfe7d478103c5fb9819ffd2",
+    "semantic_hash": ""
+  },
+  "remix/app/routes/api/v1/crud/records/delete/_delete.tsx": {
+    "mtime": 1783610611.6993537,
+    "ast_hash": "6225c1a3e203dded8871ba1e97f08e5c",
+    "semantic_hash": ""
+  },
+  "remix/app/routes/api/v1/crud/records/permissions/_permissions.tsx": {
+    "mtime": 1783610615.937869,
+    "ast_hash": "2365f86710ddbd63b7cac52aab233b95",
+    "semantic_hash": ""
+  },
+  "remix/app/routes/api/v1/crud/records/update/_update.tsx": {
+    "mtime": 1783610607.92248,
+    "ast_hash": "0836e170f94a14d9af66015771bd725d",
+    "semantic_hash": ""
+  },
+  "remix/app/routes/api/v1/crud/search/_search.tsx": {
+    "mtime": 1783610621.1856992,
+    "ast_hash": "f09174d7051b5376e0b01caf55c8552f",
+    "semantic_hash": ""
+  },
+  "remix/app/routes/api/v1/crud/types/_types.tsx": {
+    "mtime": 1783610593.8268166,
+    "ast_hash": "51fc3e4118657380d65884b05b043c46",
+    "semantic_hash": ""
+  },
+  "remix/app/routes/api/v1/crud/types/delete/_delete.tsx": {
+    "mtime": 1783610597.1029315,
+    "ast_hash": "c8fc7c245115f5274b2f586c2d437a57",
     "semantic_hash": ""
   }
 }

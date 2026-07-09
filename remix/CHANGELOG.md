@@ -18,6 +18,22 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- 🗃️ **Generic typed CRUD API + email auth flows**: new `/api/v1/crud` family
+  (types, records, update/delete/permissions, search) implementing
+  `PLANS/codexCRUDImplementation.md` — user-defined schemas in a new
+  `thingTypes` collection, records as `kind:'record'` docs in `things` with
+  per-operation subject-key ACLs (`public`, `user:<id>`, `service:<id>`),
+  optional AES-256-GCM field encryption with HMAC blind-index search tokens
+  (`THINGTIME_DATA_MASTER_KEYS`/`THINGTIME_ACTIVE_DATA_KEY_ID`), soft deletes,
+  optimistic `expectedVersion` concurrency, and 404-for-unauthorized reads.
+  Plus email-backed auth on the SES email layer: password reset
+  (`/api/v1/auth/password-reset` + `/confirm`, single-use 1h tokens, all
+  sessions revoked on reset) and opt-in email 2FA
+  (`/api/v1/auth/two-factor` toggle + two-step `/api/v1/login` OTP challenge,
+  hashed attempt-capped codes in a new `authOtps` collection). All routes
+  registered in the route map + API docs (docs-derived Nitro route list,
+  including the email PR's `config`/`test-otp` routes) with `crud`/`auth` API
+  test coverage. — _Claude (AI), 2026-07-10_
 - Added `/tests` email delivery checks for signup verification, service-account
   verification, and the OTP email helper, plus `SES_SANDBOX=1` throttling so
   sandbox runs wait one second between email sends. — _Codex (AI), 2026-07-09_
