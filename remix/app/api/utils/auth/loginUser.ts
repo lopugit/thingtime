@@ -8,7 +8,7 @@ import { findUserById, findUserByUsername, PublicUser, toPublicUser } from './us
 export type LoginResult =
   | { ok: false; status: number; error: string }
   | { ok: true; requiresOtp: true; challenge: string; expiresAt: string }
-  | { ok: true; requiresOtp?: false; user: PublicUser; jwt: string };
+  | { ok: true; user: PublicUser; jwt: string };
 
 const issueSession = async (user: any): Promise<LoginResult> => {
   const session = await createSession(String(user._id));

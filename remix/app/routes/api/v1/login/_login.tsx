@@ -21,7 +21,7 @@ export const action = async ({ request }: { request: Request }) => {
     return json({ ok: false, error: result.error }, { status: result.status });
   }
 
-  if ('requiresOtp' in result && result.requiresOtp) {
+  if ('requiresOtp' in result) {
     // no session yet — the emailed code completes the login
     return json({
       ok: true,
