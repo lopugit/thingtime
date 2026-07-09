@@ -1409,7 +1409,9 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 										setEditMode={setEditMode}
 										transition="all 0.2s ease-in-out"
 										opacity={showContextIcon ? 1 : 0}
-										iconSize={13}
+										// 11px emoji ≈ 13px lucide — the same optical size as
+										// the editor toolbar's chrome icons
+										iconSize={11}
 										uuid={uuid}
 										fullPath={fullPath}
 										path={path}
