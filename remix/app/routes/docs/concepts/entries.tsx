@@ -234,6 +234,7 @@ export const conceptEntries: ConceptEntry[] = [
 		editing: [
 			'String mode: string in → string out, on every change. The editor owns the text while mounted; remount (key) to replace it externally.',
 			'Block mode: { blocks: [...] } in → { blocks: [...] } out, preserving sibling fields like kind: "rich-text".',
+			'The 🎨 Style tune (every block\'s ⋮ menu) adds colour/size/font/alignment as validated tokens in block.tunes.style — hex/theme colours, 10–72px clamp, curated font stacks, align enums — compiled to React style objects, never raw CSS.',
 			'Pressing Enter inside a one-line value creates a newline — which upgrades that value to the block editor on its next edit.'
 		],
 		source: 'remix/app/components/Editor/LongTextEditor.tsx',

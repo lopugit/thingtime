@@ -3,6 +3,7 @@ import { Box, Flex, Grid, Text } from '@chakra-ui/react';
 
 import { registerKindRenderer } from './kindRegistry';
 import type { KindRenderContext } from './kindRegistry';
+import { sanitizeStyleTokens, styleTokensToCss } from '~/components/Editor/styleTokens';
 import {
 	Avatar,
 	BodyText,
@@ -420,7 +421,7 @@ const RepositoryRenderer = ({ value }: { value: RepoValue; context: KindRenderCo
 
 // ————— 📄 rich-text (Editor.js blocks) —————
 
-type RichTextBlock = { type: string; data: Record<string, unknown> };
+type RichTextBlock = { type: string; data: Record<string, unknown>; tunes?: Record<string, unknown> };
 type RichTextValue = { blocks: RichTextBlock[] };
 
 // strip inline HTML that editor.js allows (b/i/a/mark) down to text
@@ -503,7 +504,17 @@ const normalizeListItems = (items: unknown[], checklist: boolean): NormalizedLis
 		};
 	});
 
-const ListLevel = ({ items, ordered, depth }: { items: NormalizedListItem[]; ordered: boolean; depth: number }) => (
+const ListLevel = ({
+	items,
+	ordered,
+	depth,
+	itemStyle
+}: {
+	items: NormalizedListItem[];
+	ordered: boolean;
+	depth: number;
+	itemStyle?: React.CSSProperties;
+}) => (
 	<Flex flexDirection="column" paddingLeft={depth ? 4 : 0} rowGap={1}>
 		{items.map((item, idx) => (
 			<React.Fragment key={idx}>
@@ -516,12 +527,13 @@ const ListLevel = ({ items, ordered, depth }: { items: NormalizedListItem[]; ord
 						fontSize="sm"
 						lineHeight="1.55"
 						opacity={item.checked ? 0.6 : 1}
+						style={itemStyle}
 						sx={inlineMarkupSx}
 						textDecoration={item.checked ? 'line-through' : 'none'}
 						dangerouslySetInnerHTML={{ __html: item.html }}
 					/>
 				</Flex>
-				{item.children.length ? <ListLevel items={item.children} ordered={ordered} depth={depth + 1} /> : null}
+				{item.children.length ? <ListLevel items={item.children} ordered={ordered} depth={depth + 1} itemStyle={itemStyle} /> : null}
 			</React.Fragment>
 		))}
 	</Flex>
@@ -530,6 +542,10 @@ const ListLevel = ({ items, ordered, depth }: { items: NormalizedListItem[]; ord
 export const RichTextBlocks = ({ blocks }: { blocks: RichTextBlock[] }) => (
 	<Flex flexDirection="column" rowGap={2}>
 		{blocks.map((block, idx) => {
+			// 🎨 Style tune data: re-validated here, so a hostile stored doc can
+			// only ever contribute clean colour/size/font/align tokens
+			const tuneStyle = styleTokensToCss(sanitizeStyleTokens((block.tunes as Record<string, unknown> | undefined)?.style));
+
 			if (block.type === 'header') {
 				const level = toNumberOr(block.data.level, 2) || 2;
 				const sizes: Record<number, string> = { 1: 'xl', 2: 'lg', 3: 'md', 4: 'sm', 5: 'sm', 6: 'xs' };
@@ -540,6 +556,7 @@ export const RichTextBlocks = ({ blocks }: { blocks: RichTextBlock[] }) => (
 						fontSize={sizes[level] || 'md'}
 						fontWeight={800}
 						lineHeight="1.25"
+						style={tuneStyle}
 						sx={inlineMarkupSx}
 						dangerouslySetInnerHTML={{ __html: sanitizeInlineHtml(block.data.text) }}
 					/>
@@ -549,16 +566,17 @@ export const RichTextBlocks = ({ blocks }: { blocks: RichTextBlock[] }) => (
 				const style = toStringOr(block.data.style);
 				const checklist = block.type === 'checklist' || style === 'checklist';
 				const items = normalizeListItems(toArray(block.data.items), checklist);
-				return <ListLevel key={idx} items={items} ordered={style === 'ordered'} depth={0} />;
+				return <ListLevel key={idx} items={items} ordered={style === 'ordered'} depth={0} itemStyle={tuneStyle} />;
 			}
 			if (block.type === 'quote') {
 				return (
-					<Box key={idx} borderLeft="3px solid var(--tt-accent, hotpink)" paddingLeft={3}>
+					<Box key={idx} borderLeft="3px solid var(--tt-accent, hotpink)" paddingLeft={3} style={{ textAlign: tuneStyle.textAlign }}>
 						<Text
 							color="var(--tt-ink, #16161a)"
 							fontSize="sm"
 							fontStyle="italic"
 							lineHeight="1.6"
+							style={tuneStyle}
 							sx={inlineMarkupSx}
 							dangerouslySetInnerHTML={{ __html: sanitizeInlineHtml(block.data.text) }}
 						/>
@@ -686,6 +704,7 @@ export const RichTextBlocks = ({ blocks }: { blocks: RichTextBlock[] }) => (
 					fontSize="sm"
 					lineHeight="1.65"
 					whiteSpace="pre-wrap"
+					style={tuneStyle}
 					sx={inlineMarkupSx}
 					dangerouslySetInnerHTML={{ __html: sanitizeInlineHtml(block.data.text) }}
 				/>

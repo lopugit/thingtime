@@ -3470,13 +3470,13 @@
     "semantic_hash": ""
   },
   "remix/app/routes/docs/concepts/ConceptStories.tsx": {
-    "mtime": 1783638682.1021965,
-    "ast_hash": "5b1361346ccb8de684b9f46e9d283723",
+    "mtime": 1783640017.711781,
+    "ast_hash": "94426e4941826ebaf05527e8363587da",
     "semantic_hash": ""
   },
   "remix/app/routes/docs/concepts/entries.tsx": {
-    "mtime": 1783638698.369671,
-    "ast_hash": "c0a0b1c42544453a65222506b13cef30",
+    "mtime": 1783639864.6326108,
+    "ast_hash": "c6fb8e20581a824609aa72ec0188760c",
     "semantic_hash": ""
   },
   "remix/app/routes/docs/concepts/index.tsx": {
@@ -3485,8 +3485,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Editor/LongTextEditor.tsx": {
-    "mtime": 1783638578.9076715,
-    "ast_hash": "c188522876a73af6db15863eaf50af37",
+    "mtime": 1783640295.0429904,
+    "ast_hash": "41d9585fd1f65742005780b5cafc3367",
     "semantic_hash": ""
   },
   "remix/app/components/Kinds/kindPrimitives.tsx": {
@@ -3505,8 +3505,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Kinds/kindRenderersMedia.tsx": {
-    "mtime": 1783638613.6293488,
-    "ast_hash": "73c45023f73e4c967635c40a83c3098f",
+    "mtime": 1783639819.4093723,
+    "ast_hash": "beae4b143a7aa8790d2d4838aec7ceb9",
     "semantic_hash": ""
   },
   "remix/app/components/Kinds/kindRenderersPlanning.tsx": {
@@ -3520,8 +3520,18 @@
     "semantic_hash": ""
   },
   "PRs/53-claude-nested-data-viewer-concepts-1ebbbe--nested-data-viewer-concepts-kind-renderers.md": {
-    "mtime": 1783635446.3493938,
-    "ast_hash": "b3c7af34ad3d36640803028bcc99fca1",
+    "mtime": 1783638946.6875362,
+    "ast_hash": "4473457690c1644b1bb89f67b040b109",
+    "semantic_hash": ""
+  },
+  "remix/app/components/Editor/StyleTune.ts": {
+    "mtime": 1783640426.9963179,
+    "ast_hash": "c6b46cf34a8734bc20dccfa50a2a3e66",
+    "semantic_hash": ""
+  },
+  "remix/app/components/Editor/styleTokens.ts": {
+    "mtime": 1783639706.410136,
+    "ast_hash": "53eac7933dd30d77a7353309127cc81b",
     "semantic_hash": ""
   }
 }

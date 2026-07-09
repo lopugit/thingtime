@@ -1,6 +1,8 @@
 import React from 'react';
 import { Box } from '@chakra-ui/react';
 
+import { StyleTune } from './StyleTune';
+
 // LongTextEditor — Editor.js block editing for long-text values, everywhere.
 //
 // Two modes, decided by the value's shape (single source of truth: the data):
@@ -39,7 +41,9 @@ export type LongTextBlockType =
 	| 'image'
 	| 'marker'
 	| 'inlineCode'
-	| 'underline';
+	| 'underline'
+	// the 🎨 Style block tune (colour/size/font/align as validated tokens)
+	| 'style';
 
 // enable/disable any tool per field: absent or true = enabled
 export type LongTextBlockTypes = Partial<Record<LongTextBlockType, boolean>>;
@@ -57,7 +61,8 @@ export const LONG_TEXT_BLOCK_TYPES: LongTextBlockType[] = [
 	'image',
 	'marker',
 	'inlineCode',
-	'underline'
+	'underline',
+	'style'
 ];
 
 // the "is this string long enough to deserve a block editor" heuristic used
@@ -442,7 +447,8 @@ const LongTextEditorInner = (props: LongTextEditorProps) => {
 				...(enabled('image') ? { image: SimpleImage as any } : {}),
 				...(enabled('marker') ? { marker: Marker as any } : {}),
 				...(enabled('inlineCode') ? { inlineCode: InlineCode as any } : {}),
-				...(enabled('underline') ? { underline: Underline as any } : {})
+				...(enabled('underline') ? { underline: Underline as any } : {}),
+				...(enabled('style') ? { style: StyleTune as any } : {})
 			};
 
 			const editor = new EditorJS({
@@ -452,6 +458,8 @@ const LongTextEditorInner = (props: LongTextEditorProps) => {
 				minHeight: 0,
 				readOnly: readonlyRef.current,
 				tools: tools as any,
+				// the 🎨 Style tune rides every block's settings menu
+				...(enabled('style') ? { tunes: ['style'] } : {}),
 				onChange: async () => {
 					try {
 						const saved = await editor.save();
@@ -477,6 +485,16 @@ const LongTextEditorInner = (props: LongTextEditorProps) => {
 				editor.destroy?.();
 				editorRef.current = null;
 				return;
+			}
+
+			// register in the window.meta debug db (same convention as
+			// Thingtime.tsx) so devtools/tests can drive editor.js's own API
+			try {
+				const meta = ((window as any).meta = (window as any).meta || {});
+				meta.editors = meta.editors || [];
+				meta.editors.push(editor);
+			} catch {
+				// nothing
 			}
 
 			// fallback save on raw input events: editor.js's own change tracking
@@ -517,6 +535,12 @@ const LongTextEditorInner = (props: LongTextEditorProps) => {
 			const editor = editorRef.current;
 			editorRef.current = null;
 			if (editor) {
+				try {
+					const meta = (window as any).meta;
+					if (meta?.editors) meta.editors = meta.editors.filter((item: unknown) => item !== editor);
+				} catch {
+					// nothing
+				}
 				Promise.resolve(editor.isReady)
 					.then(() => editor.destroy?.())
 					.catch(() => {});

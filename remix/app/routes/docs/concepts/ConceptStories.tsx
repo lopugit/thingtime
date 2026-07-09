@@ -402,7 +402,8 @@ const BLOCK_TYPE_META: Record<LongTextBlockType, { label: string; emoji: string 
 	image: { label: 'Images', emoji: '🖼️' },
 	marker: { label: 'Highlight', emoji: '🖍️' },
 	inlineCode: { label: 'Inline code', emoji: '🔤' },
-	underline: { label: 'Underline', emoji: '🖊️' }
+	underline: { label: 'Underline', emoji: '🖊️' },
+	style: { label: 'Custom style', emoji: '🎨' }
 };
 
 const BLOCK_PICKER_SEED = `## Every block, one field
@@ -429,6 +430,8 @@ const BlockPickerStory = ({ edit }: ConceptStoryArgs) => {
 			<Flex columnGap={1.5} flexWrap="wrap" marginBottom={3} rowGap={1.5}>
 				{LONG_TEXT_BLOCK_TYPES.map((tool) => {
 					const enabled = blockTypes[tool] !== false;
+					// fall back gracefully if a tool ships before its chip metadata
+					const meta = BLOCK_TYPE_META[tool] || { label: tool, emoji: '🧩' };
 					return (
 						<Box
 							key={tool}
@@ -447,7 +450,7 @@ const BlockPickerStory = ({ edit }: ConceptStoryArgs) => {
 							textDecoration={enabled ? 'none' : 'line-through'}
 							onClick={() => setBlockTypes((prev) => ({ ...prev, [tool]: prev[tool] === false }))}
 						>
-							{BLOCK_TYPE_META[tool].emoji} {BLOCK_TYPE_META[tool].label}
+							{meta.emoji} {meta.label}
 						</Box>
 					);
 				})}
@@ -457,6 +460,47 @@ const BlockPickerStory = ({ edit }: ConceptStoryArgs) => {
 			</Flex>
 			<LongTextEditor value={BLOCK_PICKER_SEED} blockTypes={blockTypes} readonly={!edit} onValueChange={() => {}} />
 		</Box>
+	);
+};
+
+// styled blocks: tokens in block.tunes.style — including one hostile block
+// whose "styles" must come out neutralised
+const STYLED_SEED = {
+	kind: 'rich-text',
+	blocks: [
+		{ type: 'header', data: { text: 'Painted headings', level: 2 }, tunes: { style: { color: '#ff69b4', size: 40, align: 'center' } } },
+		{
+			type: 'paragraph',
+			data: { text: 'Colour, size, font, and alignment live in <b>block.tunes.style</b> as validated tokens — hex or theme colours, clamped px sizes, curated font stacks. Never raw CSS.' },
+			tunes: { style: { font: 'serif', size: 17 } }
+		},
+		{ type: 'quote', data: { text: 'Style is data too.', caption: 'Lopu' }, tunes: { style: { align: 'center', color: 'var(--tt-link, #2f8fd6)', size: 19 } } },
+		{
+			type: 'paragraph',
+			data: { text: 'This block tried to smuggle position:fixed, a 9999px font, and Comic Sans — the validators kept a clamped size and dropped the rest. 🛡️' },
+			tunes: { style: { color: 'red;position:fixed;top:0', size: 9999, font: 'comic-sans' } }
+		}
+	]
+};
+
+const StyledTextStory = ({ edit }: ConceptStoryArgs) => {
+	const [doc, setDoc] = React.useState<LongTextValue>(STYLED_SEED as LongTextValue);
+
+	return (
+		<Grid gap={4} templateColumns="repeat(auto-fit, minmax(280px, 1fr))">
+			<Box>
+				<Text color="var(--tt-muted, #9a9aa6)" fontFamily="var(--tt-font-mono, monospace)" fontSize="11px" fontWeight={700} marginBottom={1.5}>
+					the 🎨 Style tune (block settings ⋮ menu)
+				</Text>
+				<LongTextEditor value={STYLED_SEED as LongTextValue} onValueChange={setDoc} readonly={!edit} />
+			</Box>
+			<Box minWidth={0}>
+				<Text color="var(--tt-muted, #9a9aa6)" fontFamily="var(--tt-font-mono, monospace)" fontSize="11px" fontWeight={700} marginBottom={1.5}>
+					rendered by the rich-text kind (live)
+				</Text>
+				<RenderThing thing={doc} />
+			</Box>
+		</Grid>
 	);
 };
 
@@ -478,6 +522,15 @@ export const longTextStories: ConceptStory[] = [
 		defaultEdit: true,
 		render: (args) => <RichTextThingStory {...args} />,
 		note: 'Select text in the editor for the inline toolbar (bold/italic/link) — formatting carries into the rendered panel live.'
+	},
+	{
+		id: 'long-text-styled',
+		title: 'Custom colours, sizes & fonts — safely (style is data)',
+		description:
+			'Full visual customisation without raw CSS: the 🎨 Style tune in every block\'s ⋮ settings menu offers colour swatches (theme tokens + hexes), clamped px sizes, curated font stacks, and alignment. Choices are stored as validated tokens in block.tunes.style and compiled to React style objects at render — a token can never express url(), position:fixed, or any other CSS escape hatch. The last block below arrived hostile and left harmless.',
+		defaultEdit: true,
+		render: (args) => <StyledTextStory {...args} />,
+		note: 'Click a block, open ⋮ → 🎨 Style. Tokens survive in block mode (rich-text things); plain-string fields drop styling by design — the string stays honest.'
 	},
 	{
 		id: 'long-text-block-picker',
