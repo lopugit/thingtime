@@ -76,8 +76,12 @@
 - New `/api/v1/...` endpoints must be registered in THREE places or Nitro
   404s them: the route file (`remix/app/routes/api/v1/.../_name.tsx` exporting
   `loader` for GET / `action` for POST), the import map in
-  `remix/server/routes/api/[...].ts`, and the `apiRoutes` list in
-  `remix/nitro.config.ts`. Copy the themes family for conventions: utils in
+  `remix/server/routes/api/[...].ts`, and an `apiEndpointDocs` entry in
+  `remix/app/docs/apiDocs.ts` (Nitro's explicit route table is derived from the
+  docs registry via `apiV1RouteKeys` — there is no hand-maintained `apiRoutes`
+  list in `remix/nitro.config.ts`; documenting the endpoint IS the
+  registration, and each entry also auto-generates two `-docs` smoke tests).
+  Copy the themes family for conventions: utils in
   `remix/app/api/utils/...` returning `{ ok:false, status, error } |
   { ok:true, ... }` unions, `json` from `~/api/http` (use `readJsonBody` for
   size-capped mutation bodies), auth via `getCurrentUser(request)`, public

@@ -89,6 +89,27 @@ export function useApi() {
     things: {
       feed: useCallback(async (args) => getJson(`/api/v1/things/feed${toQuery(args)}`), []),
       userPosts: useCallback(async (args) => getJson(`/api/v1/things/user${toQuery(args)}`), []),
+      get: useCallback(async (args) => getJson(`/api/v1/things${toQuery({ id: args?.id })}`), []),
+      list: useCallback(
+        async (args) =>
+          getJson(
+            `/api/v1/things${toQuery({
+              target: args?.target,
+              thingtime: args?.thingtime,
+              cursor: args?.cursor,
+              limit: args?.limit
+            })}`
+          ),
+        []
+      ),
+      update: useCallback(
+        async (args) =>
+          asyncFetcher.submit(
+            { id: args?.id, crystal: args?.crystal, visibility: args?.visibility, tags: args?.tags },
+            { action: '/api/v1/things/update' }
+          ),
+        [asyncFetcher]
+      ),
       create: useCallback(
         async (args) => {
           const { type, text, images, listing, visibility, tags } = args;
@@ -202,6 +223,21 @@ export function useApi() {
           ret.then(refreshRootData).catch(() => {});
           return ret;
         },
+        [asyncFetcher]
+      )
+    },
+    schemas: {
+      list: useCallback(async () => getJson('/api/v1/schemas'), []),
+      get: useCallback(async (id) => getJson(`/api/v1/schemas${toQuery({ id })}`), [])
+    },
+    admin: {
+      migrations: useCallback(async () => getJson('/api/v1/admin/migrations'), []),
+      migrationsRun: useCallback(
+        async (args) =>
+          asyncFetcher.submit(
+            { migration: args?.migration, dryRun: args?.dryRun },
+            { action: '/api/v1/admin/migrations/run' }
+          ),
         [asyncFetcher]
       )
     },

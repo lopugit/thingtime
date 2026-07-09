@@ -1,0 +1,335 @@
+import React from 'react';
+import {
+  Badge,
+  Box,
+  Button,
+  Flex,
+  Heading,
+  Icon,
+  Stack,
+  Table,
+  Tbody,
+  Td,
+  Text,
+  Th,
+  Thead,
+  Tr
+} from '@chakra-ui/react';
+import { Database, FlaskConical, Play } from 'lucide-react';
+
+import { useLopu } from '~/components/Lopu/useLopu';
+import { useApi } from '~/hooks/useApi';
+
+const CARD_STYLES = {
+  bg: 'var(--tt-card, #ffffff)',
+  border: '1px solid',
+  borderColor: 'var(--tt-border, #ececef)',
+  borderRadius: 'var(--tt-radius-lg, 16px)',
+  boxShadow: 'var(--tt-shadow-card, 0 1px 2px rgba(0, 0, 0, 0.05))'
+} as const;
+
+type CollectionCensus = {
+  collection: string;
+  currentVersion: number;
+  total: number;
+  versions: Record<string, number>;
+  pendingMigrations: string[];
+};
+
+type Migration = {
+  id: string;
+  collection: string;
+  fromVersion: number;
+  toVersion: number;
+  title: string;
+  description: string;
+  pending: number;
+};
+
+type MigrationReport = {
+  dryRun: boolean;
+  matched: number;
+  migrated: number;
+  created: number;
+  skipped: number;
+  notes: string[];
+};
+
+type MigrationsStatus = {
+  collections: CollectionCensus[];
+  migrations: Migration[];
+};
+
+const versionsSummary = (versions: Record<string, number>) =>
+  Object.entries(versions || {})
+    .map(([version, count]) => `${version.startsWith('v') ? version : `v${version}`}: ${count}`)
+    .join(' · ');
+
+const reportSummary = (report?: Partial<MigrationReport>) => {
+  const counts = `matched ${report?.matched ?? 0} · migrated ${report?.migrated ?? 0} · created ${
+    report?.created ?? 0
+  } · skipped ${report?.skipped ?? 0}`;
+
+  return report?.notes?.length ? `${counts} — ${report.notes.join(' · ')}` : counts;
+};
+
+// Admin-only census of collection schema versions + one-click (well,
+// two-click — non-dry runs confirm inline) migration runner.
+export function MigrationsPanel() {
+  const { v1 } = useApi();
+  // the useApi bindings are stable useCallbacks — safe effect deps
+  const { migrations: getMigrations, migrationsRun } = v1.admin;
+  const lopu = useLopu();
+  const [status, setStatus] = React.useState<MigrationsStatus | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+  const [runningKey, setRunningKey] = React.useState<string | null>(null);
+  const [confirmId, setConfirmId] = React.useState<string | null>(null);
+
+  const fetchStatus = React.useCallback(async () => {
+    try {
+      const data = await getMigrations();
+      setStatus({ collections: data?.collections || [], migrations: data?.migrations || [] });
+      setError(null);
+    } catch (err: any) {
+      setError(err?.error || 'Failed to load migration status');
+    } finally {
+      setLoading(false);
+    }
+  }, [getMigrations]);
+
+  React.useEffect(() => {
+    fetchStatus();
+  }, [fetchStatus]);
+
+  const runMigration = React.useCallback(
+    async (migration: Migration, dryRun: boolean) => {
+      setRunningKey(`${migration.id}:${dryRun ? 'dry' : 'run'}`);
+      setConfirmId(null);
+
+      try {
+        const result = await migrationsRun({ migration: migration.id, dryRun });
+
+        lopu({
+          title: dryRun ? `Dry run: ${migration.id}` : 'Migration complete',
+          description: reportSummary(result?.report),
+          status: 'success'
+        });
+        await fetchStatus();
+      } catch (err: any) {
+        lopu({
+          title: dryRun ? `Dry run failed: ${migration.id}` : `Migration failed: ${migration.id}`,
+          description: err?.error || 'Something went wrong running the migration',
+          status: 'error'
+        });
+      } finally {
+        setRunningKey(null);
+      }
+    },
+    [fetchStatus, lopu, migrationsRun]
+  );
+
+  const busy = runningKey !== null;
+
+  return (
+    <Box as="section" id="database-migrations" minW={0} scrollMarginTop="112px">
+      <Flex align="center" gap={2} mb={2} wrap="wrap">
+        <Text
+          color="var(--tt-muted, #9a9aa6)"
+          fontFamily="mono"
+          fontSize="11px"
+          fontWeight="700"
+          letterSpacing="0.14em"
+          textTransform="uppercase"
+        >
+          Admin
+        </Text>
+        <Badge colorScheme="orange">admin only</Badge>
+      </Flex>
+
+      <Flex align="center" gap={3} mb={2}>
+        <Icon as={Database} boxSize={5} color="var(--tt-docs-accent, #008060)" />
+        <Heading as="h3" fontSize={{ base: 'xl', md: '2xl' }} letterSpacing="0">
+          Database migrations
+        </Heading>
+      </Flex>
+      <Text color="var(--tt-text, #5a5a66)" fontSize="sm" lineHeight="1.7" maxW="760px" mb={5}>
+        Collection schema census and pending migrations. Dry runs report what would change without writing anything.
+      </Text>
+
+      {loading ? (
+        <Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="sm">
+          Loading migration status…
+        </Text>
+      ) : null}
+
+      {error ? (
+        <Box {...CARD_STYLES} p={4}>
+          <Text color="var(--tt-text, #5a5a66)" fontSize="sm">
+            {error}
+          </Text>
+          <Button
+            mt={3}
+            onClick={() => {
+              setLoading(true);
+              fetchStatus();
+            }}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            Retry
+          </Button>
+        </Box>
+      ) : null}
+
+      {status ? (
+        <Stack spacing={5}>
+          <Box {...CARD_STYLES} overflow="hidden">
+            <Box borderBottom="1px solid" borderColor="var(--tt-border, #ececef)" px={5} py={4}>
+              <Heading as="h4" fontSize="md">
+                Collections census
+              </Heading>
+            </Box>
+            <Box overflowX="auto">
+              <Table minW="640px" size="sm">
+                <Thead>
+                  <Tr>
+                    <Th>Collection</Th>
+                    <Th>Current</Th>
+                    <Th isNumeric>Docs</Th>
+                    <Th>Versions</Th>
+                    <Th>Pending</Th>
+                  </Tr>
+                </Thead>
+                <Tbody>
+                  {status.collections.map((entry) => (
+                    <Tr key={entry.collection}>
+                      <Td fontFamily="mono" fontSize="xs" fontWeight="700" whiteSpace="nowrap">
+                        {entry.collection}
+                      </Td>
+                      <Td>
+                        <Badge colorScheme="blue">v{entry.currentVersion}</Badge>
+                      </Td>
+                      <Td fontFamily="mono" fontSize="xs" isNumeric>
+                        {entry.total}
+                      </Td>
+                      <Td color="var(--tt-text, #5a5a66)" fontFamily="mono" fontSize="xs" whiteSpace="nowrap">
+                        {versionsSummary(entry.versions) || '—'}
+                      </Td>
+                      <Td>
+                        {entry.pendingMigrations?.length ? (
+                          <Badge colorScheme="orange" title={entry.pendingMigrations.join(', ')}>
+                            {entry.pendingMigrations.length} pending
+                          </Badge>
+                        ) : (
+                          <Badge colorScheme="green">up to date</Badge>
+                        )}
+                      </Td>
+                    </Tr>
+                  ))}
+                </Tbody>
+              </Table>
+            </Box>
+          </Box>
+
+          {status.migrations.length ? (
+            <Stack spacing={4}>
+              {status.migrations.map((migration) => {
+                const confirming = confirmId === migration.id;
+
+                return (
+                  <Box {...CARD_STYLES} key={migration.id} minW={0} p={{ base: 4, md: 5 }}>
+                    <Flex align="center" gap={2} mb={2} wrap="wrap">
+                      <Badge
+                        bg="var(--tt-docs-accent-soft, #d7f5df)"
+                        borderRadius="sm"
+                        color="var(--tt-docs-accent-ink, #0f5132)"
+                        fontFamily="mono"
+                        px={2}
+                        textTransform="none"
+                      >
+                        {migration.collection}
+                      </Badge>
+                      <Badge colorScheme="blue">
+                        v{migration.fromVersion} → v{migration.toVersion}
+                      </Badge>
+                      <Badge colorScheme={migration.pending ? 'orange' : 'green'}>{migration.pending} pending</Badge>
+                    </Flex>
+
+                    <Heading as="h4" fontSize="md">
+                      {migration.title}
+                    </Heading>
+                    <Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="xs" mt={1}>
+                      {migration.id}
+                    </Text>
+                    <Text color="var(--tt-text, #5a5a66)" fontSize="sm" lineHeight="1.7" mt={2}>
+                      {migration.description}
+                    </Text>
+
+                    <Flex align="center" gap={2} mt={4} wrap="wrap">
+                      <Button
+                        isDisabled={busy || confirming}
+                        isLoading={runningKey === `${migration.id}:dry`}
+                        leftIcon={<Icon as={FlaskConical} boxSize={4} />}
+                        onClick={() => runMigration(migration, true)}
+                        size="sm"
+                        type="button"
+                        variant="outline"
+                      >
+                        Dry run
+                      </Button>
+                      {confirming ? (
+                        <>
+                          <Text fontSize="sm" fontWeight="700">
+                            Really run?
+                          </Text>
+                          <Button
+                            colorScheme="red"
+                            isDisabled={busy}
+                            onClick={() => runMigration(migration, false)}
+                            size="sm"
+                            type="button"
+                          >
+                            Confirm
+                          </Button>
+                          <Button
+                            isDisabled={busy}
+                            onClick={() => setConfirmId(null)}
+                            size="sm"
+                            type="button"
+                            variant="ghost"
+                          >
+                            Cancel
+                          </Button>
+                        </>
+                      ) : (
+                        <Button
+                          bg="var(--tt-docs-accent, #008060)"
+                          color="white"
+                          _hover={{ bg: 'var(--tt-docs-accent-hover, #006e52)' }}
+                          isDisabled={busy}
+                          isLoading={runningKey === `${migration.id}:run`}
+                          leftIcon={<Icon as={Play} boxSize={4} />}
+                          onClick={() => setConfirmId(migration.id)}
+                          size="sm"
+                          type="button"
+                        >
+                          Run migration
+                        </Button>
+                      )}
+                    </Flex>
+                  </Box>
+                );
+              })}
+            </Stack>
+          ) : (
+            <Text color="var(--tt-muted, #9a9aa6)" fontSize="sm">
+              No migrations registered.
+            </Text>
+          )}
+        </Stack>
+      ) : null}
+    </Box>
+  );
+}

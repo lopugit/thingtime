@@ -1,4 +1,5 @@
 export type ApiTestGroup =
+  | 'admin'
   | 'algorithms'
   | 'auth'
   | 'crypto'
@@ -8,6 +9,7 @@ export type ApiTestGroup =
   | 'mongodb'
   | 'profile'
   | 'root'
+  | 'schemas'
   | 'template'
   | 'themes'
   | 'things'

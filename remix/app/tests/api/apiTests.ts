@@ -289,13 +289,13 @@ export const apiTests: ApiTestDefinition[] = [
   {
     id: 'mongodb-raw-results',
     name: 'MongoDB raw results',
-    description: 'Raw results route responds with data or an environment-dependent error.',
+    description: 'Raw results are admin-only: 401 for non-admins, data or an environment-dependent error for admins.',
     group: 'mongodb',
     method: 'POST',
     path: '/api/v1/mongodb/raw-results',
     body: {},
     timeoutMs: 15000,
-    expect: expectStatus([200, 500], 'MongoDB raw-results route responded.')
+    expect: expectStatus([200, 401, 500], 'MongoDB raw-results route responded.')
   },
   {
     id: 'mongodb-populate',
@@ -503,13 +503,113 @@ export const apiTests: ApiTestDefinition[] = [
   },
   {
     id: 'things-delete-guarded',
-    name: 'Post delete is guarded',
-    description: 'Deleting without a session (or an unknown/unowned post) is rejected with an error shape.',
+    name: 'Thing delete is guarded',
+    description: 'Deleting without a session (or an unknown/unowned thing) is rejected with an error shape.',
     group: 'things',
     method: 'POST',
     path: '/api/v1/things/delete',
     body: { id: 'not-a-real-post-id' },
-    expect: expectJson([401, 404], (body) => body?.ok === false && typeof body?.error === 'string', 'Post delete was rejected with an error shape.')
+    expect: expectJson([401, 404], (body) => body?.ok === false && typeof body?.error === 'string', 'Thing delete was rejected with an error shape.')
+  },
+  {
+    id: 'things-read-unknown',
+    name: 'Thing read unknown id',
+    description: 'Reading an unknown thing id resolves to a 404 error shape.',
+    group: 'things',
+    method: 'GET',
+    path: '/api/v1/things?id=not-a-real-thing-id',
+    expect: expectJson([404], (body) => body?.ok === false && typeof body?.error === 'string', 'Unknown thing returned a 404 error shape.')
+  },
+  {
+    id: 'things-list-own-guarded',
+    name: 'Own-things list requires auth',
+    description: 'Listing your own things without a session is rejected; with a session it returns a things array.',
+    group: 'things',
+    method: 'GET',
+    path: '/api/v1/things?limit=5',
+    expect: expectJson(
+      [200, 401],
+      (body) => (body?.ok === true && Array.isArray(body?.things)) || (body?.ok === false && typeof body?.error === 'string'),
+      'Own-things list either returned things (session) or was rejected (anonymous).'
+    )
+  },
+  {
+    id: 'things-update-guarded',
+    name: 'Thing update is guarded',
+    description: 'Updating without a session (or an unknown/unowned thing) is rejected with an error shape.',
+    group: 'things',
+    method: 'POST',
+    path: '/api/v1/things/update',
+    body: { id: 'not-a-real-post-id', crystal: { text: 'edited' } },
+    expect: expectJson([401, 404], (body) => body?.ok === false && typeof body?.error === 'string', 'Thing update was rejected with an error shape.')
+  },
+  {
+    id: 'schemas-list',
+    name: 'Schemas registry',
+    description: 'The public schema registry returns every Thingtime Schema plus collection versions.',
+    group: 'schemas',
+    method: 'GET',
+    path: '/api/v1/schemas',
+    expect: expectJson(
+      [200],
+      (body) =>
+        body?.ok === true &&
+        Array.isArray(body?.schemas) &&
+        body.schemas.some((schema: any) => schema?.id === 'thing' && schema?.kind === 'root') &&
+        body.schemas.some((schema: any) => schema?.id === 'post' && schema?.kind === 'crystal') &&
+        typeof body?.collectionVersions?.things === 'number',
+      'Schema registry returned the root thing schema, crystal schemas, and collection versions.'
+    )
+  },
+  {
+    id: 'schemas-single',
+    name: 'Single schema lookup',
+    description: 'A schema id resolves to its full definition; unknown ids 404.',
+    group: 'schemas',
+    method: 'GET',
+    path: '/api/v1/schemas?id=comment',
+    expect: expectJson(
+      [200],
+      (body) => body?.ok === true && body?.schema?.id === 'comment' && Array.isArray(body?.schema?.fields),
+      'Comment schema returned with its fields.'
+    )
+  },
+  {
+    id: 'schemas-unknown',
+    name: 'Unknown schema id',
+    description: 'Unknown schema ids resolve to a 404 error shape.',
+    group: 'schemas',
+    method: 'GET',
+    path: '/api/v1/schemas?id=not-a-real-schema',
+    expect: expectJson([404], (body) => body?.ok === false && typeof body?.error === 'string', 'Unknown schema returned a 404 error shape.')
+  },
+  {
+    id: 'admin-migrations-guarded',
+    name: 'Migration status is admin-only',
+    description: 'Non-admin callers get the same 401 as anonymous callers; admins see the version census.',
+    group: 'admin',
+    method: 'GET',
+    path: '/api/v1/admin/migrations',
+    expect: expectJson(
+      [200, 401],
+      (body) => (body?.ok === true && Array.isArray(body?.collections)) || (body?.ok === false && typeof body?.error === 'string'),
+      'Migration status either returned the census (admin) or was rejected (non-admin).'
+    )
+  },
+  {
+    id: 'admin-migrations-run-guarded',
+    name: 'Migration run is admin-only',
+    description: 'Running a migration without admin access is rejected; admins get a dry-run report.',
+    group: 'admin',
+    method: 'POST',
+    path: '/api/v1/admin/migrations/run',
+    mutates: true,
+    body: { migration: 'things-v1-to-v2', dryRun: true },
+    expect: expectJson(
+      [200, 401],
+      (body) => (body?.ok === true && body?.report?.dryRun === true) || (body?.ok === false && typeof body?.error === 'string'),
+      'Dry-run either reported (admin) or was rejected (non-admin).'
+    )
   },
   {
     id: 'algorithms-list-guarded',

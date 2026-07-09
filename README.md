@@ -152,6 +152,20 @@ placeholder:
 MONGODB_CONNECTION_STRING="mongodb://localhost:27017/thingtime"
 ```
 
+## Admin access
+
+Schema-version migrations (`/api/v1/admin/migrations*`), the migrations panel on
+`/schemas`, and raw database diagnostics are gated to an admin allowlist. Set a
+comma-separated list of usernames in the server environment:
+
+```sh
+THINGTIME_PRIVATE_ADMIN_USERNAMES="your-username,another-admin"
+```
+
+The variable name must keep the `PRIVATE` marker — `THINGTIME_*` env vars
+without it are exposed to the browser by `/api/root-data`. Admins are computed
+from this allowlist at request time; nothing is stored on user docs.
+
 ## Auth and Lopu AI
 
 JWT-backed browser sessions prefer ES256 asymmetric signing so other platforms
