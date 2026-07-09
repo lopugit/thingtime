@@ -57,7 +57,11 @@ These patterns show up again and again — default to them when unsure:
   **expiring JWTs** backed by revocable Mongo sessions. The admin allowlist lives
   in server env (`THINGTIME_ADMIN_USER_IDS` / `THINGTIME_ADMIN_USERNAMES` /
   `THINGTIME_ADMIN_EMAILS`) so anonymous callers cannot mint durable backend
-  credentials.
+  credentials. **Admin identity must key on non-claimable attributes:** the
+  `_id` allowlist is authoritative (server-assigned, cannot be picked at signup);
+  email/username allowlists are honoured only for a **verified** account so an
+  attacker cannot pre-register an allowlisted email they do not own. Prefer
+  `THINGTIME_ADMIN_USER_IDS` in production.
 - **Email required from signup** (anti-spam + user validation), with an **email
   verification flow**. Initially considered email-optional + a localStorage/JWT
   password-reset; reversed it — emails matter from the get-go.
