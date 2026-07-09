@@ -105,6 +105,7 @@ export const designSystemEntries: DesignSystemEntry[] = [
 					{ name: 'editMode / setEditMode / readonly', type: 'boolean / updater / boolean', description: 'Mode state drives the model (read-only menus drop mutating sections).' },
 					{ name: 'fullPath / path / parent / parentPath / thing / thingType', type: 'thing context', description: 'Everything the live commands need: duplicate, paste, share, and the header meta.' },
 					{ name: 'onType / onAddChild / onDelete', type: 'handlers', description: 'Thingtime.tsx handlers: change-type → onChangeType, add-child → addNewChild, recycle/cut → deleteValue.' },
+					{ name: 'collapsible / collapsibleChildren / collapsed', type: 'boolean / boolean / boolean', description: 'Shows row-level Collapse/Expand for any hideable value; descendant cascade actions appear only for containers.' },
 					{ name: 'contextTargetRef', type: 'RefObject<HTMLElement>', description: 'Element that opens this menu on right-click (the whole thing row); the deepest thing under the pointer wins.' },
 					{ name: 'opacity / transition / iconSize', type: 'trigger styling', description: 'Wizard-icon reveal styling, matching the old SettingsMenu behaviour.' }
 				]
@@ -137,6 +138,7 @@ export const designSystemEntries: DesignSystemEntry[] = [
 					{ name: 'editMode', type: 'boolean', defaultValue: 'false', description: 'Reflects the current mode in the toggle item (label + icon).' },
 					{ name: 'readonly', type: 'boolean', defaultValue: 'false', description: 'Drops every mutating section: type, value, cut/paste, danger.' },
 					{ name: 'canDelete', type: 'boolean', defaultValue: 'true', description: 'Hides Recycle when there is no parent to remove the thing from.' },
+					{ name: 'collapsible / collapsibleChildren / collapsed', type: 'boolean / boolean / boolean', defaultValue: 'false / collapsible / false', description: 'Adds Collapse/Expand for the current row and, for containers, Collapse all/Expand all.' },
 					{ name: 'types / templates / permissions', type: 'option lists', defaultValue: 'DEFAULT_*', description: 'Override the drill-level contents; the live menu feeds types from thingtime.settings.types. Templates carry real starter values; nested children make deeper levels.' },
 					{ name: 'selectedPermissionKey', type: 'string', defaultValue: "'private'", description: 'Which permission renders checked.' },
 					{ name: 'buildTypesSubmenu(types, opts)', type: 'helper', description: "Types drill level; opts.command ('change-type' | 'add-child') and opts.wrapLevels control the leaves. Wrappable types drill to Replace/Wrap." },
