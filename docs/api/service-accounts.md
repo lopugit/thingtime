@@ -12,9 +12,13 @@ POST /api/v1/auth/service-account
 ## Email verification
 
 This endpoint requires an authenticated admin session or bearer token. Configure
-admins with `THINGTIME_ADMIN_USER_IDS`, `THINGTIME_ADMIN_USERNAMES`, or
-`THINGTIME_ADMIN_EMAILS`. It also requires a unique, valid email address for the
-service account being created.
+admins with `THINGTIME_ADMIN_USER_IDS` (preferred), `THINGTIME_ADMIN_EMAILS`, or
+`THINGTIME_ADMIN_USERNAMES`. The Mongo `_id` behind `THINGTIME_ADMIN_USER_IDS` is
+server-assigned and non-claimable, so it is the safest anchor; email/username
+allowlists are honoured only for an account that has verified its email (a
+username allowlist additionally trusts whoever registers that handle first, so
+reserve it for accounts known to already exist). It also requires a unique, valid
+email address for the service account being created.
 
 Thingtime sends an email-verification link when the service account is created.
 The account must verify that email within seven days. The returned bearer token

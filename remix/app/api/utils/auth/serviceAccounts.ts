@@ -49,9 +49,26 @@ const slugifyUsername = (value: string) =>
 const generatedServicePassword = () => `${randomUUID()}-${randomUUID()}`;
 
 const serviceTokenTtlDays = () => {
-  const configured = Number(process.env.THINGTIME_SERVICE_TOKEN_TTL_DAYS || DEFAULT_SERVICE_TOKEN_TTL_DAYS);
-  if (!Number.isFinite(configured)) return DEFAULT_SERVICE_TOKEN_TTL_DAYS;
-  return Math.min(Math.max(1, Math.floor(configured)), MAX_SERVICE_TOKEN_TTL_DAYS);
+  const raw = process.env.THINGTIME_SERVICE_TOKEN_TTL_DAYS;
+  if (raw === undefined || raw.trim() === '') return DEFAULT_SERVICE_TOKEN_TTL_DAYS;
+
+  const configured = Number(raw);
+  if (!Number.isFinite(configured)) {
+    console.warn(
+      `[serviceAccounts] THINGTIME_SERVICE_TOKEN_TTL_DAYS="${raw}" is not a number; ` +
+        `using default ${DEFAULT_SERVICE_TOKEN_TTL_DAYS}d.`
+    );
+    return DEFAULT_SERVICE_TOKEN_TTL_DAYS;
+  }
+
+  const clamped = Math.min(Math.max(1, Math.floor(configured)), MAX_SERVICE_TOKEN_TTL_DAYS);
+  if (clamped !== configured) {
+    console.warn(
+      `[serviceAccounts] THINGTIME_SERVICE_TOKEN_TTL_DAYS=${configured} out of range; ` +
+        `clamped to ${clamped}d (allowed 1–${MAX_SERVICE_TOKEN_TTL_DAYS}).`
+    );
+  }
+  return clamped;
 };
 
 export const provisionServiceAccount = async (
