@@ -17,23 +17,19 @@ const serviceEmailVerificationDueAt = (user: any) => {
 
 export type ResolvedTokenUser = { user: PublicUser; claims: JwtClaims };
 
-// Resolve a signed JWT to its live user, or null. This is THE token→user path:
-// getCurrentUser (active cookie / Bearer) and the account-switcher roster
-// (accounts.ts) both go through it so a token is either valid everywhere or
-// nowhere. Verifies: JWT signature + exp → session is still live in Mongo →
-// user exists.
-export const resolveTokenUser = async (token: string): Promise<ResolvedTokenUser | null> => {
-  const claims = await verifyJwt(token);
-  if (!claims) return null;
-
-  // Revocation check: the JWT's jti must map to a live session for the same
-  // user. Without the userId binding, a token signed with any live jti could
-  // claim a different sub.
-  const session = await getLiveSession(claims.jti);
+// Resolve a live session id to its user, or null. This is THE session→user
+// path: JWT resolution below and the account-switcher roster entries
+// (accounts.ts, which stores {userId, jti} references) both go through it, so
+// a session is either valid everywhere or nowhere. Verifies: session is still
+// live in Mongo → it belongs to the expected user → the user exists.
+export const resolveSessionUser = async (jti: string, expectedUserId: string): Promise<PublicUser | null> => {
+  // Revocation check: the jti must map to a live session for the same user.
+  // Without the userId binding, any live jti could claim a different user.
+  const session = await getLiveSession(jti);
   if (!session) return null;
-  if (String(session.userId) !== claims.sub) return null;
+  if (String(session.userId) !== expectedUserId) return null;
 
-  const user = await findUserById(claims.sub);
+  const user = await findUserById(expectedUserId);
   if (!user) return null;
   if (
     user.accountKind === 'service' &&
@@ -43,7 +39,19 @@ export const resolveTokenUser = async (token: string): Promise<ResolvedTokenUser
     return null;
   }
 
-  return { user: toPublicUser(user), claims };
+  return toPublicUser(user);
+};
+
+// Resolve a signed JWT to its live user, or null. Verifies the signature + exp,
+// then defers to the shared session→user path above.
+export const resolveTokenUser = async (token: string): Promise<ResolvedTokenUser | null> => {
+  const claims = await verifyJwt(token);
+  if (!claims) return null;
+
+  const user = await resolveSessionUser(claims.jti, claims.sub);
+  if (!user) return null;
+
+  return { user, claims };
 };
 
 // Resolve the authenticated user for a request, or null.

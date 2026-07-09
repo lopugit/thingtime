@@ -1,9 +1,13 @@
 import { createCookie } from '~/api/cookies';
 
-// httpOnly cookie holding the JWTs of EVERY signed-in account (the account
-// switcher roster) as a JSON array of token strings. `tt_auth` stays the single
-// ACTIVE credential — everything that authenticates requests keeps reading it —
-// while this cookie only feeds the switcher (list / switch / remove).
+// httpOnly cookie identifying this browser's account-switcher roster. It holds
+// ONLY an opaque roster id — the account list itself lives in the Mongo
+// `rosters` collection (accounts.ts), so the switcher is unlimited and the
+// cookie stays constant-size. `tt_auth` remains the single ACTIVE credential.
+//
+// Rosters minted before the Mongo backing stored a JSON array of JWTs in this
+// same cookie; parseAccountsCookie still surfaces that legacy shape so
+// resolveRoster can fold it into a roster doc.
 export const accountsCookie = createCookie('tt_accounts', {
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
@@ -12,17 +16,24 @@ export const accountsCookie = createCookie('tt_accounts', {
   maxAge: 60 * 60 * 24 * 30 // 30 days, same as tt_auth
 });
 
-// Browsers cap a cookie at ~4KB; five ES256 JWTs JSON-encoded stay well under
-// it with headroom for the active cookie beside them.
-export const MAX_ACCOUNTS = 5;
-
-// Roster tokens from the request cookie. Anything that isn't a non-empty
-// string array collapses to [] — a tampered cookie never throws.
-export const parseAccountTokens = async (request: Request): Promise<string[]> => {
-  const value = await accountsCookie.parse(request.headers.get('Cookie'));
-  if (!Array.isArray(value)) return [];
-  return value.filter((token): token is string => typeof token === 'string' && !!token);
+export type AccountsCookieValue = {
+  rosterId: string | null;
+  // JWTs from a pre-Mongo roster cookie, pending fold-in.
+  legacyTokens: string[];
 };
 
-export const serializeAccountsCookie = (tokens: string[]) => accountsCookie.serialize(tokens);
-export const clearAccountsCookie = () => accountsCookie.serialize([], { maxAge: 0 });
+// Tampered/unknown cookie shapes collapse to an empty value — never throw.
+export const parseAccountsCookie = async (request: Request): Promise<AccountsCookieValue> => {
+  const value = await accountsCookie.parse(request.headers.get('Cookie'));
+  if (typeof value === 'string' && value) return { rosterId: value, legacyTokens: [] };
+  if (Array.isArray(value)) {
+    return {
+      rosterId: null,
+      legacyTokens: value.filter((token): token is string => typeof token === 'string' && !!token)
+    };
+  }
+  return { rosterId: null, legacyTokens: [] };
+};
+
+export const serializeAccountsCookie = (rosterId: string) => accountsCookie.serialize(rosterId);
+export const clearAccountsCookie = () => accountsCookie.serialize('', { maxAge: 0 });

@@ -100,17 +100,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/auth/accounts',
     summary: 'Lists every account signed in to this browser, marking the active one.',
     detail:
-      'The account switcher roster lives in the httpOnly tt_accounts cookie (one JWT per signed-in account) beside the active tt_auth credential. This route resolves each token to its public user, prunes dead entries (expired, revoked, deleted), and rewrites the roster cookie when pruning changed it. Raw JWTs are never returned.',
+      'The account switcher roster is a Mongo document (rosters collection) referenced by an opaque id in the httpOnly tt_accounts cookie; its entries reference sessions by id, so there is no account limit and raw JWTs are never stored or returned. This route resolves each entry to its public user, prunes dead entries (expired, revoked, deleted), and updates the roster + cookie when anything changed.',
     auth: {
       mode: 'optional',
       description:
-        'Reads the tt_accounts and tt_auth cookies. Works without an active session so a signed-out browser can still offer "continue as" for roster accounts.'
+        'Reads the tt_accounts roster-id and tt_auth cookies. Works without an active session so a signed-out browser can still offer "continue as" for roster accounts.'
     },
     methods: ['GET'],
     steps: [
       'Send a GET request with credentials included so the httpOnly cookies travel.',
       'Read accounts[] for each signed-in public user; active: true marks the tt_auth account.',
-      'Preserve Set-Cookie on the response — pruning rewrites the roster cookie.',
+      'Preserve Set-Cookie on the response — pruning rewrites the roster-id cookie.',
       'Call /api/v1/auth/accounts/switch with a listed user id to change the active account.'
     ],
     requestExamples: [
@@ -149,7 +149,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Use this to remove a single account from the browser without touching the others. Removing the active account promotes the next roster account to active; removing the last account clears both auth cookies, signing the browser out entirely.',
     auth: {
       mode: 'optional',
-      description: 'Operates on the httpOnly tt_accounts roster cookie; possession of the roster token is the authorization.'
+      description: 'Operates on the browser roster named by the httpOnly tt_accounts cookie; possession of that roster id is the authorization.'
     },
     methods: ['POST'],
     steps: [
@@ -190,10 +190,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/auth/accounts/switch',
     summary: 'Makes a signed-in roster account the active one without re-entering a password.',
     detail:
-      'Moves the chosen account token from the tt_accounts roster into tt_auth. Authorization is possession of that account live token in the httpOnly roster cookie, so switching never needs credentials.',
+      'Mints a fresh JWT for the chosen roster account live session into tt_auth. Authorization is possession of the httpOnly roster-id cookie, so switching never needs credentials.',
     auth: {
       mode: 'optional',
-      description: 'Operates on the httpOnly tt_accounts roster cookie; the target account token must still resolve to a live session.'
+      description: 'Operates on the browser roster named by the httpOnly tt_accounts cookie; the target entry must still resolve to a live session.'
     },
     methods: ['POST'],
     steps: [

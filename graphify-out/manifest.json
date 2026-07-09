@@ -755,8 +755,8 @@
     "semantic_hash": "9066712e4f77f3469317bd05ded8f1f6"
   },
   "remix/app/api/utils/auth/getCurrentUser.ts": {
-    "mtime": 1783635586.7430055,
-    "ast_hash": "480016a28247bf741808561be2cbe17e",
+    "mtime": 1783638867.8567905,
+    "ast_hash": "b71a3434e3460e15ed910880d6af2b69",
     "semantic_hash": ""
   },
   "remix/app/api/utils/auth/jwt.ts": {
@@ -765,14 +765,14 @@
     "semantic_hash": "c6abb963acd80e4c5ede1ae00bec0976"
   },
   "remix/app/api/utils/auth/loginUser.ts": {
-    "mtime": 1783635169.5523472,
-    "ast_hash": "940d343c623400cd75941f9ff394a356",
-    "semantic_hash": "940d343c623400cd75941f9ff394a356"
+    "mtime": 1783639008.2175975,
+    "ast_hash": "63124d05375edd85e9ad5bbe74d71fda",
+    "semantic_hash": ""
   },
   "remix/app/api/utils/auth/registerUser.ts": {
-    "mtime": 1783635169.5525353,
-    "ast_hash": "1f55ebd0369c6009b5e5fc1ab0326e50",
-    "semantic_hash": "1f55ebd0369c6009b5e5fc1ab0326e50"
+    "mtime": 1783639012.543079,
+    "ast_hash": "a0aebfd7ac47a56451cfa5b2795beeb9",
+    "semantic_hash": ""
   },
   "remix/app/api/utils/auth/serviceAccounts.ts": {
     "mtime": 1783635169.5526574,
@@ -830,8 +830,8 @@
     "semantic_hash": "f65b01f4781159ee3b8a0a9da33d1f5a"
   },
   "remix/app/api/utils/mongodb/collections.ts": {
-    "mtime": 1783635169.555376,
-    "ast_hash": "6f1d8f62120922fa5cf1e44bca7c9dbf",
+    "mtime": 1783638847.8631387,
+    "ast_hash": "4aca754de6cf002d6d26c2016a8d70cf",
     "semantic_hash": ""
   },
   "remix/app/api/utils/mongodb/config.ts": {
@@ -1275,8 +1275,8 @@
     "semantic_hash": "e94d06f633eff013ffca0a2f6b3b4adf"
   },
   "remix/app/routes/api/v1/auth/register/_register.tsx": {
-    "mtime": 1783635799.7754438,
-    "ast_hash": "56af1a0dc6c69ff49726dfb4761eba43",
+    "mtime": 1783639037.0541573,
+    "ast_hash": "d001b324b554440a79f5194d13c8a4a3",
     "semantic_hash": ""
   },
   "remix/app/routes/api/v1/auth/resend-verification/_resend-verification.tsx": {
@@ -1315,8 +1315,8 @@
     "semantic_hash": "5b1f94bc4a3a6b3ee4c9b47690f56aab"
   },
   "remix/app/routes/api/v1/login/_login.tsx": {
-    "mtime": 1783635793.6564476,
-    "ast_hash": "4706787076db177c7694402b811cbafc",
+    "mtime": 1783639028.4495397,
+    "ast_hash": "4d11e49938c100413946a3d4931a417b",
     "semantic_hash": ""
   },
   "remix/app/routes/api/v1/lopu/musing/_musing.tsx": {
@@ -1580,8 +1580,8 @@
     "semantic_hash": "5e9505d10b125d54dccabb1ddfeeef75"
   },
   "FUNDAMENTALS.md": {
-    "mtime": 1783636425.3349328,
-    "ast_hash": "90b2262204c246131a8ceb86c02c1a39",
+    "mtime": 1783639111.7419593,
+    "ast_hash": "28146231ff841d6b1922132c0d3bddaf",
     "semantic_hash": ""
   },
   "README.md": {
@@ -3275,8 +3275,8 @@
     "semantic_hash": ""
   },
   "remix/app/docs/apiDocs.ts": {
-    "mtime": 1783635865.8274136,
-    "ast_hash": "83728464b783c055c362077e0b971914",
+    "mtime": 1783639100.4554756,
+    "ast_hash": "9b62d6e3d85cddcb193876beb7a5014e",
     "semantic_hash": ""
   },
   "remix/app/routes/docs/api.tsx": {
@@ -3410,13 +3410,13 @@
     "semantic_hash": ""
   },
   "remix/app/api/utils/auth/accounts.ts": {
-    "mtime": 1783635784.537699,
-    "ast_hash": "f73379c95414897400e2363aa4af56d6",
+    "mtime": 1783640454.272396,
+    "ast_hash": "2711361d52f292b42c6d279d235bfbcb",
     "semantic_hash": ""
   },
   "remix/app/api/utils/auth/accountsCookie.ts": {
-    "mtime": 1783635597.5821707,
-    "ast_hash": "8b91cfef858ad999c9098ce6009bd181",
+    "mtime": 1783638948.3597736,
+    "ast_hash": "4acd7180211a10f8b9593dc3682741aa",
     "semantic_hash": ""
   },
   "remix/app/components/Account/AccountSwitcher.tsx": {
@@ -3430,8 +3430,8 @@
     "semantic_hash": ""
   },
   "remix/app/routes/api/v1/auth/accounts/_accounts.tsx": {
-    "mtime": 1783635685.0798535,
-    "ast_hash": "9f1cbd2868fc73eef78400087278416a",
+    "mtime": 1783639053.766934,
+    "ast_hash": "f5ab9ae014be96d0b7cc0aad6a547e97",
     "semantic_hash": ""
   },
   "remix/app/routes/api/v1/auth/accounts/remove/_remove.tsx": {
@@ -3440,13 +3440,13 @@
     "semantic_hash": ""
   },
   "remix/app/routes/api/v1/auth/accounts/switch/_switch.tsx": {
-    "mtime": 1783635691.5148745,
-    "ast_hash": "acdfaf27a394b7b5782ae65c7e5d2f06",
+    "mtime": 1783639057.629631,
+    "ast_hash": "8e4ded3a8f6bfbedf69ecb1783fc0306",
     "semantic_hash": ""
   },
   "TODO/claude-todo/11-account-switcher.md": {
-    "mtime": 1783636381.6968496,
-    "ast_hash": "7d241da59fddc4681a7296536d9b89ad",
+    "mtime": 1783640581.2587175,
+    "ast_hash": "083da5891384f3bff7174599ae712c5b",
     "semantic_hash": ""
   }
 }

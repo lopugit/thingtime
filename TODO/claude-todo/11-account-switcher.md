@@ -10,17 +10,43 @@ an account** by logging in with its credentials, or **register a brand-new
 account** — all without signing anything else out.
 
 ## ✅ Decisions (locked)
-- **The roster is the httpOnly `tt_accounts` cookie** — a JSON array holding
-  one signed JWT per signed-in account, newest last, capped at 5
-  (`MAX_ACCOUNTS`, cookie-size headroom). `tt_auth` stays the single ACTIVE
-  credential and its token always also appears in the roster, so everything
-  that authenticates requests (`getCurrentUser`, Bearer clients, every
-  existing route) is untouched.
-- **One token→user validation path.** `resolveTokenUser`
-  (`getCurrentUser.ts`) verifies signature + live `jti` session + user doc;
-  both `getCurrentUser` and the roster resolver use it, so a token is valid
-  everywhere or nowhere. Dead roster entries are pruned (and the cookie
-  rewritten) whenever the roster is read.
+- **The roster is a Mongo doc** (`rosters` collection, one per browser) whose
+  entries reference sessions by `{userId, jti}` — the httpOnly `tt_accounts`
+  cookie holds only the opaque roster id. **Unlimited accounts** (owner call,
+  2026-07-10, over the earlier 5-JWT cookie roster which was bounded by the
+  browser's ~4KB cookie cap), constant-size cookie, and no raw JWTs stored
+  anywhere — only the server (holding the signing key) can mint a token for a
+  session, so switching mints a fresh JWT from the chosen live session.
+  `tt_auth` stays the single ACTIVE credential and its session always also
+  appears in the roster, so everything that authenticates requests
+  (`getCurrentUser`, Bearer clients, every existing route) is untouched.
+  Roster docs carry a rolling 30-day `expiresAt` reaped by a TTL index.
+- **One session→user validation path.** `resolveSessionUser`
+  (`getCurrentUser.ts`) checks live `jti` session + user-binding + user doc;
+  `resolveTokenUser` (JWT verify → same path) and the roster resolver both use
+  it, so a session is valid everywhere or nowhere. Dead roster entries are
+  pruned (doc + cookie updated) whenever the roster is read; legacy JWT-array
+  `tt_accounts` cookies from the pre-Mongo roster fold into a roster doc on
+  first read.
+- **Ownership gate (security-critical).** The roster id in the cookie is only
+  a pointer, so a request may use an inbound roster **only when its active
+  `tt_auth` session is already one of that roster's entries**; an id the
+  browser doesn't belong to is ignored and a fresh roster is minted for the
+  active session. Without this, an attacker who planted their own roster id in
+  a victim's browser (cookie fixation) would have the victim's session folded
+  into the attacker's roster on the next switcher read, then mint a takeover
+  token — a hole the pre-Mongo cookie roster didn't have (it stored the tokens
+  themselves, so a victim's session only ever landed in the victim's own
+  httpOnly cookie). Legit growth only happens from a browser that already owns
+  the roster (add-account while signed in) or the browser's first sign-in.
+  Residual: planting `tt_auth` *itself* is the pre-existing single-account
+  login-fixation exposure (mitigated by `tt_auth` being httpOnly + Secure +
+  SameSite=Lax) and is out of scope for this feature.
+- **Optimistic-concurrency writes.** Roster docs carry a `version` rotated on
+  every write; mutations (`mergeAccountSession`, `removeAccounts`) read-modify-
+  write under a version guard and retry on conflict, so two racing logins in
+  one browser can't lose-update each other — which would otherwise orphan a
+  live session that `log out all` could never revoke.
 - **Login/register ARE "add account".** `POST /api/v1/login` and
   `POST /api/v1/auth/register` merge their fresh JWT into the roster (same-user
   entries are replaced and their old sessions revoked; overflow drops + revokes
@@ -34,10 +60,12 @@ account** — all without signing anything else out.
   by `userId`, authorized purely by possession of the httpOnly roster cookie.
 
 ## Built this round
-- API utils: `accountsCookie.ts` (roster cookie), `accounts.ts`
-  (`resolveRoster` / `mergeAccountToken` / `removeAccounts` /
-  `serializeRosterCookieIfChanged`), `resolveTokenUser` extracted in
-  `getCurrentUser.ts`.
+- API utils: `accountsCookie.ts` (roster-id cookie + legacy parse),
+  `accounts.ts` (`resolveRoster` with the ownership gate / `mergeAccountSession`
+  / `removeAccounts` / `persistRoster` + `mutateRoster` optimistic-concurrency
+  retry / `mintAccountToken`), `resolveSessionUser` + `resolveTokenUser`
+  extracted in `getCurrentUser.ts`, `getRostersCollection` + unique/TTL indexes
+  in `mongodb/collections.ts`.
 - Routes: `GET /api/v1/auth/accounts`, `POST /api/v1/auth/accounts/switch`,
   `POST /api/v1/auth/accounts/remove`; roster-aware `login`, `register`,
   `logout` (+ `all: true`). Registered in `server/routes/api/[...].ts` and

@@ -1,7 +1,6 @@
 import { json } from '~/api/http';
 
-import { mergeAccountToken } from '~/api/utils/auth/accounts';
-import { serializeAccountsCookie } from '~/api/utils/auth/accountsCookie';
+import { mergeAccountSession } from '~/api/utils/auth/accounts';
 import { serializeAuthCookie } from '~/api/utils/auth/authCookie';
 import { shouldShowDevVerificationLink } from '~/api/utils/auth/devVerification';
 import { registerUser } from '~/api/utils/auth/registerUser';
@@ -10,7 +9,8 @@ import { registerUser } from '~/api/utils/auth/registerUser';
 // On success: creates the user, logs them in (sets the httpOnly auth cookie),
 // and kicks off email verification. emailVerified starts false. Registering
 // while other accounts are signed in ADDS the new account to the switcher
-// roster (tt_accounts) and makes it active — it never signs the others out.
+// roster (Mongo-backed, unlimited) and makes it active — it never signs the
+// others out.
 export const action = async ({ request }: { request: Request }) => {
   const body = await request.json().catch(() => ({}));
   const origin = new URL(request.url).origin;
@@ -25,11 +25,11 @@ export const action = async ({ request }: { request: Request }) => {
   // raw verification tokens to the browser.
   const showLink = shouldShowDevVerificationLink();
 
-  const rosterTokens = await mergeAccountToken(request, result.jwt, result.user.id);
+  const rosterCookies = await mergeAccountSession(request, { userId: result.user.id, jti: result.jti });
 
   const headers = new Headers();
   headers.append('Set-Cookie', await serializeAuthCookie(result.jwt));
-  headers.append('Set-Cookie', await serializeAccountsCookie(rosterTokens));
+  for (const cookie of rosterCookies) headers.append('Set-Cookie', cookie);
 
   return json(
     {

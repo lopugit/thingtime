@@ -71,12 +71,14 @@ One auth model used everywhere (see `claude-todo/03-auth-login-register.md`):
 So the JWT lives in the cookie for the website *and* works as a Bearer token for
 API clients — and either way Mongo is the source of truth for revocation.
 
-Multi-account: a second httpOnly cookie, **`tt_accounts`**, holds the JWTs of
-every account signed in to the browser (the account-switcher roster, max 5);
-`tt_auth` stays the single ACTIVE credential. Every roster token is a normal
-JWT with its own live session — independently revocable, validated by the same
-path as `tt_auth` — and raw tokens never reach the client (the switcher API
-returns public users only). See `claude-todo/11-account-switcher.md`.
+Multi-account: a second httpOnly cookie, **`tt_accounts`**, holds an opaque id
+naming this browser's account-switcher roster — a doc in the Mongo `rosters`
+collection whose entries reference sessions by id (no account limit, no raw
+JWTs stored anywhere). `tt_auth` stays the single ACTIVE credential; switching
+mints a fresh JWT from the chosen live session. Every roster account is
+independently revocable and validated by the same session→user path as
+`tt_auth`, and raw tokens never reach the client (the switcher API returns
+public users only). See `claude-todo/11-account-switcher.md`.
 
 ## 6. Never leak secrets
 

@@ -26,6 +26,7 @@ export const getThingtimeDb = async () => (await getClientCached()).db('thingtim
 
 export const getUsersCollection = async () => (await getThingtimeDb()).collection('users');
 export const getSessionsCollection = async () => (await getThingtimeDb()).collection('sessions');
+export const getRostersCollection = async () => (await getThingtimeDb()).collection('rosters');
 export const getThingsCollection = async () => (await getThingtimeDb()).collection('things');
 export const getEmailVerificationsCollection = async () => (await getThingtimeDb()).collection('emailVerifications');
 export const getLopuMusingRateLimitsCollection = async () =>
@@ -51,6 +52,10 @@ export const ensureIndexes = async () => {
         db.collection('users').createIndex({ email: 1 }, { unique: true }),
         db.collection('sessions').createIndex({ jti: 1 }, { unique: true }),
         db.collection('sessions').createIndex({ userId: 1 }),
+        // account-switcher rosters: one doc per browser, entries reference
+        // sessions by jti; TTL reaps rosters abandoned past their rolling expiry
+        db.collection('rosters').createIndex({ rosterId: 1 }, { unique: true }),
+        db.collection('rosters').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
         db.collection('emailVerifications').createIndex({ token: 1 }, { unique: true }),
         db.collection('emailVerifications').createIndex({ userId: 1 }),
         db.collection('lopuMusingRateLimits').createIndex({ key: 1 }, { unique: true }),

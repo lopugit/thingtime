@@ -20,7 +20,7 @@ export type RegisterInput = {
 
 export type RegisterResult =
   | { ok: false; status: number; error: string }
-  | { ok: true; user: PublicUser; jwt: string; verificationLink: string };
+  | { ok: true; user: PublicUser; jwt: string; jti: string; verificationLink: string };
 
 export type CreateUserAccountInput = {
   username: string;
@@ -120,5 +120,5 @@ export const registerUser = async (input: RegisterInput): Promise<RegisterResult
   const verificationLink = `${origin}/api/v1/auth/verify-email?token=${verification.token}`;
   await sendVerificationEmail({ to: email, link: verificationLink });
 
-  return { ok: true, user: toPublicUser(user), jwt, verificationLink };
+  return { ok: true, user: toPublicUser(user), jwt, jti: session.jti, verificationLink };
 };
