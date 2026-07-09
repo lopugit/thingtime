@@ -1,16 +1,17 @@
 import React from 'react';
-import { Box, Button, Center, Flex, Image, Input, Switch, Text, Textarea } from '@chakra-ui/react';
+import { Box, Button, Flex, Image, Input, Switch, Text, Textarea } from '@chakra-ui/react';
 import { useNavigate } from 'react-router';
 
 import { AlgorithmManager } from './AlgorithmManager';
 import { RainbowButton, SettingRow, SettingsSection } from './SettingsSection';
+import { AccountSwitcher } from '~/components/Account/AccountSwitcher';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useDrawer } from '~/components/Nav/Drawer/useDrawer';
 import { ColorControl } from '~/components/ThemeSettings/controls';
 import { CurrentUser, useCurrentUser } from '~/hooks/useCurrentUser';
 import { useApi } from '~/hooks/useApi';
 import { useTtTheme } from '~/hooks/useTtTheme';
-import { RAINBOW, RAINBOW_TEXT } from '~/theme/rainbow';
+import { RAINBOW_TEXT } from '~/theme/rainbow';
 
 // The dedicated /settings page: account, profile, feed algorithms, appearance
 // and drawer preferences in stacked section cards. Fully usable logged out
@@ -30,44 +31,6 @@ const FieldLabel = (props: { children: React.ReactNode }) => (
     {props.children}
   </Text>
 );
-
-const AccountAvatar = (props: { user: CurrentUser }) => {
-  const { user } = props;
-
-  if (user?.avatarUrl) {
-    return (
-      <Image
-        src={user.avatarUrl}
-        alt={user.displayName || user.username}
-        width="56px"
-        height="56px"
-        borderRadius="999px"
-        objectFit="cover"
-        flexShrink={0}
-        border="1px solid var(--tt-border, #ececef)"
-      />
-    );
-  }
-
-  const initial = (user?.displayName || user?.username || '?').trim().charAt(0).toUpperCase();
-
-  return (
-    <Center
-      width="56px"
-      height="56px"
-      borderRadius="999px"
-      flexShrink={0}
-      background={user ? RAINBOW : 'var(--tt-surface-alt, #f5f5f7)'}
-      backgroundSize="calc(100px + 200%)"
-      sx={user ? { animation: 'var(--tt-rainbow-anim, moving-rainbow 5s linear infinite)' } : undefined}
-      color={user ? 'white' : 'var(--tt-muted, #9a9aa6)'}
-      fontSize="lg"
-      fontWeight={700}
-    >
-      {user ? initial : '👤'}
-    </Center>
-  );
-};
 
 // Inline profile editor — mount keyed on user id so switching accounts
 // reinitialises the form from the fresh user.
@@ -221,8 +184,9 @@ export const SettingsPage = () => {
 
   const handleLogout = async () => {
     setLoggingOut(true);
+    let resp;
     try {
-      await api.v1.auth.logout();
+      resp = await api.v1.auth.logout();
     } catch (err: any) {
       lopu({
         title: 'Logout failed',
@@ -230,6 +194,14 @@ export const SettingsPage = () => {
         status: 'error'
       });
       setLoggingOut(false);
+      return;
+    }
+    setLoggingOut(false);
+    // Switcher semantics: other signed-in accounts stay — the next one takes
+    // over and settings re-renders on it. Only a fully signed-out browser
+    // leaves for /login.
+    if (resp?.user) {
+      lopu({ title: `Logged out — switched to @${resp.user.username} ✨`, status: 'success', duration: 6000 });
       return;
     }
     lopu({ title: 'Logged out', status: 'success', duration: 6000 });
@@ -309,51 +281,25 @@ export const SettingsPage = () => {
           </Box>
         </Box>
 
-        {/* 1 · account */}
+        {/* 1 · account — the switcher lists every signed-in account and hosts
+            the add / register-new inline forms */}
         <SettingsSection eyebrow="Account">
-          <Flex alignItems="center" columnGap={3}>
-            <AccountAvatar user={user} />
-            <Box minWidth={0}>
-              <Text fontSize="sm" fontWeight={600} color="var(--tt-ink, #16161a)" noOfLines={1}>
-                {user ? user.displayName || user.username : 'Not logged in'}
-              </Text>
-              {user ? (
-                <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)" noOfLines={1}>
-                  @{user.username} · {user.email} {user.emailVerified ? '✅' : '· ✉️ unverified'}
-                </Text>
-              ) : (
-                <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
-                  Log in to sync your profile, feed algorithms and themes.
-                </Text>
+          <AccountSwitcher />
+          {user && (
+            <Flex columnGap={2} rowGap={2} flexWrap="wrap">
+              <Button size="xs" variant="outline" onClick={() => navigate('/profile')}>
+                Profile 👤
+              </Button>
+              <Button size="xs" variant="outline" isLoading={loggingOut} onClick={handleLogout}>
+                Log out 🗝️
+              </Button>
+              {!user.emailVerified && (
+                <Button size="xs" variant="outline" onClick={handleResendVerification}>
+                  Resend verification 📬
+                </Button>
               )}
-            </Box>
-          </Flex>
-          <Flex columnGap={2} rowGap={2} flexWrap="wrap">
-            {user ? (
-              <>
-                <Button size="xs" variant="outline" onClick={() => navigate('/profile')}>
-                  Profile 👤
-                </Button>
-                <Button size="xs" variant="outline" isLoading={loggingOut} onClick={handleLogout}>
-                  Log out 🗝️
-                </Button>
-                {!user.emailVerified && (
-                  <Button size="xs" variant="outline" onClick={handleResendVerification}>
-                    Resend verification 📬
-                  </Button>
-                )}
-              </>
-            ) : (
-              <>
-                <Button size="xs" variant="outline" onClick={() => navigate('/login')}>
-                  Log in 🗝️
-                </Button>
-                <Button size="xs" variant="outline" onClick={() => navigate('/register')}>
-                  Register ➕
-                </Button>
-              </>
-            )}
-          </Flex>
+            </Flex>
+          )}
         </SettingsSection>
 
         {/* 2 · profile (auth only) */}

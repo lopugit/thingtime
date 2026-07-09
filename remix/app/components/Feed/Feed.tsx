@@ -93,12 +93,14 @@ export const FeedPage = () => {
     [filters, algorithmId]
   );
 
-  // initial fetch + reset whenever the filters or algorithm change
+  // initial fetch + reset whenever the filters or algorithm change — or the
+  // viewer does (an account switch can keep the same algorithm id, e.g. null,
+  // so `load`'s identity alone wouldn't refetch the new account's feed)
   React.useEffect(() => {
     setPosts([]);
     setNextCursor(null);
     load({ reset: true });
-  }, [load]);
+  }, [load, user?.id]);
 
   const handleLoadMore = React.useCallback(() => {
     if (!nextCursor) return;

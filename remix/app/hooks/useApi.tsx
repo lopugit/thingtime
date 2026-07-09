@@ -65,13 +65,34 @@ export function useApi() {
         [asyncFetcher]
       ),
       logout: useCallback(
-        async () => {
-          const ret = asyncFetcher.submit({}, { action: '/api/v1/auth/logout' });
+        async (args?: { all?: boolean }) => {
+          const ret = asyncFetcher.submit(args?.all ? { all: true } : {}, { action: '/api/v1/auth/logout' });
           ret.then(refreshRootData).catch(() => {});
           return ret;
         },
         [asyncFetcher]
-      )
+      ),
+      accounts: {
+        // Listing changes no state, so no refreshRootData (pruning only rewrites
+        // the roster cookie, never the active user).
+        list: useCallback(async () => getJson('/api/v1/auth/accounts'), []),
+        switch: useCallback(
+          async (args) => {
+            const ret = asyncFetcher.submit({ userId: args?.userId }, { action: '/api/v1/auth/accounts/switch' });
+            ret.then(refreshRootData).catch(() => {});
+            return ret;
+          },
+          [asyncFetcher]
+        ),
+        remove: useCallback(
+          async (args) => {
+            const ret = asyncFetcher.submit({ userId: args?.userId }, { action: '/api/v1/auth/accounts/remove' });
+            ret.then(refreshRootData).catch(() => {});
+            return ret;
+          },
+          [asyncFetcher]
+        )
+      }
     },
     mongodb: {
       rawResults: useCallback(

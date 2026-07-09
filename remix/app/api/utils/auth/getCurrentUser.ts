@@ -1,5 +1,6 @@
 import { getAuthToken } from './authCookie';
 import { verifyJwt } from './jwt';
+import type { JwtClaims } from './jwt';
 import { getLiveSession } from './sessions';
 import { findUserById, toPublicUser } from './users';
 import type { PublicUser } from './users';
@@ -14,12 +15,14 @@ const serviceEmailVerificationDueAt = (user: any) => {
   return new Date(user.createdAt).getTime() + SERVICE_EMAIL_VERIFICATION_GRACE_MS;
 };
 
-// Resolve the authenticated user for a request, or null.
-// Verifies: JWT signature + exp → session is still live in Mongo → user exists.
-export const getCurrentUser = async (request: Request): Promise<PublicUser | null> => {
-  const token = await getAuthToken(request);
-  if (!token) return null;
+export type ResolvedTokenUser = { user: PublicUser; claims: JwtClaims };
 
+// Resolve a signed JWT to its live user, or null. This is THE token→user path:
+// getCurrentUser (active cookie / Bearer) and the account-switcher roster
+// (accounts.ts) both go through it so a token is either valid everywhere or
+// nowhere. Verifies: JWT signature + exp → session is still live in Mongo →
+// user exists.
+export const resolveTokenUser = async (token: string): Promise<ResolvedTokenUser | null> => {
   const claims = await verifyJwt(token);
   if (!claims) return null;
 
@@ -40,5 +43,14 @@ export const getCurrentUser = async (request: Request): Promise<PublicUser | nul
     return null;
   }
 
-  return toPublicUser(user);
+  return { user: toPublicUser(user), claims };
+};
+
+// Resolve the authenticated user for a request, or null.
+export const getCurrentUser = async (request: Request): Promise<PublicUser | null> => {
+  const token = await getAuthToken(request);
+  if (!token) return null;
+
+  const resolved = await resolveTokenUser(token);
+  return resolved ? resolved.user : null;
 };

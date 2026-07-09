@@ -233,7 +233,13 @@ export const ProfilePage = (props: ProfilePageProps) => {
   const [editOpen, setEditOpen] = React.useState(false);
 
   const handleLogout = async () => {
-    await api.v1.auth.logout();
+    const resp = await api.v1.auth.logout();
+    // Switcher semantics: with other accounts signed in the next one takes
+    // over — stay put and let the page re-render on it.
+    if (resp?.user) {
+      lopu({ title: `Logged out — switched to @${resp.user.username} ✨`, status: 'success', duration: 6000 });
+      return;
+    }
     navigate('/login');
   };
 

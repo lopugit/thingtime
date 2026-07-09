@@ -94,6 +94,143 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'auth-accounts',
+    group: 'auth',
+    title: 'Account switcher roster',
+    endpoint: '/api/v1/auth/accounts',
+    summary: 'Lists every account signed in to this browser, marking the active one.',
+    detail:
+      'The account switcher roster lives in the httpOnly tt_accounts cookie (one JWT per signed-in account) beside the active tt_auth credential. This route resolves each token to its public user, prunes dead entries (expired, revoked, deleted), and rewrites the roster cookie when pruning changed it. Raw JWTs are never returned.',
+    auth: {
+      mode: 'optional',
+      description:
+        'Reads the tt_accounts and tt_auth cookies. Works without an active session so a signed-out browser can still offer "continue as" for roster accounts.'
+    },
+    methods: ['GET'],
+    steps: [
+      'Send a GET request with credentials included so the httpOnly cookies travel.',
+      'Read accounts[] for each signed-in public user; active: true marks the tt_auth account.',
+      'Preserve Set-Cookie on the response — pruning rewrites the roster cookie.',
+      'Call /api/v1/auth/accounts/switch with a listed user id to change the active account.'
+    ],
+    requestExamples: [
+      {
+        name: 'List signed-in accounts',
+        description: 'Read the switcher roster for this browser.',
+        method: 'GET'
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Two accounts signed in; the first is active.',
+        body: {
+          ok: true,
+          accounts: [
+            { user: { id: '64f000000000000000000001', username: 'lopu' }, active: true },
+            { user: { id: '64f000000000000000000002', username: 'nik' }, active: false }
+          ]
+        }
+      },
+      {
+        status: 200,
+        description: 'No accounts signed in.',
+        body: { ok: true, accounts: [] }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'auth-accounts-remove',
+    group: 'auth',
+    title: 'Remove account from switcher',
+    endpoint: '/api/v1/auth/accounts/remove',
+    summary: 'Signs one roster account out: revokes its session and drops it from the switcher.',
+    detail:
+      'Use this to remove a single account from the browser without touching the others. Removing the active account promotes the next roster account to active; removing the last account clears both auth cookies, signing the browser out entirely.',
+    auth: {
+      mode: 'optional',
+      description: 'Operates on the httpOnly tt_accounts roster cookie; possession of the roster token is the authorization.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST the user id of the roster account to remove.',
+      'The account session jti is revoked in MongoDB — the removed token is dead everywhere, not just in this browser.',
+      'Read user for the account that is active after the removal (null when none remain).',
+      'Store the returned Set-Cookie headers so tt_auth and tt_accounts stay in sync.'
+    ],
+    requestExamples: [
+      {
+        name: 'Remove one account',
+        description: 'Sign the account out of this browser and revoke its session.',
+        method: 'POST',
+        body: { userId: '64f000000000000000000002' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Account removed; another account remains active.',
+        body: {
+          ok: true,
+          user: { id: '64f000000000000000000001', username: 'lopu' },
+          accounts: [{ user: { id: '64f000000000000000000001', username: 'lopu' }, active: true }]
+        }
+      },
+      {
+        status: 400,
+        description: 'Missing userId.',
+        body: { ok: false, error: 'userId is required' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'auth-accounts-switch',
+    group: 'auth',
+    title: 'Switch active account',
+    endpoint: '/api/v1/auth/accounts/switch',
+    summary: 'Makes a signed-in roster account the active one without re-entering a password.',
+    detail:
+      'Moves the chosen account token from the tt_accounts roster into tt_auth. Authorization is possession of that account live token in the httpOnly roster cookie, so switching never needs credentials.',
+    auth: {
+      mode: 'optional',
+      description: 'Operates on the httpOnly tt_accounts roster cookie; the target account token must still resolve to a live session.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST the user id of a roster account (from /api/v1/auth/accounts).',
+      'Store the returned Set-Cookie headers — tt_auth now carries the chosen account token.',
+      'Refresh user-scoped state client-side; the active user changed for every subsequent request.',
+      'A 404 means that account is no longer signed in here (session expired or revoked) — refresh the roster and log in again.'
+    ],
+    requestExamples: [
+      {
+        name: 'Switch account',
+        description: 'Activate another signed-in account.',
+        method: 'POST',
+        body: { userId: '64f000000000000000000002' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Active account switched.',
+        body: {
+          ok: true,
+          user: { id: '64f000000000000000000002', username: 'nik' },
+          accounts: [
+            { user: { id: '64f000000000000000000001', username: 'lopu' }, active: false },
+            { user: { id: '64f000000000000000000002', username: 'nik' }, active: true }
+          ]
+        }
+      },
+      {
+        status: 404,
+        description: 'The account is not signed in to this browser (or its session died).',
+        body: { ok: false, error: 'That account is no longer signed in here', accounts: [] }
+      }
+    ]
+  }),
+  endpoint({
     id: 'auth-jwks',
     group: 'auth',
     title: 'JWKS discovery',
@@ -137,33 +274,49 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'auth',
     title: 'Logout',
     endpoint: '/api/v1/auth/logout',
-    summary: 'Revokes the current session and clears the auth cookie.',
+    summary: 'Signs the active account out; other switcher accounts stay signed in unless all: true.',
     detail:
-      'Use this endpoint to end browser sessions or revoke a bearer token session server-side. The route is idempotent and returns ok even without a token.',
+      'Use this endpoint to end browser sessions or revoke a bearer token session server-side. The active account session is revoked and removed from the switcher roster; the next roster account becomes active and is returned as user. Pass all: true to revoke every roster session and clear both cookies. The route is idempotent and returns ok even without a token.',
     auth: {
       mode: 'optional',
       description: 'Uses the auth cookie or Authorization: Bearer token when one exists.'
     },
     methods: ['POST'],
     steps: [
-      'POST an empty JSON object or no body.',
+      'POST an empty JSON object, or { "all": true } to sign out every switcher account.',
       'If a token is present, Thingtime verifies it and revokes the session jti in MongoDB.',
-      'Store the returned Set-Cookie header in browsers so the httpOnly cookie is cleared.',
+      'Read user for the account active after logout — null means the browser is fully signed out.',
+      'Store the returned Set-Cookie headers so tt_auth and the tt_accounts roster stay in sync.',
       'Treat repeated logout calls as success.'
     ],
     requestExamples: [
       {
         name: 'Logout current session',
-        description: 'Clear the browser session or revoke the bearer token session.',
+        description: 'Sign out the active account; remaining switcher accounts stay signed in.',
         method: 'POST',
         body: {}
+      },
+      {
+        name: 'Logout everywhere',
+        description: 'Revoke every switcher account session in this browser.',
+        method: 'POST',
+        body: { all: true }
       }
     ],
     responseExamples: [
       {
         status: 200,
-        description: 'Logout completed.',
-        body: { ok: true }
+        description: 'Active account signed out; another switcher account took over.',
+        body: {
+          ok: true,
+          user: { id: '64f000000000000000000001', username: 'lopu' },
+          accounts: [{ user: { id: '64f000000000000000000001', username: 'lopu' }, active: true }]
+        }
+      },
+      {
+        status: 200,
+        description: 'Fully signed out.',
+        body: { ok: true, user: null, accounts: [] }
       }
     ]
   }),
