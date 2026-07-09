@@ -13,6 +13,9 @@ export const DRAWER_MODAL_Z = 10004;
 export const DRAWER_MIN_WIDTH = 220;
 export const DRAWER_MAX_WIDTH = 520;
 export const DRAWER_DEFAULT_WIDTH = 300;
+export const DRAWER_TOP_LEVEL_DEFAULT_LIMIT = 5;
+export const DRAWER_TOP_LEVEL_UNLIMITED = 'unlimited' as const;
+export type DrawerTopLevelLimit = number | typeof DRAWER_TOP_LEVEL_UNLIMITED;
 
 // keep the trigger button and a scrim strip reachable when the persisted
 // width exceeds the viewport (e.g. resized wide on desktop, reopened on a phone)
@@ -32,6 +35,20 @@ export const clampDrawerWidth = (width: any): number => {
 	}
 
 	return Math.min(DRAWER_MAX_WIDTH, Math.max(DRAWER_MIN_WIDTH, Math.round(numeric)));
+};
+
+export const normalizeDrawerTopLevelLimit = (limit: any): DrawerTopLevelLimit => {
+	if (limit === DRAWER_TOP_LEVEL_UNLIMITED || limit === null || typeof limit === 'undefined' || limit === '') {
+		return DRAWER_TOP_LEVEL_UNLIMITED;
+	}
+
+	const numeric = Number(limit);
+
+	if (!Number.isFinite(numeric) || numeric <= 0) {
+		return DRAWER_TOP_LEVEL_UNLIMITED;
+	}
+
+	return Math.max(1, Math.round(numeric));
 };
 
 // Matches Chakra's default md breakpoint (48em) — below it we treat the
@@ -132,7 +149,8 @@ export const useDrawer = () => {
 	const open = !!drawerSettings?.open;
 	const direction: DrawerDirection = drawerSettings?.opens?.direction === 'right' ? 'right' : 'left';
 	const width = clampDrawerWidth(drawerSettings?.width);
-	const topLevelLimit = Math.max(1, Number(drawerSettings?.toplevelitems?.limit) || 5);
+	const topLevelLimit = normalizeDrawerTopLevelLimit(drawerSettings?.toplevelitems?.limit);
+	const topLevelLimitIsUnlimited = topLevelLimit === DRAWER_TOP_LEVEL_UNLIMITED;
 	const searchClosesDrawer = drawerSettings?.searchClosesDrawer !== false;
 	const ordering = drawerSettings?.userDrawerOrdering || {};
 	const selectedItem = drawerSettings?.selectedItem || 'home';
@@ -176,11 +194,15 @@ export const useDrawer = () => {
 	);
 
 	const setTopLevelLimit = React.useCallback(
-		(value: number) => {
-			setDrawerSetting('toplevelitems.limit', Math.max(1, Math.round(Number(value) || 5)));
+		(value: DrawerTopLevelLimit) => {
+			setDrawerSetting('toplevelitems.limit', normalizeDrawerTopLevelLimit(value));
 		},
 		[setDrawerSetting]
 	);
+
+	const setTopLevelLimitUnlimited = React.useCallback(() => {
+		setDrawerSetting('toplevelitems.limit', DRAWER_TOP_LEVEL_UNLIMITED);
+	}, [setDrawerSetting]);
 
 	const setSearchClosesDrawer = React.useCallback(
 		(value: boolean) => {
@@ -246,7 +268,9 @@ export const useDrawer = () => {
 		width,
 		setWidth,
 		topLevelLimit,
+		topLevelLimitIsUnlimited,
 		setTopLevelLimit,
+		setTopLevelLimitUnlimited,
 		searchClosesDrawer,
 		setSearchClosesDrawer,
 		ordering,

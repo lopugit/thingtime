@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router';
 import { AlgorithmManager } from './AlgorithmManager';
 import { RainbowButton, SettingRow, SettingsSection } from './SettingsSection';
 import { useLopu } from '~/components/Lopu/useLopu';
-import { useDrawer } from '~/components/Nav/Drawer/useDrawer';
+import { DRAWER_TOP_LEVEL_DEFAULT_LIMIT, useDrawer } from '~/components/Nav/Drawer/useDrawer';
 import { ColorControl } from '~/components/ThemeSettings/controls';
 import { CurrentUser, useCurrentUser } from '~/hooks/useCurrentUser';
 import { useApi } from '~/hooks/useApi';
@@ -210,7 +210,9 @@ export const SettingsPage = () => {
     searchClosesDrawer,
     setSearchClosesDrawer,
     topLevelLimit,
+    topLevelLimitIsUnlimited,
     setTopLevelLimit,
+    setTopLevelLimitUnlimited,
     resetOrdering
   } = useDrawer();
 
@@ -218,6 +220,15 @@ export const SettingsPage = () => {
     useTtTheme();
 
   const [loggingOut, setLoggingOut] = React.useState(false);
+  const topLevelLimitValue = typeof topLevelLimit === 'number' ? topLevelLimit : DRAWER_TOP_LEVEL_DEFAULT_LIMIT;
+
+  const lowerTopLevelLimit = () => {
+    setTopLevelLimit(topLevelLimitIsUnlimited ? DRAWER_TOP_LEVEL_DEFAULT_LIMIT : topLevelLimitValue - 1);
+  };
+
+  const raiseTopLevelLimit = () => {
+    setTopLevelLimit(topLevelLimitIsUnlimited ? DRAWER_TOP_LEVEL_DEFAULT_LIMIT : topLevelLimitValue + 1);
+  };
 
   const handleLogout = async () => {
     setLoggingOut(true);
@@ -459,20 +470,23 @@ export const SettingsPage = () => {
             </SettingRow>
 
             <SettingRow label="Top-level items" hint="How many items show before “More”">
-              <Flex alignItems="center" columnGap={2}>
+              <Flex alignItems="center" columnGap={2} rowGap={2} flexWrap="wrap" justifyContent="flex-end">
                 <Button
                   size="xs"
                   variant="outline"
-                  onClick={() => setTopLevelLimit(topLevelLimit - 1)}
-                  isDisabled={topLevelLimit <= 1}
+                  onClick={lowerTopLevelLimit}
+                  isDisabled={!topLevelLimitIsUnlimited && topLevelLimitValue <= 1}
                 >
                   −
                 </Button>
-                <Text width="20px" textAlign="center" fontSize="sm">
-                  {topLevelLimit}
+                <Text minWidth="74px" textAlign="center" fontSize="sm">
+                  {topLevelLimitIsUnlimited ? 'Unlimited' : topLevelLimit}
                 </Text>
-                <Button size="xs" variant="outline" onClick={() => setTopLevelLimit(topLevelLimit + 1)}>
+                <Button size="xs" variant="outline" onClick={raiseTopLevelLimit}>
                   +
+                </Button>
+                <Button size="xs" variant={topLevelLimitIsUnlimited ? 'solid' : 'outline'} onClick={setTopLevelLimitUnlimited}>
+                  Unlimited
                 </Button>
               </Flex>
             </SettingRow>
