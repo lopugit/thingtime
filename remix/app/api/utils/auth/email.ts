@@ -2,7 +2,8 @@ import { sendEmail } from '../email/service';
 import {
   renderEmailOtpTemplate,
   renderEmailVerificationTemplate,
-  renderNewsletterTemplate
+  renderNewsletterTemplate,
+  renderPasswordResetTemplate
 } from '../email/templates';
 import type { EmailSendResult } from '../email/types';
 
@@ -27,6 +28,33 @@ export const sendVerificationEmail = async ({
     tags: {
       stream: 'transactional',
       template: 'auth.verify_email'
+    }
+  });
+};
+
+export const sendPasswordResetEmail = async ({
+  to,
+  link,
+  expiresMinutes
+}: {
+  to: string;
+  link: string;
+  expiresMinutes?: number;
+}): Promise<EmailSendResult> => {
+  const rendered = renderPasswordResetTemplate({ link, expiresMinutes });
+  return sendEmail({
+    to,
+    stream: 'transactional',
+    templateKey: 'auth.password_reset',
+    subject: rendered.subject,
+    html: rendered.html,
+    text: rendered.text,
+    metadata: {
+      purpose: 'password_reset'
+    },
+    tags: {
+      stream: 'transactional',
+      template: 'auth.password_reset'
     }
   });
 };

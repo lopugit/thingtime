@@ -12,6 +12,18 @@ export const renderEmailVerificationTemplate = ({ link }: { link: string }) => (
   html: `<p>Welcome to Thingtime.</p><p><a href="${htmlEscape(link)}">Verify your email</a></p>`
 });
 
+export const renderPasswordResetTemplate = ({
+  link,
+  expiresMinutes = 60
+}: {
+  link: string;
+  expiresMinutes?: number;
+}) => ({
+  subject: 'Reset your Thingtime password',
+  text: `Someone asked to reset your Thingtime password. If this was you, open: ${link}\nThe link expires in ${expiresMinutes} minutes. If this wasn't you, ignore this email — your password is unchanged.`,
+  html: `<p>Someone asked to reset your Thingtime password.</p><p><a href="${htmlEscape(link)}">Reset your password</a> (expires in ${expiresMinutes} minutes)</p><p>If this wasn't you, ignore this email — your password is unchanged.</p>`
+});
+
 export const renderEmailOtpTemplate = ({
   code,
   expiresMinutes = 10

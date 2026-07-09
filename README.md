@@ -211,15 +211,43 @@ MongoDB collections created by the app:
   drive newsletter consent and suppression.
 - `email_identities` is reserved for verified sender/domain metadata.
 
-Current auth signup and service-account verification emails use this pipeline
-through `sendVerificationEmail`. Use `sendEmailOtp` for future email code
-flows, and `sendNewsletterEmail` for newsletter sends.
+Auth flows on this pipeline: signup and service-account verification
+(`sendVerificationEmail`), password reset links (`sendPasswordResetEmail` via
+`POST /api/v1/auth/password-reset` + `/confirm`), and opt-in email 2FA login
+codes (`sendEmailOtp` via `POST /api/v1/auth/two-factor` +
+the two-step `POST /api/v1/login` challenge). Use `sendNewsletterEmail` for
+newsletter sends.
 
 The long-term provider-independent roadmap lives in
 [`docs/email-owned-architecture.md`](docs/email-owned-architecture.md). Keep
 future SES, queue, inbound, self-hosted SMTP, and sender-reputation work aligned
 with that architecture so Thingtime can move delivery providers without changing
 feature callers.
+
+## CRUD Record Encryption
+
+The generic CRUD API (`/api/v1/crud/...`) can store individual record fields as
+AES-256-GCM envelopes with HMAC blind-index search tokens (see
+`PLANS/codexCRUDImplementation.md`). Encryption is optional: types with no
+`encrypted: true` fields work with no extra configuration.
+
+To enable encrypted fields, set placeholder-free values locally in `remix/.env`
+(never commit real keys — these examples are placeholders only):
+
+```sh
+# JSON map of key id -> base64url-encoded 32-byte key. Generate one with:
+#   node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
+THINGTIME_DATA_MASTER_KEYS='{"k1":"<base64url-32-byte-key>"}'
+# Key id used for new writes (must exist in the map above).
+THINGTIME_ACTIVE_DATA_KEY_ID="k1"
+```
+
+Key rotation: add a new key id to the map, point
+`THINGTIME_ACTIVE_DATA_KEY_ID` at it, and keep the old ids in the map — old
+envelopes decrypt with their recorded `kid` and re-encrypt with the active key
+on their next write. Blind-index search tokens are derived from the active key,
+so records written under a previous key stop matching encrypted-field searches
+until their next write re-tokenizes them.
 
 ## Auth and Lopu AI
 

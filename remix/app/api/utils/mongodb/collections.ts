@@ -40,6 +40,9 @@ export const getLopuMusingRateLimitsCollection = async () =>
 export const getThemesCollection = async () => (await getThingtimeDb()).collection('themes');
 export const getWaitlistCollection = async () => (await getThingtimeDb()).collection('waitlist');
 export const getFeedAlgorithmsCollection = async () => (await getThingtimeDb()).collection('feedAlgorithms');
+export const getThingTypesCollection = async () => (await getThingtimeDb()).collection('thingTypes');
+export const getPasswordResetsCollection = async () => (await getThingtimeDb()).collection('passwordResets');
+export const getAuthOtpsCollection = async () => (await getThingtimeDb()).collection('authOtps');
 
 // Idempotently create server-side collections + their indexes. createIndex
 // creates the collection if it doesn't exist yet, so this also bootstraps an
@@ -84,6 +87,24 @@ export const ensureIndexes = async () => {
         db.collection('things').createIndex({ shareId: 1 }, { unique: true, sparse: true }),
         db.collection('things').createIndex({ kind: 1, visibility: 1, createdAt: -1, shareId: 1 }),
         db.collection('things').createIndex({ kind: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
+        // kind:'record' CRUD queries page on (updatedAt desc, shareId asc) with
+        // exactly one ACL subject array per operation (multiple independent
+        // array fields can't share one compound index)
+        db.collection('things').createIndex({ kind: 1, typeId: 1, ownerId: 1, updatedAt: -1, shareId: 1 }),
+        db.collection('things').createIndex({ kind: 1, typeId: 1, 'acl.readKeys': 1, updatedAt: -1, shareId: 1 }),
+        db.collection('things').createIndex({ kind: 1, typeId: 1, 'acl.searchKeys': 1, updatedAt: -1, shareId: 1 }),
+        db.collection('things').createIndex({ kind: 1, typeId: 1, 'search.tokens': 1, updatedAt: -1, shareId: 1 }),
+        db.collection('things').createIndex({ kind: 1, deletedAt: 1, updatedAt: -1, shareId: 1 }),
+        db.collection('thingTypes').createIndex({ shareId: 1 }, { unique: true }),
+        db.collection('thingTypes').createIndex({ ownerId: 1, key: 1 }, { unique: true }),
+        db.collection('thingTypes').createIndex({ ownerId: 1, updatedAt: -1, shareId: 1 }),
+        db.collection('thingTypes').createIndex({ visibility: 1, updatedAt: -1, shareId: 1 }),
+        db.collection('passwordResets').createIndex({ token: 1 }, { unique: true }),
+        db.collection('passwordResets').createIndex({ userId: 1 }),
+        db.collection('passwordResets').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+        db.collection('authOtps').createIndex({ challenge: 1 }, { unique: true }),
+        db.collection('authOtps').createIndex({ userId: 1 }),
+        db.collection('authOtps').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
         db.collection('feedAlgorithms').createIndex({ shareId: 1 }, { unique: true }),
         db.collection('feedAlgorithms').createIndex({ ownerId: 1 })
       ]);

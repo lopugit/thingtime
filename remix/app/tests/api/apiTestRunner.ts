@@ -1,6 +1,7 @@
 export type ApiTestGroup =
   | 'algorithms'
   | 'auth'
+  | 'crud'
   | 'crypto'
   | 'docs'
   | 'email'
