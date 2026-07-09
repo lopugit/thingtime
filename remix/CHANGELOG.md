@@ -18,6 +18,20 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- Unified the data model so posts, comments, reactions, and shares are all one
+  root **Thing** shape: sub-schemas apply through the `thingtime` array of
+  schema ids, payloads live under `crystal`, and every doc in every collection
+  now stores its root-level `schemaVersion`. Added `GET /api/v1/things`
+  (read/list), `POST /api/v1/things/update`, `GET /api/v1/schemas`, a `/schemas`
+  browser page with an admin Database-migrations panel, and admin-only
+  schema-version migration endpoints (`/api/v1/admin/migrations*`) driven by the
+  `THINGTIME_PRIVATE_ADMIN_USERNAMES` allowlist; the previously unauthenticated
+  `mongodb/raw-results` dump is now admin-only. Legacy wire shapes stay
+  byte-compatible and reads merge v1 embedded data until the idempotent
+  `things-v1-to-v2` migration runs. Details in
+  [`PRs/59-claude-unified-thing-crystal-schemas--everything-is-a-thing.md`](../PRs/59-claude-unified-thing-crystal-schemas--everything-is-a-thing.md).
+  — _Claude (AI), 2026-07-10_
+
 - Updated the Electron release workflow trigger so merges that modify
   `.github/workflows/electron-release.yml` also spawn the release workflow,
   covering workflow-only release pipeline fixes. — _Codex (AI), 2026-07-08_
