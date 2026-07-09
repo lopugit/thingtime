@@ -16,12 +16,13 @@
   parent checkout's local env files into the clone before running install,
   dev, build, or smoke checks. Preserve matching paths for root `.env*` files
   and nested app env files such as `remix/.env*`; keep secret-bearing env files
-  untracked and never commit secrets. `remix/.env.auto` is the tracked generated
-  exception handled by the post-commit hook.
+  untracked and never commit secrets. `remix/.env.auto` is untracked and
+  generated; `remix/scripts/pre-dev.sh` rewrites it on the next dev/build run.
 - Committed git hooks live in `.githooks/`; enable them in a checkout with
-  `npm run install-git-hooks` or `git config core.hooksPath .githooks`. The
-  post-commit hook intentionally auto-commits `remix/.env.auto` when that file
-  changes after a commit, using a recursion guard around its generated commit.
+  `npm run install-git-hooks` or `git config core.hooksPath .githooks`. There
+  are currently no active hooks. Branch awareness needs no hook: local
+  checkouts generate untracked `remix/.env.auto` via `pre-dev.sh`, and Vercel
+  reads `VERCEL_GIT_COMMIT_REF` from the system env at build and runtime.
 - For local web development, use the PM2-managed `tt-nitro-react-router-9999`
   app. Vite serves the React Router non-framework shell on port 9999 and
   proxies `/api` to Nitro on port 10000. Use `npm run web-pms` from the repo

@@ -59,7 +59,9 @@ dev app `tt-nitro-react-router-9999`. The older `npm run remix-pms` command is
 kept as a compatibility alias.
 
 Local branch metadata is managed automatically by `remix/scripts/pre-dev.sh`.
-That script updates `remix/.env.auto`; do not edit that generated block by hand.
+That script writes the untracked, generated `remix/.env.auto`; do not edit that
+generated block by hand. On Vercel no file is involved: the branch comes from
+the `VERCEL_GIT_COMMIT_REF` system env var at build and runtime.
 The local dev launcher loads `remix/.env`, `remix/.env.local`, and
 `remix/.env.auto` before spawning Nitro and Vite, so ignored private values like
 MongoDB credentials are available to local API status checks without committing
