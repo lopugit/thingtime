@@ -1150,6 +1150,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	// frame when an inherited collapse-all reaches a pathless/non-collapsible
 	// value before the cleanup effect resets its stale collapse state.
 	const isContentCollapsed = isCollapsed && hasCollapsibleContent;
+	const collapseActionLabel = `${isContentCollapsed ? 'Expand' : 'Collapse'} ${renderedPath || safeJoin(fullPath)}`.trim();
 
 	React.useEffect(() => {
 		if (!hasCollapsibleContent && isCollapsed) {
@@ -1396,9 +1397,9 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 											className="thingCollapseQuick"
 											as="button"
 											type="button"
-											aria-label={isContentCollapsed ? 'Expand' : 'Collapse'}
+											aria-label={collapseActionLabel}
 											aria-expanded={!isContentCollapsed}
-											title={isContentCollapsed ? 'Expand' : 'Collapse'}
+											title={collapseActionLabel}
 											alignItems="center"
 											justifyContent="center"
 											width="20px"
@@ -1409,7 +1410,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 											cursor="pointer"
 											opacity={showContextIcon ? 1 : 0}
 											transition="opacity 0.15s ease, background 0.15s ease, color 0.15s ease"
-											sx={{ '@media (hover: none)': { opacity: 0.55 } }}
+											sx={{ '@media (hover: none), (max-width: 48em)': { opacity: 1, width: '44px', height: '44px' } }}
 											_hover={{ background: 'var(--tt-surface-hover, #ececee)', color: 'var(--tt-ink, #16161a)' }}
 											_focusVisible={{ opacity: 1, outline: '2px solid var(--tt-accent, hotpink)', outlineOffset: '-2px' }}
 											onClick={(e) => {
