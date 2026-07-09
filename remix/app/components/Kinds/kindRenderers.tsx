@@ -731,6 +731,12 @@ const ElementRenderer = ({ value }: { value: HtmlThingNode; context: KindRenderC
 );
 
 // ————— registration —————
+// Wrapped in an exported function (called lazily by kindRegistry) instead of running
+// at module scope: remix/package.json sets "sideEffects": false, so a bare
+// `import './kindRenderers'` gets tree-shaken out of production builds and
+// the registry ships empty (dev serves modules unbundled, hiding it).
+
+export const registerCoreKinds = () => {
 
 registerKindRenderer({
 	kind: 'post',
@@ -1043,3 +1049,5 @@ registerKindRenderer({
 	},
 	render: ElementRenderer
 });
+
+};

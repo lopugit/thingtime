@@ -41,7 +41,38 @@ export type KindRenderer<Props = any> = {
 
 const registry: KindRenderer[] = [];
 
+// Built-ins register lazily on the first registry access. This must live on
+// the *read paths* (not in index.ts, not as side-effect imports): the app
+// package declares "sideEffects": false, so the production bundler is free to
+// skip re-export glue and side-effect-only modules — which shipped an empty
+// registry to Vercel while dev (unbundled) looked fine. The import cycle with
+// the renderer files is safe: they only call registerKindRenderer() inside
+// these deferred functions, after every module has evaluated.
+import { registerCoreKinds } from './kindRenderers';
+import { registerMediaKinds } from './kindRenderersMedia';
+import { registerSocialKinds } from './kindRenderersSocial';
+import { registerCommerceKinds } from './kindRenderersCommerce';
+import { registerPlanningKinds } from './kindRenderersPlanning';
+import { registerKnowledgeKinds } from './kindRenderersKnowledge';
+
+let builtinsEnsured = false;
+const ensureBuiltinKinds = () => {
+	if (builtinsEnsured) return;
+	// set first: the register functions call registerKindRenderer, which
+	// re-enters ensureBuiltinKinds
+	builtinsEnsured = true;
+	registerCoreKinds();
+	registerMediaKinds();
+	registerSocialKinds();
+	registerCommerceKinds();
+	registerPlanningKinds();
+	registerKnowledgeKinds();
+};
+
 export const registerKindRenderer = (renderer: KindRenderer) => {
+	// builtins first, so a custom renderer registered early still wins over
+	// the builtin with the same kind
+	ensureBuiltinKinds();
 	const existing = registry.findIndex((item) => item.kind === renderer.kind);
 	if (existing >= 0) {
 		registry[existing] = renderer;
@@ -50,10 +81,14 @@ export const registerKindRenderer = (renderer: KindRenderer) => {
 	registry.push(renderer);
 };
 
-export const getKindRenderers = (): KindRenderer[] => [...registry];
+export const getKindRenderers = (): KindRenderer[] => {
+	ensureBuiltinKinds();
+	return [...registry];
+};
 
 export const getKindRenderer = (kind?: string | null): KindRenderer | undefined => {
 	if (!kind) return undefined;
+	ensureBuiltinKinds();
 	const normalised = String(kind).toLowerCase();
 	return registry.find(
 		(renderer) => renderer.kind === normalised || renderer.aliases?.includes(normalised)
@@ -61,6 +96,7 @@ export const getKindRenderer = (kind?: string | null): KindRenderer | undefined 
 };
 
 export const resolveKindRenderer = (thing: unknown): KindRenderer | undefined => {
+	ensureBuiltinKinds();
 	if (!thing || typeof thing !== 'object' || Array.isArray(thing)) return undefined;
 
 	const record = thing as Record<string, unknown>;

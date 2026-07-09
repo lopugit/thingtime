@@ -276,6 +276,10 @@ const JobRenderer = ({ value }: { value: JobValue; context: KindRenderContext })
 );
 
 // ————— registration —————
+// Explicit registration, called lazily by kindRegistry: "sideEffects": false would
+// tree-shake a bare side-effect import out of production builds.
+
+export const registerSocialKinds = () => {
 
 registerKindRenderer({
 	kind: 'email',
@@ -447,3 +451,5 @@ registerKindRenderer({
 	},
 	render: JobRenderer
 });
+
+};

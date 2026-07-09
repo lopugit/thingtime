@@ -504,6 +504,10 @@ const RichTextRenderer = ({ value }: { value: RichTextValue; context: KindRender
 );
 
 // ————— registration —————
+// Explicit registration, called lazily by kindRegistry: "sideEffects": false would
+// tree-shake a bare side-effect import out of production builds.
+
+export const registerMediaKinds = () => {
 
 registerKindRenderer({
 	kind: 'image',
@@ -785,3 +789,5 @@ registerKindRenderer({
 	},
 	render: RichTextRenderer
 });
+
+};

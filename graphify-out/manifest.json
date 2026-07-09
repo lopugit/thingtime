@@ -3405,18 +3405,18 @@
     "semantic_hash": ""
   },
   "remix/app/components/Kinds/index.ts": {
-    "mtime": 1783614186.8294053,
-    "ast_hash": "eceb9fa81202981923c68ce11b97a910",
+    "mtime": 1783635226.5795114,
+    "ast_hash": "f457b80d430ec94e916e3bf780239774",
     "semantic_hash": ""
   },
   "remix/app/components/Kinds/kindRegistry.tsx": {
-    "mtime": 1783613642.6662142,
-    "ast_hash": "71f138278040bc28ab3f8a101092c489",
+    "mtime": 1783635211.6442404,
+    "ast_hash": "e993625cb75a2d900cc93c1130a1c6d3",
     "semantic_hash": ""
   },
   "remix/app/components/Kinds/kindRenderers.tsx": {
-    "mtime": 1783613696.6170692,
-    "ast_hash": "d83ad61502b1c3f12be54e81decbdede",
+    "mtime": 1783635244.8663127,
+    "ast_hash": "7f5f90cf707f4ff5ad755062bc21bc48",
     "semantic_hash": ""
   },
   "remix/app/components/Kinds/sampleKindThings.ts": {
@@ -3495,33 +3495,33 @@
     "semantic_hash": ""
   },
   "remix/app/components/Kinds/kindRenderersCommerce.tsx": {
-    "mtime": 1783613980.0350065,
-    "ast_hash": "c7b3783b9cc345f340cee67b2dcc54e1",
+    "mtime": 1783635244.858703,
+    "ast_hash": "474443bc8640a3b687b389d0264ee80d",
     "semantic_hash": ""
   },
   "remix/app/components/Kinds/kindRenderersKnowledge.tsx": {
-    "mtime": 1783614170.8025043,
-    "ast_hash": "1631e765af70d3145683026868133a48",
+    "mtime": 1783635244.8601232,
+    "ast_hash": "196edc0b8ed207b3e1cc3b94d1489d1b",
     "semantic_hash": ""
   },
   "remix/app/components/Kinds/kindRenderersMedia.tsx": {
-    "mtime": 1783613818.725937,
-    "ast_hash": "f0f6270b4306b26694909ea335c03e03",
+    "mtime": 1783635244.857264,
+    "ast_hash": "ec6a0fdea7f2831c563c7b43608ac826",
     "semantic_hash": ""
   },
   "remix/app/components/Kinds/kindRenderersPlanning.tsx": {
-    "mtime": 1783614074.5697713,
-    "ast_hash": "3768d7e0a54c175571b911477c3436bd",
+    "mtime": 1783635244.8594139,
+    "ast_hash": "b3c87ad6349138d03bc3712f922fa6ca",
     "semantic_hash": ""
   },
   "remix/app/components/Kinds/kindRenderersSocial.tsx": {
-    "mtime": 1783613884.5537045,
-    "ast_hash": "921fca386436d195b0a80c5c0980b6ff",
+    "mtime": 1783635244.8579571,
+    "ast_hash": "dd32776fe5648c798b3eff144b9d92e1",
     "semantic_hash": ""
   },
   "PRs/53-claude-nested-data-viewer-concepts-1ebbbe--nested-data-viewer-concepts-kind-renderers.md": {
-    "mtime": 1783613270.7802653,
-    "ast_hash": "02abfcd1cdf8526df8737be76f0e1ef4",
+    "mtime": 1783615310.3736796,
+    "ast_hash": "0e78c9a6e928d305fff63bfa6802f0ba",
     "semantic_hash": ""
   }
 }

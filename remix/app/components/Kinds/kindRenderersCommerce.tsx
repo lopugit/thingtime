@@ -388,6 +388,10 @@ const MenuRenderer = ({ value }: { value: MenuValue; context: KindRenderContext 
 );
 
 // ————— registration —————
+// Explicit registration, called lazily by kindRegistry: "sideEffects": false would
+// tree-shake a bare side-effect import out of production builds.
+
+export const registerCommerceKinds = () => {
 
 registerKindRenderer({
 	kind: 'product',
@@ -650,3 +654,5 @@ registerKindRenderer({
 	},
 	render: MenuRenderer
 });
+
+};

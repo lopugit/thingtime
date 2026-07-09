@@ -362,6 +362,10 @@ const PlantRenderer = ({ value }: { value: PlantValue; context: KindRenderContex
 );
 
 // ————— registration —————
+// Explicit registration, called lazily by kindRegistry: "sideEffects": false would
+// tree-shake a bare side-effect import out of production builds.
+
+export const registerKnowledgeKinds = () => {
 
 registerKindRenderer({
 	kind: 'weather',
@@ -592,3 +596,5 @@ registerKindRenderer({
 	},
 	render: PlantRenderer
 });
+
+};

@@ -382,6 +382,10 @@ const FlightRenderer = ({ value }: { value: FlightValue; context: KindRenderCont
 );
 
 // ————— registration —————
+// Explicit registration, called lazily by kindRegistry: "sideEffects": false would
+// tree-shake a bare side-effect import out of production builds.
+
+export const registerPlanningKinds = () => {
 
 registerKindRenderer({
 	kind: 'event',
@@ -623,3 +627,5 @@ registerKindRenderer({
 	},
 	render: FlightRenderer
 });
+
+};
