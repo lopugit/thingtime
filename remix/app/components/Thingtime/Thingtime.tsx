@@ -42,7 +42,9 @@ const numberStepButtonStyles = {
 // Number editor: light rounded input with − / + steppers (the design-mockup
 // pattern), replacing the heavy bordered Chakra NumberInput. Keeps a local
 // draft so partial input ('-', '1.', '') doesn't fight the committed value.
-const NumberValueInput = (props: { value: number; onValueChange: (value: number) => void }) => {
+// Exported so the concept viewers (components/Thingtime/concepts) reuse the
+// exact same number editor as the live tree.
+export const NumberValueInput = (props: { value: number; onValueChange: (value: number) => void }) => {
 	const { value, onValueChange } = props;
 
 	const [draft, setDraft] = React.useState(String(value ?? 0));
