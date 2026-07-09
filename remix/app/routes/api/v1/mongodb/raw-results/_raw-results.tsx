@@ -1,11 +1,9 @@
-import { Flex, Heading } from '@chakra-ui/react';
+import { Flex } from '@chakra-ui/react';
 import { useLocation } from 'react-router';
-import { getCollection } from '~/api/utils/mongodb/collection';
-import { getConnection } from '~/api/utils/mongodb/connection';
+import { json, readJsonBody } from '~/api/http';
+import { requireAdminUser } from '~/api/utils/auth/admin';
+import { getThingsCollection } from '~/api/utils/mongodb/collections';
 import { Submit } from '~/components/API/Submit';
-import setup from '~/scripts/mongodb/setup';
-
-const routeName = 'Raw Results';
 
 export default function Index() {
   const { pathname } = useLocation();
@@ -19,44 +17,29 @@ export default function Index() {
 }
 
 const actionExport = async ({ request }) => {
-  // literally just run the setup.ts script
-
-  const connection = await getConnection();
-
-  if (!connection) {
-    return earlyReturn({
-      status: 500,
-      message: `failed to setup mongodb connection`
-    });
+  const admin = await requireAdminUser(request);
+  if (admin.ok === false) {
+    return json({ ok: false, error: admin.error }, { status: admin.status });
   }
 
-  const thingsCollection = await getCollection();
+  await readJsonBody(request, 16 * 1024);
 
-  const things = await thingsCollection.find().toArray();
+  const thingsCollection = await getThingsCollection();
+  const rawResults = await thingsCollection
+    .find({ kind: 'post', visibility: 'public' })
+    .project({ _id: 0 })
+    .sort({ createdAt: -1, shareId: 1 })
+    .limit(200)
+    .toArray();
 
-  return earlyReturn({
-    status: 200,
-    message: `successful`,
-    data: {
-      rawResults: things
+  return json({
+    ok: true,
+    rawResults,
+    filter: {
+      kind: 'post',
+      visibility: 'public'
     }
   });
-};
-
-const earlyReturn = (args) => {
-  return {
-    status: args?.status || 200,
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: {
-      message: `Early return triggered in ${routeName} action` + (args?.message ? `: ${args.message}` : ''),
-      data: args?.data
-    },
-    cache: {
-      revalidate: 60
-    }
-  };
 };
 
 export const action = actionExport;

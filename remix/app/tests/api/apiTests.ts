@@ -150,43 +150,54 @@ export const apiTests: ApiTestDefinition[] = [
   {
     id: 'auth-service-account-validation',
     name: 'Service account email validation',
-    description: 'The service account endpoint is public but requires a valid email.',
+    description: 'The service account endpoint requires admin auth before validating request fields.',
     group: 'auth',
     method: 'POST',
     path: '/api/v1/auth/service-account',
     body: { serviceName: 'Thingtime API Test Missing Email' },
     expect: expectJson(
-      [400],
-      (body) => body?.ok === false && String(body?.error || '').toLowerCase().includes('email'),
-      'Service account route requires a valid email.'
+      [400, 401, 403],
+      (body, response) =>
+        body?.ok === false &&
+        typeof body?.error === 'string' &&
+        (response.status === 400 ? body.error.toLowerCase().includes('email') : true),
+      'Service account route rejected anonymous/non-admin callers before provisioning.'
     )
   },
   {
     id: 'auth-service-account-create',
-    name: 'Service account creation',
-    description: 'Creates a service account, returns a non-expiring bearer token, and grants 5 GiB storage.',
+    name: 'Service account creation is admin-gated',
+    description: 'Anonymous/non-admin callers are rejected; admins get an expiring bearer token.',
     group: 'auth',
     method: 'POST',
     path: '/api/v1/auth/service-account',
     mutates: true,
     body: uniqueServiceAccountBody,
-    expect: expectJson([200], (body) => {
+    expect: expectJson([200, 401, 403], (body, response) => {
+      if (response.status === 401 || response.status === 403) {
+        return body?.ok === false && typeof body?.error === 'string';
+      }
+
       const payload = decodeJwtPayload(body?.accessToken);
       const deadlineMs = Date.parse(body?.verificationRequiredBy || '');
+      const expiresAtMs = Date.parse(body?.expiresAt || '');
       const sevenDaysMs = 1000 * 60 * 60 * 24 * 7;
+      const maxTokenTtlMs = 1000 * 60 * 60 * 24 * 90;
       const deadlineLooksRight = Number.isFinite(deadlineMs) && deadlineMs - Date.now() <= sevenDaysMs + 60_000;
+      const expiryLooksBounded =
+        Number.isFinite(expiresAtMs) && expiresAtMs > Date.now() && expiresAtMs - Date.now() <= maxTokenTtlMs + 60_000;
 
       return (
         body?.ok === true &&
         body?.tokenType === 'Bearer' &&
-        body?.expiresAt === null &&
+        expiryLooksBounded &&
         body?.storageAllowanceBytes === 5368709120 &&
         body?.user?.accountKind === 'service' &&
         body?.user?.emailVerified === false &&
-        !Object.prototype.hasOwnProperty.call(payload || {}, 'exp') &&
+        typeof payload?.exp === 'number' &&
         deadlineLooksRight
       );
-    }, 'Service account response has non-expiring token, seven-day verification window, and 5 GiB allowance.')
+    }, 'Service account route is admin-gated and returns expiring tokens for admin callers.')
   },
   {
     id: 'crypto-standards',
@@ -289,25 +300,41 @@ export const apiTests: ApiTestDefinition[] = [
   {
     id: 'mongodb-raw-results',
     name: 'MongoDB raw results',
-    description: 'Raw results route responds with data or an environment-dependent error.',
+    description: 'Raw results is admin-gated and never exposes future kind:record docs.',
     group: 'mongodb',
     method: 'POST',
     path: '/api/v1/mongodb/raw-results',
     body: {},
     timeoutMs: 15000,
-    expect: expectStatus([200, 500], 'MongoDB raw-results route responded.')
+    expect: expectJson([200, 401, 403], (body, response) => {
+      if (response.status === 401 || response.status === 403) {
+        return body?.ok === false && typeof body?.error === 'string';
+      }
+
+      return (
+        body?.ok === true &&
+        Array.isArray(body?.rawResults) &&
+        body.rawResults.every((entry: any) => entry?.kind !== 'record')
+      );
+    }, 'Raw results rejected anonymous/non-admin callers or returned a record-free admin diagnostic page.')
   },
   {
     id: 'mongodb-populate',
     name: 'MongoDB populate',
-    description: 'Runs the MongoDB seed path through the real API utilities.',
+    description: 'Populate is admin-gated before it can run the seed path.',
     group: 'mongodb',
     method: 'POST',
     path: '/api/v1/mongodb/populate',
     mutates: true,
     body: {},
     timeoutMs: 30000,
-    expect: expectStatus([200, 500], 'MongoDB populate route responded.')
+    expect: expectJson(
+      [200, 401, 403, 500],
+      (body, response) =>
+        (response.status === 200 && body?.ok === true) ||
+        (response.status !== 200 && body?.ok === false && typeof body?.error === 'string'),
+      'Populate route is admin-gated and returns JSON for all guarded outcomes.'
+    )
   },
   {
     id: 'template-action',

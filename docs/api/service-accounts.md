@@ -1,7 +1,7 @@
 # Service Account Provisioning API
 
-Apps and backend services can create Thingtime service accounts and receive a
-non-expiring bearer token for API access.
+Allowlisted Thingtime admins can create service accounts for apps and backend
+services. The route returns an expiring bearer token for API access.
 
 ## Endpoint
 
@@ -11,14 +11,19 @@ POST /api/v1/auth/service-account
 
 ## Email verification
 
-This endpoint is self-service and does not require a provisioning secret. It
-does require a unique, valid email address.
+This endpoint requires an authenticated admin session or bearer token. Configure
+admins with `THINGTIME_ADMIN_USER_IDS`, `THINGTIME_ADMIN_USERNAMES`, or
+`THINGTIME_ADMIN_EMAILS`. It also requires a unique, valid email address for the
+service account being created.
 
 Thingtime sends an email-verification link when the service account is created.
 The account must verify that email within seven days. The returned bearer token
-is non-expiring, but while the account is unverified it is accepted only during
-the seven-day grace window. After `verificationRequiredBy`, authenticated
-requests for the service account are rejected until the email is verified.
+is time-bounded, and while the account is unverified it is accepted only during
+the seven-day grace window. After `verificationRequiredBy` or `expiresAt`,
+authenticated requests for the service account are rejected.
+
+Service tokens are time-bounded. `THINGTIME_SERVICE_TOKEN_TTL_DAYS` defaults to
+30 days and is capped at 90 days.
 
 ## Request
 
@@ -63,9 +68,9 @@ Fields:
     "storageAllowanceBytes": 5368709120,
     "storageUsedBytes": 0
   },
-  "accessToken": "<jwt-without-exp-claim>",
+  "accessToken": "<jwt-with-exp-claim>",
   "tokenType": "Bearer",
-  "expiresAt": null,
+  "expiresAt": "2026-08-03T00:00:00.000Z",
   "verificationRequiredBy": "2026-07-11T00:00:00.000Z",
   "storageAllowanceBytes": 5368709120
 }
@@ -80,9 +85,9 @@ The access token is a normal Thingtime bearer token:
 Authorization: Bearer <accessToken>
 ```
 
-Service tokens are non-expiring JWTs. Revocation still goes through Mongo:
+Service tokens are expiring JWTs. Revocation still goes through Mongo:
 Thingtime checks the token `jti` against the `sessions` collection on each
-authenticated request. Revoke a token by revoking or deleting its backing
+authenticated request. Revoke a token early by revoking or deleting its backing
 session document.
 
 ## Frontend and client usage

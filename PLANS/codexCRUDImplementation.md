@@ -142,7 +142,9 @@ Rules:
 - `ownerId` is always included in `readKeys`, `writeKeys`, `adminKeys`, and
   `searchKeys`.
 - Use subject keys instead of several parallel ACL arrays:
-  `user:<id>`, `service:<id>`, `account-kind:service`, and `public`.
+  `user:<id>`, `service:<id>`, and `public`. Do not add class-wide service
+  grants in v1; grants to service accounts must target explicit `service:<id>`
+  subjects.
 - Anonymous callers only receive the `public` subject key.
 - Unauthorized direct reads return 404, matching existing private-theme and
   not-visible post behavior.
@@ -396,6 +398,7 @@ Permission validation:
 
 - owner cannot remove own admin/read/search/write grants;
 - public write/admin grants are rejected in v1;
+- class-wide service write/admin grants are rejected in v1;
 - public read/search grants are allowed only when explicitly requested;
 - service accounts can own and access records through the same user id model;
 - unauthorized ids return 404, not 403, when returning 403 would reveal

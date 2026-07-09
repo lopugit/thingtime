@@ -53,6 +53,11 @@ These patterns show up again and again — default to them when unsure:
   Mongo `sessions` record for revocation**, with `Authorization: Bearer` also
   supported for API clients. Wanted JWT *and* revocability — Mongo is the source
   of truth for whether a token is still live.
+- Service-account provisioning is **admin-only** and service bearer tokens are
+  **expiring JWTs** backed by revocable Mongo sessions. The admin allowlist lives
+  in server env (`THINGTIME_ADMIN_USER_IDS` / `THINGTIME_ADMIN_USERNAMES` /
+  `THINGTIME_ADMIN_EMAILS`) so anonymous callers cannot mint durable backend
+  credentials.
 - **Email required from signup** (anti-spam + user validation), with an **email
   verification flow**. Initially considered email-optional + a localStorage/JWT
   password-reset; reversed it — emails matter from the get-go.
