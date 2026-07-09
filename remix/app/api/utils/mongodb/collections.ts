@@ -28,11 +28,21 @@ export const getUsersCollection = async () => (await getThingtimeDb()).collectio
 export const getSessionsCollection = async () => (await getThingtimeDb()).collection('sessions');
 export const getThingsCollection = async () => (await getThingtimeDb()).collection('things');
 export const getEmailVerificationsCollection = async () => (await getThingtimeDb()).collection('emailVerifications');
+export const getEmailMessagesCollection = async () => (await getThingtimeDb()).collection('email_messages');
+export const getEmailEventsCollection = async () => (await getThingtimeDb()).collection('email_events');
+export const getEmailTemplatesCollection = async () => (await getThingtimeDb()).collection('email_templates');
+export const getEmailSubscriptionsCollection = async () => (await getThingtimeDb()).collection('email_subscriptions');
+export const getEmailSuppressionListCollection = async () => (await getThingtimeDb()).collection('email_suppression_list');
+export const getEmailUnsubscribesCollection = async () => (await getThingtimeDb()).collection('email_unsubscribes');
+export const getEmailIdentitiesCollection = async () => (await getThingtimeDb()).collection('email_identities');
 export const getLopuMusingRateLimitsCollection = async () =>
   (await getThingtimeDb()).collection('lopuMusingRateLimits');
 export const getThemesCollection = async () => (await getThingtimeDb()).collection('themes');
 export const getWaitlistCollection = async () => (await getThingtimeDb()).collection('waitlist');
 export const getFeedAlgorithmsCollection = async () => (await getThingtimeDb()).collection('feedAlgorithms');
+export const getThingTypesCollection = async () => (await getThingtimeDb()).collection('thingTypes');
+export const getPasswordResetsCollection = async () => (await getThingtimeDb()).collection('passwordResets');
+export const getAuthOtpsCollection = async () => (await getThingtimeDb()).collection('authOtps');
 
 // Idempotently create server-side collections + their indexes. createIndex
 // creates the collection if it doesn't exist yet, so this also bootstraps an
@@ -53,6 +63,19 @@ export const ensureIndexes = async () => {
         db.collection('sessions').createIndex({ userId: 1 }),
         db.collection('emailVerifications').createIndex({ token: 1 }, { unique: true }),
         db.collection('emailVerifications').createIndex({ userId: 1 }),
+        db.collection('email_messages').createIndex({ createdAt: -1 }),
+        db.collection('email_messages').createIndex({ to: 1 }),
+        db.collection('email_messages').createIndex({ stream: 1, status: 1, createdAt: -1 }),
+        db.collection('email_messages').createIndex({ providerMessageId: 1 }, { sparse: true }),
+        db.collection('email_events').createIndex({ emailMessageId: 1 }),
+        db.collection('email_events').createIndex({ providerMessageId: 1 }),
+        db.collection('email_events').createIndex({ eventType: 1, receivedAt: -1 }),
+        db.collection('email_templates').createIndex({ key: 1 }, { unique: true }),
+        db.collection('email_subscriptions').createIndex({ email: 1, listId: 1 }, { unique: true }),
+        db.collection('email_subscriptions').createIndex({ listId: 1, status: 1 }),
+        db.collection('email_suppression_list').createIndex({ email: 1 }, { unique: true }),
+        db.collection('email_unsubscribes').createIndex({ email: 1, listId: 1 }, { unique: true }),
+        db.collection('email_identities').createIndex({ identity: 1 }, { unique: true }),
         db.collection('lopuMusingRateLimits').createIndex({ key: 1 }, { unique: true }),
         db.collection('lopuMusingRateLimits').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
         db.collection('themes').createIndex({ shareId: 1 }, { unique: true }),
@@ -64,6 +87,24 @@ export const ensureIndexes = async () => {
         db.collection('things').createIndex({ shareId: 1 }, { unique: true, sparse: true }),
         db.collection('things').createIndex({ kind: 1, visibility: 1, createdAt: -1, shareId: 1 }),
         db.collection('things').createIndex({ kind: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
+        // kind:'record' CRUD queries page on (updatedAt desc, shareId asc) with
+        // exactly one ACL subject array per operation (multiple independent
+        // array fields can't share one compound index)
+        db.collection('things').createIndex({ kind: 1, typeId: 1, ownerId: 1, updatedAt: -1, shareId: 1 }),
+        db.collection('things').createIndex({ kind: 1, typeId: 1, 'acl.readKeys': 1, updatedAt: -1, shareId: 1 }),
+        db.collection('things').createIndex({ kind: 1, typeId: 1, 'acl.searchKeys': 1, updatedAt: -1, shareId: 1 }),
+        db.collection('things').createIndex({ kind: 1, typeId: 1, 'search.tokens': 1, updatedAt: -1, shareId: 1 }),
+        db.collection('things').createIndex({ kind: 1, deletedAt: 1, updatedAt: -1, shareId: 1 }),
+        db.collection('thingTypes').createIndex({ shareId: 1 }, { unique: true }),
+        db.collection('thingTypes').createIndex({ ownerId: 1, key: 1 }, { unique: true }),
+        db.collection('thingTypes').createIndex({ ownerId: 1, updatedAt: -1, shareId: 1 }),
+        db.collection('thingTypes').createIndex({ visibility: 1, updatedAt: -1, shareId: 1 }),
+        db.collection('passwordResets').createIndex({ token: 1 }, { unique: true }),
+        db.collection('passwordResets').createIndex({ userId: 1 }),
+        db.collection('passwordResets').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+        db.collection('authOtps').createIndex({ challenge: 1 }, { unique: true }),
+        db.collection('authOtps').createIndex({ userId: 1 }),
+        db.collection('authOtps').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
         db.collection('feedAlgorithms').createIndex({ shareId: 1 }, { unique: true }),
         db.collection('feedAlgorithms').createIndex({ ownerId: 1 })
       ]);

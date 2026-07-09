@@ -32,6 +32,8 @@ type RunOptions = {
   allowMutating?: boolean;
 };
 
+type EmailTestConfig = ApiTestContext['email'];
+
 const EMPTY_BODY_LABEL = 'No request body.';
 
 const groupLabel = (group: string) => group.charAt(0).toUpperCase() + group.slice(1);
@@ -40,6 +42,23 @@ const statusColor = (status?: string) => {
   if (status === 'pass') return 'var(--tt-positive, #0F766E)';
   if (status === 'fail') return 'var(--tt-danger, #B91C1C)';
   return 'var(--tt-muted, #52525B)';
+};
+
+const visibleCheckboxSx = {
+  '& .chakra-checkbox__control': {
+    background: '#ffffff !important',
+    border: '2px solid #3F3F46 !important',
+    boxShadow: '0 0 0 1px #ffffff !important',
+    color: '#ffffff !important'
+  },
+  '& .chakra-checkbox__control[data-checked]': {
+    background: '#3182CE !important',
+    borderColor: '#3182CE !important',
+    boxShadow: 'none !important'
+  },
+  '& .chakra-checkbox__control[data-focus-visible]': {
+    boxShadow: '0 0 0 3px rgba(49, 130, 206, 0.35)'
+  }
 };
 
 const testMatches = (test: ApiTestDefinition, group: string, query: string, includeMutating: boolean) => {
@@ -55,12 +74,13 @@ const testMatches = (test: ApiTestDefinition, group: string, query: string, incl
     .includes(needle);
 };
 
-const createApiTestContext = (): ApiTestContext => ({
-  origin: typeof window === 'undefined' ? '' : window.location.origin
+const createApiTestContext = (email?: EmailTestConfig): ApiTestContext => ({
+  origin: typeof window === 'undefined' ? '' : window.location.origin,
+  email
 });
 
-const createInitialPayloadTexts = () => {
-  const context = createApiTestContext();
+const createPayloadTexts = (email?: EmailTestConfig) => {
+  const context = createApiTestContext(email);
 
   return Object.fromEntries(
     apiTests.map((test) => [test.id, formatRequestPayload(resolveApiTestBody(test, context))])
@@ -82,10 +102,42 @@ export default function TestsPage() {
   const [includeMutating, setIncludeMutating] = React.useState(false);
   const [runningIds, setRunningIds] = React.useState<Set<string>>(new Set());
   const [results, setResults] = React.useState<ResultMap>({});
-  const [payloadTexts, setPayloadTexts] = React.useState<Record<string, string>>(() => createInitialPayloadTexts());
+  const [emailConfig, setEmailConfig] = React.useState<EmailTestConfig>();
+  const [payloadTexts, setPayloadTexts] = React.useState<Record<string, string>>(() => createPayloadTexts());
   const [editedPayloadIds, setEditedPayloadIds] = React.useState<Set<string>>(new Set());
   const [expandedPayloadIds, setExpandedPayloadIds] = React.useState<Set<string>>(new Set());
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set());
+
+  React.useEffect(() => {
+    let active = true;
+
+    fetch('/api/v1/email/config', {
+      credentials: 'include',
+      headers: { Accept: 'application/json' }
+    })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((body) => {
+        if (!active || !body?.email) return;
+        setEmailConfig(body.email);
+      })
+      .catch(() => undefined);
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  React.useEffect(() => {
+    if (!emailConfig) return;
+    const nextPayloadTexts = createPayloadTexts(emailConfig);
+    setPayloadTexts((current) => {
+      const next = { ...current };
+      for (const [testId, text] of Object.entries(nextPayloadTexts)) {
+        if (!editedPayloadIds.has(testId)) next[testId] = text;
+      }
+      return next;
+    });
+  }, [editedPayloadIds, emailConfig]);
 
   const visibleTests = React.useMemo(
     () => apiTests.filter((test) => testMatches(test, group, query, includeMutating)),
@@ -118,14 +170,14 @@ export default function TestsPage() {
   }, []);
 
   const resetPayload = React.useCallback((test: ApiTestDefinition) => {
-    const text = formatRequestPayload(resolveApiTestBody(test, createApiTestContext()));
+    const text = formatRequestPayload(resolveApiTestBody(test, createApiTestContext(emailConfig)));
     setPayloadTexts((current) => ({ ...current, [test.id]: text }));
     setEditedPayloadIds((current) => {
       const next = new Set(current);
       next.delete(test.id);
       return next;
     });
-  }, []);
+  }, [emailConfig]);
 
   const updatePayloadText = React.useCallback((testId: string, value: string) => {
     setPayloadTexts((current) => ({ ...current, [testId]: value }));
@@ -162,7 +214,7 @@ export default function TestsPage() {
   const runTests = React.useCallback(async (tests: ApiTestDefinition[], options: RunOptions = {}) => {
     const allowMutating = options.allowMutating ?? includeMutating;
     const runnable = tests.filter((test) => allowMutating || !test.mutates);
-    const context = createApiTestContext();
+    const context = createApiTestContext(emailConfig);
 
     for (const test of runnable) {
       setRunningIds((current) => new Set([...current, test.id]));
@@ -183,7 +235,7 @@ export default function TestsPage() {
         });
       }
     }
-  }, [getRunBody, includeMutating]);
+  }, [emailConfig, getRunBody, includeMutating]);
 
   const runOne = React.useCallback((test: ApiTestDefinition) => runTests([test], { allowMutating: true }), [runTests]);
 
@@ -211,6 +263,17 @@ export default function TestsPage() {
             <Text mt={2} color="var(--tt-text, #4A5568)" fontSize="sm">
               Run all safe API checks, selected tests, a filtered subset, a route group, or one test at a time.
             </Text>
+            {emailConfig ? (
+              <Flex mt={3} gap={2} wrap="wrap">
+                <Badge colorScheme={emailConfig.provider === 'ses' ? 'green' : 'gray'}>
+                  email: {emailConfig.provider}
+                </Badge>
+                {emailConfig.sesSandbox ? (
+                  <Badge colorScheme="orange">SES sandbox throttle: {emailConfig.sandboxSendDelayMs || 1000}ms</Badge>
+                ) : null}
+                <Badge colorScheme="gray">test recipient: {emailConfig.testRecipient}</Badge>
+              </Flex>
+            ) : null}
           </Box>
 
           <Flex gap={2} wrap="wrap">
@@ -244,7 +307,11 @@ export default function TestsPage() {
             <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="route, group, or test" />
           </Box>
           <Flex align="end">
-            <Checkbox isChecked={includeMutating} onChange={(event) => setIncludeMutating(event.target.checked)}>
+            <Checkbox
+              isChecked={includeMutating}
+              onChange={(event) => setIncludeMutating(event.target.checked)}
+              sx={visibleCheckboxSx}
+            >
               Include mutating tests
             </Checkbox>
           </Flex>
@@ -296,6 +363,8 @@ export default function TestsPage() {
                       onChange={(event) => toggleSelected(test.id, event.target.checked)}
                       aria-label={`Select ${test.name}`}
                       pt="2px"
+                      size="lg"
+                      sx={visibleCheckboxSx}
                     />
                     <Box color={statusColor(result?.status)} pt="2px">
                       <Icon size={18} />

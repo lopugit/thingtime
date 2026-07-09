@@ -18,6 +18,42 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- 🗃️ **Generic typed CRUD API + email auth flows**: new `/api/v1/crud` family
+  (types, records, update/delete/permissions, search) implementing
+  `PLANS/codexCRUDImplementation.md` — user-defined schemas in a new
+  `thingTypes` collection, records as `kind:'record'` docs in `things` with
+  per-operation subject-key ACLs (`public`, `user:<id>`, `service:<id>`),
+  optional AES-256-GCM field encryption with HMAC blind-index search tokens
+  (`THINGTIME_DATA_MASTER_KEYS`/`THINGTIME_ACTIVE_DATA_KEY_ID`), soft deletes,
+  optimistic `expectedVersion` concurrency, and 404-for-unauthorized reads.
+  Plus email-backed auth on the SES email layer: password reset
+  (`/api/v1/auth/password-reset` + `/confirm`, single-use 1h tokens, all
+  sessions revoked on reset) and opt-in email 2FA
+  (`/api/v1/auth/two-factor` toggle + two-step `/api/v1/login` OTP challenge,
+  hashed attempt-capped codes in a new `authOtps` collection). All routes
+  registered in the route map + API docs (docs-derived Nitro route list,
+  including the email PR's `config`/`test-otp` routes) with `crud`/`auth` API
+  test coverage. — _Claude (AI), 2026-07-10_
+- 🧩 **Extensible data (`extended`)**: every CRUD record, CRUD type, and feed
+  post now carries a schema-free `extended` property accepting any JSON
+  structure (512KB cap, replace-on-write, `null` clears) — stored untouched
+  inside the Thingtime platform envelope (ids, ACLs, versions, soft deletes),
+  never validated, indexed, or interpreted. Types may declare **zero fields**,
+  so external apps and service accounts can use Thingtime as a free-form
+  datastore (`docs/api/service-accounts.md` "Managing external app data",
+  README "Extensible Data"). — _Claude (AI), 2026-07-10_
+- Added `/tests` email delivery checks for signup verification, service-account
+  verification, and the OTP email helper, plus `SES_SANDBOX=1` throttling so
+  sandbox runs wait one second between email sends. — _Codex (AI), 2026-07-09_
+- Added a long-term owned email architecture TODO covering provider-independent
+  outbox delivery, event ingestion, inbound mail, self-hosted SMTP relay
+  milestones, and sender-reputation safeguards. — _Codex (AI), 2026-07-08_
+- Added a Mongo-backed Thingtime email delivery service with console and Amazon
+  SES providers, outbound message recording, suppression/unsubscribe
+  collections, and SES environment setup docs. — _Codex (AI), 2026-07-07_
+- Updated the Electron release workflow trigger so merges that modify
+  `.github/workflows/electron-release.yml` also spawn the release workflow,
+  covering workflow-only release pipeline fixes. — _Codex (AI), 2026-07-08_
 - Updated the Electron release workflow to run on Node 24 so the Remix/Nitro
   bundle build matches the app's declared `node: 24.x` engine during
   post-merge GitHub Releases. — _Codex (AI), 2026-07-08_
@@ -162,12 +198,29 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- Branch awareness no longer depends on a committed env file: `remix/.env.auto`
+  is now untracked/gitignored and generated locally by
+  `remix/scripts/pre-dev.sh`; the `.githooks/post-commit` auto-commit hook and
+  the unreferenced legacy `remix/vercel.sh` are removed. Vercel deployments
+  read the `VERCEL_GIT_COMMIT_REF` system env var (already preferred by
+  `root-data.server.ts` at runtime), so previews stay branch-aware while
+  `.env.auto` merge conflicts become structurally impossible. `pre-dev.sh` now
+  warns instead of failing the Vercel build when the ref is missing. Existing
+  checkouts with a locally modified `.env.auto` may hit a one-time
+  modify/delete conflict when pulling this change — resolve by keeping the
+  local file untracked (`git rm --cached remix/.env.auto`). Also routed
+  `graphify-out/graph.json` through the graphify union merge driver via
+  `.gitattributes`. — _Claude (AI), 2026-07-08_
 - Moved PR-specific notes from `remix/PRs/` to the repo-root `PRs/`
   directory and updated changelog/runbook links to the new convention. —
   _Codex (AI), 2026-07-07_
 
 ### Fixed
 
+- Fixed Electron release packaging on GitHub Actions by giving the Electron
+  package explicit repository metadata, preventing electron-builder from
+  crashing after producing macOS assets when it cannot infer the GitHub repo
+  from the runner checkout. — _Codex (AI), 2026-07-09_
 - Aligned the Electron desktop titlebar and drawer with the Codex-style macOS
   layout: compact drawer/home/search controls now sit in the titlebar, the
   titlebar stays at the compact Electron height, the control row no longer

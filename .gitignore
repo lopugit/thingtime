@@ -2,6 +2,7 @@
 .vscode
 .env
 .env.local
+.env.auto
 .env.development
 .env.test
 .env.staging
@@ -65,7 +66,13 @@ iOS/Thingtime/Resources/Info.plist
 
 # graphify - keep queryable graph + report, ignore machine-specific temp & build artifacts
 graphify-out/.graphify_*
-graphify-out/cache/
+# cache: semantic/ is tracked (content-addressed extractions -> merge-safe, makes
+# full rebuilds in fresh clones LLM-free); ast/ + stat-index.json stay local
+# (stat-index is keyed by absolute paths)
+graphify-out/cache/*
+!graphify-out/cache/semantic/
+# derived 27MB viz - regenerate with `graphify export html`
+graphify-out/graph.html
 # dated curated-graph backups created by `graphify update`
 graphify-out/[0-9]*/
 

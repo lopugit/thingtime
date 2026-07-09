@@ -29,7 +29,9 @@ export const createEmailVerification = async ({
 
 export type ConsumeResult =
   | { ok: true; userId: string; email: string }
-  | { ok: false; reason: 'invalid' | 'used' | 'expired' };
+  // email rides along on known-token failures so the verify page can offer a
+  // one-click "send a new link" without asking the user to retype it
+  | { ok: false; reason: 'invalid' | 'used' | 'expired'; email?: string };
 
 // Validate + burn a token atomically. Single-use: if two clicks race, only one
 // update can match consumedAt: null; the loser sees the token as used.
@@ -51,6 +53,6 @@ export const consumeEmailVerification = async (token: string): Promise<ConsumeRe
 
   const doc = await coll.findOne({ token });
   if (!doc) return { ok: false, reason: 'invalid' };
-  if (doc.consumedAt) return { ok: false, reason: 'used' };
-  return { ok: false, reason: 'expired' };
+  if (doc.consumedAt) return { ok: false, reason: 'used', email: doc.email };
+  return { ok: false, reason: 'expired', email: doc.email };
 };

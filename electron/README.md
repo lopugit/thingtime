@@ -70,8 +70,8 @@ extension such as `.dmg`, `.zip`, or `.pkg`.
 ## GitHub Releases
 
 `.github/workflows/electron-release.yml` publishes the Electron bundle from
-`main`. It runs after a push to `main` that changes `electron/**`, builds the
-desktop app on macOS, creates a tag like
+`main`. It runs after a push to `main` that changes `electron/**` or the
+workflow itself, builds the desktop app on macOS, creates a tag like
 `electron-v0.1.0+build.10423`, and attaches the generated `.dmg`, `.zip`, or
 `.pkg` assets to a GitHub Release titled `Thingtime Electron App Release
 0.1.0+build.10423`.

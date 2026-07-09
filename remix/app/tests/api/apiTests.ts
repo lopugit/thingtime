@@ -3,12 +3,41 @@ import {
   expectNdjson,
   expectRedirectedTo,
   expectStatus,
+  type ApiTestContext,
   type ApiTestDefinition
 } from './apiTestRunner';
 import { apiEndpointDocs } from '~/docs/apiDocs';
 
+const uniqueSuffix = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+const DEFAULT_EMAIL_TEST_RECIPIENT = 'support@thingtime.com';
+
+const plusAlias = (email: string, label: string) => {
+  const fallback = DEFAULT_EMAIL_TEST_RECIPIENT;
+  const [local, domain] = (email || fallback).trim().toLowerCase().split('@');
+  const safeLabel = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'test';
+  if (!local || !domain) return fallback;
+
+  return `${local}+${safeLabel}-${uniqueSuffix()}@${domain}`;
+};
+
+const uniqueEmailRegisterBody = (context: ApiTestContext) => {
+  const suffix = uniqueSuffix();
+  const email = plusAlias(context.email?.testRecipient || DEFAULT_EMAIL_TEST_RECIPIENT, 'signup');
+
+  return {
+    username: `ses-signup-${suffix}`,
+    password: 'testpass123',
+    email,
+    displayName: 'SES Signup Test',
+    meta: {
+      source: 'thingtime-tests-page',
+      flow: 'email-signup-verification'
+    }
+  };
+};
+
 const uniqueServiceAccountBody = () => {
-  const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const suffix = uniqueSuffix();
 
   return {
     serviceName: `Thingtime API Test ${suffix}`,
@@ -20,6 +49,28 @@ const uniqueServiceAccountBody = () => {
     }
   };
 };
+
+const uniqueEmailServiceAccountBody = (context: ApiTestContext) => {
+  const suffix = uniqueSuffix();
+  const email = plusAlias(context.email?.testRecipient || DEFAULT_EMAIL_TEST_RECIPIENT, 'service');
+
+  return {
+    serviceName: `SES Service Test ${suffix}`,
+    username: `ses-service-${suffix}`,
+    email,
+    displayName: 'SES Service Test',
+    meta: {
+      source: 'thingtime-tests-page',
+      flow: 'email-service-account-verification'
+    }
+  };
+};
+
+const uniqueEmailOtpBody = (context: ApiTestContext) => ({
+  email: plusAlias(context.email?.testRecipient || DEFAULT_EMAIL_TEST_RECIPIENT, 'otp'),
+  code: String(Math.floor(100000 + Math.random() * 900000)),
+  expiresMinutes: 10
+});
 
 const isObject = (value: any) => value && typeof value === 'object' && !Array.isArray(value);
 
@@ -141,11 +192,11 @@ export const apiTests: ApiTestDefinition[] = [
   {
     id: 'auth-verify-email-missing',
     name: 'Verify email missing token',
-    description: 'Missing verification tokens redirect to the login verification state.',
+    description: 'Missing verification tokens land on the /verify-email result page.',
     group: 'auth',
     method: 'GET',
     path: '/api/v1/auth/verify-email',
-    expect: expectRedirectedTo('/login?verify=missing')
+    expect: expectRedirectedTo('/verify-email?state=missing')
   },
   {
     id: 'auth-service-account-validation',
@@ -201,6 +252,87 @@ export const apiTests: ApiTestDefinition[] = [
         deadlineLooksRight
       );
     }, 'Service account route is admin-gated and returns expiring tokens for admin callers.')
+  },
+  {
+    id: 'email-config',
+    name: 'Email test config',
+    description: 'Returns safe email provider/test metadata without exposing SES credentials.',
+    group: 'email',
+    method: 'GET',
+    path: '/api/v1/email/config',
+    expect: expectJson(
+      [200],
+      (body) =>
+        body?.ok === true &&
+        isObject(body?.email) &&
+        ['console', 'ses'].includes(body.email.provider) &&
+        typeof body.email.sesSandbox === 'boolean' &&
+        typeof body.email.testRecipient === 'string',
+      'Email config returned provider, sandbox, and test-recipient metadata.'
+    )
+  },
+  {
+    id: 'email-signup-verification',
+    name: 'Signup verification email',
+    description: 'Creates a throwaway user and sends the normal signup verification email to the configured plus-alias test recipient.',
+    group: 'email',
+    method: 'POST',
+    path: '/api/v1/auth/register',
+    mutates: true,
+    emailSend: true,
+    timeoutMs: 30000,
+    body: uniqueEmailRegisterBody,
+    expect: expectJson([200], (body) => {
+      return (
+        body?.ok === true &&
+        body?.user?.emailVerified === false &&
+        typeof body?.user?.email === 'string' &&
+        body.user.email.includes('@')
+      );
+    }, 'Signup created an unverified user and triggered verification email delivery.')
+  },
+  {
+    id: 'email-service-account-verification',
+    name: 'Service account verification email',
+    description: 'Creates a throwaway service account and sends the service-account verification email to the configured plus-alias test recipient.',
+    group: 'email',
+    method: 'POST',
+    path: '/api/v1/auth/service-account',
+    mutates: true,
+    emailSend: true,
+    timeoutMs: 30000,
+    body: uniqueEmailServiceAccountBody,
+    expect: expectJson([200], (body) => {
+      const payload = decodeJwtPayload(body?.accessToken);
+      return (
+        body?.ok === true &&
+        body?.user?.accountKind === 'service' &&
+        body?.user?.emailVerified === false &&
+        body?.tokenType === 'Bearer' &&
+        !Object.prototype.hasOwnProperty.call(payload || {}, 'exp')
+      );
+    }, 'Service account was created and triggered verification email delivery.')
+  },
+  {
+    id: 'email-otp-helper',
+    name: 'Email OTP helper',
+    description: 'Dev/preview-only check for the OTP email renderer and delivery helper.',
+    group: 'email',
+    method: 'POST',
+    path: '/api/v1/email/test-otp',
+    mutates: true,
+    emailSend: true,
+    timeoutMs: 30000,
+    body: uniqueEmailOtpBody,
+    expect: expectJson(
+      [200, 403],
+      (body, response) =>
+        response.status === 403 ||
+        (body?.ok === true &&
+          ['sent', 'logged'].includes(body?.result?.status) &&
+          typeof body?.result?.emailMessageId === 'string'),
+      'OTP helper sent/logged a message, or was correctly blocked outside local/preview.'
+    )
   },
   {
     id: 'crypto-standards',
@@ -684,6 +816,228 @@ export const apiTests: ApiTestDefinition[] = [
     mutates: true,
     body: { email: 'tt-api-test-waitlist@example.invalid' },
     expect: expectJson([200, 429], (body) => body?.ok === true || typeof body?.error === 'string', 'Waitlist join succeeded (or was rate-limited with an error shape).')
+  },
+  {
+    id: 'auth-password-reset-neutral',
+    name: 'Password reset is probe-proof',
+    description: 'Reset requests return ok whether or not the email matches an account.',
+    group: 'auth',
+    method: 'POST',
+    path: '/api/v1/auth/password-reset',
+    body: { email: 'tt-api-test-definitely-unregistered@example.invalid' },
+    expect: expectJson([200], (body) => body?.ok === true, 'Reset request returned a neutral ok response.')
+  },
+  {
+    id: 'auth-password-reset-confirm-invalid',
+    name: 'Password reset confirm rejects bad tokens',
+    description: 'Unknown/expired reset tokens are rejected with a 400 error shape.',
+    group: 'auth',
+    method: 'POST',
+    path: '/api/v1/auth/password-reset/confirm',
+    body: { token: 'not-a-real-reset-token', password: 'valid-length-password' },
+    expect: expectJson([400], (body) => body?.ok === false && typeof body?.error === 'string', 'Invalid reset token rejected with an error shape.')
+  },
+  {
+    id: 'auth-two-factor-state-guarded',
+    name: 'Email 2FA state requires auth',
+    description: 'Reading the 2FA state anonymously is rejected with a 401 error shape.',
+    group: 'auth',
+    method: 'GET',
+    path: '/api/v1/auth/two-factor',
+    expect: expectJson(
+      [200, 401],
+      (body) => typeof body?.enabled === 'boolean' || (body?.ok === false && typeof body?.error === 'string'),
+      'Two-factor state returned for a session or was rejected anonymously.'
+    )
+  },
+  {
+    id: 'auth-two-factor-toggle-validates',
+    name: 'Email 2FA toggle validates input',
+    description: 'Toggling 2FA without a boolean enabled flag is rejected before any write.',
+    group: 'auth',
+    method: 'POST',
+    path: '/api/v1/auth/two-factor',
+    body: {},
+    expect: expectJson([400, 401], (body) => body?.ok === false && typeof body?.error === 'string', 'Invalid 2FA toggle rejected with an error shape.')
+  },
+  {
+    id: 'auth-login-otp-invalid-challenge',
+    name: 'Login OTP rejects unknown challenges',
+    description: 'Completing a 2FA login with an unknown challenge id fails with a generic 401.',
+    group: 'auth',
+    method: 'POST',
+    path: '/api/v1/login',
+    body: { challenge: 'not-a-real-challenge-id', code: '000000' },
+    expect: expectJson([401], (body) => body?.ok === false && typeof body?.error === 'string', 'Unknown OTP challenge rejected with an error shape.')
+  },
+  {
+    id: 'crud-types-list',
+    name: 'Type list is projection-safe',
+    description: 'Listing types anonymously returns public types with no internal ids or ACL internals.',
+    group: 'crud',
+    method: 'GET',
+    path: '/api/v1/crud/types',
+    expect: expectJson(
+      [200],
+      (body) =>
+        body?.ok === true &&
+        Array.isArray(body?.types) &&
+        body.types.every(
+          (type: any) =>
+            typeof type?.id === 'string' &&
+            !Object.prototype.hasOwnProperty.call(type, '_id') &&
+            !Object.prototype.hasOwnProperty.call(type, 'ownerId') &&
+            !Object.prototype.hasOwnProperty.call(type, 'defaultAcl')
+        ),
+      'Type list returned public projections only.'
+    )
+  },
+  {
+    id: 'crud-types-save-guarded',
+    name: 'Type create requires auth',
+    description: 'Creating a type without a session is rejected (401) or accepted for a logged-in tester (idempotent fixed key — re-runs hit the per-owner 409 dedup, no collection growth).',
+    group: 'crud',
+    method: 'POST',
+    path: '/api/v1/crud/types',
+    mutates: true,
+    body: {
+      key: 'tt_api_test_type',
+      name: 'API test type',
+      visibility: 'private',
+      fields: [{ key: 'title', label: 'Title', kind: 'text', required: true, searchable: 'term' }]
+    },
+    expect: expectJson(
+      [200, 401, 409],
+      (body) => (body?.ok === true && body?.type?.id) || (body?.ok === false && typeof body?.error === 'string'),
+      'Type create persisted once (session), deduped on re-run (409), or was rejected anonymously (401).'
+    )
+  },
+  {
+    id: 'crud-types-zero-field-extended',
+    name: 'Zero-field type with extended data',
+    description: 'Types may declare no fields and carry free-form extended JSON (idempotent fixed key — re-runs hit the per-owner 409 dedup).',
+    group: 'crud',
+    method: 'POST',
+    path: '/api/v1/crud/types',
+    mutates: true,
+    body: {
+      key: 'tt_api_test_extended',
+      name: 'API test extensible type',
+      visibility: 'private',
+      extended: { anyShape: true, nested: [1, 'two', { three: 3 }] }
+    },
+    expect: expectJson(
+      [200, 401, 409],
+      (body) =>
+        (body?.ok === true && body?.type?.id && body?.type?.extended?.anyShape === true) ||
+        (body?.ok === false && typeof body?.error === 'string'),
+      'Zero-field type with extended persisted (session), deduped on re-run (409), or was rejected anonymously (401).'
+    )
+  },
+  {
+    id: 'crud-types-save-validates',
+    name: 'Type create validates schema',
+    description: 'A type without a name/key/fields is rejected before anything is written.',
+    group: 'crud',
+    method: 'POST',
+    path: '/api/v1/crud/types',
+    body: { name: '' },
+    expect: expectJson([400, 401], (body) => body?.ok === false && typeof body?.error === 'string', 'Invalid type payload rejected with an error shape.')
+  },
+  {
+    id: 'crud-types-delete-guarded',
+    name: 'Type delete is guarded',
+    description: 'Deleting without a session (or an unknown id) is rejected with an error shape.',
+    group: 'crud',
+    method: 'POST',
+    path: '/api/v1/crud/types/delete',
+    body: { id: 'not-a-real-type-id' },
+    expect: expectJson([401, 404], (body) => body?.ok === false && typeof body?.error === 'string', 'Type delete was rejected with an error shape.')
+  },
+  {
+    id: 'crud-records-requires-params',
+    name: 'Record read requires id or typeId',
+    description: 'The records route validates its query parameters.',
+    group: 'crud',
+    method: 'GET',
+    path: '/api/v1/crud/records',
+    expect: expectJson([400], (body) => body?.ok === false && typeof body?.error === 'string', 'Missing id/typeId rejected with a 400 error shape.')
+  },
+  {
+    id: 'crud-records-read-unknown',
+    name: 'Unknown record ids return 404',
+    description: 'Unknown (and unauthorized) record ids resolve to a 404 error shape, never 403.',
+    group: 'crud',
+    method: 'GET',
+    path: '/api/v1/crud/records?id=not-a-real-record-id',
+    expect: expectJson([404], (body) => body?.ok === false && typeof body?.error === 'string', 'Unknown record id returned a 404 error shape.')
+  },
+  {
+    id: 'crud-records-list-unknown-type',
+    name: 'Record list hides unknown types',
+    description: 'Listing records for an unknown/private type resolves to a 404 error shape.',
+    group: 'crud',
+    method: 'GET',
+    path: '/api/v1/crud/records?typeId=not-a-real-type-id',
+    expect: expectJson([404], (body) => body?.ok === false && typeof body?.error === 'string', 'Unknown type id returned a 404 error shape.')
+  },
+  {
+    id: 'crud-records-create-guarded',
+    name: 'Record create is guarded',
+    description: 'Creating a record without a session (or for an unknown type) is rejected with an error shape.',
+    group: 'crud',
+    method: 'POST',
+    path: '/api/v1/crud/records',
+    body: { typeId: 'not-a-real-type-id', values: { title: 'API test record' } },
+    expect: expectJson([401, 404], (body) => body?.ok === false && typeof body?.error === 'string', 'Record create was rejected with an error shape.')
+  },
+  {
+    id: 'crud-records-update-guarded',
+    name: 'Record update is guarded',
+    description: 'Updating without a session (or an unknown id) is rejected with an error shape.',
+    group: 'crud',
+    method: 'POST',
+    path: '/api/v1/crud/records/update',
+    body: { id: 'not-a-real-record-id', values: { title: 'renamed' } },
+    expect: expectJson([401, 404], (body) => body?.ok === false && typeof body?.error === 'string', 'Record update was rejected with an error shape.')
+  },
+  {
+    id: 'crud-records-delete-guarded',
+    name: 'Record delete is guarded',
+    description: 'Deleting without a session (or an unknown id) is rejected with an error shape.',
+    group: 'crud',
+    method: 'POST',
+    path: '/api/v1/crud/records/delete',
+    body: { id: 'not-a-real-record-id' },
+    expect: expectJson([401, 404], (body) => body?.ok === false && typeof body?.error === 'string', 'Record delete was rejected with an error shape.')
+  },
+  {
+    id: 'crud-records-permissions-guarded',
+    name: 'Record permissions are guarded',
+    description: 'Changing an ACL without a session (or an unknown id) is rejected with an error shape.',
+    group: 'crud',
+    method: 'POST',
+    path: '/api/v1/crud/records/permissions',
+    body: { id: 'not-a-real-record-id', readKeys: ['public'] },
+    expect: expectJson([401, 404], (body) => body?.ok === false && typeof body?.error === 'string', 'Permissions change was rejected with an error shape.')
+  },
+  {
+    id: 'crud-search-requires-query',
+    name: 'Search requires a query',
+    description: 'Searching without q is rejected with a 400 error shape.',
+    group: 'crud',
+    method: 'GET',
+    path: '/api/v1/crud/search?typeId=not-a-real-type-id',
+    expect: expectJson([400], (body) => body?.ok === false && typeof body?.error === 'string', 'Missing search query rejected with a 400 error shape.')
+  },
+  {
+    id: 'crud-search-hides-unknown-types',
+    name: 'Search hides unknown types',
+    description: 'Searching an unknown/private type resolves to a 404 error shape.',
+    group: 'crud',
+    method: 'GET',
+    path: '/api/v1/crud/search?q=hello&typeId=not-a-real-type-id',
+    expect: expectJson([404], (body) => body?.ok === false && typeof body?.error === 'string', 'Unknown type search returned a 404 error shape.')
   },
   ...apiDocsSmokeTests
 ];

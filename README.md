@@ -59,7 +59,9 @@ dev app `tt-nitro-react-router-9999`. The older `npm run remix-pms` command is
 kept as a compatibility alias.
 
 Local branch metadata is managed automatically by `remix/scripts/pre-dev.sh`.
-That script updates `remix/.env.auto`; do not edit that generated block by hand.
+That script writes the untracked, generated `remix/.env.auto`; do not edit that
+generated block by hand. On Vercel no file is involved: the branch comes from
+the `VERCEL_GIT_COMMIT_REF` system env var at build and runtime.
 The local dev launcher loads `remix/.env`, `remix/.env.local`, and
 `remix/.env.auto` before spawning Nitro and Vite, so ignored private values like
 MongoDB credentials are available to local API status checks without committing
@@ -149,6 +151,135 @@ placeholder:
 ```sh
 MONGODB_CONNECTION_STRING="mongodb://localhost:27017/thingtime"
 ```
+
+## Email Delivery
+
+Thingtime stores outbound email attempts in MongoDB and sends through a
+pluggable provider. Local development defaults to `console`, which logs the
+message and records it in `email_messages` without delivering mail. Production
+should use Amazon SES through the SES API.
+
+Set these variables in `remix/.env` for local SES testing and in Vercel project
+environment variables for deployed previews/production:
+
+```sh
+THINGTIME_EMAIL_PROVIDER="ses"
+AWS_SES_REGION="ap-southeast-2"
+AWS_SES_ACCESS_KEY_ID="<iam-access-key-id>"
+AWS_SES_SECRET_ACCESS_KEY="<iam-secret-access-key>"
+THINGTIME_EMAIL_TRANSACTIONAL_FROM="Thingtime <no-reply@thingtime.com>"
+THINGTIME_EMAIL_NEWSLETTER_FROM="Thingtime Updates <community@thingtime.com>"
+THINGTIME_EMAIL_REPLY_TO="support@thingtime.com"
+AWS_SES_CONFIGURATION_SET="thingtime"
+THINGTIME_EMAIL_FAIL_CLOSED="false"
+SES_SANDBOX="1"
+THINGTIME_EMAIL_TEST_RECIPIENT="support@thingtime.com"
+```
+
+`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_REGION` also work; the
+`AWS_SES_*` names are preferred when the deployment has other AWS integrations.
+Do not create SES SMTP credentials for the app path. The server uses the SES API
+and needs an IAM access key with permission to call `ses:SendEmail` for the
+verified identities it sends from.
+
+`SES_SANDBOX=1` tells the `/tests` page to wait at least one second before each
+email-sending check so local sandbox tests respect the SES one-message-per-second
+limit. `THINGTIME_EMAIL_TEST_RECIPIENT` is the base inbox used by the email tests;
+the test harness generates plus aliases such as
+`support+signup-<timestamp>@thingtime.com`.
+
+Recommended DNS and SES setup:
+
+- Keep Google Workspace as the MX provider for human inboxes such as
+  `hello@thingtime.com` and `support@thingtime.com`.
+- Verify separate SES domain identities for transactional and newsletter mail,
+  for example `auth.thingtime.com` and `news.thingtime.com`.
+- Publish the SES DKIM records, a custom MAIL FROM/SPF record if configured,
+  and a DMARC policy for the sending domains.
+- Put signup verification, email OTP, password reset, and product
+  notifications on the transactional domain.
+- Put bulk/newsletter mail on the newsletter domain to isolate sender
+  reputation.
+
+MongoDB collections created by the app:
+
+- `email_messages` records every send attempt and its final status.
+- `email_events` stores provider delivery/bounce/complaint events when event
+  ingestion is wired.
+- `email_templates` is reserved for editable template metadata.
+- `email_subscriptions`, `email_suppression_list`, and `email_unsubscribes`
+  drive newsletter consent and suppression.
+- `email_identities` is reserved for verified sender/domain metadata.
+
+Auth flows on this pipeline: signup and service-account verification
+(`sendVerificationEmail`), password reset links (`sendPasswordResetEmail` via
+`POST /api/v1/auth/password-reset` + `/confirm`), and opt-in email 2FA login
+codes (`sendEmailOtp` via `POST /api/v1/auth/two-factor` +
+the two-step `POST /api/v1/login` challenge). Use `sendNewsletterEmail` for
+newsletter sends.
+
+The long-term provider-independent roadmap lives in
+[`docs/email-owned-architecture.md`](docs/email-owned-architecture.md). Keep
+future SES, queue, inbound, self-hosted SMTP, and sender-reputation work aligned
+with that architecture so Thingtime can move delivery providers without changing
+feature callers.
+
+## Extensible Data (`extended`)
+
+Thingtime is open and extensible by design: schemas are optional scaffolding,
+not a cage. Every CRUD record, every CRUD type, and every feed post carries an
+`extended` property that accepts **any JSON structure** — Thingtime wraps it in
+platform metadata (share ids, ACLs, versions, timestamps, soft deletes) but
+never validates, indexes, or interprets it.
+
+- **Where:** `POST /api/v1/crud/records` (+ `/update`), `POST /api/v1/crud/types`,
+  and `POST /api/v1/things` all accept `extended`; reads return it as stored
+  (after the normal permission checks).
+- **Free-form datastore:** create a type with **zero fields** and put everything
+  in `extended` — this is how an external app or service account uses Thingtime
+  as its database without adopting any schema:
+
+  ```sh
+  # 1. one bare type for your app
+  curl -X POST https://thingtime.com/api/v1/crud/types \
+    -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+    --data '{"key":"myapp_data","name":"MyApp data"}'
+
+  # 2. store anything under extended
+  curl -X POST https://thingtime.com/api/v1/crud/records \
+    -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+    --data '{"typeId":"<type id>","extended":{"any":"shape","nested":[1,2,{"deep":true}]}}'
+  ```
+
+- **Semantics:** `extended` replaces as a whole value on update (send the full
+  new payload; `null` clears it); it is capped at 512KB per document and is not
+  searchable — data you want validated, encrypted, or searchable belongs in
+  schema fields, and the two compose freely on the same record.
+
+## CRUD Record Encryption
+
+The generic CRUD API (`/api/v1/crud/...`) can store individual record fields as
+AES-256-GCM envelopes with HMAC blind-index search tokens (see
+`PLANS/codexCRUDImplementation.md`). Encryption is optional: types with no
+`encrypted: true` fields work with no extra configuration.
+
+To enable encrypted fields, set placeholder-free values locally in `remix/.env`
+(never commit real keys — these examples are placeholders only):
+
+```sh
+# JSON map of key id -> base64url-encoded 32-byte key. Generate one with:
+#   node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
+THINGTIME_DATA_MASTER_KEYS='{"k1":"<base64url-32-byte-key>"}'
+# Key id used for new writes (must exist in the map above).
+THINGTIME_ACTIVE_DATA_KEY_ID="k1"
+```
+
+Key rotation: add a new key id to the map, point
+`THINGTIME_ACTIVE_DATA_KEY_ID` at it, and keep the old ids in the map — old
+envelopes decrypt with their recorded `kid` and re-encrypt with the active key
+on their next write. Blind-index search tokens are derived from the active key,
+so records written under a previous key stop matching encrypted-field searches
+until their next write re-tokenizes them.
 
 ## Auth and Lopu AI
 

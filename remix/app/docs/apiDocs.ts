@@ -388,9 +388,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'auth',
     title: 'Verify email',
     endpoint: '/api/v1/auth/verify-email',
-    summary: 'Consumes an email verification token and redirects to login with a status.',
+    summary: 'Consumes an email verification token and lands on the /verify-email result page.',
     detail:
-      'This endpoint is designed for email links. API clients usually follow redirects or inspect the Location header.',
+      'This endpoint is designed for email links. It redirects to /verify-email with a state describing the outcome (success, already, used, expired, invalid, missing); expired links also carry the email so the page can offer a one-click resend. API clients usually follow redirects or inspect the Location header.',
     auth: {
       mode: 'none',
       description: 'Public token consumption endpoint.'
@@ -399,8 +399,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: [
       'Open the verification URL with token as a query parameter.',
       'Thingtime burns the token so it cannot be reused.',
-      'Successful tokens mark the user emailVerified and redirect to /login?verify=success.',
-      'Missing, expired, or invalid tokens redirect to /login with a reason in the verify query parameter.'
+      'Successful tokens mark the user emailVerified and redirect to /verify-email?state=success (already-verified accounts see state=already).',
+      'Missing, expired, used, or invalid tokens redirect to /verify-email with the reason in the state query parameter; expired adds email= for the resend button.'
     ],
     requestExamples: [
       {
@@ -414,12 +414,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       {
         status: 302,
         description: 'Token accepted.',
-        headers: { Location: '/login?verify=success' }
+        headers: { Location: '/verify-email?state=success' }
+      },
+      {
+        status: 302,
+        description: 'Token expired — the page offers a one-click resend.',
+        headers: { Location: '/verify-email?state=expired&email=ada%40example.com' }
       },
       {
         status: 302,
         description: 'Token missing.',
-        headers: { Location: '/login?verify=missing' }
+        headers: { Location: '/verify-email?state=missing' }
       }
     ]
   }),
@@ -619,9 +624,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     methods: ['POST'],
     steps: [
       'POST username and password.',
+      'If the account has email 2FA enabled, the response is { requiresOtp: true, challenge } and a code is emailed — POST { challenge, code } to this same endpoint to finish.',
       'Store the Set-Cookie response header for browser clients.',
       'Use /api/v1/auth/me after login to confirm the current user.',
-      'Handle 401 for invalid credentials and 500 for unavailable backing services.'
+      'Handle 401 for invalid credentials/codes, 429 for exhausted OTP attempts, and 500 for unavailable backing services.'
     ],
     requestExamples: [
       {
@@ -629,6 +635,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'Authenticate a username/password account.',
         method: 'POST',
         body: { username: 'ada-lovelace', password: 'replace-with-the-user-password' }
+      },
+      {
+        name: 'Complete email 2FA login',
+        description: 'Finish a login that returned requiresOtp using the emailed security code.',
+        method: 'POST',
+        body: { challenge: 'challenge-id-from-the-first-response', code: '123456' }
       }
     ],
     responseExamples: [
@@ -636,6 +648,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         status: 200,
         description: 'Login succeeded and auth cookie was set.',
         body: { ok: true, user: { id: '64f000000000000000000002', username: 'ada-lovelace' } }
+      },
+      {
+        status: 200,
+        description: 'Email 2FA is enabled — a security code was emailed; no session yet.',
+        body: { ok: true, requiresOtp: true, challenge: 'challenge-id', expiresAt: '2026-01-01T00:10:00.000Z' }
       },
       {
         status: 401,
@@ -1281,7 +1298,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/things',
     summary: 'Creates a text, image, or marketplace feed post in the things collection.',
     detail:
-      'Posts are stored as kind: post things with circle visibility, tags, reactions, comments, and share metadata. The route is the canonical creation path for feed content.',
+      'Posts are stored as kind: post things with circle visibility, tags, reactions, comments, and share metadata. The route is the canonical creation path for feed content. Posts also accept the platform-wide extensible data property: pass any JSON under extended and Thingtime stores it untouched alongside the schema-validated post fields.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -1289,6 +1306,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     methods: ['POST'],
     steps: [
       'POST type plus text, images, listing, visibility, and tags as needed.',
+      'Optionally include extended with any JSON structure (up to 512KB) — it is stored and returned as-is, never validated or interpreted.',
       'The route writes through the things API utility layer, not direct client database access.',
       'Use the returned post to prepend optimistic UI state.',
       'Handle 401 unauthenticated, 400 invalid payload, and 413 oversized payload.'
@@ -1296,16 +1314,29 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     requestExamples: [
       {
         name: 'Create text post',
-        description: 'Create a private text post.',
+        description: 'Create a private text post with app-specific extended data.',
         method: 'POST',
-        body: { type: 'text', text: 'Today I learned...', visibility: 'private' }
+        body: {
+          type: 'text',
+          text: 'Today I learned...',
+          visibility: 'private',
+          extended: { myApp: { mood: 'curious', readingList: ['id1', 'id2'] } }
+        }
       }
     ],
     responseExamples: [
       {
         status: 200,
-        description: 'Post created.',
-        body: { ok: true, post: { id: 'post_123', type: 'text', text: 'Today I learned...' } }
+        description: 'Post created (extended rides along untouched).',
+        body: {
+          ok: true,
+          post: {
+            id: 'post_123',
+            type: 'text',
+            text: 'Today I learned...',
+            extended: { myApp: { mood: 'curious', readingList: ['id1', 'id2'] } }
+          }
+        }
       }
     ]
   }),
@@ -1710,6 +1741,533 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         status: 400,
         description: 'Email validation failed.',
         body: { ok: false, error: 'A valid email is required' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'auth-password-reset',
+    group: 'auth',
+    title: 'Password reset request',
+    endpoint: '/api/v1/auth/password-reset',
+    summary: 'Emails a single-use password reset link to a registered address.',
+    detail:
+      'Use this to start a password reset. The route always returns ok so account existence cannot be probed; when the email matches an account, a one-hour single-use reset link is delivered through the Thingtime email service.',
+    auth: {
+      mode: 'none',
+      description: 'Public request endpoint — identity is proven later by the emailed token.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST the account email address.',
+      'Treat the ok response as neutral — it does not confirm the account exists.',
+      'The user opens the emailed link, which carries a single-use token valid for one hour.',
+      'Finish with /api/v1/auth/password-reset/confirm using that token and the new password.'
+    ],
+    requestExamples: [
+      {
+        name: 'Request a reset link',
+        description: 'Ask for a password reset email.',
+        method: 'POST',
+        body: { email: 'ada@example.com' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Request accepted (whether or not the account exists). Local/preview runs also return resetLink.',
+        body: { ok: true }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'auth-password-reset-confirm',
+    group: 'auth',
+    title: 'Password reset confirm',
+    endpoint: '/api/v1/auth/password-reset/confirm',
+    summary: 'Burns a reset token, sets the new password, and revokes all sessions.',
+    detail:
+      'Use this with the token from the reset email. On success the password is replaced and every live session for the account is revoked, so stolen cookies or bearer tokens stop working immediately.',
+    auth: {
+      mode: 'none',
+      description: 'The single-use emailed token is the credential.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST the reset token together with the new password (minimum 6 characters).',
+      'Tokens are single-use and expire after one hour — expired/used tokens return 400.',
+      'All existing sessions are revoked on success; the user logs in again with the new password.'
+    ],
+    requestExamples: [
+      {
+        name: 'Set a new password',
+        description: 'Consume a reset token and rotate the password.',
+        method: 'POST',
+        body: { token: 'reset-token-from-the-email', password: 'a-new-password' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Password rotated and sessions revoked.',
+        body: { ok: true }
+      },
+      {
+        status: 400,
+        description: 'Missing/expired/used token or invalid password.',
+        body: { ok: false, error: 'This reset link has expired — request a new one' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'auth-two-factor',
+    group: 'auth',
+    title: 'Email 2FA settings',
+    endpoint: '/api/v1/auth/two-factor',
+    summary: 'Reads or toggles opt-in email 2FA for the current account.',
+    detail:
+      'When enabled, POST /api/v1/login stops minting sessions from a password alone: it returns { requiresOtp, challenge } and emails a security code that completes the login. Enabling requires a verified email address.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires the httpOnly session cookie or an Authorization: Bearer token.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET returns the current enabled state for the session user.',
+      'POST { enabled: true } turns email 2FA on (requires a verified email).',
+      'POST { enabled: false } turns it off.',
+      'Subsequent logins follow the two-step challenge flow documented on /api/v1/login.'
+    ],
+    requestExamples: [
+      {
+        name: 'Enable email 2FA',
+        description: 'Require an emailed security code on every login.',
+        method: 'POST',
+        body: { enabled: true }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Setting applied.',
+        body: { ok: true, enabled: true }
+      },
+      {
+        status: 400,
+        description: 'Email not verified yet.',
+        body: { ok: false, error: 'Verify your email before enabling email 2FA' }
+      },
+      {
+        status: 401,
+        description: 'No session or bearer token.',
+        body: { ok: false, error: 'Unauthorized' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'email-config',
+    group: 'email',
+    title: 'Email delivery config',
+    endpoint: '/api/v1/email/config',
+    summary: 'Returns the sanitized email delivery configuration for diagnostics.',
+    detail:
+      'Use this to check which provider (console or SES), region, sender addresses, and sandbox settings the runtime resolved — no credentials are ever included.',
+    auth: {
+      mode: 'none',
+      description: 'Public diagnostic endpoint returning non-secret configuration only.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET the endpoint (POST behaves identically).',
+      'Read provider to confirm whether real SES delivery or console logging is active.',
+      'Use sesSandbox and testRecipient to plan /tests email checks.'
+    ],
+    requestExamples: [
+      {
+        name: 'Read email config',
+        description: 'Inspect the resolved delivery configuration.',
+        method: 'GET'
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Sanitized email configuration.',
+        body: {
+          ok: true,
+          email: {
+            provider: 'console',
+            region: 'us-east-1',
+            configurationSetName: null,
+            transactionalFrom: 'Thingtime <no-reply@thingtime.com>',
+            newsletterFrom: 'Thingtime Updates <updates@thingtime.com>',
+            sesSandbox: false,
+            sandboxSendDelayMs: 0,
+            testRecipient: 'support@thingtime.com',
+            testRecipientDomain: 'thingtime.com'
+          }
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'email-test-otp',
+    group: 'email',
+    title: 'Email OTP test send',
+    endpoint: '/api/v1/email/test-otp',
+    summary: 'Sends a test security-code email to the configured test recipient.',
+    detail:
+      'Dev/preview-only helper for the /tests page: it exercises the OTP template and delivery service end to end. Production environments return 403, and recipients are restricted to the configured test address (or a plus alias of it).',
+    auth: {
+      mode: 'none',
+      description: 'Gated by environment (local development and Vercel previews), not by session.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST an email matching the configured test recipient or one of its plus aliases.',
+      'Optionally pass code and expiresMinutes; a random six-digit code is generated otherwise.',
+      'Inspect the returned delivery result and the email_messages record it created.'
+    ],
+    requestExamples: [
+      {
+        name: 'Send a test OTP',
+        description: 'Deliver a security-code email to the test recipient.',
+        method: 'POST',
+        body: { email: 'support+otp-test@thingtime.com' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Test email queued/sent.',
+        body: { ok: true, result: { delivered: false, via: 'console', status: 'logged' } }
+      },
+      {
+        status: 403,
+        description: 'Not a dev/preview environment.',
+        body: { ok: false, error: 'Email OTP test sends are available only in local development and Vercel previews.' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'crud-types',
+    group: 'crud',
+    title: 'Data types',
+    endpoint: '/api/v1/crud/types',
+    summary: 'Lists visible user-defined data types, or creates/updates one.',
+    detail:
+      'Types are user-defined schemas (thingtime.thingTypes) for generic CRUD records. GET lists the caller-owned types plus public ones; POST creates a type, or updates a caller-owned type when id is provided. Field policies control kind, required, encryption, and searchability per field. Schemas are optional scaffolding, not a cage: a type may declare zero fields, and both types and their records accept the platform-wide extended property for arbitrary unvalidated JSON — the path external apps and service accounts use to manage free-form data through Thingtime.',
+    auth: {
+      mode: 'optional',
+      description: 'GET works anonymously (public types only). POST requires a session or bearer token.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET to list types you can use; anonymous callers see public types only.',
+      'POST { key, name, fields } to create — field keys are lowercase slugs, kinds are text/number/boolean/date/json/url/fileRef.',
+      'fields may be empty or omitted entirely: records of a zero-field type carry everything in their schema-free extended property.',
+      'Mark a field encrypted: true to store it as an AES-256-GCM envelope; searchable: "exact" or "term" indexes it (blind-index tokens when encrypted).',
+      'Types themselves also accept extended (any JSON up to 512KB) for integration metadata.',
+      'Pass id to update your own type; the key is immutable and field encryption cannot change while records exist.'
+    ],
+    requestExamples: [
+      {
+        name: 'Create a contact type',
+        description: 'Define a schema with a searchable name and an encrypted note.',
+        method: 'POST',
+        body: {
+          key: 'contact',
+          name: 'Contact',
+          visibility: 'private',
+          fields: [
+            { key: 'name', label: 'Name', kind: 'text', required: true, searchable: 'term' },
+            { key: 'note', label: 'Private note', kind: 'text', encrypted: true, searchable: 'exact' }
+          ]
+        }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Type created.',
+        body: {
+          ok: true,
+          type: { id: 'type-share-id', key: 'contact', name: 'Contact', visibility: 'private', version: 1 }
+        }
+      },
+      {
+        status: 401,
+        description: 'POST without a session or bearer token.',
+        body: { ok: false, error: 'Unauthorized' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'crud-types-delete',
+    group: 'crud',
+    title: 'Delete data type',
+    endpoint: '/api/v1/crud/types/delete',
+    summary: 'Deletes a caller-owned type, or archives it while records exist.',
+    detail:
+      'Types with live records refuse deletion (409) so data never orphans silently — pass archive: true to hide the type from lists and stop new records instead.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires the httpOnly session cookie or an Authorization: Bearer token.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST the type id (its shareId).',
+      'If records still exist you get a 409 — retry with archive: true to archive instead.',
+      'Archived types stay readable for existing records but reject new ones.'
+    ],
+    requestExamples: [
+      {
+        name: 'Archive a type',
+        description: 'Keep existing records readable but stop new writes.',
+        method: 'POST',
+        body: { id: 'type-share-id', archive: true }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Type deleted or archived.',
+        body: { ok: true, archived: true }
+      },
+      {
+        status: 409,
+        description: 'Live records exist and archive was not requested.',
+        body: { ok: false, error: 'This type still has 3 record(s) — pass archive: true instead' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'crud-records',
+    group: 'crud',
+    title: 'Records',
+    endpoint: '/api/v1/crud/records',
+    summary: 'Reads or lists permitted records, or creates a new one.',
+    detail:
+      'Records are kind:"record" documents in thingtime.things, validated against their type schema. Reads/lists filter by the record ACL inside the database query; unauthorized ids return 404 so record existence never leaks. Encrypted field values decrypt only on a permitted direct read. Every record also carries the schema-free extended property: any JSON structure (up to 512KB) stored untouched inside the Thingtime platform envelope — pair it with a zero-field type to store fully unstructured app data with real ACLs, versioning, and soft deletes.',
+    auth: {
+      mode: 'optional',
+      description: 'GET works anonymously for records granting the public subject. POST requires a session or bearer token.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET ?id=<recordId> for one record, or ?typeId=<typeId>&cursor=&limit= to page a type.',
+      'POST { typeId, values } to create; values are validated against the type field policies.',
+      'POST { typeId, extended } stores arbitrary unvalidated JSON — values is optional, so zero-field types make Thingtime a free-form datastore for external apps and service accounts.',
+      'Optionally pass acl grants ({ readKeys: ["public"] } etc.) — subjects are public, user:<id>, or service:<id>.',
+      'List responses return summaries: plain values and extended, with encrypted fields listed by key but never their values. extended is not searchable — searchable data belongs in schema fields.'
+    ],
+    requestExamples: [
+      {
+        name: 'Create a record',
+        description: 'Store a validated record with free-form extended data riding along.',
+        method: 'POST',
+        body: {
+          typeId: 'type-share-id',
+          values: { name: 'Grace Hopper', note: 'met at the conference' },
+          extended: { anyShape: ['works', { nested: true }], count: 42 }
+        }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Record created (encrypted fields round-trip decrypted for the owner; extended returned as stored).',
+        body: {
+          ok: true,
+          record: {
+            id: 'record-share-id',
+            typeId: 'type-share-id',
+            version: 1,
+            values: { name: 'Grace Hopper', note: 'met at the conference' },
+            extended: { anyShape: ['works', { nested: true }], count: 42 },
+            encryptedFields: ['note'],
+            permissions: { canRead: true, canSearch: true, canWrite: true, canAdmin: true }
+          }
+        }
+      },
+      {
+        status: 404,
+        description: 'Unknown or unauthorized record id.',
+        body: { ok: false, error: 'Record not found' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'crud-records-update',
+    group: 'crud',
+    title: 'Update record',
+    endpoint: '/api/v1/crud/records/update',
+    summary: 'Updates values on a writable record with optional optimistic locking.',
+    detail:
+      'Submitted fields merge into the record after validating against the type schema; untouched fields keep their stored (and encrypted) values. The schema-free extended property replaces as a whole value when provided (null clears it). Pass expectedVersion to fail with 409 instead of overwriting a concurrent write.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires write permission on the record via its ACL.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST { id, values } with just the fields to change, and/or { id, extended } to replace the free-form payload.',
+      'extended is replace-on-write: send the full new value (deep-merging arbitrary JSON is ambiguous); send null to clear it.',
+      'Include expectedVersion (the version you last read) for optimistic concurrency.',
+      'Readable-but-not-writable callers get 403; everyone else gets 404.'
+    ],
+    requestExamples: [
+      {
+        name: 'Update one field',
+        description: 'Change a single value with a version guard.',
+        method: 'POST',
+        body: { id: 'record-share-id', values: { note: 'updated note' }, expectedVersion: 1 }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Record updated; version incremented.',
+        body: { ok: true, record: { id: 'record-share-id', version: 2 } }
+      },
+      {
+        status: 409,
+        description: 'expectedVersion no longer matches.',
+        body: { ok: false, error: 'Record changed since version 1 — reload and retry' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'crud-records-delete',
+    group: 'crud',
+    title: 'Delete record',
+    endpoint: '/api/v1/crud/records/delete',
+    summary: 'Soft-deletes a record (admin or owner only).',
+    detail:
+      'Deletion sets deletedAt, hiding the record from reads, lists, and search immediately. Hard deletion is deferred to a future retention policy.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires admin permission on the record (owners are implicit admins).'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST the record id.',
+      'Only record admins (or the owner) can delete; readable non-admins get 403.',
+      'Deleted records return 404 on subsequent reads.'
+    ],
+    requestExamples: [
+      {
+        name: 'Delete a record',
+        description: 'Soft-delete by share id.',
+        method: 'POST',
+        body: { id: 'record-share-id' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Record soft-deleted.',
+        body: { ok: true }
+      },
+      {
+        status: 404,
+        description: 'Unknown or unauthorized record id.',
+        body: { ok: false, error: 'Record not found' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'crud-records-permissions',
+    group: 'crud',
+    title: 'Record permissions',
+    endpoint: '/api/v1/crud/records/permissions',
+    summary: 'Replaces a record’s ACL grants (admin or owner only).',
+    detail:
+      'Grants are per-operation subject lists: readKeys, writeKeys, adminKeys, searchKeys. Subjects are public, user:<id>, or service:<id>. Owner authority can never be removed, public write/admin grants are rejected, and searchKeys defaults to readKeys because search reveals existence.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires admin permission on the record.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST { id } plus the grant lists to set — omitted searchKeys copies readKeys.',
+      'Use explicit subjects: "public", "user:<userId>", or "service:<serviceUserId>".',
+      'Admins receive the full ACL arrays back; everyone else only ever sees capability booleans.'
+    ],
+    requestExamples: [
+      {
+        name: 'Share a record',
+        description: 'Grant public read/search while keeping writes private.',
+        method: 'POST',
+        body: { id: 'record-share-id', readKeys: ['public'] }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'ACL replaced.',
+        body: {
+          ok: true,
+          permissions: { canRead: true, canSearch: true, canWrite: true, canAdmin: true },
+          acl: { readKeys: ['user:64f000000000000000000002', 'public'], writeKeys: ['user:64f000000000000000000002'] }
+        }
+      },
+      {
+        status: 400,
+        description: 'Illegal grant (public write/admin, malformed subject, class-wide grant).',
+        body: { ok: false, error: 'public write grants are not allowed' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'crud-search',
+    group: 'crud',
+    title: 'Record search',
+    endpoint: '/api/v1/crud/search',
+    summary: 'Searches permitted records of a type by its searchable fields.',
+    detail:
+      'Search is permission-first: the ACL filter is part of the database query, so records outside acl.searchKeys can never match. Plain searchable fields match normalized tokens; encrypted fields match through HMAC blind-index tokens (exact or whole-word term matches only — no prefix/fuzzy search on encrypted data).',
+    auth: {
+      mode: 'optional',
+      description: 'Anonymous callers only match records granting the public subject.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET ?q=<query>&typeId=<typeId> (or POST the same fields as JSON).',
+      'Restrict matching with fields=<comma-separated field keys> when needed.',
+      'Every query term must match a term-searchable field, or the whole query must equal an exact-searchable value.',
+      'Page with cursor/limit; results are summaries that never include encrypted values.'
+    ],
+    requestExamples: [
+      {
+        name: 'Search records',
+        description: 'Find records of a type matching a text query.',
+        method: 'GET',
+        query: { q: 'grace', typeId: 'type-share-id', limit: 20 }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Matching permitted records.',
+        body: {
+          ok: true,
+          records: [
+            {
+              id: 'record-share-id',
+              typeId: 'type-share-id',
+              version: 2,
+              values: { name: 'Grace Hopper' },
+              encryptedFields: ['note'],
+              snippet: 'Grace Hopper'
+            }
+          ],
+          nextCursor: null
+        }
+      },
+      {
+        status: 400,
+        description: 'Missing query or no searchable fields requested.',
+        body: { ok: false, error: 'A search query (q) is required' }
       }
     ]
   })

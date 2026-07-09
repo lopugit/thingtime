@@ -1,46 +1,31 @@
-echo "Hello"
+#!/usr/bin/env bash
 
-# output the current git branch to an env var for use in the app
+# Resolves THINGTIME_BRANCH_NAME for the app.
+#
+# On Vercel the branch comes from the VERCEL_GIT_COMMIT_REF system env var,
+# which Vercel provides to both the build step and runtime functions, so
+# nothing is read from or written to disk there.
+#
+# Locally the current git branch is written to .env.auto (untracked,
+# generated) and to a managed block in .env so scripts/dev.mjs and the PM2
+# stack pick it up.
 
-# use 
-# git branch 2> /dev/null | sed -e '/^[^*]/d' -e 's/* \(.*\)/ 🌱 \1/'
-# to get the current branch name
-
-# old method doesn't work in CI
-# BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD)
-# BRANCH_NAME=$(git branch 2> /dev/null | sed -e '/^[^*]/d' -e 's/* \(.*\)/ 🌱 \1/')
-# if in vercel env just grab from committed .env.auto
-inVercel=${VERCEL_ENV:-}
-# if inVercel not null
-if [ -n "$inVercel" ]; then
-	echo "In Vercel environment, using branch name from Vercel system env"
+if [ -n "${VERCEL_ENV:-}" ]; then
 	BRANCH_NAME="${VERCEL_GIT_COMMIT_REF:-${THINGTIME_BRANCH_NAME:-}}"
-	if [ -f .env.auto ]; then
-		export $(cat .env.auto | xargs)
-		BRANCH_NAME="${BRANCH_NAME:-$THINGTIME_BRANCH_NAME}"
-	fi
 	if [ -z "$BRANCH_NAME" ]; then
-		echo "Error: could not determine THINGTIME_BRANCH_NAME. Exiting."
-		exit 1
+		echo "Warning: VERCEL_GIT_COMMIT_REF is not set; branch name will fall back to git/unknown at runtime."
+	else
+		echo "THINGTIME_BRANCH_NAME is $BRANCH_NAME (from Vercel system env)"
 	fi
-	export THINGTIME_BRANCH_NAME="$BRANCH_NAME"
-	echo "THINGTIME_BRANCH_NAME is $THINGTIME_BRANCH_NAME"
-
 	exit 0
 fi
 
 BRANCH_NAME=$(git branch 2> /dev/null | sed -e '/^[^*]/d' -e 's/* \(.*\)/\1/')
 echo "THINGTIME_BRANCH_NAME is $BRANCH_NAME"
 
-# stop script if output contains unknown
-if [[ "$BRANCH_NAME" == *"unknown"* ]]; then
-	echo "Error: Branch name contains 'unknown'. Exiting."
-	# export branch name from .env.auto if it already exists
-	if [ -f .env.auto ]; then
-		export $(cat .env.auto | xargs)
-	fi
+if [[ "$BRANCH_NAME" == *"unknown"* || -z "$BRANCH_NAME" ]]; then
+	echo "Warning: could not determine local branch name; leaving existing .env.auto untouched."
 else
-
 	echo "THINGTIME_BRANCH_NAME=\"$BRANCH_NAME\"" > .env.auto
 
 	env_marker="##### Auttomatic .env vars see pre-dev.sh #####"
@@ -66,5 +51,4 @@ else
 		echo "THINGTIME_BRANCH_NAME=\"$BRANCH_NAME\""
 		echo "$env_marker"
 	} >> .env
-	export BRANCH_NAME
 fi

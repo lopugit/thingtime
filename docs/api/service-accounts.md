@@ -109,3 +109,41 @@ Authorization: Bearer <accessToken>
 If a frontend needs to browse data through Thingtime, expose only your own app's
 normal user-safe views or use future Thingtime data endpoints that enforce the
 service account token server-side.
+
+## Managing external app data (extensible datastore)
+
+Service accounts can use Thingtime as a general-purpose datastore for another
+app — schemas are optional. The pattern:
+
+1. Create one bare data type (no fields) for your app:
+
+   ```http
+   POST /api/v1/crud/types
+   Authorization: Bearer <accessToken>
+
+   { "key": "myapp_data", "name": "MyApp data" }
+   ```
+
+2. Store any JSON structure on records under the schema-free `extended`
+   property — Thingtime wraps it in platform metadata (share id, ACLs,
+   versioning, soft deletes) and never validates or interprets it:
+
+   ```http
+   POST /api/v1/crud/records
+   Authorization: Bearer <accessToken>
+
+   { "typeId": "<type id>", "extended": { "any": "shape", "nested": [1, 2, { "deep": true }] } }
+   ```
+
+3. Read/list/page with `GET /api/v1/crud/records?id=...` or
+   `?typeId=...&cursor=...`, update with `POST /api/v1/crud/records/update`
+   (`extended` is replace-on-write; `null` clears it), delete with
+   `POST /api/v1/crud/records/delete`, and share with other subjects via
+   `POST /api/v1/crud/records/permissions` (`user:<id>`, `service:<id>`,
+   `public`).
+
+`extended` is capped at 512KB per document and is not searchable. When parts of
+your data need validation, per-field encryption, or search, declare those parts
+as schema fields on the type — schema'd `values` and free-form `extended`
+compose on the same record. Full endpoint docs live at
+`/api/v1/crud/records-docs` and `/api/v1/crud/types-docs`.
