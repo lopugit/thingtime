@@ -1293,7 +1293,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/things',
     summary: 'Creates a text, image, or marketplace feed post in the things collection.',
     detail:
-      'Posts are stored as kind: post things with circle visibility, tags, reactions, comments, and share metadata. The route is the canonical creation path for feed content.',
+      'Posts are stored as kind: post things with circle visibility, tags, reactions, comments, and share metadata. The route is the canonical creation path for feed content. Posts also accept the platform-wide extensible data property: pass any JSON under extended and Thingtime stores it untouched alongside the schema-validated post fields.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -1301,6 +1301,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     methods: ['POST'],
     steps: [
       'POST type plus text, images, listing, visibility, and tags as needed.',
+      'Optionally include extended with any JSON structure (up to 512KB) — it is stored and returned as-is, never validated or interpreted.',
       'The route writes through the things API utility layer, not direct client database access.',
       'Use the returned post to prepend optimistic UI state.',
       'Handle 401 unauthenticated, 400 invalid payload, and 413 oversized payload.'
@@ -1308,16 +1309,29 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     requestExamples: [
       {
         name: 'Create text post',
-        description: 'Create a private text post.',
+        description: 'Create a private text post with app-specific extended data.',
         method: 'POST',
-        body: { type: 'text', text: 'Today I learned...', visibility: 'private' }
+        body: {
+          type: 'text',
+          text: 'Today I learned...',
+          visibility: 'private',
+          extended: { myApp: { mood: 'curious', readingList: ['id1', 'id2'] } }
+        }
       }
     ],
     responseExamples: [
       {
         status: 200,
-        description: 'Post created.',
-        body: { ok: true, post: { id: 'post_123', type: 'text', text: 'Today I learned...' } }
+        description: 'Post created (extended rides along untouched).',
+        body: {
+          ok: true,
+          post: {
+            id: 'post_123',
+            type: 'text',
+            text: 'Today I learned...',
+            extended: { myApp: { mood: 'curious', readingList: ['id1', 'id2'] } }
+          }
+        }
       }
     ]
   }),
@@ -1936,7 +1950,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/crud/types',
     summary: 'Lists visible user-defined data types, or creates/updates one.',
     detail:
-      'Types are user-defined schemas (thingtime.thingTypes) for generic CRUD records. GET lists the caller-owned types plus public ones; POST creates a type, or updates a caller-owned type when id is provided. Field policies control kind, required, encryption, and searchability per field.',
+      'Types are user-defined schemas (thingtime.thingTypes) for generic CRUD records. GET lists the caller-owned types plus public ones; POST creates a type, or updates a caller-owned type when id is provided. Field policies control kind, required, encryption, and searchability per field. Schemas are optional scaffolding, not a cage: a type may declare zero fields, and both types and their records accept the platform-wide extended property for arbitrary unvalidated JSON — the path external apps and service accounts use to manage free-form data through Thingtime.',
     auth: {
       mode: 'optional',
       description: 'GET works anonymously (public types only). POST requires a session or bearer token.'
@@ -1945,7 +1959,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: [
       'GET to list types you can use; anonymous callers see public types only.',
       'POST { key, name, fields } to create — field keys are lowercase slugs, kinds are text/number/boolean/date/json/url/fileRef.',
+      'fields may be empty or omitted entirely: records of a zero-field type carry everything in their schema-free extended property.',
       'Mark a field encrypted: true to store it as an AES-256-GCM envelope; searchable: "exact" or "term" indexes it (blind-index tokens when encrypted).',
+      'Types themselves also accept extended (any JSON up to 512KB) for integration metadata.',
       'Pass id to update your own type; the key is immutable and field encryption cannot change while records exist.'
     ],
     requestExamples: [
@@ -2026,7 +2042,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/crud/records',
     summary: 'Reads or lists permitted records, or creates a new one.',
     detail:
-      'Records are kind:"record" documents in thingtime.things, validated against their type schema. Reads/lists filter by the record ACL inside the database query; unauthorized ids return 404 so record existence never leaks. Encrypted field values decrypt only on a permitted direct read.',
+      'Records are kind:"record" documents in thingtime.things, validated against their type schema. Reads/lists filter by the record ACL inside the database query; unauthorized ids return 404 so record existence never leaks. Encrypted field values decrypt only on a permitted direct read. Every record also carries the schema-free extended property: any JSON structure (up to 512KB) stored untouched inside the Thingtime platform envelope — pair it with a zero-field type to store fully unstructured app data with real ACLs, versioning, and soft deletes.',
     auth: {
       mode: 'optional',
       description: 'GET works anonymously for records granting the public subject. POST requires a session or bearer token.'
@@ -2035,24 +2051,26 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: [
       'GET ?id=<recordId> for one record, or ?typeId=<typeId>&cursor=&limit= to page a type.',
       'POST { typeId, values } to create; values are validated against the type field policies.',
+      'POST { typeId, extended } stores arbitrary unvalidated JSON — values is optional, so zero-field types make Thingtime a free-form datastore for external apps and service accounts.',
       'Optionally pass acl grants ({ readKeys: ["public"] } etc.) — subjects are public, user:<id>, or service:<id>.',
-      'List responses return summaries: plain values only, encrypted fields listed by key but never their values.'
+      'List responses return summaries: plain values and extended, with encrypted fields listed by key but never their values. extended is not searchable — searchable data belongs in schema fields.'
     ],
     requestExamples: [
       {
         name: 'Create a record',
-        description: 'Store a validated record of an existing type.',
+        description: 'Store a validated record with free-form extended data riding along.',
         method: 'POST',
         body: {
           typeId: 'type-share-id',
-          values: { name: 'Grace Hopper', note: 'met at the conference' }
+          values: { name: 'Grace Hopper', note: 'met at the conference' },
+          extended: { anyShape: ['works', { nested: true }], count: 42 }
         }
       }
     ],
     responseExamples: [
       {
         status: 200,
-        description: 'Record created (encrypted fields round-trip decrypted for the owner).',
+        description: 'Record created (encrypted fields round-trip decrypted for the owner; extended returned as stored).',
         body: {
           ok: true,
           record: {
@@ -2060,6 +2078,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
             typeId: 'type-share-id',
             version: 1,
             values: { name: 'Grace Hopper', note: 'met at the conference' },
+            extended: { anyShape: ['works', { nested: true }], count: 42 },
             encryptedFields: ['note'],
             permissions: { canRead: true, canSearch: true, canWrite: true, canAdmin: true }
           }
@@ -2079,14 +2098,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/crud/records/update',
     summary: 'Updates values on a writable record with optional optimistic locking.',
     detail:
-      'Submitted fields merge into the record after validating against the type schema; untouched fields keep their stored (and encrypted) values. Pass expectedVersion to fail with 409 instead of overwriting a concurrent write.',
+      'Submitted fields merge into the record after validating against the type schema; untouched fields keep their stored (and encrypted) values. The schema-free extended property replaces as a whole value when provided (null clears it). Pass expectedVersion to fail with 409 instead of overwriting a concurrent write.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires write permission on the record via its ACL.'
     },
     methods: ['POST'],
     steps: [
-      'POST { id, values } with just the fields to change.',
+      'POST { id, values } with just the fields to change, and/or { id, extended } to replace the free-form payload.',
+      'extended is replace-on-write: send the full new value (deep-merging arbitrary JSON is ambiguous); send null to clear it.',
       'Include expectedVersion (the version you last read) for optimistic concurrency.',
       'Readable-but-not-writable callers get 403; everyone else gets 404.'
     ],

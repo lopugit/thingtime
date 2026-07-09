@@ -224,6 +224,38 @@ future SES, queue, inbound, self-hosted SMTP, and sender-reputation work aligned
 with that architecture so Thingtime can move delivery providers without changing
 feature callers.
 
+## Extensible Data (`extended`)
+
+Thingtime is open and extensible by design: schemas are optional scaffolding,
+not a cage. Every CRUD record, every CRUD type, and every feed post carries an
+`extended` property that accepts **any JSON structure** — Thingtime wraps it in
+platform metadata (share ids, ACLs, versions, timestamps, soft deletes) but
+never validates, indexes, or interprets it.
+
+- **Where:** `POST /api/v1/crud/records` (+ `/update`), `POST /api/v1/crud/types`,
+  and `POST /api/v1/things` all accept `extended`; reads return it as stored
+  (after the normal permission checks).
+- **Free-form datastore:** create a type with **zero fields** and put everything
+  in `extended` — this is how an external app or service account uses Thingtime
+  as its database without adopting any schema:
+
+  ```sh
+  # 1. one bare type for your app
+  curl -X POST https://thingtime.com/api/v1/crud/types \
+    -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+    --data '{"key":"myapp_data","name":"MyApp data"}'
+
+  # 2. store anything under extended
+  curl -X POST https://thingtime.com/api/v1/crud/records \
+    -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+    --data '{"typeId":"<type id>","extended":{"any":"shape","nested":[1,2,{"deep":true}]}}'
+  ```
+
+- **Semantics:** `extended` replaces as a whole value on update (send the full
+  new payload; `null` clears it); it is capped at 512KB per document and is not
+  searchable — data you want validated, encrypted, or searchable belongs in
+  schema fields, and the two compose freely on the same record.
+
 ## CRUD Record Encryption
 
 The generic CRUD API (`/api/v1/crud/...`) can store individual record fields as

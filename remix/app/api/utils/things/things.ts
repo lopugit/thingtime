@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { ObjectId } from 'mongodb';
 
+import { sanitizeExtended } from '../crud/validation';
 import { ensureIndexes, getThingsCollection, getUsersCollection } from '../mongodb/collections';
 import { scorePost, type AlgorithmWeights, type PostFeatures } from './feedRanking';
 
@@ -43,6 +44,9 @@ export type FeedPostDoc = {
   comments: PostCommentDoc[];
   shareOfId: string | null;
   shareCount: number;
+  // schema-free extensible data (see api/utils/crud/validation.ts) — any JSON
+  // an app wants to ride along with the post; never validated or interpreted
+  extended?: unknown | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -81,6 +85,7 @@ export type PublicPost = {
   // not visible to the viewer (shareOf null in that case)
   isShare: boolean;
   shareOf: PublicPost | null;
+  extended: unknown | null;
   createdAt: string;
 };
 
@@ -172,6 +177,7 @@ export type CreatePostInput = {
   listing?: unknown;
   visibility?: unknown;
   tags?: unknown;
+  extended?: unknown;
   // seeding passes a fixed shareId for idempotency; the API route never does
   shareId?: string;
   createdAt?: Date;
@@ -206,6 +212,9 @@ export const createPost = async (ownerId: string, input: CreatePostInput): Promi
   if (type === 'text' && !text) return fail(400, 'Say something first ✍️');
   if (type === 'image' && !images.length) return fail(400, 'Image posts need at least one image');
 
+  const extended = sanitizeExtended(input.extended);
+  if (isFail(extended)) return extended;
+
   await ensureIndexes();
   const things = await getThingsCollection();
   const now = input.createdAt instanceof Date ? input.createdAt : new Date();
@@ -226,6 +235,7 @@ export const createPost = async (ownerId: string, input: CreatePostInput): Promi
     comments: [],
     shareOfId: null,
     shareCount: 0,
+    extended: extended.value === undefined ? null : extended.value,
     createdAt: now,
     updatedAt: now
   };
@@ -324,6 +334,7 @@ export const toPublicPosts = async (docs: FeedPostDoc[], viewerId: string | null
       isShare: !!doc.shareOfId,
       // only surface originals the viewer is allowed to see
       shareOf: original && canView(original, viewerId) ? project(original, false) : null,
+      extended: doc.extended ?? null,
       createdAt: new Date(doc.createdAt).toISOString()
     };
   };

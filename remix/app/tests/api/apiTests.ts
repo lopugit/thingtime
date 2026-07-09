@@ -913,6 +913,28 @@ export const apiTests: ApiTestDefinition[] = [
     )
   },
   {
+    id: 'crud-types-zero-field-extended',
+    name: 'Zero-field type with extended data',
+    description: 'Types may declare no fields and carry free-form extended JSON (idempotent fixed key — re-runs hit the per-owner 409 dedup).',
+    group: 'crud',
+    method: 'POST',
+    path: '/api/v1/crud/types',
+    mutates: true,
+    body: {
+      key: 'tt_api_test_extended',
+      name: 'API test extensible type',
+      visibility: 'private',
+      extended: { anyShape: true, nested: [1, 'two', { three: 3 }] }
+    },
+    expect: expectJson(
+      [200, 401, 409],
+      (body) =>
+        (body?.ok === true && body?.type?.id && body?.type?.extended?.anyShape === true) ||
+        (body?.ok === false && typeof body?.error === 'string'),
+      'Zero-field type with extended persisted (session), deduped on re-run (409), or was rejected anonymously (401).'
+    )
+  },
+  {
     id: 'crud-types-save-validates',
     name: 'Type create validates schema',
     description: 'A type without a name/key/fields is rejected before anything is written.',

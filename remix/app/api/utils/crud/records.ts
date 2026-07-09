@@ -28,6 +28,7 @@ import {
   fail,
   isFail,
   missingRequiredField,
+  sanitizeExtended,
   validateFieldValue,
   type Fail,
   type ThingTypeField
@@ -44,6 +45,9 @@ export type ThingRecordDoc = {
   ownerId: string;
   acl: ThingRecordAcl;
   values: Record<string, StoredThingValue>;
+  // schema-free extensible data: any JSON the caller wants, wrapped in this
+  // platform envelope but never validated, indexed, or interpreted
+  extended: unknown | null;
   search: {
     tokens: string[];
     publicText: string | null;
@@ -66,6 +70,7 @@ export type PublicThingRecord = {
   typeId: string;
   version: number;
   values: Record<string, unknown>;
+  extended: unknown | null;
   encryptedFields: string[];
   permissions: RecordPermissions;
   acl: { readKeys: string[]; writeKeys: string[]; adminKeys: string[]; searchKeys: string[] } | null;
@@ -78,6 +83,7 @@ export type PublicThingRecordSummary = {
   typeId: string;
   version: number;
   values: Record<string, unknown>;
+  extended: unknown | null;
   encryptedFields: string[];
   snippet: string | null;
   createdAt: string;
@@ -260,6 +266,7 @@ export const toPublicRecord = (
     typeId: doc.typeId,
     version: doc.version || 1,
     values: decrypted.values,
+    extended: doc.extended ?? null,
     encryptedFields: decrypted.encryptedFields,
     permissions,
     acl,
@@ -275,6 +282,7 @@ export const toRecordSummary = (doc: ThingRecordDoc): PublicThingRecordSummary =
   typeId: doc.typeId,
   version: doc.version || 1,
   values: plainValuesOf(doc),
+  extended: doc.extended ?? null,
   encryptedFields: encryptedFieldKeysOf(doc),
   snippet: doc.search?.publicText || null,
   createdAt: new Date(doc.createdAt).toISOString(),
@@ -306,6 +314,7 @@ const notFound = () => fail(404, 'Record not found');
 type CreateRecordInput = {
   typeId?: unknown;
   values?: unknown;
+  extended?: unknown;
   acl?: unknown;
 };
 
@@ -317,10 +326,15 @@ export const createRecord = async (
   if (!type) return fail(404, 'Type not found');
   if (type.archivedAt) return fail(400, 'This type is archived and no longer accepts new records');
 
-  if (!input.values || typeof input.values !== 'object' || Array.isArray(input.values)) {
+  // values is optional — extended-only records (typically on zero-field types)
+  // are the schema-free path for arbitrary app data.
+  if (input.values !== undefined && (!input.values || typeof input.values !== 'object' || Array.isArray(input.values))) {
     return fail(400, 'values must be an object of field values');
   }
-  const submitted = input.values as Record<string, unknown>;
+  const submitted = (input.values as Record<string, unknown>) ?? {};
+
+  const extended = sanitizeExtended(input.extended);
+  if (isFail(extended)) return extended;
 
   const owner = { ownerId: user.id, ownerSubject: subjectKeyForUser(user) };
   // The type's defaultAcl only applies to the type owner's own records —
@@ -369,6 +383,7 @@ export const createRecord = async (
     ownerId: user.id,
     acl,
     values: stored.stored,
+    extended: extended.value === undefined ? null : extended.value,
     search: {
       tokens,
       publicText: buildPublicText(type, plainForSearch)
@@ -435,7 +450,7 @@ export const listRecords = async (
   return { ok: true, records: page.map(toRecordSummary), nextCursor };
 };
 
-type UpdateRecordInput = { id?: unknown; values?: unknown; expectedVersion?: unknown };
+type UpdateRecordInput = { id?: unknown; values?: unknown; extended?: unknown; expectedVersion?: unknown };
 
 export const updateRecord = async (
   user: PublicUser,
@@ -448,11 +463,20 @@ export const updateRecord = async (
     return readable ? fail(403, 'You do not have write access to this record') : notFound();
   }
 
-  if (!input.values || typeof input.values !== 'object' || Array.isArray(input.values)) {
+  if (input.values !== undefined && (!input.values || typeof input.values !== 'object' || Array.isArray(input.values))) {
     return fail(400, 'values must be an object of field values');
   }
-  const submitted = input.values as Record<string, unknown>;
-  if (!Object.keys(submitted).length) return fail(400, 'values must contain at least one field');
+  const submitted = (input.values as Record<string, unknown>) ?? {};
+
+  // extended replaces as a whole value on write (deep-merging arbitrary JSON is
+  // ambiguous); undefined leaves it untouched, null clears it.
+  const extended = sanitizeExtended(input.extended);
+  if (isFail(extended)) return extended;
+  const hasExtendedChange = input.extended !== undefined;
+
+  if (!Object.keys(submitted).length && !hasExtendedChange) {
+    return fail(400, 'Pass values with at least one field, or an extended payload');
+  }
 
   let expectedVersion: number | null = null;
   if (input.expectedVersion !== undefined && input.expectedVersion !== null) {
@@ -514,6 +538,7 @@ export const updateRecord = async (
     {
       $set: {
         values: mergedValues,
+        ...(hasExtendedChange ? { extended: extended.value } : {}),
         search: { tokens: [...keptTokens, ...newTokens], publicText: buildPublicText(type, mergedPlain) },
         updatedAt: now
       },

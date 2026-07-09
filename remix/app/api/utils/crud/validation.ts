@@ -43,6 +43,29 @@ const utf8Bytes = (value: string) => new TextEncoder().encode(value).byteLength;
 
 export const valueByteSize = (value: unknown) => utf8Bytes(JSON.stringify(value) ?? '');
 
+// The extensible data escape hatch: `extended` carries ANY JSON structure with
+// no schema validation — Thingtime wraps it in platform metadata (ids, ACLs,
+// versions, timestamps) but never interprets it. Byte-capped so a single doc
+// stays well inside Mongo's 16MB limit alongside values + search tokens.
+export const EXTENDED_MAX_BYTES = 512 * 1024;
+
+// Returns the value to store under `extended`. undefined means "not provided"
+// (callers keep the existing value); null clears it; anything else is accepted
+// as-is if it fits the byte cap and JSON round-trips.
+export const sanitizeExtended = (value: unknown): { ok: true; value: unknown } | Fail => {
+  if (value === undefined) return { ok: true, value: undefined };
+  if (value === null) return { ok: true, value: null };
+  if (typeof value === 'function') return fail(400, 'extended must be JSON-serializable');
+  const bytes = valueByteSize(value);
+  if (!Number.isFinite(bytes) || bytes === 0) {
+    return fail(400, 'extended must be JSON-serializable');
+  }
+  if (bytes > EXTENDED_MAX_BYTES) {
+    return fail(400, `extended exceeds the ${EXTENDED_MAX_BYTES} byte limit`);
+  }
+  return { ok: true, value };
+};
+
 const sanitizeKey = (value: unknown, maxChars: number): string | null => {
   if (typeof value !== 'string') return null;
   const key = value.trim();
@@ -128,17 +151,21 @@ export const validateTypeInput = (input: Record<string, unknown>): ValidatedType
   // Only an explicit 'public' publishes — mirrors the themes convention.
   const visibility: ThingTypeVisibility = input.visibility === 'public' ? 'public' : 'private';
 
-  if (!Array.isArray(input.fields) || !input.fields.length) {
-    return fail(400, 'A type needs at least one field');
+  // Zero-field types are valid: records of such a type carry everything in
+  // their schema-free `extended` property — the escape hatch that lets
+  // external apps and service accounts store arbitrary data through Thingtime.
+  if (input.fields !== undefined && !Array.isArray(input.fields)) {
+    return fail(400, 'fields must be a list of field definitions');
   }
-  if (input.fields.length > MAX_FIELDS_PER_TYPE) {
+  const inputFields = Array.isArray(input.fields) ? input.fields : [];
+  if (inputFields.length > MAX_FIELDS_PER_TYPE) {
     return fail(400, `A type can have at most ${MAX_FIELDS_PER_TYPE} fields`);
   }
 
   const fields: ThingTypeField[] = [];
   const seen = new Set<string>();
-  for (let index = 0; index < input.fields.length; index += 1) {
-    const field = sanitizeField(input.fields[index], index);
+  for (let index = 0; index < inputFields.length; index += 1) {
+    const field = sanitizeField(inputFields[index], index);
     if (isFail(field)) return field;
     if (seen.has(field.key)) return fail(400, `Duplicate field key "${field.key}"`);
     seen.add(field.key);

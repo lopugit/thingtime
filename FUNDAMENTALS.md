@@ -35,8 +35,8 @@ Single Mongo database `thingtime` with these collections:
 | ---------- | ----- |
 | `users`    | user accounts (hashed passwords + signup metadata + profile fields: bio/avatarUrl/bannerUrl; opt-in email 2FA flag in `meta.twoFactorEmailEnabled`) |
 | `sessions` | server-side sessions / JWT records (for revocation) |
-| `things`   | the actual Thingtime data — feed posts as `kind: 'post'` docs (`/api/v1/things`) and generic typed CRUD records as `kind: 'record'` docs (`/api/v1/crud/records`, ACL-guarded + optionally field-encrypted) |
-| `thingTypes` | user-defined schemas for `kind: 'record'` things (`/api/v1/crud/types`; field kinds, required/encrypted/searchable policies, default ACL) |
+| `things`   | the actual Thingtime data — feed posts as `kind: 'post'` docs (`/api/v1/things`) and generic typed CRUD records as `kind: 'record'` docs (`/api/v1/crud/records`, ACL-guarded + optionally field-encrypted). Posts and records also carry a schema-free `extended` property for arbitrary unvalidated JSON (see README "Extensible Data") |
+| `thingTypes` | user-defined schemas for `kind: 'record'` things (`/api/v1/crud/types`; field kinds, required/encrypted/searchable policies, default ACL). Zero-field types are valid — their records live entirely in `extended` |
 | `emailVerifications` | pending email-verification tokens |
 | `passwordResets` | single-use password-reset tokens (`/api/v1/auth/password-reset`; 1h TTL, sessions revoked on use) |
 | `authOtps` | short-lived email 2FA login challenges (hashed codes, attempt-capped; see `/api/v1/login`) |

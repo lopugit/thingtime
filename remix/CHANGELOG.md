@@ -34,6 +34,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   registered in the route map + API docs (docs-derived Nitro route list,
   including the email PR's `config`/`test-otp` routes) with `crud`/`auth` API
   test coverage. — _Claude (AI), 2026-07-10_
+- 🧩 **Extensible data (`extended`)**: every CRUD record, CRUD type, and feed
+  post now carries a schema-free `extended` property accepting any JSON
+  structure (512KB cap, replace-on-write, `null` clears) — stored untouched
+  inside the Thingtime platform envelope (ids, ACLs, versions, soft deletes),
+  never validated, indexed, or interpreted. Types may declare **zero fields**,
+  so external apps and service accounts can use Thingtime as a free-form
+  datastore (`docs/api/service-accounts.md` "Managing external app data",
+  README "Extensible Data"). — _Claude (AI), 2026-07-10_
 - Added `/tests` email delivery checks for signup verification, service-account
   verification, and the OTP email helper, plus `SES_SANDBOX=1` throttling so
   sandbox runs wait one second between email sends. — _Codex (AI), 2026-07-09_

@@ -7,6 +7,7 @@ import { sanitizeAclInput, subjectKeyForUser, type ThingRecordAcl } from './perm
 import {
   fail,
   isFail,
+  sanitizeExtended,
   validateTypeInput,
   type Fail,
   type ThingTypeField,
@@ -27,6 +28,8 @@ export type ThingTypeDoc = {
   version: number;
   fields: ThingTypeField[];
   defaultAcl: ThingRecordAcl;
+  // schema-free extensible data — same escape hatch records have
+  extended: unknown | null;
   archivedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -40,6 +43,7 @@ export type PublicThingType = {
   visibility: ThingTypeVisibility;
   version: number;
   fields: ThingTypeField[];
+  extended: unknown | null;
   archived: boolean;
   owned: boolean;
   createdAt: string;
@@ -56,6 +60,7 @@ export const toPublicThingType = (doc: any, user: PublicUser | null): PublicThin
   visibility: doc.visibility === 'public' ? 'public' : 'private',
   version: doc.version || 1,
   fields: (doc.fields || []).map((field: ThingTypeField) => ({ ...field })),
+  extended: doc.extended ?? null,
   archived: !!doc.archivedAt,
   owned: !!user && String(doc.ownerId) === user.id,
   createdAt: new Date(doc.createdAt).toISOString(),
@@ -104,6 +109,10 @@ export const saveType = async (user: PublicUser, input: SaveTypeInput): Promise<
     owner
   );
   if (isFail(defaultAcl)) return defaultAcl;
+
+  const extended = sanitizeExtended(input.extended);
+  if (isFail(extended)) return extended;
+  const hasExtendedChange = input.extended !== undefined;
 
   await ensureIndexes();
   const types = await getThingTypesCollection();
@@ -161,6 +170,7 @@ export const saveType = async (user: PublicUser, input: SaveTypeInput): Promise<
       visibility: validated.visibility,
       fields: validated.fields,
       defaultAcl,
+      ...(hasExtendedChange ? { extended: extended.value } : {}),
       version: (existing.version || 1) + 1,
       updatedAt: now
     };
@@ -186,6 +196,7 @@ export const saveType = async (user: PublicUser, input: SaveTypeInput): Promise<
     version: 1,
     fields: validated.fields,
     defaultAcl,
+    extended: extended.value === undefined ? null : extended.value,
     archivedAt: null,
     createdAt: now,
     updatedAt: now
