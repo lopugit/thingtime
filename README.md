@@ -221,14 +221,25 @@ Apps and backend services can create service-owned Thingtime accounts through:
 POST /api/v1/auth/service-account
 ```
 
-The endpoint is self-service: it does not require a server provisioning secret,
-but it does require a unique, valid email address. The account must verify that
-email within seven days. Until verification, the bearer token works only during
-that grace window; after the deadline, authenticated requests for the service
-account are rejected until the email is verified.
+The endpoint is admin-only because it mints bearer credentials. Configure
+allowlisted admins with one or more of:
+
+```sh
+THINGTIME_ADMIN_USER_IDS="6688f0f00000000000000000"
+THINGTIME_ADMIN_USERNAMES="lopu"
+THINGTIME_ADMIN_EMAILS="lopu@example.com"
+```
+
+The request must be sent with an authenticated admin cookie or
+`Authorization: Bearer <admin-token>`. It still requires a unique, valid email
+address for the service account. The account must verify that email within seven
+days. Until verification, the bearer token works only during that grace window;
+after the deadline, authenticated requests for the service account are rejected
+until the email is verified.
 
 ```sh
 curl -X POST "https://thingtime.com/api/v1/auth/service-account" \
+  -H "Authorization: Bearer <admin-token>" \
   -H "Content-Type: application/json" \
   -d '{
     "serviceName": "CodexTime",
@@ -245,12 +256,13 @@ Thingtime bearer token:
 Authorization: Bearer <accessToken>
 ```
 
-Service account tokens are intentionally non-expiring JWTs with revocable Mongo
-session records. The session `expiresAt` value is `null`, the JWT has no `exp`
-claim, and the account starts with a `storageAllowanceBytes` value of
+Service account tokens are expiring JWTs with revocable Mongo session records.
+`THINGTIME_SERVICE_TOKEN_TTL_DAYS` controls the lifetime, defaults to 30 days,
+and is capped at 90 days. The response includes `expiresAt`, the JWT has an
+`exp` claim, and the account starts with a `storageAllowanceBytes` value of
 `5368709120` (5 GiB). The email-verification deadline is returned as
-`verificationRequiredBy`. Revoke the token by revoking or deleting its backing
-session document.
+`verificationRequiredBy`. Revoke a token early by revoking or deleting its
+backing session document.
 
 See `docs/api/service-accounts.md` for the complete request and response shape.
 

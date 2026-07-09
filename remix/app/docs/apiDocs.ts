@@ -315,17 +315,19 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'auth',
     title: 'Service account provisioning',
     endpoint: '/api/v1/auth/service-account',
-    summary: 'Creates a service-owned account with a non-expiring bearer token and 5 GiB storage allowance.',
+    summary: 'Admin-only provisioning for a service-owned account with an expiring bearer token and 5 GiB storage allowance.',
     detail:
-      'Use this endpoint to connect other apps to Thingtime backend data. The account is public self-service but must verify its email within seven days.',
+      'Use this endpoint to connect trusted backend services to Thingtime data. Provisioning is restricted to authenticated admins because the route mints bearer credentials.',
     auth: {
-      mode: 'none',
-      description: 'Public endpoint. Email verification is required after creation.'
+      mode: 'session-or-bearer',
+      description:
+        'Requires an authenticated admin user allowlisted by THINGTIME_ADMIN_USER_IDS, THINGTIME_ADMIN_USERNAMES, or THINGTIME_ADMIN_EMAILS.'
     },
     methods: ['POST'],
     steps: [
+      'Authenticate as an allowlisted admin with a browser session or Bearer token.',
       'POST a serviceName and valid email. username, displayName, and meta are optional.',
-      'Store accessToken securely server-side; it has no exp claim and should be treated like an API key.',
+      'Store accessToken securely server-side; it has an exp claim and remains revocable through its Mongo session.',
       'Send Authorization: Bearer <accessToken> to authenticated Thingtime API routes.',
       'Complete email verification before verificationRequiredBy to keep the integration trustworthy.'
     ],
@@ -351,7 +353,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           ok: true,
           accessToken: 'eyJhbGciOiJFUzI1NiIsImtpZCI6InRoaW5ndGltZSJ9...',
           tokenType: 'Bearer',
-          expiresAt: null,
+          expiresAt: '2026-08-14T00:00:00.000Z',
           verificationRequiredBy: '2026-07-15T00:00:00.000Z',
           storageAllowanceBytes: 5368709120,
           user: {
@@ -361,12 +363,25 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         }
       },
       {
+        status: 401,
+        description: 'No authenticated admin session or bearer token was provided.',
+        body: { ok: false, error: 'Unauthorized' }
+      },
+      {
+        status: 403,
+        description: 'The authenticated user is not in the admin allowlist.',
+        body: { ok: false, error: 'Admin access required' }
+      },
+      {
         status: 400,
         description: 'A valid email is required.',
         body: { ok: false, error: 'A valid email is required' }
       }
     ],
-    notes: ['The bearer token is intentionally non-expiring; rotate it by creating a replacement service account when needed.']
+    notes: [
+      'The bearer token expires after THINGTIME_SERVICE_TOKEN_TTL_DAYS, defaulting to 30 days and capped at 90 days.',
+      'Configure admins with THINGTIME_ADMIN_USER_IDS, THINGTIME_ADMIN_USERNAMES, or THINGTIME_ADMIN_EMAILS.'
+    ]
   }),
   endpoint({
     id: 'auth-verify-email',
@@ -707,18 +722,20 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'mongodb',
     title: 'MongoDB populate',
     endpoint: '/api/v1/mongodb/populate',
-    summary: 'Runs the MongoDB setup/populate script.',
+    summary: 'Admin-only route that runs the MongoDB setup/populate script.',
     detail:
-      'This is a mutating development utility. Use it carefully because it initializes or updates local Thingtime MongoDB state.',
+      'This is a mutating development utility. It is admin-gated because it initializes or updates Thingtime MongoDB state and can perform expensive seed work.',
     auth: {
-      mode: 'none',
-      description: 'Development utility endpoint. Restrict exposure by environment and network controls.'
+      mode: 'session-or-bearer',
+      description:
+        'Requires an authenticated admin user allowlisted by THINGTIME_ADMIN_USER_IDS, THINGTIME_ADMIN_USERNAMES, or THINGTIME_ADMIN_EMAILS.'
     },
     methods: ['POST'],
     steps: [
+      'Authenticate as an allowlisted admin with a browser session or Bearer token.',
       'POST an empty JSON object from a trusted development environment.',
       'The route runs the shared MongoDB setup script.',
-      'Read data.ret for setup output.',
+      'Read result for setup output.',
       'Avoid calling this from production automation unless explicitly intended.'
     ],
     requestExamples: [
@@ -733,29 +750,35 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       {
         status: 200,
         description: 'Populate script completed.',
-        body: { message: 'Early return triggered in Populate action: successful', data: { ret: true } }
+        body: { ok: true, result: { ok: true, created: 0, skipped: 10 } }
+      },
+      {
+        status: 401,
+        description: 'No authenticated admin session or bearer token was provided.',
+        body: { ok: false, error: 'Unauthorized' }
       }
     ],
-    notes: ['This route mutates database state. It is present for local/dev workflows and test harness coverage.']
+    notes: ['This route mutates database state. Keep it admin-only even in preview and development deployments.']
   }),
   endpoint({
     id: 'mongodb-raw-results',
     group: 'mongodb',
     title: 'MongoDB raw results',
     endpoint: '/api/v1/mongodb/raw-results',
-    summary: 'Returns raw Thingtime records from MongoDB for diagnostics.',
+    summary: 'Admin-only diagnostic route that returns a filtered page of public post documents.',
     detail:
-      'Use this route for low-level diagnostics when validating the database connection and stored Thingtime data.',
+      'Use this route for low-level diagnostics when validating the database connection and stored Thingtime data. It is restricted to admins and excludes kind: record documents.',
     auth: {
-      mode: 'none',
-      description: 'Development diagnostic endpoint. Treat returned data as sensitive.'
+      mode: 'session-or-bearer',
+      description:
+        'Requires an authenticated admin user allowlisted by THINGTIME_ADMIN_USER_IDS, THINGTIME_ADMIN_USERNAMES, or THINGTIME_ADMIN_EMAILS.'
     },
     methods: ['POST'],
     steps: [
+      'Authenticate as an allowlisted admin with a browser session or Bearer token.',
       'POST an empty JSON object from a trusted development environment.',
-      'The route opens the configured MongoDB connection and reads the things collection.',
-      'Inspect data.rawResults for stored Thingtime records.',
-      'Handle 500 if MongoDB is unavailable.'
+      'The route reads only public kind: post documents and strips Mongo _id.',
+      'Inspect rawResults for the filtered diagnostic page.'
     ],
     requestExamples: [
       {
@@ -768,11 +791,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [
       {
         status: 200,
-        description: 'Raw things collection results.',
-        body: { message: 'Early return triggered in Raw Results action: successful', data: { rawResults: [] } }
+        description: 'Filtered public post diagnostics.',
+        body: { ok: true, rawResults: [], filter: { kind: 'post', visibility: 'public' } }
+      },
+      {
+        status: 401,
+        description: 'No authenticated admin session or bearer token was provided.',
+        body: { ok: false, error: 'Unauthorized' }
       }
     ],
-    notes: ['Raw results can contain user data. Prefer higher-level API routes for app integrations.']
+    notes: ['This route must never return kind: record documents. Prefer higher-level API routes for app integrations.']
   }),
   endpoint({
     id: 'mongodb-status',

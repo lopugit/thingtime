@@ -1,9 +1,9 @@
-import { Flex, Heading } from '@chakra-ui/react';
+import { Flex } from '@chakra-ui/react';
 import { useLocation } from 'react-router';
+import { json, readJsonBody } from '~/api/http';
+import { requireAdminUser } from '~/api/utils/auth/admin';
 import { Submit } from '~/components/API/Submit';
 import setup from '~/scripts/mongodb/setup';
-
-const routeName = 'Populate';
 
 export default function Index() {
   const { pathname } = useLocation();
@@ -18,41 +18,22 @@ export default function Index() {
 }
 
 const actionExport = async ({ request }) => {
-  // literally just run the setup.ts script
-
-
-  const ret = await setup();
-
-  if (!ret) {
-    return earlyReturn({
-      status: 500,
-      message: `failed to setup mongodb`
-    });
+  const admin = await requireAdminUser(request);
+  if (admin.ok === false) {
+    return json({ ok: false, error: admin.error }, { status: admin.status });
   }
 
-  return earlyReturn({
-    status: 200,
-    message: `successful`,
-    data: {
-      ret
-    }
-  });
-};
+  await readJsonBody(request, 16 * 1024);
+  const ret = await setup();
 
-const earlyReturn = (args) => {
-  return {
-    status: args?.status || 200,
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: {
-      message: `Early return triggered in ${routeName} action` + (args?.message ? `: ${args.message}` : ''),
-      data: args?.data
-    },
-    cache: {
-      revalidate: 60
-    }
-  };
+  if (!ret || ret.ok === false) {
+    return json(
+      { ok: false, error: ret?.error || 'failed to setup mongodb' },
+      { status: 500 }
+    );
+  }
+
+  return json({ ok: true, result: ret });
 };
 
 export const action = actionExport;

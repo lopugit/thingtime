@@ -10,6 +10,8 @@ import type { PublicUser } from './users';
 
 export const DEFAULT_SERVICE_STORAGE_ALLOWANCE_BYTES = 5 * 1024 * 1024 * 1024;
 export const SERVICE_EMAIL_VERIFICATION_GRACE_MS = 1000 * 60 * 60 * 24 * 7;
+const DEFAULT_SERVICE_TOKEN_TTL_DAYS = 30;
+const MAX_SERVICE_TOKEN_TTL_DAYS = 90;
 
 export type ProvisionServiceAccountInput = {
   username?: string;
@@ -19,6 +21,7 @@ export type ProvisionServiceAccountInput = {
   password?: string;
   meta?: Record<string, any>;
   origin?: string;
+  provisionedByUserId?: string;
 };
 
 export type ProvisionServiceAccountResult =
@@ -28,7 +31,7 @@ export type ProvisionServiceAccountResult =
       user: PublicUser;
       accessToken: string;
       tokenType: 'Bearer';
-      expiresAt: null;
+      expiresAt: string;
       verificationRequiredBy: string;
       verificationLink: string;
       storageAllowanceBytes: number;
@@ -45,6 +48,12 @@ const slugifyUsername = (value: string) =>
 
 const generatedServicePassword = () => `${randomUUID()}-${randomUUID()}`;
 
+const serviceTokenTtlDays = () => {
+  const configured = Number(process.env.THINGTIME_SERVICE_TOKEN_TTL_DAYS || DEFAULT_SERVICE_TOKEN_TTL_DAYS);
+  if (!Number.isFinite(configured)) return DEFAULT_SERVICE_TOKEN_TTL_DAYS;
+  return Math.min(Math.max(1, Math.floor(configured)), MAX_SERVICE_TOKEN_TTL_DAYS);
+};
+
 export const provisionServiceAccount = async (
   input: ProvisionServiceAccountInput
 ): Promise<ProvisionServiceAccountResult> => {
@@ -54,12 +63,15 @@ export const provisionServiceAccount = async (
   const serviceName = (input.serviceName || input.displayName || username).trim();
   const now = new Date();
   const verificationRequiredBy = new Date(now.getTime() + SERVICE_EMAIL_VERIFICATION_GRACE_MS);
+  const tokenTtlDays = serviceTokenTtlDays();
+  const tokenExpiresAt = new Date(now.getTime() + tokenTtlDays * 24 * 60 * 60 * 1000);
   const meta = {
     ...(input.meta ?? {}),
     accountKind: 'service',
     serviceName,
     provisionedVia: 'api',
-    tokenExpiry: 'none',
+    provisionedByUserId: input.provisionedByUserId || null,
+    tokenExpiry: `${tokenTtlDays}d`,
     emailVerificationGraceDays: 7
   };
 
@@ -79,14 +91,19 @@ export const provisionServiceAccount = async (
   if (created.ok === false) return created;
 
   const session = await createSession(String(created.user._id), {
-    expiresAt: null,
+    expiresAt: tokenExpiresAt,
     purpose: 'service',
     meta: {
       serviceName,
-      tokenExpiry: 'none'
+      tokenExpiry: `${tokenTtlDays}d`,
+      provisionedByUserId: input.provisionedByUserId || null
     }
   });
-  const accessToken = await signJwt({ sub: String(created.user._id), jti: session.jti, expiresIn: null });
+  const accessToken = await signJwt({
+    sub: String(created.user._id),
+    jti: session.jti,
+    expiresIn: `${tokenTtlDays}d`
+  });
   const origin = input.origin || process.env.APP_URL || 'http://localhost:9999';
   const verification = await createEmailVerification({
     userId: String(created.user._id),
@@ -101,7 +118,7 @@ export const provisionServiceAccount = async (
     user: created.publicUser,
     accessToken,
     tokenType: 'Bearer',
-    expiresAt: null,
+    expiresAt: tokenExpiresAt.toISOString(),
     verificationRequiredBy: verificationRequiredBy.toISOString(),
     verificationLink,
     storageAllowanceBytes: DEFAULT_SERVICE_STORAGE_ALLOWANCE_BYTES,

@@ -1,7 +1,7 @@
 # 09 — Security hardening (unauth endpoints, auth rate limiting, persisted-state eval)
 
-**Status:** 🔴 Not started · raised 2026-07-08 by a multi-agent review, each
-finding adversarially verified against the source.
+**Status:** 🟡 Started · A1-A3 endpoint lockdown landed in Phase 0; auth
+rate-limiting and persisted-state hardening remain.
 
 This groups the security findings from the 2026-07-08 review. They share a theme
 the owner already cares about (DECISIONS.md #5 "security-conscious by reflex":
@@ -42,12 +42,10 @@ rate limit, and no `NODE_ENV` gate.
 ### A3. `POST /api/v1/auth/service-account` — unauth minting of permanent 5 GB tokens
 - File: `remix/app/routes/api/v1/auth/service-account/_service-account.tsx` L8 →
   `remix/app/api/utils/auth/serviceAccounts.ts` L48–109.
-- `provisionServiceAccount` mints a **non-expiring** bearer token
-  (`signJwt` with `expiresIn:null` omits the `exp` claim — `jwt.ts` L113;
-  `createSession` with `expiresAt:null` never expires per `sessions.ts` L51) and
-  grants `storageAllowanceBytes` = **5 GB**, with no caller identity check and no
-  throttle. Anyone can mass-create accounts to exhaust rows/storage and keep
-  permanent tokens.
+- Before Phase 0, `provisionServiceAccount` minted a non-expiring bearer token
+  and granted `storageAllowanceBytes` = **5 GB**, with no caller identity check.
+  Phase 0 now gates provisioning behind admin auth and makes service tokens
+  expire; rate limiting remains part of the broader auth-hardening work.
 - Partial existing mitigation: `getCurrentUser` (`getCurrentUser.ts` L35–41)
   disables an **unverified** service token after a 7-day grace — but that leaves a
   7-day live window, does not stop unauth creation, and does not bound tokens once
@@ -116,7 +114,7 @@ revive only tagged values.
 
 ## Done when
 
-- [ ] A1–A3 require auth (or are dev-gated + removed from the prod dispatcher);
+- [x] A1–A3 require auth (or are dev-gated + removed from the prod dispatcher);
       any that remain apply visibility filtering.
 - [ ] Login / register / resend-verification return 429 past a per-IP (and
       per-username, for login) threshold, reusing the existing quota util.
