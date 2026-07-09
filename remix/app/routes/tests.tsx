@@ -44,6 +44,23 @@ const statusColor = (status?: string) => {
   return '#52525B';
 };
 
+const visibleCheckboxSx = {
+  '& .chakra-checkbox__control': {
+    background: '#ffffff !important',
+    border: '2px solid #3F3F46 !important',
+    boxShadow: '0 0 0 1px #ffffff !important',
+    color: '#ffffff !important'
+  },
+  '& .chakra-checkbox__control[data-checked]': {
+    background: '#3182CE !important',
+    borderColor: '#3182CE !important',
+    boxShadow: 'none !important'
+  },
+  '& .chakra-checkbox__control[data-focus-visible]': {
+    boxShadow: '0 0 0 3px rgba(49, 130, 206, 0.35)'
+  }
+};
+
 const testMatches = (test: ApiTestDefinition, group: string, query: string, includeMutating: boolean) => {
   if (!includeMutating && test.mutates) return false;
   if (group !== 'all' && test.group !== group) return false;
@@ -290,7 +307,11 @@ export default function TestsPage() {
             <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="route, group, or test" />
           </Box>
           <Flex align="end">
-            <Checkbox isChecked={includeMutating} onChange={(event) => setIncludeMutating(event.target.checked)}>
+            <Checkbox
+              isChecked={includeMutating}
+              onChange={(event) => setIncludeMutating(event.target.checked)}
+              sx={visibleCheckboxSx}
+            >
               Include mutating tests
             </Checkbox>
           </Flex>
@@ -334,6 +355,8 @@ export default function TestsPage() {
                       onChange={(event) => toggleSelected(test.id, event.target.checked)}
                       aria-label={`Select ${test.name}`}
                       pt="2px"
+                      size="lg"
+                      sx={visibleCheckboxSx}
                     />
                     <Box color={statusColor(result?.status)} pt="2px">
                       <Icon size={18} />
