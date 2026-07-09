@@ -363,6 +363,10 @@ export type BuildThingContextMenuModelArgs = {
 	readonly?: boolean;
 	// hide the delete action when the thing has no parent (nothing to remove)
 	canDelete?: boolean;
+	// things with children get the View section (collapse/expand verbs);
+	// collapsed picks which direction leads
+	collapsible?: boolean;
+	collapsed?: boolean;
 	types?: ThingTypeOption[];
 	templates?: ThingTemplateOption[];
 	permissions?: ThingPermissionOption[];
@@ -376,6 +380,8 @@ export const buildThingContextMenuModel = (args: BuildThingContextMenuModelArgs 
 		editMode = false,
 		readonly = false,
 		canDelete = true,
+		collapsible = false,
+		collapsed = false,
 		types = DEFAULT_THING_TYPES,
 		templates = DEFAULT_THING_TEMPLATES,
 		permissions = DEFAULT_THING_PERMISSIONS,
@@ -396,6 +402,21 @@ export const buildThingContextMenuModel = (args: BuildThingContextMenuModelArgs 
 			]
 		}
 	];
+
+	// collapse/expand are view state, not mutations — they show in readonly too
+	if (collapsible) {
+		sections.push({
+			id: 'view',
+			label: 'View',
+			actions: [
+				collapsed
+					? { id: 'expand', command: 'expand', label: 'Expand', icon: '▾' }
+					: { id: 'collapse', command: 'collapse', label: 'Collapse', icon: '▸' },
+				{ id: 'collapse-all', command: 'collapse-all', label: 'Collapse all', icon: '🍂', hint: 'This thing + everything inside' },
+				{ id: 'expand-all', command: 'expand-all', label: 'Expand all', icon: '🌳', hint: 'This thing + everything inside' }
+			]
+		});
+	}
 
 	if (!readonly) {
 		sections.push({

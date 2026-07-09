@@ -88,7 +88,10 @@ export const sanitizeCustomCss = (raw: unknown): string => {
   return raw
     .slice(0, 4000)
     .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/<!--|-->/g, '')
+    // stripping every < and > wholesale (single characters remove completely
+    // in one pass, so nothing can reassemble) means no HTML or comment
+    // delimiter — <!--, -->, --!> — can survive; a separate delimiter regex
+    // would be redundant and only partially effective (CodeQL js/bad-tag-filter)
     .replace(/[{}<>@\\]/g, '')
     .replace(/(url|expression|image-set)\s*\(/gi, '(')
     .trim()

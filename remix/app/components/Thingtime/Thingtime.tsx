@@ -21,6 +21,12 @@ type ThingtimeProps = {
 	thingtimeMachineNamespace?: string;
 };
 
+// collapse-all/expand-all cascade from the nearest ancestor: the mount
+// default for newly-rendered things (null = no cascade, mount expanded).
+// Context rather than props so children mounting in the same commit as the
+// cascade update read the fresh value, not a memoized element's stale prop.
+const CollapseCascadeContext = React.createContext<boolean | null>(null);
+
 const numberStepButtonStyles = {
 	alignItems: 'center',
 	justifyContent: 'center',
@@ -169,7 +175,20 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	const thingtimeRef = React.useRef();
 
 	const [showFullPathContext, setShowFullPathContext] = React.useState(false);
-	const [isCollapsed, setIsCollapsed] = React.useState(Boolean(props?.collapsed));
+	// the nearest ancestor's collapse-all/expand-all cascade — read via context
+	// (not element props) so children mounting in the same commit as the
+	// cascade update still see the fresh value
+	const inheritedCollapsed = React.useContext(CollapseCascadeContext);
+	const [isCollapsed, setIsCollapsed] = React.useState(Boolean(props?.collapsed ?? inheritedCollapsed));
+	// set by collapse-all/expand-all: the mount default for this thing's children
+	const [childrenDefaultCollapsed, setChildrenDefaultCollapsed] = React.useState<boolean | null>(null);
+
+	// collapse events are scoped per tree root, so the same path shown in two
+	// editor windows collapses independently
+	const collapseScope = React.useMemo(
+		() => props?.collapseScope || Math.random().toString(36).slice(2, 9),
+		[props?.collapseScope]
+	);
 
 	const editValueRef = React.useRef({});
 
@@ -537,6 +556,53 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		}
 	}, [hasCollapsibleChildren, isCollapsed]);
 
+	// context-menu View verbs. The -all variants broadcast over the events bus;
+	// this node hears its own event too (delivery is synchronous), and every
+	// mounted node in the same scope whose path matches collapses/expands
+	const applyCollapse = React.useCallback(
+		(command: 'collapse' | 'expand' | 'collapse-all' | 'expand-all') => {
+			if (command === 'collapse' || command === 'expand') {
+				setIsCollapsed(command === 'collapse');
+				return;
+			}
+
+			events.next({
+				type: 'thingtime-collapse',
+				scope: collapseScope,
+				path: safeJoin(fullPath),
+				collapsed: command === 'collapse-all'
+			});
+		},
+		[events, collapseScope, safeJoin(fullPath)]
+	);
+
+	React.useEffect(() => {
+		const self = safeJoin(fullPath);
+
+		const subscription = events.subscribe((event: any) => {
+			if (event?.type !== 'thingtime-collapse' || event.scope !== collapseScope) {
+				return;
+			}
+
+			const target = typeof event.path === 'string' ? event.path : '';
+
+			if (self !== target && !(target && self.startsWith(`${target}.`))) {
+				return;
+			}
+
+			// mount default for children rendered later + live state now
+			setChildrenDefaultCollapsed(!!event.collapsed);
+
+			if (hasCollapsibleChildren) {
+				setIsCollapsed(!!event.collapsed);
+			}
+		});
+
+		return () => {
+			subscription?.unsubscribe?.();
+		};
+	}, [events, collapseScope, safeJoin(fullPath), hasCollapsibleChildren]);
+
 	// if Thingtime object has "exec" then execute and set thing to returned data
 	React.useEffect(() => {
 		(async () => {
@@ -670,6 +736,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 								// thing={{ infinite: { yes: true } }}
 								valuePl={pl}
 								onRendered={onChildRendered}
+								collapseScope={collapseScope}
 							></Thingtime>
 						);
 					})}
@@ -718,7 +785,8 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		render,
 		depth,
 		safeJoin(fullPath),
-		chakra
+		chakra,
+		collapseScope
 	]);
 
 	React.useEffect(() => {
@@ -1234,15 +1302,25 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 							{hasCollapsibleChildren && (
 								<Flex
 									className="thingCaretToggle"
+									role="button"
+									aria-label={isCollapsed ? 'Expand' : 'Collapse'}
+									aria-expanded={!isCollapsed}
 									alignItems="center"
 									justifyContent="center"
-									marginRight={2}
 									cursor="pointer"
 									userSelect="none"
-									opacity={0.8}
 									tabIndex={0}
 									position="absolute"
-									left={-4}
+									left="-14px"
+									width="14px"
+									height="100%"
+									// hidden until the row is hovered (collapsed nodes keep
+									// their caret so the fold stays visible); touch devices
+									// have no hover, so the caret always shows there
+									opacity={isCollapsed ? 0.9 : showContextIcon ? 0.7 : 0}
+									transition="opacity 0.15s ease"
+									sx={{ '@media (hover: none)': { opacity: 0.65 } }}
+									_focusVisible={{ opacity: 1, outline: '2px solid var(--tt-accent, hotpink)', outlineOffset: '-2px' }}
 									onClick={(e) => {
 										e?.preventDefault?.();
 										e?.stopPropagation?.();
@@ -1256,7 +1334,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 										}
 									}}
 								>
-									<Box color="var(--tt-faint, #b6b6c0)" fontSize="12px" lineHeight="1">
+									<Box color="var(--tt-faint, #b6b6c0)" fontSize="11px" lineHeight="1">
 										{isCollapsed ? '▸' : '▾'}
 									</Box>
 								</Flex>
@@ -1276,7 +1354,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 									{typeIcon}
 								</Box>
 							)}
-							{codeView && hasCollapsibleChildren && (
+							{codeView && hasCollapsibleChildren && !isCollapsed && (
 								<Flex
 									className="thingKeyCount"
 									alignItems="center"
@@ -1295,6 +1373,39 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 									{thing instanceof Array ? `${thing.length} item${thing.length === 1 ? '' : 's'}` : `${keys?.length || 0} key${keys?.length === 1 ? '' : 's'}`}
 								</Flex>
 							)}
+							{/* collapsed children fold up into an inline badge on the key
+							row (no indented placeholder row) — click to expand */}
+							{hasCollapsibleChildren && isCollapsed && (
+								<Flex
+									className="thingCollapsedBadge"
+									as="button"
+									type="button"
+									title="Expand"
+									aria-label="Expand collapsed children"
+									alignItems="center"
+									marginTop={-1}
+									marginLeft={2}
+									paddingX="8px"
+									paddingY="1px"
+									background="var(--tt-surface-alt, #f5f5f7)"
+									borderRadius="999px"
+									color="var(--tt-muted, #9a9aa6)"
+									fontFamily="var(--tt-font-mono, monospace)"
+									fontSize="11px"
+									whiteSpace="nowrap"
+									userSelect="none"
+									cursor="pointer"
+									transition="background 0.15s ease, color 0.15s ease"
+									_hover={{ background: 'var(--tt-surface-hover, #ececee)', color: 'var(--tt-ink, #16161a)' }}
+									onClick={(e) => {
+										e?.preventDefault?.();
+										e?.stopPropagation?.();
+										setIsCollapsed(false);
+									}}
+								>
+									{thing instanceof Array ? `[…] ${thing.length}` : `{…} ${keys?.length || 0}`}
+								</Flex>
+							)}
 							{pathDom && (
 								<Flex className="thingPathDom" flexDirection="row" columnGap={1} marginTop={-1} paddingLeft={1}>
 									<ThingContextMenuTrigger
@@ -1310,6 +1421,9 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 										thing={thing}
 										thingType={type}
 										readonly={!editMode}
+										collapsible={hasCollapsibleChildren}
+										collapsed={isCollapsed}
+										onCollapse={applyCollapse}
 										onType={onChangeType}
 										onDelete={deleteValue}
 										contextTargetRef={thingtimeRef}
@@ -1335,7 +1449,9 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 				{/* render thingtime children */}
 				{!loading && thingtimeChildren && !isCollapsed && (
 					<Box className="thingtimeChildren" flexGrow={0} flexShrink={1} width={render ? '100%' : ''}>
-						{thingtimeChildren}
+						<CollapseCascadeContext.Provider value={childrenDefaultCollapsed ?? inheritedCollapsed}>
+							{thingtimeChildren}
+						</CollapseCascadeContext.Provider>
 						{!render && type === 'object' && (
 							<Flex
 								position="relative"
@@ -1412,13 +1528,6 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
           <Icon size={7} name="plus"></Icon> */}
 							</Flex>
 						)}
-					</Box>
-				)}
-				{!loading && thingtimeChildren && isCollapsed && (
-					<Box className="thingtimeChildrenCollapsed" paddingLeft={multiplyPl(2)} paddingY={2} opacity={0.6}>
-						<Flex color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="12px" userSelect="none">
-							{thing instanceof Array ? `[…] ${thing.length}` : `{…} ${keys?.length || 0}`}
-						</Flex>
 					</Box>
 				)}
 			</Flex>
