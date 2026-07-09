@@ -33,13 +33,14 @@ Single Mongo database `thingtime` with these collections:
 
 | Collection | Holds |
 | ---------- | ----- |
-| `users`    | user accounts (hashed passwords + signup metadata) |
+| `users`    | user accounts (hashed passwords + signup metadata + profile fields: bio/avatarUrl/bannerUrl) |
 | `sessions` | server-side sessions / JWT records (for revocation) |
-| `things`   | the actual Thingtime data |
+| `things`   | the actual Thingtime data — feed posts live here as `kind: 'post'` docs (see `/api/v1/things`) |
 | `emailVerifications` | pending email-verification tokens |
 | `lopuMusingRateLimits` | rate-limit windows for Lopu musings |
 | `themes`   | saved user themes (shareable by `shareId`; see `/api/v1/themes`) |
 | `waitlist` | launch waitlist emails (`/api/v1/waitlist`) |
+| `feedAlgorithms` | per-user doomscroll-trained feed algorithms (`/api/v1/algorithms`; active pick lives in `users.meta.activeFeedAlgorithmId`) |
 
 (Replaces the earlier inconsistent `auth.users` vs `thingtime.things` split.)
 

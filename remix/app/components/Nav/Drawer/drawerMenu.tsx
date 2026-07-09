@@ -40,6 +40,17 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		]
 	},
 	{
+		id: 'feed',
+		label: 'Feed',
+		icon: '📰',
+		to: '/feed',
+		children: [
+			{ id: 'feed-home', label: 'Feed', icon: '📰', to: '/feed' },
+			{ id: 'feed-profile', label: 'Profile', icon: '👤', to: '/profile', authOnly: true },
+			{ id: 'feed-settings', label: 'Settings', icon: '⚙️', to: '/settings' }
+		]
+	},
+	{
 		id: 'things',
 		label: 'Things',
 		icon: '📦',
@@ -58,6 +69,7 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		to: '/profile',
 		children: [
 			{ id: 'account-profile', label: 'Profile', icon: '👤', to: '/profile', authOnly: true },
+			{ id: 'account-settings', label: 'Settings', icon: '⚙️', to: '/settings' },
 			{ id: 'account-welcome', label: 'Welcome', icon: '✨', to: '/welcome', authOnly: true },
 			{ id: 'account-themes', label: 'Themes', icon: '🎨', to: '/themes' },
 			{ id: 'account-login', label: 'Log in', icon: '🗝️', to: '/login', guestOnly: true },

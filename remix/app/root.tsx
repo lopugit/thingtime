@@ -11,9 +11,12 @@ import { useIcons } from './hooks/useIcons';
 import { ChakraWrapper } from './Providers/Chakra/ChakraWrapper';
 import { ThingtimeProvider } from './Providers/ThingtimeProvider';
 import { DevKit } from './components/DevKit/DevKit';
+import { ElectronBridgeHost } from './components/Electron/ElectronBridgeHost';
 import { NativeBridgeHost } from './components/NativeBridge/NativeBridgeHost';
 import { VisualSettingsHost } from './components/VisualSettings/VisualSettingsHost';
 import { ThemeHost } from './components/ThemeSettings/ThemeHost';
+import { ConfettiCanvas } from './components/Landing/ConfettiCanvas';
+import { EasterEggs } from './components/EasterEggs/EasterEggs';
 
 const setThingtime = (glob: any) => {
   try {
@@ -72,7 +75,13 @@ export default function App() {
         ? `${baseTitle} docs - Design mockups`
         : pathname === '/docs'
           ? `${baseTitle} docs`
-          : baseTitle;
+          : pathname === '/feed'
+            ? `${baseTitle} - Feed`
+            : pathname.startsWith('/profile')
+              ? `${baseTitle} - Profile`
+              : pathname === '/settings'
+                ? `${baseTitle} - Settings`
+                : baseTitle;
 
       document.title = routeTitle;
     }
@@ -95,6 +104,7 @@ export default function App() {
       <ThingtimeProvider>
         <VisualSettingsHost />
         <ThemeHost />
+        {mounted ? <ElectronBridgeHost /> : null}
         {mounted ? <NativeBridgeHost /> : null}
         <DevKit />
         <Nav />
@@ -102,6 +112,9 @@ export default function App() {
           <Outlet />
         </Main>
         <DrawerSystem />
+        {/* App-wide confetti canvas + easter eggs (🥚 party mode, window.tt). */}
+        <ConfettiCanvas />
+        {mounted ? <EasterEggs /> : null}
       </ThingtimeProvider>
       <ScrollRestoration />
       {mounted ? <Analytics /> : null}

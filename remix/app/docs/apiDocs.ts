@@ -1048,6 +1048,496 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'algorithms',
+    group: 'algorithms',
+    title: 'Feed algorithms',
+    endpoint: '/api/v1/algorithms',
+    summary: 'Lists or creates the current user feed-ranking algorithms.',
+    detail:
+      'Feed algorithms store per-user ranking weights trained from dwell, expand, reaction, comment, and share events. Users can keep multiple named algorithms and switch the active one.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET with credentials to list the caller algorithms and active id.',
+      'POST a name, optional emoji, optional branchFrom id, and optional events to create an algorithm.',
+      'Use branchFrom to copy an existing algorithm weight profile before further training.',
+      'Handle 401 for anonymous callers and 400 for invalid creation payloads.'
+    ],
+    requestExamples: [
+      {
+        name: 'List algorithms',
+        description: 'Read the caller feed algorithms.',
+        method: 'GET'
+      },
+      {
+        name: 'Create algorithm',
+        description: 'Create a named algorithm for the caller.',
+        method: 'POST',
+        body: { name: 'Quiet marketplace', emoji: 'compass' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Algorithms listed.',
+        body: { ok: true, algorithms: [], activeAlgorithmId: null }
+      },
+      {
+        status: 401,
+        description: 'No authenticated user.',
+        body: { ok: false, error: 'Unauthorized' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'algorithms-active',
+    group: 'algorithms',
+    title: 'Active feed algorithm',
+    endpoint: '/api/v1/algorithms/active',
+    summary: 'Sets or clears the current user active feed algorithm.',
+    detail:
+      'Use this endpoint when the feed algorithm picker changes. A null algorithmId returns the feed to latest-first chronological ranking.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST algorithmId as a string to activate a saved algorithm, or null for Latest.',
+      'The algorithm must belong to the current user.',
+      'Persist activeAlgorithmId from the response in local UI state.',
+      'Handle 401 unauthenticated and 404 for unknown or unowned algorithms.'
+    ],
+    requestExamples: [
+      {
+        name: 'Set active algorithm',
+        description: 'Switch the caller feed to a saved algorithm.',
+        method: 'POST',
+        body: { algorithmId: 'algorithm_123' }
+      },
+      {
+        name: 'Use latest feed',
+        description: 'Clear the active algorithm.',
+        method: 'POST',
+        body: { algorithmId: null }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Active algorithm updated.',
+        body: { ok: true, activeAlgorithmId: 'algorithm_123' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'algorithms-delete',
+    group: 'algorithms',
+    title: 'Delete feed algorithm',
+    endpoint: '/api/v1/algorithms/delete',
+    summary: 'Deletes one of the current user feed algorithms.',
+    detail:
+      'This route removes a user-owned algorithm and clears the active algorithm pointer when it pointed at the deleted algorithm.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST the algorithm id to delete.',
+      'The current user must own the algorithm.',
+      'On success, remove it from the settings algorithm manager.',
+      'Handle 401 unauthenticated and 404 for unknown or unowned algorithms.'
+    ],
+    requestExamples: [
+      {
+        name: 'Delete algorithm',
+        description: 'Delete a caller-owned algorithm.',
+        method: 'POST',
+        body: { id: 'algorithm_123' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Algorithm deleted.',
+        body: { ok: true }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'algorithms-track',
+    group: 'algorithms',
+    title: 'Track feed engagement',
+    endpoint: '/api/v1/algorithms/track',
+    summary: 'Trains the current or selected feed algorithm from engagement events.',
+    detail:
+      'The feed sends bounded batches of dwell, expand, reaction, comment, and share events so the active algorithm can update deterministic interest weights.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST events and optionally algorithmId.',
+      'If algorithmId is omitted, the caller active feed algorithm is trained.',
+      'Keep batches small; the route enforces a 128 KiB payload cap.',
+      'Handle 400 for empty or malformed event batches.'
+    ],
+    requestExamples: [
+      {
+        name: 'Track engagement',
+        description: 'Train from a small event batch.',
+        method: 'POST',
+        body: {
+          algorithmId: 'algorithm_123',
+          events: [{ type: 'dwell', postId: 'post_123', tags: ['tools'], value: 3 }]
+        }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Events were applied.',
+        body: { ok: true, trained: true, applied: 1 }
+      },
+      {
+        status: 400,
+        description: 'No valid events were provided.',
+        body: { ok: false, error: 'events are required' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'algorithms-update',
+    group: 'algorithms',
+    title: 'Update feed algorithm',
+    endpoint: '/api/v1/algorithms/update',
+    summary: 'Renames or restyles one of the current user feed algorithms.',
+    detail:
+      'Use this endpoint from the settings algorithm manager to update algorithm display metadata without changing its learned weights.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST id plus name and/or emoji.',
+      'The current user must own the algorithm.',
+      'Use the returned algorithm to refresh local state.',
+      'Handle 401 unauthenticated, 400 invalid input, and 404 missing algorithm.'
+    ],
+    requestExamples: [
+      {
+        name: 'Rename algorithm',
+        description: 'Update display fields.',
+        method: 'POST',
+        body: { id: 'algorithm_123', name: 'Home projects', emoji: 'house' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Algorithm updated.',
+        body: { ok: true, algorithm: { id: 'algorithm_123', name: 'Home projects' } }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'things',
+    group: 'things',
+    title: 'Create feed post',
+    endpoint: '/api/v1/things',
+    summary: 'Creates a text, image, or marketplace feed post in the things collection.',
+    detail:
+      'Posts are stored as kind: post things with circle visibility, tags, reactions, comments, and share metadata. The route is the canonical creation path for feed content.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST type plus text, images, listing, visibility, and tags as needed.',
+      'The route writes through the things API utility layer, not direct client database access.',
+      'Use the returned post to prepend optimistic UI state.',
+      'Handle 401 unauthenticated, 400 invalid payload, and 413 oversized payload.'
+    ],
+    requestExamples: [
+      {
+        name: 'Create text post',
+        description: 'Create a private text post.',
+        method: 'POST',
+        body: { type: 'text', text: 'Today I learned...', visibility: 'private' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Post created.',
+        body: { ok: true, post: { id: 'post_123', type: 'text', text: 'Today I learned...' } }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'things-comment',
+    group: 'things',
+    title: 'Comment on post',
+    endpoint: '/api/v1/things/comment',
+    summary: 'Adds a comment to a post visible to the current user.',
+    detail:
+      'The route re-checks visibility before writing so private or circle-limited posts cannot be commented on by unauthorized viewers.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST id and text.',
+      'The post must be visible to the current user.',
+      'Use commentCount from the response to update the card.',
+      'Handle 401 unauthenticated, 404 not visible, and 400 invalid text.'
+    ],
+    requestExamples: [
+      {
+        name: 'Add comment',
+        description: 'Comment on a visible post.',
+        method: 'POST',
+        body: { id: 'post_123', text: 'I am interested.' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Comment added.',
+        body: { ok: true, comment: { text: 'I am interested.' }, commentCount: 1 }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'things-delete',
+    group: 'things',
+    title: 'Delete feed post',
+    endpoint: '/api/v1/things/delete',
+    summary: 'Deletes one of the current user feed posts.',
+    detail:
+      'Only the owning user may delete a post. The route is used by feed/profile card controls and preserves visibility checks.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST the post id to delete.',
+      'The current user must own the post.',
+      'On success, remove the post from feed and profile lists.',
+      'Handle 401 unauthenticated and 404 for missing or unowned posts.'
+    ],
+    requestExamples: [
+      {
+        name: 'Delete post',
+        description: 'Delete a caller-owned post.',
+        method: 'POST',
+        body: { id: 'post_123' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Post deleted.',
+        body: { ok: true }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'things-feed',
+    group: 'things',
+    title: 'Feed page',
+    endpoint: '/api/v1/things/feed',
+    summary: 'Returns public and viewer-visible feed posts with optional algorithm ranking.',
+    detail:
+      'The feed reads a lean projection of recent visible posts, applies filters, then optionally ranks them with the selected or active feed algorithm.',
+    auth: {
+      mode: 'optional',
+      description: 'Anonymous callers see public posts; authenticated callers may also see their own visible circles.'
+    },
+    methods: ['GET'],
+    steps: [
+      'Send optional types, circles, from, to, algorithm, cursor, and limit query parameters.',
+      'Use algorithm=latest to force chronological ordering.',
+      'Use nextCursor for infinite scrolling.',
+      'Read ranked to know whether algorithm scoring affected the page.'
+    ],
+    requestExamples: [
+      {
+        name: 'Read feed',
+        description: 'Fetch a public feed page.',
+        method: 'GET',
+        query: { types: 'marketplace', circles: 'public', limit: 5 }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Feed page returned.',
+        body: { ok: true, posts: [], nextCursor: null, ranked: false }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'things-react',
+    group: 'things',
+    title: 'React to post',
+    endpoint: '/api/v1/things/react',
+    summary: 'Sets, replaces, or clears the current user reaction on a visible post.',
+    detail:
+      'Posting the same emoji again, or null, clears the viewer reaction. Reaction counts are returned for immediate card updates.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST id and emoji, or emoji null to clear.',
+      'The post must be visible to the current user.',
+      'Use reactionCounts and viewerReaction to update UI state.',
+      'Handle 401 unauthenticated and 404 for missing or not-visible posts.'
+    ],
+    requestExamples: [
+      {
+        name: 'Set reaction',
+        description: 'React to a post.',
+        method: 'POST',
+        body: { id: 'post_123', emoji: 'like' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Reaction updated.',
+        body: { ok: true, reactionCounts: { like: 1 }, viewerReaction: 'like' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'things-share',
+    group: 'things',
+    title: 'Share post',
+    endpoint: '/api/v1/things/share',
+    summary: 'Creates a share post that points back to a visible root post.',
+    detail:
+      'Shares copy the root post reference rather than chaining share-of-share references, so delete and count behavior stays deterministic.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST the post id plus optional text and visibility.',
+      'The source post must be public or owned/visible to the current user.',
+      'Use the returned share post to update feed state.',
+      'Handle 401 unauthenticated and 404 for missing or not-visible posts.'
+    ],
+    requestExamples: [
+      {
+        name: 'Share post',
+        description: 'Create a repost with optional commentary.',
+        method: 'POST',
+        body: { id: 'post_123', text: 'Worth saving', visibility: 'public' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Share created.',
+        body: { ok: true, post: { id: 'share_123', shareOf: 'post_123' } }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'things-user',
+    group: 'things',
+    title: 'User posts',
+    endpoint: '/api/v1/things/user',
+    summary: 'Returns posts for a public profile, filtered by viewer visibility.',
+    detail:
+      'Profile pages use this route to page through a user posts. Owners can see their full circle set; other viewers only see public content.',
+    auth: {
+      mode: 'optional',
+      description: 'Anonymous callers can read public posts; authenticated callers may see their own broader visibility.'
+    },
+    methods: ['GET'],
+    steps: [
+      'Send username, optional cursor, and optional limit query parameters.',
+      'Use nextCursor to fetch more posts.',
+      'Read postCount for profile summary display.',
+      'Handle 400 missing username and 404 unknown user.'
+    ],
+    requestExamples: [
+      {
+        name: 'Read user posts',
+        description: 'Fetch public posts for a profile.',
+        method: 'GET',
+        query: { username: 'rick.deckard', limit: 10 }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'User posts returned.',
+        body: { ok: true, posts: [], nextCursor: null, postCount: 0 }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'users-profile',
+    group: 'profile',
+    title: 'User profile',
+    endpoint: '/api/v1/users/profile',
+    summary: 'Reads public profiles or updates the current user profile fields.',
+    detail:
+      'GET returns a stripped public projection that never includes email or verification fields. POST updates the caller display name, bio, avatar URL, or banner URL.',
+    auth: {
+      mode: 'optional',
+      description: 'GET is public. POST requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET with username to read a public profile and post count.',
+      'POST displayName, bio, avatarUrl, or bannerUrl to update the current user profile.',
+      'Only http(s) and data:image URLs are accepted for avatar/banner fields.',
+      'Handle 400 missing username or invalid profile fields, 401 anonymous updates, and 404 unknown users.'
+    ],
+    requestExamples: [
+      {
+        name: 'Read public profile',
+        description: 'Fetch a public profile.',
+        method: 'GET',
+        query: { username: 'rick.deckard' }
+      },
+      {
+        name: 'Update profile',
+        description: 'Update the caller profile fields.',
+        method: 'POST',
+        body: { bio: 'Working on Thingtime.', avatarUrl: 'https://example.com/avatar.png' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Public profile returned.',
+        body: { ok: true, profile: { username: 'rick.deckard', displayName: 'Rick Deckard' }, postCount: 0 }
+      },
+      {
+        status: 401,
+        description: 'Anonymous caller attempted a profile update.',
+        body: { ok: false, error: 'Unauthorized' }
+      }
+    ]
+  }),
+  endpoint({
     id: 'vercel-deployments',
     group: 'vercel',
     title: 'Vercel deployments',

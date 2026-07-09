@@ -1,13 +1,16 @@
 export type ApiTestGroup =
+  | 'algorithms'
   | 'auth'
   | 'crypto'
   | 'docs'
   | 'health'
   | 'lopu'
   | 'mongodb'
+  | 'profile'
   | 'root'
   | 'template'
   | 'themes'
+  | 'things'
   | 'vercel'
   | 'waitlist';
 

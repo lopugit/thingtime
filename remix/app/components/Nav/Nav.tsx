@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Center, Flex } from '@chakra-ui/react';
-import { PanelLeft } from 'lucide-react';
+import { PanelLeft, Search } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router';
 
 import { CommanderV2 } from '../Commander/CommanderV2';
@@ -8,15 +8,52 @@ import { Icon } from '../Icon/Icon';
 import { drawerWidthCss, useDrawer, useDrawerLiveWidth, useIsMobileViewport } from './Drawer/useDrawer';
 import { useThingtime } from '../Thingtime/useThingtime';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useLopu } from '../Lopu/useLopu';
+import { motionOK, partyConfetti } from '~/eggs/eggs';
+
+// 🥚 Easter egg: rapid 7-click streak on the nav 🦄 makes it gallop.
+const GALLOP_STREAK = 7;
+const STREAK_WINDOW_MS = 1500;
+
+const useUnicornGallop = () => {
+	const lopu = useLopu();
+	const count = React.useRef(0);
+	const last = React.useRef(0);
+	const [galloping, setGalloping] = React.useState(false);
+
+	const onLogoClick = React.useCallback(() => {
+		const now = Date.now();
+		count.current = now - last.current < STREAK_WINDOW_MS ? count.current + 1 : 1;
+		last.current = now;
+		if (count.current >= GALLOP_STREAK) {
+			count.current = 0;
+			if (motionOK()) {
+				setGalloping(true);
+				window.setTimeout(() => setGalloping(false), 1100);
+			}
+			partyConfetti(4);
+			lopu({
+				title: 'You found the gallop 🦄💨',
+				description: 'Seven clicks of pure curiosity. Ride on, explorer.',
+				status: 'success'
+			});
+		}
+	}, [lopu]);
+
+	return { onLogoClick, galloping };
+};
 
 export const Nav = (props) => {
 	const { thingtime } = useThingtime();
 
 	const user = useCurrentUser();
 
-	const { loading, open, toggleOpen, direction } = useDrawer();
+	const { loading, open, toggleOpen, direction, openSearch } = useDrawer();
 	const { width: drawerWidth, resizing } = useDrawerLiveWidth();
 	const isMobile = useIsMobileViewport();
+
+	const { onLogoClick, galloping } = useUnicornGallop();
+	const gallopSx = galloping ? { animation: 'tt-gallop 1.1s ease-in-out' } : undefined;
 
 	const { pathname } = useLocation();
 
@@ -95,6 +132,15 @@ export const Nav = (props) => {
 		[pathname, navigate]
 	);
 
+	const onElectronSearchClick = React.useCallback(
+		(event: React.MouseEvent) => {
+			event.preventDefault();
+			event.stopPropagation();
+			openSearch();
+		},
+		[openSearch]
+	);
+
 	return (
 		<>
 			<Box
@@ -122,6 +168,7 @@ export const Nav = (props) => {
 					}}
 				>
 				<Flex
+					className="thingtimeTopNavInner"
 					as="nav"
 					position="relative"
 					alignItems="center"
@@ -130,7 +177,8 @@ export const Nav = (props) => {
 					width="100%"
 					maxWidth="100%"
 					marginY={1}
-					paddingX="18px"
+					paddingLeft="18px"
+					paddingRight="18px"
 					paddingY="14px"
 					// bg='white'
 					// boxShadow={'0px 0px 10px rgba(0,0,0,0.1)'}
@@ -165,15 +213,40 @@ export const Nav = (props) => {
 						display={['none', 'flex']}
 						height="100%"
 						marginRight="auto"
+						columnGap={2}
 						// leave room for the fixed drawer trigger button at the top
 						// left of the screen — needed unless the drawer is pinned
 						// on the left (then the nav starts right of the trigger)
-						paddingLeft={direction === 'left' && desktopOpen ? 0 : '34px'}
+						paddingLeft={direction === 'left' && desktopOpen ? 0 : 'var(--thingtime-electron-titlebar-nav-start, 34px)'}
 					>
-						<Center transform="scaleX(-100%)" cursor="pointer">
+						<Center className="electron-titlebar-home-button" transform="scaleX(-100%)" cursor="pointer" onClick={onLogoClick} sx={gallopSx}>
 							<Link to="/">
 								<Icon size="12px" name="🦄"></Icon>
 							</Link>
+						</Center>
+						<Center
+							className="electron-titlebar-search-button"
+							as="button"
+							type="button"
+							display="none"
+							width="34px"
+							height="34px"
+							borderRadius="8px"
+							opacity={0.74}
+							cursor="pointer"
+							title="Search"
+							aria-label="Search"
+							_hover={{ opacity: 1, background: 'var(--tt-surface-hover, #ececee)' }}
+							sx={{
+								WebkitTapHighlightColor: 'transparent',
+								touchAction: 'manipulation',
+								'html.thingtime-electron-desktop &': {
+									display: 'flex'
+								}
+							}}
+							onClick={onElectronSearchClick}
+						>
+							<Search size={16} strokeWidth={1.9} />
 						</Center>
 					</Center>
 					<CommanderV2 global id="nav" rainbow={false}></CommanderV2>
@@ -225,7 +298,7 @@ export const Nav = (props) => {
 								</Link>
 							)}
 						</Center>
-						<Center display={['flex', 'none']} cursor="pointer">
+						<Center display={['flex', 'none']} cursor="pointer" onClick={onLogoClick} sx={gallopSx}>
 							<Link to="/">
 								<Icon size="12px" name="🦄"></Icon>
 							</Link>

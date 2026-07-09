@@ -1,16 +1,18 @@
 import React from 'react';
 import ClickAwayListener from 'react-click-away-listener';
 import { Center, Flex, Input } from '@chakra-ui/react';
-import { useLocation } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import Fuse from 'fuse.js';
 
 import { Rainbow } from '../Rainbow/Rainbow';
 import { Thingtime } from '../Thingtime/Thingtime';
 import { useThingtime } from '../Thingtime/useThingtime';
+import { useLopu } from '../Lopu/useLopu';
 
 import { sanitise } from '~/functions/sanitise';
 import { usePath } from '~/hooks/usePath';
 import { getParentPath } from '~/smarts';
+import { SECRET_WORDS, partyMode, rainbowFlash, pickSparkle } from '~/eggs/eggs';
 
 export const CommanderV2 = (props) => {
 	const { thingtime, setThingtime, getThingtime, thingtimeRef, paths } = useThingtime();
@@ -19,6 +21,9 @@ export const CommanderV2 = (props) => {
 	console.log('thingtime.settings.commander.nav.commanderActive', thingtime?.settings?.commander?.nav?.commanderActive);
 
 	const { mode, changePath } = usePath();
+
+	const navigate = useNavigate();
+	const lopu = useLopu();
 
 	const commanderId = React.useMemo(() => {
 		return props?.id || 'global';
@@ -243,6 +248,30 @@ export const CommanderV2 = (props) => {
 	}, [thingtime?.settings?.commander, commanderSettings?.commanderActive, commanderId, closeCommander, openCommander]);
 
 	const executeCommand = React.useCallback(() => {
+		// 🥚 Easter egg: secret words typed into the Commander and Entered.
+		const secret = (inputValue || '').trim().toLowerCase();
+		const secretWord = commanderActive ? SECRET_WORDS[secret] : undefined;
+		if (secretWord) {
+			setInputValue('');
+			setHoveredSuggestion(null);
+			closeCommander();
+			if (secretWord === 'ode') {
+				navigate('/ode');
+			} else if (secretWord === 'rainbow') {
+				rainbowFlash();
+				lopu({ title: '🌈 Rainbow!', description: pickSparkle(), status: 'success' });
+			} else {
+				// unicorn / party / konami / lopu → the full celebration
+				partyMode();
+				lopu({
+					title: secretWord === 'lopu' ? '🦄 Lopu says hi' : '🦄✨ You said the magic word',
+					description: pickSparkle(),
+					status: 'success'
+				});
+			}
+			return;
+		}
+
 		// if selection is active then select it
 		const curSuggestionIdx = hoveredSuggestion;
 		if (curSuggestionIdx !== null) {
@@ -323,7 +352,11 @@ export const CommanderV2 = (props) => {
 		getThingtime,
 		setThingtime,
 		setContextPath,
-		setShowContext
+		setShowContext,
+		inputValue,
+		closeCommander,
+		navigate,
+		lopu
 	]);
 
 	const allCommanderKeyListener = React.useCallback(
@@ -397,9 +430,30 @@ export const CommanderV2 = (props) => {
 		setVirtualValue(inputValue);
 	}, [inputValue]);
 
+	const electronCommanderInputSx = React.useMemo(
+		() => ({
+			transition: 'opacity 0.14s ease-out, transform 0.14s ease-out, box-shadow 0.14s ease-out',
+			'html.thingtime-electron-desktop #commander[data-commander-active="false"] &': {
+				display: 'none',
+				opacity: 0,
+				pointerEvents: 'none',
+				transform: 'translateY(-6px) scale(0.98)'
+			},
+			'html.thingtime-electron-desktop #commander[data-commander-active="true"] &': {
+				display: 'flex',
+				opacity: 1,
+				transform: 'translateY(0) scale(1)',
+				boxShadow: 'var(--tt-shadow-popover, 0 16px 40px -12px rgba(20, 20, 40, 0.3))'
+			}
+		}),
+		[]
+	);
+
 	return (
 		<ClickAwayListener onClickAway={closeCommander}>
 			<Flex
+				className="commanderHost"
+				data-commander-active={commanderActive ? 'true' : 'false'}
 				position="absolute"
 				zIndex={9999}
 				top={0}
@@ -416,6 +470,19 @@ export const CommanderV2 = (props) => {
 				id="commander"
 				paddingLeft={['52px', 1]}
 				paddingRight={1}
+				sx={{
+					'html.thingtime-electron-desktop &': {
+						top: 'calc(var(--thingtime-electron-titlebar-height, 52px) + 8px)',
+						right: 'auto',
+						left: '50%',
+						width: 'min(420px, calc(100vw - 32px))',
+						height: '48px',
+						paddingLeft: 0,
+						paddingRight: 0,
+						transform: 'translateX(-50%)',
+						zIndex: 10050
+					}
+				}}
 			>
 				<Flex
 					position="absolute"
@@ -506,6 +573,7 @@ export const CommanderV2 = (props) => {
 							overflow="visible"
 						>
 							<Center
+								className="commanderInputShell"
 								position="relative"
 								zIndex={9999}
 								overflow="hidden"
@@ -516,6 +584,7 @@ export const CommanderV2 = (props) => {
 								borderRadius="var(--tt-radius-sm, 9px)"
 								pointerEvents="all"
 								outline="none"
+								sx={electronCommanderInputSx}
 							>
 								<Rainbow
 									opacity={commanderActive ? 0.6 : 0}
@@ -551,6 +620,7 @@ export const CommanderV2 = (props) => {
 					)}
 					{!props?.rainbow && (
 						<Center
+							className="commanderInputShell"
 							position="relative"
 							zIndex={9999}
 							overflow="hidden"
@@ -561,6 +631,7 @@ export const CommanderV2 = (props) => {
 							borderRadius="var(--tt-radius-sm, 9px)"
 							pointerEvents="all"
 							outline="none"
+							sx={electronCommanderInputSx}
 						>
 							<Input
 								// display='none'

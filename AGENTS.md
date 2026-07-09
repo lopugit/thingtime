@@ -73,9 +73,16 @@
   browser window before finishing. Use screenshot evidence or measured element
   bounds across the relevant desktop/mobile viewport so centering, max-width,
   overflow, and overlap behavior match the request.
-- When a task reveals a repeatable workflow, validation command, deployment
-  setting, project convention, or other future-use instruction, add it to this
-  `AGENTS.md` runbook before finishing so future agents do it by default.
+- New `/api/v1/...` endpoints must be registered in THREE places or Nitro
+  404s them: the route file (`remix/app/routes/api/v1/.../_name.tsx` exporting
+  `loader` for GET / `action` for POST), the import map in
+  `remix/server/routes/api/[...].ts`, and the `apiRoutes` list in
+  `remix/nitro.config.ts`. Copy the themes family for conventions: utils in
+  `remix/app/api/utils/...` returning `{ ok:false, status, error } |
+  { ok:true, ... }` unions, `json` from `~/api/http` (use `readJsonBody` for
+  size-capped mutation bodies), auth via `getCurrentUser(request)`, public
+  projections that whitelist fields, new collections + indexes in
+  `ensureIndexes()` and the FUNDAMENTALS §3 table.
 - When adding or changing a feature that depends on private/non-public
   configuration, external dashboards, secrets, deploy settings, or environment
   variables, also document the fork-safe setup steps in `README.md`. Use
@@ -125,6 +132,9 @@ Rules:
 - If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
 - After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+- graphify-out/graph.json + manifest.json are an atomic pair from one update run (manifest.json records which files are already analyzed). On any merge conflict under graphify-out/, take ONE side for the whole directory (`git checkout --ours -- graphify-out/` or `--theirs`, never mixed per-file), then run `graphify update .` and commit the refreshed outputs with the merge.
+- Recovery for a poisoned pair (graph missing data for files `graphify update` reports as unchanged): delete graphify-out/manifest.json and run `graphify update .` — everything re-extracts (AST is free; semantic extraction is served from the tracked content-addressed cache in graphify-out/cache/semantic/) and a consistent pair is rewritten. `graphify update --force` bypasses the fewer-nodes guard after large deletions/refactors.
+- graphify-out/graph.html is untracked derived viz — regenerate with `graphify export html`, never `git add` it. graphify-out/cache/semantic/ IS tracked (content-addressed, merge-safe); cache/ast/ and cache/stat-index.json stay local.
 
 ## Delivery messaging
 
