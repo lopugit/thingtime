@@ -895,21 +895,21 @@ export const apiTests: ApiTestDefinition[] = [
   {
     id: 'crud-types-save-guarded',
     name: 'Type create requires auth',
-    description: 'Creating a type without a session is rejected (401) or accepted for a logged-in tester.',
+    description: 'Creating a type without a session is rejected (401) or accepted for a logged-in tester (idempotent fixed key — re-runs hit the per-owner 409 dedup, no collection growth).',
     group: 'crud',
     method: 'POST',
     path: '/api/v1/crud/types',
     mutates: true,
-    body: () => ({
-      key: `tt_api_test_${Date.now()}`,
+    body: {
+      key: 'tt_api_test_type',
       name: 'API test type',
       visibility: 'private',
       fields: [{ key: 'title', label: 'Title', kind: 'text', required: true, searchable: 'term' }]
-    }),
+    },
     expect: expectJson(
-      [200, 401],
+      [200, 401, 409],
       (body) => (body?.ok === true && body?.type?.id) || (body?.ok === false && typeof body?.error === 'string'),
-      'Type create either persisted (session) or was rejected with an error shape (anonymous).'
+      'Type create persisted once (session), deduped on re-run (409), or was rejected anonymously (401).'
     )
   },
   {

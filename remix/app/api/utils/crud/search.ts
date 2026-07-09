@@ -17,7 +17,7 @@ import {
   type ThingRecordDoc
 } from './records';
 import { findVisibleType } from './types';
-import { fail, isFail, type Fail, type ThingTypeField } from './validation';
+import { fail, isFail, validateFieldValue, type Fail, type ThingTypeField } from './validation';
 
 // Permission-first record search. The ACL filter is part of every Mongo query
 // — a record outside acl.searchKeys can never match, whatever the tokens say.
@@ -77,6 +77,24 @@ export const searchRecords = async (user: PublicUser | null, input: SearchInput)
   const tokensFor = (field: ThingTypeField, mode: 'exact' | 'term', normalized: string) =>
     searchToken(type.shareId, field.key, mode, normalized, field.encrypted ? dataKeys : null);
 
+  // Stored exact tokens are built from the field's VALIDATED value (dates
+  // become ISO strings, numbers canonical, urls trimmed), so the query must go
+  // through the same per-kind normalization or non-text kinds never match.
+  const exactQueryValue = (field: ThingTypeField, query: string): string | null => {
+    let coerced: unknown = query;
+    if (field.kind === 'number') {
+      const n = Number(query);
+      if (!Number.isFinite(n)) return null;
+      coerced = n;
+    } else if (field.kind === 'boolean') {
+      if (query !== 'true' && query !== 'false') return null;
+      coerced = query === 'true';
+    }
+    const validated = validateFieldValue({ ...field, required: false }, coerced);
+    if (isFail(validated) || validated.value === null) return null;
+    return normalizeExactValue(validated.value);
+  };
+
   // Semantics: every query term must match somewhere in a term field (AND
   // across terms, OR across fields), or some exact field equals the whole
   // normalized query. Exact + term clauses combine with $or.
@@ -87,7 +105,10 @@ export const searchRecords = async (user: PublicUser | null, input: SearchInput)
           'search.tokens': { $in: termFields.map((field) => tokensFor(field, 'term', term)) }
         }))
       : null;
-  const exactTokens = exactFields.map((field) => tokensFor(field, 'exact', normalizeExactValue(q)));
+  const exactTokens = exactFields.flatMap((field) => {
+    const normalized = exactQueryValue(field, q);
+    return normalized === null ? [] : [tokensFor(field, 'exact', normalized)];
+  });
 
   const matchClauses: any[] = [];
   if (termClauses) matchClauses.push(termClauses.length === 1 ? termClauses[0] : { $and: termClauses });

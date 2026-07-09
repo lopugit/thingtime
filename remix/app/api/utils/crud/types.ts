@@ -126,8 +126,33 @@ export const saveType = async (user: PublicUser, input: SaveTypeInput): Promise<
       const previous = existingFieldByKey.get(field.key);
       return previous && previous.encrypted !== field.encrypted;
     });
-    if (encryptionChanged && (await countLiveRecords(existing.shareId)) > 0) {
+    const liveRecords = await countLiveRecords(existing.shareId);
+    if (encryptionChanged && liveRecords > 0) {
       return fail(400, 'Cannot change field encryption while records exist for this type');
+    }
+    if (liveRecords > 0) {
+      // The same mixed-storage hazard hides behind remove-then-re-add: a field
+      // absent from the current definition has no `previous` to compare, so
+      // check re-added keys against the storage form actually persisted.
+      const things = await getThingsCollection();
+      for (const field of validated.fields) {
+        if (existingFieldByKey.has(field.key)) continue;
+        const mismatched = await things.countDocuments(
+          {
+            kind: 'record',
+            typeId: existing.shareId,
+            deletedAt: null,
+            [`values.${field.key}.storage`]: field.encrypted ? 'plain' : 'encrypted'
+          },
+          { limit: 1 }
+        );
+        if (mismatched > 0) {
+          return fail(
+            400,
+            `Field "${field.key}" has stored ${field.encrypted ? 'plain' : 'encrypted'} values — cannot re-add it with a different encryption setting while records exist`
+          );
+        }
+      }
     }
 
     const update = {

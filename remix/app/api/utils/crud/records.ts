@@ -440,7 +440,7 @@ type UpdateRecordInput = { id?: unknown; values?: unknown; expectedVersion?: unk
 export const updateRecord = async (
   user: PublicUser,
   input: UpdateRecordInput
-): Promise<Fail | { ok: true; record: PublicThingRecord }> => {
+): Promise<Fail | { ok: true; record: PublicThingRecord | null }> => {
   const doc = await findLiveRecord(input.id);
   if (!doc) return notFound();
   const readable = canReadRecord(doc.acl, user);
@@ -501,9 +501,11 @@ export const updateRecord = async (
   }
 
   const now = new Date();
-  const nextVersion = (doc.version || 1) + 1;
   const things = await getThingsCollection();
-  const result = await things.updateOne(
+  // $inc keeps version strictly monotonic under concurrent writers — a $set
+  // computed from the earlier findOne could mint duplicate version numbers and
+  // quietly defeat expectedVersion conflict detection.
+  const updated = (await things.findOneAndUpdate(
     {
       _id: new ObjectId(doc._id),
       deletedAt: null,
@@ -513,22 +515,24 @@ export const updateRecord = async (
       $set: {
         values: mergedValues,
         search: { tokens: [...keptTokens, ...newTokens], publicText: buildPublicText(type, mergedPlain) },
-        version: nextVersion,
         updatedAt: now
-      }
-    }
-  );
-  if (!result.matchedCount) {
+      },
+      $inc: { version: 1 }
+    },
+    { returnDocument: 'after' }
+  )) as any as ThingRecordDoc | null;
+  if (!updated) {
     return expectedVersion !== null
       ? fail(409, `Record changed since version ${expectedVersion} — reload and retry`)
       : notFound();
   }
 
-  const record = toPublicRecord(
-    { ...doc, values: mergedValues, version: nextVersion, updatedAt: now },
-    type,
-    user
-  );
+  // A write grant alone must not become a read oracle: only return the
+  // decrypted record when the caller could also read it.
+  if (!readable) {
+    return { ok: true, record: null };
+  }
+  const record = toPublicRecord(updated, type, user);
   if (isFail(record)) return record;
   return { ok: true, record };
 };
@@ -581,7 +585,7 @@ export const updateRecordPermissions = async (
   const things = await getThingsCollection();
   await things.updateOne(
     { _id: new ObjectId(doc._id) },
-    { $set: { acl, updatedAt: new Date(), version: (doc.version || 1) + 1 } }
+    { $set: { acl, updatedAt: new Date() }, $inc: { version: 1 } }
   );
 
   const projected = projectAclFor(acl, user);
