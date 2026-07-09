@@ -30,6 +30,7 @@ import ThingtimeUrl from './routes/$';
 import TestsPage from './routes/tests';
 import Themes from './routes/themes';
 import VercelPage from './routes/vercel';
+import VerifyEmail from './routes/verify-email';
 import Welcome from './routes/welcome';
 
 const fetchJson = async <T,>(url: string, init: RequestInit = {}) => {
@@ -117,6 +118,7 @@ export const router = createBrowserRouter([
       { path: 'rainbow/*', element: <Rainbow /> },
       { path: 'raw', element: <Raw /> },
       { path: 'register', element: <Register />, loader: requireGuest('/welcome') },
+      { path: 'verify-email', element: <VerifyEmail /> },
       {
         path: 'status',
         element: <StatusPage />,

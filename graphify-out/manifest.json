@@ -750,9 +750,9 @@
     "semantic_hash": ""
   },
   "remix/app/api/utils/auth/emailVerifications.ts": {
-    "mtime": 1783609089.6365561,
-    "ast_hash": "9066712e4f77f3469317bd05ded8f1f6",
-    "semantic_hash": "9066712e4f77f3469317bd05ded8f1f6"
+    "mtime": 1783615952.2239633,
+    "ast_hash": "7b0e4ddbbf31f05e9e174f77d5409ad6",
+    "semantic_hash": ""
   },
   "remix/app/api/utils/auth/getCurrentUser.ts": {
     "mtime": 1783609089.6366262,
@@ -1245,8 +1245,8 @@
     "semantic_hash": ""
   },
   "remix/app/routes.tsx": {
-    "mtime": 1783609089.6754138,
-    "ast_hash": "cb6fc53663aaea4207c6f80d518c415f",
+    "mtime": 1783616054.1074862,
+    "ast_hash": "183c6d0f40e04c9f8e4ddad748b93b00",
     "semantic_hash": ""
   },
   "remix/app/routes/$.tsx": {
@@ -1285,9 +1285,9 @@
     "semantic_hash": "528818ca48168e48264ff513856493ee"
   },
   "remix/app/routes/api/v1/auth/verify-email/_verify-email.tsx": {
-    "mtime": 1783609089.6944828,
-    "ast_hash": "6044212030574f1cb97ef1bc46ff50e9",
-    "semantic_hash": "6044212030574f1cb97ef1bc46ff50e9"
+    "mtime": 1783615991.4264388,
+    "ast_hash": "1ff3732c6541ef665877d21058d6ae11",
+    "semantic_hash": ""
   },
   "remix/app/routes/api/v1/crypto/_crypto.tsx": {
     "mtime": 1783609089.6946661,
@@ -1555,8 +1555,8 @@
     "semantic_hash": "950a24b857c8b01f88bd22a25b38e8f4"
   },
   "remix/vite.config.ts": {
-    "mtime": 1783609089.7875135,
-    "ast_hash": "90b9b4975bcd62f7e35edc1a39a8c41b",
+    "mtime": 1783616591.3482516,
+    "ast_hash": "f7579746071fae2397e3976269b606ac",
     "semantic_hash": ""
   },
   "tsconfig.json": {
@@ -2685,8 +2685,8 @@
     "semantic_hash": ""
   },
   "remix/app/tests/api/apiTests.ts": {
-    "mtime": 1783614502.3985224,
-    "ast_hash": "4c20d2b58bdf0fec688d0793645709be",
+    "mtime": 1783616057.359381,
+    "ast_hash": "ded81ea2d92aa02d59d0f4467c72b940",
     "semantic_hash": ""
   },
   "remix/app/components/Nav/Drawer/DrawerContent.tsx": {
@@ -3280,8 +3280,8 @@
     "semantic_hash": ""
   },
   "remix/app/docs/apiDocs.ts": {
-    "mtime": 1783614431.3442163,
-    "ast_hash": "401fb75ece83188e83618b81607d8732",
+    "mtime": 1783616084.5181918,
+    "ast_hash": "a136760f6e367c0948370d09ed758d62",
     "semantic_hash": ""
   },
   "remix/app/routes/docs/api.tsx": {
@@ -3552,6 +3552,11 @@
   "remix/app/routes/api/v1/crud/types/delete/_delete.tsx": {
     "mtime": 1783610597.1029315,
     "ast_hash": "c8fc7c245115f5274b2f586c2d437a57",
+    "semantic_hash": ""
+  },
+  "remix/app/routes/verify-email.tsx": {
+    "mtime": 1783616233.9016109,
+    "ast_hash": "fc4e958fc7e2462b4dd6fde227e60325",
     "semantic_hash": ""
   }
 }

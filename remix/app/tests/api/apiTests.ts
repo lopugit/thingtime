@@ -192,11 +192,11 @@ export const apiTests: ApiTestDefinition[] = [
   {
     id: 'auth-verify-email-missing',
     name: 'Verify email missing token',
-    description: 'Missing verification tokens redirect to the login verification state.',
+    description: 'Missing verification tokens land on the /verify-email result page.',
     group: 'auth',
     method: 'GET',
     path: '/api/v1/auth/verify-email',
-    expect: expectRedirectedTo('/login?verify=missing')
+    expect: expectRedirectedTo('/verify-email?state=missing')
   },
   {
     id: 'auth-service-account-validation',

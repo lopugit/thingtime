@@ -155,7 +155,16 @@ export default defineConfig({
         target: apiProxyTarget,
         changeOrigin: true,
         configure(proxy) {
-          if (!shouldUseProductionApiProxy) return;
+          if (!shouldUseProductionApiProxy) {
+            // Local Nitro target: restore the browser's Host so origin-derived
+            // links (email verification, password reset) point at the Vite
+            // port that actually serves the SPA — not Nitro's internal port.
+            // changeOrigin stays on for the production-fallback mode below.
+            proxy.on('proxyReq', (proxyReq, req) => {
+              if (req.headers.host) proxyReq.setHeader('host', req.headers.host);
+            });
+            return;
+          }
 
           proxy.on('proxyReq', (proxyReq) => {
             proxyReq.setHeader('x-thingtime-api-fallback', 'vite-dev');

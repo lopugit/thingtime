@@ -388,9 +388,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'auth',
     title: 'Verify email',
     endpoint: '/api/v1/auth/verify-email',
-    summary: 'Consumes an email verification token and redirects to login with a status.',
+    summary: 'Consumes an email verification token and lands on the /verify-email result page.',
     detail:
-      'This endpoint is designed for email links. API clients usually follow redirects or inspect the Location header.',
+      'This endpoint is designed for email links. It redirects to /verify-email with a state describing the outcome (success, already, used, expired, invalid, missing); expired links also carry the email so the page can offer a one-click resend. API clients usually follow redirects or inspect the Location header.',
     auth: {
       mode: 'none',
       description: 'Public token consumption endpoint.'
@@ -399,8 +399,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: [
       'Open the verification URL with token as a query parameter.',
       'Thingtime burns the token so it cannot be reused.',
-      'Successful tokens mark the user emailVerified and redirect to /login?verify=success.',
-      'Missing, expired, or invalid tokens redirect to /login with a reason in the verify query parameter.'
+      'Successful tokens mark the user emailVerified and redirect to /verify-email?state=success (already-verified accounts see state=already).',
+      'Missing, expired, used, or invalid tokens redirect to /verify-email with the reason in the state query parameter; expired adds email= for the resend button.'
     ],
     requestExamples: [
       {
@@ -414,12 +414,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       {
         status: 302,
         description: 'Token accepted.',
-        headers: { Location: '/login?verify=success' }
+        headers: { Location: '/verify-email?state=success' }
+      },
+      {
+        status: 302,
+        description: 'Token expired — the page offers a one-click resend.',
+        headers: { Location: '/verify-email?state=expired&email=ada%40example.com' }
       },
       {
         status: 302,
         description: 'Token missing.',
-        headers: { Location: '/login?verify=missing' }
+        headers: { Location: '/verify-email?state=missing' }
       }
     ]
   }),
