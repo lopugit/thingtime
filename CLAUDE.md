@@ -51,6 +51,11 @@
   installs, and local generated state needed for validation. The current
   dependency directories alone are roughly 1.5 GB when present, and
   generated-output patterns can make managed worktrees larger.
+- Thingtime email delivery work must stay aligned with the owned-stack plan in
+  `docs/email-owned-architecture.md`. App/auth code should enqueue through a
+  shared email service boundary rather than calling SES, SMTP, or another
+  transport directly, so provider-backed and self-hosted delivery share the
+  same templates, events, suppressions, compliance checks, and audit trail.
 - For layout or alignment changes, always verify the affected screen in a live
   browser window before finishing. Use screenshot evidence or measured element
   bounds across the relevant desktop/mobile viewport so centering, max-width,

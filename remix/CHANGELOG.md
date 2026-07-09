@@ -18,6 +18,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- Added `docs/email-owned-architecture.md`, a phased plan for owning
+  Thingtime email end-to-end with a self-hosted SMTP path, Mongo-backed queues
+  and events, stream separation, sender-reputation warm-up, bounce/complaint
+  handling, one-click unsubscribe, abuse contacts, security controls, and
+  compliance requirements. — _Codex (AI), 2026-07-10_
 - Updated the Electron release workflow trigger so merges that modify
   `.github/workflows/electron-release.yml` also spawn the release workflow,
   covering workflow-only release pipeline fixes. — _Codex (AI), 2026-07-08_

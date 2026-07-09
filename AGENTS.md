@@ -88,6 +88,11 @@
   variables, also document the fork-safe setup steps in `README.md`. Use
   placeholder values only; never copy real tokens, passwords, project secrets,
   or account-specific credentials into public docs.
+- Thingtime email delivery work must stay aligned with the owned-stack plan in
+  `docs/email-owned-architecture.md`. App/auth code should enqueue through a
+  shared email service boundary rather than calling SES, SMTP, or another
+  transport directly, so provider-backed and self-hosted delivery share the
+  same templates, events, suppressions, compliance checks, and audit trail.
 - For Vercel dashboard links, do not use `VERCEL_GIT_REPO_OWNER` as the
   dashboard owner slug; that value is the Git provider owner. Prefer Vercel API
   project/deployment data when `VERCEL_API_TOKEN` is available, or an explicit
