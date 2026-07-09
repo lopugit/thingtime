@@ -3,6 +3,7 @@ import { ObjectId } from 'mongodb';
 
 import { resolveTheme, THINGTIME_THEME, TtTheme } from '../../../theme/tokens';
 import { ensureIndexes, getThemesCollection, getUsersCollection } from '../mongodb/collections';
+import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
 // Canonical theme document (thingtime.themes). Themes are stored as the fully
 // resolved, sanitized token document (see app/theme/tokens.ts) so a shared
@@ -14,6 +15,7 @@ export type ThemeDoc = {
   name: string;
   theme: TtTheme;
   visibility: 'private' | 'public';
+  schemaVersion: number;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -80,7 +82,7 @@ export const saveTheme = async (ownerId: string, input: SaveThemeInput): Promise
     const visibility = explicitVisibility ?? (existing.visibility === 'public' ? 'public' : 'private');
     await themes.updateOne(
       { _id: new ObjectId(existing._id) },
-      { $set: { name, theme, visibility, updatedAt: now } }
+      { $set: { name, theme, visibility, schemaVersion: COLLECTION_SCHEMA_VERSIONS.themes, updatedAt: now } }
     );
     return { ok: true, theme: toPublicTheme({ ...existing, name, theme, visibility, updatedAt: now }) };
   }
@@ -98,6 +100,7 @@ export const saveTheme = async (ownerId: string, input: SaveThemeInput): Promise
     name,
     theme,
     visibility,
+    schemaVersion: COLLECTION_SCHEMA_VERSIONS.themes,
     createdAt: now,
     updatedAt: now
   };

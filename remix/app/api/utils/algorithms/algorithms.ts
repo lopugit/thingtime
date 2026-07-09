@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { ObjectId } from 'mongodb';
 
 import { ensureIndexes, getFeedAlgorithmsCollection, getUsersCollection } from '../mongodb/collections';
+import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 import { setUserActiveFeedAlgorithm } from '../auth/users';
 import {
   applyEventsToWeights,
@@ -26,6 +27,7 @@ export type FeedAlgorithmDoc = {
   weights: AlgorithmWeights;
   eventCount: number;
   lastTrainedAt: Date | null;
+  schemaVersion: number;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -200,6 +202,7 @@ export const createAlgorithm = async (
     weights,
     eventCount,
     lastTrainedAt,
+    schemaVersion: COLLECTION_SCHEMA_VERSIONS.feedAlgorithms,
     createdAt: now,
     updatedAt: now
   };

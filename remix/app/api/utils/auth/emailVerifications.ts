@@ -1,4 +1,5 @@
 import { getEmailVerificationsCollection } from '../mongodb/collections';
+import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
 const TWENTY_FOUR_HOURS_MS = 1000 * 60 * 60 * 24;
 
@@ -19,6 +20,7 @@ export const createEmailVerification = async ({
     token: newToken(),
     userId,
     email: email.trim().toLowerCase(),
+    schemaVersion: COLLECTION_SCHEMA_VERSIONS.emailVerifications,
     createdAt: now,
     expiresAt: new Date(now.getTime() + expiresInMs),
     consumedAt: null as Date | null
