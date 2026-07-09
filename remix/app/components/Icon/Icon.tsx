@@ -2,11 +2,21 @@ import React from "react"
 import { Center } from "@chakra-ui/react"
 import emojis from "emojis-list"
 
+import { useTtIconStyle } from "~/hooks/useTtTheme"
+import { LUCIDE_FOR_EMOJI, LUCIDE_ICONS } from "~/theme/icons"
+
 export const Icon = (props) => {
   const name = props?.name
 
+  // theme icon language: emoji (default) or the mapped coloured Lucide twin
+  const iconStyle = useTtIconStyle()
+
   const icon = React.useMemo(() => {
-    // nothing
+    // plain glyphs (tree carets, minimised square) pass straight through —
+    // they're not in emojis-list, so without this they'd hit the 🤷‍♂️ fallback
+    if (["▸", "▾", "▢"]?.includes(name)) {
+      return name
+    }
     if (["⚙️", "gear", "cog"]?.includes(name)) {
       return "⚙️"
     }
@@ -212,6 +222,19 @@ export const Icon = (props) => {
     return "🤷‍♂️"
   }, [name])
 
+  // lucide mode: an explicit contextual name (props.lucide, e.g. a menu
+  // action's fold chevrons) wins; otherwise the resolved emoji's twin.
+  // Unmapped icons stay emoji, so the map can grow lazily.
+  const lucideName =
+    props?.lucide && LUCIDE_ICONS[props.lucide]
+      ? props.lucide
+      : LUCIDE_FOR_EMOJI[icon]
+  const lucide = iconStyle === "lucide" ? LUCIDE_ICONS[lucideName] : undefined
+
+  // emoji glyphs fill more of their em box than Lucide strokes do — scale up
+  // slightly so both languages read the same optical size
+  const lucidePx = Math.round((parseFloat(String(props?.size)) || 14) * 1.15)
+
   return (
     <Center
       transition="all 0.2s ease-out"
@@ -219,7 +242,11 @@ export const Icon = (props) => {
       {...props?.chakras}
       fontSize={props?.size}
     >
-      {icon}
+      {lucide ? (
+        <lucide.Icon size={lucidePx} color={lucide.color} strokeWidth={2} />
+      ) : (
+        icon
+      )}
     </Center>
   )
 }

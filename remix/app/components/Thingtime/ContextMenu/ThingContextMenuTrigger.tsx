@@ -45,6 +45,10 @@ export interface ThingContextMenuTriggerProps {
 	opacity?: number;
 	transition?: string;
 	iconSize?: number | string;
+	// things with children get View verbs (collapse/expand + all-variants)
+	collapsible?: boolean;
+	collapsed?: boolean;
+	onCollapse?: (command: 'collapse' | 'expand' | 'collapse-all' | 'expand-all') => void;
 	onType?: (args: { type: unknown; wrap?: boolean }) => void;
 	onAddChild?: (args: { type: unknown }) => void;
 	onDelete?: () => void;
@@ -93,6 +97,9 @@ export const ThingContextMenuTrigger = (props: ThingContextMenuTriggerProps) => 
 		opacity = 1,
 		transition,
 		iconSize = 7,
+		collapsible = false,
+		collapsed = false,
+		onCollapse,
 		onType,
 		onAddChild,
 		onDelete,
@@ -237,6 +244,8 @@ export const ThingContextMenuTrigger = (props: ThingContextMenuTriggerProps) => 
 			editMode,
 			readonly,
 			canDelete: !!onDelete,
+			collapsible,
+			collapsed,
 			types
 		});
 
@@ -249,9 +258,9 @@ export const ThingContextMenuTrigger = (props: ThingContextMenuTriggerProps) => 
 						label: 'Key',
 						actions: [
 							...(!readonly
-								? [{ id: 'rename-key', command: 'rename-key', label: 'Rename key…', icon: '✏️', hint: 'Edit the property name' }]
+								? [{ id: 'rename-key', command: 'rename-key', label: 'Rename key…', icon: '✏️', lucide: 'text-cursor-input', hint: 'Edit the property name' }]
 								: []),
-							{ id: 'copy-key', command: 'copy-key', label: 'Copy key', icon: '📋', hint: path }
+							{ id: 'copy-key', command: 'copy-key', label: 'Copy key', icon: '📋', lucide: 'copy', hint: path }
 						]
 					},
 					...base.sections
@@ -260,7 +269,7 @@ export const ThingContextMenuTrigger = (props: ThingContextMenuTriggerProps) => 
 		}
 
 		return base;
-	}, [variant, editMode, readonly, onDelete, types, targetZone, path]);
+	}, [variant, editMode, readonly, onDelete, collapsible, collapsed, types, targetZone, path]);
 
 	// ------------------------------------------------------------------
 	// live command implementations
@@ -392,6 +401,12 @@ export const ThingContextMenuTrigger = (props: ThingContextMenuTriggerProps) => 
 				case 'modify':
 					modifyThing();
 					break;
+				case 'collapse':
+				case 'expand':
+				case 'collapse-all':
+				case 'expand-all':
+					onCollapse?.(action.command);
+					break;
 				case 'rename-key':
 					setEditMode?.(() => true);
 					setTimeout(() => {
@@ -440,7 +455,7 @@ export const ThingContextMenuTrigger = (props: ThingContextMenuTriggerProps) => 
 					console.warn('[tt][context-menu] unhandled action', fired);
 			}
 		},
-		[setEditMode, onType, onAddChild, setThingtime, fullPath, lopu, dottedPath, modifyThing, duplicateThing, copyThing, pasteThing, shareThing, onDelete]
+		[setEditMode, onType, onAddChild, onCollapse, setThingtime, fullPath, lopu, dottedPath, modifyThing, duplicateThing, copyThing, pasteThing, shareThing, onDelete]
 	);
 
 	const onClickAway = React.useCallback(() => {
