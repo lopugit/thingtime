@@ -783,6 +783,9 @@ const EditorWindow = (props: { leaf: EditorLeaf; actions: WindowActions; context
 					thing={thing}
 					edit={leaf.edit}
 					codeView={leaf.contentMode === 'code'}
+					// the window body already pads — slim the tree's key gutter
+					// to just the caret width so the root isn't double-inset
+					pathPl="15px"
 					debugId={`EditorWindow-${leaf.id}`}
 				/>
 			</Box>

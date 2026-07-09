@@ -19,6 +19,10 @@ export type ThingContextAction = {
 	payload?: unknown;
 	label: string;
 	icon: string;
+	// contextual Lucide icon name for the lucide icon style (falls back to the
+	// emoji's mapped twin when omitted) — e.g. collapse-all wants folding
+	// chevrons, not a literal leaf
+	lucide?: string;
 	// short caption rendered under the label
 	hint?: string;
 	// keyboard shortcut label rendered on the right (display only)
@@ -56,6 +60,7 @@ export type ThingTypeOption = {
 	key: string;
 	label?: string;
 	icon?: string;
+	lucide?: string;
 	// wrappable types (e.g. containers) can wrap the current value instead of
 	// replacing it — modelled as a nested drill level
 	wrap?: string;
@@ -68,15 +73,15 @@ export type ThingTypeOption = {
 // Mirrors thingtime.settings.types.javascript + .custom: the live menu builds
 // this list from settings; stories/docs use this default.
 export const DEFAULT_THING_TYPES: ThingTypeOption[] = [
-	{ key: 'any', label: 'any', icon: '🪄', group: 'JavaScript' },
-	{ key: 'object', label: 'object', icon: '📦', value: {}, group: 'JavaScript' },
-	{ key: 'array', label: 'array', icon: '📚', value: [], group: 'JavaScript' },
-	{ key: 'string', label: 'string', icon: '💬', value: '', group: 'JavaScript' },
-	{ key: 'number', label: 'number', icon: '💯', value: 0, group: 'JavaScript' },
-	{ key: 'boolean', label: 'boolean', icon: '🌗', value: false, group: 'JavaScript' },
-	{ key: 'function', label: 'function', icon: '📐', group: 'JavaScript' },
-	{ key: 'thingtime-logo', label: 'Thingtime Logo', icon: '🌀', wrap: 'children', group: 'Custom' },
-	{ key: 'violet', label: 'Violet', icon: '🌺', group: 'Custom' }
+	{ key: 'any', label: 'any', icon: '🪄', lucide: 'wand', group: 'JavaScript' },
+	{ key: 'object', label: 'object', icon: '📦', lucide: 'box', value: {}, group: 'JavaScript' },
+	{ key: 'array', label: 'array', icon: '📚', lucide: 'brackets', value: [], group: 'JavaScript' },
+	{ key: 'string', label: 'string', icon: '💬', lucide: 'quote', value: '', group: 'JavaScript' },
+	{ key: 'number', label: 'number', icon: '💯', lucide: 'hash', value: 0, group: 'JavaScript' },
+	{ key: 'boolean', label: 'boolean', icon: '🌗', lucide: 'toggle-left', value: false, group: 'JavaScript' },
+	{ key: 'function', label: 'function', icon: '📐', lucide: 'square-function', group: 'JavaScript' },
+	{ key: 'thingtime-logo', label: 'Thingtime Logo', icon: '🌀', lucide: 'shell', wrap: 'children', group: 'Custom' },
+	{ key: 'violet', label: 'Violet', icon: '🌺', lucide: 'flower-2', group: 'Custom' }
 ];
 
 export type BuildTypesSubmenuOpts = {
@@ -98,7 +103,8 @@ const typeAction = (type: ThingTypeOption, opts: BuildTypesSubmenuOpts = {}): Th
 		command,
 		payload: { type },
 		label: type.label || type.key,
-		icon: type.icon || type.key
+		icon: type.icon || type.key,
+		lucide: type.lucide
 	};
 
 	if (!type.wrap || !wrapLevels) {
@@ -122,6 +128,7 @@ const typeAction = (type: ThingTypeOption, opts: BuildTypesSubmenuOpts = {}): Th
 							payload: { type },
 							label: 'Replace value',
 							icon: type.icon || '🌀',
+							lucide: 'replace',
 							hint: `Become a fresh ${base.label}`
 						},
 						{
@@ -130,6 +137,7 @@ const typeAction = (type: ThingTypeOption, opts: BuildTypesSubmenuOpts = {}): Th
 							payload: { type, wrap: true },
 							label: 'Wrap current value',
 							icon: '🎁',
+							lucide: 'gift',
 							hint: `Keep the value inside a ${base.label}`
 						}
 					]
@@ -174,6 +182,7 @@ export type ThingTemplateOption = {
 	key: string;
 	label: string;
 	icon?: string;
+	lucide?: string;
 	description?: string;
 	// the actual starter value the template applies
 	value?: unknown;
@@ -182,11 +191,12 @@ export type ThingTemplateOption = {
 };
 
 export const DEFAULT_THING_TEMPLATES: ThingTemplateOption[] = [
-	{ key: 'empty-thing', label: 'Empty thing', icon: '📦', description: 'Fresh object with no keys', value: {} },
+	{ key: 'empty-thing', label: 'Empty thing', icon: '📦', lucide: 'package-open', description: 'Fresh object with no keys', value: {} },
 	{
 		key: 'note',
 		label: 'Note',
 		icon: '📖',
+		lucide: 'notebook-pen',
 		description: 'title + body strings',
 		value: { title: 'New note', body: 'Imagine..' }
 	},
@@ -194,6 +204,7 @@ export const DEFAULT_THING_TEMPLATES: ThingTemplateOption[] = [
 		key: 'todo-list',
 		label: 'Todo list',
 		icon: '✅',
+		lucide: 'list-checks',
 		description: 'array of { done, label }',
 		value: { todos: [{ done: false, label: 'First thing to do' }] }
 	},
@@ -201,6 +212,7 @@ export const DEFAULT_THING_TEMPLATES: ThingTemplateOption[] = [
 		key: 'contact',
 		label: 'Contact',
 		icon: '👤',
+		lucide: 'contact',
 		description: 'name, email, phone',
 		value: { name: '', email: '', phone: '' }
 	},
@@ -208,11 +220,13 @@ export const DEFAULT_THING_TEMPLATES: ThingTemplateOption[] = [
 		key: 'more-templates',
 		label: 'More templates…',
 		icon: '🌟',
+		lucide: 'sparkles',
 		children: [
 			{
 				key: 'recipe',
 				label: 'Recipe',
 				icon: '🌺',
+				lucide: 'chef-hat',
 				description: 'ingredients + steps',
 				value: { name: 'New recipe', ingredients: [], steps: [] }
 			},
@@ -220,6 +234,7 @@ export const DEFAULT_THING_TEMPLATES: ThingTemplateOption[] = [
 				key: 'bookmark',
 				label: 'Bookmark',
 				icon: '🔗',
+				lucide: 'bookmark',
 				description: 'url + notes',
 				value: { url: 'https://', notes: '' }
 			},
@@ -227,6 +242,7 @@ export const DEFAULT_THING_TEMPLATES: ThingTemplateOption[] = [
 				key: 'journal-entry',
 				label: 'Journal entry',
 				icon: '✨',
+				lucide: 'notebook-text',
 				description: 'date + entry text',
 				value: { date: '', entry: '' }
 			}
@@ -240,6 +256,7 @@ const templateAction = (template: ThingTemplateOption): ThingContextAction => {
 			id: `template-${template.key}`,
 			label: template.label,
 			icon: template.icon || '🌱',
+			lucide: template.lucide,
 			hint: template.description,
 			submenu: {
 				title: template.label.replace(/…$/, ''),
@@ -259,6 +276,7 @@ const templateAction = (template: ThingTemplateOption): ThingContextAction => {
 		payload: { template },
 		label: template.label,
 		icon: template.icon || '🌱',
+		lucide: template.lucide,
 		hint: template.description
 	};
 };
@@ -282,13 +300,14 @@ export type ThingPermissionOption = {
 	key: string;
 	label: string;
 	icon?: string;
+	lucide?: string;
 	description?: string;
 };
 
 export const DEFAULT_THING_PERMISSIONS: ThingPermissionOption[] = [
-	{ key: 'private', label: 'Private', icon: '🔒', description: 'Only you can see and edit' },
-	{ key: 'shared', label: 'Shared with…', icon: '👥', description: 'Invited people can view or edit' },
-	{ key: 'public', label: 'Public', icon: '🌍', description: 'Anyone with the link can view' }
+	{ key: 'private', label: 'Private', icon: '🔒', lucide: 'lock', description: 'Only you can see and edit' },
+	{ key: 'shared', label: 'Shared with…', icon: '👥', lucide: 'users', description: 'Invited people can view or edit' },
+	{ key: 'public', label: 'Public', icon: '🌍', lucide: 'globe', description: 'Anyone with the link can view' }
 ];
 
 export const buildPermissionsSubmenu = (
@@ -307,6 +326,7 @@ export const buildPermissionsSubmenu = (
 					payload: { permission },
 					label: permission.label,
 					icon: permission.icon || '🔒',
+					lucide: permission.lucide,
 					hint: permission.description,
 					selected: permission.key === selectedKey
 				};
@@ -332,6 +352,7 @@ export const buildPermissionsSubmenu = (
 										command: 'invite-person',
 										label: 'Invite by email…',
 										icon: '✉️',
+										lucide: 'mail',
 										hint: 'Send a view or edit invite'
 									},
 									{
@@ -340,6 +361,7 @@ export const buildPermissionsSubmenu = (
 										payload: { permission },
 										label: 'Set to shared',
 										icon: '👥',
+										lucide: 'users',
 										hint: 'Only invited people'
 									}
 								]
@@ -397,6 +419,7 @@ export const buildThingContextMenuModel = (args: BuildThingContextMenuModelArgs 
 					command: 'toggle-edit-mode',
 					label: editMode ? 'Done editing' : 'Toggle Edit Mode',
 					icon: editMode ? '👀' : '🎨',
+					lucide: editMode ? 'eye' : 'paintbrush',
 					kbd: '⌘E'
 				}
 			]
@@ -410,10 +433,10 @@ export const buildThingContextMenuModel = (args: BuildThingContextMenuModelArgs 
 			label: 'View',
 			actions: [
 				collapsed
-					? { id: 'expand', command: 'expand', label: 'Expand', icon: '▾' }
-					: { id: 'collapse', command: 'collapse', label: 'Collapse', icon: '▸' },
-				{ id: 'collapse-all', command: 'collapse-all', label: 'Collapse all', icon: '🍂', hint: 'This thing + everything inside' },
-				{ id: 'expand-all', command: 'expand-all', label: 'Expand all', icon: '🌳', hint: 'This thing + everything inside' }
+					? { id: 'expand', command: 'expand', label: 'Expand', icon: '▾', lucide: 'chevron-down' }
+					: { id: 'collapse', command: 'collapse', label: 'Collapse', icon: '▸', lucide: 'chevron-right' },
+				{ id: 'collapse-all', command: 'collapse-all', label: 'Collapse all', icon: '🍂', lucide: 'chevrons-down-up', hint: 'This thing + everything inside' },
+				{ id: 'expand-all', command: 'expand-all', label: 'Expand all', icon: '🌳', lucide: 'chevrons-up-down', hint: 'This thing + everything inside' }
 			]
 		});
 	}
@@ -427,6 +450,7 @@ export const buildThingContextMenuModel = (args: BuildThingContextMenuModelArgs 
 					id: 'change-type',
 					label: 'Change type…',
 					icon: '🌀',
+					lucide: 'replace',
 					hint: 'Convert or wrap the current value',
 					submenu: buildTypesSubmenu(types)
 				}
@@ -441,11 +465,12 @@ export const buildThingContextMenuModel = (args: BuildThingContextMenuModelArgs 
 					id: 'apply-template',
 					label: 'Apply template…',
 					icon: '🌱',
+					lucide: 'sprout',
 					hint: 'Default / starter values',
 					submenu: buildTemplatesSubmenu(templates)
 				},
-				{ id: 'modify', command: 'modify', label: 'Modify…', icon: '✏️', hint: 'Open the value editor' },
-				{ id: 'duplicate', command: 'duplicate', label: 'Duplicate', icon: '🐑', kbd: '⌘D' }
+				{ id: 'modify', command: 'modify', label: 'Modify…', icon: '✏️', lucide: 'pen-line', hint: 'Open the value editor' },
+				{ id: 'duplicate', command: 'duplicate', label: 'Duplicate', icon: '🐑', lucide: 'copy-plus', kbd: '⌘D' }
 			]
 		});
 	}
@@ -454,9 +479,9 @@ export const buildThingContextMenuModel = (args: BuildThingContextMenuModelArgs 
 		id: 'clipboard',
 		label: 'Clipboard',
 		actions: [
-			{ id: 'copy', command: 'copy', label: 'Copy', icon: '📋', kbd: '⌘C' },
-			...(!readonly ? [{ id: 'cut', command: 'cut', label: 'Cut', icon: '✂️', kbd: '⌘X' }] : []),
-			...(!readonly ? [{ id: 'paste', command: 'paste', label: 'Paste', icon: '📥', kbd: '⌘V' }] : [])
+			{ id: 'copy', command: 'copy', label: 'Copy', icon: '📋', lucide: 'copy', kbd: '⌘C' },
+			...(!readonly ? [{ id: 'cut', command: 'cut', label: 'Cut', icon: '✂️', lucide: 'scissors', kbd: '⌘X' }] : []),
+			...(!readonly ? [{ id: 'paste', command: 'paste', label: 'Paste', icon: '📥', lucide: 'clipboard-paste', kbd: '⌘V' }] : [])
 		]
 	});
 
@@ -464,11 +489,12 @@ export const buildThingContextMenuModel = (args: BuildThingContextMenuModelArgs 
 		id: 'sharing',
 		label: 'Sharing',
 		actions: [
-			{ id: 'share', command: 'share', label: 'Share…', icon: '🔗', hint: 'Copy a link to this thing' },
+			{ id: 'share', command: 'share', label: 'Share…', icon: '🔗', lucide: 'share-2', hint: 'Copy a link to this thing' },
 			{
 				id: 'permissions',
 				label: 'Permissions…',
 				icon: '🔒',
+				lucide: 'lock',
 				submenu: buildPermissionsSubmenu(permissions, selectedPermissionKey)
 			}
 		]
@@ -478,7 +504,7 @@ export const buildThingContextMenuModel = (args: BuildThingContextMenuModelArgs 
 		sections.push({
 			id: 'danger',
 			actions: [
-				{ id: 'recycle', command: 'recycle', label: 'Recycle', icon: '🗑️', hint: 'Move to the recycle bin', danger: true }
+				{ id: 'recycle', command: 'recycle', label: 'Recycle', icon: '🗑️', lucide: 'trash-2', hint: 'Move to the recycle bin', danger: true }
 			]
 		});
 	}

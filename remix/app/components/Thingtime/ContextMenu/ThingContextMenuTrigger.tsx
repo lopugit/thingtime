@@ -258,9 +258,9 @@ export const ThingContextMenuTrigger = (props: ThingContextMenuTriggerProps) => 
 						label: 'Key',
 						actions: [
 							...(!readonly
-								? [{ id: 'rename-key', command: 'rename-key', label: 'Rename key…', icon: '✏️', hint: 'Edit the property name' }]
+								? [{ id: 'rename-key', command: 'rename-key', label: 'Rename key…', icon: '✏️', lucide: 'text-cursor-input', hint: 'Edit the property name' }]
 								: []),
-							{ id: 'copy-key', command: 'copy-key', label: 'Copy key', icon: '📋', hint: path }
+							{ id: 'copy-key', command: 'copy-key', label: 'Copy key', icon: '📋', lucide: 'copy', hint: path }
 						]
 					},
 					...base.sections

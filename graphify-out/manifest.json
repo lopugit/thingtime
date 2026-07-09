@@ -950,8 +950,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Icon/Icon.tsx": {
-    "mtime": 1783612929.2952914,
-    "ast_hash": "2e062dea1efb56837d20ba8641a91f7c",
+    "mtime": 1783614009.1215909,
+    "ast_hash": "a1b23d02dd718a5a0ffd9a8153f453b0",
     "semantic_hash": ""
   },
   "remix/app/components/Layout/Main.tsx": {
@@ -1070,8 +1070,8 @@
     "semantic_hash": "92d444e302d23d08505fc8d2c8624a24"
   },
   "remix/app/components/Thingtime/Thingtime.tsx": {
-    "mtime": 1783612743.1180851,
-    "ast_hash": "265cdd304673dd05816808793031000b",
+    "mtime": 1783614385.6602936,
+    "ast_hash": "1c6fa8c8519e19ce1dac91a53b188c18",
     "semantic_hash": ""
   },
   "remix/app/components/Thingtime/ThingtimeDemo.tsx": {
@@ -3050,13 +3050,13 @@
     "semantic_hash": ""
   },
   "remix/app/components/Thingtime/ContextMenu/ThingContextMenu.tsx": {
-    "mtime": 1783499002.0153944,
-    "ast_hash": "c21c36dfc4453bf76cb24be35e2927d7",
+    "mtime": 1783614295.8566551,
+    "ast_hash": "6769849856f271cb6f866ee2d20924b1",
     "semantic_hash": ""
   },
   "remix/app/components/Thingtime/ContextMenu/contextMenuModel.ts": {
-    "mtime": 1783609706.4727662,
-    "ast_hash": "5bf200fd3bc5841393816cdf6459bf18",
+    "mtime": 1783614189.7917519,
+    "ast_hash": "24fca58aabc9d25eb2d05b0d89cc3051",
     "semantic_hash": ""
   },
   "remix/app/components/Thingtime/ContextMenu/useThingContextMenu.tsx": {
@@ -3085,8 +3085,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Thingtime/ContextMenu/ThingContextMenuTrigger.tsx": {
-    "mtime": 1783609754.8233182,
-    "ast_hash": "03cdca3fcfbf5855c9c14caf04c9a621",
+    "mtime": 1783614299.2871578,
+    "ast_hash": "0a46fa2e0d1b46486f31e657867f4958",
     "semantic_hash": ""
   },
   "remix/app/components/Thingtime/thingZones.ts": {
@@ -3095,8 +3095,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Thingtime/EditorSplit.tsx": {
-    "mtime": 1783604611.3038406,
-    "ast_hash": "fd77d06607d46252f7767370400feec8",
+    "mtime": 1783614397.8639927,
+    "ast_hash": "78ffc0857473d1baf586311b5ce9c782",
     "semantic_hash": ""
   },
   ".claude/settings.local.json": {
@@ -3270,8 +3270,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Nav/Drawer/EditorDrawerSection.tsx": {
-    "mtime": 1783613023.9890246,
-    "ast_hash": "1cf32195edc58bf88d8fbd3e9cead80b",
+    "mtime": 1783614345.8066578,
+    "ast_hash": "b4d9385bd2e6635c858e8d67a7d7d3ee",
     "semantic_hash": ""
   },
   "remix/app/components/Thingtime/jsonValue.ts": {
@@ -3400,8 +3400,8 @@
     "semantic_hash": ""
   },
   "remix/app/theme/icons.tsx": {
-    "mtime": 1783612831.0476816,
-    "ast_hash": "bafebb196a9eeb261256db4aee762002",
+    "mtime": 1783614357.574301,
+    "ast_hash": "825185e5ab7ea2faac6607a54df5e4af",
     "semantic_hash": ""
   }
 }

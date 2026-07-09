@@ -737,6 +737,9 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 								valuePl={pl}
 								onRendered={onChildRendered}
 								collapseScope={collapseScope}
+								// pre-padded containers (editor windows) slim the key
+								// gutter for the whole tree, not just the root
+								pathPl={props?.pathPl}
 							></Thingtime>
 						);
 					})}
@@ -786,7 +789,8 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		depth,
 		safeJoin(fullPath),
 		chakra,
-		collapseScope
+		collapseScope,
+		props?.pathPl
 	]);
 
 	React.useEffect(() => {
@@ -1311,10 +1315,14 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 									userSelect="none"
 									tabIndex={0}
 									position="absolute"
-									// hug the key text: the path input is padded by pl, so the
-									// caret sits just inside that inset instead of floating at
-									// the row's far-left edge
-									left={pl.map((p) => `calc(${p * 0.25}rem - 15px)`)}
+									// hug the key text: the path input is padded by pathPl/pl,
+									// so the caret sits just inside that inset instead of
+									// floating at the row's far-left edge
+									left={
+										props?.pathPl
+											? `calc(${props.pathPl} - 15px)`
+											: pl.map((p) => `calc(${p * 0.25}rem - 15px)`)
+									}
 									width="14px"
 									height="100%"
 									// hidden until the row is hovered (collapsed nodes keep

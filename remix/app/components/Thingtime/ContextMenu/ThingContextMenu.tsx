@@ -496,7 +496,7 @@ export const ThingContextMenu = (props: ThingContextMenuProps) => {
 					}
 				}}
 			>
-				<Icon name={action.icon} size="12px"></Icon>
+				<Icon name={action.icon} lucide={action.lucide} size="12px"></Icon>
 				<Box minWidth={0}>
 					<Text fontSize="xs" fontWeight={action.selected ? 600 : 500} noOfLines={1}>
 						{action.label}
@@ -509,7 +509,7 @@ export const ThingContextMenu = (props: ThingContextMenuProps) => {
 				</Box>
 				{action.selected && (
 					<Box marginLeft="auto">
-						<Icon name="check" size="10px"></Icon>
+						<Icon name="check" lucide="check" size="10px"></Icon>
 					</Box>
 				)}
 				{action.kbd && (
@@ -632,7 +632,7 @@ export const ThingContextMenu = (props: ThingContextMenuProps) => {
 							title={pinned ? 'Unpin menu' : 'Pin menu open'}
 							onClick={() => onPinnedChange(!pinned)}
 						>
-							<Icon name={pinned ? 'pinned' : 'pin'} size="11px"></Icon>
+							<Icon name={pinned ? 'pinned' : 'pin'} lucide={pinned ? 'pin-off' : 'pin'} size="11px"></Icon>
 						</Flex>
 					)}
 					{(presentation === 'modal' || onClose) && (

@@ -245,10 +245,11 @@ export const EditorDrawerSection = (props: { onNavigate?: () => void }) => {
 							command: 'open-config',
 							label: 'Open layout',
 							icon: '📐',
+							lucide: 'layout-template',
 							hint: editorMounted ? 'Apply to this editor' : 'Open the editor with this layout'
 						},
-						{ id: 'rename-config', command: 'rename-config', label: 'Rename…', icon: '✏️', hint: 'Edit the config name' },
-						{ id: 'duplicate-config', command: 'duplicate-config', label: 'Duplicate', icon: '🐑' },
+						{ id: 'rename-config', command: 'rename-config', label: 'Rename…', icon: '✏️', lucide: 'text-cursor-input', hint: 'Edit the config name' },
+						{ id: 'duplicate-config', command: 'duplicate-config', label: 'Duplicate', icon: '🐑', lucide: 'copy-plus' },
 						...(editorMounted
 							? [
 									{
@@ -256,6 +257,7 @@ export const EditorDrawerSection = (props: { onNavigate?: () => void }) => {
 										command: 'overwrite-config',
 										label: 'Overwrite with current layout',
 										icon: '💾',
+										lucide: 'save',
 										hint: 'Replace the saved windows'
 									}
 							  ]
@@ -264,7 +266,7 @@ export const EditorDrawerSection = (props: { onNavigate?: () => void }) => {
 				},
 				{
 					id: 'danger',
-					actions: [{ id: 'delete-config', command: 'delete-config', label: 'Delete', icon: '🗑️', danger: true }]
+					actions: [{ id: 'delete-config', command: 'delete-config', label: 'Delete', icon: '🗑️', lucide: 'trash-2', danger: true }]
 				}
 			]
 		};
@@ -329,7 +331,7 @@ export const EditorDrawerSection = (props: { onNavigate?: () => void }) => {
 
 			{!editorMounted && (
 				<Flex {...rowStyles} {...rowA11y('Open editor', openEditor)}>
-					<Icon name="💻" size="12px" chakras={{ flexShrink: 0 }} />
+					<Icon name="💻" lucide="monitor" size="12px" chakras={{ flexShrink: 0 }} />
 					<Text fontSize="xs">Open editor</Text>
 				</Flex>
 			)}
@@ -392,7 +394,7 @@ export const EditorDrawerSection = (props: { onNavigate?: () => void }) => {
 			{configNames.map((name) =>
 				renaming === name ? (
 					<Flex key={name} {...rowStyles} cursor="default">
-						<Icon name="📐" size="11px" chakras={{ flexShrink: 0 }} />
+						<Icon name="📐" lucide="layout-template" size="11px" chakras={{ flexShrink: 0 }} />
 						<Input
 							autoFocus
 							value={renameDraft}
@@ -424,7 +426,7 @@ export const EditorDrawerSection = (props: { onNavigate?: () => void }) => {
 						{...rowA11y(`Open config ${name}`, () => openConfig(name))}
 						onContextMenu={(e) => onConfigContextMenu(e, name)}
 					>
-						<Icon name="📐" size="11px" chakras={{ flexShrink: 0 }} />
+						<Icon name="📐" lucide="layout-template" size="11px" chakras={{ flexShrink: 0 }} />
 						<Text fontSize="xs" noOfLines={1} minWidth={0}>
 							{name}
 						</Text>

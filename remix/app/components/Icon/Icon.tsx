@@ -3,7 +3,7 @@ import { Center } from "@chakra-ui/react"
 import emojis from "emojis-list"
 
 import { useTtIconStyle } from "~/hooks/useTtTheme"
-import { LUCIDE_FOR_EMOJI } from "~/theme/icons"
+import { LUCIDE_FOR_EMOJI, LUCIDE_ICONS } from "~/theme/icons"
 
 export const Icon = (props) => {
   const name = props?.name
@@ -222,9 +222,14 @@ export const Icon = (props) => {
     return "🤷‍♂️"
   }, [name])
 
-  // the Lucide twin of the resolved emoji (colour included); unmapped icons
-  // stay emoji even in lucide mode, so the map can grow lazily
-  const lucide = iconStyle === "lucide" ? LUCIDE_FOR_EMOJI[icon] : undefined
+  // lucide mode: an explicit contextual name (props.lucide, e.g. a menu
+  // action's fold chevrons) wins; otherwise the resolved emoji's twin.
+  // Unmapped icons stay emoji, so the map can grow lazily.
+  const lucideName =
+    props?.lucide && LUCIDE_ICONS[props.lucide]
+      ? props.lucide
+      : LUCIDE_FOR_EMOJI[icon]
+  const lucide = iconStyle === "lucide" ? LUCIDE_ICONS[lucideName] : undefined
 
   // emoji glyphs fill more of their em box than Lucide strokes do — scale up
   // slightly so both languages read the same optical size
