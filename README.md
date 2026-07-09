@@ -108,14 +108,16 @@ environment variables for deployed previews/production:
 
 ```sh
 THINGTIME_EMAIL_PROVIDER="ses"
-AWS_SES_REGION="us-east-1"
+AWS_SES_REGION="ap-southeast-2"
 AWS_SES_ACCESS_KEY_ID="<iam-access-key-id>"
 AWS_SES_SECRET_ACCESS_KEY="<iam-secret-access-key>"
-THINGTIME_EMAIL_TRANSACTIONAL_FROM="Thingtime <security@auth.thingtime.com>"
-THINGTIME_EMAIL_NEWSLETTER_FROM="Thingtime Updates <updates@news.thingtime.com>"
+THINGTIME_EMAIL_TRANSACTIONAL_FROM="Thingtime <no-reply@thingtime.com>"
+THINGTIME_EMAIL_NEWSLETTER_FROM="Thingtime Updates <community@thingtime.com>"
 THINGTIME_EMAIL_REPLY_TO="support@thingtime.com"
 AWS_SES_CONFIGURATION_SET="thingtime"
 THINGTIME_EMAIL_FAIL_CLOSED="false"
+SES_SANDBOX="1"
+THINGTIME_EMAIL_TEST_RECIPIENT="support@thingtime.com"
 ```
 
 `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_REGION` also work; the
@@ -123,6 +125,12 @@ THINGTIME_EMAIL_FAIL_CLOSED="false"
 Do not create SES SMTP credentials for the app path. The server uses the SES API
 and needs an IAM access key with permission to call `ses:SendEmail` for the
 verified identities it sends from.
+
+`SES_SANDBOX=1` tells the `/tests` page to wait at least one second before each
+email-sending check so local sandbox tests respect the SES one-message-per-second
+limit. `THINGTIME_EMAIL_TEST_RECIPIENT` is the base inbox used by the email tests;
+the test harness generates plus aliases such as
+`support+signup-<timestamp>@thingtime.com`.
 
 Recommended DNS and SES setup:
 

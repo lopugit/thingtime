@@ -18,6 +18,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- Added `/tests` email delivery checks for signup verification, service-account
+  verification, and the OTP email helper, plus `SES_SANDBOX=1` throttling so
+  sandbox runs wait one second between email sends. — _Codex (AI), 2026-07-09_
 - Added a long-term owned email architecture TODO covering provider-independent
   outbox delivery, event ingestion, inbound mail, self-hosted SMTP relay
   milestones, and sender-reputation safeguards. — _Codex (AI), 2026-07-08_

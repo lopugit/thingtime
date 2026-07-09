@@ -28,6 +28,21 @@ The roadmap keeps SES as Phase 0 and scopes later work around:
 - eventual Thingtime-operated SMTP relay hosts on stable IPs
 - per-stream sender reputation, warmup, throttling, and fallback controls
 
+## Frontend email test kit
+
+The `/tests` page now has an `Email` group with:
+
+- safe provider/test-recipient metadata from `/api/v1/email/config`
+- signup verification email flow through `POST /api/v1/auth/register`
+- service-account verification email flow through
+  `POST /api/v1/auth/service-account`
+- dev/preview-only OTP helper flow through `POST /api/v1/email/test-otp`
+
+When `SES_SANDBOX=1`, email-sending test cases wait at least 1000 ms before
+each send so sandbox runs respect the SES one-message-per-second limit.
+`THINGTIME_EMAIL_TEST_RECIPIENT` controls the base inbox, and the harness
+generates plus aliases for individual flows.
+
 ## Validation
 
 - `git diff --check`
@@ -36,6 +51,9 @@ The roadmap keeps SES as Phase 0 and scopes later work around:
 - `corepack pnpm --dir remix run build`
 - `graphify update .`
 - `GRAPHIFY_VIZ_NODE_LIMIT=1000000 graphify export html`
+- `/api/v1/email/config` local smoke check
+- `/api/v1/email/test-otp` invalid-recipient rejection smoke check
+- Playwright rendered check for `/tests` email group at desktop and mobile
 
 ## Notes
 

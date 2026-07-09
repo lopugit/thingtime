@@ -3,11 +3,40 @@ import {
   expectNdjson,
   expectRedirectedTo,
   expectStatus,
+  type ApiTestContext,
   type ApiTestDefinition
 } from './apiTestRunner';
 
+const uniqueSuffix = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+const DEFAULT_EMAIL_TEST_RECIPIENT = 'support@thingtime.com';
+
+const plusAlias = (email: string, label: string) => {
+  const fallback = DEFAULT_EMAIL_TEST_RECIPIENT;
+  const [local, domain] = (email || fallback).trim().toLowerCase().split('@');
+  const safeLabel = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'test';
+  if (!local || !domain) return fallback;
+
+  return `${local}+${safeLabel}-${uniqueSuffix()}@${domain}`;
+};
+
+const uniqueEmailRegisterBody = (context: ApiTestContext) => {
+  const suffix = uniqueSuffix();
+  const email = plusAlias(context.email?.testRecipient || DEFAULT_EMAIL_TEST_RECIPIENT, 'signup');
+
+  return {
+    username: `ses-signup-${suffix}`,
+    password: 'testpass123',
+    email,
+    displayName: 'SES Signup Test',
+    meta: {
+      source: 'thingtime-tests-page',
+      flow: 'email-signup-verification'
+    }
+  };
+};
+
 const uniqueServiceAccountBody = () => {
-  const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const suffix = uniqueSuffix();
 
   return {
     serviceName: `Thingtime API Test ${suffix}`,
@@ -19,6 +48,28 @@ const uniqueServiceAccountBody = () => {
     }
   };
 };
+
+const uniqueEmailServiceAccountBody = (context: ApiTestContext) => {
+  const suffix = uniqueSuffix();
+  const email = plusAlias(context.email?.testRecipient || DEFAULT_EMAIL_TEST_RECIPIENT, 'service');
+
+  return {
+    serviceName: `SES Service Test ${suffix}`,
+    username: `ses-service-${suffix}`,
+    email,
+    displayName: 'SES Service Test',
+    meta: {
+      source: 'thingtime-tests-page',
+      flow: 'email-service-account-verification'
+    }
+  };
+};
+
+const uniqueEmailOtpBody = (context: ApiTestContext) => ({
+  email: plusAlias(context.email?.testRecipient || DEFAULT_EMAIL_TEST_RECIPIENT, 'otp'),
+  code: String(Math.floor(100000 + Math.random() * 900000)),
+  expiresMinutes: 10
+});
 
 const isObject = (value: any) => value && typeof value === 'object' && !Array.isArray(value);
 
@@ -159,6 +210,87 @@ export const apiTests: ApiTestDefinition[] = [
         deadlineLooksRight
       );
     }, 'Service account response has non-expiring token, seven-day verification window, and 5 GiB allowance.')
+  },
+  {
+    id: 'email-config',
+    name: 'Email test config',
+    description: 'Returns safe email provider/test metadata without exposing SES credentials.',
+    group: 'email',
+    method: 'GET',
+    path: '/api/v1/email/config',
+    expect: expectJson(
+      [200],
+      (body) =>
+        body?.ok === true &&
+        isObject(body?.email) &&
+        ['console', 'ses'].includes(body.email.provider) &&
+        typeof body.email.sesSandbox === 'boolean' &&
+        typeof body.email.testRecipient === 'string',
+      'Email config returned provider, sandbox, and test-recipient metadata.'
+    )
+  },
+  {
+    id: 'email-signup-verification',
+    name: 'Signup verification email',
+    description: 'Creates a throwaway user and sends the normal signup verification email to the configured plus-alias test recipient.',
+    group: 'email',
+    method: 'POST',
+    path: '/api/v1/auth/register',
+    mutates: true,
+    emailSend: true,
+    timeoutMs: 30000,
+    body: uniqueEmailRegisterBody,
+    expect: expectJson([200], (body) => {
+      return (
+        body?.ok === true &&
+        body?.user?.emailVerified === false &&
+        typeof body?.user?.email === 'string' &&
+        body.user.email.includes('@')
+      );
+    }, 'Signup created an unverified user and triggered verification email delivery.')
+  },
+  {
+    id: 'email-service-account-verification',
+    name: 'Service account verification email',
+    description: 'Creates a throwaway service account and sends the service-account verification email to the configured plus-alias test recipient.',
+    group: 'email',
+    method: 'POST',
+    path: '/api/v1/auth/service-account',
+    mutates: true,
+    emailSend: true,
+    timeoutMs: 30000,
+    body: uniqueEmailServiceAccountBody,
+    expect: expectJson([200], (body) => {
+      const payload = decodeJwtPayload(body?.accessToken);
+      return (
+        body?.ok === true &&
+        body?.user?.accountKind === 'service' &&
+        body?.user?.emailVerified === false &&
+        body?.tokenType === 'Bearer' &&
+        !Object.prototype.hasOwnProperty.call(payload || {}, 'exp')
+      );
+    }, 'Service account was created and triggered verification email delivery.')
+  },
+  {
+    id: 'email-otp-helper',
+    name: 'Email OTP helper',
+    description: 'Dev/preview-only check for the OTP email renderer and delivery helper.',
+    group: 'email',
+    method: 'POST',
+    path: '/api/v1/email/test-otp',
+    mutates: true,
+    emailSend: true,
+    timeoutMs: 30000,
+    body: uniqueEmailOtpBody,
+    expect: expectJson(
+      [200, 403],
+      (body, response) =>
+        response.status === 403 ||
+        (body?.ok === true &&
+          ['sent', 'logged'].includes(body?.result?.status) &&
+          typeof body?.result?.emailMessageId === 'string'),
+      'OTP helper sent/logged a message, or was correctly blocked outside local/preview.'
+    )
   },
   {
     id: 'crypto-standards',

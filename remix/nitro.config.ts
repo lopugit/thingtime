@@ -12,6 +12,8 @@ const apiRoutes = [
   'v1/auth/service-account',
   'v1/auth/verify-email',
   'v1/crypto',
+  'v1/email/config',
+  'v1/email/test-otp',
   'v1/health/frontend',
   'v1/health/mongodb',
   'v1/health/nitro',

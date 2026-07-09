@@ -1,6 +1,7 @@
 export type ApiTestGroup =
   | 'auth'
   | 'crypto'
+  | 'email'
   | 'health'
   | 'lopu'
   | 'mongodb'
@@ -12,6 +13,17 @@ export type ApiTestResultStatus = 'pass' | 'fail';
 
 export type ApiTestContext = {
   origin: string;
+  email?: {
+    provider: 'console' | 'ses' | string;
+    region: string;
+    configurationSetName: string | null;
+    transactionalFrom: string;
+    newsletterFrom: string;
+    sesSandbox: boolean;
+    sandboxSendDelayMs: number;
+    testRecipient: string;
+    testRecipientDomain: string;
+  };
 };
 
 export type ApiTestExpectation = (args: {
@@ -29,10 +41,18 @@ export type ApiTestDefinition = {
   method: 'GET' | 'POST';
   path: string;
   mutates?: boolean;
+  emailSend?: boolean;
   timeoutMs?: number;
   body?: unknown | ((context: ApiTestContext) => unknown);
   headers?: Record<string, string>;
   expect: ApiTestExpectation;
+};
+
+const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
+const getEmailSendDelayMs = (test: ApiTestDefinition, context: ApiTestContext) => {
+  if (!test.emailSend || !context.email?.sesSandbox) return 0;
+  return Math.max(1000, Number(context.email.sandboxSendDelayMs) || 0);
 };
 
 export type ApiTestResult = {
@@ -173,6 +193,9 @@ export const runApiTest = async (
   const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
 
   try {
+    const delayMs = getEmailSendDelayMs(test, context);
+    if (delayMs) await sleep(delayMs);
+
     const body = options.hasBodyOverride ? options.bodyOverride : resolveApiTestBody(test, context);
     const response = await fetch(test.path, {
       method: test.method,

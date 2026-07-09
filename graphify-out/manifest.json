@@ -1490,9 +1490,9 @@
     "semantic_hash": ""
   },
   "remix/nitro.config.ts": {
-    "mtime": 1783369835.6777053,
-    "ast_hash": "b1fc8211fe5a270548832bca2e88953e",
-    "semantic_hash": "b1fc8211fe5a270548832bca2e88953e"
+    "mtime": 1783600222.482919,
+    "ast_hash": "85cf64d56f3cd1f781470bc430c7dbb4",
+    "semantic_hash": ""
   },
   "remix/package.json": {
     "mtime": 1783430483.1984317,
@@ -1540,9 +1540,9 @@
     "semantic_hash": "3e068c437e00eacf7136b9836e06d3a0"
   },
   "remix/server/routes/api/[...].ts": {
-    "mtime": 1783369835.7275002,
-    "ast_hash": "03816b8b43b87575106c186d04a6298f",
-    "semantic_hash": "03816b8b43b87575106c186d04a6298f"
+    "mtime": 1783600222.4826314,
+    "ast_hash": "f1d69ef26cae10553b82a392bcab3a33",
+    "semantic_hash": ""
   },
   "remix/server/routes/api/root-data.get.ts": {
     "mtime": 1783369835.7277799,
@@ -1600,8 +1600,8 @@
     "semantic_hash": "459fb3a271e5340a04d5f7275dfd1195"
   },
   "README.md": {
-    "mtime": 1783439674.5724227,
-    "ast_hash": "a6874969bc6a97009d1a5dc91c25f0eb",
+    "mtime": 1783600643.6758757,
+    "ast_hash": "c5c865fbed0362511e5aee5e13d13ebd",
     "semantic_hash": ""
   },
   "VERCEL_DEPLOYMENTS.md": {
@@ -1825,8 +1825,8 @@
     "semantic_hash": "f162fbffa18046af73dfca08802a536f"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1783439674.5740643,
-    "ast_hash": "74d6edf3ced500a85fa705e4e9b7f865",
+    "mtime": 1783600222.4842694,
+    "ast_hash": "6127f0c4a2d00ccfff1756d555c291f2",
     "semantic_hash": ""
   },
   "remix/README.md": {
@@ -2690,19 +2690,19 @@
     "semantic_hash": "6eb815f0cfbe5e0c76790ee42833aa81"
   },
   "remix/app/routes/tests.tsx": {
-    "mtime": 1783369835.6729658,
-    "ast_hash": "a07f281e3cfa2c169e448a2b32187e2b",
-    "semantic_hash": "a07f281e3cfa2c169e448a2b32187e2b"
+    "mtime": 1783600239.4528992,
+    "ast_hash": "4390eb4d830b9f3a4996044bed82753f",
+    "semantic_hash": ""
   },
   "remix/app/tests/api/apiTestRunner.ts": {
-    "mtime": 1783369835.6757245,
-    "ast_hash": "c116688c85d2180d9a5621d9b4a513a4",
-    "semantic_hash": "c116688c85d2180d9a5621d9b4a513a4"
+    "mtime": 1783600222.4831653,
+    "ast_hash": "84e0657b313fd32152ede758081b97c5",
+    "semantic_hash": ""
   },
   "remix/app/tests/api/apiTests.ts": {
-    "mtime": 1783430423.9938514,
-    "ast_hash": "9db1db0a8dc925a9c8a071a84faa52e1",
-    "semantic_hash": "9db1db0a8dc925a9c8a071a84faa52e1"
+    "mtime": 1783600298.517945,
+    "ast_hash": "0258bac38d2999f6712291e12295e00f",
+    "semantic_hash": ""
   },
   "remix/app/components/Nav/Drawer/DrawerContent.tsx": {
     "mtime": 1783369835.6349258,
@@ -3005,13 +3005,28 @@
     "semantic_hash": ""
   },
   "PRs/35-codex-email-ses-mongodb--add-mongo-backed-ses-email-delivery.md": {
-    "mtime": 1783439674.574498,
-    "ast_hash": "b1552516ca56908efb3afdd58ec29774",
+    "mtime": 1783600761.8417394,
+    "ast_hash": "2b04267ddd550739ca2976028112edbb",
     "semantic_hash": ""
   },
   "docs/email-owned-architecture.md": {
     "mtime": 1783439674.571828,
     "ast_hash": "eb5b651e67f68e463d028d1c960e673c",
+    "semantic_hash": ""
+  },
+  "remix/app/api/utils/email/testConfig.ts": {
+    "mtime": 1783600222.4818988,
+    "ast_hash": "48781e8e81c86ca91b5d3cb10859e8c6",
+    "semantic_hash": ""
+  },
+  "remix/app/routes/api/v1/email/config/_config.tsx": {
+    "mtime": 1783600222.4821184,
+    "ast_hash": "7040eb659c3bf2f2e8c91bc6f913c84a",
+    "semantic_hash": ""
+  },
+  "remix/app/routes/api/v1/email/test-otp/_test-otp.tsx": {
+    "mtime": 1783600222.4823468,
+    "ast_hash": "5af6fa3cc4f1a10a925735382ff6a538",
     "semantic_hash": ""
   }
 }
