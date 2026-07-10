@@ -10,7 +10,7 @@ import { FeedFilters } from './FeedFilters';
 import { PostComposer } from './PostComposer';
 import { PostList } from './PostList';
 import { useFeedEngagement } from './useFeedEngagement';
-import type { FeedFiltersState, PublicPost } from './feedTypes';
+import type { FeedFiltersState, PostChange, PublicPost } from './feedTypes';
 
 // The /feed page: composer + algorithm picker + filters over an infinite
 // post column. Guest-visible (public posts only); engagement telemetry from
@@ -107,8 +107,14 @@ export const FeedPage = () => {
     load({ cursor: nextCursor });
   }, [nextCursor, load]);
 
-  const handlePostChanged = React.useCallback((id: string, next: PublicPost | null) => {
-    setPosts((prev) => (next ? prev.map((post) => (post.id === id ? next : post)) : prev.filter((post) => post.id !== id)));
+  const handlePostChanged = React.useCallback((id: string, next: PostChange) => {
+    setPosts((prev) =>
+      prev.flatMap((post) => {
+        if (post.id !== id) return [post];
+        const resolved = typeof next === 'function' ? next(post) : next;
+        return resolved ? [resolved] : [];
+      })
+    );
   }, []);
 
   const handlePosted = React.useCallback((post: PublicPost) => {

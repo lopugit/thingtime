@@ -21,6 +21,7 @@ future Claude sessions (use alongside `graphify-out/` for codebase orientation).
 | 09 | Security hardening (unauth admin/data endpoints, auth rate limiting, persisted-state `eval`/CSP, Date.parse corruption) | 🔴 Not started · ⚠️ has urgent items | [09-security-hardening.md](./09-security-hardening.md) |
 | 10 | Delight & growth ideas (sharing loops, theme gallery, algorithm-growth design, Commander/DevKit power-ups, easter eggs) | 🌱 Idea bank · some eggs shipped | [10-delight-and-growth-ideas.md](./10-delight-and-growth-ideas.md) |
 | 11 | Account switcher — multi-account sign-in (`tt_accounts` roster, switch/remove, add + register-new inline) | 🟢 Built, live-tested locally | [11-account-switcher.md](./11-account-switcher.md) |
+| 12 | Multi-emoji reactions + custom emoji picker + optimistic UI (native keyboard, typed multi-emoji tokens, paginated recents, no loading flashes) | 🟢 Built, live-tested locally | [12-reactions-and-optimistic-ui.md](./12-reactions-and-optimistic-ui.md) |
 
 ## Conventions (see `FUNDAMENTALS.md`)
 

@@ -1,8 +1,15 @@
 import React from 'react';
 
+import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '../Lopu/useLopu';
+
+// Device-scoped mirror of the last-known roster so the switcher paints its rows
+// instantly on open instead of a "Checking accounts…" spinner (optimistic
+// rendering). Only the public account info the client already holds; overwritten
+// (to []) on full sign-out.
+const ROSTER_CACHE_KEY = 'tt-accounts-roster';
 
 export type SwitcherAccountUser = {
   id: string;
@@ -24,9 +31,19 @@ export const useAccountSwitcher = () => {
   const lopu = useLopu();
   const user = useCurrentUser();
 
-  const [accounts, setAccounts] = React.useState<SwitcherAccount[]>([]);
-  const [loading, setLoading] = React.useState(true);
+  // Seed synchronously from the device mirror so the first paint shows the
+  // last-known roster; the spinner is reserved for a true cold start (no cache).
+  const [accounts, setAccounts] = React.useState<SwitcherAccount[]>(
+    () => readLocalCache<SwitcherAccount[]>(ROSTER_CACHE_KEY) || []
+  );
+  const [loading, setLoading] = React.useState(() => readLocalCache<SwitcherAccount[]>(ROSTER_CACHE_KEY) === null);
   const [busyUserId, setBusyUserId] = React.useState<string | null>(null);
+
+  // Every roster update funnels through here so the mirror stays in lockstep.
+  const commitAccounts = React.useCallback((next: SwitcherAccount[]) => {
+    setAccounts(next);
+    writeLocalCache(ROSTER_CACHE_KEY, next);
+  }, []);
 
   // useApi()'s return object is rebuilt per render — refs keep the callbacks
   // below stable without refetch loops (same pattern as Feed.tsx).
@@ -34,11 +51,13 @@ export const useAccountSwitcher = () => {
   apiRef.current = api;
   const lopuRef = React.useRef(lopu);
   lopuRef.current = lopu;
+  const commitRef = React.useRef(commitAccounts);
+  commitRef.current = commitAccounts;
 
   const refresh = React.useCallback(async () => {
     try {
       const resp = await apiRef.current.v1.auth.accounts.list();
-      if (resp?.ok) setAccounts(resp.accounts || []);
+      if (resp?.ok) commitRef.current(resp.accounts || []);
     } catch {
       // keep rendering whatever the switcher last knew
     } finally {
@@ -57,7 +76,7 @@ export const useAccountSwitcher = () => {
     try {
       const resp = await apiRef.current.v1.auth.accounts.switch({ userId: target.id });
       if (resp?.ok) {
-        setAccounts(resp.accounts || []);
+        commitRef.current(resp.accounts || []);
         lopuRef.current({
           title: `Switched to @${resp.user?.username || target.username} ✨`,
           status: 'success',
@@ -72,7 +91,7 @@ export const useAccountSwitcher = () => {
       });
     } catch (err: any) {
       // non-2xx throws the parsed payload; a 404 carries the pruned roster
-      if (Array.isArray(err?.accounts)) setAccounts(err.accounts);
+      if (Array.isArray(err?.accounts)) commitRef.current(err.accounts);
       lopuRef.current({
         title: 'Could not switch accounts',
         description: err?.error || 'Could not reach the server.',
@@ -89,7 +108,7 @@ export const useAccountSwitcher = () => {
     try {
       const resp = await apiRef.current.v1.auth.accounts.remove({ userId: target.id });
       if (resp?.ok) {
-        setAccounts(resp.accounts || []);
+        commitRef.current(resp.accounts || []);
         lopuRef.current({
           title: `Signed @${target.username} out 👋`,
           description: resp.user ? `Now on @${resp.user.username}.` : undefined,
@@ -126,7 +145,7 @@ export const useAccountSwitcher = () => {
     try {
       const resp = await apiRef.current.v1.auth.logout(args);
       if (resp?.ok) {
-        if (Array.isArray(resp.accounts)) setAccounts(resp.accounts);
+        if (Array.isArray(resp.accounts)) commitRef.current(resp.accounts);
         lopuRef.current({
           title: resp.user ? `Logged out — switched to @${resp.user.username} ✨` : 'Logged out',
           status: 'success',

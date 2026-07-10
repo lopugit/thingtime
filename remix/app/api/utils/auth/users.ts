@@ -130,6 +130,44 @@ export const setUserActiveFeedAlgorithm = async (userId: string, algorithmShareI
   );
 };
 
+// Recently-used reaction tokens live in meta.recentReactions as a most-recent-
+// first MRU list, so the custom-emoji picker's "Recently Used" follows the user
+// across devices and roster accounts (same tier as activeThemeId). Capped high
+// enough to feel unlimited while keeping the user doc lean; it is NOT projected
+// onto the public user (fetched lazily by the picker instead).
+const MAX_RECENT_REACTIONS = 500;
+
+// Push a token to the front of the user's recents (de-duped) and return the
+// updated MRU list. Two writes because Mongo can't $pull and $push one field
+// in a single update.
+export const pushUserRecentReaction = async (userId: string, token: string): Promise<string[]> => {
+  if (!ObjectId.isValid(userId)) return [];
+  const users = await getUsersCollection();
+  const _id = new ObjectId(userId);
+  await users.updateOne({ _id }, { $pull: { 'meta.recentReactions': token } } as any);
+  await users.updateOne(
+    { _id },
+    {
+      $push: {
+        'meta.recentReactions': { $each: [token], $position: 0, $slice: MAX_RECENT_REACTIONS }
+      },
+      $set: { updatedAt: new Date() }
+    } as any
+  );
+  const doc = await users.findOne({ _id }, { projection: { 'meta.recentReactions': 1 } });
+  return Array.isArray(doc?.meta?.recentReactions) ? (doc!.meta.recentReactions as string[]) : [];
+};
+
+// The user's full recents MRU (most-recent-first), for the picker to page.
+export const getUserRecentReactions = async (userId: string): Promise<string[]> => {
+  if (!ObjectId.isValid(userId)) return [];
+  const doc = await (await getUsersCollection()).findOne(
+    { _id: new ObjectId(userId) },
+    { projection: { 'meta.recentReactions': 1 } }
+  );
+  return Array.isArray(doc?.meta?.recentReactions) ? (doc!.meta.recentReactions as string[]) : [];
+};
+
 const MAX_BIO_CHARS = 500;
 const MAX_DISPLAY_NAME_CHARS = 80;
 // Generous enough for a small pasted data:image URI, small enough to keep user

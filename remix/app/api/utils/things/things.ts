@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { ObjectId } from 'mongodb';
 
 import { ensureIndexes, getThingsCollection, getUsersCollection } from '../mongodb/collections';
+import { pushUserRecentReaction } from '../auth/users';
+import { sanitizeReactionToken } from '~/utils/reactionTokens';
 import { scorePost, type AlgorithmWeights, type PostFeatures } from './feedRanking';
 
 // Feed posts are things (thingtime.things) with kind:'post'. shareId is the
@@ -73,7 +75,7 @@ export type PublicPost = {
   listing: MarketplaceListing | null;
   tags: string[];
   reactionCounts: Record<string, number>;
-  viewerReaction: string | null;
+  viewerReactions: string[];
   commentCount: number;
   comments: PublicComment[];
   shareCount: number;
@@ -96,6 +98,13 @@ const MAX_TAGS = 12;
 const MAX_TAG_CHARS = 40;
 const MAX_COMMENT_CHARS = 1000;
 const MAX_COMMENTS_PER_POST = 500;
+// Reactions are now open-vocabulary (any emoji / multi-emoji token), so bound
+// them the way comments are bounded: a post holds at most this many DISTINCT
+// reaction tokens, and one user contributes at most this many. Without these a
+// single account could mint unlimited `reactions.<token>` keys and brick a
+// post's shared doc (16 MB cap) + bloat every viewer's feed payload/DOM.
+const MAX_REACTION_KEYS_PER_POST = 100;
+const MAX_REACTIONS_PER_USER_PER_POST = 20;
 const RETURNED_COMMENTS = 20;
 const MAX_FEED_LIMIT = 50;
 const DEFAULT_FEED_LIMIT = 20;
@@ -271,12 +280,15 @@ const reactionCountsOf = (doc: FeedPostDoc): Record<string, number> => {
   return counts;
 };
 
-const viewerReactionOf = (doc: FeedPostDoc, viewerId: string | null): string | null => {
-  if (!viewerId) return null;
+// Every reaction token the viewer has toggled on this post (a user can react
+// with several distinct emoji, so this is a set, not a single value).
+const viewerReactionsOf = (doc: FeedPostDoc, viewerId: string | null): string[] => {
+  if (!viewerId) return [];
+  const out: string[] = [];
   for (const [emoji, userIds] of Object.entries(doc.reactions || {})) {
-    if (Array.isArray(userIds) && userIds.includes(viewerId)) return emoji;
+    if (Array.isArray(userIds) && userIds.includes(viewerId)) out.push(emoji);
   }
-  return null;
+  return out;
 };
 
 export const toPublicPosts = async (docs: FeedPostDoc[], viewerId: string | null): Promise<PublicPost[]> => {
@@ -317,7 +329,7 @@ export const toPublicPosts = async (docs: FeedPostDoc[], viewerId: string | null
       listing: doc.listing || null,
       tags: doc.tags || [],
       reactionCounts: reactionCountsOf(doc),
-      viewerReaction: viewerReactionOf(doc, viewerId),
+      viewerReactions: viewerReactionsOf(doc, viewerId),
       commentCount: (doc.comments || []).length,
       comments,
       shareCount: doc.shareCount || 0,
@@ -517,36 +529,72 @@ export const toggleReaction = async (
   viewerId: string,
   shareId: unknown,
   emoji: unknown
-): Promise<Fail | { ok: true; reactionCounts: Record<string, number>; viewerReaction: string | null }> => {
-  if (emoji !== null && (typeof emoji !== 'string' || !REACTION_EMOJIS.includes(emoji))) {
+): Promise<
+  | Fail
+  | {
+      ok: true;
+      reactionCounts: Record<string, number>;
+      viewerReactions: string[];
+      recentReactions?: string[];
+    }
+> => {
+  // Any emoji or multi-emoji group is a valid reaction token now (not just the
+  // 6 quick ones) — validated emoji-only + Mongo-key-safe by the shared helper.
+  const token = sanitizeReactionToken(emoji);
+  if (emoji !== null && token === null) {
     return fail(400, 'Unsupported reaction');
   }
   const doc = await findViewablePost(shareId, viewerId);
   if (!doc) return fail(404, 'Post not found');
 
-  const previous = viewerReactionOf(doc, viewerId);
-  // reacting with the same emoji again clears it (toggle), a different one replaces
-  const next = typeof emoji === 'string' && emoji !== previous ? emoji : null;
+  const current = viewerReactionsOf(doc, viewerId);
+  // Independent per-emoji toggle: a token you already have is removed, a new
+  // one is added — reacting with one emoji never clears your others.
+  const removing = token !== null && current.includes(token);
+  const adding = token !== null && !current.includes(token);
+
+  // Bound reaction growth (see the caps above). Removing is always allowed.
+  if (adding) {
+    if (current.length >= MAX_REACTIONS_PER_USER_PER_POST) {
+      return fail(400, `You can add at most ${MAX_REACTIONS_PER_USER_PER_POST} reactions to a post`);
+    }
+    const existingKeys = Object.keys(doc.reactions || {});
+    if (!existingKeys.includes(token!) && existingKeys.length >= MAX_REACTION_KEYS_PER_POST) {
+      return fail(400, 'This post has reached its reaction limit');
+    }
+  }
 
   // targeted update — never rewrites other users' reaction arrays
   const update: Record<string, any> = { $set: { updatedAt: new Date() } };
-  if (previous) update.$pull = { [`reactions.${previous}`]: viewerId };
-  if (next) update.$addToSet = { [`reactions.${next}`]: viewerId };
+  if (removing) update.$pull = { [`reactions.${token}`]: viewerId };
+  if (adding) update.$addToSet = { [`reactions.${token}`]: viewerId };
 
   const things = await getThingsCollection();
-  if (previous || next) {
+  if (removing || adding) {
     await things.updateOne({ shareId: doc.shareId } as any, update);
   }
 
   const reactions: Record<string, string[]> = {};
   Object.entries(doc.reactions || {}).forEach(([key, userIds]) => {
-    const rest = (userIds || []).filter((id) => id !== viewerId);
-    if (rest.length) reactions[key] = rest;
+    reactions[key] = [...(userIds || [])];
   });
-  if (next) reactions[next] = [...(reactions[next] || []), viewerId];
+  if (token) {
+    const others = (reactions[token] || []).filter((id) => id !== viewerId);
+    reactions[token] = adding ? [...others, viewerId] : others;
+    if (!reactions[token].length) delete reactions[token];
+  }
+
+  // Record the token in the viewer's recents only when they add it (so the
+  // custom-emoji picker's "Recently Used" reflects what they actually use).
+  const recentReactions = adding && token ? await pushUserRecentReaction(viewerId, token) : undefined;
 
   const updated: FeedPostDoc = { ...doc, reactions };
-  return { ok: true, reactionCounts: reactionCountsOf(updated), viewerReaction: viewerReactionOf(updated, viewerId) };
+  return {
+    ok: true,
+    reactionCounts: reactionCountsOf(updated),
+    viewerReactions: viewerReactionsOf(updated, viewerId),
+    recentReactions
+  };
 };
 
 export const addComment = async (

@@ -110,6 +110,7 @@ export function useApi() {
     things: {
       feed: useCallback(async (args) => getJson(`/api/v1/things/feed${toQuery(args)}`), []),
       userPosts: useCallback(async (args) => getJson(`/api/v1/things/user${toQuery(args)}`), []),
+      reactionsRecent: useCallback(async () => getJson('/api/v1/things/reactions-recent'), []),
       create: useCallback(
         async (args) => {
           const { type, text, images, listing, visibility, tags } = args;

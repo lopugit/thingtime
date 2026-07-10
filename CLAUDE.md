@@ -55,6 +55,17 @@
   browser window before finishing. Use screenshot evidence or measured element
   bounds across the relevant desktop/mobile viewport so centering, max-width,
   overflow, and overlap behavior match the request.
+- Optimistic rendering at all times (UI house rule): never flash a loading
+  screen, spinner, or skeleton when we already have prior or cached state.
+  Render the last-known value instantly from cache/local state and refetch in
+  the background, reconciling (and reverting on failure) when fresh data lands.
+  Only show a loading state on a true cold start with nothing to show. Use the
+  synchronous `~/hooks/localCache` tier (localStorage, keys `tt-<domain>`) for
+  anything that gates first paint — the async localforage `thingtime` blob
+  can't seed the first render. Examples: the account switcher paints its
+  last-known roster on open (not "Checking accounts…"); post reactions toggle
+  instantly before the API returns; the emoji picker's Recently Used paints
+  from cache while the server list loads.
 - The native iOS app lives in `iOS/` and uses XcodeGen; treat
   `iOS/project.yml` as the source of truth and run `xcodegen generate` inside
   `iOS/` before `xcodebuild` checks. Keep generated `.xcodeproj` files

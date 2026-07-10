@@ -1544,33 +1544,71 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'things',
     title: 'React to post',
     endpoint: '/api/v1/things/react',
-    summary: 'Sets, replaces, or clears the current user reaction on a visible post.',
+    summary: 'Toggles one of the current user reactions on a visible post (multi-react).',
     detail:
-      'Posting the same emoji again, or null, clears the viewer reaction. Reaction counts are returned for immediate card updates.',
+      'emoji may be a single emoji or a multi-emoji group typed/pasted as one token (e.g. "🤣🤣🙌💀💦"). Toggling a token you already have removes it, a new one is added — you can hold several at once. Adding a token also records it in your recent reactions. Posting the same token again, or null, is the clear/no-op. Reaction counts are returned for immediate card updates.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
     },
     methods: ['POST'],
     steps: [
-      'POST id and emoji, or emoji null to clear.',
+      'POST id and emoji (a single emoji or a multi-emoji token), or emoji null for a no-op.',
       'The post must be visible to the current user.',
-      'Use reactionCounts and viewerReaction to update UI state.',
+      'Use reactionCounts and viewerReactions to update UI state; recentReactions (present when a token was added) refreshes the picker.',
       'Handle 401 unauthenticated and 404 for missing or not-visible posts.'
     ],
     requestExamples: [
       {
-        name: 'Set reaction',
-        description: 'React to a post.',
+        name: 'Toggle reaction',
+        description: 'Add or remove one reaction token on a post.',
         method: 'POST',
-        body: { id: 'post_123', emoji: 'like' }
+        body: { id: 'post_123', emoji: '🤣🤣🙌💀💦' }
       }
     ],
     responseExamples: [
       {
         status: 200,
-        description: 'Reaction updated.',
-        body: { ok: true, reactionCounts: { like: 1 }, viewerReaction: 'like' }
+        description: 'Reaction toggled.',
+        body: {
+          ok: true,
+          reactionCounts: { '👍': 3, '🤣🤣🙌💀💦': 1 },
+          viewerReactions: ['👍', '🤣🤣🙌💀💦'],
+          recentReactions: ['🤣🤣🙌💀💦', '👍']
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'things-reactions-recent',
+    group: 'things',
+    title: 'Recent reactions',
+    endpoint: '/api/v1/things/reactions-recent',
+    summary: 'Returns the caller recently-used emoji tokens (most-recent-first).',
+    detail:
+      'The custom-emoji picker loads this lazily when it opens and pages through it 20 at a time. Tokens are single emoji or multi-emoji groups. Anonymous callers get an empty list.',
+    auth: {
+      mode: 'optional',
+      description: 'Reads the auth cookie or Bearer token when present; anonymous callers receive an empty list.'
+    },
+    methods: ['GET'],
+    steps: [
+      'Send a GET request with credentials or a bearer token.',
+      'Render recentReactions in the picker, 20 at a time with a "show more" pager.',
+      'Seed from a local snapshot first for an instant render, then reconcile with this response.'
+    ],
+    requestExamples: [
+      {
+        name: 'Load recent reactions',
+        description: 'Fetch the caller recently-used emoji.',
+        method: 'GET'
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Recently-used tokens, newest first.',
+        body: { ok: true, recentReactions: ['🤣🤣🙌💀💦', '👍', '🔥', '💀'] }
       }
     ]
   }),

@@ -46,6 +46,7 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/things/delete': () => import('../../../app/routes/api/v1/things/delete/_delete'),
   'v1/things/feed': () => import('../../../app/routes/api/v1/things/feed/_feed'),
   'v1/things/react': () => import('../../../app/routes/api/v1/things/react/_react'),
+  'v1/things/reactions-recent': () => import('../../../app/routes/api/v1/things/reactions-recent/_reactions-recent'),
   'v1/things/share': () => import('../../../app/routes/api/v1/things/share/_share'),
   'v1/things/user': () => import('../../../app/routes/api/v1/things/user/_user'),
   'v1/users/profile': () => import('../../../app/routes/api/v1/users/profile/_profile'),

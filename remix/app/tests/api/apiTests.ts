@@ -538,6 +538,33 @@ export const apiTests: ApiTestDefinition[] = [
     expect: expectJson([401, 404], (body) => body?.ok === false && typeof body?.error === 'string', 'Reaction was rejected with an error shape.')
   },
   {
+    id: 'things-react-invalid-emoji',
+    name: 'Reaction tokens must be emoji',
+    description: 'A non-emoji reaction token is rejected (400) before touching the post; anonymous callers get 401.',
+    group: 'things',
+    method: 'POST',
+    path: '/api/v1/things/react',
+    body: { id: 'not-a-real-post-id', emoji: 'not-an-emoji' },
+    expect: expectJson(
+      [400, 401],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Non-emoji reaction token was rejected with an error shape.'
+    )
+  },
+  {
+    id: 'things-reactions-recent',
+    name: 'Recent reactions list',
+    description: 'The recent-reactions route returns an array (empty for anonymous callers).',
+    group: 'things',
+    method: 'GET',
+    path: '/api/v1/things/reactions-recent',
+    expect: expectJson(
+      [200],
+      (body) => body?.ok === true && Array.isArray(body?.recentReactions),
+      'Recent reactions returned an array.'
+    )
+  },
+  {
     id: 'things-comment-guarded',
     name: 'Comments are guarded',
     description: 'Commenting without a session (or on an unknown post) is rejected with an error shape.',

@@ -1,7 +1,7 @@
 {
   "AGENTS.md": {
-    "mtime": 1783635169.2880588,
-    "ast_hash": "66ab33a204d74e6f8601851448479935",
+    "mtime": 1783680698.3678303,
+    "ast_hash": "d928e0541d7ae0ec8efab2579e83183e",
     "semantic_hash": ""
   },
   ".claude/settings.json": {
@@ -785,8 +785,8 @@
     "semantic_hash": "beac198714a3203970a2a5e34e480124"
   },
   "remix/app/api/utils/auth/users.ts": {
-    "mtime": 1783635169.5531092,
-    "ast_hash": "ee325beee76a53d7278c6fa23891ed03",
+    "mtime": 1783680698.368861,
+    "ast_hash": "1fb132535ace19dab4983a9411e903ec",
     "semantic_hash": ""
   },
   "remix/app/api/utils/crypto/cryptoTools.server.ts": {
@@ -1185,8 +1185,8 @@
     "semantic_hash": "2c876691ea163b0306ebf575cf88e1b4"
   },
   "remix/app/hooks/useApi.tsx": {
-    "mtime": 1783635927.6411633,
-    "ast_hash": "ca6d92fe0b19a91048552bdae70808a0",
+    "mtime": 1783680698.3707829,
+    "ast_hash": "9db3691deefdbe7ea8fbee68099cc641",
     "semantic_hash": ""
   },
   "remix/app/hooks/useAsyncFetcher.tsx": {
@@ -1485,8 +1485,8 @@
     "semantic_hash": ""
   },
   "remix/package.json": {
-    "mtime": 1783635169.6273181,
-    "ast_hash": "9b8e429f6bbfcc8f9d1318286c32923e",
+    "mtime": 1783680698.3713279,
+    "ast_hash": "8e628c51bfd7c59d4c39b4d46daa2109",
     "semantic_hash": ""
   },
   "remix/public/manifest.json": {
@@ -1530,8 +1530,8 @@
     "semantic_hash": "3e068c437e00eacf7136b9836e06d3a0"
   },
   "remix/server/routes/api/[...].ts": {
-    "mtime": 1783635820.2663825,
-    "ast_hash": "416e0142f4f422bf5b381be9d3bdf23e",
+    "mtime": 1783680698.3726642,
+    "ast_hash": "634926fe682812028a93e5a63239693a",
     "semantic_hash": ""
   },
   "remix/server/routes/api/root-data.get.ts": {
@@ -1565,8 +1565,8 @@
     "semantic_hash": "6f47150939eacf6d3a89a87289013ea3"
   },
   "CLAUDE.md": {
-    "mtime": 1783635169.2706773,
-    "ast_hash": "c1b038f78ea8930050aeb74a1d86d275",
+    "mtime": 1783680698.368449,
+    "ast_hash": "57f6b23fa97f9ed8a8201b18697c9196",
     "semantic_hash": ""
   },
   "CODEX.md": {
@@ -2685,8 +2685,8 @@
     "semantic_hash": ""
   },
   "remix/app/tests/api/apiTests.ts": {
-    "mtime": 1783636349.66689,
-    "ast_hash": "98a948c77c7126617cb34827065298f9",
+    "mtime": 1783681114.8061378,
+    "ast_hash": "6f8a50a86a544f171864f6aa4e984a67",
     "semantic_hash": ""
   },
   "remix/app/components/Nav/Drawer/DrawerContent.tsx": {
@@ -2925,8 +2925,8 @@
     "semantic_hash": ""
   },
   "TODO/claude-todo/README.md": {
-    "mtime": 1783636385.357507,
-    "ast_hash": "a5539a37e49e7c3866e9cfc3921670ca",
+    "mtime": 1783682332.3451025,
+    "ast_hash": "0e51fe5484cfb9a6a05cbd66fcab6d2c",
     "semantic_hash": ""
   },
   "docs/design-inspiration/human-ai/html-examples/gold-standard-ai-era-value-moats-light-v5-balanced-cards.html": {
@@ -3115,18 +3115,18 @@
     "semantic_hash": ""
   },
   "remix/app/api/utils/things/things.ts": {
-    "mtime": 1783635169.5569098,
-    "ast_hash": "0d11ceb8b0b88856f666b1c89c8cdfc1",
+    "mtime": 1783681992.9928393,
+    "ast_hash": "33bb02a46bf1baf6f370d359f5773604",
     "semantic_hash": ""
   },
   "remix/app/components/Feed/Feed.tsx": {
-    "mtime": 1783636285.5641577,
-    "ast_hash": "86022b4def2a12383f03299d286fad93",
+    "mtime": 1783682195.9391973,
+    "ast_hash": "97e88a8eb65ccd817dc94c8587738ef7",
     "semantic_hash": ""
   },
   "remix/app/components/Feed/feedTypes.ts": {
-    "mtime": 1783635169.5655472,
-    "ast_hash": "f2ddf7ec8c08a479fc28512cf26061cf",
+    "mtime": 1783682077.6948822,
+    "ast_hash": "37655820530c94758210ca90113fe05c",
     "semantic_hash": ""
   },
   "remix/app/components/Profile/EditProfileModal.tsx": {
@@ -3135,8 +3135,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Profile/ProfilePage.tsx": {
-    "mtime": 1783636267.322839,
-    "ast_hash": "cf670590a57d6fa385bc654ec56230aa",
+    "mtime": 1783682197.5664709,
+    "ast_hash": "483580654a71c391e9c54f41c271be60",
     "semantic_hash": ""
   },
   "remix/app/components/Settings/AlgorithmManager.tsx": {
@@ -3200,8 +3200,8 @@
     "semantic_hash": ""
   },
   "remix/app/routes/api/v1/things/react/_react.tsx": {
-    "mtime": 1783635169.5957928,
-    "ast_hash": "220ae6532b4d468da4d46e8de5f9f87c",
+    "mtime": 1783680698.371098,
+    "ast_hash": "5526e8e936ca5633b757e5226e59cd2b",
     "semantic_hash": ""
   },
   "remix/app/routes/api/v1/things/share/_share.tsx": {
@@ -3240,8 +3240,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Feed/PostCard.tsx": {
-    "mtime": 1783635169.5644617,
-    "ast_hash": "ed2c769659a1319776a20cc7da5e5a68",
+    "mtime": 1783682124.9175491,
+    "ast_hash": "6a17581b71eebbb31eb396a471610769",
     "semantic_hash": ""
   },
   "remix/app/components/Feed/PostComposer.tsx": {
@@ -3250,8 +3250,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Feed/PostList.tsx": {
-    "mtime": 1783635169.5652924,
-    "ast_hash": "d12c8914d2edcf1accdeda50fa19fb51",
+    "mtime": 1783682144.3314242,
+    "ast_hash": "fc313565572d7a78c141b680893c7ff1",
     "semantic_hash": ""
   },
   "remix/app/components/Feed/useFeedEngagement.ts": {
@@ -3275,8 +3275,8 @@
     "semantic_hash": ""
   },
   "remix/app/docs/apiDocs.ts": {
-    "mtime": 1783639100.4554756,
-    "ast_hash": "9b62d6e3d85cddcb193876beb7a5014e",
+    "mtime": 1783680698.3704672,
+    "ast_hash": "f391d12e7226968e1663123d22f7a6e9",
     "semantic_hash": ""
   },
   "remix/app/routes/docs/api.tsx": {
@@ -3400,8 +3400,8 @@
     "semantic_hash": ""
   },
   ".claude/launch.json": {
-    "mtime": 1783636465.2790215,
-    "ast_hash": "5917d49d0a3dd32c6f70f71e1b509ea4",
+    "mtime": 1783680761.693584,
+    "ast_hash": "faaf6d8ad1242b4411653665d17816d6",
     "semantic_hash": ""
   },
   "remix/api/index.js": {
@@ -3425,8 +3425,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Account/useAccountSwitcher.tsx": {
-    "mtime": 1783638076.3510556,
-    "ast_hash": "d690ad8a330e23570b8a20fd70644892",
+    "mtime": 1783680698.369506,
+    "ast_hash": "435c9cc3d351a364c61480f7f6249b6f",
     "semantic_hash": ""
   },
   "remix/app/routes/api/v1/auth/accounts/_accounts.tsx": {
@@ -3447,6 +3447,41 @@
   "TODO/claude-todo/11-account-switcher.md": {
     "mtime": 1783640581.2587175,
     "ast_hash": "083da5891384f3bff7174599ae712c5b",
+    "semantic_hash": ""
+  },
+  "remix/app/components/Emoji/EmojiPicker.tsx": {
+    "mtime": 1783680698.4147818,
+    "ast_hash": "317a3acdb7a176c83f47ad86049f7b2a",
+    "semantic_hash": ""
+  },
+  "remix/app/components/Emoji/emojiData.ts": {
+    "mtime": 1783680698.415109,
+    "ast_hash": "ecc8a2e4bf5309ed047e9bbce698677f",
+    "semantic_hash": ""
+  },
+  "remix/app/components/Emoji/useRecentReactions.tsx": {
+    "mtime": 1783680698.4155385,
+    "ast_hash": "a59115eaf668845bde4b6ee868b501b7",
+    "semantic_hash": ""
+  },
+  "remix/app/hooks/localCache.ts": {
+    "mtime": 1783680698.4159713,
+    "ast_hash": "982ac985e7a27bdeb2077e6d195a3cc2",
+    "semantic_hash": ""
+  },
+  "remix/app/routes/api/v1/things/reactions-recent/_reactions-recent.tsx": {
+    "mtime": 1783680698.4165611,
+    "ast_hash": "0143a3ca60d6a720f3599c41d141bffb",
+    "semantic_hash": ""
+  },
+  "remix/app/utils/reactionTokens.ts": {
+    "mtime": 1783680698.4167902,
+    "ast_hash": "ce4473a3bfe4f942731be8b737f74d92",
+    "semantic_hash": ""
+  },
+  "TODO/claude-todo/12-reactions-and-optimistic-ui.md": {
+    "mtime": 1783682324.8907561,
+    "ast_hash": "564e1a823fb1fe93a1913f8a29fd8f07",
     "semantic_hash": ""
   }
 }
