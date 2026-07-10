@@ -64,6 +64,19 @@ export interface TtThemeGeneral {
   motion: boolean
   /** Base UI transition speed in ms (tt.Button already reads a speed). */
   animSpeed: number
+  /** UI icon language: playful emoji or coloured Lucide line icons. */
+  iconStyle: 'emoji' | 'lucide'
+}
+
+export interface TtThemeWindows {
+  /** Traffic-light colours; '' = follow the matching rainbow stop (1/2/3). */
+  closeColor: string
+  minimiseColor: string
+  maximiseColor: string
+  /** Per-button border radius in px (the buttons are 12px squares). */
+  closeRadius: number
+  minimiseRadius: number
+  maximiseRadius: number
 }
 
 export interface TtTheme {
@@ -71,6 +84,8 @@ export interface TtTheme {
   colors: TtThemeColors
   fonts: TtThemeFonts
   general: TtThemeGeneral
+  /** Editor window chrome (close / minimise / expand traffic lights). */
+  windows: TtThemeWindows
 }
 
 /** Deep-partial of TtTheme — the shape of user overrides + API payloads. */
@@ -79,6 +94,7 @@ export type TtThemePatch = {
   colors?: Partial<TtThemeColors> & { rainbow?: string[] }
   fonts?: Partial<TtThemeFonts>
   general?: Partial<TtThemeGeneral>
+  windows?: Partial<TtThemeWindows>
 }
 
 export const FONT_STACKS = {
@@ -171,6 +187,15 @@ export const THINGTIME_THEME: TtTheme = {
     shadow: 'soft',
     motion: true,
     animSpeed: 200,
+    iconStyle: 'emoji',
+  },
+  windows: {
+    closeColor: '',
+    minimiseColor: '',
+    maximiseColor: '',
+    closeRadius: 3.5,
+    minimiseRadius: 3.5,
+    maximiseRadius: 3.5,
   },
 }
 
@@ -197,6 +222,7 @@ export const FABLE_THEME: TtTheme = {
     shadow: 'hard',
     motion: true,
     animSpeed: 120,
+    iconStyle: 'emoji',
   },
 }
 
@@ -280,6 +306,8 @@ export const resolveTheme = (
     colors: { ...base.colors, rainbow: [...base.colors.rainbow] as TtThemeColors['rainbow'] },
     fonts: { ...base.fonts },
     general: { ...base.general },
+    // older stored themes predate the windows section — fill from defaults
+    windows: { ...THINGTIME_THEME.windows, ...(base.windows || {}) },
   }
   if (!patch || typeof patch !== 'object') return out
 
@@ -322,6 +350,29 @@ export const resolveTheme = (
     if (general.shadow === 'soft' || general.shadow === 'hard') out.general.shadow = general.shadow
     if (typeof general.motion === 'boolean') out.general.motion = general.motion
     out.general.animSpeed = clampNumber(general.animSpeed, 0, 2000, out.general.animSpeed)
+    if (general.iconStyle === 'emoji' || general.iconStyle === 'lucide') out.general.iconStyle = general.iconStyle
+  }
+
+  const windows = patch.windows
+  if (windows && typeof windows === 'object') {
+    for (const key of ['closeColor', 'minimiseColor', 'maximiseColor'] as const) {
+      const raw = (windows as Record<string, unknown>)[key]
+      // '' is meaningful — it means "follow the rainbow stop"
+      if (raw === '') {
+        out.windows[key] = ''
+        continue
+      }
+      const v = sanitizeCssValue(raw)
+      if (v) out.windows[key] = v
+    }
+    for (const key of ['closeRadius', 'minimiseRadius', 'maximiseRadius'] as const) {
+      out.windows[key] = clampNumber(
+        (windows as Record<string, unknown>)[key],
+        0,
+        24,
+        out.windows[key],
+      )
+    }
   }
 
   return out
@@ -343,6 +394,7 @@ export const rainbowTextGradient = (rainbow: string[]) =>
 
 export const themeToCssVars = (theme: TtTheme): Record<string, string> => {
   const { colors: c, fonts: f, general: g } = theme
+  const w = theme.windows || THINGTIME_THEME.windows
   const r = (n: number) => px(n * g.radiusScale)
   const hard = g.shadow === 'hard'
   const vars: Record<string, string> = {
@@ -404,6 +456,13 @@ export const themeToCssVars = (theme: TtTheme): Record<string, string> => {
       : '0 14px 38px rgba(20, 20, 40, 0.18)',
     '--tt-shadow-hard-sm': `5px 5px 0 ${c.ink}`,
     '--tt-shadow-hard-lg': `8px 8px 0 ${c.ink}`,
+    // editor window traffic lights — unset colours follow the rainbow stops
+    '--tt-traffic-close': w.closeColor || c.rainbow[0],
+    '--tt-traffic-minimise': w.minimiseColor || c.rainbow[1],
+    '--tt-traffic-maximise': w.maximiseColor || c.rainbow[2],
+    '--tt-traffic-close-radius': px(w.closeRadius),
+    '--tt-traffic-minimise-radius': px(w.minimiseRadius),
+    '--tt-traffic-maximise-radius': px(w.maximiseRadius),
     '--tt-anim-speed': `${Math.round(g.animSpeed)}ms`,
     '--tt-rainbow-anim': g.motion
       ? 'moving-rainbow 5s linear infinite'

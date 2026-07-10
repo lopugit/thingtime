@@ -52,6 +52,7 @@ export const DrawerContent = (props: DrawerContentProps) => {
 		open,
 		direction,
 		topLevelLimit,
+		topLevelLimitIsUnlimited,
 		ordering,
 		setOrderingFor,
 		selectedItem,
@@ -93,10 +94,19 @@ export const DrawerContent = (props: DrawerContentProps) => {
 	}, [ordering?.toplevel]);
 
 	const visibleTopItems = React.useMemo(() => {
-		return showAllTop ? orderedTopItems : orderedTopItems.slice(0, topLevelLimit);
-	}, [orderedTopItems, showAllTop, topLevelLimit]);
+		const finiteTopLevelLimit = typeof topLevelLimit === 'number' ? topLevelLimit : orderedTopItems.length;
 
-	const hiddenTopCount = Math.max(0, orderedTopItems.length - topLevelLimit);
+		if (topLevelLimitIsUnlimited || showAllTop) {
+			return orderedTopItems;
+		}
+
+		return orderedTopItems.slice(0, finiteTopLevelLimit);
+	}, [orderedTopItems, showAllTop, topLevelLimit, topLevelLimitIsUnlimited]);
+
+	const hiddenTopCount =
+		topLevelLimitIsUnlimited || typeof topLevelLimit !== 'number'
+			? 0
+			: Math.max(0, orderedTopItems.length - topLevelLimit);
 
 	const selectedTopItem = React.useMemo(() => {
 		return orderedTopItems.find((item) => item.id === selectedItem) || orderedTopItems[0];

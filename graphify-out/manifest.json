@@ -710,8 +710,8 @@
     "semantic_hash": ""
   },
   "remix/app/Providers/Thingtime/ThingtimeDefaults.tsx": {
-    "mtime": 1783611081.1154032,
-    "ast_hash": "8fb4f8a4eecc6afce0904c90c0902e33",
+    "mtime": 1783679598.3387818,
+    "ast_hash": "5747fdd030e36ed8588bd0364aaf5586",
     "semantic_hash": ""
   },
   "remix/app/Providers/Thingtime/defaults/cmdWatcher.ts": {
@@ -950,9 +950,9 @@
     "semantic_hash": ""
   },
   "remix/app/components/Icon/Icon.tsx": {
-    "mtime": 1783611081.1743798,
-    "ast_hash": "cae6440674fb81b25e0366aab9a0300c",
-    "semantic_hash": "cae6440674fb81b25e0366aab9a0300c"
+    "mtime": 1783679598.3401582,
+    "ast_hash": "a1b23d02dd718a5a0ffd9a8153f453b0",
+    "semantic_hash": ""
   },
   "remix/app/components/Layout/Main.tsx": {
     "mtime": 1783611081.176631,
@@ -1070,8 +1070,8 @@
     "semantic_hash": "92d444e302d23d08505fc8d2c8624a24"
   },
   "remix/app/components/Thingtime/Thingtime.tsx": {
-    "mtime": 1783614459.809371,
-    "ast_hash": "3bb3fecbdd372000469e1039f31f1c8d",
+    "mtime": 1783679598.3460212,
+    "ast_hash": "ecf6a8ced9719fcdc077d4fe642f69aa",
     "semantic_hash": ""
   },
   "remix/app/components/Thingtime/ThingtimeDemo.tsx": {
@@ -2690,8 +2690,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Nav/Drawer/DrawerContent.tsx": {
-    "mtime": 1783611081.1871474,
-    "ast_hash": "00297c0203f07178f1a5a71e46f0b204",
+    "mtime": 1783679598.340817,
+    "ast_hash": "675dfd13eb7308534c5f3310825d6800",
     "semantic_hash": ""
   },
   "remix/app/components/Nav/Drawer/DrawerSystem.tsx": {
@@ -2715,8 +2715,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Nav/Drawer/UserSettingsModal.tsx": {
-    "mtime": 1783611081.2005703,
-    "ast_hash": "5e9764231e1ebe8a6fdcf76f7f58107b",
+    "mtime": 1783679598.341559,
+    "ast_hash": "3fd1f549d85d1906e410d1b50730bce9",
     "semantic_hash": ""
   },
   "remix/app/components/Nav/Drawer/drawerMenu.tsx": {
@@ -2725,9 +2725,9 @@
     "semantic_hash": ""
   },
   "remix/app/components/Nav/Drawer/useDrawer.tsx": {
-    "mtime": 1783611081.2051027,
-    "ast_hash": "dc8400c352b3d7c9949f0abb95bfda5b",
-    "semantic_hash": "dc8400c352b3d7c9949f0abb95bfda5b"
+    "mtime": 1783679598.3419945,
+    "ast_hash": "e875c4647b751da2886f2ac2e31a0806",
+    "semantic_hash": ""
   },
   "remix/app/routes/docs/DesignWorkspace.tsx": {
     "mtime": 1783611081.311485,
@@ -2985,18 +2985,18 @@
     "semantic_hash": ""
   },
   "remix/app/components/ThemeSettings/ThemeHost.tsx": {
-    "mtime": 1783611081.228551,
-    "ast_hash": "5888bdd5f8047c64f12dbae6e54150b6",
+    "mtime": 1783679598.342654,
+    "ast_hash": "ae2e6ce2f38e833ea43f9970d03134e6",
     "semantic_hash": ""
   },
   "remix/app/components/ThemeSettings/ThemeStudio.tsx": {
-    "mtime": 1783611081.2286613,
-    "ast_hash": "8d433c987cd6e23e2d7136ca7b14d899",
+    "mtime": 1783679598.3429713,
+    "ast_hash": "d382f773d4c6d3a348a2bafb428c51aa",
     "semantic_hash": ""
   },
   "remix/app/hooks/useTtTheme.tsx": {
-    "mtime": 1783611081.2651942,
-    "ast_hash": "03e8a2f1e4b7ba3e51bfd22a7482f3dc",
+    "mtime": 1783679598.346343,
+    "ast_hash": "d340814025f204d0da97d8869eeb0702",
     "semantic_hash": ""
   },
   "remix/app/routes/api/v1/themes/_themes.tsx": {
@@ -3040,8 +3040,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/ThemeSettings/controls.tsx": {
-    "mtime": 1783611081.2287488,
-    "ast_hash": "d5b99feb860d32769ab4c1ab8755c82c",
+    "mtime": 1783679598.3432624,
+    "ast_hash": "39cd6701340352f46cc43e93a4ab5e24",
     "semantic_hash": ""
   },
   "PRs/32-claude-vigilant-moser--design-refactor-theming.md": {
@@ -3050,13 +3050,13 @@
     "semantic_hash": ""
   },
   "remix/app/components/Thingtime/ContextMenu/ThingContextMenu.tsx": {
-    "mtime": 1783611081.230493,
-    "ast_hash": "c21c36dfc4453bf76cb24be35e2927d7",
+    "mtime": 1783679598.3436744,
+    "ast_hash": "6769849856f271cb6f866ee2d20924b1",
     "semantic_hash": ""
   },
   "remix/app/components/Thingtime/ContextMenu/contextMenuModel.ts": {
-    "mtime": 1783611081.2349555,
-    "ast_hash": "8f733044c0387fac1f8f4d48152ab423",
+    "mtime": 1783679598.3447223,
+    "ast_hash": "5207f2bbaeaed6971103a55e9fa52b27",
     "semantic_hash": ""
   },
   "remix/app/components/Thingtime/ContextMenu/useThingContextMenu.tsx": {
@@ -3075,8 +3075,8 @@
     "semantic_hash": ""
   },
   "remix/app/routes/docs/design-system/entries.tsx": {
-    "mtime": 1783611081.3260224,
-    "ast_hash": "962a6e9d090272594de5e86236239cc8",
+    "mtime": 1783679598.3467689,
+    "ast_hash": "a640bd9a2e736da8c1fd11d01ff54649",
     "semantic_hash": ""
   },
   "remix/app/routes/docs/design-system/index.tsx": {
@@ -3085,8 +3085,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Thingtime/ContextMenu/ThingContextMenuTrigger.tsx": {
-    "mtime": 1783611081.2327201,
-    "ast_hash": "e5fcdf6fcd867e8962a736d19805c9f9",
+    "mtime": 1783679598.3443656,
+    "ast_hash": "21de03c2ab31337669267bf47eb4205e",
     "semantic_hash": ""
   },
   "remix/app/components/Thingtime/thingZones.ts": {
@@ -3095,8 +3095,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Thingtime/EditorSplit.tsx": {
-    "mtime": 1783611081.2425199,
-    "ast_hash": "ee1e9dc54d110bd52300f7c8e1995e42",
+    "mtime": 1783679598.3452375,
+    "ast_hash": "9857063cfaaca847757bb8e9c4c1feb8",
     "semantic_hash": ""
   },
   ".claude/settings.local.json": {
@@ -3150,8 +3150,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Settings/SettingsPage.tsx": {
-    "mtime": 1783611081.223312,
-    "ast_hash": "b744047b62b82161bc273d7d76d0215e",
+    "mtime": 1783679598.342349,
+    "ast_hash": "1146d13434239543a521de8c959b068c",
     "semantic_hash": ""
   },
   "remix/app/components/Settings/SettingsSection.tsx": {
@@ -3270,8 +3270,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Nav/Drawer/EditorDrawerSection.tsx": {
-    "mtime": 1783611081.1937497,
-    "ast_hash": "eccde4627c86d489fcfaf871ab475a52",
+    "mtime": 1783679598.3411815,
+    "ast_hash": "b4d9385bd2e6635c858e8d67a7d7d3ee",
     "semantic_hash": ""
   },
   "remix/app/components/Thingtime/jsonValue.ts": {
@@ -3520,8 +3520,8 @@
     "semantic_hash": ""
   },
   "PRs/53-claude-nested-data-viewer-concepts-1ebbbe--nested-data-viewer-concepts-kind-renderers.md": {
-    "mtime": 1783638946.6875362,
-    "ast_hash": "4473457690c1644b1bb89f67b040b109",
+    "mtime": 1783640717.4971664,
+    "ast_hash": "0ce8cfb96f3e1075c05efd03ad46d25c",
     "semantic_hash": ""
   },
   "remix/app/components/Editor/StyleTune.ts": {
@@ -3532,6 +3532,16 @@
   "remix/app/components/Editor/styleTokens.ts": {
     "mtime": 1783639706.410136,
     "ast_hash": "53eac7933dd30d77a7353309127cc81b",
+    "semantic_hash": ""
+  },
+  "remix/app/theme/customise.ts": {
+    "mtime": 1783679598.347028,
+    "ast_hash": "2bfc420cb38ec1be2013a2cb21160f94",
+    "semantic_hash": ""
+  },
+  "remix/app/theme/icons.tsx": {
+    "mtime": 1783679598.3472648,
+    "ast_hash": "825185e5ab7ea2faac6607a54df5e4af",
     "semantic_hash": ""
   }
 }
