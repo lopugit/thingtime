@@ -188,6 +188,38 @@ live tree's editors (MagicInput, exported NumberValueInput, Switch):
   honest and the sanitizer closed; inline colour spans remain a possible
   future custom inline tool.
 
+## Round 6 — stable String ↔ Editor.js datatype toggle
+
+- Removed the live `>160 characters || contains newline` renderer heuristic
+  that remounted the input while a person typed. Primitive strings now always
+  use the plain inline editor, so Enter/focus/save cannot produce the recorded
+  layout and caret jump.
+- Added **Editor.js** under Change type → Custom types. String → Editor.js
+  converts the current text into `{ kind: 'rich-text', blocks }`; Editor.js →
+  string uses the existing deterministic block-to-text conversion. Both rows
+  use the menu's radio state to show the active representation.
+- Native block documents are atomic values in the Thingtime tree and all five
+  viewer concepts: sanitized rich blocks in view mode, Editor.js in edit mode.
+  JSON-stringified native Editor.js documents are detected by shape and
+  promoted to native block data on edit; ordinary long/multi-line strings are
+  deliberately not content-classified.
+- Added focused Node regression tests for native/stringified document
+  detection, ordinary multi-line strings, malformed lookalikes, and empty
+  documents. Browser QA covers both conversion directions and the original
+  Enter reproduction at desktop/mobile sizes.
+- Same-representation external replacements (Paste/template/undo/remote sync)
+  now remount Editor.js without treating rapid parent echoes as replacements,
+  preventing stale blocks from overwriting newly applied data.
+- Rich-text SSR and browser rendering now share one deterministic inline-markup
+  allowlist. Executable/local URL schemes, unsafe element contents, double
+  decoding, excessive nesting, non-string payloads, oversized auto-detection,
+  deep lists, huge tables, and unbounded previews are rejected or capped while
+  leaving the stored value intact.
+- Final validation: 25 focused tests, targeted ESLint with zero errors, the
+  full Vercel-output build, and live desktop/mobile browser passes for Enter,
+  both datatype conversions, JSON-string detection, rich view hydration,
+  Editor.js toolbox interaction, full-page scroll, and horizontal overflow.
+
 ## Follow-ups (ideas)
 
 - Mount FocusCardsViewer as the mobile presentation of /things; Columns as a

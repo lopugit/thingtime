@@ -1,7 +1,13 @@
 import React from 'react';
 import { Box } from '@chakra-ui/react';
 
+import { getEditorJsValueSignature, isEditorJsDoc, isEditorJsDocSafeToEdit } from './editorJsValue';
+import type { EditorJsDoc } from './editorJsValue';
+import { inlineHtmlToText } from './inlineHtmlText';
 import { StyleTune } from './StyleTune';
+
+export { getEditorJsDoc, isEditorJsDoc, parseEditorJsDocString } from './editorJsValue';
+export type { EditorJsBlock, EditorJsDoc } from './editorJsValue';
 
 // LongTextEditor — Editor.js block editing for long-text values, everywhere.
 //
@@ -21,8 +27,6 @@ import { StyleTune } from './StyleTune';
 //
 // Editor.js is browser-only, so the library and its tools load via dynamic
 // import inside an effect; SSR and non-DOM environments never touch it.
-
-export type EditorJsDoc = { blocks: Array<{ type: string; data: Record<string, unknown> }> } & Record<string, unknown>;
 
 export type LongTextValue = string | EditorJsDoc;
 
@@ -65,25 +69,7 @@ export const LONG_TEXT_BLOCK_TYPES: LongTextBlockType[] = [
 	'style'
 ];
 
-// the "is this string long enough to deserve a block editor" heuristic used
-// across the board (tree, concepts, composer)
-export const isLongText = (value: unknown): value is string =>
-	typeof value === 'string' && (value.length > 160 || value.includes('\n'));
-
-export const isEditorJsDoc = (value: unknown): value is EditorJsDoc =>
-	Boolean(value) && typeof value === 'object' && !Array.isArray(value) && Array.isArray((value as EditorJsDoc).blocks);
-
 // ————— inline html ↔ text (editor.js allows <b>/<i>/<a>/<mark>… inline) —————
-
-const stripInlineHtml = (html: unknown): string =>
-	String(html ?? '')
-		.replace(/<br\s*\/?>/gi, '\n')
-		.replace(/<[^>]+>/g, '')
-		.replace(/&amp;/g, '&')
-		.replace(/&lt;/g, '<')
-		.replace(/&gt;/g, '>')
-		.replace(/&quot;/g, '"')
-		.replace(/&nbsp;/g, ' ');
 
 const escapeInline = (text: string): string => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -258,7 +244,7 @@ export const textToBlocks = (text: string): EditorJsDoc['blocks'] => {
 const checklistItems = (data: Record<string, unknown>): Array<{ text: string; checked: boolean }> =>
 	(Array.isArray(data.items) ? data.items : []).map((item) => {
 		const record = (item || {}) as Record<string, unknown>;
-		return { text: stripInlineHtml(record.text ?? record.content ?? item), checked: record.checked === true };
+		return { text: inlineHtmlToText(record.text ?? record.content ?? item), checked: record.checked === true };
 	});
 
 export const blocksToText = (blocks: EditorJsDoc['blocks']): string =>
@@ -267,7 +253,7 @@ export const blocksToText = (blocks: EditorJsDoc['blocks']): string =>
 			const data = block.data || {};
 			if (block.type === 'header') {
 				const level = Math.max(1, Math.min(6, Number(data.level) || 2));
-				return `${'#'.repeat(level)} ${stripInlineHtml(data.text)}`;
+				return `${'#'.repeat(level)} ${inlineHtmlToText(data.text)}`;
 			}
 			if (block.type === 'list') {
 				// List v2 items are { content, meta: { checked }, items: [...] };
@@ -278,7 +264,7 @@ export const blocksToText = (blocks: EditorJsDoc['blocks']): string =>
 						.map((item, idx) => {
 							const record = (item || {}) as Record<string, unknown>;
 							const meta = (record.meta || {}) as Record<string, unknown>;
-							const text = stripInlineHtml(typeof item === 'string' ? item : record.text ?? record.content);
+							const text = inlineHtmlToText(typeof item === 'string' ? item : record.text ?? record.content);
 							const indent = '  '.repeat(depth);
 							const line =
 								style === 'checklist'
@@ -298,8 +284,8 @@ export const blocksToText = (blocks: EditorJsDoc['blocks']): string =>
 					.join('\n');
 			}
 			if (block.type === 'quote') {
-				const caption = stripInlineHtml(data.caption);
-				return `> ${stripInlineHtml(data.text)}${caption ? `\n> — ${caption}` : ''}`;
+				const caption = inlineHtmlToText(data.caption);
+				return `> ${inlineHtmlToText(data.text)}${caption ? `\n> — ${caption}` : ''}`;
 			}
 			if (block.type === 'delimiter') {
 				return '---';
@@ -310,29 +296,29 @@ export const blocksToText = (blocks: EditorJsDoc['blocks']): string =>
 			if (block.type === 'table') {
 				const content = (Array.isArray(data.content) ? data.content : []) as unknown[][];
 				if (!content.length) return '';
-				const rows = content.map((row) => `| ${(Array.isArray(row) ? row : []).map((cell) => stripInlineHtml(cell)).join(' | ')} |`);
+				const rows = content.map((row) => `| ${(Array.isArray(row) ? row : []).map((cell) => inlineHtmlToText(cell)).join(' | ')} |`);
 				if (data.withHeadings === true && content[0]) {
 					rows.splice(1, 0, `| ${content[0].map(() => '---').join(' | ')} |`);
 				}
 				return rows.join('\n');
 			}
 			if (block.type === 'warning') {
-				const title = stripInlineHtml(data.title);
-				const message = stripInlineHtml(data.message);
+				const title = inlineHtmlToText(data.title);
+				const message = inlineHtmlToText(data.message);
 				return `⚠️ ${title}${message ? ` — ${message}` : ''}`;
 			}
 			if (block.type === 'image') {
 				const file = (data.file || {}) as Record<string, unknown>;
 				const url = String(data.url ?? file.url ?? '');
-				if (!url) return stripInlineHtml(data.caption);
-				return `![${stripInlineHtml(data.caption)}](${url})`;
+				if (!url) return inlineHtmlToText(data.caption);
+				return `![${inlineHtmlToText(data.caption)}](${url})`;
 			}
 			if (block.type === 'embed') {
 				const source = String(data.source ?? data.embed ?? '');
-				const caption = stripInlineHtml(data.caption);
+				const caption = inlineHtmlToText(data.caption);
 				return source ? `${source}${caption ? `\n${caption}` : ''}` : caption;
 			}
-			return stripInlineHtml(data.text);
+			return inlineHtmlToText(data.text);
 		})
 		.filter((piece) => piece.trim() !== '')
 		.join('\n\n');
@@ -614,18 +600,86 @@ const LongTextEditorInner = (props: LongTextEditorProps) => {
 // Outer wrapper: changing `blockTypes` needs an editor re-init (editor.js
 // cannot swap tools live), so we remount the inner editor keyed by the
 // enabled-tool set while carrying the latest edited value across the remount.
-export const LongTextEditor = (props: LongTextEditorProps) => {
+const EditableLongTextEditor = (props: LongTextEditorProps) => {
 	const latestRef = React.useRef<LongTextValue | null>(null);
+	const valueMode = isEditorJsDoc(props.value) ? 'blocks' : 'string';
+	const valueModeRef = React.useRef(valueMode);
+	const incomingSignature = getEditorJsValueSignature(props.value);
+	const incomingSignatureRef = React.useRef(incomingSignature);
+	const latestSignatureRef = React.useRef(incomingSignature);
+	const pendingEmittedSignaturesRef = React.useRef<string[]>([]);
+	const externalRevisionRef = React.useRef(0);
 
-	const configKey = LONG_TEXT_BLOCK_TYPES.filter((tool) => props.blockTypes?.[tool] !== false).join(',');
+	// A caller can explicitly convert string <-> Editor.js while this wrapper
+	// remains mounted. Reset the carried value and remount the inner editor so
+	// its mount-fixed output mode always matches the persisted representation.
+	if (valueModeRef.current !== valueMode) {
+		valueModeRef.current = valueMode;
+		latestRef.current = props.value;
+	}
+
+	// Editor.js owns its live document, so normal parent echoes of handleChange
+	// must not reset it. A genuinely different incoming value (Paste, Apply
+	// template, undo, remote sync, etc.) must remount, even when it has the same
+	// string/blocks representation, otherwise the stale editor can overwrite it
+	// on the next keystroke.
+	if (incomingSignatureRef.current !== incomingSignature) {
+		incomingSignatureRef.current = incomingSignature;
+		const pending = pendingEmittedSignaturesRef.current;
+		const echoIndex = pending.indexOf(incomingSignature);
+		const pendingEcho = echoIndex >= 0;
+
+		if (!pendingEcho) {
+			pending.length = 0;
+			latestRef.current = props.value;
+			latestSignatureRef.current = incomingSignature;
+			externalRevisionRef.current += 1;
+		} else {
+			// Acknowledging an emitted value also retires every older edit. Keep
+			// newer unacknowledged values live so a delayed parent echo cannot
+			// roll the editor back.
+			pending.splice(0, echoIndex + 1);
+			if (latestSignatureRef.current === incomingSignature) latestRef.current = props.value;
+		}
+	}
+
+	const configKey = `${valueMode}:${externalRevisionRef.current}:${LONG_TEXT_BLOCK_TYPES.filter((tool) => props.blockTypes?.[tool] !== false).join(',')}`;
+	const onValueChange = props.onValueChange;
 
 	const handleChange = React.useCallback(
 		(next: LongTextValue) => {
+			const signature = getEditorJsValueSignature(next);
 			latestRef.current = next;
-			props.onValueChange?.(next);
+			latestSignatureRef.current = signature;
+			const pending = pendingEmittedSignaturesRef.current;
+			const duplicateIndex = pending.indexOf(signature);
+			if (duplicateIndex >= 0) pending.splice(duplicateIndex, 1);
+			pending.push(signature);
+			if (pending.length > 32) pending.splice(0, pending.length - 32);
+			onValueChange?.(next);
 		},
-		[props.onValueChange]
+		[onValueChange]
 	);
 
 	return <LongTextEditorInner {...props} key={configKey} value={latestRef.current ?? props.value} onValueChange={handleChange} />;
+};
+
+export const LongTextEditor = (props: LongTextEditorProps) => {
+	if (isEditorJsDoc(props.value) && !isEditorJsDocSafeToEdit(props.value)) {
+		return (
+			<Box
+				role="note"
+				width="100%"
+				padding="12px"
+				border="1px solid var(--tt-border, #ececef)"
+				borderRadius="var(--tt-radius-md, 12px)"
+				color="var(--tt-muted, #9a9aa6)"
+				fontSize="13px"
+			>
+				This Editor.js document is too large or deeply nested for safe editing. Its complete value is preserved; use view mode for a bounded preview.
+			</Box>
+		);
+	}
+
+	return <EditableLongTextEditor {...props} />;
 };

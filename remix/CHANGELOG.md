@@ -184,6 +184,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- Fixed the Thingtime value editor jumping between its inline string control
+  and Editor.js after Enter/focus/save. Primitive strings now stay plain;
+  Editor.js is a persistent `rich-text` block datatype with content-preserving
+  String ↔ Editor.js context-menu conversions and native-payload detection.
+  Rich-text view rendering now uses the same allowlist sanitizer during SSR
+  and hydration, with bounded detection/rendering and safe URL protocols for
+  hostile or oversized stored documents.
+  Details in
+  [`PRs/53-claude-nested-data-viewer-concepts-1ebbbe--nested-data-viewer-concepts-kind-renderers.md`](../PRs/53-claude-nested-data-viewer-concepts-1ebbbe--nested-data-viewer-concepts-kind-renderers.md).
+  — _Codex (AI), 2026-07-10_
 - Fixed Electron release packaging on GitHub Actions by giving the Electron
   package explicit repository metadata, preventing electron-builder from
   crashing after producing macOS assets when it cannot infer the GitHub repo

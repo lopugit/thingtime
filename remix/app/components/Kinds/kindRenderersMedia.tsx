@@ -3,6 +3,8 @@ import { Box, Flex, Grid, Text } from '@chakra-ui/react';
 
 import { registerKindRenderer } from './kindRegistry';
 import type { KindRenderContext } from './kindRegistry';
+import { isEditorJsDoc } from '~/components/Editor/editorJsValue';
+import { inlineHtmlToText, sanitizeEditorJsInlineHtml } from '~/components/Editor/inlineHtmlText';
 import { sanitizeStyleTokens, styleTokensToCss } from '~/components/Editor/styleTokens';
 import {
 	Avatar,
@@ -423,60 +425,32 @@ const RepositoryRenderer = ({ value }: { value: RepoValue; context: KindRenderCo
 
 type RichTextBlock = { type: string; data: Record<string, unknown>; tunes?: Record<string, unknown> };
 type RichTextValue = { blocks: RichTextBlock[] };
+type RichTextRenderLimits = { remaining: number; textRemaining: number; truncated: boolean };
+
+const MAX_RENDER_BLOCKS = 500;
+const MAX_RENDER_UNITS = 1_000;
+const MAX_RENDER_FIELD_LENGTH = 100_000;
+const MAX_RENDER_TEXT_LENGTH = 1_000_000;
+const MAX_LIST_DEPTH = 16;
+const MAX_TABLE_ROWS = 200;
+const MAX_TABLE_COLUMNS = 50;
+
+const boundedRenderValue = (value: unknown, limits?: RichTextRenderLimits): unknown => {
+	if (!limits || typeof value !== 'string') return value;
+	const allowedLength = Math.min(MAX_RENDER_FIELD_LENGTH, Math.max(0, limits.textRemaining));
+	limits.textRemaining -= Math.min(value.length, allowedLength);
+	if (value.length <= allowedLength) return value;
+	limits.truncated = true;
+	return value.slice(0, allowedLength);
+};
 
 // strip inline HTML that editor.js allows (b/i/a/mark) down to text
-const inlineText = (html: unknown): string =>
-	toStringOr(html)
-		.replace(/<br\s*\/?>/gi, '\n')
-		.replace(/<[^>]+>/g, '')
-		.replace(/&amp;/g, '&')
-		.replace(/&lt;/g, '<')
-		.replace(/&gt;/g, '>')
-		.replace(/&quot;/g, '"')
-		.replace(/&nbsp;/g, ' ');
+const inlineText = (html: unknown, limits?: RichTextRenderLimits): string => inlineHtmlToText(boundedRenderValue(html, limits));
 
-const escapeHtmlText = (text: string): string => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-const escapeAttr = (text: string): string => escapeHtmlText(text).replace(/"/g, '&quot;');
-
-const ALLOWED_INLINE_TAGS = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'S', 'A', 'MARK', 'CODE', 'BR']);
-
-// Allowlist sanitiser for editor.js inline markup so bold/italic/links/marks
-// actually render (instead of being stripped) without opening an XSS door:
-// parser-based, unknown tags unwrap to their text, every attribute drops
-// except a safe-protocol href, event handlers can never survive.
-export const sanitizeInlineHtml = (html: unknown): string => {
-	const raw = toStringOr(html);
-	if (!raw) return '';
-	if (typeof document === 'undefined' || typeof DOMParser === 'undefined') {
-		return escapeHtmlText(inlineText(raw));
-	}
-
-	const parsed = new DOMParser().parseFromString(`<div>${raw}</div>`, 'text/html');
-
-	const walk = (node: Node): string => {
-		if (node.nodeType === Node.TEXT_NODE) return escapeHtmlText(node.textContent || '');
-		if (node.nodeType !== Node.ELEMENT_NODE) return '';
-
-		const el = node as HTMLElement;
-		const inner = Array.from(el.childNodes).map(walk).join('');
-		const tag = el.tagName;
-
-		if (!ALLOWED_INLINE_TAGS.has(tag)) return inner;
-		if (tag === 'BR') return '<br/>';
-		if (tag === 'A') {
-			const href = (el.getAttribute('href') || '').trim();
-			const safe = /^(https?:|mailto:|tel:|\/(?!\/)|#)/i.test(href);
-			return safe ? `<a href="${escapeAttr(href)}" target="_blank" rel="noopener noreferrer">${inner}</a>` : inner;
-		}
-
-		const lower = tag.toLowerCase();
-		return `<${lower}>${inner}</${lower}>`;
-	};
-
-	return Array.from(parsed.body.firstChild?.childNodes ?? [])
-		.map(walk)
-		.join('');
-};
+// The sanitizer is deliberately shared with the plain-text conversion so
+// server rendering and browser hydration use the exact same parser policy.
+export const sanitizeInlineHtml = (html: unknown, limits?: RichTextRenderLimits): string =>
+	sanitizeEditorJsInlineHtml(boundedRenderValue(html, limits));
 
 // theme styling for the sanitised inline tags
 const inlineMarkupSx = {
@@ -493,16 +467,51 @@ const inlineMarkupSx = {
 // ({ text, checked }) and List v2 ({ content, meta: { checked }, items })
 type NormalizedListItem = { html: string; checked: boolean | null; children: NormalizedListItem[] };
 
-const normalizeListItems = (items: unknown[], checklist: boolean): NormalizedListItem[] =>
-	items.map((item) => {
+const normalizeListItems = (items: unknown[], checklist: boolean, limits: RichTextRenderLimits, depth = 0): NormalizedListItem[] => {
+	if (depth >= MAX_LIST_DEPTH) {
+		if (items.length) limits.truncated = true;
+		return [];
+	}
+
+	const normalized: NormalizedListItem[] = [];
+	for (const item of items) {
+		if (limits.remaining <= 0) {
+			limits.truncated = true;
+			break;
+		}
+		limits.remaining -= 1;
 		const record = (item || {}) as Record<string, unknown>;
 		const meta = (record.meta || {}) as Record<string, unknown>;
-		return {
-			html: sanitizeInlineHtml(typeof item === 'string' ? item : record.text ?? record.content),
+		normalized.push({
+			html: sanitizeInlineHtml(typeof item === 'string' ? item : record.text ?? record.content, limits),
 			checked: checklist ? record.checked === true || meta.checked === true : null,
-			children: normalizeListItems(toArray(record.items), checklist)
-		};
-	});
+			children: normalizeListItems(toArray(record.items), checklist, limits, depth + 1)
+		});
+	}
+	return normalized;
+};
+
+const boundedTableContent = (content: unknown[], limits: RichTextRenderLimits): unknown[][] => {
+	const rows: unknown[][] = [];
+	let clippedColumns = false;
+	for (const row of content.slice(0, MAX_TABLE_ROWS)) {
+		const cells: unknown[] = [];
+		const rowValues = toArray(row);
+		if (rowValues.length > MAX_TABLE_COLUMNS) clippedColumns = true;
+		for (const cell of rowValues.slice(0, MAX_TABLE_COLUMNS)) {
+			if (limits.remaining <= 0) {
+				limits.truncated = true;
+				break;
+			}
+			limits.remaining -= 1;
+			cells.push(cell);
+		}
+		rows.push(cells);
+		if (limits.remaining <= 0) break;
+	}
+	if (content.length > rows.length || clippedColumns) limits.truncated = true;
+	return rows;
+};
 
 const ListLevel = ({
 	items,
@@ -539,9 +548,22 @@ const ListLevel = ({
 	</Flex>
 );
 
-export const RichTextBlocks = ({ blocks }: { blocks: RichTextBlock[] }) => (
-	<Flex flexDirection="column" rowGap={2}>
-		{blocks.map((block, idx) => {
+export const RichTextBlocks = ({ blocks }: { blocks: RichTextBlock[] }) => {
+	const limits: RichTextRenderLimits = {
+		remaining: MAX_RENDER_UNITS,
+		textRemaining: MAX_RENDER_TEXT_LENGTH,
+		truncated: blocks.length > MAX_RENDER_BLOCKS
+	};
+	const visibleBlocks = blocks.slice(0, MAX_RENDER_BLOCKS);
+
+	return (
+		<Flex flexDirection="column" rowGap={2}>
+			{visibleBlocks.map((block, idx) => {
+				if (limits.remaining <= 0) {
+					limits.truncated = true;
+					return null;
+				}
+				limits.remaining -= 1;
 			// 🎨 Style tune data: re-validated here, so a hostile stored doc can
 			// only ever contribute clean colour/size/font/align tokens
 			const tuneStyle = styleTokensToCss(sanitizeStyleTokens((block.tunes as Record<string, unknown> | undefined)?.style));
@@ -558,14 +580,14 @@ export const RichTextBlocks = ({ blocks }: { blocks: RichTextBlock[] }) => (
 						lineHeight="1.25"
 						style={tuneStyle}
 						sx={inlineMarkupSx}
-						dangerouslySetInnerHTML={{ __html: sanitizeInlineHtml(block.data.text) }}
+						dangerouslySetInnerHTML={{ __html: sanitizeInlineHtml(block.data.text, limits) }}
 					/>
 				);
 			}
 			if (block.type === 'list' || block.type === 'checklist') {
 				const style = toStringOr(block.data.style);
 				const checklist = block.type === 'checklist' || style === 'checklist';
-				const items = normalizeListItems(toArray(block.data.items), checklist);
+				const items = normalizeListItems(toArray(block.data.items), checklist, limits);
 				return <ListLevel key={idx} items={items} ordered={style === 'ordered'} depth={0} itemStyle={tuneStyle} />;
 			}
 			if (block.type === 'quote') {
@@ -578,9 +600,9 @@ export const RichTextBlocks = ({ blocks }: { blocks: RichTextBlock[] }) => (
 							lineHeight="1.6"
 							style={tuneStyle}
 							sx={inlineMarkupSx}
-							dangerouslySetInnerHTML={{ __html: sanitizeInlineHtml(block.data.text) }}
+							dangerouslySetInnerHTML={{ __html: sanitizeInlineHtml(block.data.text, limits) }}
 						/>
-						{block.data.caption ? <MutedMono>— {inlineText(block.data.caption)}</MutedMono> : null}
+						{block.data.caption ? <MutedMono>— {inlineText(block.data.caption, limits)}</MutedMono> : null}
 					</Box>
 				);
 			}
@@ -606,12 +628,12 @@ export const RichTextBlocks = ({ blocks }: { blocks: RichTextBlock[] }) => (
 						padding={3}
 						whiteSpace="pre"
 					>
-						{toStringOr(block.data.code)}
+						{toStringOr(boundedRenderValue(block.data.code, limits))}
 					</Box>
 				);
 			}
 			if (block.type === 'table') {
-				const content = toArray(block.data.content) as unknown[][];
+				const content = boundedTableContent(toArray(block.data.content), limits);
 				const withHeadings = block.data.withHeadings === true;
 				return (
 					<Box key={idx} overflowX="auto">
@@ -633,7 +655,7 @@ export const RichTextBlocks = ({ blocks }: { blocks: RichTextBlock[] }) => (
 													fontSize="sm"
 													fontWeight={withHeadings && rowIdx === 0 ? 750 : 500}
 													sx={inlineMarkupSx}
-													dangerouslySetInnerHTML={{ __html: sanitizeInlineHtml(cell) }}
+											dangerouslySetInnerHTML={{ __html: sanitizeInlineHtml(cell, limits) }}
 												/>
 											</Box>
 										))}
@@ -651,9 +673,9 @@ export const RichTextBlocks = ({ blocks }: { blocks: RichTextBlock[] }) => (
 							⚠️
 						</Text>
 						<Box minWidth={0}>
-							<Text color="#78350f" fontSize="sm" fontWeight={800} sx={inlineMarkupSx} dangerouslySetInnerHTML={{ __html: sanitizeInlineHtml(block.data.title) }} />
+							<Text color="#78350f" fontSize="sm" fontWeight={800} sx={inlineMarkupSx} dangerouslySetInnerHTML={{ __html: sanitizeInlineHtml(block.data.title, limits) }} />
 							{block.data.message ? (
-								<Text color="#8a6d3b" fontSize="sm" lineHeight="1.5" sx={inlineMarkupSx} dangerouslySetInnerHTML={{ __html: sanitizeInlineHtml(block.data.message) }} />
+								<Text color="#8a6d3b" fontSize="sm" lineHeight="1.5" sx={inlineMarkupSx} dangerouslySetInnerHTML={{ __html: sanitizeInlineHtml(block.data.message, limits) }} />
 							) : null}
 						</Box>
 					</Flex>
@@ -661,8 +683,8 @@ export const RichTextBlocks = ({ blocks }: { blocks: RichTextBlock[] }) => (
 			}
 			if (block.type === 'image') {
 				const file = (block.data.file || {}) as Record<string, unknown>;
-				const url = toStringOr(block.data.url, toStringOr(file.url));
-				const caption = inlineText(block.data.caption);
+				const url = toStringOr(boundedRenderValue(toStringOr(block.data.url, toStringOr(file.url)), limits));
+				const caption = inlineText(block.data.caption, limits);
 				const safeUrl = /^(https?:\/\/|\/(?!\/))/i.test(url.trim());
 				if (!safeUrl) return null;
 				return (
@@ -673,8 +695,8 @@ export const RichTextBlocks = ({ blocks }: { blocks: RichTextBlock[] }) => (
 				);
 			}
 			if (block.type === 'embed') {
-				const source = toStringOr(block.data.source, toStringOr(block.data.embed));
-				const caption = inlineText(block.data.caption);
+				const source = toStringOr(boundedRenderValue(toStringOr(block.data.source, toStringOr(block.data.embed)), limits));
+				const caption = inlineText(block.data.caption, limits);
 				const safeUrl = /^https?:\/\//i.test(source.trim());
 				if (!safeUrl) return null;
 				// link-out card, never an iframe — embeds stay sandboxed to a click
@@ -686,7 +708,7 @@ export const RichTextBlocks = ({ blocks }: { blocks: RichTextBlock[] }) => (
 							</Text>
 							<Box minWidth={0}>
 								<Text color="var(--tt-link, #2f8fd6)" fontSize="sm" fontWeight={700} noOfLines={1}>
-									{toStringOr(block.data.service, 'Embedded media')} ↗
+									{toStringOr(boundedRenderValue(toStringOr(block.data.service, 'Embedded media'), limits))} ↗
 								</Text>
 								<Text color="var(--tt-muted, #9a9aa6)" fontSize="xs" noOfLines={1}>
 									{caption || source}
@@ -706,12 +728,14 @@ export const RichTextBlocks = ({ blocks }: { blocks: RichTextBlock[] }) => (
 					whiteSpace="pre-wrap"
 					style={tuneStyle}
 					sx={inlineMarkupSx}
-					dangerouslySetInnerHTML={{ __html: sanitizeInlineHtml(block.data.text) }}
+					dangerouslySetInnerHTML={{ __html: sanitizeInlineHtml(block.data.text, limits) }}
 				/>
 			);
-		})}
-	</Flex>
-);
+			})}
+			{limits.truncated ? <MutedMono>Rich text preview truncated for performance.</MutedMono> : null}
+		</Flex>
+	);
+};
 
 const RichTextRenderer = ({ value }: { value: RichTextValue; context: KindRenderContext }) => (
 	<KindCard>
@@ -993,16 +1017,12 @@ registerKindRenderer({
 registerKindRenderer({
 	kind: 'rich-text',
 	title: 'Rich text (blocks)',
-	emoji: '📄',
+	emoji: '📝',
 	description: 'An Editor.js block document — headings, lists, quotes, checklists — rendered read-only.',
 	category: 'Media',
 	aliases: ['blocks', 'editorjs'],
-	match: (thing) => Array.isArray(thing.blocks) && toArray(thing.blocks).every((block) => block && typeof block === 'object' && 'type' in (block as Record<string, unknown>)),
-	adapt: (thing): RichTextValue | null => {
-		const blocks = toArray(thing.blocks).filter((block) => block && typeof block === 'object') as RichTextBlock[];
-		if (!blocks.length) return null;
-		return { blocks };
-	},
+	match: (thing) => isEditorJsDoc(thing),
+	adapt: (thing): RichTextValue | null => (isEditorJsDoc(thing) ? { blocks: thing.blocks } : null),
 	render: RichTextRenderer
 });
 

@@ -507,16 +507,16 @@ const StyledTextStory = ({ edit }: ConceptStoryArgs) => {
 export const longTextStories: ConceptStory[] = [
 	{
 		id: 'long-text-string',
-		title: 'Long strings become block documents',
+		title: 'A string field can opt into blocks',
 		description:
-			'Any string longer than a line opens in Editor.js — headings, lists, checklists, quotes — and serialises back to one plain, readable string on every keystroke. The thing in Mongo never stops being simple JSON. This exact editor is now wired into the tree, every viewer concept, and the feed composer.',
+			'A field such as the feed composer can explicitly use Editor.js while still serialising back to one plain, readable string. In the Thingtime tree, primitive strings remain stable plain-text values; choosing Editor.js from Change type promotes the value to a persistent rich-text block document instead of changing controls as you type.',
 		defaultEdit: true,
 		render: (args) => <LongTextStringStory {...args} />,
-		note: 'Type "## " for a heading or use the + menu — then watch the stored string keep up on the right. Flip to 👀 View for the read-only render of the same document.'
+		note: 'This demo is an explicitly block-enabled string field. In the tree, use Change type → Editor.js for persistent block editing, or Change type → string to flatten the blocks back to readable text.'
 	},
 	{
 		id: 'long-text-rich-thing',
-		title: 'Rich text as a kind',
+		title: 'Editor.js as a stable datatype',
 		description:
 			'A value that already is an Editor.js document ({ blocks: [...] }) edits natively — bold, italics, links, and marks included — and renders through the rich-text kind renderer via a sanitising allowlist. Write once, display anywhere a RenderThing mounts.',
 		defaultEdit: true,

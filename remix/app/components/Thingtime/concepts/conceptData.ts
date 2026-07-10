@@ -1,5 +1,7 @@
 import React from 'react';
 
+import { getEditorJsDoc } from '~/components/Editor/editorJsValue';
+
 // Shared pure-JSON helpers for the nested data viewer concepts
 // (components/Thingtime/concepts). Every concept viewer is driven by a plain
 // JSON thing plus an onChange(nextThing) callback, so a concept can be mounted
@@ -22,7 +24,7 @@ export const thingTypeOf = (value: unknown): ThingType => {
 };
 
 export const isBranch = (value: unknown): value is Record<string, unknown> | unknown[] =>
-	value !== null && typeof value === 'object';
+	value !== null && typeof value === 'object' && !getEditorJsDoc(value);
 
 // emoji per type, matching the Icon names the live tree uses
 export const thingTypeEmoji: Record<ThingType, string> = {
@@ -131,6 +133,8 @@ export const childKeysOf = (value: unknown): Array<string | number> => {
 
 // one-line, layperson-friendly preview of any value ("3 items", "Roses, tulips…")
 export const summarizeThing = (value: unknown, maxLength = 60): string => {
+	if (getEditorJsDoc(value)) return 'Rich text';
+
 	const type = thingTypeOf(value);
 
 	if (type === 'string') {
@@ -196,6 +200,7 @@ const KEY_EMOJI_RULES: Array<[RegExp, string]> = [
 
 export const keyEmoji = (key: string | number, value?: unknown): string => {
 	if (typeof key === 'number') return '📄';
+	if (getEditorJsDoc(value)) return '📝';
 	for (const [pattern, emoji] of KEY_EMOJI_RULES) {
 		if (pattern.test(key)) return emoji;
 	}

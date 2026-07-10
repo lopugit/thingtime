@@ -1,5 +1,7 @@
 import React from 'react';
 
+import { isSafeUrl } from './safeUrl';
+
 // JSON → DOM renderer: lets people build their own html/css components as
 // plain JSON things (stored in Mongo like any other thing) and render them
 // live. A node is either a string (text) or:
@@ -113,14 +115,6 @@ const VOID_TAGS = new Set(['img', 'input', 'br', 'hr']);
 
 const MAX_NODES = 600;
 const MAX_DEPTH = 24;
-
-const isSafeUrl = (value: string): boolean => {
-	const url = String(value).trim().toLowerCase();
-	if (url.startsWith('javascript:') || url.startsWith('data:text/html') || url.startsWith('vbscript:')) {
-		return false;
-	}
-	return true;
-};
 
 const sanitizeStyle = (style: unknown): React.CSSProperties | undefined => {
 	if (!style || typeof style !== 'object' || Array.isArray(style)) return undefined;

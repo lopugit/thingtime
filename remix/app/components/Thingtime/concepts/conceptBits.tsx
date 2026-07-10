@@ -1,10 +1,12 @@
 import React from 'react';
 import { Box, Flex, Switch, Text } from '@chakra-ui/react';
 
+import { getEditorJsDoc } from '~/components/Editor/editorJsValue';
+import { LongTextEditor } from '~/components/Editor/LongTextEditor';
+import type { LongTextBlockTypes } from '~/components/Editor/LongTextEditor';
+import { RichTextBlocks } from '~/components/Kinds/kindRenderersMedia';
 import { MagicInput } from '~/components/MagicInput/MagicInput';
 import { NumberValueInput } from '~/components/Thingtime/Thingtime';
-import { LongTextEditor, isLongText } from '~/components/Editor/LongTextEditor';
-import type { LongTextBlockTypes } from '~/components/Editor/LongTextEditor';
 import { RenderThing, resolveKindRenderer } from '~/components/Kinds';
 
 import { thingTypeOf } from './conceptData';
@@ -64,7 +66,18 @@ export const LeafValueEditor = (props: {
 	blockTypes?: LongTextBlockTypes;
 }) => {
 	const { value, edit, onValueChange } = props;
+	const editorJsDoc = getEditorJsDoc(value);
 	const type = thingTypeOf(value);
+
+	if (editorJsDoc) {
+		return edit ? (
+			<LongTextEditor value={editorJsDoc} blockTypes={props.blockTypes} onValueChange={(next) => onValueChange?.(next)} />
+		) : (
+			<Box width="100%" minWidth={0} paddingY={1}>
+				<RichTextBlocks blocks={editorJsDoc.blocks} />
+			</Box>
+		);
+	}
 
 	if (type === 'boolean') {
 		return (
@@ -94,11 +107,6 @@ export const LeafValueEditor = (props: {
 	}
 
 	if (type === 'string') {
-		// long text gets the block editor (Editor.js) instead of a one-line input
-		if (edit && isLongText(value)) {
-			return <LongTextEditor value={value} blockTypes={props.blockTypes} onValueChange={(next) => onValueChange?.(next)} />;
-		}
-
 		return (
 			<MagicInput
 				value={value as string}

@@ -217,29 +217,30 @@ export const conceptEntries: ConceptEntry[] = [
 		title: 'Long text — a block editor everywhere',
 		emoji: '📝',
 		status: 'Adopted',
-		summary: 'Editor.js block editing for every long-text input: the tree, all viewer concepts, and the feed composer.',
+		summary: 'Stable Editor.js block documents in the tree and viewers, with explicit string-mode fields where wanted.',
 		why:
-			'Long text is where one-line inputs stop being honest: people write plans, notes, and stories, not values. The block editor (Editor.js) gives every long string real paragraphs, headings, lists, checklists, and quotes — while the stored thing stays a plain, readable string via a deterministic blocks↔text round-trip. Data stays simple; editing stops being cramped. And when a value already is a block document ({ blocks: [...] }), it edits natively and renders through the rich-text kind.',
+			'Presentation must not change underneath a person while they type. Primitive strings therefore stay plain strings, while Editor.js is a real JSON datatype ({ kind: "rich-text", blocks: [...] }) that edits and renders consistently. Change type converts between them without discarding content. Fields such as the feed composer can still opt into string-mode Editor.js and use the deterministic blocks↔text round-trip.',
 		desktop: [
-			'Any string over ~160 characters (or containing a newline) opens as a block document in edit mode — in the Thingtime tree, Focus, Columns, Document, and Form.',
+			'Change type → Editor.js converts the current value into a native block document and keeps that representation in both view and edit modes. Change type → string flattens the blocks back to readable text.',
+			'JSON-stringified native Editor.js output is detected for clipboard/API compatibility and promoted to the native document shape on edit; ordinary long and multi-line strings remain plain.',
 			'The full suite ships: headings, lists, checklists, quotes, dividers, tables, code, callouts, embeds, images — plus highlight, inline-code, and underline inline tools. Everything serialises to markdown-ish plain text ("## ", "- [x]", "> ", "| a | b |", "```", "⚠️", "![]()", "---").',
 			'The blockTypes prop enables/disables any tool per field, so a field\'s metadata can define what its text may contain.',
 			'The feed composer (What\'s on your mind?) is the block editor by default — posts still store plain text.'
 		],
 		mobile: [
 			'Editor.js is touch-native: the + block menu and toolbar work as tap targets, and blocks reflow at any width.',
-			'Short strings keep the one-line magic input, so quick edits stay quick on a phone.',
-			'The stored string stays readable in every view mode — no rich-text lock-in on small screens.'
+			'Primitive strings keep the inline magic input regardless of length or newlines, so quick edits never trigger a layout jump on a phone.',
+			'Editor.js documents render as sanitised rich blocks in view mode and open the same block document in edit mode.'
 		],
 		editing: [
-			'String mode: string in → string out, on every change. The editor owns the text while mounted; remount (key) to replace it externally.',
-			'Block mode: { blocks: [...] } in → { blocks: [...] } out, preserving sibling fields like kind: "rich-text".',
+			'Plain mode: primitive string in → primitive string out through MagicInput. Length, Enter, focus, and blur never reclassify it.',
+			'Block mode: { blocks: [...] } in → { blocks: [...] } out, preserving sibling fields like kind: "rich-text"; the editor remount key includes the representation mode.',
 			'The 🎨 Style tune (every block\'s ⋮ menu) adds colour/size/font/alignment as validated tokens in block.tunes.style — hex/theme colours, 10–72px clamp, curated font stacks, align enums — compiled to React style objects, never raw CSS.',
-			'Pressing Enter inside a one-line value creates a newline — which upgrades that value to the block editor on its next edit.'
+			'Context-menu type rows show which representation is active and conversions preserve the current text.'
 		],
 		source: 'remix/app/components/Editor/LongTextEditor.tsx',
 		adoption:
-			'Already wired across the board: Thingtime.tsx (tree edit mode), concepts/LeafValueEditor (all five viewers), and Feed/PostComposer. New surfaces just render <LongTextEditor value={text} onValueChange={...} blockTypes={{ table: false }}/> — omit blockTypes for the full suite.',
+			'Already wired across the board: Thingtime.tsx treats block documents as atomic, concepts treat them as rich leaves, and Feed/PostComposer explicitly opts its string body into blocks. New rich fields should store { kind: "rich-text", blocks } and render <LongTextEditor value={doc} onValueChange={...}/>; string-backed fields may opt in deliberately.',
 		stories: longTextStories
 	},
 	{
