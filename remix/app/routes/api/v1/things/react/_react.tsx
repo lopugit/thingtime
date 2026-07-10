@@ -12,7 +12,7 @@ export const action = async ({ request }: { request: Request }) => {
   }
 
   const body = await readJsonBody(request, 64 * 1024);
-  const result = await toggleReaction(user.id, body.id, body.emoji ?? null);
+  const result = await toggleReaction({ id: user.id, username: user.username }, body.id, body.emoji ?? null);
 
   if (result.ok === false) {
     return json({ ok: false, error: result.error }, { status: result.status });

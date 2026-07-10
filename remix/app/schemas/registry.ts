@@ -50,6 +50,122 @@ export type ThingtimeSchema = {
 export const THING_VISIBILITIES = ['public', 'friends', 'family', 'private', 'inherit'] as const;
 export type ThingVisibility = (typeof THING_VISIBILITIES)[number];
 
+// ---------------------------------------------------------------------------
+// ACL permissions. A thing's audience is an array of tt: entries — grants,
+// plus '-'-prefixed exclusions:
+//
+//   tt:all              everyone, including logged-out viewers
+//   tt:user             the thing's owner
+//   tt:userFriends      the owner's friends circle
+//   tt:userFamily       the owner's family circle
+//   tt:user/<username>  one specific user (grant or exclude)
+//   tt:inherit          attached things (comments, reactions) — as visible as
+//                       their target
+//
+// Examples: ['tt:all'] is public; ['-tt:all', 'tt:userFriends', 'tt:user'] is
+// friends-only; ['tt:all', '-tt:user/somebody'] is public except one user.
+//
+// Evaluation: the MOST SPECIFIC entry matching the viewer decides (exclusions
+// win ties), so a broad '-tt:all' never locks out someone a narrower grant
+// admits. Specificity: tt:all < circles/groups < tt:user < tt:user/<name>.
+// Owners always view their own things regardless of acl. No relationship
+// graph exists yet, so circle entries currently resolve to the owner only —
+// matching the pre-acl behaviour of friends/family visibility.
+
+export const ACL_ALL = 'tt:all';
+export const ACL_OWNER = 'tt:user';
+export const ACL_FRIENDS = 'tt:userFriends';
+export const ACL_FAMILY = 'tt:userFamily';
+export const ACL_INHERIT = 'tt:inherit';
+export const ACL_USER_PREFIX = 'tt:user/';
+
+const ACL_ENTRY_PATTERN = /^-?tt:[A-Za-z0-9][A-Za-z0-9._/-]*$/;
+const MAX_ACL_ENTRIES = 16;
+const MAX_ACL_ENTRY_CHARS = 64;
+
+// legacy visibility names map onto acls (accepted as input everywhere an acl
+// is, and derived back for the wire so old clients keep working)
+export const LEGACY_VISIBILITY_ACLS: Record<ThingVisibility, string[]> = {
+  public: [ACL_ALL],
+  friends: ['-tt:all', ACL_FRIENDS, ACL_OWNER],
+  family: ['-tt:all', ACL_FAMILY, ACL_OWNER],
+  private: [ACL_OWNER],
+  inherit: [ACL_INHERIT]
+};
+
+export const aclFromVisibility = (visibility: unknown): string[] | null =>
+  typeof visibility === 'string' && visibility in LEGACY_VISIBILITY_ACLS
+    ? [...LEGACY_VISIBILITY_ACLS[visibility as ThingVisibility]]
+    : null;
+
+export const visibilityFromAcl = (acl: string[]): ThingVisibility => {
+  if (acl.includes(ACL_INHERIT)) return 'inherit';
+  if (acl.includes(ACL_ALL)) return 'public';
+  if (acl.includes(ACL_FRIENDS)) return 'friends';
+  if (acl.includes(ACL_FAMILY)) return 'family';
+  return 'private';
+};
+
+export const sanitizeAcl = (value: unknown): string[] | { ok: false; status: number; error: string } => {
+  if (!Array.isArray(value)) return { ok: false, status: 400, error: 'acl must be a list of tt: permission entries' };
+  const entries: string[] = [];
+  for (const raw of value) {
+    if (typeof raw !== 'string') return { ok: false, status: 400, error: 'acl entries must be strings' };
+    const entry = raw.trim();
+    if (!entry) continue;
+    if (entry.length > MAX_ACL_ENTRY_CHARS || !ACL_ENTRY_PATTERN.test(entry)) {
+      return { ok: false, status: 400, error: `acl entries look like tt:all, tt:user, tt:userFriends, or tt:user/<username>, optionally '-' prefixed (got ${entry.slice(0, 80)})` };
+    }
+    if (!entries.includes(entry)) entries.push(entry);
+    if (entries.length > MAX_ACL_ENTRIES) return { ok: false, status: 400, error: `acl can have at most ${MAX_ACL_ENTRIES} entries` };
+  }
+  if (!entries.length) return { ok: false, status: 400, error: 'acl needs at least one entry' };
+  return entries;
+};
+
+export type AclViewer = { id: string | null; username?: string | null } | null;
+
+const aclSpecificity = (id: string): number => {
+  if (id === ACL_ALL) return 0;
+  if (id === ACL_OWNER) return 2;
+  if (id.startsWith(ACL_USER_PREFIX)) return 3;
+  return 1; // circles + future groups
+};
+
+const aclEntryMatches = (id: string, viewer: AclViewer, ownerId: string): boolean => {
+  if (id === ACL_ALL) return true;
+  if (!viewer?.id) return false;
+  if (id === ACL_OWNER) return viewer.id === ownerId;
+  if (id.startsWith(ACL_USER_PREFIX)) {
+    const username = id.slice(ACL_USER_PREFIX.length).toLowerCase();
+    return !!viewer.username && viewer.username.toLowerCase() === username;
+  }
+  // circles/groups: no relationship graph yet — owner only
+  if (id === ACL_FRIENDS || id === ACL_FAMILY) return viewer.id === ownerId;
+  return false;
+};
+
+// Most-specific matching entry wins; exclusions win ties. Callers short-circuit
+// the owner before asking (owners always see their own things).
+export const aclAllows = (acl: string[], viewer: AclViewer, ownerId: string): boolean => {
+  let best = -1;
+  let allow = false;
+  for (const raw of acl) {
+    const negated = raw.startsWith('-');
+    const id = negated ? raw.slice(1) : raw;
+    if (id === ACL_INHERIT) continue;
+    if (!aclEntryMatches(id, viewer, ownerId)) continue;
+    const specificity = aclSpecificity(id);
+    if (specificity > best) {
+      best = specificity;
+      allow = !negated;
+    } else if (specificity === best && negated) {
+      allow = false;
+    }
+  }
+  return allow;
+};
+
 export const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '😡'];
 export const POST_TYPES = ['text', 'image', 'marketplace'] as const;
 export const MARKETPLACE_CATEGORIES = ['car', 'tool', 'furniture', 'service', 'other'] as const;
@@ -84,15 +200,20 @@ const rootThingSchema: ThingtimeSchema = {
   detail:
     'Posts, comments, reactions, and shares are all the same root shape. What kind of thing a ' +
     'thing is lives in its `thingtime` array — schema ids pointing at the Thingtime Schemas ' +
-    'below — and the sub-schema payload lives under `crystal`. Things that attach to another ' +
-    'thing (comments, reactions, shares) point at it via `targetId` and inherit its visibility.',
+    'below — and the sub-schema payload lives under `crystal`. Who can see it lives in `acl`: ' +
+    'tt: grants plus "-"-prefixed exclusions, most-specific entry wins (["tt:all"] is public, ' +
+    '["-tt:all","tt:userFriends","tt:user"] is friends-only, ["tt:all","-tt:user/somebody"] is ' +
+    'public except one user; owners always see their own things). Things that attach to another ' +
+    'thing (comments, reactions) carry ["tt:inherit"] and are as visible as their target. The ' +
+    'legacy visibility names (public/friends/family/private) are still accepted as input and ' +
+    'derived on the wire.',
   fields: [
     { name: 'shareId', type: 'id', required: true, description: 'Public id — the only id clients ever see.' },
     { name: 'schemaVersion', type: 'number', required: true, description: 'Root schema version this doc was written at (docs without one are version 1).' },
     { name: 'thingtime', type: 'string[]', required: true, description: 'Thingtime Schema ids applied to this thing, e.g. ["post"] or ["post","share"].' },
     { name: 'crystal', type: 'object', required: true, description: 'The sub-schema payload, validated against every schema in thingtime.' },
     { name: 'ownerId', type: 'id', required: true, description: 'The owning user id.' },
-    { name: 'visibility', type: 'enum', required: true, values: [...THING_VISIBILITIES], description: 'Who can view the thing. Target-attached things use "inherit" — they are as visible as their target.' },
+    { name: 'acl', type: 'string[]', required: true, max: 16, description: 'Permission entries: tt:all, tt:user (owner), tt:userFriends, tt:userFamily, tt:user/<username>, each optionally "-" prefixed to exclude; tt:inherit on target-attached things. Most specific matching entry decides; owners always view.' },
     { name: 'targetId', type: 'id', required: false, description: 'shareId of the thing this thing is about (comment → post, reaction → post, share → root post).' },
     { name: 'tags', type: 'string[]', required: true, max: 12, description: 'Lowercased tags, max 12 × 40 chars.' },
     { name: 'createdAt', type: 'date', required: true, description: 'Creation time.' },
@@ -104,7 +225,7 @@ const rootThingSchema: ThingtimeSchema = {
     thingtime: ['post'],
     crystal: { type: 'text', text: 'Hello Thingtime 🌈', images: [], listing: null },
     ownerId: '664f1c2a9d3e5b0012345678',
-    visibility: 'public',
+    acl: ['tt:all', '-tt:user/replicant-hunter', 'tt:user'],
     targetId: null,
     tags: ['hello'],
     createdAt: '2026-07-10T00:00:00.000Z',
@@ -139,9 +260,9 @@ const commentSchema: ThingtimeSchema = {
   title: 'Comment',
   summary: 'A comment on another thing.',
   detail:
-    'A standalone thing pointing at its target via targetId, visible exactly when the target ' +
-    'is. Comments used to live embedded inside post docs — the things v1→v2 migration explodes ' +
-    'them into these.',
+    'A standalone thing pointing at its target via targetId, carrying acl ["tt:inherit"] so it ' +
+    'is visible exactly when the target is. Comments used to live embedded inside post docs — ' +
+    'the things v1→v2 migration explodes them into these.',
   requiresTarget: true,
   fields: [
     { name: 'text', type: 'string', required: true, max: MAX_COMMENT_CHARS, description: `Comment body, max ${MAX_COMMENT_CHARS} chars.` }

@@ -14,8 +14,9 @@ export const action = async ({ request }: { request: Request }) => {
   }
 
   const body: any = await readJsonBody(request, 256 * 1024);
-  const result = await updateThing(user.id, body?.id, {
+  const result = await updateThing({ id: user.id, username: user.username }, body?.id, {
     crystal: body?.crystal,
+    acl: body?.acl,
     visibility: body?.visibility,
     tags: body?.tags
   });

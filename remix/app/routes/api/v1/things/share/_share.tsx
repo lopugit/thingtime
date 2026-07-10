@@ -12,7 +12,7 @@ export const action = async ({ request }: { request: Request }) => {
   }
 
   const body = await readJsonBody(request, 64 * 1024);
-  const result = await sharePost(user.id, body.id, { text: body.text, visibility: body.visibility });
+  const result = await sharePost({ id: user.id, username: user.username }, body.id, { text: body.text, acl: body.acl, visibility: body.visibility });
 
   if (result.ok === false) {
     return json({ ok: false, error: result.error }, { status: result.status });

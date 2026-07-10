@@ -3,10 +3,19 @@ import { ObjectId } from 'mongodb';
 
 import { ensureIndexes, getThingsCollection, getUsersCollection } from '../mongodb/collections';
 import {
+  ACL_ALL,
+  ACL_FAMILY,
+  ACL_FRIENDS,
+  ACL_INHERIT,
+  ACL_OWNER,
   COLLECTION_SCHEMA_VERSIONS,
   MAX_TEXT_CHARS,
   REACTION_EMOJIS,
+  aclAllows,
+  aclFromVisibility,
+  sanitizeAcl,
   validateThingtimeCrystal,
+  visibilityFromAcl,
   type ThingVisibility
 } from '~/schemas/registry';
 import { scorePost, type AlgorithmWeights, type PostFeatures } from './feedRanking';
@@ -54,7 +63,8 @@ export type ThingDoc = {
   thingtime?: string[];
   crystal?: Record<string, any>;
   ownerId: string;
-  visibility: ThingVisibility;
+  acl?: string[]; // v2 — tt: grants/exclusions (see schemas/registry.ts)
+  visibility?: ThingVisibility; // v1 residue (mapped onto acl at read time)
   targetId?: string | null;
   tags?: string[];
   createdAt: Date;
@@ -92,7 +102,9 @@ export type PublicPost = {
   thingtime: string[];
   type: PostType;
   author: FeedAuthor | null;
+  // legacy name derived from acl so old clients keep working
   visibility: PostVisibility;
+  acl: string[];
   text: string;
   images: string[];
   listing: MarketplaceListing | null;
@@ -115,12 +127,20 @@ export type PublicThing = {
   thingtime: string[];
   author: FeedAuthor | null;
   visibility: ThingVisibility;
+  acl: string[];
   targetId: string | null;
   crystal: Record<string, any>;
   tags: string[];
   createdAt: string;
   updatedAt: string;
 };
+
+// Who is looking. Routes pass { id, username } from the authed PublicUser;
+// internal callers may only have an id (username-specific acl exclusions
+// simply can't match then). Plain string ids are accepted for compat.
+export type Viewer = { id: string; username?: string | null } | null;
+export const asViewer = (value: string | Viewer | null | undefined): Viewer =>
+  typeof value === 'string' ? { id: value } : value || null;
 
 const POST_TYPES: PostType[] = ['text', 'image', 'marketplace'];
 const VISIBILITIES: PostVisibility[] = ['public', 'friends', 'family', 'private'];
@@ -149,6 +169,7 @@ const FEATURE_PROJECTION = {
   tags: 1,
   ownerId: 1,
   createdAt: 1,
+  acl: 1,
   visibility: 1
 };
 
@@ -223,7 +244,8 @@ const sanitizeShareId = (value: unknown): string | null | Fail => {
 export type CreateThingInput = {
   thingtime?: unknown;
   crystal?: unknown;
-  visibility?: unknown;
+  acl?: unknown;
+  visibility?: unknown; // legacy alias, mapped onto acl
   targetId?: unknown;
   tags?: unknown;
   // seeding/migration pass fixed ids + timestamps for idempotency
@@ -233,7 +255,27 @@ export type CreateThingInput = {
 
 type CreateThingResult = Fail | { ok: true; doc: ThingDoc };
 
-export const createThing = async (ownerId: string, input: CreateThingInput): Promise<CreateThingResult> => {
+// audience for a new thing: explicit acl > legacy visibility name > default
+const resolveInputAcl = (input: { acl?: unknown; visibility?: unknown }): string[] | null | Fail => {
+  if (input.acl !== undefined && input.acl !== null) {
+    const acl = sanitizeAcl(input.acl);
+    if (isFail(acl)) return acl;
+    return acl;
+  }
+  if (input.visibility !== undefined && input.visibility !== null) {
+    const acl = aclFromVisibility(input.visibility);
+    if (!acl || acl.includes(ACL_INHERIT)) return fail(400, 'Unknown visibility');
+    return acl;
+  }
+  return null;
+};
+
+export const createThing = async (
+  ownerId: string,
+  input: CreateThingInput,
+  viewer: Viewer = null
+): Promise<CreateThingResult> => {
+  const asOwner = viewer && viewer.id === ownerId ? viewer : { id: ownerId };
   const validated = validateThingtimeCrystal(input.thingtime, input.crystal);
   if (isFail(validated)) return validated;
 
@@ -242,6 +284,9 @@ export const createThing = async (ownerId: string, input: CreateThingInput): Pro
 
   const shareId = sanitizeShareId(input.shareId);
   if (isFail(shareId)) return shareId;
+
+  const inputAcl = resolveInputAcl(input);
+  if (isFail(inputAcl)) return inputAcl;
 
   // marketplace listings fold their category into tags so filters find them
   const listing = validated.crystal.listing as MarketplaceListing | null | undefined;
@@ -252,11 +297,11 @@ export const createThing = async (ownerId: string, input: CreateThingInput): Pro
   let targetId: string | null = null;
   let target: ThingDoc | null = null;
   if (validated.requiresTarget) {
-    target = await findViewableThing(input.targetId, ownerId);
+    target = await findViewableThing(input.targetId, asOwner);
     if (!target) return fail(404, 'Post not found');
     if (validated.thingtime.includes('share')) {
-      // viewable ≠ shareable: non-public things can only be shared by their owner
-      if (target.visibility !== 'public' && target.ownerId !== ownerId) {
+      // viewable ≠ shareable: only tt:all things (or your own) can be shared
+      if (target.ownerId !== ownerId && !aclOf(target).includes(ACL_ALL)) {
         return fail(403, 'Only public posts can be shared');
       }
       // re-shares point at the ROOT post (Facebook-style) — shares only resolve
@@ -272,15 +317,13 @@ export const createThing = async (ownerId: string, input: CreateThingInput): Pro
     return fail(400, `thingtime ${validated.thingtime.join('+')} does not take a targetId`);
   }
 
-  // Target-attached things inherit their target's visibility dynamically;
+  // Target-attached things inherit their target's audience dynamically;
   // standalone things default public.
-  let visibility: ThingVisibility;
+  let acl: string[];
   if (validated.requiresTarget && !validated.thingtime.includes('post')) {
-    visibility = 'inherit';
+    acl = [ACL_INHERIT];
   } else {
-    visibility = VISIBILITIES.includes(input.visibility as PostVisibility)
-      ? (input.visibility as PostVisibility)
-      : 'public';
+    acl = inputAcl || [ACL_ALL];
   }
 
   if (validated.thingtime.includes('comment') && target) {
@@ -298,7 +341,7 @@ export const createThing = async (ownerId: string, input: CreateThingInput): Pro
     thingtime: validated.thingtime,
     crystal: validated.crystal,
     ownerId,
-    visibility,
+    acl,
     targetId,
     tags: allTags,
     createdAt: now,
@@ -325,6 +368,7 @@ export type CreatePostInput = {
   text?: unknown;
   images?: unknown;
   listing?: unknown;
+  acl?: unknown;
   visibility?: unknown;
   tags?: unknown;
   // seeding passes a fixed shareId for idempotency
@@ -335,17 +379,26 @@ export type CreatePostInput = {
 type CreateResult = Fail | { ok: true; post: PublicPost };
 
 // Legacy-shaped convenience wrapper — same unified path underneath.
-export const createPost = async (ownerId: string, input: CreatePostInput): Promise<CreateResult> => {
-  const created = await createThing(ownerId, {
-    thingtime: ['post'],
-    crystal: { type: input.type, text: input.text, images: input.images, listing: input.listing },
-    visibility: input.visibility,
-    tags: input.tags,
-    shareId: input.shareId,
-    createdAt: input.createdAt
-  });
+export const createPost = async (
+  ownerId: string,
+  input: CreatePostInput,
+  viewer: Viewer = null
+): Promise<CreateResult> => {
+  const created = await createThing(
+    ownerId,
+    {
+      thingtime: ['post'],
+      crystal: { type: input.type, text: input.text, images: input.images, listing: input.listing },
+      acl: input.acl,
+      visibility: input.visibility,
+      tags: input.tags,
+      shareId: input.shareId,
+      createdAt: input.createdAt
+    },
+    viewer
+  );
   if (isFail(created)) return created;
-  return { ok: true, post: (await toPublicPosts([created.doc], ownerId))[0] };
+  return { ok: true, post: (await toPublicPosts([created.doc], viewer || ownerId))[0] };
 };
 
 // ---------------------------------------------------------------------------
@@ -471,7 +524,9 @@ const viewerReactionOf = (entries: ReactionEntry[], viewerId: string | null): st
 const liveShareCountOf = (doc: ThingDoc, related: RelatedThings): number =>
   related.shareCountByTarget.get(doc.shareId) || 0;
 
-export const toPublicPosts = async (docs: ThingDoc[], viewerId: string | null): Promise<PublicPost[]> => {
+export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | Viewer): Promise<PublicPost[]> => {
+  const viewer = asViewer(viewerInput);
+  const viewerId = viewer?.id || null;
   if (!docs.length) return [];
   const things = await getThingsCollection();
 
@@ -514,7 +569,8 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerId: string | null): 
       thingtime: thingtimeOf(doc),
       type: (crystal.type as PostType) || 'text',
       author: profiles.get(doc.ownerId) || null,
-      visibility: doc.visibility as PostVisibility,
+      visibility: visibilityFromAcl(aclOf(doc)) as PostVisibility,
+      acl: aclOf(doc),
       text: String(crystal.text || ''),
       images: (crystal.images as string[]) || [],
       listing: (crystal.listing as MarketplaceListing) || null,
@@ -526,7 +582,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerId: string | null): 
       shareCount: liveShareCountOf(doc, related),
       isShare: !!shareTarget && thingtimeOf(doc).includes('share'),
       // only surface originals the viewer is allowed to see
-      shareOf: original && canView(original, viewerId) ? project(original, false) : null,
+      shareOf: original && canView(original, viewer) ? project(original, false) : null,
       createdAt: new Date(doc.createdAt).toISOString()
     };
   };
@@ -534,14 +590,15 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerId: string | null): 
   return docs.map((doc) => project(doc, true));
 };
 
-export const toPublicThings = async (docs: ThingDoc[], _viewerId: string | null): Promise<PublicThing[]> => {
+export const toPublicThings = async (docs: ThingDoc[], _viewer: string | Viewer): Promise<PublicThing[]> => {
   if (!docs.length) return [];
   const profiles = await resolveProfiles(docs.map((doc) => doc.ownerId));
   return docs.map((doc) => ({
     id: doc.shareId,
     thingtime: thingtimeOf(doc),
     author: profiles.get(doc.ownerId) || null,
-    visibility: doc.visibility,
+    visibility: visibilityFromAcl(aclOf(doc)),
+    acl: aclOf(doc),
     targetId: targetIdOf(doc),
     crystal: crystalOf(doc),
     tags: doc.tags || [],
@@ -551,30 +608,65 @@ export const toPublicThings = async (docs: ThingDoc[], _viewerId: string | null)
 };
 
 // ---------------------------------------------------------------------------
-// Visibility: no relationship graph exists yet, so friends/family/private
-// things are only visible to their owner; public is visible to everyone.
-// Target-attached things ('inherit') are as visible as their target.
+// Permissions: acl entries decide who can view (see schemas/registry.ts for
+// the grammar + most-specific-wins evaluation). Owners always see their own
+// things. Target-attached things carry ['tt:inherit'] and are as visible as
+// their target. v1 residue docs still carry the visibility enum — aclOf maps
+// it so one evaluation path serves both eras.
 
-const canView = (doc: ThingDoc, viewerId: string | null): boolean =>
-  doc.visibility === 'public' || (!!viewerId && doc.ownerId === viewerId);
+const aclOf = (doc: ThingDoc): string[] =>
+  Array.isArray(doc.acl) && doc.acl.length ? doc.acl : aclFromVisibility(doc.visibility) || [ACL_OWNER];
 
-const canViewInherited = async (doc: ThingDoc, viewerId: string | null, depth = 0): Promise<boolean> => {
-  if (doc.visibility !== 'inherit') return canView(doc, viewerId);
+const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
+  if (viewer?.id && doc.ownerId === viewer.id) return true;
+  return aclAllows(aclOf(doc), viewer, doc.ownerId);
+};
+
+const canViewInherited = async (doc: ThingDoc, viewer: Viewer, depth = 0): Promise<boolean> => {
+  if (!aclOf(doc).includes(ACL_INHERIT)) return canView(doc, viewer);
   // comment-on-comment chains resolve through their targets, bounded so a
   // pathological cycle can't loop forever
   if (depth >= 4) return false;
   const target = doc.targetId ? await findThing(doc.targetId) : null;
-  return !!target && (await canViewInherited(target, viewerId, depth + 1));
+  return !!target && (await canViewInherited(target, viewer, depth + 1));
 };
 
-const visibilityQueryFor = (viewerId: string | null, circles: PostVisibility[]) => {
+// Coarse DB-level audience match per requested circle, covering both eras.
+// Exact acl evaluation (exclusions, specific-user grants) happens in-memory on
+// the fetched page via canView — the query only has to be a superset.
+const circleClause = (circle: PostVisibility) => {
+  switch (circle) {
+    case 'public':
+      return { $or: [{ acl: ACL_ALL }, { visibility: 'public' }] };
+    case 'friends':
+      return { $or: [{ acl: ACL_FRIENDS }, { visibility: 'friends' }] };
+    case 'family':
+      return { $or: [{ acl: ACL_FAMILY }, { visibility: 'family' }] };
+    case 'private':
+      // $nin on an array field means "contains none of these"
+      return {
+        $or: [
+          { acl: { $exists: true, $nin: [ACL_ALL, ACL_FRIENDS, ACL_FAMILY] } },
+          { visibility: 'private' }
+        ]
+      };
+  }
+};
+
+const visibilityQueryFor = (viewer: Viewer, circles: PostVisibility[]) => {
   const wanted = circles.length ? circles : VISIBILITIES;
   const publicWanted = wanted.includes('public');
-  const ownCircles = viewerId ? wanted : [];
 
   const clauses: any[] = [];
-  if (publicWanted) clauses.push({ visibility: 'public' });
-  if (viewerId && ownCircles.length) clauses.push({ ownerId: viewerId, visibility: { $in: ownCircles } });
+  if (publicWanted) clauses.push(circleClause('public'));
+  if (viewer?.id) {
+    // the viewer's own things, optionally narrowed to the requested circles
+    clauses.push(
+      wanted.length === VISIBILITIES.length
+        ? { ownerId: viewer.id }
+        : { ownerId: viewer.id, $or: wanted.map((circle) => circleClause(circle)) }
+    );
+  }
   // nothing requested that the viewer could ever see
   if (!clauses.length) return null;
   return clauses.length === 1 ? clauses[0] : { $or: clauses };
@@ -586,9 +678,9 @@ const findThing = async (shareId: unknown): Promise<ThingDoc | null> => {
   return (await things.findOne({ shareId: shareId.trim() } as any)) as any as ThingDoc | null;
 };
 
-const findViewableThing = async (shareId: unknown, viewerId: string | null): Promise<ThingDoc | null> => {
+const findViewableThing = async (shareId: unknown, viewer: Viewer): Promise<ThingDoc | null> => {
   const doc = await findThing(shareId);
-  if (!doc || !(await canViewInherited(doc, viewerId))) return null;
+  if (!doc || !(await canViewInherited(doc, viewer))) return null;
   return doc;
 };
 
@@ -628,14 +720,15 @@ const typeClause = (types: PostType[]) =>
   types.length ? { $or: [{ 'crystal.type': { $in: types } }, { type: { $in: types } }] } : {};
 
 export const getFeed = async (
-  viewerId: string | null,
+  viewerInput: string | Viewer,
   query: FeedQuery
 ): Promise<{ ok: true; posts: PublicPost[]; nextCursor: string | null; ranked: boolean } | Fail> => {
+  const viewer = asViewer(viewerInput);
   const limit = Math.min(Math.max(1, query.limit || DEFAULT_FEED_LIMIT), MAX_FEED_LIMIT);
   const types = (query.types || []).filter((type) => POST_TYPES.includes(type));
   const circles = (query.circles || []).filter((circle) => VISIBILITIES.includes(circle));
 
-  const visibility = visibilityQueryFor(viewerId, circles);
+  const visibility = visibilityQueryFor(viewer, circles);
   if (!visibility) return { ok: true, posts: [], nextCursor: null, ranked: false };
 
   const range: any = {};
@@ -663,7 +756,11 @@ export const getFeed = async (
     const page = docs.slice(0, limit);
     const last = page[page.length - 1];
     const nextCursor = docs.length > limit && last ? `${new Date(last.createdAt).getTime()}_${last.shareId}` : null;
-    return { ok: true, posts: await toPublicPosts(page, viewerId), nextCursor, ranked: false };
+    // exact acl evaluation (exclusions, specific-user grants) — the DB match
+    // is only a superset; the cursor advances over the raw page so filtered
+    // docs are skipped, not resurfaced
+    const visible = page.filter((doc) => canView(doc, viewer));
+    return { ok: true, posts: await toPublicPosts(visible, viewer), nextCursor, ranked: false };
   }
 
   // ranked: score a lean projection of the newest candidate window, page by
@@ -697,8 +794,9 @@ export const getFeed = async (
     : [];
   const docsById = new Map(pageDocs.map((doc) => [doc.shareId, doc]));
   const page = pageIds.map((id) => docsById.get(id)).filter(Boolean) as ThingDoc[];
+  const visible = page.filter((doc) => canView(doc, viewer));
   const nextCursor = offset + limit < scored.length ? String(offset + limit) : null;
-  return { ok: true, posts: await toPublicPosts(page, viewerId), nextCursor, ranked: true };
+  return { ok: true, posts: await toPublicPosts(visible, viewer), nextCursor, ranked: true };
 };
 
 export const featuresOf = (doc: ThingDoc): PostFeatures => ({
@@ -709,19 +807,22 @@ export const featuresOf = (doc: ThingDoc): PostFeatures => ({
 });
 
 export const listUserPosts = async (
-  viewerId: string | null,
+  viewerInput: string | Viewer,
   username: string,
   cursor: string | null,
   limit = DEFAULT_FEED_LIMIT
 ): Promise<{ ok: true; posts: PublicPost[]; nextCursor: string | null; postCount?: number } | Fail> => {
+  const viewer = asViewer(viewerInput);
   if (typeof username !== 'string' || !username.trim()) return fail(400, 'username is required');
   const users = await getUsersCollection();
   const user = await users.findOne({ username: username.trim().toLowerCase() });
   if (!user) return fail(404, 'User not found');
 
   const ownerId = String(user._id);
-  const own = viewerId === ownerId;
-  const match = withMatch(postMatch(), { ownerId, ...(own ? {} : { visibility: 'public' }) });
+  const own = viewer?.id === ownerId;
+  const match = own
+    ? withMatch(postMatch(), { ownerId })
+    : withMatch(postMatch(), { ownerId }, circleClause('public'));
 
   const things = await getThingsCollection();
   const parsed = parseChronoCursor(cursor);
@@ -740,19 +841,21 @@ export const listUserPosts = async (
   const page = docs.slice(0, capped);
   const last = page[page.length - 1];
   const nextCursor = docs.length > capped && last ? `${new Date(last.createdAt).getTime()}_${last.shareId}` : null;
-  return { ok: true, posts: await toPublicPosts(page, viewerId), nextCursor, postCount };
+  const visible = page.filter((doc) => canView(doc, viewer));
+  return { ok: true, posts: await toPublicPosts(visible, viewer), nextCursor, postCount };
 };
 
 // Unified single read — posts project as PublicPost, everything else as the
 // generic PublicThing.
 export const getThing = async (
-  viewerId: string | null,
+  viewerInput: string | Viewer,
   shareId: unknown
 ): Promise<Fail | { ok: true; thing: PublicThing; post: PublicPost | null }> => {
-  const doc = await findViewableThing(shareId, viewerId);
+  const viewer = asViewer(viewerInput);
+  const doc = await findViewableThing(shareId, viewer);
   if (!doc) return fail(404, 'Thing not found');
-  const thing = (await toPublicThings([doc], viewerId))[0];
-  const post = isPostThing(doc) ? (await toPublicPosts([doc], viewerId))[0] : null;
+  const thing = (await toPublicThings([doc], viewer))[0];
+  const post = isPostThing(doc) ? (await toPublicPosts([doc], viewer))[0] : null;
   return { ok: true, thing, post };
 };
 
@@ -768,20 +871,21 @@ export type ListThingsQuery = {
 //   a post) — inherit visibility from the target.
 // - no targetId: the viewer's OWN things (any schema), newest first.
 export const listThings = async (
-  viewerId: string | null,
+  viewerInput: string | Viewer,
   query: ListThingsQuery
 ): Promise<Fail | { ok: true; things: PublicThing[]; nextCursor: string | null }> => {
+  const viewer = asViewer(viewerInput);
   const limit = Math.min(Math.max(1, query.limit || DEFAULT_FEED_LIMIT), MAX_FEED_LIMIT);
   const thingtime = (query.thingtime || []).filter((id) => typeof id === 'string' && id.trim());
 
   let match: Record<string, any>;
   if (query.targetId) {
-    const target = await findViewableThing(query.targetId, viewerId);
+    const target = await findViewableThing(query.targetId, viewer);
     if (!target) return fail(404, 'Thing not found');
     match = { targetId: target.shareId };
   } else {
-    if (!viewerId) return fail(401, 'Unauthorized');
-    match = { ownerId: viewerId, $or: [{ thingtime: { $exists: true } }, { kind: 'post' }] };
+    if (!viewer?.id) return fail(401, 'Unauthorized');
+    match = { ownerId: viewer.id, $or: [{ thingtime: { $exists: true } }, { kind: 'post' }] };
   }
   if (thingtime.length) {
     // v1 posts have no thingtime array — a 'post' filter must match them too
@@ -804,7 +908,7 @@ export const listThings = async (
   const page = docs.slice(0, limit);
   const last = page[page.length - 1];
   const nextCursor = docs.length > limit && last ? `${new Date(last.createdAt).getTime()}_${last.shareId}` : null;
-  return { ok: true, things: await toPublicThings(page, viewerId), nextCursor };
+  return { ok: true, things: await toPublicThings(page, viewer), nextCursor };
 };
 
 // ---------------------------------------------------------------------------
@@ -812,14 +916,17 @@ export const listThings = async (
 // thing can't be interacted with.
 
 export const toggleReaction = async (
-  viewerId: string,
+  viewerInput: string | Viewer,
   shareId: unknown,
   emoji: unknown
 ): Promise<Fail | { ok: true; reactionCounts: Record<string, number>; viewerReaction: string | null }> => {
+  const viewer = asViewer(viewerInput);
+  if (!viewer?.id) return fail(401, 'Unauthorized');
+  const viewerId = viewer.id;
   if (emoji !== null && (typeof emoji !== 'string' || !REACTION_EMOJIS.includes(emoji))) {
     return fail(400, 'Unsupported reaction');
   }
-  const target = await findViewableThing(shareId, viewerId);
+  const target = await findViewableThing(shareId, viewer);
   if (!target) return fail(404, 'Post not found');
 
   const things = await getThingsCollection();
@@ -854,11 +961,15 @@ export const toggleReaction = async (
   await Promise.all(ops);
 
   if (next) {
-    const created = await createThing(viewerId, {
-      thingtime: ['reaction'],
-      crystal: { emoji: next },
-      targetId: target.shareId
-    });
+    const created = await createThing(
+      viewerId,
+      {
+        thingtime: ['reaction'],
+        crystal: { emoji: next },
+        targetId: target.shareId
+      },
+      viewer
+    );
     if (isFail(created)) return created;
   } else {
     await things.updateOne({ shareId: target.shareId } as any, { $set: { updatedAt: now } });
@@ -885,18 +996,25 @@ export const toggleReaction = async (
 };
 
 export const addComment = async (
-  viewerId: string,
+  viewerInput: string | Viewer,
   shareId: unknown,
   text: unknown
 ): Promise<Fail | { ok: true; comment: PublicComment; commentCount: number }> => {
-  const target = await findViewableThing(shareId, viewerId);
+  const viewer = asViewer(viewerInput);
+  if (!viewer?.id) return fail(401, 'Unauthorized');
+  const viewerId = viewer.id;
+  const target = await findViewableThing(shareId, viewer);
   if (!target) return fail(404, 'Post not found');
 
-  const created = await createThing(viewerId, {
-    thingtime: ['comment'],
-    crystal: { text },
-    targetId: target.shareId
-  });
+  const created = await createThing(
+    viewerId,
+    {
+      thingtime: ['comment'],
+      crystal: { text },
+      targetId: target.shareId
+    },
+    viewer
+  );
   if (isFail(created)) return created;
 
   const profiles = await resolveProfiles([viewerId]);
@@ -913,38 +1031,48 @@ export const addComment = async (
 };
 
 export const sharePost = async (
-  viewerId: string,
+  viewerInput: string | Viewer,
   shareId: unknown,
-  input: { text?: unknown; visibility?: unknown }
+  input: { text?: unknown; visibility?: unknown; acl?: unknown }
 ): Promise<Fail | { ok: true; post: PublicPost }> => {
-  const original = await findViewableThing(shareId, viewerId);
+  const viewer = asViewer(viewerInput);
+  if (!viewer?.id) return fail(401, 'Unauthorized');
+  const viewerId = viewer.id;
+  const original = await findViewableThing(shareId, viewer);
   if (!original || !isPostThing(original)) return fail(404, 'Post not found');
-  if (original.visibility !== 'public' && original.ownerId !== viewerId) {
+  if (original.ownerId !== viewerId && !aclOf(original).includes(ACL_ALL)) {
     return fail(403, 'Only public posts can be shared');
   }
 
   const text = typeof input.text === 'string' ? input.text.trim().slice(0, MAX_TEXT_CHARS) : '';
   const originalCrystal = crystalOf(original);
 
-  const created = await createThing(viewerId, {
-    thingtime: ['post', 'share'],
-    crystal: { type: originalCrystal.type || 'text', text, images: [], listing: null },
-    visibility: input.visibility,
-    // never carry a non-public original's tags to audiences that can't view it
-    tags: original.visibility === 'public' ? original.tags || [] : [],
-    targetId: original.shareId
-  });
+  const created = await createThing(
+    viewerId,
+    {
+      thingtime: ['post', 'share'],
+      crystal: { type: originalCrystal.type || 'text', text, images: [], listing: null },
+      acl: input.acl,
+      visibility: input.visibility,
+      // never carry a non-public original's tags to audiences that can't view it
+      tags: aclOf(original).includes(ACL_ALL) ? original.tags || [] : [],
+      targetId: original.shareId
+    },
+    viewer
+  );
   if (isFail(created)) return created;
 
-  return { ok: true, post: (await toPublicPosts([created.doc], viewerId))[0] };
+  return { ok: true, post: (await toPublicPosts([created.doc], viewer))[0] };
 };
 
-export const deleteThing = async (viewerId: string, shareId: unknown): Promise<Fail | { ok: true }> => {
+export const deleteThing = async (viewerInput: string | Viewer, shareId: unknown): Promise<Fail | { ok: true }> => {
+  const viewer = asViewer(viewerInput);
+  if (!viewer?.id) return fail(401, 'Unauthorized');
   if (typeof shareId !== 'string' || !shareId.trim()) return fail(400, 'Thing id is required');
   const things = await getThingsCollection();
   const deleted = (await things.findOneAndDelete({
     shareId: shareId.trim(),
-    ownerId: viewerId
+    ownerId: viewer.id
   } as any)) as any as ThingDoc | null;
   if (!deleted) return fail(404, 'Thing not found');
   // comments/reactions attached to the deleted thing go with it; share things
@@ -957,21 +1085,26 @@ export const deletePost = deleteThing;
 
 export type UpdateThingInput = {
   crystal?: unknown;
-  visibility?: unknown;
+  acl?: unknown;
+  visibility?: unknown; // legacy alias, mapped onto acl
   tags?: unknown;
 };
 
-// Own-thing update: crystal patches merge over the existing crystal and are
-// re-validated against the thing's schemas. v1 posts are upgraded to v2 shape
+// Own-thing update. PATCH semantics by default: crystal patches merge over the
+// existing crystal; with replaceCrystal (PUT) the crystal is taken whole. Both
+// re-validate against the thing's schemas. v1 posts are upgraded to v2 shape
 // on write (their embedded comments/reactions residue stays until migration).
 export const updateThing = async (
-  viewerId: string,
+  viewerInput: string | Viewer,
   shareId: unknown,
-  input: UpdateThingInput
+  input: UpdateThingInput,
+  options: { replaceCrystal?: boolean } = {}
 ): Promise<Fail | { ok: true; thing: PublicThing; post: PublicPost | null }> => {
+  const viewer = asViewer(viewerInput);
+  if (!viewer?.id) return fail(401, 'Unauthorized');
   if (typeof shareId !== 'string' || !shareId.trim()) return fail(400, 'Thing id is required');
   const things = await getThingsCollection();
-  const doc = (await things.findOne({ shareId: shareId.trim(), ownerId: viewerId } as any)) as any as ThingDoc | null;
+  const doc = (await things.findOne({ shareId: shareId.trim(), ownerId: viewer.id } as any)) as any as ThingDoc | null;
   if (!doc || (!isV2(doc) && !isPostThing(doc))) return fail(404, 'Thing not found');
 
   const thingtime = thingtimeOf(doc);
@@ -979,7 +1112,8 @@ export const updateThing = async (
     input.crystal && typeof input.crystal === 'object' && !Array.isArray(input.crystal)
       ? (input.crystal as Record<string, unknown>)
       : {};
-  const validated = validateThingtimeCrystal(thingtime, { ...crystalOf(doc), ...patch });
+  const nextCrystal = options.replaceCrystal ? patch : { ...crystalOf(doc), ...patch };
+  const validated = validateThingtimeCrystal(thingtime, nextCrystal);
   if (isFail(validated)) return validated;
 
   let tags = doc.tags || [];
@@ -990,11 +1124,12 @@ export const updateThing = async (
     tags = [...sanitized, ...(listing ? [listing.category] : [])].filter((tag, index, all) => all.indexOf(tag) === index);
   }
 
-  let visibility = doc.visibility;
-  if (input.visibility !== undefined) {
-    if (doc.visibility === 'inherit') return fail(400, 'Attached things inherit their target visibility');
-    if (!VISIBILITIES.includes(input.visibility as PostVisibility)) return fail(400, 'Unknown visibility');
-    visibility = input.visibility as PostVisibility;
+  let acl = aclOf(doc);
+  if (input.acl !== undefined || input.visibility !== undefined) {
+    if (acl.includes(ACL_INHERIT)) return fail(400, 'Attached things inherit their target audience');
+    const nextAcl = resolveInputAcl(input);
+    if (isFail(nextAcl)) return nextAcl;
+    if (nextAcl) acl = nextAcl;
   }
 
   const now = new Date();
@@ -1004,12 +1139,21 @@ export const updateThing = async (
     crystal: validated.crystal,
     targetId: targetIdOf(doc),
     tags,
-    visibility,
+    acl,
     updatedAt: now
   };
   // upgrading a v1 post in place — clear the legacy crystal-at-root fields the
   // v2 shape replaces (embedded comments/reactions stay for the migration)
-  const unset: Record<string, any> = { kind: '', type: '', text: '', images: '', listing: '', shareOfId: '', shareCount: '' };
+  const unset: Record<string, any> = {
+    kind: '',
+    type: '',
+    text: '',
+    images: '',
+    listing: '',
+    shareOfId: '',
+    shareCount: '',
+    visibility: ''
+  };
   await things.updateOne({ shareId: doc.shareId } as any, { $set: set, $unset: unset } as any);
 
   const updated = { ...doc, ...set } as ThingDoc;
@@ -1020,25 +1164,60 @@ export const updateThing = async (
   delete (updated as any).listing;
   delete (updated as any).shareOfId;
   delete (updated as any).shareCount;
+  delete (updated as any).visibility;
 
-  const thing = (await toPublicThings([updated], viewerId))[0];
-  const post = isPostThing(updated) ? (await toPublicPosts([updated], viewerId))[0] : null;
+  const thing = (await toPublicThings([updated], viewer))[0];
+  const post = isPostThing(updated) ? (await toPublicPosts([updated], viewer))[0] : null;
   return { ok: true, thing, post };
+};
+
+// PUT semantics: create the thing at a caller-chosen id when it doesn't exist,
+// otherwise replace the owned thing's crystal (and any provided audience/tags).
+export const upsertThing = async (
+  ownerId: string,
+  input: CreateThingInput,
+  viewer: Viewer = null
+): Promise<Fail | { ok: true; created: boolean; thing: PublicThing; post: PublicPost | null }> => {
+  const shareId = sanitizeShareId(input.shareId);
+  if (isFail(shareId)) return shareId;
+  if (!shareId) return fail(400, 'Upserts need an id (the shareId to create or replace)');
+
+  const existing = await findThing(shareId);
+  if (!existing) {
+    const created = await createThing(ownerId, { ...input, shareId }, viewer);
+    if (isFail(created)) return created;
+    const projectViewer = viewer && viewer.id === ownerId ? viewer : { id: ownerId };
+    const thing = (await toPublicThings([created.doc], projectViewer))[0];
+    const post = isPostThing(created.doc) ? (await toPublicPosts([created.doc], projectViewer))[0] : null;
+    return { ok: true, created: true, thing, post };
+  }
+
+  if (existing.ownerId !== ownerId) return fail(404, 'Thing not found');
+  if (input.thingtime !== undefined) {
+    const wanted = Array.isArray(input.thingtime) ? [...input.thingtime].sort().join(',') : '';
+    if (wanted !== [...thingtimeOf(existing)].sort().join(',')) {
+      return fail(400, 'A thing’s thingtime schemas can’t be changed');
+    }
+  }
+  const updated = await updateThing(viewer || ownerId, shareId, input as UpdateThingInput, { replaceCrystal: true });
+  if (isFail(updated)) return updated;
+  return { ok: true, created: false, thing: updated.thing, post: updated.post };
 };
 
 // Public post count for a profile header — kept here so no route touches the
 // things collection directly.
 export const countPublicPosts = async (ownerId: string): Promise<number> => {
   const things = await getThingsCollection();
-  return things.countDocuments(withMatch(postMatch(), { ownerId, visibility: 'public' }) as any);
+  return things.countDocuments(withMatch(postMatch(), { ownerId }, circleClause('public')) as any);
 };
 
 // Feature lookup used by algorithm training — only returns posts the engaging
 // user can actually see.
 export const getPostFeatures = async (
-  viewerId: string,
+  viewerInput: string | Viewer,
   shareIds: string[]
 ): Promise<Map<string, PostFeatures>> => {
+  const viewer = asViewer(viewerInput);
   const wanted = [...new Set(shareIds.filter((id) => typeof id === 'string' && id.trim()))];
   if (!wanted.length) return new Map();
   const things = await getThingsCollection();
@@ -1046,5 +1225,5 @@ export const getPostFeatures = async (
     .find(withMatch({ shareId: { $in: wanted } }, postMatch()) as any)
     .project(FEATURE_PROJECTION)
     .toArray()) as any as ThingDoc[];
-  return new Map(docs.filter((doc) => canView(doc, viewerId)).map((doc) => [doc.shareId, featuresOf(doc)]));
+  return new Map(docs.filter((doc) => canView(doc, viewer)).map((doc) => [doc.shareId, featuresOf(doc)]));
 };

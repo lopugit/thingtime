@@ -1,5 +1,5 @@
 import { ensureIndexes, getThingtimeDb } from '../mongodb/collections';
-import { COLLECTION_SCHEMA_VERSIONS, LEGACY_SCHEMA_VERSION } from '~/schemas/registry';
+import { ACL_INHERIT, ACL_OWNER, COLLECTION_SCHEMA_VERSIONS, LEGACY_SCHEMA_VERSION, aclFromVisibility } from '~/schemas/registry';
 
 // Admin-run database schema-version migrations. Every collection stores the
 // root-level schemaVersion each doc was written at (docs without one predate
@@ -166,7 +166,7 @@ const thingsMigration: Migration = {
             thingtime: ['comment'],
             crystal: { text: comment.text },
             ownerId: comment.userId,
-            visibility: 'inherit',
+            acl: [ACL_INHERIT],
             targetId: doc.shareId,
             tags: [],
             createdAt: new Date(comment.createdAt),
@@ -181,7 +181,7 @@ const thingsMigration: Migration = {
               thingtime: ['reaction'],
               crystal: { emoji },
               ownerId: userId,
-              visibility: 'inherit',
+              acl: [ACL_INHERIT],
               targetId: doc.shareId,
               tags: [],
               // v1 stored no per-reaction time; the post's updatedAt is the
@@ -219,7 +219,9 @@ const thingsMigration: Migration = {
                 listing: doc.listing || null
               },
               targetId: doc.shareOfId || null,
-              tags: doc.tags || []
+              tags: doc.tags || [],
+              // legacy visibility enum becomes acl grants/exclusions
+              acl: aclFromVisibility(doc.visibility) || [ACL_OWNER]
             },
             $unset: {
               kind: '',
@@ -230,7 +232,8 @@ const thingsMigration: Migration = {
               comments: '',
               reactions: '',
               shareOfId: '',
-              shareCount: ''
+              shareCount: '',
+              visibility: ''
             }
           }
         );

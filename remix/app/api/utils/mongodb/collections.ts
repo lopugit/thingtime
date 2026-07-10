@@ -67,9 +67,11 @@ export const ensureIndexes = async () => {
         db.collection('things').createIndex({ shareId: 1 }, { unique: true, sparse: true }),
         db.collection('things').createIndex({ kind: 1, visibility: 1, createdAt: -1, shareId: 1 }),
         db.collection('things').createIndex({ kind: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
-        db.collection('things').createIndex({ thingtime: 1, visibility: 1, createdAt: -1, shareId: 1 }),
         db.collection('things').createIndex({ thingtime: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
         db.collection('things').createIndex({ targetId: 1, thingtime: 1, createdAt: 1, shareId: 1 }),
+        // acl and thingtime are both arrays — Mongo forbids two multikey fields
+        // in one compound index, so the audience index stands alone
+        db.collection('things').createIndex({ acl: 1, createdAt: -1, shareId: 1 }),
         db.collection('feedAlgorithms').createIndex({ shareId: 1 }, { unique: true }),
         db.collection('feedAlgorithms').createIndex({ ownerId: 1 })
       ]);
