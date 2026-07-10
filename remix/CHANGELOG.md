@@ -28,7 +28,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   `THINGTIME_PRIVATE_ADMIN_USERNAMES` allowlist; the previously unauthenticated
   `mongodb/raw-results` dump is now admin-only. Legacy wire shapes stay
   byte-compatible and reads merge v1 embedded data until the idempotent
-  `things-v1-to-v2` migration runs. Details in
+  `things-v1-to-v2` migration runs. Round 2: the stored visibility enum became
+  a generic `acl` permission array (tt: grants plus "-"-prefixed exclusions,
+  most-specific entry wins — e.g. `["tt:all","-tt:user/somebody"]`), with the
+  legacy names still accepted and derived, and `/api/v1/things` grew the full
+  verb set (GET read/list, POST create, PUT upsert, PATCH merge, DELETE).
+  Details in
   [`PRs/59-claude-unified-thing-crystal-schemas--everything-is-a-thing.md`](../PRs/59-claude-unified-thing-crystal-schemas--everything-is-a-thing.md).
   — _Claude (AI), 2026-07-10_
 

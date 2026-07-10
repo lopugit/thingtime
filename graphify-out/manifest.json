@@ -830,8 +830,8 @@
     "semantic_hash": "f65b01f4781159ee3b8a0a9da33d1f5a"
   },
   "remix/app/api/utils/mongodb/collections.ts": {
-    "mtime": 1783638896.0553424,
-    "ast_hash": "f837aacea52fca0e5a8709faaf9fd261",
+    "mtime": 1783680724.7655427,
+    "ast_hash": "8039b99d7d29b9481db1f97b4f7fe2d4",
     "semantic_hash": ""
   },
   "remix/app/api/utils/mongodb/config.ts": {
@@ -1185,8 +1185,8 @@
     "semantic_hash": "2c876691ea163b0306ebf575cf88e1b4"
   },
   "remix/app/hooks/useApi.tsx": {
-    "mtime": 1783640861.858866,
-    "ast_hash": "c89340ba053b97680e94f2459b46900a",
+    "mtime": 1783680952.136339,
+    "ast_hash": "efeee35680f4047ddab32eaba75814b0",
     "semantic_hash": ""
   },
   "remix/app/hooks/useAsyncFetcher.tsx": {
@@ -1810,8 +1810,8 @@
     "semantic_hash": "f162fbffa18046af73dfca08802a536f"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1783636817.468938,
-    "ast_hash": "a80be772d8afb642d822530713560a19",
+    "mtime": 1783641261.8371975,
+    "ast_hash": "aab542a567880167ece904e51d2b7cab",
     "semantic_hash": ""
   },
   "remix/README.md": {
@@ -2680,13 +2680,13 @@
     "semantic_hash": ""
   },
   "remix/app/tests/api/apiTestRunner.ts": {
-    "mtime": 1783639347.0675168,
-    "ast_hash": "c5e83b4a48fd784e0e455183880baad6",
+    "mtime": 1783681203.2136717,
+    "ast_hash": "b850a0b709d26567d9fc748fed0e0dd7",
     "semantic_hash": ""
   },
   "remix/app/tests/api/apiTests.ts": {
-    "mtime": 1783639369.8806608,
-    "ast_hash": "e7e86da7c6a3b37e5462ea08c35edacc",
+    "mtime": 1783681165.6531324,
+    "ast_hash": "2ef56b2229d9f8f2d0f6d9feb375c512",
     "semantic_hash": ""
   },
   "remix/app/components/Nav/Drawer/DrawerContent.tsx": {
@@ -3110,8 +3110,8 @@
     "semantic_hash": ""
   },
   "remix/app/api/utils/things/things.ts": {
-    "mtime": 1783639542.2921584,
-    "ast_hash": "24858339ac2f2ba419a46e78837b1f2d",
+    "mtime": 1783680721.6922731,
+    "ast_hash": "749a63b8ce6d3bc2b8a7667cc96a5dba",
     "semantic_hash": ""
   },
   "remix/app/components/Feed/Feed.tsx": {
@@ -3120,8 +3120,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Feed/feedTypes.ts": {
-    "mtime": 1783640861.8586357,
-    "ast_hash": "1635a83228a69518be93196b261761ad",
+    "mtime": 1783680952.1973116,
+    "ast_hash": "7de8ae74cf13878e9b5b2bbdf744e149",
     "semantic_hash": ""
   },
   "remix/app/components/Profile/EditProfileModal.tsx": {
@@ -3175,38 +3175,38 @@
     "semantic_hash": ""
   },
   "remix/app/routes/api/v1/things/_things.tsx": {
-    "mtime": 1783638979.2116897,
-    "ast_hash": "32c5df4c6fcb4ced518584a77d387c96",
+    "mtime": 1783680805.7242181,
+    "ast_hash": "a4015abbe67fe4efaae7dc5e37fe4fc9",
     "semantic_hash": ""
   },
   "remix/app/routes/api/v1/things/comment/_comment.tsx": {
-    "mtime": 1783636817.5538795,
-    "ast_hash": "9bd5bb881b6b98e4964e1f1fa52e3d96",
+    "mtime": 1783680858.012415,
+    "ast_hash": "fbd425a7d2ed9fc7d237683102713065",
     "semantic_hash": ""
   },
   "remix/app/routes/api/v1/things/delete/_delete.tsx": {
-    "mtime": 1783636817.5542867,
-    "ast_hash": "f10cef6b4c90a1ed78886eeba0135def",
+    "mtime": 1783680858.0272586,
+    "ast_hash": "794c986f0af78094167454fa025812f9",
     "semantic_hash": ""
   },
   "remix/app/routes/api/v1/things/feed/_feed.tsx": {
-    "mtime": 1783636817.5548525,
-    "ast_hash": "20829365c26f44292bfad71d4b5e1884",
+    "mtime": 1783680818.8024178,
+    "ast_hash": "fe4bb7729d18d9d8a0701ca5919ac7a7",
     "semantic_hash": ""
   },
   "remix/app/routes/api/v1/things/react/_react.tsx": {
-    "mtime": 1783636817.5553174,
-    "ast_hash": "220ae6532b4d468da4d46e8de5f9f87c",
+    "mtime": 1783680858.0182588,
+    "ast_hash": "4dce11ade9f2ee6d873193c6b70dc27c",
     "semantic_hash": ""
   },
   "remix/app/routes/api/v1/things/share/_share.tsx": {
-    "mtime": 1783636817.5558608,
-    "ast_hash": "95c9f0f2fc35d34e428bcae973a33cce",
+    "mtime": 1783680858.0215623,
+    "ast_hash": "812f7fda348b2e8ee43e54ce2f71ea63",
     "semantic_hash": ""
   },
   "remix/app/routes/api/v1/things/user/_user.tsx": {
-    "mtime": 1783636817.5563328,
-    "ast_hash": "f803c93ab6cab948ee4506b7a98c28cd",
+    "mtime": 1783680895.0659342,
+    "ast_hash": "24ddc20e3233926620010f1078eca157",
     "semantic_hash": ""
   },
   "remix/app/routes/api/v1/users/profile/_profile.tsx": {
@@ -3270,13 +3270,13 @@
     "semantic_hash": ""
   },
   "remix/app/docs/apiDocs.ts": {
-    "mtime": 1783639303.2813761,
-    "ast_hash": "e415b0dd11e7727879013e25dbfa32cc",
+    "mtime": 1783681141.2720451,
+    "ast_hash": "a6294892261ed4c127ce48b0191de02c",
     "semantic_hash": ""
   },
   "remix/app/routes/docs/api.tsx": {
-    "mtime": 1783636817.5613902,
-    "ast_hash": "2bb822b6469dcd7686c38709fc1ffbff",
+    "mtime": 1783681003.687585,
+    "ast_hash": "04b45d6ab0b7ae1efc2d3349a171fe95",
     "semantic_hash": ""
   },
   "remix/server/routes/api/root-data-docs.ts": {
@@ -3400,8 +3400,8 @@
     "semantic_hash": ""
   },
   "remix/app/api/utils/migrations/migrations.ts": {
-    "mtime": 1783640017.9010978,
-    "ast_hash": "355fb9579133c9c2ce8d369d20a20725",
+    "mtime": 1783680764.594757,
+    "ast_hash": "738a4e84465c914a2609fb418c41bb4f",
     "semantic_hash": ""
   },
   "remix/app/components/Schemas/MigrationsPanel.tsx": {
@@ -3430,8 +3430,8 @@
     "semantic_hash": ""
   },
   "remix/app/routes/api/v1/things/update/_update.tsx": {
-    "mtime": 1783638988.8277078,
-    "ast_hash": "2275ccde586fe0d93930c483d98c33b9",
+    "mtime": 1783680818.8018508,
+    "ast_hash": "f1af87e072e920125dbde621551f07d7",
     "semantic_hash": ""
   },
   "remix/app/routes/schemas.tsx": {
@@ -3440,8 +3440,13 @@
     "semantic_hash": ""
   },
   "remix/app/schemas/registry.ts": {
-    "mtime": 1783639486.1370606,
-    "ast_hash": "540bfd3eb29c2f167877c63482dcc487",
+    "mtime": 1783680345.5914695,
+    "ast_hash": "4e2129e555f4c3e4272ac2f4e8247412",
+    "semantic_hash": ""
+  },
+  "PRs/59-claude-unified-thing-crystal-schemas--everything-is-a-thing.md": {
+    "mtime": 1783641256.4443119,
+    "ast_hash": "0b660276ab1a1894a4e5c0abc8bb2083",
     "semantic_hash": ""
   }
 }

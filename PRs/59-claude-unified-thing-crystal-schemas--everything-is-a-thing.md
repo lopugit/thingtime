@@ -54,8 +54,17 @@ Writes are always v2. **Reads merge v1 embedded residue** (embedded `comments` a
 - `POST /api/v1/mongodb/raw-results` was unauthenticated and dumped every private doc (incl. Magic's vault chunks); now admin-only, docs + tests updated.
 - Client-supplied `shareId` on create (needed for seed idempotency) is now validated (string, ≤128 chars, no `$`/`.`/whitespace) instead of storing arbitrary JSON values.
 
+## Round 2 — ACL permissions + full CRUD on one endpoint (2026-07-10, same PR)
+
+- **`acl` replaces the stored visibility enum** on the root Thing schema: tt: grants plus `-`-prefixed exclusions (`tt:all`, `tt:user` owner, `tt:userFriends`, `tt:userFamily`, `tt:user/<username>`, `tt:inherit` on attached things). Evaluation is most-specific-entry-wins with exclusions winning ties, owners always view; circles resolve to owner-only until a relationship graph exists. Legacy visibility names map in (`private` → `['tt:user']`, `friends` → `['-tt:all','tt:userFriends','tt:user']`, …) and derive back out on the wire, so the frontend composer, Magic, and seeds keep working unchanged. DB queries are a coarse superset (`acl`/legacy-visibility clauses) with exact in-memory `canView` filtering per page; new standalone multikey index `{acl, createdAt, shareId}` (acl+thingtime can't share a compound index — parallel arrays).
+- **`/api/v1/things` now does all of CRUD**: GET (read/list), POST (create), PUT (upsert by caller id — 201 create / 200 replace-crystal-whole, thingtime immutable), PATCH (merge update), DELETE (`?id=` or body). Sub-routes stay as sugar; useApi speaks the unified verbs now. Docs `ApiHttpMethod` widened (badge colors + Net::HTTP class mapping updated); 11 request examples on the things entry covering every verb + acl shapes.
+- Migration `things-v1-to-v2` now writes `acl` (mapped from each doc's visibility) and `$unset`s the enum; exploded comments/reactions carry `['tt:inherit']`.
+- Verified live: two service accounts + anon — friends-only post invisible to non-owners (404 + feed-filtered), public-except-B post visible to anon but 404/feed-filtered for the excluded user (who also can't comment on it), PUT create→replace→cross-owner-steal-404, PATCH crystal+acl retarget, malformed acl → 400, legacy visibility input mapping. Migration re-verified on a fresh dump-restore: 31 posts + 38 exploded things, feed before/after diff EMPTY (sorted-key normalization), re-run no-op, migrated docs carry acl with zero visibility residue.
+
 ## Follow-ups worth considering
 
 - `POST /api/v1/auth/service-account` and `POST /api/v1/mongodb/populate` remain unauthenticated (pre-existing; populate is 200-smoke-tested deliberately).
 - Comment pagination beyond the latest-20 window (unified `GET /api/v1/things?target=` already supports cursors).
+- A relationship graph so `tt:userFriends` / `tt:userFamily` grant beyond the owner; group acls (`tt:group/<id>`) parse already but match nothing.
+- Themes still use their own private/public enum — could adopt acls later.
 - The `kind:'record'` + `extended` experimental docs from the parallel branch could migrate into `thingtime`/`crystal` once that branch's intent lands.
