@@ -544,6 +544,50 @@ export const apiTests: ApiTestDefinition[] = [
     expect: expectJson([401, 404], (body) => body?.ok === false && typeof body?.error === 'string', 'Thing update was rejected with an error shape.')
   },
   {
+    id: 'things-patch-guarded',
+    name: 'Unified PATCH is guarded',
+    description: 'PATCH /things without a session (or an unknown/unowned thing) is rejected with an error shape.',
+    group: 'things',
+    method: 'PATCH',
+    path: '/api/v1/things',
+    body: { id: 'not-a-real-post-id', crystal: { text: 'edited' } },
+    expect: expectJson([401, 404], (body) => body?.ok === false && typeof body?.error === 'string', 'Unified PATCH was rejected with an error shape.')
+  },
+  {
+    id: 'things-put-guarded',
+    name: 'Unified PUT upsert is guarded',
+    description: 'PUT /things without a session is rejected; with one it needs an id and valid payload.',
+    group: 'things',
+    method: 'PUT',
+    path: '/api/v1/things',
+    mutates: true,
+    body: { id: 'api-test-upsert-001', thingtime: ['post'], crystal: { type: 'text', text: 'API test upsert 🧪' }, acl: ['tt:user'] },
+    expect: expectJson(
+      [200, 201, 401],
+      (body) => (body?.ok === true && typeof body?.created === 'boolean') || (body?.ok === false && typeof body?.error === 'string'),
+      'Unified PUT either upserted (session) or was rejected (anonymous).'
+    )
+  },
+  {
+    id: 'things-delete-unified-guarded',
+    name: 'Unified DELETE is guarded',
+    description: 'DELETE /things?id= without a session (or an unknown/unowned thing) is rejected with an error shape.',
+    group: 'things',
+    method: 'DELETE',
+    path: '/api/v1/things?id=not-a-real-post-id',
+    expect: expectJson([401, 404], (body) => body?.ok === false && typeof body?.error === 'string', 'Unified DELETE was rejected with an error shape.')
+  },
+  {
+    id: 'things-acl-validated',
+    name: 'ACL entries are validated',
+    description: 'Malformed acl entries are rejected with a 400 error shape (401 anonymous).',
+    group: 'things',
+    method: 'POST',
+    path: '/api/v1/things',
+    body: { thingtime: ['post'], crystal: { type: 'text', text: 'acl test' }, acl: ['not-a-permission'] },
+    expect: expectJson([400, 401], (body) => body?.ok === false && typeof body?.error === 'string', 'Malformed acl was rejected with an error shape.')
+  },
+  {
     id: 'schemas-list',
     name: 'Schemas registry',
     description: 'The public schema registry returns every Thingtime Schema plus collection versions.',

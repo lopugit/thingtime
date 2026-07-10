@@ -105,15 +105,35 @@ export function useApi() {
       update: useCallback(
         async (args) =>
           asyncFetcher.submit(
-            { id: args?.id, crystal: args?.crystal, visibility: args?.visibility, tags: args?.tags },
-            { action: '/api/v1/things/update' }
+            { id: args?.id, crystal: args?.crystal, acl: args?.acl, visibility: args?.visibility, tags: args?.tags },
+            { action: '/api/v1/things', method: 'PATCH' }
+          ),
+        [asyncFetcher]
+      ),
+      upsert: useCallback(
+        async (args) =>
+          asyncFetcher.submit(
+            {
+              id: args?.id,
+              thingtime: args?.thingtime,
+              crystal: args?.crystal,
+              acl: args?.acl,
+              visibility: args?.visibility,
+              targetId: args?.targetId,
+              tags: args?.tags
+            },
+            { action: '/api/v1/things', method: 'PUT' }
           ),
         [asyncFetcher]
       ),
       create: useCallback(
         async (args) => {
-          const { type, text, images, listing, visibility, tags } = args;
-          return asyncFetcher.submit({ type, text, images, listing, visibility, tags }, { action: '/api/v1/things' });
+          const { type, text, images, listing, thingtime, crystal, targetId, acl, visibility, tags } = args;
+          // unified shape when thingtime is given, legacy post shape otherwise
+          const payload = Array.isArray(thingtime)
+            ? { thingtime, crystal, targetId, acl, visibility, tags }
+            : { type, text, images, listing, acl, visibility, tags };
+          return asyncFetcher.submit(payload, { action: '/api/v1/things' });
         },
         [asyncFetcher]
       ),
@@ -128,13 +148,13 @@ export function useApi() {
       share: useCallback(
         async (args) =>
           asyncFetcher.submit(
-            { id: args?.id, text: args?.text, visibility: args?.visibility },
+            { id: args?.id, text: args?.text, acl: args?.acl, visibility: args?.visibility },
             { action: '/api/v1/things/share' }
           ),
         [asyncFetcher]
       ),
       remove: useCallback(
-        async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/things/delete' }),
+        async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/things', method: 'DELETE' }),
         [asyncFetcher]
       )
     },

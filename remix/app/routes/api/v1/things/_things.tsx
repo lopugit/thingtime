@@ -4,10 +4,14 @@ import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import {
   createPost,
   createThing,
+  deleteThing,
   getThing,
   listThings,
   toPublicPosts,
-  toPublicThings
+  toPublicThings,
+  updateThing,
+  upsertThing,
+  type Viewer
 } from '~/api/utils/things/things';
 
 // Things are small JSON payloads (crystal fields: text + image URLs + listing).
@@ -19,6 +23,9 @@ const csv = (value: string | null): string[] =>
     .map((entry) => entry.trim())
     .filter(Boolean);
 
+const viewerOf = (user: { id: string; username: string } | null): Viewer =>
+  user ? { id: user.id, username: user.username } : null;
+
 // GET /api/v1/things?id=<shareId> — read one thing (post projection included
 // for post things).
 // GET /api/v1/things?target=<shareId>&thingtime=comment&cursor=&limit= — list
@@ -26,18 +33,19 @@ const csv = (value: string | null): string[] =>
 // GET /api/v1/things?thingtime=&cursor=&limit= — list your own things.
 export const loader = async ({ request }: { request: Request }) => {
   const user = await getCurrentUser(request);
+  const viewer = viewerOf(user);
   const params = new URL(request.url).searchParams;
 
   const id = (params.get('id') || '').trim();
   if (id) {
-    const result = await getThing(user ? user.id : null, id);
+    const result = await getThing(viewer, id);
     if (result.ok === false) {
       return json({ ok: false, error: result.error }, { status: result.status });
     }
     return json({ ok: true, thing: result.thing, post: result.post });
   }
 
-  const result = await listThings(user ? user.id : null, {
+  const result = await listThings(viewer, {
     thingtime: csv(params.get('thingtime')),
     targetId: (params.get('target') || '').trim() || null,
     cursor: params.get('cursor'),
@@ -49,38 +57,76 @@ export const loader = async ({ request }: { request: Request }) => {
   return json({ ok: true, things: result.things, nextCursor: result.nextCursor });
 };
 
-// POST /api/v1/things — create a thing as the current user. Two body shapes,
-// one code path underneath:
-// - unified: { thingtime: ['post'|...], crystal: {...}, visibility?, targetId?, tags? }
-// - legacy post: { type, text?, images?, listing?, visibility?, tags? }
+// One endpoint, full CRUD (the GET loader above is the R):
+// - POST   /api/v1/things — create. Unified shape { thingtime, crystal, acl?,
+//   visibility?, targetId?, tags? } or the legacy post shape { type, text,
+//   images, listing, visibility, tags } — same code path underneath.
+// - PUT    /api/v1/things — upsert by id: { id, thingtime, crystal, acl?, ... }
+//   creates the thing at that id or replaces the owned thing's crystal whole.
+// - PATCH  /api/v1/things — partial update: { id, crystal?, acl?, visibility?,
+//   tags? } — crystal fields merge over the existing crystal.
+// - DELETE /api/v1/things?id= (or body { id }) — delete an owned thing.
 export const action = async ({ request }: { request: Request }) => {
   const user = await getCurrentUser(request);
   if (!user) {
     return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
   }
+  const viewer = viewerOf(user);
 
   const contentLength = Number(request.headers.get('content-length') || 0);
   if (contentLength > MAX_BODY_BYTES) {
     return json({ ok: false, error: 'Post payload too large' }, { status: 413 });
   }
 
+  const method = request.method.toUpperCase();
   const body = await request.json().catch(() => ({}));
 
-  if (Array.isArray(body?.thingtime)) {
-    const result = await createThing(user.id, body);
+  if (method === 'POST') {
+    if (Array.isArray(body?.thingtime)) {
+      const result = await createThing(user.id, body, viewer);
+      if (result.ok === false) {
+        return json({ ok: false, error: result.error }, { status: result.status });
+      }
+      const isPost = (result.doc.thingtime || []).includes('post');
+      if (isPost) {
+        return json({ ok: true, post: (await toPublicPosts([result.doc], viewer))[0] });
+      }
+      return json({ ok: true, thing: (await toPublicThings([result.doc], viewer))[0] });
+    }
+    const result = await createPost(user.id, body, viewer);
     if (result.ok === false) {
       return json({ ok: false, error: result.error }, { status: result.status });
     }
-    const isPost = (result.doc.thingtime || []).includes('post');
-    if (isPost) {
-      return json({ ok: true, post: (await toPublicPosts([result.doc], user.id))[0] });
-    }
-    return json({ ok: true, thing: (await toPublicThings([result.doc], user.id))[0] });
+    return json({ ok: true, post: result.post });
   }
 
-  const result = await createPost(user.id, body);
-  if (result.ok === false) {
-    return json({ ok: false, error: result.error }, { status: result.status });
+  if (method === 'PUT') {
+    const result = await upsertThing(user.id, { ...body, shareId: body?.shareId ?? body?.id }, viewer);
+    if (result.ok === false) {
+      return json({ ok: false, error: result.error }, { status: result.status });
+    }
+    return json(
+      { ok: true, created: result.created, thing: result.thing, post: result.post },
+      { status: result.created ? 201 : 200 }
+    );
   }
-  return json({ ok: true, post: result.post });
+
+  if (method === 'PATCH') {
+    const result = await updateThing(viewer, body?.id, body, { replaceCrystal: false });
+    if (result.ok === false) {
+      return json({ ok: false, error: result.error }, { status: result.status });
+    }
+    return json({ ok: true, thing: result.thing, post: result.post });
+  }
+
+  if (method === 'DELETE') {
+    const id = (new URL(request.url).searchParams.get('id') || '').trim() || body?.id;
+    const result = await deleteThing(viewer, id);
+    if (result.ok === false) {
+      return json({ ok: false, error: result.error }, { status: result.status });
+    }
+    return json({ ok: true });
+  }
+
+  return json({ ok: false, error: 'Method not allowed' }, { status: 405, headers: { Allow: 'GET, POST, PUT, PATCH, DELETE' } });
 };

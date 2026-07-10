@@ -34,7 +34,7 @@ export type ApiTestDefinition = {
   name: string;
   description: string;
   group: ApiTestGroup;
-  method: 'GET' | 'POST';
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   path: string;
   mutates?: boolean;
   timeoutMs?: number;

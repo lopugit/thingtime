@@ -25,7 +25,14 @@ import {
 } from '~/docs/apiDocs';
 import { Link as RouterLink, useLocation, useParams } from 'react-router';
 
-const methodColor = (method: ApiHttpMethod) => (method === 'GET' ? 'blue' : 'purple');
+const METHOD_COLORS: Record<ApiHttpMethod, string> = {
+  GET: 'blue',
+  POST: 'purple',
+  PUT: 'orange',
+  PATCH: 'teal',
+  DELETE: 'red'
+};
+const methodColor = (method: ApiHttpMethod) => METHOD_COLORS[method] || 'purple';
 const groupLabel = (group: string) => group.charAt(0).toUpperCase() + group.slice(1);
 const groupPagePath = (group: string) => `/docs/api/${group}`;
 const docPagePath = (doc: ApiEndpointDoc) => `${groupPagePath(doc.group)}/${doc.id}`;
