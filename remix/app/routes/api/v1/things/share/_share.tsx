@@ -1,6 +1,7 @@
 import { json, readJsonBody } from '~/api/http';
 
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
+import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import { sharePost } from '~/api/utils/things/things';
 
 // POST /api/v1/things/share — { id, text?, visibility? } — repost a public
@@ -9,6 +10,19 @@ export const action = async ({ request }: { request: Request }) => {
   const user = await getCurrentUser(request);
   if (!user) {
     return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // A share mints a new post thing, so it's throttled on the same write
+  // ceiling as creating one through the generic /things route (service
+  // accounts get the higher bulk ceiling); otherwise this route is an
+  // unbounded post-creation bypass.
+  const limit = await enforceRateLimit(
+    request,
+    user.accountKind === 'service' ? 'things.write.service' : 'things.write',
+    `user:${user.id}`
+  );
+  if (!limit.allowed) {
+    return json({ ok: false, error: 'You’re sharing too fast — take a breather 🌸' }, rateLimitedResponseInit(limit));
   }
 
   const body = await readJsonBody(request, 64 * 1024);
