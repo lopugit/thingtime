@@ -117,7 +117,8 @@ const thingsMigration: Migration = {
     // other experiments (e.g. kind:'record') deliberately stay untouched
     const strays = await things.countDocuments({
       $or: [{ schemaVersion: { $exists: false } }, { schemaVersion: { $lt: THINGS_VERSION } }],
-      kind: { $ne: 'post' },
+      // kind:'reaction'/'comment' docs are converted (not strays)
+      kind: { $nin: ['post', 'reaction', 'comment'] },
       thingtime: { $exists: false }
     });
     const notes: string[] = [];
