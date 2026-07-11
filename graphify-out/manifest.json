@@ -1,7 +1,7 @@
 {
   "AGENTS.md": {
-    "mtime": 1783680698.3678303,
-    "ast_hash": "d928e0541d7ae0ec8efab2579e83183e",
+    "mtime": 1783738787.1069243,
+    "ast_hash": "2857c2106d5d6b7a02b148b69cd2c129",
     "semantic_hash": ""
   },
   ".claude/settings.json": {
@@ -830,8 +830,8 @@
     "semantic_hash": "f65b01f4781159ee3b8a0a9da33d1f5a"
   },
   "remix/app/api/utils/mongodb/collections.ts": {
-    "mtime": 1783638847.8631387,
-    "ast_hash": "4aca754de6cf002d6d26c2016a8d70cf",
+    "mtime": 1783739454.7615495,
+    "ast_hash": "3f27ce7a836d604632f55d0ecaa9f070",
     "semantic_hash": ""
   },
   "remix/app/api/utils/mongodb/config.ts": {
@@ -1565,8 +1565,8 @@
     "semantic_hash": "6f47150939eacf6d3a89a87289013ea3"
   },
   "CLAUDE.md": {
-    "mtime": 1783680698.368449,
-    "ast_hash": "57f6b23fa97f9ed8a8201b18697c9196",
+    "mtime": 1783738771.3312542,
+    "ast_hash": "85f820a109b7f66ac84c8b712c722009",
     "semantic_hash": ""
   },
   "CODEX.md": {
@@ -1580,8 +1580,8 @@
     "semantic_hash": "5e9505d10b125d54dccabb1ddfeeef75"
   },
   "FUNDAMENTALS.md": {
-    "mtime": 1783639111.7419593,
-    "ast_hash": "28146231ff841d6b1922132c0d3bddaf",
+    "mtime": 1783738756.2947814,
+    "ast_hash": "0fbc17942e98ba3665d8f0356a86c738",
     "semantic_hash": ""
   },
   "README.md": {
@@ -3115,8 +3115,8 @@
     "semantic_hash": ""
   },
   "remix/app/api/utils/things/things.ts": {
-    "mtime": 1783681992.9928393,
-    "ast_hash": "33bb02a46bf1baf6f370d359f5773604",
+    "mtime": 1783739503.7336912,
+    "ast_hash": "6e60fb3693d643c1f47e938c0cfb3caa",
     "semantic_hash": ""
   },
   "remix/app/components/Feed/Feed.tsx": {
@@ -3480,8 +3480,8 @@
     "semantic_hash": ""
   },
   "TODO/claude-todo/12-reactions-and-optimistic-ui.md": {
-    "mtime": 1783682324.8907561,
-    "ast_hash": "564e1a823fb1fe93a1913f8a29fd8f07",
+    "mtime": 1783738801.8198802,
+    "ast_hash": "e8bbfcdf1da473760049fe633ce1e930",
     "semantic_hash": ""
   }
 }

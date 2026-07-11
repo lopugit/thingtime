@@ -102,6 +102,7 @@ Read `FUNDAMENTALS.md` before adding features. Non-negotiables:
 - All data access goes through the Thingtime API (`remix/app/routes/api/v1/...`) + the API utils layer. UI/scripts/tests never touch MongoDB directly.
 - **Seed and test by calling the real API** (e.g. seed users via `POST /api/v1/auth/register`), never by writing to Mongo directly — so seeded data and real signups share one code path.
 - One `thingtime` db (`users`, `sessions`, `things`); one connection source (`mongodb/config.ts` `getMongoUri()`).
+- Appended/child data (reactions, comments, any accumulating list) is **relational** — its own atomic `things` doc (`kind`) linked by `parentId`, aggregated on read, never an unbounded embedded array/map on the parent. Canonical rule in `FUNDAMENTALS.md` §3 ("Appended/child data is relational").
 - Auth: httpOnly cookie carrying a signed JWT (`jti`/`sub`/`exp`) + a Mongo `sessions` doc for revocation; Bearer token supported for API clients.
 - All user-facing notifications go through the Lopu toast (`components/Lopu/useLopu.tsx` — `useLopu()` / `useLopuStream()`), never raw Chakra `useToast` or `alert()`.
 

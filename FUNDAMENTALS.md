@@ -44,6 +44,30 @@ Single Mongo database `thingtime` with these collections:
 
 (Replaces the earlier inconsistent `auth.users` vs `thingtime.things` split.)
 
+### Appended/child data is relational — never an unbounded embedded array
+
+Data that accumulates on a parent (post **reactions**, post **comments**, and
+anything similar in future) is stored as its OWN atomic `things` doc
+(`kind: 'reaction'`, `kind: 'comment'`, …) linked to the parent by `parentId`
+(the parent's `shareId`) and aggregated back on read. NEVER append it as an
+ever-growing array/map field on the parent doc.
+
+Why: an embedded array/map has no natural bound — one actor can grow a single
+doc toward Mongo's 16 MB cap (bricking it) and bloat every reader's
+payload/DOM, and every write rewrites the whole parent. Relational children keep
+the parent bounded, make each write per-item + concurrency-safe (a partial-unique
+index enforces invariants like one-reaction-per-user), and give natural paging.
+
+How (see `api/utils/things/things.ts`):
+- Child docs carry `kind` + `parentId` + `ownerId` (+ payload), no `shareId`.
+- Reads **batch-aggregate** children for the whole page in ONE query per kind
+  (`{ kind, parentId: { $in: postIds } }`) — never N+1 — and project the same
+  shape the client already consumes, so the UI is unchanged.
+- Writes create/delete one child doc; per-parent/per-user caps become soft
+  product limits, not structural safety rails.
+- Legacy embedded data folds in on read and migrates to children on first write.
+- Deleting a parent cascades: delete its children by `parentId`.
+
 ## 4. One MongoDB connection source
 
 The connection string comes from exactly one place:

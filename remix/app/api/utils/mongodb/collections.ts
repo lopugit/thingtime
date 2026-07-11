@@ -69,6 +69,25 @@ export const ensureIndexes = async () => {
         db.collection('things').createIndex({ shareId: 1 }, { unique: true, sparse: true }),
         db.collection('things').createIndex({ kind: 1, visibility: 1, createdAt: -1, shareId: 1 }),
         db.collection('things').createIndex({ kind: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
+        // Appended/child data (reactions, comments) are their own things linked
+        // to a post by parentId (= the post's shareId), aggregated on read — see
+        // FUNDAMENTALS.md §"Appended data is relational". This index serves the
+        // batched per-post aggregation + chronological comment paging.
+        db.collection('things').createIndex({ kind: 1, parentId: 1, createdAt: 1 }),
+        // One reaction per (post, user, emoji): makes toggle-on an idempotent
+        // upsert and dedups even under races. Partial so it only applies to
+        // reaction things (post/comment things have no token).
+        db.collection('things').createIndex(
+          { parentId: 1, ownerId: 1, token: 1 },
+          { unique: true, partialFilterExpression: { kind: 'reaction' } }
+        ),
+        // Unique comment id: makes the migration comment upsert a true
+        // idempotent upsert (E11000 → match, not a duplicate insert) and
+        // guarantees comment ids never collide.
+        db.collection('things').createIndex(
+          { commentId: 1 },
+          { unique: true, partialFilterExpression: { kind: 'comment' } }
+        ),
         db.collection('feedAlgorithms').createIndex({ shareId: 1 }, { unique: true }),
         db.collection('feedAlgorithms').createIndex({ ownerId: 1 })
       ]);

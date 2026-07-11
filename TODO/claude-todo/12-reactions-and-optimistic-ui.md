@@ -20,11 +20,16 @@ when it has cached state.
   `sanitizeReactionToken` (emoji-only via Unicode property escapes, ≤12
   graphemes / ≤80 codepoints, rejects `.`/`$`/whitespace for Mongo-key safety),
   shared by server + picker.
-- **Bounded growth (security):** open-vocabulary reactions are capped —
-  `MAX_REACTION_KEYS_PER_POST = 100`, `MAX_REACTIONS_PER_USER_PER_POST = 20` —
-  so one account can't mint unlimited keys and brick a post's 16 MB doc / bloat
-  every viewer's feed payload. (Rate-limiting the react endpoint is a follow-up,
-  same gap as auth endpoints — see 09-security-hardening.md.)
+- **Relational appended data (supersedes the embedded model):** reactions and
+  comments are their own atomic `things` (`kind:'reaction'`/`'comment'`) linked
+  by `parentId`, aggregated on read — NOT embedded in the post doc. This
+  root-fixes the unbounded-doc DoS structurally (no single field grows) and made
+  the concurrency clobber tractable. The caps (`MAX_REACTIONS_PER_USER_PER_POST
+  = 20`, `MAX_REACTION_KEYS_PER_POST = 100`, `MAX_COMMENTS_PER_POST = 500`)
+  remain as SOFT product limits, no longer structural safety rails. Canonical
+  data-model rule: `FUNDAMENTALS.md` §3 ("Appended/child data is relational").
+  Legacy embedded data folds in on read + migrates to things on first write.
+  (Rate-limiting the react endpoint is still a follow-up — 09-security-hardening.)
 - **Recents follow the user:** `users.meta.recentReactions` MRU (capped 500),
   fetched lazily via `GET /api/v1/things/reactions-recent` (not projected on the
   public user, to keep it lean); picker pages 20 at a time.
