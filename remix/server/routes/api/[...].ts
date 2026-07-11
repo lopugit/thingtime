@@ -9,6 +9,8 @@ type RouteModule = {
 };
 
 const routeModules: Record<string, () => Promise<RouteModule>> = {
+  'v1/admin/migrations': () => import('../../../app/routes/api/v1/admin/migrations/_migrations'),
+  'v1/admin/migrations/run': () => import('../../../app/routes/api/v1/admin/migrations/run/_run'),
   'v1/admin/rate-limits': () => import('../../../app/routes/api/v1/admin/rate-limits/_rate-limits'),
   'v1/admin/set-admin': () => import('../../../app/routes/api/v1/admin/set-admin/_set-admin'),
   'v1/admin/users': () => import('../../../app/routes/api/v1/admin/users/_users'),
@@ -39,6 +41,7 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/mongodb/raw-results': () => import('../../../app/routes/api/v1/mongodb/raw-results/_raw-results'),
   'v1/mongodb/status': () => import('../../../app/routes/api/v1/mongodb/status/_status'),
   'v1/mongodb/status-data': () => import('../../../app/routes/api/v1/mongodb/status-data/_status-data'),
+  'v1/schemas': () => import('../../../app/routes/api/v1/schemas/_schemas'),
   'v1/template': () => import('../../../app/routes/api/v1/template/_template'),
   'v1/themes': () => import('../../../app/routes/api/v1/themes/_themes'),
   'v1/themes/active': () => import('../../../app/routes/api/v1/themes/active/_active'),
@@ -51,6 +54,7 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/things/react': () => import('../../../app/routes/api/v1/things/react/_react'),
   'v1/things/reactions-recent': () => import('../../../app/routes/api/v1/things/reactions-recent/_reactions-recent'),
   'v1/things/share': () => import('../../../app/routes/api/v1/things/share/_share'),
+  'v1/things/update': () => import('../../../app/routes/api/v1/things/update/_update'),
   'v1/things/user': () => import('../../../app/routes/api/v1/things/user/_user'),
   'v1/users/profile': () => import('../../../app/routes/api/v1/users/profile/_profile'),
   'v1/vercel/deployments': () => import('../../../app/routes/api/v1/vercel/deployments/_deployments'),

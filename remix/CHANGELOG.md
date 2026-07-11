@@ -18,6 +18,30 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- Unified the data model so posts, comments, reactions, and shares are all one
+  root **Thing** shape: sub-schemas apply through the `thingtime` array of
+  schema ids, payloads live under `crystal`, and every doc in every collection
+  now stores its root-level `schemaVersion`. Added `GET /api/v1/things`
+  (read/list), `POST /api/v1/things/update`, `GET /api/v1/schemas`, a `/schemas`
+  browser page with an admin Database-migrations panel, and admin-only
+  schema-version migration endpoints (`/api/v1/admin/migrations*`) gated by the
+  admin role (`meta.admin` flag or the `ADMIN_USERNAMES` allowlist); the
+  previously unauthenticated `mongodb/raw-results` dump is now admin-only. Legacy wire shapes stay
+  byte-compatible and reads merge v1 embedded data until the idempotent
+  `things-v1-to-v2` migration runs. Round 2: the stored visibility enum became
+  a generic `acl` permission array (tt: grants plus "-"-prefixed exclusions,
+  most-specific entry wins — e.g. `["tt:all","-tt:user/somebody"]`), with the
+  legacy names still accepted and derived, and `/api/v1/things` grew the full
+  verb set (GET read/list, POST create, PUT upsert, PATCH merge, DELETE).
+  Merged origin/main (multi-emoji reactions, relational comments, meta.admin
+  role system, account switcher) and reconciled onto the unified model; a
+  post-merge adversarial security review then fixed 5 issues (a listThings acl
+  leak of private shares, a reaction-cap DoS bypass on the generic endpoint,
+  missing rate limits on /things, and migration id-squat data loss).
+  Details in
+  [`PRs/59-claude-unified-thing-crystal-schemas--everything-is-a-thing.md`](../PRs/59-claude-unified-thing-crystal-schemas--everything-is-a-thing.md).
+  — _Claude (AI), 2026-07-10_
+
 - Updated the Electron release workflow trigger so merges that modify
   `.github/workflows/electron-release.yml` also spawn the release workflow,
   covering workflow-only release pipeline fixes. — _Codex (AI), 2026-07-08_

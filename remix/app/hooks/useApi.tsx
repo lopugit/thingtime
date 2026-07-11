@@ -104,6 +104,15 @@ export function useApi() {
       setAdmin: useCallback(
         async (args) => asyncFetcher.submit({ userId: args?.userId, admin: args?.admin }, { action: '/api/v1/admin/set-admin' }),
         [asyncFetcher]
+      ),
+      migrations: useCallback(async () => getJson('/api/v1/admin/migrations'), []),
+      migrationsRun: useCallback(
+        async (args) =>
+          asyncFetcher.submit(
+            { migration: args?.migration, dryRun: args?.dryRun },
+            { action: '/api/v1/admin/migrations/run' }
+          ),
+        [asyncFetcher]
       )
     },
     mongodb: {
@@ -122,11 +131,52 @@ export function useApi() {
     things: {
       feed: useCallback(async (args) => getJson(`/api/v1/things/feed${toQuery(args)}`), []),
       userPosts: useCallback(async (args) => getJson(`/api/v1/things/user${toQuery(args)}`), []),
+      get: useCallback(async (args) => getJson(`/api/v1/things${toQuery({ id: args?.id })}`), []),
+      list: useCallback(
+        async (args) =>
+          getJson(
+            `/api/v1/things${toQuery({
+              target: args?.target,
+              thingtime: args?.thingtime,
+              cursor: args?.cursor,
+              limit: args?.limit
+            })}`
+          ),
+        []
+      ),
+      update: useCallback(
+        async (args) =>
+          asyncFetcher.submit(
+            { id: args?.id, crystal: args?.crystal, acl: args?.acl, visibility: args?.visibility, tags: args?.tags },
+            { action: '/api/v1/things', method: 'PATCH' }
+          ),
+        [asyncFetcher]
+      ),
+      upsert: useCallback(
+        async (args) =>
+          asyncFetcher.submit(
+            {
+              id: args?.id,
+              thingtime: args?.thingtime,
+              crystal: args?.crystal,
+              acl: args?.acl,
+              visibility: args?.visibility,
+              targetId: args?.targetId,
+              tags: args?.tags
+            },
+            { action: '/api/v1/things', method: 'PUT' }
+          ),
+        [asyncFetcher]
+      ),
       reactionsRecent: useCallback(async () => getJson('/api/v1/things/reactions-recent'), []),
       create: useCallback(
         async (args) => {
-          const { type, text, images, listing, visibility, tags } = args;
-          return asyncFetcher.submit({ type, text, images, listing, visibility, tags }, { action: '/api/v1/things' });
+          const { type, text, images, listing, thingtime, crystal, targetId, acl, visibility, tags } = args;
+          // unified shape when thingtime is given, legacy post shape otherwise
+          const payload = Array.isArray(thingtime)
+            ? { thingtime, crystal, targetId, acl, visibility, tags }
+            : { type, text, images, listing, acl, visibility, tags };
+          return asyncFetcher.submit(payload, { action: '/api/v1/things' });
         },
         [asyncFetcher]
       ),
@@ -141,13 +191,13 @@ export function useApi() {
       share: useCallback(
         async (args) =>
           asyncFetcher.submit(
-            { id: args?.id, text: args?.text, visibility: args?.visibility },
+            { id: args?.id, text: args?.text, acl: args?.acl, visibility: args?.visibility },
             { action: '/api/v1/things/share' }
           ),
         [asyncFetcher]
       ),
       remove: useCallback(
-        async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/things/delete' }),
+        async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/things', method: 'DELETE' }),
         [asyncFetcher]
       )
     },
@@ -238,6 +288,10 @@ export function useApi() {
         },
         [asyncFetcher]
       )
+    },
+    schemas: {
+      list: useCallback(async () => getJson('/api/v1/schemas'), []),
+      get: useCallback(async (id) => getJson(`/api/v1/schemas${toQuery({ id })}`), [])
     },
     waitlist: {
       join: useCallback(

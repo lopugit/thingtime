@@ -1,4 +1,4 @@
-export type ApiHttpMethod = 'GET' | 'POST';
+export type ApiHttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 export type ApiAuthMode = 'none' | 'optional' | 'session' | 'bearer' | 'session-or-bearer';
 
@@ -1004,15 +1004,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     detail:
       'Use this route for low-level diagnostics when validating the database connection and stored Thingtime data.',
     auth: {
-      mode: 'none',
-      description: 'Development diagnostic endpoint. Treat returned data as sensitive.'
+      mode: 'session-or-bearer',
+      description:
+        'Admin-only (meta.admin flag or the ADMIN_USERNAMES env allowlist). Raw docs include private things.'
     },
     methods: ['POST'],
     steps: [
-      'POST an empty JSON object from a trusted development environment.',
+      'POST an empty JSON object as an allowlisted admin.',
       'The route opens the configured MongoDB connection and reads the things collection.',
       'Inspect data.rawResults for stored Thingtime records.',
-      'Handle 500 if MongoDB is unavailable.'
+      'Handle 401 non-admin callers and 500 if MongoDB is unavailable.'
     ],
     requestExamples: [
       {
@@ -1506,36 +1507,180 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   endpoint({
     id: 'things',
     group: 'things',
-    title: 'Create feed post',
+    title: 'Things (full CRUD)',
     endpoint: '/api/v1/things',
-    summary: 'Creates a text, image, or marketplace feed post in the things collection.',
+    summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares.',
     detail:
-      'Posts are stored as kind: post things with circle visibility, tags, reactions, comments, and share metadata. The route is the canonical creation path for feed content.',
+      'Everything is a thing: one root Thing schema per doc, sub-schemas applied via the thingtime array of schema ids (see /schemas), the payload under crystal, and the audience under acl — tt: grants plus "-"-prefixed exclusions where the most specific matching entry wins (["tt:all"] public, ["-tt:all","tt:userFriends","tt:user"] friends-only, ["tt:all","-tt:user/somebody"] public except one user; owners always see their own things). POST creates (unified shape or the legacy post body — same path), GET reads one thing / lists a target’s attached things / lists your own, PUT upserts by id (create-or-replace), PATCH merges a partial update, DELETE removes an owned thing and its attached comments/reactions. The legacy visibility names still work as input and are derived on the wire.',
     auth: {
       mode: 'session-or-bearer',
-      description: 'Requires an auth cookie or Authorization: Bearer token.'
+      description:
+        'Mutations require an auth cookie or Authorization: Bearer token. GET works logged out for tt:all things; attached things inherit their target audience.'
     },
-    methods: ['POST'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     steps: [
-      'POST type plus text, images, listing, visibility, and tags as needed.',
-      'The route writes through the things API utility layer, not direct client database access.',
-      'Use the returned post to prepend optimistic UI state.',
-      'Handle 401 unauthenticated, 400 invalid payload, and 413 oversized payload.'
+      'POST { thingtime: ["post"], crystal: { type, text, images, listing }, acl, tags } — or the legacy post body — to create.',
+      'Attached kinds (comment, reaction) require targetId and carry acl ["tt:inherit"]; shares carry thingtime ["post","share"].',
+      'GET ?id= reads one thing; GET ?target=&thingtime=comment lists a visible thing’s comments; GET ?thingtime=&cursor=&limit= lists your own things.',
+      'PUT { id, thingtime, crystal, acl? } creates the thing at that id (201) or replaces the owned thing’s crystal whole (200); PATCH { id, crystal?, acl?, tags? } merges.',
+      'DELETE ?id= (or body { id }) removes an owned thing; attached comments/reactions go with it, shares survive with an original-unavailable placeholder.',
+      'Handle 401 unauthenticated, 400 invalid payload or acl, 404 missing target/thing, and 413 oversized payload.'
     ],
     requestExamples: [
       {
-        name: 'Create text post',
-        description: 'Create a private text post.',
+        name: 'Create public post',
+        description: 'A public text post — acl ["tt:all"] is also the default when neither acl nor visibility is sent.',
         method: 'POST',
-        body: { type: 'text', text: 'Today I learned...', visibility: 'private' }
+        body: {
+          thingtime: ['post'],
+          crystal: { type: 'text', text: 'Everything is a thing ✨' },
+          acl: ['tt:all'],
+          tags: ['thingtime']
+        }
+      },
+      {
+        name: 'Create friends-only post',
+        description: 'Exclude the world, grant the friends circle and yourself.',
+        method: 'POST',
+        body: {
+          thingtime: ['post'],
+          crystal: { type: 'text', text: 'Bonfire at ours on Saturday 🔥' },
+          acl: ['-tt:all', 'tt:userFriends', 'tt:user']
+        }
+      },
+      {
+        name: 'Create public-except-one post',
+        description: 'Grants and exclusions combine; the most specific entry wins per viewer.',
+        method: 'POST',
+        body: {
+          thingtime: ['post'],
+          crystal: { type: 'text', text: 'Planning a surprise party 🎂🤫' },
+          acl: ['tt:all', '-tt:user/birthday.person', 'tt:user']
+        }
+      },
+      {
+        name: 'Create marketplace post (legacy body)',
+        description: 'The pre-unification body still works and maps onto the same path — visibility names become acls.',
+        method: 'POST',
+        body: {
+          type: 'marketplace',
+          text: 'Selling my hoverboard, barely used.',
+          listing: { title: 'Hoverboard', price: 420, currency: 'AUD', category: 'other' },
+          visibility: 'public'
+        }
+      },
+      {
+        name: 'Comment via the unified shape',
+        description: 'Comments are things too — targetId points at the post, audience inherits.',
+        method: 'POST',
+        body: {
+          thingtime: ['comment'],
+          crystal: { text: 'So say we all 🚀' },
+          targetId: 'post_123'
+        }
+      },
+      {
+        name: 'Read one thing',
+        description: 'Fetch a thing by id (posts include the full post projection).',
+        method: 'GET',
+        query: { id: 'post_123' }
+      },
+      {
+        name: 'List comments of a post',
+        description: 'Read the comment things attached to a visible thing.',
+        method: 'GET',
+        query: { target: 'post_123', thingtime: 'comment', limit: 20 }
+      },
+      {
+        name: 'List your own things',
+        description: 'Everything you own, newest first — filter with thingtime=post,comment.',
+        method: 'GET',
+        query: { thingtime: 'post', limit: 10 }
+      },
+      {
+        name: 'Upsert by id',
+        description: 'PUT creates the thing at your id or replaces the crystal whole — handy for idempotent sync clients.',
+        method: 'PUT',
+        body: {
+          id: 'my-sync-doc-001',
+          thingtime: ['post'],
+          crystal: { type: 'text', text: 'Synced snapshot v2' },
+          acl: ['tt:user']
+        }
+      },
+      {
+        name: 'Patch a thing',
+        description: 'PATCH merges crystal fields and can retarget the audience.',
+        method: 'PATCH',
+        body: { id: 'post_123', crystal: { text: 'Edited ✏️' }, acl: ['-tt:all', 'tt:userFamily', 'tt:user'] }
+      },
+      {
+        name: 'Delete a thing',
+        description: 'Removes an owned thing; its comments and reactions go with it.',
+        method: 'DELETE',
+        query: { id: 'post_123' }
       }
     ],
     responseExamples: [
       {
         status: 200,
-        description: 'Post created.',
-        body: { ok: true, post: { id: 'post_123', type: 'text', text: 'Today I learned...' } }
+        description: 'Post thing created.',
+        body: {
+          ok: true,
+          post: {
+            id: 'post_123',
+            thingtime: ['post'],
+            type: 'text',
+            text: 'Everything is a thing ✨',
+            acl: ['tt:all'],
+            visibility: 'public'
+          }
+        }
+      },
+      {
+        status: 201,
+        description: 'PUT created a new thing at the caller-chosen id.',
+        body: {
+          ok: true,
+          created: true,
+          thing: {
+            id: 'my-sync-doc-001',
+            thingtime: ['post'],
+            crystal: { type: 'text', text: 'Synced snapshot v2' },
+            acl: ['tt:user']
+          },
+          post: { id: 'my-sync-doc-001', visibility: 'private' }
+        }
+      },
+      {
+        status: 200,
+        description: 'Attached things listed.',
+        body: {
+          ok: true,
+          things: [
+            {
+              id: 'comment_123',
+              thingtime: ['comment'],
+              crystal: { text: 'So say we all 🚀' },
+              targetId: 'post_123',
+              acl: ['tt:inherit'],
+              visibility: 'inherit'
+            }
+          ],
+          nextCursor: null
+        }
+      },
+      {
+        status: 400,
+        description: 'Malformed acl entry.',
+        body: { ok: false, error: "acl entries look like tt:all, tt:user, tt:userFriends, or tt:user/<username>, optionally '-' prefixed (got tt bogus)" }
       }
+    ],
+    notes: [
+      'acl entries: tt:all, tt:user (owner), tt:userFriends, tt:userFamily, tt:user/<username>, each optionally "-" prefixed; the most specific matching entry decides and owners always view. Circles resolve to the owner only until a relationship graph exists.',
+      'Every doc stores the root schemaVersion it was written at; admins migrate older docs via /api/v1/admin/migrations.',
+      'Browse every schema kind at /schemas or GET /api/v1/schemas.',
+      'The comment/react/share/update/delete sub-routes remain as sugar over this endpoint.'
     ]
   }),
   endpoint({
@@ -1545,7 +1690,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/things/comment',
     summary: 'Adds a comment to a post visible to the current user.',
     detail:
-      'The route re-checks visibility before writing so private or circle-limited posts cannot be commented on by unauthorized viewers.',
+      'Comments are standalone things (thingtime ["comment"]) pointing at their target via targetId and inheriting its visibility — this route is sugar over the unified thing path. Visibility is re-checked before writing so private or circle-limited posts cannot be commented on by unauthorized viewers.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -1578,9 +1723,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'things',
     title: 'Delete feed post',
     endpoint: '/api/v1/things/delete',
-    summary: 'Deletes one of the current user feed posts.',
+    summary: 'Deletes one of the current user things (post, comment, reaction, or share).',
     detail:
-      'Only the owning user may delete a post. The route is used by feed/profile card controls and preserves visibility checks.',
+      'Only the owning user may delete a thing. Deleting a thing also deletes the comment and reaction things attached to it; share things pointing at it survive and render an original-unavailable placeholder.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -1615,7 +1760,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/things/feed',
     summary: 'Returns public and viewer-visible feed posts with optional algorithm ranking.',
     detail:
-      'The feed reads a lean projection of recent visible posts, applies filters, then optionally ranks them with the selected or active feed algorithm.',
+      'The feed reads recent posts whose acl admits the viewer (tt:all for logged-out callers, plus your own things when authenticated — acl exclusions like -tt:user/<you> are honoured), applies filters, then optionally ranks them with the selected or active feed algorithm.',
     auth: {
       mode: 'optional',
       description: 'Anonymous callers see public posts; authenticated callers may also see their own visible circles.'
@@ -1650,7 +1795,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/things/react',
     summary: 'Toggles one of the current user reactions on a visible post (multi-react).',
     detail:
-      'emoji may be a single emoji or a multi-emoji group typed/pasted as one token (e.g. "🤣🤣🙌💀💦"). Toggling a token you already have removes it, a new one is added — you can hold several at once. Adding a token also records it in your recent reactions. Posting the same token again, or null, is the clear/no-op. Reaction counts are returned for immediate card updates.',
+      'emoji may be a single emoji or a multi-emoji group typed/pasted as one token (e.g. "🤣🤣🙌💀💦"). Toggling a token you already have removes it, a new one is added — you can hold several at once. Adding a token also records it in your recent reactions; posting null is a no-op. Reactions are standalone things (thingtime ["reaction"], crystal.emoji = the token) pointing at their target via targetId — this route is toggle sugar over the unified thing path. Reaction counts are returned for immediate card updates.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -1741,13 +1886,64 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'Create a repost with optional commentary.',
         method: 'POST',
         body: { id: 'post_123', text: 'Worth saving', visibility: 'public' }
+      },
+      {
+        name: 'Share to your friends only',
+        description: 'Shares take acls too.',
+        method: 'POST',
+        body: { id: 'post_123', text: 'Keeping this in the circle', acl: ['-tt:all', 'tt:userFriends', 'tt:user'] }
       }
     ],
     responseExamples: [
       {
         status: 200,
-        description: 'Share created.',
-        body: { ok: true, post: { id: 'share_123', shareOf: 'post_123' } }
+        description: 'Share created — a thing carrying both the post and share schemas.',
+        body: { ok: true, post: { id: 'share_123', thingtime: ['post', 'share'], isShare: true } }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'things-update',
+    group: 'things',
+    title: 'Update thing',
+    endpoint: '/api/v1/things/update',
+    summary: 'Updates one of the current user things — crystal payload, acl audience, or tags.',
+    detail:
+      'Sugar over PATCH /api/v1/things: crystal patches merge over the existing crystal and are re-validated against the thing schemas in its thingtime array; acl (or a legacy visibility name) retargets the audience. Updating a pre-unification post upgrades it to the v2 doc shape in place. Attached things (comments, reactions) keep their inherited audience.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST the thing id plus any of crystal, visibility, and tags.',
+      'Crystal fields you omit keep their current values; included fields are validated by the thing schemas.',
+      'The current user must own the thing.',
+      'Handle 401 unauthenticated, 404 missing or unowned things, and 400 invalid patches.'
+    ],
+    requestExamples: [
+      {
+        name: 'Edit post text',
+        description: 'Patch the crystal text of an owned post.',
+        method: 'POST',
+        body: { id: 'post_123', crystal: { text: 'Today I learned (edited)...' } }
+      },
+      {
+        name: 'Retarget the audience',
+        description: 'Swap the acl to friends-only without touching the crystal.',
+        method: 'POST',
+        body: { id: 'post_123', acl: ['-tt:all', 'tt:userFriends', 'tt:user'] }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Thing updated.',
+        body: {
+          ok: true,
+          thing: { id: 'post_123', thingtime: ['post'], crystal: { text: 'Today I learned (edited)...' } },
+          post: { id: 'post_123', text: 'Today I learned (edited)...' }
+        }
       }
     ]
   }),
@@ -1979,6 +2175,143 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         body: { ok: false, error: 'A valid email is required' }
       }
     ]
+  }),
+  endpoint({
+    id: 'schemas',
+    group: 'schemas',
+    title: 'Thingtime Schemas',
+    endpoint: '/api/v1/schemas',
+    summary: 'Returns every Thingtime Schema — the root thing schema, crystal sub-schemas, and collection schemas.',
+    detail:
+      'The registry the API validates against, as data: field lists, versions, examples, and the schema version each collection currently writes. Browse the same registry visually at /schemas.',
+    auth: {
+      mode: 'none',
+      description: 'Public — schemas describe shapes, never data.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET with no parameters for every schema plus collectionVersions.',
+      'GET ?id=post (or comment, reaction, share, thing, ...) for one schema.',
+      'Crystal schemas are the ids a thing may carry in its thingtime array.',
+      'Handle 404 for unknown schema ids.'
+    ],
+    requestExamples: [
+      {
+        name: 'List schemas',
+        description: 'Read the full schema registry.',
+        method: 'GET'
+      },
+      {
+        name: 'Read one schema',
+        description: 'Read the post crystal schema.',
+        method: 'GET',
+        query: { id: 'post' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Registry returned.',
+        body: { ok: true, schemas: [{ id: 'thing', kind: 'root', version: 2 }], collectionVersions: { things: 2 } }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'admin-migrations',
+    group: 'admin',
+    title: 'Migration status',
+    endpoint: '/api/v1/admin/migrations',
+    summary: 'Per-collection schema-version census plus registered migrations and their pending doc counts.',
+    detail:
+      'Every doc stores the root-level schemaVersion it was written at (docs without one count as version 1). This endpoint reports how many docs sit at each version per collection and which registered migrations still have work to do.',
+    auth: {
+      mode: 'session-or-bearer',
+      description:
+        'Admin-only (meta.admin flag or the ADMIN_USERNAMES env allowlist): anonymous callers get 401, signed-in non-admins 403.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET as an allowlisted admin.',
+      'Read collections for the per-version doc census.',
+      'Read migrations for pending counts per registered migration.',
+      'Handle 401 for anonymous or non-admin callers.'
+    ],
+    requestExamples: [
+      {
+        name: 'Read migration status',
+        description: 'Census of schema versions across collections.',
+        method: 'GET'
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Status returned.',
+        body: {
+          ok: true,
+          collections: [
+            { collection: 'things', currentVersion: 2, total: 42, versions: { '1': 24, '2': 18 }, pendingMigrations: ['things-v1-to-v2'] }
+          ],
+          migrations: [{ id: 'things-v1-to-v2', collection: 'things', fromVersion: 1, toVersion: 2, pending: 24 }]
+        }
+      },
+      {
+        status: 401,
+        description: 'Anonymous or non-admin caller.',
+        body: { ok: false, error: 'Unauthorized' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'admin-migrations-run',
+    group: 'admin',
+    title: 'Run migration',
+    endpoint: '/api/v1/admin/migrations/run',
+    summary: 'Runs (or dry-runs) a registered schema-version migration.',
+    detail:
+      'Migrations are idempotent, so re-running after a partial failure only touches what is left. The things v1→v2 migration explodes embedded comments/reactions into standalone things, converts share posts to thingtime ["post","share"], moves post payloads under crystal, and stamps schemaVersion; the other collections stamp the version they already conform to.',
+    auth: {
+      mode: 'session-or-bearer',
+      description:
+        'Admin-only (meta.admin flag or the ADMIN_USERNAMES env allowlist): anonymous callers get 401, signed-in non-admins 403.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST the migration id from /api/v1/admin/migrations.',
+      'Pass dryRun: true first to see matched counts without writing.',
+      'Read the report for matched, migrated, created, skipped, and notes.',
+      'Handle 401 non-admin callers and 404 unknown migration ids.'
+    ],
+    requestExamples: [
+      {
+        name: 'Dry-run the things migration',
+        description: 'Count what the unified-thing migration would touch.',
+        method: 'POST',
+        body: { migration: 'things-v1-to-v2', dryRun: true }
+      },
+      {
+        name: 'Run the things migration',
+        description: 'Migrate v1 posts to unified v2 things.',
+        method: 'POST',
+        body: { migration: 'things-v1-to-v2' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Migration report returned.',
+        body: {
+          ok: true,
+          migration: 'things-v1-to-v2',
+          report: { dryRun: false, matched: 24, migrated: 24, created: 28, skipped: 0, notes: [] }
+        }
+      },
+      {
+        status: 404,
+        description: 'Unknown migration id.',
+        body: { ok: false, error: 'Unknown migration' }
+      }
+    ]
   })
 ];
 
@@ -2119,7 +2452,7 @@ export const buildPlatformExamples = (
     '',
     ...(hasBody ? [`payload = JSON.parse(<<~JSON)`, prettyBody, 'JSON', ''] : []),
     `uri = URI(${JSON.stringify(url)})`,
-    `request = Net::HTTP::${method === 'GET' ? 'Get' : 'Post'}.new(uri)`,
+    `request = Net::HTTP::${method.charAt(0) + method.slice(1).toLowerCase()}.new(uri)`,
     `${rubyHeaders}.each { |key, value| request[key] = value }`,
     ...(hasBody ? ['request.body = payload.to_json'] : []),
     '',

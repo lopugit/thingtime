@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import { ensureIndexes, getLopuMusingRateLimitsCollection } from '../mongodb/collections';
+import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
 const LOPU_MUSING_LIMIT = 10;
 const LOPU_MUSING_WINDOW_MS = 1000 * 60 * 60;
@@ -65,6 +66,7 @@ export const consumeLopuMusingQuota = async (request: Request): Promise<RateLimi
         $setOnInsert: {
           key,
           type: 'tt.lopuMusingRateLimit',
+          schemaVersion: COLLECTION_SCHEMA_VERSIONS.lopuMusingRateLimits,
           createdAt: now,
           requests: []
         },

@@ -67,27 +67,35 @@ export const ensureIndexes = async () => {
         db.collection('themes').createIndex({ shareId: 1 }, { unique: true }),
         db.collection('themes').createIndex({ ownerId: 1 }),
         db.collection('waitlist').createIndex({ email: 1 }, { unique: true }),
-        // feed posts live in `things` under kind:'post' (see api/utils/things);
+        // everything in `things` is a thing (see api/utils/things + app/schemas);
         // shareId is included so the (createdAt desc, shareId asc) page sort is
-        // fully index-provided instead of an in-memory sort per request
+        // fully index-provided instead of an in-memory sort per request. The
+        // kind-prefixed indexes serve v1-era docs until the things migration
+        // runs; the thingtime-prefixed ones serve v2 (multikey on the schema-id
+        // array), and targetId serves comment/reaction/share lookups.
         db.collection('things').createIndex({ shareId: 1 }, { unique: true, sparse: true }),
         db.collection('things').createIndex({ kind: 1, visibility: 1, createdAt: -1, shareId: 1 }),
         db.collection('things').createIndex({ kind: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
-        // Appended/child data (reactions, comments) are their own things linked
-        // to a post by parentId (= the post's shareId), aggregated on read — see
-        // FUNDAMENTALS.md §"Appended data is relational". This index serves the
-        // batched per-post aggregation + chronological comment paging.
+        db.collection('things').createIndex({ thingtime: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
+        db.collection('things').createIndex({ targetId: 1, thingtime: 1, createdAt: 1, shareId: 1 }),
+        // acl and thingtime are both arrays — Mongo forbids two multikey fields
+        // in one compound index, so the audience index stands alone
+        db.collection('things').createIndex({ acl: 1, createdAt: -1, shareId: 1 }),
+        // One reaction per (target, user, emoji token): makes toggle-on an
+        // idempotent upsert and dedups even under races. Partial via
+        // crystal.emoji-exists so it only applies to reaction things.
+        db.collection('things').createIndex(
+          { targetId: 1, ownerId: 1, 'crystal.emoji': 1 },
+          { unique: true, partialFilterExpression: { 'crystal.emoji': { $exists: true } } }
+        ),
+        // Legacy relational era (kind:'reaction'/'comment' docs written by the
+        // pre-unification relational model): aggregation + dedup indexes stay
+        // until the things migration converts those docs to thingtime things.
         db.collection('things').createIndex({ kind: 1, parentId: 1, createdAt: 1 }),
-        // One reaction per (post, user, emoji): makes toggle-on an idempotent
-        // upsert and dedups even under races. Partial so it only applies to
-        // reaction things (post/comment things have no token).
         db.collection('things').createIndex(
           { parentId: 1, ownerId: 1, token: 1 },
           { unique: true, partialFilterExpression: { kind: 'reaction' } }
         ),
-        // Unique comment id: makes the migration comment upsert a true
-        // idempotent upsert (E11000 → match, not a duplicate insert) and
-        // guarantees comment ids never collide.
         db.collection('things').createIndex(
           { commentId: 1 },
           { unique: true, partialFilterExpression: { kind: 'comment' } }

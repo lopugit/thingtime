@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import { ensureIndexes, getLopuMusingRateLimitsCollection, getWaitlistCollection } from '../mongodb/collections';
+import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const JOINS_PER_IP_PER_HOUR = 20;
@@ -28,7 +29,14 @@ const consumeJoinQuota = async (request: Request) => {
     const collection = await getLopuMusingRateLimitsCollection();
     const doc = await collection.findOneAndUpdate(
       { key, expiresAt: { $gt: now } },
-      { $inc: { count: 1 }, $setOnInsert: { key, expiresAt: new Date(now.getTime() + WINDOW_MS) } },
+      {
+        $inc: { count: 1 },
+        $setOnInsert: {
+          key,
+          expiresAt: new Date(now.getTime() + WINDOW_MS),
+          schemaVersion: COLLECTION_SCHEMA_VERSIONS.lopuMusingRateLimits
+        }
+      },
       { upsert: true, returnDocument: 'after' }
     );
     const count = doc?.count ?? doc?.value?.count ?? 1;
@@ -57,7 +65,7 @@ export const joinWaitlist = async (request: Request, input: { email?: unknown })
   await ensureIndexes();
   const waitlist = await getWaitlistCollection();
   try {
-    await waitlist.insertOne({ email, createdAt: new Date() });
+    await waitlist.insertOne({ email, schemaVersion: COLLECTION_SCHEMA_VERSIONS.waitlist, createdAt: new Date() });
     return { ok: true };
   } catch (error: any) {
     if (error?.code === 11000) {

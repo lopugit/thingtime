@@ -18,7 +18,7 @@ export const action = async ({ request }: { request: Request }) => {
   }
 
   const body = await readJsonBody(request, 64 * 1024);
-  const result = await addComment(user.id, body.id, body.text);
+  const result = await addComment({ id: user.id, username: user.username }, body.id, body.text);
 
   if (result.ok === false) {
     return json({ ok: false, error: result.error }, { status: result.status });

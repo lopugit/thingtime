@@ -10,6 +10,7 @@ export type CurrentUser = {
   avatarUrl: string | null;
   bannerUrl: string | null;
   emailVerified: boolean;
+  isAdmin: boolean;
   createdAt: string;
   accountKind: 'user' | 'service';
   emailVerificationRequiredBy: string | null;
@@ -17,7 +18,6 @@ export type CurrentUser = {
   storageUsedBytes: number | null;
   activeThemeId: string | null;
   activeFeedAlgorithmId: string | null;
-  isAdmin: boolean;
 } | null;
 
 // Reads the authenticated user resolved by the root loader (getCurrentUser).

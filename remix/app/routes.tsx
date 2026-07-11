@@ -26,6 +26,7 @@ import Profile from './routes/profile';
 import Rainbow from './routes/rainbow.$';
 import Raw from './routes/raw';
 import Register from './routes/register';
+import SchemasRoute from './routes/schemas';
 import StatusPage from './routes/status';
 import ThingtimeUrl from './routes/$';
 import TestsPage from './routes/tests';
@@ -119,6 +120,13 @@ export const router = createBrowserRouter([
       { path: 'rainbow/*', element: <Rainbow /> },
       { path: 'raw', element: <Raw /> },
       { path: 'register', element: <Register />, loader: requireGuest('/welcome') },
+      {
+        // Schema browser rides in the docs chrome (drawer + nav) — docsNav
+        // `to` values are absolute so links keep working under /schemas.
+        path: 'schemas',
+        element: <DocsLayout />,
+        children: [{ index: true, element: <SchemasRoute /> }]
+      },
       {
         path: 'status',
         element: <StatusPage />,

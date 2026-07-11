@@ -152,6 +152,22 @@ placeholder:
 MONGODB_CONNECTION_STRING="mongodb://localhost:27017/thingtime"
 ```
 
+## Admin access
+
+Schema-version migrations (`/api/v1/admin/migrations*`), the migrations panel on
+`/schemas`, the admin panel, and raw database diagnostics are admin-gated. A
+user is an admin when their user doc has `meta.admin: true` (promote/demote via
+the admin panel or `POST /api/v1/admin/set-admin`) or their username is in the
+bootstrap env allowlist:
+
+```sh
+ADMIN_USERNAMES="your-username,another-admin"
+```
+
+Env-allowlisted usernames are a permanent override (they can't be demoted from
+the UI, so there's always a way back in) and are reserved at registration so
+nobody can squat an admin username before you register it.
+
 ## Auth and Lopu AI
 
 JWT-backed browser sessions prefer ES256 asymmetric signing so other platforms

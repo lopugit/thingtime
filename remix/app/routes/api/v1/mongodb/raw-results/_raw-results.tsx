@@ -1,5 +1,6 @@
 import { Flex, Heading } from '@chakra-ui/react';
 import { useLocation } from 'react-router';
+import { requireAdmin } from '~/api/utils/auth/requireAdmin';
 import { getCollection } from '~/api/utils/mongodb/collection';
 import { getConnection } from '~/api/utils/mongodb/connection';
 import { Submit } from '~/components/API/Submit';
@@ -19,7 +20,15 @@ export default function Index() {
 }
 
 const actionExport = async ({ request }) => {
-  // literally just run the setup.ts script
+  // raw docs include every user's private things (and now their crystal
+  // payloads) — admin-only debug endpoint
+  const gate = await requireAdmin(request);
+  if ('error' in gate) {
+    return earlyReturn({
+      status: gate.error.status,
+      message: gate.error.message
+    });
+  }
 
   const connection = await getConnection();
 

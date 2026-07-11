@@ -1,4 +1,5 @@
 import { ensureIndexes } from '../mongodb/collections';
+import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
 import { isEnvAdmin } from './admin';
 import { createEmailVerification } from './emailVerifications';
@@ -82,13 +83,15 @@ export const createUserAccount = async (input: CreateUserAccountInput): Promise<
   if (await findUserByEmail(email)) return { ok: false, status: 409, error: 'Email already registered' };
 
   const now = new Date();
-  const userDoc: UserDoc = {
+  // UserDoc's type lives in users.ts; intersect the version stamp in here.
+  const userDoc: UserDoc & { schemaVersion: number } = {
     ttid: username,
     username,
     email,
     passwordHash: await hashPassword(password),
     displayName: input.displayName ?? null,
     emailVerified: input.emailVerified ?? false,
+    schemaVersion: COLLECTION_SCHEMA_VERSIONS.users,
     createdAt: now,
     updatedAt: now,
     accountKind: input.accountKind ?? 'user',
