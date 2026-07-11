@@ -61,6 +61,15 @@ Writes are always v2. **Reads merge v1 embedded residue** (embedded `comments` a
 - Migration `things-v1-to-v2` now writes `acl` (mapped from each doc's visibility) and `$unset`s the enum; exploded comments/reactions carry `['tt:inherit']`.
 - Verified live: two service accounts + anon — friends-only post invisible to non-owners (404 + feed-filtered), public-except-B post visible to anon but 404/feed-filtered for the excluded user (who also can't comment on it), PUT create→replace→cross-owner-steal-404, PATCH crystal+acl retarget, malformed acl → 400, legacy visibility input mapping. Migration re-verified on a fresh dump-restore: 31 posts + 38 exploded things, feed before/after diff EMPTY (sorted-key normalization), re-run no-op, migrated docs carry acl with zero visibility residue.
 
+## Post-merge adversarial security review (2026-07-10)
+
+After merging main, a 4-dimension adversarial review (each finding verified by an independent skeptic) confirmed 5 issues, all now fixed and re-verified live:
+
+- **HIGH — `listThings` target-mode ACL leak.** `GET /api/v1/things?target=<viewable post>` returned every attached thing without a per-doc audience check. Comments/reactions (`tt:inherit`) were fine, but a private *share* carries its own acl (`['post','share']` + targetId) — its secret caption/author leaked to anyone (incl. anon). Fix: filter the page through `canViewInherited` before projecting (things.ts:listThings). Verified: anon gets 0, owner still sees own, inherit comments still list.
+- **HIGH — reaction-cap bypass (DoS).** Caps lived only in `toggleReaction`; `POST /api/v1/things {thingtime:['reaction']}` minted uncapped reaction things → unbounded feed-payload/memory growth. Fix: `enforceReactionCaps` helper applied inside `createThing` (single source across both eras). Verified: 25 distinct reactions via the generic path → 20 accepted, 5 rejected.
+- **MED — generic `/things` had no rate limit**, bypassing main's per-op limits. Fix: route each op to its key (`things.react`/`things.comment`/new `things.write`); service accounts (bulk sync like Magic vault) exempt from the general write throttle. Verified: human 65 rapid creates → 60 ok + 5×429; service account exempt.
+- **MED + LOW — migration id-squat data loss.** The relational-conversion loop deleted the source doc unconditionally after a no-op `$setOnInsert`, and the embedded loop `$unset` cleared data even when a foreign doc squatted a deterministic destination id. Fix: verify the destination is a genuine counterpart (owner+target) before deleting; leave a collided post at v1 (reads fold it) for a safe re-run; reserve the `react-` id prefix in `sanitizeShareId`; exclude skipped ids from re-batching. Verified on a squat-injected throwaway: embedded comment preserved, squatter not hijacked, re-run after removal completes the migration.
+
 ## Follow-ups worth considering
 
 - `POST /api/v1/auth/service-account` and `POST /api/v1/mongodb/populate` remain unauthenticated (pre-existing; populate is 200-smoke-tested deliberately).

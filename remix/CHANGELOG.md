@@ -33,6 +33,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   most-specific entry wins — e.g. `["tt:all","-tt:user/somebody"]`), with the
   legacy names still accepted and derived, and `/api/v1/things` grew the full
   verb set (GET read/list, POST create, PUT upsert, PATCH merge, DELETE).
+  Merged origin/main (multi-emoji reactions, relational comments, meta.admin
+  role system, account switcher) and reconciled onto the unified model; a
+  post-merge adversarial security review then fixed 5 issues (a listThings acl
+  leak of private shares, a reaction-cap DoS bypass on the generic endpoint,
+  missing rate limits on /things, and migration id-squat data loss).
   Details in
   [`PRs/59-claude-unified-thing-crystal-schemas--everything-is-a-thing.md`](../PRs/59-claude-unified-thing-crystal-schemas--everything-is-a-thing.md).
   — _Claude (AI), 2026-07-10_
