@@ -45,8 +45,10 @@ export interface ThingContextMenuTriggerProps {
 	opacity?: number;
 	transition?: string;
 	iconSize?: number | string;
-	// things with children get View verbs (collapse/expand + all-variants)
+	// any row with hideable content gets collapse/expand; only containers get
+	// the descendant cascade variants
 	collapsible?: boolean;
+	collapsibleChildren?: boolean;
 	collapsed?: boolean;
 	onCollapse?: (command: 'collapse' | 'expand' | 'collapse-all' | 'expand-all') => void;
 	onType?: (args: { type: unknown; wrap?: boolean }) => void;
@@ -98,6 +100,7 @@ export const ThingContextMenuTrigger = (props: ThingContextMenuTriggerProps) => 
 		transition,
 		iconSize = 7,
 		collapsible = false,
+		collapsibleChildren = collapsible,
 		collapsed = false,
 		onCollapse,
 		onType,
@@ -245,6 +248,7 @@ export const ThingContextMenuTrigger = (props: ThingContextMenuTriggerProps) => 
 			readonly,
 			canDelete: !!onDelete,
 			collapsible,
+			collapsibleChildren,
 			collapsed,
 			types
 		});
@@ -269,7 +273,7 @@ export const ThingContextMenuTrigger = (props: ThingContextMenuTriggerProps) => 
 		}
 
 		return base;
-	}, [variant, editMode, readonly, onDelete, collapsible, collapsed, types, targetZone, path]);
+	}, [variant, editMode, readonly, onDelete, collapsible, collapsibleChildren, collapsed, types, targetZone, path]);
 
 	// ------------------------------------------------------------------
 	// live command implementations

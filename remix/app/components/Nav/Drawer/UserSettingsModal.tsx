@@ -5,7 +5,7 @@ import localforage from 'localforage';
 import { useNavigate } from 'react-router';
 import { X } from 'lucide-react';
 
-import { DRAWER_MODAL_OVERLAY_Z, DRAWER_MODAL_Z, useDrawer, useIsMobileViewport } from './useDrawer';
+import { DRAWER_MODAL_OVERLAY_Z, DRAWER_MODAL_Z, DRAWER_TOP_LEVEL_DEFAULT_LIMIT, useDrawer, useIsMobileViewport } from './useDrawer';
 import { AccountSwitcher } from '../../Account/AccountSwitcher';
 import { useLopu } from '../../Lopu/useLopu';
 import { ColorControl } from '../../ThemeSettings/controls';
@@ -61,7 +61,9 @@ export const UserSettingsModal = () => {
 		searchClosesDrawer,
 		setSearchClosesDrawer,
 		topLevelLimit,
+		topLevelLimitIsUnlimited,
 		setTopLevelLimit,
+		setTopLevelLimitUnlimited,
 		resetOrdering
 	} = useDrawer();
 
@@ -73,6 +75,15 @@ export const UserSettingsModal = () => {
 	const { theme, preset, hasOverrides, appliedThemeShareId, builtinThemes, setPreset, setColor, setGeneral, resetOverrides } =
 		useTtTheme();
 	const { thingtime, setThingtime } = useThingtime();
+	const topLevelLimitValue = typeof topLevelLimit === 'number' ? topLevelLimit : DRAWER_TOP_LEVEL_DEFAULT_LIMIT;
+
+	const lowerTopLevelLimit = () => {
+		setTopLevelLimit(topLevelLimitIsUnlimited ? DRAWER_TOP_LEVEL_DEFAULT_LIMIT : topLevelLimitValue - 1);
+	};
+
+	const raiseTopLevelLimit = () => {
+		setTopLevelLimit(topLevelLimitIsUnlimited ? DRAWER_TOP_LEVEL_DEFAULT_LIMIT : topLevelLimitValue + 1);
+	};
 
 	// two-frame mount so the open transition animates from the hidden state
 	const [visible, setVisible] = React.useState(false);
@@ -624,15 +635,23 @@ export const UserSettingsModal = () => {
 
 				{settingRow(
 					'Top-level items',
-					<Flex alignItems="center" columnGap={2}>
-						<Button size="xs" variant="outline" onClick={() => setTopLevelLimit(topLevelLimit - 1)} isDisabled={topLevelLimit <= 1}>
+					<Flex alignItems="center" columnGap={2} rowGap={2} flexWrap="wrap" justifyContent="flex-end">
+						<Button
+							size="xs"
+							variant="outline"
+							onClick={lowerTopLevelLimit}
+							isDisabled={!topLevelLimitIsUnlimited && topLevelLimitValue <= 1}
+						>
 							−
 						</Button>
-						<Text width="20px" textAlign="center" fontSize="sm">
-							{topLevelLimit}
+						<Text minWidth="74px" textAlign="center" fontSize="sm">
+							{topLevelLimitIsUnlimited ? 'Unlimited' : topLevelLimit}
 						</Text>
-						<Button size="xs" variant="outline" onClick={() => setTopLevelLimit(topLevelLimit + 1)}>
+						<Button size="xs" variant="outline" onClick={raiseTopLevelLimit}>
 							+
+						</Button>
+						<Button size="xs" variant={topLevelLimitIsUnlimited ? 'solid' : 'outline'} onClick={setTopLevelLimitUnlimited}>
+							Unlimited
 						</Button>
 					</Flex>,
 					'How many items show before “More”'

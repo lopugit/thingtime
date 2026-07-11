@@ -550,59 +550,6 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		return typeof thing === 'object' && thing !== null;
 	}, [chakraChild, chakra, circular, keysToUse, thing]);
 
-	React.useEffect(() => {
-		if (!hasCollapsibleChildren && isCollapsed) {
-			setIsCollapsed(false);
-		}
-	}, [hasCollapsibleChildren, isCollapsed]);
-
-	// context-menu View verbs. The -all variants broadcast over the events bus;
-	// this node hears its own event too (delivery is synchronous), and every
-	// mounted node in the same scope whose path matches collapses/expands
-	const applyCollapse = React.useCallback(
-		(command: 'collapse' | 'expand' | 'collapse-all' | 'expand-all') => {
-			if (command === 'collapse' || command === 'expand') {
-				setIsCollapsed(command === 'collapse');
-				return;
-			}
-
-			events.next({
-				type: 'thingtime-collapse',
-				scope: collapseScope,
-				path: safeJoin(fullPath),
-				collapsed: command === 'collapse-all'
-			});
-		},
-		[events, collapseScope, safeJoin(fullPath)]
-	);
-
-	React.useEffect(() => {
-		const self = safeJoin(fullPath);
-
-		const subscription = events.subscribe((event: any) => {
-			if (event?.type !== 'thingtime-collapse' || event.scope !== collapseScope) {
-				return;
-			}
-
-			const target = typeof event.path === 'string' ? event.path : '';
-
-			if (self !== target && !(target && self.startsWith(`${target}.`))) {
-				return;
-			}
-
-			// mount default for children rendered later + live state now
-			setChildrenDefaultCollapsed(!!event.collapsed);
-
-			if (hasCollapsibleChildren) {
-				setIsCollapsed(!!event.collapsed);
-			}
-		});
-
-		return () => {
-			subscription?.unsubscribe?.();
-		};
-	}, [events, collapseScope, safeJoin(fullPath), hasCollapsibleChildren]);
-
 	// if Thingtime object has "exec" then execute and set thing to returned data
 	React.useEffect(() => {
 		(async () => {
@@ -1187,6 +1134,77 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		}
 	}, [renderedPath, pl, chakraChild, editMode, props?.pathPl]);
 
+	// Leaf values can collapse to their property path just like nested things
+	// collapse to their path + summary badge. A path is required so a root-level
+	// atomic Thing can never collapse into a completely blank row.
+	const hasCollapsibleAtomicValue = Boolean(
+		renderedPath &&
+			!chakraChild &&
+			!chakra &&
+			!circular &&
+			!props?.children &&
+			(thing === null || typeof thing !== 'object')
+	);
+	const hasCollapsibleContent = hasCollapsibleChildren || hasCollapsibleAtomicValue;
+	// Render from the derived capability as well as state. This avoids a blank
+	// frame when an inherited collapse-all reaches a pathless/non-collapsible
+	// value before the cleanup effect resets its stale collapse state.
+	const isContentCollapsed = isCollapsed && hasCollapsibleContent;
+	const collapseActionLabel = `${isContentCollapsed ? 'Expand' : 'Collapse'} ${renderedPath || safeJoin(fullPath)}`.trim();
+
+	React.useEffect(() => {
+		if (!hasCollapsibleContent && isCollapsed) {
+			setIsCollapsed(false);
+		}
+	}, [hasCollapsibleContent, isCollapsed]);
+
+	// context-menu View verbs. The -all variants broadcast over the events bus;
+	// this node hears its own event too (delivery is synchronous), and every
+	// mounted node in the same scope whose path matches collapses/expands
+	const applyCollapse = React.useCallback(
+		(command: 'collapse' | 'expand' | 'collapse-all' | 'expand-all') => {
+			if (command === 'collapse' || command === 'expand') {
+				setIsCollapsed(command === 'collapse');
+				return;
+			}
+
+			events.next({
+				type: 'thingtime-collapse',
+				scope: collapseScope,
+				path: safeJoin(fullPath),
+				collapsed: command === 'collapse-all'
+			});
+		},
+		[events, collapseScope, safeJoin(fullPath)]
+	);
+
+	React.useEffect(() => {
+		const self = safeJoin(fullPath);
+
+		const subscription = events.subscribe((event: any) => {
+			if (event?.type !== 'thingtime-collapse' || event.scope !== collapseScope) {
+				return;
+			}
+
+			const target = typeof event.path === 'string' ? event.path : '';
+
+			if (self !== target && !(target && self.startsWith(`${target}.`))) {
+				return;
+			}
+
+			// mount default for children rendered later + live state now
+			setChildrenDefaultCollapsed(!!event.collapsed);
+
+			if (hasCollapsibleContent) {
+				setIsCollapsed(!!event.collapsed);
+			}
+		});
+
+		return () => {
+			subscription?.unsubscribe?.();
+		};
+	}, [events, collapseScope, safeJoin(fullPath), hasCollapsibleContent]);
+
 	const handleMouseEvent = React.useCallback(
 		(e) => {
 			const target = e?.target;
@@ -1318,7 +1336,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 									{typeIcon}
 								</Box>
 							)}
-							{codeView && hasCollapsibleChildren && !isCollapsed && (
+							{codeView && hasCollapsibleChildren && !isContentCollapsed && (
 								<Flex
 									className="thingKeyCount"
 									alignItems="center"
@@ -1339,7 +1357,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 							)}
 							{/* collapsed children fold up into an inline badge on the key
 							row (no indented placeholder row) — click to expand */}
-							{hasCollapsibleChildren && isCollapsed && (
+							{hasCollapsibleChildren && isContentCollapsed && (
 								<Flex
 									className="thingCollapsedBadge"
 									as="button"
@@ -1374,14 +1392,14 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 									{/* hover quick actions: collapse/expand beside the context
 									icon (the row's "double whammy") — always in layout so
 									nothing shifts, revealed on row hover */}
-									{hasCollapsibleChildren && (
+									{hasCollapsibleContent && (
 										<Flex
 											className="thingCollapseQuick"
 											as="button"
 											type="button"
-											aria-label={isCollapsed ? 'Expand' : 'Collapse'}
-											aria-expanded={!isCollapsed}
-											title={isCollapsed ? 'Expand' : 'Collapse'}
+											aria-label={collapseActionLabel}
+											aria-expanded={!isContentCollapsed}
+											title={collapseActionLabel}
 											alignItems="center"
 											justifyContent="center"
 											width="20px"
@@ -1392,7 +1410,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 											cursor="pointer"
 											opacity={showContextIcon ? 1 : 0}
 											transition="opacity 0.15s ease, background 0.15s ease, color 0.15s ease"
-											sx={{ '@media (hover: none)': { opacity: 0.55 } }}
+											sx={{ '@media (hover: none), (max-width: 48em)': { opacity: 1, width: '44px', height: '44px' } }}
 											_hover={{ background: 'var(--tt-surface-hover, #ececee)', color: 'var(--tt-ink, #16161a)' }}
 											_focusVisible={{ opacity: 1, outline: '2px solid var(--tt-accent, hotpink)', outlineOffset: '-2px' }}
 											onClick={(e) => {
@@ -1401,7 +1419,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 												setIsCollapsed((prev) => !prev);
 											}}
 										>
-											<Icon name={isCollapsed ? '▸' : '▾'} lucide={isCollapsed ? 'chevron-right' : 'chevron-down'} size="14px" />
+											<Icon name={isContentCollapsed ? '▸' : '▾'} lucide={isContentCollapsed ? 'chevron-right' : 'chevron-down'} size="14px" />
 										</Flex>
 									)}
 									<ThingContextMenuTrigger
@@ -1420,8 +1438,9 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 										thing={thing}
 										thingType={type}
 										readonly={!editMode}
-										collapsible={hasCollapsibleChildren}
-										collapsed={isCollapsed}
+										collapsible={hasCollapsibleContent}
+										collapsibleChildren={hasCollapsibleChildren}
+										collapsed={isContentCollapsed}
 										onCollapse={applyCollapse}
 										onType={onChangeType}
 										onDelete={deleteValue}
@@ -1438,7 +1457,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 				{/* it will also show if the Thing has standard React children */}
 				{/* overflowX auto (not scroll): scroll reserves a permanent
 				scrollbar track that renders as a stray line under every value */}
-				{!loading && !thingtimeChildren && atomicValue && (
+				{!loading && !isContentCollapsed && !thingtimeChildren && atomicValue && (
 					<Box className="atomicValue" data-tt-zone="value" width={'100%'} overflowX={'auto'}>
 						{atomicValue}
 					</Box>
@@ -1446,7 +1465,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 				{/* render any normal React children as well */}
 				{render && props?.children ? props.children : null}
 				{/* render thingtime children */}
-				{!loading && thingtimeChildren && !isCollapsed && (
+				{!loading && thingtimeChildren && !isContentCollapsed && (
 					<Box className="thingtimeChildren" flexGrow={0} flexShrink={1} width={render ? '100%' : ''}>
 						<CollapseCascadeContext.Provider value={childrenDefaultCollapsed ?? inheritedCollapsed}>
 							{thingtimeChildren}
