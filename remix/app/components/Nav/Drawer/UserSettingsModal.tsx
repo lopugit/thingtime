@@ -5,8 +5,8 @@ import localforage from 'localforage';
 import { useNavigate } from 'react-router';
 import { X } from 'lucide-react';
 
-import { UserAvatarCircle } from './DrawerContent';
 import { DRAWER_MODAL_OVERLAY_Z, DRAWER_MODAL_Z, DRAWER_TOP_LEVEL_DEFAULT_LIMIT, useDrawer, useIsMobileViewport } from './useDrawer';
+import { AccountSwitcher } from '../../Account/AccountSwitcher';
 import { useLopu } from '../../Lopu/useLopu';
 import { ColorControl } from '../../ThemeSettings/controls';
 import { useThingtime } from '../../Thingtime/useThingtime';
@@ -152,11 +152,20 @@ export const UserSettingsModal = () => {
 	}, [accountModalOpen]);
 
 	const handleLogout = React.useCallback(async () => {
+		let resp;
 		try {
-			await api.v1.auth.logout();
+			resp = await api.v1.auth.logout();
 		} catch (err) {
 			console.error('Logout failed', err);
 			lopu({ title: 'Logout failed', description: 'Please try again in a moment.', status: 'error' });
+			return;
+		}
+
+		// Switcher semantics: other signed-in accounts stay — the next one takes
+		// over and the modal stays open on it. Only a fully signed-out browser
+		// leaves for /login.
+		if (resp?.user) {
+			lopu({ title: `Logged out — switched to @${resp.user.username} ✨`, status: 'success', duration: 6000 });
 			return;
 		}
 
@@ -439,41 +448,21 @@ export const UserSettingsModal = () => {
 				</Center>
 			</Flex>
 
-			{/* account */}
+			{/* account — the switcher lists every signed-in account and hosts the
+			    add / register-new inline forms */}
 			<Flex flexDirection="column" rowGap={3}>
 				<Text fontSize="10px" fontWeight={600} letterSpacing="0.08em" textTransform="uppercase" opacity={0.45}>
 					Account
 				</Text>
-				<Flex alignItems="center" columnGap={3}>
-					<UserAvatarCircle size="44px" fontSize="md"></UserAvatarCircle>
-					<Box minWidth={0}>
-						<Text fontSize="sm" fontWeight={600} noOfLines={1}>
-							{user ? user.displayName || user.username : 'Not logged in'}
-						</Text>
-						{user && (
-							<Text fontSize="xs" opacity={0.6} noOfLines={1}>
-								@{user.username} · {user.email} {user.emailVerified ? '✅' : '· ✉️ unverified'}
-							</Text>
-						)}
-					</Box>
-				</Flex>
+				<AccountSwitcher onNavigate={close} />
 				<Flex columnGap={2} rowGap={2} flexWrap="wrap">
-					{user ? (
+					{user && (
 						<>
 							<Button size="xs" variant="outline" onClick={() => handleGoTo('/profile')}>
 								Profile 👤
 							</Button>
 							<Button size="xs" variant="outline" onClick={handleLogout}>
 								Log out 🗝️
-							</Button>
-						</>
-					) : (
-						<>
-							<Button size="xs" variant="outline" onClick={() => handleGoTo('/login')}>
-								Log in 🗝️
-							</Button>
-							<Button size="xs" variant="outline" onClick={() => handleGoTo('/register')}>
-								Register ➕
 							</Button>
 						</>
 					)}

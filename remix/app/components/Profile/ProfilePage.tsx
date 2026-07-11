@@ -8,7 +8,7 @@ import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { RAINBOW, RAINBOW_TEXT } from '~/theme/rainbow';
-import type { PublicPost, PublicProfile } from '~/components/Feed/feedTypes';
+import type { PostChange, PublicPost, PublicProfile } from '~/components/Feed/feedTypes';
 
 // Full profile page. SELF mode (no username param, or the param is the logged-in
 // user) shows email/verification + edit/logout controls; PUBLIC mode fetches the
@@ -224,16 +224,30 @@ export const ProfilePage = (props: ProfilePageProps) => {
     loadPage(postsUsername, nextCursorRef.current, generationRef.current);
   }, [postsUsername, loadPage]);
 
-  const handlePostChanged = React.useCallback((id: string, next: PublicPost | null) => {
-    setPosts((prev) => (next ? prev.map((post) => (post.id === id ? next : post)) : prev.filter((post) => post.id !== id)));
-    if (!next) setPostCount((prev) => (typeof prev === 'number' ? Math.max(0, prev - 1) : prev));
+  const handlePostChanged = React.useCallback((id: string, next: PostChange) => {
+    setPosts((prev) =>
+      prev.flatMap((post) => {
+        if (post.id !== id) return [post];
+        const resolved = typeof next === 'function' ? next(post) : next;
+        return resolved ? [resolved] : [];
+      })
+    );
+    // deletes arrive as an explicit null (handleDelete); reaction updaters
+    // never remove, so keying the count on null is correct.
+    if (next === null) setPostCount((prev) => (typeof prev === 'number' ? Math.max(0, prev - 1) : prev));
   }, []);
 
   // self-mode actions
   const [editOpen, setEditOpen] = React.useState(false);
 
   const handleLogout = async () => {
-    await api.v1.auth.logout();
+    const resp = await api.v1.auth.logout();
+    // Switcher semantics: with other accounts signed in the next one takes
+    // over — stay put and let the page re-render on it.
+    if (resp?.user) {
+      lopu({ title: `Logged out — switched to @${resp.user.username} ✨`, status: 'success', duration: 6000 });
+      return;
+    }
     navigate('/login');
   };
 

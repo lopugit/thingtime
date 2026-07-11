@@ -321,6 +321,10 @@ live tree's editors (MagicInput, exported NumberValueInput, Switch):
 
 ## Follow-ups (ideas)
 
+- Editor.js block drag/drop reordering is tracked in
+  [TODO 14](../TODO/claude-todo/14-editorjs-block-drag-drop.md): desktop pointer
+  drag, mobile long-press, and keyboard-accessible movement without regressing
+  autosave, undo/redo, or focus.
 - Mount FocusCardsViewer as the mobile presentation of /things; Columns as a
   desktop editor mode; Form as the Edit presentation.
 - Feed integration: `<RenderThing thing={post} fallback={<PostCard/>}/>`.

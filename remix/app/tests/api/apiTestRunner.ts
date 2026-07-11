@@ -1,4 +1,5 @@
 export type ApiTestGroup =
+  | 'admin'
   | 'algorithms'
   | 'auth'
   | 'crypto'

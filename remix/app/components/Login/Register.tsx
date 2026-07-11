@@ -25,7 +25,14 @@ const inputSx = {
   }
 };
 
+// Zero-prop on the /register page. Embedded mode (account switcher "Register a
+// new account") skips the /welcome navigation on success — onSuccess gets the
+// user (the register API already merged the new account into the switcher
+// roster) — and the login cross-link becomes an in-place toggle via
+// onSwitchMode.
 export const Register = (props) => {
+  const { embedded, onSuccess, onSwitchMode } = props || {};
+
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [email, setEmail] = useState('');
@@ -67,8 +74,12 @@ export const Register = (props) => {
           duration: 8000,
           link: r.verificationLink ? { label: '🔗 Verify your email now (dev)', href: r.verificationLink } : undefined
         });
-        // off to the welcome page (carry the dev verify link along)
-        navigate('/welcome', { state: { verificationLink: r.verificationLink } });
+        if (onSuccess) {
+          onSuccess(r.user, r);
+        } else {
+          // off to the welcome page (carry the dev verify link along)
+          navigate('/welcome', { state: { verificationLink: r.verificationLink } });
+        }
       } else {
         lopu({
           title: 'Registration failed',
@@ -94,13 +105,13 @@ export const Register = (props) => {
       <Flex
         flexDirection="column"
         gap={4}
-        width="340px"
+        width={embedded ? '100%' : '340px'}
         maxWidth="100%"
         background="var(--tt-card, #ffffff)"
         border="1px solid var(--tt-border, #ececef)"
-        borderRadius="var(--tt-radius-xl, 20px)"
-        boxShadow="var(--tt-shadow-panel, 0 24px 60px -28px rgba(20, 20, 40, 0.28))"
-        padding={9}
+        borderRadius={embedded ? 'var(--tt-radius-md, 12px)' : 'var(--tt-radius-xl, 20px)'}
+        boxShadow={embedded ? 'none' : 'var(--tt-shadow-panel, 0 24px 60px -28px rgba(20, 20, 40, 0.28))'}
+        padding={embedded ? 5 : 9}
       >
         <Flex flexDirection="column" gap={1} paddingBottom={1}>
           <Box
@@ -111,7 +122,7 @@ export const Register = (props) => {
             textTransform="uppercase"
             color="var(--tt-muted, #9a9aa6)"
           >
-            Thingtime · Register
+            {embedded ? 'Thingtime · New account' : 'Thingtime · Register'}
           </Box>
           <Box
             as="h1"
@@ -128,7 +139,7 @@ export const Register = (props) => {
               animation: 'var(--tt-rainbow-anim, moving-rainbow 5s linear infinite)'
             }}
           >
-            Create your account 🦄
+            {embedded ? 'Register a new account 🦄' : 'Create your account 🦄'}
           </Box>
         </Flex>
 
@@ -217,16 +228,32 @@ export const Register = (props) => {
           </Flex>
         )}
 
-        <RouterLink to="/login">
-          <Text
+        {onSwitchMode ? (
+          <Box
+            as="button"
+            type="button"
+            onClick={onSwitchMode}
+            textAlign="left"
             fontSize="xs"
             color="var(--tt-muted, #9a9aa6)"
             transition="color 150ms ease"
+            cursor="pointer"
             _hover={{ color: 'var(--tt-text, #5a5a66)' }}
           >
             Already have an account? Log in
-          </Text>
-        </RouterLink>
+          </Box>
+        ) : (
+          <RouterLink to="/login">
+            <Text
+              fontSize="xs"
+              color="var(--tt-muted, #9a9aa6)"
+              transition="color 150ms ease"
+              _hover={{ color: 'var(--tt-text, #5a5a66)' }}
+            >
+              Already have an account? Log in
+            </Text>
+          </RouterLink>
+        )}
       </Flex>
     </form>
   );
