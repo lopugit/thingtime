@@ -17,10 +17,12 @@ import {
 
 // Route a unified mutation to the rate-limit key its dedicated sub-route would
 // use, so the generic endpoint can't be used to bypass the per-op limits.
-// Reaction/comment limits are universal (they're the abuse-sensitive ones);
-// only the general write ceiling is raised for service accounts (bulk sync).
-const rateLimitKeyFor = (method: string, body: any, accountKind: string): string => {
-  if (method === 'POST' && Array.isArray(body?.thingtime)) {
+// Reaction/comment limits are universal (they're the abuse-sensitive ones) and
+// apply whatever verb creates them — POST or a PUT upsert carrying that
+// thingtime — never the higher write ceiling. Only the general write ceiling
+// is raised for service accounts (bulk sync).
+const rateLimitKeyFor = (body: any, accountKind: string): string => {
+  if (Array.isArray(body?.thingtime)) {
     if (body.thingtime.includes('reaction')) return 'things.react';
     if (body.thingtime.includes('comment')) return 'things.comment';
   }
@@ -98,7 +100,7 @@ export const action = async ({ request }: { request: Request }) => {
   // around the per-op limits main added to the react/comment sub-routes. No
   // one is exempt (service-account provisioning is unauthenticated, so
   // accountKind confers no trust); service accounts just get a higher ceiling.
-  const limit = await enforceRateLimit(request, rateLimitKeyFor(method, body, user.accountKind), `user:${user.id}`);
+  const limit = await enforceRateLimit(request, rateLimitKeyFor(body, user.accountKind), `user:${user.id}`);
   if (!limit.allowed) {
     return json(
       { ok: false, error: 'You’re doing that too fast — take a breather 🌸' },
