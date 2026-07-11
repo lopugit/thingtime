@@ -249,6 +249,35 @@ const thingsMigration: Migration = {
             created += inserted;
             skipped += duplicates || inserts.length - inserted;
           }
+
+          // Post-insert verification closes the TOCTOU window: a doc could have
+          // been squatted at a destination id between the pre-check above and
+          // this insert (making the genuine insert dup-fail). Re-read every
+          // destination and confirm each is a genuine counterpart (our owner +
+          // target). If any isn't, roll back the counterparts we DID create and
+          // leave the post at v1 — never $unset embedded data we couldn't
+          // fully relocate, and never double-count by keeping both copies.
+          const ids = inserts.map((entry) => entry.shareId);
+          const after = (await things.find({ shareId: { $in: ids } } as any).toArray()) as any[];
+          const afterById = new Map(after.map((row) => [row.shareId, row]));
+          const isGenuine = (entry: any) => {
+            const twin = afterById.get(entry.shareId);
+            return (
+              !!twin &&
+              String(twin.ownerId) === String(entry.ownerId) &&
+              String(twin.targetId) === String(entry.targetId)
+            );
+          };
+          if (!inserts.every(isGenuine)) {
+            const ours = inserts.filter(isGenuine).map((entry) => entry.shareId);
+            if (ours.length) {
+              await things.deleteMany({ shareId: { $in: ours }, targetId: doc.shareId } as any);
+            }
+            notes.push(`post ${doc.shareId}: interaction id race — rolled back, left at v1 for a later re-run`);
+            skipped += 1;
+            skippedPostIds.push(doc._id);
+            continue;
+          }
         }
 
         await things.updateOne(

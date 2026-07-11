@@ -14,7 +14,11 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   'things.comment': { limit: 20, windowMs: 60_000, enabled: true },
   // any other mutating write through /api/v1/things (create/upsert/patch/delete
   // posts and other thing kinds) — reactions/comments route to their own keys
-  'things.write': { limit: 60, windowMs: 60_000, enabled: true }
+  'things.write': { limit: 60, windowMs: 60_000, enabled: true },
+  // service accounts do legitimate bulk writes (e.g. chunked snapshot sync), so
+  // they get a higher ceiling — but a BOUNDED one, never an exemption: anyone
+  // can provision a service account, so accountKind confers no trust
+  'things.write.service': { limit: 600, windowMs: 60_000, enabled: true }
 };
 
 export const RATE_LIMIT_ENDPOINTS = Object.keys(RATE_LIMIT_DEFAULTS);

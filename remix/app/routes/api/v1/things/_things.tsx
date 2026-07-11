@@ -17,12 +17,14 @@ import {
 
 // Route a unified mutation to the rate-limit key its dedicated sub-route would
 // use, so the generic endpoint can't be used to bypass the per-op limits.
-const rateLimitKeyFor = (method: string, body: any): string => {
+// Reaction/comment limits are universal (they're the abuse-sensitive ones);
+// only the general write ceiling is raised for service accounts (bulk sync).
+const rateLimitKeyFor = (method: string, body: any, accountKind: string): string => {
   if (method === 'POST' && Array.isArray(body?.thingtime)) {
     if (body.thingtime.includes('reaction')) return 'things.react';
     if (body.thingtime.includes('comment')) return 'things.comment';
   }
-  return 'things.write';
+  return accountKind === 'service' ? 'things.write.service' : 'things.write';
 };
 
 // Things are small JSON payloads (crystal fields: text + image URLs + listing).
@@ -93,17 +95,15 @@ export const action = async ({ request }: { request: Request }) => {
   const body = await request.json().catch(() => ({}));
 
   // Every mutating verb is throttled — the generic endpoint must not be a way
-  // around the per-op limits main added to the react/comment sub-routes.
-  // Service accounts are deliberately-provisioned API clients (e.g. bulk
-  // snapshot sync) and are exempt from the general write throttle.
-  if (user.accountKind !== 'service') {
-    const limit = await enforceRateLimit(request, rateLimitKeyFor(method, body), `user:${user.id}`);
-    if (!limit.allowed) {
-      return json(
-        { ok: false, error: 'You’re doing that too fast — take a breather 🌸' },
-        rateLimitedResponseInit(limit)
-      );
-    }
+  // around the per-op limits main added to the react/comment sub-routes. No
+  // one is exempt (service-account provisioning is unauthenticated, so
+  // accountKind confers no trust); service accounts just get a higher ceiling.
+  const limit = await enforceRateLimit(request, rateLimitKeyFor(method, body, user.accountKind), `user:${user.id}`);
+  if (!limit.allowed) {
+    return json(
+      { ok: false, error: 'You’re doing that too fast — take a breather 🌸' },
+      rateLimitedResponseInit(limit)
+    );
   }
 
   if (method === 'POST') {
