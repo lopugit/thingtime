@@ -1,8 +1,9 @@
 import React from 'react';
-import { Box, Button, Flex, IconButton, Image, Input, Select, Text, Textarea } from '@chakra-ui/react';
+import { Box, Button, Flex, IconButton, Image, Input, Select, Text } from '@chakra-ui/react';
 import { X } from 'lucide-react';
 
 import { useApi } from '~/hooks/useApi';
+import { LongTextEditor } from '~/components/Editor/LongTextEditor';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { UserAvatarCircle } from '~/components/Nav/Drawer/DrawerContent';
 import { RAINBOW } from '~/theme/rainbow';
@@ -11,9 +12,10 @@ import type { MarketplaceCategory, PostType, PostVisibility, PublicPost } from '
 
 // "What's on your mind?" composer. Collapsed it's a one-line prompt beside
 // the viewer's avatar; expanded it grows type tabs (text/photos/marketplace),
-// an autosizing textarea, image URL rows, listing fields, tag chips and a
-// circle picker. Posts through api.v1.things.create and hands the returned
-// post to onPosted for prepending.
+// a block editor for the body (Editor.js — headings, lists, quotes,
+// checklists serialise to a plain string), image URL rows, listing fields,
+// tag chips and a circle picker. Posts through api.v1.things.create and
+// hands the returned post to onPosted for prepending.
 
 const INK = 'var(--tt-ink, #16161a)';
 const TEXT = 'var(--tt-text, #5a5a66)';
@@ -70,14 +72,9 @@ export const PostComposer = (props: PostComposerProps) => {
   const [visibility, setVisibility] = React.useState<PostVisibility>('public');
   const [posting, setPosting] = React.useState(false);
 
-  const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
-
-  React.useEffect(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, 320)}px`;
-  }, [text, expanded, type]);
+  // bumping the session remounts the block editor with a clean document
+  // (while mounted, the editor owns the text)
+  const [composerSession, setComposerSession] = React.useState(0);
 
   const parsedTags = Array.from(
     new Set(
@@ -106,6 +103,7 @@ export const PostComposer = (props: PostComposerProps) => {
     setExpanded(false);
     setType('text');
     setText('');
+    setComposerSession((session) => session + 1);
     setImages([]);
     setTitle('');
     setPrice('');
@@ -228,20 +226,15 @@ export const PostComposer = (props: PostComposerProps) => {
 
       <Flex columnGap={3}>
         <UserAvatarCircle size="36px" fontSize="sm" />
-        <Textarea
-          ref={textareaRef}
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          placeholder={TEXTAREA_PLACEHOLDERS[type]}
-          minHeight="72px"
-          resize="none"
-          border="none"
-          paddingX={0}
-          paddingY={1}
-          fontSize="md"
-          color={INK}
-          _focusVisible={{ outline: 'none', boxShadow: 'none' }}
-        />
+        <Box flex="1" minWidth={0}>
+          <LongTextEditor
+            key={composerSession}
+            value={text}
+            onValueChange={(next) => setText(typeof next === 'string' ? next : '')}
+            placeholder={TEXTAREA_PLACEHOLDERS[type]}
+            minHeight="72px"
+          />
+        </Box>
       </Flex>
 
       {/* photos */}
