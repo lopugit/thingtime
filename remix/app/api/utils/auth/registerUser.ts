@@ -41,6 +41,18 @@ export type CreateUserAccountResult =
 
 const isEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 
+// Privileged meta keys that must never be set at account creation (only via
+// their own admin-gated / authenticated endpoints).
+const PRIVILEGED_META_KEYS = ['admin'];
+
+// Drop privileged keys from any caller-supplied meta before it's persisted.
+const sanitizeCreateMeta = (meta: unknown): Record<string, any> => {
+  if (!meta || typeof meta !== 'object') return {};
+  const clean: Record<string, any> = { ...(meta as Record<string, any>) };
+  for (const key of PRIVILEGED_META_KEYS) delete clean[key];
+  return clean;
+};
+
 // Single insertion path for user accounts. Browser registration, service
 // account provisioning, and seeding share this validation + schema path.
 export const createUserAccount = async (input: CreateUserAccountInput): Promise<CreateUserAccountResult> => {
@@ -69,7 +81,10 @@ export const createUserAccount = async (input: CreateUserAccountInput): Promise<
     createdAt: now,
     updatedAt: now,
     accountKind: input.accountKind ?? 'user',
-    meta: input.meta ?? {}
+    // Defense-in-depth: privileged flags can never be set at creation time,
+    // even if a caller sneaks them into meta. `admin` is granted only via the
+    // admin-gated setUserAdmin (auth/admin.ts).
+    meta: sanitizeCreateMeta(input.meta)
   };
 
   if (input.emailVerificationRequiredBy !== undefined) {

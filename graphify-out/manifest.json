@@ -770,8 +770,8 @@
     "semantic_hash": ""
   },
   "remix/app/api/utils/auth/registerUser.ts": {
-    "mtime": 1783639012.543079,
-    "ast_hash": "a0aebfd7ac47a56451cfa5b2795beeb9",
+    "mtime": 1783747437.2304807,
+    "ast_hash": "2d951b94144e40219a6501ac2d905f2b",
     "semantic_hash": ""
   },
   "remix/app/api/utils/auth/serviceAccounts.ts": {
@@ -1275,8 +1275,8 @@
     "semantic_hash": "e94d06f633eff013ffca0a2f6b3b4adf"
   },
   "remix/app/routes/api/v1/auth/register/_register.tsx": {
-    "mtime": 1783639037.0541573,
-    "ast_hash": "d001b324b554440a79f5194d13c8a4a3",
+    "mtime": 1783747437.230678,
+    "ast_hash": "c8f78cb402e86c6cbdb8ee27df30c86e",
     "semantic_hash": ""
   },
   "remix/app/routes/api/v1/auth/resend-verification/_resend-verification.tsx": {
@@ -2680,8 +2680,8 @@
     "semantic_hash": ""
   },
   "remix/app/tests/api/apiTestRunner.ts": {
-    "mtime": 1783635169.6043022,
-    "ast_hash": "5ccd15fda9e65e8ccb06947799e244b9",
+    "mtime": 1783747503.645857,
+    "ast_hash": "5d940b9863d43ab3e357298e2885a1e4",
     "semantic_hash": ""
   },
   "remix/app/tests/api/apiTests.ts": {
