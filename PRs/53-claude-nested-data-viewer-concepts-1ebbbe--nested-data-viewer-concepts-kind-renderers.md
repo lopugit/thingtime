@@ -243,6 +243,29 @@ live tree's editors (MagicInput, exported NumberValueInput, Switch):
   hierarchy, semantic H2/H6 view rendering, a 44px custom heading override,
   full-page mobile scrolling and zero horizontal overflow.
 
+## Round 8 — multiline Editor.js textbox keyboard boundaries
+
+- Traced the quote jump to Editor.js core decomposing multiline
+  `contenteditable` fields into logical inputs. An empty internal line was then
+  misidentified as the start or end of the whole block, so Backspace and arrow
+  keys moved focus into another input or the previous Editor.js block.
+- Added a field-level keyboard guard for Editor.js `cdx-input`
+  contenteditables. Backspace/Delete retain browser editing, while arrow keys
+  use the browser Selection API before the event reaches Editor.js's outer
+  block-navigation listener. True field starts/ends still reach Editor.js, and
+  the guard is intentionally narrower than all editables, leaving paragraph,
+  header, list, checklist, table, and native textarea behavior under their
+  existing owners.
+- A MutationObserver binds the same behavior to dynamically inserted tool
+  fields and removes listeners for deleted fields, covering quote, warning,
+  image-caption, and embed-caption inputs without leaking detached blocks.
+- Added focused regression tests for every protected deletion/navigation key,
+  unaffected Editor.js keys, normal block editables, and invalid event targets.
+  Live QA reproduced the recording at 1280px and 390x844: Enter created an
+  empty quote line; Up, Down, and Left stayed in the quote; Backspace removed
+  the line with focus still in the quote. Both viewports completed full-page
+  scroll checks with no horizontal overflow or new console errors.
+
 ## Follow-ups (ideas)
 
 - Mount FocusCardsViewer as the mobile presentation of /things; Columns as a

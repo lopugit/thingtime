@@ -3,6 +3,7 @@ import { Box } from '@chakra-ui/react';
 
 import { EDITOR_JS_HEADING_FONT_SIZES, EDITOR_JS_HEADING_LEVELS, getEditorJsValueSignature, isEditorJsDoc, isEditorJsDocSafeToEdit } from './editorJsValue';
 import type { EditorJsDoc } from './editorJsValue';
+import { watchEditorJsTextFieldKeydowns } from './editorJsKeyboard';
 import { inlineHtmlToText } from './inlineHtmlText';
 import { StyleTune } from './StyleTune';
 
@@ -375,6 +376,7 @@ const LongTextEditorInner = (props: LongTextEditorProps) => {
 	React.useEffect(() => {
 		destroyedRef.current = false;
 		let cancelled = false;
+		let textFieldKeyboardCleanup: (() => void) | undefined;
 
 		(async () => {
 			if (!holderRef.current) return;
@@ -473,6 +475,11 @@ const LongTextEditorInner = (props: LongTextEditorProps) => {
 				return;
 			}
 
+			// Editor.js's block listener mistakes empty internal lines in tool
+			// textboxes for block boundaries. Bind before that outer listener so
+			// the browser keeps native deletion and cursor movement in the field.
+			textFieldKeyboardCleanup = watchEditorJsTextFieldKeydowns(holderRef.current);
+
 			// register in the window.meta debug db (same convention as
 			// Thingtime.tsx) so devtools/tests can drive editor.js's own API
 			try {
@@ -516,6 +523,7 @@ const LongTextEditorInner = (props: LongTextEditorProps) => {
 		return () => {
 			cancelled = true;
 			destroyedRef.current = true;
+			textFieldKeyboardCleanup?.();
 			rawInputCleanupRef.current?.();
 			rawInputCleanupRef.current = null;
 			const editor = editorRef.current;

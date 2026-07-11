@@ -2,7 +2,7 @@
   "AGENTS.md": {
     "mtime": 1783611080.726016,
     "ast_hash": "66ab33a204d74e6f8601851448479935",
-    "semantic_hash": ""
+    "semantic_hash": "66ab33a204d74e6f8601851448479935"
   },
   ".claude/settings.json": {
     "mtime": 1783611080.708161,
@@ -1567,7 +1567,7 @@
   "CLAUDE.md": {
     "mtime": 1783611080.7083209,
     "ast_hash": "c1b038f78ea8930050aeb74a1d86d275",
-    "semantic_hash": ""
+    "semantic_hash": "c1b038f78ea8930050aeb74a1d86d275"
   },
   "CODEX.md": {
     "mtime": 1783611080.726991,
@@ -1582,12 +1582,12 @@
   "FUNDAMENTALS.md": {
     "mtime": 1783611080.7272263,
     "ast_hash": "527d0aebeb02ffecfc0b86c5a6314f4e",
-    "semantic_hash": ""
+    "semantic_hash": "527d0aebeb02ffecfc0b86c5a6314f4e"
   },
   "README.md": {
     "mtime": 1783611080.7305598,
     "ast_hash": "dad16ae49ecc565f863a7b4d1ff28561",
-    "semantic_hash": ""
+    "semantic_hash": "dad16ae49ecc565f863a7b4d1ff28561"
   },
   "VERCEL_DEPLOYMENTS.md": {
     "mtime": 1783611080.7331786,
@@ -1607,7 +1607,7 @@
   "docs/design/README.md": {
     "mtime": 1783611080.7385232,
     "ast_hash": "58f1d6b18f88f2a9218d111b043c51bb",
-    "semantic_hash": ""
+    "semantic_hash": "58f1d6b18f88f2a9218d111b043c51bb"
   },
   "docs/design/claude-design-mockup-v1/README.md": {
     "mtime": 1783611080.738793,
@@ -1810,8 +1810,8 @@
     "semantic_hash": "f162fbffa18046af73dfca08802a536f"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1783683281.1091013,
-    "ast_hash": "2f35f3985a018d188040f2d585db065d",
+    "mtime": 1783740259.3734834,
+    "ast_hash": "59337e0c0b0e070be71566419b255b79",
     "semantic_hash": ""
   },
   "remix/README.md": {
@@ -2882,7 +2882,7 @@
   "TODO/TODO.md": {
     "mtime": 1783611080.7311857,
     "ast_hash": "957caf3832bd496e500755f82c2297fc",
-    "semantic_hash": ""
+    "semantic_hash": "957caf3832bd496e500755f82c2297fc"
   },
   "TODO/claude-todo/01-mongodb-connection-status.md": {
     "mtime": 1783611080.7314162,
@@ -2927,7 +2927,7 @@
   "TODO/claude-todo/README.md": {
     "mtime": 1783611080.7330775,
     "ast_hash": "d60164b05ccb25545b2be57040cc54d5",
-    "semantic_hash": ""
+    "semantic_hash": "d60164b05ccb25545b2be57040cc54d5"
   },
   "docs/design-inspiration/human-ai/html-examples/gold-standard-ai-era-value-moats-light-v5-balanced-cards.html": {
     "mtime": 1783611080.7356663,
@@ -3307,7 +3307,7 @@
   "PRs/40-claude-feed-algorithms-profile-516506--feed-personal-algorithms-profiles-settings.md": {
     "mtime": 1783611080.7297008,
     "ast_hash": "ddf594e89b2b9f7d27e86509b5be7f3e",
-    "semantic_hash": ""
+    "semantic_hash": "ddf594e89b2b9f7d27e86509b5be7f3e"
   },
   "remix/app/components/EasterEggs/EasterEggs.tsx": {
     "mtime": 1783611081.1457925,
@@ -3327,22 +3327,22 @@
   "TODO/claude-todo/09-security-hardening.md": {
     "mtime": 1783611080.7324512,
     "ast_hash": "da00c703ec67c306eae36ea7d81398d7",
-    "semantic_hash": ""
+    "semantic_hash": "da00c703ec67c306eae36ea7d81398d7"
   },
   "TODO/claude-todo/10-delight-and-growth-ideas.md": {
     "mtime": 1783611080.7327707,
     "ast_hash": "9e62d45ac4e322c2b5a227b9aec4dc89",
-    "semantic_hash": ""
+    "semantic_hash": "9e62d45ac4e322c2b5a227b9aec4dc89"
   },
   "docs/design/thingtime-algorithm-growth/index.html": {
     "mtime": 1783611080.767744,
     "ast_hash": "20b370d6ba0185015596da20edf894aa",
-    "semantic_hash": ""
+    "semantic_hash": "20b370d6ba0185015596da20edf894aa"
   },
   "docs/design/thingtime-theme-gallery/index.html": {
     "mtime": 1783611080.8516562,
     "ast_hash": "3682a002c99ff959c04ffa06157937d4",
-    "semantic_hash": ""
+    "semantic_hash": "3682a002c99ff959c04ffa06157937d4"
   },
   "electron/package.json": {
     "mtime": 1783611080.8529532,
@@ -3377,22 +3377,22 @@
   ".github/workflows/electron-release.yml": {
     "mtime": 1783611080.72449,
     "ast_hash": "86ebce48c0b766c8d7fd1458f2892837",
-    "semantic_hash": ""
+    "semantic_hash": "86ebce48c0b766c8d7fd1458f2892837"
   },
   "PRs/42-codex-electron-remix-app--add-electron-desktop-app-shell.md": {
     "mtime": 1783611080.7303402,
     "ast_hash": "cef236b2909fd206dd16da39d183a8a6",
-    "semantic_hash": ""
+    "semantic_hash": "cef236b2909fd206dd16da39d183a8a6"
   },
   "electron/README.md": {
     "mtime": 1783611080.8524308,
     "ast_hash": "3d57a3bf3d49fe9504a59f1b34aa8bee",
-    "semantic_hash": ""
+    "semantic_hash": "3d57a3bf3d49fe9504a59f1b34aa8bee"
   },
   ".githooks/README.md": {
     "mtime": 1783611080.7240682,
     "ast_hash": "a71d4009ea2ac03af56a3cb93b10187d",
-    "semantic_hash": ""
+    "semantic_hash": "a71d4009ea2ac03af56a3cb93b10187d"
   },
   ".claude/launch.json": {
     "mtime": 1783612407.056492,
@@ -3485,9 +3485,9 @@
     "semantic_hash": "cb100f6065969db2ba48924ccbc315ee"
   },
   "remix/app/components/Editor/LongTextEditor.tsx": {
-    "mtime": 1783734005.6021392,
-    "ast_hash": "80644f08fb3fbc74dcee002a5177a9e7",
-    "semantic_hash": "80644f08fb3fbc74dcee002a5177a9e7"
+    "mtime": 1783738338.6108096,
+    "ast_hash": "d615f127c5b6e5a350fce8bc9734cf38",
+    "semantic_hash": "d615f127c5b6e5a350fce8bc9734cf38"
   },
   "remix/app/components/Kinds/kindPrimitives.tsx": {
     "mtime": 1783613628.9318583,
@@ -3520,9 +3520,9 @@
     "semantic_hash": "dd32776fe5648c798b3eff144b9d92e1"
   },
   "PRs/53-claude-nested-data-viewer-concepts-1ebbbe--nested-data-viewer-concepts-kind-renderers.md": {
-    "mtime": 1783683281.1096835,
-    "ast_hash": "8cecc159b29b87ca83d8e04153c24dd9",
-    "semantic_hash": ""
+    "mtime": 1783739637.0884144,
+    "ast_hash": "726e486caa1798aad39e0f534b9535fd",
+    "semantic_hash": "726e486caa1798aad39e0f534b9535fd"
   },
   "remix/app/components/Editor/StyleTune.ts": {
     "mtime": 1783733932.753837,
@@ -3573,5 +3573,15 @@
     "mtime": 1783680399.571225,
     "ast_hash": "a33863c7ff35f9aa545d03f201073292",
     "semantic_hash": "a33863c7ff35f9aa545d03f201073292"
+  },
+  "remix/app/components/Editor/editorJsKeyboard.test.ts": {
+    "mtime": 1783740599.6736238,
+    "ast_hash": "c28e7faffd1e57200a2e965694ed521b",
+    "semantic_hash": ""
+  },
+  "remix/app/components/Editor/editorJsKeyboard.ts": {
+    "mtime": 1783740599.6731265,
+    "ast_hash": "e6fd6a732582f32fd55b6872e6ffe2e3",
+    "semantic_hash": ""
   }
 }

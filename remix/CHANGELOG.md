@@ -184,6 +184,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- Fixed Editor.js multiline tool textboxes treating empty internal lines as
+  block boundaries. Quote, warning, image-caption, and embed-caption fields now
+  keep Backspace/Delete and arrow-key editing inside the active textbox at
+  internal line boundaries, while genuine field boundaries, native inputs, and
+  ordinary paragraph, heading, list, and checklist block navigation remain
+  unchanged. Dynamically added Editor.js fields receive the same guard. Details
+  in [`PRs/53-claude-nested-data-viewer-concepts-1ebbbe--nested-data-viewer-concepts-kind-renderers.md`](../PRs/53-claude-nested-data-viewer-concepts-1ebbbe--nested-data-viewer-concepts-kind-renderers.md).
+  — _Codex (AI), 2026-07-11_
 - Fixed Editor.js chrome being clipped by the Thingtime atomic-value scroll
   wrapper. Rich-text values now keep floating toolboxes visible, wide editors
   reserve an in-card gutter for both the `+` and six-dot controls, and narrow
