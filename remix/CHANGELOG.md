@@ -184,6 +184,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- Fixed Editor.js chrome being clipped by the Thingtime atomic-value scroll
+  wrapper. Rich-text values now keep floating toolboxes visible, wide editors
+  reserve an in-card gutter for both the `+` and six-dot controls, and narrow
+  editors retain Editor.js's mobile bottom-sheet layout. Header blocks now use
+  an explicit H1-H6 scale in edit mode and semantic heading elements with the
+  same scale in view mode, while validated Style Tune sizes still override the
+  defaults. Details in
+  [`PRs/53-claude-nested-data-viewer-concepts-1ebbbe--nested-data-viewer-concepts-kind-renderers.md`](../PRs/53-claude-nested-data-viewer-concepts-1ebbbe--nested-data-viewer-concepts-kind-renderers.md).
+  — _Codex (AI), 2026-07-11_
 - Fixed the Thingtime value editor jumping between its inline string control
   and Editor.js after Enter/focus/save. Primitive strings now stay plain;
   Editor.js is a persistent `rich-text` block datatype with content-preserving

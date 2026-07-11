@@ -220,6 +220,29 @@ live tree's editors (MagicInput, exported NumberValueInput, Switch):
   both datatype conversions, JSON-string detection, rich view hydration,
   Editor.js toolbox interaction, full-page scroll, and horizontal overflow.
 
+## Round 7 — Editor.js chrome + heading rendering
+
+- Removed the Editor.js document path from `.atomicValue`'s computed two-axis
+  scroll container. Toolboxes, block settings and nested conversion popovers
+  can now extend beyond the value row instead of being cut off at its 96px
+  height.
+- Wide editors reserve and align a 58px in-card action gutter, so both the `+`
+  toolbox button and six-dot block-settings button stay inside page clipping
+  boundaries. Editor.js narrow mode remains untouched and continues to show
+  both buttons above its mobile bottom sheet.
+- Header levels share one clamped H1-H6 visual scale. Edit mode explicitly
+  restores size and weight after Chakra's heading reset; read-only rich-text
+  rendering now emits semantic `h1`-`h6` elements instead of paragraphs.
+  The Header tool and Markdown conversion now retain all six levels rather
+  than downgrading stored H5/H6 blocks when they are edited.
+  Validated Style Tune font sizes are forwarded through a scoped CSS variable
+  so a person's explicit custom size still wins over the level default.
+- Regression coverage now checks hostile/default/clamped heading levels and
+  descending font sizes. Live QA at 1560px and 390x844 exercised the `+`
+  toolbox, six-dot settings, nested **Convert to** menu, the H1/H2/H4/H6 edit
+  hierarchy, semantic H2/H6 view rendering, a 44px custom heading override,
+  full-page mobile scrolling and zero horizontal overflow.
+
 ## Follow-ups (ideas)
 
 - Mount FocusCardsViewer as the mobile presentation of /things; Columns as a

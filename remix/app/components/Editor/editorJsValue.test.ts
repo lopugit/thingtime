@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 // @ts-ignore Node 24 executes this TypeScript test directly and requires the .ts extension.
-import { EDITOR_JS_AUTO_DETECT_LIMITS, getEditorJsDoc, getEditorJsValueSignature, isEditorJsDoc, isEditorJsDocSafeToEdit, parseEditorJsDocString } from './editorJsValue.ts';
+import { EDITOR_JS_AUTO_DETECT_LIMITS, EDITOR_JS_HEADING_LEVELS, getEditorJsDoc, getEditorJsHeadingFontSize, getEditorJsValueSignature, isEditorJsDoc, isEditorJsDocSafeToEdit, normalizeEditorJsHeadingLevel, parseEditorJsDocString } from './editorJsValue.ts';
 
 const doc = {
 	time: 123,
@@ -87,4 +87,18 @@ test('native edit safety uses cumulative value and text budgets', () => {
 	};
 	assert.equal(isEditorJsDocSafeToEdit(manyValues), false);
 	assert.equal(isEditorJsDocSafeToEdit(muchText), false);
+});
+
+test('normalises heading levels onto a visible semantic hierarchy', () => {
+	assert.deepEqual(EDITOR_JS_HEADING_LEVELS, [1, 2, 3, 4, 5, 6]);
+	assert.equal(normalizeEditorJsHeadingLevel(undefined), 2);
+	assert.equal(normalizeEditorJsHeadingLevel(null), 2);
+	assert.equal(normalizeEditorJsHeadingLevel(''), 2);
+	assert.equal(normalizeEditorJsHeadingLevel('1'), 1);
+	assert.equal(normalizeEditorJsHeadingLevel(4.9), 4);
+	assert.equal(normalizeEditorJsHeadingLevel(-10), 1);
+	assert.equal(normalizeEditorJsHeadingLevel(99), 6);
+	assert.equal(normalizeEditorJsHeadingLevel(Symbol('unsafe')), 2);
+	assert.ok(Number.parseFloat(getEditorJsHeadingFontSize(1)) > Number.parseFloat(getEditorJsHeadingFontSize(4)));
+	assert.ok(Number.parseFloat(getEditorJsHeadingFontSize(4)) > Number.parseFloat(getEditorJsHeadingFontSize(6)));
 });

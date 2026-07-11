@@ -150,6 +150,8 @@ export class StyleTune {
 		const css = styleTokensToCss(this.data);
 		this.wrapper.style.color = (css.color as string) || '';
 		this.wrapper.style.fontSize = (css.fontSize as string) || '';
+		if (css.fontSize) this.wrapper.style.setProperty('--tt-editor-heading-font-size', css.fontSize as string);
+		else this.wrapper.style.removeProperty('--tt-editor-heading-font-size');
 		this.wrapper.style.fontFamily = (css.fontFamily as string) || '';
 		this.wrapper.style.textAlign = (css.textAlign as string) || '';
 	}

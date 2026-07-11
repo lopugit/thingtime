@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box } from '@chakra-ui/react';
 
-import { getEditorJsValueSignature, isEditorJsDoc, isEditorJsDocSafeToEdit } from './editorJsValue';
+import { EDITOR_JS_HEADING_FONT_SIZES, EDITOR_JS_HEADING_LEVELS, getEditorJsValueSignature, isEditorJsDoc, isEditorJsDocSafeToEdit } from './editorJsValue';
 import type { EditorJsDoc } from './editorJsValue';
 import { inlineHtmlToText } from './inlineHtmlText';
 import { StyleTune } from './StyleTune';
@@ -160,7 +160,7 @@ const parseChunkLines = (lines: string[], blocks: EditorJsDoc['blocks']) => {
 
 		if (header) {
 			flushAll();
-			blocks.push({ type: 'header', data: { text: escapeInline(header[2]), level: Math.min(header[1].length, 4) } });
+			blocks.push({ type: 'header', data: { text: escapeInline(header[2]), level: Math.min(header[1].length, 6) } });
 		} else if (line.trim() === '---') {
 			flushAll();
 			blocks.push({ type: 'delimiter', data: {} });
@@ -419,7 +419,7 @@ const LongTextEditorInner = (props: LongTextEditorProps) => {
 			const enabled = (tool: LongTextBlockType) => blockTypesRef.current?.[tool] !== false;
 
 			const tools: Record<string, unknown> = {
-				...(enabled('header') ? { header: { class: Header as any, inlineToolbar: true, config: { levels: [1, 2, 3, 4], defaultLevel: 2 } } } : {}),
+				...(enabled('header') ? { header: { class: Header as any, inlineToolbar: true, config: { levels: [...EDITOR_JS_HEADING_LEVELS], defaultLevel: 2 } } } : {}),
 				...(enabled('list') ? { list: { class: List as any, inlineToolbar: true } } : {}),
 				...(enabled('quote') ? { quote: { class: Quote as any, inlineToolbar: true } } : {}),
 				...(enabled('checklist') ? { checklist: { class: Checklist as any, inlineToolbar: true } } : {}),
@@ -555,10 +555,30 @@ const LongTextEditorInner = (props: LongTextEditorProps) => {
 			}}
 			sx={{
 				// keep editor.js chrome inside our card look
+				// Wide Editor.js positions its 58px + / settings action row to the
+				// left of block content. Reserve that gutter inside the editor;
+				// narrow mode moves the controls itself and must keep the full width.
+				'@media screen and (min-width: 651px)': {
+					'.codex-editor:not(.codex-editor--narrow)': { paddingInlineStart: '58px' },
+					'.codex-editor:not(.codex-editor--narrow) .ce-toolbar': {
+						insetInlineStart: '58px',
+						width: 'calc(100% - 58px)'
+					}
+				},
 				'.codex-editor__redactor': { paddingBottom: '0 !important' },
 				'.ce-block__content, .ce-toolbar__content': { maxWidth: '100%' },
 				'.ce-toolbar__plus, .ce-toolbar__settings-btn': { color: 'var(--tt-muted, #9a9aa6)' },
 				'.ce-paragraph[data-placeholder]:empty::before': { color: 'var(--tt-faint, #b6b6c0)' },
+				'h1.ce-header, h2.ce-header, h3.ce-header, h4.ce-header, h5.ce-header, h6.ce-header': {
+					fontWeight: 800,
+					lineHeight: 1.25
+				},
+				'h1.ce-header': { fontSize: `var(--tt-editor-heading-font-size, ${EDITOR_JS_HEADING_FONT_SIZES[1]})` },
+				'h2.ce-header': { fontSize: `var(--tt-editor-heading-font-size, ${EDITOR_JS_HEADING_FONT_SIZES[2]})` },
+				'h3.ce-header': { fontSize: `var(--tt-editor-heading-font-size, ${EDITOR_JS_HEADING_FONT_SIZES[3]})` },
+				'h4.ce-header': { fontSize: `var(--tt-editor-heading-font-size, ${EDITOR_JS_HEADING_FONT_SIZES[4]})` },
+				'h5.ce-header': { fontSize: `var(--tt-editor-heading-font-size, ${EDITOR_JS_HEADING_FONT_SIZES[5]})` },
+				'h6.ce-header': { fontSize: `var(--tt-editor-heading-font-size, ${EDITOR_JS_HEADING_FONT_SIZES[6]})` },
 				// quotes should look like quotes, not bordered boxes: kill the
 				// stock cdx-input chrome + ~160px min-height, use the accent rule
 				'.cdx-quote__text': {

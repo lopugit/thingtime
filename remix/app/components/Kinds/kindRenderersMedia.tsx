@@ -3,7 +3,7 @@ import { Box, Flex, Grid, Text } from '@chakra-ui/react';
 
 import { registerKindRenderer } from './kindRegistry';
 import type { KindRenderContext } from './kindRegistry';
-import { isEditorJsDoc } from '~/components/Editor/editorJsValue';
+import { getEditorJsHeadingFontSize, isEditorJsDoc, normalizeEditorJsHeadingLevel } from '~/components/Editor/editorJsValue';
 import { inlineHtmlToText, sanitizeEditorJsInlineHtml } from '~/components/Editor/inlineHtmlText';
 import { sanitizeStyleTokens, styleTokensToCss } from '~/components/Editor/styleTokens';
 import {
@@ -569,15 +569,17 @@ export const RichTextBlocks = ({ blocks }: { blocks: RichTextBlock[] }) => {
 			const tuneStyle = styleTokensToCss(sanitizeStyleTokens((block.tunes as Record<string, unknown> | undefined)?.style));
 
 			if (block.type === 'header') {
-				const level = toNumberOr(block.data.level, 2) || 2;
-				const sizes: Record<number, string> = { 1: 'xl', 2: 'lg', 3: 'md', 4: 'sm', 5: 'sm', 6: 'xs' };
+				const level = normalizeEditorJsHeadingLevel(block.data.level);
+				const headingTag = `h${level}` as 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6';
 				return (
-					<Text
+					<Box
+						as={headingTag}
 						key={idx}
 						color="var(--tt-ink, #16161a)"
-						fontSize={sizes[level] || 'md'}
+						fontSize={getEditorJsHeadingFontSize(level)}
 						fontWeight={800}
 						lineHeight="1.25"
+						margin={0}
 						style={tuneStyle}
 						sx={inlineMarkupSx}
 						dangerouslySetInnerHTML={{ __html: sanitizeInlineHtml(block.data.text, limits) }}

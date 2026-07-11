@@ -9,6 +9,32 @@ export type EditorJsDoc = {
 	blocks: EditorJsBlock[];
 } & Record<string, unknown>;
 
+export const EDITOR_JS_HEADING_LEVELS = [1, 2, 3, 4, 5, 6] as const;
+export type EditorJsHeadingLevel = (typeof EDITOR_JS_HEADING_LEVELS)[number];
+
+// Chakra's reset deliberately makes native h1-h6 elements inherit their
+// surrounding text size. Keep one explicit scale for Editor.js edit and view
+// rendering so a saved header level is both semantic and visibly hierarchical.
+export const EDITOR_JS_HEADING_FONT_SIZES: Record<EditorJsHeadingLevel, string> = {
+	1: '1.875rem',
+	2: '1.5rem',
+	3: '1.25rem',
+	4: '1.125rem',
+	5: '1rem',
+	6: '0.875rem'
+};
+
+export const normalizeEditorJsHeadingLevel = (value: unknown): EditorJsHeadingLevel => {
+	const numericLevel =
+		typeof value === 'number' ? value : typeof value === 'string' && value.trim().length > 0 ? Number(value) : Number.NaN;
+
+	if (!Number.isFinite(numericLevel)) return 2;
+	return Math.max(1, Math.min(6, Math.trunc(numericLevel))) as EditorJsHeadingLevel;
+};
+
+export const getEditorJsHeadingFontSize = (value: unknown): string =>
+	EDITOR_JS_HEADING_FONT_SIZES[normalizeEditorJsHeadingLevel(value)];
+
 export const EDITOR_JS_AUTO_DETECT_LIMITS = {
 	sourceLength: 1_000_000,
 	blocks: 500,

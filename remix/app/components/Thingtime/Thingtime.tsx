@@ -591,7 +591,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	const AtomicWrapper = React.useCallback((args) => {
 		return (
 			<Flex
-				className="atomic-wrapper"
+				className={['atomic-wrapper', args?.className].filter(Boolean).join(' ')}
 				position="relative"
 				flexDirection="row"
 				flexShrink={1}
@@ -1558,10 +1558,17 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 				{/* this value will show in a few cases */}
 				{/* Basic types like String, Number, etc.. non-object values */}
 				{/* it will also show if the Thing has standard React children */}
-				{/* overflowX auto (not scroll): scroll reserves a permanent
-				scrollbar track that renders as a stray line under every value */}
+				{/* Editor.js owns floating toolbar/popover UI, so its datatype must
+				remain overflow-visible. Other atomic values keep horizontal auto
+				overflow (not scroll) to avoid a permanent stray scrollbar track. */}
 				{!loading && !isContentCollapsed && !thingtimeChildren && atomicValue && (
-					<Box className="atomicValue" data-tt-zone="value" width={'100%'} overflowX={'auto'}>
+					<Box
+						className="atomicValue"
+						data-tt-zone="value"
+						width="100%"
+						overflowX={editorJsDoc ? 'visible' : 'auto'}
+						overflowY={editorJsDoc ? 'visible' : undefined}
+					>
 						{atomicValue}
 					</Box>
 				)}
