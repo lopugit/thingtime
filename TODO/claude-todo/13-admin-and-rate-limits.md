@@ -37,6 +37,16 @@ had none.
 - UI: `components/Admin/AdminPanel.tsx` (rate-limit editor + admin manager),
   rendered in `SettingsPage` only when `user.isAdmin`.
 
+## Bootstrap order (important)
+Register your admin account FIRST, then add its username to `ADMIN_USERNAMES`.
+Public registration of an allowlisted username is rejected (generic "Username
+already taken") so an attacker can't squat an unregistered admin username and
+inherit admin via the allowlist. Seeding calls `registerUser` directly (bypasses
+the route guard), so seeded admins are unaffected.
+
 ## Still TODO
 - Consider rate-limiting auth endpoints too (login/register/resend) via the same
   general limiter — see 09-security-hardening.md.
+- Gate the pre-existing unauthenticated `mongodb/raw-results` + `mongodb/populate`
+  debug endpoints behind `requireAdmin` (spawned as a separate task; see
+  09-security-hardening.md).

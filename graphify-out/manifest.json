@@ -1275,8 +1275,8 @@
     "semantic_hash": "e94d06f633eff013ffca0a2f6b3b4adf"
   },
   "remix/app/routes/api/v1/auth/register/_register.tsx": {
-    "mtime": 1783747437.230678,
-    "ast_hash": "c8f78cb402e86c6cbdb8ee27df30c86e",
+    "mtime": 1783748207.918723,
+    "ast_hash": "f3ff70a6d1aca2785e66572d682634d7",
     "semantic_hash": ""
   },
   "remix/app/routes/api/v1/auth/resend-verification/_resend-verification.tsx": {
@@ -3495,8 +3495,8 @@
     "semantic_hash": ""
   },
   "remix/app/api/utils/rateLimit/config.ts": {
-    "mtime": 1783745752.748469,
-    "ast_hash": "9eb220f46030c853e2326144917008a8",
+    "mtime": 1783748226.2382414,
+    "ast_hash": "43d97411d641581ef3ef4fd471ef6490",
     "semantic_hash": ""
   },
   "remix/app/api/utils/rateLimit/enforce.ts": {
@@ -3525,8 +3525,8 @@
     "semantic_hash": ""
   },
   "TODO/claude-todo/13-admin-and-rate-limits.md": {
-    "mtime": 1783746571.7929318,
-    "ast_hash": "754e2941c1d26354e48dea7a798da8ee",
+    "mtime": 1783748373.5086088,
+    "ast_hash": "6b0af99c03c2994ae7887554d182dcf7",
     "semantic_hash": ""
   }
 }

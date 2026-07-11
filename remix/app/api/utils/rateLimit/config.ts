@@ -57,8 +57,11 @@ export const setRateLimitConfig = async (patch: RateLimitConfig, updatedBy: stri
   const current = await getRateLimitConfig(true);
   const endpoints: RateLimitConfig = {};
   for (const [name, def] of Object.entries(RATE_LIMIT_DEFAULTS)) {
-    // patch value → current stored value → default, then clamp
-    endpoints[name] = clampRule(patch?.[name] ?? current[name], def);
+    // Merge the patch OVER the current stored rule, so a partial patch (e.g.
+    // only { limit }) keeps the endpoint's other fields instead of resetting
+    // them to defaults; then clamp. Non-object patch entries are ignored.
+    const p = patch?.[name] && typeof patch[name] === 'object' ? patch[name] : {};
+    endpoints[name] = clampRule({ ...current[name], ...p }, def);
   }
   await (await getSettingsCollection()).updateOne(
     { key: SETTINGS_KEY },
