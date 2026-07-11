@@ -34,6 +34,10 @@ export const getLopuMusingRateLimitsCollection = async () =>
 export const getThemesCollection = async () => (await getThingtimeDb()).collection('themes');
 export const getWaitlistCollection = async () => (await getThingtimeDb()).collection('waitlist');
 export const getFeedAlgorithmsCollection = async () => (await getThingtimeDb()).collection('feedAlgorithms');
+// Global, admin-editable app settings (singleton docs keyed by `key`, e.g. the
+// rate-limit config) and the general per-endpoint rate-limit windows.
+export const getSettingsCollection = async () => (await getThingtimeDb()).collection('settings');
+export const getRateLimitsCollection = async () => (await getThingtimeDb()).collection('rateLimits');
 
 // Idempotently create server-side collections + their indexes. createIndex
 // creates the collection if it doesn't exist yet, so this also bootstraps an
@@ -89,7 +93,12 @@ export const ensureIndexes = async () => {
           { unique: true, partialFilterExpression: { kind: 'comment' } }
         ),
         db.collection('feedAlgorithms').createIndex({ shareId: 1 }, { unique: true }),
-        db.collection('feedAlgorithms').createIndex({ ownerId: 1 })
+        db.collection('feedAlgorithms').createIndex({ ownerId: 1 }),
+        // global app settings singletons (rate-limit config lives here)
+        db.collection('settings').createIndex({ key: 1 }, { unique: true }),
+        // general per-endpoint rate-limit windows; TTL reaps expired windows
+        db.collection('rateLimits').createIndex({ key: 1 }, { unique: true }),
+        db.collection('rateLimits').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
       ]);
     })().catch((err) => {
       // don't cache a failed run — let the next call retry

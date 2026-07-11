@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router';
 import { AlgorithmManager } from './AlgorithmManager';
 import { RainbowButton, SettingRow, SettingsSection } from './SettingsSection';
 import { AccountSwitcher } from '~/components/Account/AccountSwitcher';
+import { AdminPanel } from '~/components/Admin/AdminPanel';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useDrawer } from '~/components/Nav/Drawer/useDrawer';
 import { ColorControl } from '~/components/ThemeSettings/controls';
@@ -301,6 +302,13 @@ export const SettingsPage = () => {
             </Flex>
           )}
         </SettingsSection>
+
+        {/* admin (admins only) */}
+        {user?.isAdmin && (
+          <SettingsSection eyebrow="Admin" description="Global controls — rate limits and admin access.">
+            <AdminPanel />
+          </SettingsSection>
+        )}
 
         {/* 2 · profile (auth only) */}
         {user && (

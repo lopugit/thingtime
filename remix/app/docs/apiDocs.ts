@@ -55,6 +55,110 @@ const endpoint = (doc: Omit<ApiEndpointDoc, 'docsEndpoint'>): ApiEndpointDoc => 
 
 export const apiEndpointDocs: ApiEndpointDoc[] = [
   endpoint({
+    id: 'admin-rate-limits',
+    group: 'admin',
+    title: 'Rate-limit config',
+    endpoint: '/api/v1/admin/rate-limits',
+    summary: 'Read or update the global per-endpoint rate limits (admin only).',
+    detail:
+      'Admins configure how often each throttled endpoint (e.g. things.react, things.comment) can be called per user. GET returns the current merged config plus the endpoint list + defaults; POST { endpoints: { <name>: { limit, windowMs, enabled } } } updates it. Unknown endpoints are ignored and values clamped server-side.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET to load the current config, endpoint names, and defaults.',
+      'POST endpoints with limit (per window), windowMs, and enabled to change a limit.',
+      'Non-admins receive 403; anonymous callers 401.',
+      'Changes take effect within seconds (the limiter caches config briefly).'
+    ],
+    requestExamples: [
+      { name: 'Read config', description: 'Load the current rate limits.', method: 'GET' },
+      {
+        name: 'Update react limit',
+        description: 'Allow 30 reactions per minute.',
+        method: 'POST',
+        body: { endpoints: { 'things.react': { limit: 30, windowMs: 60000, enabled: true } } }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Current config.',
+        body: {
+          ok: true,
+          config: { 'things.react': { limit: 60, windowMs: 60000, enabled: true } },
+          endpoints: ['things.react', 'things.comment'],
+          defaults: { 'things.react': { limit: 60, windowMs: 60000, enabled: true } }
+        }
+      },
+      { status: 403, description: 'Not an admin.', body: { ok: false, error: 'Admins only' } }
+    ]
+  }),
+  endpoint({
+    id: 'admin-users',
+    group: 'admin',
+    title: 'Admin user lookup',
+    endpoint: '/api/v1/admin/users',
+    summary: 'List current admins and search users to promote/demote (admin only).',
+    detail:
+      'Returns the current DB-flagged admins; with ?q=<query> also returns matching users (by username/email) so an admin can promote or demote them. Env-allowlist admins are marked envAdmin and cannot be demoted from the UI.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['GET'],
+    steps: [
+      'GET with credentials to list current admins.',
+      'Add ?q=<username or email> to search users to manage.',
+      'Use POST /api/v1/admin/set-admin with a returned user id to change their admin flag.',
+      'Non-admins receive 403; anonymous callers 401.'
+    ],
+    requestExamples: [
+      { name: 'List admins', description: 'Current admins only.', method: 'GET' },
+      { name: 'Search users', description: 'Find users to promote.', method: 'GET', query: { q: 'lopu' } }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Admins + search results.',
+        body: {
+          ok: true,
+          admins: [{ id: '64f000000000000000000001', username: 'lopu', isAdmin: true, envAdmin: true }],
+          results: [{ id: '64f000000000000000000002', username: 'nik', isAdmin: false, envAdmin: false }]
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'admin-set-admin',
+    group: 'admin',
+    title: 'Promote / demote admin',
+    endpoint: '/api/v1/admin/set-admin',
+    summary: 'Set a user’s stored admin flag (admin only).',
+    detail:
+      'POST { userId, admin } to grant or revoke the meta.admin flag. Env-allowlist admins keep access regardless (the returned isAdmin may stay true after a demote).',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['POST'],
+    steps: [
+      'POST userId + admin:true to promote, admin:false to demote.',
+      'Read the returned user row (id, username, isAdmin, envAdmin) to update the UI.',
+      'Demoting an env-allowlist admin only clears the DB flag; they stay admin via env.',
+      'Non-admins receive 403; missing userId 400; unknown user 404.'
+    ],
+    requestExamples: [
+      {
+        name: 'Promote user',
+        description: 'Grant admin.',
+        method: 'POST',
+        body: { userId: '64f000000000000000000002', admin: true }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Updated user row.',
+        body: { ok: true, user: { id: '64f000000000000000000002', username: 'nik', isAdmin: true, envAdmin: false } }
+      },
+      { status: 400, description: 'Missing userId.', body: { ok: false, error: 'userId is required' } }
+    ]
+  }),
+  endpoint({
     id: 'root-data',
     group: 'root',
     title: 'Root data',

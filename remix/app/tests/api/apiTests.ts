@@ -565,6 +565,46 @@ export const apiTests: ApiTestDefinition[] = [
     )
   },
   {
+    id: 'admin-rate-limits-guarded',
+    name: 'Rate-limit config is admin-only',
+    description: 'Reading the global rate-limit config requires an admin session.',
+    group: 'admin',
+    method: 'GET',
+    path: '/api/v1/admin/rate-limits',
+    expect: expectJson(
+      [401, 403],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Non-admin rate-limit read was rejected.'
+    )
+  },
+  {
+    id: 'admin-users-guarded',
+    name: 'Admin user lookup is admin-only',
+    description: 'The admin user lookup requires an admin session.',
+    group: 'admin',
+    method: 'GET',
+    path: '/api/v1/admin/users',
+    expect: expectJson(
+      [401, 403],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Non-admin user lookup was rejected.'
+    )
+  },
+  {
+    id: 'admin-set-admin-guarded',
+    name: 'Promote/demote is admin-only',
+    description: 'Setting a user admin flag requires an admin session.',
+    group: 'admin',
+    method: 'POST',
+    path: '/api/v1/admin/set-admin',
+    body: { userId: '000000000000000000000000', admin: true },
+    expect: expectJson(
+      [401, 403],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Non-admin promote attempt was rejected.'
+    )
+  },
+  {
     id: 'things-comment-guarded',
     name: 'Comments are guarded',
     description: 'Commenting without a session (or on an unknown post) is rejected with an error shape.',

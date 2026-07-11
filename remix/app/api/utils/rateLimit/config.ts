@@ -1,0 +1,70 @@
+import { getSettingsCollection } from '../mongodb/collections';
+
+// Global, admin-editable rate-limit config. The endpoints below are the ones we
+// throttle, with their DEFAULT limits; an admin overrides them via the admin
+// panel (stored as a singleton `settings` doc, merged over these defaults). The
+// merged config is cached briefly so limits are read cheaply per request while
+// admin edits still take effect within seconds.
+
+export type RateLimitRule = { limit: number; windowMs: number; enabled: boolean };
+export type RateLimitConfig = Record<string, RateLimitRule>;
+
+export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
+  'things.react': { limit: 60, windowMs: 60_000, enabled: true },
+  'things.comment': { limit: 20, windowMs: 60_000, enabled: true }
+};
+
+export const RATE_LIMIT_ENDPOINTS = Object.keys(RATE_LIMIT_DEFAULTS);
+
+const SETTINGS_KEY = 'rateLimits';
+const CONFIG_TTL_MS = 15_000;
+const MAX_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+let cache: { at: number; config: RateLimitConfig } | null = null;
+
+const clampRule = (rule: any, fallback: RateLimitRule): RateLimitRule => ({
+  limit: Number.isFinite(rule?.limit) ? Math.max(1, Math.min(100_000, Math.floor(rule.limit))) : fallback.limit,
+  windowMs: Number.isFinite(rule?.windowMs)
+    ? Math.max(1000, Math.min(MAX_WINDOW_MS, Math.floor(rule.windowMs)))
+    : fallback.windowMs,
+  enabled: rule?.enabled === undefined ? fallback.enabled : rule.enabled !== false
+});
+
+// Only known endpoints survive, each clamped — a stored/patched config can never
+// widen the endpoint set or set nonsensical values.
+const normalize = (endpoints: any): RateLimitConfig => {
+  const out: RateLimitConfig = {};
+  for (const [name, def] of Object.entries(RATE_LIMIT_DEFAULTS)) {
+    out[name] = clampRule(endpoints?.[name], def);
+  }
+  return out;
+};
+
+export const getRateLimitConfig = async (force = false): Promise<RateLimitConfig> => {
+  if (!force && cache && Date.now() - cache.at < CONFIG_TTL_MS) return cache.config;
+  try {
+    const doc = await (await getSettingsCollection()).findOne({ key: SETTINGS_KEY });
+    const config = normalize(doc?.endpoints);
+    cache = { at: Date.now(), config };
+    return config;
+  } catch {
+    // fall back to the last cache or the defaults if the settings read fails
+    return cache?.config || normalize(null);
+  }
+};
+
+export const setRateLimitConfig = async (patch: RateLimitConfig, updatedBy: string): Promise<RateLimitConfig> => {
+  const current = await getRateLimitConfig(true);
+  const endpoints: RateLimitConfig = {};
+  for (const [name, def] of Object.entries(RATE_LIMIT_DEFAULTS)) {
+    // patch value → current stored value → default, then clamp
+    endpoints[name] = clampRule(patch?.[name] ?? current[name], def);
+  }
+  await (await getSettingsCollection()).updateOne(
+    { key: SETTINGS_KEY },
+    { $set: { key: SETTINGS_KEY, endpoints, updatedAt: new Date(), updatedBy } },
+    { upsert: true }
+  );
+  cache = { at: Date.now(), config: endpoints };
+  return endpoints;
+};

@@ -785,8 +785,8 @@
     "semantic_hash": "beac198714a3203970a2a5e34e480124"
   },
   "remix/app/api/utils/auth/users.ts": {
-    "mtime": 1783680698.368861,
-    "ast_hash": "1fb132535ace19dab4983a9411e903ec",
+    "mtime": 1783745666.527575,
+    "ast_hash": "429886bd4e3961eb404f33f71219d953",
     "semantic_hash": ""
   },
   "remix/app/api/utils/crypto/cryptoTools.server.ts": {
@@ -830,8 +830,8 @@
     "semantic_hash": "f65b01f4781159ee3b8a0a9da33d1f5a"
   },
   "remix/app/api/utils/mongodb/collections.ts": {
-    "mtime": 1783739454.7615495,
-    "ast_hash": "3f27ce7a836d604632f55d0ecaa9f070",
+    "mtime": 1783745714.000028,
+    "ast_hash": "afe36b74271cf432ba7034ddde18497a",
     "semantic_hash": ""
   },
   "remix/app/api/utils/mongodb/config.ts": {
@@ -1185,8 +1185,8 @@
     "semantic_hash": "2c876691ea163b0306ebf575cf88e1b4"
   },
   "remix/app/hooks/useApi.tsx": {
-    "mtime": 1783680698.3707829,
-    "ast_hash": "9db3691deefdbe7ea8fbee68099cc641",
+    "mtime": 1783746043.0112505,
+    "ast_hash": "8464120742bd48b265a1b1148f2731bb",
     "semantic_hash": ""
   },
   "remix/app/hooks/useAsyncFetcher.tsx": {
@@ -1195,8 +1195,8 @@
     "semantic_hash": "f02c507a6951916ccdc99db2ef4ff1cd"
   },
   "remix/app/hooks/useCurrentUser.tsx": {
-    "mtime": 1783635169.586728,
-    "ast_hash": "b2bf3778ed220784472060defeb74686",
+    "mtime": 1783746025.4266589,
+    "ast_hash": "68138366a3dac9c91d47fb4df64d8132",
     "semantic_hash": ""
   },
   "remix/app/hooks/useIcons.tsx": {
@@ -1530,8 +1530,8 @@
     "semantic_hash": "3e068c437e00eacf7136b9836e06d3a0"
   },
   "remix/server/routes/api/[...].ts": {
-    "mtime": 1783680698.3726642,
-    "ast_hash": "634926fe682812028a93e5a63239693a",
+    "mtime": 1783745885.3270993,
+    "ast_hash": "95a7a32570df6b0c64e3242bb13642e1",
     "semantic_hash": ""
   },
   "remix/server/routes/api/root-data.get.ts": {
@@ -2685,8 +2685,8 @@
     "semantic_hash": ""
   },
   "remix/app/tests/api/apiTests.ts": {
-    "mtime": 1783681114.8061378,
-    "ast_hash": "6f8a50a86a544f171864f6aa4e984a67",
+    "mtime": 1783746509.6978493,
+    "ast_hash": "65b4ba3d87f6d0fbce2fdce2114b308b",
     "semantic_hash": ""
   },
   "remix/app/components/Nav/Drawer/DrawerContent.tsx": {
@@ -2925,8 +2925,8 @@
     "semantic_hash": ""
   },
   "TODO/claude-todo/README.md": {
-    "mtime": 1783682332.3451025,
-    "ast_hash": "0e51fe5484cfb9a6a05cbd66fcab6d2c",
+    "mtime": 1783746586.9608994,
+    "ast_hash": "27156da19c69bbc5f63d52857e1c178f",
     "semantic_hash": ""
   },
   "docs/design-inspiration/human-ai/html-examples/gold-standard-ai-era-value-moats-light-v5-balanced-cards.html": {
@@ -3115,8 +3115,8 @@
     "semantic_hash": ""
   },
   "remix/app/api/utils/things/things.ts": {
-    "mtime": 1783739503.7336912,
-    "ast_hash": "6e60fb3693d643c1f47e938c0cfb3caa",
+    "mtime": 1783745993.0723693,
+    "ast_hash": "e5ba2f6c5c669571777620014722c7c3",
     "semantic_hash": ""
   },
   "remix/app/components/Feed/Feed.tsx": {
@@ -3145,8 +3145,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Settings/SettingsPage.tsx": {
-    "mtime": 1783636321.553457,
-    "ast_hash": "22cbbc8861aa9e4bab8bb9947eea12ef",
+    "mtime": 1783746133.215628,
+    "ast_hash": "b153e1041e36e8e41d64ec2b104c65c2",
     "semantic_hash": ""
   },
   "remix/app/components/Settings/SettingsSection.tsx": {
@@ -3185,8 +3185,8 @@
     "semantic_hash": ""
   },
   "remix/app/routes/api/v1/things/comment/_comment.tsx": {
-    "mtime": 1783635169.5948367,
-    "ast_hash": "9bd5bb881b6b98e4964e1f1fa52e3d96",
+    "mtime": 1783745811.6180694,
+    "ast_hash": "30a69919ab4c59117983414a07943978",
     "semantic_hash": ""
   },
   "remix/app/routes/api/v1/things/delete/_delete.tsx": {
@@ -3200,8 +3200,8 @@
     "semantic_hash": ""
   },
   "remix/app/routes/api/v1/things/react/_react.tsx": {
-    "mtime": 1783680698.371098,
-    "ast_hash": "5526e8e936ca5633b757e5226e59cd2b",
+    "mtime": 1783745802.0126445,
+    "ast_hash": "1d5add26db45a2a382d114a12ac8a842",
     "semantic_hash": ""
   },
   "remix/app/routes/api/v1/things/share/_share.tsx": {
@@ -3275,8 +3275,8 @@
     "semantic_hash": ""
   },
   "remix/app/docs/apiDocs.ts": {
-    "mtime": 1783680698.3704672,
-    "ast_hash": "f391d12e7226968e1663123d22f7a6e9",
+    "mtime": 1783745973.2125745,
+    "ast_hash": "a18b4a70ef9b9d2ed2258e98322181c0",
     "semantic_hash": ""
   },
   "remix/app/routes/docs/api.tsx": {
@@ -3480,8 +3480,53 @@
     "semantic_hash": ""
   },
   "TODO/claude-todo/12-reactions-and-optimistic-ui.md": {
-    "mtime": 1783738801.8198802,
-    "ast_hash": "e8bbfcdf1da473760049fe633ce1e930",
+    "mtime": 1783746550.3931258,
+    "ast_hash": "f60a7efc7a8bf64a920acb3dcfaf58f4",
+    "semantic_hash": ""
+  },
+  "remix/app/api/utils/auth/admin.ts": {
+    "mtime": 1783745575.4161942,
+    "ast_hash": "2d93703475a29915ef114dbca0faa1d2",
+    "semantic_hash": ""
+  },
+  "remix/app/api/utils/auth/requireAdmin.ts": {
+    "mtime": 1783745832.340061,
+    "ast_hash": "72315d91a917dab861c5a059d418c3f2",
+    "semantic_hash": ""
+  },
+  "remix/app/api/utils/rateLimit/config.ts": {
+    "mtime": 1783745752.748469,
+    "ast_hash": "9eb220f46030c853e2326144917008a8",
+    "semantic_hash": ""
+  },
+  "remix/app/api/utils/rateLimit/enforce.ts": {
+    "mtime": 1783745775.442698,
+    "ast_hash": "c5356ce4db366c0c8d10a7c0ee4ac6a8",
+    "semantic_hash": ""
+  },
+  "remix/app/components/Admin/AdminPanel.tsx": {
+    "mtime": 1783746090.7832155,
+    "ast_hash": "2aabdbdecc883aa77999101c35848ce7",
+    "semantic_hash": ""
+  },
+  "remix/app/routes/api/v1/admin/rate-limits/_rate-limits.tsx": {
+    "mtime": 1783745842.9533944,
+    "ast_hash": "9bfbc8106c5edae393a0326dbab71ffe",
+    "semantic_hash": ""
+  },
+  "remix/app/routes/api/v1/admin/set-admin/_set-admin.tsx": {
+    "mtime": 1783745869.048644,
+    "ast_hash": "3cbd17cdde4f103c620edd9667256c47",
+    "semantic_hash": ""
+  },
+  "remix/app/routes/api/v1/admin/users/_users.tsx": {
+    "mtime": 1783745851.7745397,
+    "ast_hash": "beaf580594c92ead1d6ded7a4704aee8",
+    "semantic_hash": ""
+  },
+  "TODO/claude-todo/13-admin-and-rate-limits.md": {
+    "mtime": 1783746571.7929318,
+    "ast_hash": "754e2941c1d26354e48dea7a798da8ee",
     "semantic_hash": ""
   }
 }

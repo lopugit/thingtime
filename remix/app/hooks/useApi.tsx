@@ -94,6 +94,18 @@ export function useApi() {
         )
       }
     },
+    admin: {
+      rateLimits: useCallback(async () => getJson('/api/v1/admin/rate-limits'), []),
+      setRateLimits: useCallback(
+        async (endpoints) => asyncFetcher.submit({ endpoints }, { action: '/api/v1/admin/rate-limits' }),
+        [asyncFetcher]
+      ),
+      users: useCallback(async (args) => getJson(`/api/v1/admin/users${toQuery(args)}`), []),
+      setAdmin: useCallback(
+        async (args) => asyncFetcher.submit({ userId: args?.userId, admin: args?.admin }, { action: '/api/v1/admin/set-admin' }),
+        [asyncFetcher]
+      )
+    },
     mongodb: {
       rawResults: useCallback(
         async (args) => {

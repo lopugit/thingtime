@@ -54,5 +54,6 @@ when it has cached state.
   `useAccountSwitcher`, `PostChange` functional updater through Feed/Profile/List.
 
 ## Still TODO
-- Rate-limit `POST /api/v1/things/react` (shared gap with auth endpoints).
+- ~~Rate-limit `POST /api/v1/things/react`~~ ✅ done — admin-configurable rate
+  limits, see [13-admin-and-rate-limits.md](./13-admin-and-rate-limits.md).
 - "Continue as" roster list on `/login` (carried over from 11).

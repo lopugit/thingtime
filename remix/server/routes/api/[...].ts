@@ -9,6 +9,9 @@ type RouteModule = {
 };
 
 const routeModules: Record<string, () => Promise<RouteModule>> = {
+  'v1/admin/rate-limits': () => import('../../../app/routes/api/v1/admin/rate-limits/_rate-limits'),
+  'v1/admin/set-admin': () => import('../../../app/routes/api/v1/admin/set-admin/_set-admin'),
+  'v1/admin/users': () => import('../../../app/routes/api/v1/admin/users/_users'),
   'v1/algorithms': () => import('../../../app/routes/api/v1/algorithms/_algorithms'),
   'v1/algorithms/active': () => import('../../../app/routes/api/v1/algorithms/active/_active'),
   'v1/algorithms/delete': () => import('../../../app/routes/api/v1/algorithms/delete/_delete'),

@@ -17,6 +17,7 @@ export type CurrentUser = {
   storageUsedBytes: number | null;
   activeThemeId: string | null;
   activeFeedAlgorithmId: string | null;
+  isAdmin: boolean;
 } | null;
 
 // Reads the authenticated user resolved by the root loader (getCurrentUser).

@@ -367,7 +367,21 @@ const migratePostInteractions = async (doc: FeedPostDoc): Promise<void> => {
       }
     });
   }
-  if (ops.length) await things.bulkWrite(ops, { ordered: false });
+  if (ops.length) {
+    try {
+      await things.bulkWrite(ops, { ordered: false });
+    } catch (err) {
+      // The claim already committed the $unset, so the embedded copy is the only
+      // remaining source of this legacy data. If materializing the relational
+      // things failed, restore it so the NEXT write re-migrates (upserts are
+      // idempotent) instead of silently losing reactions/comments forever.
+      await things.updateOne(
+        { shareId: doc.shareId, kind: 'post' } as any,
+        { $set: { reactions: claimed.reactions ?? {}, comments: claimed.comments ?? [] } } as any
+      );
+      throw err;
+    }
+  }
 };
 
 // Batch-load reactions + comments for a set of posts — ONE query per kind, no
