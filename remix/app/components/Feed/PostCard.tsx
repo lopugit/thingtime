@@ -13,6 +13,7 @@ import {
   MenuItem,
   MenuList,
   Popover,
+  PopoverAnchor,
   PopoverContent,
   PopoverTrigger,
   Select,
@@ -21,11 +22,14 @@ import {
   Tooltip
 } from '@chakra-ui/react';
 import { Link } from 'react-router';
-import { MoreHorizontal, Send } from 'lucide-react';
+import { MoreHorizontal, Plus, Send } from 'lucide-react';
 
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '~/components/Lopu/useLopu';
+import { EmojiPicker } from '~/components/Emoji/EmojiPicker';
+import { useRecentReactions } from '~/components/Emoji/useRecentReactions';
+import { sanitizeReactionToken, splitEmojis } from '~/utils/reactionTokens';
 import { RAINBOW } from '~/theme/rainbow';
 import {
   CIRCLE_META,
@@ -33,7 +37,78 @@ import {
   REACTION_EMOJIS,
   timeAgo
 } from './feedTypes';
-import type { EngagementEvent, FeedAuthor, PostVisibility, PublicPost } from './feedTypes';
+import type { EngagementEvent, FeedAuthor, PostChange, PostVisibility, PublicPost } from './feedTypes';
+
+// Keep reaction displays from running off the card: cap how many individual
+// emoji show before an ellipsis, so one long multi-emoji token (🥳🥳🥳…) can't
+// blow out a chip or the React-button preview.
+const MAX_PREVIEW_EMOJIS = 6;
+
+// Truncate a single token's emoji for chip display.
+const truncateToken = (token: string): { text: string; truncated: boolean } => {
+  const parts = splitEmojis(token);
+  if (parts.length <= MAX_PREVIEW_EMOJIS) return { text: token, truncated: false };
+  return { text: parts.slice(0, MAX_PREVIEW_EMOJIS).join(''), truncated: true };
+};
+
+// Apply one token's toggle to a post, idempotently (a no-op if the post already
+// reflects it). Used for optimistic paint + revert against the FRESHEST post, so
+// a concurrent reaction on a different token is never clobbered.
+const applyReactionToggle = (prev: PublicPost, token: string, adding: boolean): PublicPost => {
+  const has = prev.viewerReactions.includes(token);
+  if (adding === has) return prev;
+  const reactionCounts = { ...prev.reactionCounts };
+  reactionCounts[token] = (reactionCounts[token] || 0) + (adding ? 1 : -1);
+  if (reactionCounts[token] <= 0) delete reactionCounts[token];
+  const viewerReactions = adding
+    ? [...prev.viewerReactions, token]
+    : prev.viewerReactions.filter((entry) => entry !== token);
+  return { ...prev, reactionCounts, viewerReactions };
+};
+
+// Reconcile ONLY the toggled token against the server's authoritative view,
+// leaving other tokens (possibly changed by concurrent reactions) intact.
+const reconcileReactionToken = (
+  prev: PublicPost,
+  token: string,
+  serverCounts: Record<string, number>,
+  serverViewer: string[]
+): PublicPost => {
+  const reactionCounts = { ...prev.reactionCounts };
+  const count = serverCounts[token] || 0;
+  if (count > 0) reactionCounts[token] = count;
+  else delete reactionCounts[token];
+  const serverHas = serverViewer.includes(token);
+  const prevHas = prev.viewerReactions.includes(token);
+  let viewerReactions = prev.viewerReactions;
+  if (serverHas && !prevHas) viewerReactions = [...prev.viewerReactions, token];
+  else if (!serverHas && prevHas) viewerReactions = prev.viewerReactions.filter((entry) => entry !== token);
+  return { ...prev, reactionCounts, viewerReactions };
+};
+
+// Compact preview of the viewer's reactions for the React button: each token is
+// its own group (gapped from the next) carrying its use-count, capped across all
+// groups at MAX_PREVIEW_EMOJIS emoji then an ellipsis.
+const summarizeReactions = (
+  tokens: string[],
+  counts: Record<string, number>
+): { groups: Array<{ key: string; emoji: string; count: number }>; truncated: boolean } => {
+  const groups: Array<{ key: string; emoji: string; count: number }> = [];
+  let shown = 0;
+  let truncated = false;
+  for (const token of tokens) {
+    if (shown >= MAX_PREVIEW_EMOJIS) {
+      truncated = true;
+      break;
+    }
+    const parts = splitEmojis(token);
+    const slice = parts.slice(0, MAX_PREVIEW_EMOJIS - shown);
+    if (slice.length < parts.length) truncated = true;
+    groups.push({ key: token, emoji: slice.join(''), count: counts[token] || 1 });
+    shown += slice.length;
+  }
+  return { groups, truncated };
+};
 
 // The typed post renderer for the feed / profile columns. Renders text,
 // photo-grid and marketplace bodies, one-level share nesting, the reaction
@@ -48,8 +123,9 @@ const RADIUS_MD = 'var(--tt-radius-md, 12px)';
 
 export type PostCardProps = {
   post: PublicPost;
-  // null means the post was deleted
-  onChanged?: (next: PublicPost | null) => void;
+  // a value replaces the post (null = deleted); a function applies a delta to
+  // the freshest post (used by optimistic reactions)
+  onChanged?: (next: PostChange) => void;
   // card-level signals: expand/react/comment/share
   onEngagement?: (event: EngagementEvent) => void;
 };
@@ -261,17 +337,20 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
   const [shareText, setShareText] = React.useState('');
   const [shareVisibility, setShareVisibility] = React.useState<PostVisibility>('public');
   const [sharing, setSharing] = React.useState(false);
+  const [pickerOpen, setPickerOpen] = React.useState(false);
   const expandSentRef = React.useRef(false);
+
+  const { recent, pushRecent } = useRecentReactions();
 
   const isOwner = !!user && !!post.author && user.id === post.author.id;
   const circle = CIRCLE_META[post.visibility] || CIRCLE_META.public;
 
-  const reactionTotal = Object.values(post.reactionCounts || {}).reduce((sum, count) => sum + count, 0);
-  const topEmojis = Object.entries(post.reactionCounts || {})
+  // Every reaction token on the post, most-used first, as clickable chips.
+  const reactionEntries = Object.entries(post.reactionCounts || {})
     .filter(([, count]) => count > 0)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 3)
-    .map(([emoji]) => emoji);
+    .sort((a, b) => b[1] - a[1]);
+  const viewerReactions = post.viewerReactions || [];
+  const viewerSet = new Set(viewerReactions);
 
   const handleDelete = async () => {
     try {
@@ -283,20 +362,32 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     }
   };
 
-  const handleReact = async (emoji: string) => {
+  // Toggle one reaction token (single emoji or a multi-emoji group). Optimistic:
+  // we repaint the card immediately, then reconcile with the server's counts
+  // and revert on failure — no spinner, no wait (optimistic-rendering rule).
+  const handleReact = async (rawToken: string) => {
     if (!user) {
       lopu({ title: 'Log in to react 🗝️', status: 'info', duration: 6000 });
       return;
     }
+    const token = sanitizeReactionToken(rawToken);
+    if (!token) return;
 
-    // clicking your current reaction clears it
-    const next = post.viewerReaction === emoji ? null : emoji;
+    const adding = !viewerSet.has(token);
+
+    // Optimistic + reconcile + revert all touch ONLY this token, applied to the
+    // freshest post — so a concurrent reaction on another token isn't clobbered
+    // by a stale full snapshot (and out-of-order responses stay consistent).
+    onChanged?.((prev) => applyReactionToggle(prev, token, adding));
+    if (adding) onEngagement?.({ thingId: post.id, signal: 'react' });
 
     try {
-      const resp = await api.v1.things.react({ id: post.id, emoji: next });
-      onChanged?.({ ...post, reactionCounts: resp.reactionCounts, viewerReaction: resp.viewerReaction });
-      if (next) onEngagement?.({ thingId: post.id, signal: 'react' });
+      const resp = await api.v1.things.react({ id: post.id, emoji: token });
+      onChanged?.((prev) => reconcileReactionToken(prev, token, resp.reactionCounts, resp.viewerReactions));
+      // record recents only on a successful ADD (server records the same)
+      if (adding) pushRecent(token, resp.recentReactions);
     } catch (err: any) {
+      onChanged?.((prev) => applyReactionToggle(prev, token, !adding)); // undo just this token
       lopu({ title: err?.error || 'Reaction did not stick 😞', status: 'error' });
     }
   };
@@ -364,14 +455,45 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     _hover: { background: 'var(--tt-surface-hover, #ececee)', color: INK }
   };
 
+  const reactionPreview = summarizeReactions(viewerReactions, post.reactionCounts || {});
   const reactButton = (
     <Button
       {...actionButtonStyles}
-      color={post.viewerReaction ? INK : MUTED}
-      fontWeight={post.viewerReaction ? 700 : 600}
-      onClick={() => handleReact(post.viewerReaction || '👍')}
+      minWidth={0}
+      color={viewerReactions.length ? INK : MUTED}
+      fontWeight={viewerReactions.length ? 700 : 600}
+      onClick={() => handleReact('👍')}
     >
-      {post.viewerReaction || '👍'} React
+      <Flex
+        as="span"
+        alignItems="center"
+        columnGap={1.5}
+        marginRight={1}
+        maxWidth="220px"
+        overflow="hidden"
+        sx={{ whiteSpace: 'nowrap' }}
+      >
+        {viewerReactions.length ? (
+          <>
+            {reactionPreview.groups.map((group) => (
+              <Flex as="span" key={group.key} alignItems="center" columnGap="2px" flexShrink={0}>
+                <Text as="span">{group.emoji}</Text>
+                <Text as="span" fontSize="0.72em" opacity={0.7}>
+                  {group.count}
+                </Text>
+              </Flex>
+            ))}
+            {reactionPreview.truncated && (
+              <Text as="span" flexShrink={0}>
+                …
+              </Text>
+            )}
+          </>
+        ) : (
+          <Text as="span">👍</Text>
+        )}
+      </Flex>
+      React
     </Button>
   );
 
@@ -459,17 +581,39 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
           <PostBody post={post} />
         )}
 
-        {/* counts row */}
-        {(reactionTotal > 0 || post.commentCount > 0 || post.shareCount > 0) && (
-          <Flex alignItems="center" fontSize="xs" color={MUTED}>
-            {reactionTotal > 0 && (
-              <Flex alignItems="center" columnGap={1}>
-                <Text as="span" letterSpacing="-0.08em">
-                  {topEmojis.join('')}
-                </Text>
-                <Text as="span">{reactionTotal}</Text>
-              </Flex>
-            )}
+        {/* reaction chips + counts row — each chip toggles that reaction */}
+        {(reactionEntries.length > 0 || post.commentCount > 0 || post.shareCount > 0) && (
+          <Flex alignItems="center" fontSize="xs" color={MUTED} columnGap={2} rowGap={1} flexWrap="wrap">
+            {reactionEntries.map(([token, count]) => {
+              const mine = viewerSet.has(token);
+              const { text, truncated } = truncateToken(token);
+              return (
+                <Flex
+                  as="button"
+                  type="button"
+                  key={token}
+                  alignItems="center"
+                  columnGap={1}
+                  paddingX={2}
+                  paddingY="1px"
+                  maxWidth="100%"
+                  borderRadius="999px"
+                  border={mine ? '1px solid var(--tt-accent, #7c5cff)' : BORDER}
+                  background={mine ? 'var(--tt-accent-soft, rgba(124, 92, 255, 0.12))' : 'transparent'}
+                  color={mine ? INK : MUTED}
+                  cursor={user ? 'pointer' : 'default'}
+                  _hover={user ? { background: 'var(--tt-surface-hover, #ececee)' } : undefined}
+                  onClick={() => handleReact(token)}
+                  title={token}
+                >
+                  <Text as="span" sx={{ whiteSpace: 'nowrap' }}>
+                    {text}
+                    {truncated ? '…' : ''}
+                  </Text>
+                  <Text as="span">{count}</Text>
+                </Flex>
+              );
+            })}
             <Flex alignItems="center" columnGap={2} marginLeft="auto">
               {post.commentCount > 0 && (
                 <Text as="span">
@@ -488,38 +632,87 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
         {/* action row */}
         <Flex borderTop={BORDER} paddingTop={2} columnGap={1}>
           {user ? (
-            <Popover trigger="hover" placement="top" openDelay={150} isLazy>
-              <PopoverTrigger>{reactButton}</PopoverTrigger>
-              <PopoverContent
-                width="auto"
-                border={BORDER}
-                borderRadius="999px"
-                boxShadow="var(--tt-shadow-panel, 0px 18px 60px rgba(0, 0, 0, 0.22))"
-                zIndex={10}
-                _focusVisible={{ outline: 'none' }}
-              >
-                <Flex columnGap={0.5} padding={1.5}>
-                  {REACTION_EMOJIS.map((emoji) => (
+            <Box position="relative">
+              {/* hover: quick reactions + a ＋ that opens the full picker */}
+              <Popover trigger="hover" placement="top" openDelay={150} isLazy>
+                <PopoverTrigger>{reactButton}</PopoverTrigger>
+                <PopoverContent
+                  width="auto"
+                  border={BORDER}
+                  borderRadius="999px"
+                  boxShadow="var(--tt-shadow-panel, 0px 18px 60px rgba(0, 0, 0, 0.22))"
+                  zIndex={10}
+                  _focusVisible={{ outline: 'none' }}
+                >
+                  <Flex columnGap={0.5} padding={1.5} alignItems="center">
+                    {REACTION_EMOJIS.map((emoji) => (
+                      <Center
+                        key={emoji}
+                        as="button"
+                        type="button"
+                        width="34px"
+                        height="34px"
+                        fontSize="lg"
+                        borderRadius="999px"
+                        background={viewerSet.has(emoji) ? 'var(--tt-surface-hover, #ececee)' : 'transparent'}
+                        boxShadow={viewerSet.has(emoji) ? 'inset 0 0 0 1.5px var(--tt-accent, #7c5cff)' : 'none'}
+                        _hover={{ background: 'var(--tt-surface-hover, #ececee)', transform: 'scale(1.2)' }}
+                        transition="transform 0.12s ease-out"
+                        aria-label={`React ${emoji}`}
+                        onClick={() => handleReact(emoji)}
+                      >
+                        {emoji}
+                      </Center>
+                    ))}
                     <Center
-                      key={emoji}
                       as="button"
                       type="button"
                       width="34px"
                       height="34px"
-                      fontSize="lg"
                       borderRadius="999px"
-                      background={post.viewerReaction === emoji ? 'var(--tt-surface-hover, #ececee)' : 'transparent'}
-                      _hover={{ background: 'var(--tt-surface-hover, #ececee)', transform: 'scale(1.2)' }}
+                      color={MUTED}
+                      background="var(--tt-surface-alt, #f5f5f7)"
+                      _hover={{ background: 'var(--tt-surface-hover, #ececee)', color: INK, transform: 'scale(1.2)' }}
                       transition="transform 0.12s ease-out"
-                      aria-label={`React ${emoji}`}
-                      onClick={() => handleReact(emoji)}
+                      aria-label="Choose a custom emoji"
+                      title="Choose a custom emoji"
+                      onClick={() => setPickerOpen(true)}
                     >
-                      {emoji}
+                      <Plus size={16} strokeWidth={2.4} />
                     </Center>
-                  ))}
-                </Flex>
-              </PopoverContent>
-            </Popover>
+                  </Flex>
+                </PopoverContent>
+              </Popover>
+
+              {/* click: the full native-emoji picker (multi-select), anchored here */}
+              <Popover
+                isOpen={pickerOpen}
+                onClose={() => setPickerOpen(false)}
+                placement="top-start"
+                isLazy
+                closeOnBlur
+              >
+                <PopoverAnchor>
+                  <Box position="absolute" left={0} bottom="100%" width="1px" height="1px" pointerEvents="none" />
+                </PopoverAnchor>
+                <PopoverContent
+                  width="auto"
+                  border={BORDER}
+                  borderRadius="var(--tt-radius-lg, 16px)"
+                  background="var(--tt-card, #fff)"
+                  boxShadow="var(--tt-shadow-panel, 0px 18px 60px rgba(0, 0, 0, 0.22))"
+                  zIndex={20}
+                  _focusVisible={{ outline: 'none' }}
+                >
+                  <EmojiPicker
+                    onPick={handleReact}
+                    recent={recent}
+                    activeTokens={viewerReactions}
+                    autoFocus
+                  />
+                </PopoverContent>
+              </Popover>
+            </Box>
           ) : (
             reactButton
           )}

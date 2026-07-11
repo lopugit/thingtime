@@ -55,6 +55,17 @@
   browser window before finishing. Use screenshot evidence or measured element
   bounds across the relevant desktop/mobile viewport so centering, max-width,
   overflow, and overlap behavior match the request.
+- Optimistic rendering at all times (UI house rule): never flash a loading
+  screen, spinner, or skeleton when we already have prior or cached state.
+  Render the last-known value instantly from cache/local state and refetch in
+  the background, reconciling (and reverting on failure) when fresh data lands.
+  Only show a loading state on a true cold start with nothing to show. Use the
+  synchronous `~/hooks/localCache` tier (localStorage, keys `tt-<domain>`) for
+  anything that gates first paint — the async localforage `thingtime` blob
+  can't seed the first render. Examples: the account switcher paints its
+  last-known roster on open (not "Checking accounts…"); post reactions toggle
+  instantly before the API returns; the emoji picker's Recently Used paints
+  from cache while the server list loads.
 - The native iOS app lives in `iOS/` and uses XcodeGen; treat
   `iOS/project.yml` as the source of truth and run `xcodegen generate` inside
   `iOS/` before `xcodebuild` checks. Keep generated `.xcodeproj` files
@@ -91,6 +102,7 @@ Read `FUNDAMENTALS.md` before adding features. Non-negotiables:
 - All data access goes through the Thingtime API (`remix/app/routes/api/v1/...`) + the API utils layer. UI/scripts/tests never touch MongoDB directly.
 - **Seed and test by calling the real API** (e.g. seed users via `POST /api/v1/auth/register`), never by writing to Mongo directly — so seeded data and real signups share one code path.
 - One `thingtime` db (`users`, `sessions`, `things`); one connection source (`mongodb/config.ts` `getMongoUri()`).
+- Appended/child data (reactions, comments, any accumulating list) is **relational** — its own atomic `things` doc (`kind`) linked by `parentId`, aggregated on read, never an unbounded embedded array/map on the parent. Canonical rule in `FUNDAMENTALS.md` §3 ("Appended/child data is relational").
 - Auth: httpOnly cookie carrying a signed JWT (`jti`/`sub`/`exp`) + a Mongo `sessions` doc for revocation; Bearer token supported for API clients.
 - All user-facing notifications go through the Lopu toast (`components/Lopu/useLopu.tsx` — `useLopu()` / `useLopuStream()`), never raw Chakra `useToast` or `alert()`.
 

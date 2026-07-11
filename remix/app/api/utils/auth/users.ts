@@ -1,6 +1,7 @@
 import { ObjectId } from 'mongodb';
 
 import { getUsersCollection } from '../mongodb/collections';
+import { isAdminDoc, isEnvAdmin } from './admin';
 
 // Canonical user document (thingtime.users). See FUNDAMENTALS.md §3 + the user
 // schema in claude-todo/03-auth-login-register.md.
@@ -42,6 +43,9 @@ export type PublicUser = {
   storageUsedBytes: number | null;
   activeThemeId: string | null;
   activeFeedAlgorithmId: string | null;
+  // true when meta.admin OR the ADMIN_USERNAMES env allowlist — the client uses
+  // it to reveal the admin panel; the server always re-checks server-side.
+  isAdmin: boolean;
 };
 
 // Minimal projection safe to show OTHER users (public profiles, post authors).
@@ -75,7 +79,8 @@ export const toPublicUser = (user: any): PublicUser => ({
   storageUsedBytes: typeof user.storageUsedBytes === 'number' ? user.storageUsedBytes : null,
   activeThemeId: typeof user.meta?.activeThemeId === 'string' ? user.meta.activeThemeId : null,
   activeFeedAlgorithmId:
-    typeof user.meta?.activeFeedAlgorithmId === 'string' ? user.meta.activeFeedAlgorithmId : null
+    typeof user.meta?.activeFeedAlgorithmId === 'string' ? user.meta.activeFeedAlgorithmId : null,
+  isAdmin: isAdminDoc(user)
 });
 
 export const toPublicProfile = (user: any): PublicProfile => ({
@@ -128,6 +133,107 @@ export const setUserActiveFeedAlgorithm = async (userId: string, algorithmShareI
     { _id: new ObjectId(userId) },
     { $set: { 'meta.activeFeedAlgorithmId': algorithmShareId, updatedAt: new Date() } }
   );
+};
+
+// Recently-used reaction tokens live in meta.recentReactions as a most-recent-
+// first MRU list, so the custom-emoji picker's "Recently Used" follows the user
+// across devices and roster accounts (same tier as activeThemeId). Capped high
+// enough to feel unlimited while keeping the user doc lean; it is NOT projected
+// onto the public user (fetched lazily by the picker instead).
+const MAX_RECENT_REACTIONS = 500;
+
+// Push a token to the front of the user's recents (de-duped) and return the
+// updated MRU list. Two writes because Mongo can't $pull and $push one field
+// in a single update.
+export const pushUserRecentReaction = async (userId: string, token: string): Promise<string[]> => {
+  if (!ObjectId.isValid(userId)) return [];
+  const users = await getUsersCollection();
+  const _id = new ObjectId(userId);
+  await users.updateOne({ _id }, { $pull: { 'meta.recentReactions': token } } as any);
+  await users.updateOne(
+    { _id },
+    {
+      $push: {
+        'meta.recentReactions': { $each: [token], $position: 0, $slice: MAX_RECENT_REACTIONS }
+      },
+      $set: { updatedAt: new Date() }
+    } as any
+  );
+  const doc = await users.findOne({ _id }, { projection: { 'meta.recentReactions': 1 } });
+  return Array.isArray(doc?.meta?.recentReactions) ? (doc!.meta.recentReactions as string[]) : [];
+};
+
+// The user's full recents MRU (most-recent-first), for the picker to page.
+export const getUserRecentReactions = async (userId: string): Promise<string[]> => {
+  if (!ObjectId.isValid(userId)) return [];
+  const doc = await (await getUsersCollection()).findOne(
+    { _id: new ObjectId(userId) },
+    { projection: { 'meta.recentReactions': 1 } }
+  );
+  return Array.isArray(doc?.meta?.recentReactions) ? (doc!.meta.recentReactions as string[]) : [];
+};
+
+// --- Admin management (see auth/admin.ts) ---
+
+// Lightweight user row for the admin panel (never includes passwordHash/meta).
+export type AdminUserRow = {
+  id: string;
+  username: string;
+  displayName: string | null;
+  email: string;
+  isAdmin: boolean;
+  envAdmin: boolean; // admin via ADMIN_USERNAMES — can't be demoted from the UI
+};
+
+const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const toAdminRow = (doc: any): AdminUserRow => ({
+  id: String(doc._id),
+  username: doc.username,
+  displayName: doc.displayName ?? null,
+  email: doc.email,
+  isAdmin: isAdminDoc(doc),
+  envAdmin: isEnvAdmin(doc.username)
+});
+
+// Set (or clear) a user's stored admin flag. Env-allowlist admins remain admin
+// regardless (isAdminDoc ORs the env check), so demoting one only clears the
+// DB flag — they keep access until removed from ADMIN_USERNAMES.
+export const setUserAdmin = async (userId: string, admin: boolean): Promise<AdminUserRow | null> => {
+  if (!ObjectId.isValid(userId)) return null;
+  const users = await getUsersCollection();
+  await users.updateOne(
+    { _id: new ObjectId(userId) },
+    { $set: { 'meta.admin': admin === true, updatedAt: new Date() } }
+  );
+  const updated = await users.findOne({ _id: new ObjectId(userId) });
+  return updated ? toAdminRow(updated) : null;
+};
+
+// Search users by username/email for the admin panel's promote flow.
+export const searchUsersForAdmin = async (query: string, limit = 20): Promise<AdminUserRow[]> => {
+  const q = (query || '').trim();
+  const users = await getUsersCollection();
+  const filter = q
+    ? { $or: [{ username: { $regex: escapeRegex(q), $options: 'i' } }, { email: { $regex: escapeRegex(q), $options: 'i' } }] }
+    : {};
+  const docs = await users
+    .find(filter as any)
+    .project({ username: 1, displayName: 1, email: 1, meta: 1 })
+    .limit(Math.min(50, Math.max(1, limit)))
+    .toArray();
+  return docs.map(toAdminRow);
+};
+
+// Current DB-flagged admins (env admins are surfaced separately in the config).
+export const listAdmins = async (): Promise<AdminUserRow[]> => {
+  const users = await getUsersCollection();
+  const docs = await users
+    .find({ 'meta.admin': true } as any)
+    .project({ username: 1, displayName: 1, email: 1, meta: 1 })
+    .limit(200)
+    .toArray();
+  return docs.map(toAdminRow);
 };
 
 const MAX_BIO_CHARS = 500;

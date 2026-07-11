@@ -73,6 +73,15 @@
   browser window before finishing. Use screenshot evidence or measured element
   bounds across the relevant desktop/mobile viewport so centering, max-width,
   overflow, and overlap behavior match the request.
+- Optimistic rendering at all times: never flash a loading screen/spinner when
+  prior or cached state exists — render last-known state instantly and refetch
+  in the background. Canonical rule + the `~/hooks/localCache` first-paint tier
+  live in `CLAUDE.md` ("Optimistic rendering at all times").
+- Appended/child data (reactions, comments, any accumulating list) is
+  relational: its own atomic `things` doc (`kind`) linked by `parentId`,
+  batch-aggregated on read (one query per kind, never N+1), never an unbounded
+  embedded array/map on the parent. Canonical rule lives in `FUNDAMENTALS.md`
+  §3 ("Appended/child data is relational").
 - New `/api/v1/...` endpoints must be registered in THREE places or Nitro
   404s them: the route file (`remix/app/routes/api/v1/.../_name.tsx` exporting
   `loader` for GET / `action` for POST), the import map in

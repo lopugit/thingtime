@@ -5,7 +5,7 @@ import { findUserByUsername, PublicUser, toPublicUser } from './users';
 
 export type LoginResult =
   | { ok: false; status: number; error: string }
-  | { ok: true; user: PublicUser; jwt: string };
+  | { ok: true; user: PublicUser; jwt: string; jti: string };
 
 // Login is allowed even when emailVerified is false (we just flag it). The
 // generic error avoids leaking whether a username exists.
@@ -19,5 +19,5 @@ export const loginUser = async ({ username, password }: { username: string; pass
   const session = await createSession(String(user._id));
   const jwt = await signJwt({ sub: String(user._id), jti: session.jti });
 
-  return { ok: true, user: toPublicUser(user), jwt };
+  return { ok: true, user: toPublicUser(user), jwt, jti: session.jti };
 };

@@ -28,7 +28,14 @@ const inputSx = {
 	}
 };
 
+// Zero-prop on the /login page. Embedded mode (account switcher "Add an
+// account") renders the same form inside a host surface: no navigation on
+// success (onSuccess gets the user — the login API already merged the account
+// into the switcher roster), modal-safe loading, and the register cross-link
+// becomes an in-place mode toggle via onSwitchMode.
 export const Login = (props) => {
+	const { embedded, onSuccess, onSwitchMode } = props || {};
+
 	const { thingtime } = useThingtime();
 
 	const devMode = thingtime?.devKit?.devMode;
@@ -85,7 +92,11 @@ export const Login = (props) => {
 					status: 'success',
 					duration: 5000,
 				});
-				navigate('/');
+				if (onSuccess) {
+					onSuccess(resp.user);
+				} else {
+					navigate('/');
+				}
 			} else {
 				lopu({
 					title: 'Login failed',
@@ -114,7 +125,9 @@ export const Login = (props) => {
 		</>
 	) : null;
 
-	if (loading) {
+	// Embedded hosts keep the form mounted (Button isLoading below) — swapping
+	// in this full-viewport spinner would blow up a modal.
+	if (loading && !embedded) {
 		return (
 			<>
 				<Flex flexDir="column" alignItems="center" justifyContent="center" height="100vh" width="100%">
@@ -144,13 +157,13 @@ export const Login = (props) => {
 				<Flex
 					flexDirection="column"
 					gap={4}
-					width="340px"
+					width={embedded ? '100%' : '340px'}
 					maxWidth="100%"
 					background="var(--tt-card, #ffffff)"
 					border="1px solid var(--tt-border, #ececef)"
-					borderRadius="var(--tt-radius-xl, 20px)"
-					boxShadow="var(--tt-shadow-panel, 0 24px 60px -28px rgba(20, 20, 40, 0.28))"
-					padding={9}
+					borderRadius={embedded ? 'var(--tt-radius-md, 12px)' : 'var(--tt-radius-xl, 20px)'}
+					boxShadow={embedded ? 'none' : 'var(--tt-shadow-panel, 0 24px 60px -28px rgba(20, 20, 40, 0.28))'}
+					padding={embedded ? 5 : 9}
 				>
 					<Flex flexDirection="column" gap={1} paddingBottom={1}>
 						<Box
@@ -161,7 +174,7 @@ export const Login = (props) => {
 							textTransform="uppercase"
 							color="var(--tt-muted, #9a9aa6)"
 						>
-							Thingtime · Login
+							{embedded ? 'Thingtime · Add account' : 'Thingtime · Login'}
 						</Box>
 						<Box
 							as="h1"
@@ -178,7 +191,7 @@ export const Login = (props) => {
 								animation: 'var(--tt-rainbow-anim, moving-rainbow 5s linear infinite)'
 							}}
 						>
-							Welcome back ✨
+							{embedded ? 'Add an account ✨' : 'Welcome back ✨'}
 						</Box>
 					</Flex>
 
@@ -215,6 +228,8 @@ export const Login = (props) => {
 							animation: 'var(--tt-rainbow-anim, moving-rainbow 5s linear infinite)'
 						}}
 						type="submit"
+						isLoading={embedded ? loading : undefined}
+						loadingText="Logging in…"
 						display="flex"
 						justifyContent="center"
 						width="100%"
@@ -233,19 +248,35 @@ export const Login = (props) => {
 						paddingX={4}
 						paddingY={2}
 					>
-						Login ✨
+						{embedded ? 'Add account ✨' : 'Login ✨'}
 					</Button>
 
-					<RouterLink to="/register">
+					{onSwitchMode ? (
 						<Box
+							as="button"
+							type="button"
+							onClick={onSwitchMode}
+							textAlign="left"
 							fontSize="xs"
 							color="var(--tt-muted, #9a9aa6)"
 							transition="color 150ms ease"
+							cursor="pointer"
 							_hover={{ color: 'var(--tt-text, #5a5a66)' }}
 						>
 							Need an account? Register
 						</Box>
-					</RouterLink>
+					) : (
+						<RouterLink to="/register">
+							<Box
+								fontSize="xs"
+								color="var(--tt-muted, #9a9aa6)"
+								transition="color 150ms ease"
+								_hover={{ color: 'var(--tt-text, #5a5a66)' }}
+							>
+								Need an account? Register
+							</Box>
+						</RouterLink>
+					)}
 				</Flex>
 			</form>
 		</>

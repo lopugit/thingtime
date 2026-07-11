@@ -9,11 +9,17 @@ type RouteModule = {
 };
 
 const routeModules: Record<string, () => Promise<RouteModule>> = {
+  'v1/admin/rate-limits': () => import('../../../app/routes/api/v1/admin/rate-limits/_rate-limits'),
+  'v1/admin/set-admin': () => import('../../../app/routes/api/v1/admin/set-admin/_set-admin'),
+  'v1/admin/users': () => import('../../../app/routes/api/v1/admin/users/_users'),
   'v1/algorithms': () => import('../../../app/routes/api/v1/algorithms/_algorithms'),
   'v1/algorithms/active': () => import('../../../app/routes/api/v1/algorithms/active/_active'),
   'v1/algorithms/delete': () => import('../../../app/routes/api/v1/algorithms/delete/_delete'),
   'v1/algorithms/track': () => import('../../../app/routes/api/v1/algorithms/track/_track'),
   'v1/algorithms/update': () => import('../../../app/routes/api/v1/algorithms/update/_update'),
+  'v1/auth/accounts': () => import('../../../app/routes/api/v1/auth/accounts/_accounts'),
+  'v1/auth/accounts/remove': () => import('../../../app/routes/api/v1/auth/accounts/remove/_remove'),
+  'v1/auth/accounts/switch': () => import('../../../app/routes/api/v1/auth/accounts/switch/_switch'),
   'v1/auth/jwks': () => import('../../../app/routes/api/v1/auth/jwks/_jwks'),
   'v1/auth/logout': () => import('../../../app/routes/api/v1/auth/logout/_logout'),
   'v1/auth/me': () => import('../../../app/routes/api/v1/auth/me/_me'),
@@ -43,6 +49,7 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/things/delete': () => import('../../../app/routes/api/v1/things/delete/_delete'),
   'v1/things/feed': () => import('../../../app/routes/api/v1/things/feed/_feed'),
   'v1/things/react': () => import('../../../app/routes/api/v1/things/react/_react'),
+  'v1/things/reactions-recent': () => import('../../../app/routes/api/v1/things/reactions-recent/_reactions-recent'),
   'v1/things/share': () => import('../../../app/routes/api/v1/things/share/_share'),
   'v1/things/user': () => import('../../../app/routes/api/v1/things/user/_user'),
   'v1/users/profile': () => import('../../../app/routes/api/v1/users/profile/_profile'),
