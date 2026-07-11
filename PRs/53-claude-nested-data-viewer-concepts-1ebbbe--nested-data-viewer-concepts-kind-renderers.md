@@ -302,6 +302,23 @@ live tree's editors (MagicInput, exported NumberValueInput, Switch):
   durable reload after typing, 14–55ms automated key interactions, full-page
   scrolling, and no horizontal overflow at 390x844 or 1280px.
 
+## Round 10 — preserve focus across Editor.js autosave echoes
+
+- Fixed a reconciliation ordering regression where a normal `A → B` parent
+  echo cleared its pending `B` marker before the changed-signature branch could
+  classify it. Thingtime then treated the echo as an external replacement,
+  incremented the editor revision, changed the React key, and remounted
+  Editor.js after a short typing delay.
+- The skipped-intermediate acknowledgement now runs only when the incoming
+  signature is unchanged from the previously committed parent value. Normal
+  changed echoes remain pending until the existing changed-signature path
+  consumes them, keeping the editor key stable; genuine external replacements
+  still increment the revision and remount as intended.
+- Added a focused `A → B` regression alongside the existing batched
+  `A → AB → A` test. Live QA typed into the existing scratchpad paragraph and
+  confirmed it remained the active contenteditable at 150ms, 500ms, 1s, and
+  2.2s, then restored and reload-verified the original persisted content.
+
 ## Follow-ups (ideas)
 
 - Mount FocusCardsViewer as the mobile presentation of /things; Columns as a

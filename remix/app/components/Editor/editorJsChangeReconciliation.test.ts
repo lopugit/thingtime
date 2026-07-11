@@ -6,13 +6,19 @@ import { acknowledgeLatestEditorJsEcho, shouldAcceptEditorJsSnapshot } from './e
 
 test('retires skipped intermediate signatures when React commits the final echo', () => {
 	const pending = ['AB', 'A'];
-	assert.equal(acknowledgeLatestEditorJsEcho(pending, 'A', 'A'), true);
+	assert.equal(acknowledgeLatestEditorJsEcho(pending, 'A', 'A', 'A'), true);
 	assert.deepEqual(pending, []);
+});
+
+test('preserves a normal changed parent echo for changed-signature reconciliation', () => {
+	const pending = ['B'];
+	assert.equal(acknowledgeLatestEditorJsEcho(pending, 'A', 'B', 'B'), false);
+	assert.deepEqual(pending, ['B']);
 });
 
 test('does not retire a pending edit for an older parent value', () => {
 	const pending = ['AB'];
-	assert.equal(acknowledgeLatestEditorJsEcho(pending, 'A', 'AB'), false);
+	assert.equal(acknowledgeLatestEditorJsEcho(pending, 'A', 'A', 'AB'), false);
 	assert.deepEqual(pending, ['AB']);
 });
 

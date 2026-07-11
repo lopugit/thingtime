@@ -184,6 +184,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- Fixed Editor.js autosave echoes remounting the active editor and stealing
+  focus after the asynchronous save/parent echo. Changed parent values now
+  reach the pending-echo reconciliation path before skipped intermediate
+  signatures are retired, so ordinary local echoes preserve the Editor.js
+  instance while genuine external replacements still refresh it. Added focused
+  coverage for the changed-signature echo case. Details in
+  [`PRs/53-claude-nested-data-viewer-concepts-1ebbbe--nested-data-viewer-concepts-kind-renderers.md`](../PRs/53-claude-nested-data-viewer-concepts-1ebbbe--nested-data-viewer-concepts-kind-renderers.md).
+  — _Codex (AI), 2026-07-11_
 - Fixed Editor.js persistence and duplicate toolbox entries. The List-v2
   Checklist alias is hidden while the compatible legacy Checklist tool remains,
   Editor.js snapshots are emitted in change order, and Thingtime now serializes

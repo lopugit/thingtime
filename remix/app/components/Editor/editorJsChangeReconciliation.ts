@@ -4,8 +4,13 @@ export type EditorJsSourceRevision = {
 	externalRevision: number;
 };
 
-export const acknowledgeLatestEditorJsEcho = (pending: string[], incomingSignature: string, latestSignature: string): boolean => {
-	if (pending.length === 0 || incomingSignature !== latestSignature) return false;
+export const acknowledgeLatestEditorJsEcho = (
+	pending: string[],
+	previousIncomingSignature: string,
+	incomingSignature: string,
+	latestSignature: string
+): boolean => {
+	if (previousIncomingSignature !== incomingSignature || pending.length === 0 || incomingSignature !== latestSignature) return false;
 	pending.length = 0;
 	return true;
 };

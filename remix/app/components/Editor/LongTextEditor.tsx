@@ -694,7 +694,7 @@ const EditableLongTextEditor = (props: LongTextEditorProps) => {
 	// string/blocks representation, otherwise the stale editor can overwrite it
 	// on the next keystroke.
 	const pending = pendingEmittedSignaturesRef.current;
-	if (acknowledgeLatestEditorJsEcho(pending, incomingSignature, latestSignatureRef.current)) {
+	if (acknowledgeLatestEditorJsEcho(pending, incomingSignatureRef.current, incomingSignature, latestSignatureRef.current)) {
 		// React may batch A -> AB -> A into one final A prop render. Acknowledge
 		// that latest echo even when its signature equals the previously rendered
 		// prop, otherwise the skipped AB marker could swallow a later real undo.
