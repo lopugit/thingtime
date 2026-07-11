@@ -1,5 +1,6 @@
 import { ensureIndexes } from '../mongodb/collections';
 
+import { isEnvAdmin } from './admin';
 import { createEmailVerification } from './emailVerifications';
 import { sendVerificationEmail } from './email';
 import { signJwt } from './jwt';
@@ -63,6 +64,16 @@ export const createUserAccount = async (input: CreateUserAccountInput): Promise<
   if (!username) return { ok: false, status: 400, error: 'Username is required' };
   if (password.length < 6) return { ok: false, status: 400, error: 'Password must be at least 6 characters' };
   if (!isEmail(email)) return { ok: false, status: 400, error: 'A valid email is required' };
+
+  // Reserve env-allowlist admin usernames across EVERY creation path (register,
+  // service-account, seed) so no public route can mint an account whose
+  // username grants admin via ADMIN_USERNAMES — this is the single chokepoint,
+  // proof against future parallel creation paths. The username is already
+  // normalized (trim + lowercase), matching how isEnvAdmin + storage compare,
+  // and it catches slugified inputs from the service-account path too. Generic
+  // message avoids leaking which usernames are privileged. Bootstrap: create the
+  // admin account BEFORE adding it to ADMIN_USERNAMES.
+  if (isEnvAdmin(username)) return { ok: false, status: 409, error: 'Username already taken' };
 
   // ensure the collections + unique indexes exist (idempotent, API-side)
   await ensureIndexes();

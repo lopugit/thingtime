@@ -1,7 +1,6 @@
 import { json } from '~/api/http';
 
 import { mergeAccountSession } from '~/api/utils/auth/accounts';
-import { isEnvAdmin } from '~/api/utils/auth/admin';
 import { serializeAuthCookie } from '~/api/utils/auth/authCookie';
 import { shouldShowDevVerificationLink } from '~/api/utils/auth/devVerification';
 import { registerUser } from '~/api/utils/auth/registerUser';
@@ -21,14 +20,8 @@ export const action = async ({ request }: { request: Request }) => {
   const body = await request.json().catch(() => ({}));
   const origin = new URL(request.url).origin;
 
-  // Reserve env-allowlist admin usernames: a public signup must not be able to
-  // squat an unregistered admin username and inherit admin via the allowlist.
-  // Generic "taken" avoids revealing which usernames are privileged. (Seeding
-  // calls registerUser directly, bypassing this route, so bootstrap still works.)
-  if (typeof body?.username === 'string' && isEnvAdmin(body.username)) {
-    return json({ ok: false, error: 'Username already taken' }, { status: 409 });
-  }
-
+  // (Env-allowlist admin usernames are reserved in createUserAccount — the
+  // single chokepoint covering this route, service-account, and seeding.)
   const result = await registerUser({
     username: body?.username,
     password: body?.password,
