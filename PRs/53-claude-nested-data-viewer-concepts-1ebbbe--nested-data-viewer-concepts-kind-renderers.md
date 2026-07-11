@@ -266,6 +266,42 @@ live tree's editors (MagicInput, exported NumberValueInput, Switch):
   the line with focus still in the quote. Both viewports completed full-page
   scroll checks with no horizontal overflow or new console errors.
 
+## Round 9 — ordered Editor.js autosave + fast persistence
+
+- Removed the duplicate **Checklist** row by filtering only List v2's
+  `style: 'checklist'` toolbox alias. The legacy Checklist tool stays registered
+  as the direct insertion/conversion target, so existing block data and the
+  current plain-text parser remain compatible.
+- Editor.js saves now enter an ordered change queue: each requested snapshot
+  starts immediately, resolves in request order, and suppresses only adjacent
+  structural duplicates. Returning from `A` to an earlier `A` remains a real
+  edit. Failed or teardown-time saves cannot stall later changes. Snapshot
+  sequence numbers span keyed tool-config remounts, so a late old editor cannot
+  overwrite a newer current-editor change; batched parent echoes also retire
+  skipped signatures without swallowing a later real undo/external replacement.
+- Split autosave into two lanes. Thingtime applies every distinct editor/input
+  update and records its timeline event immediately, while a latest-revision
+  coordinator defers whole-root `flatted.stringify()` and LocalForage work until
+  350ms idle, with a 2s maximum wait. Writes are single-flight; an edit that
+  arrives during a write drains as the newest revision afterward. Visibility
+  and page-hide transitions flush pending work, failed writes remain dirty for
+  retry, and the temporary pre-LocalForage hydration state is never saved.
+  Storage read/parse failures stay in retrying hydration rather than exposing a
+  session that silently cannot autosave.
+- Moved the mutation queue from React state to a ref-backed microtask queue and
+  removed full-root per-keystroke logs, MagicInput's unused global-context
+  subscription/path work, and `useThingtime`'s unbounded browser debug snapshot
+  retention. This removes the avoidable enqueue/dequeue renders and synchronous
+  debugging work from ordinary text input without coalescing edit/history
+  events.
+- Regression coverage: 9 coordinator tests (debounce, max-wait, single-flight,
+  lifecycle reuse, retry, newer-revision recovery, disposal), 3 evolving
+  mutation-queue tests, 6 ordered-save tests (including baseline suppression
+  and teardown draining), 4 parent-echo/cross-remount reconciliation tests, and
+  3 toolbox filter tests. Live desktop/mobile QA confirmed one Checklist entry,
+  durable reload after typing, 14–55ms automated key interactions, full-page
+  scrolling, and no horizontal overflow at 390x844 or 1280px.
+
 ## Follow-ups (ideas)
 
 - Mount FocusCardsViewer as the mobile presentation of /things; Columns as a

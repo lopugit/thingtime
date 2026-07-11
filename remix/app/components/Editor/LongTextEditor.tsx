@@ -1,9 +1,20 @@
 import React from 'react';
 import { Box } from '@chakra-ui/react';
 
-import { EDITOR_JS_HEADING_FONT_SIZES, EDITOR_JS_HEADING_LEVELS, getEditorJsValueSignature, isEditorJsDoc, isEditorJsDocSafeToEdit } from './editorJsValue';
+import {
+	EDITOR_JS_HEADING_FONT_SIZES,
+	EDITOR_JS_HEADING_LEVELS,
+	getEditorJsValueSignature,
+	isEditorJsDoc,
+	isEditorJsDocSafeToEdit
+} from './editorJsValue';
 import type { EditorJsDoc } from './editorJsValue';
+import { createOrderedEditorJsChangeQueue } from './editorJsChangeQueue';
+import type { OrderedEditorJsChangeQueue } from './editorJsChangeQueue';
+import { acknowledgeLatestEditorJsEcho, shouldAcceptEditorJsSnapshot } from './editorJsChangeReconciliation';
+import type { EditorJsSourceRevision } from './editorJsChangeReconciliation';
 import { watchEditorJsTextFieldKeydowns } from './editorJsKeyboard';
+import { filterListV2ChecklistToolbox } from './editorJsToolbox';
 import { inlineHtmlToText } from './inlineHtmlText';
 import { StyleTune } from './StyleTune';
 
@@ -271,8 +282,8 @@ export const blocksToText = (blocks: EditorJsDoc['blocks']): string =>
 								style === 'checklist'
 									? `${indent}- [${record.checked === true || meta.checked === true ? 'x' : ' '}] ${text}`
 									: style === 'ordered'
-										? `${indent}${idx + 1}. ${text}`
-										: `${indent}- ${text}`;
+									? `${indent}${idx + 1}. ${text}`
+									: `${indent}- ${text}`;
 							const children = Array.isArray(record.items) && record.items.length ? `\n${serializeItems(record.items, depth + 1)}` : '';
 							return line + children;
 						})
@@ -338,7 +349,17 @@ export type LongTextEditorProps = {
 	blockTypes?: LongTextBlockTypes;
 };
 
-const LongTextEditorInner = (props: LongTextEditorProps) => {
+type SequencedLongTextValue = {
+	value: LongTextValue;
+	sequence: number;
+};
+
+type LongTextEditorInnerProps = Omit<LongTextEditorProps, 'onValueChange'> & {
+	onValueChange?: (next: LongTextValue, sequence: number) => void;
+	allocateChangeSequence: () => number;
+};
+
+const LongTextEditorInner = (props: LongTextEditorInnerProps) => {
 	const holderRef = React.useRef<HTMLDivElement | null>(null);
 	const editorRef = React.useRef<any>(null);
 	const destroyedRef = React.useRef(false);
@@ -348,8 +369,6 @@ const LongTextEditorInner = (props: LongTextEditorProps) => {
 	const onChangeRef = React.useRef(props.onValueChange);
 	const readonlyRef = React.useRef(Boolean(props.readonly));
 	const blockTypesRef = React.useRef(props.blockTypes);
-	// remember the last text we emitted so prop echoes don't reset the editor
-	const lastEmittedRef = React.useRef<string | null>(null);
 	const rawInputCleanupRef = React.useRef<(() => void) | null>(null);
 
 	React.useEffect(() => {
@@ -377,6 +396,8 @@ const LongTextEditorInner = (props: LongTextEditorProps) => {
 		destroyedRef.current = false;
 		let cancelled = false;
 		let textFieldKeyboardCleanup: (() => void) | undefined;
+		let editorChangeQueue: OrderedEditorJsChangeQueue<SequencedLongTextValue> | undefined;
+		let saveEditorValue: (() => void) | undefined;
 
 		(async () => {
 			if (!holderRef.current) return;
@@ -417,19 +438,32 @@ const LongTextEditorInner = (props: LongTextEditorProps) => {
 
 			const initial = valueRef.current;
 			const blocks = isEditorJsDoc(initial) ? initial.blocks : textToBlocks(String(initial ?? ''));
+			const initialOutputValue: LongTextValue = blockModeRef.current ? (initial as EditorJsDoc) : blocksToText(blocks as EditorJsDoc['blocks']);
 
 			const enabled = (tool: LongTextBlockType) => blockTypesRef.current?.[tool] !== false;
+			// List v2 also advertises a Checklist toolbox alias. Keep the legacy
+			// checklist tool as the one direct insertion/conversion target so the
+			// toolbox has one Checklist and existing checklist blocks stay stable.
+			const listToolbox = filterListV2ChecklistToolbox((List as any).toolbox);
 
 			const tools: Record<string, unknown> = {
-				...(enabled('header') ? { header: { class: Header as any, inlineToolbar: true, config: { levels: [...EDITOR_JS_HEADING_LEVELS], defaultLevel: 2 } } } : {}),
-				...(enabled('list') ? { list: { class: List as any, inlineToolbar: true } } : {}),
+				...(enabled('header')
+					? { header: { class: Header as any, inlineToolbar: true, config: { levels: [...EDITOR_JS_HEADING_LEVELS], defaultLevel: 2 } } }
+					: {}),
+				...(enabled('list') ? { list: { class: List as any, inlineToolbar: true, toolbox: listToolbox } } : {}),
 				...(enabled('quote') ? { quote: { class: Quote as any, inlineToolbar: true } } : {}),
 				...(enabled('checklist') ? { checklist: { class: Checklist as any, inlineToolbar: true } } : {}),
 				...(enabled('delimiter') ? { delimiter: Delimiter as any } : {}),
 				...(enabled('table') ? { table: { class: Table as any, inlineToolbar: true } } : {}),
 				...(enabled('code') ? { code: CodeTool as any } : {}),
 				...(enabled('warning')
-					? { warning: { class: Warning as any, inlineToolbar: true, config: { titlePlaceholder: 'Heads up', messagePlaceholder: 'What should people know?' } } }
+					? {
+							warning: {
+								class: Warning as any,
+								inlineToolbar: true,
+								config: { titlePlaceholder: 'Heads up', messagePlaceholder: 'What should people know?' }
+							}
+					  }
 					: {}),
 				...(enabled('embed') ? { embed: Embed as any } : {}),
 				...(enabled('image') ? { image: SimpleImage as any } : {}),
@@ -439,7 +473,29 @@ const LongTextEditorInner = (props: LongTextEditorProps) => {
 				...(enabled('style') ? { style: StyleTune as any } : {})
 			};
 
-			const editor = new EditorJS({
+			let editor: any;
+			editorChangeQueue = createOrderedEditorJsChangeQueue<SequencedLongTextValue, string>({
+				getSignature: (snapshot) => getEditorJsValueSignature(snapshot.value),
+				initialSignature: getEditorJsValueSignature(initialOutputValue),
+				onEmit: (snapshot) => {
+					onChangeRef.current?.(snapshot.value, snapshot.sequence);
+				}
+			});
+
+			saveEditorValue = () => {
+				if (!editor || destroyedRef.current) return;
+				const sequence = props.allocateChangeSequence();
+				editorChangeQueue?.enqueue(async () => {
+					const saved = await editor.save();
+					if (blockModeRef.current) {
+						const base = isEditorJsDoc(valueRef.current) ? valueRef.current : {};
+						return { value: { ...base, blocks: saved.blocks } as EditorJsDoc, sequence };
+					}
+					return { value: blocksToText(saved.blocks as EditorJsDoc['blocks']), sequence };
+				});
+			};
+
+			editor = new EditorJS({
 				holder: holderRef.current,
 				data: { blocks },
 				placeholder: props.placeholder || 'Imagine..',
@@ -448,21 +504,8 @@ const LongTextEditorInner = (props: LongTextEditorProps) => {
 				tools: tools as any,
 				// the 🎨 Style tune rides every block's settings menu
 				...(enabled('style') ? { tunes: ['style'] } : {}),
-				onChange: async () => {
-					try {
-						const saved = await editor.save();
-						if (destroyedRef.current) return;
-						if (blockModeRef.current) {
-							const base = isEditorJsDoc(valueRef.current) ? valueRef.current : {};
-							onChangeRef.current?.({ ...base, blocks: saved.blocks } as EditorJsDoc);
-						} else {
-							const text = blocksToText(saved.blocks as EditorJsDoc['blocks']);
-							lastEmittedRef.current = text;
-							onChangeRef.current?.(text);
-						}
-					} catch {
-						// a save during teardown is fine to drop
-					}
+				onChange: () => {
+					saveEditorValue?.();
 				}
 			});
 
@@ -490,28 +533,14 @@ const LongTextEditorInner = (props: LongTextEditorProps) => {
 				// nothing
 			}
 
-			// fallback save on raw input events: editor.js's own change tracking
-			// misses some programmatic/IME mutations — a debounced save on the
-			// holder catches them (double saves are harmless: same serialisation)
+			// Fallback for programmatic/IME mutations that Editor.js misses. Always
+			// capture the final raw-input snapshot: the ordered queue removes the
+			// adjacent duplicate when Editor.js also reported the same mutation.
+			const rawSaveDelay = 250;
 			let inputDebounce: ReturnType<typeof setTimeout> | undefined;
 			const onRawInput = () => {
 				clearTimeout(inputDebounce);
-				inputDebounce = setTimeout(async () => {
-					try {
-						const saved = await editor.save();
-						if (destroyedRef.current) return;
-						if (blockModeRef.current) {
-							const base = isEditorJsDoc(valueRef.current) ? valueRef.current : {};
-							onChangeRef.current?.({ ...base, blocks: saved.blocks } as EditorJsDoc);
-						} else {
-							const text = blocksToText(saved.blocks as EditorJsDoc['blocks']);
-							lastEmittedRef.current = text;
-							onChangeRef.current?.(text);
-						}
-					} catch {
-						// a save during teardown is fine to drop
-					}
-				}, 250);
+				inputDebounce = setTimeout(() => saveEditorValue?.(), rawSaveDelay);
 			};
 			holderRef.current?.addEventListener('input', onRawInput);
 			rawInputCleanupRef.current = () => {
@@ -522,6 +551,11 @@ const LongTextEditorInner = (props: LongTextEditorProps) => {
 
 		return () => {
 			cancelled = true;
+			// Capture the final DOM state before teardown, then allow already-started
+			// saves to drain. The outer wrapper rejects stale results after an explicit
+			// value replacement while preserving edits across tool-config remounts.
+			saveEditorValue?.();
+			const drained = editorChangeQueue?.close() ?? Promise.resolve();
 			destroyedRef.current = true;
 			textFieldKeyboardCleanup?.();
 			rawInputCleanupRef.current?.();
@@ -535,7 +569,7 @@ const LongTextEditorInner = (props: LongTextEditorProps) => {
 				} catch {
 					// nothing
 				}
-				Promise.resolve(editor.isReady)
+				Promise.all([Promise.resolve(editor.isReady), drained])
 					.then(() => editor.destroy?.())
 					.catch(() => {});
 			}
@@ -637,6 +671,14 @@ const EditableLongTextEditor = (props: LongTextEditorProps) => {
 	const latestSignatureRef = React.useRef(incomingSignature);
 	const pendingEmittedSignaturesRef = React.useRef<string[]>([]);
 	const externalRevisionRef = React.useRef(0);
+	const editorRefreshRevisionRef = React.useRef(0);
+	const activeConfigKeyRef = React.useRef('');
+	const changeSequenceRef = React.useRef(0);
+	const lastAcceptedSequenceRef = React.useRef(0);
+	const allocateChangeSequence = React.useCallback(() => {
+		changeSequenceRef.current += 1;
+		return changeSequenceRef.current;
+	}, []);
 
 	// A caller can explicitly convert string <-> Editor.js while this wrapper
 	// remains mounted. Reset the carried value and remount the inner editor so
@@ -651,9 +693,17 @@ const EditableLongTextEditor = (props: LongTextEditorProps) => {
 	// template, undo, remote sync, etc.) must remount, even when it has the same
 	// string/blocks representation, otherwise the stale editor can overwrite it
 	// on the next keystroke.
+	const pending = pendingEmittedSignaturesRef.current;
+	if (acknowledgeLatestEditorJsEcho(pending, incomingSignature, latestSignatureRef.current)) {
+		// React may batch A -> AB -> A into one final A prop render. Acknowledge
+		// that latest echo even when its signature equals the previously rendered
+		// prop, otherwise the skipped AB marker could swallow a later real undo.
+		pending.length = 0;
+		latestRef.current = props.value;
+	}
+
 	if (incomingSignatureRef.current !== incomingSignature) {
 		incomingSignatureRef.current = incomingSignature;
-		const pending = pendingEmittedSignaturesRef.current;
 		const echoIndex = pending.indexOf(incomingSignature);
 		const pendingEcho = echoIndex >= 0;
 
@@ -671,11 +721,37 @@ const EditableLongTextEditor = (props: LongTextEditorProps) => {
 		}
 	}
 
-	const configKey = `${valueMode}:${externalRevisionRef.current}:${LONG_TEXT_BLOCK_TYPES.filter((tool) => props.blockTypes?.[tool] !== false).join(',')}`;
+	const sourceRevision = {
+		valueMode,
+		externalRevision: externalRevisionRef.current
+	};
+	const configKey = `${valueMode}:${externalRevisionRef.current}:${editorRefreshRevisionRef.current}:${LONG_TEXT_BLOCK_TYPES.filter(
+		(tool) => props.blockTypes?.[tool] !== false
+	).join(',')}`;
+	activeConfigKeyRef.current = configKey;
 	const onValueChange = props.onValueChange;
 
 	const handleChange = React.useCallback(
-		(next: LongTextValue) => {
+		(next: LongTextValue, source: EditorJsSourceRevision, sequence: number) => {
+			// An explicit conversion/replacement wins over a late save from the old
+			// editor. A tool-config-only remount keeps the edit and refreshes the new
+			// editor once the parent echoes the drained value.
+			if (
+				!shouldAcceptEditorJsSnapshot(
+					source,
+					{ valueMode: valueModeRef.current, externalRevision: externalRevisionRef.current },
+					sequence,
+					lastAcceptedSequenceRef.current
+				)
+			)
+				return;
+			// Save requests from every keyed Editor.js instance share this sequence.
+			// A late old-config result cannot overwrite a newer edit from the current
+			// instance even if its promise resolves last.
+			if (sequence <= lastAcceptedSequenceRef.current) return;
+			lastAcceptedSequenceRef.current = sequence;
+			if (source.configKey !== activeConfigKeyRef.current) editorRefreshRevisionRef.current += 1;
+
 			const signature = getEditorJsValueSignature(next);
 			latestRef.current = next;
 			latestSignatureRef.current = signature;
@@ -689,10 +765,8 @@ const EditableLongTextEditor = (props: LongTextEditorProps) => {
 		[onValueChange]
 	);
 
-	return <LongTextEditorInner {...props} key={configKey} value={latestRef.current ?? props.value} onValueChange={handleChange} />;
-};
-
-export const LongTextEditor = (props: LongTextEditorProps) => {
+	// Keep this wrapper mounted for unsafe external replacements so it can bump
+	// the generation above and invalidate any save draining from the old editor.
 	if (isEditorJsDoc(props.value) && !isEditorJsDocSafeToEdit(props.value)) {
 		return (
 			<Box
@@ -709,5 +783,17 @@ export const LongTextEditor = (props: LongTextEditorProps) => {
 		);
 	}
 
+	return (
+		<LongTextEditorInner
+			{...props}
+			key={configKey}
+			value={latestRef.current ?? props.value}
+			allocateChangeSequence={allocateChangeSequence}
+			onValueChange={(next, sequence) => handleChange(next, { ...sourceRevision, configKey }, sequence)}
+		/>
+	);
+};
+
+export const LongTextEditor = (props: LongTextEditorProps) => {
 	return <EditableLongTextEditor {...props} />;
 };

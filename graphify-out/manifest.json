@@ -720,9 +720,9 @@
     "semantic_hash": "4a9346609db2ffbb77bffd37402b7531"
   },
   "remix/app/Providers/ThingtimeProvider.tsx": {
-    "mtime": 1783611081.1157434,
-    "ast_hash": "8d305adaab1cbc2dfc394a172aef5f03",
-    "semantic_hash": "8d305adaab1cbc2dfc394a172aef5f03"
+    "mtime": 1783747329.6982868,
+    "ast_hash": "1072b85656dbefe3f859d154417cdcac",
+    "semantic_hash": ""
   },
   "remix/app/api/cookies.ts": {
     "mtime": 1783611081.1159132,
@@ -980,9 +980,9 @@
     "semantic_hash": "d33cc152d27c7ecd7dc5fc5c22aa504a"
   },
   "remix/app/components/MagicInput/MagicInput.tsx": {
-    "mtime": 1783611081.1805627,
-    "ast_hash": "efbcc5de6f46837641bdfb4e153d222f",
-    "semantic_hash": "efbcc5de6f46837641bdfb4e153d222f"
+    "mtime": 1783744995.4979825,
+    "ast_hash": "8c1e8f59152da814838196c8b7d0edb1",
+    "semantic_hash": ""
   },
   "remix/app/components/MongoDB/MongoStatus.tsx": {
     "mtime": 1783611081.1826663,
@@ -1085,9 +1085,9 @@
     "semantic_hash": "30d6ac45b0aaf7aaf7d2acdc1947deb3"
   },
   "remix/app/components/Thingtime/useThingtime.tsx": {
-    "mtime": 1783611081.2537634,
-    "ast_hash": "18e010b4d0e23186337b685b90757cd8",
-    "semantic_hash": "18e010b4d0e23186337b685b90757cd8"
+    "mtime": 1783744995.5081968,
+    "ast_hash": "a1c638ba67ab9b8e960d1740493828df",
+    "semantic_hash": ""
   },
   "remix/app/components/User/UserCard.tsx": {
     "mtime": 1783611081.2539124,
@@ -1220,9 +1220,9 @@
     "semantic_hash": "0b02a00fb00355c03fd6f53b77d3754d"
   },
   "remix/app/hooks/useThingtimeMachine.tsx": {
-    "mtime": 1783611081.2650614,
-    "ast_hash": "d60b82d42e545916204ef19e3ea53a7a",
-    "semantic_hash": "d60b82d42e545916204ef19e3ea53a7a"
+    "mtime": 1783744644.5331595,
+    "ast_hash": "53c2cd1126f87ad9015814cf27c11b31",
+    "semantic_hash": ""
   },
   "remix/app/hooks/useTrace.tsx": {
     "mtime": 1783611081.265128,
@@ -1485,9 +1485,9 @@
     "semantic_hash": "829580533674af55b849c25c5a518ae8"
   },
   "remix/package.json": {
-    "mtime": 1783680902.1155877,
-    "ast_hash": "526f67edc0a5445f2b9be2539e077419",
-    "semantic_hash": "526f67edc0a5445f2b9be2539e077419"
+    "mtime": 1783746355.0374212,
+    "ast_hash": "1a46e850071f0e1a90d3c6ae2b86a9ac",
+    "semantic_hash": ""
   },
   "remix/public/manifest.json": {
     "mtime": 1783611081.5105097,
@@ -1810,8 +1810,8 @@
     "semantic_hash": "f162fbffa18046af73dfca08802a536f"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1783740259.3734834,
-    "ast_hash": "59337e0c0b0e070be71566419b255b79",
+    "mtime": 1783745865.695779,
+    "ast_hash": "b236c56102a7030206559744f7f59cbe",
     "semantic_hash": ""
   },
   "remix/README.md": {
@@ -3485,9 +3485,9 @@
     "semantic_hash": "cb100f6065969db2ba48924ccbc315ee"
   },
   "remix/app/components/Editor/LongTextEditor.tsx": {
-    "mtime": 1783738338.6108096,
-    "ast_hash": "d615f127c5b6e5a350fce8bc9734cf38",
-    "semantic_hash": "d615f127c5b6e5a350fce8bc9734cf38"
+    "mtime": 1783747372.7233639,
+    "ast_hash": "8e694e0c07580b5cf49b188dd31865e8",
+    "semantic_hash": ""
   },
   "remix/app/components/Kinds/kindPrimitives.tsx": {
     "mtime": 1783613628.9318583,
@@ -3520,9 +3520,9 @@
     "semantic_hash": "dd32776fe5648c798b3eff144b9d92e1"
   },
   "PRs/53-claude-nested-data-viewer-concepts-1ebbbe--nested-data-viewer-concepts-kind-renderers.md": {
-    "mtime": 1783739637.0884144,
-    "ast_hash": "726e486caa1798aad39e0f534b9535fd",
-    "semantic_hash": "726e486caa1798aad39e0f534b9535fd"
+    "mtime": 1783747329.6985784,
+    "ast_hash": "3c824701a11cfd2f97d0a26b0889bbce",
+    "semantic_hash": ""
   },
   "remix/app/components/Editor/StyleTune.ts": {
     "mtime": 1783733932.753837,
@@ -3582,6 +3582,56 @@
   "remix/app/components/Editor/editorJsKeyboard.ts": {
     "mtime": 1783740599.6731265,
     "ast_hash": "e6fd6a732582f32fd55b6872e6ffe2e3",
+    "semantic_hash": ""
+  },
+  "remix/app/Providers/latestRevisionAutosave.test.ts": {
+    "mtime": 1783746317.9830363,
+    "ast_hash": "79bb020eefc725254db9bf3a571b34d8",
+    "semantic_hash": ""
+  },
+  "remix/app/Providers/latestRevisionAutosave.ts": {
+    "mtime": 1783746210.4475853,
+    "ast_hash": "ca29e7f5bdaca2989cc0471d8714bb49",
+    "semantic_hash": ""
+  },
+  "remix/app/Providers/thingtimeMutationQueue.test.ts": {
+    "mtime": 1783746355.0359995,
+    "ast_hash": "05d63fef7a2a4d1affe821f75b4fca3e",
+    "semantic_hash": ""
+  },
+  "remix/app/Providers/thingtimeMutationQueue.ts": {
+    "mtime": 1783746355.0356696,
+    "ast_hash": "788976368ae118ad49aef7e248ad99e2",
+    "semantic_hash": ""
+  },
+  "remix/app/components/Editor/editorJsChangeQueue.test.ts": {
+    "mtime": 1783746755.7031465,
+    "ast_hash": "9a5917595b34ef2b519ca0f53b631a37",
+    "semantic_hash": ""
+  },
+  "remix/app/components/Editor/editorJsChangeQueue.ts": {
+    "mtime": 1783746774.6728806,
+    "ast_hash": "853df59c3fc514823341e9998e11f917",
+    "semantic_hash": ""
+  },
+  "remix/app/components/Editor/editorJsToolbox.test.ts": {
+    "mtime": 1783744652.018108,
+    "ast_hash": "d68b5000ff790de47eb54811cc23d217",
+    "semantic_hash": ""
+  },
+  "remix/app/components/Editor/editorJsToolbox.ts": {
+    "mtime": 1783744652.017954,
+    "ast_hash": "f13f278adbd23938b4e834d88ac713f8",
+    "semantic_hash": ""
+  },
+  "remix/app/components/Editor/editorJsChangeReconciliation.test.ts": {
+    "mtime": 1783747372.7229433,
+    "ast_hash": "b18724ee68672b4e0be5a51661d297fd",
+    "semantic_hash": ""
+  },
+  "remix/app/components/Editor/editorJsChangeReconciliation.ts": {
+    "mtime": 1783747381.38497,
+    "ast_hash": "d47d631615ee7ba5ec3d3d989be33f38",
     "semantic_hash": ""
   }
 }

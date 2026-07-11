@@ -184,6 +184,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- Fixed Editor.js persistence and duplicate toolbox entries. The List-v2
+  Checklist alias is hidden while the compatible legacy Checklist tool remains,
+  Editor.js snapshots are emitted in change order, and Thingtime now serializes
+  only the latest revision after a 350ms idle window (with a 2s maximum wait)
+  instead of serializing the whole object during every keystroke. Edit/history
+  events remain immediate, LocalForage writes cannot overlap, lifecycle flushes
+  cover background/navigation, and pre-hydration placeholder state is never
+  persisted. Removed per-keystroke full-object logging, React-state queue churn,
+  and unbounded debug snapshots from the same hot path. Details in
+  [`PRs/53-claude-nested-data-viewer-concepts-1ebbbe--nested-data-viewer-concepts-kind-renderers.md`](../PRs/53-claude-nested-data-viewer-concepts-1ebbbe--nested-data-viewer-concepts-kind-renderers.md).
+  — _Codex (AI), 2026-07-11_
 - Fixed Editor.js multiline tool textboxes treating empty internal lines as
   block boundaries. Quote, warning, image-caption, and embed-caption fields now
   keep Backspace/Delete and arrow-key editing inside the active textbox at

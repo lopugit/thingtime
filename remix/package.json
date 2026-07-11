@@ -19,6 +19,7 @@
     "patch:vercel-output": "node scripts/patch-vercel-output.mjs",
     "preview": "node .output/server/index.mjs",
     "sync:nitro-template": "node scripts/sync-nitro-template.mjs",
+    "test:autosave": "node --test app/Providers/*.test.ts",
     "test:editorjs": "node --test app/components/Editor/*.test.ts app/components/Kinds/*.test.ts",
     "verify:vercel-output": "node scripts/verify-vercel-output.mjs"
   },
