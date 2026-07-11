@@ -24,9 +24,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   now stores its root-level `schemaVersion`. Added `GET /api/v1/things`
   (read/list), `POST /api/v1/things/update`, `GET /api/v1/schemas`, a `/schemas`
   browser page with an admin Database-migrations panel, and admin-only
-  schema-version migration endpoints (`/api/v1/admin/migrations*`) driven by the
-  `THINGTIME_PRIVATE_ADMIN_USERNAMES` allowlist; the previously unauthenticated
-  `mongodb/raw-results` dump is now admin-only. Legacy wire shapes stay
+  schema-version migration endpoints (`/api/v1/admin/migrations*`) gated by the
+  admin role (`meta.admin` flag or the `ADMIN_USERNAMES` allowlist); the
+  previously unauthenticated `mongodb/raw-results` dump is now admin-only. Legacy wire shapes stay
   byte-compatible and reads merge v1 embedded data until the idempotent
   `things-v1-to-v2` migration runs. Round 2: the stored visibility enum became
   a generic `acl` permission array (tt: grants plus "-"-prefixed exclusions,
