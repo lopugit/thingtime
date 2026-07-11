@@ -55,6 +55,110 @@ const endpoint = (doc: Omit<ApiEndpointDoc, 'docsEndpoint'>): ApiEndpointDoc => 
 
 export const apiEndpointDocs: ApiEndpointDoc[] = [
   endpoint({
+    id: 'admin-rate-limits',
+    group: 'admin',
+    title: 'Rate-limit config',
+    endpoint: '/api/v1/admin/rate-limits',
+    summary: 'Read or update the global per-endpoint rate limits (admin only).',
+    detail:
+      'Admins configure how often each throttled endpoint (e.g. things.react, things.comment) can be called per user. GET returns the current merged config plus the endpoint list + defaults; POST { endpoints: { <name>: { limit, windowMs, enabled } } } updates it. Unknown endpoints are ignored and values clamped server-side.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET to load the current config, endpoint names, and defaults.',
+      'POST endpoints with limit (per window), windowMs, and enabled to change a limit.',
+      'Non-admins receive 403; anonymous callers 401.',
+      'Changes take effect within seconds (the limiter caches config briefly).'
+    ],
+    requestExamples: [
+      { name: 'Read config', description: 'Load the current rate limits.', method: 'GET' },
+      {
+        name: 'Update react limit',
+        description: 'Allow 30 reactions per minute.',
+        method: 'POST',
+        body: { endpoints: { 'things.react': { limit: 30, windowMs: 60000, enabled: true } } }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Current config.',
+        body: {
+          ok: true,
+          config: { 'things.react': { limit: 60, windowMs: 60000, enabled: true } },
+          endpoints: ['things.react', 'things.comment'],
+          defaults: { 'things.react': { limit: 60, windowMs: 60000, enabled: true } }
+        }
+      },
+      { status: 403, description: 'Not an admin.', body: { ok: false, error: 'Admins only' } }
+    ]
+  }),
+  endpoint({
+    id: 'admin-users',
+    group: 'admin',
+    title: 'Admin user lookup',
+    endpoint: '/api/v1/admin/users',
+    summary: 'List current admins and search users to promote/demote (admin only).',
+    detail:
+      'Returns the current DB-flagged admins; with ?q=<query> also returns matching users (by username/email) so an admin can promote or demote them. Env-allowlist admins are marked envAdmin and cannot be demoted from the UI.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['GET'],
+    steps: [
+      'GET with credentials to list current admins.',
+      'Add ?q=<username or email> to search users to manage.',
+      'Use POST /api/v1/admin/set-admin with a returned user id to change their admin flag.',
+      'Non-admins receive 403; anonymous callers 401.'
+    ],
+    requestExamples: [
+      { name: 'List admins', description: 'Current admins only.', method: 'GET' },
+      { name: 'Search users', description: 'Find users to promote.', method: 'GET', query: { q: 'lopu' } }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Admins + search results.',
+        body: {
+          ok: true,
+          admins: [{ id: '64f000000000000000000001', username: 'lopu', isAdmin: true, envAdmin: true }],
+          results: [{ id: '64f000000000000000000002', username: 'nik', isAdmin: false, envAdmin: false }]
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'admin-set-admin',
+    group: 'admin',
+    title: 'Promote / demote admin',
+    endpoint: '/api/v1/admin/set-admin',
+    summary: 'Set a user’s stored admin flag (admin only).',
+    detail:
+      'POST { userId, admin } to grant or revoke the meta.admin flag. Env-allowlist admins keep access regardless (the returned isAdmin may stay true after a demote).',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['POST'],
+    steps: [
+      'POST userId + admin:true to promote, admin:false to demote.',
+      'Read the returned user row (id, username, isAdmin, envAdmin) to update the UI.',
+      'Demoting an env-allowlist admin only clears the DB flag; they stay admin via env.',
+      'Non-admins receive 403; missing userId 400; unknown user 404.'
+    ],
+    requestExamples: [
+      {
+        name: 'Promote user',
+        description: 'Grant admin.',
+        method: 'POST',
+        body: { userId: '64f000000000000000000002', admin: true }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Updated user row.',
+        body: { ok: true, user: { id: '64f000000000000000000002', username: 'nik', isAdmin: true, envAdmin: false } }
+      },
+      { status: 400, description: 'Missing userId.', body: { ok: false, error: 'userId is required' } }
+    ]
+  }),
+  endpoint({
     id: 'root-data',
     group: 'root',
     title: 'Root data',
@@ -90,6 +194,143 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           titlePrefix: '[LC]',
           user: null
         }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'auth-accounts',
+    group: 'auth',
+    title: 'Account switcher roster',
+    endpoint: '/api/v1/auth/accounts',
+    summary: 'Lists every account signed in to this browser, marking the active one.',
+    detail:
+      'The account switcher roster is a Mongo document (rosters collection) referenced by an opaque id in the httpOnly tt_accounts cookie; its entries reference sessions by id, so there is no account limit and raw JWTs are never stored or returned. This route resolves each entry to its public user, prunes dead entries (expired, revoked, deleted), and updates the roster + cookie when anything changed.',
+    auth: {
+      mode: 'optional',
+      description:
+        'Reads the tt_accounts roster-id and tt_auth cookies. Works without an active session so a signed-out browser can still offer "continue as" for roster accounts.'
+    },
+    methods: ['GET'],
+    steps: [
+      'Send a GET request with credentials included so the httpOnly cookies travel.',
+      'Read accounts[] for each signed-in public user; active: true marks the tt_auth account.',
+      'Preserve Set-Cookie on the response — pruning rewrites the roster-id cookie.',
+      'Call /api/v1/auth/accounts/switch with a listed user id to change the active account.'
+    ],
+    requestExamples: [
+      {
+        name: 'List signed-in accounts',
+        description: 'Read the switcher roster for this browser.',
+        method: 'GET'
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Two accounts signed in; the first is active.',
+        body: {
+          ok: true,
+          accounts: [
+            { user: { id: '64f000000000000000000001', username: 'lopu' }, active: true },
+            { user: { id: '64f000000000000000000002', username: 'nik' }, active: false }
+          ]
+        }
+      },
+      {
+        status: 200,
+        description: 'No accounts signed in.',
+        body: { ok: true, accounts: [] }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'auth-accounts-remove',
+    group: 'auth',
+    title: 'Remove account from switcher',
+    endpoint: '/api/v1/auth/accounts/remove',
+    summary: 'Signs one roster account out: revokes its session and drops it from the switcher.',
+    detail:
+      'Use this to remove a single account from the browser without touching the others. Removing the active account promotes the next roster account to active; removing the last account clears both auth cookies, signing the browser out entirely.',
+    auth: {
+      mode: 'optional',
+      description: 'Operates on the browser roster named by the httpOnly tt_accounts cookie; possession of that roster id is the authorization.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST the user id of the roster account to remove.',
+      'The account session jti is revoked in MongoDB — the removed token is dead everywhere, not just in this browser.',
+      'Read user for the account that is active after the removal (null when none remain).',
+      'Store the returned Set-Cookie headers so tt_auth and tt_accounts stay in sync.'
+    ],
+    requestExamples: [
+      {
+        name: 'Remove one account',
+        description: 'Sign the account out of this browser and revoke its session.',
+        method: 'POST',
+        body: { userId: '64f000000000000000000002' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Account removed; another account remains active.',
+        body: {
+          ok: true,
+          user: { id: '64f000000000000000000001', username: 'lopu' },
+          accounts: [{ user: { id: '64f000000000000000000001', username: 'lopu' }, active: true }]
+        }
+      },
+      {
+        status: 400,
+        description: 'Missing userId.',
+        body: { ok: false, error: 'userId is required' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'auth-accounts-switch',
+    group: 'auth',
+    title: 'Switch active account',
+    endpoint: '/api/v1/auth/accounts/switch',
+    summary: 'Makes a signed-in roster account the active one without re-entering a password.',
+    detail:
+      'Mints a fresh JWT for the chosen roster account live session into tt_auth. Authorization is possession of the httpOnly roster-id cookie, so switching never needs credentials.',
+    auth: {
+      mode: 'optional',
+      description: 'Operates on the browser roster named by the httpOnly tt_accounts cookie; the target entry must still resolve to a live session.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST the user id of a roster account (from /api/v1/auth/accounts).',
+      'Store the returned Set-Cookie headers — tt_auth now carries the chosen account token.',
+      'Refresh user-scoped state client-side; the active user changed for every subsequent request.',
+      'A 404 means that account is no longer signed in here (session expired or revoked) — refresh the roster and log in again.'
+    ],
+    requestExamples: [
+      {
+        name: 'Switch account',
+        description: 'Activate another signed-in account.',
+        method: 'POST',
+        body: { userId: '64f000000000000000000002' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Active account switched.',
+        body: {
+          ok: true,
+          user: { id: '64f000000000000000000002', username: 'nik' },
+          accounts: [
+            { user: { id: '64f000000000000000000001', username: 'lopu' }, active: false },
+            { user: { id: '64f000000000000000000002', username: 'nik' }, active: true }
+          ]
+        }
+      },
+      {
+        status: 404,
+        description: 'The account is not signed in to this browser (or its session died).',
+        body: { ok: false, error: 'That account is no longer signed in here', accounts: [] }
       }
     ]
   }),
@@ -137,33 +378,49 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'auth',
     title: 'Logout',
     endpoint: '/api/v1/auth/logout',
-    summary: 'Revokes the current session and clears the auth cookie.',
+    summary: 'Signs the active account out; other switcher accounts stay signed in unless all: true.',
     detail:
-      'Use this endpoint to end browser sessions or revoke a bearer token session server-side. The route is idempotent and returns ok even without a token.',
+      'Use this endpoint to end browser sessions or revoke a bearer token session server-side. The active account session is revoked and removed from the switcher roster; the next roster account becomes active and is returned as user. Pass all: true to revoke every roster session and clear both cookies. The route is idempotent and returns ok even without a token.',
     auth: {
       mode: 'optional',
       description: 'Uses the auth cookie or Authorization: Bearer token when one exists.'
     },
     methods: ['POST'],
     steps: [
-      'POST an empty JSON object or no body.',
+      'POST an empty JSON object, or { "all": true } to sign out every switcher account.',
       'If a token is present, Thingtime verifies it and revokes the session jti in MongoDB.',
-      'Store the returned Set-Cookie header in browsers so the httpOnly cookie is cleared.',
+      'Read user for the account active after logout — null means the browser is fully signed out.',
+      'Store the returned Set-Cookie headers so tt_auth and the tt_accounts roster stay in sync.',
       'Treat repeated logout calls as success.'
     ],
     requestExamples: [
       {
         name: 'Logout current session',
-        description: 'Clear the browser session or revoke the bearer token session.',
+        description: 'Sign out the active account; remaining switcher accounts stay signed in.',
         method: 'POST',
         body: {}
+      },
+      {
+        name: 'Logout everywhere',
+        description: 'Revoke every switcher account session in this browser.',
+        method: 'POST',
+        body: { all: true }
       }
     ],
     responseExamples: [
       {
         status: 200,
-        description: 'Logout completed.',
-        body: { ok: true }
+        description: 'Active account signed out; another switcher account took over.',
+        body: {
+          ok: true,
+          user: { id: '64f000000000000000000001', username: 'lopu' },
+          accounts: [{ user: { id: '64f000000000000000000001', username: 'lopu' }, active: true }]
+        }
+      },
+      {
+        status: 200,
+        description: 'Fully signed out.',
+        body: { ok: true, user: null, accounts: [] }
       }
     ]
   }),
@@ -749,7 +1006,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     auth: {
       mode: 'session-or-bearer',
       description:
-        'Admin-only: the authenticated username must be in the server THINGTIME_PRIVATE_ADMIN_USERNAMES allowlist. Raw docs include private things.'
+        'Admin-only (meta.admin flag or the ADMIN_USERNAMES env allowlist). Raw docs include private things.'
     },
     methods: ['POST'],
     steps: [
@@ -1536,33 +1793,71 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'things',
     title: 'React to post',
     endpoint: '/api/v1/things/react',
-    summary: 'Sets, replaces, or clears the current user reaction on a visible post.',
+    summary: 'Toggles one of the current user reactions on a visible post (multi-react).',
     detail:
-      'Posting the same emoji again, or null, clears the viewer reaction. Reactions are standalone things (thingtime ["reaction"]) pointing at their target via targetId — this route is toggle sugar over the unified thing path. Reaction counts are returned for immediate card updates.',
+      'emoji may be a single emoji or a multi-emoji group typed/pasted as one token (e.g. "🤣🤣🙌💀💦"). Toggling a token you already have removes it, a new one is added — you can hold several at once. Adding a token also records it in your recent reactions; posting null is a no-op. Reactions are standalone things (thingtime ["reaction"], crystal.emoji = the token) pointing at their target via targetId — this route is toggle sugar over the unified thing path. Reaction counts are returned for immediate card updates.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
     },
     methods: ['POST'],
     steps: [
-      'POST id and emoji, or emoji null to clear.',
+      'POST id and emoji (a single emoji or a multi-emoji token), or emoji null for a no-op.',
       'The post must be visible to the current user.',
-      'Use reactionCounts and viewerReaction to update UI state.',
+      'Use reactionCounts and viewerReactions to update UI state; recentReactions (present when a token was added) refreshes the picker.',
       'Handle 401 unauthenticated and 404 for missing or not-visible posts.'
     ],
     requestExamples: [
       {
-        name: 'Set reaction',
-        description: 'React to a post.',
+        name: 'Toggle reaction',
+        description: 'Add or remove one reaction token on a post.',
         method: 'POST',
-        body: { id: 'post_123', emoji: 'like' }
+        body: { id: 'post_123', emoji: '🤣🤣🙌💀💦' }
       }
     ],
     responseExamples: [
       {
         status: 200,
-        description: 'Reaction updated.',
-        body: { ok: true, reactionCounts: { like: 1 }, viewerReaction: 'like' }
+        description: 'Reaction toggled.',
+        body: {
+          ok: true,
+          reactionCounts: { '👍': 3, '🤣🤣🙌💀💦': 1 },
+          viewerReactions: ['👍', '🤣🤣🙌💀💦'],
+          recentReactions: ['🤣🤣🙌💀💦', '👍']
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'things-reactions-recent',
+    group: 'things',
+    title: 'Recent reactions',
+    endpoint: '/api/v1/things/reactions-recent',
+    summary: 'Returns the caller recently-used emoji tokens (most-recent-first).',
+    detail:
+      'The custom-emoji picker loads this lazily when it opens and pages through it 20 at a time. Tokens are single emoji or multi-emoji groups. Anonymous callers get an empty list.',
+    auth: {
+      mode: 'optional',
+      description: 'Reads the auth cookie or Bearer token when present; anonymous callers receive an empty list.'
+    },
+    methods: ['GET'],
+    steps: [
+      'Send a GET request with credentials or a bearer token.',
+      'Render recentReactions in the picker, 20 at a time with a "show more" pager.',
+      'Seed from a local snapshot first for an instant render, then reconcile with this response.'
+    ],
+    requestExamples: [
+      {
+        name: 'Load recent reactions',
+        description: 'Fetch the caller recently-used emoji.',
+        method: 'GET'
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Recently-used tokens, newest first.',
+        body: { ok: true, recentReactions: ['🤣🤣🙌💀💦', '👍', '🔥', '💀'] }
       }
     ]
   }),
@@ -1932,7 +2227,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     auth: {
       mode: 'session-or-bearer',
       description:
-        'Admin-only: the authenticated username must be in the server THINGTIME_PRIVATE_ADMIN_USERNAMES allowlist. Non-admins get the same 401 as anonymous callers.'
+        'Admin-only (meta.admin flag or the ADMIN_USERNAMES env allowlist): anonymous callers get 401, signed-in non-admins 403.'
     },
     methods: ['GET'],
     steps: [
@@ -1978,7 +2273,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     auth: {
       mode: 'session-or-bearer',
       description:
-        'Admin-only: the authenticated username must be in the server THINGTIME_PRIVATE_ADMIN_USERNAMES allowlist. Non-admins get the same 401 as anonymous callers.'
+        'Admin-only (meta.admin flag or the ADMIN_USERNAMES env allowlist): anonymous callers get 401, signed-in non-admins 403.'
     },
     methods: ['POST'],
     steps: [

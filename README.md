@@ -155,16 +155,18 @@ MONGODB_CONNECTION_STRING="mongodb://localhost:27017/thingtime"
 ## Admin access
 
 Schema-version migrations (`/api/v1/admin/migrations*`), the migrations panel on
-`/schemas`, and raw database diagnostics are gated to an admin allowlist. Set a
-comma-separated list of usernames in the server environment:
+`/schemas`, the admin panel, and raw database diagnostics are admin-gated. A
+user is an admin when their user doc has `meta.admin: true` (promote/demote via
+the admin panel or `POST /api/v1/admin/set-admin`) or their username is in the
+bootstrap env allowlist:
 
 ```sh
-THINGTIME_PRIVATE_ADMIN_USERNAMES="your-username,another-admin"
+ADMIN_USERNAMES="your-username,another-admin"
 ```
 
-The variable name must keep the `PRIVATE` marker — `THINGTIME_*` env vars
-without it are exposed to the browser by `/api/root-data`. Admins are computed
-from this allowlist at request time; nothing is stored on user docs.
+Env-allowlisted usernames are a permanent override (they can't be demoted from
+the UI, so there's always a way back in) and are reserved at registration so
+nobody can squat an admin username before you register it.
 
 ## Auth and Lopu AI
 

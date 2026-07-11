@@ -57,7 +57,8 @@ export type PublicPost = {
   listing: MarketplaceListing | null;
   tags: string[];
   reactionCounts: Record<string, number>;
-  viewerReaction: string | null;
+  // every reaction token the viewer has toggled on this post (multi-react)
+  viewerReactions: string[];
   commentCount: number;
   // latest comments (≤ 20), oldest → newest
   comments: PostComment[];
@@ -68,6 +69,12 @@ export type PublicPost = {
   shareOf: PublicPost | null;
   createdAt: string;
 };
+
+// A post update bubbled up from a card. A value replaces the post (null removes
+// it); a function applies a delta to the FRESHEST post in the list — the form
+// optimistic reactions use so concurrent toggles reconcile per-token instead of
+// clobbering each other with a stale full snapshot.
+export type PostChange = PublicPost | null | ((prev: PublicPost) => PublicPost | null);
 
 export type AlgorithmInterest = {
   kind: 'type' | 'tag' | 'author';

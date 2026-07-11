@@ -385,9 +385,10 @@ export type BuildThingContextMenuModelArgs = {
 	readonly?: boolean;
 	// hide the delete action when the thing has no parent (nothing to remove)
 	canDelete?: boolean;
-	// things with children get the View section (collapse/expand verbs);
-	// collapsed picks which direction leads
+	// rows with hideable content get the View section (collapse/expand verbs);
+	// containers additionally get descendant cascade actions
 	collapsible?: boolean;
+	collapsibleChildren?: boolean;
 	collapsed?: boolean;
 	types?: ThingTypeOption[];
 	templates?: ThingTemplateOption[];
@@ -403,6 +404,7 @@ export const buildThingContextMenuModel = (args: BuildThingContextMenuModelArgs 
 		readonly = false,
 		canDelete = true,
 		collapsible = false,
+		collapsibleChildren = collapsible,
 		collapsed = false,
 		types = DEFAULT_THING_TYPES,
 		templates = DEFAULT_THING_TEMPLATES,
@@ -428,16 +430,23 @@ export const buildThingContextMenuModel = (args: BuildThingContextMenuModelArgs 
 
 	// collapse/expand are view state, not mutations — they show in readonly too
 	if (collapsible) {
+		const viewActions: ThingContextAction[] = [
+			collapsed
+				? { id: 'expand', command: 'expand', label: 'Expand', icon: '▾', lucide: 'chevron-down' }
+				: { id: 'collapse', command: 'collapse', label: 'Collapse', icon: '▸', lucide: 'chevron-right' }
+		];
+
+		if (collapsibleChildren) {
+			viewActions.push(
+				{ id: 'collapse-all', command: 'collapse-all', label: 'Collapse all', icon: '🍂', lucide: 'chevrons-down-up', hint: 'This thing + everything inside' },
+				{ id: 'expand-all', command: 'expand-all', label: 'Expand all', icon: '🌳', lucide: 'chevrons-up-down', hint: 'This thing + everything inside' }
+			);
+		}
+
 		sections.push({
 			id: 'view',
 			label: 'View',
-			actions: [
-				collapsed
-					? { id: 'expand', command: 'expand', label: 'Expand', icon: '▾', lucide: 'chevron-down' }
-					: { id: 'collapse', command: 'collapse', label: 'Collapse', icon: '▸', lucide: 'chevron-right' },
-				{ id: 'collapse-all', command: 'collapse-all', label: 'Collapse all', icon: '🍂', lucide: 'chevrons-down-up', hint: 'This thing + everything inside' },
-				{ id: 'expand-all', command: 'expand-all', label: 'Expand all', icon: '🌳', lucide: 'chevrons-up-down', hint: 'This thing + everything inside' }
-			]
+			actions: viewActions
 		});
 	}
 

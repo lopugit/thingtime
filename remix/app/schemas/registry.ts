@@ -7,6 +7,8 @@
 // imported by the client (/schemas page), the docs, and the server API layer
 // alike — the same apiDocs.ts pattern.
 
+import { MAX_REACTION_EMOJIS, sanitizeReactionToken } from '~/utils/reactionTokens';
+
 export type ThingtimeFieldType =
   | 'string'
   | 'number'
@@ -166,6 +168,8 @@ export const aclAllows = (acl: string[], viewer: AclViewer, ownerId: string): bo
   return allow;
 };
 
+// quick-pick defaults; any emoji token validated by ~/utils/reactionTokens is
+// accepted as a reaction
 export const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '😡'];
 export const POST_TYPES = ['text', 'image', 'marketplace'] as const;
 export const MARKETPLACE_CATEGORIES = ['car', 'tool', 'furniture', 'service', 'other'] as const;
@@ -276,16 +280,24 @@ const reactionSchema: ThingtimeSchema = {
   kind: 'crystal',
   collection: null,
   title: 'Reaction',
-  summary: 'An emoji reaction to another thing — one per user per target.',
+  summary: 'An emoji reaction to another thing — one thing per (user, target, token).',
   detail:
-    'Toggling the same emoji removes the reaction; a different emoji replaces it. Reactions ' +
-    'used to live embedded on post docs as an emoji → userIds map — the things v1→v2 migration ' +
-    'explodes them into these.',
+    'The emoji is an open-vocabulary token: a single emoji or a multi-emoji group typed as one ' +
+    `unit (up to ${MAX_REACTION_EMOJIS} emoji), validated emoji-only by the shared token helper. ` +
+    'Users can hold several reaction things on one target; toggling a token they already have ' +
+    'removes it. Reactions used to live embedded on post docs as an emoji → userIds map — the ' +
+    'things v1→v2 migration explodes them into these.',
   requiresTarget: true,
   fields: [
-    { name: 'emoji', type: 'enum', required: true, values: [...REACTION_EMOJIS], description: 'The reaction emoji.' }
+    {
+      name: 'emoji',
+      type: 'string',
+      required: true,
+      max: MAX_REACTION_EMOJIS,
+      description: `The reaction token — one emoji or a multi-emoji group (max ${MAX_REACTION_EMOJIS} emoji, emoji-only).`
+    }
   ],
-  example: { emoji: '❤️' }
+  example: { emoji: '🤣🤣🙌💀💦' }
 };
 
 const shareSchema: ThingtimeSchema = {
@@ -550,10 +562,9 @@ const sanitizeCommentCrystal = (input: Record<string, unknown>): { ok: true; cry
 };
 
 const sanitizeReactionCrystal = (input: Record<string, unknown>): { ok: true; crystal: Record<string, unknown> } | Fail => {
-  if (typeof input.emoji !== 'string' || !REACTION_EMOJIS.includes(input.emoji)) {
-    return fail(400, 'Unsupported reaction');
-  }
-  return { ok: true, crystal: { emoji: input.emoji } };
+  const token = sanitizeReactionToken(input.emoji);
+  if (!token) return fail(400, 'Unsupported reaction');
+  return { ok: true, crystal: { emoji: token } };
 };
 
 const crystalSanitizers: Record<

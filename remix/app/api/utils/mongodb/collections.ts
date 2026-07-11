@@ -26,6 +26,7 @@ export const getThingtimeDb = async () => (await getClientCached()).db('thingtim
 
 export const getUsersCollection = async () => (await getThingtimeDb()).collection('users');
 export const getSessionsCollection = async () => (await getThingtimeDb()).collection('sessions');
+export const getRostersCollection = async () => (await getThingtimeDb()).collection('rosters');
 export const getThingsCollection = async () => (await getThingtimeDb()).collection('things');
 export const getEmailVerificationsCollection = async () => (await getThingtimeDb()).collection('emailVerifications');
 export const getLopuMusingRateLimitsCollection = async () =>
@@ -33,6 +34,10 @@ export const getLopuMusingRateLimitsCollection = async () =>
 export const getThemesCollection = async () => (await getThingtimeDb()).collection('themes');
 export const getWaitlistCollection = async () => (await getThingtimeDb()).collection('waitlist');
 export const getFeedAlgorithmsCollection = async () => (await getThingtimeDb()).collection('feedAlgorithms');
+// Global, admin-editable app settings (singleton docs keyed by `key`, e.g. the
+// rate-limit config) and the general per-endpoint rate-limit windows.
+export const getSettingsCollection = async () => (await getThingtimeDb()).collection('settings');
+export const getRateLimitsCollection = async () => (await getThingtimeDb()).collection('rateLimits');
 
 // Idempotently create server-side collections + their indexes. createIndex
 // creates the collection if it doesn't exist yet, so this also bootstraps an
@@ -51,6 +56,10 @@ export const ensureIndexes = async () => {
         db.collection('users').createIndex({ email: 1 }, { unique: true }),
         db.collection('sessions').createIndex({ jti: 1 }, { unique: true }),
         db.collection('sessions').createIndex({ userId: 1 }),
+        // account-switcher rosters: one doc per browser, entries reference
+        // sessions by jti; TTL reaps rosters abandoned past their rolling expiry
+        db.collection('rosters').createIndex({ rosterId: 1 }, { unique: true }),
+        db.collection('rosters').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
         db.collection('emailVerifications').createIndex({ token: 1 }, { unique: true }),
         db.collection('emailVerifications').createIndex({ userId: 1 }),
         db.collection('lopuMusingRateLimits').createIndex({ key: 1 }, { unique: true }),
@@ -72,8 +81,32 @@ export const ensureIndexes = async () => {
         // acl and thingtime are both arrays — Mongo forbids two multikey fields
         // in one compound index, so the audience index stands alone
         db.collection('things').createIndex({ acl: 1, createdAt: -1, shareId: 1 }),
+        // One reaction per (target, user, emoji token): makes toggle-on an
+        // idempotent upsert and dedups even under races. Partial via
+        // crystal.emoji-exists so it only applies to reaction things.
+        db.collection('things').createIndex(
+          { targetId: 1, ownerId: 1, 'crystal.emoji': 1 },
+          { unique: true, partialFilterExpression: { 'crystal.emoji': { $exists: true } } }
+        ),
+        // Legacy relational era (kind:'reaction'/'comment' docs written by the
+        // pre-unification relational model): aggregation + dedup indexes stay
+        // until the things migration converts those docs to thingtime things.
+        db.collection('things').createIndex({ kind: 1, parentId: 1, createdAt: 1 }),
+        db.collection('things').createIndex(
+          { parentId: 1, ownerId: 1, token: 1 },
+          { unique: true, partialFilterExpression: { kind: 'reaction' } }
+        ),
+        db.collection('things').createIndex(
+          { commentId: 1 },
+          { unique: true, partialFilterExpression: { kind: 'comment' } }
+        ),
         db.collection('feedAlgorithms').createIndex({ shareId: 1 }, { unique: true }),
-        db.collection('feedAlgorithms').createIndex({ ownerId: 1 })
+        db.collection('feedAlgorithms').createIndex({ ownerId: 1 }),
+        // global app settings singletons (rate-limit config lives here)
+        db.collection('settings').createIndex({ key: 1 }, { unique: true }),
+        // general per-endpoint rate-limit windows; TTL reaps expired windows
+        db.collection('rateLimits').createIndex({ key: 1 }, { unique: true }),
+        db.collection('rateLimits').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
       ]);
     })().catch((err) => {
       // don't cache a failed run — let the next call retry

@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { ObjectId } from 'mongodb';
 
 import { ensureIndexes, getThingsCollection, getUsersCollection } from '../mongodb/collections';
+import { pushUserRecentReaction } from '../auth/users';
+import { sanitizeReactionToken } from '~/utils/reactionTokens';
 import {
   ACL_ALL,
   ACL_FAMILY,
@@ -69,8 +71,14 @@ export type ThingDoc = {
   tags?: string[];
   createdAt: Date;
   updatedAt: Date;
-  // v1 residue fields (unset by the things v1→v2 migration)
-  kind?: 'post';
+  // v1 residue fields (unset by the things v1→v2 migration). kind 'reaction'
+  // and 'comment' cover the interim relational era (parentId/token/commentId
+  // docs) written by main's pre-unification model — read + migrated like the
+  // embedded residue.
+  kind?: 'post' | 'reaction' | 'comment';
+  parentId?: string;
+  token?: string;
+  commentId?: string;
   type?: PostType;
   text?: string;
   images?: string[];
@@ -110,7 +118,7 @@ export type PublicPost = {
   listing: MarketplaceListing | null;
   tags: string[];
   reactionCounts: Record<string, number>;
-  viewerReaction: string | null;
+  viewerReactions: string[];
   commentCount: number;
   comments: PublicComment[];
   shareCount: number;
@@ -149,6 +157,11 @@ const MAX_TAGS = 12;
 const MAX_TAG_CHARS = 40;
 const MAX_SHARE_ID_CHARS = 128;
 const MAX_COMMENTS_PER_POST = 500;
+// Reactions are open-vocabulary (any emoji / multi-emoji token), so bound them:
+// a post holds at most this many DISTINCT tokens, and one user contributes at
+// most this many reaction things per post.
+const MAX_REACTION_KEYS_PER_POST = 100;
+const MAX_REACTIONS_PER_USER_PER_POST = 20;
 const RETURNED_COMMENTS = 20;
 const MAX_FEED_LIMIT = 50;
 const DEFAULT_FEED_LIMIT = 20;
@@ -444,10 +457,17 @@ const resolveRelated = async (docs: ThingDoc[]): Promise<RelatedThings> => {
   if (!ids.length) return { commentsByTarget, reactionsByTarget, shareCountByTarget };
 
   const things = await getThingsCollection();
-  const [related, shareCounts] = await Promise.all([
+  const [related, legacyRelational, shareCounts] = await Promise.all([
     things
       .find({ targetId: { $in: ids }, thingtime: { $in: ['comment', 'reaction'] } } as any)
       .sort({ createdAt: 1, shareId: 1 })
+      .toArray() as Promise<any[]>,
+    // interim relational era: kind:'reaction'/'comment' docs linked by parentId
+    // (written by the pre-unification relational model; converted by the things
+    // migration, folded here until then)
+    things
+      .find({ kind: { $in: ['comment', 'reaction'] }, parentId: { $in: ids } } as any)
+      .sort({ createdAt: 1 })
       .toArray() as Promise<any[]>,
     things
       .aggregate([
@@ -457,21 +477,41 @@ const resolveRelated = async (docs: ThingDoc[]): Promise<RelatedThings> => {
       .toArray() as Promise<any[]>
   ]);
 
+  const pushComment = (target: string, entry: CommentEntry) => {
+    const list = commentsByTarget.get(target) || [];
+    list.push(entry);
+    commentsByTarget.set(target, list);
+  };
+  const pushReaction = (target: string, entry: ReactionEntry) => {
+    const list = reactionsByTarget.get(target) || [];
+    list.push(entry);
+    reactionsByTarget.set(target, list);
+  };
+
   for (const doc of related as ThingDoc[]) {
     const target = doc.targetId as string;
     if (thingtimeOf(doc).includes('comment')) {
-      const list = commentsByTarget.get(target) || [];
-      list.push({
+      pushComment(target, {
         id: doc.shareId,
         userId: doc.ownerId,
         text: String(doc.crystal?.text || ''),
         createdAt: new Date(doc.createdAt)
       });
-      commentsByTarget.set(target, list);
     } else if (thingtimeOf(doc).includes('reaction')) {
-      const list = reactionsByTarget.get(target) || [];
-      list.push({ userId: doc.ownerId, emoji: String(doc.crystal?.emoji || '') });
-      reactionsByTarget.set(target, list);
+      pushReaction(target, { userId: doc.ownerId, emoji: String(doc.crystal?.emoji || '') });
+    }
+  }
+  for (const doc of legacyRelational as ThingDoc[]) {
+    const target = doc.parentId as string;
+    if (doc.kind === 'comment') {
+      pushComment(target, {
+        id: String(doc.commentId || doc._id),
+        userId: doc.ownerId,
+        text: String((doc as any).text || ''),
+        createdAt: new Date(doc.createdAt)
+      });
+    } else if (doc.kind === 'reaction') {
+      pushReaction(target, { userId: doc.ownerId, emoji: String(doc.token || '') });
     }
   }
   for (const row of shareCounts) shareCountByTarget.set(String(row._id), row.count);
@@ -493,17 +533,22 @@ const mergedCommentsOf = (doc: ThingDoc, related: RelatedThings): CommentEntry[]
   );
 };
 
-// Merge a post's v1 embedded reaction map with standalone reaction things.
-// A user's standalone reaction supersedes their embedded residue (toggles
-// always write standalone and clean the residue, but stay defensive).
+// Merge a post's v1 embedded reaction map with standalone reaction things
+// (v2 thingtime things + interim kind docs, already folded by resolveRelated).
+// Users can hold several tokens at once, so dedupe by exact (user, token) pair.
 const mergedReactionsOf = (doc: ThingDoc, related: RelatedThings): ReactionEntry[] => {
-  const standalone = related.reactionsByTarget.get(doc.shareId) || [];
-  const standaloneUsers = new Set(standalone.map((entry) => entry.userId));
-  const merged = [...standalone];
+  const merged: ReactionEntry[] = [];
+  const seen = new Set<string>();
+  const push = (entry: ReactionEntry) => {
+    if (!entry.emoji) return;
+    const key = `${entry.userId}\u0000${entry.emoji}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    merged.push(entry);
+  };
+  (related.reactionsByTarget.get(doc.shareId) || []).forEach(push);
   Object.entries(doc.reactions || {}).forEach(([emoji, userIds]) => {
-    (userIds || []).forEach((userId) => {
-      if (!standaloneUsers.has(userId)) merged.push({ userId, emoji });
-    });
+    (userIds || []).forEach((userId) => push({ userId, emoji }));
   });
   return merged;
 };
@@ -516,9 +561,9 @@ const reactionCountsOf = (entries: ReactionEntry[]): Record<string, number> => {
   return counts;
 };
 
-const viewerReactionOf = (entries: ReactionEntry[], viewerId: string | null): string | null => {
-  if (!viewerId) return null;
-  return entries.find((entry) => entry.userId === viewerId)?.emoji || null;
+const viewerReactionsOf = (entries: ReactionEntry[], viewerId: string | null): string[] => {
+  if (!viewerId) return [];
+  return entries.filter((entry) => entry.userId === viewerId).map((entry) => entry.emoji);
 };
 
 const liveShareCountOf = (doc: ThingDoc, related: RelatedThings): number =>
@@ -576,7 +621,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
       listing: (crystal.listing as MarketplaceListing) || null,
       tags: doc.tags || [],
       reactionCounts: reactionCountsOf(reactions),
-      viewerReaction: viewerReactionOf(reactions, viewerId),
+      viewerReactions: viewerReactionsOf(reactions, viewerId),
       commentCount: allComments.length,
       comments,
       shareCount: liveShareCountOf(doc, related),
@@ -686,8 +731,11 @@ const findViewableThing = async (shareId: unknown, viewer: Viewer): Promise<Thin
 
 const countCommentsOf = async (target: ThingDoc): Promise<number> => {
   const things = await getThingsCollection();
-  const standalone = await things.countDocuments({ targetId: target.shareId, thingtime: 'comment' } as any);
-  return standalone + (target.comments || []).length;
+  const [standalone, legacyRelational] = await Promise.all([
+    things.countDocuments({ targetId: target.shareId, thingtime: 'comment' } as any),
+    things.countDocuments({ kind: 'comment', parentId: target.shareId } as any)
+  ]);
+  return standalone + legacyRelational + (target.comments || []).length;
 };
 
 // ---------------------------------------------------------------------------
@@ -911,6 +959,102 @@ export const listThings = async (
   return { ok: true, things: await toPublicThings(page, viewer), nextCursor };
 };
 
+// Copy a target's LEGACY embedded reactions/comments into standalone v2 things
+// (once) and clear the embedded fields, so a legacy post becomes fully
+// relational on its first write. No-op for new or already-claimed posts.
+//
+// The claim is ATOMIC: findOneAndUpdate unsets the embedded fields and returns
+// the before-image, so exactly ONE concurrent writer migrates (losers see the
+// fields already gone and skip). Deterministic shareIds make the inserts
+// idempotent with the admin migration. Mutates `doc` to reflect the clear.
+const emojiHex = (emoji: string) => [...emoji].map((char) => char.codePointAt(0)!.toString(16)).join('');
+const safeIdPart = (value: string) => value.replace(/[^A-Za-z0-9_-]/g, '_');
+export const reactionShareId = (targetId: string, userId: string, emoji: string) =>
+  `react-${safeIdPart(targetId)}-${safeIdPart(userId)}-${emojiHex(emoji)}`;
+
+const migrateThingInteractions = async (doc: ThingDoc): Promise<void> => {
+  if (!doc.reactions && !doc.comments) return;
+  const things = await getThingsCollection();
+
+  const claimed = (await things.findOneAndUpdate(
+    {
+      shareId: doc.shareId,
+      $or: [{ reactions: { $exists: true } }, { comments: { $exists: true } }]
+    } as any,
+    { $unset: { reactions: '', comments: '' } } as any,
+    { returnDocument: 'before' }
+  )) as any as ThingDoc | null;
+
+  // Reflect the clear locally regardless of who won, so response aggregation
+  // reads only standalone data (never double-folds the embedded copy).
+  delete doc.reactions;
+  delete doc.comments;
+  if (!claimed) return; // another writer already claimed this post
+
+  const ops: any[] = [];
+  for (const [token, userIds] of Object.entries(claimed.reactions || {})) {
+    for (const ownerId of userIds || []) {
+      const shareId = reactionShareId(doc.shareId, ownerId, token);
+      ops.push({
+        updateOne: {
+          filter: { shareId },
+          update: {
+            $setOnInsert: {
+              shareId,
+              schemaVersion: THINGS_SCHEMA_VERSION,
+              thingtime: ['reaction'],
+              crystal: { emoji: token },
+              ownerId,
+              acl: [ACL_INHERIT],
+              targetId: doc.shareId,
+              tags: [],
+              createdAt: new Date(claimed.createdAt),
+              updatedAt: new Date(claimed.createdAt)
+            }
+          },
+          upsert: true
+        }
+      });
+    }
+  }
+  for (const comment of claimed.comments || []) {
+    ops.push({
+      updateOne: {
+        filter: { shareId: comment.id },
+        update: {
+          $setOnInsert: {
+            shareId: comment.id,
+            schemaVersion: THINGS_SCHEMA_VERSION,
+            thingtime: ['comment'],
+            crystal: { text: comment.text },
+            ownerId: comment.userId,
+            acl: [ACL_INHERIT],
+            targetId: doc.shareId,
+            tags: [],
+            createdAt: new Date(comment.createdAt),
+            updatedAt: new Date(comment.createdAt)
+          }
+        },
+        upsert: true
+      }
+    });
+  }
+  if (ops.length) {
+    try {
+      await things.bulkWrite(ops, { ordered: false });
+    } catch (err) {
+      // The claim already committed the $unset, so the embedded copy is the
+      // only remaining source of this legacy data. Restore it so the NEXT
+      // write re-claims (upserts are idempotent) instead of losing it forever.
+      await things.updateOne(
+        { shareId: doc.shareId } as any,
+        { $set: { reactions: claimed.reactions ?? {}, comments: claimed.comments ?? [] } } as any
+      );
+      throw err;
+    }
+  }
+};
+
 // ---------------------------------------------------------------------------
 // Social actions. Every action re-checks visibility so a URL-guessed private
 // thing can't be interacted with.
@@ -919,80 +1063,96 @@ export const toggleReaction = async (
   viewerInput: string | Viewer,
   shareId: unknown,
   emoji: unknown
-): Promise<Fail | { ok: true; reactionCounts: Record<string, number>; viewerReaction: string | null }> => {
+): Promise<
+  | Fail
+  | {
+      ok: true;
+      reactionCounts: Record<string, number>;
+      viewerReactions: string[];
+      recentReactions?: string[];
+    }
+> => {
   const viewer = asViewer(viewerInput);
   if (!viewer?.id) return fail(401, 'Unauthorized');
   const viewerId = viewer.id;
-  if (emoji !== null && (typeof emoji !== 'string' || !REACTION_EMOJIS.includes(emoji))) {
+  // Any emoji or multi-emoji group is a valid reaction token (open vocabulary),
+  // validated by the shared emoji-only helper the picker UI also uses.
+  const token = sanitizeReactionToken(emoji);
+  if (emoji !== null && token === null) {
     return fail(400, 'Unsupported reaction');
   }
   const target = await findViewableThing(shareId, viewer);
   if (!target) return fail(404, 'Post not found');
 
+  await ensureIndexes(); // the reaction unique index must exist before insert
   const things = await getThingsCollection();
-  const existing = (await things.findOne({
-    targetId: target.shareId,
-    thingtime: 'reaction',
-    ownerId: viewerId
-  } as any)) as any as ThingDoc | null;
+  let recentReactions: string[] | undefined;
 
-  const embeddedPrevious = Object.entries(target.reactions || {}).find(([, userIds]) =>
-    (userIds || []).includes(viewerId)
-  )?.[0];
-  const previous = existing?.crystal?.emoji || embeddedPrevious || null;
-  // reacting with the same emoji again clears it (toggle), a different one replaces
-  const next = typeof emoji === 'string' && emoji !== previous ? emoji : null;
+  if (token) {
+    // first write claims any legacy embedded residue into standalone things
+    await migrateThingInteractions(target);
 
-  const now = new Date();
-  const ops: Promise<any>[] = [];
-  // clear every standalone reaction this viewer has on the target (defensive
-  // against duplicates) before writing the replacement
-  if (existing) ops.push(things.deleteMany({ targetId: target.shareId, thingtime: 'reaction', ownerId: viewerId } as any));
-  if (embeddedPrevious) {
-    // clean the v1 residue for this user so cleared/replaced reactions don't
-    // resurface from the embedded map
-    ops.push(
-      things.updateOne({ shareId: target.shareId } as any, {
-        $pull: { [`reactions.${embeddedPrevious}`]: viewerId },
-        $set: { updatedAt: now }
-      } as any)
-    );
-  }
-  await Promise.all(ops);
-
-  if (next) {
-    const created = await createThing(
-      viewerId,
-      {
-        thingtime: ['reaction'],
-        crystal: { emoji: next },
-        targetId: target.shareId
-      },
-      viewer
-    );
-    if (isFail(created)) return created;
-  } else {
-    await things.updateOne({ shareId: target.shareId } as any, { $set: { updatedAt: now } });
+    // toggling is an insert/delete of ONE (viewer, token) thing — checked
+    // across both the v2 shape and the interim kind:'reaction' era
+    const [existingV2, existingKind] = await Promise.all([
+      things.findOne({
+        targetId: target.shareId,
+        thingtime: 'reaction',
+        ownerId: viewerId,
+        'crystal.emoji': token
+      } as any),
+      things.findOne({ kind: 'reaction', parentId: target.shareId, ownerId: viewerId, token } as any)
+    ]);
+    if (existingV2 || existingKind) {
+      const ids = [existingV2?._id, existingKind?._id].filter(Boolean);
+      await things.deleteMany({ _id: { $in: ids } } as any);
+    } else {
+      // soft product caps — relational storage removed the doc-size risk, but
+      // open-vocabulary tokens still need bounding
+      const [ownV2, ownKind] = await Promise.all([
+        things.countDocuments({ targetId: target.shareId, thingtime: 'reaction', ownerId: viewerId } as any),
+        things.countDocuments({ kind: 'reaction', parentId: target.shareId, ownerId: viewerId } as any)
+      ]);
+      if (ownV2 + ownKind >= MAX_REACTIONS_PER_USER_PER_POST) {
+        return fail(400, `You can add at most ${MAX_REACTIONS_PER_USER_PER_POST} reactions to a post`);
+      }
+      const tokenAlreadyOnPost =
+        (await things.countDocuments(
+          { targetId: target.shareId, thingtime: 'reaction', 'crystal.emoji': token } as any,
+          { limit: 1 }
+        )) ||
+        (await things.countDocuments({ kind: 'reaction', parentId: target.shareId, token } as any, { limit: 1 }));
+      if (!tokenAlreadyOnPost) {
+        const [v2Tokens, kindTokens] = await Promise.all([
+          things.distinct('crystal.emoji', { targetId: target.shareId, thingtime: 'reaction' } as any),
+          things.distinct('token', { kind: 'reaction', parentId: target.shareId } as any)
+        ]);
+        if (new Set([...v2Tokens, ...kindTokens]).size >= MAX_REACTION_KEYS_PER_POST) {
+          return fail(400, 'This post has reached its reaction limit');
+        }
+      }
+      const created = await createThing(
+        viewerId,
+        { thingtime: ['reaction'], crystal: { emoji: token }, targetId: target.shareId },
+        viewer
+      );
+      // 409 = the unique (target, owner, token) index raced another add of the
+      // same token — that reaction already exists, which is what we wanted
+      if (isFail(created) && created.status !== 409) return created;
+      recentReactions = await pushUserRecentReaction(viewerId, token);
+    }
+    await things.updateOne({ shareId: target.shareId } as any, { $set: { updatedAt: new Date() } });
   }
 
   // recompute merged state for this target
-  const residue: Record<string, string[]> = {};
-  Object.entries(target.reactions || {}).forEach(([key, userIds]) => {
-    const rest = (userIds || []).filter((id) => id !== viewerId);
-    if (rest.length) residue[key] = rest;
-  });
-  const standalone = (await things
-    .find({ targetId: target.shareId, thingtime: 'reaction' } as any)
-    .toArray()) as any as ThingDoc[];
-  const entries = mergedReactionsOf(
-    { ...target, reactions: residue },
-    {
-      commentsByTarget: new Map(),
-      reactionsByTarget: new Map([[target.shareId, standalone.map((doc) => ({ userId: doc.ownerId, emoji: String(doc.crystal?.emoji || '') }))]]),
-      shareCountByTarget: new Map()
-    }
-  );
-  return { ok: true, reactionCounts: reactionCountsOf(entries), viewerReaction: viewerReactionOf(entries, viewerId) };
+  const related = await resolveRelated([target]);
+  const entries = mergedReactionsOf(target, related);
+  return {
+    ok: true,
+    reactionCounts: reactionCountsOf(entries),
+    viewerReactions: viewerReactionsOf(entries, viewerId),
+    recentReactions
+  };
 };
 
 export const addComment = async (
@@ -1005,6 +1165,9 @@ export const addComment = async (
   const viewerId = viewer.id;
   const target = await findViewableThing(shareId, viewer);
   if (!target) return fail(404, 'Post not found');
+
+  // first write claims any legacy embedded residue into standalone things
+  await migrateThingInteractions(target);
 
   const created = await createThing(
     viewerId,
@@ -1075,9 +1238,15 @@ export const deleteThing = async (viewerInput: string | Viewer, shareId: unknown
     ownerId: viewer.id
   } as any)) as any as ThingDoc | null;
   if (!deleted) return fail(404, 'Thing not found');
-  // comments/reactions attached to the deleted thing go with it; share things
-  // survive so they can render their 'original unavailable' placeholder
-  await things.deleteMany({ targetId: deleted.shareId, thingtime: { $in: ['comment', 'reaction'] } } as any);
+  // comments/reactions attached to the deleted thing go with it (v2 things AND
+  // interim kind docs); share things survive so they can render their
+  // 'original unavailable' placeholder
+  await things.deleteMany({
+    $or: [
+      { targetId: deleted.shareId, thingtime: { $in: ['comment', 'reaction'] } },
+      { parentId: deleted.shareId, kind: { $in: ['comment', 'reaction'] } }
+    ]
+  } as any);
   return { ok: true };
 };
 

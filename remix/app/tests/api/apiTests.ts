@@ -109,6 +109,62 @@ export const apiTests: ApiTestDefinition[] = [
     expect: expectJson([200], (body) => body?.ok === true, 'Logout returned ok.')
   },
   {
+    id: 'auth-accounts-list',
+    name: 'Account switcher roster',
+    description: 'The accounts route lists signed-in accounts (empty for anonymous browsers) without exposing raw JWTs.',
+    group: 'auth',
+    method: 'GET',
+    path: '/api/v1/auth/accounts',
+    expect: expectJson(
+      [200],
+      (body) =>
+        body?.ok === true &&
+        Array.isArray(body?.accounts) &&
+        body.accounts.every(
+          (account: any) =>
+            isObject(account?.user) &&
+            typeof account?.active === 'boolean' &&
+            !Object.prototype.hasOwnProperty.call(account, 'token') &&
+            !Object.prototype.hasOwnProperty.call(account, 'jti')
+        ),
+      'Accounts roster returned public users only.'
+    )
+  },
+  {
+    id: 'auth-accounts-switch-validation',
+    name: 'Switch account validation',
+    description: 'Switching requires a userId.',
+    group: 'auth',
+    method: 'POST',
+    path: '/api/v1/auth/accounts/switch',
+    body: {},
+    expect: expectJson([400], (body) => body?.ok === false && Boolean(body?.error), 'Switch returned validation error.')
+  },
+  {
+    id: 'auth-accounts-switch-unknown',
+    name: 'Switch to unknown account',
+    description: 'Switching to an account that is not signed in to this browser returns 404.',
+    group: 'auth',
+    method: 'POST',
+    path: '/api/v1/auth/accounts/switch',
+    body: { userId: '000000000000000000000000' },
+    expect: expectJson(
+      [404],
+      (body) => body?.ok === false && Boolean(body?.error) && Array.isArray(body?.accounts),
+      'Switch rejected an account that is not in the roster.'
+    )
+  },
+  {
+    id: 'auth-accounts-remove-validation',
+    name: 'Remove account validation',
+    description: 'Removing a switcher account requires a userId.',
+    group: 'auth',
+    method: 'POST',
+    path: '/api/v1/auth/accounts/remove',
+    body: {},
+    expect: expectJson([400], (body) => body?.ok === false && Boolean(body?.error), 'Remove returned validation error.')
+  },
+  {
     id: 'auth-register-validation',
     name: 'Register validation',
     description: 'Register fails before database writes when required fields are missing.',
@@ -480,6 +536,73 @@ export const apiTests: ApiTestDefinition[] = [
     path: '/api/v1/things/react',
     body: { id: 'not-a-real-post-id', emoji: '👍' },
     expect: expectJson([401, 404], (body) => body?.ok === false && typeof body?.error === 'string', 'Reaction was rejected with an error shape.')
+  },
+  {
+    id: 'things-react-invalid-emoji',
+    name: 'Reaction tokens must be emoji',
+    description: 'A non-emoji reaction token is rejected (400) before touching the post; anonymous callers get 401.',
+    group: 'things',
+    method: 'POST',
+    path: '/api/v1/things/react',
+    body: { id: 'not-a-real-post-id', emoji: 'not-an-emoji' },
+    expect: expectJson(
+      [400, 401],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Non-emoji reaction token was rejected with an error shape.'
+    )
+  },
+  {
+    id: 'things-reactions-recent',
+    name: 'Recent reactions list',
+    description: 'The recent-reactions route returns an array (empty for anonymous callers).',
+    group: 'things',
+    method: 'GET',
+    path: '/api/v1/things/reactions-recent',
+    expect: expectJson(
+      [200],
+      (body) => body?.ok === true && Array.isArray(body?.recentReactions),
+      'Recent reactions returned an array.'
+    )
+  },
+  {
+    id: 'admin-rate-limits-guarded',
+    name: 'Rate-limit config is admin-only',
+    description: 'Reading the global rate-limit config requires an admin session.',
+    group: 'admin',
+    method: 'GET',
+    path: '/api/v1/admin/rate-limits',
+    expect: expectJson(
+      [401, 403],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Non-admin rate-limit read was rejected.'
+    )
+  },
+  {
+    id: 'admin-users-guarded',
+    name: 'Admin user lookup is admin-only',
+    description: 'The admin user lookup requires an admin session.',
+    group: 'admin',
+    method: 'GET',
+    path: '/api/v1/admin/users',
+    expect: expectJson(
+      [401, 403],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Non-admin user lookup was rejected.'
+    )
+  },
+  {
+    id: 'admin-set-admin-guarded',
+    name: 'Promote/demote is admin-only',
+    description: 'Setting a user admin flag requires an admin session.',
+    group: 'admin',
+    method: 'POST',
+    path: '/api/v1/admin/set-admin',
+    body: { userId: '000000000000000000000000', admin: true },
+    expect: expectJson(
+      [401, 403],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Non-admin promote attempt was rejected.'
+    )
   },
   {
     id: 'things-comment-guarded',

@@ -65,11 +65,53 @@ export function useApi() {
         [asyncFetcher]
       ),
       logout: useCallback(
-        async () => {
-          const ret = asyncFetcher.submit({}, { action: '/api/v1/auth/logout' });
+        async (args?: { all?: boolean }) => {
+          const ret = asyncFetcher.submit(args?.all ? { all: true } : {}, { action: '/api/v1/auth/logout' });
           ret.then(refreshRootData).catch(() => {});
           return ret;
         },
+        [asyncFetcher]
+      ),
+      accounts: {
+        // Listing changes no state, so no refreshRootData (pruning only rewrites
+        // the roster cookie, never the active user).
+        list: useCallback(async () => getJson('/api/v1/auth/accounts'), []),
+        switch: useCallback(
+          async (args) => {
+            const ret = asyncFetcher.submit({ userId: args?.userId }, { action: '/api/v1/auth/accounts/switch' });
+            ret.then(refreshRootData).catch(() => {});
+            return ret;
+          },
+          [asyncFetcher]
+        ),
+        remove: useCallback(
+          async (args) => {
+            const ret = asyncFetcher.submit({ userId: args?.userId }, { action: '/api/v1/auth/accounts/remove' });
+            ret.then(refreshRootData).catch(() => {});
+            return ret;
+          },
+          [asyncFetcher]
+        )
+      }
+    },
+    admin: {
+      rateLimits: useCallback(async () => getJson('/api/v1/admin/rate-limits'), []),
+      setRateLimits: useCallback(
+        async (endpoints) => asyncFetcher.submit({ endpoints }, { action: '/api/v1/admin/rate-limits' }),
+        [asyncFetcher]
+      ),
+      users: useCallback(async (args) => getJson(`/api/v1/admin/users${toQuery(args)}`), []),
+      setAdmin: useCallback(
+        async (args) => asyncFetcher.submit({ userId: args?.userId, admin: args?.admin }, { action: '/api/v1/admin/set-admin' }),
+        [asyncFetcher]
+      ),
+      migrations: useCallback(async () => getJson('/api/v1/admin/migrations'), []),
+      migrationsRun: useCallback(
+        async (args) =>
+          asyncFetcher.submit(
+            { migration: args?.migration, dryRun: args?.dryRun },
+            { action: '/api/v1/admin/migrations/run' }
+          ),
         [asyncFetcher]
       )
     },
@@ -126,6 +168,7 @@ export function useApi() {
           ),
         [asyncFetcher]
       ),
+      reactionsRecent: useCallback(async () => getJson('/api/v1/things/reactions-recent'), []),
       create: useCallback(
         async (args) => {
           const { type, text, images, listing, thingtime, crystal, targetId, acl, visibility, tags } = args;
@@ -249,17 +292,6 @@ export function useApi() {
     schemas: {
       list: useCallback(async () => getJson('/api/v1/schemas'), []),
       get: useCallback(async (id) => getJson(`/api/v1/schemas${toQuery({ id })}`), [])
-    },
-    admin: {
-      migrations: useCallback(async () => getJson('/api/v1/admin/migrations'), []),
-      migrationsRun: useCallback(
-        async (args) =>
-          asyncFetcher.submit(
-            { migration: args?.migration, dryRun: args?.dryRun },
-            { action: '/api/v1/admin/migrations/run' }
-          ),
-        [asyncFetcher]
-      )
     },
     waitlist: {
       join: useCallback(

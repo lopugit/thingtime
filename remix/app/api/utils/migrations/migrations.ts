@@ -1,4 +1,5 @@
 import { ensureIndexes, getThingtimeDb } from '../mongodb/collections';
+import { reactionShareId } from '../things/things';
 import { ACL_INHERIT, ACL_OWNER, COLLECTION_SCHEMA_VERSIONS, LEGACY_SCHEMA_VERSION, aclFromVisibility } from '~/schemas/registry';
 
 // Admin-run database schema-version migrations. Every collection stores the
@@ -76,18 +77,14 @@ const stampMigration = (collection: string, description: string): Migration => {
 const THINGS_VERSION = COLLECTION_SCHEMA_VERSIONS.things;
 const THINGS_BATCH = 200;
 
-// deterministic so re-runs dedupe on the unique shareId index; shareIds can be
-// client-minted, so strip anything outside the safe id alphabet
-const safeIdPart = (value: string) => value.replace(/[^A-Za-z0-9_-]/g, '_');
-const emojiHex = (emoji: string) =>
-  [...emoji].map((char) => char.codePointAt(0)!.toString(16)).join('');
-const reactionShareId = (postShareId: string, userId: string, emoji: string) =>
-  `react-${safeIdPart(postShareId)}-${safeIdPart(userId)}-${emojiHex(emoji)}`;
-
 const legacyPostFilter = {
   kind: 'post',
   $or: [{ schemaVersion: { $exists: false } }, { schemaVersion: { $lt: THINGS_VERSION } }]
 };
+
+// interim relational era: kind:'reaction'/'comment' docs linked by parentId,
+// written by the pre-unification relational model
+const legacyRelationalFilter = { kind: { $in: ['reaction', 'comment'] } };
 
 const thingsMigration: Migration = {
   id: `things-v1-to-v${THINGS_VERSION}`,
@@ -98,12 +95,17 @@ const thingsMigration: Migration = {
   description:
     'Explodes embedded comments and reactions into standalone comment/reaction things ' +
     '(comment ids are preserved as thing shareIds; reaction things get deterministic ids so ' +
-    're-runs are idempotent), converts share posts to thingtime ["post","share"] with targetId, ' +
-    'moves post payloads under crystal, and stamps schemaVersion. Stray non-post docs in the ' +
-    'things collection (legacy prototypes) are left untouched and reported.',
+    're-runs are idempotent), converts interim relational kind:"reaction"/"comment" docs to ' +
+    'thingtime things, converts share posts to thingtime ["post","share"] with targetId, moves ' +
+    'post payloads under crystal, and stamps schemaVersion. Stray non-post docs in the things ' +
+    'collection (legacy prototypes) are left untouched and reported.',
   pending: async () => {
     const db = await getThingtimeDb();
-    return db.collection('things').countDocuments(legacyPostFilter);
+    const [posts, relational] = await Promise.all([
+      db.collection('things').countDocuments(legacyPostFilter),
+      db.collection('things').countDocuments(legacyRelationalFilter)
+    ]);
+    return posts + relational;
   },
   run: async ({ dryRun }) => {
     await ensureIndexes();
@@ -149,7 +151,9 @@ const thingsMigration: Migration = {
         .toArray();
       const wouldCreate = sample.length ? sample[0].comments + sample[0].reactions : 0;
       notes.push(`${wouldCreate} standalone comment/reaction thing(s) would be created`);
-      return { dryRun, matched, migrated: 0, created: 0, skipped: 0, notes };
+      const relational = await things.countDocuments(legacyRelationalFilter);
+      if (relational) notes.push(`${relational} interim relational kind doc(s) would be converted`);
+      return { dryRun, matched: matched + relational, migrated: 0, created: 0, skipped: 0, notes };
     }
 
     // batch through matching docs; re-runs only see still-unmigrated posts
@@ -241,7 +245,43 @@ const thingsMigration: Migration = {
       }
     }
 
-    return { dryRun, matched, migrated, created, skipped, notes };
+    // convert interim relational kind:'reaction'/'comment' docs (written by the
+    // pre-unification relational model) into v2 things, then remove them —
+    // deterministic/stable ids make re-runs and races idempotent
+    let converted = 0;
+    for (;;) {
+      const batch = (await things.find(legacyRelationalFilter).limit(THINGS_BATCH).toArray()) as any[];
+      if (!batch.length) break;
+      for (const doc of batch) {
+        const shareId =
+          doc.kind === 'reaction'
+            ? reactionShareId(String(doc.parentId), String(doc.ownerId), String(doc.token))
+            : String(doc.commentId || doc._id);
+        await things.updateOne(
+          { shareId },
+          {
+            $setOnInsert: {
+              shareId,
+              schemaVersion: THINGS_VERSION,
+              thingtime: [doc.kind],
+              crystal: doc.kind === 'reaction' ? { emoji: doc.token } : { text: doc.text || '' },
+              ownerId: doc.ownerId,
+              acl: [ACL_INHERIT],
+              targetId: doc.parentId,
+              tags: [],
+              createdAt: new Date(doc.createdAt),
+              updatedAt: new Date(doc.createdAt)
+            }
+          },
+          { upsert: true }
+        );
+        await things.deleteOne({ _id: doc._id });
+        converted += 1;
+      }
+    }
+    if (converted) notes.push(`${converted} interim relational kind doc(s) converted to things`);
+
+    return { dryRun, matched: matched + converted, migrated: migrated + converted, created, skipped, notes };
   }
 };
 

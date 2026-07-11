@@ -1,19 +1,20 @@
-// Admin allowlist. Admins are usernames listed in
-// THINGTIME_PRIVATE_ADMIN_USERNAMES (comma-separated, case-insensitive) — a
-// server-only env var. The name MUST contain 'PRIVATE': root-data ships every
-// THINGTIME_* env var WITHOUT 'PRIVATE' in its name to the browser
-// (root-data.server.ts), and an admin allowlist must never ride along.
-//
-// Env is the single source of truth — no role field on user docs, nothing to
-// bootstrap or migrate, revoked by redeploying without the name. The request
-// gate lives in getCurrentUser.ts (requireAdmin); this module stays pure so
-// users.ts can use it without an import cycle.
+// Admin identity. A user is an admin when their user doc has `meta.admin === true`
+// OR their username is in the ADMIN_USERNAMES env allowlist. The env allowlist
+// bootstraps the first admin and is a PERMANENT override — an env-listed user is
+// always an admin and can't be demoted from the UI — so there's always a way
+// back in. Pure predicates only (no imports) to stay clear of the
+// users ↔ getCurrentUser import cycle; routes gate on the `isAdmin` flag that
+// toPublicUser stamps onto every PublicUser.
 
-export const adminUsernames = (): string[] =>
-  (process.env.THINGTIME_PRIVATE_ADMIN_USERNAMES || '')
+const envAdminUsernames = (): string[] =>
+  (process.env.ADMIN_USERNAMES || '')
     .split(',')
-    .map((entry) => entry.trim().toLowerCase())
+    .map((name) => name.trim().toLowerCase())
     .filter(Boolean);
 
-export const isAdminUsername = (username: unknown): boolean =>
-  typeof username === 'string' && adminUsernames().includes(username.trim().toLowerCase());
+export const isEnvAdmin = (username: string | null | undefined): boolean =>
+  !!username && envAdminUsernames().includes(username.trim().toLowerCase());
+
+// Works on a raw user doc (has `meta` + `username`).
+export const isAdminDoc = (user: { username?: string; meta?: Record<string, any> } | null | undefined): boolean =>
+  !!user && (user.meta?.admin === true || isEnvAdmin(user.username));

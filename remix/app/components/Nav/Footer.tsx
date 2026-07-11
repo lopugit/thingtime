@@ -42,10 +42,16 @@ export const Footer = (props) => {
   );
 
   const handleLogout = React.useCallback(async () => {
-    await api.v1.auth.logout();
+    const resp = await api.v1.auth.logout();
+    // Switcher semantics: with other accounts signed in the next one takes
+    // over — stay put and let the root revalidation swap the user.
+    if (resp?.user) {
+      lopu({ title: `Logged out — switched to @${resp.user.username} ✨`, status: 'success', duration: 6000 });
+      return;
+    }
     // the fetcher submit revalidates the root loader → user clears
     navigate('/login');
-  }, [api, navigate]);
+  }, [api, navigate, lopu]);
 
   return (
     <Center
