@@ -208,6 +208,52 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- Fixed Editor.js autosave echoes remounting the active editor and stealing
+  focus after the asynchronous save/parent echo. Changed parent values now
+  reach the pending-echo reconciliation path before skipped intermediate
+  signatures are retired, so ordinary local echoes preserve the Editor.js
+  instance while genuine external replacements still refresh it. Added focused
+  coverage for the changed-signature echo case. Details in
+  [`PRs/53-claude-nested-data-viewer-concepts-1ebbbe--nested-data-viewer-concepts-kind-renderers.md`](../PRs/53-claude-nested-data-viewer-concepts-1ebbbe--nested-data-viewer-concepts-kind-renderers.md).
+  — _Codex (AI), 2026-07-11_
+- Fixed Editor.js persistence and duplicate toolbox entries. The List-v2
+  Checklist alias is hidden while the compatible legacy Checklist tool remains,
+  Editor.js snapshots are emitted in change order, and Thingtime now serializes
+  only the latest revision after a 350ms idle window (with a 2s maximum wait)
+  instead of serializing the whole object during every keystroke. Edit/history
+  events remain immediate, LocalForage writes cannot overlap, lifecycle flushes
+  cover background/navigation, and pre-hydration placeholder state is never
+  persisted. Removed per-keystroke full-object logging, React-state queue churn,
+  and unbounded debug snapshots from the same hot path. Details in
+  [`PRs/53-claude-nested-data-viewer-concepts-1ebbbe--nested-data-viewer-concepts-kind-renderers.md`](../PRs/53-claude-nested-data-viewer-concepts-1ebbbe--nested-data-viewer-concepts-kind-renderers.md).
+  — _Codex (AI), 2026-07-11_
+- Fixed Editor.js multiline tool textboxes treating empty internal lines as
+  block boundaries. Quote, warning, image-caption, and embed-caption fields now
+  keep Backspace/Delete and arrow-key editing inside the active textbox at
+  internal line boundaries, while genuine field boundaries, native inputs, and
+  ordinary paragraph, heading, list, and checklist block navigation remain
+  unchanged. Dynamically added Editor.js fields receive the same guard. Details
+  in [`PRs/53-claude-nested-data-viewer-concepts-1ebbbe--nested-data-viewer-concepts-kind-renderers.md`](../PRs/53-claude-nested-data-viewer-concepts-1ebbbe--nested-data-viewer-concepts-kind-renderers.md).
+  — _Codex (AI), 2026-07-11_
+- Fixed Editor.js chrome being clipped by the Thingtime atomic-value scroll
+  wrapper. Rich-text values now keep floating toolboxes visible, wide editors
+  reserve an in-card gutter for both the `+` and six-dot controls, and narrow
+  editors retain Editor.js's mobile bottom-sheet layout. Header blocks now use
+  an explicit H1-H6 scale in edit mode and semantic heading elements with the
+  same scale in view mode, while validated Style Tune sizes still override the
+  defaults. Details in
+  [`PRs/53-claude-nested-data-viewer-concepts-1ebbbe--nested-data-viewer-concepts-kind-renderers.md`](../PRs/53-claude-nested-data-viewer-concepts-1ebbbe--nested-data-viewer-concepts-kind-renderers.md).
+  — _Codex (AI), 2026-07-11_
+- Fixed the Thingtime value editor jumping between its inline string control
+  and Editor.js after Enter/focus/save. Primitive strings now stay plain;
+  Editor.js is a persistent `rich-text` block datatype with content-preserving
+  String ↔ Editor.js context-menu conversions and native-payload detection.
+  Rich-text view rendering now uses the same allowlist sanitizer during SSR
+  and hydration, with bounded detection/rendering and safe URL protocols for
+  hostile or oversized stored documents.
+  Details in
+  [`PRs/53-claude-nested-data-viewer-concepts-1ebbbe--nested-data-viewer-concepts-kind-renderers.md`](../PRs/53-claude-nested-data-viewer-concepts-1ebbbe--nested-data-viewer-concepts-kind-renderers.md).
+  — _Codex (AI), 2026-07-10_
 - Fixed Electron release packaging on GitHub Actions by giving the Electron
   package explicit repository metadata, preventing electron-builder from
   crashing after producing macOS assets when it cannot infer the GitHub repo

@@ -2,6 +2,7 @@ import React from 'react';
 import ClickAwayListener from 'react-click-away-listener';
 import { Center, Flex } from '@chakra-ui/react';
 
+import { getEditorJsDoc } from '../../Editor/editorJsValue';
 import { Icon } from '../../Icon/Icon';
 import { useLopu } from '../../Lopu/useLopu';
 import { useThingtime } from '../useThingtime';
@@ -215,6 +216,7 @@ export const ThingContextMenuTrigger = (props: ThingContextMenuTriggerProps) => 
 			key: type.key,
 			label: type.label || type.key,
 			icon: type.icon || type.key,
+			lucide: type.lucide,
 			wrap: type.wrap,
 			value: type.value,
 			group: type.group
@@ -222,6 +224,13 @@ export const ThingContextMenuTrigger = (props: ThingContextMenuTriggerProps) => 
 
 		return mapped.length ? mapped : DEFAULT_THING_TYPES;
 	}, [thingtime?.settings?.types?.javascript, thingtime?.settings?.types?.custom]);
+
+	const selectedTypeKey = React.useMemo(() => {
+		if (getEditorJsDoc(thing)) return 'editorjs';
+		if (thing instanceof Array) return 'array';
+		if (thing === null || thing === undefined) return 'any';
+		return typeof thing;
+	}, [thing]);
 
 	const model = React.useMemo<ThingContextMenuModel>(() => {
 		if (variant === 'new-child') {
@@ -250,7 +259,8 @@ export const ThingContextMenuTrigger = (props: ThingContextMenuTriggerProps) => 
 			collapsible,
 			collapsibleChildren,
 			collapsed,
-			types
+			types,
+			selectedTypeKey
 		});
 
 		// right-clicking the key zone leads with key-specific verbs
@@ -273,7 +283,7 @@ export const ThingContextMenuTrigger = (props: ThingContextMenuTriggerProps) => 
 		}
 
 		return base;
-	}, [variant, editMode, readonly, onDelete, collapsible, collapsibleChildren, collapsed, types, targetZone, path]);
+	}, [variant, editMode, readonly, onDelete, collapsible, collapsibleChildren, collapsed, types, selectedTypeKey, targetZone, path]);
 
 	// ------------------------------------------------------------------
 	// live command implementations

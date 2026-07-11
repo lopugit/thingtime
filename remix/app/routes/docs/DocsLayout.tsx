@@ -13,13 +13,14 @@ import {
   Stack,
   Text
 } from '@chakra-ui/react';
-import { BookOpen, Boxes, ChevronDown, ChevronRight, Component, Gem, GripVertical, Menu, PanelLeftClose, PanelLeftOpen, Search, ServerCog, X } from 'lucide-react';
+import { BookOpen, Boxes, ChevronDown, ChevronRight, Component, Gem, GripVertical, Menu, PanelLeftClose, PanelLeftOpen, Search, ServerCog, Shapes, X } from 'lucide-react';
 import { Link as RouterLink, Outlet, useLocation, useSearchParams } from 'react-router';
 
 import { apiEndpointDocs, type ApiEndpointDoc } from '~/docs/apiDocs';
 
 import { designEntries, designKindColors, getDesignEntryBySlug } from './designEntries';
 import { designSystemEntries, designSystemStatusColors, getDesignSystemEntryBySlug } from './design-system/entries';
+import { conceptEntries, conceptStatusColors, getConceptEntryBySlug } from './concepts/entries';
 
 const docsNav = [
   {
@@ -51,6 +52,12 @@ const docsNav = [
     to: '/docs/design-system',
     icon: Component,
     description: 'Component library'
+  },
+  {
+    label: 'Data viewer concepts',
+    to: '/docs/concepts',
+    icon: Shapes,
+    description: 'Nested viewers + kind renderers'
   }
 ];
 
@@ -79,6 +86,9 @@ const isDesignSystemPath = (pathname: string) =>
 
 const isApiPath = (pathname: string) =>
   pathname === '/docs/api' || pathname.startsWith('/docs/api/');
+
+const isConceptsPath = (pathname: string) =>
+  pathname === '/docs/concepts' || pathname.startsWith('/docs/concepts/');
 
 const clampDrawerWidth = (width: number) =>
   Math.min(MAX_DRAWER_WIDTH, Math.max(MIN_DRAWER_WIDTH, width));
@@ -382,6 +392,88 @@ function DrawerDesignSystemList({ onNavigate }: DrawerDesignSystemListProps) {
   );
 }
 
+type DrawerConceptListProps = {
+  onNavigate?: () => void;
+};
+
+function DrawerConceptList({ onNavigate }: DrawerConceptListProps) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedEntry =
+    getConceptEntryBySlug(searchParams.get('concept')) || conceptEntries[0];
+
+  const selectEntry = (slug: string) => {
+    const next = new URLSearchParams(searchParams);
+    next.set('concept', slug);
+    setSearchParams(next);
+    onNavigate?.();
+  };
+
+  return (
+    <Stack minH={0} spacing={3}>
+      <Flex align="center" gap={2}>
+        <Text
+          color="var(--tt-muted, #9a9aa6)"
+          fontFamily="mono"
+          fontSize="11px"
+          fontWeight="600"
+          letterSpacing="0.14em"
+          textTransform="uppercase"
+        >
+          Concepts
+        </Text>
+        <Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="xs">
+          {conceptEntries.length}
+        </Text>
+      </Flex>
+
+      <Stack spacing={0.5}>
+        {conceptEntries.map((entry) => {
+          const active = entry.slug === selectedEntry.slug;
+          const statusColor = conceptStatusColors[entry.status];
+
+          return (
+            <Box
+              key={entry.slug}
+              _hover={{ bg: active ? 'var(--tt-card, #ffffff)' : 'var(--tt-surface-hover, #ececee)' }}
+              as="button"
+              bg={active ? 'var(--tt-card, #ffffff)' : 'transparent'}
+              borderLeft="3px solid"
+              borderLeftColor={active ? 'var(--tt-docs-accent, #008060)' : 'transparent'}
+              cursor="pointer"
+              data-testid={`concept-entry-${entry.slug}`}
+              onClick={() => selectEntry(entry.slug)}
+              px={3}
+              py={2}
+              textAlign="left"
+              transition="background 140ms ease, border-color 140ms ease"
+              type="button"
+              w="100%"
+            >
+              <Flex align="center" gap={2} minW={0}>
+                <Badge
+                  bg={statusColor.bg}
+                  borderRadius="sm"
+                  color={statusColor.color}
+                  flexShrink={0}
+                  px={1.5}
+                >
+                  {entry.status}
+                </Badge>
+                <Text fontSize="sm" fontWeight={active ? '700' : '600'} isTruncated minW={0}>
+                  {entry.emoji} {entry.title}
+                </Text>
+              </Flex>
+              <Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="xs" isTruncated mt={0.5}>
+                {entry.slug}
+              </Text>
+            </Box>
+          );
+        })}
+      </Stack>
+    </Stack>
+  );
+}
+
 type DocsDrawerContentProps = {
   closeTestId?: string;
   onClose?: () => void;
@@ -504,6 +596,7 @@ function DocsDrawerContent({ closeTestId, onClose, pathname, showClose = false }
 
       {isDesignPath(pathname) ? <DrawerDesignEntryList onNavigate={onClose} /> : null}
       {isDesignSystemPath(pathname) ? <DrawerDesignSystemList onNavigate={onClose} /> : null}
+      {isConceptsPath(pathname) ? <DrawerConceptList onNavigate={onClose} /> : null}
     </Stack>
   );
 }

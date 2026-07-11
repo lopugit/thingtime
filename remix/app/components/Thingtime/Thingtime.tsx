@@ -6,7 +6,11 @@ import { Box, Center, Flex, Input, Select, Spinner, Switch, Textarea } from '@ch
 import { CommanderV1 } from '../Commander/CommanderV1Deprecated';
 import { CommanderV2 } from '../Commander/CommanderV2';
 // import { Magic } from "../Commander/Magic"
+import { blocksToText, getEditorJsDoc, LongTextEditor, textToBlocks } from '../Editor/LongTextEditor';
+import { EDITOR_JS_AUTO_DETECT_LIMITS, isEditorJsDocSafeToEdit } from '../Editor/editorJsValue';
 import { Icon } from '../Icon/Icon';
+import { RichTextBlocks } from '../Kinds/kindRenderersMedia';
+import { useLopu } from '../Lopu/useLopu';
 import { MagicInput } from '../MagicInput/MagicInput';
 import { Safe } from '../Safety/Safe';
 import { ThingContextMenuTrigger } from './ContextMenu/ThingContextMenuTrigger';
@@ -48,7 +52,9 @@ const numberStepButtonStyles = {
 // Number editor: light rounded input with − / + steppers (the design-mockup
 // pattern), replacing the heavy bordered Chakra NumberInput. Keeps a local
 // draft so partial input ('-', '1.', '') doesn't fight the committed value.
-const NumberValueInput = (props: { value: number; onValueChange: (value: number) => void }) => {
+// Exported so the concept viewers (components/Thingtime/concepts) reuse the
+// exact same number editor as the live tree.
+export const NumberValueInput = (props: { value: number; onValueChange: (value: number) => void }) => {
 	const { value, onValueChange } = props;
 
 	const [draft, setDraft] = React.useState(String(value ?? 0));
@@ -162,6 +168,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	// up to 1 level deep
 
 	const { append } = useThings();
+	const lopu = useLopu();
 
 	const { thingtime, setThingtime, getThingtime, loading, events } = useThingtime();
 
@@ -354,6 +361,11 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		// }
 	}, [getThingtime, props?.thing, safeJoin(props?.path), uuid, childrenRef.current]);
 
+	// Editor.js is a persisted datatype, not a transient decision based on
+	// string length/focus. JSON-stringified Editor.js output is recognised for
+	// clipboard/API compatibility and promoted to the native shape on edit.
+	const editorJsDoc = React.useMemo(() => getEditorJsDoc(thing), [thing]);
+
 	const chakra = React.useMemo(() => {
 		return !editMode && typeof thing?.chakra === 'string' && thing?.chakra;
 	}, [thing?.chakra, editMode]);
@@ -406,6 +418,10 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	}, []);
 
 	const keys = React.useMemo(() => {
+		if (editorJsDoc) {
+			return [];
+		}
+
 		if (validKeyTypes?.includes(typeof thing)) {
 			try {
 				const keysRet = Object.keys(thing);
@@ -416,7 +432,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		} else {
 			return [];
 		}
-	}, [thing, thingDep, validKeyTypes]);
+	}, [thing, thingDep, validKeyTypes, editorJsDoc]);
 
 	const type = React.useMemo(() => {
 		if (thing === null) {
@@ -428,7 +444,13 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 
 	const typeIcon = React.useMemo(() => {
 		const size = 7;
-		if (thing instanceof Array) {
+		if (editorJsDoc) {
+			return (
+				<Box as="span" aria-label="Editor.js" fontSize="18px" lineHeight="1">
+					📝
+				</Box>
+			);
+		} else if (thing instanceof Array) {
 			return <Icon name="array" size={size}></Icon>;
 		} else if (type === 'object') {
 			return <Icon name="object" size={size}></Icon>;
@@ -443,7 +465,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		} else {
 			return <Icon name="box" size={size}></Icon>;
 		}
-	}, [type, thing]);
+	}, [type, thing, editorJsDoc]);
 
 	const valuePl = React.useMemo(() => {
 		if (typeof props?.valuePl === 'number') {
@@ -569,7 +591,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	const AtomicWrapper = React.useCallback((args) => {
 		return (
 			<Flex
-				className="atomic-wrapper"
+				className={['atomic-wrapper', args?.className].filter(Boolean).join(' ')}
 				position="relative"
 				flexDirection="row"
 				flexShrink={1}
@@ -741,6 +763,11 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	]);
 
 	React.useEffect(() => {
+		if (editorJsDoc) {
+			setThingtimeChildren(null);
+			return;
+		}
+
 		if (type === 'object' && !circular) {
 			if (chakra) {
 				const ChakraComponent = Chakras[chakra];
@@ -850,6 +877,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		depth,
 		thing,
 		thingDep,
+		editorJsDoc,
 		valuePl,
 		pl
 	]);
@@ -872,6 +900,65 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	const onChangeType = React.useCallback(
 		(args) => {
 			const { type, wrap } = args;
+			const typeKey = String(type?.key || '').toLowerCase();
+			const currentTypeKey = editorJsDoc
+				? 'editorjs'
+				: thing instanceof Array
+					? 'array'
+					: thing === null || thing === undefined
+						? 'any'
+						: typeof thing;
+
+			if (typeKey === currentTypeKey) return;
+
+			if (typeKey === 'editorjs') {
+				let source = '';
+				if (typeof thing === 'string') {
+					source = thing;
+				} else if (thing !== null && thing !== undefined) {
+					try {
+						source = JSON.stringify(thing, null, 2) ?? String(thing);
+					} catch {
+						source = String(thing);
+					}
+				}
+				if (source.length > EDITOR_JS_AUTO_DETECT_LIMITS.sourceLength) {
+					lopu({
+						title: 'Kept the value as-is',
+						description: 'This value is too large to convert into an Editor.js document safely.',
+						status: 'error'
+					});
+					return;
+				}
+
+				const next = editorJsDoc
+					? { ...editorJsDoc, kind: 'rich-text' }
+					: { kind: 'rich-text', blocks: textToBlocks(source) };
+				if (!isEditorJsDocSafeToEdit(next)) {
+					lopu({
+						title: 'Kept the value as-is',
+						description: 'This value would create an Editor.js document that is too large or deeply nested to edit safely.',
+						status: 'error'
+					});
+					return;
+				}
+				updateValue({ value: next });
+				return;
+			}
+
+			if (typeKey === 'string' && editorJsDoc) {
+				if (!isEditorJsDocSafeToEdit(editorJsDoc)) {
+					lopu({
+						title: 'Kept the Editor.js document intact',
+						description: 'This document is too large or deeply nested to flatten safely. Nothing was changed.',
+						status: 'error'
+					});
+					return;
+				}
+				updateValue({ value: blocksToText(editorJsDoc.blocks) });
+				return;
+			}
+
 			const typeValue = typeof type?.value === 'function' ? type?.value() : type?.value;
 
 			if (type) {
@@ -890,7 +977,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 				}
 			}
 		},
-		[updateValue, thing, append, safeJoin(fullPath)]
+		[updateValue, thing, editorJsDoc, append, safeJoin(fullPath), lopu]
 	);
 
 	const onWrapType = React.useCallback(
@@ -928,6 +1015,21 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		console.log('[tt][Thingtime.tsx][atomicValue][debug]', debug);
 		// log renderableValue
 		console.log('renderableValue', props?.debugId, renderableValue);
+		if (editorJsDoc) {
+			debug.editorJs = true;
+			return (
+				<AtomicWrapper paddingLeft={pl} className="editorjs-atomic-wrapper">
+					{editMode ? (
+						<LongTextEditor value={editorJsDoc} onValueChange={(next) => updateValue({ value: next })} />
+					) : (
+						<Box width="100%" minWidth={0} paddingY={2}>
+							<RichTextBlocks blocks={editorJsDoc.blocks} />
+						</Box>
+					)}
+				</AtomicWrapper>
+			);
+		}
+
 		if (renderableValue === null) {
 			debug.noRenderableValue = true;
 			return null;
@@ -967,6 +1069,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 
 			if (type === 'string') {
 				debug.string = true;
+
 				return (
 					<AtomicWrapper paddingLeft={pl} className="string-atomic-wrapper">
 						<MagicInput value={thing} placeholder="Imagine.." onValueChange={updateValue}></MagicInput>
@@ -1013,7 +1116,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 				{renderableValue}
 			</AtomicWrapper>
 		);
-	}, [renderableValue, pl, type, safeJoin(fullPath), uuid, AtomicWrapper, editMode, thing, thingDep, updateValue]);
+	}, [renderableValue, editorJsDoc, pl, type, safeJoin(fullPath), uuid, AtomicWrapper, editMode, thing, thingDep, updateValue]);
 
 	const contextMenu = (
 		<Flex position="absolute" top={0} right={0} paddingRight={4} userSelect="none">
@@ -1455,10 +1558,17 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 				{/* this value will show in a few cases */}
 				{/* Basic types like String, Number, etc.. non-object values */}
 				{/* it will also show if the Thing has standard React children */}
-				{/* overflowX auto (not scroll): scroll reserves a permanent
-				scrollbar track that renders as a stray line under every value */}
+				{/* Editor.js owns floating toolbar/popover UI, so its datatype must
+				remain overflow-visible. Other atomic values keep horizontal auto
+				overflow (not scroll) to avoid a permanent stray scrollbar track. */}
 				{!loading && !isContentCollapsed && !thingtimeChildren && atomicValue && (
-					<Box className="atomicValue" data-tt-zone="value" width={'100%'} overflowX={'auto'}>
+					<Box
+						className="atomicValue"
+						data-tt-zone="value"
+						width="100%"
+						overflowX={editorJsDoc ? 'visible' : 'auto'}
+						overflowY={editorJsDoc ? 'visible' : undefined}
+					>
 						{atomicValue}
 					</Box>
 				)}

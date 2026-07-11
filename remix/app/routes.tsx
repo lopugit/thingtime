@@ -11,6 +11,7 @@ import BrandingOld from './routes/branding_old';
 import CryptoPage from './routes/crypto';
 import DocsLayout from './routes/docs/DocsLayout';
 import DocsApi from './routes/docs/api';
+import DocsConcepts from './routes/docs/concepts/index';
 import DocsDesign from './routes/docs/design';
 import DocsDesignSystem from './routes/docs/design-system/index';
 import DocsIndex from './routes/docs/index';
@@ -101,7 +102,8 @@ export const router = createBrowserRouter([
           { path: 'api/:group', element: <DocsApi /> },
           { path: 'api/:group/:docId', element: <DocsApi /> },
           { path: 'design', element: <DocsDesign /> },
-          { path: 'design-system', element: <DocsDesignSystem /> }
+          { path: 'design-system', element: <DocsDesignSystem /> },
+          { path: 'concepts', element: <DocsConcepts /> }
         ]
       },
       { path: 'edge', element: <Edge /> },

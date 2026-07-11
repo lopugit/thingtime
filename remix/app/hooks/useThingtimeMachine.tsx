@@ -37,9 +37,6 @@ export const useThingtimeLine = (Everything) => {
 	// Use Everything.thingtime
 	// const { thingtime } = Everything;
 
-	console.info('[tt][useThingtimeLine.tsx/useThingtimeLine()] NEW 🔥 CYCLE Everything:', Everything);
-	console.info('[tt][useThingtimeLine.tsx/useThingtimeLine()] NEW 🔥 CYCLE Everything.thingtime:', Everything.thingtime);
-
 	const shortcuts = React.useState({
 		undo: {
 			key: 'z',
@@ -55,23 +52,11 @@ export const useThingtimeLine = (Everything) => {
 
 	const addTimelineEvent = React.useCallback(async (thingtimeWeAreAddingTimelineEventToo, event: TimelineEvent) => {
 		try {
-			// what caused addTimelineEvent to be called?
-			console.info('[tt][useThingtimeLine.tsx/addTimelineEvent] called');
-
-			console.info('[tt][useThingtimeLine.tsx/addTimelineEvent] event', event);
-			console.info('[tt][useThingtimeLine.tsx/addTimelineEvent] PRE-wrap thingtime.timemachine', thingtimeWeAreAddingTimelineEventToo.timemachine);
 			const timemachine = ThingtimeLine(thingtimeWeAreAddingTimelineEventToo.timemachine);
-
-			console.info('[tt][useThingtimeLine.tsx/addTimelineEvent] POST-wrap timemachine', timemachine);
-			console.info('[tt][useThingtimeLine.tsx/addTimelineEvent] event.namespace', event?.namespace);
 			const timeline = timemachine.getTimeline(event?.namespace || 'default');
-
-			console.info('[tt][useThingtimeLine.tsx/addTimelineEvent] timeline', timeline);
-			// return;
 
 			// don't add the event if value and fromValue are equal
 			if (event.value === event.fromValue) {
-				console.info('[tt][useThingtimeLine.tsx/addTimelineEvent] value and fromValue are equal, not adding event to timeline', event);
 				return;
 			}
 
@@ -340,10 +325,6 @@ export const newTimeline = (key: string = 'default', scaffold?: TimelineScaffold
 				event.timestamp = Date.now();
 			}
 
-			// don't log if namespace is default
-			if (event.namespace !== 'default') {
-				console.log('[tt][useThingtimeLine.tsx/ThingtimeLine.timeline.addEvent] 🕰️ Adding event:', event, 'to timeline', timeline);
-			}
 			// add current present to past
 			if (timeline.present) {
 				timeline.past.push(timeline.present);
@@ -406,9 +387,6 @@ export const ThingtimeLine = (scaffold?: TimemachineScaffold) => {
 				timemachine.addTimeline(key, newTimeline(key));
 			}
 			const timeline = timemachine.timelines[key];
-			if (event?.namespace !== 'default') {
-				console.log('[tt][useThingtimeLine.tsx/ThingtimeLine.addEvent] 🕰️ Adding event to timeline', timeline, 'event:', event);
-			}
 			timeline.addEvent(event);
 		},
 		addTimeline: (key: string = 'default', timeline: any) => {
