@@ -1,6 +1,7 @@
 import { json } from '~/api/http';
 
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
+import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import {
   createPost,
   createThing,
@@ -13,6 +14,16 @@ import {
   upsertThing,
   type Viewer
 } from '~/api/utils/things/things';
+
+// Route a unified mutation to the rate-limit key its dedicated sub-route would
+// use, so the generic endpoint can't be used to bypass the per-op limits.
+const rateLimitKeyFor = (method: string, body: any): string => {
+  if (method === 'POST' && Array.isArray(body?.thingtime)) {
+    if (body.thingtime.includes('reaction')) return 'things.react';
+    if (body.thingtime.includes('comment')) return 'things.comment';
+  }
+  return 'things.write';
+};
 
 // Things are small JSON payloads (crystal fields: text + image URLs + listing).
 const MAX_BODY_BYTES = 256 * 1024;
@@ -80,6 +91,20 @@ export const action = async ({ request }: { request: Request }) => {
 
   const method = request.method.toUpperCase();
   const body = await request.json().catch(() => ({}));
+
+  // Every mutating verb is throttled — the generic endpoint must not be a way
+  // around the per-op limits main added to the react/comment sub-routes.
+  // Service accounts are deliberately-provisioned API clients (e.g. bulk
+  // snapshot sync) and are exempt from the general write throttle.
+  if (user.accountKind !== 'service') {
+    const limit = await enforceRateLimit(request, rateLimitKeyFor(method, body), `user:${user.id}`);
+    if (!limit.allowed) {
+      return json(
+        { ok: false, error: 'You’re doing that too fast — take a breather 🌸' },
+        rateLimitedResponseInit(limit)
+      );
+    }
+  }
 
   if (method === 'POST') {
     if (Array.isArray(body?.thingtime)) {

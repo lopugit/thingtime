@@ -157,12 +157,23 @@ const thingsMigration: Migration = {
       return { dryRun, matched: matched + relational, migrated: 0, created: 0, skipped: 0, notes };
     }
 
-    // batch through matching docs; re-runs only see still-unmigrated posts
+    // batch through matching docs; re-runs only see still-unmigrated posts.
+    // Collided posts are left at v1 and would re-match forever, so exclude the
+    // ones we've already skipped this run from later batches.
+    const skippedPostIds: any[] = [];
     for (;;) {
-      const batch = (await things.find(legacyPostFilter).limit(THINGS_BATCH).toArray()) as any[];
+      const batchFilter = skippedPostIds.length
+        ? { $and: [legacyPostFilter, { _id: { $nin: skippedPostIds } }] }
+        : legacyPostFilter;
+      const batch = (await things.find(batchFilter as any).limit(THINGS_BATCH).toArray()) as any[];
       if (!batch.length) break;
 
       for (const doc of batch) {
+        // Each embedded comment/reaction becomes a standalone thing at a
+        // deterministic id, along with the genuine (ownerId, targetId) it must
+        // carry. A foreign doc squatting one of these ids would let an attacker
+        // hijack migrated content, so verify every destination id is either
+        // free or already a genuine counterpart before touching the post.
         const inserts: any[] = [];
         for (const comment of doc.comments || []) {
           inserts.push({
@@ -195,6 +206,35 @@ const thingsMigration: Migration = {
               updatedAt: new Date(doc.updatedAt)
             });
           }
+        }
+
+        // Skip a post whose interaction migration would collide with a foreign
+        // doc: convert its body but KEEP the embedded copies (reads fold them),
+        // so nothing is lost or double-counted and a re-run finishes it once
+        // the collision is resolved.
+        let collision = false;
+        if (inserts.length) {
+          const ids = inserts.map((entry) => entry.shareId);
+          const existing = (await things.find({ shareId: { $in: ids } } as any).toArray()) as any[];
+          const byId = new Map(existing.map((row) => [row.shareId, row]));
+          collision = inserts.some((entry) => {
+            const twin = byId.get(entry.shareId);
+            // free id, or a genuine prior-run counterpart (same owner + target)
+            return (
+              twin &&
+              (String(twin.ownerId) !== String(entry.ownerId) || String(twin.targetId) !== String(entry.targetId))
+            );
+          });
+        }
+
+        if (collision) {
+          // Leave the whole post at v1 (reads fold its embedded data) so a
+          // re-run retries it once the squatting doc is removed. Never $unset
+          // embedded data we couldn't safely relocate.
+          notes.push(`post ${doc.shareId}: interaction id collision — left at v1 for a later re-run`);
+          skipped += 1;
+          skippedPostIds.push(doc._id);
+          continue;
         }
 
         if (inserts.length) {
@@ -250,15 +290,19 @@ const thingsMigration: Migration = {
     // pre-unification relational model) into v2 things, then remove them —
     // deterministic/stable ids make re-runs and races idempotent
     let converted = 0;
+    const skippedRelationalIds: any[] = [];
     for (;;) {
-      const batch = (await things.find(legacyRelationalFilter).limit(THINGS_BATCH).toArray()) as any[];
+      const relFilter = skippedRelationalIds.length
+        ? { $and: [legacyRelationalFilter, { _id: { $nin: skippedRelationalIds } }] }
+        : legacyRelationalFilter;
+      const batch = (await things.find(relFilter as any).limit(THINGS_BATCH).toArray()) as any[];
       if (!batch.length) break;
       for (const doc of batch) {
         const shareId =
           doc.kind === 'reaction'
             ? reactionShareId(String(doc.parentId), String(doc.ownerId), String(doc.token))
             : String(doc.commentId || doc._id);
-        await things.updateOne(
+        const res = await things.updateOne(
           { shareId },
           {
             $setOnInsert: {
@@ -276,8 +320,24 @@ const thingsMigration: Migration = {
           },
           { upsert: true }
         );
-        await things.deleteOne({ _id: doc._id });
-        converted += 1;
+        // Only delete the source once its converted counterpart is safely in
+        // place — either we just inserted it, or the existing doc at that id is
+        // a genuine twin (same owner + target). A foreign doc squatting the id
+        // ($setOnInsert no-ops) must NOT cause the source to be deleted.
+        let genuine = !!res.upsertedCount;
+        if (!genuine) {
+          const twin = (await things.findOne({ shareId } as any)) as any;
+          genuine =
+            !!twin && String(twin.ownerId) === String(doc.ownerId) && String(twin.targetId) === String(doc.parentId);
+        }
+        if (genuine) {
+          await things.deleteOne({ _id: doc._id });
+          converted += 1;
+        } else {
+          notes.push(`relational ${doc.kind} ${shareId}: id collision — source kept for a later re-run`);
+          skipped += 1;
+          skippedRelationalIds.push(doc._id);
+        }
       }
     }
     if (converted) notes.push(`${converted} interim relational kind doc(s) converted to things`);

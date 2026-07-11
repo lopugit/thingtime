@@ -237,9 +237,15 @@ const sanitizeTags = (value: unknown): string[] | Fail => {
   return tags;
 };
 
+// The things v1→v2 migration mints deterministic reaction thing ids under this
+// prefix (reactionShareId). Reserving it means a client can never pre-create a
+// thing at a migration destination id to hijack or delete migrated data.
+export const MIGRATION_RESERVED_ID_PREFIX = 'react-';
+
 // Seeding passes fixed shareIds for idempotency (and Magic relies on ids
 // round-tripping), so client-supplied ids are allowed — but they must be sane
-// strings, not arbitrary JSON values (the v1 route stored anything truthy).
+// strings, not arbitrary JSON values (the v1 route stored anything truthy),
+// and must not squat the migration's reserved id namespace.
 const sanitizeShareId = (value: unknown): string | null | Fail => {
   if (value === undefined || value === null) return null;
   if (typeof value !== 'string') return fail(400, 'shareId must be a string');
@@ -247,6 +253,9 @@ const sanitizeShareId = (value: unknown): string | null | Fail => {
   if (!trimmed) return null;
   if (trimmed.length > MAX_SHARE_ID_CHARS || /[$.\s]/.test(trimmed)) {
     return fail(400, 'shareId must be a short id without spaces, dots, or $');
+  }
+  if (trimmed.startsWith(MIGRATION_RESERVED_ID_PREFIX)) {
+    return fail(400, 'shareId uses a reserved prefix');
   }
   return trimmed;
 };
@@ -342,6 +351,15 @@ export const createThing = async (
   if (validated.thingtime.includes('comment') && target) {
     const commentCount = await countCommentsOf(target);
     if (commentCount >= MAX_COMMENTS_PER_POST) return fail(400, 'This post has reached its comment limit');
+  }
+
+  // Reaction caps apply to EVERY creation path (dedicated toggle + generic
+  // POST /api/v1/things), so an attacker can't mint unbounded reaction things
+  // by skipping the toggle route. The unique (targetId, ownerId, crystal.emoji)
+  // index dedupes the same (user, token) pair; this bounds distinct tokens.
+  if (validated.thingtime.includes('reaction') && target) {
+    const capped = await enforceReactionCaps(target.shareId, ownerId, String(validated.crystal.emoji || ''));
+    if (capped) return capped;
   }
 
   await ensureIndexes();
@@ -738,6 +756,36 @@ const countCommentsOf = async (target: ThingDoc): Promise<number> => {
   return standalone + legacyRelational + (target.comments || []).length;
 };
 
+// Reaction caps, enforced BEFORE a new reaction thing is created so every
+// creation path is bounded (the dedicated toggle route AND the generic
+// POST /api/v1/things path both funnel through createThing). Counts across
+// both eras: v2 crystal.emoji reaction things and interim kind:'reaction' docs.
+const enforceReactionCaps = async (targetShareId: string, ownerId: string, token: string): Promise<Fail | null> => {
+  const things = await getThingsCollection();
+  const [ownV2, ownKind] = await Promise.all([
+    things.countDocuments({ targetId: targetShareId, thingtime: 'reaction', ownerId } as any),
+    things.countDocuments({ kind: 'reaction', parentId: targetShareId, ownerId } as any)
+  ]);
+  if (ownV2 + ownKind >= MAX_REACTIONS_PER_USER_PER_POST) {
+    return fail(400, `You can add at most ${MAX_REACTIONS_PER_USER_PER_POST} reactions to a post`);
+  }
+  const tokenAlreadyOnPost =
+    (await things.countDocuments(
+      { targetId: targetShareId, thingtime: 'reaction', 'crystal.emoji': token } as any,
+      { limit: 1 }
+    )) || (await things.countDocuments({ kind: 'reaction', parentId: targetShareId, token } as any, { limit: 1 }));
+  if (!tokenAlreadyOnPost) {
+    const [v2Tokens, kindTokens] = await Promise.all([
+      things.distinct('crystal.emoji', { targetId: targetShareId, thingtime: 'reaction' } as any),
+      things.distinct('token', { kind: 'reaction', parentId: targetShareId } as any)
+    ]);
+    if (new Set([...v2Tokens, ...kindTokens]).size >= MAX_REACTION_KEYS_PER_POST) {
+      return fail(400, 'This post has reached its reaction limit');
+    }
+  }
+  return null;
+};
+
 // ---------------------------------------------------------------------------
 // Reads.
 
@@ -956,7 +1004,16 @@ export const listThings = async (
   const page = docs.slice(0, limit);
   const last = page[page.length - 1];
   const nextCursor = docs.length > limit && last ? `${new Date(last.createdAt).getTime()}_${last.shareId}` : null;
-  return { ok: true, things: await toPublicThings(page, viewer), nextCursor };
+  // Per-doc audience check before projecting. Comments/reactions carry
+  // ['tt:inherit'] and short-circuit to the already-viewable target, but a
+  // thing attached to a target can carry its OWN acl (e.g. a private share:
+  // thingtime ['post','share'], targetId=original) — those must be judged on
+  // their own acl, never disclosed just because their target is viewable.
+  const visible: ThingDoc[] = [];
+  for (const doc of page) {
+    if (await canViewInherited(doc, viewer)) visible.push(doc);
+  }
+  return { ok: true, things: await toPublicThings(visible, viewer), nextCursor };
 };
 
 // Copy a target's LEGACY embedded reactions/comments into standalone v2 things
@@ -1107,30 +1164,8 @@ export const toggleReaction = async (
       const ids = [existingV2?._id, existingKind?._id].filter(Boolean);
       await things.deleteMany({ _id: { $in: ids } } as any);
     } else {
-      // soft product caps — relational storage removed the doc-size risk, but
-      // open-vocabulary tokens still need bounding
-      const [ownV2, ownKind] = await Promise.all([
-        things.countDocuments({ targetId: target.shareId, thingtime: 'reaction', ownerId: viewerId } as any),
-        things.countDocuments({ kind: 'reaction', parentId: target.shareId, ownerId: viewerId } as any)
-      ]);
-      if (ownV2 + ownKind >= MAX_REACTIONS_PER_USER_PER_POST) {
-        return fail(400, `You can add at most ${MAX_REACTIONS_PER_USER_PER_POST} reactions to a post`);
-      }
-      const tokenAlreadyOnPost =
-        (await things.countDocuments(
-          { targetId: target.shareId, thingtime: 'reaction', 'crystal.emoji': token } as any,
-          { limit: 1 }
-        )) ||
-        (await things.countDocuments({ kind: 'reaction', parentId: target.shareId, token } as any, { limit: 1 }));
-      if (!tokenAlreadyOnPost) {
-        const [v2Tokens, kindTokens] = await Promise.all([
-          things.distinct('crystal.emoji', { targetId: target.shareId, thingtime: 'reaction' } as any),
-          things.distinct('token', { kind: 'reaction', parentId: target.shareId } as any)
-        ]);
-        if (new Set([...v2Tokens, ...kindTokens]).size >= MAX_REACTION_KEYS_PER_POST) {
-          return fail(400, 'This post has reached its reaction limit');
-        }
-      }
+      // createThing enforces the per-user + per-post reaction caps (single
+      // source of truth, so the generic POST path is bounded the same way)
       const created = await createThing(
         viewerId,
         { thingtime: ['reaction'], crystal: { emoji: token }, targetId: target.shareId },

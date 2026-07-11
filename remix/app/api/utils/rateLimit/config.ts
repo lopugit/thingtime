@@ -11,7 +11,10 @@ export type RateLimitConfig = Record<string, RateLimitRule>;
 
 export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   'things.react': { limit: 60, windowMs: 60_000, enabled: true },
-  'things.comment': { limit: 20, windowMs: 60_000, enabled: true }
+  'things.comment': { limit: 20, windowMs: 60_000, enabled: true },
+  // any other mutating write through /api/v1/things (create/upsert/patch/delete
+  // posts and other thing kinds) — reactions/comments route to their own keys
+  'things.write': { limit: 60, windowMs: 60_000, enabled: true }
 };
 
 export const RATE_LIMIT_ENDPOINTS = Object.keys(RATE_LIMIT_DEFAULTS);
