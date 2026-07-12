@@ -362,9 +362,9 @@ export const startPointerGesture = (e: React.PointerEvent, onMove: (move: Pointe
 	window.addEventListener('blur', teardown);
 };
 
-// the corner resize grip shared by floating frames, the composer's editor
-// popout, and the thing context menu — one affordance, one drawing
-export const ResizeGrip = (props: { onPointerDown: (e: React.PointerEvent) => void; title?: string }) => (
+// the corner resize grip on floating frames (the context menu keeps its own
+// copy — importing from here would cycle through Thingtime → the menu trigger)
+const ResizeGrip = (props: { onPointerDown: (e: React.PointerEvent) => void; title?: string }) => (
 	<Box
 		aria-hidden
 		position="absolute"
@@ -1032,8 +1032,9 @@ export type EditorSplitProps = {
 	// root height override (embedded containers own their sizing)
 	height?: string;
 	// imperative surface for hosts (the composer's pop-out button duplicates
-	// the current window into a floating frame — the docked editor stays)
-	onApi?: (api: { popOutDuplicate: () => void }) => void;
+	// the current window into a floating frame — the docked editor stays).
+	// Called with null on unmount so hosts never hold a stale api.
+	onApi?: (api: { popOutDuplicate: () => void } | null) => void;
 };
 
 export const EditorSplit = (props: EditorSplitProps) => {
@@ -1212,14 +1213,42 @@ export const EditorSplit = (props: EditorSplitProps) => {
 
 	// apply a tree transform to the main tree and every floating frame;
 	// frames whose tree empties out are removed
-	const mapAllTrees = React.useCallback((fn: (node: EditorNode | null) => EditorNode | null) => {
-		setTree((prev) => fn(prev));
-		setFloating((prev) =>
-			prev
-				.map((win) => ({ ...win, node: fn(win.node) }))
-				.filter((win): win is FloatingWindow => !!win.node)
-		);
-	}, []);
+	// every frame removal must tell the layer divider which band the frame
+	// left: dropping a below-drawer frame without decrementing the divider
+	// would mis-band the frames above it (they'd silently fall behind the
+	// drawer). Both removal paths (emptied frames here, dockInById) route
+	// through this accounting.
+	const setFloatingAccountingForDivider = React.useCallback(
+		(compute: (prev: FloatingWindow[]) => FloatingWindow[]) => {
+			// computed OUTSIDE the setState updater — the divider adjustment must
+			// run exactly once (updaters can be re-invoked under StrictMode), and
+			// every caller is one discrete user action, so layoutRef is fresh
+			const prev = layoutRef.current.floating;
+			const next = compute(prev);
+			const divider = drawerLayerIndexRef.current;
+			const removedBelow = prev.filter(
+				(win, index) => index < divider && !next.some((kept) => kept.id === win.id)
+			).length;
+
+			if (removedBelow) {
+				setDrawerLayerIndex(Math.max(0, divider - removedBelow));
+			}
+			setFloating(next);
+		},
+		[]
+	);
+
+	const mapAllTrees = React.useCallback(
+		(fn: (node: EditorNode | null) => EditorNode | null) => {
+			setTree((prev) => fn(prev));
+			setFloatingAccountingForDivider((prev) =>
+				prev
+					.map((win) => ({ ...win, node: fn(win.node) }))
+					.filter((win): win is FloatingWindow => !!win.node)
+			);
+		},
+		[setFloatingAccountingForDivider]
+	);
 
 	const findLeafEverywhere = React.useCallback((id: string): EditorLeaf | null => {
 		const { tree: currentTree, floating: currentFloating } = layoutRef.current;
@@ -1329,14 +1358,14 @@ export const EditorSplit = (props: EditorSplitProps) => {
 				return;
 			}
 
-			setFloating((prev) =>
+			setFloatingAccountingForDivider((prev) =>
 				prev
 					.map((win) => ({ ...win, node: removeLeaf(win.node, id) }))
 					.filter((win): win is FloatingWindow => !!win.node)
 			);
 			dockLeaf(leaf);
 		},
-		[dockLeaf]
+		[dockLeaf, setFloatingAccountingForDivider]
 	);
 
 	const toggleMaximise = React.useCallback((id: string) => {
@@ -1370,6 +1399,10 @@ export const EditorSplit = (props: EditorSplitProps) => {
 
 	React.useEffect(() => {
 		onApi?.({ popOutDuplicate });
+
+		return () => {
+			onApi?.(null);
+		};
 	}, [onApi, popOutDuplicate]);
 
 	// Move a frame through the layer stack. `floating` is the bottom → top
@@ -1495,14 +1528,14 @@ export const EditorSplit = (props: EditorSplitProps) => {
 
 				return target.kind === 'root' ? leaf : insertAtLeaf(removed, target.leafId, leaf, target.side);
 			});
-			setFloating((prev) =>
+			setFloatingAccountingForDivider((prev) =>
 				prev
 					.map((win) => ({ ...win, node: removeLeaf(win.node, leafId) }))
 					.filter((win): win is FloatingWindow => !!win.node)
 			);
 			setMaximisedId(null);
 		},
-		[findLeafEverywhere]
+		[findLeafEverywhere, setFloatingAccountingForDivider]
 	);
 
 	const moveFrameToTarget = React.useCallback((frameId: string, target: NonNullable<DropTarget>) => {
@@ -1512,10 +1545,10 @@ export const EditorSplit = (props: EditorSplitProps) => {
 			return;
 		}
 
-		setFloating((prev) => prev.filter((win) => win.id !== frameId));
+		setFloatingAccountingForDivider((prev) => prev.filter((win) => win.id !== frameId));
 		setMaximisedId(null);
 		setTree((prev) => (target.kind === 'root' ? frame.node : insertAtLeaf(prev, target.leafId, frame.node, target.side)));
-	}, []);
+	}, [setFloatingAccountingForDivider]);
 
 	const windowDragRef = React.useRef<WindowDragState | null>(null);
 

@@ -492,6 +492,10 @@ const LongTextEditorInner = (props: LongTextEditorInnerProps) => {
 			const restoreForeignSelection = () => {
 				if (!foreignSelection || !foreignSelection.startContainer.isConnected) return;
 				const selection = window.getSelection();
+				// rangeCount > 0 means someone re-established a caret after the wipe
+				// (the user clicked, or — version-dependent — Editor.js placed one in
+				// its own holder); fighting it risks worse than the wipe. Empirically
+				// our Editor.js build leaves the selection cleared, so this restores.
 				if (selection && selection.rangeCount === 0) selection.addRange(foreignSelection);
 			};
 
@@ -533,13 +537,17 @@ const LongTextEditorInner = (props: LongTextEditorInnerProps) => {
 
 			editorRef.current = editor;
 			await editor.isReady;
-			restoreForeignSelection();
 
 			if (cancelled) {
+				// a superseded init still wiped the document selection — restore
+				// AFTER its teardown so destroy can't re-clear what we put back
 				editor.destroy?.();
 				editorRef.current = null;
+				restoreForeignSelection();
 				return;
 			}
+
+			restoreForeignSelection();
 
 			// Editor.js's block listener mistakes empty internal lines in tool
 			// textboxes for block boundaries. Bind before that outer listener so

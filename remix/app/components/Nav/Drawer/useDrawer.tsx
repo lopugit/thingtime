@@ -2,13 +2,23 @@ import React from 'react';
 
 import { useThingtime } from '../../Thingtime/useThingtime';
 
-// z-index ladder for the drawer system: above the fixed nav (9999),
-// below DevKit (99999+).
+// z-index ladder for the app chrome, above the fixed nav (9999) and below
+// DevKit (99999+). Floating editor windows layer AROUND the drawer (bands
+// 9900+ and 10040+, see EditorSplit) — so everything transient or blocking
+// (popups, the trigger, modals, context menus) sits ABOVE the window bands
+// and the hovered drawer, or frames would cover open menus and dialogs:
+//   9900+   editor windows sent below the drawer
+//   10000   drawer panel
+//   10040+  editor windows above the drawer (their default)
+//   10120   drawer panel while hovered (takes the front, hands it back)
+//   10190   window drag ghosts / drop previews
+//   10220   dropdowns & popups   10230 drawer trigger
+//   10240/10250   modal overlay / modal
 export const DRAWER_Z = 10000;
-export const DRAWER_POPUP_Z = 10001;
-export const DRAWER_TRIGGER_Z = 10002;
-export const DRAWER_MODAL_OVERLAY_Z = 10003;
-export const DRAWER_MODAL_Z = 10004;
+export const DRAWER_POPUP_Z = 10220;
+export const DRAWER_TRIGGER_Z = 10230;
+export const DRAWER_MODAL_OVERLAY_Z = 10240;
+export const DRAWER_MODAL_Z = 10250;
 // while the pointer is over the drawer it outranks floating editor windows
 // (which default to layering above it — see EditorSplit's layer system)
 export const DRAWER_HOVER_Z = 10120;

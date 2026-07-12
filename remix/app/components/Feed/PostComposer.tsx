@@ -48,6 +48,12 @@ const MIN_EDITOR_HEIGHT = 120;
 
 const isImageUrl = (url: string) => /^https?:\/\/\S+$/i.test(url.trim());
 
+// a draft that is exactly { name: '' } is pre-rename seed residue, not content
+const isEmptyNameResidue = (value: any): boolean => {
+  const keys = value && typeof value === 'object' && !Array.isArray(value) ? Object.keys(value) : null;
+  return !!keys && keys.length === 1 && keys[0] === 'name' && value.name === '';
+};
+
 // A thing "has content" once any leaf holds a real value — numbers, booleans,
 // and deliberate nulls count; empty strings don't, so the auto-seeded
 // { name: '' } alone never enables Post.
@@ -110,7 +116,7 @@ export const PostComposer = (props: PostComposerProps) => {
   const [thingListing, setThingListing] = React.useState(false);
   const [editorHeight, setEditorHeight] = React.useState(DEFAULT_EDITOR_HEIGHT);
   const editorApiRef = React.useRef<{ popOutDuplicate: () => void } | null>(null);
-  const handleEditorApi = React.useCallback((api: { popOutDuplicate: () => void }) => {
+  const handleEditorApi = React.useCallback((api: { popOutDuplicate: () => void } | null) => {
     editorApiRef.current = api;
   }, []);
 
@@ -141,10 +147,6 @@ export const PostComposer = (props: PostComposerProps) => {
   // collapses to the bare New Thing root.
   React.useEffect(() => {
     if (type !== 'thingtime' || !expanded || thingtimeLoading) return;
-    const isEmptyNameResidue = (value: any) => {
-      const keys = value && typeof value === 'object' && !Array.isArray(value) ? Object.keys(value) : null;
-      return !!keys && keys.length === 1 && keys[0] === 'name' && value.name === '';
-    };
     const current = getThingtime(THING_DRAFT_PATH);
     if (current && typeof current === 'object' && !Array.isArray(current)) {
       if (isEmptyNameResidue(current)) setThingtime(THING_DRAFT_PATH, {});

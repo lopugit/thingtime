@@ -14,9 +14,14 @@
      — over the global store branch `New Thing` (the key IS the editor's root
      label; localforage-persisted → drafts survive reloads). Seeded `{}`
      post-hydration only; drafts from the pre-rename `composerDraft` branch
-     migrate across once. Height-draggable (touch too), and poppable into a
-     floating/resizable/splittable `ThingEditorPopout` window live-synced through
-     the store. Photos and Marketplace field groups toggle onto thingtime posts.
+     migrate across once (and `{ name: '' }` residue collapses to the bare
+     root). Height-draggable (touch too); the pop-out button duplicates the
+     window into one of the editor's OWN floating frames (`EditorSplit`'s
+     `onApi`/`popOutDuplicate` — native window chrome, live-synced through the
+     store, the in-post editor stays). Floating frames carry a layer system
+     around the drawer (default above it, drawer takes the front on hover, ▲▼
+     toolbar arrows step layers with the drawer as a layer index). Photos and
+     Marketplace field groups toggle onto thingtime posts.
    - Server: `sanitizePostCrystal` validates `input.thing` through `sanitizeDataValue`
      (the bounded data-crystal walker, starting at depth 1) and stores it under the
      reserved `crystal.thing` key. `["post","data"]` stays forbidden — the namespaced

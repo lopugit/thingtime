@@ -90,7 +90,9 @@ export const ThingContextMenu = (props: ThingContextMenuProps) => {
 		onSurfaceMouseEnter,
 		onSurfaceMouseLeave,
 		width = DEFAULT_MENU_WIDTH,
-		zIndex = 1400,
+		// above the floating editor windows (10040+/10120 bands) and the modal
+		// ladder — the menu opens from inside all of them
+		zIndex = 10260,
 		inline = false
 	} = props;
 
