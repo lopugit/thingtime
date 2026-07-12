@@ -101,6 +101,9 @@ export const ensureIndexes = async () => {
         // keys, schema:<id>, …): multikey unique — each element unique across
         // the collection; sparse so ordinary things skip the index entirely
         db.collection('things').createIndex({ uniqueKeys: 1 }, { unique: true, sparse: true }),
+        // login + people-search lookups on user things (thingtime is the only
+        // multikey field here, so the compound is legal)
+        db.collection('things').createIndex({ thingtime: 1, 'crystal.username': 1 }),
         db.collection('things').createIndex({ kind: 1, visibility: 1, createdAt: -1, shareId: 1 }),
         db.collection('things').createIndex({ kind: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
         db.collection('things').createIndex({ thingtime: 1, ownerId: 1, createdAt: -1, shareId: 1 }),

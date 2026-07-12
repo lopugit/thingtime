@@ -490,14 +490,35 @@ const toFeedAuthor = (doc: any): FeedAuthor => ({
 });
 
 const resolveProfiles = async (userIds: string[]): Promise<Map<string, FeedAuthor>> => {
-  const valid = [...new Set(userIds)].filter((id) => ObjectId.isValid(id));
-  if (!valid.length) return new Map();
-  const users = await getUsersCollection();
-  const docs = await users
-    .find({ _id: { $in: valid.map((id) => new ObjectId(id)) } })
-    .project({ username: 1, displayName: 1, avatarUrl: 1 })
+  const wanted = [...new Set(userIds)].filter((id) => typeof id === 'string' && id.trim());
+  if (!wanted.length) return new Map();
+  const profiles = new Map<string, FeedAuthor>();
+
+  // things-era users first (shareId = the id every ownerId reference carries)
+  const things = await getThingsCollection();
+  const userThings = await things
+    .find({ thingtime: 'user', shareId: { $in: wanted } } as any)
+    .project({ shareId: 1, 'crystal.username': 1, 'crystal.displayName': 1, 'crystal.avatarUrl': 1 })
     .toArray();
-  return new Map(docs.map((doc: any) => [String(doc._id), toFeedAuthor(doc)]));
+  for (const doc of userThings as any[]) {
+    profiles.set(String(doc.shareId), {
+      id: String(doc.shareId),
+      username: doc.crystal?.username,
+      displayName: doc.crystal?.displayName ?? null,
+      avatarUrl: typeof doc.crystal?.avatarUrl === 'string' ? doc.crystal.avatarUrl : null
+    });
+  }
+
+  const remaining = wanted.filter((id) => !profiles.has(id) && ObjectId.isValid(id));
+  if (remaining.length) {
+    const users = await getUsersCollection();
+    const docs = await users
+      .find({ _id: { $in: remaining.map((id) => new ObjectId(id)) } })
+      .project({ username: 1, displayName: 1, avatarUrl: 1 })
+      .toArray();
+    for (const doc of docs as any[]) profiles.set(String(doc._id), toFeedAuthor(doc));
+  }
+  return profiles;
 };
 
 // Normalized comment/reaction views over both eras.

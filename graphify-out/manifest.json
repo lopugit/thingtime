@@ -770,8 +770,8 @@
     "semantic_hash": "63124d05375edd85e9ad5bbe74d71fda"
   },
   "remix/app/api/utils/auth/registerUser.ts": {
-    "mtime": 1783814170.099386,
-    "ast_hash": "ae910e2c19bab857cfaab3aa4612a70a",
+    "mtime": 1783831987.3192906,
+    "ast_hash": "372239366da58552bfef32ea23cce70a",
     "semantic_hash": ""
   },
   "remix/app/api/utils/auth/serviceAccounts.ts": {
@@ -785,8 +785,8 @@
     "semantic_hash": ""
   },
   "remix/app/api/utils/auth/users.ts": {
-    "mtime": 1783829922.6788669,
-    "ast_hash": "840ed3151440b4103f4094b45a6b6778",
+    "mtime": 1783831969.8443842,
+    "ast_hash": "02649c1ab1f56d25a97598410afd5fe3",
     "semantic_hash": ""
   },
   "remix/app/api/utils/crypto/cryptoTools.server.ts": {
@@ -830,8 +830,8 @@
     "semantic_hash": "f65b01f4781159ee3b8a0a9da33d1f5a"
   },
   "remix/app/api/utils/mongodb/collections.ts": {
-    "mtime": 1783827721.9903216,
-    "ast_hash": "efd8f52fb67e9c6b52f3f71c3d6f279f",
+    "mtime": 1783832000.1438181,
+    "ast_hash": "6b1f726fdd6fe774286b3675b54b19eb",
     "semantic_hash": ""
   },
   "remix/app/api/utils/mongodb/config.ts": {
@@ -3110,8 +3110,8 @@
     "semantic_hash": "70a4a9dbd0d87d97133f4e04742017cf"
   },
   "remix/app/api/utils/things/things.ts": {
-    "mtime": 1783827690.9378402,
-    "ast_hash": "d0e40171cb6a8149fbc14ffa57cb10b5",
+    "mtime": 1783831995.6382368,
+    "ast_hash": "6ec74ca29cdfa8c2887d0fd765c3471c",
     "semantic_hash": ""
   },
   "remix/app/components/Feed/Feed.tsx": {
@@ -3765,8 +3765,8 @@
     "semantic_hash": ""
   },
   "remix/app/schemas/registry.ts": {
-    "mtime": 1783827643.4875565,
-    "ast_hash": "d5778960dd8b1b10170fc196a6d62bb2",
+    "mtime": 1783831510.1887035,
+    "ast_hash": "2b51f95788a8b2e9fde4a5ca66d7c7c8",
     "semantic_hash": ""
   },
   "PRs/59-claude-unified-thing-crystal-schemas--everything-is-a-thing.md": {
@@ -3842,6 +3842,11 @@
   "remix/app/routes/api/v1/users/search/_search.tsx": {
     "mtime": 1783829927.1156397,
     "ast_hash": "fdca51d8e6150f0c8533a790689ac000",
+    "semantic_hash": ""
+  },
+  "claude-todo/12-everything-is-a-thing-collections.md": {
+    "mtime": 1783831395.52842,
+    "ast_hash": "46eb93220a1fd6d5e96586a6bfd2436f",
     "semantic_hash": ""
   }
 }
