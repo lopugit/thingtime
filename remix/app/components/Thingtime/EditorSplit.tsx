@@ -352,6 +352,28 @@ export const startPointerGesture = (e: React.PointerEvent, onMove: (move: Pointe
 	window.addEventListener('blur', teardown);
 };
 
+// the corner resize grip shared by floating frames, the composer's editor
+// popout, and the thing context menu — one affordance, one drawing
+export const ResizeGrip = (props: { onPointerDown: (e: React.PointerEvent) => void; title?: string }) => (
+	<Box
+		aria-hidden
+		position="absolute"
+		right="1px"
+		bottom="1px"
+		width="15px"
+		height="15px"
+		cursor="nwse-resize"
+		color="var(--tt-faint, #b6b6c0)"
+		sx={{ touchAction: 'none' }}
+		title={props.title || 'Drag to resize'}
+		onPointerDown={props.onPointerDown}
+	>
+		<svg viewBox="0 0 14 14" width="14" height="14">
+			<path d="M12 6 L6 12 M12 10 L10 12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" fill="none" />
+		</svg>
+	</Box>
+);
+
 // window chrome ------------------------------------------------------------
 
 type WindowContext = 'main' | 'frame' | 'maximised';
@@ -954,23 +976,7 @@ const FloatingWindowView = (props: {
 			<Box flex="1" minHeight={0}>
 				<EditorNodeView node={win.node} actions={actions} onRatio={onRatio} context="frame" />
 			</Box>
-			<Box
-				aria-hidden
-				position="absolute"
-				right="1px"
-				bottom="1px"
-				width="15px"
-				height="15px"
-				cursor="nwse-resize"
-				color="var(--tt-faint, #b6b6c0)"
-				sx={{ touchAction: 'none' }}
-				title="Drag to resize"
-				onPointerDown={startResize}
-			>
-				<svg viewBox="0 0 14 14" width="14" height="14">
-					<path d="M12 6 L6 12 M12 10 L10 12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" fill="none" />
-				</svg>
-			</Box>
+			<ResizeGrip onPointerDown={startResize} />
 		</Flex>
 	);
 };
@@ -1301,6 +1307,19 @@ export const EditorSplit = (props: EditorSplitProps) => {
 			const leafId = leafEl.getAttribute('data-tt-editor-leaf') || '';
 
 			if (!leafId || leafId === excludeLeafId) {
+				return null;
+			}
+
+			// more than one editor can be mounted at once (the composer's in-post
+			// editor + its popout, both fixed-positioned): the element under the
+			// pointer may belong to the OTHER instance. Docking there would remove
+			// the window from this instance and insert it nowhere — reject foreign
+			// leaves so the drag ends harmlessly instead of losing the window.
+			const ownLeaf =
+				!!findLeaf(layoutRef.current.tree, leafId) ||
+				layoutRef.current.floating.some((win) => findLeaf(win.node, leafId));
+
+			if (!ownLeaf) {
 				return null;
 			}
 

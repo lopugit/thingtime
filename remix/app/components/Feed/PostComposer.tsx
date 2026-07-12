@@ -169,7 +169,10 @@ export const PostComposer = (props: PostComposerProps) => {
           ? draftReady &&
             Object.keys(draftThing).length > 0 &&
             thingHasContent(draftThing) &&
-            (!thingListing || listingValid)
+            (!thingListing || listingValid) &&
+            // a toggled-on Photos group with no valid image is a half-filled
+            // form, not an implicit un-toggle — same bar as an image post
+            (!thingPhotos || validImages.length > 0)
           : listingValid;
 
   const reset = () => {
@@ -354,7 +357,10 @@ export const PostComposer = (props: PostComposerProps) => {
           </Flex>
 
           <Box height={`${editorHeight}px`} maxWidth="100%">
-            {draftReady ? (
+            {/* mount as soon as the store hydrates (the seed effect writes in
+            the same pass) — the placeholder only covers the true cold start
+            while the localforage blob loads, per the optimistic-render rule */}
+            {!thingtimeLoading ? (
               <EditorSplit initialPath={THING_DRAFT_PATH} embedded height="100%" />
             ) : (
               <Flex

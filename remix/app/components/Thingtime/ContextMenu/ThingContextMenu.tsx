@@ -59,6 +59,10 @@ export interface ThingContextMenuProps {
 	onSurfaceMouseLeave?: () => void;
 	width?: number;
 	zIndex?: number;
+	// popover only: keep the legacy in-flow absolute rendering instead of the
+	// body portal — for statically-open surfaces (design-system anatomy
+	// stories) that lay the menu out inside a reserved canvas
+	inline?: boolean;
 }
 
 const FOCUSABLE_ITEM_CLASS = 'thing-context-menu-item';
@@ -86,7 +90,8 @@ export const ThingContextMenu = (props: ThingContextMenuProps) => {
 		onSurfaceMouseEnter,
 		onSurfaceMouseLeave,
 		width = DEFAULT_MENU_WIDTH,
-		zIndex = 1400
+		zIndex = 1400,
+		inline = false
 	} = props;
 
 	const surfaceRef = React.useRef<HTMLDivElement>(null);
@@ -115,6 +120,58 @@ export const ThingContextMenu = (props: ThingContextMenuProps) => {
 		setLevelTick(0);
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [open]);
+
+	// popover anchoring: a zero-size probe stays in the trigger wrapper's flow
+	// (getBoundingClientRect works even inside clipped ancestors); the surface
+	// itself portals to <body> at these fixed viewport coordinates, re-measured
+	// on any scroll (capture phase reaches nested scrollers) and resize so it
+	// stays glued to its open point. Horizontal viewport clamping stays with
+	// reclampPopover (one owner per axis); the measure only keeps the header
+	// row reachable at the bottom edge. `inline` popovers (the design-system
+	// anatomy stories) keep the legacy in-flow rendering and skip all of this.
+	const anchorRef = React.useRef<HTMLDivElement | null>(null);
+	const [anchorPoint, setAnchorPoint] = React.useState<{ x: number; y: number } | null>(null);
+
+	React.useLayoutEffect(() => {
+		if (!open || presentation !== 'popover' || inline) {
+			setAnchorPoint(null);
+			return;
+		}
+
+		const measure = () => {
+			const el = anchorRef.current;
+			if (!el) {
+				return;
+			}
+
+			const rect = el.getBoundingClientRect();
+
+			setAnchorPoint((prev) => {
+				const next = {
+					x: rect.left,
+					// keep the header row reachable at both viewport edges (a trigger
+					// scrolled past the top must not strand the menu off-screen)
+					y: Math.max(CONTEXT_MENU_MARGIN, Math.min(rect.top, window.innerHeight - 56))
+				};
+
+				return prev && prev.x === next.x && prev.y === next.y ? prev : next;
+			});
+		};
+
+		measure();
+		window.addEventListener('scroll', measure, true);
+		window.addEventListener('resize', measure);
+		// layout shifts that move the trigger without scrolling (content above
+		// expanding, the composer's editor being height-dragged) re-anchor too
+		const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
+		observer?.observe(document.body);
+
+		return () => {
+			window.removeEventListener('scroll', measure, true);
+			window.removeEventListener('resize', measure);
+			observer?.disconnect();
+		};
+	}, [open, presentation, inline]);
 
 	// measure and nudge the popover back inside the viewport; incremental
 	// (rect already includes the current shift) so it converges, and shifted
@@ -159,54 +216,14 @@ export const ThingContextMenu = (props: ThingContextMenuProps) => {
 		return () => {
 			window.removeEventListener('resize', reclampPopover);
 		};
-	}, [open, presentation, menuWidth, reclampPopover]);
+		// anchorPoint: the portal'd surface mounts a commit AFTER open flips (the
+		// probe must be measured first) — reclamp again once it exists, and when
+		// the anchor moves under scroll
+	}, [open, presentation, menuWidth, reclampPopover, anchorPoint]);
 
 	const currentLevel = stack.length ? stack[stack.length - 1] : null;
 	const currentSections = currentLevel?.submenu?.sections || model.sections;
 	const currentPath = React.useMemo(() => stack.map((action) => action.id), [stack]);
-
-	// popover anchoring: a zero-size probe stays in the trigger wrapper's flow
-	// (getBoundingClientRect works even inside clipped ancestors); the surface
-	// itself portals to <body> at these fixed viewport coordinates, re-measured
-	// on any scroll (capture phase reaches nested scrollers) and resize so it
-	// stays glued to its open point
-	const anchorRef = React.useRef<HTMLDivElement | null>(null);
-	const [anchorPoint, setAnchorPoint] = React.useState<{ x: number; y: number } | null>(null);
-
-	React.useLayoutEffect(() => {
-		if (!open || presentation !== 'popover') {
-			setAnchorPoint(null);
-			return;
-		}
-
-		const measure = () => {
-			const el = anchorRef.current;
-			if (!el) {
-				return;
-			}
-
-			const rect = el.getBoundingClientRect();
-
-			setAnchorPoint((prev) => {
-				const next = {
-					x: Math.max(CONTEXT_MENU_MARGIN, rect.left),
-					// keep at least the header row reachable at the bottom edge
-					y: Math.min(rect.top, window.innerHeight - 56)
-				};
-
-				return prev && prev.x === next.x && prev.y === next.y ? prev : next;
-			});
-		};
-
-		measure();
-		window.addEventListener('scroll', measure, true);
-		window.addEventListener('resize', measure);
-
-		return () => {
-			window.removeEventListener('scroll', measure, true);
-			window.removeEventListener('resize', measure);
-		};
-	}, [open, presentation]);
 
 	// clamp the context presentation inside the viewport
 	const [clampedPosition, setClampedPosition] = React.useState(position);
@@ -835,6 +852,16 @@ export const ThingContextMenu = (props: ThingContextMenuProps) => {
 	if (presentation === 'context') {
 		return (
 			<Box position="fixed" top={`${clampedPosition?.y ?? 0}px`} left={`${clampedPosition?.x ?? 0}px`} zIndex={zIndex}>
+				{surface}
+			</Box>
+		);
+	}
+
+	// 'popover' — inline mode keeps the legacy in-flow anchoring (anatomy
+	// stories lay the surface out inside a reserved canvas)
+	if (inline) {
+		return (
+			<Box position="absolute" top="100%" left={0} paddingTop="4px" zIndex={zIndex}>
 				{surface}
 			</Box>
 		);

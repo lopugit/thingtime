@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Box, Flex, IconButton, Text } from '@chakra-ui/react';
 import { X } from 'lucide-react';
 
-import { EditorSplit, startPointerGesture } from './EditorSplit';
+import { EditorSplit, ResizeGrip, startPointerGesture } from './EditorSplit';
 
 // A popped-out thing editor: a portal'd, viewport-fixed frame holding its own
 // embedded EditorSplit over the same store path as whatever spawned it — both
@@ -65,8 +65,10 @@ export const ThingEditorPopout = (props: ThingEditorPopoutProps) => {
     startPointerGesture(e, (move) => {
       setGeometry((prev) => ({
         ...prev,
-        width: Math.max(320, origin.width + move.clientX - startX),
-        height: Math.max(220, origin.height + move.clientY - startY)
+        // same bounds as EditorSplit's floating frames: never larger than the
+        // viewport, never too small to use
+        width: Math.max(320, Math.min(origin.width + move.clientX - startX, window.innerWidth - 24)),
+        height: Math.max(220, Math.min(origin.height + move.clientY - startY, window.innerHeight - 24))
       }));
     });
   };
@@ -128,23 +130,7 @@ export const ThingEditorPopout = (props: ThingEditorPopoutProps) => {
         <EditorSplit initialPath={path} embedded height="100%" />
       </Box>
 
-      <Box
-        aria-hidden
-        position="absolute"
-        right="1px"
-        bottom="1px"
-        width="16px"
-        height="16px"
-        cursor="nwse-resize"
-        color="var(--tt-faint, #b6b6c0)"
-        sx={{ touchAction: 'none' }}
-        title="Drag to resize"
-        onPointerDown={startResize}
-      >
-        <svg viewBox="0 0 14 14" width="14" height="14">
-          <path d="M12 6 L6 12 M12 10 L10 12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" fill="none" />
-        </svg>
-      </Box>
+      <ResizeGrip onPointerDown={startResize} />
     </Flex>,
     document.body
   );

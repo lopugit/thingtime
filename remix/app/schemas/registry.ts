@@ -654,9 +654,16 @@ const sanitizePostCrystal = (
   }
 
   // marketplace posts REQUIRE a listing; thingtime posts may opt into one
-  // (the composer's Marketplace toggle) — validated identically when present
+  // (the composer's Marketplace toggle) — validated identically when present.
+  // Shares are exempt from the requirement: sharePost re-posts the original's
+  // type with listing null (the shared original renders the listing), which
+  // used to 400 every marketplace share.
   let listing: Record<string, unknown> | null = null;
-  if (type === 'marketplace' || (type === 'thingtime' && input.listing !== undefined && input.listing !== null)) {
+  const listingProvided = input.listing !== undefined && input.listing !== null;
+  if (
+    (type === 'marketplace' && !isShare) ||
+    ((type === 'marketplace' || type === 'thingtime') && listingProvided)
+  ) {
     const value = input.listing;
     if (!value || typeof value !== 'object') return fail(400, 'Marketplace posts need listing details');
     const raw = value as Record<string, unknown>;

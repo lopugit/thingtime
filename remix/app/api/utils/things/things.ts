@@ -1353,16 +1353,22 @@ export const updateThing = async (
   const validated = validateThingtimeCrystal(thingtime, nextCrystal);
   if (isFail(validated)) return validated;
 
+  // post crystals only — see the identical guard in createThing
+  const patchedListing = thingtime.includes('post')
+    ? (validated.crystal.listing as MarketplaceListing | null | undefined)
+    : null;
+  const categoryTag = patchedListing && typeof patchedListing.category === 'string' ? [patchedListing.category] : [];
+
   let tags = doc.tags || [];
   if (input.tags !== undefined) {
     const sanitized = sanitizeTags(input.tags);
     if (isFail(sanitized)) return sanitized;
-    // post crystals only — see the identical guard in createThing
-    const listing = thingtime.includes('post')
-      ? (validated.crystal.listing as MarketplaceListing | null | undefined)
-      : null;
-    const categoryTag = listing && typeof listing.category === 'string' ? [listing.category] : [];
     tags = [...sanitized, ...categoryTag].filter((tag, index, all) => all.indexOf(tag) === index);
+  } else if (categoryTag.length && !tags.includes(categoryTag[0])) {
+    // a listing PATCH that changes the category without resending tags must
+    // still fold the new category in, or category filters mis-file the post
+    // (the old category tag stays, matching create-time folding semantics)
+    tags = [...tags, ...categoryTag];
   }
 
   let acl = aclOf(doc);

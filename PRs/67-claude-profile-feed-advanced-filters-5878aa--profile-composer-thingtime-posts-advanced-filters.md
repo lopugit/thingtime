@@ -9,9 +9,14 @@
 1. **Profile composer** — `ProfilePage` renders the feed `PostComposer` in self mode,
    optimistic prepend + header post-count increment (`handlePosted`).
 2. **Thingtime post type** — fourth `PostType` beside text/image/marketplace.
-   - Composer tab mounts the real `<Thingtime>` editor over the global store branch
-     `composerDraft` (localforage-persisted → drafts survive reloads). Seeded with
-     `{ name: '' }` post-hydration only, so a persisted draft is never clobbered.
+   - Composer tab mounts the real things editor — an embedded single-window
+     `EditorSplit` (new `embedded` prop: container-sized, off the /editor plumbing)
+     — over the global store branch `New Thing` (the key IS the editor's root
+     label; localforage-persisted → drafts survive reloads). Seeded `{}`
+     post-hydration only; drafts from the pre-rename `composerDraft` branch
+     migrate across once. Height-draggable (touch too), and poppable into a
+     floating/resizable/splittable `ThingEditorPopout` window live-synced through
+     the store. Photos and Marketplace field groups toggle onto thingtime posts.
    - Server: `sanitizePostCrystal` validates `input.thing` through `sanitizeDataValue`
      (the bounded data-crystal walker, starting at depth 1) and stores it under the
      reserved `crystal.thing` key. `["post","data"]` stays forbidden — the namespaced
