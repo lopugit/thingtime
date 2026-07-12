@@ -407,6 +407,12 @@ export const CommanderV2 = (props) => {
 			// only run these if commander active
 
 			if (commanderActive) {
+				// arrow selection only means something while the dropdown is visible —
+				// otherwise a stray ArrowDown would silently hover the (hidden) search
+				// row and Enter would navigate away instead of running the command
+				if (!showSuggestions && (e?.code === 'ArrowUp' || e?.code === 'ArrowDown')) {
+					return;
+				}
 				// if arrow keys then move selection (row 0 = the pinned search row)
 				if (e?.code === 'ArrowUp') {
 					// move selection up
@@ -431,7 +437,7 @@ export const CommanderV2 = (props) => {
 				}
 			}
 		},
-		[closeCommander, toggleCommander, hoveredSuggestion, suggestions, suggestionRowCount, thingtime, thingtimeRef, commanderActive, executeCommand]
+		[closeCommander, toggleCommander, hoveredSuggestion, suggestions, suggestionRowCount, showSuggestions, thingtime, thingtimeRef, commanderActive, executeCommand]
 	);
 
 	React.useEffect(() => {

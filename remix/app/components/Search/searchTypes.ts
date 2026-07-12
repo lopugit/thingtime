@@ -47,7 +47,8 @@ export type SearchResponse = {
 };
 
 // value coercion hint per condition row — "proper developer datatype searches"
-export type RowValueType = 'auto' | 'text' | 'number' | 'boolean' | 'null' | 'date';
+// (dates travel as ISO strings, so 'text' covers them)
+export type RowValueType = 'auto' | 'text' | 'number' | 'boolean' | 'null';
 
 // One GUI row of the query builder. `between` is UI sugar that compiles to a
 // gte+lte pair; everything else maps 1:1 onto the API operator grammar.

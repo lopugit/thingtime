@@ -1,14 +1,19 @@
 import { ensureIndexes, getThingsCollection } from '../mongodb/collections';
+import { KEY_SEGMENT_PATTERN } from '~/schemas/registry';
 import {
   asViewer,
   canViewInherited,
   chronoCursorClause,
+  fail,
+  isFail,
   isPostThing,
+  oldestCursorClause,
   parseChronoCursor,
   toPublicPosts,
   toPublicThings,
   visibilityQueryFor,
   withMatch,
+  type Fail,
   type PublicPost,
   type PublicThing,
   type ThingDoc,
@@ -27,11 +32,6 @@ import {
 // same way as the feed: a DB-level superset (public + own) plus the exact
 // per-doc acl check before projection.
 
-type Fail = { ok: false; status: number; error: string };
-const fail = (status: number, error: string): Fail => ({ ok: false, status, error });
-const isFail = (value: unknown): value is Fail =>
-  !!value && typeof value === 'object' && !Array.isArray(value) && (value as any).ok === false;
-
 export const SEARCH_OPERATORS = [
   'eq',
   'ne',
@@ -39,6 +39,7 @@ export const SEARCH_OPERATORS = [
   'gte',
   'lt',
   'lte',
+  'between',
   'in',
   'nin',
   'exists',
@@ -81,7 +82,9 @@ const COUNT_MAX_TIME_MS = 2000;
 // names like "legs" auto-prefix to crystal.legs so the GUI can stay simple).
 const ROOT_FIELDS = new Set(['tags', 'thingtime', 'createdAt', 'updatedAt', 'shareId', 'targetId']);
 const DATE_FIELDS = new Set(['createdAt', 'updatedAt']);
-const FIELD_SEGMENT = /^[A-Za-z0-9_-]+$/;
+// the same grammar data-crystal keys are stored under — a storable key is
+// always a searchable key (single source: schemas/registry.ts)
+const FIELD_SEGMENT = KEY_SEGMENT_PATTERN;
 
 export type SearchCondition = {
   field?: unknown;
@@ -172,14 +175,14 @@ const sanitizeScalar = (field: string, value: unknown): Scalar | Fail => {
 
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-const requireString = (field: string, op: string, value: unknown): string | Fail => {
-  if (typeof value !== 'string' || !value.length) {
-    return fail(400, `${op} conditions need a text value (field ${field})`);
+// gt/gte/lt/lte/between operands: ordered scalars only
+const sanitizeOrdered = (field: string, op: string, value: unknown): string | number | Date | Fail => {
+  const scalar = sanitizeScalar(field, value);
+  if (isFail(scalar)) return scalar;
+  if (scalar === null || typeof scalar === 'boolean') {
+    return fail(400, `${op} conditions need a number, text, or date value (field ${field})`);
   }
-  if (value.length > MAX_STRING_VALUE_CHARS) {
-    return fail(400, `Condition values can be at most ${MAX_STRING_VALUE_CHARS} characters`);
-  }
-  return value;
+  return scalar;
 };
 
 const buildCondition = (input: SearchCondition): Record<string, any> | Fail => {
@@ -202,12 +205,28 @@ const buildCondition = (input: SearchCondition): Record<string, any> | Fail => {
     case 'gte':
     case 'lt':
     case 'lte': {
-      const value = sanitizeScalar(field, input.value);
+      const value = sanitizeOrdered(field, op, input.value);
       if (isFail(value)) return value;
-      if (value === null || typeof value === 'boolean') {
-        return fail(400, `${op} conditions need a number, text, or date value (field ${field})`);
-      }
       return { [field]: { [`$${op}`]: value } };
+    }
+    case 'between': {
+      // one atomic range condition — values: [low, high] (either end may be
+      // null/undefined for open-ended ranges, but not both)
+      const raw = Array.isArray(input.values) ? input.values : [input.value, (input as any).value2];
+      const [lowRaw, highRaw] = raw;
+      const range: Record<string, any> = {};
+      if (lowRaw !== undefined && lowRaw !== null && lowRaw !== '') {
+        const low = sanitizeOrdered(field, op, lowRaw);
+        if (isFail(low)) return low;
+        range.$gte = low;
+      }
+      if (highRaw !== undefined && highRaw !== null && highRaw !== '') {
+        const high = sanitizeOrdered(field, op, highRaw);
+        if (isFail(high)) return high;
+        range.$lte = high;
+      }
+      if (!Object.keys(range).length) return fail(400, `between conditions need a low and/or high value (field ${field})`);
+      return { [field]: range };
     }
     case 'in':
     case 'nin': {
@@ -238,8 +257,11 @@ const buildCondition = (input: SearchCondition): Record<string, any> | Fail => {
     case 'contains':
     case 'startsWith':
     case 'endsWith': {
-      const value = requireString(field, op, input.value);
+      const value = sanitizeScalar(field, input.value);
       if (isFail(value)) return value;
+      if (typeof value !== 'string' || !value.length) {
+        return fail(400, `${op} conditions need a text value (field ${field})`);
+      }
       const literal = escapeRegExp(value);
       const pattern = op === 'startsWith' ? `^${literal}` : op === 'endsWith' ? `${literal}$` : literal;
       return { [field]: { $regex: pattern, $options: 'i' } };
@@ -289,11 +311,6 @@ const parseDate = (value: unknown): Date | null | Fail => {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? fail(400, 'Invalid date') : date;
 };
-
-// oldest-first pagination inverts the cursor comparison chronoCursorClause uses
-const oldestCursorClause = (cursor: { createdAt: Date; id: string }) => ({
-  $or: [{ createdAt: { $gt: cursor.createdAt } }, { createdAt: cursor.createdAt, shareId: { $gt: cursor.id } }]
-});
 
 export const searchThings = async (viewerInput: string | Viewer, query: SearchQuery): Promise<Fail | SearchResult> => {
   const viewer = asViewer(viewerInput);
@@ -363,57 +380,56 @@ export const searchThings = async (viewerInput: string | Viewer, query: SearchQu
   await ensureIndexes();
   const things = await getThingsCollection();
 
-  let docs: ThingDoc[];
-  let nextCursor: string | null = null;
-
-  if (ranked) {
-    const offset = Math.min(Math.max(0, Number(query.cursor) || 0), MAX_RANKED_OFFSET);
-    docs = (await things
-      .find(match as any, { projection: { score: { $meta: 'textScore' } } } as any)
-      .sort({ score: { $meta: 'textScore' }, createdAt: -1, shareId: 1 } as any)
-      .skip(offset)
-      .limit(limit + 1)
-      .toArray()) as any as ThingDoc[];
-    if (docs.length > limit && offset + limit < MAX_RANKED_OFFSET) {
-      nextCursor = String(offset + limit);
+  const fetchPage = async (): Promise<{ docs: ThingDoc[]; nextCursor: string | null }> => {
+    if (ranked) {
+      const offset = Math.min(Math.max(0, Number(query.cursor) || 0), MAX_RANKED_OFFSET);
+      const docs = (await things
+        .find(match as any, { projection: { score: { $meta: 'textScore' } } } as any)
+        .sort({ score: { $meta: 'textScore' }, createdAt: -1, shareId: 1 } as any)
+        .skip(offset)
+        .limit(limit + 1)
+        .toArray()) as any as ThingDoc[];
+      // the clamp allows offsets up to and including MAX_RANKED_OFFSET
+      const nextOffset = offset + limit;
+      return { docs, nextCursor: docs.length > limit && nextOffset <= MAX_RANKED_OFFSET ? String(nextOffset) : null };
     }
-  } else {
     const parsed = parseChronoCursor(typeof query.cursor === 'string' ? query.cursor : null);
     const cursorClause = parsed ? (sort === 'oldest' ? oldestCursorClause(parsed) : chronoCursorClause(parsed)) : null;
     const pageMatch = cursorClause ? withMatch(match, cursorClause) : match;
-    docs = (await things
+    const docs = (await things
       .find(pageMatch as any)
       .sort(sort === 'oldest' ? { createdAt: 1, shareId: 1 } : { createdAt: -1, shareId: 1 })
       .limit(limit + 1)
       .toArray()) as any as ThingDoc[];
-    const page = docs.slice(0, limit);
-    const last = page[page.length - 1];
-    if (docs.length > limit && last) {
-      nextCursor = `${new Date(last.createdAt).getTime()}_${last.shareId}`;
-    }
-  }
+    const last = docs.slice(0, limit)[Math.min(docs.length, limit) - 1];
+    return {
+      docs,
+      nextCursor: docs.length > limit && last ? `${new Date(last.createdAt).getTime()}_${last.shareId}` : null
+    };
+  };
 
+  // Capped count for the "N things match" readout — only on the FIRST page
+  // (load-more keeps the total it already has), concurrent with the page find,
+  // and approximate by design: it counts the DB visibility superset, so
+  // circle-restricted docs the exact acl pass rejects may be included.
+  const fetchTotal = async (): Promise<{ total: number | null; totalCapped: boolean }> => {
+    if (query.cursor) return { total: null, totalCapped: false };
+    try {
+      const count = await things.countDocuments(match as any, { limit: COUNT_LIMIT + 1, maxTimeMS: COUNT_MAX_TIME_MS });
+      return count > COUNT_LIMIT ? { total: COUNT_LIMIT, totalCapped: true } : { total: count, totalCapped: false };
+    } catch {
+      return { total: null, totalCapped: false };
+    }
+  };
+
+  const [{ docs, nextCursor }, { total, totalCapped }] = await Promise.all([fetchPage(), fetchTotal()]);
   const page = docs.slice(0, limit);
 
-  // capped count for the "N things match" readout — never worth a slow scan
-  let total: number | null = null;
-  let totalCapped = false;
-  try {
-    total = await things.countDocuments(match as any, { limit: COUNT_LIMIT + 1, maxTimeMS: COUNT_MAX_TIME_MS });
-    if (total > COUNT_LIMIT) {
-      total = COUNT_LIMIT;
-      totalCapped = true;
-    }
-  } catch {
-    total = null;
-  }
-
   // exact acl evaluation — the DB match is only a superset; the cursor advances
-  // over the raw page so filtered docs are skipped, not resurfaced
-  const visible: ThingDoc[] = [];
-  for (const doc of page) {
-    if (await canViewInherited(doc, viewer)) visible.push(doc);
-  }
+  // over the raw page so filtered docs are skipped, not resurfaced. Verdicts
+  // resolve concurrently (inherit chains each cost lookups).
+  const verdicts = await Promise.all(page.map((doc) => canViewInherited(doc, viewer)));
+  const visible = page.filter((_, index) => verdicts[index]);
 
   const publicThings = await toPublicThings(visible, viewer);
   const postDocs = visible.filter((doc) => isPostThing(doc));

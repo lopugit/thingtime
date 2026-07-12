@@ -47,6 +47,29 @@ export const getRateLimitsCollection = async () => (await getThingtimeDb()).coll
 // racy on their own).
 let indexesEnsured: Promise<void> | null = null;
 
+// createIndex with different options than an existing same-key index throws
+// IndexOptionsConflict (85) / IndexKeySpecsConflict (86). For indexes whose
+// options evolve (partial filters, text weights/overrides), drop the old
+// definition by name and recreate — idempotent, and the only alternative is a
+// manual migration per deploy.
+const createIndexReplacing = async (
+  collection: any,
+  keys: Record<string, any>,
+  options: Record<string, any> & { name: string },
+  legacyNames: string[] = []
+) => {
+  for (const legacy of legacyNames) {
+    await collection.dropIndex(legacy).catch(() => {}); // absent = fine
+  }
+  try {
+    await collection.createIndex(keys, options);
+  } catch (err: any) {
+    if (err?.code !== 85 && err?.code !== 86) throw err;
+    await collection.dropIndex(options.name).catch(() => {});
+    await collection.createIndex(keys, options);
+  }
+};
+
 export const ensureIndexes = async () => {
   if (!indexesEnsured) {
     indexesEnsured = (async () => {
@@ -83,24 +106,39 @@ export const ensureIndexes = async () => {
         db.collection('things').createIndex({ acl: 1, createdAt: -1, shareId: 1 }),
         // One weighted wildcard text index powers /api/v1/things/search ranked
         // text mode across every string field of every thing (a collection can
-        // hold at most ONE text index — this is it). language_override points at
-        // a field no crystal will ever set, so user data containing a
-        // `language` key can never break inserts with an unsupported language.
-        db.collection('things').createIndex(
+        // hold at most ONE text index — this is it; wildcard is deliberate:
+        // data crystals hold arbitrary user keys, and searching them is the
+        // feature). The language_override name is honoured INSIDE embedded
+        // documents too (verified: a crystal key with the override name and an
+        // unsupported value fails the insert), so it must be a name no crystal
+        // can ever contain — ':' is outside the data-key grammar, making
+        // 'tt:textLanguage' unwritable through every sanitizer.
+        createIndexReplacing(
+          db.collection('things'),
           { '$**': 'text' },
           {
             name: 'things_text_search',
             weights: { 'crystal.name': 10, 'crystal.text': 10, 'crystal.title': 8, 'crystal.listing.title': 8, tags: 6 },
             default_language: 'english',
-            language_override: 'ttTextLanguage'
+            language_override: 'tt:textLanguage'
           }
         ),
         // One reaction per (target, user, emoji token): makes toggle-on an
-        // idempotent upsert and dedups even under races. Partial via
-        // crystal.emoji-exists so it only applies to reaction things.
-        db.collection('things').createIndex(
+        // idempotent upsert and dedups even under races. The partial filter
+        // requires a STRING targetId as well as crystal.emoji — reactions
+        // always attach to a target, while free-form data things (targetId
+        // null) may legitimately carry an `emoji` key and must never collide
+        // here (verified: the emoji-exists-only filter 409'd the second data
+        // thing sharing an emoji value).
+        createIndexReplacing(
+          db.collection('things'),
           { targetId: 1, ownerId: 1, 'crystal.emoji': 1 },
-          { unique: true, partialFilterExpression: { 'crystal.emoji': { $exists: true } } }
+          {
+            name: 'things_reaction_unique',
+            unique: true,
+            partialFilterExpression: { targetId: { $type: 'string' }, 'crystal.emoji': { $exists: true } }
+          },
+          ['targetId_1_ownerId_1_crystal.emoji_1']
         ),
         // Legacy relational era (kind:'reaction'/'comment' docs written by the
         // pre-unification relational model): aggregation + dedup indexes stay

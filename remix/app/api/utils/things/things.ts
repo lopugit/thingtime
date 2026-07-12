@@ -186,10 +186,15 @@ const FEATURE_PROJECTION = {
   visibility: 1
 };
 
-type Fail = { ok: false; status: number; error: string };
-const fail = (status: number, error: string): Fail => ({ ok: false, status, error });
-const isFail = (value: unknown): value is Fail =>
+export type Fail = { ok: false; status: number; error: string };
+export const fail = (status: number, error: string): Fail => ({ ok: false, status, error });
+export const isFail = (value: unknown): value is Fail =>
   !!value && typeof value === 'object' && !Array.isArray(value) && (value as any).ok === false;
+
+// Route-layer adapter: the authed user (or null) → the Viewer acl evaluation
+// expects. Shared so every route passes the same shape.
+export const viewerOf = (user: { id: string; username: string } | null): Viewer =>
+  user ? { id: user.id, username: user.username } : null;
 
 // ---------------------------------------------------------------------------
 // Era helpers — one place that knows how to read both doc generations.
@@ -310,11 +315,14 @@ export const createThing = async (
   const inputAcl = resolveInputAcl(input);
   if (isFail(inputAcl)) return inputAcl;
 
-  // marketplace listings fold their category into tags so filters find them
-  const listing = validated.crystal.listing as MarketplaceListing | null | undefined;
-  const allTags = [...(tags as string[]), ...(listing ? [listing.category] : [])].filter(
-    (tag, index, all) => all.indexOf(tag) === index
-  );
+  // marketplace listings fold their category into tags so filters find them —
+  // post crystals only (a free-form data crystal can carry any `listing`
+  // value, which must never leak unsanitized into the multikey tags index)
+  const listing = validated.thingtime.includes('post')
+    ? (validated.crystal.listing as MarketplaceListing | null | undefined)
+    : null;
+  const categoryTag = listing && typeof listing.category === 'string' ? [listing.category] : [];
+  const allTags = [...(tags as string[]), ...categoryTag].filter((tag, index, all) => all.indexOf(tag) === index);
 
   let targetId: string | null = null;
   let target: ThingDoc | null = null;
@@ -382,9 +390,17 @@ export const createThing = async (
   try {
     await things.insertOne(doc as any);
   } catch (err: any) {
-    // duplicate shareId (seeding re-runs pass fixed ids) — mirror the
-    // registerUser 409 convention so seeds can skip idempotently
-    if (err?.code === 11000) return fail(409, 'Post already exists');
+    // duplicate-key can come from more than one unique index — only a shareId
+    // collision means "this thing already exists" (seeding re-runs pass fixed
+    // ids; mirror the registerUser 409 convention so seeds skip idempotently).
+    // The reaction (target, owner, token) index races surface as 409 too so
+    // toggleReaction keeps treating them as already-reacted.
+    if (err?.code === 11000) {
+      const keys = Object.keys(err?.keyPattern || {});
+      if (!keys.length || keys.includes('shareId')) return fail(409, 'Post already exists');
+      if (keys.includes('crystal.emoji')) return fail(409, 'Post already exists');
+      return fail(409, 'A thing with those unique fields already exists');
+    }
     throw err;
   }
 
@@ -809,6 +825,12 @@ export const parseChronoCursor = (cursor: string | null | undefined): { createdA
 
 export const chronoCursorClause = (cursor: { createdAt: Date; id: string }) => ({
   $or: [{ createdAt: { $lt: cursor.createdAt } }, { createdAt: cursor.createdAt, shareId: { $gt: cursor.id } }]
+});
+
+// oldest-first pagination inverts the createdAt comparison (search's oldest
+// sort) — kept beside its mirror so the cursor grammar lives in one file
+export const oldestCursorClause = (cursor: { createdAt: Date; id: string }) => ({
+  $or: [{ createdAt: { $gt: cursor.createdAt } }, { createdAt: cursor.createdAt, shareId: { $gt: cursor.id } }]
 });
 
 // type filter must match both eras: v2 keeps type in crystal, v1 at the root
@@ -1324,8 +1346,12 @@ export const updateThing = async (
   if (input.tags !== undefined) {
     const sanitized = sanitizeTags(input.tags);
     if (isFail(sanitized)) return sanitized;
-    const listing = validated.crystal.listing as MarketplaceListing | null | undefined;
-    tags = [...sanitized, ...(listing ? [listing.category] : [])].filter((tag, index, all) => all.indexOf(tag) === index);
+    // post crystals only — see the identical guard in createThing
+    const listing = thingtime.includes('post')
+      ? (validated.crystal.listing as MarketplaceListing | null | undefined)
+      : null;
+    const categoryTag = listing && typeof listing.category === 'string' ? [listing.category] : [];
+    tags = [...sanitized, ...categoryTag].filter((tag, index, all) => all.indexOf(tag) === index);
   }
 
   let acl = aclOf(doc);

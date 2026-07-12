@@ -18,6 +18,7 @@ import { useLopu } from '~/components/Lopu/useLopu';
 import { useApi } from '~/hooks/useApi';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { thingtimeSchemas } from '~/schemas/registry';
+import { CARD_STYLES } from '~/theme/card';
 import type {
   ConditionRow,
   RowValueType,
@@ -34,14 +35,6 @@ import type {
 
 const CACHE_KEY = 'tt-search';
 const PAGE_SIZE = 20;
-
-const CARD_STYLES = {
-  bg: 'var(--tt-card, #ffffff)',
-  border: '1px solid',
-  borderColor: 'var(--tt-border, #ececef)',
-  borderRadius: 'var(--tt-radius-lg, 16px)',
-  boxShadow: 'var(--tt-shadow-card, 0 1px 2px rgba(0, 0, 0, 0.05))'
-} as const;
 
 // UI operator vocabulary. `between` is sugar for a gte+lte pair; the rest map
 // 1:1 onto the API grammar (which whitelists them server-side too).
@@ -68,9 +61,11 @@ const ROOT_FIELD_SUGGESTIONS = ['tags', 'thingtime', 'createdAt', 'updatedAt', '
 
 const opKind = (op: string) => OPERATORS.find((entry) => entry.id === op)?.kind || 'value';
 
-let rowSeq = 0;
+const rowId = () =>
+  typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+
 const newRow = (partial: Partial<ConditionRow> = {}): ConditionRow => ({
-  id: `row-${++rowSeq}-${Date.now().toString(36)}`,
+  id: rowId(),
   field: '',
   op: 'contains',
   value: '',
@@ -86,7 +81,7 @@ const PURE_NUMBER = /^-?\d+(\.\d+)?$/;
 // their real types, everything else stays text.
 const coerceValue = (raw: string, valueType: RowValueType): string | number | boolean | null => {
   const value = raw.trim();
-  if (valueType === 'text' || valueType === 'date') return value;
+  if (valueType === 'text') return value;
   if (valueType === 'number') return PURE_NUMBER.test(value) ? Number(value) : value;
   if (valueType === 'boolean') return value === 'true';
   if (valueType === 'null') return null;
@@ -99,10 +94,32 @@ const coerceValue = (raw: string, valueType: RowValueType): string | number | bo
 
 type ApiCondition = Record<string, unknown>;
 
+// Pre-submit validation: a row explicitly typed 'number' whose value isn't one
+// is a typo the user should hear about, not a silent string comparison.
+const invalidNumberField = (rows: ConditionRow[]): string | null => {
+  for (const row of rows) {
+    if (row.valueType !== 'number' || !row.field.trim()) continue;
+    const kind = opKind(row.op);
+    const values =
+      kind === 'range'
+        ? [row.value, row.value2]
+        : kind === 'list'
+          ? row.value.split(',')
+          : kind === 'value'
+            ? [row.value]
+            : [];
+    for (const value of values) {
+      const trimmed = value.trim();
+      if (trimmed && !PURE_NUMBER.test(trimmed)) return row.field.trim();
+    }
+  }
+  return null;
+};
+
 // Compile GUI rows to the API's condition list. Empty rows are ignored (that's
 // what makes schema prefill browsable — rows appear, you fill what you care
 // about). Returns null when nothing is filled in.
-const compileRows = (rows: ConditionRow[], mode: 'all' | 'any'): ApiCondition[] | null => {
+const compileRows = (rows: ConditionRow[]): ApiCondition[] | null => {
   const conditions: ApiCondition[] = [];
   for (const row of rows) {
     const field = row.field.trim();
@@ -121,16 +138,13 @@ const compileRows = (rows: ConditionRow[], mode: 'all' | 'any'): ApiCondition[] 
     if (kind === 'range') {
       const low = row.value.trim();
       const high = row.value2.trim();
-      const pair: ApiCondition[] = [];
-      if (low) pair.push({ field, op: 'gte', value: coerceValue(low, row.valueType) });
-      if (high) pair.push({ field, op: 'lte', value: coerceValue(high, row.valueType) });
-      if (!pair.length) continue;
-      // an any-of search must keep the range atomic (low AND high together)
-      if (pair.length === 2 && mode === 'any') {
-        conditions.push({ mode: 'all', conditions: pair });
-      } else {
-        conditions.push(...pair);
-      }
+      if (!low && !high) continue;
+      // the API's native between keeps the range atomic in any-of searches
+      conditions.push({
+        field,
+        op: 'between',
+        values: [low ? coerceValue(low, row.valueType) : null, high ? coerceValue(high, row.valueType) : null]
+      });
       continue;
     }
     if (kind === 'list') {
@@ -169,10 +183,18 @@ const rowFromSchemaField = (field: SchemaSource['fields'][number]): ConditionRow
     return newRow({ field: field.name, op: 'eq', value: 'true', valueType: 'boolean', meta });
   }
   if (field.type === 'date') {
-    return newRow({ field: field.name, op: 'between', valueType: 'date', meta });
+    // crystal dates are ISO strings — string comparison orders them correctly
+    return newRow({ field: field.name, op: 'between', valueType: 'text', meta });
   }
   return newRow({ field: field.name, op: 'contains', meta });
 };
+
+// only fields the search grammar can actually address prefill a row — the
+// data schema's illustrative '*' wildcard and object/record payload fields
+// (e.g. a schema thing's own `fields` array) would just 400 on submit
+const SEARCHABLE_FIELD_NAME = /^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$/;
+const searchableField = (field: { name: string; type: string }) =>
+  SEARCHABLE_FIELD_NAME.test(field.name) && field.type !== 'object' && field.type !== 'record';
 
 const builtinSchemaSources = (): SchemaSource[] =>
   thingtimeSchemas
@@ -182,15 +204,17 @@ const builtinSchemaSources = (): SchemaSource[] =>
       name: schema.title,
       description: schema.summary,
       origin: 'builtin' as const,
-      fields: schema.fields.map((field) => ({
-        name: field.name,
-        type: field.type === 'enum' ? 'enum' : field.type,
-        description: field.description,
-        values: field.values,
-        max: undefined,
-        min: undefined,
-        unit: undefined
-      }))
+      fields: schema.fields
+        .filter((field) => searchableField(field))
+        .map((field) => ({
+          name: field.name,
+          type: field.type === 'enum' ? 'enum' : field.type,
+          description: field.description,
+          values: field.values,
+          max: undefined,
+          min: undefined,
+          unit: undefined
+        }))
     }));
 
 const schemaThingToSource = (thing: SearchThing): SchemaSource | null => {
@@ -277,7 +301,15 @@ function CrystalPreview({ crystal }: { crystal: Record<string, any> }) {
   );
 }
 
-function ThingResultCard({ thing, post }: { thing: SearchThing; post: SearchPost | null }) {
+// memoized — result cards are stable between builder-row keystrokes, and
+// CrystalPreview stringifies every chip on render
+const ThingResultCard = React.memo(function ThingResultCard({
+  thing,
+  post
+}: {
+  thing: SearchThing;
+  post: SearchPost | null;
+}) {
   const created = new Date(thing.createdAt);
   const when = Number.isNaN(created.getTime()) ? '' : created.toLocaleDateString();
   const title = post?.text || thing.crystal?.name || thing.crystal?.title || thing.crystal?.text || '';
@@ -314,7 +346,7 @@ function ThingResultCard({ thing, post }: { thing: SearchThing; post: SearchPost
       ) : null}
     </Box>
   );
-}
+});
 
 export const SearchPage = () => {
   const api = useApi();
@@ -356,6 +388,10 @@ export const SearchPage = () => {
 
   const stateRef = React.useRef({ q, mode, rows, kind, sort });
   stateRef.current = { q, mode, rows, kind, sort };
+  // the query that produced the current result set — load-more continues THIS
+  // query, never live (possibly edited-but-unsubmitted) builder state, so a
+  // stale cursor can't be mixed with new params
+  const submittedRef = React.useRef(stateRef.current);
 
   const runSearch = React.useCallback(
     async (options: { cursor?: string | null } = {}) => {
@@ -363,8 +399,21 @@ export const SearchPage = () => {
       const seq = ++requestSeqRef.current;
       setLoading(true);
 
-      const current = stateRef.current;
-      const conditions = compileRows(current.rows, current.mode);
+      const current = cursor ? submittedRef.current : stateRef.current;
+      if (!cursor) submittedRef.current = current;
+
+      const invalidField = invalidNumberField(current.rows);
+      if (invalidField) {
+        setLoading(false);
+        lopuRef.current({
+          title: `"${invalidField}" wants a number`,
+          description: 'That value isn’t numeric — fix it or switch the row’s datatype to text.',
+          status: 'error'
+        });
+        return;
+      }
+
+      const conditions = compileRows(current.rows);
       const body: Record<string, unknown> = {
         q: current.q.trim() || undefined,
         mode: current.mode,
@@ -386,8 +435,11 @@ export const SearchPage = () => {
         });
         setPosts((prev) => (cursor ? { ...prev, ...(resp.posts || {}) } : resp.posts || {}));
         setNextCursor(resp.nextCursor ?? null);
-        setTotal(resp.total ?? null);
-        setTotalCapped(!!resp.totalCapped);
+        // load-more responses skip the count — keep the first page's total
+        if (!cursor || resp.total !== null) {
+          setTotal(resp.total ?? null);
+          setTotalCapped(!!resp.totalCapped);
+        }
         setRanked(!!resp.ranked);
 
         if (!cursor) {
@@ -427,6 +479,32 @@ export const SearchPage = () => {
     runSearch();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // a ?q= arriving while the page is already mounted (Commander's pinned row
+  // used on /search itself) is a fresh text search — reset filters and rerun.
+  // Initializers only cover the mount case; this covers every later one.
+  const lastUrlQRef = React.useRef(urlQ);
+  const [pendingUrlSearch, setPendingUrlSearch] = React.useState(false);
+  React.useEffect(() => {
+    if (urlQ === lastUrlQRef.current) return;
+    lastUrlQRef.current = urlQ;
+    if (!urlQ) return;
+    // runSearch syncs ?q= after every submit — our own echo is not a new search
+    if (urlQ === stateRef.current.q.trim()) return;
+    setQ(urlQ);
+    setRows([]);
+    setKind('');
+    setSort('auto');
+    setMode('all');
+    setActiveSchema(null);
+    setPendingUrlSearch(true);
+  }, [urlQ]);
+  React.useEffect(() => {
+    if (!pendingUrlSearch) return;
+    setPendingUrlSearch(false);
+    // runs after the resets above have re-rendered, so stateRef is fresh
+    runSearch();
+  }, [pendingUrlSearch, runSearch]);
 
   // community schemas load lazily when the browser opens
   React.useEffect(() => {
@@ -494,8 +572,10 @@ export const SearchPage = () => {
     [runSearch]
   );
 
+  // the count is a visibility-superset approximation (private-to-others docs
+  // can be counted but never shown), so present it as such
   const totalLabel =
-    total === null ? null : `${total}${totalCapped ? '+' : ''} thing${total === 1 && !totalCapped ? '' : 's'}`;
+    total === null ? null : `${totalCapped ? `${total}+` : `~${total}`} thing${total === 1 && !totalCapped ? '' : 's'}`;
 
   return (
     <Flex background="var(--tt-surface, #fafafb)" justifyContent="center" minHeight="100vh" width="100%">

@@ -338,7 +338,9 @@ const dataSchema: ThingtimeSchema = {
     'The open half of Thingtime: a data thing’s crystal holds whatever structure you give it ' +
     '(numbers stay numbers, booleans stay booleans), bounded but never schema-gated. Search it ' +
     'with real datatype conditions on /search (legs ≥ 3, material in wood/concrete, height ' +
-    'between 60–130). Convention: carry a `schema` field naming a published schema thing (e.g. ' +
+    'between 60–130). Data crystals stand alone — thingtime ["data"] never combines with typed ' +
+    'schemas, so the open shape can’t ride past a typed whitelist. Convention: carry a `schema` ' +
+    'field naming a published schema thing (e.g. ' +
     '"Table") so schema-driven searches can find you, and tag the thing for feed filters. Keys ' +
     `are letters/numbers/_/- (max ${MAX_DATA_KEY_CHARS} chars), nesting caps at ` +
     `${MAX_DATA_CRYSTAL_DEPTH} levels, ${MAX_DATA_CRYSTAL_NODES} values per crystal, arrays at ` +
@@ -687,9 +689,14 @@ const sanitizeReactionCrystal = (input: Record<string, unknown>): { ok: true; cr
   return { ok: true, crystal: { emoji: token } };
 };
 
+// The one key-segment grammar shared by data-crystal keys, schema-thing field
+// names, and the search API's condition field paths — exported so the three
+// can never drift (a storable key MUST be a searchable key).
+export const KEY_SEGMENT_PATTERN = /^[A-Za-z0-9_-]+$/;
+
 // Free-form data crystals: any JSON, bounded and key-validated. The walk fails
 // loudly (never silently drops) so writers know exactly what didn't fit.
-const DATA_KEY_PATTERN = /^[A-Za-z0-9_-]+$/;
+const DATA_KEY_PATTERN = KEY_SEGMENT_PATTERN;
 
 const sanitizeDataValue = (
   value: unknown,
@@ -716,8 +723,8 @@ const sanitizeDataValue = (
     const out: unknown[] = [];
     for (let index = 0; index < value.length; index++) {
       const entry = sanitizeDataValue(value[index], depth + 1, counter, `${path}[${index}]`);
-      if ('ok' in entry && entry.ok === false) return entry;
-      out.push((entry as { ok: true; value: unknown }).value);
+      if (!entry.ok) return entry;
+      out.push(entry.value);
     }
     return { ok: true, value: out };
   }
@@ -729,8 +736,8 @@ const sanitizeDataValue = (
         return fail(400, `Data keys are letters/numbers/_/- up to ${MAX_DATA_KEY_CHARS} chars (got ${key.slice(0, 80)})`);
       }
       const sanitized = sanitizeDataValue(entry, depth + 1, counter, path ? `${path}.${key}` : key);
-      if ('ok' in sanitized && sanitized.ok === false) return sanitized;
-      out[key] = (sanitized as { ok: true; value: unknown }).value;
+      if (!sanitized.ok) return sanitized;
+      out[key] = sanitized.value;
     }
     return { ok: true, value: out };
   }
@@ -738,15 +745,13 @@ const sanitizeDataValue = (
 };
 
 const sanitizeDataCrystal = (input: Record<string, unknown>): { ok: true; crystal: Record<string, unknown> } | Fail => {
-  const counter = { nodes: 0 };
-  const sanitized = sanitizeDataValue(input, 0, counter, '');
-  if ('ok' in sanitized && sanitized.ok === false) return sanitized;
-  return { ok: true, crystal: (sanitized as { ok: true; value: Record<string, unknown> }).value };
+  const sanitized = sanitizeDataValue(input, 0, { nodes: 0 }, '');
+  if (!sanitized.ok) return sanitized;
+  return { ok: true, crystal: sanitized.value as Record<string, unknown> };
 };
 
 // Schema-thing field names double as crystal paths in the search builder
-// (crystal.<name>), so they follow the same segment grammar the search API
-// accepts — no $, no spaces, dots only as nesting separators.
+// (crystal.<name>): KEY_SEGMENT_PATTERN segments joined by dots.
 const SCHEMA_FIELD_NAME_PATTERN = /^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$/;
 const MAX_SCHEMA_FIELD_NAME_CHARS = 60;
 const MAX_SCHEMA_FIELD_DESCRIPTION_CHARS = 200;
@@ -772,7 +777,9 @@ const sanitizeSchemaCrystal = (input: Record<string, unknown>): { ok: true; crys
       return fail(400, `Schema field names are letters/numbers/_/- with optional dots (got ${String(def.name).slice(0, 80)})`);
     }
     const key = fieldName.toLowerCase();
-    if (seen.has(key)) continue;
+    // fail loudly (module convention) — silently dropping a duplicate would
+    // lose a user's field definition with a 200
+    if (seen.has(key)) return fail(400, `Duplicate schema field name: ${fieldName}`);
     seen.add(key);
 
     const type = SCHEMA_FIELD_TYPES.includes(def.type as any) ? (def.type as SchemaFieldType) : null;
@@ -854,15 +861,18 @@ export const validateThingtimeCrystal = (thingtime: unknown, crystal: unknown): 
     if (!ids.includes(id)) ids.push(id);
   }
 
+  // Free-form 'data' crystals stand alone. Combining data with a typed schema
+  // would let arbitrary keys ride past that schema's whitelist (verified:
+  // ["post","data"] smuggled non-post fields into the stored crystal), so the
+  // open shape and the closed shapes never share one thing.
+  if (ids.includes('data') && ids.length > 1) {
+    return fail(400, 'data crystals stand alone — publish a separate data thing and link it via targetId or tags');
+  }
+
   const input = crystal && typeof crystal === 'object' && !Array.isArray(crystal) ? (crystal as Record<string, unknown>) : {};
   const merged: Record<string, unknown> = {};
   let requiresTarget = false;
-  // free-form 'data' sanitizes FIRST whatever its thingtime position, so a
-  // typed schema sharing the array (e.g. ["post","data"]) always overrides the
-  // raw values for its own fields — data can widen a crystal, never weaken a
-  // typed schema's invariants
-  const sanitizeOrder = ids.includes('data') ? ['data', ...ids.filter((id) => id !== 'data')] : ids;
-  for (const id of sanitizeOrder) {
+  for (const id of ids) {
     const schema = getThingtimeSchema(id)!;
     if (schema.requiresTarget) requiresTarget = true;
     const sanitizer = crystalSanitizers[id];

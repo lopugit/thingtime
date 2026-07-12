@@ -12,7 +12,7 @@ import {
   toPublicThings,
   updateThing,
   upsertThing,
-  type Viewer
+  viewerOf
 } from '~/api/utils/things/things';
 
 // Route a unified mutation to the rate-limit key its dedicated sub-route would
@@ -37,9 +37,6 @@ const csv = (value: string | null): string[] =>
     .split(',')
     .map((entry) => entry.trim())
     .filter(Boolean);
-
-const viewerOf = (user: { id: string; username: string } | null): Viewer =>
-  user ? { id: user.id, username: user.username } : null;
 
 // GET /api/v1/things?id=<shareId> — read one thing (post projection included
 // for post things).

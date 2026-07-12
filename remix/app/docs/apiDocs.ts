@@ -1693,7 +1693,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'The search behind /search. Two modes that compose: q runs a ranked text search (weighted ' +
       'wildcard text index over every string field — relevance-sorted like a web search), and ' +
       'conditions runs a structured query built from a whitelisted operator grammar: eq, ne, gt, ' +
-      'gte, lt, lte, in, nin, exists, type, contains, startsWith, endsWith. Fields address the ' +
+      'gte, lt, lte, between, in, nin, exists, type, contains, startsWith, endsWith. Fields address the ' +
       'crystal by path (bare names auto-prefix, so "legs" means crystal.legs) plus the root ' +
       'fields tags, thingtime, createdAt, updatedAt, shareId, and targetId. Conditions nest into ' +
       'all/any groups (depth ≤ 3, ≤ 32 conditions); values must be bounded primitives, and text ' +
@@ -1710,9 +1710,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: [
       'GET ?q=<text>&thingtime=&tags=&sort=&cursor=&limit= for the simple shareable form.',
       'POST { q?, mode: "all"|"any", conditions: [{ field, op, value | values } | { mode, conditions: [...] }], thingtime?, tags?, from?, to?, sort?, cursor?, limit? } for structured searches.',
-      'Range searches are two conditions on one field (gte + lte); enum picks are one in condition.',
+      'Range searches are one atomic between condition ({ field, op: "between", values: [low, high] }, either end open); enum picks are one in condition.',
       'sort defaults to relevance with q, newest otherwise (oldest also supported); ranked pages cursor by offset, chronological pages by the standard createdAt_shareId cursor.',
-      'The response carries things (generic projections), posts (full post projections keyed by thing id), nextCursor, and a capped total.',
+      'The response carries things (generic projections), posts (full post projections keyed by thing id), nextCursor, and a capped approximate total (a visibility-superset count, only computed on the first page).',
       'Handle 400 invalid grammar and 429 rate-limited.'
     ],
     requestExamples: [
@@ -1731,8 +1731,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           conditions: [
             { field: 'legs', op: 'gte', value: 3 },
             { field: 'material', op: 'in', values: ['wood', 'concrete'] },
-            { field: 'height', op: 'gte', value: 60 },
-            { field: 'height', op: 'lte', value: 130 },
+            { field: 'height', op: 'between', values: [60, 130] },
             { field: 'features', op: 'contains', value: 'sit/stand' }
           ]
         }
@@ -1793,7 +1792,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       {
         status: 400,
         description: 'A condition failed the grammar.',
-        body: { ok: false, error: 'Unknown search operator: where (use eq, ne, gt, gte, lt, lte, in, nin, exists, type, contains, startsWith, endsWith)' }
+        body: { ok: false, error: 'Unknown search operator: where (use eq, ne, gt, gte, lt, lte, between, in, nin, exists, type, contains, startsWith, endsWith)' }
       }
     ],
     notes: [

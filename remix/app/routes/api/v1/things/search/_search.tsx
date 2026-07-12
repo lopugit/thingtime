@@ -3,15 +3,12 @@ import { json, readJsonBody } from '~/api/http';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import { searchThings, type SearchQuery } from '~/api/utils/things/search';
-import type { Viewer } from '~/api/utils/things/things';
+import { viewerOf } from '~/api/utils/things/things';
 
 // Search bodies are small JSON condition trees.
 const MAX_BODY_BYTES = 32 * 1024;
 
-const viewerOf = (user: { id: string; username: string } | null): Viewer =>
-  user ? { id: user.id, username: user.username } : null;
-
-const respond = async (request: Request, user: { id: string } | null, query: SearchQuery) => {
+const respond = async (request: Request, user: { id: string; username: string } | null, query: SearchQuery) => {
   // throttled for everyone (searches hit indexes, but a query builder is still
   // an invitation to hammer) — authed users by id, anonymous by hashed IP
   const limit = await enforceRateLimit(request, 'things.search', user ? `user:${user.id}` : null);
@@ -22,7 +19,7 @@ const respond = async (request: Request, user: { id: string } | null, query: Sea
     );
   }
 
-  const result = await searchThings(viewerOf(user as any), query);
+  const result = await searchThings(viewerOf(user), query);
   if (result.ok === false) {
     return json({ ok: false, error: result.error }, { status: result.status });
   }
