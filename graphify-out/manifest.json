@@ -2705,9 +2705,9 @@
     "semantic_hash": "0c4cda614416a229910529e75f1ec04b"
   },
   "remix/app/components/Nav/Drawer/NavDrawer.tsx": {
-    "mtime": 1783832024.3239284,
-    "ast_hash": "dbcae288c3a12d49a33b7aa209eca627",
-    "semantic_hash": "dbcae288c3a12d49a33b7aa209eca627"
+    "mtime": 1783870394.1746209,
+    "ast_hash": "6a0ee6baea284b6998893525e1124769",
+    "semantic_hash": ""
   },
   "remix/app/components/Nav/Drawer/ReorderableList.tsx": {
     "mtime": 1783832024.3240354,
@@ -2725,9 +2725,9 @@
     "semantic_hash": ""
   },
   "remix/app/components/Nav/Drawer/useDrawer.tsx": {
-    "mtime": 1783832024.3243344,
-    "ast_hash": "e875c4647b751da2886f2ac2e31a0806",
-    "semantic_hash": "e875c4647b751da2886f2ac2e31a0806"
+    "mtime": 1783870364.5386705,
+    "ast_hash": "f046b7e3052cb4a0603aa2121407d704",
+    "semantic_hash": ""
   },
   "remix/app/routes/docs/DesignWorkspace.tsx": {
     "mtime": 1783832024.341317,
@@ -3095,8 +3095,8 @@
     "semantic_hash": "04f619961c2607fa0e42335fe49c2b04"
   },
   "remix/app/components/Thingtime/EditorSplit.tsx": {
-    "mtime": 1783866822.9018536,
-    "ast_hash": "f9bbbec54489f77aaf4fb7b70732705a",
+    "mtime": 1783870338.7862115,
+    "ast_hash": "a9666c3758fa8f049db864fd64dec204",
     "semantic_hash": ""
   },
   "remix/app/api/utils/algorithms/algorithms.ts": {
@@ -3240,8 +3240,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Feed/PostComposer.tsx": {
-    "mtime": 1783866931.9042745,
-    "ast_hash": "e388d6131c683d819686b7e93f045ceb",
+    "mtime": 1783870444.970773,
+    "ast_hash": "a74ccff791afc38f271b7a246d788c7a",
     "semantic_hash": ""
   },
   "remix/app/components/Feed/PostList.tsx": {
@@ -3470,9 +3470,9 @@
     "semantic_hash": "cb100f6065969db2ba48924ccbc315ee"
   },
   "remix/app/components/Editor/LongTextEditor.tsx": {
-    "mtime": 1783832024.3171928,
-    "ast_hash": "032bd69aa961640a839cf55b6a43efb7",
-    "semantic_hash": "032bd69aa961640a839cf55b6a43efb7"
+    "mtime": 1783869705.9393444,
+    "ast_hash": "1239aaa54fae52f1a8b06d252cf83e80",
+    "semantic_hash": ""
   },
   "remix/app/components/Kinds/kindPrimitives.tsx": {
     "mtime": 1783832024.32058,
@@ -3857,11 +3857,6 @@
   "PRs/67-claude-profile-feed-advanced-filters-5878aa--profile-composer-thingtime-posts-advanced-filters.md": {
     "mtime": 1783866900.5908637,
     "ast_hash": "271f1bba44890d4af7e658baf97edd2a",
-    "semantic_hash": ""
-  },
-  "remix/app/components/Thingtime/ThingEditorPopout.tsx": {
-    "mtime": 1783866841.455017,
-    "ast_hash": "21e2b214739c6c4e541b1c4f857e068a",
     "semantic_hash": ""
   }
 }

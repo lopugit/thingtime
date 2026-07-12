@@ -9,6 +9,9 @@ export const DRAWER_POPUP_Z = 10001;
 export const DRAWER_TRIGGER_Z = 10002;
 export const DRAWER_MODAL_OVERLAY_Z = 10003;
 export const DRAWER_MODAL_Z = 10004;
+// while the pointer is over the drawer it outranks floating editor windows
+// (which default to layering above it — see EditorSplit's layer system)
+export const DRAWER_HOVER_Z = 10120;
 
 export const DRAWER_MIN_WIDTH = 220;
 export const DRAWER_MAX_WIDTH = 520;

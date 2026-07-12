@@ -7,7 +7,6 @@ import { LongTextEditor } from '~/components/Editor/LongTextEditor';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { UserAvatarCircle } from '~/components/Nav/Drawer/DrawerContent';
 import { EditorSplit, startPointerGesture } from '~/components/Thingtime/EditorSplit';
-import { ThingEditorPopout } from '~/components/Thingtime/ThingEditorPopout';
 import { useThingtime } from '~/components/Thingtime/useThingtime';
 import { RAINBOW } from '~/theme/rainbow';
 import { CIRCLE_META, MARKETPLACE_CATEGORY_META, POST_TYPE_META } from './feedTypes';
@@ -105,11 +104,15 @@ export const PostComposer = (props: PostComposerProps) => {
   const [posting, setPosting] = React.useState(false);
 
   // thingtime-tab extras: toggleable photos/marketplace field groups, the
-  // in-post editor's draggable height, and the floating popout editor
+  // in-post editor's draggable height, and its imperative API (the pop-out
+  // button duplicates the window into one of the editor's own floating frames)
   const [thingPhotos, setThingPhotos] = React.useState(false);
   const [thingListing, setThingListing] = React.useState(false);
   const [editorHeight, setEditorHeight] = React.useState(DEFAULT_EDITOR_HEIGHT);
-  const [popoutOpen, setPopoutOpen] = React.useState(false);
+  const editorApiRef = React.useRef<{ popOutDuplicate: () => void } | null>(null);
+  const handleEditorApi = React.useCallback((api: { popOutDuplicate: () => void }) => {
+    editorApiRef.current = api;
+  }, []);
 
   // bumping the session remounts the block editor with a clean document
   // (while mounted, the editor owns the text)
@@ -133,13 +136,28 @@ export const PostComposer = (props: PostComposerProps) => {
 
   // seed the draft branch the first time the tab opens (post-hydration only,
   // so a persisted draft is never clobbered by the pre-hydration empty store).
-  // Drafts from the pre-rename composerDraft branch migrate across once.
+  // Drafts from the pre-rename composerDraft branch migrate across once, and
+  // the old default child is stripped: a draft that is exactly { name: '' }
+  // collapses to the bare New Thing root.
   React.useEffect(() => {
     if (type !== 'thingtime' || !expanded || thingtimeLoading) return;
+    const isEmptyNameResidue = (value: any) => {
+      const keys = value && typeof value === 'object' && !Array.isArray(value) ? Object.keys(value) : null;
+      return !!keys && keys.length === 1 && keys[0] === 'name' && value.name === '';
+    };
     const current = getThingtime(THING_DRAFT_PATH);
-    if (current && typeof current === 'object' && !Array.isArray(current)) return;
+    if (current && typeof current === 'object' && !Array.isArray(current)) {
+      if (isEmptyNameResidue(current)) setThingtime(THING_DRAFT_PATH, {});
+      return;
+    }
     const legacy = getThingtime(LEGACY_DRAFT_PATH);
-    if (legacy && typeof legacy === 'object' && !Array.isArray(legacy) && Object.keys(legacy).length) {
+    if (
+      legacy &&
+      typeof legacy === 'object' &&
+      !Array.isArray(legacy) &&
+      Object.keys(legacy).length &&
+      !isEmptyNameResidue(legacy)
+    ) {
       setThingtime(THING_DRAFT_PATH, legacy);
       setThingtime(LEGACY_DRAFT_PATH, null);
       return;
@@ -191,7 +209,6 @@ export const PostComposer = (props: PostComposerProps) => {
     setVisibility('public');
     setThingPhotos(false);
     setThingListing(false);
-    setPopoutOpen(false);
   };
 
   const setImageAt = (index: number, url: string) => {
@@ -350,8 +367,8 @@ export const PostComposer = (props: PostComposerProps) => {
                 variant="ghost"
                 color={MUTED}
                 borderRadius="8px"
-                title="Pop out a floating, resizable, splittable editor window"
-                onClick={() => setPopoutOpen(true)}
+                title="Pop out a floating, resizable, splittable editor window (the in-post editor stays)"
+                onClick={() => editorApiRef.current?.popOutDuplicate()}
               />
             </Flex>
           </Flex>
@@ -361,7 +378,7 @@ export const PostComposer = (props: PostComposerProps) => {
             the same pass) — the placeholder only covers the true cold start
             while the localforage blob loads, per the optimistic-render rule */}
             {!thingtimeLoading ? (
-              <EditorSplit initialPath={THING_DRAFT_PATH} embedded height="100%" />
+              <EditorSplit initialPath={THING_DRAFT_PATH} embedded height="100%" onApi={handleEditorApi} />
             ) : (
               <Flex
                 alignItems="center"
@@ -405,14 +422,6 @@ export const PostComposer = (props: PostComposerProps) => {
             it out into its own window ↗️
           </Text>
         </Flex>
-      )}
-
-      {popoutOpen && (
-        <ThingEditorPopout
-          path={THING_DRAFT_PATH}
-          title="New Thing · editor 🌀"
-          onClose={() => setPopoutOpen(false)}
-        />
       )}
 
       {/* photos */}

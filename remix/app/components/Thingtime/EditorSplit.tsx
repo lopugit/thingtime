@@ -1,8 +1,9 @@
 import React from 'react';
 import { Box, Flex, Input } from '@chakra-ui/react';
-import { Columns2, Ellipsis, Eye, Grip, Paintbrush, PictureInPicture, PictureInPicture2, Rows2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, Columns2, Ellipsis, Eye, Grip, Paintbrush, PictureInPicture, PictureInPicture2, Rows2 } from 'lucide-react';
 
 import { useTtCustomClasses } from '../../hooks/useTtTheme';
+import { DRAWER_Z } from '../Nav/Drawer/useDrawer';
 import { useLopu } from '../Lopu/useLopu';
 import { Thingtime } from './Thingtime';
 import { useThingtime } from './useThingtime';
@@ -73,6 +74,9 @@ export type EditorLayoutSnapshot = {
 	minimised: EditorLeaf[];
 	// the maximised window survives save/restore (null = normal layout)
 	maximisedId?: string | null;
+	// how many floating frames (from the bottom of the stack) sit BELOW the
+	// drawer layer; absent on old configs = all below (their legacy stacking)
+	drawerLayerIndex?: number;
 };
 
 export type DropSide = 'left' | 'right' | 'top' | 'bottom';
@@ -96,8 +100,14 @@ type WindowDragState = {
 
 const MIN_RATIO = 0.12;
 const MAX_RATIO = 0.88;
-const FLOATING_Z_INDEX = 1250;
-const DRAG_GHOST_Z_INDEX = 1350;
+// Floating frames layer around the drawer (DRAWER_Z): the below band still
+// floats over page content but slides under the drawer and the fixed nav
+// (9999); the above band clears both. Within a band, array order (bottom →
+// top) sets the stacking; the ▲▼ layer controls move frames within and
+// ACROSS the bands, treating the drawer itself as one layer index.
+const FRAME_BELOW_DRAWER_BASE = DRAWER_Z - 100;
+const FRAME_ABOVE_DRAWER_BASE = DRAWER_Z + 40;
+const DRAG_GHOST_Z_INDEX = DRAWER_Z + 190;
 const DRAG_THRESHOLD_PX = 6;
 
 // the platform's dock-while-dragging modifier, for hints ('⌘' or 'Ctrl')
@@ -385,6 +395,9 @@ type WindowActions = {
 	onMinimise: (id: string) => void;
 	onMaximise: (id: string) => void;
 	onPopOut: (id: string) => void;
+	// frame windows only: move the enclosing frame through the layer stack
+	// (direction 1 = raise, -1 = lower; toEnd = bring-to-front / send-to-back)
+	onLayerMove: (id: string, direction: 1 | -1, toEnd?: boolean) => void;
 	onDockIn: (id: string) => void;
 	onStartWindowDrag: (e: React.PointerEvent, leafId: string, label: string) => void;
 	maximisedId: string | null;
@@ -778,6 +791,20 @@ const EditorWindow = (props: { leaf: EditorLeaf; actions: WindowActions; context
 									<Flex {...toolbarButtonStyles} title="Pop back into the layout" onClick={() => actions.onDockIn(leaf.id)}>
 										<PictureInPicture size={13} strokeWidth={2} />
 									</Flex>
+									<Flex
+										{...toolbarButtonStyles}
+										title="Raise a layer — layers cross the drawer (⇧-click: bring to front)"
+										onClick={(e) => actions.onLayerMove(leaf.id, 1, e.shiftKey)}
+									>
+										<ArrowUp size={13} strokeWidth={2} />
+									</Flex>
+									<Flex
+										{...toolbarButtonStyles}
+										title="Lower a layer — layers cross the drawer (⇧-click: send to back)"
+										onClick={(e) => actions.onLayerMove(leaf.id, -1, e.shiftKey)}
+									>
+										<ArrowDown size={13} strokeWidth={2} />
+									</Flex>
 								</>
 							)}
 						</Flex>
@@ -908,8 +935,10 @@ const FloatingWindowView = (props: {
 	onStartFrameDrag: (e: React.PointerEvent, frameId: string, opts?: { dock?: boolean }) => void;
 	onRatio: (id: string, ratio: number) => void;
 	dragging: boolean;
+	// stacking slot from the layer system (frames sit above or below the drawer)
+	zIndex: number;
 }) => {
-	const { win, actions, onGeometry, onStartFrameDrag, onRatio, dragging } = props;
+	const { win, actions, onGeometry, onStartFrameDrag, onRatio, dragging, zIndex } = props;
 
 	const onFramePointerDown = React.useCallback(
 		(e: React.PointerEvent) => {
@@ -960,7 +989,7 @@ const FloatingWindowView = (props: {
 			top={`${win.y}px`}
 			width={`${win.width}px`}
 			height={`${win.height}px`}
-			zIndex={FLOATING_Z_INDEX}
+			zIndex={zIndex}
 			flexDirection="column"
 			background="var(--tt-card, #ffffff)"
 			border="1px solid var(--tt-border, #ececef)"
@@ -1002,6 +1031,9 @@ export type EditorSplitProps = {
 	embedded?: boolean;
 	// root height override (embedded containers own their sizing)
 	height?: string;
+	// imperative surface for hosts (the composer's pop-out button duplicates
+	// the current window into a floating frame — the docked editor stays)
+	onApi?: (api: { popOutDuplicate: () => void }) => void;
 };
 
 export const EditorSplit = (props: EditorSplitProps) => {
@@ -1021,6 +1053,12 @@ export const EditorSplit = (props: EditorSplitProps) => {
 	const [floating, setFloating] = React.useState<FloatingWindow[]>([]);
 	const [minimised, setMinimised] = React.useState<EditorLeaf[]>([]);
 	const [maximisedId, setMaximisedId] = React.useState<string | null>(null);
+	// the drawer's slot in the frame stack: frames before this index (bottom →
+	// top) render below the drawer, the rest above. 0 = everything above (the
+	// default — new windows float over the drawer until sent back).
+	const [drawerLayerIndex, setDrawerLayerIndex] = React.useState(0);
+	const drawerLayerIndexRef = React.useRef(drawerLayerIndex);
+	drawerLayerIndexRef.current = drawerLayerIndex;
 
 	// window drag-docking state (ghost + skeleton drop previews)
 	const [windowDrag, setWindowDrag] = React.useState<WindowDragState | null>(null);
@@ -1055,10 +1093,19 @@ export const EditorSplit = (props: EditorSplitProps) => {
 
 		// configs are user-editable data — never trust their shape
 		const nextTree = sanitizeNodeData(layout.tree);
+		const nextFloating = (Array.isArray(layout.floating) ? layout.floating : [])
+			.map(sanitizeFloatingData)
+			.filter(Boolean) as FloatingWindow[];
 
 		setTree(nextTree);
-		setFloating((Array.isArray(layout.floating) ? layout.floating : []).map(sanitizeFloatingData).filter(Boolean) as FloatingWindow[]);
+		setFloating(nextFloating);
 		setMinimised((Array.isArray(layout.minimised) ? layout.minimised : []).map(sanitizeLeafData).filter(Boolean) as EditorLeaf[]);
+		// configs saved before the layer system stacked every frame below the
+		// drawer — keep that look for them; new saves restore their divider
+		const savedDivider = Number(layout.drawerLayerIndex);
+		setDrawerLayerIndex(
+			Number.isFinite(savedDivider) ? Math.min(Math.max(0, Math.floor(savedDivider)), nextFloating.length) : nextFloating.length
+		);
 
 		// restore a saved maximised window — only if that leaf still exists in
 		// the (sanitized) docked tree, since maximise renders from the main tree
@@ -1066,6 +1113,12 @@ export const EditorSplit = (props: EditorSplitProps) => {
 
 		setMaximisedId(typeof savedMaximisedId === 'string' && findLeaf(nextTree, savedMaximisedId) ? savedMaximisedId : null);
 	}, []);
+
+	// closing/docking frames must never strand the drawer divider past the
+	// stack's end (a dangling divider would mis-band the next popped frame)
+	React.useEffect(() => {
+		setDrawerLayerIndex((divider) => Math.min(divider, floating.length));
+	}, [floating.length]);
 
 	// viewport shrinks (window resize) never strand floating frames offscreen
 	React.useEffect(() => {
@@ -1293,6 +1346,85 @@ export const EditorSplit = (props: EditorSplitProps) => {
 	const addWindow = React.useCallback(() => {
 		dockLeaf(makeLeaf(props.initialPath, true));
 	}, [dockLeaf, props.initialPath]);
+
+	// Duplicate the current window into a floating frame WITHOUT removing the
+	// docked one — the composer's pop-out button. Both windows edit the same
+	// path, so they live-sync through the store.
+	const popOutDuplicate = React.useCallback(() => {
+		const layout = layoutRef.current;
+		const source =
+			collectLeaves(layout.tree)[0] || layout.floating.flatMap((win) => collectLeaves(win.node))[0] || null;
+		const leaf: EditorLeaf = source ? { ...source, id: uid() } : makeLeaf(props.initialPath, true);
+
+		setFloating((prev) => {
+			const offset = 90 + prev.length * 28;
+
+			return [
+				...prev,
+				clampFloatingGeometry({ id: uid(), node: leaf, x: offset, y: offset, width: 760, height: 540 })
+			];
+		});
+	}, [props.initialPath]);
+
+	const onApi = props.onApi;
+
+	React.useEffect(() => {
+		onApi?.({ popOutDuplicate });
+	}, [onApi, popOutDuplicate]);
+
+	// Move a frame through the layer stack. `floating` is the bottom → top
+	// order; the drawer occupies the slot at drawerLayerIndex. Raising the
+	// top-most below-drawer frame (or lowering the bottom-most above one)
+	// crosses the drawer by moving the DIVIDER, not the frame, so relative
+	// window order is preserved across the crossing.
+	const moveFrameLayer = React.useCallback((leafId: string, direction: 1 | -1, toEnd = false) => {
+		const frames = layoutRef.current.floating;
+		const divider = drawerLayerIndexRef.current;
+		const index = frames.findIndex((win) => findLeaf(win.node, leafId));
+
+		if (index < 0) {
+			return;
+		}
+
+		if (toEnd) {
+			// bring-to-front / send-to-back, crossing the drawer if needed
+			setFloating((prev) => {
+				const win = prev[index];
+				const rest = prev.filter((_, i) => i !== index);
+				return direction === 1 ? [...rest, win] : [win, ...rest];
+			});
+			if (direction === 1 && index < divider) setDrawerLayerIndex(divider - 1);
+			if (direction === -1 && index >= divider) setDrawerLayerIndex(divider + 1);
+			return;
+		}
+
+		if (direction === 1) {
+			if (index === divider - 1) {
+				setDrawerLayerIndex(divider - 1);
+				return;
+			}
+			if (index < frames.length - 1) {
+				setFloating((prev) => {
+					const next = [...prev];
+					[next[index], next[index + 1]] = [next[index + 1], next[index]];
+					return next;
+				});
+			}
+			return;
+		}
+
+		if (index === divider) {
+			setDrawerLayerIndex(divider + 1);
+			return;
+		}
+		if (index > 0) {
+			setFloating((prev) => {
+				const next = [...prev];
+				[next[index - 1], next[index]] = [next[index], next[index - 1]];
+				return next;
+			});
+		}
+	}, []);
 
 	// ------------------------------------------------------------------
 	// drag-docking: move windows/frames by their toolbars, preview the half
@@ -1559,7 +1691,8 @@ export const EditorSplit = (props: EditorSplitProps) => {
 					tree: currentTree,
 					floating: currentFloating,
 					minimised: currentMinimised,
-					maximisedId: currentMaximisedId
+					maximisedId: currentMaximisedId,
+					drawerLayerIndex: drawerLayerIndexRef.current
 				}
 			},
 			{ namespace: 'editor' }
@@ -1660,10 +1793,11 @@ export const EditorSplit = (props: EditorSplitProps) => {
 			onMaximise: toggleMaximise,
 			onPopOut: popOutById,
 			onDockIn: dockInById,
+			onLayerMove: moveFrameLayer,
 			onStartWindowDrag: startWindowDrag,
 			maximisedId
 		}),
-		[patchLeaf, splitById, closeById, minimiseById, toggleMaximise, popOutById, dockInById, startWindowDrag, maximisedId]
+		[patchLeaf, splitById, closeById, minimiseById, toggleMaximise, popOutById, dockInById, moveFrameLayer, startWindowDrag, maximisedId]
 	);
 
 	const onRatio = React.useCallback(
@@ -1740,7 +1874,7 @@ export const EditorSplit = (props: EditorSplitProps) => {
 				)}
 			</Box>
 
-			{floating.map((win) => (
+			{floating.map((win, index) => (
 				<FloatingWindowView
 					key={win.id}
 					win={win}
@@ -1749,6 +1883,7 @@ export const EditorSplit = (props: EditorSplitProps) => {
 					onStartFrameDrag={startFrameDrag}
 					onRatio={onRatio}
 					dragging={windowDrag?.kind === 'frame' && windowDrag.sourceId === win.id}
+					zIndex={index < drawerLayerIndex ? FRAME_BELOW_DRAWER_BASE + index : FRAME_ABOVE_DRAWER_BASE + index}
 				/>
 			))}
 
