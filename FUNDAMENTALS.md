@@ -37,10 +37,13 @@ kind declared through the `thingtime` schema-id array (see
 
 | Collection | Holds |
 | ---------- | ----- |
-| `things`   | ALL Thingtime data. System kinds: `user` (public profile in `crystal`, all private state as a single BinData `secure` blob, uniqueness via BinData `uniqueKeys`), `theme`, `feed-algorithm`, `waitlist`, `schema`; content kinds: `post`, `comment`, `reaction`, `share`, `data` |
+| `things`   | ALL Thingtime data. System kinds: `user` (public profile in `crystal`, all private state as a single BinData `secure` blob, uniqueness via BinData `uniqueKeys`), `theme`, `feed-algorithm`, `waitlist`, `schema`; content kinds: `post`, `comment`, `reaction`, `share`, `data`. Every thing also carries a schema-free `extended` property for arbitrary unvalidated JSON (≤512KB, replace-on-write, never structured-searchable) |
 | `sessions` | server-side sessions / JWT records (revocation; `userId` = the user thing's `shareId`) |
 | `rosters`  | account-switcher rosters (TTL-reaped) |
 | `emailVerifications` | pending email-verification tokens |
+| `passwordResets` | single-use password-reset tokens (1h TTL; consuming one revokes every live session) |
+| `authOtps` | email-2FA login challenges (gated by user `meta.twoFactorEmailEnabled`; sha256 code hashes only, 10-min TTL, attempt-capped) |
+| `email_messages` + `email_events`/`email_suppression_list`/`email_unsubscribes`/`email_templates`/`email_subscriptions`/`email_identities` | the owned email layer — outbox rows for every send plus deliverability satellites (see `api/utils/email/`) |
 | `lopuMusingRateLimits` / `rateLimits` | rate-limit windows |
 | `settings` | admin-editable app settings singletons |
 | `users` / `themes` / `feedAlgorithms` / `waitlist` | LEGACY — new records are always written as things; a legacy doc is only ever *updated in place* (dual-era fallback) until the admin migrations (`/api/v1/admin/migrations`) convert it into a thing and delete it. No NEW records land here. |

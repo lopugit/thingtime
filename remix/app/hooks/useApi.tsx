@@ -34,9 +34,12 @@ export function useApi() {
   const v1 = {
     login: useCallback(
       async (args) => {
-        const { username, password } = args;
+        const { username, password, challenge, code } = args;
 
-        const ret = asyncFetcher.submit({ username, password }, { action: '/api/v1/login' });
+        // two-step email 2FA: the second call swaps the emailed code for the
+        // session the password step withheld
+        const body = challenge ? { challenge, code } : { username, password };
+        const ret = asyncFetcher.submit(body, { action: '/api/v1/login' });
         ret.then(refreshRootData).catch(() => {});
         return ret;
       },
@@ -64,6 +67,28 @@ export function useApi() {
         },
         [asyncFetcher]
       ),
+      passwordReset: {
+        // neutral response by design — never confirms the account exists
+        request: useCallback(
+          async (args) => asyncFetcher.submit({ email: args?.email }, { action: '/api/v1/auth/password-reset' }),
+          [asyncFetcher]
+        ),
+        confirm: useCallback(
+          async (args) =>
+            asyncFetcher.submit(
+              { token: args?.token, password: args?.password },
+              { action: '/api/v1/auth/password-reset/confirm' }
+            ),
+          [asyncFetcher]
+        )
+      },
+      twoFactor: {
+        get: useCallback(async () => getJson('/api/v1/auth/two-factor'), []),
+        set: useCallback(
+          async (args) => asyncFetcher.submit({ enabled: !!args?.enabled }, { action: '/api/v1/auth/two-factor' }),
+          [asyncFetcher]
+        )
+      },
       logout: useCallback(
         async (args?: { all?: boolean }) => {
           const ret = asyncFetcher.submit(args?.all ? { all: true } : {}, { action: '/api/v1/auth/logout' });

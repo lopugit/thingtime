@@ -10,6 +10,7 @@ import { useLopu } from '~/components/Lopu/useLopu';
 import { DRAWER_TOP_LEVEL_DEFAULT_LIMIT, useDrawer } from '~/components/Nav/Drawer/useDrawer';
 import { ColorControl } from '~/components/ThemeSettings/controls';
 import { CurrentUser, useCurrentUser } from '~/hooks/useCurrentUser';
+import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
 import { useTtTheme } from '~/hooks/useTtTheme';
 import { RAINBOW_TEXT } from '~/theme/rainbow';
@@ -220,6 +221,70 @@ export const SettingsPage = () => {
     navigate('/login');
   };
 
+  // Email 2FA — optimistic per the house rule: first paint comes from the
+  // synchronous local cache (last-known value per user), the server state
+  // reconciles in the background, and the toggle flips instantly + reverts on
+  // failure. Cache key is per-user so the account switcher can't bleed states.
+  const twoFactorCacheKey = user ? `tt-two-factor-${user.id}` : null;
+  const [twoFactorEnabled, setTwoFactorEnabled] = React.useState<boolean>(
+    () => (twoFactorCacheKey ? readLocalCache<boolean>(twoFactorCacheKey) === true : false)
+  );
+  const [twoFactorSaving, setTwoFactorSaving] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!user) return;
+    const cacheKey = `tt-two-factor-${user.id}`;
+    setTwoFactorEnabled(readLocalCache<boolean>(cacheKey) === true);
+    let cancelled = false;
+    api.v1.auth.twoFactor
+      .get()
+      .then((resp: any) => {
+        if (cancelled || typeof resp?.enabled !== 'boolean') return;
+        setTwoFactorEnabled(resp.enabled);
+        writeLocalCache(cacheKey, resp.enabled);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
+  const handleTwoFactorToggle = async (enabled: boolean) => {
+    if (!user || twoFactorSaving) return;
+    const previous = twoFactorEnabled;
+    setTwoFactorEnabled(enabled); // optimistic — revert on failure
+    setTwoFactorSaving(true);
+    try {
+      const resp = await api.v1.auth.twoFactor.set({ enabled });
+      if (resp?.ok) {
+        setTwoFactorEnabled(!!resp.enabled);
+        if (twoFactorCacheKey) writeLocalCache(twoFactorCacheKey, !!resp.enabled);
+        lopu({
+          title: resp.enabled ? 'Email 2FA is on 🔐' : 'Email 2FA is off',
+          description: resp.enabled
+            ? 'Logins now need a 6-digit code from your inbox.'
+            : 'Logins go back to password only.',
+          status: 'success',
+          duration: 6000
+        });
+      } else {
+        setTwoFactorEnabled(previous);
+        lopu({ title: 'Could not update 2FA', description: resp?.error, status: 'error', duration: 6000 });
+      }
+    } catch (err: any) {
+      setTwoFactorEnabled(previous);
+      lopu({
+        title: 'Could not update 2FA',
+        description: err?.error || 'Please try again in a moment.',
+        status: 'error',
+        duration: 6000
+      });
+    } finally {
+      setTwoFactorSaving(false);
+    }
+  };
+
   const handleResendVerification = async () => {
     if (!user) return;
     try {
@@ -313,6 +378,33 @@ export const SettingsPage = () => {
             </Flex>
           )}
         </SettingsSection>
+
+        {/* security (auth only) — email 2FA + the reset flow's home */}
+        {user && (
+          <SettingsSection eyebrow="Security" description="Extra checks between a password and a session.">
+            <Flex flexDirection="column">
+              <SettingRow
+                label="Email 2FA 🔐"
+                hint={
+                  user.emailVerified
+                    ? 'Logins also need a 6-digit code emailed to you'
+                    : 'Verify your email first — codes are delivered there'
+                }
+              >
+                <Switch
+                  isChecked={twoFactorEnabled}
+                  isDisabled={!user.emailVerified || twoFactorSaving}
+                  onChange={(e) => handleTwoFactorToggle(e.target.checked)}
+                ></Switch>
+              </SettingRow>
+              <SettingRow label="Password" hint="Rotate it via an emailed single-use link">
+                <Button size="xs" variant="outline" onClick={() => navigate('/reset-password')}>
+                  Reset 🔑
+                </Button>
+              </SettingRow>
+            </Flex>
+          </SettingsSection>
+        )}
 
         {/* admin (admins only) */}
         {user?.isAdmin && (

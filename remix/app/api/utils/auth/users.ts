@@ -346,6 +346,50 @@ export const markEmailVerified = async (userId: string) => {
   );
 };
 
+// Rotate the user's password hash. Returns whether a store actually accepted
+// the write — a password reset burns its token before rotating, so a silent
+// miss here would log the user out everywhere while the OLD password keeps
+// working (a failed rotation the user believes succeeded).
+export const setUserPasswordHash = async (userId: string, passwordHash: string): Promise<boolean> => {
+  if (await mutateUserThingSecure(userId, (s) => { s.passwordHash = passwordHash; })) return true;
+  if (!ObjectId.isValid(userId)) return false;
+  const res = await (await getUsersCollection()).updateOne(
+    { _id: new ObjectId(userId) },
+    { $set: { passwordHash, updatedAt: new Date() } }
+  );
+  return res.matchedCount > 0;
+};
+
+// Email-2FA opt-in flag (meta.twoFactorEmailEnabled) — dual-era accessors so
+// the settings toggle and the login gate hit whichever store holds the doc
+// (thing-era users keep it inside the secure blob). Projected reads only.
+export const getUserTwoFactorEmailEnabled = async (userId: string): Promise<boolean> => {
+  const things = await getThingsCollection();
+  const thing = await things.findOne(
+    { shareId: String(userId), thingtime: 'user' } as any,
+    { projection: { secure: 1 } }
+  );
+  if (thing) return !!unpackSecure((thing as any).secure).meta?.twoFactorEmailEnabled;
+  if (!ObjectId.isValid(userId)) return false;
+  const doc = await (await getUsersCollection()).findOne(
+    { _id: new ObjectId(userId) },
+    { projection: { 'meta.twoFactorEmailEnabled': 1 } }
+  );
+  return !!doc?.meta?.twoFactorEmailEnabled;
+};
+
+// Returns whether a store matched the user — enabling 2FA must never report
+// success without the flag actually landing (login would then skip the OTP).
+export const setUserTwoFactorEmailEnabled = async (userId: string, enabled: boolean): Promise<boolean> => {
+  if (await mutateUserThingSecure(userId, (s) => { s.meta!.twoFactorEmailEnabled = enabled; })) return true;
+  if (!ObjectId.isValid(userId)) return false;
+  const res = await (await getUsersCollection()).updateOne(
+    { _id: new ObjectId(userId) },
+    { $set: { 'meta.twoFactorEmailEnabled': enabled, updatedAt: new Date() } }
+  );
+  return res.matchedCount > 0;
+};
+
 // Set (or clear, with null) the user's active theme shareId in meta.
 export const setUserActiveTheme = async (userId: string, themeShareId: string | null) => {
   if (await mutateUserThingSecure(userId, (s) => { s.meta!.activeThemeId = themeShareId; })) return;

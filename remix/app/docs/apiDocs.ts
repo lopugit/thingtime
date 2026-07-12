@@ -473,6 +473,81 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'auth-password-reset',
+    group: 'auth',
+    title: 'Password reset request',
+    endpoint: '/api/v1/auth/password-reset',
+    summary: 'Emails a single-use password reset link to a registered address.',
+    detail:
+      'Use this to start a password reset. The route always returns ok so account existence cannot be probed; when the email matches an account, a one-hour single-use reset link is delivered through the Thingtime email service. Requests are rate-limited per IP — the neutral response would otherwise hide a mail bomb.',
+    auth: {
+      mode: 'none',
+      description: 'Public request endpoint — identity is proven later by the emailed token.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST the account email address.',
+      'Treat the ok response as neutral — it does not confirm the account exists.',
+      'The user opens the emailed link (/reset-password?token=…), which carries a single-use token valid for one hour.',
+      'Finish with /api/v1/auth/password-reset/confirm using that token and the new password.',
+      'Handle 429 when the per-IP request window is exhausted.'
+    ],
+    requestExamples: [
+      {
+        name: 'Request a reset link',
+        description: 'Ask for a password reset email.',
+        method: 'POST',
+        body: { email: 'ada@example.com' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Request accepted (whether or not the account exists). Local/preview runs also return resetLink.',
+        body: { ok: true }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'auth-password-reset-confirm',
+    group: 'auth',
+    title: 'Password reset confirm',
+    endpoint: '/api/v1/auth/password-reset/confirm',
+    summary: 'Burns a reset token, sets the new password, and revokes all sessions.',
+    detail:
+      'Use this with the token from the reset email. On success the password is replaced and every live session for the account is revoked, so stolen cookies or bearer tokens stop working immediately.',
+    auth: {
+      mode: 'none',
+      description: 'The single-use emailed token is the credential.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST the reset token together with the new password (minimum 6 characters).',
+      'Tokens are single-use and expire after one hour — expired/used tokens return 400.',
+      'All existing sessions are revoked on success; the user logs in again with the new password.'
+    ],
+    requestExamples: [
+      {
+        name: 'Set a new password',
+        description: 'Consume a reset token and rotate the password.',
+        method: 'POST',
+        body: { token: 'reset-token-from-the-email', password: 'a-new-password' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Password rotated and sessions revoked.',
+        body: { ok: true }
+      },
+      {
+        status: 400,
+        description: 'Missing/expired/used token or invalid password.',
+        body: { ok: false, error: 'This reset link has expired — request a new one' }
+      }
+    ]
+  }),
+  endpoint({
     id: 'auth-register',
     group: 'auth',
     title: 'Register user',
@@ -626,6 +701,51 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     notes: ['The bearer token is intentionally non-expiring; rotate it by creating a replacement service account when needed.']
   }),
   endpoint({
+    id: 'auth-two-factor',
+    group: 'auth',
+    title: 'Email 2FA settings',
+    endpoint: '/api/v1/auth/two-factor',
+    summary: 'Reads or toggles opt-in email 2FA for the current account.',
+    detail:
+      'When enabled, POST /api/v1/login stops minting sessions from a password alone: it returns { requiresOtp, challenge } and emails a security code that completes the login. Enabling requires a verified email address.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires the httpOnly session cookie or an Authorization: Bearer token.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET returns the current enabled state for the session user.',
+      'POST { enabled: true } turns email 2FA on (requires a verified email).',
+      'POST { enabled: false } turns it off.',
+      'Subsequent logins follow the two-step challenge flow documented on /api/v1/login.'
+    ],
+    requestExamples: [
+      {
+        name: 'Enable email 2FA',
+        description: 'Require an emailed security code on every login.',
+        method: 'POST',
+        body: { enabled: true }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Setting applied.',
+        body: { ok: true, enabled: true }
+      },
+      {
+        status: 400,
+        description: 'Email not verified yet.',
+        body: { ok: false, error: 'Verify your email before enabling email 2FA' }
+      },
+      {
+        status: 401,
+        description: 'No session or bearer token.',
+        body: { ok: false, error: 'Unauthorized' }
+      }
+    ]
+  }),
+  endpoint({
     id: 'auth-verify-email',
     group: 'auth',
     title: 'Verify email',
@@ -707,6 +827,91 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         status: 400,
         description: 'Unknown intent.',
         body: { ok: false, error: 'Unknown crypto action.' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'email-config',
+    group: 'email',
+    title: 'Email delivery config',
+    endpoint: '/api/v1/email/config',
+    summary: 'Returns the sanitized email delivery configuration for diagnostics.',
+    detail:
+      'Use this to check which provider (console or SES), region, sender addresses, and sandbox settings the runtime resolved — no credentials are ever included.',
+    auth: {
+      mode: 'none',
+      description: 'Public diagnostic endpoint returning non-secret configuration only.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET the endpoint (POST behaves identically).',
+      'Read provider to confirm whether real SES delivery or console logging is active.',
+      'Use sesSandbox and testRecipient to plan /tests email checks.'
+    ],
+    requestExamples: [
+      {
+        name: 'Read email config',
+        description: 'Inspect the resolved delivery configuration.',
+        method: 'GET'
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Sanitized email configuration.',
+        body: {
+          ok: true,
+          email: {
+            provider: 'console',
+            region: 'us-east-1',
+            configurationSetName: null,
+            transactionalFrom: 'Thingtime <no-reply@thingtime.com>',
+            newsletterFrom: 'Thingtime Updates <updates@thingtime.com>',
+            sesSandbox: false,
+            sandboxSendDelayMs: 0,
+            testRecipient: 'support@thingtime.com',
+            testRecipientDomain: 'thingtime.com'
+          }
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'email-test-otp',
+    group: 'email',
+    title: 'Email OTP test send',
+    endpoint: '/api/v1/email/test-otp',
+    summary: 'Sends a test security-code email to the configured test recipient.',
+    detail:
+      'Dev/preview-only helper for the /tests page: it exercises the OTP template and delivery service end to end. Production environments return 403, and recipients are restricted to the configured test address (or a plus alias of it).',
+    auth: {
+      mode: 'none',
+      description: 'Gated by environment (local development and Vercel previews), not by session.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST an email matching the configured test recipient or one of its plus aliases.',
+      'Optionally pass code and expiresMinutes; a random six-digit code is generated otherwise.',
+      'Inspect the returned delivery result and the email_messages record it created.'
+    ],
+    requestExamples: [
+      {
+        name: 'Send a test OTP',
+        description: 'Deliver a security-code email to the test recipient.',
+        method: 'POST',
+        body: { email: 'support+otp-test@thingtime.com' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Test email queued/sent.',
+        body: { ok: true, result: { delivered: false, via: 'console', status: 'logged' } }
+      },
+      {
+        status: 403,
+        description: 'Not a dev/preview environment.',
+        body: { ok: false, error: 'Email OTP test sends are available only in local development and Vercel previews.' }
       }
     ]
   }),
@@ -861,9 +1066,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     methods: ['POST'],
     steps: [
       'POST username and password.',
+      'If the account has email 2FA enabled, the response is { requiresOtp: true, challenge } and a code is emailed — POST { challenge, code } to this same endpoint to finish.',
       'Store the Set-Cookie response header for browser clients.',
       'Use /api/v1/auth/me after login to confirm the current user.',
-      'Handle 401 for invalid credentials and 500 for unavailable backing services.'
+      'Handle 401 for invalid credentials/codes, 429 for rate-limited attempts or exhausted OTP retries, and 500 for unavailable backing services.'
     ],
     requestExamples: [
       {
@@ -871,6 +1077,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'Authenticate a username/password account.',
         method: 'POST',
         body: { username: 'ada-lovelace', password: 'replace-with-the-user-password' }
+      },
+      {
+        name: 'Complete email 2FA login',
+        description: 'Finish a login that returned requiresOtp using the emailed security code.',
+        method: 'POST',
+        body: { challenge: 'challenge-id-from-the-first-response', code: '123456' }
       }
     ],
     responseExamples: [
@@ -878,6 +1090,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         status: 200,
         description: 'Login succeeded and auth cookie was set.',
         body: { ok: true, user: { id: '64f000000000000000000002', username: 'ada-lovelace' } }
+      },
+      {
+        status: 200,
+        description: 'Email 2FA is enabled — a security code was emailed; no session yet.',
+        body: { ok: true, requiresOtp: true, challenge: 'challenge-id', expiresAt: '2026-01-01T00:10:00.000Z' }
       },
       {
         status: 401,
@@ -1511,7 +1728,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares.',
     detail:
-      'Everything is a thing: one root Thing schema per doc, sub-schemas applied via the thingtime array of schema ids (see /schemas), the payload under crystal, and the audience under acl — tt: grants plus "-"-prefixed exclusions where the most specific matching entry wins (["tt:all"] public, ["-tt:all","tt:userFriends","tt:user"] friends-only, ["tt:all","-tt:user/somebody"] public except one user; owners always see their own things). POST creates (unified shape or the legacy post body — same path), GET reads one thing / lists a target’s attached things / lists your own, PUT upserts by id (create-or-replace), PATCH merges a partial update, DELETE removes an owned thing and its attached comments/reactions. The legacy visibility names still work as input and are derived on the wire.',
+      'Everything is a thing: one root Thing schema per doc, sub-schemas applied via the thingtime array of schema ids (see /schemas), the payload under crystal, and the audience under acl — tt: grants plus "-"-prefixed exclusions where the most specific matching entry wins (["tt:all"] public, ["-tt:all","tt:userFriends","tt:user"] friends-only, ["tt:all","-tt:user/somebody"] public except one user; owners always see their own things). POST creates (unified shape or the legacy post body — same path), GET reads one thing / lists a target’s attached things / lists your own, PUT upserts by id (create-or-replace), PATCH merges a partial update, DELETE removes an owned thing and its attached comments/reactions. The legacy visibility names still work as input and are derived on the wire. Crystals are optionally schema-less: omit thingtime and it defaults to ["data"], the bounded free-form crystal. Beside the crystal, every thing also carries a schema-free extended property — any JSON up to 512KB, stored and returned exactly as given, never validated or interpreted, and not structured-searchable (/search field conditions can’t target it, though its string content is indexed by the wildcard text index). extended replaces as a whole value on write (deep-merging arbitrary JSON is ambiguous) and null clears it — the open sidecar external apps park their data in.',
     auth: {
       mode: 'session-or-bearer',
       description:
@@ -1520,9 +1737,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     steps: [
       'POST { thingtime: ["post"], crystal: { type, text, images, listing }, acl, tags } — or the legacy post body — to create.',
+      'Omit thingtime entirely to create a schema-less thing: { crystal: { any: "shape" } } defaults to thingtime ["data"].',
+      'Optionally add extended: any JSON up to 512KB, stored untouched and returned as-is — replace-on-write, null clears it. It is not structured-searchable (/search field conditions can’t target it), though its string content is indexed by the wildcard text index like any field.',
       'Attached kinds (comment, reaction) require targetId and carry acl ["tt:inherit"]; shares carry thingtime ["post","share"].',
       'GET ?id= reads one thing; GET ?target=&thingtime=comment lists a visible thing’s comments; GET ?thingtime=&cursor=&limit= lists your own things.',
-      'PUT { id, thingtime, crystal, acl? } creates the thing at that id (201) or replaces the owned thing’s crystal whole (200); PATCH { id, crystal?, acl?, tags? } merges.',
+      'PUT { id, thingtime, crystal, acl? } creates the thing at that id (201) or replaces the owned thing’s crystal whole (200); PATCH { id, crystal?, extended?, acl?, tags? } merges crystal fields (extended still replaces whole).',
       'DELETE ?id= (or body { id }) removes an owned thing; attached comments/reactions go with it, shares survive with an original-unavailable placeholder.',
       'Handle 401 unauthenticated, 400 invalid payload or acl, 404 missing target/thing, and 413 oversized payload.'
     ],
@@ -1577,6 +1796,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           thingtime: ['comment'],
           crystal: { text: 'So say we all 🚀' },
           targetId: 'post_123'
+        }
+      },
+      {
+        name: 'Create a schema-less thing',
+        description: 'No thingtime needed — a bare crystal defaults to ["data"], and extended carries anything else as-is.',
+        method: 'POST',
+        body: {
+          crystal: { name: 'Walnut standing desk', legs: 4, material: 'wood' },
+          extended: { myApp: { mood: 'curious', readingList: ['FUNDAMENTALS.md', { title: 'Everything is a thing', progress: 0.42 }] } },
+          acl: ['tt:user']
         }
       },
       {
@@ -2073,8 +2302,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     },
     methods: ['POST'],
     steps: [
-      'POST the thing id plus any of crystal, visibility, and tags.',
+      'POST the thing id plus any of crystal, extended, visibility, and tags.',
       'Crystal fields you omit keep their current values; included fields are validated by the thing schemas.',
+      'extended replaces as a whole value when provided (null clears it) — it is never deep-merged.',
       'The current user must own the thing.',
       'Handle 401 unauthenticated, 404 missing or unowned things, and 400 invalid patches.'
     ],

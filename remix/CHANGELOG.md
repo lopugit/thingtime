@@ -35,6 +35,27 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- Extensible data: every `things` doc now carries a schema-free top-level
+  `extended` property — any JSON up to 512KB, stored and returned exactly as
+  given, never validated, structured-searchable, or interpreted;
+  replace-on-write (`null` clears), threaded through create/upsert/patch and
+  both public projections, with one reserved key (`tt:textLanguage`, the text
+  index's language override). Crystals are now optionally schema-less too:
+  omitting `thingtime` on create defaults to `["data"]`, so a bare
+  `{ crystal: {…} }` behaves like an extended-style field bag while staying
+  /search-able. — Claude (AI), 2026-07-12
+- Ported the stranded PR #52/#35 email + auth work onto the unified data
+  model: the owned email layer (`api/utils/email/` — outbox `email_messages`
+  rows for every send, suppression/unsubscribe checks, SES or console
+  delivery, `GET /api/v1/email/config`, dev/preview `POST /api/v1/email/test-otp`),
+  password reset (`POST /api/v1/auth/password-reset` + `/confirm` — probe-proof
+  neutral responses, single-use 1h tokens, revoke-all-sessions on rotation,
+  per-IP `auth.passwordReset` rate limit, `/reset-password` page), and opt-in
+  email 2FA (`GET/POST /api/v1/auth/two-factor`, two-step
+  `POST /api/v1/login { challenge, code }` with hashed attempt-capped OTPs in
+  `authOtps`, per-IP `auth.login` rate limit, Settings → Security toggle, login
+  form code step). Also ports the `/verify-email` landing page the emailed
+  verification links point at. — Claude (AI), 2026-07-12
 - `/search` page + `POST/GET /api/v1/things/search`: a Commander-style search
   over every visible thing — whitelisted MongoDB operator grammar (nested
   all/any groups, bounded primitives only, escaped-literal text ops), ranked

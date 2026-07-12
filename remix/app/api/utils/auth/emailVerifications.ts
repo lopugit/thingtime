@@ -1,9 +1,11 @@
 import { getEmailVerificationsCollection } from '../mongodb/collections';
 import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
+import { newAuthToken } from './tokens';
+
 const TWENTY_FOUR_HOURS_MS = 1000 * 60 * 60 * 24;
 
-const newToken = () => (crypto.randomUUID() + crypto.randomUUID()).replace(/-/g, '');
+const newToken = newAuthToken;
 
 // Issue a single-use, time-limited email verification token.
 export const createEmailVerification = async ({

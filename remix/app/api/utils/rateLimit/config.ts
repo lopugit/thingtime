@@ -28,7 +28,13 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // service accounts do legitimate bulk writes (e.g. chunked snapshot sync), so
   // they get a higher ceiling — but a BOUNDED one, never an exemption: anyone
   // can provision a service account, so accountKind confers no trust
-  'things.write.service': { limit: 600, windowMs: 60_000, enabled: true }
+  'things.write.service': { limit: 600, windowMs: 60_000, enabled: true },
+  // password-reset requests email any address you name — the classic mail-bomb
+  // + enumeration vector, so the window is tight (anonymous, keyed by IP)
+  'auth.passwordReset': { limit: 5, windowMs: 15 * 60_000, enabled: true },
+  // login attempts (password step and OTP step share the endpoint): bounds
+  // credential stuffing and OTP-email sends beyond the per-challenge attempt cap
+  'auth.login': { limit: 30, windowMs: 60_000, enabled: true }
 };
 
 export const RATE_LIMIT_ENDPOINTS = Object.keys(RATE_LIMIT_DEFAULTS);

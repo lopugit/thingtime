@@ -179,6 +179,15 @@ export const MAX_IMAGES = 8;
 export const MAX_IMAGE_URL_CHARS = 2048;
 export const MAX_COMMENT_CHARS = 1000;
 
+// Extended (the schema-free sidecar every thing carries) — see sanitizeExtended
+// below for the full story.
+export const EXTENDED_MAX_BYTES = 512 * 1024;
+export const MAX_EXTENDED_DEPTH = 64;
+// The wildcard text index's language_override field name. Data-crystal keys
+// can never collide with it (their grammar bans ':'), but extended accepts any
+// key — except this one, which would hijack or break the text index.
+export const EXTENDED_RESERVED_KEY = 'tt:textLanguage';
+
 // The schema version each collection's docs are written at today. Docs with no
 // schemaVersion field predate versioning and count as version 1 everywhere.
 export const COLLECTION_SCHEMA_VERSIONS: Record<string, number> = {
@@ -189,7 +198,11 @@ export const COLLECTION_SCHEMA_VERSIONS: Record<string, number> = {
   themes: 2,
   waitlist: 2,
   feedAlgorithms: 2,
-  lopuMusingRateLimits: 2
+  lopuMusingRateLimits: 2,
+  // born at 2 (no v1 era): single-use auth tokens + the email outbox
+  passwordResets: 2,
+  authOtps: 2,
+  email_messages: 2
 };
 
 export const LEGACY_SCHEMA_VERSION = 1;
@@ -210,12 +223,18 @@ const rootThingSchema: ThingtimeSchema = {
     'public except one user; owners always see their own things). Things that attach to another ' +
     'thing (comments, reactions) carry ["tt:inherit"] and are as visible as their target. The ' +
     'legacy visibility names (public/friends/family/private) are still accepted as input and ' +
-    'derived on the wire.',
+    'derived on the wire. Beside the schema’d crystal, every thing carries a schema-free ' +
+    '`extended` property: any JSON up to 512KB, stored and returned as-is, never validated or ' +
+    'interpreted, and not structured-searchable (/search field conditions can’t target it, ' +
+    'though its string content is indexed by the wildcard text index) — the open sidecar ' +
+    'external apps park their data in. Crystals are optionally schema-less too: omit thingtime ' +
+    'and it defaults to ["data"], the bounded free-form crystal.',
   fields: [
     { name: 'shareId', type: 'id', required: true, description: 'Public id — the only id clients ever see.' },
     { name: 'schemaVersion', type: 'number', required: true, description: 'Root schema version this doc was written at (docs without one are version 1).' },
-    { name: 'thingtime', type: 'string[]', required: true, description: 'Thingtime Schema ids applied to this thing, e.g. ["post"] or ["post","share"].' },
+    { name: 'thingtime', type: 'string[]', required: true, description: 'Thingtime Schema ids applied to this thing, e.g. ["post"] or ["post","share"]. Omitting it on create defaults to ["data"] — the schema-less crystal.' },
     { name: 'crystal', type: 'object', required: true, description: 'The sub-schema payload, validated against every schema in thingtime.' },
+    { name: 'extended', type: 'record', required: false, description: `Schema-free sidecar: any JSON up to ${EXTENDED_MAX_BYTES} bytes, stored untouched, never validated, structured-searchable, or interpreted. Replace-on-write; null clears it.` },
     { name: 'ownerId', type: 'id', required: true, description: 'The owning user id.' },
     { name: 'acl', type: 'string[]', required: true, max: 16, description: 'Permission entries: tt:all, tt:user (owner), tt:userFriends, tt:userFamily, tt:user/<username>, each optionally "-" prefixed to exclude; tt:inherit on target-attached things. Most specific matching entry decides; owners always view.' },
     { name: 'targetId', type: 'id', required: false, description: 'shareId of the thing this thing is about (comment → post, reaction → post, share → root post).' },
@@ -335,6 +354,8 @@ const dataSchema: ThingtimeSchema = {
   title: 'Data',
   summary: 'Free-form structured data — any JSON shape, searchable by real datatypes on /search.',
   detail:
+    'The default schema when a thing declares none: creating a thing without thingtime (just a ' +
+    'crystal) resolves to ["data"], so crystals are optionally schema-less. ' +
     'The open half of Thingtime: a data thing’s crystal holds whatever structure you give it ' +
     '(numbers stay numbers, booleans stay booleans), bounded but never schema-gated. Search it ' +
     'with real datatype conditions on /search (legs ≥ 3, material in wood/concrete, height ' +
@@ -535,6 +556,88 @@ const emailVerificationSchema: ThingtimeSchema = {
   example: { token: 'ab12…64hex', userId: '664f…', email: 'rick@example.com', schemaVersion: 2 }
 };
 
+const passwordResetSchema: ThingtimeSchema = {
+  id: 'password-reset',
+  version: COLLECTION_SCHEMA_VERSIONS.passwordResets,
+  kind: 'collection',
+  collection: 'passwordResets',
+  title: 'Password reset',
+  summary: 'A pending single-use password-reset token.',
+  detail:
+    'Created by POST /api/v1/auth/password-reset and burned atomically by /confirm; expires after ' +
+    'one hour (TTL index reaps the doc). Consuming one rotates the bcrypt hash and revokes every ' +
+    'live session.',
+  fields: [
+    { name: 'token', type: 'string', required: true, description: 'Unique single-use token (two UUIDs, ~256 bits).' },
+    { name: 'userId', type: 'id', required: true, description: 'User being reset.' },
+    { name: 'email', type: 'string', required: true, description: 'Address the link was sent to.' },
+    { name: 'expiresAt', type: 'date', required: true, description: 'Expiry (1h) — TTL index reaps the doc.' },
+    { name: 'consumedAt', type: 'date', required: false, description: 'Set once used; racing submits burn exactly one.' },
+    { name: 'schemaVersion', type: 'number', required: true, description: 'Collection schema version.' },
+    { name: 'createdAt', type: 'date', required: true, description: 'Request time.' }
+  ],
+  example: { token: 'ab12…64hex', userId: '664f…', email: 'rick@example.com', schemaVersion: 2 }
+};
+
+const authOtpSchema: ThingtimeSchema = {
+  id: 'auth-otp',
+  version: COLLECTION_SCHEMA_VERSIONS.authOtps,
+  kind: 'collection',
+  collection: 'authOtps',
+  title: 'Auth OTP challenge',
+  summary: 'A pending email-2FA login challenge — only a hash of the code is stored.',
+  detail:
+    'Minted when an email-2FA account passes the password step of POST /api/v1/login. Stores ' +
+    'sha256(challenge:code) — never the code — with a 10-minute TTL and an attempt counter ' +
+    'incremented atomically BEFORE each constant-time comparison (capped at 5).',
+  fields: [
+    { name: 'challenge', type: 'string', required: true, description: 'Unique challenge id returned to the client.' },
+    { name: 'userId', type: 'id', required: true, description: 'User completing login.' },
+    { name: 'purpose', type: 'enum', required: true, values: ['login'], description: 'What the code proves.' },
+    { name: 'codeHash', type: 'string', required: true, description: 'sha256(challenge:code) — plaintext codes are never stored.' },
+    { name: 'attempts', type: 'number', required: true, description: 'Verification attempts so far (max 5, incremented pre-compare).' },
+    { name: 'expiresAt', type: 'date', required: true, description: 'Expiry (10 min) — TTL index reaps the doc.' },
+    { name: 'consumedAt', type: 'date', required: false, description: 'Set once the login completes.' },
+    { name: 'schemaVersion', type: 'number', required: true, description: 'Collection schema version.' },
+    { name: 'createdAt', type: 'date', required: true, description: 'Challenge mint time.' }
+  ],
+  example: { challenge: 'cd34…64hex', userId: '664f…', purpose: 'login', attempts: 0, schemaVersion: 2 }
+};
+
+const emailMessageSchema: ThingtimeSchema = {
+  id: 'email-message',
+  version: COLLECTION_SCHEMA_VERSIONS.email_messages,
+  kind: 'collection',
+  collection: 'email_messages',
+  title: 'Email message (outbox)',
+  summary: 'One row per email send — queued, then sent/logged/skipped/failed.',
+  detail:
+    'The owned email layer writes every send here before delivery (SES or console), then stamps ' +
+    'the outcome. Satellite collections back deliverability: email_events (provider events), ' +
+    'email_suppression_list + email_unsubscribes (list hygiene, checked before every send), and ' +
+    'email_templates/email_subscriptions/email_identities (reserved for the owned-email roadmap).',
+  fields: [
+    { name: 'provider', type: 'enum', required: true, values: ['console', 'ses'], description: 'Delivery provider resolved from env.' },
+    { name: 'stream', type: 'enum', required: true, values: ['transactional', 'newsletter'], description: 'Send stream — picks the from-address and unsubscribe rules.' },
+    { name: 'templateKey', type: 'string', required: false, description: 'Dotted template id, e.g. auth.password_reset.' },
+    { name: 'status', type: 'enum', required: true, values: ['queued', 'sent', 'logged', 'skipped', 'failed'], description: 'Delivery lifecycle state.' },
+    { name: 'from', type: 'string', required: true, description: 'From address used.' },
+    { name: 'replyTo', type: 'string', required: false, description: 'Reply-to address (null when unset).' },
+    { name: 'to', type: 'string[]', required: true, description: 'Normalized recipient list.' },
+    { name: 'subject', type: 'string', required: true, description: 'Subject line.' },
+    { name: 'html', type: 'string', required: true, description: 'Rendered HTML body — replaced by a redacted placeholder when sensitive is true.' },
+    { name: 'text', type: 'string', required: true, description: 'Rendered text body — replaced by a redacted placeholder when sensitive is true.' },
+    { name: 'sensitive', type: 'boolean', required: true, description: 'True for secret-bearing mail (OTP codes, reset links); its body is stored redacted so the outbox can’t replay the secret.' },
+    { name: 'metadata', type: 'record', required: false, description: 'Purpose tags for analytics (never secrets).' },
+    { name: 'tags', type: 'record', required: false, description: 'Provider tags ({ stream, template }).' },
+    { name: 'providerMessageId', type: 'string', required: false, description: 'SES message id when delivered.' },
+    { name: 'suppressedRecipients', type: 'string[]', required: false, description: 'Recipients dropped for suppression/unsubscribe (set only when some were skipped).' },
+    { name: 'schemaVersion', type: 'number', required: true, description: 'Collection schema version.' },
+    { name: 'createdAt', type: 'date', required: true, description: 'Queue time.' },
+    { name: 'updatedAt', type: 'date', required: true, description: 'Last status change (sentAt/loggedAt/failedAt/skippedAt + error/skippedReason ride alongside per outcome).' }
+  ],
+  example: { provider: 'console', stream: 'transactional', templateKey: 'auth.email_otp', status: 'logged', schemaVersion: 2 }
+};
 
 
 
@@ -679,6 +782,9 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   // collections that remain collections
   sessionSchema,
   emailVerificationSchema,
+  passwordResetSchema,
+  authOtpSchema,
+  emailMessageSchema,
   rateLimitSchema
 ];
 
@@ -825,6 +931,74 @@ const sanitizeDataCrystal = (input: Record<string, unknown>): { ok: true; crysta
   const sanitized = sanitizeDataValue(input, 0, { nodes: 0 }, '');
   if (!sanitized.ok) return sanitized;
   return { ok: true, crystal: sanitized.value as Record<string, unknown> };
+};
+
+// ---------------------------------------------------------------------------
+// Extended — the schema-free sidecar every thing carries. Any JSON structure,
+// stored inside the platform envelope (shareId, acl, timestamps) but never
+// validated against a schema, structured-searchable, or interpreted. Where the
+// data crystal is the bounded, searchable open shape, `extended` is the big
+// opaque one: external apps park whatever they want here. Replace-on-write
+// (null clears, undefined leaves it untouched) — deep-merging arbitrary JSON
+// is ambiguous, so we never do. The caps (EXTENDED_MAX_BYTES /
+// MAX_EXTENDED_DEPTH / EXTENDED_RESERVED_KEY) live with the other caps up top.
+
+// Keys-only walk: values pass through verbatim, but a key that would corrupt
+// storage (BSON null byte, the text-index override) or a stack-hostile depth
+// fails loudly. Never mutates or drops — extended is stored exactly as given.
+const checkExtendedKeys = (value: unknown, depth: number, path: string): true | Fail => {
+  if (depth > MAX_EXTENDED_DEPTH) return fail(400, `extended nests at most ${MAX_EXTENDED_DEPTH} levels (${path || 'root'})`);
+  if (Array.isArray(value)) {
+    for (let index = 0; index < value.length; index++) {
+      const entry = checkExtendedKeys(value[index], depth + 1, `${path}[${index}]`);
+      if (entry !== true) return entry;
+    }
+    return true;
+  }
+  if (value && typeof value === 'object') {
+    for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+      if (key.includes('\u0000')) return fail(400, 'extended keys can’t contain null bytes');
+      if (key === EXTENDED_RESERVED_KEY) {
+        return fail(400, `extended can’t use the reserved key ${EXTENDED_RESERVED_KEY}`);
+      }
+      const checked = checkExtendedKeys(entry, depth + 1, path ? `${path}.${key}` : key);
+      if (checked !== true) return checked;
+    }
+    return true;
+  }
+  return true;
+};
+
+// Three-valued: undefined = not provided (callers keep the existing value),
+// null = clear it, anything else = the whole new value if it's JSON-serializable
+// and fits the byte cap.
+export const sanitizeExtended = (value: unknown): { ok: true; value: unknown } | Fail => {
+  if (value === undefined) return { ok: true, value: undefined };
+  if (value === null) return { ok: true, value: null };
+  let serialized: string | undefined;
+  try {
+    serialized = JSON.stringify(value);
+  } catch {
+    return fail(400, 'extended must be JSON-serializable');
+  }
+  if (typeof serialized !== 'string') return fail(400, 'extended must be JSON-serializable');
+  // Byte cap via UTF-16 code-unit bounds, skipping the full TextEncoder pass in
+  // the common case: every code unit is ≥1 and ≤3 UTF-8 bytes (registry stays
+  // client-pure, so no node Buffer). length > cap ⇒ definitely over; length*3 ≤
+  // cap ⇒ definitely under; only the ambiguous middle band needs a precise
+  // byte count.
+  if (serialized.length > EXTENDED_MAX_BYTES) {
+    return fail(400, `extended exceeds the ${EXTENDED_MAX_BYTES} byte limit`);
+  }
+  if (serialized.length * 3 > EXTENDED_MAX_BYTES) {
+    const bytes = new TextEncoder().encode(serialized).byteLength;
+    if (bytes > EXTENDED_MAX_BYTES) {
+      return fail(400, `extended exceeds the ${EXTENDED_MAX_BYTES} byte limit`);
+    }
+  }
+  const keys = checkExtendedKeys(value, 0, '');
+  if (keys !== true) return keys;
+  return { ok: true, value };
 };
 
 // Schema-thing field names double as crystal paths in the search builder
@@ -1206,9 +1380,19 @@ export type ValidatedCrystal = { ok: true; thingtime: string[]; crystal: Record<
 // Validates a thingtime schema-id list + raw crystal payload. The sanitized
 // crystal is the union of each schema's sanitized fields — later schemas never
 // clobber earlier ones' keys with undefined.
+//
+// Crystals are optionally schema-less: omitting thingtime (or passing an empty
+// list) defaults to ['data'], so a bare { crystal: {...} } behaves like an
+// extended-style free-form field bag — bounded arbitrary JSON, searchable on
+// /search — without declaring any schema. Storage always carries the resolved
+// non-empty thingtime; schema-lessness is an input convenience, never a stored
+// state.
 export const validateThingtimeCrystal = (thingtime: unknown, crystal: unknown): ValidatedCrystal | Fail => {
-  if (!Array.isArray(thingtime) || !thingtime.length) {
-    return fail(400, 'thingtime must be a non-empty list of schema ids');
+  if (thingtime === undefined || thingtime === null || (Array.isArray(thingtime) && !thingtime.length)) {
+    thingtime = ['data'];
+  }
+  if (!Array.isArray(thingtime)) {
+    return fail(400, 'thingtime must be a list of schema ids (or omitted for a schema-less data thing)');
   }
   const ids: string[] = [];
   for (const entry of thingtime) {
