@@ -17,7 +17,8 @@ import { Rainbow } from '~/components/Rainbow/Rainbow';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useApi } from '~/hooks/useApi';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
-import { thingtimeSchemas } from '~/schemas/registry';
+import { thingtimeSchemas, type SchemaThingField } from '~/schemas/registry';
+import { flattenSchemaFields } from '~/schemas/tools';
 import { CARD_STYLES } from '~/theme/card';
 import type {
   ConditionRow,
@@ -227,27 +228,39 @@ const seededBuiltinShareIds = new Set(
   thingtimeSchemas.filter((schema) => schema.kind === 'crystal').map((schema) => `schema-${schema.id}`)
 );
 
-const schemaThingToSource = (thing: SearchThing): SchemaSource | null => {
+// A schema thing (or browse entry) → a SchemaSource. Nested object/array
+// fields flatten to the dotted crystal paths the search grammar addresses.
+const schemaThingToSource = (
+  thing: Pick<SearchThing, 'id' | 'crystal' | 'author'> & {
+    usageCount?: number;
+    reactionCounts?: Record<string, number>;
+  }
+): SchemaSource | null => {
   if (seededBuiltinShareIds.has(thing.id) && !thing.author) return null;
   const crystal = thing.crystal || {};
-  const fields = Array.isArray(crystal.fields) ? crystal.fields : [];
+  const fields = Array.isArray(crystal.fields) ? (crystal.fields as SchemaThingField[]) : [];
   if (typeof crystal.name !== 'string' || !fields.length) return null;
+  const reactions = Object.values(thing.reactionCounts || {}).reduce((sum, count) => sum + (count || 0), 0);
   return {
     key: `thing-${thing.id}`,
     name: crystal.name,
     description: typeof crystal.description === 'string' ? crystal.description : '',
     origin: 'community',
     author: thing.author?.username || null,
-    fields: fields
-      .filter((field: any) => field && typeof field.name === 'string' && field.name)
-      .map((field: any) => ({
-        name: field.name,
-        type: typeof field.type === 'string' ? field.type : 'string',
-        description: typeof field.description === 'string' ? field.description : undefined,
-        values: Array.isArray(field.values) ? field.values.filter((v: any) => typeof v === 'string') : undefined,
-        min: Number.isFinite(field.min) ? field.min : undefined,
-        max: Number.isFinite(field.max) ? field.max : undefined,
-        unit: typeof field.unit === 'string' ? field.unit : undefined
+    shareId: thing.id,
+    usageCount: typeof thing.usageCount === 'number' ? thing.usageCount : undefined,
+    reactions: reactions || undefined,
+    fields: flattenSchemaFields(fields)
+      .filter((flat) => SEARCHABLE_FIELD_NAME.test(flat.path))
+      .map((flat) => ({
+        name: flat.path,
+        type: typeof flat.field.type === 'string' ? flat.field.type : 'string',
+        description: typeof flat.field.description === 'string' ? flat.field.description : undefined,
+        values: Array.isArray(flat.field.values) ? flat.field.values.filter((v: any) => typeof v === 'string') : undefined,
+        min: Number.isFinite(flat.field.min) ? flat.field.min : undefined,
+        max: Number.isFinite(flat.field.max) ? flat.field.max : undefined,
+        unit: typeof flat.field.unit === 'string' ? flat.field.unit : undefined,
+        maxLength: Number.isFinite(flat.field.maxLength) ? flat.field.maxLength : undefined
       }))
   };
 };
@@ -436,6 +449,12 @@ export const SearchPage = () => {
   const [schemasOpen, setSchemasOpen] = React.useState(false);
   const [communitySchemas, setCommunitySchemas] = React.useState<SchemaSource[]>([]);
   const [activeSchema, setActiveSchema] = React.useState<string | null>(null);
+  // schema rail browsing — same paginated system as /schemas (top/recent/popular)
+  const [schemaQ, setSchemaQ] = React.useState('');
+  const [schemaSort, setSchemaSort] = React.useState<'newest' | 'popular'>('newest');
+  const [schemaCursor, setSchemaCursor] = React.useState<string | null>(null);
+  const [schemasLoading, setSchemasLoading] = React.useState(false);
+  const schemasLoadedRef = React.useRef(false);
 
   const requestSeqRef = React.useRef(0);
   const apiRef = React.useRef(api);
@@ -574,31 +593,46 @@ export const SearchPage = () => {
     runSearch();
   }, [pendingUrlSearch, runSearch]);
 
-  // community schemas load lazily when the browser opens
+  // community schemas ride the paginated /api/v1/schemas/browse rail —
+  // newest/popular sorts, text search, cursor pagination (same system as
+  // /schemas). Loading is lazy (first open) and failures stay non-fatal.
+  const schemaRailRef = React.useRef({ schemaQ, schemaSort });
+  schemaRailRef.current = { schemaQ, schemaSort };
+  const schemaSeqRef = React.useRef(0);
+  const loadSchemas = React.useCallback(async (options: { cursor?: string | null } = {}) => {
+    const seq = ++schemaSeqRef.current;
+    const { cursor } = options;
+    setSchemasLoading(true);
+    try {
+      const rail = schemaRailRef.current;
+      const resp: any = await apiRef.current.v1.schemas.browse({
+        q: rail.schemaQ.trim() || undefined,
+        sort: rail.schemaSort,
+        cursor: cursor || undefined,
+        limit: 12
+      });
+      if (seq !== schemaSeqRef.current || !resp?.ok) return;
+      const sources = (resp.schemas || [])
+        .map(schemaThingToSource)
+        .filter((source: SchemaSource | null): source is SchemaSource => !!source);
+      setCommunitySchemas((prev) => {
+        if (!cursor) return sources;
+        const seen = new Set(prev.map((source) => source.key));
+        return [...prev, ...sources.filter((source: SchemaSource) => !seen.has(source.key))];
+      });
+      setSchemaCursor(resp.nextCursor ?? null);
+    } catch {
+      // schema browsing is sugar — the builder still works without it
+    } finally {
+      if (seq === schemaSeqRef.current) setSchemasLoading(false);
+    }
+  }, []);
+
   React.useEffect(() => {
-    if (!schemasOpen || communitySchemas.length) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const resp = (await apiRef.current.v1.things.search({
-          thingtime: 'schema',
-          sort: 'newest',
-          limit: 50
-        })) as SearchResponse;
-        if (cancelled) return;
-        setCommunitySchemas(
-          (resp.things || [])
-            .map(schemaThingToSource)
-            .filter((source): source is SchemaSource => !!source)
-        );
-      } catch {
-        // schema browsing is sugar — the builder still works without it
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [schemasOpen, communitySchemas.length]);
+    if (!schemasOpen || schemasLoadedRef.current) return;
+    schemasLoadedRef.current = true;
+    loadSchemas();
+  }, [schemasOpen, loadSchemas]);
 
   const schemaSources = React.useMemo(
     () => [...communitySchemas, ...builtinSchemaSources()],
@@ -609,13 +643,63 @@ export const SearchPage = () => {
     setActiveSchema(source.key);
     const prefilled = source.fields.map((field) => rowFromSchemaField(field));
     // community data things carry `schema: "<Name>"` by convention — pin that
-    // condition first so the prefilled search actually scopes to the shape
+    // condition first so the prefilled search actually scopes to the shape;
+    // builtin schemas scope by their thingtime kind instead
     if (source.origin === 'community') {
       prefilled.unshift(newRow({ field: 'schema', op: 'eq', value: source.name, valueType: 'text' }));
+      setKind('data');
+    } else {
+      setKind(source.key.replace(/^builtin-/, ''));
     }
     setRows(prefilled);
     setMode('all');
   }, []);
+
+  // /schemas deep-links here with ?schema=<shareId | builtin:id> — resolve the
+  // shape, prefill the refinement form, and run the scoped search.
+  const urlSchema = React.useMemo(
+    () => new URLSearchParams(location.search).get('schema') || '',
+    [location.search]
+  );
+  const appliedUrlSchemaRef = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    if (!urlSchema || appliedUrlSchemaRef.current === urlSchema) return;
+    appliedUrlSchemaRef.current = urlSchema;
+    let cancelled = false;
+    (async () => {
+      let source: SchemaSource | null = null;
+      if (urlSchema.startsWith('builtin:')) {
+        const id = urlSchema.slice('builtin:'.length);
+        source = builtinSchemaSources().find((builtin) => builtin.key === `builtin-${id}`) || null;
+      } else {
+        try {
+          const resp: any = await apiRef.current.v1.things.get({ id: urlSchema });
+          if (resp?.ok && resp.thing) source = schemaThingToSource(resp.thing);
+        } catch {
+          // unknown/invisible schema — fall through to the plain page
+        }
+      }
+      if (cancelled) return;
+      if (!source) {
+        lopuRef.current({ title: 'That schema isn’t visible from here 🥲', status: 'info', duration: 6000 });
+        return;
+      }
+      // make sure the resolved shape has a chip in the rail even before the
+      // rail's own page loads (reset loads may replace it — that's fine)
+      if (source.origin === 'community') {
+        const resolved = source;
+        setCommunitySchemas((prev) => (prev.some((existing) => existing.key === resolved.key) ? prev : [resolved, ...prev]));
+      }
+      setQ('');
+      setSort('auto');
+      setSchemasOpen(true);
+      applySchema(source);
+      setPendingUrlSearch(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [urlSchema, applySchema]);
 
   const updateRow = React.useCallback((id: string, patch: Partial<ConditionRow>) => {
     setRows((prev) => prev.map((row) => (row.id === id ? { ...row, ...patch } : row)));
@@ -625,12 +709,15 @@ export const SearchPage = () => {
     setRows((prev) => prev.filter((row) => row.id !== id));
   }, []);
 
+  const activeSchemaSource = React.useMemo(
+    () => (activeSchema ? schemaSources.find((source) => source.key === activeSchema) || null : null),
+    [activeSchema, schemaSources]
+  );
+
   const fieldSuggestions = React.useMemo(() => {
-    const fromSchema = activeSchema
-      ? schemaSources.find((source) => source.key === activeSchema)?.fields.map((field) => field.name) || []
-      : [];
+    const fromSchema = activeSchemaSource?.fields.map((field) => field.name) || [];
     return [...new Set([...fromSchema, ...ROOT_FIELD_SUGGESTIONS])];
-  }, [activeSchema, schemaSources]);
+  }, [activeSchemaSource]);
 
   const submit = React.useCallback(
     (event?: React.FormEvent) => {
@@ -749,12 +836,50 @@ export const SearchPage = () => {
           ) : null}
         </Flex>
 
-        {/* schema browser */}
+        {/* schema browser — same paginated rail as /schemas */}
         {schemasOpen ? (
           <Box {...CARD_STYLES} p={4}>
-            <Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="11px" fontWeight="700" mb={3}>
-              Pick a shape to search by — its fields prefill the builder
-            </Text>
+            <Flex align="center" gap={2} mb={3} wrap="wrap">
+              <Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="11px" fontWeight="700">
+                Pick a shape to search by
+              </Text>
+              <Box flex={1} />
+              <Input
+                maxWidth="180px"
+                onChange={(event) => setSchemaQ(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    loadSchemas();
+                  }
+                }}
+                placeholder="find a schema…"
+                size="xs"
+                value={schemaQ}
+              />
+              <Button
+                onClick={() => {
+                  setSchemaSort('newest');
+                  schemaRailRef.current = { ...schemaRailRef.current, schemaSort: 'newest' };
+                  loadSchemas();
+                }}
+                size="xs"
+                variant={schemaSort === 'newest' ? 'solid' : 'ghost'}
+              >
+                Recent
+              </Button>
+              <Button
+                onClick={() => {
+                  setSchemaSort('popular');
+                  schemaRailRef.current = { ...schemaRailRef.current, schemaSort: 'popular' };
+                  loadSchemas();
+                }}
+                size="xs"
+                variant={schemaSort === 'popular' ? 'solid' : 'ghost'}
+              >
+                Popular
+              </Button>
+            </Flex>
             <Flex gap={2} wrap="wrap">
               {schemaSources.map((source) => (
                 <Button
@@ -762,27 +887,57 @@ export const SearchPage = () => {
                   colorScheme={activeSchema === source.key ? 'pink' : undefined}
                   onClick={() => applySchema(source)}
                   size="sm"
-                  title={source.description}
+                  title={[source.description, source.usageCount ? `${source.usageCount} things use this` : '']
+                    .filter(Boolean)
+                    .join(' · ')}
                   variant={activeSchema === source.key ? 'solid' : 'outline'}
                 >
                   {source.name}
                   {source.origin === 'community' ? (
                     <Text as="span" color="var(--tt-muted, #9a9aa6)" fontSize="10px" ml={1.5}>
                       {source.author ? `@${source.author}` : 'community'}
+                      {source.usageCount ? ` · ${source.usageCount}` : ''}
+                      {source.reactions ? ` · ${source.reactions}❤` : ''}
                     </Text>
                   ) : null}
                 </Button>
               ))}
-              {!schemaSources.length ? (
+              {!schemaSources.length && !schemasLoading ? (
                 <Text color="var(--tt-muted, #9a9aa6)" fontSize="sm">
                   No schemas yet.
                 </Text>
               ) : null}
+              {schemaCursor ? (
+                <Button isLoading={schemasLoading} onClick={() => loadSchemas({ cursor: schemaCursor })} size="sm" variant="ghost">
+                  more…
+                </Button>
+              ) : null}
             </Flex>
             <Text color="var(--tt-muted, #9a9aa6)" fontSize="xs" mt={3}>
-              Anyone can publish a schema: POST /api/v1/things with thingtime ["schema"] — see /schemas.
+              Browse, fork, and build schemas at{' '}
+              <Text as={RouterLink} color="var(--tt-text, #33333c)" textDecoration="underline" to="/schemas">
+                /schemas
+              </Text>{' '}
+              ✨
             </Text>
           </Box>
+        ) : null}
+
+        {/* active-schema refinement header — fill only what you care about */}
+        {activeSchemaSource ? (
+          <Flex align="baseline" gap={2} wrap="wrap">
+            <Text color="var(--tt-ink, #16161a)" fontSize="sm" fontWeight="700">
+              Refine {activeSchemaSource.name}
+            </Text>
+            {activeSchemaSource.author ? (
+              <Text color="var(--tt-muted, #9a9aa6)" fontSize="xs">
+                @{activeSchemaSource.author}
+              </Text>
+            ) : null}
+            <Text color="var(--tt-muted, #9a9aa6)" fontSize="xs">
+              fill only the properties you care about — empty rows are skipped
+            </Text>
+          </Flex>
         ) : null}
 
         {/* builder rows */}
@@ -798,17 +953,66 @@ export const SearchPage = () => {
               const enumValues = row.meta?.values;
               const unit = row.meta?.unit;
               const rangeHint = row.meta?.min !== undefined || row.meta?.max !== undefined;
+              // the pinned shape-scope condition renders as a locked chip, not
+              // an editable row — removing it un-scopes the search
+              if (activeSchemaSource && row.field === 'schema' && row.op === 'eq') {
+                return (
+                  <Flex align="center" gap={2} key={row.id}>
+                    <Flex
+                      align="center"
+                      background="var(--tt-surface-alt, #f5f5f7)"
+                      borderRadius="full"
+                      gap={1.5}
+                      paddingX={3}
+                      paddingY={1}
+                    >
+                      <Sparkles size={12} />
+                      <Text color="var(--tt-text, #33333c)" fontSize="xs" fontWeight="600">
+                        shape · {row.value}
+                      </Text>
+                    </Flex>
+                    <IconButton
+                      aria-label="Remove shape scope"
+                      icon={<X size={14} />}
+                      onClick={() => {
+                        removeRow(row.id);
+                        setActiveSchema(null);
+                      }}
+                      size="sm"
+                      variant="ghost"
+                    />
+                  </Flex>
+                );
+              }
               return (
                 <Flex align="center" gap={2} key={row.id} wrap="wrap">
-                  <Input
-                    list="tt-search-fields"
-                    maxWidth="180px"
-                    onChange={(event) => updateRow(row.id, { field: event.target.value })}
-                    placeholder="field (e.g. legs)"
-                    size="sm"
-                    title={row.meta?.description || 'crystal field path — bare names mean crystal.<name>'}
-                    value={row.field}
-                  />
+                  {row.meta?.type ? (
+                    <Flex direction="column" flexShrink={0} minWidth="140px" maxWidth="180px">
+                      <Text
+                        color="var(--tt-ink, #16161a)"
+                        fontFamily="var(--tt-font-mono, monospace)"
+                        fontSize="13px"
+                        isTruncated
+                        title={row.meta?.description || row.field}
+                      >
+                        {row.field}
+                      </Text>
+                      <Text color="var(--tt-faint, #b6b6c0)" fontSize="10px">
+                        {row.meta.type}
+                        {unit ? ` · ${unit}` : ''}
+                      </Text>
+                    </Flex>
+                  ) : (
+                    <Input
+                      list="tt-search-fields"
+                      maxWidth="180px"
+                      onChange={(event) => updateRow(row.id, { field: event.target.value })}
+                      placeholder="field (e.g. legs)"
+                      size="sm"
+                      title={row.meta?.description || 'crystal field path — bare names mean crystal.<name>'}
+                      value={row.field}
+                    />
+                  )}
                   <Select
                     maxWidth="130px"
                     onChange={(event) => updateRow(row.id, { op: event.target.value })}

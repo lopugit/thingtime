@@ -2177,6 +2177,44 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'things-save',
+    group: 'things',
+    title: 'Save to library',
+    endpoint: '/api/v1/things/save',
+    summary: 'Toggles a private library save of a visible thing ("add to my library").',
+    detail:
+      'Saves are relational child things (thingtime ["save"], targetId = the saved thing, acl ' +
+      '["tt:user"]) — always private to the saver, never inheriting the target audience, so a ' +
+      'library is personal by construction. Toggling an existing save removes it. List saved ' +
+      'schemas via /api/v1/schemas/browse?library=1, or raw saves via GET /api/v1/things?thingtime=save.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST the id of the thing to save (or unsave).',
+      'The thing must be visible to the current user.',
+      'Use the returned saved boolean to flip the UI state optimistically.',
+      'Handle 401 unauthenticated and 404 for missing or not-visible things.'
+    ],
+    requestExamples: [
+      {
+        name: 'Toggle save',
+        description: 'Add or remove a thing from the caller library.',
+        method: 'POST',
+        body: { id: 'schema_table_001' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Save toggled.',
+        body: { ok: true, saved: true }
+      }
+    ]
+  }),
+  endpoint({
     id: 'things-reactions-recent',
     group: 'things',
     title: 'Recent reactions',
@@ -2573,7 +2611,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/schemas',
     summary: 'Returns every Thingtime Schema — the root thing schema, crystal sub-schemas, and collection schemas.',
     detail:
-      'The registry the API validates against, as data: field lists, versions, examples, and the schema version each collection currently writes. Browse the same registry visually at /schemas.',
+      'The registry the API validates against, as data: field lists, versions, examples, and the schema version each collection currently writes. Browse the same registry visually at /docs/schemas; published community schemas live at /schemas.',
     auth: {
       mode: 'none',
       description: 'Public — schemas describe shapes, never data.'
@@ -2603,6 +2641,69 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         status: 200,
         description: 'Registry returned.',
         body: { ok: true, schemas: [{ id: 'thing', kind: 'root', version: 2 }], collectionVersions: { things: 2 } }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'schemas-browse',
+    group: 'schemas',
+    title: 'Browse published schemas',
+    endpoint: '/api/v1/schemas/browse',
+    summary: 'Paginated browsing of user-published schema things — newest, oldest, popular, or text-searched.',
+    detail:
+      'The UGC side of /schemas: schema things (thingtime ["schema"]) with cursor pagination. ' +
+      'sort=popular ranks by reaction count over a bounded window; q rides the same hardened ' +
+      'text search as /api/v1/things/search; library=1 returns only the caller saved schemas ' +
+      '(save recency order); mine=1 returns only the caller own schemas. Every entry carries ' +
+      'reactionCounts, viewerReactions, saved, and usageCount (public data things whose crystal ' +
+      'schema field names it). Built-in registry schemas are not included — clients merge them ' +
+      'from GET /api/v1/schemas.',
+    auth: {
+      mode: 'optional',
+      description: 'Anonymous callers see public schemas; library=1 and mine=1 require auth.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET with sort=newest|oldest|popular, optional q, limit (max 50).',
+      'Page with the returned nextCursor until it is null (cursors are opaque).',
+      'Pass library=1 for the caller saved schemas, mine=1 for their own.',
+      'Handle 401 for library/mine without auth and 429 when rate-limited.'
+    ],
+    requestExamples: [
+      {
+        name: 'Popular schemas',
+        description: 'First page of the most-reacted schemas.',
+        method: 'GET',
+        query: { sort: 'popular', limit: 20 }
+      },
+      {
+        name: 'Search schemas',
+        description: 'Relevance-ranked text search.',
+        method: 'GET',
+        query: { q: 'table', limit: 20 }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Schema page returned.',
+        body: {
+          ok: true,
+          schemas: [
+            {
+              id: 'schema_table_001',
+              thingtime: ['schema'],
+              crystal: { name: 'Table', description: 'Tables of all kinds.', fields: [{ name: 'legs', type: 'number', min: 0, max: 12 }] },
+              reactionCounts: { '🔥': 3 },
+              viewerReactions: [],
+              saved: false,
+              usageCount: 12
+            }
+          ],
+          nextCursor: null,
+          total: 1,
+          totalCapped: false
+        }
       }
     ]
   }),

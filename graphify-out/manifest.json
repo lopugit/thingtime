@@ -1185,8 +1185,8 @@
     "semantic_hash": "2c876691ea163b0306ebf575cf88e1b4"
   },
   "remix/app/hooks/useApi.tsx": {
-    "mtime": 1783865958.2197127,
-    "ast_hash": "b407d5acb54bce24d392607b1940fc98",
+    "mtime": 1783867646.7866845,
+    "ast_hash": "0570cac6f608d400503458cd43c09e1d",
     "semantic_hash": ""
   },
   "remix/app/hooks/useAsyncFetcher.tsx": {
@@ -1245,8 +1245,8 @@
     "semantic_hash": "5e172b1ac332861692c018b4894c251b"
   },
   "remix/app/routes.tsx": {
-    "mtime": 1783865958.2203193,
-    "ast_hash": "647d7007bdefcd5781215f1e35b28428",
+    "mtime": 1783867695.4420695,
+    "ast_hash": "135c98be08f8a3fc60d70b445922820b",
     "semantic_hash": ""
   },
   "remix/app/routes/$.tsx": {
@@ -1530,8 +1530,8 @@
     "semantic_hash": "3e068c437e00eacf7136b9836e06d3a0"
   },
   "remix/server/routes/api/[...].ts": {
-    "mtime": 1783865958.2296517,
-    "ast_hash": "ebc19e4892578f16d1d0838eab529a28",
+    "mtime": 1783867646.7895544,
+    "ast_hash": "5d91868311e66372581ed78407fd0744",
     "semantic_hash": ""
   },
   "remix/server/routes/api/root-data.get.ts": {
@@ -2685,8 +2685,8 @@
     "semantic_hash": ""
   },
   "remix/app/tests/api/apiTests.ts": {
-    "mtime": 1783865958.2270813,
-    "ast_hash": "a57a1b13e7365477bb9a76601b171910",
+    "mtime": 1783867646.7891932,
+    "ast_hash": "2e6cee5641f3ea8a6a88d3a2fc3e2588",
     "semantic_hash": ""
   },
   "remix/app/components/Nav/Drawer/DrawerContent.tsx": {
@@ -2735,8 +2735,8 @@
     "semantic_hash": "cc5766c8788080e49fa8e865b8fa2cac"
   },
   "remix/app/routes/docs/DocsLayout.tsx": {
-    "mtime": 1783865958.224702,
-    "ast_hash": "f4817adb774b0079c293370bb3fffa47",
+    "mtime": 1783867646.7875881,
+    "ast_hash": "1bc24485f5d572400db8051bc4c74a64",
     "semantic_hash": ""
   },
   "remix/app/routes/docs/PreviewPane.tsx": {
@@ -2755,8 +2755,8 @@
     "semantic_hash": "28f4f7ca579094c9105d82e1e04e1297"
   },
   "remix/app/routes/docs/index.tsx": {
-    "mtime": 1783865958.2255738,
-    "ast_hash": "477c34c260b3b0dc6787148027bb1f75",
+    "mtime": 1783867646.7878149,
+    "ast_hash": "2e8c4025cd599975528ba5fab6374e60",
     "semantic_hash": ""
   },
   "iOS/Thingtime/Web/ThingtimeWebDeploymentsClient.swift": {
@@ -3110,8 +3110,8 @@
     "semantic_hash": "70a4a9dbd0d87d97133f4e04742017cf"
   },
   "remix/app/api/utils/things/things.ts": {
-    "mtime": 1783866421.6322544,
-    "ast_hash": "d5e823237e1a573284501f77397cf94e",
+    "mtime": 1783867646.78458,
+    "ast_hash": "e8d6fb125eae5268a1918f11fabf243c",
     "semantic_hash": ""
   },
   "remix/app/components/Feed/Feed.tsx": {
@@ -3270,8 +3270,8 @@
     "semantic_hash": "f33d517f220a280930d5f773399b28a0"
   },
   "remix/app/docs/apiDocs.ts": {
-    "mtime": 1783866421.633747,
-    "ast_hash": "c963a0efed2ab3627ea8435e9c29ff65",
+    "mtime": 1783867646.7863057,
+    "ast_hash": "6e3a62a3f7faf1f6fbd019c3be45a8da",
     "semantic_hash": ""
   },
   "remix/app/routes/docs/api.tsx": {
@@ -3640,8 +3640,8 @@
     "semantic_hash": "72315d91a917dab861c5a059d418c3f2"
   },
   "remix/app/api/utils/rateLimit/config.ts": {
-    "mtime": 1783865958.2082112,
-    "ast_hash": "207f56dbc97fd19adf003c9b6e70d266",
+    "mtime": 1783867646.7838986,
+    "ast_hash": "57110706d4be788b2f932bb53bbc6aa8",
     "semantic_hash": ""
   },
   "remix/app/api/utils/rateLimit/enforce.ts": {
@@ -3760,13 +3760,13 @@
     "semantic_hash": ""
   },
   "remix/app/routes/schemas.tsx": {
-    "mtime": 1783865958.2259066,
-    "ast_hash": "ae5fde5216dac3fe046985a63d695991",
+    "mtime": 1783867646.7880967,
+    "ast_hash": "d5126ef1f13ccf198ac1b7f8dd9b143b",
     "semantic_hash": ""
   },
   "remix/app/schemas/registry.ts": {
-    "mtime": 1783866573.0173435,
-    "ast_hash": "b033ac8520af6a7c845d14b0542ac8e0",
+    "mtime": 1783867646.7884846,
+    "ast_hash": "c8d827796c8d4ea1b9910f8421bbf3dd",
     "semantic_hash": ""
   },
   "PRs/59-claude-unified-thing-crystal-schemas--everything-is-a-thing.md": {
@@ -3810,13 +3810,13 @@
     "semantic_hash": ""
   },
   "remix/app/components/Search/SearchPage.tsx": {
-    "mtime": 1783866421.6331437,
-    "ast_hash": "10c730203c9e3faac8c94be9f0660f43",
+    "mtime": 1783867646.785663,
+    "ast_hash": "36800765986bf5ff88b042e87ff39682",
     "semantic_hash": ""
   },
   "remix/app/components/Search/searchTypes.ts": {
-    "mtime": 1783865958.2164776,
-    "ast_hash": "01c2d44333eaf2958288aa4929bac687",
+    "mtime": 1783867646.7858453,
+    "ast_hash": "a22eeb7fe3de741869d9d5eb356ef784",
     "semantic_hash": ""
   },
   "remix/app/routes/api/v1/things/search/_search.tsx": {
@@ -3952,6 +3952,51 @@
   "claude-todo/12-everything-is-a-thing-collections.md": {
     "mtime": 1783866421.5853627,
     "ast_hash": "7fa10973fa365e2e0e4f7c530c0708c1",
+    "semantic_hash": ""
+  },
+  "remix/app/api/utils/schemas/browse.ts": {
+    "mtime": 1783867646.7841477,
+    "ast_hash": "f89748e77432afddc46f8e999e8fb298",
+    "semantic_hash": ""
+  },
+  "remix/app/components/Schemas/SchemaBuilder.tsx": {
+    "mtime": 1783867646.784756,
+    "ast_hash": "efd0e4d12835a09e8571ce49fdeca9ec",
+    "semantic_hash": ""
+  },
+  "remix/app/components/Schemas/SchemaThingForm.tsx": {
+    "mtime": 1783867646.7849653,
+    "ast_hash": "5e783c8d0fa83e9e0f9fc9a3cfa747a1",
+    "semantic_hash": ""
+  },
+  "remix/app/components/Schemas/SchemasBrowsePage.tsx": {
+    "mtime": 1783867646.7851846,
+    "ast_hash": "56e1542cab9de3353672b60dac1106b2",
+    "semantic_hash": ""
+  },
+  "remix/app/components/Schemas/schemaBrowseTypes.ts": {
+    "mtime": 1783867646.7853189,
+    "ast_hash": "6a8a11c3cb833cf6f62875ec2ee369d1",
+    "semantic_hash": ""
+  },
+  "remix/app/routes/api/v1/schemas/browse/_browse.tsx": {
+    "mtime": 1783867646.7871544,
+    "ast_hash": "72e0c80377703f971323b05616536e5b",
+    "semantic_hash": ""
+  },
+  "remix/app/routes/api/v1/things/save/_save.tsx": {
+    "mtime": 1783867646.787357,
+    "ast_hash": "18bf7b6ac741380f73f1b117a6ba4640",
+    "semantic_hash": ""
+  },
+  "remix/app/routes/docs/schemas.tsx": {
+    "mtime": 1783867646.7879074,
+    "ast_hash": "dc5dc169f11b425673e0d5f5f7584173",
+    "semantic_hash": ""
+  },
+  "remix/app/schemas/tools.ts": {
+    "mtime": 1783867646.788632,
+    "ast_hash": "a20cb19ef7e0e06bf822533a2e29c848",
     "semantic_hash": ""
   }
 }

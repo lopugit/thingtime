@@ -987,6 +987,70 @@ export const apiTests: ApiTestDefinition[] = [
     expect: expectJson([404], (body) => body?.ok === false && typeof body?.error === 'string', 'Unknown schema returned a 404 error shape.')
   },
   {
+    id: 'schemas-browse-newest',
+    name: 'Browse published schemas',
+    description: 'The paginated UGC schema browser returns decorated entries (reactions, saved, usage).',
+    group: 'schemas',
+    method: 'GET',
+    path: '/api/v1/schemas/browse?sort=newest&limit=5',
+    expect: expectJson(
+      [200],
+      (body) =>
+        body?.ok === true &&
+        Array.isArray(body?.schemas) &&
+        'nextCursor' in body &&
+        body.schemas.every(
+          (entry: any) =>
+            typeof entry?.id === 'string' &&
+            entry?.reactionCounts !== undefined &&
+            Array.isArray(entry?.viewerReactions) &&
+            typeof entry?.saved === 'boolean' &&
+            typeof entry?.usageCount === 'number'
+        ),
+      'Browse returned decorated schema entries with a cursor field.'
+    )
+  },
+  {
+    id: 'schemas-browse-popular',
+    name: 'Browse schemas by popularity',
+    description: 'sort=popular ranks schema things by reaction count over a bounded window.',
+    group: 'schemas',
+    method: 'GET',
+    path: '/api/v1/schemas/browse?sort=popular&limit=5',
+    expect: expectJson(
+      [200],
+      (body) => body?.ok === true && Array.isArray(body?.schemas),
+      'Popular browse returned a schema page.'
+    )
+  },
+  {
+    id: 'schemas-browse-library-guarded',
+    name: 'Library filter needs auth',
+    description: 'library=1 returns the caller’s saved schemas when signed in and 401 anonymously.',
+    group: 'schemas',
+    method: 'GET',
+    path: '/api/v1/schemas/browse?library=1',
+    expect: expectJson(
+      [200, 401],
+      (body) => (body?.ok === true && Array.isArray(body?.schemas)) || (body?.ok === false && typeof body?.error === 'string'),
+      'Library browse returned saved schemas (signed in) or the 401 error shape (anonymous).'
+    )
+  },
+  {
+    id: 'things-save-guarded',
+    name: 'Library save needs auth + a real thing',
+    description: 'POST /api/v1/things/save is 401 anonymous; signed in, a bogus id is 404.',
+    group: 'things',
+    method: 'POST',
+    path: '/api/v1/things/save',
+    body: { id: 'not-a-real-thing-id' },
+    expect: expectJson(
+      [401, 404],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Save toggle rejected the call with the expected error shape.'
+    )
+  },
+  {
     id: 'admin-migrations-guarded',
     name: 'Migration status is admin-only',
     description: 'Non-admin callers get the same 401 as anonymous callers; admins see the version census.',

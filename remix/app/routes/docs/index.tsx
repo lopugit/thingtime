@@ -24,7 +24,7 @@ import { conceptEntries } from './concepts/entries';
 
 const referenceLinks = [
   { label: 'API reference', to: '/docs/api', detail: `${apiEndpointDocs.length} endpoints with JSON -docs routes` },
-  { label: 'Thingtime Schemas', to: '/schemas', detail: `${thingtimeSchemas.length} schemas across root, crystal, and collection kinds` },
+  { label: 'Thingtime Schemas', to: '/docs/schemas', detail: `${thingtimeSchemas.length} schemas across root, crystal, and collection kinds` },
   { label: 'Design mockups', to: '/docs/design', detail: `${designEntries.length} standalone bundles` },
   { label: 'Design system', to: '/docs/design-system', detail: `${designSystemEntries.length} component ${designSystemEntries.length === 1 ? 'entry' : 'entries'}` },
   { label: 'Data viewer concepts', to: '/docs/concepts', detail: `${conceptEntries.length} live concepts + kind renderers` }
@@ -119,7 +119,7 @@ export default function DocsIndex() {
             </Text>
             <Button
               as={RouterLink}
-              to="/schemas"
+              to="/docs/schemas"
               size="sm"
               bg="var(--tt-docs-accent, #008060)"
               borderRadius="var(--tt-radius-sm, 9px)"
