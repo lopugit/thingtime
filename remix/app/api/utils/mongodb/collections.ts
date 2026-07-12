@@ -149,6 +149,12 @@ export const ensureIndexes = async () => {
         db.collection('things').createIndex({ kind: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
         db.collection('things').createIndex({ thingtime: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
         db.collection('things').createIndex({ targetId: 1, thingtime: 1, createdAt: 1, shareId: 1 }),
+        // schema-usage counting (schemas/browse decorate): data things are
+        // grouped by crystal.schemaId (stamped) with a crystal.schema name
+        // fallback for pre-stamp docs — both need index support or every
+        // schema browse page scans the whole data partition
+        db.collection('things').createIndex({ thingtime: 1, 'crystal.schemaId': 1 }),
+        db.collection('things').createIndex({ thingtime: 1, 'crystal.schema': 1 }),
         // acl and thingtime are both arrays — Mongo forbids two multikey fields
         // in one compound index, so the audience index stands alone
         db.collection('things').createIndex({ acl: 1, createdAt: -1, shareId: 1 }),

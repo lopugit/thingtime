@@ -19,7 +19,7 @@ import { useApi } from '~/hooks/useApi';
 import { validateValueAgainstFields, type SchemaItemSpec, type SchemaThingField } from '~/schemas/registry';
 import { describeSchemaField } from '~/schemas/tools';
 
-import type { SchemaCardSource } from './schemaBrowseTypes';
+import { searchableSchemaSource, type SchemaCardSource } from './schemaBrowseTypes';
 
 // "Create a thing using this schema" — a value form generated from the
 // schema's field tree (nesting included). Publishes a free-form data thing
@@ -306,11 +306,21 @@ export const SchemaThingForm = ({ source, onClose }: SchemaThingFormProps) => {
         }
       });
       if (!resp?.ok) throw resp;
+      // only link to /search when SearchPage can actually resolve the schema
+      // — non-searchable builtin kinds (share/save/user/…) would dead-end on
+      // a "not visible" toast
       lopu({
         title: `Thing created with the ${source.name} schema ✨`,
         status: 'success',
         duration: 8000,
-        link: { label: 'Find it on /search', href: `/search?schema=${encodeURIComponent(source.origin === 'builtin' ? `builtin:${source.id}` : source.id)}` }
+        ...(searchableSchemaSource(source)
+          ? {
+              link: {
+                label: 'Find it on /search',
+                href: `/search?schema=${encodeURIComponent(source.origin === 'builtin' ? `builtin:${source.id}` : source.id)}`
+              }
+            }
+          : {})
       });
       onClose();
     } catch (err: any) {

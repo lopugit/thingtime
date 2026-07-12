@@ -6,6 +6,7 @@ import {
   MONGO_QUERY_COLLECTIONS,
   MONGO_QUERY_LIMITS,
   MONGO_PROTECTED_FIELD_QUERY_COLLECTIONS,
+  MONGO_PROTECTED_THING_FIELDS,
   MONGO_QUERY_OPERATIONS,
   MONGO_READ_ONLY_AGGREGATION_STAGES,
   MONGO_SENSITIVE_QUERY_COLLECTIONS,
@@ -82,30 +83,53 @@ const shouldRedactKey = (key: string) => {
 
 const isSensitiveFieldPath = (path: string) => path.split('.').some(shouldRedactKey);
 
-const findSensitiveQueryReference = (value: unknown, depth = 0): string | null => {
+// things-era protected root fields, matched EXACTLY per path segment — unlike
+// the shouldRedactKey heuristics this can never false-positive on ordinary
+// crystal fields whose names merely contain "token"/"secret"/…
+const protectedThingSegmentSet = new Set<string>(MONGO_PROTECTED_THING_FIELDS.map((field) => field.toLowerCase()));
+const isProtectedThingFieldPath = (path: string) =>
+  path.split('.').some((segment) => protectedThingSegmentSet.has(segment.toLowerCase()));
+
+type ReferenceScanOptions = {
+  matchPath: (path: string) => boolean;
+  // whole-document predicates that can reveal protected values through
+  // repeated yes/no probes even when response fields are redacted. $text is
+  // separate: it only reads the text index, which never tokenizes the BinData
+  // `secure` payloads, so it is safe on things but not on the legacy
+  // sensitive collections (their secrets are plain fields).
+  blockedPredicates: ReadonlySet<string>;
+};
+
+const ALL_PROBE_PREDICATES: ReadonlySet<string> = new Set(['$expr', '$jsonSchema', '$text']);
+const COMPUTE_PROBE_PREDICATES: ReadonlySet<string> = new Set(['$expr', '$jsonSchema']);
+const NO_PROBE_PREDICATES: ReadonlySet<string> = new Set();
+
+const findProtectedQueryReference = (value: unknown, options: ReferenceScanOptions, depth = 0): string | null => {
   if (depth > MONGO_QUERY_LIMITS.maxDocumentDepth) return null;
   if (typeof value === 'string') {
     const fieldReference = value.startsWith('$$') ? value.slice(2) : value.startsWith('$') ? value.slice(1) : '';
-    return fieldReference && isSensitiveFieldPath(fieldReference) ? value : null;
+    return fieldReference && options.matchPath(fieldReference) ? value : null;
   }
   if (!value || typeof value !== 'object') return null;
   if (Array.isArray(value)) {
     for (const child of value) {
-      const match = findSensitiveQueryReference(child, depth + 1);
+      const match = findProtectedQueryReference(child, options, depth + 1);
       if (match) return match;
     }
     return null;
   }
   for (const [key, child] of Object.entries(value)) {
-    if (!key.startsWith('$') && isSensitiveFieldPath(key)) return key;
-    // These whole-document predicates can reveal protected values through
-    // repeated yes/no probes even when response fields are redacted.
-    if (key === '$expr' || key === '$jsonSchema' || key === '$text') return key;
-    const match = findSensitiveQueryReference(child, depth + 1);
+    if (!key.startsWith('$') && options.matchPath(key)) return key;
+    if (options.blockedPredicates.has(key)) return key;
+    const match = findProtectedQueryReference(child, options, depth + 1);
     if (match) return match;
   }
   return null;
 };
+
+// legacy sensitive collections: heuristic name matching + every probe predicate
+const findSensitiveQueryReference = (value: unknown): string | null =>
+  findProtectedQueryReference(value, { matchPath: isSensitiveFieldPath, blockedPredicates: ALL_PROBE_PREDICATES });
 
 const validateStructure = (value: unknown): string | null => {
   let entries = 0;
@@ -222,32 +246,47 @@ export const normalizeMongoQueryRequest = async (
   }
 
   if (protectedFieldCollectionSet.has(collection)) {
-    const sensitiveFilterReference = findSensitiveQueryReference(filterInput);
-    if (sensitiveFilterReference) {
-      return fail(400, `Queries cannot inspect protected field ${sensitiveFilterReference}`);
+    // things gets the exact-segment secure/uniqueKeys matcher and keeps $text
+    // (its secrets are BinData the text index never tokenizes); the legacy
+    // sensitive collections keep the broad heuristics and lose $text too
+    const scan: ReferenceScanOptions = sensitiveCollectionSet.has(collection)
+      ? { matchPath: isSensitiveFieldPath, blockedPredicates: ALL_PROBE_PREDICATES }
+      : { matchPath: isProtectedThingFieldPath, blockedPredicates: COMPUTE_PROBE_PREDICATES };
+    const protectedFilterReference = findProtectedQueryReference(filterInput, scan);
+    if (protectedFilterReference) {
+      return fail(400, `Queries cannot inspect protected field ${protectedFilterReference}`);
     }
-    const sensitiveProjectionReference = findSensitiveQueryReference(projectionInput);
-    if (sensitiveProjectionReference) {
-      return fail(400, `Queries cannot project protected field ${sensitiveProjectionReference}`);
+    const protectedProjectionReference = findProtectedQueryReference(projectionInput, scan);
+    if (protectedProjectionReference) {
+      return fail(400, `Queries cannot project protected field ${protectedProjectionReference}`);
     }
-    const sensitiveSortReference = Object.keys(sortInput).find(isSensitiveFieldPath);
-    if (sensitiveSortReference) {
-      return fail(400, `Queries cannot sort by protected field ${sensitiveSortReference}`);
+    const protectedSortReference = Object.keys(sortInput).find(scan.matchPath);
+    if (protectedSortReference) {
+      return fail(400, `Queries cannot sort by protected field ${protectedSortReference}`);
     }
+    // expressions in a find projection evaluate against the raw document (the
+    // runner's strip cannot precede them), so computed projections stay
+    // disabled on every protected collection
     const computedProjection = Object.values(projectionInput).some(
       (value) => value !== 0 && value !== 1 && value !== false && value !== true
     );
     if (computedProjection) {
-      return fail(400, 'Computed projections are disabled for collections that contain authentication material');
+      return fail(400, 'Computed projections are disabled for collections that contain protected fields');
     }
   }
 
-  // Aliasing guard for every collection: a pipeline can otherwise copy a
-  // protected field (its own, or one ridden in via $lookup) into a harmless
-  // name before the response redactor sees it.
-  const sensitivePipelineReference = findSensitiveQueryReference(pipelineInput);
-  if (sensitivePipelineReference) {
-    return fail(400, `Queries cannot inspect protected field ${sensitivePipelineReference}`);
+  // Aliasing guard for every collection's pipeline: nothing may NAME a
+  // things-era protected path (e.g. `$owner.secure` after a $lookup). This
+  // uses only the exact-segment matcher — no probe-predicate blocking and no
+  // broad name heuristics — because the runner strips secure/uniqueKeys at
+  // every things ingress before user stages run; this check is
+  // defense-in-depth, not the primary barrier.
+  const protectedPipelineReference = findProtectedQueryReference(pipelineInput, {
+    matchPath: isProtectedThingFieldPath,
+    blockedPredicates: NO_PROBE_PREDICATES
+  });
+  if (protectedPipelineReference) {
+    return fail(400, `Queries cannot inspect protected field ${protectedPipelineReference}`);
   }
 
   for (const value of [filterInput, projectionInput, sortInput, pipelineInput, body.hint, body.collation]) {
@@ -365,6 +404,104 @@ export const redactMongoValue = (value: unknown, state?: RedactionState): { valu
   return { value: visit(value), redactedFields: active.count };
 };
 
+// things-era system kinds (user/theme/…) keep credentials + PII ciphertext
+// under root `secure`/`uniqueKeys`. Strip both server-side at EVERY point
+// things documents can enter a pipeline — primary collection, $lookup,
+// $unionWith — so no later stage (e.g. $objectToArray over $$ROOT, which
+// turns field names into values) can see them; key-based response redaction
+// alone can't survive renaming. Derived from MONGO_PROTECTED_THING_FIELDS so
+// the strip, the probe checks, and the redactor share one list.
+const PROTECTED_THING_STRIP = {
+  $project: Object.fromEntries(MONGO_PROTECTED_THING_FIELDS.map((field) => [field, 0]))
+};
+
+// Recursively inject the strip into every sub-pipeline that reads `things`.
+// $graphLookup has no pipeline support, so it cannot be stripped — reject it.
+const stripThingsIngress = (stages: unknown): { stages: Record<string, unknown>[] } | MongoQueryFail => {
+  const output: Record<string, unknown>[] = [];
+  for (const stage of Array.isArray(stages) ? stages : []) {
+    if (!stage || typeof stage !== 'object') return { ok: false, status: 400, error: 'Invalid aggregation stage' };
+    const entry = { ...(stage as Record<string, unknown>) };
+
+    if (entry.$graphLookup && typeof entry.$graphLookup === 'object') {
+      const from = (entry.$graphLookup as Record<string, unknown>).from;
+      if (from === 'things') {
+        return {
+          ok: false,
+          status: 400,
+          error: '$graphLookup cannot read things (its documents carry protected fields) — use $lookup with a pipeline instead'
+        };
+      }
+    }
+
+    if (entry.$lookup && typeof entry.$lookup === 'object') {
+      const lookup = { ...(entry.$lookup as Record<string, unknown>) };
+      const inner = stripThingsIngress(lookup.pipeline ?? []);
+      if ('status' in inner) return inner;
+      if (lookup.from === 'things') {
+        lookup.pipeline = [PROTECTED_THING_STRIP, ...inner.stages];
+      } else if (Array.isArray(lookup.pipeline)) {
+        lookup.pipeline = inner.stages;
+      }
+      entry.$lookup = lookup;
+    }
+
+    if (entry.$unionWith !== undefined) {
+      const union = entry.$unionWith;
+      const coll = typeof union === 'string' ? union : union && typeof union === 'object' ? (union as Record<string, unknown>).coll : undefined;
+      const innerStages = union && typeof union === 'object' ? ((union as Record<string, unknown>).pipeline ?? []) : [];
+      const inner = stripThingsIngress(innerStages);
+      if ('status' in inner) return inner;
+      if (coll === 'things') {
+        entry.$unionWith = { coll: 'things', pipeline: [PROTECTED_THING_STRIP, ...inner.stages] };
+      } else if (union && typeof union === 'object' && Array.isArray((union as Record<string, unknown>).pipeline)) {
+        entry.$unionWith = { ...(union as Record<string, unknown>), pipeline: inner.stages };
+      }
+    }
+
+    if (entry.$facet && typeof entry.$facet === 'object') {
+      const facet: Record<string, unknown> = {};
+      for (const [key, sub] of Object.entries(entry.$facet as Record<string, unknown>)) {
+        const inner = stripThingsIngress(sub);
+        if ('status' in inner) return inner;
+        facet[key] = inner.stages;
+      }
+      entry.$facet = facet;
+    }
+
+    output.push(entry);
+  }
+  return { stages: output };
+};
+
+export const hardenThingsQuery = (query: NormalizedMongoQuery): NormalizedMongoQuery | MongoQueryFail => {
+  const walked = stripThingsIngress(query.pipeline);
+  if ('status' in walked) return walked;
+  const pipeline = query.collection === 'things' ? [PROTECTED_THING_STRIP, ...walked.stages] : walked.stages;
+
+  let projection = query.projection;
+  if (query.collection === 'things') {
+    // Mongo's `_id` exception cuts both ways: `{ crystal: 0, _id: 1 }` is a
+    // valid EXCLUSION projection (it returns everything but crystal), so
+    // inclusion detection must ignore `_id`. A bare `{ _id: 1 }` is the one
+    // projection where a truthy `_id` does mean inclusion — it returns only
+    // `_id`, which is already safe to leave untouched. Explicitly including a
+    // protected field is rejected at normalize time.
+    // EJSON canonical deserialization wraps numbers (Int32 { value: 1 }), so
+    // coerce numerically — Int32/Long/Double all valueOf() to number, and
+    // true/false coerce to 1/0, matching Mongo's own truthiness rules
+    const inclusionFlag = (value: unknown) => Number(value) === 1;
+    const entries = Object.entries(projection);
+    const nonId = entries.filter(([key]) => key !== '_id');
+    const inclusion =
+      nonId.some(([, value]) => inclusionFlag(value)) ||
+      (!nonId.length && entries.some(([, value]) => inclusionFlag(value)));
+    if (!inclusion) projection = { ...projection, ...PROTECTED_THING_STRIP.$project };
+  }
+
+  return { ...query, pipeline, projection };
+};
+
 export const safeMongoError = (error: unknown) => {
   const message = error instanceof Error ? error.message : 'MongoDB query failed';
   return message
@@ -384,6 +521,11 @@ export const mongoQueryCapabilities = () => ({
   bsonTypes: MONGO_BSON_VALUE_TYPES,
   aggregationStages: MONGO_READ_ONLY_AGGREGATION_STAGES,
   sensitiveCollections: MONGO_SENSITIVE_QUERY_COLLECTIONS,
+  // collections that additionally carry things-era protected root fields —
+  // filter/sort/projection probes on those fields (and $expr/$jsonSchema
+  // filters, and computed projections) return 400 there
+  protectedFieldCollections: MONGO_PROTECTED_FIELD_QUERY_COLLECTIONS,
+  protectedThingFields: MONGO_PROTECTED_THING_FIELDS,
   blockedKeys: MONGO_BLOCKED_QUERY_KEYS,
   limits: MONGO_QUERY_LIMITS
 });

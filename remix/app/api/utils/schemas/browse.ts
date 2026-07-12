@@ -62,6 +62,23 @@ export type BrowseSchemasResult = {
 const clampLimit = (raw: unknown): number =>
   Math.min(Math.max(1, Number(raw) || DEFAULT_LIMIT), MAX_LIMIT);
 
+// First-page-only capped total, shared by every browse mode that reports one:
+// cursor pages skip the count entirely, failures degrade to null, and the
+// result is clamped so `total === COUNT_LIMIT` uniformly means "capped".
+const cappedCount = async (
+  collection: { countDocuments: (filter: any, options: any) => Promise<number> },
+  match: unknown,
+  cursor: unknown
+): Promise<number | null> => {
+  if (cursor) return null;
+  try {
+    const count = await collection.countDocuments(match, { limit: COUNT_LIMIT + 1, maxTimeMS: COUNT_MAX_TIME_MS });
+    return Math.min(count, COUNT_LIMIT);
+  } catch {
+    return null;
+  }
+};
+
 const truthyFlag = (raw: unknown): boolean => raw === true || raw === '1' || raw === 'true';
 
 // Schema things are v2-only (the schema crystal postdates the v1 era), so
@@ -105,8 +122,11 @@ const decorate = async (viewer: Viewer, things: PublicThing[]): Promise<BrowseSc
               )
             },
             { $group: { _id: { $ifNull: ['$crystal.schemaId', '$crystal.schema'] }, count: { $sum: 1 } } }
-          ])
+          ], { maxTimeMS: COUNT_MAX_TIME_MS })
           .toArray()
+          // usage counts are decoration — a slow/failed count must not take
+          // the whole browse page down with it
+          .catch(() => [] as any[])
       : Promise.resolve([] as any[])
   ]);
 
@@ -179,21 +199,7 @@ const browsePopular = async (
         { $limit: limit + 1 }
       ])
       .toArray() as Promise<ThingDoc[]>,
-    // the total is only reported on the first page — skip the capped count
-    // entirely on cursor pages instead of running and discarding it
-    cursor
-      ? Promise.resolve(null)
-      : (async () => {
-          try {
-            const count = await collection.countDocuments(match, {
-              limit: COUNT_LIMIT + 1,
-              maxTimeMS: COUNT_MAX_TIME_MS
-            });
-            return count > COUNT_LIMIT ? COUNT_LIMIT : count;
-          } catch {
-            return null;
-          }
-        })()
+    cappedCount(collection, match, cursor)
   ]);
 
   const page = docs.slice(0, limit);
@@ -269,14 +275,7 @@ const browseMine = async (
       .sort(sort === 'oldest' ? { createdAt: 1, shareId: 1 } : { createdAt: -1, shareId: 1 })
       .limit(limit + 1)
       .toArray() as Promise<ThingDoc[]>,
-    cursor
-      ? Promise.resolve(null)
-      : collection
-          .countDocuments({ ownerId: viewer.id, thingtime: 'schema' } as any, {
-            limit: COUNT_LIMIT + 1,
-            maxTimeMS: COUNT_MAX_TIME_MS
-          })
-          .catch(() => null)
+    cappedCount(collection, { ownerId: viewer.id, thingtime: 'schema' }, cursor)
   ]);
 
   const page = docs.slice(0, limit);

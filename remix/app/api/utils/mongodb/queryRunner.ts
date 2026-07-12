@@ -1,6 +1,7 @@
 import { getThingtimeDb } from './collections';
 import { MONGO_QUERY_LIMITS, type MongoQueryRequest, type MongoQuerySuccess } from './queryContract';
 import {
+  hardenThingsQuery,
   mongoQueryCapabilities,
   normalizeMongoQueryRequest,
   redactMongoValue,
@@ -60,21 +61,6 @@ const collectValues = async (
   return { results, truncated, redactedFields: state.count };
 };
 
-// things-era system kinds (user/theme/…) keep credentials + PII ciphertext
-// under root `secure`/`uniqueKeys`. Strip both server-side so no projection
-// alias or later pipeline stage (e.g. $objectToArray over $$ROOT) can see the
-// values — key-based response redaction alone can't survive renaming.
-const hardenThingsQuery = (query: NormalizedMongoQuery): NormalizedMongoQuery => {
-  if (query.collection !== 'things') return query;
-  const pipeline = [{ $project: { secure: 0, uniqueKeys: 0 } }, ...query.pipeline];
-  // an inclusion projection already omits the protected fields (explicitly
-  // including them is rejected at normalize time); only exclusion-type or
-  // empty projections need the exclusions merged in
-  const inclusion = Object.values(query.projection).some((value) => value === 1 || value === true);
-  const projection = inclusion ? query.projection : { ...query.projection, secure: 0, uniqueKeys: 0 };
-  return { ...query, pipeline, projection };
-};
-
 const boundedDistinctPipeline = (query: NormalizedMongoQuery) => [
   { $match: query.filter },
   {
@@ -96,7 +82,9 @@ export const runMongoQuery = async (
 ): Promise<Fail | MongoQuerySuccess> => {
   const checked = await normalizeMongoQueryRequest(body || {});
   if ('status' in checked) return checked;
-  const normalized = hardenThingsQuery(checked);
+  const hardened = hardenThingsQuery(checked);
+  if ('status' in hardened) return hardened;
+  const normalized = hardened;
 
   const started = performance.now();
   try {

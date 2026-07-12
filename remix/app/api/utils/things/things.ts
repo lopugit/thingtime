@@ -340,6 +340,26 @@ export const createThing = async (
     return fail(403, `${validated.thingtime.join('+')} things are managed by their own endpoints`);
   }
 
+  // data things may carry schema provenance tags (crystal.schema name +
+  // crystal.schemaId, stamped by the schema form). The stamp drives
+  // per-schema usage counts, so the server is authoritative: schemaId must
+  // resolve to a schema thing the creator can see, and the display name is
+  // taken from that schema — no client can attribute its data to a schema
+  // under a mismatched schemaId/name pair.
+  if (validated.thingtime.includes('data') && validated.crystal.schemaId !== undefined) {
+    const rawSchemaId = validated.crystal.schemaId;
+    if (typeof rawSchemaId !== 'string' || !rawSchemaId.trim()) {
+      return fail(400, 'crystal.schemaId must be a schema thing id');
+    }
+    const schemaThing = await findViewableThing(rawSchemaId.trim(), asOwner);
+    if (!schemaThing || !thingtimeOf(schemaThing).includes('schema')) {
+      return fail(400, 'crystal.schemaId does not resolve to a schema you can see');
+    }
+    validated.crystal.schemaId = schemaThing.shareId;
+    const schemaName = (schemaThing.crystal as Record<string, unknown> | undefined)?.name;
+    if (typeof schemaName === 'string' && schemaName) validated.crystal.schema = schemaName;
+  }
+
   const tags = sanitizeTags(input.tags);
   if (isFail(tags)) return tags;
 

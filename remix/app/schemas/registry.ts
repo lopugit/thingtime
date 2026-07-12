@@ -1013,6 +1013,12 @@ export const SCHEMA_FIELD_NAME_PATTERN = /^[A-Za-z0-9_-]+$/;
 export const MAX_SCHEMA_FIELD_NAME_CHARS = 60;
 export const MAX_SCHEMA_FIELD_DESCRIPTION_CHARS = 200;
 
+// top-level crystal keys that tag data things with their schema — a schema
+// field by either name could never round-trip. Exported so the builder's
+// inline validation and the server sanitizer share one list (lowercased for
+// case-insensitive comparison).
+export const SCHEMA_RESERVED_TOP_LEVEL_FIELD_NAMES: ReadonlySet<string> = new Set(['schema', 'schemaid']);
+
 // whole-number constraint (maxLength/minItems/maxItems); fail-loudly on junk
 const sanitizeCountConstraint = (
   raw: unknown,
@@ -1055,9 +1061,7 @@ const sanitizeSchemaField = (
     if (!fieldName || fieldName.length > MAX_SCHEMA_FIELD_NAME_CHARS || !SCHEMA_FIELD_NAME_PATTERN.test(fieldName)) {
       return fail(400, `Schema field names are letters/numbers/_/- — nest with children, not dots (got ${String(def.name).slice(0, 80)})`);
     }
-    // top-level crystal keys `schema`/`schemaId` tag data things with their
-    // schema; a field by either name could never round-trip
-    if (depth === 1 && (fieldName.toLowerCase() === 'schema' || fieldName.toLowerCase() === 'schemaid')) {
+    if (depth === 1 && SCHEMA_RESERVED_TOP_LEVEL_FIELD_NAMES.has(fieldName.toLowerCase())) {
       return fail(400, `Field name ${fieldName} is reserved (it tags data things with their schema)`);
     }
   }

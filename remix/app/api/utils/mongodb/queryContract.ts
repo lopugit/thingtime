@@ -28,13 +28,19 @@ export const MONGO_SENSITIVE_QUERY_COLLECTIONS = [
 
 // things-era system kinds (user/theme/waitlist/…) live in `things` and carry
 // credentials + PII ciphertext under root `secure`/`uniqueKeys`. `things` stays
-// aggregable (the runner strips those two fields server-side before any stage
-// runs), but filter/sort/projection probe checks treat it like the sensitive
-// collections above.
+// aggregable (the runner strips those two fields at every ingress — primary
+// collection, $lookup, $unionWith — before any user stage runs), but
+// filter/sort/projection probe checks treat it like the sensitive collections
+// above.
 export const MONGO_PROTECTED_FIELD_QUERY_COLLECTIONS = [
   ...MONGO_SENSITIVE_QUERY_COLLECTIONS,
   'things'
 ] as const satisfies readonly MongoQueryCollection[];
+
+// The single source of truth for the things-era protected root fields — the
+// probe checks (querySafety), the ingress strip stages (queryRunner), and the
+// response redactor all derive from this list.
+export const MONGO_PROTECTED_THING_FIELDS = ['secure', 'uniqueKeys'] as const;
 
 export const MONGO_QUERY_OPERATIONS = [
   { value: 'find', label: 'Find many', description: 'Return matching documents.' },

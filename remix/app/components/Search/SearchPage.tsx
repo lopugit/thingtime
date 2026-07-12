@@ -199,6 +199,17 @@ const SEARCHABLE_FIELD_NAME = /^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$/;
 const searchableField = (field: { name: string; type: string }) =>
   SEARCHABLE_FIELD_NAME.test(field.name) && field.type !== 'object' && field.type !== 'record';
 
+// display labels for the kind <Select>, rendered from SEARCHABLE_CRYSTAL_KINDS
+// so the dropdown, the builtin schema chips, and /schemas' "Search things"
+// gating can never drift apart
+const KIND_OPTION_LABELS: Record<string, string> = {
+  post: 'posts',
+  data: 'data',
+  schema: 'schemas',
+  comment: 'comments',
+  reaction: 'reactions'
+};
+
 const builtinSchemaSources = (): SchemaSource[] =>
   thingtimeSchemas
     .filter((schema) => schema.kind === 'crystal' && SEARCHABLE_CRYSTAL_KINDS.has(schema.id))
@@ -336,7 +347,11 @@ const previewValue = (value: unknown): string => {
 };
 
 function CrystalPreview({ crystal }: { crystal: Record<string, any> }) {
-  const entries = Object.entries(crystal || {}).filter(([, value]) => value !== '' && value !== undefined);
+  // schemaId is internal provenance (the schema thing's shareId) — the
+  // human-readable `schema` chip already conveys the shape
+  const entries = Object.entries(crystal || {}).filter(
+    ([key, value]) => key !== 'schemaId' && value !== '' && value !== undefined
+  );
   if (!entries.length) {
     return (
       <Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="xs">
@@ -680,13 +695,18 @@ export const SearchPage = () => {
     [location.search]
   );
   const appliedUrlSchemaRef = React.useRef<string | null>(null);
+  // render-synced mirror of the CURRENT ?schema — lets an in-flight
+  // resolution detect that the user navigated away (urlSchema changed or
+  // emptied) and drop its result instead of clobbering the newer search
+  const currentUrlSchemaRef = React.useRef(urlSchema);
+  currentUrlSchemaRef.current = urlSchema;
   React.useEffect(() => {
     if (!urlSchema || appliedUrlSchemaRef.current === urlSchema) return;
     appliedUrlSchemaRef.current = urlSchema;
     // NO cancel-on-cleanup here: StrictMode's simulated unmount (and our own
     // post-search replace-navigate stripping ?schema) would cancel the only
     // resolution in flight — the ref already dedupes re-runs, and staleness
-    // is checked against the ref when the async result lands instead
+    // is checked against currentUrlSchemaRef when the async result lands
     (async () => {
       let source: SchemaSource | null = null;
       if (urlSchema.startsWith('builtin:')) {
@@ -700,8 +720,9 @@ export const SearchPage = () => {
           // unknown/invisible schema — fall through to the plain page
         }
       }
-      // a different ?schema took over while we resolved — it owns the page now
-      if (appliedUrlSchemaRef.current !== urlSchema) return;
+      // the user navigated away (or a different ?schema took over) while we
+      // resolved — the newer page state owns the search now
+      if (appliedUrlSchemaRef.current !== urlSchema || currentUrlSchemaRef.current !== urlSchema) return;
       if (!source) {
         lopuRef.current({ title: 'That schema isn’t visible from here 🥲', status: 'info', duration: 6000 });
         // the mount search deferred to us — still paint results, and let a
@@ -833,11 +854,11 @@ export const SearchPage = () => {
           ) : null}
           <Select maxWidth="140px" onChange={(event) => setKind(event.target.value)} size="xs" value={kind}>
             <option value="">any kind</option>
-            <option value="post">posts</option>
-            <option value="data">data</option>
-            <option value="schema">schemas</option>
-            <option value="comment">comments</option>
-            <option value="reaction">reactions</option>
+            {[...SEARCHABLE_CRYSTAL_KINDS].map((kindOption) => (
+              <option key={kindOption} value={kindOption}>
+                {KIND_OPTION_LABELS[kindOption] || kindOption}
+              </option>
+            ))}
           </Select>
           <Select maxWidth="130px" onChange={(event) => setSort(event.target.value)} size="xs" value={sort}>
             <option value="auto">auto sort</option>

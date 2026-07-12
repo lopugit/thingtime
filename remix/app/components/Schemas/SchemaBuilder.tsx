@@ -7,8 +7,11 @@ import { useApi } from '~/hooks/useApi';
 import {
   MAX_SCHEMA_FIELDS,
   MAX_SCHEMA_FIELD_DEPTH,
+  MAX_SCHEMA_FIELD_NAME_CHARS,
   MAX_SCHEMA_NAME_CHARS,
+  SCHEMA_FIELD_NAME_PATTERN,
   SCHEMA_FIELD_TYPES,
+  SCHEMA_RESERVED_TOP_LEVEL_FIELD_NAMES,
   type SchemaFieldType,
   type SchemaThingField
 } from '~/schemas/registry';
@@ -86,10 +89,6 @@ const fromSchemaField = (field: SchemaThingField): DraftField =>
     items: field.items ? fromSchemaField({ name: 'items', ...field.items } as SchemaThingField) : null
   });
 
-// mirrors the server's SCHEMA_FIELD_NAME_PATTERN: one path segment, no dots —
-// nesting comes from object children / array items
-const FIELD_NAME_PATTERN = /^[A-Za-z0-9_-]+$/;
-const RESERVED_TOP_LEVEL_NAMES = new Set(['schema', 'schemaid']);
 
 type CompileResult = { fields: SchemaThingField[]; issues: string[]; nodes: number };
 
@@ -107,11 +106,13 @@ const compileDrafts = (drafts: DraftField[], depth: number, path: string): Compi
       continue;
     }
     const name = draft.name.trim();
-    if (!FIELD_NAME_PATTERN.test(name) || name.length > 60) {
-      issues.push(`${name}: names are letters/numbers/_/- (nest with object fields, not dots), max 60 chars`);
+    if (!SCHEMA_FIELD_NAME_PATTERN.test(name) || name.length > MAX_SCHEMA_FIELD_NAME_CHARS) {
+      issues.push(
+        `${name}: names are letters/numbers/_/- (nest with object fields, not dots), max ${MAX_SCHEMA_FIELD_NAME_CHARS} chars`
+      );
       continue;
     }
-    if (depth === 1 && RESERVED_TOP_LEVEL_NAMES.has(name.toLowerCase())) {
+    if (depth === 1 && SCHEMA_RESERVED_TOP_LEVEL_FIELD_NAMES.has(name.toLowerCase())) {
       issues.push(`${name}: reserved — it tags data things with their schema`);
       continue;
     }
