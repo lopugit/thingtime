@@ -114,6 +114,10 @@ export const FeedPage = () => {
         setRanked(!!resp.ranked);
       } catch (err: any) {
         if (seq !== requestSeqRef.current) return;
+        // a failed RESET must not leave the previous query's posts posing as
+        // this one's results (the optimistic keep only covers the happy path);
+        // a failed load-more keeps the list it was extending
+        if (reset) setPosts([]);
         setNextCursor(null);
         lopuRef.current({ title: err?.error || 'Could not load the feed 😞', status: 'error' });
       } finally {

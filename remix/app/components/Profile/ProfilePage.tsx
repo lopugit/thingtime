@@ -238,6 +238,9 @@ export const ProfilePage = (props: ProfilePageProps) => {
         if (typeof resp?.postCount === 'number') setPostCount(resp.postCount);
       } catch (err: any) {
         if (generationRef.current !== generation) return;
+        // a failed first page must not leave the previous query's posts posing
+        // as this one's results; a failed load-more keeps the list
+        if (!cursor) setPosts([]);
         nextCursorRef.current = null;
         setNextCursor(null);
         lopuRef.current({

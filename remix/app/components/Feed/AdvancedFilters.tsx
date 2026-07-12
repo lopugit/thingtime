@@ -51,9 +51,14 @@ export const EMPTY_ADVANCED_FILTERS: AdvancedFiltersState = {
   sort: 'auto'
 };
 
+// the sort that will actually reach the API: relevance needs text (the server
+// 400s otherwise), and auto means "let the server pick"
+const effectiveSort = (state: AdvancedFiltersState): string | undefined =>
+  state.sort === 'auto' || (state.sort === 'relevance' && !state.q.trim()) ? undefined : state.sort;
+
 // does this state actually change anything? (an open-but-empty panel keeps the
-// normal feed behaviour). A non-auto sort counts — "oldest, nothing else" is a
-// real search the normal feed can't express.
+// normal feed behaviour). A sort counts only when it would actually be sent —
+// "oldest, nothing else" is a real search, "relevance with no text" is not.
 export const advancedFiltersActive = (state: AdvancedFiltersState): boolean =>
   !!(
     state.q.trim() ||
@@ -64,7 +69,7 @@ export const advancedFiltersActive = (state: AdvancedFiltersState): boolean =>
     state.minComments.trim() ||
     state.minTextChars.trim() ||
     state.maxTextChars.trim() ||
-    state.sort !== 'auto'
+    effectiveSort(state)
   );
 
 // state → POST /api/v1/things/search body (posts only — feeds are posts). The
@@ -80,8 +85,7 @@ export const advancedSearchBody = (state: AdvancedFiltersState): Record<string, 
   minComments: state.minComments.trim() || undefined,
   minTextChars: state.minTextChars.trim() || undefined,
   maxTextChars: state.maxTextChars.trim() || undefined,
-  // relevance without text is a server-side 400 — fall back to auto (newest)
-  sort: state.sort === 'auto' || (state.sort === 'relevance' && !state.q.trim()) ? undefined : state.sort
+  sort: effectiveSort(state)
 });
 
 // search response → ordered full post projections (things carries the order,
