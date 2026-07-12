@@ -18,6 +18,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- Replaced the unfinished `/raw` MongoDB dump with an admin-only no-code Query
+  Workbench: nested filters, typed BSON values, projections, sorting, bounded
+  find/count/distinct/index/stats tools, read-only aggregation pipelines,
+  execution plans, cancellation, request previews, and JSON/table/CSV results.
+  Server-side allowlists, complexity/time/response caps, protected-field probe
+  prevention and redaction, blocked write/server-JavaScript stages, and
+  fail-closed rate limiting keep the tool read-only and bounded. Details in
+  [`PRs/64-codex-mongodb-query-builder--add-no-code-mongodb-query-workbench.md`](../PRs/64-codex-mongodb-query-builder--add-no-code-mongodb-query-workbench.md).
+  — _Codex (AI), 2026-07-12_
+
 - Unified the data model so posts, comments, reactions, and shares are all one
   root **Thing** shape: sub-schemas apply through the `thingtime` array of
   schema ids, payloads live under `crystal`, and every doc in every collection
