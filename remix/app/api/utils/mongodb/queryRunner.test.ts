@@ -184,6 +184,34 @@ test('keeps ordinary field names and $expr usable outside protected scopes', asy
     pipeline: [{ $addFields: { leaked: { $getField: { field: 'uniqueKeys', input: '$$ROOT' } } } }]
   });
   assert.equal('status' in getFieldObject, true);
+
+  // a COMPUTED $getField field arg can't be verified statically → rejected
+  const getFieldComputed = await normalizeMongoQueryRequest({
+    collection: 'things',
+    operation: 'aggregate',
+    pipeline: [{ $addFields: { leaked: { $getField: { field: { $literal: 'apiKey' }, input: '$crystal' } } } }]
+  });
+  assert.equal('status' in getFieldComputed, true);
+});
+
+test('redacts $objectToArray-materialized sensitive values by sibling key', () => {
+  // $objectToArray output shape: sensitive field name becomes a `k` value, the
+  // secret a `v` value under non-sensitive keys — masked by the sibling-k rule
+  const materialized = redactMongoValue({
+    kv: [
+      { k: 'label', v: 'coffee' },
+      { k: 'apiKey', v: 'sk-live-secret' },
+      { k: 'password', v: 'hunter2' }
+    ]
+  });
+  assert.deepEqual(materialized.value, {
+    kv: [
+      { k: 'label', v: 'coffee' },
+      { k: 'apiKey', v: '[redacted]' },
+      { k: 'password', v: '[redacted]' }
+    ]
+  });
+  assert.equal(materialized.redactedFields, 2);
 });
 
 test('enforces the read-only stage allowlist inside nested sub-pipelines', async () => {

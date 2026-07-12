@@ -116,10 +116,17 @@ const findProtectedQueryReference = (value: unknown, options: ReferenceScanOptio
     if (options.blockedPredicates.has(key)) return key;
     // $getField/$setField name a field via a PLAIN (non-$) string argument
     // that the reference/key checks above would miss: { $getField: 'secure' }
-    // or { $getField: { field: 'secure', … } }
+    // or { $getField: { field: 'secure', … } }. A COMPUTED field argument
+    // (e.g. { field: { $literal: 'apiKey' } }) can't be verified statically,
+    // and there's no legitimate read-only use for a dynamic field name, so it
+    // is rejected outright rather than allowed to launder a redacted value.
     if (key === '$getField' || key === '$setField') {
-      const field = typeof child === 'string' ? child : isRecord(child) && typeof child.field === 'string' ? child.field : '';
-      if (field && options.matchPath(field)) return `${key}:${field}`;
+      const field = typeof child === 'string' ? child : isRecord(child) ? child.field : undefined;
+      if (typeof field === 'string') {
+        if (field && options.matchPath(field)) return `${key}:${field}`;
+      } else if (field !== undefined) {
+        return `${key}:<computed field>`;
+      }
     }
     const match = findProtectedQueryReference(child, options, depth + 1);
     if (match) return match;
@@ -321,8 +328,17 @@ export const normalizeMongoQueryRequest = async (
   // redactor-sensitive path (e.g. `$owner.secure` after a $lookup, or
   // `$crystal.apiKey`) as an aggregation source, since renaming it into a
   // harmless output key would escape the response redactor. Uses the same
-  // predicate as the redactor so the two never disagree; secure/uniqueKeys are
-  // additionally hard-stripped at every things ingress by hardenThingsQuery.
+  // predicate as the redactor.
+  //
+  // Layered guarantee:
+  //  - HARD (system credentials secure/uniqueKeys): hardenThingsQuery physically
+  //    strips them at every things ingress, so no expression can reach them.
+  //  - BEST-EFFORT (user-authored plaintext crystal fields named like secrets):
+  //    this reference guard + the { k, v } redactor cover direct references and
+  //    $objectToArray materialization; a determined admin could still
+  //    reconstruct such a value through exotic expressions. That is an accepted
+  //    limit for a requireAdmin-gated read-only debug tool over the user's own
+  //    public crystal — the redaction is hygiene, not a trust boundary.
   const protectedPipelineReference = findProtectedQueryReference(pipelineInput, {
     matchPath: isSensitiveFieldPath,
     blockedPredicates: NO_PROBE_PREDICATES
@@ -424,6 +440,16 @@ export const redactMongoValue = (value: unknown, state?: RedactionState): { valu
     const extended = (next as any).toExtendedJSON;
     if (typeof extended === 'function') return visit(extended.call(next));
     if (Array.isArray(next)) return next.map(visit);
+
+    // $objectToArray turns field NAMES into VALUES under { k, v } pairs, which
+    // the key-name redaction below would miss (the keys are 'k'/'v', not the
+    // sensitive name). Redact `v` whenever its sibling `k` is a sensitive
+    // field name, so materialize-the-subtree aggregations can't launder a
+    // heuristic-sensitive value past the redactor.
+    if (typeof (next as any).k === 'string' && 'v' in (next as any) && shouldRedactKey((next as any).k)) {
+      active.count += 1;
+      return { k: (next as any).k, v: '[redacted]' };
+    }
 
     const output: Record<string, unknown> = {};
     for (const [key, child] of Object.entries(next)) {

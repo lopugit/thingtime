@@ -1497,10 +1497,18 @@ export const updateThing = async (
   const validated = validateThingtimeCrystal(thingtime, nextCrystal);
   if (isFail(validated)) return validated;
 
-  // same server-authoritative schema-provenance check as createThing — a
-  // forged crystal.schemaId must not slip in via PATCH/PUT after create
-  const provenance = await resolveDataSchemaProvenance(validated.thingtime, validated.crystal, viewer);
-  if (isFail(provenance)) return provenance;
+  // Re-run the createThing provenance check ONLY when this write changes the
+  // schema attribution. Re-validating an unchanged (already-validated)
+  // schemaId would lock the owner out of editing their own data thing if the
+  // schema's author later hid or deleted it — an action outside the owner's
+  // control. A changed/new schemaId must still prove the writer can see it.
+  const prevSchemaId = typeof (crystalOf(doc) as Record<string, unknown>)?.schemaId === 'string'
+    ? ((crystalOf(doc) as Record<string, unknown>).schemaId as string)
+    : undefined;
+  if (validated.crystal.schemaId !== undefined && validated.crystal.schemaId !== prevSchemaId) {
+    const provenance = await resolveDataSchemaProvenance(validated.thingtime, validated.crystal, viewer);
+    if (isFail(provenance)) return provenance;
+  }
 
   let tags = doc.tags || [];
   if (input.tags !== undefined) {
