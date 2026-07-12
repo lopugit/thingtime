@@ -626,6 +626,7 @@ const usersToThings = collectionToThingsMigration({
         tags: [],
         uniqueKeys: [userUsernameKey(doc.username), userEmailKey(doc.email)],
         secure,
+        secureVersion: 0, // matches insertUser — optimistic-concurrency token
         ...(admin ? { secureAdmin: true } : {}),
         createdAt,
         updatedAt

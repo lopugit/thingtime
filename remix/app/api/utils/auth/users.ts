@@ -273,6 +273,7 @@ export const insertUser = async (doc: UserDoc & { schemaVersion?: number }) => {
     tags: [],
     uniqueKeys: [userUsernameKey(doc.username), userEmailKey(doc.email)],
     secure,
+    secureVersion: 0, // optimistic-concurrency token for blob mutations
     // sparse boolean, queryable by listAdmins (booleans aren't text-indexed)
     ...(admin ? { secureAdmin: true } : {}),
     createdAt: now,
@@ -295,22 +296,44 @@ const updateUserStore = async (userId: string, thingUpdate: any, legacyUpdate: a
 };
 
 // Read-modify-write a things-era user's secure blob (the whole subdocument is
-// opaque BinData, so no dotted $set is possible). Not atomic, but per-user
-// secure writes don't meaningfully race — the pointer/verify/reaction paths are
-// single-actor, and the old dotted path already did two separate writes for the
-// MRU. Returns false when there is no user thing (caller falls back to legacy).
+// opaque BinData, so no dotted $set is possible). The blob can't rely on
+// field-scoped atomic $set, so the write is guarded by an optimistic
+// `secureVersion` CAS + retry: if another writer bumped the version between our
+// read and write, we re-read and re-apply — so two concurrent mutations of
+// DIFFERENT fields never clobber each other (proven necessary: a naive
+// last-write-wins reverted emailVerified under a racing reaction write).
+// Returns false when there is no user thing (caller falls back to legacy).
+// generous ceiling: retries only ever loop on genuine concurrent writes to the
+// SAME user (rare — a couple at most in practice), and each contended writer
+// needs up to (N concurrent) attempts to win a round, so the cap must comfortably
+// exceed realistic burst width
+const SECURE_CAS_ATTEMPTS = 20;
 const mutateUserThingSecure = async (
   userId: string,
   mutate: (secure: SecurePayload) => void
 ): Promise<boolean> => {
   const things = await getThingsCollection();
-  const filter = { shareId: String(userId), thingtime: 'user' } as any;
-  const thing = await things.findOne(filter, { projection: { secure: 1 } });
-  if (!thing) return false;
-  const secure = unpackSecure((thing as any).secure);
-  if (!secure.meta) secure.meta = {};
-  mutate(secure);
-  await things.updateOne(filter, { $set: { secure: packSecure(secure), updatedAt: new Date() } });
+  const base = { shareId: String(userId), thingtime: 'user' } as any;
+  for (let attempt = 0; attempt < SECURE_CAS_ATTEMPTS; attempt++) {
+    const thing = await things.findOne(base, { projection: { secure: 1, secureVersion: 1 } });
+    if (!thing) return false;
+    const version = (thing as any).secureVersion; // number | undefined (pre-versioned docs)
+    const secure = unpackSecure((thing as any).secure);
+    if (!secure.meta) secure.meta = {};
+    mutate(secure);
+    // guard on the exact version we read — a missing field guards on its absence
+    const guard = version === undefined ? { secureVersion: { $exists: false } } : { secureVersion: version };
+    const res = await things.updateOne(
+      { ...base, ...guard },
+      { $set: { secure: packSecure(secure), secureVersion: (version ?? 0) + 1, updatedAt: new Date() } }
+    );
+    if (res.modifiedCount) return true;
+    // lost the CAS — another writer won; small jittered backoff so a burst of
+    // writers doesn't keep colliding on the same round, then re-read and re-apply
+    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 3 * attempt + Math.floor(Math.random() * 5)));
+  }
+  // the thing exists but we lost every CAS under extreme contention — report
+  // handled so the caller doesn't wrongly fall through to the legacy store
   return true;
 };
 
