@@ -18,6 +18,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- `/search` page + `POST/GET /api/v1/things/search`: a Commander-style search
+  over every visible thing — whitelisted MongoDB operator grammar (nested
+  all/any groups, bounded primitives only, escaped-literal text ops), ranked
+  text search via a weighted wildcard text index, new free-form `data` and
+  user-authored `schema` crystal schemas, search-by-schema prefill, a pinned
+  Commander "Search things" row, and a `things.search` rate-limit window.
+  Details in
+  [PRs/63](../PRs/63-claude-search-page-mongodb-query-154eb4--search-page-query-builder-ranked-text-search-by-schema.md).
+  — Claude (AI), 2026-07-12
 - Unified the data model so posts, comments, reactions, and shares are all one
   root **Thing** shape: sub-schemas apply through the `thingtime` array of
   schema ids, payloads live under `crystal`, and every doc in every collection
