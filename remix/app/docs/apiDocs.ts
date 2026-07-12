@@ -998,39 +998,65 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   endpoint({
     id: 'mongodb-raw-results',
     group: 'mongodb',
-    title: 'MongoDB raw results',
+    title: 'MongoDB query workbench',
     endpoint: '/api/v1/mongodb/raw-results',
-    summary: 'Returns raw Thingtime records from MongoDB for diagnostics.',
+    summary: 'Advertises and runs bounded, read-only MongoDB queries for the no-code admin workbench.',
     detail:
-      'Use this route for low-level diagnostics when validating the database connection and stored Thingtime data.',
+      'GET returns the server-owned capability catalogue. POST accepts a structured query built from filters, typed Extended JSON values, projection, sort, collation, index hints, or a read-only aggregation pipeline. Results are capped by document count, response bytes, and execution time. Mutations, change streams, operational/session inspection, server-side JavaScript, arbitrary databases, and unknown collections are rejected recursively.',
     auth: {
       mode: 'session-or-bearer',
       description:
-        'Admin-only (meta.admin flag or the ADMIN_USERNAMES env allowlist). Raw docs include private things.'
+        'Admin-only (meta.admin flag or the ADMIN_USERNAMES env allowlist). Every request is re-authorized and query execution is rate-limited.'
     },
-    methods: ['POST'],
+    methods: ['GET', 'POST'],
     steps: [
-      'POST an empty JSON object as an allowlisted admin.',
-      'The route opens the configured MongoDB connection and reads the things collection.',
-      'Inspect data.rawResults for stored Thingtime records.',
-      'Handle 401 non-admin callers and 500 if MongoDB is unavailable.'
+      'GET the endpoint as an admin to load the exact collections, operations, stages, blocked keys, and resource limits.',
+      'Choose one allowlisted Thingtime collection and a read operation: find, findOne, exact/estimated count, distinct, aggregate, indexes, or collection stats.',
+      'POST the structured request. Use canonical MongoDB Extended JSON wrappers such as $oid, $date, $numberLong, and $regularExpression for typed values.',
+      'Read results, resultCount, durationMs, truncated, redactedFields, and explain from the response.',
+      'Handle 400 for invalid/unsafe queries, 401/403 for non-admin callers, 413 for oversized bodies, 429 for rate limiting, and 503 when MongoDB is unavailable.'
     ],
     requestExamples: [
       {
-        name: 'Read raw results',
-        description: 'Fetch raw things collection results.',
+        name: 'Find recent posts',
+        description: 'Run a bounded, sorted query from the no-code builder.',
         method: 'POST',
-        body: {}
+        body: {
+          collection: 'things',
+          operation: 'find',
+          filter: { thingtime: { $all: ['post'] } },
+          projection: { shareId: 1, thingtime: 1, crystal: 1, createdAt: 1, _id: 0 },
+          sort: { createdAt: -1 },
+          limit: 25,
+          skip: 0,
+          maxTimeMS: 5000,
+          explain: false
+        }
       }
     ],
     responseExamples: [
       {
         status: 200,
-        description: 'Raw things collection results.',
-        body: { message: 'Early return triggered in Raw Results action: successful', data: { rawResults: [] } }
+        description: 'A successful bounded query.',
+        body: {
+          ok: true,
+          operation: 'find',
+          collection: 'things',
+          results: [],
+          resultCount: 0,
+          durationMs: 4.2,
+          truncated: false,
+          redactedFields: 0,
+          explain: false
+        }
       }
     ],
-    notes: ['Raw results can contain user data. Prefer higher-level API routes for app integrations.']
+    notes: [
+      'This endpoint is an admin diagnostic surface, not an integration API. App data flows should use the higher-level Thingtime endpoints.',
+      'Passwords, credentials, secrets, tokens, JWTs, session/roster identifiers, private keys, and credentialed MongoDB URLs are always redacted.',
+      'Aggregation and computed projections are disabled for authentication/config collections so a user expression cannot rename a secret before redaction.',
+      '$out, $merge, $where, $function, $accumulator, change streams, session inspection, and raw database commands are deliberately unavailable.'
+    ]
   }),
   endpoint({
     id: 'mongodb-status',

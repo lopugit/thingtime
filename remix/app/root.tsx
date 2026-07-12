@@ -17,6 +17,7 @@ import { VisualSettingsHost } from './components/VisualSettings/VisualSettingsHo
 import { ThemeHost } from './components/ThemeSettings/ThemeHost';
 import { ConfettiCanvas } from './components/Landing/ConfettiCanvas';
 import { EasterEggs } from './components/EasterEggs/EasterEggs';
+import { rememberAuthReturnTo } from './utils/authReturn';
 
 const setThingtime = (glob: any) => {
   try {
@@ -47,7 +48,7 @@ try {
 export default function App() {
   const rootData = useLoaderData() as RootLoaderData;
   const { envFromCookie, titlePrefix } = rootData;
-  const { pathname } = useLocation();
+  const { pathname, search, hash } = useLocation();
   const revalidator = useRevalidator();
   const [mounted, setMounted] = React.useState(false);
 
@@ -67,6 +68,10 @@ export default function App() {
       // Ignore non-browser runtimes.
     }
   }, [envFromCookie]);
+
+  React.useEffect(() => {
+    rememberAuthReturnTo(`${pathname}${search}${hash}`);
+  }, [hash, pathname, search]);
 
   React.useEffect(() => {
     if (typeof document !== 'undefined') {
