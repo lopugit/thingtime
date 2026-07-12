@@ -85,9 +85,13 @@ export type SchemaSource = {
   name: string;
   description: string;
   origin: 'builtin' | 'community';
-  // community schemas remember their author for display
+  // community schemas remember their author + thing id for display/deep-links
   author?: string | null;
+  shareId?: string;
+  usageCount?: number;
+  reactions?: number;
   fields: {
+    // dotted crystal path (nested object/array fields flatten to paths)
     name: string;
     type: string;
     description?: string;
@@ -95,5 +99,6 @@ export type SchemaSource = {
     min?: number;
     max?: number;
     unit?: string;
+    maxLength?: number;
   }[];
 };

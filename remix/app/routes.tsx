@@ -27,6 +27,7 @@ import Rainbow from './routes/rainbow.$';
 import Raw from './routes/raw';
 import Register from './routes/register';
 import SchemasRoute from './routes/schemas';
+import DocsSchemas from './routes/docs/schemas';
 import SearchRoute from './routes/search';
 import StatusPage from './routes/status';
 import ThingtimeUrl from './routes/$';
@@ -104,7 +105,8 @@ export const router = createBrowserRouter([
           { path: 'api/:group/:docId', element: <DocsApi /> },
           { path: 'design', element: <DocsDesign /> },
           { path: 'design-system', element: <DocsDesignSystem /> },
-          { path: 'concepts', element: <DocsConcepts /> }
+          { path: 'concepts', element: <DocsConcepts /> },
+          { path: 'schemas', element: <DocsSchemas /> }
         ]
       },
       { path: 'edge', element: <Edge /> },
@@ -121,13 +123,9 @@ export const router = createBrowserRouter([
       { path: 'rainbow/*', element: <Rainbow /> },
       { path: 'raw', element: <Raw /> },
       { path: 'register', element: <Register />, loader: requireGuest('/welcome') },
-      {
-        // Schema browser rides in the docs chrome (drawer + nav) — docsNav
-        // `to` values are absolute so links keep working under /schemas.
-        path: 'schemas',
-        element: <DocsLayout />,
-        children: [{ index: true, element: <SchemasRoute /> }]
-      },
+      // Schema BROWSING/BUILDING lives at /schemas (standalone, like /search);
+      // the registry reference docs moved to /docs/schemas.
+      { path: 'schemas', element: <SchemasRoute /> },
       { path: 'search', element: <SearchRoute /> },
       {
         path: 'status',

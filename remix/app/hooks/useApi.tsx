@@ -190,6 +190,11 @@ export function useApi() {
         async (args) => asyncFetcher.submit({ id: args?.id, emoji: args?.emoji ?? null }, { action: '/api/v1/things/react' }),
         [asyncFetcher]
       ),
+      // toggle a private "add to my library" save on any visible thing
+      save: useCallback(
+        async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/things/save' }),
+        [asyncFetcher]
+      ),
       comment: useCallback(
         async (args) => asyncFetcher.submit({ id: args?.id, text: args?.text }, { action: '/api/v1/things/comment' }),
         [asyncFetcher]
@@ -299,7 +304,9 @@ export function useApi() {
     },
     schemas: {
       list: useCallback(async () => getJson('/api/v1/schemas'), []),
-      get: useCallback(async (id) => getJson(`/api/v1/schemas${toQuery({ id })}`), [])
+      get: useCallback(async (id) => getJson(`/api/v1/schemas${toQuery({ id })}`), []),
+      // paginated UGC schema browsing — { q, sort, cursor, limit, library, mine }
+      browse: useCallback(async (args) => getJson(`/api/v1/schemas/browse${toQuery(args)}`), [])
     },
     waitlist: {
       join: useCallback(

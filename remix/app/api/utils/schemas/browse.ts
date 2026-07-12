@@ -1,0 +1,326 @@
+import { ensureIndexes, getThingsCollection } from '../mongodb/collections';
+import {
+  asViewer,
+  canViewInherited,
+  chronoCursorClause,
+  fail,
+  isFail,
+  oldestCursorClause,
+  parseChronoCursor,
+  savedTargetIds,
+  toPublicThings,
+  visibilityQueryFor,
+  withMatch,
+  type Fail,
+  type PublicThing,
+  type ThingDoc,
+  type Viewer
+} from '../things/things';
+import { searchThings } from '../things/search';
+
+// Browse published schema things (thingtime ['schema']) for /schemas and the
+// /search schema rail. Read paths reuse the hardened searchThings grammar
+// wherever possible; the extras here are the sorts/filters search doesn't do:
+//
+//   sort=popular   reaction-count ranking (offset cursor, bounded window)
+//   library=1      only schemas the viewer saved (ordered by save recency)
+//   mine=1         only the viewer's own schemas (any audience)
+//
+// Every result is decorated with reactionCounts / viewerReactions / saved /
+// usageCount so cards can render actions without N+1 client fetches.
+
+const DEFAULT_LIMIT = 20;
+const MAX_LIMIT = 50;
+const POPULAR_MAX_OFFSET = 500;
+const COUNT_LIMIT = 1000;
+const COUNT_MAX_TIME_MS = 2000;
+
+export type BrowseSchemasQuery = {
+  q?: unknown;
+  sort?: unknown; // newest (default) | oldest | popular | relevance (with q)
+  cursor?: unknown;
+  limit?: unknown;
+  library?: unknown; // truthy → only the viewer's saved schemas
+  mine?: unknown; // truthy → only the viewer's own schemas
+};
+
+export type BrowseSchemaEntry = PublicThing & {
+  reactionCounts: Record<string, number>;
+  viewerReactions: string[];
+  saved: boolean;
+  usageCount: number;
+};
+
+export type BrowseSchemasResult = {
+  ok: true;
+  schemas: BrowseSchemaEntry[];
+  nextCursor: string | null;
+  total: number | null;
+  totalCapped: boolean;
+};
+
+const clampLimit = (raw: unknown): number =>
+  Math.min(Math.max(1, Number(raw) || DEFAULT_LIMIT), MAX_LIMIT);
+
+const truthyFlag = (raw: unknown): boolean => raw === true || raw === '1' || raw === 'true';
+
+// Schema things are v2-only (the schema crystal postdates the v1 era), so
+// reactions pointing at them are always v2 reaction things — no legacy
+// kind:'reaction' pass needed here.
+const decorate = async (viewer: Viewer, things: PublicThing[]): Promise<BrowseSchemaEntry[]> => {
+  if (!things.length) return [];
+  const ids = things.map((thing) => thing.id);
+  const names = things
+    .map((thing) => (typeof thing.crystal?.name === 'string' ? thing.crystal.name : null))
+    .filter(Boolean) as string[];
+
+  const collection = await getThingsCollection();
+  const visibility = visibilityQueryFor(viewer, []);
+
+  const [reactionDocs, saved, usageDocs] = await Promise.all([
+    collection
+      .find({ thingtime: 'reaction', targetId: { $in: ids } } as any)
+      .project({ targetId: 1, ownerId: 1, 'crystal.emoji': 1 })
+      .toArray(),
+    savedTargetIds(viewer, ids),
+    names.length && visibility
+      ? collection
+          .aggregate([
+            { $match: withMatch({ thingtime: 'data', 'crystal.schema': { $in: names } }, visibility) },
+            { $group: { _id: '$crystal.schema', count: { $sum: 1 } } }
+          ])
+          .toArray()
+      : Promise.resolve([] as any[])
+  ]);
+
+  const reactionsByTarget = new Map<string, { counts: Record<string, number>; viewer: string[] }>();
+  for (const doc of reactionDocs as any[]) {
+    const targetId = String(doc.targetId);
+    const token = typeof doc.crystal?.emoji === 'string' ? doc.crystal.emoji : null;
+    if (!token) continue;
+    const entry = reactionsByTarget.get(targetId) || { counts: {}, viewer: [] };
+    entry.counts[token] = (entry.counts[token] || 0) + 1;
+    if (viewer?.id && String(doc.ownerId) === viewer.id && !entry.viewer.includes(token)) {
+      entry.viewer.push(token);
+    }
+    reactionsByTarget.set(targetId, entry);
+  }
+
+  const usageByName = new Map<string, number>();
+  for (const doc of usageDocs as any[]) {
+    if (typeof doc._id === 'string') usageByName.set(doc._id, Number(doc.count) || 0);
+  }
+
+  return things.map((thing) => {
+    const reactions = reactionsByTarget.get(thing.id) || { counts: {}, viewer: [] };
+    const name = typeof thing.crystal?.name === 'string' ? thing.crystal.name : '';
+    return {
+      ...thing,
+      reactionCounts: reactions.counts,
+      viewerReactions: reactions.viewer,
+      saved: saved.has(thing.id),
+      usageCount: usageByName.get(name) || 0
+    };
+  });
+};
+
+// popular: reaction-count ranking over the visibility superset, exact acl
+// check on the fetched page (same superset-then-exact model as search/feed).
+const browsePopular = async (
+  viewer: Viewer,
+  cursor: unknown,
+  limit: number
+): Promise<Fail | { things: PublicThing[]; nextCursor: string | null; total: number | null; totalCapped: boolean }> => {
+  const visibility = visibilityQueryFor(viewer, []);
+  if (!visibility) return { things: [], nextCursor: null, total: 0, totalCapped: false };
+
+  const offset = Math.min(Math.max(0, Number(cursor) || 0), POPULAR_MAX_OFFSET);
+  const match = withMatch({ thingtime: 'schema' }, visibility);
+
+  await ensureIndexes();
+  const collection = await getThingsCollection();
+  const [docs, total] = await Promise.all([
+    collection
+      .aggregate([
+        { $match: match },
+        {
+          $lookup: {
+            from: 'things',
+            let: { sid: '$shareId' },
+            pipeline: [
+              { $match: { $and: [{ $expr: { $eq: ['$targetId', '$$sid'] } }, { thingtime: 'reaction' }] } },
+              { $count: 'count' }
+            ],
+            as: 'reactionStats'
+          }
+        },
+        { $addFields: { reactionCount: { $ifNull: [{ $first: '$reactionStats.count' }, 0] } } },
+        { $project: { reactionStats: 0 } },
+        { $sort: { reactionCount: -1, createdAt: -1, shareId: 1 } },
+        { $skip: offset },
+        { $limit: limit + 1 }
+      ])
+      .toArray() as Promise<ThingDoc[]>,
+    (async () => {
+      try {
+        const count = await collection.countDocuments(match, { limit: COUNT_LIMIT + 1, maxTimeMS: COUNT_MAX_TIME_MS });
+        return count > COUNT_LIMIT ? COUNT_LIMIT : count;
+      } catch {
+        return null;
+      }
+    })()
+  ]);
+
+  const page = docs.slice(0, limit);
+  const visibleFlags = await Promise.all(page.map((doc) => canViewInherited(doc, viewer)));
+  const visible = page.filter((_, index) => visibleFlags[index]);
+  const nextOffset = offset + limit;
+  const nextCursor = docs.length > limit && nextOffset <= POPULAR_MAX_OFFSET ? String(nextOffset) : null;
+  return {
+    things: await toPublicThings(visible, viewer),
+    nextCursor,
+    total: cursor ? null : total,
+    totalCapped: !cursor && total === COUNT_LIMIT
+  };
+};
+
+// library: the viewer's save things (newest save first) resolved to their
+// schema targets. Cursor pages over the SAVE docs, so unsave/reorder is stable.
+const browseLibrary = async (
+  viewer: Viewer,
+  cursor: unknown,
+  limit: number
+): Promise<Fail | { things: PublicThing[]; nextCursor: string | null }> => {
+  if (!viewer?.id) return fail(401, 'Sign in to see your library');
+  await ensureIndexes();
+  const collection = await getThingsCollection();
+
+  const cursorDoc = parseChronoCursor(cursor);
+  const match = withMatch(
+    { ownerId: viewer.id, thingtime: 'save' },
+    ...(cursorDoc ? [chronoCursorClause(cursorDoc)] : [])
+  );
+  const saves = (await collection
+    .find(match as any)
+    .sort({ createdAt: -1, shareId: 1 })
+    .limit(limit + 1)
+    .toArray()) as any as ThingDoc[];
+
+  const page = saves.slice(0, limit);
+  const targetIds = page.map((save) => save.targetId).filter(Boolean) as string[];
+  const targets = targetIds.length
+    ? ((await collection.find({ shareId: { $in: targetIds }, thingtime: 'schema' } as any).toArray()) as any as ThingDoc[])
+    : [];
+  const byId = new Map(targets.map((doc) => [doc.shareId, doc]));
+  const ordered = targetIds.map((id) => byId.get(id)).filter(Boolean) as ThingDoc[];
+  const visibleFlags = await Promise.all(ordered.map((doc) => canViewInherited(doc, viewer)));
+  const visible = ordered.filter((_, index) => visibleFlags[index]);
+
+  const last = page[page.length - 1];
+  const nextCursor =
+    saves.length > limit && last ? `${new Date(last.createdAt).getTime()}_${last.shareId}` : null;
+  return { things: await toPublicThings(visible, viewer), nextCursor };
+};
+
+// mine: the viewer's own schemas, any audience, chrono cursors.
+const browseMine = async (
+  viewer: Viewer,
+  sort: 'newest' | 'oldest',
+  cursor: unknown,
+  limit: number
+): Promise<Fail | { things: PublicThing[]; nextCursor: string | null; total: number | null }> => {
+  if (!viewer?.id) return fail(401, 'Sign in to see your schemas');
+  await ensureIndexes();
+  const collection = await getThingsCollection();
+
+  const cursorDoc = parseChronoCursor(cursor);
+  const match = withMatch(
+    { ownerId: viewer.id, thingtime: 'schema' },
+    ...(cursorDoc ? [sort === 'oldest' ? oldestCursorClause(cursorDoc) : chronoCursorClause(cursorDoc)] : [])
+  );
+  const [docs, total] = await Promise.all([
+    collection
+      .find(match as any)
+      .sort(sort === 'oldest' ? { createdAt: 1, shareId: 1 } : { createdAt: -1, shareId: 1 })
+      .limit(limit + 1)
+      .toArray() as Promise<ThingDoc[]>,
+    cursor
+      ? Promise.resolve(null)
+      : collection
+          .countDocuments({ ownerId: viewer.id, thingtime: 'schema' } as any, {
+            limit: COUNT_LIMIT + 1,
+            maxTimeMS: COUNT_MAX_TIME_MS
+          })
+          .catch(() => null)
+  ]);
+
+  const page = docs.slice(0, limit);
+  const last = page[page.length - 1];
+  const nextCursor = docs.length > limit && last ? `${new Date(last.createdAt).getTime()}_${last.shareId}` : null;
+  return { things: await toPublicThings(page, viewer), nextCursor, total: typeof total === 'number' ? total : null };
+};
+
+export const browseSchemas = async (
+  viewerInput: string | Viewer,
+  query: BrowseSchemasQuery
+): Promise<Fail | BrowseSchemasResult> => {
+  const viewer = asViewer(viewerInput);
+  const limit = clampLimit(query.limit);
+  const sortRaw = typeof query.sort === 'string' ? query.sort.trim() : '';
+  const q = typeof query.q === 'string' ? query.q.trim() : '';
+
+  if (truthyFlag(query.library)) {
+    const result = await browseLibrary(viewer, query.cursor, limit);
+    if (isFail(result)) return result;
+    return {
+      ok: true,
+      schemas: await decorate(viewer, result.things),
+      nextCursor: result.nextCursor,
+      total: null,
+      totalCapped: false
+    };
+  }
+
+  if (truthyFlag(query.mine)) {
+    const sort = sortRaw === 'oldest' ? 'oldest' : 'newest';
+    const result = await browseMine(viewer, sort, query.cursor, limit);
+    if (isFail(result)) return result;
+    return {
+      ok: true,
+      schemas: await decorate(viewer, result.things),
+      nextCursor: result.nextCursor,
+      total: result.total,
+      totalCapped: result.total === COUNT_LIMIT
+    };
+  }
+
+  if (sortRaw === 'popular') {
+    const result = await browsePopular(viewer, query.cursor, limit);
+    if (isFail(result)) return result;
+    return {
+      ok: true,
+      schemas: await decorate(viewer, result.things),
+      nextCursor: result.nextCursor,
+      total: result.total,
+      totalCapped: result.totalCapped
+    };
+  }
+
+  // newest / oldest / relevance-with-q ride the hardened search grammar
+  const sort = sortRaw === 'oldest' ? 'oldest' : sortRaw === 'relevance' && q ? 'relevance' : q && !sortRaw ? undefined : 'newest';
+  const result = await searchThings(viewer, {
+    q: q || undefined,
+    thingtime: 'schema',
+    sort,
+    cursor: typeof query.cursor === 'string' ? query.cursor : undefined,
+    limit
+  });
+  if (isFail(result)) return result;
+  return {
+    ok: true,
+    schemas: await decorate(viewer, result.things),
+    nextCursor: result.nextCursor,
+    total: result.total,
+    totalCapped: result.totalCapped
+  };
+};

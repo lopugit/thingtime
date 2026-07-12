@@ -348,9 +348,13 @@ export const createThing = async (
   }
 
   // Target-attached things inherit their target's audience dynamically;
-  // standalone things default public.
+  // standalone things default public. Library saves are the exception: a
+  // library is personal, so saves are always private to the saver — never
+  // the target's audience.
   let acl: string[];
-  if (validated.requiresTarget && !validated.thingtime.includes('post')) {
+  if (validated.thingtime.includes('save')) {
+    acl = [ACL_OWNER];
+  } else if (validated.requiresTarget && !validated.thingtime.includes('post')) {
     acl = [ACL_INHERIT];
   } else {
     acl = inputAcl || [ACL_ALL];
@@ -1212,6 +1216,45 @@ export const toggleReaction = async (
   };
 };
 
+// "Add to my library": toggle a private save thing pointing at the target
+// (FUNDAMENTALS §3 — accumulating per-user state is a relational child doc).
+// Saves carry acl ['tt:user'] (createThing special-cases the save crystal),
+// so a library is personal by construction. A create/create race can mint a
+// duplicate save doc; toggle-off deletes ALL matching docs, so it self-heals.
+export const toggleSave = async (
+  viewerInput: string | Viewer,
+  shareId: unknown
+): Promise<Fail | { ok: true; saved: boolean }> => {
+  const viewer = asViewer(viewerInput);
+  if (!viewer?.id) return fail(401, 'Unauthorized');
+  const target = await findViewableThing(shareId, viewer);
+  if (!target) return fail(404, 'Thing not found');
+
+  const things = await getThingsCollection();
+  const existing = await things
+    .find({ targetId: target.shareId, thingtime: 'save', ownerId: viewer.id } as any)
+    .project({ _id: 1 })
+    .toArray();
+  if (existing.length) {
+    await things.deleteMany({ _id: { $in: existing.map((doc: any) => doc._id) } } as any);
+    return { ok: true, saved: false };
+  }
+  const created = await createThing(viewer.id, { thingtime: ['save'], targetId: target.shareId }, viewer);
+  if (isFail(created)) return created;
+  return { ok: true, saved: true };
+};
+
+// Which of these targets has the viewer saved? Batch (one query per page).
+export const savedTargetIds = async (viewer: Viewer, targetIds: string[]): Promise<Set<string>> => {
+  if (!viewer?.id || !targetIds.length) return new Set();
+  const things = await getThingsCollection();
+  const docs = await things
+    .find({ ownerId: viewer.id, thingtime: 'save', targetId: { $in: targetIds } } as any)
+    .project({ targetId: 1 })
+    .toArray();
+  return new Set(docs.map((doc: any) => String(doc.targetId)));
+};
+
 export const addComment = async (
   viewerInput: string | Viewer,
   shareId: unknown,
@@ -1295,12 +1338,12 @@ export const deleteThing = async (viewerInput: string | Viewer, shareId: unknown
     ownerId: viewer.id
   } as any)) as any as ThingDoc | null;
   if (!deleted) return fail(404, 'Thing not found');
-  // comments/reactions attached to the deleted thing go with it (v2 things AND
-  // interim kind docs); share things survive so they can render their
-  // 'original unavailable' placeholder
+  // comments/reactions/saves attached to the deleted thing go with it (v2
+  // things AND interim kind docs); share things survive so they can render
+  // their 'original unavailable' placeholder
   await things.deleteMany({
     $or: [
-      { targetId: deleted.shareId, thingtime: { $in: ['comment', 'reaction'] } },
+      { targetId: deleted.shareId, thingtime: { $in: ['comment', 'reaction', 'save'] } },
       { parentId: deleted.shareId, kind: { $in: ['comment', 'reaction'] } }
     ]
   } as any);
