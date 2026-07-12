@@ -3470,9 +3470,9 @@
     "semantic_hash": "cb100f6065969db2ba48924ccbc315ee"
   },
   "remix/app/components/Editor/LongTextEditor.tsx": {
-    "mtime": 1783814425.1622558,
-    "ast_hash": "032bd69aa961640a839cf55b6a43efb7",
-    "semantic_hash": "032bd69aa961640a839cf55b6a43efb7"
+    "mtime": 1783865939.5300424,
+    "ast_hash": "1fcc6a00ee6652671e2cc4d6a2460836",
+    "semantic_hash": ""
   },
   "remix/app/components/Kinds/kindPrimitives.tsx": {
     "mtime": 1783814425.1681373,
@@ -3794,14 +3794,24 @@
     "ast_hash": "6a72afaf8c17a341aeb40cebe62af718",
     "semantic_hash": ""
   },
-  ".claude/settings.local.json": {
-    "mtime": 1783814424.9693892,
-    "ast_hash": "d6acef1001ec135066a4084aedd50515",
-    "semantic_hash": ""
-  },
   "remix/api/index.js": {
     "mtime": 1783814455.811433,
     "ast_hash": "844210d487b558804d922d7ac0c53dfa",
+    "semantic_hash": ""
+  },
+  "remix/app/components/Editor/editorJsPopoverViewport.test.ts": {
+    "mtime": 1783865939.5301716,
+    "ast_hash": "6008a488bb9b3b7ead4cece627a1d8cd",
+    "semantic_hash": ""
+  },
+  "remix/app/components/Editor/editorJsPopoverViewport.ts": {
+    "mtime": 1783865939.530262,
+    "ast_hash": "5293afd0fe153111c8c0c4375318ef1d",
+    "semantic_hash": ""
+  },
+  ".claude/settings.local.json": {
+    "mtime": 1783814424.9693892,
+    "ast_hash": "d6acef1001ec135066a4084aedd50515",
     "semantic_hash": ""
   },
   "remix/app/api/utils/apps/appData.ts": {
