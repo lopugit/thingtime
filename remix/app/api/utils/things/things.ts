@@ -12,6 +12,7 @@ import {
   ACL_OWNER,
   COLLECTION_SCHEMA_VERSIONS,
   MAX_TEXT_CHARS,
+  POST_TYPES as REGISTRY_POST_TYPES,
   REACTION_EMOJIS,
   aclAllows,
   aclFromVisibility,
@@ -37,7 +38,9 @@ import { scorePost, type AlgorithmWeights, type PostFeatures } from './feedRanki
 
 export { REACTION_EMOJIS };
 
-export type PostType = 'text' | 'image' | 'marketplace' | 'thingtime';
+// derived from the registry's whitelist so the validation gate and the feed's
+// type filters can never drift
+export type PostType = (typeof REGISTRY_POST_TYPES)[number];
 export type PostVisibility = 'public' | 'friends' | 'family' | 'private';
 export type MarketplaceCategory = 'car' | 'tool' | 'furniture' | 'service' | 'other';
 
@@ -152,7 +155,7 @@ export type Viewer = { id: string; username?: string | null } | null;
 export const asViewer = (value: string | Viewer | null | undefined): Viewer =>
   typeof value === 'string' ? { id: value } : value || null;
 
-export const POST_TYPES: PostType[] = ['text', 'image', 'marketplace', 'thingtime'];
+export const POST_TYPES: PostType[] = [...REGISTRY_POST_TYPES];
 export const VISIBILITIES: PostVisibility[] = ['public', 'friends', 'family', 'private'];
 
 const MAX_TAGS = 12;

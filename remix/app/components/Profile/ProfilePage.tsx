@@ -6,14 +6,13 @@ import { SlidersHorizontal } from 'lucide-react';
 import { EditProfileModal } from './EditProfileModal';
 import {
   AdvancedFilters,
-  EMPTY_ADVANCED_FILTERS,
-  advancedFiltersActive,
   advancedSearchBody,
+  searchResponsePosts,
+  useAdvancedFilters,
   type AdvancedFiltersState
 } from '~/components/Feed/AdvancedFilters';
 import { PostComposer } from '~/components/Feed/PostComposer';
 import { PostList } from '~/components/Feed/PostList';
-import { invalidNumberField } from '~/components/Search/searchBuilder';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '~/components/Lopu/useLopu';
@@ -187,10 +186,9 @@ export const ProfilePage = (props: ProfilePageProps) => {
   const generationRef = React.useRef(0);
 
   // advanced search over this profile's posts — the panel edits a draft;
-  // Apply snapshots it into appliedAdvanced (null = plain chrono pager)
-  const [advancedOpen, setAdvancedOpen] = React.useState(false);
-  const [advanced, setAdvanced] = React.useState<AdvancedFiltersState>(EMPTY_ADVANCED_FILTERS);
-  const [appliedAdvanced, setAppliedAdvanced] = React.useState<AdvancedFiltersState | null>(null);
+  // Apply snapshots it into `applied` (null = plain chrono pager)
+  const advancedFilters = useAdvancedFilters();
+  const appliedAdvanced = advancedFilters.applied;
 
   const loadPage = React.useCallback(
     async (
@@ -215,9 +213,7 @@ export const ProfilePage = (props: ProfilePageProps) => {
           });
           if (generationRef.current !== generation) return;
 
-          const page: PublicPost[] = (resp?.things || [])
-            .map((thing: any) => (resp?.posts || {})[thing.id])
-            .filter(Boolean);
+          const page: PublicPost[] = searchResponsePosts(resp);
           setPosts((prev) => {
             if (!cursor) return page;
             const seen = new Set(prev.map((post) => post.id));
@@ -257,12 +253,21 @@ export const ProfilePage = (props: ProfilePageProps) => {
     [fetchUserPosts]
   );
 
+  // Optimistic rendering: applying/clearing an advanced search over the SAME
+  // profile keeps the last-known posts on screen while the new query loads
+  // (the reset load replaces them when it lands); only a different profile
+  // clears immediately — one user's posts must never linger under another's
+  // header.
+  const lastPostsUsernameRef = React.useRef<string | null>(null);
   React.useEffect(() => {
     generationRef.current += 1;
     const generation = generationRef.current;
     loadingRef.current = false;
     nextCursorRef.current = null;
-    setPosts([]);
+    if (lastPostsUsernameRef.current !== postsUsername) {
+      lastPostsUsernameRef.current = postsUsername;
+      setPosts([]);
+    }
     setNextCursor(null);
     setPostsLoading(false);
 
@@ -275,33 +280,6 @@ export const ProfilePage = (props: ProfilePageProps) => {
     loadPage(postsUsername, nextCursorRef.current, generationRef.current, appliedAdvanced);
   }, [postsUsername, loadPage, appliedAdvanced]);
 
-  const advancedRef = React.useRef(advanced);
-  advancedRef.current = advanced;
-  const handleAdvancedApply = React.useCallback(() => {
-    const draft = advancedRef.current;
-    const invalid = invalidNumberField(draft.rows);
-    if (invalid) {
-      lopuRef.current({
-        title: `"${invalid}" wants a number`,
-        description: 'That value isn’t numeric — fix it or switch the row’s datatype to text.',
-        status: 'error'
-      });
-      return;
-    }
-    setAppliedAdvanced(advancedFiltersActive(draft) ? { ...draft } : null);
-  }, []);
-
-  const handleAdvancedClear = React.useCallback(() => {
-    setAdvanced(EMPTY_ADVANCED_FILTERS);
-    setAppliedAdvanced(null);
-  }, []);
-
-  const handleAdvancedToggle = () => {
-    const next = !advancedOpen;
-    setAdvancedOpen(next);
-    if (!next) setAppliedAdvanced(null);
-  };
-
   // the header count belongs to the profile, not the current filter — reset it
   // only when the profile under the pager changes
   React.useEffect(() => {
@@ -309,7 +287,9 @@ export const ProfilePage = (props: ProfilePageProps) => {
   }, [postsUsername]);
 
   // the profile composer prepends the fresh post optimistically (same idiom as
-  // the feed) and keeps the header's post count honest
+  // the feed) and keeps the header's post count honest. Deliberately optimistic
+  // even while an advanced search is applied — seeing your own fresh post beats
+  // strict filter fidelity, and the next Apply reconciles the list.
   const handlePosted = React.useCallback((post: PublicPost) => {
     setPosts((prev) => [post, ...prev]);
     setPostCount((prev) => (typeof prev === 'number' ? prev + 1 : prev));
@@ -604,25 +584,25 @@ export const ProfilePage = (props: ProfilePageProps) => {
             variant="outline"
             marginLeft="auto"
             fontWeight={600}
-            color={advancedOpen || appliedAdvanced ? 'var(--tt-ink, #16161a)' : 'var(--tt-text, #5a5a66)'}
+            color={advancedFilters.open || appliedAdvanced ? 'var(--tt-ink, #16161a)' : 'var(--tt-text, #5a5a66)'}
             borderColor="var(--tt-border, #ececef)"
             borderRadius="var(--tt-radius-md, 12px)"
-            background={advancedOpen ? 'var(--tt-surface-alt, #f5f5f7)' : 'var(--tt-card, #ffffff)'}
+            background={advancedFilters.open ? 'var(--tt-surface-alt, #f5f5f7)' : 'var(--tt-card, #ffffff)'}
             _hover={{ background: 'var(--tt-surface-alt, #f5f5f7)' }}
             leftIcon={<SlidersHorizontal size={12} />}
-            onClick={handleAdvancedToggle}
+            onClick={() => advancedFilters.toggle()}
           >
             {appliedAdvanced ? 'Advanced · on 🔬' : 'Advanced 🔬'}
           </Button>
         </Flex>
 
-        {advancedOpen && (
+        {advancedFilters.open && (
           <Box mb={4}>
             <AdvancedFilters
-              value={advanced}
-              onChange={setAdvanced}
-              onApply={handleAdvancedApply}
-              onClear={handleAdvancedClear}
+              value={advancedFilters.draft}
+              onChange={advancedFilters.setDraft}
+              onApply={advancedFilters.apply}
+              onClear={advancedFilters.clear}
               loading={postsLoading}
               lockedAuthor={profile.username}
             />

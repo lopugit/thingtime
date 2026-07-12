@@ -299,7 +299,7 @@ const ListingBlock = ({ post }: { post: PublicPost }) => {
 const THING_PREVIEW_MAX_ROWS = 24;
 const THING_PREVIEW_MAX_DEPTH = 4;
 
-type ThingRow = { id: string; indent: number; label: string; value: string | null };
+type ThingRow = { id: number; indent: number; label: string; value: string | null };
 
 const formatThingScalar = (value: unknown): string => {
   if (value === null) return 'null';
@@ -310,7 +310,7 @@ const formatThingScalar = (value: unknown): string => {
 const flattenThing = (thing: Record<string, any>): { rows: ThingRow[]; truncated: boolean } => {
   const rows: ThingRow[] = [];
   let truncated = false;
-  const walk = (value: unknown, label: string, indent: number, id: string) => {
+  const walk = (value: unknown, label: string, indent: number) => {
     if (rows.length >= THING_PREVIEW_MAX_ROWS) {
       truncated = true;
       return;
@@ -319,17 +319,17 @@ const flattenThing = (thing: Record<string, any>): { rows: ThingRow[]; truncated
       const entries = Array.isArray(value)
         ? value.map((entry, index) => [String(index + 1), entry] as const)
         : Object.entries(value as Record<string, unknown>);
-      rows.push({ id, indent, label, value: entries.length ? null : Array.isArray(value) ? '[]' : '{}' });
+      rows.push({ id: rows.length, indent, label, value: entries.length ? null : Array.isArray(value) ? '[]' : '{}' });
       if (indent + 1 >= THING_PREVIEW_MAX_DEPTH && entries.length) {
         truncated = true;
         return;
       }
-      for (const [key, entry] of entries) walk(entry, key, indent + 1, `${id}.${key}`);
+      for (const [key, entry] of entries) walk(entry, key, indent + 1);
       return;
     }
-    rows.push({ id, indent, label, value: formatThingScalar(value) });
+    rows.push({ id: rows.length, indent, label, value: formatThingScalar(value) });
   };
-  Object.entries(thing).forEach(([key, value]) => walk(value, key, 0, key));
+  Object.entries(thing).forEach(([key, value]) => walk(value, key, 0));
   return { rows, truncated };
 };
 

@@ -3,13 +3,16 @@ import { Box, Button, Center, Flex, Input, Select, Text } from '@chakra-ui/react
 import { Plus, Search as SearchIcon } from 'lucide-react';
 
 import { Rainbow } from '~/components/Rainbow/Rainbow';
+import { useLopu } from '~/components/Lopu/useLopu';
 import {
   ConditionRowsEditor,
   ROOT_FIELD_SUGGESTIONS,
   compileRows,
+  invalidNumberField,
   newRow
 } from '~/components/Search/searchBuilder';
 import type { ConditionRow } from '~/components/Search/searchTypes';
+import type { PublicPost } from './feedTypes';
 
 // The Advanced panel behind the feed/profile Filters ▸ Advanced option — the
 // /search experience embedded above the composer: a rainbow text-search input,
@@ -48,8 +51,9 @@ export const EMPTY_ADVANCED_FILTERS: AdvancedFiltersState = {
   sort: 'auto'
 };
 
-// does this state actually narrow anything? (an open-but-empty panel keeps the
-// normal feed behaviour)
+// does this state actually change anything? (an open-but-empty panel keeps the
+// normal feed behaviour). A non-auto sort counts — "oldest, nothing else" is a
+// real search the normal feed can't express.
 export const advancedFiltersActive = (state: AdvancedFiltersState): boolean =>
   !!(
     state.q.trim() ||
@@ -59,7 +63,8 @@ export const advancedFiltersActive = (state: AdvancedFiltersState): boolean =>
     state.minReactions.trim() ||
     state.minComments.trim() ||
     state.minTextChars.trim() ||
-    state.maxTextChars.trim()
+    state.maxTextChars.trim() ||
+    state.sort !== 'auto'
   );
 
 // state → POST /api/v1/things/search body (posts only — feeds are posts). The
@@ -75,8 +80,61 @@ export const advancedSearchBody = (state: AdvancedFiltersState): Record<string, 
   minComments: state.minComments.trim() || undefined,
   minTextChars: state.minTextChars.trim() || undefined,
   maxTextChars: state.maxTextChars.trim() || undefined,
-  sort: state.sort === 'auto' ? undefined : state.sort
+  // relevance without text is a server-side 400 — fall back to auto (newest)
+  sort: state.sort === 'auto' || (state.sort === 'relevance' && !state.q.trim()) ? undefined : state.sort
 });
+
+// search response → ordered full post projections (things carries the order,
+// posts the projections keyed by id)
+export const searchResponsePosts = (resp: any): PublicPost[] =>
+  ((resp?.things || []) as { id: string }[])
+    .map((thing) => (resp?.posts || {})[thing.id])
+    .filter(Boolean) as PublicPost[];
+
+// The advanced-search state machine shared by /feed and profiles: the panel
+// edits a draft; Apply validates and snapshots it into `applied` (null = the
+// page's normal pager); closing the panel always restores the normal pager.
+export const useAdvancedFilters = () => {
+  const lopu = useLopu();
+  const lopuRef = React.useRef(lopu);
+  lopuRef.current = lopu;
+
+  const [open, setOpen] = React.useState(false);
+  const [draft, setDraft] = React.useState<AdvancedFiltersState>(EMPTY_ADVANCED_FILTERS);
+  const [applied, setApplied] = React.useState<AdvancedFiltersState | null>(null);
+
+  const draftRef = React.useRef(draft);
+  draftRef.current = draft;
+
+  const apply = React.useCallback(() => {
+    const current = draftRef.current;
+    const invalid = invalidNumberField(current.rows);
+    if (invalid) {
+      lopuRef.current({
+        title: `"${invalid}" wants a number`,
+        description: 'That value isn’t numeric — fix it or switch the row’s datatype to text.',
+        status: 'error'
+      });
+      return;
+    }
+    setApplied(advancedFiltersActive(current) ? current : null);
+  }, []);
+
+  const clear = React.useCallback(() => {
+    setDraft(EMPTY_ADVANCED_FILTERS);
+    setApplied(null);
+  }, []);
+
+  const openRef = React.useRef(open);
+  openRef.current = open;
+  const toggle = React.useCallback((next?: boolean) => {
+    const value = next === undefined ? !openRef.current : next;
+    setOpen(value);
+    if (!value) setApplied(null);
+  }, []);
+
+  return { open, draft, setDraft, applied, apply, clear, toggle };
+};
 
 const ShortcutField = (props: { label: string; children: React.ReactNode }) => (
   <Flex flexDirection="column" rowGap={1} minWidth="130px" flex="1 1 130px">

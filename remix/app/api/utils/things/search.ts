@@ -432,10 +432,19 @@ export const searchThings = async (viewerInput: string | Viewer, query: SearchQu
   const maxTextChars = parseCount(query.maxTextChars, 'maxTextChars', MAX_TEXT_CHARS);
   if (isFail(maxTextChars)) return maxTextChars;
   if (minTextChars !== null || maxTextChars !== null) {
+    // $let binds the length once so $strLenCP runs a single time per doc even
+    // when both bounds are set
     const bounds: Record<string, any>[] = [];
-    if (minTextChars !== null) bounds.push({ $gte: [textLengthExpr(), minTextChars] });
-    if (maxTextChars !== null) bounds.push({ $lte: [textLengthExpr(), maxTextChars] });
-    clauses.push({ $expr: bounds.length === 1 ? bounds[0] : { $and: bounds } });
+    if (minTextChars !== null) bounds.push({ $gte: ['$$textLen', minTextChars] });
+    if (maxTextChars !== null) bounds.push({ $lte: ['$$textLen', maxTextChars] });
+    clauses.push({
+      $expr: {
+        $let: {
+          vars: { textLen: textLengthExpr() },
+          in: bounds.length === 1 ? bounds[0] : { $and: bounds }
+        }
+      }
+    });
   }
 
   const minReactions = parseCount(query.minReactions, 'minReactions', 1_000_000);
@@ -466,9 +475,12 @@ export const searchThings = async (viewerInput: string | Viewer, query: SearchQu
   // Instead: take a bounded window of the newest (or best-matching) candidates,
   // batch-count their children (one $group per era — never N+1), filter by the
   // thresholds, and page by offset within the filtered window. Counts sum raw
-  // docs across eras (embedded residue + interim kind docs + v2 things); a
-  // mid-migration duplicate can transiently over-count a filter verdict, but
-  // the projected cards always show the exact deduped numbers.
+  // docs across eras (embedded residue + interim kind docs + v2 things) with
+  // NO (user, token) dedup, unlike the cards' mergedReactionsOf — so a post
+  // holding the same reaction in two era representations can over-count a
+  // filter verdict until the things v1→v2 admin migration collapses the
+  // residue. Exact dedup would mean shipping every (owner, token) pair for up
+  // to 400 posts over the wire; a threshold heuristic doesn't justify that.
   if (engagement) {
     const offset = Math.min(Math.max(0, Number(query.cursor) || 0), ENGAGEMENT_CANDIDATE_WINDOW);
     const windowSort = ranked

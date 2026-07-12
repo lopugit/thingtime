@@ -5,14 +5,7 @@ import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { RAINBOW_TEXT } from '~/theme/rainbow';
-import { invalidNumberField } from '~/components/Search/searchBuilder';
-import {
-  AdvancedFilters,
-  EMPTY_ADVANCED_FILTERS,
-  advancedFiltersActive,
-  advancedSearchBody,
-  type AdvancedFiltersState
-} from './AdvancedFilters';
+import { AdvancedFilters, advancedSearchBody, searchResponsePosts, useAdvancedFilters } from './AdvancedFilters';
 import { AlgorithmMenu } from './AlgorithmMenu';
 import { FeedFilters } from './FeedFilters';
 import { PostComposer } from './PostComposer';
@@ -39,10 +32,9 @@ export const FeedPage = () => {
   const [algorithmId, setAlgorithmId] = React.useState<string | null>(user?.activeFeedAlgorithmId ?? null);
 
   // advanced search: the panel edits a draft; Apply snapshots it into
-  // appliedAdvanced (null = normal feed), which the pager keys off
-  const [advancedOpen, setAdvancedOpen] = React.useState(false);
-  const [advanced, setAdvanced] = React.useState<AdvancedFiltersState>(EMPTY_ADVANCED_FILTERS);
-  const [appliedAdvanced, setAppliedAdvanced] = React.useState<AdvancedFiltersState | null>(null);
+  // `applied` (null = normal feed), which the pager keys off
+  const advancedFilters = useAdvancedFilters();
+  const appliedAdvanced = advancedFilters.applied;
 
   const [posts, setPosts] = React.useState<PublicPost[]>([]);
   const [nextCursor, setNextCursor] = React.useState<string | null>(null);
@@ -95,9 +87,7 @@ export const FeedPage = () => {
           });
           if (seq !== requestSeqRef.current) return;
 
-          const pagePosts: PublicPost[] = (resp.things || [])
-            .map((thing: any) => (resp.posts || {})[thing.id])
-            .filter(Boolean);
+          const pagePosts: PublicPost[] = searchResponsePosts(resp);
           setPosts((prev) => {
             if (reset) return pagePosts;
             const seen = new Set(prev.map((post) => post.id));
@@ -136,11 +126,20 @@ export const FeedPage = () => {
     [filters, algorithmId, appliedAdvanced]
   );
 
-  // initial fetch + reset whenever the filters or algorithm change — or the
-  // viewer does (an account switch can keep the same algorithm id, e.g. null,
-  // so `load`'s identity alone wouldn't refetch the new account's feed)
+  // initial fetch + reset whenever the filters, algorithm, or advanced search
+  // change — or the viewer does (an account switch can keep the same algorithm
+  // id, e.g. null, so `load`'s identity alone wouldn't refetch the new
+  // account's feed). Optimistic rendering: the last-known posts stay on screen
+  // while the new query loads (reset replaces them when it lands) — only a
+  // viewer change clears immediately, so one account's circle posts never
+  // linger into another's session.
+  const lastViewerRef = React.useRef(user?.id ?? null);
   React.useEffect(() => {
-    setPosts([]);
+    const viewerId = user?.id ?? null;
+    if (lastViewerRef.current !== viewerId) {
+      lastViewerRef.current = viewerId;
+      setPosts([]);
+    }
     setNextCursor(null);
     load({ reset: true });
   }, [load, user?.id]);
@@ -160,36 +159,11 @@ export const FeedPage = () => {
     );
   }, []);
 
+  // deliberately optimistic even while an advanced search is applied: seeing
+  // your own fresh post beats strict filter fidelity, and the next Apply or
+  // page reload reconciles the list
   const handlePosted = React.useCallback((post: PublicPost) => {
     setPosts((prev) => [post, ...prev]);
-  }, []);
-
-  // Apply snapshots the draft (or drops back to the normal feed when the panel
-  // is effectively empty); closing the panel always restores the normal feed
-  const advancedRef = React.useRef(advanced);
-  advancedRef.current = advanced;
-  const handleAdvancedApply = React.useCallback(() => {
-    const draft = advancedRef.current;
-    const invalid = invalidNumberField(draft.rows);
-    if (invalid) {
-      lopuRef.current({
-        title: `"${invalid}" wants a number`,
-        description: 'That value isn’t numeric — fix it or switch the row’s datatype to text.',
-        status: 'error'
-      });
-      return;
-    }
-    setAppliedAdvanced(advancedFiltersActive(draft) ? { ...draft } : null);
-  }, []);
-
-  const handleAdvancedClear = React.useCallback(() => {
-    setAdvanced(EMPTY_ADVANCED_FILTERS);
-    setAppliedAdvanced(null);
-  }, []);
-
-  const handleAdvancedToggle = React.useCallback((open: boolean) => {
-    setAdvancedOpen(open);
-    if (!open) setAppliedAdvanced(null);
   }, []);
 
   // hook the engagement observer onto every rendered card wrapper
@@ -270,18 +244,18 @@ export const FeedPage = () => {
             <FeedFilters
               value={filters}
               onChange={setFilters}
-              advancedOpen={advancedOpen}
-              onAdvancedToggle={handleAdvancedToggle}
+              advancedOpen={advancedFilters.open}
+              onAdvancedToggle={advancedFilters.toggle}
             />
           </Box>
         </Flex>
 
-        {advancedOpen && (
+        {advancedFilters.open && (
           <AdvancedFilters
-            value={advanced}
-            onChange={setAdvanced}
-            onApply={handleAdvancedApply}
-            onClear={handleAdvancedClear}
+            value={advancedFilters.draft}
+            onChange={advancedFilters.setDraft}
+            onApply={advancedFilters.apply}
+            onClear={advancedFilters.clear}
             loading={loading}
           />
         )}

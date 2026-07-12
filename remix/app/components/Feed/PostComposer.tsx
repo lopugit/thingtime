@@ -38,6 +38,16 @@ const THING_DRAFT_PATH = 'composerDraft';
 
 const isImageUrl = (url: string) => /^https?:\/\/\S+$/i.test(url.trim());
 
+// A thing "has content" once any leaf holds a real value — numbers, booleans,
+// and deliberate nulls count; empty strings don't, so the auto-seeded
+// { name: '' } alone never enables Post.
+const thingHasContent = (value: unknown): boolean => {
+  if (typeof value === 'string') return value.trim().length > 0;
+  if (Array.isArray(value)) return value.some(thingHasContent);
+  if (value && typeof value === 'object') return Object.values(value).some(thingHasContent);
+  return value !== undefined;
+};
+
 const TEXTAREA_PLACEHOLDERS: Record<PostType, string> = {
   text: "What's on your mind? ✨",
   image: 'Say something about these photos… 🖼️',
@@ -99,8 +109,8 @@ export const PostComposer = (props: PostComposerProps) => {
   const validImages = images.map((url) => url.trim()).filter(isImageUrl);
 
   // the thingtime-tab draft lives in the global store (persisted locally) —
-  // read it every render; provider state updates re-render us
-  const draftThing = getThingtime(THING_DRAFT_PATH);
+  // read it only when that tab is active (this render path runs per keystroke)
+  const draftThing = type === 'thingtime' ? getThingtime(THING_DRAFT_PATH) : null;
   const draftReady = !!draftThing && typeof draftThing === 'object' && !Array.isArray(draftThing);
 
   // seed a starter thing the first time the tab opens (post-hydration only, so
@@ -119,7 +129,7 @@ export const PostComposer = (props: PostComposerProps) => {
       : type === 'image'
         ? validImages.length > 0
         : type === 'thingtime'
-          ? draftReady && Object.keys(draftThing).length > 0
+          ? draftReady && Object.keys(draftThing).length > 0 && thingHasContent(draftThing)
           : title.trim().length > 0 &&
             price.trim() !== '' &&
             Number.isFinite(Number(price)) &&
