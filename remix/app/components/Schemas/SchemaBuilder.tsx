@@ -40,7 +40,7 @@ type DraftField = {
   type: SchemaFieldType;
   description: string;
   required: boolean;
-  values: string; // enum: comma-separated
+  values: string; // enum: one value per line (values may contain commas)
   min: string;
   max: string;
   unit: string;
@@ -75,7 +75,7 @@ const fromSchemaField = (field: SchemaThingField): DraftField =>
     type: (SCHEMA_FIELD_TYPES as readonly string[]).includes(field.type) ? field.type : 'string',
     description: field.description || '',
     required: !!field.required,
-    values: (field.values || []).join(', '),
+    values: (field.values || []).join('\n'),
     min: field.min !== undefined ? String(field.min) : '',
     max: field.max !== undefined ? String(field.max) : '',
     unit: field.unit || '',
@@ -86,7 +86,10 @@ const fromSchemaField = (field: SchemaThingField): DraftField =>
     items: field.items ? fromSchemaField({ name: 'items', ...field.items } as SchemaThingField) : null
   });
 
-const FIELD_NAME_PATTERN = /^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$/;
+// mirrors the server's SCHEMA_FIELD_NAME_PATTERN: one path segment, no dots —
+// nesting comes from object children / array items
+const FIELD_NAME_PATTERN = /^[A-Za-z0-9_-]+$/;
+const RESERVED_TOP_LEVEL_NAMES = new Set(['schema', 'schemaid']);
 
 type CompileResult = { fields: SchemaThingField[]; issues: string[]; nodes: number };
 
@@ -105,7 +108,11 @@ const compileDrafts = (drafts: DraftField[], depth: number, path: string): Compi
     }
     const name = draft.name.trim();
     if (!FIELD_NAME_PATTERN.test(name) || name.length > 60) {
-      issues.push(`${name}: names are letters/numbers/_/- (dots for nesting), max 60 chars`);
+      issues.push(`${name}: names are letters/numbers/_/- (nest with object fields, not dots), max 60 chars`);
+      continue;
+    }
+    if (depth === 1 && RESERVED_TOP_LEVEL_NAMES.has(name.toLowerCase())) {
+      issues.push(`${name}: reserved — it tags data things with their schema`);
       continue;
     }
     if (seen.has(name.toLowerCase())) {
@@ -124,8 +131,9 @@ const compileDrafts = (drafts: DraftField[], depth: number, path: string): Compi
 
     const num = (raw: string) => (raw.trim() === '' ? undefined : Number(raw));
     if (draft.type === 'enum') {
+      // one value per line — never split on commas, values may contain them
       const values = draft.values
-        .split(',')
+        .split(/\r?\n/)
         .map((value) => value.trim())
         .filter(Boolean);
       if (!values.length) issues.push(`${name}: enum needs at least one value`);
@@ -317,10 +325,12 @@ const FieldEditor = ({ draft, depth, isItems, onChange, onRemove }: FieldEditorP
       </Flex>
 
       {draft.type === 'enum' && (
-        <Input
+        <Textarea
           {...inputSx}
+          minHeight="72px"
           onChange={(event) => set({ values: event.target.value })}
-          placeholder="allowed values, comma separated — wood, plastic, concrete"
+          placeholder={'allowed values, one per line —\nwood\nwood, reclaimed\nconcrete'}
+          rows={3}
           value={draft.values}
         />
       )}

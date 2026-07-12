@@ -33,6 +33,7 @@ import { SchemaThingForm } from './SchemaThingForm';
 import {
   entryToCardSource,
   registryToCardSource,
+  searchableSchemaSource,
   type BrowseSchemaEntry,
   type BrowseSchemasResponse,
   type SchemaCardSource
@@ -309,9 +310,11 @@ const SchemaCard = React.memo(({ source, onReact, onSave, onFork, onCreateThing,
         <Button leftIcon={<Sparkles size={14} />} onClick={() => onCreateThing(source)} size="xs" variant="outline">
           Create a thing
         </Button>
-        <Button leftIcon={<Search size={14} />} onClick={() => onSearchThings(source)} size="xs" variant="outline">
-          Search things
-        </Button>
+        {searchableSchemaSource(source) && (
+          <Button leftIcon={<Search size={14} />} onClick={() => onSearchThings(source)} size="xs" variant="outline">
+            Search things
+          </Button>
+        )}
         <Button leftIcon={<GitFork size={14} />} onClick={() => onFork(source)} size="xs" variant="outline">
           Fork
         </Button>

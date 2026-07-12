@@ -1002,10 +1002,14 @@ export const sanitizeExtended = (value: unknown): { ok: true; value: unknown } |
 };
 
 // Schema-thing field names double as crystal paths in the search builder
-// (crystal.<name>): KEY_SEGMENT_PATTERN segments joined by dots. Exported so
-// the builtin-schema seed migration maps registry fields onto the exact same
-// grammar sanitizeSchemaCrystal enforces on user-authored schema things.
-export const SCHEMA_FIELD_NAME_PATTERN = /^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$/;
+// (crystal.<name>). A name is ONE path segment — nesting is expressed via
+// `children`/`items`, never dots — so a schema tree bounded by
+// MAX_SCHEMA_FIELD_DEPTH can never flatten to a dotted path deeper than the
+// search grammar's MAX_FIELD_DEPTH or a crystal deeper than
+// MAX_DATA_CRYSTAL_DEPTH. Exported so the builtin-schema seed migration maps
+// registry fields onto the exact same grammar sanitizeSchemaCrystal enforces
+// on user-authored schema things.
+export const SCHEMA_FIELD_NAME_PATTERN = /^[A-Za-z0-9_-]+$/;
 export const MAX_SCHEMA_FIELD_NAME_CHARS = 60;
 export const MAX_SCHEMA_FIELD_DESCRIPTION_CHARS = 200;
 
@@ -1049,7 +1053,12 @@ const sanitizeSchemaField = (
   if (named) {
     fieldName = typeof def.name === 'string' ? def.name.trim() : '';
     if (!fieldName || fieldName.length > MAX_SCHEMA_FIELD_NAME_CHARS || !SCHEMA_FIELD_NAME_PATTERN.test(fieldName)) {
-      return fail(400, `Schema field names are letters/numbers/_/- with optional dots (got ${String(def.name).slice(0, 80)})`);
+      return fail(400, `Schema field names are letters/numbers/_/- — nest with children, not dots (got ${String(def.name).slice(0, 80)})`);
+    }
+    // top-level crystal keys `schema`/`schemaId` tag data things with their
+    // schema; a field by either name could never round-trip
+    if (depth === 1 && (fieldName.toLowerCase() === 'schema' || fieldName.toLowerCase() === 'schemaid')) {
+      return fail(400, `Field name ${fieldName} is reserved (it tags data things with their schema)`);
     }
   }
   const label = path || fieldName || 'items';
@@ -1072,7 +1081,9 @@ const sanitizeSchemaField = (
     const values: string[] = [];
     for (const value of def.values) {
       if (typeof value !== 'string') return fail(400, `Enum field ${label} values must be strings`);
-      const trimmed = value.trim().slice(0, MAX_SCHEMA_ENUM_VALUE_CHARS);
+      // collapse inner whitespace: values are dropdown labels, and the builder
+      // round-trips them one-per-line, so embedded newlines can never survive
+      const trimmed = value.replace(/\s+/g, ' ').trim().slice(0, MAX_SCHEMA_ENUM_VALUE_CHARS);
       if (trimmed && !values.includes(trimmed)) values.push(trimmed);
     }
     if (!values.length) return fail(400, `Enum field ${label} needs a values list`);

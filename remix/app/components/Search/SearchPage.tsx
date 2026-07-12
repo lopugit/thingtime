@@ -15,6 +15,7 @@ import { Link as RouterLink, useLocation, useNavigate } from 'react-router';
 
 import { Rainbow } from '~/components/Rainbow/Rainbow';
 import { useLopu } from '~/components/Lopu/useLopu';
+import { SEARCHABLE_CRYSTAL_KINDS } from '~/components/Schemas/schemaBrowseTypes';
 import { useApi } from '~/hooks/useApi';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { thingtimeSchemas, type SchemaThingField } from '~/schemas/registry';
@@ -200,7 +201,7 @@ const searchableField = (field: { name: string; type: string }) =>
 
 const builtinSchemaSources = (): SchemaSource[] =>
   thingtimeSchemas
-    .filter((schema) => schema.kind === 'crystal')
+    .filter((schema) => schema.kind === 'crystal' && SEARCHABLE_CRYSTAL_KINDS.has(schema.id))
     .map((schema) => ({
       key: `builtin-${schema.id}`,
       name: schema.title,
@@ -449,6 +450,10 @@ export const SearchPage = () => {
   const [schemasOpen, setSchemasOpen] = React.useState(false);
   const [communitySchemas, setCommunitySchemas] = React.useState<SchemaSource[]>([]);
   const [activeSchema, setActiveSchema] = React.useState<string | null>(null);
+  // the id of the shape-scope row applySchema pins for community schemas —
+  // only THAT row renders as the locked chip (a hand-typed `schema eq X`
+  // row stays an ordinary editable row)
+  const [pinnedRowId, setPinnedRowId] = React.useState<string | null>(null);
   // schema rail browsing — same paginated system as /schemas (top/recent/popular)
   const [schemaQ, setSchemaQ] = React.useState('');
   const [schemaSort, setSchemaSort] = React.useState<'newest' | 'popular'>('newest');
@@ -561,8 +566,12 @@ export const SearchPage = () => {
   );
 
   // first mount: refetch whatever the page painted from cache (or run the
-  // URL's ?q= / an empty browse-recent search) — optimistic render, live data
+  // URL's ?q= / an empty browse-recent search) — optimistic render, live data.
+  // With a ?schema deep link the schema effect owns the first search instead:
+  // running both races them, and the winner's replace-navigate strips ?schema
+  // out from under the loser's cancellable resolution.
   React.useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('schema')) return;
     runSearch();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -584,6 +593,7 @@ export const SearchPage = () => {
     setSort('auto');
     setMode('all');
     setActiveSchema(null);
+    setPinnedRowId(null);
     setPendingUrlSearch(true);
   }, [urlQ]);
   React.useEffect(() => {
@@ -612,6 +622,9 @@ export const SearchPage = () => {
         limit: 12
       });
       if (seq !== schemaSeqRef.current || !resp?.ok) return;
+      // only a SUCCESSFUL first load marks the rail as loaded — a failed or
+      // rate-limited first fetch must retry when the rail is next opened
+      schemasLoadedRef.current = true;
       const sources = (resp.schemas || [])
         .map(schemaThingToSource)
         .filter((source: SchemaSource | null): source is SchemaSource => !!source);
@@ -630,7 +643,6 @@ export const SearchPage = () => {
 
   React.useEffect(() => {
     if (!schemasOpen || schemasLoadedRef.current) return;
-    schemasLoadedRef.current = true;
     loadSchemas();
   }, [schemasOpen, loadSchemas]);
 
@@ -646,10 +658,16 @@ export const SearchPage = () => {
     // condition first so the prefilled search actually scopes to the shape;
     // builtin schemas scope by their thingtime kind instead
     if (source.origin === 'community') {
-      prefilled.unshift(newRow({ field: 'schema', op: 'eq', value: source.name, valueType: 'text' }));
+      const pinned = newRow({ field: 'schema', op: 'eq', value: source.name, valueType: 'text' });
+      prefilled.unshift(pinned);
+      setPinnedRowId(pinned.id);
       setKind('data');
     } else {
-      setKind(source.key.replace(/^builtin-/, ''));
+      // never force a kind the <Select> doesn't offer — a stuck hidden filter
+      // would show "any kind" while secretly scoping (or zeroing) the search
+      const builtinKind = source.key.replace(/^builtin-/, '');
+      setPinnedRowId(null);
+      setKind(SEARCHABLE_CRYSTAL_KINDS.has(builtinKind) ? builtinKind : '');
     }
     setRows(prefilled);
     setMode('all');
@@ -682,6 +700,10 @@ export const SearchPage = () => {
       if (cancelled) return;
       if (!source) {
         lopuRef.current({ title: 'That schema isn’t visible from here 🥲', status: 'info', duration: 6000 });
+        // the mount search deferred to us — still paint results, and let a
+        // revisit of the same link retry the resolution
+        appliedUrlSchemaRef.current = null;
+        setPendingUrlSearch(true);
         return;
       }
       // make sure the resolved shape has a chip in the rail even before the
@@ -827,6 +849,8 @@ export const SearchPage = () => {
               onClick={() => {
                 setRows([]);
                 setActiveSchema(null);
+                setPinnedRowId(null);
+                setKind('');
               }}
               size="xs"
               variant="ghost"
@@ -953,9 +977,10 @@ export const SearchPage = () => {
               const enumValues = row.meta?.values;
               const unit = row.meta?.unit;
               const rangeHint = row.meta?.min !== undefined || row.meta?.max !== undefined;
-              // the pinned shape-scope condition renders as a locked chip, not
-              // an editable row — removing it un-scopes the search
-              if (activeSchemaSource && row.field === 'schema' && row.op === 'eq') {
+              // ONLY the row applySchema pinned for a community schema renders
+              // as the locked chip (removing it un-scopes the search) — a
+              // hand-typed `schema eq X` row stays editable
+              if (activeSchemaSource?.origin === 'community' && row.id === pinnedRowId) {
                 return (
                   <Flex align="center" gap={2} key={row.id}>
                     <Flex
@@ -977,6 +1002,7 @@ export const SearchPage = () => {
                       onClick={() => {
                         removeRow(row.id);
                         setActiveSchema(null);
+                        setPinnedRowId(null);
                       }}
                       size="sm"
                       variant="ghost"

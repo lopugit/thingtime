@@ -8,7 +8,11 @@ import {
 } from './apiTestRunner';
 import { apiEndpointDocs } from '~/docs/apiDocs';
 
-const uniqueSuffix = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+// crypto-sourced randomness: these suffixes end up in registered usernames /
+// email aliases, and Web Crypto is available everywhere this runs (browser
+// tests page + Node ≥ 18), so there's no reason to trip CodeQL over
+// Math.random here
+const uniqueSuffix = () => `${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
 
 // Email tests deliver to the configured test inbox via plus aliases so real
 // sends stay contained: support@x.com → support+signup-<suffix>@x.com.
@@ -64,7 +68,7 @@ const uniqueEmailServiceAccountBody = (context: ApiTestContext) => {
 
 const uniqueEmailOtpBody = (context: ApiTestContext) => ({
   email: plusAlias(context.email?.testRecipient || DEFAULT_EMAIL_TEST_RECIPIENT, 'otp'),
-  code: String(Math.floor(100000 + Math.random() * 900000)),
+  code: String(100000 + (crypto.getRandomValues(new Uint32Array(1))[0] % 900000)),
   expiresMinutes: 10
 });
 

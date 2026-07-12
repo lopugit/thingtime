@@ -83,11 +83,28 @@ const decorate = async (viewer: Viewer, things: PublicThing[]): Promise<BrowseSc
       .project({ targetId: 1, ownerId: 1, 'crystal.emoji': 1 })
       .toArray(),
     savedTargetIds(viewer, ids),
-    names.length && visibility
+    visibility
       ? collection
           .aggregate([
-            { $match: withMatch({ thingtime: 'data', 'crystal.schema': { $in: names } }, visibility) },
-            { $group: { _id: '$crystal.schema', count: { $sum: 1 } } }
+            {
+              // data things created via the schema form stamp crystal.schemaId
+              // (the schema thing's shareId) — the precise per-schema key.
+              // Docs from before the stamp fall back to the display name,
+              // which isn't unique, so only legacy docs keep name semantics.
+              $match: withMatch(
+                { thingtime: 'data' },
+                {
+                  $or: [
+                    { 'crystal.schemaId': { $in: ids } },
+                    ...(names.length
+                      ? [{ 'crystal.schemaId': { $exists: false }, 'crystal.schema': { $in: names } }]
+                      : [])
+                  ]
+                },
+                visibility
+              )
+            },
+            { $group: { _id: { $ifNull: ['$crystal.schemaId', '$crystal.schema'] }, count: { $sum: 1 } } }
           ])
           .toArray()
       : Promise.resolve([] as any[])
@@ -106,9 +123,10 @@ const decorate = async (viewer: Viewer, things: PublicThing[]): Promise<BrowseSc
     reactionsByTarget.set(targetId, entry);
   }
 
-  const usageByName = new Map<string, number>();
+  // keyed by schemaId (shareId) for stamped docs, by display name for legacy
+  const usageByKey = new Map<string, number>();
   for (const doc of usageDocs as any[]) {
-    if (typeof doc._id === 'string') usageByName.set(doc._id, Number(doc.count) || 0);
+    if (typeof doc._id === 'string') usageByKey.set(doc._id, Number(doc.count) || 0);
   }
 
   return things.map((thing) => {
@@ -119,7 +137,7 @@ const decorate = async (viewer: Viewer, things: PublicThing[]): Promise<BrowseSc
       reactionCounts: reactions.counts,
       viewerReactions: reactions.viewer,
       saved: saved.has(thing.id),
-      usageCount: usageByName.get(name) || 0
+      usageCount: (usageByKey.get(thing.id) || 0) + (name ? usageByKey.get(name) || 0 : 0)
     };
   });
 };
@@ -161,14 +179,21 @@ const browsePopular = async (
         { $limit: limit + 1 }
       ])
       .toArray() as Promise<ThingDoc[]>,
-    (async () => {
-      try {
-        const count = await collection.countDocuments(match, { limit: COUNT_LIMIT + 1, maxTimeMS: COUNT_MAX_TIME_MS });
-        return count > COUNT_LIMIT ? COUNT_LIMIT : count;
-      } catch {
-        return null;
-      }
-    })()
+    // the total is only reported on the first page — skip the capped count
+    // entirely on cursor pages instead of running and discarding it
+    cursor
+      ? Promise.resolve(null)
+      : (async () => {
+          try {
+            const count = await collection.countDocuments(match, {
+              limit: COUNT_LIMIT + 1,
+              maxTimeMS: COUNT_MAX_TIME_MS
+            });
+            return count > COUNT_LIMIT ? COUNT_LIMIT : count;
+          } catch {
+            return null;
+          }
+        })()
   ]);
 
   const page = docs.slice(0, limit);
@@ -179,8 +204,8 @@ const browsePopular = async (
   return {
     things: await toPublicThings(visible, viewer),
     nextCursor,
-    total: cursor ? null : total,
-    totalCapped: !cursor && total === COUNT_LIMIT
+    total,
+    totalCapped: total === COUNT_LIMIT
   };
 };
 

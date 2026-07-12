@@ -294,9 +294,16 @@ export const SchemaThingForm = ({ source, onClose }: SchemaThingFormProps) => {
     }
     setPublishing(true);
     try {
+      // the scope/provenance tags spread LAST so no user field can clobber
+      // them (top-level fields named schema/schemaId are also rejected at
+      // author time); schemaId pins usage counts to this exact schema thing
       const resp: any = await api.v1.things.create({
         thingtime: ['data'],
-        crystal: { schema: source.name, ...value }
+        crystal: {
+          ...value,
+          schema: source.name,
+          ...(source.origin === 'community' ? { schemaId: source.id } : {})
+        }
       });
       if (!resp?.ok) throw resp;
       lopu({

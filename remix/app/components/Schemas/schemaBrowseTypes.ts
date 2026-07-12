@@ -65,6 +65,14 @@ export const entryToCardSource = (entry: BrowseSchemaEntry): SchemaCardSource | 
   };
 };
 
+// The crystal kinds /search's kind <Select> can scope to. Protected
+// thingtimes (user/theme/…) are $nin-excluded by searchThings and share/save
+// aren't searchable, so "Search things" for those builtins would dead-end.
+export const SEARCHABLE_CRYSTAL_KINDS = new Set(['post', 'data', 'schema', 'comment', 'reaction']);
+
+export const searchableSchemaSource = (source: Pick<SchemaCardSource, 'origin' | 'id'>): boolean =>
+  source.origin === 'community' || SEARCHABLE_CRYSTAL_KINDS.has(source.id);
+
 export const registryToCardSource = (schema: ThingtimeSchema): SchemaCardSource => ({
   key: `builtin:${schema.id}`,
   origin: 'builtin',
