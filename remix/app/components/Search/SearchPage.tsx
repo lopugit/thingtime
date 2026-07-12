@@ -683,7 +683,10 @@ export const SearchPage = () => {
   React.useEffect(() => {
     if (!urlSchema || appliedUrlSchemaRef.current === urlSchema) return;
     appliedUrlSchemaRef.current = urlSchema;
-    let cancelled = false;
+    // NO cancel-on-cleanup here: StrictMode's simulated unmount (and our own
+    // post-search replace-navigate stripping ?schema) would cancel the only
+    // resolution in flight — the ref already dedupes re-runs, and staleness
+    // is checked against the ref when the async result lands instead
     (async () => {
       let source: SchemaSource | null = null;
       if (urlSchema.startsWith('builtin:')) {
@@ -697,7 +700,8 @@ export const SearchPage = () => {
           // unknown/invisible schema — fall through to the plain page
         }
       }
-      if (cancelled) return;
+      // a different ?schema took over while we resolved — it owns the page now
+      if (appliedUrlSchemaRef.current !== urlSchema) return;
       if (!source) {
         lopuRef.current({ title: 'That schema isn’t visible from here 🥲', status: 'info', duration: 6000 });
         // the mount search deferred to us — still paint results, and let a
@@ -718,9 +722,6 @@ export const SearchPage = () => {
       applySchema(source);
       setPendingUrlSearch(true);
     })();
-    return () => {
-      cancelled = true;
-    };
   }, [urlSchema, applySchema]);
 
   const updateRow = React.useCallback((id: string, patch: Partial<ConditionRow>) => {

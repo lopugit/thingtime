@@ -2680,8 +2680,8 @@
     "semantic_hash": ""
   },
   "remix/app/tests/api/apiTests.ts": {
-    "mtime": 1783870211.1254237,
-    "ast_hash": "b0423c4ee28176e2bf11f6cf58f95403",
+    "mtime": 1783871386.8496387,
+    "ast_hash": "a531702b93fbb9a5b18a79e71ac75336",
     "semantic_hash": ""
   },
   "remix/app/components/Nav/Drawer/DrawerContent.tsx": {
@@ -3760,8 +3760,8 @@
     "semantic_hash": ""
   },
   "remix/app/schemas/registry.ts": {
-    "mtime": 1783870102.200593,
-    "ast_hash": "c8d827796c8d4ea1b9910f8421bbf3dd",
+    "mtime": 1783871068.8407707,
+    "ast_hash": "aab9fcde3ab610c8ef43e1011a34a8f7",
     "semantic_hash": ""
   },
   "PRs/59-claude-unified-thing-crystal-schemas--everything-is-a-thing.md": {
@@ -3805,8 +3805,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Search/SearchPage.tsx": {
-    "mtime": 1783870102.1968188,
-    "ast_hash": "36800765986bf5ff88b042e87ff39682",
+    "mtime": 1783879190.8843932,
+    "ast_hash": "561b55d5f7e754e329309f80e3211e01",
     "semantic_hash": ""
   },
   "remix/app/components/Search/searchTypes.ts": {
@@ -3945,28 +3945,28 @@
     "semantic_hash": ""
   },
   "remix/app/api/utils/schemas/browse.ts": {
-    "mtime": 1783870102.1943102,
-    "ast_hash": "f89748e77432afddc46f8e999e8fb298",
+    "mtime": 1783870883.965667,
+    "ast_hash": "319267feb10000b48949498b56edf1a5",
     "semantic_hash": ""
   },
   "remix/app/components/Schemas/SchemaBuilder.tsx": {
-    "mtime": 1783870102.196142,
-    "ast_hash": "efd0e4d12835a09e8571ce49fdeca9ec",
+    "mtime": 1783871049.6077268,
+    "ast_hash": "01bea42e05f32cc91da4bc56a5ac45e5",
     "semantic_hash": ""
   },
   "remix/app/components/Schemas/SchemaThingForm.tsx": {
-    "mtime": 1783870102.1962843,
-    "ast_hash": "5e783c8d0fa83e9e0f9fc9a3cfa747a1",
+    "mtime": 1783870917.9077566,
+    "ast_hash": "19064710a8a9276698baee6fde81bcdb",
     "semantic_hash": ""
   },
   "remix/app/components/Schemas/SchemasBrowsePage.tsx": {
-    "mtime": 1783870102.19646,
-    "ast_hash": "56e1542cab9de3353672b60dac1106b2",
+    "mtime": 1783871327.46501,
+    "ast_hash": "6fb0ca0b14b88a799c8c5fc92431147c",
     "semantic_hash": ""
   },
   "remix/app/components/Schemas/schemaBrowseTypes.ts": {
-    "mtime": 1783870102.1965609,
-    "ast_hash": "6a8a11c3cb833cf6f62875ec2ee369d1",
+    "mtime": 1783871301.5797653,
+    "ast_hash": "7d474130f91a5d6e1bb395a2a68903bf",
     "semantic_hash": ""
   },
   "remix/app/routes/api/v1/schemas/browse/_browse.tsx": {
