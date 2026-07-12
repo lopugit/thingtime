@@ -3848,5 +3848,15 @@
     "mtime": 1783827177.2073023,
     "ast_hash": "279e6eb821bec297fd711b5279b1f947",
     "semantic_hash": ""
+  },
+  ".githooks/post-checkout": {
+    "mtime": 1783827371.7336557,
+    "ast_hash": "18ce593685d2799611e4db5604ba2025",
+    "semantic_hash": ""
+  },
+  ".githooks/post-commit": {
+    "mtime": 1783827371.733495,
+    "ast_hash": "8ef614b7e7176761e299808e2c48b988",
+    "semantic_hash": ""
   }
 }
