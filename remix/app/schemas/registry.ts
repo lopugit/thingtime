@@ -378,21 +378,42 @@ const dataSchema: ThingtimeSchema = {
 // builder. Field defs are bounded and whitelisted — never arbitrary JSON.
 export const MAX_SCHEMA_NAME_CHARS = 60;
 export const MAX_SCHEMA_DESCRIPTION_CHARS = 500;
-export const MAX_SCHEMA_FIELDS = 40;
+export const MAX_SCHEMA_FIELDS = 40; // top-level fields
+export const MAX_SCHEMA_TOTAL_FIELDS = 200; // across all nesting levels
+export const MAX_SCHEMA_FIELD_DEPTH = 5; // nesting depth cap
 export const MAX_SCHEMA_ENUM_VALUES = 30;
 export const MAX_SCHEMA_ENUM_VALUE_CHARS = 60;
 export const MAX_SCHEMA_UNIT_CHARS = 20;
-export const SCHEMA_FIELD_TYPES = ['string', 'number', 'boolean', 'date', 'enum', 'string[]'] as const;
+// 'object' nests `fields`; 'array' describes its element via `items`; 'string[]'
+// stays the simple array-of-strings shortcut. Scalars are string/number/
+// boolean/date/enum.
+export const SCHEMA_FIELD_TYPES = [
+  'string',
+  'number',
+  'boolean',
+  'date',
+  'enum',
+  'string[]',
+  'object',
+  'array'
+] as const;
 export type SchemaFieldType = (typeof SCHEMA_FIELD_TYPES)[number];
 
 export type SchemaThingField = {
   name: string;
   type: SchemaFieldType;
   description?: string;
-  values?: string[]; // enum types
-  min?: number; // number types
-  max?: number; // number types
-  unit?: string; // number types, display only (e.g. "cm")
+  required?: boolean;
+  values?: string[]; // enum
+  min?: number; // number: minimum
+  max?: number; // number: maximum
+  unit?: string; // number: display unit (e.g. "cm")
+  minLength?: number; // string: min characters
+  maxLength?: number; // string: max characters
+  minItems?: number; // array / string[]: min elements
+  maxItems?: number; // array / string[]: max elements
+  fields?: SchemaThingField[]; // object: nested field definitions
+  items?: SchemaThingField; // array: element definition (its `name` is ignored)
 };
 
 const schemaThingSchema: ThingtimeSchema = {
@@ -636,6 +657,7 @@ export const crystalSchemas = (): ThingtimeSchema[] => thingtimeSchemas.filter((
 
 type Fail = { ok: false; status: number; error: string };
 const fail = (status: number, error: string): Fail => ({ ok: false, status, error });
+const isFail = (value: { ok: boolean }): value is Fail => value.ok === false;
 
 const isHttpUrl = (value: string) => /^https?:\/\//i.test(value);
 
@@ -777,6 +799,123 @@ export const SCHEMA_FIELD_NAME_PATTERN = /^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$/;
 export const MAX_SCHEMA_FIELD_NAME_CHARS = 60;
 export const MAX_SCHEMA_FIELD_DESCRIPTION_CHARS = 200;
 
+// nonneg integer bound (maxLength/maxItems/…) — undefined when absent/invalid
+const boundedInt = (value: unknown): number | undefined => {
+  if (value === undefined || value === null) return undefined;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) return undefined;
+  return Math.floor(n);
+};
+
+// Recursively sanitize ONE field definition. `named` is false for an array's
+// `items` element (whose name is decorative). counter caps total fields across
+// all nesting; depth caps nesting.
+const sanitizeSchemaFieldDef = (
+  raw: unknown,
+  opts: { named: boolean; depth: number; counter: { total: number } }
+): { ok: true; field: SchemaThingField } | Fail => {
+  const { named, depth } = opts;
+  if (depth > MAX_SCHEMA_FIELD_DEPTH) return fail(400, `Schema nests at most ${MAX_SCHEMA_FIELD_DEPTH} levels deep`);
+  if (++opts.counter.total > MAX_SCHEMA_TOTAL_FIELDS) {
+    return fail(400, `A schema can have at most ${MAX_SCHEMA_TOTAL_FIELDS} fields in total`);
+  }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return fail(400, 'Each schema field must be an object');
+  const def = raw as Record<string, unknown>;
+
+  const fieldName = typeof def.name === 'string' ? def.name.trim() : '';
+  if (named) {
+    if (!fieldName || fieldName.length > MAX_SCHEMA_FIELD_NAME_CHARS || !SCHEMA_FIELD_NAME_PATTERN.test(fieldName)) {
+      return fail(400, `Schema field names are letters/numbers/_/- with optional dots (got ${String(def.name).slice(0, 80)})`);
+    }
+  }
+
+  const type = SCHEMA_FIELD_TYPES.includes(def.type as any) ? (def.type as SchemaFieldType) : null;
+  if (!type) return fail(400, `Schema field types are ${SCHEMA_FIELD_TYPES.join(', ')}`);
+
+  const field: SchemaThingField = { name: named ? fieldName : fieldName || 'item', type };
+  if (def.required === true) field.required = true;
+
+  const fieldDescription = typeof def.description === 'string' ? def.description.trim() : '';
+  if (fieldDescription) field.description = fieldDescription.slice(0, MAX_SCHEMA_FIELD_DESCRIPTION_CHARS);
+
+  if (type === 'enum') {
+    if (!Array.isArray(def.values) || !def.values.length) return fail(400, `Enum field ${field.name} needs a values list`);
+    if (def.values.length > MAX_SCHEMA_ENUM_VALUES) {
+      return fail(400, `Enum field ${field.name} can have at most ${MAX_SCHEMA_ENUM_VALUES} values`);
+    }
+    const values: string[] = [];
+    for (const value of def.values) {
+      if (typeof value !== 'string') return fail(400, `Enum field ${field.name} values must be strings`);
+      const trimmed = value.trim().slice(0, MAX_SCHEMA_ENUM_VALUE_CHARS);
+      if (trimmed && !values.includes(trimmed)) values.push(trimmed);
+    }
+    if (!values.length) return fail(400, `Enum field ${field.name} needs a values list`);
+    field.values = values;
+  }
+
+  if (type === 'number') {
+    if (def.min !== undefined && def.min !== null) {
+      if (!Number.isFinite(Number(def.min))) return fail(400, `Field ${field.name} min must be a number`);
+      field.min = Number(def.min);
+    }
+    if (def.max !== undefined && def.max !== null) {
+      if (!Number.isFinite(Number(def.max))) return fail(400, `Field ${field.name} max must be a number`);
+      field.max = Number(def.max);
+    }
+    if (field.min !== undefined && field.max !== undefined && field.min > field.max) {
+      return fail(400, `Field ${field.name} min can’t exceed its max`);
+    }
+    if (typeof def.unit === 'string' && def.unit.trim()) field.unit = def.unit.trim().slice(0, MAX_SCHEMA_UNIT_CHARS);
+  }
+
+  if (type === 'string') {
+    const minLength = boundedInt(def.minLength);
+    const maxLength = boundedInt(def.maxLength);
+    if (minLength !== undefined) field.minLength = minLength;
+    if (maxLength !== undefined) field.maxLength = maxLength;
+    if (field.minLength !== undefined && field.maxLength !== undefined && field.minLength > field.maxLength) {
+      return fail(400, `Field ${field.name} minLength can’t exceed its maxLength`);
+    }
+  }
+
+  if (type === 'array' || type === 'string[]') {
+    const minItems = boundedInt(def.minItems);
+    const maxItems = boundedInt(def.maxItems);
+    if (minItems !== undefined) field.minItems = minItems;
+    if (maxItems !== undefined) field.maxItems = maxItems;
+    if (field.minItems !== undefined && field.maxItems !== undefined && field.minItems > field.maxItems) {
+      return fail(400, `Field ${field.name} minItems can’t exceed its maxItems`);
+    }
+  }
+
+  // typed array: recurse into the element definition (string[] stays a shortcut)
+  if (type === 'array') {
+    if (def.items === undefined || def.items === null) return fail(400, `Array field ${field.name} needs an items definition`);
+    const items = sanitizeSchemaFieldDef(def.items, { named: false, depth: depth + 1, counter: opts.counter });
+    if (isFail(items)) return items;
+    field.items = items.field;
+  }
+
+  // nested object: recurse into child fields
+  if (type === 'object') {
+    if (!Array.isArray(def.fields) || !def.fields.length) return fail(400, `Object field ${field.name} needs a fields list`);
+    if (def.fields.length > MAX_SCHEMA_FIELDS) return fail(400, `Object field ${field.name} can have at most ${MAX_SCHEMA_FIELDS} fields`);
+    const children: SchemaThingField[] = [];
+    const seen = new Set<string>();
+    for (const child of def.fields) {
+      const sanitized = sanitizeSchemaFieldDef(child, { named: true, depth: depth + 1, counter: opts.counter });
+      if (isFail(sanitized)) return sanitized;
+      const key = sanitized.field.name.toLowerCase();
+      if (seen.has(key)) return fail(400, `Duplicate field name in ${field.name}: ${sanitized.field.name}`);
+      seen.add(key);
+      children.push(sanitized.field);
+    }
+    field.fields = children;
+  }
+
+  return { ok: true, field };
+};
+
 const sanitizeSchemaCrystal = (input: Record<string, unknown>): { ok: true; crystal: Record<string, unknown> } | Fail => {
   const name = typeof input.name === 'string' ? input.name.trim() : '';
   if (!name) return fail(400, 'Schemas need a name');
@@ -785,71 +924,29 @@ const sanitizeSchemaCrystal = (input: Record<string, unknown>): { ok: true; crys
   const description = typeof input.description === 'string' ? input.description.trim().slice(0, MAX_SCHEMA_DESCRIPTION_CHARS) : '';
 
   if (!Array.isArray(input.fields)) return fail(400, 'Schema fields must be a list');
-  if (input.fields.length > MAX_SCHEMA_FIELDS) return fail(400, `A schema can have at most ${MAX_SCHEMA_FIELDS} fields`);
+  if (input.fields.length > MAX_SCHEMA_FIELDS) return fail(400, `A schema can have at most ${MAX_SCHEMA_FIELDS} top-level fields`);
 
   const fields: SchemaThingField[] = [];
   const seen = new Set<string>();
+  const counter = { total: 0 };
   for (const raw of input.fields) {
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return fail(400, 'Each schema field must be an object');
-    const def = raw as Record<string, unknown>;
-
-    const fieldName = typeof def.name === 'string' ? def.name.trim() : '';
-    if (!fieldName || fieldName.length > MAX_SCHEMA_FIELD_NAME_CHARS || !SCHEMA_FIELD_NAME_PATTERN.test(fieldName)) {
-      return fail(400, `Schema field names are letters/numbers/_/- with optional dots (got ${String(def.name).slice(0, 80)})`);
-    }
-    const key = fieldName.toLowerCase();
+    const sanitized = sanitizeSchemaFieldDef(raw, { named: true, depth: 1, counter });
+    if (isFail(sanitized)) return sanitized;
+    const key = sanitized.field.name.toLowerCase();
     // fail loudly (module convention) — silently dropping a duplicate would
     // lose a user's field definition with a 200
-    if (seen.has(key)) return fail(400, `Duplicate schema field name: ${fieldName}`);
+    if (seen.has(key)) return fail(400, `Duplicate schema field name: ${sanitized.field.name}`);
     seen.add(key);
-
-    const type = SCHEMA_FIELD_TYPES.includes(def.type as any) ? (def.type as SchemaFieldType) : null;
-    if (!type) return fail(400, `Schema field types are ${SCHEMA_FIELD_TYPES.join(', ')}`);
-
-    const field: SchemaThingField = { name: fieldName, type };
-
-    const fieldDescription = typeof def.description === 'string' ? def.description.trim() : '';
-    if (fieldDescription) field.description = fieldDescription.slice(0, MAX_SCHEMA_FIELD_DESCRIPTION_CHARS);
-
-    if (type === 'enum') {
-      if (!Array.isArray(def.values) || !def.values.length) return fail(400, `Enum field ${fieldName} needs a values list`);
-      if (def.values.length > MAX_SCHEMA_ENUM_VALUES) {
-        return fail(400, `Enum field ${fieldName} can have at most ${MAX_SCHEMA_ENUM_VALUES} values`);
-      }
-      const values: string[] = [];
-      for (const value of def.values) {
-        if (typeof value !== 'string') return fail(400, `Enum field ${fieldName} values must be strings`);
-        const trimmed = value.trim().slice(0, MAX_SCHEMA_ENUM_VALUE_CHARS);
-        if (trimmed && !values.includes(trimmed)) values.push(trimmed);
-      }
-      if (!values.length) return fail(400, `Enum field ${fieldName} needs a values list`);
-      field.values = values;
-    }
-
-    if (type === 'number') {
-      const min = Number(def.min);
-      const max = Number(def.max);
-      if (def.min !== undefined && def.min !== null) {
-        if (!Number.isFinite(min)) return fail(400, `Field ${fieldName} min must be a number`);
-        field.min = min;
-      }
-      if (def.max !== undefined && def.max !== null) {
-        if (!Number.isFinite(max)) return fail(400, `Field ${fieldName} max must be a number`);
-        field.max = max;
-      }
-      if (field.min !== undefined && field.max !== undefined && field.min > field.max) {
-        return fail(400, `Field ${fieldName} min can’t exceed its max`);
-      }
-      if (typeof def.unit === 'string' && def.unit.trim()) {
-        field.unit = def.unit.trim().slice(0, MAX_SCHEMA_UNIT_CHARS);
-      }
-    }
-
-    fields.push(field);
+    fields.push(sanitized.field);
   }
   if (!fields.length) return fail(400, 'Schemas need at least one field');
 
-  return { ok: true, crystal: { name, description, fields } };
+  // preserve a forkedFrom pointer if present (fork lineage; a plain id string)
+  const crystal: Record<string, unknown> = { name, description, fields };
+  if (typeof input.forkedFrom === 'string' && input.forkedFrom.trim()) {
+    crystal.forkedFrom = input.forkedFrom.trim().slice(0, 128);
+  }
+  return { ok: true, crystal };
 };
 
 // System-kind sanitizers: deep validation lives in each kind's dedicated
