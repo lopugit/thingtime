@@ -108,21 +108,24 @@ export const toPublicProfile = (user: any): PublicProfile => ({
 // ---------------------------------------------------------------------------
 // The user-things store.
 
-export const userUsernameKey = (username: string) => `username:${username.trim().toLowerCase()}`;
-// hashed so the multikey uniqueKeys index (plain strings, text-indexed) never
-// carries a readable address
-export const userEmailKey = (email: string) =>
-  `email:${createHash('sha256').update(email.trim().toLowerCase()).digest('hex')}`;
-
 // BinData wrappers: the wildcard text index tokenizes every STRING field, so
 // secrets travel as binary — invisible to $text, still exact-queryable.
-const toBin = (value: string) => new Binary(Buffer.from(value, 'utf8'));
-const fromBin = (value: any): string => {
+export const toBin = (value: string) => new Binary(Buffer.from(value, 'utf8'));
+export const fromBin = (value: any): string => {
   if (typeof value === 'string') return value;
   if (value?.buffer) return Buffer.from(value.buffer).toString('utf8');
   if (Buffer.isBuffer(value)) return value.toString('utf8');
   return '';
 };
+
+// uniqueKeys are BinData too — plain-string keys would tokenize into the text
+// index and make user things enumerable via q=email/q=username, and the email
+// key is additionally sha256-hashed so not even an exact-binary reader learns
+// an address. The multikey unique index and exact-match lookups work the same
+// on binary values.
+export const userUsernameKey = (username: string) => toBin(`username:${username.trim().toLowerCase()}`);
+export const userEmailKey = (email: string) =>
+  toBin(`email:${createHash('sha256').update(email.trim().toLowerCase()).digest('hex')}`);
 
 // thing → legacy UserDoc view. _id is the thing's shareId (a hex string —
 // String(user._id) everywhere keeps working; new ids are minted ObjectId-shaped
@@ -238,6 +241,26 @@ export const setUserActiveTheme = async (userId: string, themeShareId: string | 
     userId,
     { $set: { 'secure.meta.activeThemeId': themeShareId, updatedAt: new Date() } },
     { $set: { 'meta.activeThemeId': themeShareId, updatedAt: new Date() } }
+  );
+};
+
+// Clear the user's active theme pointer ONLY if it still points at the given
+// theme shareId — theme deletion uses this so it never stomps a pointer the
+// user has since moved to another theme. Can't ride updateUserStore because
+// the pointer match belongs in the FILTER (conditional update, not a set).
+export const clearUserActiveTheme = async (userId: string, themeShareId: string) => {
+  const things = await getThingsCollection();
+  const res = await things.updateOne(
+    { shareId: String(userId), thingtime: 'user', 'secure.meta.activeThemeId': themeShareId } as any,
+    { $set: { 'secure.meta.activeThemeId': null, updatedAt: new Date() } }
+  );
+  // No match means either a legacy-era user or a things-era user whose pointer
+  // already moved on — the legacy update is a harmless no-op for the latter.
+  if (res.matchedCount) return;
+  if (!ObjectId.isValid(userId)) return;
+  await (await getUsersCollection()).updateOne(
+    { _id: new ObjectId(userId), 'meta.activeThemeId': themeShareId },
+    { $set: { 'meta.activeThemeId': null, updatedAt: new Date() } }
   );
 };
 

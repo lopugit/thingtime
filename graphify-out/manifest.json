@@ -770,8 +770,8 @@
     "semantic_hash": "63124d05375edd85e9ad5bbe74d71fda"
   },
   "remix/app/api/utils/auth/registerUser.ts": {
-    "mtime": 1783831987.3192906,
-    "ast_hash": "372239366da58552bfef32ea23cce70a",
+    "mtime": 1783833331.8601844,
+    "ast_hash": "a7719abc6b5f99ce5d115bb233b1144e",
     "semantic_hash": ""
   },
   "remix/app/api/utils/auth/serviceAccounts.ts": {
@@ -785,8 +785,8 @@
     "semantic_hash": ""
   },
   "remix/app/api/utils/auth/users.ts": {
-    "mtime": 1783831969.8443842,
-    "ast_hash": "02649c1ab1f56d25a97598410afd5fe3",
+    "mtime": 1783833329.0225317,
+    "ast_hash": "cf0e10a1f338dfac0c78fb57926ce650",
     "semantic_hash": ""
   },
   "remix/app/api/utils/crypto/cryptoTools.server.ts": {
@@ -2955,13 +2955,13 @@
     "semantic_hash": "17f9d65ca49d887be58ba6bfdc3f5a35"
   },
   "remix/app/api/utils/themes/themes.ts": {
-    "mtime": 1783814170.1035094,
-    "ast_hash": "550b847ac9ed7a38295556ddad3b2fdb",
+    "mtime": 1783833168.4396508,
+    "ast_hash": "d59f6ce02a533c63f6317efa057ca0cc",
     "semantic_hash": ""
   },
   "remix/app/api/utils/waitlist/waitlist.ts": {
-    "mtime": 1783814170.104794,
-    "ast_hash": "621faba6d339bd7f21b10316fa09aea3",
+    "mtime": 1783833382.2311895,
+    "ast_hash": "e75de6050464529d0a5366fca811e98d",
     "semantic_hash": ""
   },
   "remix/app/components/Landing/BrutalButton.tsx": {
@@ -3100,8 +3100,8 @@
     "semantic_hash": "9857063cfaaca847757bb8e9c4c1feb8"
   },
   "remix/app/api/utils/algorithms/algorithms.ts": {
-    "mtime": 1783814170.0979884,
-    "ast_hash": "dd8ecd1a987592243edfa3acc31154d7",
+    "mtime": 1783833168.439252,
+    "ast_hash": "2950aabd641d36dd87ebd660acf8ead9",
     "semantic_hash": ""
   },
   "remix/app/api/utils/things/feedRanking.ts": {

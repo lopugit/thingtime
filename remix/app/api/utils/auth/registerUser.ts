@@ -115,7 +115,8 @@ export const createUserAccount = async (input: CreateUserAccountInput): Promise<
     // things-era collisions surface via uniqueKeys ('email:<hash>' or
     // 'username:<name>'), legacy ones via the old per-field indexes
     if (err?.code === 11000) {
-      const uniqueKey = typeof err?.keyValue?.uniqueKeys === 'string' ? err.keyValue.uniqueKeys : '';
+      const kv = err?.keyValue?.uniqueKeys;
+      const uniqueKey = typeof kv === 'string' ? kv : kv?.buffer ? Buffer.from(kv.buffer).toString('utf8') : '';
       const field = err?.keyPattern?.email || uniqueKey.startsWith('email:') ? 'Email' : 'Username';
       return { ok: false, status: 409, error: `${field} already registered` };
     }
