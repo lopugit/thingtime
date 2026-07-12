@@ -1365,10 +1365,15 @@ export const updateThing = async (
     if (isFail(sanitized)) return sanitized;
     tags = [...sanitized, ...categoryTag].filter((tag, index, all) => all.indexOf(tag) === index);
   } else if (categoryTag.length && !tags.includes(categoryTag[0])) {
-    // a listing PATCH that changes the category without resending tags must
-    // still fold the new category in, or category filters mis-file the post
-    // (the old category tag stays, matching create-time folding semantics)
-    tags = [...tags, ...categoryTag];
+    // a listing PATCH that changes the category without resending tags SWAPS
+    // the folded category tag — never accumulates stale categories, never
+    // grows the list past the create-time fold's bound
+    const previousCategory = thingtime.includes('post')
+      ? ((crystalOf(doc).listing as MarketplaceListing | null | undefined)?.category ?? null)
+      : null;
+    tags = [...tags.filter((tag) => tag !== previousCategory), ...categoryTag].filter(
+      (tag, index, all) => all.indexOf(tag) === index
+    );
   }
 
   let acl = aclOf(doc);
