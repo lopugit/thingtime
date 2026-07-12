@@ -3938,5 +3938,10 @@
     "mtime": 1783866104.0901465,
     "ast_hash": "5293afd0fe153111c8c0c4375318ef1d",
     "semantic_hash": ""
+  },
+  "SCHEMA-FEATURE-HANDOFF.md": {
+    "mtime": 1783866286.5545402,
+    "ast_hash": "110fbc1db42eab955a07544551553674",
+    "semantic_hash": ""
   }
 }
