@@ -1,0 +1,51 @@
+# PR #65 — Everything is a thing: satellite collections collapse into things
+
+- **Branch:** `claude/everything-is-a-thing-collections` (stacked on
+  `claude/search-page-mongodb-query-154eb4`, PR #63)
+- **PR:** https://github.com/lopugit/thingtime/pull/65
+- **Author:** Claude (AI), 2026-07-12
+- **Design:** claude-todo/12-everything-is-a-thing-collections.md
+
+## Shape
+
+Users, themes, feed algorithms, waitlist entries, and the builtin schema
+catalogue are things (`thingtime: ['user'|'theme'|'feed-algorithm'|'waitlist'|'schema']`).
+Two new root mechanisms on ThingDoc: `uniqueKeys[]` (multikey unique sparse,
+all elements BinData, PII hashed) and `secure{}` (never projected, secrets as
+BinData — the `$**` text index tokenizes strings only). System kinds are
+protected from the generic /api/v1/things CRUD. Reads are dual-era (things
+first, frozen legacy collections fallback); five admin migrations convert
+legacy docs idempotently (census + dryRun; source deleted only after its
+destination twin is verified).
+
+Key invariant: **user ids never change shape.** Migrated users keep their
+legacy `_id` hex as the thing shareId; new users mint ObjectId-shaped ids.
+sessions.userId, roster entries, ownerId joins, and active theme/algorithm
+pointers all survive untouched, and `users.ts` adapts things back to the
+legacy UserDoc shape so the entire auth web (loginUser, getCurrentUser,
+admin.ts, service accounts, routes) is unchanged.
+
+## Verification highlights (all live against the dev stack)
+
+- Register/login/me/profile/post/people-search for things-era users; legacy
+  users keep working; THEN the users migration converted all 88 legacy users
+  and those same accounts still log in with their data intact.
+- Themes: era-merged listing, acl-gated share links, 100-cap across eras,
+  active-pointer clears in both user eras.
+- Algorithms: ranked feed via migrated + things-era algorithms, training
+  writes, 50-cap, mixed-era author labels; hot path kept ≤2 indexed reads
+  (IXSCAN-verified).
+- Waitlist: idempotent joins across eras; email exists only as BinData.
+- Security: canary tokens present only in passwords/emails return zero search
+  results; `q=email`/`q=username`/`q=waitlist-email` enumeration clean; zero
+  plain-string uniqueKeys/secure values in Mongo; generic CRUD refuses system
+  kinds (403/404 verified).
+- Every migration re-run converts 0.
+
+## Implementation trail
+
+Built across loop iterations by a 6-domain touchpoint-mapping workflow, then
+per-domain subagents (themes/algorithms/waitlist) on the committed users
+pattern, then a migrations agent — each live-verifying its own slice, with
+integration smoke passes between commits (d5740be core+users, cc88bae domains,
+642e43e migrations+docs).
