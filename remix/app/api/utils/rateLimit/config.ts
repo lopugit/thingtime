@@ -15,6 +15,9 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // any other mutating write through /api/v1/things (create/upsert/patch/delete
   // posts and other thing kinds) — reactions/comments route to their own keys
   'things.write': { limit: 60, windowMs: 60_000, enabled: true },
+  // Admin-only raw queries can still be expensive; keep accidental repeated
+  // scans bounded independently from the ordinary app APIs.
+  'mongodb.query': { limit: 30, windowMs: 60_000, enabled: true },
   // service accounts do legitimate bulk writes (e.g. chunked snapshot sync), so
   // they get a higher ceiling — but a BOUNDED one, never an exemption: anyone
   // can provision a service account, so accountKind confers no trust

@@ -59,7 +59,7 @@ export const drawerMenuItems: DrawerTopItem[] = [
 			{ id: 'things-view', label: 'View', icon: '👀', to: '/things', mode: 'view', group: 'Modes' },
 			{ id: 'things-edit', label: 'Edit', icon: '🎨', to: '/edit', mode: 'edit', group: 'Modes' },
 			{ id: 'things-editor', label: 'Editor', icon: '💻', to: '/editor', mode: 'editor', group: 'Modes' },
-			{ id: 'things-raw', label: 'Raw results', icon: '🔍', to: '/raw' }
+				{ id: 'things-raw', label: 'MongoDB query', icon: '🔍', to: '/raw' }
 		]
 	},
 	{
