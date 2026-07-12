@@ -97,6 +97,10 @@ export const ensureIndexes = async () => {
         // runs; the thingtime-prefixed ones serve v2 (multikey on the schema-id
         // array), and targetId serves comment/reaction/share lookups.
         db.collection('things').createIndex({ shareId: 1 }, { unique: true, sparse: true }),
+        // generalized uniqueness for system kinds (username:<u>, hashed email
+        // keys, schema:<id>, …): multikey unique — each element unique across
+        // the collection; sparse so ordinary things skip the index entirely
+        db.collection('things').createIndex({ uniqueKeys: 1 }, { unique: true, sparse: true }),
         db.collection('things').createIndex({ kind: 1, visibility: 1, createdAt: -1, shareId: 1 }),
         db.collection('things').createIndex({ kind: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
         db.collection('things').createIndex({ thingtime: 1, ownerId: 1, createdAt: -1, shareId: 1 }),

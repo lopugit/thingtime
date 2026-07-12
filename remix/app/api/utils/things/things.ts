@@ -12,9 +12,11 @@ import {
   ACL_OWNER,
   COLLECTION_SCHEMA_VERSIONS,
   MAX_TEXT_CHARS,
+  PROTECTED_THINGTIME,
   REACTION_EMOJIS,
   aclAllows,
   aclFromVisibility,
+  isProtectedThingtime,
   sanitizeAcl,
   validateThingtimeCrystal,
   visibilityFromAcl,
@@ -71,6 +73,13 @@ export type ThingDoc = {
   tags?: string[];
   createdAt: Date;
   updatedAt: Date;
+  // System kinds only (user/theme/feed-algorithm/waitlist — the collections
+  // collapsing into things): generalized uniqueness (multikey unique sparse
+  // index; PII keys hashed) and private state. `secure` is NEVER projected,
+  // is unreachable by the search field grammar, and its sensitive strings are
+  // stored as BinData so the $** text index cannot tokenize them.
+  uniqueKeys?: string[];
+  secure?: Record<string, any>;
   // v1 residue fields (unset by the things v1→v2 migration). kind 'reaction'
   // and 'comment' cover the interim relational era (parentId/token/commentId
   // docs) written by main's pre-unification model — read + migrated like the
@@ -282,6 +291,16 @@ export type CreateThingInput = {
 
 type CreateThingResult = Fail | { ok: true; doc: ThingDoc };
 
+// Internal-only extensions for the dedicated system-kind utils (register,
+// themes, algorithms, waitlist). Routes never construct this — the generic
+// /api/v1/things CRUD always calls without it, so protected kinds and the
+// secure/uniqueKeys fields are unreachable from the public surface.
+export type SystemThingOptions = {
+  system?: boolean;
+  secure?: Record<string, any>;
+  uniqueKeys?: string[];
+};
+
 // audience for a new thing: explicit acl > legacy visibility name > default
 const resolveInputAcl = (input: { acl?: unknown; visibility?: unknown }): string[] | null | Fail => {
   if (input.acl !== undefined && input.acl !== null) {
@@ -300,11 +319,18 @@ const resolveInputAcl = (input: { acl?: unknown; visibility?: unknown }): string
 export const createThing = async (
   ownerId: string,
   input: CreateThingInput,
-  viewer: Viewer = null
+  viewer: Viewer = null,
+  systemOptions: SystemThingOptions = {}
 ): Promise<CreateThingResult> => {
   const asOwner = viewer && viewer.id === ownerId ? viewer : { id: ownerId };
   const validated = validateThingtimeCrystal(input.thingtime, input.crystal);
   if (isFail(validated)) return validated;
+
+  // system kinds are written only by their dedicated utils — otherwise anyone
+  // could mint user/waitlist/theme/algorithm things through the generic CRUD
+  if (isProtectedThingtime(validated.thingtime) && !systemOptions.system) {
+    return fail(403, `${validated.thingtime.join('+')} things are managed by their own endpoints`);
+  }
 
   const tags = sanitizeTags(input.tags);
   if (isFail(tags)) return tags;
@@ -386,6 +412,8 @@ export const createThing = async (
     createdAt: now,
     updatedAt: now
   };
+  if (systemOptions.uniqueKeys?.length) doc.uniqueKeys = systemOptions.uniqueKeys;
+  if (systemOptions.secure) doc.secure = systemOptions.secure;
 
   try {
     await things.insertOne(doc as any);
@@ -399,6 +427,8 @@ export const createThing = async (
       const keys = Object.keys(err?.keyPattern || {});
       if (!keys.length || keys.includes('shareId')) return fail(409, 'Post already exists');
       if (keys.includes('crystal.emoji')) return fail(409, 'Post already exists');
+      // uniqueKeys collisions (username taken, email registered, …) — the
+      // dedicated utils translate this into their own friendlier message
       return fail(409, 'A thing with those unique fields already exists');
     }
     throw err;
@@ -1285,14 +1315,22 @@ export const sharePost = async (
   return { ok: true, post: (await toPublicPosts([created.doc], viewer))[0] };
 };
 
-export const deleteThing = async (viewerInput: string | Viewer, shareId: unknown): Promise<Fail | { ok: true }> => {
+export const deleteThing = async (
+  viewerInput: string | Viewer,
+  shareId: unknown,
+  options: { system?: boolean } = {}
+): Promise<Fail | { ok: true }> => {
   const viewer = asViewer(viewerInput);
   if (!viewer?.id) return fail(401, 'Unauthorized');
   if (typeof shareId !== 'string' || !shareId.trim()) return fail(400, 'Thing id is required');
   const things = await getThingsCollection();
+  // system kinds (a user's own account thing!) are never deletable through
+  // the generic DELETE — $nin on the multikey array excludes them atomically
+  const guard = options.system ? {} : { thingtime: { $nin: [...PROTECTED_THINGTIME] } };
   const deleted = (await things.findOneAndDelete({
     shareId: shareId.trim(),
-    ownerId: viewer.id
+    ownerId: viewer.id,
+    ...guard
   } as any)) as any as ThingDoc | null;
   if (!deleted) return fail(404, 'Thing not found');
   // comments/reactions attached to the deleted thing go with it (v2 things AND
@@ -1324,7 +1362,7 @@ export const updateThing = async (
   viewerInput: string | Viewer,
   shareId: unknown,
   input: UpdateThingInput,
-  options: { replaceCrystal?: boolean } = {}
+  options: { replaceCrystal?: boolean; system?: boolean } = {}
 ): Promise<Fail | { ok: true; thing: PublicThing; post: PublicPost | null }> => {
   const viewer = asViewer(viewerInput);
   if (!viewer?.id) return fail(401, 'Unauthorized');
@@ -1334,6 +1372,11 @@ export const updateThing = async (
   if (!doc || (!isV2(doc) && !isPostThing(doc))) return fail(404, 'Thing not found');
 
   const thingtime = thingtimeOf(doc);
+  // system kinds mutate only through their dedicated utils (profile update,
+  // themes, algorithms) — never the generic PATCH/PUT surface
+  if (isProtectedThingtime(thingtime) && !options.system) {
+    return fail(403, `${thingtime.join('+')} things are managed by their own endpoints`);
+  }
   const patch =
     input.crystal && typeof input.crystal === 'object' && !Array.isArray(input.crystal)
       ? (input.crystal as Record<string, unknown>)
