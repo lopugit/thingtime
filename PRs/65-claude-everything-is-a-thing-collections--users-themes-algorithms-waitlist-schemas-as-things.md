@@ -63,6 +63,27 @@ An 8-angle adversarial review found + fixed (all live-verified):
   guards); buildUserSecure shared by insert + migration; registry constants
   deduped; docs reconciled.
 
+## Self-review round 2 (regression pass on round-1 fixes, commit 49c73ae)
+
+A focused round-2 review of the round-1 fix diff (the large secure-blob rework)
+found exactly one regression and confirmed everything else correct (live-tested):
+- **Fixed:** `mutateUserThingSecure` was a non-atomic read-modify-write of the
+  opaque blob, so two concurrent mutations of different secure fields clobbered
+  each other (proven live: a racing reaction write reverted a just-set
+  emailVerified). Now guarded by an optimistic `secureVersion` CAS + retry with
+  jittered backoff; `insertUser`/migration stamp `secureVersion:0`. Verified: a
+  theme-pointer write concurrent with reactions keeps both; realistic 3-way
+  concurrency loses nothing.
+- **Confirmed correct (live):** `$nin` still matches field-missing v1 posts
+  (legacy posts stay in search; schema browser unaffected); the
+  emailVerificationRequiredBy Date round-trips through the blob with ms fidelity
+  so the service-account gate holds; secureAdmin promote/demote is atomic; the
+  migration data-loss guard converges (no infinite loop); the reaction-MRU
+  dedupe is equivalent to the old $pull/$push.
+
+Merged `main` (PR #62) into the search branch and this stacked branch; both PRs
+are conflict-free, green, and mergeable.
+
 ## Implementation trail
 
 Built across loop iterations by a 6-domain touchpoint-mapping workflow, then
