@@ -386,7 +386,12 @@ const PostBody = ({ post, compact }: { post: PublicPost; compact?: boolean }) =>
     )}
     {post.type === 'image' && <ImageGrid images={post.images} alt={post.text || 'Post photo'} />}
     {post.type === 'marketplace' && <ListingBlock post={post} />}
+    {/* thingtime: the thing leads; opted-in photos and listing follow */}
     {post.type === 'thingtime' && post.thing && <ThingBlock thing={post.thing} compact={compact} />}
+    {post.type === 'thingtime' && post.images.length > 0 && (
+      <ImageGrid images={post.images} alt={post.text || 'Thing photo'} />
+    )}
+    {post.type === 'thingtime' && post.listing && <ListingBlock post={post} />}
   </Flex>
 );
 

@@ -319,8 +319,9 @@ const sanitizeFloatingData = (raw: any): FloatingWindow | null => {
 };
 
 // pointer gesture helper (pointer-id filtered, cancel/blur teardown) --------
+// exported for the composer's thing-editor shell (resize handle, popout drag)
 
-const startPointerGesture = (e: React.PointerEvent, onMove: (move: PointerEvent) => void, onDone?: () => void) => {
+export const startPointerGesture = (e: React.PointerEvent, onMove: (move: PointerEvent) => void, onDone?: () => void) => {
 	const pointerId = e.pointerId;
 
 	const handleMove = (move: PointerEvent) => {
@@ -985,7 +986,19 @@ const defaultTree = (initialPath: string): EditorNode => ({
 	b: makeLeaf(initialPath, true)
 });
 
-export const EditorSplit = (props: { initialPath: string }) => {
+export type EditorSplitProps = {
+	initialPath: string;
+	// Embedded instances (the post composer's thing editor, its popout) start
+	// with a single editable window, size to their container, and stay off the
+	// shared editor plumbing: they never mirror into settings.editor.live,
+	// never consume settings.editor.openConfig, and ignore the drawer's
+	// editor-command bus — all of that belongs to the one true /editor.
+	embedded?: boolean;
+	// root height override (embedded containers own their sizing)
+	height?: string;
+};
+
+export const EditorSplit = (props: EditorSplitProps) => {
 	const { thingtime, setThingtime, events } = useThingtime();
 	const lopu = useLopu();
 
@@ -994,8 +1007,11 @@ export const EditorSplit = (props: { initialPath: string }) => {
 	const setThingtimeRef = React.useRef(setThingtime);
 	setThingtimeRef.current = setThingtime;
 
-	// default layout: rendered view beside an editable view of the same thing
-	const [tree, setTree] = React.useState<EditorNode | null>(() => defaultTree(props.initialPath));
+	// default layout: rendered view beside an editable view of the same thing;
+	// embedded editors start as one editable window
+	const [tree, setTree] = React.useState<EditorNode | null>(() =>
+		props.embedded ? makeLeaf(props.initialPath, true) : defaultTree(props.initialPath)
+	);
 	const [floating, setFloating] = React.useState<FloatingWindow[]>([]);
 	const [minimised, setMinimised] = React.useState<EditorLeaf[]>([]);
 	const [maximisedId, setMaximisedId] = React.useState<string | null>(null);
@@ -1058,9 +1074,10 @@ export const EditorSplit = (props: { initialPath: string }) => {
 		};
 	}, []);
 
-	// the drawer opens a saved config by name, then navigates here
+	// the drawer opens a saved config by name, then navigates here — embedded
+	// editors must never consume (and clear) a flag meant for /editor
 	const openedConfigRef = React.useRef(false);
-	const pendingConfigName = thingtime?.settings?.editor?.openConfig;
+	const pendingConfigName = props.embedded ? null : thingtime?.settings?.editor?.openConfig;
 
 	React.useEffect(() => {
 		if (!pendingConfigName || openedConfigRef.current) {
@@ -1085,8 +1102,13 @@ export const EditorSplit = (props: { initialPath: string }) => {
 	// payloads — never re-triggers itself, never touches the undo timeline.
 	const lastMirrorRef = React.useRef<string>('');
 	const firstMirrorRef = React.useRef(true);
+	const embedded = !!props.embedded;
 
 	React.useEffect(() => {
+		if (embedded) {
+			return;
+		}
+
 		const write = () => {
 			const summarise = (leaf: EditorLeaf, location: 'docked' | 'floating') => ({
 				id: leaf.id,
@@ -1123,7 +1145,7 @@ export const EditorSplit = (props: { initialPath: string }) => {
 		const timer = setTimeout(write, 600);
 
 		return () => clearTimeout(timer);
-	}, [tree, floating, minimised]);
+	}, [tree, floating, minimised, embedded]);
 
 	// ------------------------------------------------------------------
 	// window operations (shared by toolbars, drags, and drawer commands)
@@ -1562,8 +1584,13 @@ export const EditorSplit = (props: { initialPath: string }) => {
 		[writeConfigNamed, lopu]
 	);
 
-	// drawer → editor commands over the shared events bus
+	// drawer → editor commands over the shared events bus (the drawer manages
+	// the one true /editor — embedded instances stay out of its way)
 	React.useEffect(() => {
+		if (embedded) {
+			return;
+		}
+
 		const subscription = events.subscribe((event: any) => {
 			if (event?.type !== 'editor-command') {
 				return;
@@ -1603,7 +1630,7 @@ export const EditorSplit = (props: { initialPath: string }) => {
 		return () => {
 			subscription?.unsubscribe?.();
 		};
-	}, [events, restoreById, minimiseById, closeById, saveConfig, overwriteConfig, applyLayout, addWindow]);
+	}, [events, restoreById, minimiseById, closeById, saveConfig, overwriteConfig, applyLayout, addWindow, embedded]);
 
 	const actions = React.useMemo<WindowActions>(
 		() => ({
@@ -1642,8 +1669,8 @@ export const EditorSplit = (props: { initialPath: string }) => {
 				ref={rootRef}
 				className="editor-split-root"
 				width="100%"
-				height="calc(100vh - 92px)"
-				minHeight="440px"
+				height={props.height || 'calc(100vh - 92px)'}
+				minHeight={props.embedded ? undefined : '440px'}
 				border="1px solid var(--tt-border, #ececef)"
 				borderRadius="var(--tt-radius-md, 12px)"
 				overflow="hidden"

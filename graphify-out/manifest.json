@@ -3050,9 +3050,9 @@
     "semantic_hash": "be525a339b93f42b38e0323c3eaa3f7a"
   },
   "remix/app/components/Thingtime/ContextMenu/ThingContextMenu.tsx": {
-    "mtime": 1783832024.3274658,
-    "ast_hash": "6769849856f271cb6f866ee2d20924b1",
-    "semantic_hash": "6769849856f271cb6f866ee2d20924b1"
+    "mtime": 1783865538.0094883,
+    "ast_hash": "129e8f92f8f8e3d6b7007e479631af67",
+    "semantic_hash": ""
   },
   "remix/app/components/Thingtime/ContextMenu/contextMenuModel.ts": {
     "mtime": 1783832024.3276846,
@@ -3095,9 +3095,9 @@
     "semantic_hash": "04f619961c2607fa0e42335fe49c2b04"
   },
   "remix/app/components/Thingtime/EditorSplit.tsx": {
-    "mtime": 1783832024.3279169,
-    "ast_hash": "9857063cfaaca847757bb8e9c4c1feb8",
-    "semantic_hash": "9857063cfaaca847757bb8e9c4c1feb8"
+    "mtime": 1783865155.918089,
+    "ast_hash": "f15d30c2ea33a242c5ee1d6506d7de0a",
+    "semantic_hash": ""
   },
   "remix/app/api/utils/algorithms/algorithms.ts": {
     "mtime": 1783832024.3106725,
@@ -3235,13 +3235,13 @@
     "semantic_hash": ""
   },
   "remix/app/components/Feed/PostCard.tsx": {
-    "mtime": 1783836203.5549762,
-    "ast_hash": "0a3857bf972790e944320400b9312277",
+    "mtime": 1783865383.2304418,
+    "ast_hash": "76944c68f5054d20e75746666a45312c",
     "semantic_hash": ""
   },
   "remix/app/components/Feed/PostComposer.tsx": {
-    "mtime": 1783836156.4565547,
-    "ast_hash": "ccdbbb35d5adca35c02c9de7a967bbeb",
+    "mtime": 1783865353.546222,
+    "ast_hash": "76d0040264d71915f7fd7582212ba44c",
     "semantic_hash": ""
   },
   "remix/app/components/Feed/PostList.tsx": {
@@ -3270,8 +3270,8 @@
     "semantic_hash": "f33d517f220a280930d5f773399b28a0"
   },
   "remix/app/docs/apiDocs.ts": {
-    "mtime": 1783833574.3111994,
-    "ast_hash": "d4c7299c0d9b99f4ad9b1697b69d8a74",
+    "mtime": 1783865555.3468375,
+    "ast_hash": "7464a735e01c3d63e2ad9d19cfdc1aae",
     "semantic_hash": ""
   },
   "remix/app/routes/docs/api.tsx": {
@@ -3765,8 +3765,8 @@
     "semantic_hash": ""
   },
   "remix/app/schemas/registry.ts": {
-    "mtime": 1783832719.0417137,
-    "ast_hash": "56005fcff5f1c542e894860839fa40e9",
+    "mtime": 1783865370.761413,
+    "ast_hash": "9b07a1d2eb84e7953f65fe542d47303e",
     "semantic_hash": ""
   },
   "PRs/59-claude-unified-thing-crystal-schemas--everything-is-a-thing.md": {
@@ -3857,6 +3857,11 @@
   "PRs/67-claude-profile-feed-advanced-filters-5878aa--profile-composer-thingtime-posts-advanced-filters.md": {
     "mtime": 1783835275.4260345,
     "ast_hash": "b92357e745d29c9191a0f0f0d5d619e3",
+    "semantic_hash": ""
+  },
+  "remix/app/components/Thingtime/ThingEditorPopout.tsx": {
+    "mtime": 1783865184.9502196,
+    "ast_hash": "1babe01ae4c945dab95a3a88ff45f69b",
     "semantic_hash": ""
   }
 }

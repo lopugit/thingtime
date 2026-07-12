@@ -1,12 +1,13 @@
 import React from 'react';
 import { Box, Button, Flex, IconButton, Image, Input, Select, Text } from '@chakra-ui/react';
-import { X } from 'lucide-react';
+import { PictureInPicture2, X } from 'lucide-react';
 
 import { useApi } from '~/hooks/useApi';
 import { LongTextEditor } from '~/components/Editor/LongTextEditor';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { UserAvatarCircle } from '~/components/Nav/Drawer/DrawerContent';
-import { Thingtime } from '~/components/Thingtime/Thingtime';
+import { EditorSplit, startPointerGesture } from '~/components/Thingtime/EditorSplit';
+import { ThingEditorPopout } from '~/components/Thingtime/ThingEditorPopout';
 import { useThingtime } from '~/components/Thingtime/useThingtime';
 import { RAINBOW } from '~/theme/rainbow';
 import { CIRCLE_META, MARKETPLACE_CATEGORY_META, POST_TYPE_META } from './feedTypes';
@@ -17,10 +18,13 @@ import type { MarketplaceCategory, PostType, PostVisibility, PublicPost } from '
 // thingtime), a block editor for the body (Editor.js — headings, lists,
 // quotes, checklists serialise to a plain string), image URL rows, listing
 // fields, tag chips and a circle picker. The thingtime tab mounts the real
-// <Thingtime> editor over a draft branch of the global thingtime store
-// (localforage-persisted, so half-built things survive reloads). Posts
-// through api.v1.things.create and hands the returned post to onPosted for
-// prepending.
+// things editor (an embedded single-window EditorSplit) over the "New Thing"
+// draft branch of the global thingtime store (localforage-persisted, so
+// half-built things survive reloads) — height-draggable, and poppable into a
+// floating, resizable, splittable editor window that stays live-synced with
+// the in-post one. Thingtime posts can toggle on the Photos and Marketplace
+// field groups too. Posts through api.v1.things.create and hands the
+// returned post to onPosted for prepending.
 
 const INK = 'var(--tt-ink, #16161a)';
 const TEXT = 'var(--tt-text, #5a5a66)';
@@ -33,8 +37,15 @@ const MAX_IMAGES = 8;
 const CURRENCIES = ['AUD', 'USD', 'EUR'];
 
 // Where the thingtime-tab draft lives in the global thingtime store — its own
-// top-level branch, well away from the user's 'thingtime' tree.
-const THING_DRAFT_PATH = 'composerDraft';
+// top-level branch, well away from the user's 'thingtime' tree. The key IS the
+// label the editor shows, so the composer presents one friendly root property.
+const THING_DRAFT_PATH = 'New Thing';
+// pre-rename draft home (one release of drafts lived here) — migrated on seed
+const LEGACY_DRAFT_PATH = 'composerDraft';
+
+// the in-post editor's default height; drag the handle for anything else
+const DEFAULT_EDITOR_HEIGHT = 440;
+const MIN_EDITOR_HEIGHT = 120;
 
 const isImageUrl = (url: string) => /^https?:\/\/\S+$/i.test(url.trim());
 
@@ -93,6 +104,13 @@ export const PostComposer = (props: PostComposerProps) => {
   const [visibility, setVisibility] = React.useState<PostVisibility>('public');
   const [posting, setPosting] = React.useState(false);
 
+  // thingtime-tab extras: toggleable photos/marketplace field groups, the
+  // in-post editor's draggable height, and the floating popout editor
+  const [thingPhotos, setThingPhotos] = React.useState(false);
+  const [thingListing, setThingListing] = React.useState(false);
+  const [editorHeight, setEditorHeight] = React.useState(DEFAULT_EDITOR_HEIGHT);
+  const [popoutOpen, setPopoutOpen] = React.useState(false);
+
   // bumping the session remounts the block editor with a clean document
   // (while mounted, the editor owns the text)
   const [composerSession, setComposerSession] = React.useState(0);
@@ -113,15 +131,34 @@ export const PostComposer = (props: PostComposerProps) => {
   const draftThing = type === 'thingtime' ? getThingtime(THING_DRAFT_PATH) : null;
   const draftReady = !!draftThing && typeof draftThing === 'object' && !Array.isArray(draftThing);
 
-  // seed a starter thing the first time the tab opens (post-hydration only, so
-  // a persisted draft is never clobbered by the pre-hydration empty store)
+  // seed the draft branch the first time the tab opens (post-hydration only,
+  // so a persisted draft is never clobbered by the pre-hydration empty store).
+  // Drafts from the pre-rename composerDraft branch migrate across once.
   React.useEffect(() => {
     if (type !== 'thingtime' || !expanded || thingtimeLoading) return;
     const current = getThingtime(THING_DRAFT_PATH);
-    if (!current || typeof current !== 'object' || Array.isArray(current)) {
-      setThingtime(THING_DRAFT_PATH, { name: '' });
+    if (current && typeof current === 'object' && !Array.isArray(current)) return;
+    const legacy = getThingtime(LEGACY_DRAFT_PATH);
+    if (legacy && typeof legacy === 'object' && !Array.isArray(legacy) && Object.keys(legacy).length) {
+      setThingtime(THING_DRAFT_PATH, legacy);
+      setThingtime(LEGACY_DRAFT_PATH, null);
+      return;
     }
+    setThingtime(THING_DRAFT_PATH, {});
   }, [type, expanded, thingtimeLoading, getThingtime, setThingtime]);
+
+  // which optional field groups are in play (marketplace always has both;
+  // thingtime opts in per toggle)
+  const showPhotos = type === 'image' || type === 'marketplace' || (type === 'thingtime' && thingPhotos);
+  const showListing = type === 'marketplace' || (type === 'thingtime' && thingListing);
+
+  const listingValid =
+    title.trim().length > 0 &&
+    price.trim() !== '' &&
+    Number.isFinite(Number(price)) &&
+    Number(price) >= 0 &&
+    !!currency &&
+    !!category;
 
   const valid =
     type === 'text'
@@ -129,13 +166,11 @@ export const PostComposer = (props: PostComposerProps) => {
       : type === 'image'
         ? validImages.length > 0
         : type === 'thingtime'
-          ? draftReady && Object.keys(draftThing).length > 0 && thingHasContent(draftThing)
-          : title.trim().length > 0 &&
-            price.trim() !== '' &&
-            Number.isFinite(Number(price)) &&
-            Number(price) >= 0 &&
-            !!currency &&
-            !!category;
+          ? draftReady &&
+            Object.keys(draftThing).length > 0 &&
+            thingHasContent(draftThing) &&
+            (!thingListing || listingValid)
+          : listingValid;
 
   const reset = () => {
     setExpanded(false);
@@ -151,6 +186,9 @@ export const PostComposer = (props: PostComposerProps) => {
     setListingLocation('');
     setTagsInput('');
     setVisibility('public');
+    setThingPhotos(false);
+    setThingListing(false);
+    setPopoutOpen(false);
   };
 
   const setImageAt = (index: number, url: string) => {
@@ -172,9 +210,9 @@ export const PostComposer = (props: PostComposerProps) => {
         visibility,
         tags: parsedTags
       };
-      if (type !== 'text' && type !== 'thingtime') payload.images = validImages;
+      if (showPhotos) payload.images = validImages;
       if (type === 'thingtime') payload.thing = draftThing;
-      if (type === 'marketplace') {
+      if (showListing) {
         payload.listing = {
           title: title.trim(),
           price: Number(price),
@@ -278,37 +316,103 @@ export const PostComposer = (props: PostComposerProps) => {
         </Box>
       </Flex>
 
-      {/* the thing itself — the real Thingtime editor over the draft branch */}
+      {/* the thing itself — the real things editor over the draft branch */}
       {type === 'thingtime' && (
         <Flex flexDirection="column" rowGap={2}>
-          <Eyebrow>Thing 🌀</Eyebrow>
-          <Box
-            border={BORDER}
-            borderRadius={RADIUS_MD}
-            paddingX={2}
-            paddingY={1}
-            maxWidth="100%"
-            overflowX="auto"
-            background="var(--tt-surface, #fafafb)"
-          >
+          <Flex alignItems="center" columnGap={1}>
+            <Eyebrow>Thing 🌀</Eyebrow>
+            <Flex marginLeft="auto" columnGap={1} alignItems="center">
+              <Button
+                size="xs"
+                variant={thingPhotos ? 'solid' : 'ghost'}
+                borderRadius={RADIUS_SM}
+                onClick={() => setThingPhotos((on) => !on)}
+                title="Add photos to this thing post"
+              >
+                {POST_TYPE_META.image.emoji} Photos
+              </Button>
+              <Button
+                size="xs"
+                variant={thingListing ? 'solid' : 'ghost'}
+                borderRadius={RADIUS_SM}
+                onClick={() => setThingListing((on) => !on)}
+                title="Add marketplace listing fields to this thing post"
+              >
+                {POST_TYPE_META.marketplace.emoji} Marketplace
+              </Button>
+              <IconButton
+                aria-label="Pop the editor out"
+                icon={<PictureInPicture2 size={13} />}
+                size="xs"
+                variant="ghost"
+                color={MUTED}
+                borderRadius="8px"
+                title="Pop out a floating, resizable, splittable editor window"
+                onClick={() => setPopoutOpen(true)}
+              />
+            </Flex>
+          </Flex>
+
+          <Box height={`${editorHeight}px`} maxWidth="100%">
             {draftReady ? (
-              <Thingtime path={THING_DRAFT_PATH} thing={draftThing} edit width="100%" maxWidth="100%" />
+              <EditorSplit initialPath={THING_DRAFT_PATH} embedded height="100%" />
             ) : (
-              <Text fontSize="sm" color={MUTED} paddingY={2}>
-                Summoning your thing… 🌀
-              </Text>
+              <Flex
+                alignItems="center"
+                justifyContent="center"
+                height="100%"
+                border={BORDER}
+                borderRadius={RADIUS_MD}
+                background="var(--tt-surface, #fafafb)"
+              >
+                <Text fontSize="sm" color={MUTED}>
+                  Summoning your thing… 🌀
+                </Text>
+              </Flex>
             )}
           </Box>
+
+          {/* height drag handle — pointer events, so touch drags too; grow as
+          far as you like (only a small floor so the editor can't vanish) */}
+          <Flex
+            justifyContent="center"
+            paddingY="2px"
+            cursor="ns-resize"
+            borderRadius={RADIUS_SM}
+            sx={{ touchAction: 'none' }}
+            _hover={{ background: 'var(--tt-surface-alt, #f5f5f7)' }}
+            title="Drag to resize the editor"
+            onPointerDown={(event) => {
+              event.preventDefault();
+              const startY = event.clientY;
+              const origin = editorHeight;
+              startPointerGesture(event, (move) => {
+                setEditorHeight(Math.max(MIN_EDITOR_HEIGHT, origin + move.clientY - startY));
+              });
+            }}
+          >
+            <Box width="44px" height="4px" borderRadius="999px" background="var(--tt-faint, #b6b6c0)" />
+          </Flex>
+
           <Text fontSize="10px" color={MUTED} whiteSpace="normal">
-            Build any thing — fields, nested objects, arrays, numbers, whatever it needs ✨
+            Build any thing — fields, nested objects, arrays, numbers, whatever it needs ✨ Split the editor, or pop
+            it out into its own window ↗️
           </Text>
         </Flex>
       )}
 
+      {popoutOpen && (
+        <ThingEditorPopout
+          path={THING_DRAFT_PATH}
+          title="New Thing · editor 🌀"
+          onClose={() => setPopoutOpen(false)}
+        />
+      )}
+
       {/* photos */}
-      {type !== 'text' && type !== 'thingtime' && (
+      {showPhotos && (
         <Flex flexDirection="column" rowGap={2}>
-          <Eyebrow>Photos {type === 'marketplace' ? '(optional) ' : ''}🖼️</Eyebrow>
+          <Eyebrow>Photos {type !== 'image' ? '(optional) ' : ''}🖼️</Eyebrow>
           {images.map((url, index) => (
             <Flex key={index} columnGap={2} alignItems="center">
               {isImageUrl(url) && (
@@ -357,7 +461,7 @@ export const PostComposer = (props: PostComposerProps) => {
       )}
 
       {/* marketplace listing */}
-      {type === 'marketplace' && (
+      {showListing && (
         <Flex flexDirection="column" rowGap={2}>
           <Eyebrow>Listing 🏪</Eyebrow>
           <Input

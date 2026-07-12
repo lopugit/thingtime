@@ -254,8 +254,8 @@ const postSchema: ThingtimeSchema = {
     { name: 'type', type: 'enum', required: true, values: [...POST_TYPES], description: 'What kind of post this is.' },
     { name: 'text', type: 'string', required: false, max: MAX_TEXT_CHARS, description: `Post body (required for text posts), max ${MAX_TEXT_CHARS} chars.` },
     { name: 'images', type: 'string[]', required: false, max: MAX_IMAGES, description: `http(s) image URLs, max ${MAX_IMAGES} × ${MAX_IMAGE_URL_CHARS} chars (image posts need at least one).` },
-    { name: 'listing', type: 'object', required: false, description: 'Marketplace listing { title, price, currency, category, condition, location, sold } — required for marketplace posts.' },
-    { name: 'thing', type: 'record', required: false, description: 'Free-form structured thing payload — required for thingtime posts, bounded like data crystals (searchable as crystal.thing.<field>).' }
+    { name: 'listing', type: 'object', required: false, description: 'Marketplace listing { title, price, currency, category, condition, location, sold } — required for marketplace posts, optional on thingtime posts.' },
+    { name: 'thing', type: 'record', required: false, description: 'Free-form structured thing payload — required for thingtime posts, bounded like data crystals (searchable as crystal.thing.<field>). Thingtime posts can also carry images and a listing.' }
   ],
   example: { type: 'text', text: 'Everything is a thing ✨', images: [], listing: null, thing: null }
 };
@@ -653,8 +653,10 @@ const sanitizePostCrystal = (
     }
   }
 
+  // marketplace posts REQUIRE a listing; thingtime posts may opt into one
+  // (the composer's Marketplace toggle) — validated identically when present
   let listing: Record<string, unknown> | null = null;
-  if (type === 'marketplace') {
+  if (type === 'marketplace' || (type === 'thingtime' && input.listing !== undefined && input.listing !== null)) {
     const value = input.listing;
     if (!value || typeof value !== 'object') return fail(400, 'Marketplace posts need listing details');
     const raw = value as Record<string, unknown>;
