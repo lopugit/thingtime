@@ -66,12 +66,21 @@ const uniqueEmailServiceAccountBody = (context: ApiTestContext) => {
   };
 };
 
-// a 6-digit test OTP from a CSPRNG. Scale-by-division (not modulo) so CodeQL's
-// biased-random rule stays clear — uniformity is irrelevant for a test code,
-// but avoiding `%` on the raw CSPRNG output keeps the scan green.
+// an unbiased 6-digit test OTP from a CSPRNG. Rejection sampling + a
+// division-based reduction (no modulo on the CSPRNG output) is the canonical
+// unbiased pattern — uniformity is irrelevant for a test code, but this keeps
+// CodeQL's insecure-randomness AND biased-random rules clear.
+const SIX_DIGIT_SPAN = 900000; // 100000–999999 inclusive
 const sixDigitCode = () => {
-  const [rand] = crypto.getRandomValues(new Uint32Array(1));
-  return String(100000 + Math.floor((rand / 0x1_0000_0000) * 900000));
+  const bucket = Math.floor(0x1_0000_0000 / SIX_DIGIT_SPAN); // 2^32 / span, floored
+  const limit = bucket * SIX_DIGIT_SPAN; // largest multiple of span ≤ 2^32
+  const buf = new Uint32Array(1);
+  let rand: number;
+  do {
+    crypto.getRandomValues(buf);
+    rand = buf[0];
+  } while (rand >= limit); // reject the biased tail
+  return String(100000 + Math.floor(rand / bucket));
 };
 
 const uniqueEmailOtpBody = (context: ApiTestContext) => ({
