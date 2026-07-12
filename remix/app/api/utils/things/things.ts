@@ -323,6 +323,33 @@ const resolveInputAcl = (input: { acl?: unknown; visibility?: unknown }): string
   return null;
 };
 
+// Data things may carry schema provenance tags (crystal.schema name +
+// crystal.schemaId, stamped by the schema form). The stamp drives per-schema
+// usage counts, so the server — not the client — is authoritative on EVERY
+// write path (create, PATCH, PUT): schemaId must resolve to a schema thing the
+// writer can see, and the display name is overwritten from that schema, so no
+// client can attribute its data to a schema under a mismatched schemaId/name
+// pair. Mutates `crystal` in place; a data thing with no schemaId is untouched.
+const resolveDataSchemaProvenance = async (
+  thingtime: string[],
+  crystal: Record<string, unknown>,
+  asOwner: Viewer
+): Promise<{ ok: true } | Fail> => {
+  if (!thingtime.includes('data') || crystal.schemaId === undefined) return { ok: true };
+  const rawSchemaId = crystal.schemaId;
+  if (typeof rawSchemaId !== 'string' || !rawSchemaId.trim()) {
+    return fail(400, 'crystal.schemaId must be a schema thing id');
+  }
+  const schemaThing = await findViewableThing(rawSchemaId.trim(), asOwner);
+  if (!schemaThing || !thingtimeOf(schemaThing).includes('schema')) {
+    return fail(400, 'crystal.schemaId does not resolve to a schema you can see');
+  }
+  crystal.schemaId = schemaThing.shareId;
+  const schemaName = (schemaThing.crystal as Record<string, unknown> | undefined)?.name;
+  if (typeof schemaName === 'string' && schemaName) crystal.schema = schemaName;
+  return { ok: true };
+};
+
 export const createThing = async (
   ownerId: string,
   input: CreateThingInput,
@@ -340,25 +367,8 @@ export const createThing = async (
     return fail(403, `${validated.thingtime.join('+')} things are managed by their own endpoints`);
   }
 
-  // data things may carry schema provenance tags (crystal.schema name +
-  // crystal.schemaId, stamped by the schema form). The stamp drives
-  // per-schema usage counts, so the server is authoritative: schemaId must
-  // resolve to a schema thing the creator can see, and the display name is
-  // taken from that schema — no client can attribute its data to a schema
-  // under a mismatched schemaId/name pair.
-  if (validated.thingtime.includes('data') && validated.crystal.schemaId !== undefined) {
-    const rawSchemaId = validated.crystal.schemaId;
-    if (typeof rawSchemaId !== 'string' || !rawSchemaId.trim()) {
-      return fail(400, 'crystal.schemaId must be a schema thing id');
-    }
-    const schemaThing = await findViewableThing(rawSchemaId.trim(), asOwner);
-    if (!schemaThing || !thingtimeOf(schemaThing).includes('schema')) {
-      return fail(400, 'crystal.schemaId does not resolve to a schema you can see');
-    }
-    validated.crystal.schemaId = schemaThing.shareId;
-    const schemaName = (schemaThing.crystal as Record<string, unknown> | undefined)?.name;
-    if (typeof schemaName === 'string' && schemaName) validated.crystal.schema = schemaName;
-  }
+  const provenance = await resolveDataSchemaProvenance(validated.thingtime, validated.crystal, asOwner);
+  if (isFail(provenance)) return provenance;
 
   const tags = sanitizeTags(input.tags);
   if (isFail(tags)) return tags;
@@ -1486,6 +1496,11 @@ export const updateThing = async (
   const nextCrystal = options.replaceCrystal ? patch : { ...crystalOf(doc), ...patch };
   const validated = validateThingtimeCrystal(thingtime, nextCrystal);
   if (isFail(validated)) return validated;
+
+  // same server-authoritative schema-provenance check as createThing — a
+  // forged crystal.schemaId must not slip in via PATCH/PUT after create
+  const provenance = await resolveDataSchemaProvenance(validated.thingtime, validated.crystal, viewer);
+  if (isFail(provenance)) return provenance;
 
   let tags = doc.tags || [];
   if (input.tags !== undefined) {

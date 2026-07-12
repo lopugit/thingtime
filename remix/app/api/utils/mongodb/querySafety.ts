@@ -83,13 +83,6 @@ const shouldRedactKey = (key: string) => {
 
 const isSensitiveFieldPath = (path: string) => path.split('.').some(shouldRedactKey);
 
-// things-era protected root fields, matched EXACTLY per path segment — unlike
-// the shouldRedactKey heuristics this can never false-positive on ordinary
-// crystal fields whose names merely contain "token"/"secret"/…
-const protectedThingSegmentSet = new Set<string>(MONGO_PROTECTED_THING_FIELDS.map((field) => field.toLowerCase()));
-const isProtectedThingFieldPath = (path: string) =>
-  path.split('.').some((segment) => protectedThingSegmentSet.has(segment.toLowerCase()));
-
 type ReferenceScanOptions = {
   matchPath: (path: string) => boolean;
   // whole-document predicates that can reveal protected values through
@@ -121,6 +114,13 @@ const findProtectedQueryReference = (value: unknown, options: ReferenceScanOptio
   for (const [key, child] of Object.entries(value)) {
     if (!key.startsWith('$') && options.matchPath(key)) return key;
     if (options.blockedPredicates.has(key)) return key;
+    // $getField/$setField name a field via a PLAIN (non-$) string argument
+    // that the reference/key checks above would miss: { $getField: 'secure' }
+    // or { $getField: { field: 'secure', … } }
+    if (key === '$getField' || key === '$setField') {
+      const field = typeof child === 'string' ? child : isRecord(child) && typeof child.field === 'string' ? child.field : '';
+      if (field && options.matchPath(field)) return `${key}:${field}`;
+    }
     const match = findProtectedQueryReference(child, options, depth + 1);
     if (match) return match;
   }
@@ -215,6 +215,43 @@ const validateStructure = (value: unknown): string | null => {
   return visit(value, 0);
 };
 
+// Enforce the read-only stage allowlist at EVERY pipeline depth, not just the
+// top level — a non-allowlisted stage nested inside $lookup / $unionWith /
+// $facet sub-pipelines would otherwise skip the check (validateStructure only
+// recurses the blocked-key / join-target rules, not the stage allowlist).
+const validatePipelineStages = (stages: unknown, depth = 0): string | null => {
+  if (depth > MONGO_QUERY_LIMITS.maxDocumentDepth) return 'Pipeline is nested too deeply';
+  if (!Array.isArray(stages)) return 'Pipeline must be an array';
+  for (const stage of stages) {
+    if (!isRecord(stage) || Object.keys(stage).length !== 1) {
+      return 'Each aggregation stage must contain exactly one stage operator';
+    }
+    const stageName = Object.keys(stage)[0];
+    if (!aggregationStageSet.has(stageName)) {
+      return `${stageName} is not available in the read-only aggregation builder`;
+    }
+    const body = stage[stageName];
+    if (stageName === '$lookup' && isRecord(body) && body.pipeline !== undefined) {
+      const nested = validatePipelineStages(body.pipeline, depth + 1);
+      if (nested) return nested;
+    }
+    if (stageName === '$unionWith') {
+      const nested = isRecord(body) ? body.pipeline : undefined;
+      if (nested !== undefined) {
+        const error = validatePipelineStages(nested, depth + 1);
+        if (error) return error;
+      }
+    }
+    if (stageName === '$facet' && isRecord(body)) {
+      for (const sub of Object.values(body)) {
+        const error = validatePipelineStages(sub, depth + 1);
+        if (error) return error;
+      }
+    }
+  }
+  return null;
+};
+
 const deserializeExtendedJson = async (value: unknown): Promise<unknown> => {
   const { BSON } = await import('mongodb');
   return BSON.EJSON.deserialize(value, { relaxed: false });
@@ -246,12 +283,17 @@ export const normalizeMongoQueryRequest = async (
   }
 
   if (protectedFieldCollectionSet.has(collection)) {
-    // things gets the exact-segment secure/uniqueKeys matcher and keeps $text
-    // (its secrets are BinData the text index never tokenizes); the legacy
-    // sensitive collections keep the broad heuristics and lose $text too
+    // The query guard uses the SAME predicate as the response redactor
+    // (isSensitiveFieldPath → shouldRedactKey, which covers secure/uniqueKeys
+    // AND the token/secret/apiKey/… heuristics). If the redactor masks a value
+    // in the response, the guard must also refuse to filter/sort/project/alias
+    // it — otherwise a pipeline could rename a redacted field out from under
+    // the redactor. things keeps $text (its secrets are BinData the text index
+    // never tokenizes, and text search is a real feature); the legacy
+    // sensitive collections lose $text too (their secrets are plain fields).
     const scan: ReferenceScanOptions = sensitiveCollectionSet.has(collection)
       ? { matchPath: isSensitiveFieldPath, blockedPredicates: ALL_PROBE_PREDICATES }
-      : { matchPath: isProtectedThingFieldPath, blockedPredicates: COMPUTE_PROBE_PREDICATES };
+      : { matchPath: isSensitiveFieldPath, blockedPredicates: COMPUTE_PROBE_PREDICATES };
     const protectedFilterReference = findProtectedQueryReference(filterInput, scan);
     if (protectedFilterReference) {
       return fail(400, `Queries cannot inspect protected field ${protectedFilterReference}`);
@@ -276,13 +318,13 @@ export const normalizeMongoQueryRequest = async (
   }
 
   // Aliasing guard for every collection's pipeline: nothing may NAME a
-  // things-era protected path (e.g. `$owner.secure` after a $lookup). This
-  // uses only the exact-segment matcher — no probe-predicate blocking and no
-  // broad name heuristics — because the runner strips secure/uniqueKeys at
-  // every things ingress before user stages run; this check is
-  // defense-in-depth, not the primary barrier.
+  // redactor-sensitive path (e.g. `$owner.secure` after a $lookup, or
+  // `$crystal.apiKey`) as an aggregation source, since renaming it into a
+  // harmless output key would escape the response redactor. Uses the same
+  // predicate as the redactor so the two never disagree; secure/uniqueKeys are
+  // additionally hard-stripped at every things ingress by hardenThingsQuery.
   const protectedPipelineReference = findProtectedQueryReference(pipelineInput, {
-    matchPath: isProtectedThingFieldPath,
+    matchPath: isSensitiveFieldPath,
     blockedPredicates: NO_PROBE_PREDICATES
   });
   if (protectedPipelineReference) {
@@ -295,15 +337,8 @@ export const normalizeMongoQueryRequest = async (
   }
 
   const pipeline = pipelineInput as Record<string, unknown>[];
-  for (const stage of pipeline) {
-    if (!isRecord(stage) || Object.keys(stage).length !== 1) {
-      return fail(400, 'Each aggregation stage must contain exactly one stage operator');
-    }
-    const stageName = Object.keys(stage)[0];
-    if (!aggregationStageSet.has(stageName)) {
-      return fail(400, `${stageName} is not available in the read-only aggregation builder`);
-    }
-  }
+  const pipelineStageError = validatePipelineStages(pipeline);
+  if (pipelineStageError) return fail(400, pipelineStageError);
 
   const distinctField = typeof body.distinctField === 'string' ? body.distinctField.trim() : '';
   if (operation === 'distinct' && !isSafeFieldPath(distinctField)) {

@@ -123,13 +123,29 @@ test('keeps ordinary field names and $expr usable outside protected scopes', asy
   });
   assert.equal('status' in expr, false);
 
-  // a crystal field whose name merely contains "token" is not protected
-  const tokenish = await normalizeMongoQueryRequest({
+  // an ordinary crystal field (no sensitive name) is freely queryable on things
+  const ordinary = await normalizeMongoQueryRequest({
     collection: 'things',
     operation: 'find',
-    filter: { 'crystal.tokenCount': { $gt: 3 } }
+    filter: { 'crystal.legs': { $gt: 3 } }
   });
-  assert.equal('status' in tokenish, false);
+  assert.equal('status' in ordinary, false);
+
+  // the query guard mirrors the response redactor: a crystal field whose name
+  // the redactor would mask (…token…/…apiKey…) can't be filtered/aliased out
+  // from under it, so those queries are rejected on things too
+  const redactorConsistent = await normalizeMongoQueryRequest({
+    collection: 'things',
+    operation: 'find',
+    filter: { 'crystal.apiKey': { $gt: '' } }
+  });
+  assert.equal('status' in redactorConsistent, true);
+  const aliasedCrystalSecret = await normalizeMongoQueryRequest({
+    collection: 'things',
+    operation: 'aggregate',
+    pipeline: [{ $project: { leaked: '$crystal.apiKey' } }]
+  });
+  assert.equal('status' in aliasedCrystalSecret, true);
 
   // $text stays available on things (secure is BinData the text index never tokenizes)
   const text = await normalizeMongoQueryRequest({
@@ -154,6 +170,54 @@ test('keeps ordinary field names and $expr usable outside protected scopes', asy
     pipeline: [{ $project: { leaked: '$owner.secure' } }]
   });
   assert.equal('status' in aliased, true);
+
+  // $getField naming a protected field (both shorthand + object forms) is caught
+  const getFieldShorthand = await normalizeMongoQueryRequest({
+    collection: 'things',
+    operation: 'aggregate',
+    pipeline: [{ $addFields: { leaked: { $getField: 'secure' } } }]
+  });
+  assert.equal('status' in getFieldShorthand, true);
+  const getFieldObject = await normalizeMongoQueryRequest({
+    collection: 'things',
+    operation: 'aggregate',
+    pipeline: [{ $addFields: { leaked: { $getField: { field: 'uniqueKeys', input: '$$ROOT' } } } }]
+  });
+  assert.equal('status' in getFieldObject, true);
+});
+
+test('enforces the read-only stage allowlist inside nested sub-pipelines', async () => {
+  // a non-allowlisted stage nested in a $lookup pipeline is rejected
+  const nestedLookup = await normalizeMongoQueryRequest({
+    collection: 'themes',
+    operation: 'aggregate',
+    pipeline: [{ $lookup: { from: 'things', pipeline: [{ $notARealStage: {} }], as: 'x' } }]
+  });
+  assert.equal('status' in nestedLookup, true);
+
+  // …inside a $unionWith pipeline
+  const nestedUnion = await normalizeMongoQueryRequest({
+    collection: 'themes',
+    operation: 'aggregate',
+    pipeline: [{ $unionWith: { coll: 'things', pipeline: [{ $notARealStage: {} }] } }]
+  });
+  assert.equal('status' in nestedUnion, true);
+
+  // …inside a $facet branch
+  const nestedFacet = await normalizeMongoQueryRequest({
+    collection: 'things',
+    operation: 'aggregate',
+    pipeline: [{ $facet: { branch: [{ $notARealStage: {} }] } }]
+  });
+  assert.equal('status' in nestedFacet, true);
+
+  // a legitimate nested read-only pipeline still passes
+  const okNested = await normalizeMongoQueryRequest({
+    collection: 'themes',
+    operation: 'aggregate',
+    pipeline: [{ $lookup: { from: 'things', pipeline: [{ $match: { thingtime: 'user' } }, { $limit: 1 }], as: 'x' } }]
+  });
+  assert.equal('status' in okNested, false);
 });
 
 test('protects authentication collections from aliasing and aggregation', async () => {
