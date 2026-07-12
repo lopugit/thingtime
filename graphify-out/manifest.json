@@ -2,7 +2,7 @@
   "AGENTS.md": {
     "mtime": 1783824106.4579828,
     "ast_hash": "789b69172eca85b4c772a7d4ac71acf9",
-    "semantic_hash": ""
+    "semantic_hash": "789b69172eca85b4c772a7d4ac71acf9"
   },
   ".claude/settings.json": {
     "mtime": 1783824106.4548535,
@@ -965,14 +965,14 @@
     "semantic_hash": "45e853deebd1ee014ea082cf7d94ec83"
   },
   "remix/app/components/Login/Login.tsx": {
-    "mtime": 1783824106.8500443,
-    "ast_hash": "d2bf0c0b1995bcbc76643fa5c40e6dcb",
-    "semantic_hash": "d2bf0c0b1995bcbc76643fa5c40e6dcb"
+    "mtime": 1783833037.0097842,
+    "ast_hash": "2e3d26d4014c1110c258a10664a1a4e9",
+    "semantic_hash": "2e3d26d4014c1110c258a10664a1a4e9"
   },
   "remix/app/components/Login/Register.tsx": {
-    "mtime": 1783824106.850248,
-    "ast_hash": "cd12712a6cc5db335caa218b2b705dc0",
-    "semantic_hash": "cd12712a6cc5db335caa218b2b705dc0"
+    "mtime": 1783832960.6418517,
+    "ast_hash": "ada1b6175a23f23ed76bb7deab8c36ad",
+    "semantic_hash": "ada1b6175a23f23ed76bb7deab8c36ad"
   },
   "remix/app/components/Lopu/useLopu.tsx": {
     "mtime": 1783824106.8504806,
@@ -1235,9 +1235,9 @@
     "semantic_hash": "689aa489ed73d14667a3a4c2d3428fb4"
   },
   "remix/app/root.tsx": {
-    "mtime": 1783824106.8829212,
-    "ast_hash": "5e172b1ac332861692c018b4894c251b",
-    "semantic_hash": "5e172b1ac332861692c018b4894c251b"
+    "mtime": 1783832960.6406097,
+    "ast_hash": "282744bcfc881abb681aaa2e114cd6ec",
+    "semantic_hash": "282744bcfc881abb681aaa2e114cd6ec"
   },
   "remix/app/routes.tsx": {
     "mtime": 1783824106.8832436,
@@ -1582,7 +1582,7 @@
   "README.md": {
     "mtime": 1783824106.4647422,
     "ast_hash": "3b787cd3fbe1ccc2c3f3ddb9f9321e18",
-    "semantic_hash": ""
+    "semantic_hash": "3b787cd3fbe1ccc2c3f3ddb9f9321e18"
   },
   "VERCEL_DEPLOYMENTS.md": {
     "mtime": 1783824106.4683926,
@@ -1805,8 +1805,8 @@
     "semantic_hash": "f162fbffa18046af73dfca08802a536f"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1783824106.8060994,
-    "ast_hash": "f33bf00d268b7a27466986ea16692582",
+    "mtime": 1783827526.0962389,
+    "ast_hash": "65e4965d4d44efbc8c682084e937f8f9",
     "semantic_hash": ""
   },
   "remix/README.md": {
@@ -3465,9 +3465,9 @@
     "semantic_hash": "cb100f6065969db2ba48924ccbc315ee"
   },
   "remix/app/components/Editor/LongTextEditor.tsx": {
-    "mtime": 1783824106.834423,
-    "ast_hash": "032bd69aa961640a839cf55b6a43efb7",
-    "semantic_hash": "032bd69aa961640a839cf55b6a43efb7"
+    "mtime": 1783832704.316906,
+    "ast_hash": "1fcc6a00ee6652671e2cc4d6a2460836",
+    "semantic_hash": "1fcc6a00ee6652671e2cc4d6a2460836"
   },
   "remix/app/components/Kinds/kindPrimitives.tsx": {
     "mtime": 1783824106.8454964,
@@ -3767,7 +3767,7 @@
   "PRs/59-claude-unified-thing-crystal-schemas--everything-is-a-thing.md": {
     "mtime": 1783824106.4644244,
     "ast_hash": "e8621594e90b37b6f367ef46008848ec",
-    "semantic_hash": ""
+    "semantic_hash": "e8621594e90b37b6f367ef46008848ec"
   },
   "TODO/claude-todo/11-account-switcher.md": {
     "mtime": 1783824106.466129,
@@ -3858,5 +3858,30 @@
     "mtime": 1783827371.733495,
     "ast_hash": "8ef614b7e7176761e299808e2c48b988",
     "semantic_hash": "8ef614b7e7176761e299808e2c48b988"
+  },
+  "remix/app/components/Editor/editorJsPopoverViewport.test.ts": {
+    "mtime": 1783832704.3171294,
+    "ast_hash": "6008a488bb9b3b7ead4cece627a1d8cd",
+    "semantic_hash": "6008a488bb9b3b7ead4cece627a1d8cd"
+  },
+  "remix/app/components/Editor/editorJsPopoverViewport.ts": {
+    "mtime": 1783832704.3172503,
+    "ast_hash": "5293afd0fe153111c8c0c4375318ef1d",
+    "semantic_hash": "5293afd0fe153111c8c0c4375318ef1d"
+  },
+  "PRs/64-codex-mongodb-query-builder--add-no-code-mongodb-query-workbench.md": {
+    "mtime": 1783827526.095777,
+    "ast_hash": "e6e12b54ede0e813f583c74c32eecbd6",
+    "semantic_hash": ""
+  },
+  "remix/app/utils/authReturn.test.ts": {
+    "mtime": 1783833037.0103745,
+    "ast_hash": "9e5c2ff8f9f6840ec198fb1ebc54a9a3",
+    "semantic_hash": "9e5c2ff8f9f6840ec198fb1ebc54a9a3"
+  },
+  "remix/app/utils/authReturn.ts": {
+    "mtime": 1783832960.6394706,
+    "ast_hash": "a6c0854196ae9514653884668c76fa04",
+    "semantic_hash": "a6c0854196ae9514653884668c76fa04"
   }
 }

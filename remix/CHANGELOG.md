@@ -218,6 +218,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- Login and registration now return standalone users to the last page they
+  visited before entering auth, including query strings and hashes. The
+  session-scoped destination is consumed only after success, auth/API/external
+  targets are rejected, direct auth visits keep the existing `/` and
+  `/welcome` fallbacks, and embedded account switching remains in place.
+  Details in
+  [`PRs/64-codex-mongodb-query-builder--add-no-code-mongodb-query-workbench.md`](../PRs/64-codex-mongodb-query-builder--add-no-code-mongodb-query-workbench.md).
+  — _Codex (AI), 2026-07-12_
+
 - Fixed Editor.js autosave echoes remounting the active editor and stealing
   focus after the asynchronous save/parent echo. Changed parent values now
   reach the pending-echo reconciliation path before skipped intermediate

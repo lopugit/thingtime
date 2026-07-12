@@ -66,3 +66,20 @@ and this expensive endpoint opts into fail-closed rate limiting.
 - Static capability lists follow MongoDB's official predicate and aggregation
   catalogs. Unsafe or operational tools remain excluded even if MongoDB lists
   them alongside read stages.
+
+## Follow-up — main refresh and auth return (2026-07-12)
+
+- Merged current `origin/main` after PR #62 landed. The only conflicts were the
+  generated Graphify report/manifest pair; the branch's graph directory was
+  taken atomically and regenerated from the combined source tree instead of
+  hand-merging generated data.
+- Login and registration now return standalone users to the last non-auth page
+  they visited, preserving its query string and hash. The destination is kept
+  only in session storage, consumed after a successful auth response, and
+  validated as an internal non-auth/non-API path to prevent redirect loops or
+  open redirects.
+- Embedded account-switcher login/register remains in place and does not
+  consume the pending page destination.
+- Added focused auth-return tests for route preservation, reload-style reads,
+  one-time consumption, auth-loop rejection, API-path rejection, and malicious
+  external/backslash destinations.
