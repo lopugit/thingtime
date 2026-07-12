@@ -2,13 +2,19 @@ import { ObjectId } from 'mongodb';
 
 import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
-import { getPasswordResetsCollection, getSessionsCollection, getUsersCollection } from '../mongodb/collections';
+import {
+  getAuthOtpsCollection,
+  getPasswordResetsCollection,
+  getSessionsCollection,
+  getUsersCollection
+} from '../mongodb/collections';
 
 import { hashPassword } from './passwords';
+import { newAuthToken } from './tokens';
 
 const ONE_HOUR_MS = 1000 * 60 * 60;
 
-const newToken = () => (crypto.randomUUID() + crypto.randomUUID()).replace(/-/g, '');
+const newToken = newAuthToken;
 
 // Issue a single-use, time-limited password reset token — mirrors the
 // emailVerifications token pattern (single-use burn, short TTL).
@@ -62,15 +68,27 @@ export const consumePasswordReset = async (token: string): Promise<ConsumePasswo
   return { ok: false, reason: 'expired' };
 };
 
-// Apply the new password and revoke every live session for the user — a reset
-// is a credential rotation, so stolen cookies/tokens must stop working too.
+// Apply the new password and invalidate every other live credential for the
+// user — a reset is a credential rotation, so stolen cookies/tokens must stop
+// working, AND any other outstanding single-use credential (a second reset link
+// or a pending login OTP) must not survive to undo the rotation.
 export const applyPasswordReset = async (userId: string, password: string) => {
+  const now = new Date();
   await (await getUsersCollection()).updateOne(
     { _id: new ObjectId(userId) },
-    { $set: { passwordHash: await hashPassword(password), updatedAt: new Date() } }
+    { $set: { passwordHash: await hashPassword(password), updatedAt: now } }
   );
-  await (await getSessionsCollection()).updateMany(
-    { userId, revokedAt: null },
-    { $set: { revokedAt: new Date() } }
-  );
+  await Promise.all([
+    // revoke live sessions (stolen cookies/bearer tokens stop working)
+    (await getSessionsCollection()).updateMany({ userId, revokedAt: null }, { $set: { revokedAt: now } }),
+    // burn any other unconsumed reset tokens for this user — a captured second
+    // link must not let someone rotate the password right back
+    (await getPasswordResetsCollection()).updateMany(
+      { userId, consumedAt: null },
+      { $set: { consumedAt: now } }
+    ),
+    // drop pending login OTP challenges — the old password is gone, so any
+    // in-flight 2FA login started against it should not be completable
+    (await getAuthOtpsCollection()).deleteMany({ userId, consumedAt: null })
+  ]);
 };

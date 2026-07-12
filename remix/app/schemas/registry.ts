@@ -225,9 +225,10 @@ const rootThingSchema: ThingtimeSchema = {
     'legacy visibility names (public/friends/family/private) are still accepted as input and ' +
     'derived on the wire. Beside the schema’d crystal, every thing carries a schema-free ' +
     '`extended` property: any JSON up to 512KB, stored and returned as-is, never validated or ' +
-    'interpreted, and never structured-searchable — the open sidecar external apps park their ' +
-    'data in. Crystals are optionally schema-less too: omit thingtime and it defaults to ' +
-    '["data"], the bounded free-form crystal.',
+    'interpreted, and not structured-searchable (/search field conditions can’t target it, ' +
+    'though its string content is indexed by the wildcard text index) — the open sidecar ' +
+    'external apps park their data in. Crystals are optionally schema-less too: omit thingtime ' +
+    'and it defaults to ["data"], the bounded free-form crystal.',
   fields: [
     { name: 'shareId', type: 'id', required: true, description: 'Public id — the only id clients ever see.' },
     { name: 'schemaVersion', type: 'number', required: true, description: 'Root schema version this doc was written at (docs without one are version 1).' },
@@ -594,13 +595,19 @@ const emailMessageSchema: ThingtimeSchema = {
     { name: 'templateKey', type: 'string', required: false, description: 'Dotted template id, e.g. auth.password_reset.' },
     { name: 'status', type: 'enum', required: true, values: ['queued', 'sent', 'logged', 'skipped', 'failed'], description: 'Delivery lifecycle state.' },
     { name: 'from', type: 'string', required: true, description: 'From address used.' },
+    { name: 'replyTo', type: 'string', required: false, description: 'Reply-to address (null when unset).' },
     { name: 'to', type: 'string[]', required: true, description: 'Normalized recipient list.' },
     { name: 'subject', type: 'string', required: true, description: 'Subject line.' },
+    { name: 'html', type: 'string', required: true, description: 'Rendered HTML body — replaced by a redacted placeholder when sensitive is true.' },
+    { name: 'text', type: 'string', required: true, description: 'Rendered text body — replaced by a redacted placeholder when sensitive is true.' },
+    { name: 'sensitive', type: 'boolean', required: true, description: 'True for secret-bearing mail (OTP codes, reset links); its body is stored redacted so the outbox can’t replay the secret.' },
     { name: 'metadata', type: 'record', required: false, description: 'Purpose tags for analytics (never secrets).' },
+    { name: 'tags', type: 'record', required: false, description: 'Provider tags ({ stream, template }).' },
     { name: 'providerMessageId', type: 'string', required: false, description: 'SES message id when delivered.' },
+    { name: 'suppressedRecipients', type: 'string[]', required: false, description: 'Recipients dropped for suppression/unsubscribe (set only when some were skipped).' },
     { name: 'schemaVersion', type: 'number', required: true, description: 'Collection schema version.' },
     { name: 'createdAt', type: 'date', required: true, description: 'Queue time.' },
-    { name: 'updatedAt', type: 'date', required: true, description: 'Last status change.' }
+    { name: 'updatedAt', type: 'date', required: true, description: 'Last status change (sentAt/loggedAt/failedAt/skippedAt + error/skippedReason ride alongside per outcome).' }
   ],
   example: { provider: 'console', stream: 'transactional', templateKey: 'auth.email_otp', status: 'logged', schemaVersion: 2 }
 };
@@ -899,9 +906,19 @@ export const sanitizeExtended = (value: unknown): { ok: true; value: unknown } |
     return fail(400, 'extended must be JSON-serializable');
   }
   if (typeof serialized !== 'string') return fail(400, 'extended must be JSON-serializable');
-  const bytes = new TextEncoder().encode(serialized).byteLength;
-  if (bytes > EXTENDED_MAX_BYTES) {
+  // Byte cap via UTF-16 code-unit bounds, skipping the full TextEncoder pass in
+  // the common case: every code unit is ≥1 and ≤3 UTF-8 bytes (registry stays
+  // client-pure, so no node Buffer). length > cap ⇒ definitely over; length*3 ≤
+  // cap ⇒ definitely under; only the ambiguous middle band needs a precise
+  // byte count.
+  if (serialized.length > EXTENDED_MAX_BYTES) {
     return fail(400, `extended exceeds the ${EXTENDED_MAX_BYTES} byte limit`);
+  }
+  if (serialized.length * 3 > EXTENDED_MAX_BYTES) {
+    const bytes = new TextEncoder().encode(serialized).byteLength;
+    if (bytes > EXTENDED_MAX_BYTES) {
+      return fail(400, `extended exceeds the ${EXTENDED_MAX_BYTES} byte limit`);
+    }
   }
   const keys = checkExtendedKeys(value, 0, '');
   if (keys !== true) return keys;

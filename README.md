@@ -134,8 +134,10 @@ Schemas are optional scaffolding, not a cage. Two open surfaces on every thing:
   validates, structure-indexes, or interprets it. Replace-on-write semantics:
   send `extended` to swap the whole value, `null` to clear it, omit it to leave
   it untouched (deep-merging arbitrary JSON is ambiguous, so we never do).
-  It is never structured-searchable (`/search` field paths can't reach it).
-  One reserved key: `tt:textLanguage` (the text index's language override).
+  It is not structured-searchable — `/search` field conditions can't target it
+  — though its string content is indexed by the collection's wildcard text
+  index like any field (so keep secrets out of it). One reserved key:
+  `tt:textLanguage` (the text index's language override).
 - **Schema-less crystals** — `thingtime` is optional on create: a bare
   `POST /api/v1/things { crystal: { any: 'shape' } }` defaults to
   `thingtime: ["data"]`, the bounded free-form crystal, so external apps can

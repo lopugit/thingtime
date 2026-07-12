@@ -17,7 +17,9 @@ export const action = async ({ request }: { request: Request }) => {
     if (user && !user.emailVerified) {
       const verification = await createEmailVerification({ userId: String(user._id), email: user.email });
       const link = `${new URL(request.url).origin}/api/v1/auth/verify-email?token=${verification.token}`;
-      await sendVerificationEmail({ to: user.email, link });
+      // Fire-and-forget so a send failure can't turn the neutral response into
+      // a 500 (which would leak that this email belongs to an unverified user).
+      void sendVerificationEmail({ to: user.email, link }).catch(() => {});
       if (showLink) return json({ ok: true, verificationLink: link });
     }
   }

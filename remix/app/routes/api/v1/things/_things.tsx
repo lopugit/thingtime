@@ -111,11 +111,13 @@ export const action = async ({ request }: { request: Request }) => {
   }
 
   if (method === 'POST') {
-    // unified shape: explicit thingtime, or a schema-less crystal (defaults to
-    // ["data"] in validateThingtimeCrystal). Bodies with neither are the
-    // legacy post shape.
-    const isUnified =
-      Array.isArray(body?.thingtime) || (body?.crystal && typeof body.crystal === 'object' && !Array.isArray(body.crystal));
+    // Unified shape whenever the body opts into the thing vocabulary: an
+    // explicit `thingtime`, or a schema-less `crystal` (defaults to ["data"]).
+    // Legacy post bodies carry neither key. Routing on key PRESENCE (not shape)
+    // keeps the decision in one place — validateThingtimeCrystal raises the
+    // right error for a malformed thingtime/crystal instead of the request
+    // silently falling through to the legacy post path.
+    const isUnified = body && typeof body === 'object' && ('thingtime' in body || 'crystal' in body);
     if (isUnified) {
       const result = await createThing(user.id, body, viewer);
       if (result.ok === false) {

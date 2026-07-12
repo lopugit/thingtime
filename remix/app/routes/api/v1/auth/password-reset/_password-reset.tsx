@@ -37,7 +37,12 @@ export const action = async ({ request }: { request: Request }) => {
         expiresInMs: RESET_TTL_MINUTES * 60 * 1000
       });
       const link = `${origin}/reset-password?token=${reset.token}`;
-      await sendPasswordResetEmail({ to: email, link, expiresMinutes: RESET_TTL_MINUTES });
+      // Fire-and-forget: awaiting the send would make the "account exists"
+      // path measurably slower than the "no account" path (a synchronous SES
+      // round-trip), turning the deliberately-neutral response into a timing
+      // oracle for account enumeration. Delivery failures are recorded in the
+      // email outbox, not surfaced here.
+      void sendPasswordResetEmail({ to: email, link, expiresMinutes: RESET_TTL_MINUTES }).catch(() => {});
       // Surface the link only in local + Vercel preview, mirroring the
       // register route's dev verification link.
       if (shouldShowDevVerificationLink()) resetLink = link;

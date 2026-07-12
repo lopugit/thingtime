@@ -49,6 +49,8 @@ export const sendPasswordResetEmail = async ({
     subject: rendered.subject,
     html: rendered.html,
     text: rendered.text,
+    // the body carries a single-use reset link — keep it out of the outbox
+    sensitive: true,
     metadata: {
       purpose: 'password_reset'
     },
@@ -76,6 +78,8 @@ export const sendEmailOtp = async ({
     subject: rendered.subject,
     html: rendered.html,
     text: rendered.text,
+    // the body carries the plaintext OTP — keep it out of the outbox
+    sensitive: true,
     metadata: {
       purpose: 'email_otp',
       expiresMinutes: expiresMinutes ?? 10

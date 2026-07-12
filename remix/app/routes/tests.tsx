@@ -112,17 +112,24 @@ export default function TestsPage() {
     };
   }, []);
 
+  // Once the email config lands, refresh the generated payloads that reference
+  // it. Depend on emailConfig ALONE — depending on editedPayloadIds would
+  // re-run this on every keystroke and re-randomize every unedited payload
+  // (uniqueSuffix/Math.random churn); read the edited set inside the functional
+  // update instead so an edited payload is never clobbered.
+  const editedPayloadIdsRef = React.useRef(editedPayloadIds);
+  editedPayloadIdsRef.current = editedPayloadIds;
   React.useEffect(() => {
     if (!emailConfig) return;
     const nextPayloadTexts = createPayloadTexts(emailConfig);
     setPayloadTexts((current) => {
       const next = { ...current };
       for (const [testId, text] of Object.entries(nextPayloadTexts)) {
-        if (!editedPayloadIds.has(testId)) next[testId] = text;
+        if (!editedPayloadIdsRef.current.has(testId)) next[testId] = text;
       }
       return next;
     });
-  }, [editedPayloadIds, emailConfig]);
+  }, [emailConfig]);
 
   const visibleTests = React.useMemo(
     () => apiTests.filter((test) => testMatches(test, group, query, includeMutating)),

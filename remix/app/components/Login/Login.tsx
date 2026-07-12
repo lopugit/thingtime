@@ -86,6 +86,14 @@ export const Login = (props) => {
 	const handleLogin = async (e) => {
 		e?.preventDefault();
 
+		// Don't spend a challenge attempt on an empty/short code — the server
+		// increments the attempt counter before comparing, so a stray submit
+		// would burn one of the five tries against a still-valid challenge.
+		if (otpChallenge && otpCode.trim().length < 6) {
+			lopu({ title: 'Enter the 6-digit code from your email', status: 'info', duration: 4000 });
+			return;
+		}
+
 		setLoading(true);
 
 		try {
@@ -133,8 +141,12 @@ export const Login = (props) => {
 				status: 'error',
 				duration: 6000,
 			});
-			// an exhausted/expired challenge can only be fixed by logging in again
-			if (err?.error && /challenge|attempts/i.test(err.error)) {
+			// Only bounce back to the password step when the challenge itself is
+			// dead (expired/consumed, or its own attempts exhausted). Match the
+			// specific server phrasings — NOT the login rate-limiter's "Too many
+			// login attempts" 429, which shares the word "attempts" but leaves the
+			// challenge valid, and NOT "Invalid security code" (let them retry).
+			if (otpChallenge && err?.error && /no longer valid|request a new code/i.test(err.error)) {
 				setOtpChallenge(null);
 				setOtpCode('');
 			}

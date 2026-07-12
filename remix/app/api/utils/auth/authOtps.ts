@@ -4,6 +4,8 @@ import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
 import { getAuthOtpsCollection } from '../mongodb/collections';
 
+import { newAuthToken } from './tokens';
+
 // Short-lived email OTP challenges (login 2FA). Only a hash of the code is
 // stored — the plaintext code exists in the outbound email and nowhere else.
 
@@ -12,7 +14,7 @@ const MAX_ATTEMPTS = 5;
 
 export type OtpPurpose = 'login';
 
-const newChallengeId = () => (crypto.randomUUID() + crypto.randomUUID()).replace(/-/g, '');
+const newChallengeId = newAuthToken;
 
 const hashOtpCode = (challenge: string, code: string) =>
   createHash('sha256').update(`${challenge}:${code}`).digest('hex');
@@ -102,4 +104,12 @@ export const consumeOtpChallenge = async ({
   if (!burned) return { ok: false, reason: 'invalid' };
 
   return { ok: true, userId: doc.userId };
+};
+
+// Best-effort delete of a freshly-minted challenge whose code email never went
+// out — so a delivery failure doesn't strand an uncompletable challenge (TTL
+// would otherwise keep it around for 10 minutes).
+export const deleteOtpChallenge = async (challenge: string): Promise<void> => {
+  if (!challenge) return;
+  await (await getAuthOtpsCollection()).deleteOne({ challenge }).catch(() => {});
 };

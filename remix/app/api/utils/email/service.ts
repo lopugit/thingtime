@@ -105,6 +105,13 @@ export const sendEmail = async (input: EmailSendInput): Promise<EmailSendResult>
   const replyTo = input.replyTo || config.replyTo;
   const now = new Date();
 
+  // Secret-bearing mail (OTP codes, reset links) is delivered in full but the
+  // outbox stores only a placeholder — a DB read must never be able to replay
+  // the code/link that authOtps/passwordResets deliberately hash or single-use.
+  const REDACTED = '[redacted: single-use secret]';
+  const storedHtml = input.sensitive ? REDACTED : input.html;
+  const storedText = input.sensitive ? REDACTED : input.text;
+
   const inserted = await (await getEmailMessagesCollection()).insertOne({
     provider: config.provider,
     stream,
@@ -114,8 +121,9 @@ export const sendEmail = async (input: EmailSendInput): Promise<EmailSendResult>
     replyTo: replyTo || null,
     to,
     subject: input.subject,
-    html: input.html,
-    text: input.text,
+    html: storedHtml,
+    text: storedText,
+    sensitive: !!input.sensitive,
     metadata: input.metadata || {},
     tags: input.tags || {},
     schemaVersion: COLLECTION_SCHEMA_VERSIONS.email_messages,
@@ -126,7 +134,11 @@ export const sendEmail = async (input: EmailSendInput): Promise<EmailSendResult>
   const emailMessageId = String(inserted.insertedId);
   const suppressedRecipients = await getSuppressedRecipients(to, stream);
 
-  if (suppressedRecipients.length) {
+  // Only skip the recipients that opted out; deliver to the rest. Skipping the
+  // whole message because one address on a multi-recipient send is suppressed
+  // would silently drop mail for people who never unsubscribed.
+  const deliverTo = to.filter((recipient) => !suppressedRecipients.includes(recipient));
+  if (!deliverTo.length) {
     await updateMessageStatus(inserted.insertedId, 'skipped', {
       skippedAt: new Date(),
       skippedReason: 'suppressed_recipient',
@@ -142,12 +154,14 @@ export const sendEmail = async (input: EmailSendInput): Promise<EmailSendResult>
   }
 
   try {
-    const delivery = await deliverEmail({ ...input, stream, to, from, replyTo }, config);
+    const delivery = await deliverEmail({ ...input, stream, to: deliverTo, from, replyTo }, config);
     const status: EmailStatus = delivery.delivered ? 'sent' : 'logged';
     await updateMessageStatus(inserted.insertedId, status, {
       sentAt: delivery.delivered ? new Date() : null,
       loggedAt: delivery.delivered ? null : new Date(),
-      providerMessageId: delivery.providerMessageId || null
+      providerMessageId: delivery.providerMessageId || null,
+      // record who was dropped so the outbox reflects the true recipient set
+      ...(suppressedRecipients.length ? { suppressedRecipients } : {})
     });
 
     return {

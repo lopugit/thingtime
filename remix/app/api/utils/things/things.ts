@@ -1448,8 +1448,16 @@ export const upsertThing = async (
   }
 
   if (existing.ownerId !== ownerId) return fail(404, 'Thing not found');
-  if (input.thingtime !== undefined) {
-    const wanted = Array.isArray(input.thingtime) ? [...input.thingtime].sort().join(',') : '';
+  // A thing's schemas are immutable, but an omitted/empty thingtime is the
+  // schema-less default (['data']) — treat those as "no change requested" so
+  // re-PUTting a data thing without repeating thingtime isn't a false conflict.
+  // A non-array, non-empty thingtime is a real (rejected) attempt to change it.
+  const thingtimeProvided =
+    input.thingtime !== undefined &&
+    input.thingtime !== null &&
+    !(Array.isArray(input.thingtime) && input.thingtime.length === 0);
+  if (thingtimeProvided) {
+    const wanted = Array.isArray(input.thingtime) ? [...input.thingtime].sort().join(',') : String(input.thingtime);
     if (wanted !== [...thingtimeOf(existing)].sort().join(',')) {
       return fail(400, 'A thing’s thingtime schemas can’t be changed');
     }

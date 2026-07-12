@@ -1,4 +1,4 @@
-import { consumeOtpChallenge, createOtpChallenge, generateOtpCode } from './authOtps';
+import { consumeOtpChallenge, createOtpChallenge, deleteOtpChallenge, generateOtpCode } from './authOtps';
 import { sendEmailOtp } from './email';
 import { signJwt } from './jwt';
 import { verifyPassword } from './passwords';
@@ -30,7 +30,19 @@ export const loginUser = async ({ username, password }: { username: string; pass
   if (user.meta?.twoFactorEmailEnabled) {
     const code = generateOtpCode();
     const challenge = await createOtpChallenge({ userId: String(user._id), purpose: 'login', code });
-    await sendEmailOtp({ to: user.email, code });
+    // If the code can't be delivered, don't strand a challenge the user can
+    // never complete — drop it and surface a real error instead of prompting
+    // for a code that never arrives (or, under fail-closed email, 500ing).
+    let sent: Awaited<ReturnType<typeof sendEmailOtp>> | null = null;
+    try {
+      sent = await sendEmailOtp({ to: user.email, code });
+    } catch {
+      sent = null;
+    }
+    if (!sent || sent.status === 'failed' || sent.status === 'skipped') {
+      await deleteOtpChallenge(challenge.challenge);
+      return { ok: false, status: 502, error: 'Could not send your security code — try again in a moment' };
+    }
     return {
       ok: true,
       requiresOtp: true,

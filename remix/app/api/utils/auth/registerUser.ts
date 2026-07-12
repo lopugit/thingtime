@@ -147,7 +147,10 @@ export const registerUser = async (input: RegisterInput): Promise<RegisterResult
   const verification = await createEmailVerification({ userId, email });
   const origin = input.origin || process.env.APP_URL || 'http://localhost:9999';
   const verificationLink = `${origin}/api/v1/auth/verify-email?token=${verification.token}`;
-  await sendVerificationEmail({ to: email, link: verificationLink });
+  // Fire-and-forget: a send failure (e.g. fail-closed SES outage) must not fail
+  // a registration whose user + session are already committed — the dev link is
+  // returned regardless and the user can resend from Settings.
+  void sendVerificationEmail({ to: email, link: verificationLink }).catch(() => {});
 
   return { ok: true, user: toPublicUser(user), jwt, jti: session.jti, verificationLink };
 };
