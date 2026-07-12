@@ -39,19 +39,34 @@ const CodeBlock = ({ children }: { children: string }) => (
 
 const SCOPE_ROWS = [
   {
+    id: 'profile.username',
+    shares: 'The @username (+ id + profileUrl link)',
+    notes: 'Baseline — always granted; it IS the login identity.'
+  },
+  {
+    id: 'profile.displayName · .avatar · .bio · .banner',
+    shares: 'Individual profile fields, each its own permission',
+    notes: 'Granular — ask for exactly the fields you need.'
+  },
+  {
     id: 'profile',
-    shares: 'Username, display name, avatar (+ profileUrl link)',
-    notes: 'Always granted — it IS the login identity.'
+    shares: 'The whole public profile (covers every profile.* leaf)',
+    notes: 'Ancestors cover descendants — new leaves join automatically.'
   },
   {
     id: 'email',
     shares: 'The email address on the Thingtime account',
-    notes: 'Optional; returned by /oauth/userinfo only when granted.'
+    notes: 'Returned by /oauth/userinfo only when granted.'
   },
   {
     id: 'app-data',
     shares: 'Read/write the app’s OWN key/value data for this user',
-    notes: 'Optional; /api/v1/app-data* returns 403 without it.'
+    notes: '/api/v1/app-data* returns 403 without it.'
+  },
+  {
+    id: 'things',
+    shares: 'Read-only access to specific things the user hand-picks',
+    notes: 'The consent screen shows a picker; read them via /oauth/shared.'
   }
 ];
 
@@ -120,34 +135,42 @@ export default function DocsEmbed() {
 <script>
   Thingtime.renderButton(document.getElementById('thingtime-login'), {
     clientId: 'ttapp_…',
-    scopes: ['profile', 'email', 'app-data'],  // what you'd like (user chooses)
-    theme: 'light',                             // 'light' | 'dark' | 'rainbow'
-    size: 'md',                                 // 'sm' | 'md' | 'lg'
-    text: 'Login with Thingtime',               // optional custom label
+    scopes: ['profile.username', 'app-data'],      // REQUIRED — user can't untick, only cancel
+    optionalScopes: ['email', 'profile.avatar'],   // nice-to-have — user decides
+    allowExtra: true,                              // user may volunteer MORE (default true)
+    theme: 'light',                                // 'light' | 'dark' | 'rainbow'
+    size: 'md',                                    // 'sm' | 'md' | 'lg'
+    text: 'Login with Thingtime',                  // optional custom label
     onLogin: function (session) {
-      // session.token     — Bearer token for the APIs below (30 days, revocable)
-      // session.scopes    — what the user ACTUALLY granted
-      // session.user      — { id, username, displayName, avatarUrl }
-      // session.expiresAt — ISO timestamp
+      // session.token        — Bearer token for the APIs below (30 days, revocable)
+      // session.scopes       — what the user ACTUALLY granted (may exceed your ask!)
+      // session.sharedThings — how many things they hand-picked for you
+      // session.user         — identity, shaped by the granted scopes
     },
     onError: function (error) { /* 'cancelled', popup blocked, … */ }
   });
 </script>`}</CodeBlock>
         <Text>
           Prefer your own button? Call{' '}
-          <code>Thingtime.login({'{ clientId, scopes }'})</code> from a click handler — it returns a
-          Promise of the same session object. (It must run in a user gesture or the popup will be
-          blocked.)
+          <code>Thingtime.login({'{ clientId, scopes, optionalScopes }'})</code> from a click handler —
+          it returns a Promise of the same session object. (It must run in a user gesture or the popup
+          will be blocked.) While building, add <code>sandbox: true</code> — the popup runs the full
+          consent UI with a pretend token and nothing is really shared.
         </Text>
       </Stack>
 
       <Stack spacing={3}>
         <Heading size="md">3 · Permissions (scopes)</Heading>
         <Text>
-          You configure the scopes your button asks for; the consent screen renders them as a
-          selector where the user ticks what they’re happy to share. Your grant is the
-          intersection — consent can narrow your request, never widen it. Always read{' '}
-          <code>session.scopes</code> to see what you got.
+          Scopes are <strong>hierarchical dot paths</strong> over the user’s data — ask for exactly
+          the granularity you need (<code>profile.avatar</code>, not the whole profile). You declare a{' '}
+          <strong>required</strong> floor (<code>scopes</code>) the user can’t untick — only cancel —
+          and an <strong>optional</strong> set (<code>optionalScopes</code>) they decide on. And unless
+          you pass <code>allowExtra: false</code>, the consent screen also lets the user{' '}
+          <strong>volunteer more</strong> — extra profile fields, or a hand-picked set of their things
+          — so a platform that reads <code>session.scopes</code> dynamically lights up features for
+          whatever the user chose to bring. The live catalog:{' '}
+          <code>GET /api/v1/oauth/scopes</code>.
         </Text>
         <Box overflowX="auto">
           <Table size="sm" variant="simple">
@@ -181,12 +204,22 @@ export default function DocsEmbed() {
           server.
         </Text>
         <CodeBlock>{`Thingtime.userinfo(session.token).then(function (info) {
-  // info.user  → { id, username, displayName, avatarUrl, profileUrl, email? }
-  // info.scopes → e.g. ['profile', 'email']
+  // info.user   → id, username, profileUrl — plus displayName / avatarUrl /
+  //               bio / bannerUrl / email, each present ONLY if its scope
+  //               was granted (the response mirrors the consent screen)
+  // info.scopes → e.g. ['profile.username', 'profile.avatar', 'email']
 });
 
 // or raw: GET https://thingtime.com/api/v1/oauth/userinfo
 //         Authorization: Bearer <token>`}</CodeBlock>
+        <Text>
+          <strong>Shared things:</strong> when the user hand-picked things for you ('things' scope),
+          read exactly those — read-only:
+        </Text>
+        <CodeBlock>{`Thingtime.shared(session.token).then(function (things) {
+  // [{ shareId, thingtime, crystal, tags, createdAt, updatedAt }, …]
+  // Exactly the set the user ticked on the consent screen — nothing else.
+});`}</CodeBlock>
         <Text>
           <strong>App storage:</strong> keep your per-user data (settings, saves, progress…) in the
           user’s Thingtime account — your app can only ever see its own keys.
@@ -232,8 +265,9 @@ data.remove('preferences');`}</CodeBlock>
           <ChakraLink href="/sdk/demo.html" color="var(--tt-docs-accent-ink, #0f5132)" isExternal>
             /sdk/demo.html
           </ChakraLink>{' '}
-          — register an app with that page’s origin, paste your clientId, and run the whole
-          login → consent → storage loop.
+          — it opens in <strong>sandbox mode</strong> out of the box (full consent + permissions UI,
+          pretend token, nothing shared). Register an app with that page’s origin, paste your real{' '}
+          <code>ttapp_…</code> clientId, and the same loop runs live.
         </Text>
       </Stack>
     </Stack>

@@ -6,25 +6,54 @@ import { Register } from '~/components/Login/Register';
 
 // The "Login with Thingtime" popup (route /authorize, opened by the embed SDK
 // from a third-party site). Flow: validate clientId + origin against
-// /api/v1/apps/public → log in (or register) if needed → consent → POST
-// /api/v1/oauth/authorize → hand the app-scoped token to the opener via
-// postMessage (targetOrigin = the validated origin, never '*') → close.
+// /api/v1/apps/public → log in (or register) if needed → consent, where the
+// permissions selector shows the platform's REQUIRED scopes (locked), its
+// OPTIONAL scopes (toggles), and — unless the platform opted out — a "share
+// more" section where the user can volunteer extra profile fields and
+// hand-pick specific things to share → POST /api/v1/oauth/authorize → hand
+// the app-scoped token to the opener via postMessage (targetOrigin = the
+// validated origin, never '*') → close.
 //
-// The token deliberately only reaches window.opener at the exact allowlisted
-// origin. If someone opens this URL directly (no opener), the approval still
-// works but the token goes nowhere — we just tell them to close the window.
+// SANDBOX MODE (?sandbox=1, used by /sdk/demo.html): the full consent UI runs
+// against a pretend app — no server validation, no real token, nothing
+// shared. Logged-out visitors get a mock "@you" identity so the permissions
+// UX is explorable without an account.
 
 type EmbedApp = { clientId: string; name: string };
-type EmbedUser = { id: string; username: string; displayName: string | null; avatarUrl: string | null };
-type ScopeDescriptor = { id: string; title: string; description: string; required: boolean };
+type EmbedUser = { id: string; username: string; displayName?: string | null; avatarUrl?: string | null };
+type ScopeDescriptor = {
+  id: string;
+  title: string;
+  description: string;
+  kind: 'namespace' | 'field' | 'capability' | 'picker';
+  baseline?: boolean;
+};
+type PickerThing = { id: string; label: string; detail: string };
 
 const MAX_STATE_CHARS = 512;
+// Matches the server's MAX_SHARED_THINGS cap so the picker can surface every
+// thing a user is allowed to share.
+const MAX_PICKER_THINGS = 100;
 
 const SCOPE_EMOJI: Record<string, string> = {
-  profile: '👤',
+  profile: '🪪',
+  'profile.username': '👤',
+  'profile.displayName': '✨',
+  'profile.avatar': '🖼️',
+  'profile.bio': '📝',
+  'profile.banner': '🎨',
   email: '💌',
-  'app-data': '📦'
+  'app-data': '📦',
+  things: '🗂️'
 };
+
+const SANDBOX_USER: EmbedUser = { id: 'sandbox', username: 'you', displayName: 'You', avatarUrl: null };
+
+const SANDBOX_THINGS: PickerThing[] = [
+  { id: 'sandbox-thing-1', label: 'Sunset over the bay 🌅', detail: 'post' },
+  { id: 'sandbox-thing-2', label: 'Reading list', detail: 'post' },
+  { id: 'sandbox-thing-3', label: 'Garden watering notes 🌱', detail: 'post' }
+];
 
 // Never rejects: transport failures resolve to { ok:false, network:true } so
 // every consumer can show a real error + retry instead of stranding the popup
@@ -42,10 +71,23 @@ const fetchJson = async (url: string, init: RequestInit = {}) => {
   }
 };
 
+// Client-side mirror of the server's ancestor-covers rule.
+const coversPath = (scope: string, path: string) => scope === path || path.startsWith(`${scope}.`);
+const anyCovers = (scopes: string[], path: string) => scopes.some((s) => coversPath(s, path));
+
+const parseScopeList = (raw: string, catalog: ScopeDescriptor[]): string[] => {
+  const known = new Set(catalog.map((s) => s.id));
+  return raw
+    .split(/[\s,+]+/)
+    .filter(Boolean)
+    .filter((id) => known.has(id))
+    .filter((id, index, list) => list.indexOf(id) === index);
+};
+
 const cardSx = {
   flexDirection: 'column' as const,
   gap: 4,
-  width: '400px',
+  width: '420px',
   maxWidth: '100%',
   background: 'var(--tt-card, #ffffff)',
   border: '1px solid var(--tt-border, #ececef)',
@@ -67,17 +109,82 @@ const Kicker = ({ children }: { children: React.ReactNode }) => (
   </Box>
 );
 
+const SandboxChip = () => (
+  <Box
+    alignSelf="flex-start"
+    fontFamily="mono"
+    fontSize="10px"
+    fontWeight="700"
+    letterSpacing="0.12em"
+    padding="2px 8px"
+    borderRadius="full"
+    background="var(--tt-surface-alt, #f5f5f7)"
+    border="1px dashed var(--tt-border, #d8d8de)"
+    color="var(--tt-muted, #9a9aa6)"
+  >
+    SANDBOX · NOTHING IS REALLY SHARED
+  </Box>
+);
+
+type ScopeRowProps = {
+  scope: ScopeDescriptor;
+  checked: boolean;
+  locked: boolean;
+  onChange: (checked: boolean) => void;
+};
+
+const ScopeRow = ({ scope, checked, locked, onChange }: ScopeRowProps) => (
+  <Flex
+    as="label"
+    gap={3}
+    alignItems="flex-start"
+    padding={2}
+    borderRadius="var(--tt-radius-sm, 9px)"
+    cursor={locked ? 'default' : 'pointer'}
+    _hover={locked ? undefined : { background: 'var(--tt-surface-alt, #f5f5f7)' }}
+  >
+    <input
+      type="checkbox"
+      checked={checked}
+      disabled={locked}
+      onChange={(event) => onChange(event.target.checked)}
+      style={{ marginTop: '3px', accentColor: 'var(--tt-text, #1c1c22)' }}
+    />
+    <Box fontSize="14px">
+      <Box as="span" fontWeight="600">
+        {SCOPE_EMOJI[scope.id] || '🔐'} {scope.title}
+      </Box>
+      {locked ? (
+        <Box as="span" fontSize="12px" color="var(--tt-muted, #9a9aa6)">
+          {' '}
+          · {scope.baseline ? 'always shared' : 'required by this app'}
+        </Box>
+      ) : null}
+      <Box fontSize="13px" color="var(--tt-muted, #9a9aa6)">
+        {scope.description}
+      </Box>
+    </Box>
+  </Flex>
+);
+
 export const AuthorizePage = () => {
   const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
   const clientId = (params.get('client_id') || params.get('clientId') || '').trim();
   const origin = (params.get('origin') || '').trim();
   const state = (params.get('state') || '').slice(0, MAX_STATE_CHARS);
-  const scopeParam = (params.get('scope') || '').slice(0, 256);
+  const scopeParam = (params.get('scope') || '').slice(0, 1024);
+  const optionalScopeParam = (params.get('optional_scope') || '').slice(0, 1024);
+  const extrasAllowed = params.get('extra') !== '0';
+  const sandbox = params.get('sandbox') === '1';
 
+  const [catalog, setCatalog] = React.useState<ScopeDescriptor[]>([]);
+  const [defaultScopes, setDefaultScopes] = React.useState<string[]>([]);
   const [app, setApp] = React.useState<EmbedApp | null>(null);
   const [verifiedOrigin, setVerifiedOrigin] = React.useState<string | null>(null);
-  const [scopes, setScopes] = React.useState<ScopeDescriptor[]>([]);
+  const [requiredScopes, setRequiredScopes] = React.useState<ScopeDescriptor[]>([]);
+  const [optionalScopes, setOptionalScopes] = React.useState<ScopeDescriptor[]>([]);
   const [selected, setSelected] = React.useState<Record<string, boolean>>({});
+  const [showExtras, setShowExtras] = React.useState(false);
   const [invalidReason, setInvalidReason] = React.useState<string | null>(null);
   const [networkFailed, setNetworkFailed] = React.useState(false);
   const [user, setUser] = React.useState<EmbedUser | null>(null);
@@ -86,31 +193,53 @@ export const AuthorizePage = () => {
   const [issuing, setIssuing] = React.useState(false);
   const [done, setDone] = React.useState<'approved' | 'cancelled' | null>(null);
   const [issueError, setIssueError] = React.useState<string | null>(null);
+  const [pickerThings, setPickerThings] = React.useState<PickerThing[] | null>(null);
+  const [pickerError, setPickerError] = React.useState(false);
+  const [pickedThings, setPickedThings] = React.useState<Record<string, boolean>>({});
+
+  // ---- boot: catalog (+ app validation in real mode, auth probe) -----------
 
   React.useEffect(() => {
+    fetchJson('/api/v1/oauth/scopes').then((resp) => {
+      if (resp?.ok && Array.isArray(resp.scopes)) {
+        setCatalog(resp.scopes);
+        setDefaultScopes(Array.isArray(resp.defaults) ? resp.defaults : []);
+      } else {
+        setNetworkFailed(!!resp?.network);
+        setInvalidReason(resp?.error || 'Could not load the permission catalog.');
+      }
+    });
+
+    if (sandbox) {
+      // Sandbox NEVER resolves the real account. It runs entirely on the mock
+      // SANDBOX_USER, so even though the origin here is unvalidated (it's a UI
+      // demo, not a real grant), no real identity or data can ever be posted
+      // to it. Calling /api/v1/auth/me here would leak the real logged-in
+      // user's id + username to an arbitrary opener — the exact thing the
+      // "nothing is really shared" promise forbids.
+      setCheckedAuth(true);
+      return;
+    }
+
     if (!clientId || !origin) {
       setInvalidReason('This link is missing its app details (client_id and origin).');
       return;
     }
 
     fetchJson(
-      `/api/v1/apps/public?clientId=${encodeURIComponent(clientId)}&origin=${encodeURIComponent(origin)}&scope=${encodeURIComponent(scopeParam)}`
-    ).then(
-      (resp) => {
-        if (resp?.ok && resp.app) {
-          setApp(resp.app);
-          setVerifiedOrigin(resp.origin);
-          const list: ScopeDescriptor[] = Array.isArray(resp.scopes) ? resp.scopes : [];
-          setScopes(list);
-          // Everything the platform asked for starts ticked; the user unticks
-          // what they'd rather not share (required scopes can't be unticked).
-          setSelected(Object.fromEntries(list.map((scope) => [scope.id, true])));
-        } else {
-          setNetworkFailed(!!resp?.network);
-          setInvalidReason(resp?.error || 'This app could not be verified.');
-        }
+      `/api/v1/apps/public?clientId=${encodeURIComponent(clientId)}&origin=${encodeURIComponent(origin)}` +
+        `&scope=${encodeURIComponent(scopeParam)}&optional_scope=${encodeURIComponent(optionalScopeParam)}`
+    ).then((resp) => {
+      if (resp?.ok && resp.app) {
+        setApp(resp.app);
+        setVerifiedOrigin(resp.origin);
+        setRequiredScopes(Array.isArray(resp.requiredScopes) ? resp.requiredScopes : []);
+        setOptionalScopes(Array.isArray(resp.optionalScopes) ? resp.optionalScopes : []);
+      } else {
+        setNetworkFailed(!!resp?.network);
+        setInvalidReason(resp?.error || 'This app could not be verified.');
       }
-    );
+    });
 
     // Always resolves (fetchJson never rejects); a failed auth probe just
     // means "not logged in yet" — the login form handles it from there.
@@ -120,6 +249,111 @@ export const AuthorizePage = () => {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Sandbox mode builds its "app" + scope sets client-side from the catalog —
+  // the pretend app is named after the demo's clientId text.
+  React.useEffect(() => {
+    if (!sandbox || !catalog.length) return;
+
+    setApp({ clientId: clientId || 'sandbox', name: clientId && !clientId.startsWith('ttapp_') ? clientId : 'Your App' });
+    try {
+      setVerifiedOrigin(origin ? new URL(origin).origin : null);
+    } catch {
+      setVerifiedOrigin(null);
+    }
+
+    const baseline = catalog.filter((s) => s.baseline).map((s) => s.id);
+    const requestedRequired = scopeParam ? parseScopeList(scopeParam, catalog) : [...defaultScopes];
+    const requiredIds = [...baseline.filter((b) => !anyCovers(requestedRequired, b)), ...requestedRequired];
+    const optionalIds = parseScopeList(optionalScopeParam, catalog).filter((id) => !anyCovers(requiredIds, id));
+
+    const byId = new Map(catalog.map((s) => [s.id, s]));
+    setRequiredScopes(requiredIds.map((id) => byId.get(id)).filter(Boolean) as ScopeDescriptor[]);
+    setOptionalScopes(optionalIds.map((id) => byId.get(id)).filter(Boolean) as ScopeDescriptor[]);
+  }, [sandbox, catalog, defaultScopes, clientId, origin, scopeParam, optionalScopeParam]);
+
+  // Requested scopes start ticked (required ones are locked); extras start off.
+  React.useEffect(() => {
+    setSelected((prev) => {
+      const next: Record<string, boolean> = { ...prev };
+      for (const scope of requiredScopes) next[scope.id] = true;
+      for (const scope of optionalScopes) if (next[scope.id] === undefined) next[scope.id] = true;
+      return next;
+    });
+  }, [requiredScopes, optionalScopes]);
+
+  const requiredIds = React.useMemo(() => requiredScopes.map((s) => s.id), [requiredScopes]);
+  const optionalIds = React.useMemo(() => optionalScopes.map((s) => s.id), [optionalScopes]);
+
+  // The grant the user is currently composing.
+  const selection = React.useMemo(
+    () => [
+      ...requiredIds,
+      ...Object.keys(selected).filter((id) => selected[id] && !requiredIds.includes(id))
+    ],
+    [requiredIds, selected]
+  );
+
+  // "Share more" candidates: leaf/capability/picker scopes neither the
+  // required nor the optional set already covers (namespaces stay out — the
+  // fields say it better). Coverage, not exact id, so a leaf whose ancestor is
+  // already offered never double-appears.
+  const extraScopes = React.useMemo(
+    () =>
+      catalog.filter(
+        (scope) =>
+          scope.kind !== 'namespace' &&
+          !scope.baseline &&
+          !anyCovers(requiredIds, scope.id) &&
+          !anyCovers(optionalIds, scope.id)
+      ),
+    [catalog, requiredIds, optionalIds]
+  );
+
+  const thingsActive = React.useMemo(() => anyCovers(selection, 'things'), [selection]);
+
+  // ---- things picker -------------------------------------------------------
+
+  React.useEffect(() => {
+    if (!thingsActive || pickerThings !== null) return;
+
+    if (sandbox) {
+      // Sandbox always uses mock things — it never reads the real account.
+      setPickerThings(SANDBOX_THINGS);
+      return;
+    }
+    if (!user) return;
+
+    fetchJson(`/api/v1/things/user?username=${encodeURIComponent(user.username)}&limit=${MAX_PICKER_THINGS}`).then(
+      (resp) => {
+        // Distinguish "no things" from "couldn't load" — a failed fetch must
+        // not masquerade as an empty Thingtime (with a retry, not a dead end).
+        if (!resp?.ok || !Array.isArray(resp.posts)) {
+          setPickerError(true);
+          setPickerThings([]);
+          return;
+        }
+        setPickerError(false);
+        setPickerThings(
+          resp.posts.map((post: any) => ({
+            id: String(post.id ?? post.shareId ?? ''),
+            label:
+              (typeof post.text === 'string' && post.text.trim().slice(0, 60)) ||
+              (typeof post.crystal?.text === 'string' && post.crystal.text.trim().slice(0, 60)) ||
+              (Array.isArray(post.tags) && post.tags.length ? `#${post.tags[0]}` : 'Untitled thing'),
+            detail: Array.isArray(post.thingtime) ? post.thingtime.join(' + ') : post.type || 'thing'
+          })).filter((thing: PickerThing) => thing.id)
+        );
+      }
+    );
+  }, [thingsActive, pickerThings, sandbox, user]);
+
+  const pickedIds = React.useMemo(
+    () => Object.keys(pickedThings).filter((id) => pickedThings[id]),
+    [pickedThings]
+  );
+
+  // ---- approve / cancel ----------------------------------------------------
 
   const postToOpener = (payload: Record<string, unknown>) => {
     // targetOrigin is the server-validated origin — the token can only land on
@@ -131,10 +365,39 @@ export const AuthorizePage = () => {
     return false;
   };
 
+  const activeUser = user || (sandbox ? SANDBOX_USER : null);
+
   const approve = async () => {
-    if (!app || !verifiedOrigin || issuing) return;
+    if (!app || issuing) return;
     setIssuing(true);
     setIssueError(null);
+
+    if (sandbox) {
+      // Mirror the server's scope gating: even a pretend handoff only carries
+      // the fields the selection covers — never the raw /auth/me object.
+      postToOpener({
+        type: 'thingtime:login',
+        ok: true,
+        sandbox: true,
+        token: 'tt-sandbox-token',
+        tokenType: 'Bearer',
+        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30).toISOString(),
+        scopes: selection,
+        sharedThings: thingsActive ? pickedIds.length : 0,
+        user: {
+          id: activeUser.id,
+          username: activeUser.username,
+          ...(anyCovers(selection, 'profile.displayName') ? { displayName: activeUser.displayName ?? null } : {}),
+          ...(anyCovers(selection, 'profile.avatar') ? { avatarUrl: activeUser.avatarUrl ?? null } : {})
+        }
+      });
+      setDone('approved');
+      setIssuing(false);
+      setTimeout(() => window.close(), 700);
+      return;
+    }
+
+    if (!verifiedOrigin) return;
 
     const resp = await fetchJson('/api/v1/oauth/authorize', {
       method: 'POST',
@@ -143,7 +406,10 @@ export const AuthorizePage = () => {
         clientId: app.clientId,
         origin: verifiedOrigin,
         scope: scopeParam,
-        scopes: scopes.filter((scope) => scope.required || selected[scope.id]).map((scope) => scope.id)
+        optionalScope: optionalScopeParam,
+        extra: extrasAllowed ? '1' : '0',
+        scopes: selection,
+        sharedThings: thingsActive ? pickedIds : []
       })
     });
 
@@ -155,6 +421,7 @@ export const AuthorizePage = () => {
         tokenType: resp.tokenType,
         expiresAt: resp.expiresAt,
         scopes: resp.scopes,
+        sharedThings: resp.sharedThings,
         user: resp.user
       });
       setDone('approved');
@@ -166,7 +433,7 @@ export const AuthorizePage = () => {
   };
 
   const cancel = () => {
-    postToOpener({ type: 'thingtime:login', ok: false, error: 'cancelled' });
+    postToOpener({ type: 'thingtime:login', ok: false, error: 'cancelled', ...(sandbox ? { sandbox: true } : {}) });
     setDone('cancelled');
     setTimeout(() => window.close(), 400);
   };
@@ -178,6 +445,8 @@ export const AuthorizePage = () => {
       return null;
     }
   }, [verifiedOrigin]);
+
+  // ---- render ---------------------------------------------------------------
 
   let body: React.ReactNode;
 
@@ -197,7 +466,8 @@ export const AuthorizePage = () => {
           </Button>
         ) : (
           <Box color="var(--tt-muted, #9a9aa6)" fontSize="13px">
-            If you run this site, register the app (and this exact origin) under Thingtime apps, then reload.
+            If you run this site, register the app (and this exact origin) under Thingtime apps, then reload —
+            or try the sandbox from /sdk/demo.html.
           </Box>
         )}
       </Flex>
@@ -206,17 +476,20 @@ export const AuthorizePage = () => {
     body = (
       <Flex sx={cardSx} alignItems="flex-start">
         <Kicker>Thingtime · Login with Thingtime</Kicker>
+        {sandbox ? <SandboxChip /> : null}
         <Box as="h1" fontSize="20px" fontWeight="700">
-          {done === 'approved' ? 'You’re signed in ✨' : 'Cancelled'}
+          {done === 'approved' ? (sandbox ? 'Sandbox login complete 🧪' : 'You’re signed in ✨') : 'Cancelled'}
         </Box>
         <Box color="var(--tt-muted, #9a9aa6)" fontSize="14px">
           {done === 'approved'
-            ? `You can head back to ${app?.name || 'the site'} — this window will close itself.`
+            ? sandbox
+              ? 'A pretend token was handed back — no data actually left your account. This window will close itself.'
+              : `You can head back to ${app?.name || 'the site'} — this window will close itself.`
             : 'Nothing was shared. You can close this window.'}
         </Box>
       </Flex>
     );
-  } else if (!app || !checkedAuth) {
+  } else if (!app || (!sandbox && !checkedAuth)) {
     // True cold start (fresh popup): a minimal frame, no spinner flash.
     body = (
       <Flex sx={cardSx}>
@@ -226,9 +499,9 @@ export const AuthorizePage = () => {
         </Box>
       </Flex>
     );
-  } else if (!user) {
+  } else if (!activeUser) {
     body = (
-      <Flex flexDirection="column" gap={3} width="400px" maxWidth="100%">
+      <Flex flexDirection="column" gap={3} width="420px" maxWidth="100%">
         <Flex sx={{ ...cardSx, width: '100%', padding: 5, gap: 1 }}>
           <Kicker>Login with Thingtime</Kicker>
           <Box fontSize="14px" color="var(--tt-muted, #9a9aa6)">
@@ -249,13 +522,14 @@ export const AuthorizePage = () => {
     body = (
       <Flex sx={cardSx}>
         <Kicker>Login with Thingtime</Kicker>
+        {sandbox ? <SandboxChip /> : null}
         <Box as="h1" fontSize="20px" fontWeight="700" lineHeight="1.3">
           {app.name}
         </Box>
         <Box fontSize="14px" color="var(--tt-muted, #9a9aa6)">
-          {originHost} wants to sign you in as{' '}
+          {originHost || 'This site'} wants to sign you in as{' '}
           <Box as="strong" color="var(--tt-text, #1c1c22)">
-            @{user.username}
+            @{activeUser.username}
           </Box>
           .
         </Box>
@@ -279,49 +553,126 @@ export const AuthorizePage = () => {
           >
             It’s asking to
           </Box>
-          {scopes.map((scope) => {
-            const checked = scope.required || !!selected[scope.id];
-            return (
-              <Flex
-                key={scope.id}
-                as="label"
-                gap={3}
-                alignItems="flex-start"
-                padding={2}
-                borderRadius="var(--tt-radius-sm, 9px)"
-                cursor={scope.required ? 'default' : 'pointer'}
-                _hover={scope.required ? undefined : { background: 'var(--tt-surface-alt, #f5f5f7)' }}
-              >
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  disabled={scope.required}
-                  onChange={(event) =>
-                    setSelected((prev) => ({ ...prev, [scope.id]: event.target.checked }))
-                  }
-                  style={{ marginTop: '3px', accentColor: 'var(--tt-text, #1c1c22)' }}
-                />
-                <Box fontSize="14px">
-                  <Box as="span" fontWeight="600">
-                    {SCOPE_EMOJI[scope.id] || '🔐'} {scope.title}
-                  </Box>
-                  {scope.required ? (
-                    <Box as="span" fontSize="12px" color="var(--tt-muted, #9a9aa6)">
-                      {' '}
-                      · always shared
-                    </Box>
-                  ) : null}
-                  <Box fontSize="13px" color="var(--tt-muted, #9a9aa6)">
-                    {scope.description}
-                  </Box>
-                </Box>
+          {requiredScopes.map((scope) => (
+            <ScopeRow key={scope.id} scope={scope} checked locked onChange={() => {}} />
+          ))}
+          {optionalScopes.map((scope) => (
+            <ScopeRow
+              key={scope.id}
+              scope={scope}
+              checked={!!selected[scope.id]}
+              locked={false}
+              onChange={(checked) => setSelected((prev) => ({ ...prev, [scope.id]: checked }))}
+            />
+          ))}
+        </Flex>
+
+        {extrasAllowed && extraScopes.length ? (
+          <Flex flexDirection="column" gap={1}>
+            <Button
+              variant="ghost"
+              size="sm"
+              alignSelf="flex-start"
+              paddingX={2}
+              fontWeight="600"
+              color="var(--tt-muted, #9a9aa6)"
+              onClick={() => setShowExtras((open) => !open)}
+              aria-expanded={showExtras}
+            >
+              {showExtras ? '▾' : '▸'} Share more from your Thingtime ✨
+            </Button>
+            {showExtras ? (
+              <Flex flexDirection="column" gap={1} role="group" aria-label="Share more from your Thingtime">
+                {extraScopes.map((scope) => (
+                  <ScopeRow
+                    key={scope.id}
+                    scope={scope}
+                    checked={!!selected[scope.id]}
+                    locked={false}
+                    onChange={(checked) => setSelected((prev) => ({ ...prev, [scope.id]: checked }))}
+                  />
+                ))}
               </Flex>
-            );
-          })}
-          <Flex gap={2} alignItems="center" fontSize="13px" color="var(--tt-muted, #9a9aa6)" paddingTop={1}>
-            <Box>🔒</Box>
-            <Box>It can never read your posts, password, or anything another app stored.</Box>
+            ) : null}
           </Flex>
+        ) : null}
+
+        {thingsActive ? (
+          <Flex
+            flexDirection="column"
+            gap={1}
+            padding={3}
+            borderRadius="var(--tt-radius-md, 12px)"
+            background="var(--tt-surface-alt, #f5f5f7)"
+            role="group"
+            aria-label="Pick things to share"
+          >
+            <Box fontSize="13px" fontWeight="600">
+              🗂️ Pick the things to share ({pickedIds.length} selected)
+            </Box>
+            <Box fontSize="12px" color="var(--tt-muted, #9a9aa6)">
+              Only the things you tick here are shared — read-only, just with this app.
+            </Box>
+            {pickerThings === null ? (
+              <Box fontSize="13px" color="var(--tt-muted, #9a9aa6)" paddingY={1}>
+                Loading your things…
+              </Box>
+            ) : pickerError ? (
+              <Flex gap={2} alignItems="center" paddingY={1}>
+                <Box fontSize="13px" color="var(--tt-muted, #9a9aa6)">
+                  Couldn’t load your things.
+                </Box>
+                <Button
+                  size="xs"
+                  variant="ghost"
+                  onClick={() => {
+                    setPickerError(false);
+                    setPickerThings(null);
+                  }}
+                >
+                  Retry
+                </Button>
+              </Flex>
+            ) : pickerThings.length ? (
+              <Flex flexDirection="column" maxHeight="160px" overflowY="auto">
+                {pickerThings.map((thing) => (
+                  <Flex
+                    key={thing.id}
+                    as="label"
+                    gap={2}
+                    alignItems="center"
+                    paddingY={1}
+                    cursor="pointer"
+                    fontSize="13px"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={!!pickedThings[thing.id]}
+                      onChange={(event) =>
+                        setPickedThings((prev) => ({ ...prev, [thing.id]: event.target.checked }))
+                      }
+                      style={{ accentColor: 'var(--tt-text, #1c1c22)' }}
+                    />
+                    <Box as="span" noOfLines={1}>
+                      {thing.label}
+                    </Box>
+                    <Box as="span" fontSize="11px" color="var(--tt-muted, #9a9aa6)" flexShrink={0}>
+                      {thing.detail}
+                    </Box>
+                  </Flex>
+                ))}
+              </Flex>
+            ) : (
+              <Box fontSize="13px" color="var(--tt-muted, #9a9aa6)" paddingY={1}>
+                Nothing to share yet — your Thingtime is empty.
+              </Box>
+            )}
+          </Flex>
+        ) : null}
+
+        <Flex gap={2} alignItems="center" fontSize="13px" color="var(--tt-muted, #9a9aa6)">
+          <Box>🔒</Box>
+          <Box>It only ever gets what’s ticked above — never your password, posts, or other apps’ data.</Box>
         </Flex>
 
         {issueError ? (
@@ -339,7 +690,7 @@ export const AuthorizePage = () => {
             color="var(--tt-card, #ffffff)"
             _hover={{ opacity: 0.9 }}
           >
-            Continue as @{user.username}
+            Continue as @{activeUser.username}
           </Button>
           <Button onClick={cancel} variant="ghost">
             Cancel

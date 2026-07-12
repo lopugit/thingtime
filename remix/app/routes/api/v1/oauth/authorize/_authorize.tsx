@@ -2,16 +2,23 @@ import { json, readJsonBody } from '~/api/http';
 
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { appAllowsOrigin, findAppByClientId, normalizeAppOrigin } from '~/api/utils/apps/apps';
-import { issueAppToken, toEmbedUser } from '~/api/utils/apps/appTokens';
-import { parseScopeParam, sanitizeGrantedScopes } from '~/api/utils/apps/scopes';
+import { issueAppToken } from '~/api/utils/apps/appTokens';
+import { parseScopeParam, sanitizeGrantedScopes, scopeCovers } from '~/api/utils/apps/scopes';
+import { sanitizeSharedThings } from '~/api/utils/apps/sharedThings';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 
-// POST /api/v1/oauth/authorize — { clientId, origin, scope?, scopes? } — the
-// consent step of the "Login with Thingtime" popup. `scope` is the
-// space-delimited set the PLATFORM requested (from the popup URL); `scopes`
-// is the subset the USER approved on the permissions selector. The grant is
-// their intersection (consent can narrow a request, never widen it), stored
-// on the app session and enforced by every app-token endpoint.
+// POST /api/v1/oauth/authorize — the consent step of the "Login with
+// Thingtime" popup. Body:
+//   clientId, origin       — the app + the embedding origin (allowlist-checked)
+//   scope                  — space-delimited REQUIRED scopes the platform declared
+//   optionalScope          — space-delimited OPTIONAL scopes it also asked for
+//   extra                  — '0' when the platform opted out of volunteer sharing
+//   scopes                 — the paths the USER approved on the permissions selector
+//   sharedThings           — shareIds hand-picked for the 'things' picker scope
+// The grant must cover every required scope, may include the approved
+// optionals, and (unless extra='0') any known scope the user volunteered —
+// consent can reshape a request, but the platform's REQUIRED floor holds and
+// nothing unknown ever enters a grant.
 //
 // Requires the user's real session (cookie); app-scoped bearer tokens are
 // rejected by getCurrentUser, so a leaked app token can never mint further
@@ -28,21 +35,31 @@ export const action = async ({ request }: { request: Request }) => {
     return json({ ok: false, error: 'Too many authorizations — take a breather 🌸' }, rateLimitedResponseInit(limit));
   }
 
-  const body = await readJsonBody(request, 8 * 1024);
+  const body = await readJsonBody(request, 32 * 1024);
   const clientId = typeof body?.clientId === 'string' ? body.clientId.trim() : '';
   const origin = normalizeAppOrigin(body?.origin);
 
   if (!clientId) return json({ ok: false, error: 'clientId is required' }, { status: 400 });
   if (!origin) return json({ ok: false, error: 'origin must be a valid web origin' }, { status: 400 });
 
-  const requested = parseScopeParam(body?.scope);
-  if (requested.ok === false) {
-    return json({ ok: false, error: requested.error }, { status: 400 });
-  }
+  const required = parseScopeParam(body?.scope);
+  if (required.ok === false) return json({ ok: false, error: required.error }, { status: 400 });
 
-  const granted = sanitizeGrantedScopes(body?.scopes, requested.scopes);
-  if (granted.ok === false) {
-    return json({ ok: false, error: granted.error }, { status: 400 });
+  const optional = parseScopeParam(body?.optionalScope, [], false);
+  if (optional.ok === false) return json({ ok: false, error: optional.error }, { status: 400 });
+
+  const allowExtra = body?.extra !== '0' && body?.extra !== 0 && body?.extra !== false;
+
+  const granted = sanitizeGrantedScopes(body?.scopes, required.scopes, optional.scopes, allowExtra);
+  if (granted.ok === false) return json({ ok: false, error: granted.error }, { status: 400 });
+
+  // The things picker: only meaningful when the grant includes the scope, and
+  // every picked id must be a thing this user owns.
+  let sharedThings: string[] = [];
+  if (scopeCovers(granted.scopes, 'things')) {
+    const picked = await sanitizeSharedThings(user.id, body?.sharedThings);
+    if (picked.ok === false) return json({ ok: false, error: picked.error }, { status: picked.status });
+    sharedThings = picked.sharedThings;
   }
 
   const app = await findAppByClientId(clientId);
@@ -52,7 +69,11 @@ export const action = async ({ request }: { request: Request }) => {
     return json({ ok: false, error: 'This origin is not on the app’s allowlist' }, { status: 403 });
   }
 
-  const grant = await issueAppToken(user.id, clientId, origin, granted.scopes);
+  const grant = await issueAppToken(user.id, clientId, origin, granted.scopes, sharedThings);
+
+  // The handoff user object honours the grant exactly like /oauth/userinfo —
+  // a field the user didn't share never crosses to the platform.
+  const has = (path: string) => scopeCovers(grant.scopes, path);
 
   return json({
     ok: true,
@@ -60,6 +81,12 @@ export const action = async ({ request }: { request: Request }) => {
     tokenType: grant.tokenType,
     expiresAt: grant.expiresAt.toISOString(),
     scopes: grant.scopes,
-    user: toEmbedUser(user)
+    sharedThings: grant.sharedThings.length,
+    user: {
+      id: user.id,
+      username: user.username,
+      ...(has('profile.displayName') ? { displayName: user.displayName } : {}),
+      ...(has('profile.avatar') ? { avatarUrl: user.avatarUrl } : {})
+    }
   });
 };

@@ -31,22 +31,29 @@ export const toEmbedUser = (user: PublicUser): EmbedUser => ({
   avatarUrl: user.avatarUrl
 });
 
-export type AppTokenGrant = { token: string; tokenType: 'Bearer'; expiresAt: Date; scopes: AppScopeId[] };
+export type AppTokenGrant = {
+  token: string;
+  tokenType: 'Bearer';
+  expiresAt: Date;
+  scopes: AppScopeId[];
+  sharedThings: string[];
+};
 
 export const issueAppToken = async (
   userId: string,
   clientId: string,
   origin: string,
-  scopes: AppScopeId[]
+  scopes: AppScopeId[],
+  sharedThings: string[] = []
 ): Promise<AppTokenGrant> => {
   const expiresAt = new Date(Date.now() + APP_TOKEN_TTL_MS);
   const session = await createSession(userId, {
     purpose: 'app',
     expiresAt,
-    meta: { clientId, origin, scopes }
+    meta: { clientId, origin, scopes, sharedThings }
   });
   const token = await signJwt({ sub: userId, jti: session.jti, expiresIn: '30d' });
-  return { token, tokenType: 'Bearer', expiresAt, scopes };
+  return { token, tokenType: 'Bearer', expiresAt, scopes, sharedThings };
 };
 
 export type AppTokenContext = {
@@ -55,6 +62,7 @@ export type AppTokenContext = {
   origin: string;
   jti: string;
   scopes: AppScopeId[];
+  sharedThings: string[];
 };
 
 // Resolve an app-scoped Bearer token, or null. Bearer-only on purpose: app
@@ -84,11 +92,16 @@ export const resolveAppToken = async (request: Request): Promise<AppTokenContext
   const user = await findUserById(claims.sub);
   if (!user) return null;
 
+  const sharedThings = Array.isArray(session.meta?.sharedThings)
+    ? session.meta.sharedThings.filter((id: unknown) => typeof id === 'string')
+    : [];
+
   return {
     user: toPublicUser(user),
     clientId,
     origin,
     jti: claims.jti,
-    scopes: sessionScopes(session.meta)
+    scopes: sessionScopes(session.meta),
+    sharedThings
   };
 };

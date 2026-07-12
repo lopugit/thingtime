@@ -50,6 +50,8 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/oauth/authorize': () => import('../../../app/routes/api/v1/oauth/authorize/_authorize'),
   'v1/oauth/grants': () => import('../../../app/routes/api/v1/oauth/grants/_grants'),
   'v1/oauth/grants/revoke': () => import('../../../app/routes/api/v1/oauth/grants/revoke/_revoke'),
+  'v1/oauth/scopes': () => import('../../../app/routes/api/v1/oauth/scopes/_scopes'),
+  'v1/oauth/shared': () => import('../../../app/routes/api/v1/oauth/shared/_shared'),
   'v1/oauth/userinfo': () => import('../../../app/routes/api/v1/oauth/userinfo/_userinfo'),
   'v1/schemas': () => import('../../../app/routes/api/v1/schemas/_schemas'),
   'v1/template': () => import('../../../app/routes/api/v1/template/_template'),

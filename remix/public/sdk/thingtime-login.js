@@ -56,12 +56,22 @@
 
   /**
    * Open the "Login with Thingtime" popup.
-   * @param {{ clientId: string, scopes?: string[], baseUrl?: string }} options
-   *   scopes — permissions to request: 'profile' (always granted), 'email',
-   *   'app-data'. Defaults to ['profile', 'app-data']. The user picks what to
-   *   actually share on the consent screen, so read `session.scopes` for what
-   *   you really got.
-   * @returns {Promise<{ token: string, tokenType: string, expiresAt: string, scopes: string[], user: Object }>}
+   * @param {{
+   *   clientId: string,
+   *   scopes?: string[],         // REQUIRED permission paths (the user can't untick these — only cancel)
+   *   optionalScopes?: string[], // nice-to-have paths the user can untick
+   *   allowExtra?: boolean,      // default true: the user may volunteer MORE data than you asked for
+   *   sandbox?: boolean,         // demo mode: full consent UI, fake token, nothing really shared
+   *   baseUrl?: string
+   * }} options
+   *   Scope paths are hierarchical — 'profile' covers every profile.* leaf;
+   *   ask for exactly what you need ('profile.avatar', 'email', 'app-data',
+   *   'things' — the user hand-picks which things). Catalog:
+   *   GET /api/v1/oauth/scopes. Always read `session.scopes` for what the
+   *   user ACTUALLY granted — well-built platforms light features up
+   *   dynamically from it.
+   * @returns {Promise<{ token: string, tokenType: string, expiresAt: string,
+   *   scopes: string[], sharedThings: number, sandbox?: boolean, user: Object }>}
    */
   function login(options) {
     options = options || {};
@@ -76,6 +86,7 @@
 
       var state = randomState();
       var scope = Array.isArray(options.scopes) ? options.scopes.join(' ') : '';
+      var optionalScope = Array.isArray(options.optionalScopes) ? options.optionalScopes.join(' ') : '';
       var url =
         base +
         '/authorize?client_id=' +
@@ -84,7 +95,10 @@
         encodeURIComponent(window.location.origin) +
         '&state=' +
         encodeURIComponent(state) +
-        (scope ? '&scope=' + encodeURIComponent(scope) : '');
+        (scope ? '&scope=' + encodeURIComponent(scope) : '') +
+        (optionalScope ? '&optional_scope=' + encodeURIComponent(optionalScope) : '') +
+        (options.allowExtra === false ? '&extra=0' : '') +
+        (options.sandbox ? '&sandbox=1' : '');
 
       var left = Math.max(0, Math.round((window.screen.width - POPUP_WIDTH) / 2));
       var top = Math.max(0, Math.round((window.screen.height - POPUP_HEIGHT) / 2));
@@ -125,6 +139,8 @@
             tokenType: data.tokenType || 'Bearer',
             expiresAt: data.expiresAt,
             scopes: data.scopes || ['profile', 'app-data'],
+            sharedThings: data.sharedThings || 0,
+            sandbox: data.sandbox === true,
             user: data.user
           });
         } else {
@@ -264,7 +280,10 @@
    * @param {Element} el
    * @param {{
    *   clientId: string,
-   *   scopes?: string[],            // permissions to request (see login())
+   *   scopes?: string[],            // required permissions (see login())
+   *   optionalScopes?: string[],    // nice-to-have permissions
+   *   allowExtra?: boolean,         // let the user volunteer more (default true)
+   *   sandbox?: boolean,            // demo mode — fake token, nothing shared
    *   theme?: 'light'|'dark'|'rainbow',
    *   size?: 'sm'|'md'|'lg',
    *   text?: string,
@@ -310,7 +329,14 @@
 
     button.addEventListener('click', function () {
       button.disabled = true;
-      login({ clientId: options.clientId, scopes: options.scopes, baseUrl: options.baseUrl })
+      login({
+        clientId: options.clientId,
+        scopes: options.scopes,
+        optionalScopes: options.optionalScopes,
+        allowExtra: options.allowExtra,
+        sandbox: options.sandbox,
+        baseUrl: options.baseUrl
+      })
         .then(function (session) {
           button.disabled = false;
           if (options.onLogin) options.onLogin(session);
@@ -325,10 +351,34 @@
     return button;
   }
 
+  /**
+   * The things the user hand-picked to share with your app ('things' scope):
+   * read-only [{ shareId, thingtime, crystal, tags, createdAt, updatedAt }].
+   * @param {string} token — the token from login()
+   * @param {{ baseUrl?: string }} [options]
+   */
+  function shared(token, options) {
+    options = options || {};
+    var base = (options.baseUrl || DEFAULT_BASE).replace(/\/+$/, '');
+    return fetch(base + '/api/v1/oauth/shared', {
+      headers: { Authorization: 'Bearer ' + token }
+    }).then(function (response) {
+      return response.json().then(function (payload) {
+        if (!payload || payload.ok !== true) {
+          var error = new Error((payload && payload.error) || 'Thingtime request failed');
+          error.status = response.status;
+          throw error;
+        }
+        return payload.things || [];
+      });
+    });
+  }
+
   window.Thingtime = window.Thingtime || {};
   window.Thingtime.login = login;
   window.Thingtime.data = data;
   window.Thingtime.userinfo = userinfo;
+  window.Thingtime.shared = shared;
   window.Thingtime.renderButton = renderButton;
-  window.Thingtime.sdkVersion = '1.1.0';
+  window.Thingtime.sdkVersion = '1.2.0';
 })();

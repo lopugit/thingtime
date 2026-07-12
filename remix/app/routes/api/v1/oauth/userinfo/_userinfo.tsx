@@ -1,14 +1,20 @@
 import { json } from '~/api/http';
 
 import { getJwtIssuer } from '~/api/utils/auth/jwt';
-import { resolveAppToken, toEmbedUser } from '~/api/utils/apps/appTokens';
+import { resolveAppToken } from '~/api/utils/apps/appTokens';
 import { appCorsHeaders, appDataPreflight } from '~/api/utils/apps/cors';
+import { scopeCovers } from '~/api/utils/apps/scopes';
 
 // GET /api/v1/oauth/userinfo — the SSO identity endpoint: a platform holding
-// an app-scoped Bearer token reads the user it was granted for. Base fields
-// are the public profile (the mandatory 'profile' scope) plus a Thingtime
-// profile link; email is included only when the user granted the 'email'
-// scope on the consent screen. Same CORS + origin binding as /app-data.
+// an app-scoped Bearer token reads the user it was granted for. Every field
+// beyond the identity itself is gated by its own scope path, so the response
+// mirrors exactly what the user chose on the consent screen:
+//   id, username, profileUrl        — always (profile.username baseline)
+//   displayName / avatarUrl / bio / bannerUrl — profile.<field> (or profile)
+//   email                            — email scope
+// Well-built platforms read `scopes` and light up features for whatever the
+// user shared ("auto" sharing) instead of assuming a fixed shape. Same CORS +
+// origin binding as /app-data.
 export const loader = async ({ request }: { request: Request }) => {
   const requestOrigin = request.headers.get('Origin');
   const cors = appCorsHeaders(requestOrigin);
@@ -23,15 +29,22 @@ export const loader = async ({ request }: { request: Request }) => {
   }
 
   const issuer = getJwtIssuer().replace(/\/+$/, '');
+  const has = (path: string) => scopeCovers(ctx.scopes, path);
 
   return json(
     {
       ok: true,
       scopes: ctx.scopes,
+      sharedThings: has('things') ? ctx.sharedThings.length : 0,
       user: {
-        ...toEmbedUser(ctx.user),
+        id: ctx.user.id,
+        username: ctx.user.username,
         profileUrl: `${issuer}/profile/${encodeURIComponent(ctx.user.username)}`,
-        ...(ctx.scopes.includes('email') ? { email: ctx.user.email } : {})
+        ...(has('profile.displayName') ? { displayName: ctx.user.displayName } : {}),
+        ...(has('profile.avatar') ? { avatarUrl: ctx.user.avatarUrl } : {}),
+        ...(has('profile.bio') ? { bio: ctx.user.bio } : {}),
+        ...(has('profile.banner') ? { bannerUrl: ctx.user.bannerUrl } : {}),
+        ...(has('email') ? { email: ctx.user.email } : {})
       }
     },
     { headers: cors }

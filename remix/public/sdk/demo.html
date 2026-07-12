@@ -53,19 +53,28 @@
   <body>
     <h1>Login with Thingtime — demo embed 🌈</h1>
     <p class="muted">
-      This page plays the role of a third-party website. Register an app on Thingtime
-      (<code>POST /api/v1/apps</code>) with THIS page's origin on its allowlist, paste the
-      clientId below, and the whole popup → token → data-storage loop runs against the real API.
+      This page plays the role of a third-party website. With the prefilled "Your App" id the
+      button runs a <strong>sandbox</strong> — the real consent popup with the full permissions
+      selector, a pretend token, nothing actually shared. Paste a real <code>ttapp_…</code>
+      clientId (register via <code>POST /api/v1/apps</code> with this page's origin) and the same
+      loop runs live against the real API.
     </p>
 
     <div class="row">
-      <input id="client-id" placeholder="ttapp_… (your app's clientId)" autocomplete="off" />
+      <input id="client-id" value="Your App" autocomplete="off" />
+    </div>
+    <p class="muted" id="mode-note" style="margin: -4px 0 0;"></p>
+    <div class="row" style="align-items:center; gap:14px; font-size:13px; flex-wrap: wrap;">
+      <span class="muted">Require:</span>
+      <label><input type="checkbox" checked disabled /> profile.username</label>
+      <label><input type="checkbox" id="req-app-data" checked /> app-data</label>
+      <span class="muted">Optional:</span>
+      <label><input type="checkbox" id="opt-email" checked /> email</label>
+      <label><input type="checkbox" id="opt-avatar" checked /> profile.avatar</label>
+      <label><input type="checkbox" id="opt-things" /> things</label>
     </div>
     <div class="row" style="align-items:center; gap:14px; font-size:13px;">
-      <span class="muted">Ask for:</span>
-      <label><input type="checkbox" checked disabled /> profile</label>
-      <label><input type="checkbox" id="scope-email" /> email</label>
-      <label><input type="checkbox" id="scope-app-data" checked /> app-data</label>
+      <label><input type="checkbox" id="allow-extra" checked /> allow extra sharing</label>
       <select id="btn-theme">
         <option value="light">light</option>
         <option value="dark">dark</option>
@@ -85,6 +94,7 @@
     </div>
     <div class="row">
       <button class="plain" id="btn-userinfo">userinfo</button>
+      <button class="plain" id="btn-shared">shared</button>
       <button class="plain" id="btn-set">set</button>
       <button class="plain" id="btn-get">get</button>
       <button class="plain" id="btn-list">list</button>
@@ -102,25 +112,51 @@
         logEl.textContent = '[' + label + ']\n' + JSON.stringify(value, null, 2);
       }
 
+      // Sandbox rule: anything that isn't a real ttapp_ clientId (like the
+      // prefilled "Your App") drives the consent popup in sandbox mode — full
+      // permissions UI, pretend token, nothing shared. Real ids run live.
+      function isSandbox() {
+        return !document.getElementById('client-id').value.trim().startsWith('ttapp_');
+      }
+      function requiredScopes() {
+        var scopes = ['profile.username'];
+        if (document.getElementById('req-app-data').checked) scopes.push('app-data');
+        return scopes;
+      }
+      function optionalScopes() {
+        var scopes = [];
+        if (document.getElementById('opt-email').checked) scopes.push('email');
+        if (document.getElementById('opt-avatar').checked) scopes.push('profile.avatar');
+        if (document.getElementById('opt-things').checked) scopes.push('things');
+        return scopes;
+      }
+
       // Re-render the button whenever any config field changes so the click
       // always uses the current values.
       var mount = document.getElementById('login-mount');
-      function selectedScopes() {
-        var scopes = ['profile'];
-        if (document.getElementById('scope-email').checked) scopes.push('email');
-        if (document.getElementById('scope-app-data').checked) scopes.push('app-data');
-        return scopes;
-      }
+      var modeNote = document.getElementById('mode-note');
       function renderLoginButton() {
         mount.innerHTML = '';
+        modeNote.textContent = isSandbox()
+          ? '🧪 sandbox mode — the popup demos the permissions UI with a pretend token'
+          : '🔴 live mode — this clientId will mint a real token';
         Thingtime.renderButton(mount, {
           clientId: document.getElementById('client-id').value.trim(),
-          scopes: selectedScopes(),
+          scopes: requiredScopes(),
+          optionalScopes: optionalScopes(),
+          allowExtra: document.getElementById('allow-extra').checked,
+          sandbox: isSandbox(),
           theme: document.getElementById('btn-theme').value,
           size: document.getElementById('btn-size').value,
           onLogin: function (s) {
             session = s;
-            log('logged in', { user: s.user, scopes: s.scopes, expiresAt: s.expiresAt });
+            log(s.sandbox ? 'sandbox logged in' : 'logged in', {
+              user: s.user,
+              scopes: s.scopes,
+              sharedThings: s.sharedThings,
+              sandbox: s.sandbox || undefined,
+              expiresAt: s.expiresAt
+            });
           },
           onError: function (err) {
             log('login error', String(err && err.message ? err.message : err));
@@ -131,24 +167,45 @@
       // 'change' — 'change' fires on blur, and the blur caused by clicking the
       // login button would replace the button mid-click and swallow it.
       document.getElementById('client-id').addEventListener('input', renderLoginButton);
-      ['scope-email', 'scope-app-data', 'btn-theme', 'btn-size'].forEach(function (id) {
-        document.getElementById(id).addEventListener('change', renderLoginButton);
-      });
+      ['req-app-data', 'opt-email', 'opt-avatar', 'opt-things', 'allow-extra', 'btn-theme', 'btn-size'].forEach(
+        function (id) {
+          document.getElementById(id).addEventListener('change', renderLoginButton);
+        }
+      );
       renderLoginButton();
 
+      // Sandbox sessions hold a pretend token — the live APIs would 401, so
+      // the playground says so instead of calling them.
+      function guardSandbox() {
+        if (!session) {
+          log('error', 'Log in first');
+          return true;
+        }
+        if (session.sandbox) {
+          log('sandbox', 'This is a pretend token — register a real app (POST /api/v1/apps) and paste its ttapp_… id to call the live APIs.');
+          return true;
+        }
+        return false;
+      }
+
       document.getElementById('btn-userinfo').addEventListener('click', function () {
-        if (!session) return log('error', 'Log in first');
+        if (guardSandbox()) return;
         Thingtime.userinfo(session.token).then(
           function (info) { log('userinfo', info); },
           function (err) { log('userinfo error', String(err.message || err)); }
         );
       });
 
+      document.getElementById('btn-shared').addEventListener('click', function () {
+        if (guardSandbox()) return;
+        Thingtime.shared(session.token).then(
+          function (things) { log('shared things', things); },
+          function (err) { log('shared error', String(err.message || err)); }
+        );
+      });
+
       function withSession(fn) {
-        if (!session) {
-          log('error', 'Log in first');
-          return;
-        }
+        if (guardSandbox()) return;
         fn(Thingtime.data(session.token));
       }
 
