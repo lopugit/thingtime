@@ -61,6 +61,22 @@
     <div class="row">
       <input id="client-id" placeholder="ttapp_… (your app's clientId)" autocomplete="off" />
     </div>
+    <div class="row" style="align-items:center; gap:14px; font-size:13px;">
+      <span class="muted">Ask for:</span>
+      <label><input type="checkbox" checked disabled /> profile</label>
+      <label><input type="checkbox" id="scope-email" /> email</label>
+      <label><input type="checkbox" id="scope-app-data" checked /> app-data</label>
+      <select id="btn-theme">
+        <option value="light">light</option>
+        <option value="dark">dark</option>
+        <option value="rainbow">rainbow</option>
+      </select>
+      <select id="btn-size">
+        <option value="sm">sm</option>
+        <option value="md" selected>md</option>
+        <option value="lg">lg</option>
+      </select>
+    </div>
     <div class="row" id="login-mount"></div>
 
     <div class="row">
@@ -68,6 +84,7 @@
       <input id="data-value" placeholder='value JSON (e.g. {"theme":"rainbow"})' autocomplete="off" />
     </div>
     <div class="row">
+      <button class="plain" id="btn-userinfo">userinfo</button>
       <button class="plain" id="btn-set">set</button>
       <button class="plain" id="btn-get">get</button>
       <button class="plain" id="btn-list">list</button>
@@ -85,24 +102,47 @@
         logEl.textContent = '[' + label + ']\n' + JSON.stringify(value, null, 2);
       }
 
-      // Re-render the button whenever the clientId field changes so the click
-      // always uses the current value.
+      // Re-render the button whenever any config field changes so the click
+      // always uses the current values.
       var mount = document.getElementById('login-mount');
+      function selectedScopes() {
+        var scopes = ['profile'];
+        if (document.getElementById('scope-email').checked) scopes.push('email');
+        if (document.getElementById('scope-app-data').checked) scopes.push('app-data');
+        return scopes;
+      }
       function renderLoginButton() {
         mount.innerHTML = '';
         Thingtime.renderButton(mount, {
           clientId: document.getElementById('client-id').value.trim(),
+          scopes: selectedScopes(),
+          theme: document.getElementById('btn-theme').value,
+          size: document.getElementById('btn-size').value,
           onLogin: function (s) {
             session = s;
-            log('logged in', { user: s.user, expiresAt: s.expiresAt });
+            log('logged in', { user: s.user, scopes: s.scopes, expiresAt: s.expiresAt });
           },
           onError: function (err) {
             log('login error', String(err && err.message ? err.message : err));
           }
         });
       }
-      document.getElementById('client-id').addEventListener('change', renderLoginButton);
+      // The text field re-renders on 'input' (per keystroke/paste), NOT
+      // 'change' — 'change' fires on blur, and the blur caused by clicking the
+      // login button would replace the button mid-click and swallow it.
+      document.getElementById('client-id').addEventListener('input', renderLoginButton);
+      ['scope-email', 'scope-app-data', 'btn-theme', 'btn-size'].forEach(function (id) {
+        document.getElementById(id).addEventListener('change', renderLoginButton);
+      });
       renderLoginButton();
+
+      document.getElementById('btn-userinfo').addEventListener('click', function () {
+        if (!session) return log('error', 'Log in first');
+        Thingtime.userinfo(session.token).then(
+          function (info) { log('userinfo', info); },
+          function (err) { log('userinfo error', String(err.message || err)); }
+        );
+      });
 
       function withSession(fn) {
         if (!session) {

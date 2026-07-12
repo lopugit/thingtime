@@ -80,48 +80,52 @@ export const setAppData = async (
   await ensureIndexes();
   const things = await getThingsCollection();
   const filter = { thingtime: 'app-data', ownerId, 'crystal.appId': appId, 'crystal.key': key };
-  const now = new Date();
 
-  const updated = await things.findOneAndUpdate(
-    filter,
-    { $set: { 'crystal.value': value, updatedAt: now } },
-    { returnDocument: 'after' }
-  );
-  if (updated) return { ok: true, entry: toEntry(updated) };
+  // update-then-insert, retried: a racing set() of the same new key loses the
+  // insert to the unique index and folds into an update on the next pass; a
+  // set() racing a delete of the winner just inserts on the next pass. Two
+  // full passes always suffice for one interleaving; the bound only trips
+  // under sustained adversarial interleaving, which gets a structured 503
+  // instead of a raw duplicate-key 500.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const now = new Date();
 
-  // New key: soft product cap on keys per (user, app), then insert. A racing
-  // duplicate insert loses to the unique index and folds into an update.
-  const count = await things.countDocuments({ thingtime: 'app-data', ownerId, 'crystal.appId': appId });
-  if (count >= MAX_APP_DATA_KEYS_PER_APP_USER) {
-    return fail(400, `An app can store at most ${MAX_APP_DATA_KEYS_PER_APP_USER} keys per user`);
-  }
-
-  const doc = {
-    shareId: randomUUID(),
-    schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
-    thingtime: ['app-data'],
-    crystal: { appId, key, value },
-    ownerId,
-    acl: [ACL_OWNER],
-    targetId: null,
-    tags: [],
-    createdAt: now,
-    updatedAt: now
-  };
-
-  try {
-    await things.insertOne(doc as any);
-    return { ok: true, entry: toEntry(doc) };
-  } catch (err: any) {
-    if (err?.code !== 11000) throw err;
-    const raced = await things.findOneAndUpdate(
+    const updated = await things.findOneAndUpdate(
       filter,
       { $set: { 'crystal.value': value, updatedAt: now } },
       { returnDocument: 'after' }
     );
-    if (raced) return { ok: true, entry: toEntry(raced) };
-    throw err;
+    if (updated) return { ok: true, entry: toEntry(updated) };
+
+    // New key: soft product cap on keys per (user, app), then insert.
+    const count = await things.countDocuments({ thingtime: 'app-data', ownerId, 'crystal.appId': appId });
+    if (count >= MAX_APP_DATA_KEYS_PER_APP_USER) {
+      return fail(400, `An app can store at most ${MAX_APP_DATA_KEYS_PER_APP_USER} keys per user`);
+    }
+
+    const doc = {
+      shareId: randomUUID(),
+      schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+      thingtime: ['app-data'],
+      crystal: { appId, key, value },
+      ownerId,
+      acl: [ACL_OWNER],
+      targetId: null,
+      tags: [],
+      createdAt: now,
+      updatedAt: now
+    };
+
+    try {
+      await things.insertOne(doc as any);
+      return { ok: true, entry: toEntry(doc) };
+    } catch (err: any) {
+      if (err?.code !== 11000) throw err;
+      // lost the insert race — loop back to the update path
+    }
   }
+
+  return fail(503, 'Storage is busy for this key — try again');
 };
 
 export const deleteAppData = async (

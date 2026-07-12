@@ -1,9 +1,9 @@
-import { json, readJsonBody } from '~/api/http';
+import { json } from '~/api/http';
 
 import { resolveAppToken } from '~/api/utils/apps/appTokens';
 import type { AppTokenContext } from '~/api/utils/apps/appTokens';
 import { getAppData, listAppData, setAppData } from '~/api/utils/apps/appData';
-import { appCorsHeaders, appDataPreflight } from '~/api/utils/apps/cors';
+import { appCorsHeaders, appDataPreflight, readJsonBodyWithCors } from '~/api/utils/apps/cors';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 
 // The embed data API: an app-scoped Bearer token (minted by /oauth/authorize)
@@ -30,6 +30,15 @@ const resolveAppRequest = async (request: Request): Promise<AppRequestContext | 
 
   if (requestOrigin && requestOrigin !== ctx.origin) {
     return json({ ok: false, error: 'Origin does not match this token' }, { status: 403, headers: cors });
+  }
+
+  // Storage needs the 'app-data' scope — the user can decline it on the
+  // consent screen and still log in with just their identity.
+  if (!ctx.scopes.includes('app-data')) {
+    return json(
+      { ok: false, error: 'This token was not granted the app-data scope' },
+      { status: 403, headers: cors }
+    );
   }
 
   return { ctx, cors };
@@ -73,7 +82,7 @@ export const action = async ({ request }: { request: Request }) => {
     );
   }
 
-  const body = await readJsonBody(request, 64 * 1024);
+  const body = await readJsonBodyWithCors(request, 64 * 1024, cors);
   const result = await setAppData(ctx.user.id, ctx.clientId, body?.key, body?.value);
 
   if (result.ok === false) {

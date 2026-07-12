@@ -3,6 +3,8 @@ import { createSession, getLiveSession } from '../auth/sessions';
 import { findUserById, toPublicUser } from '../auth/users';
 import type { PublicUser } from '../auth/users';
 import { appAllowsOrigin, findAppByClientId } from './apps';
+import { sessionScopes } from './scopes';
+import type { AppScopeId } from './scopes';
 
 // App-scoped tokens: the credential a third-party site holds after a user
 // approves "Login with Thingtime". Same revocable-JWT model as every other
@@ -29,21 +31,22 @@ export const toEmbedUser = (user: PublicUser): EmbedUser => ({
   avatarUrl: user.avatarUrl
 });
 
-export type AppTokenGrant = { token: string; tokenType: 'Bearer'; expiresAt: Date };
+export type AppTokenGrant = { token: string; tokenType: 'Bearer'; expiresAt: Date; scopes: AppScopeId[] };
 
 export const issueAppToken = async (
   userId: string,
   clientId: string,
-  origin: string
+  origin: string,
+  scopes: AppScopeId[]
 ): Promise<AppTokenGrant> => {
   const expiresAt = new Date(Date.now() + APP_TOKEN_TTL_MS);
   const session = await createSession(userId, {
     purpose: 'app',
     expiresAt,
-    meta: { clientId, origin }
+    meta: { clientId, origin, scopes }
   });
   const token = await signJwt({ sub: userId, jti: session.jti, expiresIn: '30d' });
-  return { token, tokenType: 'Bearer', expiresAt };
+  return { token, tokenType: 'Bearer', expiresAt, scopes };
 };
 
 export type AppTokenContext = {
@@ -51,6 +54,7 @@ export type AppTokenContext = {
   clientId: string;
   origin: string;
   jti: string;
+  scopes: AppScopeId[];
 };
 
 // Resolve an app-scoped Bearer token, or null. Bearer-only on purpose: app
@@ -80,5 +84,11 @@ export const resolveAppToken = async (request: Request): Promise<AppTokenContext
   const user = await findUserById(claims.sub);
   if (!user) return null;
 
-  return { user: toPublicUser(user), clientId, origin, jti: claims.jti };
+  return {
+    user: toPublicUser(user),
+    clientId,
+    origin,
+    jti: claims.jti,
+    scopes: sessionScopes(session.meta)
+  };
 };

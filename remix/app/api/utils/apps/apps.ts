@@ -121,6 +121,9 @@ export const createApp = async (
   await ensureIndexes();
   const things = await getThingsCollection();
 
+  // Soft product cap (like the app-data key cap): racing registrations can
+  // momentarily exceed it, which is harmless — listApps returns everything,
+  // so nothing becomes invisible or undeletable.
   const count = await things.countDocuments({ thingtime: 'app', ownerId });
   if (count >= MAX_APPS_PER_USER) {
     return fail(400, `You can register at most ${MAX_APPS_PER_USER} apps`);
@@ -144,13 +147,11 @@ export const createApp = async (
   return { ok: true, app: toPublicApp(doc) };
 };
 
+// No .limit(): if racing registrations ever exceed the soft cap, the overflow
+// apps must still show up here so the owner can see and delete them.
 export const listApps = async (ownerId: string): Promise<PublicApp[]> => {
   const things = await getThingsCollection();
-  const docs = await things
-    .find({ thingtime: 'app', ownerId })
-    .sort({ createdAt: 1 })
-    .limit(MAX_APPS_PER_USER)
-    .toArray();
+  const docs = await things.find({ thingtime: 'app', ownerId }).sort({ createdAt: 1 }).toArray();
   return docs.map(toPublicApp);
 };
 

@@ -514,7 +514,7 @@ const appDataSchema: ThingtimeSchema = {
     'developer, so users can see and delete what an app has stored for them.',
   fields: [
     { name: 'appId', type: 'id', required: true, description: 'The clientId of the app this entry belongs to.' },
-    { name: 'key', type: 'string', required: true, max: MAX_APP_DATA_KEY_CHARS, description: `Entry key ([A-Za-z0-9._:-], max ${MAX_APP_DATA_KEY_CHARS} chars).` },
+    { name: 'key', type: 'string', required: true, max: MAX_APP_DATA_KEY_CHARS, description: `Entry key ([A-Za-z0-9._:-], first char alphanumeric, max ${MAX_APP_DATA_KEY_CHARS} chars).` },
     { name: 'value', type: 'object', required: true, description: `Arbitrary JSON value, max ${MAX_APP_DATA_VALUE_BYTES / 1024}KB serialized.` }
   ],
   example: { appId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', key: 'preferences', value: { theme: 'rainbow' } }

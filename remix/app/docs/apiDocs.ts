@@ -1516,7 +1516,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'mints the clientId (ttapp_<uuid>) and validates origins — bare https origins like ' +
       'https://example.com, with http allowed only for localhost dev. Only those exact origins can open ' +
       'the authorize popup and receive tokens. GET lists your registered apps.',
-    auth: { mode: 'session', description: 'Your own Thingtime session (cookie or full-account Bearer). App-scoped tokens are rejected.' },
+    auth: { mode: 'session-or-bearer', description: 'Your own Thingtime session (cookie or full-account Bearer). App-scoped tokens are rejected.' },
     methods: ['GET', 'POST'],
     steps: [
       'POST { name, origins } to register an app and receive its clientId.',
@@ -1555,7 +1555,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'POST { clientId, name?, origins? }. Origins are re-validated like registration. Removing an origin ' +
       'takes effect on the next request from any token bound to it — the app-token resolver re-checks the ' +
       'allowlist every time.',
-    auth: { mode: 'session', description: 'Your own Thingtime session; you can only update apps you own.' },
+    auth: { mode: 'session-or-bearer', description: 'Your own Thingtime session (cookie or full-account Bearer); you can only update apps you own.' },
     methods: ['POST'],
     steps: [
       'POST the clientId plus the fields to change.',
@@ -1584,7 +1584,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'POST { clientId }. Every app-scoped session for the app is revoked, so tokens held by embedding ' +
       'sites die immediately. End users KEEP their app-data things — that data belongs to them, not the ' +
       'app developer.',
-    auth: { mode: 'session', description: 'Your own Thingtime session; you can only delete apps you own.' },
+    auth: { mode: 'session-or-bearer', description: 'Your own Thingtime session (cookie or full-account Bearer); you can only delete apps you own.' },
     methods: ['POST'],
     steps: ['POST the clientId.', 'All app tokens are revoked; user data stays with its users.'],
     requestExamples: [
@@ -1602,22 +1602,38 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/apps/public',
     summary: 'Anonymous lookup the authorize popup uses to validate a clientId + origin pair.',
     detail:
-      'GET ?clientId=…&origin=…. Returns the app\'s public face (clientId + name) only when the app ' +
-      'exists AND the origin is on its allowlist, so the popup can refuse unregistered embedders before ' +
-      'any login UI renders. 404 for unknown apps, 403 for origins not on the allowlist.',
-    auth: { mode: 'none', description: 'Anonymous — returns only the app name.' },
+      'GET ?clientId=…&origin=…&scope=…. Returns the app\'s public face (clientId + name) plus the ' +
+      'requested permission scopes as descriptor entries ({ id, title, description, required }) for the ' +
+      'consent screen\'s permissions selector — only when the app exists AND the origin is on its ' +
+      'allowlist, so the popup can refuse unregistered embedders before any login UI renders. `scope` is ' +
+      'space-delimited (profile, email, app-data; unknown names 400; empty → profile + app-data). ' +
+      '404 for unknown apps, 403 for origins not on the allowlist.',
+    auth: { mode: 'none', description: 'Anonymous — returns only the app name + scope descriptors.' },
     methods: ['GET'],
-    steps: ['GET with clientId and the embedding page origin.', 'Render the consent screen from the returned name.'],
+    steps: ['GET with clientId, the embedding page origin, and the requested scope set.', 'Render the consent screen from the returned name + scope descriptors.'],
     requestExamples: [
       {
         name: 'Lookup',
-        description: 'Validate a clientId for an origin.',
+        description: 'Validate a clientId for an origin, requesting email too.',
         method: 'GET',
-        query: { clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', origin: 'https://rainbownotes.example' }
+        query: { clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', origin: 'https://rainbownotes.example', scope: 'profile email app-data' }
       }
     ],
     responseExamples: [
-      { status: 200, description: 'Allowed.', body: { ok: true, app: { clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', name: 'Rainbow Notes' }, origin: 'https://rainbownotes.example' } },
+      {
+        status: 200,
+        description: 'Allowed.',
+        body: {
+          ok: true,
+          app: { clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', name: 'Rainbow Notes' },
+          origin: 'https://rainbownotes.example',
+          scopes: [
+            { id: 'profile', title: 'Public profile', description: 'Your username, display name, and avatar.', required: true },
+            { id: 'email', title: 'Email address', description: 'The email address on your Thingtime account.', required: false },
+            { id: 'app-data', title: 'App storage', description: 'Store its own data for you in your Thingtime account — only its own, nothing else.', required: false }
+          ]
+        }
+      },
       { status: 403, description: 'Origin not allowlisted.', body: { ok: false, error: 'This origin is not on the app’s allowlist' } }
     ]
   }),
@@ -1628,25 +1644,34 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/oauth/authorize',
     summary: 'The consent step of the "Login with Thingtime" popup — mints an app-scoped Bearer token.',
     detail:
-      'POST { clientId, origin } with the user\'s real session cookie (the popup runs on the Thingtime ' +
-      'origin). Validates the app + origin allowlist, then mints a revocable app-scoped session ' +
-      '(purpose "app", 30 days) and returns its Bearer token plus a minimal user object ' +
-      '{ id, username, displayName, avatarUrl } — never email or account internals. App tokens are ' +
-      'rejected by every normal endpoint: they only work on /api/v1/app-data*, so a leaked token can\'t ' +
-      'touch the rest of the account or mint further tokens.',
+      'POST { clientId, origin, scope?, scopes? } with the user\'s real session cookie (the popup runs ' +
+      'on the Thingtime origin). `scope` is the space-delimited set the platform requested; `scopes` is ' +
+      'the subset the user approved on the permissions selector — the grant is their intersection ' +
+      '(consent narrows, never widens; profile is always included). Validates the app + origin ' +
+      'allowlist, then mints a revocable app-scoped session (purpose "app", 30 days, meta.scopes) and ' +
+      'returns its Bearer token, the granted scopes, and a minimal user object { id, username, ' +
+      'displayName, avatarUrl } — never email or account internals (userinfo returns email only under ' +
+      'the email scope). App tokens are rejected by every normal endpoint: they only work on ' +
+      '/api/v1/app-data* and /api/v1/oauth/userinfo, so a leaked token can\'t touch the rest of the ' +
+      'account or mint further tokens.',
     auth: { mode: 'session', description: 'The end user\'s Thingtime session cookie (popup is same-origin).' },
     methods: ['POST'],
     steps: [
-      'The SDK opens /authorize?client_id=…&origin=…&state=… in a popup.',
-      'The popup validates via /api/v1/apps/public, has the user log in if needed, and shows consent.',
-      'On approve it POSTs here, then hands the token to the opener via postMessage (targetOrigin = the validated origin).'
+      'The SDK opens /authorize?client_id=…&origin=…&state=…&scope=… in a popup.',
+      'The popup validates via /api/v1/apps/public, has the user log in if needed, and shows the consent + permissions selector.',
+      'On approve it POSTs here with the user\'s selection, then hands the token to the opener via postMessage (targetOrigin = the validated origin).'
     ],
     requestExamples: [
       {
         name: 'Authorize',
-        description: 'Approve the app for the logged-in user.',
+        description: 'Approve the app for the logged-in user, sharing email but not storage.',
         method: 'POST',
-        body: { clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', origin: 'https://rainbownotes.example' }
+        body: {
+          clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f',
+          origin: 'https://rainbownotes.example',
+          scope: 'profile email app-data',
+          scopes: ['profile', 'email']
+        }
       }
     ],
     responseExamples: [
@@ -1655,15 +1680,107 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'Token minted.',
         body: {
           ok: true,
-          token: 'eyJhbGciOiJFUzI1NiIs…',
+          token: '<app-scoped-jwt>',
           tokenType: 'Bearer',
           expiresAt: '2026-08-11T00:00:00.000Z',
+          scopes: ['profile', 'email'],
           user: { id: '664f1c2a9d3e5b0012345678', username: 'lopu', displayName: 'Lopu', avatarUrl: null }
         }
       },
       { status: 403, description: 'Origin not allowlisted.', body: { ok: false, error: 'This origin is not on the app’s allowlist' } }
     ],
-    notes: ['Revoke by deleting the app, or per-session via the sessions collection — the token dies before its exp like every Thingtime JWT.']
+    notes: ['Revocable from both sides: the developer deletes the app (/api/v1/apps/delete), or the user disconnects it (/api/v1/oauth/grants/revoke) — the token dies before its exp like every Thingtime JWT.']
+  }),
+  endpoint({
+    id: 'oauth-grants',
+    group: 'embed',
+    title: 'Connected apps (grants)',
+    endpoint: '/api/v1/oauth/grants',
+    summary: 'List the apps connected to YOUR account via "Login with Thingtime".',
+    detail:
+      'GET with your own session. One entry per connected app, aggregated over your live app sessions: ' +
+      'the app name (null if it was since deleted), the union of scopes you granted, how many live ' +
+      'sessions it holds, first/last grant times, and the latest expiry. Disconnect one with ' +
+      '/api/v1/oauth/grants/revoke.',
+    auth: { mode: 'session-or-bearer', description: 'Your own Thingtime session. App-scoped tokens are rejected.' },
+    methods: ['GET'],
+    steps: ['GET to see every app connected to your account.', 'POST the clientId to /api/v1/oauth/grants/revoke to disconnect one.'],
+    requestExamples: [{ name: 'List', description: 'Apps connected to your account.', method: 'GET' }],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Connected apps.',
+        body: {
+          ok: true,
+          grants: [
+            {
+              clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f',
+              appName: 'Rainbow Notes',
+              scopes: ['profile', 'app-data'],
+              sessions: 1,
+              firstGrantedAt: '2026-07-12T00:00:00.000Z',
+              lastGrantedAt: '2026-07-12T00:00:00.000Z',
+              expiresAt: '2026-08-11T00:00:00.000Z'
+            }
+          ]
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'oauth-grants-revoke',
+    group: 'embed',
+    title: 'Disconnect an app',
+    endpoint: '/api/v1/oauth/grants/revoke',
+    summary: 'Revoke every app session YOU granted to one app — its tokens stop working immediately.',
+    detail:
+      'POST { clientId } with your own session. Revokes all of your live app-scoped sessions for that ' +
+      'clientId (other users are unaffected); the app-token resolver checks session liveness on every ' +
+      'request, so any token the app still holds for you dies instantly. This is the end-user ' +
+      'counterpart to the developer-side /api/v1/apps/delete.',
+    auth: { mode: 'session-or-bearer', description: 'Your own Thingtime session. App-scoped tokens are rejected.' },
+    methods: ['POST'],
+    steps: ['Find the clientId via /api/v1/oauth/grants.', 'POST it here; revoked reports how many sessions died.'],
+    requestExamples: [
+      { name: 'Disconnect', description: 'Cut an app off from your account.', method: 'POST', body: { clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f' } }
+    ],
+    responseExamples: [{ status: 200, description: 'Revoked.', body: { ok: true, revoked: 1 } }]
+  }),
+  endpoint({
+    id: 'oauth-userinfo',
+    group: 'embed',
+    title: 'Userinfo (SSO identity)',
+    endpoint: '/api/v1/oauth/userinfo',
+    summary: 'Resolve the user an app-scoped token was granted for — the SSO identity endpoint.',
+    detail:
+      'GET with the app-scoped Bearer token. Returns the granted scopes plus the user\'s public profile ' +
+      '{ id, username, displayName, avatarUrl } and a profileUrl Thingtime link; email is included only ' +
+      'when the user granted the email scope on the consent screen. Platforms call this to sync the ' +
+      'account on their side (display name changes, avatar, etc). Same CORS + origin binding as ' +
+      '/api/v1/app-data.',
+    auth: { mode: 'bearer', description: 'App-scoped Bearer token only.' },
+    methods: ['GET'],
+    steps: ['GET with the token from Thingtime.login(…).', 'Read user + scopes; email appears only under the email scope.'],
+    requestExamples: [{ name: 'Lookup', description: 'Who is this token?', method: 'GET' }],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Identity (email scope granted).',
+        body: {
+          ok: true,
+          scopes: ['profile', 'email'],
+          user: {
+            id: '664f1c2a9d3e5b0012345678',
+            username: 'lopu',
+            displayName: 'Lopu',
+            avatarUrl: null,
+            profileUrl: 'https://thingtime.com/profile/lopu',
+            email: 'lopu@example.com'
+          }
+        }
+      },
+      { status: 401, description: 'Missing/expired/revoked token.', body: { ok: false, error: 'Unauthorized' } }
+    ]
   }),
   endpoint({
     id: 'app-data',
@@ -1674,11 +1791,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     detail:
       'Authenticated by an app-scoped Bearer token from /api/v1/oauth/authorize. GET ?key=… returns one ' +
       'entry ({ entry: null } when unset); GET without key lists every entry for this (user, app). ' +
-      'POST { key, value } inserts or updates one entry — keys are [A-Za-z0-9._:-] up to 128 chars, values ' +
+      'POST { key, value } inserts or updates one entry — keys are [A-Za-z0-9._:-] up to 128 chars ' +
+      '(first char must be a letter or digit), values ' +
       'any JSON up to 32KB, at most 200 keys per user per app. Entries are things owned by the END USER ' +
       '(acl ["tt:user"]), so users can always see and delete what an app stored. CORS: browser calls must ' +
-      'come from the token\'s own bound origin.',
-    auth: { mode: 'bearer', description: 'App-scoped Bearer token only — cookies never authenticate this route.' },
+      'come from the token\'s own bound origin. Requires the app-data scope — 403 when the user declined ' +
+      'it on the consent screen.',
+    auth: { mode: 'bearer', description: 'App-scoped Bearer token with the app-data scope — cookies never authenticate this route.' },
     methods: ['GET', 'POST'],
     steps: [
       'Take the token from Thingtime.login(…) in the SDK.',

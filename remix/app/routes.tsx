@@ -12,6 +12,7 @@ import BrandingOld from './routes/branding_old';
 import CryptoPage from './routes/crypto';
 import DocsLayout from './routes/docs/DocsLayout';
 import DocsApi from './routes/docs/api';
+import DocsEmbed from './routes/docs/embed';
 import DocsConcepts from './routes/docs/concepts/index';
 import DocsDesign from './routes/docs/design';
 import DocsDesignSystem from './routes/docs/design-system/index';
@@ -102,6 +103,7 @@ export const router = createBrowserRouter([
         element: <DocsLayout />,
         children: [
           { index: true, element: <DocsIndex /> },
+          { path: 'embed', element: <DocsEmbed /> },
           { path: 'api', element: <DocsApi /> },
           { path: 'api/:group', element: <DocsApi /> },
           { path: 'api/:group/:docId', element: <DocsApi /> },

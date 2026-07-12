@@ -1,8 +1,8 @@
-import { json, readJsonBody } from '~/api/http';
+import { json } from '~/api/http';
 
 import { resolveAppToken } from '~/api/utils/apps/appTokens';
 import { deleteAppData } from '~/api/utils/apps/appData';
-import { appCorsHeaders, appDataPreflight } from '~/api/utils/apps/cors';
+import { appCorsHeaders, appDataPreflight, readJsonBodyWithCors } from '~/api/utils/apps/cors';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 
 // POST /api/v1/app-data/delete — { key } — remove one entry for this
@@ -23,6 +23,13 @@ export const action = async ({ request }: { request: Request }) => {
     return json({ ok: false, error: 'Origin does not match this token' }, { status: 403, headers: cors });
   }
 
+  if (!ctx.scopes.includes('app-data')) {
+    return json(
+      { ok: false, error: 'This token was not granted the app-data scope' },
+      { status: 403, headers: cors }
+    );
+  }
+
   const limit = await enforceRateLimit(request, 'appData.write', `user:${ctx.user.id}:app:${ctx.clientId}`);
   if (!limit.allowed) {
     const init = rateLimitedResponseInit(limit);
@@ -32,7 +39,7 @@ export const action = async ({ request }: { request: Request }) => {
     );
   }
 
-  const body = await readJsonBody(request, 8 * 1024);
+  const body = await readJsonBodyWithCors(request, 8 * 1024, cors);
   const result = await deleteAppData(ctx.user.id, ctx.clientId, body?.key);
 
   if (result.ok === false) {

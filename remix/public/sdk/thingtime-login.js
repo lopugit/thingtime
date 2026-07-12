@@ -5,19 +5,24 @@
  * <script>
  *   Thingtime.renderButton(document.querySelector('#login'), {
  *     clientId: 'ttapp_…',
+ *     scopes: ['profile', 'email', 'app-data'], // what to ask for (user picks on consent)
+ *     theme: 'light',                            // 'light' | 'dark' | 'rainbow'
+ *     size: 'md',                                // 'sm' | 'md' | 'lg'
  *     onLogin: function (session) {
  *       // session.token  — app-scoped Bearer token (revocable server-side)
+ *       // session.scopes — what the user actually granted
  *       // session.user   — { id, username, displayName, avatarUrl }
- *       var data = Thingtime.data(session.token);
- *       data.set('preferences', { theme: 'rainbow' });
+ *       Thingtime.userinfo(session.token).then(function (info) { … });
+ *       Thingtime.data(session.token).set('preferences', { theme: 'rainbow' });
  *     }
  *   });
  * </script>
  *
- * Or drive it yourself: Thingtime.login({ clientId }).then(session => …)
+ * Or drive it yourself: Thingtime.login({ clientId, scopes }).then(session => …)
  *
  * Register your app (name + your site's exact origins) on Thingtime first —
- * the popup only hands tokens to allowlisted origins.
+ * the popup only hands tokens to allowlisted origins. Full docs + examples:
+ * https://thingtime.com/docs/embed
  */
 (function () {
   'use strict';
@@ -51,8 +56,12 @@
 
   /**
    * Open the "Login with Thingtime" popup.
-   * @param {{ clientId: string, baseUrl?: string }} options
-   * @returns {Promise<{ token: string, tokenType: string, expiresAt: string, user: Object }>}
+   * @param {{ clientId: string, scopes?: string[], baseUrl?: string }} options
+   *   scopes — permissions to request: 'profile' (always granted), 'email',
+   *   'app-data'. Defaults to ['profile', 'app-data']. The user picks what to
+   *   actually share on the consent screen, so read `session.scopes` for what
+   *   you really got.
+   * @returns {Promise<{ token: string, tokenType: string, expiresAt: string, scopes: string[], user: Object }>}
    */
   function login(options) {
     options = options || {};
@@ -66,6 +75,7 @@
       }
 
       var state = randomState();
+      var scope = Array.isArray(options.scopes) ? options.scopes.join(' ') : '';
       var url =
         base +
         '/authorize?client_id=' +
@@ -73,7 +83,8 @@
         '&origin=' +
         encodeURIComponent(window.location.origin) +
         '&state=' +
-        encodeURIComponent(state);
+        encodeURIComponent(state) +
+        (scope ? '&scope=' + encodeURIComponent(scope) : '');
 
       var left = Math.max(0, Math.round((window.screen.width - POPUP_WIDTH) / 2));
       var top = Math.max(0, Math.round((window.screen.height - POPUP_HEIGHT) / 2));
@@ -113,6 +124,7 @@
             token: data.token,
             tokenType: data.tokenType || 'Bearer',
             expiresAt: data.expiresAt,
+            scopes: data.scopes || ['profile', 'app-data'],
             user: data.user
           });
         } else {
@@ -208,24 +220,81 @@
   }
 
   /**
+   * SSO identity lookup: resolve the user this token was granted for.
+   * Returns { user: { id, username, displayName, avatarUrl, profileUrl,
+   * email? }, scopes } — email only when the user granted the 'email' scope.
+   * @param {string} token — the token from login()
+   * @param {{ baseUrl?: string }} [options]
+   */
+  function userinfo(token, options) {
+    options = options || {};
+    var base = (options.baseUrl || DEFAULT_BASE).replace(/\/+$/, '');
+    return fetch(base + '/api/v1/oauth/userinfo', {
+      headers: { Authorization: 'Bearer ' + token }
+    }).then(function (response) {
+      return response.json().then(function (payload) {
+        if (!payload || payload.ok !== true) {
+          var error = new Error((payload && payload.error) || 'Thingtime request failed');
+          error.status = response.status;
+          throw error;
+        }
+        return { user: payload.user, scopes: payload.scopes };
+      });
+    });
+  }
+
+  var BUTTON_SIZES = {
+    sm: 'padding:7px 13px;font-size:13px;border-radius:8px;',
+    md: 'padding:10px 18px;font-size:14px;border-radius:10px;',
+    lg: 'padding:13px 24px;font-size:16px;border-radius:12px;'
+  };
+
+  // theme → [text color, inner background]. Every theme keeps the Thingtime
+  // rainbow border so the button stays recognizable across host sites.
+  var BUTTON_THEMES = {
+    light: { color: '#1c1c22', background: '#ffffff' },
+    dark: { color: '#f4f4f6', background: '#1c1c22' },
+    rainbow: { color: '#1c1c22', background: '#ffffff', rainbowFill: true }
+  };
+
+  var RAINBOW_GRADIENT = 'linear-gradient(90deg,#ff5f6d,#ffc371,#47e891,#3ec6ff,#b06ab3,#ff5f6d)';
+
+  /**
    * Render a ready-made "Login with Thingtime" button into `el`.
    * @param {Element} el
-   * @param {{ clientId: string, onLogin?: Function, onError?: Function, text?: string, baseUrl?: string }} options
+   * @param {{
+   *   clientId: string,
+   *   scopes?: string[],            // permissions to request (see login())
+   *   theme?: 'light'|'dark'|'rainbow',
+   *   size?: 'sm'|'md'|'lg',
+   *   text?: string,
+   *   onLogin?: Function,
+   *   onError?: Function,
+   *   baseUrl?: string
+   * }} options
    */
   function renderButton(el, options) {
     options = options || {};
     if (!el || !el.appendChild) throw new Error('Thingtime.renderButton: pass a DOM element');
+
+    var theme = BUTTON_THEMES[options.theme] || BUTTON_THEMES.light;
+    var size = BUTTON_SIZES[options.size] || BUTTON_SIZES.md;
 
     var button = document.createElement('button');
     button.type = 'button';
     button.setAttribute('data-thingtime-login', '');
     button.textContent = options.text || 'Login with Thingtime';
 
+    var innerFill = theme.rainbowFill
+      ? 'linear-gradient(rgba(255,255,255,0.88),rgba(255,255,255,0.88)),' + RAINBOW_GRADIENT
+      : 'linear-gradient(' + theme.background + ',' + theme.background + ')';
+
     var baseStyle =
-      'display:inline-flex;align-items:center;gap:8px;padding:10px 18px;' +
-      'font:600 14px/1.2 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;' +
-      'color:#1c1c22;background:#ffffff;border:1px solid transparent;border-radius:10px;cursor:pointer;' +
-      'background-image:linear-gradient(#ffffff,#ffffff),linear-gradient(90deg,#ff5f6d,#ffc371,#47e891,#3ec6ff,#b06ab3,#ff5f6d);' +
+      'display:inline-flex;align-items:center;gap:8px;' +
+      size +
+      'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-weight:600;line-height:1.2;' +
+      'color:' + theme.color + ';border:1px solid transparent;cursor:pointer;' +
+      'background-image:' + innerFill + ',' + RAINBOW_GRADIENT + ';' +
       'background-origin:border-box;background-clip:padding-box,border-box;' +
       'box-shadow:0 1px 4px rgba(20,20,40,0.12);transition:box-shadow 150ms ease,transform 150ms ease;';
     button.setAttribute('style', baseStyle);
@@ -241,7 +310,7 @@
 
     button.addEventListener('click', function () {
       button.disabled = true;
-      login({ clientId: options.clientId, baseUrl: options.baseUrl })
+      login({ clientId: options.clientId, scopes: options.scopes, baseUrl: options.baseUrl })
         .then(function (session) {
           button.disabled = false;
           if (options.onLogin) options.onLogin(session);
@@ -259,6 +328,7 @@
   window.Thingtime = window.Thingtime || {};
   window.Thingtime.login = login;
   window.Thingtime.data = data;
+  window.Thingtime.userinfo = userinfo;
   window.Thingtime.renderButton = renderButton;
-  window.Thingtime.sdkVersion = '1.0.0';
+  window.Thingtime.sdkVersion = '1.1.0';
 })();
