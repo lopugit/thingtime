@@ -1,5 +1,5 @@
 import { ensureIndexes, getThingsCollection } from '../mongodb/collections';
-import { KEY_SEGMENT_PATTERN } from '~/schemas/registry';
+import { KEY_SEGMENT_PATTERN, PROTECTED_THINGTIME } from '~/schemas/registry';
 import {
   asViewer,
   canViewInherited,
@@ -349,6 +349,14 @@ export const searchThings = async (viewerInput: string | Viewer, query: SearchQu
         : { thingtime: { $in: thingtime } }
     );
   }
+
+  // Protected system kinds are NOT discoverable through the generic search:
+  // user things are public but belong on the dedicated /api/v1/users/search
+  // (which caps + requires a query, so this endpoint can't be a bulk directory
+  // scrape / account-existence + user-count oracle); theme/feed-algorithm/
+  // waitlist things are owner-private and never meant to be searched. schema
+  // things stay searchable — the schema browser relies on it.
+  clauses.push({ thingtime: { $nin: [...PROTECTED_THINGTIME] } });
 
   const tags = csvList(query.tags).map((tag) => tag.toLowerCase());
   if (tags.length) clauses.push({ tags: { $in: tags } });

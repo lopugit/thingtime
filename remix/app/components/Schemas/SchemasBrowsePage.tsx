@@ -443,9 +443,20 @@ export const SchemasBrowsePage = () => {
       .filter((source) => !needle || source.name.toLowerCase().includes(needle) || source.description.toLowerCase().includes(needle));
   }, [scope, q]);
 
+  // the seed-builtin-schemas migration mirrors builtin crystal schemas into
+  // things (shareId schema-<id>, system-owned → author null); the registry
+  // column already shows those, so the mirrors are dropped from community
+  const seededBuiltinIds = React.useMemo(
+    () => new Set(crystalSchemas().map((schema) => `schema-${schema.id}`)),
+    []
+  );
   const communitySources = React.useMemo(
-    () => entries.map(entryToCardSource).filter(Boolean) as SchemaCardSource[],
-    [entries]
+    () =>
+      entries
+        .filter((entry) => !(seededBuiltinIds.has(entry.id) && !entry.author))
+        .map(entryToCardSource)
+        .filter(Boolean) as SchemaCardSource[],
+    [entries, seededBuiltinIds]
   );
   const sources = React.useMemo(() => [...builtinSources, ...communitySources], [builtinSources, communitySources]);
 

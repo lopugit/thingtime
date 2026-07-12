@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { ObjectId } from 'mongodb';
+import { Binary, ObjectId } from 'mongodb';
 
 import { ensureIndexes, getThingsCollection, getUsersCollection } from '../mongodb/collections';
-import { pushUserRecentReaction } from '../auth/users';
+import { findUserByUsername, pushUserRecentReaction } from '../auth/users';
 import { sanitizeReactionToken } from '~/utils/reactionTokens';
 import {
   ACL_ALL,
@@ -12,9 +12,11 @@ import {
   ACL_OWNER,
   COLLECTION_SCHEMA_VERSIONS,
   MAX_TEXT_CHARS,
+  PROTECTED_THINGTIME,
   REACTION_EMOJIS,
   aclAllows,
   aclFromVisibility,
+  isProtectedThingtime,
   sanitizeAcl,
   validateThingtimeCrystal,
   visibilityFromAcl,
@@ -71,6 +73,16 @@ export type ThingDoc = {
   tags?: string[];
   createdAt: Date;
   updatedAt: Date;
+  // System kinds only (user/theme/feed-algorithm/waitlist — the collections
+  // collapsing into things): generalized uniqueness (multikey unique sparse
+  // index; elements are BinData, PII keys hashed) and private state. `secure`
+  // is NEVER projected, is unreachable by the search field grammar, and is a
+  // single opaque BinData blob so the $** text index cannot tokenize any field
+  // inside it. `secureAdmin` is the one queryable flag (a boolean — booleans
+  // aren't text-indexed either).
+  uniqueKeys?: Binary[];
+  secure?: Binary;
+  secureAdmin?: boolean;
   // v1 residue fields (unset by the things v1→v2 migration). kind 'reaction'
   // and 'comment' cover the interim relational era (parentId/token/commentId
   // docs) written by main's pre-unification model — read + migrated like the
@@ -246,6 +258,9 @@ const sanitizeTags = (value: unknown): string[] | Fail => {
 // prefix (reactionShareId). Reserving it means a client can never pre-create a
 // thing at a migration destination id to hijack or delete migrated data.
 export const MIGRATION_RESERVED_ID_PREFIX = 'react-';
+// Builtin-schema seed mints shareId `schema-<id>` deterministically — reserve
+// the prefix so a client can't pre-claim (and impersonate) a builtin schema.
+export const SCHEMA_RESERVED_ID_PREFIX = 'schema-';
 
 // Seeding passes fixed shareIds for idempotency (and Magic relies on ids
 // round-tripping), so client-supplied ids are allowed — but they must be sane
@@ -259,7 +274,10 @@ const sanitizeShareId = (value: unknown): string | null | Fail => {
   if (trimmed.length > MAX_SHARE_ID_CHARS || /[$.\s]/.test(trimmed)) {
     return fail(400, 'shareId must be a short id without spaces, dots, or $');
   }
-  if (trimmed.startsWith(MIGRATION_RESERVED_ID_PREFIX)) {
+  if (trimmed.startsWith(MIGRATION_RESERVED_ID_PREFIX) || trimmed.startsWith(SCHEMA_RESERVED_ID_PREFIX)) {
+    // 'react-' (reaction migration) and 'schema-' (builtin-schema seed) are
+    // deterministic migration destinations — a client must never squat one,
+    // or it blocks the seed/migration and impersonates a builtin schema
     return fail(400, 'shareId uses a reserved prefix');
   }
   return trimmed;
@@ -305,6 +323,14 @@ export const createThing = async (
   const asOwner = viewer && viewer.id === ownerId ? viewer : { id: ownerId };
   const validated = validateThingtimeCrystal(input.thingtime, input.crystal);
   if (isFail(validated)) return validated;
+
+  // system kinds are written ONLY by their dedicated utils (register, themes,
+  // algorithms, waitlist — each a direct insert with the right secure/uniqueKeys
+  // shape). The generic path unconditionally refuses them, so nobody can mint a
+  // user/theme/algorithm/waitlist thing (or a fake account) through /api/v1/things.
+  if (isProtectedThingtime(validated.thingtime)) {
+    return fail(403, `${validated.thingtime.join('+')} things are managed by their own endpoints`);
+  }
 
   const tags = sanitizeTags(input.tags);
   if (isFail(tags)) return tags;
@@ -390,7 +416,6 @@ export const createThing = async (
     createdAt: now,
     updatedAt: now
   };
-
   try {
     await things.insertOne(doc as any);
   } catch (err: any) {
@@ -403,6 +428,8 @@ export const createThing = async (
       const keys = Object.keys(err?.keyPattern || {});
       if (!keys.length || keys.includes('shareId')) return fail(409, 'Post already exists');
       if (keys.includes('crystal.emoji')) return fail(409, 'Post already exists');
+      // uniqueKeys collisions (username taken, email registered, …) — the
+      // dedicated utils translate this into their own friendlier message
       return fail(409, 'A thing with those unique fields already exists');
     }
     throw err;
@@ -464,14 +491,35 @@ const toFeedAuthor = (doc: any): FeedAuthor => ({
 });
 
 const resolveProfiles = async (userIds: string[]): Promise<Map<string, FeedAuthor>> => {
-  const valid = [...new Set(userIds)].filter((id) => ObjectId.isValid(id));
-  if (!valid.length) return new Map();
-  const users = await getUsersCollection();
-  const docs = await users
-    .find({ _id: { $in: valid.map((id) => new ObjectId(id)) } })
-    .project({ username: 1, displayName: 1, avatarUrl: 1 })
+  const wanted = [...new Set(userIds)].filter((id) => typeof id === 'string' && id.trim());
+  if (!wanted.length) return new Map();
+  const profiles = new Map<string, FeedAuthor>();
+
+  // things-era users first (shareId = the id every ownerId reference carries)
+  const things = await getThingsCollection();
+  const userThings = await things
+    .find({ thingtime: 'user', shareId: { $in: wanted } } as any)
+    .project({ shareId: 1, 'crystal.username': 1, 'crystal.displayName': 1, 'crystal.avatarUrl': 1 })
     .toArray();
-  return new Map(docs.map((doc: any) => [String(doc._id), toFeedAuthor(doc)]));
+  for (const doc of userThings as any[]) {
+    profiles.set(String(doc.shareId), {
+      id: String(doc.shareId),
+      username: doc.crystal?.username,
+      displayName: doc.crystal?.displayName ?? null,
+      avatarUrl: typeof doc.crystal?.avatarUrl === 'string' ? doc.crystal.avatarUrl : null
+    });
+  }
+
+  const remaining = wanted.filter((id) => !profiles.has(id) && ObjectId.isValid(id));
+  if (remaining.length) {
+    const users = await getUsersCollection();
+    const docs = await users
+      .find({ _id: { $in: remaining.map((id) => new ObjectId(id)) } })
+      .project({ username: 1, displayName: 1, avatarUrl: 1 })
+      .toArray();
+    for (const doc of docs as any[]) profiles.set(String(doc._id), toFeedAuthor(doc));
+  }
+  return profiles;
 };
 
 // Normalized comment/reaction views over both eras.
@@ -936,8 +984,9 @@ export const listUserPosts = async (
 ): Promise<{ ok: true; posts: PublicPost[]; nextCursor: string | null; postCount?: number } | Fail> => {
   const viewer = asViewer(viewerInput);
   if (typeof username !== 'string' || !username.trim()) return fail(400, 'username is required');
-  const users = await getUsersCollection();
-  const user = await users.findOne({ username: username.trim().toLowerCase() });
+  // dual-era: findUserByUsername resolves user things first, legacy second —
+  // a bare users.findOne would 404 every things-era + migrated account
+  const user = await findUserByUsername(username.trim());
   if (!user) return fail(404, 'User not found');
 
   const ownerId = String(user._id);
@@ -1007,7 +1056,14 @@ export const listThings = async (
     match = { targetId: target.shareId };
   } else {
     if (!viewer?.id) return fail(401, 'Unauthorized');
-    match = { ownerId: viewer.id, $or: [{ thingtime: { $exists: true } }, { kind: 'post' }] };
+    // your OWN things, but not your account/theme/algorithm/waitlist things —
+    // those are managed by their dedicated endpoints and would otherwise show
+    // up as inert, non-editable entries (edit/delete 403) in the data browser
+    match = {
+      ownerId: viewer.id,
+      thingtime: { $nin: [...PROTECTED_THINGTIME] },
+      $or: [{ thingtime: { $exists: true } }, { kind: 'post' }]
+    };
   }
   if (thingtime.length) {
     // v1 posts have no thingtime array — a 'post' filter must match them too
@@ -1333,9 +1389,13 @@ export const deleteThing = async (viewerInput: string | Viewer, shareId: unknown
   if (!viewer?.id) return fail(401, 'Unauthorized');
   if (typeof shareId !== 'string' || !shareId.trim()) return fail(400, 'Thing id is required');
   const things = await getThingsCollection();
+  // system kinds (a user's own account thing!) are never deletable through the
+  // generic DELETE — $nin on the multikey array excludes them atomically. Their
+  // dedicated endpoints (themes, algorithms) own deletion.
   const deleted = (await things.findOneAndDelete({
     shareId: shareId.trim(),
-    ownerId: viewer.id
+    ownerId: viewer.id,
+    thingtime: { $nin: [...PROTECTED_THINGTIME] }
   } as any)) as any as ThingDoc | null;
   if (!deleted) return fail(404, 'Thing not found');
   // comments/reactions/saves attached to the deleted thing go with it (v2
@@ -1377,6 +1437,11 @@ export const updateThing = async (
   if (!doc || (!isV2(doc) && !isPostThing(doc))) return fail(404, 'Thing not found');
 
   const thingtime = thingtimeOf(doc);
+  // system kinds mutate only through their dedicated utils (profile update,
+  // themes, algorithms) — never the generic PATCH/PUT surface
+  if (isProtectedThingtime(thingtime)) {
+    return fail(403, `${thingtime.join('+')} things are managed by their own endpoints`);
+  }
   const patch =
     input.crystal && typeof input.crystal === 'object' && !Array.isArray(input.crystal)
       ? (input.crystal as Record<string, unknown>)

@@ -493,36 +493,6 @@ const saveThingSchema: ThingtimeSchema = {
   example: {}
 };
 
-const userSchema: ThingtimeSchema = {
-  id: 'user',
-  version: COLLECTION_SCHEMA_VERSIONS.users,
-  kind: 'collection',
-  collection: 'users',
-  title: 'User',
-  summary: 'A user account (or service account) — hashed password, profile, verification state.',
-  detail: 'Created only via POST /api/v1/auth/register or /api/v1/auth/service-account.',
-  fields: [
-    { name: 'ttid', type: 'string', required: true, description: 'Thingtime id (currently the username).' },
-    { name: 'username', type: 'string', required: true, description: 'Unique, lowercased.' },
-    { name: 'email', type: 'string', required: true, description: 'Unique, lowercased.' },
-    { name: 'passwordHash', type: 'string', required: true, description: 'bcrypt hash — never leaves the server.' },
-    { name: 'displayName', type: 'string', required: false, description: 'Optional display name.' },
-    { name: 'bio', type: 'string', required: false, description: 'Profile bio.' },
-    { name: 'avatarUrl', type: 'string', required: false, description: 'Avatar image URL.' },
-    { name: 'bannerUrl', type: 'string', required: false, description: 'Profile banner URL.' },
-    { name: 'emailVerified', type: 'boolean', required: true, description: 'Whether the email is verified.' },
-    { name: 'accountKind', type: 'enum', required: false, values: ['user', 'service'], description: 'Human or service account.' },
-    { name: 'emailVerificationRequiredBy', type: 'date', required: false, description: 'Service accounts stop authenticating unverified past this.' },
-    { name: 'storageAllowanceBytes', type: 'number', required: false, description: 'Storage allowance.' },
-    { name: 'storageUsedBytes', type: 'number', required: false, description: 'Storage used.' },
-    { name: 'meta', type: 'record', required: true, description: 'Grab-bag: activeThemeId, activeFeedAlgorithmId, service metadata.' },
-    { name: 'schemaVersion', type: 'number', required: true, description: 'Collection schema version.' },
-    { name: 'createdAt', type: 'date', required: true, description: 'Signup time.' },
-    { name: 'updatedAt', type: 'date', required: true, description: 'Last update time.' }
-  ],
-  example: { ttid: 'rick.deckard', username: 'rick.deckard', email: 'rick@example.com', emailVerified: true, accountKind: 'user', meta: {}, schemaVersion: 2 }
-};
-
 const sessionSchema: ThingtimeSchema = {
   id: 'session',
   version: COLLECTION_SCHEMA_VERSIONS.sessions,
@@ -565,66 +535,8 @@ const emailVerificationSchema: ThingtimeSchema = {
   example: { token: 'ab12…64hex', userId: '664f…', email: 'rick@example.com', schemaVersion: 2 }
 };
 
-const themeSchema: ThingtimeSchema = {
-  id: 'theme',
-  version: COLLECTION_SCHEMA_VERSIONS.themes,
-  kind: 'collection',
-  collection: 'themes',
-  title: 'Theme',
-  summary: 'A saved user theme, shareable by shareId.',
-  detail: 'Fully resolved token doc; max 100 per user.',
-  fields: [
-    { name: 'shareId', type: 'id', required: true, description: 'Public id.' },
-    { name: 'ownerId', type: 'id', required: true, description: 'Theme owner.' },
-    { name: 'name', type: 'string', required: true, max: 60, description: 'Theme name.' },
-    { name: 'theme', type: 'object', required: true, description: 'Resolved theme tokens.' },
-    { name: 'visibility', type: 'enum', required: true, values: ['private', 'public'], description: 'Share visibility.' },
-    { name: 'schemaVersion', type: 'number', required: true, description: 'Collection schema version.' },
-    { name: 'createdAt', type: 'date', required: true, description: 'Creation time.' },
-    { name: 'updatedAt', type: 'date', required: true, description: 'Last update time.' }
-  ],
-  example: { shareId: '9a8b…', ownerId: '664f…', name: 'Midnight', visibility: 'private', schemaVersion: 2 }
-};
 
-const waitlistSchema: ThingtimeSchema = {
-  id: 'waitlist',
-  version: COLLECTION_SCHEMA_VERSIONS.waitlist,
-  kind: 'collection',
-  collection: 'waitlist',
-  title: 'Waitlist entry',
-  summary: 'A launch-waitlist email.',
-  detail: 'Unique per email; duplicate joins are treated as success.',
-  fields: [
-    { name: 'email', type: 'string', required: true, max: 254, description: 'Lowercased email.' },
-    { name: 'schemaVersion', type: 'number', required: true, description: 'Collection schema version.' },
-    { name: 'createdAt', type: 'date', required: true, description: 'Join time.' }
-  ],
-  example: { email: 'rick@example.com', schemaVersion: 2 }
-};
 
-const feedAlgorithmSchema: ThingtimeSchema = {
-  id: 'feed-algorithm',
-  version: COLLECTION_SCHEMA_VERSIONS.feedAlgorithms,
-  kind: 'collection',
-  collection: 'feedAlgorithms',
-  title: 'Feed algorithm',
-  summary: 'A user-trained feed ranking algorithm.',
-  detail: 'Weights over post types, tags, and authors, trained from engagement events.',
-  fields: [
-    { name: 'shareId', type: 'id', required: true, description: 'Public id.' },
-    { name: 'ownerId', type: 'id', required: true, description: 'Algorithm owner.' },
-    { name: 'name', type: 'string', required: true, max: 60, description: 'Algorithm name.' },
-    { name: 'emoji', type: 'string', required: true, description: 'Display emoji.' },
-    { name: 'parentId', type: 'id', required: false, description: 'Branch lineage parent.' },
-    { name: 'weights', type: 'object', required: true, description: '{ types, tags, authors } weight maps.' },
-    { name: 'eventCount', type: 'number', required: true, description: 'Engagement events trained on.' },
-    { name: 'lastTrainedAt', type: 'date', required: false, description: 'Last training time.' },
-    { name: 'schemaVersion', type: 'number', required: true, description: 'Collection schema version.' },
-    { name: 'createdAt', type: 'date', required: true, description: 'Creation time.' },
-    { name: 'updatedAt', type: 'date', required: true, description: 'Last update time.' }
-  ],
-  example: { shareId: '3c4d…', ownerId: '664f…', name: 'Chronological+', emoji: '🧠', eventCount: 0, schemaVersion: 2 }
-};
 
 const rateLimitSchema: ThingtimeSchema = {
   id: 'rate-limit',
@@ -646,6 +558,110 @@ const rateLimitSchema: ThingtimeSchema = {
   example: { key: 'waitlist:9f2c…', count: 3, schemaVersion: 2 }
 };
 
+// ---------------------------------------------------------------------------
+// System kinds — the satellite collections collapsing into things (see
+// claude-todo/12-everything-is-a-thing-collections.md). These kinds are
+// PROTECTED: the generic /api/v1/things CRUD unconditionally refuses them.
+// Only their dedicated utils (register, profile update, themes/algorithms/
+// waitlist) write them, each a direct insert that owns the right secure/
+// uniqueKeys shape — they do NOT go through createThing. Private state lives
+// under the root `secure` field (never crystal, never projected, a single
+// BinData blob so the $** text index can't tokenize any field inside it) and
+// uniqueness rides the root `uniqueKeys` array (multikey unique sparse index;
+// BinData elements, PII keys hashed).
+
+export const PROTECTED_THINGTIME = ['user', 'theme', 'feed-algorithm', 'waitlist'] as const;
+export const isProtectedThingtime = (ids: string[]): boolean =>
+  ids.some((id) => (PROTECTED_THINGTIME as readonly string[]).includes(id));
+
+const userThingSchema: ThingtimeSchema = {
+  id: 'user',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'User (thing)',
+  summary: 'A user account as a thing — public profile in crystal, credentials in the secure root field.',
+  detail:
+    'Users are things too: the crystal holds ONLY the public profile (what /api/v1/users/profile ' +
+    'already exposes), so user things are safely listable/searchable like any public thing. ' +
+    'Credentials and private account state (email, passwordHash, verification, storage, meta) ' +
+    'live under the root `secure` field — omitted from every projection, unreachable by the ' +
+    'search grammar, sensitive strings stored as binary so the text index cannot index them. ' +
+    'Username/email uniqueness rides uniqueKeys (email hashed). Created only via ' +
+    'POST /api/v1/auth/register or /api/v1/auth/service-account — the generic things CRUD ' +
+    'refuses this kind. Migrated users keep their legacy id as shareId, so ownerId references, ' +
+    'sessions, and rosters keep working unchanged.',
+  fields: [
+    { name: 'username', type: 'string', required: true, description: 'Unique, lowercased.' },
+    { name: 'ttid', type: 'string', required: true, description: 'Thingtime id (currently the username).' },
+    { name: 'displayName', type: 'string', required: false, description: 'Optional display name.' },
+    { name: 'bio', type: 'string', required: false, description: 'Profile bio.' },
+    { name: 'avatarUrl', type: 'string', required: false, description: 'Avatar image URL.' },
+    { name: 'bannerUrl', type: 'string', required: false, description: 'Profile banner URL.' }
+  ],
+  example: { username: 'rick.deckard', ttid: 'rick.deckard', displayName: 'Rick Deckard', bio: 'Blade runner.' }
+};
+
+const themeThingSchema: ThingtimeSchema = {
+  id: 'theme',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Theme (thing)',
+  summary: 'A saved user theme as a thing — share visibility maps onto the acl.',
+  detail:
+    'The resolved token doc lives in crystal.theme; the legacy visibility enum maps onto the ' +
+    'thing acl (public → ["tt:all"], private → ["tt:user"]). shareIds are preserved by the ' +
+    'migration so existing share links keep resolving. Written only through /api/v1/themes ' +
+    '(the 100-per-user cap and token validation live there); the generic things CRUD refuses ' +
+    'this kind.',
+  fields: [
+    { name: 'name', type: 'string', required: true, max: 60, description: 'Theme name.' },
+    { name: 'theme', type: 'object', required: true, description: 'Resolved theme tokens.' }
+  ],
+  example: { name: 'Midnight', theme: { '--tt-accent': 'hotpink' } }
+};
+
+const feedAlgorithmThingSchema: ThingtimeSchema = {
+  id: 'feed-algorithm',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Feed algorithm (thing)',
+  summary: 'A user-trained feed ranking algorithm as a thing (always private to its owner).',
+  detail:
+    'Weights over post types, tags, and authors, trained from engagement events. Always acl ' +
+    '["tt:user"] — weights encode reading habits. Written only through /api/v1/algorithms*; ' +
+    'the generic things CRUD refuses this kind. shareIds are preserved by the migration so ' +
+    'users.meta.activeFeedAlgorithmId pointers keep working.',
+  fields: [
+    { name: 'name', type: 'string', required: true, max: 60, description: 'Algorithm name.' },
+    { name: 'emoji', type: 'string', required: true, description: 'Display emoji.' },
+    { name: 'parentId', type: 'id', required: false, description: 'Branch lineage parent.' },
+    { name: 'weights', type: 'object', required: true, description: '{ types, tags, authors } weight maps.' },
+    { name: 'eventCount', type: 'number', required: true, description: 'Engagement events trained on.' },
+    { name: 'lastTrainedAt', type: 'date', required: false, description: 'Last training time.' }
+  ],
+  example: { name: 'Chronological+', emoji: '🧠', weights: { types: {}, tags: {}, authors: {} }, eventCount: 0 }
+};
+
+const waitlistThingSchema: ThingtimeSchema = {
+  id: 'waitlist',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Waitlist entry (thing)',
+  summary: 'A launch-waitlist signup as a thing — the email never leaves the secure field.',
+  detail:
+    'The crystal is empty by design: the email lives under the root secure field as binary ' +
+    '(invisible to projections, the search grammar, and the text index) and uniqueness rides a ' +
+    'hashed uniqueKey. System-owned and private (ownerId "system", acl ["tt:user"]) so no ' +
+    'viewer ever matches it. Written only through /api/v1/waitlist; duplicate joins are ' +
+    'treated as success.',
+  fields: [],
+  example: {}
+};
+
 export const thingtimeSchemas: ThingtimeSchema[] = [
   rootThingSchema,
   postSchema,
@@ -655,12 +671,14 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   dataSchema,
   schemaThingSchema,
   saveThingSchema,
-  userSchema,
+  // system kinds (collections collapsing into things — dual-era)
+  userThingSchema,
+  themeThingSchema,
+  feedAlgorithmThingSchema,
+  waitlistThingSchema,
+  // collections that remain collections
   sessionSchema,
   emailVerificationSchema,
-  themeSchema,
-  waitlistSchema,
-  feedAlgorithmSchema,
   rateLimitSchema
 ];
 
@@ -810,10 +828,12 @@ const sanitizeDataCrystal = (input: Record<string, unknown>): { ok: true; crysta
 };
 
 // Schema-thing field names double as crystal paths in the search builder
-// (crystal.<name>): KEY_SEGMENT_PATTERN segments joined by dots.
-const SCHEMA_FIELD_NAME_PATTERN = /^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$/;
-const MAX_SCHEMA_FIELD_NAME_CHARS = 60;
-const MAX_SCHEMA_FIELD_DESCRIPTION_CHARS = 200;
+// (crystal.<name>): KEY_SEGMENT_PATTERN segments joined by dots. Exported so
+// the builtin-schema seed migration maps registry fields onto the exact same
+// grammar sanitizeSchemaCrystal enforces on user-authored schema things.
+export const SCHEMA_FIELD_NAME_PATTERN = /^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$/;
+export const MAX_SCHEMA_FIELD_NAME_CHARS = 60;
+export const MAX_SCHEMA_FIELD_DESCRIPTION_CHARS = 200;
 
 // whole-number constraint (maxLength/minItems/maxItems); fail-loudly on junk
 const sanitizeCountConstraint = (
@@ -1105,6 +1125,65 @@ export const validateValueAgainstFields = (
   return { ok: !issues.length, issues };
 };
 
+// System-kind sanitizers: deep validation lives in each kind's dedicated
+// utils (register/profile/themes/algorithms/waitlist) — these enforce the
+// structural bounds so no write path can bypass them.
+export const MAX_USERNAME_CHARS = 60;
+export const MAX_DISPLAY_NAME_CHARS = 80;
+export const MAX_BIO_CHARS = 500;
+export const MAX_PROFILE_URL_CHARS = 64 * 1024;
+
+const boundedString = (value: unknown, max: number): string | null =>
+  typeof value === 'string' && value.trim() ? value.trim().slice(0, max) : null;
+
+const sanitizeUserCrystal = (input: Record<string, unknown>): { ok: true; crystal: Record<string, unknown> } | Fail => {
+  const username = boundedString(input.username, MAX_USERNAME_CHARS)?.toLowerCase();
+  if (!username) return fail(400, 'User things need a username');
+  return {
+    ok: true,
+    crystal: {
+      username,
+      ttid: boundedString(input.ttid, MAX_USERNAME_CHARS) || username,
+      displayName: boundedString(input.displayName, MAX_DISPLAY_NAME_CHARS),
+      bio: boundedString(input.bio, MAX_BIO_CHARS),
+      avatarUrl: boundedString(input.avatarUrl, MAX_PROFILE_URL_CHARS),
+      bannerUrl: boundedString(input.bannerUrl, MAX_PROFILE_URL_CHARS)
+    }
+  };
+};
+
+const sanitizeThemeCrystal = (input: Record<string, unknown>): { ok: true; crystal: Record<string, unknown> } | Fail => {
+  const name = boundedString(input.name, 60);
+  if (!name) return fail(400, 'Themes need a name');
+  if (!input.theme || typeof input.theme !== 'object' || Array.isArray(input.theme)) {
+    return fail(400, 'Themes need a theme token object');
+  }
+  return { ok: true, crystal: { name, theme: input.theme } };
+};
+
+const sanitizeFeedAlgorithmCrystal = (
+  input: Record<string, unknown>
+): { ok: true; crystal: Record<string, unknown> } | Fail => {
+  const name = boundedString(input.name, 60);
+  if (!name) return fail(400, 'Algorithms need a name');
+  const emoji = boundedString(input.emoji, 16) || '🧠';
+  if (!input.weights || typeof input.weights !== 'object' || Array.isArray(input.weights)) {
+    return fail(400, 'Algorithms need a weights object');
+  }
+  const eventCount = Number(input.eventCount);
+  return {
+    ok: true,
+    crystal: {
+      name,
+      emoji,
+      parentId: boundedString(input.parentId, 128),
+      weights: input.weights,
+      eventCount: Number.isFinite(eventCount) && eventCount >= 0 ? Math.floor(eventCount) : 0,
+      lastTrainedAt: boundedString(input.lastTrainedAt, 40)
+    }
+  };
+};
+
 const crystalSanitizers: Record<
   string,
   (input: Record<string, unknown>, appliedIds: string[]) => { ok: true; crystal: Record<string, unknown> } | Fail
@@ -1115,7 +1194,11 @@ const crystalSanitizers: Record<
   share: () => ({ ok: true, crystal: {} }),
   save: () => ({ ok: true, crystal: {} }),
   schema: sanitizeSchemaCrystal,
-  data: sanitizeDataCrystal
+  data: sanitizeDataCrystal,
+  user: sanitizeUserCrystal,
+  theme: sanitizeThemeCrystal,
+  'feed-algorithm': sanitizeFeedAlgorithmCrystal,
+  waitlist: () => ({ ok: true, crystal: {} })
 };
 
 export type ValidatedCrystal = { ok: true; thingtime: string[]; crystal: Record<string, unknown>; requiresTarget: boolean };

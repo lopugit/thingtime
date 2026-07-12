@@ -219,6 +219,15 @@ const builtinSchemaSources = (): SchemaSource[] =>
         }))
     }));
 
+// The seed-builtin-schemas admin migration mirrors every builtin crystal
+// schema into things as a system-owned schema thing (shareId schema-<id>,
+// author resolves to null). The browser already lists builtins from the code
+// registry, so those mirrors are dropped from the community column — without
+// this they'd render twice.
+const seededBuiltinShareIds = new Set(
+  thingtimeSchemas.filter((schema) => schema.kind === 'crystal').map((schema) => `schema-${schema.id}`)
+);
+
 // A schema thing (or browse entry) → a SchemaSource. Nested object/array
 // fields flatten to the dotted crystal paths the search grammar addresses.
 const schemaThingToSource = (
@@ -227,6 +236,7 @@ const schemaThingToSource = (
     reactionCounts?: Record<string, number>;
   }
 ): SchemaSource | null => {
+  if (seededBuiltinShareIds.has(thing.id) && !thing.author) return null;
   const crystal = thing.crystal || {};
   const fields = Array.isArray(crystal.fields) ? (crystal.fields as SchemaThingField[]) : [];
   if (typeof crystal.name !== 'string' || !fields.length) return null;

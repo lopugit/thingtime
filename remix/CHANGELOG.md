@@ -7,6 +7,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 **Author legend** — every entry is attributed:
 
 - **Codex (AI)** — change made by the Codex AI assistant.
+- **Claude (AI)** — change made by the Claude AI assistant.
 - **Lopu** — change made manually by the developer.
 
 > When you make a manual change, add a bullet under `[Unreleased]` ending with
@@ -15,6 +16,22 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 ---
 
 ## [Unreleased]
+
+### Changed
+
+- **Everything is a thing, for real now**: users, themes, feed algorithms, and
+  waitlist entries are stored in the `things` collection as protected system
+  kinds (`user`/`theme`/`feed-algorithm`/`waitlist`, plus seeded `schema`
+  things for every builtin kind). Public payloads live in `crystal`; secrets
+  (emails, password hashes) are BinData under the root `secure` field so the
+  search text index can never tokenize them; uniqueness rides BinData
+  `uniqueKeys` (PII hashed). Reads are dual-era (things first, frozen legacy
+  collections as fallback) and admin migrations under `/api/v1/admin/migrations`
+  convert each legacy collection idempotently. Legacy ids are preserved as
+  thing shareIds so sessions, rosters, ownerId joins, share links, and active
+  theme/algorithm pointers keep working unchanged. FUNDAMENTALS §3 rewritten.
+  Details in claude-todo/12-everything-is-a-thing-collections.md.
+  — Claude (AI), 2026-07-12
 
 ### Added
 
