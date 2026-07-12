@@ -51,6 +51,16 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		]
 	},
 	{
+		id: 'search',
+		label: 'Search',
+		icon: '🔍',
+		to: '/search',
+		children: [
+			{ id: 'search-home', label: 'Search', icon: '🔍', to: '/search' },
+			{ id: 'search-schemas', label: 'Schemas', icon: '💎', to: '/schemas' }
+		]
+	},
+	{
 		id: 'things',
 		label: 'Things',
 		icon: '📦',
@@ -59,6 +69,7 @@ export const drawerMenuItems: DrawerTopItem[] = [
 			{ id: 'things-view', label: 'View', icon: '👀', to: '/things', mode: 'view', group: 'Modes' },
 			{ id: 'things-edit', label: 'Edit', icon: '🎨', to: '/edit', mode: 'edit', group: 'Modes' },
 			{ id: 'things-editor', label: 'Editor', icon: '💻', to: '/editor', mode: 'editor', group: 'Modes' },
+			{ id: 'things-search', label: 'Search', icon: '🔍', to: '/search' },
 			{ id: 'things-raw', label: 'Raw results', icon: '🔍', to: '/raw' }
 		]
 	},

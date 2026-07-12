@@ -174,8 +174,10 @@ export const CommanderV2 = (props) => {
 		}
 	}, [inputValue, paths]);
 
+	// dropdown rows: index 0 is the pinned "Search things" row (→ /search), the
+	// fuzzy path suggestions follow at index 1+
 	const showSuggestions = React.useMemo(() => {
-		return inputValue?.length && suggestions?.length && commanderActive && !commanderSettings?.commanderActive?.hideSuggestionsOnToggle;
+		return inputValue?.length && commanderActive && !commanderSettings?.commanderActive?.hideSuggestionsOnToggle;
 	}, [
 		inputValue,
 		suggestions,
@@ -185,9 +187,24 @@ export const CommanderV2 = (props) => {
 		commanderSettings?.commanderActive?.hideSuggestionsOnToggle
 	]);
 
+	const suggestionRowCount = React.useMemo(() => {
+		return (suggestions?.length || 0) + 1;
+	}, [suggestions]);
+
 	const selectSuggestion = React.useCallback(
 		(suggestionIdx) => {
-			const suggestion = suggestions?.[suggestionIdx];
+			if (suggestionIdx === 0) {
+				const query = (inputValue || '').trim();
+				console.log('Commander search row selected, navigating to /search', { query });
+				navigate(query ? `/search?q=${encodeURIComponent(query)}` : '/search');
+				setShowContext(false, 'Search things');
+				setInputValue('');
+				setHoveredSuggestion(null);
+				setContextPath(undefined);
+				closeCommander();
+				return;
+			}
+			const suggestion = suggestions?.[suggestionIdx - 1];
 
 			const previewMode = false;
 
@@ -209,7 +226,9 @@ export const CommanderV2 = (props) => {
 				closeCommander();
 			}
 		},
-		[setInputValue, setContextPath, setShowContext, suggestions]
+		// closeCommander is declared below — referenced in the closure body only
+		// (calling it at select time is fine; naming it in deps would hit the TDZ)
+		[setInputValue, setContextPath, setShowContext, suggestions, inputValue, navigate, changePath]
 	);
 
 	const commandContainsPath = React.useMemo(() => {
@@ -276,6 +295,11 @@ export const CommanderV2 = (props) => {
 		const curSuggestionIdx = hoveredSuggestion;
 		if (curSuggestionIdx !== null) {
 			selectSuggestion(curSuggestionIdx);
+			// the pinned search row navigates to /search — never also run the
+			// input through the path/setter command path below
+			if (curSuggestionIdx === 0) {
+				return;
+			}
 		}
 		if (commanderActive) {
 			try {
@@ -383,21 +407,21 @@ export const CommanderV2 = (props) => {
 			// only run these if commander active
 
 			if (commanderActive) {
-				// if arrow keys then move selection
+				// if arrow keys then move selection (row 0 = the pinned search row)
 				if (e?.code === 'ArrowUp') {
 					// move selection up
-					const curSuggestionIdx = typeof hoveredSuggestion === 'number' ? hoveredSuggestion : suggestions?.length;
+					const curSuggestionIdx = typeof hoveredSuggestion === 'number' ? hoveredSuggestion : suggestionRowCount;
 					const newSuggestionIdx = curSuggestionIdx - 1;
 					if (newSuggestionIdx >= 0) {
 						setHoveredSuggestion(newSuggestionIdx);
 					} else {
-						setHoveredSuggestion(suggestions?.length - 1);
+						setHoveredSuggestion(suggestionRowCount - 1);
 					}
 				} else if (e?.code === 'ArrowDown') {
 					// move selection down
 					const curSuggestionIdx = typeof hoveredSuggestion === 'number' ? hoveredSuggestion : -1;
 					const newSuggestionIdx = curSuggestionIdx + 1;
-					if (newSuggestionIdx < suggestions?.length) {
+					if (newSuggestionIdx < suggestionRowCount) {
 						setHoveredSuggestion(newSuggestionIdx);
 					} else {
 						setHoveredSuggestion(0);
@@ -407,7 +431,7 @@ export const CommanderV2 = (props) => {
 				}
 			}
 		},
-		[closeCommander, toggleCommander, hoveredSuggestion, suggestions, thingtime, thingtimeRef, commanderActive, executeCommand]
+		[closeCommander, toggleCommander, hoveredSuggestion, suggestions, suggestionRowCount, thingtime, thingtimeRef, commanderActive, executeCommand]
 	);
 
 	React.useEffect(() => {
@@ -419,8 +443,9 @@ export const CommanderV2 = (props) => {
 	}, [allCommanderKeyListener]);
 
 	React.useEffect(() => {
-		if (typeof hoveredSuggestion === 'number') {
-			setVirtualValue(suggestions?.[hoveredSuggestion]);
+		// row 0 is the pinned search row — it previews the raw input, not a path
+		if (typeof hoveredSuggestion === 'number' && hoveredSuggestion > 0) {
+			setVirtualValue(suggestions?.[hoveredSuggestion - 1]);
 		} else {
 			setVirtualValue(inputValue);
 		}
@@ -524,11 +549,27 @@ export const CommanderV2 = (props) => {
 							onMouseLeave={() => setHoveredSuggestion(null)}
 							paddingY={3}
 						>
+							<Flex
+								background={hoveredSuggestion === 0 ? 'var(--tt-surface-hover, #ececee)' : null}
+								_hover={{
+									background: 'var(--tt-surface-hover, #ececee)'
+								}}
+								cursor="pointer"
+								fontFamily="mono"
+								fontSize="13px"
+								color="var(--tt-text, #5a5a66)"
+								onClick={() => selectSuggestion(0)}
+								onMouseEnter={() => setHoveredSuggestion(0)}
+								paddingX={4}
+								paddingY={1}
+							>
+								🔍 Search things for “{inputValue}”
+							</Flex>
 							{suggestions?.map((suggestion, i) => {
 								return (
 									<Flex
 										key={i}
-										background={hoveredSuggestion === i ? 'var(--tt-surface-hover, #ececee)' : null}
+										background={hoveredSuggestion === i + 1 ? 'var(--tt-surface-hover, #ececee)' : null}
 										_hover={{
 											background: 'var(--tt-surface-hover, #ececee)'
 										}}
@@ -536,8 +577,8 @@ export const CommanderV2 = (props) => {
 										fontFamily="mono"
 										fontSize="13px"
 										color="var(--tt-text, #5a5a66)"
-										onClick={() => selectSuggestion(i)}
-										onMouseEnter={() => setHoveredSuggestion(i)}
+										onClick={() => selectSuggestion(i + 1)}
+										onMouseEnter={() => setHoveredSuggestion(i + 1)}
 										paddingX={4}
 										paddingY={1}
 									>

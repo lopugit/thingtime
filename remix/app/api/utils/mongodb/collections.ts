@@ -81,6 +81,20 @@ export const ensureIndexes = async () => {
         // acl and thingtime are both arrays — Mongo forbids two multikey fields
         // in one compound index, so the audience index stands alone
         db.collection('things').createIndex({ acl: 1, createdAt: -1, shareId: 1 }),
+        // One weighted wildcard text index powers /api/v1/things/search ranked
+        // text mode across every string field of every thing (a collection can
+        // hold at most ONE text index — this is it). language_override points at
+        // a field no crystal will ever set, so user data containing a
+        // `language` key can never break inserts with an unsupported language.
+        db.collection('things').createIndex(
+          { '$**': 'text' },
+          {
+            name: 'things_text_search',
+            weights: { 'crystal.name': 10, 'crystal.text': 10, 'crystal.title': 8, 'crystal.listing.title': 8, tags: 6 },
+            default_language: 'english',
+            language_override: 'ttTextLanguage'
+          }
+        ),
         // One reaction per (target, user, emoji token): makes toggle-on an
         // idempotent upsert and dedups even under races. Partial via
         // crystal.emoji-exists so it only applies to reaction things.

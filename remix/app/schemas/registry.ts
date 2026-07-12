@@ -316,6 +316,124 @@ const shareSchema: ThingtimeSchema = {
   example: {}
 };
 
+// Free-form structured data (thingtime ["data"]): the crystal is ANY bounded
+// JSON shape — this is the "everything is a thing" promise made writable, and
+// what /search's real-datatype queries search over. Keys follow the same
+// segment grammar the search API accepts (no $, no dots inside a key), values
+// are depth/size/count-bounded, and when combined with a typed schema (e.g.
+// thingtime ["post","data"]) the typed sanitizer's fields always win.
+export const MAX_DATA_CRYSTAL_DEPTH = 6;
+export const MAX_DATA_CRYSTAL_NODES = 400;
+export const MAX_DATA_ARRAY_ITEMS = 100;
+export const MAX_DATA_KEY_CHARS = 60;
+
+const dataSchema: ThingtimeSchema = {
+  id: 'data',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Data',
+  summary: 'Free-form structured data — any JSON shape, searchable by real datatypes on /search.',
+  detail:
+    'The open half of Thingtime: a data thing’s crystal holds whatever structure you give it ' +
+    '(numbers stay numbers, booleans stay booleans), bounded but never schema-gated. Search it ' +
+    'with real datatype conditions on /search (legs ≥ 3, material in wood/concrete, height ' +
+    'between 60–130). Convention: carry a `schema` field naming a published schema thing (e.g. ' +
+    '"Table") so schema-driven searches can find you, and tag the thing for feed filters. Keys ' +
+    `are letters/numbers/_/- (max ${MAX_DATA_KEY_CHARS} chars), nesting caps at ` +
+    `${MAX_DATA_CRYSTAL_DEPTH} levels, ${MAX_DATA_CRYSTAL_NODES} values per crystal, arrays at ` +
+    `${MAX_DATA_ARRAY_ITEMS} items, strings at ${MAX_TEXT_CHARS} chars.`,
+  fields: [
+    {
+      name: '*',
+      type: 'record',
+      required: false,
+      description: 'Any JSON structure within the bounds above — this schema deliberately has no fixed fields.'
+    },
+    {
+      name: 'schema',
+      type: 'string',
+      required: false,
+      description: 'Optional convention: the name of the published schema thing this data follows.'
+    }
+  ],
+  example: {
+    schema: 'Table',
+    name: 'Walnut standing desk',
+    legs: 4,
+    material: 'wood',
+    width: 160,
+    height: 130,
+    depth: 80,
+    features: ['sit/stand', 'cable tray'],
+    price: 899.5
+  }
+};
+
+// User-authored schemas are things too (thingtime ["schema"]). They describe a
+// data shape other things can follow in their crystal (e.g. a "Table" with
+// legs/material/width), and the /search page browses them to prefill its query
+// builder. Field defs are bounded and whitelisted — never arbitrary JSON.
+export const MAX_SCHEMA_NAME_CHARS = 60;
+export const MAX_SCHEMA_DESCRIPTION_CHARS = 500;
+export const MAX_SCHEMA_FIELDS = 40;
+export const MAX_SCHEMA_ENUM_VALUES = 30;
+export const MAX_SCHEMA_ENUM_VALUE_CHARS = 60;
+export const MAX_SCHEMA_UNIT_CHARS = 20;
+export const SCHEMA_FIELD_TYPES = ['string', 'number', 'boolean', 'date', 'enum', 'string[]'] as const;
+export type SchemaFieldType = (typeof SCHEMA_FIELD_TYPES)[number];
+
+export type SchemaThingField = {
+  name: string;
+  type: SchemaFieldType;
+  description?: string;
+  values?: string[]; // enum types
+  min?: number; // number types
+  max?: number; // number types
+  unit?: string; // number types, display only (e.g. "cm")
+};
+
+const schemaThingSchema: ThingtimeSchema = {
+  id: 'schema',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Schema',
+  summary: 'A user-authored data shape — browse them on /search to prefill structured searches.',
+  detail:
+    'Anyone can publish a schema thing describing a shape (e.g. "Table": legs, material ' +
+    'wood/plastic/concrete, width/height/depth). Things that follow a schema simply carry its ' +
+    'fields in their crystal — schemas are discovery + search sugar, never a validation gate ' +
+    '(Thingtime searches real datatypes, not schema registrations). The /search page lists ' +
+    'public schema things next to the built-in crystal schemas and prefills its query builder ' +
+    'from the field definitions.',
+  fields: [
+    { name: 'name', type: 'string', required: true, max: MAX_SCHEMA_NAME_CHARS, description: 'Display name, e.g. "Table".' },
+    { name: 'description', type: 'string', required: false, max: MAX_SCHEMA_DESCRIPTION_CHARS, description: 'What this shape describes.' },
+    {
+      name: 'fields',
+      type: 'object',
+      required: true,
+      max: MAX_SCHEMA_FIELDS,
+      description:
+        `Field definitions, max ${MAX_SCHEMA_FIELDS}: { name, type (${SCHEMA_FIELD_TYPES.join('/')}), ` +
+        'description?, values? (enum), min?/max?/unit? (number) }.'
+    }
+  ],
+  example: {
+    name: 'Table',
+    description: 'Tables of all kinds — dining, coffee, standing desks.',
+    fields: [
+      { name: 'legs', type: 'number', min: 0, max: 12 },
+      { name: 'material', type: 'enum', values: ['wood', 'plastic', 'concrete', 'metal', 'glass'] },
+      { name: 'width', type: 'number', min: 0, unit: 'cm' },
+      { name: 'height', type: 'number', min: 0, unit: 'cm' },
+      { name: 'depth', type: 'number', min: 0, unit: 'cm' },
+      { name: 'features', type: 'string[]', description: 'e.g. sit/stand, extendable, foldable' }
+    ]
+  }
+};
+
 const userSchema: ThingtimeSchema = {
   id: 'user',
   version: COLLECTION_SCHEMA_VERSIONS.users,
@@ -475,6 +593,8 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   commentSchema,
   reactionSchema,
   shareSchema,
+  dataSchema,
+  schemaThingSchema,
   userSchema,
   sessionSchema,
   emailVerificationSchema,
@@ -567,6 +687,143 @@ const sanitizeReactionCrystal = (input: Record<string, unknown>): { ok: true; cr
   return { ok: true, crystal: { emoji: token } };
 };
 
+// Free-form data crystals: any JSON, bounded and key-validated. The walk fails
+// loudly (never silently drops) so writers know exactly what didn't fit.
+const DATA_KEY_PATTERN = /^[A-Za-z0-9_-]+$/;
+
+const sanitizeDataValue = (
+  value: unknown,
+  depth: number,
+  counter: { nodes: number },
+  path: string
+): { ok: true; value: unknown } | Fail => {
+  counter.nodes += 1;
+  if (counter.nodes > MAX_DATA_CRYSTAL_NODES) {
+    return fail(400, `Data crystals can hold at most ${MAX_DATA_CRYSTAL_NODES} values`);
+  }
+  if (value === null || typeof value === 'boolean') return { ok: true, value };
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return fail(400, `Data numbers must be finite (${path})`);
+    return { ok: true, value };
+  }
+  if (typeof value === 'string') {
+    if (value.length > MAX_TEXT_CHARS) return fail(400, `Data strings cap at ${MAX_TEXT_CHARS} chars (${path})`);
+    return { ok: true, value };
+  }
+  if (Array.isArray(value)) {
+    if (depth >= MAX_DATA_CRYSTAL_DEPTH) return fail(400, `Data nests at most ${MAX_DATA_CRYSTAL_DEPTH} levels (${path})`);
+    if (value.length > MAX_DATA_ARRAY_ITEMS) return fail(400, `Data arrays cap at ${MAX_DATA_ARRAY_ITEMS} items (${path})`);
+    const out: unknown[] = [];
+    for (let index = 0; index < value.length; index++) {
+      const entry = sanitizeDataValue(value[index], depth + 1, counter, `${path}[${index}]`);
+      if ('ok' in entry && entry.ok === false) return entry;
+      out.push((entry as { ok: true; value: unknown }).value);
+    }
+    return { ok: true, value: out };
+  }
+  if (typeof value === 'object') {
+    if (depth >= MAX_DATA_CRYSTAL_DEPTH) return fail(400, `Data nests at most ${MAX_DATA_CRYSTAL_DEPTH} levels (${path})`);
+    const out: Record<string, unknown> = {};
+    for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+      if (key.length > MAX_DATA_KEY_CHARS || !DATA_KEY_PATTERN.test(key)) {
+        return fail(400, `Data keys are letters/numbers/_/- up to ${MAX_DATA_KEY_CHARS} chars (got ${key.slice(0, 80)})`);
+      }
+      const sanitized = sanitizeDataValue(entry, depth + 1, counter, path ? `${path}.${key}` : key);
+      if ('ok' in sanitized && sanitized.ok === false) return sanitized;
+      out[key] = (sanitized as { ok: true; value: unknown }).value;
+    }
+    return { ok: true, value: out };
+  }
+  return fail(400, `Data values must be JSON (${path})`);
+};
+
+const sanitizeDataCrystal = (input: Record<string, unknown>): { ok: true; crystal: Record<string, unknown> } | Fail => {
+  const counter = { nodes: 0 };
+  const sanitized = sanitizeDataValue(input, 0, counter, '');
+  if ('ok' in sanitized && sanitized.ok === false) return sanitized;
+  return { ok: true, crystal: (sanitized as { ok: true; value: Record<string, unknown> }).value };
+};
+
+// Schema-thing field names double as crystal paths in the search builder
+// (crystal.<name>), so they follow the same segment grammar the search API
+// accepts — no $, no spaces, dots only as nesting separators.
+const SCHEMA_FIELD_NAME_PATTERN = /^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$/;
+const MAX_SCHEMA_FIELD_NAME_CHARS = 60;
+const MAX_SCHEMA_FIELD_DESCRIPTION_CHARS = 200;
+
+const sanitizeSchemaCrystal = (input: Record<string, unknown>): { ok: true; crystal: Record<string, unknown> } | Fail => {
+  const name = typeof input.name === 'string' ? input.name.trim() : '';
+  if (!name) return fail(400, 'Schemas need a name');
+  if (name.length > MAX_SCHEMA_NAME_CHARS) return fail(400, `Schema name is too long (max ${MAX_SCHEMA_NAME_CHARS})`);
+
+  const description = typeof input.description === 'string' ? input.description.trim().slice(0, MAX_SCHEMA_DESCRIPTION_CHARS) : '';
+
+  if (!Array.isArray(input.fields)) return fail(400, 'Schema fields must be a list');
+  if (input.fields.length > MAX_SCHEMA_FIELDS) return fail(400, `A schema can have at most ${MAX_SCHEMA_FIELDS} fields`);
+
+  const fields: SchemaThingField[] = [];
+  const seen = new Set<string>();
+  for (const raw of input.fields) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return fail(400, 'Each schema field must be an object');
+    const def = raw as Record<string, unknown>;
+
+    const fieldName = typeof def.name === 'string' ? def.name.trim() : '';
+    if (!fieldName || fieldName.length > MAX_SCHEMA_FIELD_NAME_CHARS || !SCHEMA_FIELD_NAME_PATTERN.test(fieldName)) {
+      return fail(400, `Schema field names are letters/numbers/_/- with optional dots (got ${String(def.name).slice(0, 80)})`);
+    }
+    const key = fieldName.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const type = SCHEMA_FIELD_TYPES.includes(def.type as any) ? (def.type as SchemaFieldType) : null;
+    if (!type) return fail(400, `Schema field types are ${SCHEMA_FIELD_TYPES.join(', ')}`);
+
+    const field: SchemaThingField = { name: fieldName, type };
+
+    const fieldDescription = typeof def.description === 'string' ? def.description.trim() : '';
+    if (fieldDescription) field.description = fieldDescription.slice(0, MAX_SCHEMA_FIELD_DESCRIPTION_CHARS);
+
+    if (type === 'enum') {
+      if (!Array.isArray(def.values) || !def.values.length) return fail(400, `Enum field ${fieldName} needs a values list`);
+      if (def.values.length > MAX_SCHEMA_ENUM_VALUES) {
+        return fail(400, `Enum field ${fieldName} can have at most ${MAX_SCHEMA_ENUM_VALUES} values`);
+      }
+      const values: string[] = [];
+      for (const value of def.values) {
+        if (typeof value !== 'string') return fail(400, `Enum field ${fieldName} values must be strings`);
+        const trimmed = value.trim().slice(0, MAX_SCHEMA_ENUM_VALUE_CHARS);
+        if (trimmed && !values.includes(trimmed)) values.push(trimmed);
+      }
+      if (!values.length) return fail(400, `Enum field ${fieldName} needs a values list`);
+      field.values = values;
+    }
+
+    if (type === 'number') {
+      const min = Number(def.min);
+      const max = Number(def.max);
+      if (def.min !== undefined && def.min !== null) {
+        if (!Number.isFinite(min)) return fail(400, `Field ${fieldName} min must be a number`);
+        field.min = min;
+      }
+      if (def.max !== undefined && def.max !== null) {
+        if (!Number.isFinite(max)) return fail(400, `Field ${fieldName} max must be a number`);
+        field.max = max;
+      }
+      if (field.min !== undefined && field.max !== undefined && field.min > field.max) {
+        return fail(400, `Field ${fieldName} min can’t exceed its max`);
+      }
+      if (typeof def.unit === 'string' && def.unit.trim()) {
+        field.unit = def.unit.trim().slice(0, MAX_SCHEMA_UNIT_CHARS);
+      }
+    }
+
+    fields.push(field);
+  }
+  if (!fields.length) return fail(400, 'Schemas need at least one field');
+
+  return { ok: true, crystal: { name, description, fields } };
+};
+
 const crystalSanitizers: Record<
   string,
   (input: Record<string, unknown>, appliedIds: string[]) => { ok: true; crystal: Record<string, unknown> } | Fail
@@ -574,7 +831,9 @@ const crystalSanitizers: Record<
   post: sanitizePostCrystal,
   comment: sanitizeCommentCrystal,
   reaction: sanitizeReactionCrystal,
-  share: () => ({ ok: true, crystal: {} })
+  share: () => ({ ok: true, crystal: {} }),
+  schema: sanitizeSchemaCrystal,
+  data: sanitizeDataCrystal
 };
 
 export type ValidatedCrystal = { ok: true; thingtime: string[]; crystal: Record<string, unknown>; requiresTarget: boolean };
@@ -598,7 +857,12 @@ export const validateThingtimeCrystal = (thingtime: unknown, crystal: unknown): 
   const input = crystal && typeof crystal === 'object' && !Array.isArray(crystal) ? (crystal as Record<string, unknown>) : {};
   const merged: Record<string, unknown> = {};
   let requiresTarget = false;
-  for (const id of ids) {
+  // free-form 'data' sanitizes FIRST whatever its thingtime position, so a
+  // typed schema sharing the array (e.g. ["post","data"]) always overrides the
+  // raw values for its own fields — data can widen a crystal, never weaken a
+  // typed schema's invariants
+  const sanitizeOrder = ids.includes('data') ? ['data', ...ids.filter((id) => id !== 'data')] : ids;
+  for (const id of sanitizeOrder) {
     const schema = getThingtimeSchema(id)!;
     if (schema.requiresTarget) requiresTarget = true;
     const sanitizer = crystalSanitizers[id];

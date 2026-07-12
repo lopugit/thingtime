@@ -15,6 +15,9 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // any other mutating write through /api/v1/things (create/upsert/patch/delete
   // posts and other thing kinds) — reactions/comments route to their own keys
   'things.write': { limit: 60, windowMs: 60_000, enabled: true },
+  // structured/text search (/api/v1/things/search) — read-only but query-shaped,
+  // so it gets its own generous-but-bounded window (anonymous callers key by IP)
+  'things.search': { limit: 120, windowMs: 60_000, enabled: true },
   // service accounts do legitimate bulk writes (e.g. chunked snapshot sync), so
   // they get a higher ceiling — but a BOUNDED one, never an exemption: anyone
   // can provision a service account, so accountKind confers no trust

@@ -202,7 +202,7 @@ const thingtimeOf = (doc: ThingDoc): string[] => {
   return doc.shareOfId ? ['post', 'share'] : ['post'];
 };
 
-const isPostThing = (doc: ThingDoc): boolean => thingtimeOf(doc).includes('post');
+export const isPostThing = (doc: ThingDoc): boolean => thingtimeOf(doc).includes('post');
 
 const crystalOf = (doc: ThingDoc): Record<string, any> => {
   if (isV2(doc)) return doc.crystal || {};
@@ -219,7 +219,7 @@ const targetIdOf = (doc: ThingDoc): string | null => {
 // thingtime:['post',...]; v1 posts carry kind:'post' (migration unsets kind).
 const postMatch = () => ({ $or: [{ thingtime: 'post' }, { kind: 'post' }] });
 
-const withMatch = (base: Record<string, any>, ...clauses: Record<string, any>[]) => {
+export const withMatch = (base: Record<string, any>, ...clauses: Record<string, any>[]) => {
   const and = [base, ...clauses].filter((clause) => Object.keys(clause).length);
   return and.length > 1 ? { $and: and } : and[0] || {};
 };
@@ -685,7 +685,7 @@ const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
   return aclAllows(aclOf(doc), viewer, doc.ownerId);
 };
 
-const canViewInherited = async (doc: ThingDoc, viewer: Viewer, depth = 0): Promise<boolean> => {
+export const canViewInherited = async (doc: ThingDoc, viewer: Viewer, depth = 0): Promise<boolean> => {
   if (!aclOf(doc).includes(ACL_INHERIT)) return canView(doc, viewer);
   // comment-on-comment chains resolve through their targets, bounded so a
   // pathological cycle can't loop forever
@@ -716,7 +716,7 @@ const circleClause = (circle: PostVisibility) => {
   }
 };
 
-const visibilityQueryFor = (viewer: Viewer, circles: PostVisibility[]) => {
+export const visibilityQueryFor = (viewer: Viewer, circles: PostVisibility[]) => {
   const wanted = circles.length ? circles : VISIBILITIES;
   const publicWanted = wanted.includes('public');
 
@@ -799,7 +799,7 @@ export type FeedQuery = {
   weights?: AlgorithmWeights | null;
 };
 
-const parseChronoCursor = (cursor: string | null | undefined): { createdAt: Date; id: string } | null => {
+export const parseChronoCursor = (cursor: string | null | undefined): { createdAt: Date; id: string } | null => {
   if (!cursor) return null;
   const [ms, id] = cursor.split('_');
   const time = Number(ms);
@@ -807,7 +807,7 @@ const parseChronoCursor = (cursor: string | null | undefined): { createdAt: Date
   return { createdAt: new Date(time), id };
 };
 
-const chronoCursorClause = (cursor: { createdAt: Date; id: string }) => ({
+export const chronoCursorClause = (cursor: { createdAt: Date; id: string }) => ({
   $or: [{ createdAt: { $lt: cursor.createdAt } }, { createdAt: cursor.createdAt, shareId: { $gt: cursor.id } }]
 });
 

@@ -27,6 +27,7 @@ import Rainbow from './routes/rainbow.$';
 import Raw from './routes/raw';
 import Register from './routes/register';
 import SchemasRoute from './routes/schemas';
+import SearchRoute from './routes/search';
 import StatusPage from './routes/status';
 import ThingtimeUrl from './routes/$';
 import TestsPage from './routes/tests';
@@ -127,6 +128,7 @@ export const router = createBrowserRouter([
         element: <DocsLayout />,
         children: [{ index: true, element: <SchemasRoute /> }]
       },
+      { path: 'search', element: <SearchRoute /> },
       {
         path: 'status',
         element: <StatusPage />,

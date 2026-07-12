@@ -1684,6 +1684,125 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'things-search',
+    group: 'things',
+    title: 'Search things',
+    endpoint: '/api/v1/things/search',
+    summary: 'Structured MongoDB-style search plus Google-like ranked text search over every thing you can see.',
+    detail:
+      'The search behind /search. Two modes that compose: q runs a ranked text search (weighted ' +
+      'wildcard text index over every string field — relevance-sorted like a web search), and ' +
+      'conditions runs a structured query built from a whitelisted operator grammar: eq, ne, gt, ' +
+      'gte, lt, lte, in, nin, exists, type, contains, startsWith, endsWith. Fields address the ' +
+      'crystal by path (bare names auto-prefix, so "legs" means crystal.legs) plus the root ' +
+      'fields tags, thingtime, createdAt, updatedAt, shareId, and targetId. Conditions nest into ' +
+      'all/any groups (depth ≤ 3, ≤ 32 conditions); values must be bounded primitives, and text ' +
+      'operators escape to literal matching — raw regex and query operators from the client never ' +
+      'reach the database. Results honour the same audience model as the feed: public things plus ' +
+      'your own, with exact acl evaluation per doc; attached tt:inherit things (comments, ' +
+      'reactions) only surface for their owner.',
+    auth: {
+      mode: 'optional',
+      description:
+        'Works logged out (tt:all things only, throttled per IP). Authenticated searches also see your own things.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET ?q=<text>&thingtime=&tags=&sort=&cursor=&limit= for the simple shareable form.',
+      'POST { q?, mode: "all"|"any", conditions: [{ field, op, value | values } | { mode, conditions: [...] }], thingtime?, tags?, from?, to?, sort?, cursor?, limit? } for structured searches.',
+      'Range searches are two conditions on one field (gte + lte); enum picks are one in condition.',
+      'sort defaults to relevance with q, newest otherwise (oldest also supported); ranked pages cursor by offset, chronological pages by the standard createdAt_shareId cursor.',
+      'The response carries things (generic projections), posts (full post projections keyed by thing id), nextCursor, and a capped total.',
+      'Handle 400 invalid grammar and 429 rate-limited.'
+    ],
+    requestExamples: [
+      {
+        name: 'Ranked text search',
+        description: 'Google-style: relevance-ranked matches across every string field of every visible thing.',
+        method: 'GET',
+        query: { q: 'standing desk walnut', limit: 20 }
+      },
+      {
+        name: 'Structured property search',
+        description: 'Real datatype conditions on crystal fields — a 60–130cm sit/stand table with wood or concrete top.',
+        method: 'POST',
+        body: {
+          mode: 'all',
+          conditions: [
+            { field: 'legs', op: 'gte', value: 3 },
+            { field: 'material', op: 'in', values: ['wood', 'concrete'] },
+            { field: 'height', op: 'gte', value: 60 },
+            { field: 'height', op: 'lte', value: 130 },
+            { field: 'features', op: 'contains', value: 'sit/stand' }
+          ]
+        }
+      },
+      {
+        name: 'Any-of groups + datatype checks',
+        description: 'Nested all/any groups compose; type/exists conditions search by developer datatype.',
+        method: 'POST',
+        body: {
+          mode: 'all',
+          conditions: [
+            { field: 'price', op: 'type', value: 'number' },
+            {
+              mode: 'any',
+              conditions: [
+                { field: 'condition', op: 'eq', value: 'new' },
+                { field: 'price', op: 'lt', value: 100 }
+              ]
+            }
+          ],
+          thingtime: ['post'],
+          sort: 'newest'
+        }
+      },
+      {
+        name: 'Text + structure together',
+        description: 'Relevance-ranked text matching, narrowed by structured conditions.',
+        method: 'POST',
+        body: {
+          q: 'table',
+          conditions: [{ field: 'legs', op: 'gte', value: 4 }]
+        }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Matches, newest or best first.',
+        body: {
+          ok: true,
+          things: [
+            {
+              id: 'thing_123',
+              thingtime: ['post'],
+              crystal: { type: 'text', text: 'Standing desk, walnut top, 60–130cm' },
+              tags: ['furniture'],
+              acl: ['tt:all'],
+              visibility: 'public'
+            }
+          ],
+          posts: { thing_123: { id: 'thing_123', type: 'text', text: 'Standing desk, walnut top, 60–130cm' } },
+          nextCursor: null,
+          total: 1,
+          totalCapped: false,
+          ranked: true
+        }
+      },
+      {
+        status: 400,
+        description: 'A condition failed the grammar.',
+        body: { ok: false, error: 'Unknown search operator: where (use eq, ne, gt, gte, lt, lte, in, nin, exists, type, contains, startsWith, endsWith)' }
+      }
+    ],
+    notes: [
+      'Browse schemas to search by on /search — picking one prefills conditions from its field definitions (user-authored schema things use thingtime ["schema"]).',
+      'contains/startsWith/endsWith match escaped literals case-insensitively; raw regex is deliberately not accepted.',
+      'The text index weights crystal.name/crystal.text highest, then titles and tags, then everything else.'
+    ]
+  }),
+  endpoint({
     id: 'things-comment',
     group: 'things',
     title: 'Comment on post',

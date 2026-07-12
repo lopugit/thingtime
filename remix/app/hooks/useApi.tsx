@@ -130,6 +130,12 @@ export function useApi() {
     },
     things: {
       feed: useCallback(async (args) => getJson(`/api/v1/things/feed${toQuery(args)}`), []),
+      // structured search — POST carries the condition tree (read-only despite
+      // the verb); see /docs/api things-search
+      search: useCallback(
+        async (args) => asyncFetcher.submit(args || {}, { action: '/api/v1/things/search' }),
+        [asyncFetcher]
+      ),
       userPosts: useCallback(async (args) => getJson(`/api/v1/things/user${toQuery(args)}`), []),
       get: useCallback(async (args) => getJson(`/api/v1/things${toQuery({ id: args?.id })}`), []),
       list: useCallback(
