@@ -692,6 +692,59 @@ export const apiTests: ApiTestDefinition[] = [
     )
   },
   {
+    id: 'things-record-put-guarded',
+    name: 'Record things upsert round-trip',
+    description: 'PUT /things with thingtime ["record"] stores the free-form crystal.record payload whole (401 anonymous).',
+    group: 'things',
+    method: 'PUT',
+    path: '/api/v1/things',
+    mutates: true,
+    body: {
+      id: 'api-test-record-001',
+      thingtime: ['record'],
+      crystal: {
+        schema: 'thingtime-tests/api-record@1',
+        title: 'API test record 🧪',
+        record: { hello: 'thingtime', nested: { list: [1, 2, 3], ok: true } }
+      },
+      acl: ['tt:user']
+    },
+    expect: expectJson(
+      [200, 201, 401],
+      (body) =>
+        (body?.ok === true &&
+          typeof body?.created === 'boolean' &&
+          body?.thing?.crystal?.record?.hello === 'thingtime' &&
+          body?.thing?.crystal?.record?.nested?.list?.length === 3 &&
+          body?.thing?.crystal?.schema === 'thingtime-tests/api-record@1') ||
+        (body?.ok === false && typeof body?.error === 'string'),
+      'Record upsert stored the payload whole (session) or was rejected (anonymous).'
+    )
+  },
+  {
+    id: 'things-record-shape-validated',
+    name: 'Record payload shape is validated',
+    description: 'A record thing without a crystal.record object is rejected with a 400 error shape (401 anonymous).',
+    group: 'things',
+    method: 'POST',
+    path: '/api/v1/things',
+    body: { thingtime: ['record'], crystal: { schema: 'thingtime-tests/api-record@1', record: 'not-an-object' }, acl: ['tt:user'] },
+    expect: expectJson([400, 401], (body) => body?.ok === false && typeof body?.error === 'string', 'Malformed record payload was rejected with an error shape.')
+  },
+  {
+    id: 'schemas-record-registered',
+    name: 'Record schema is registered',
+    description: 'The public schema registry includes the free-form record crystal schema.',
+    group: 'schemas',
+    method: 'GET',
+    path: '/api/v1/schemas',
+    expect: expectJson(
+      [200],
+      (body) => body?.ok === true && body.schemas.some((schema: any) => schema?.id === 'record' && schema?.kind === 'crystal'),
+      'Schema registry returned the record crystal schema.'
+    )
+  },
+  {
     id: 'things-delete-unified-guarded',
     name: 'Unified DELETE is guarded',
     description: 'DELETE /things?id= without a session (or an unknown/unowned thing) is rejected with an error shape.',

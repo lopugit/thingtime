@@ -178,6 +178,10 @@ export const MAX_TEXT_CHARS = 5000;
 export const MAX_IMAGES = 8;
 export const MAX_IMAGE_URL_CHARS = 2048;
 export const MAX_COMMENT_CHARS = 1000;
+export const MAX_RECORD_CHARS = 200_000;
+export const MAX_RECORD_DEPTH = 16;
+export const MAX_RECORD_SCHEMA_CHARS = 120;
+export const MAX_RECORD_TITLE_CHARS = 200;
 
 // The schema version each collection's docs are written at today. Docs with no
 // schemaVersion field predate versioning and count as version 1 everywhere.
@@ -314,6 +318,51 @@ const shareSchema: ThingtimeSchema = {
   requiresTarget: true,
   fields: [],
   example: {}
+};
+
+const recordSchema: ThingtimeSchema = {
+  id: 'record',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Record',
+  summary: 'A free-form structured data record — the extension point for apps that build on Thingtime.',
+  detail:
+    'Records let an app store its own JSON documents as things without inventing a new server ' +
+    'schema: the payload lives whole under `crystal.record`, the app names its own type in ' +
+    '`crystal.schema` (e.g. "magic/project@1"), and `crystal.title` gives generic browsers ' +
+    'something human to show. The payload is stored as sent — the server only enforces shape ' +
+    `(object or array), size (${MAX_RECORD_CHARS.toLocaleString('en-US')} serialized chars), depth ` +
+    `(${MAX_RECORD_DEPTH} levels), and strips prototype-pollution keys. Records never appear in ` +
+    'feeds; list yours with GET /api/v1/things?thingtime=record. Standalone things default to ' +
+    'acl ["tt:all"] (public) — apps storing private data must send acl ["tt:user"] explicitly.',
+  fields: [
+    {
+      name: 'schema',
+      type: 'string',
+      required: false,
+      max: MAX_RECORD_SCHEMA_CHARS,
+      description: `App-defined type id for the record, e.g. "magic/project@1" (max ${MAX_RECORD_SCHEMA_CHARS} chars, [A-Za-z0-9@/._-]).`
+    },
+    {
+      name: 'title',
+      type: 'string',
+      required: false,
+      max: MAX_RECORD_TITLE_CHARS,
+      description: `Optional human-readable label for generic browsers (max ${MAX_RECORD_TITLE_CHARS} chars).`
+    },
+    {
+      name: 'record',
+      type: 'object',
+      required: true,
+      description: `The payload itself — arbitrary JSON object or array, up to ${MAX_RECORD_CHARS.toLocaleString('en-US')} serialized chars and ${MAX_RECORD_DEPTH} levels deep.`
+    }
+  ],
+  example: {
+    schema: 'magic/project@1',
+    title: 'LOTR/LTC eBay AU Buying Goal',
+    record: { id: 'lotr-ltc-ebay-au-buying-goal', kind: 'buying-goal', cards: [{ name: 'Rivendell', set: 'LTR' }] }
+  }
 };
 
 const userSchema: ThingtimeSchema = {
@@ -475,6 +524,7 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   commentSchema,
   reactionSchema,
   shareSchema,
+  recordSchema,
   userSchema,
   sessionSchema,
   emailVerificationSchema,
@@ -567,6 +617,67 @@ const sanitizeReactionCrystal = (input: Record<string, unknown>): { ok: true; cr
   return { ok: true, crystal: { emoji: token } };
 };
 
+// Free-form record payloads are stored as sent, minus anything dangerous:
+// prototype-pollution keys are stripped recursively, depth and serialized size
+// are capped, and only JSON-representable values pass (request bodies arrive
+// via JSON.parse so this mostly guards direct server-side callers).
+const POLLUTION_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+const sanitizeRecordValue = (value: unknown, depth: number): { ok: true; value: unknown } | Fail => {
+  if (depth > MAX_RECORD_DEPTH) return fail(400, `record is nested too deeply (max ${MAX_RECORD_DEPTH} levels)`);
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return { ok: true, value };
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return fail(400, 'record numbers must be finite');
+    return { ok: true, value };
+  }
+  if (Array.isArray(value)) {
+    const out: unknown[] = [];
+    for (const entry of value) {
+      const sanitized = sanitizeRecordValue(entry, depth + 1);
+      if (sanitized.ok === false) return sanitized;
+      out.push(sanitized.value);
+    }
+    return { ok: true, value: out };
+  }
+  if (typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+      if (POLLUTION_KEYS.has(key)) continue;
+      if (entry === undefined) continue;
+      const sanitized = sanitizeRecordValue(entry, depth + 1);
+      if (sanitized.ok === false) return sanitized;
+      out[key] = sanitized.value;
+    }
+    return { ok: true, value: out };
+  }
+  return fail(400, 'record values must be JSON (objects, arrays, strings, numbers, booleans, null)');
+};
+
+const sanitizeRecordCrystal = (input: Record<string, unknown>): { ok: true; crystal: Record<string, unknown> } | Fail => {
+  const rawSchema = typeof input.schema === 'string' ? input.schema.trim() : '';
+  if (rawSchema && (rawSchema.length > MAX_RECORD_SCHEMA_CHARS || !/^[A-Za-z0-9@/._-]+$/.test(rawSchema))) {
+    return fail(400, `record schema must be at most ${MAX_RECORD_SCHEMA_CHARS} chars of [A-Za-z0-9@/._-]`);
+  }
+
+  const rawTitle = typeof input.title === 'string' ? input.title.trim() : '';
+  const title = rawTitle.slice(0, MAX_RECORD_TITLE_CHARS);
+
+  const rawRecord = input.record;
+  if (!rawRecord || typeof rawRecord !== 'object') {
+    return fail(400, 'record requires a crystal.record object or array payload');
+  }
+
+  const sanitized = sanitizeRecordValue(rawRecord, 1);
+  if (sanitized.ok === false) return sanitized;
+
+  const serializedChars = JSON.stringify(sanitized.value).length;
+  if (serializedChars > MAX_RECORD_CHARS) {
+    return fail(400, `Record is too large (${serializedChars.toLocaleString('en-US')} chars, max ${MAX_RECORD_CHARS.toLocaleString('en-US')})`);
+  }
+
+  return { ok: true, crystal: { schema: rawSchema || null, title: title || null, record: sanitized.value } };
+};
+
 const crystalSanitizers: Record<
   string,
   (input: Record<string, unknown>, appliedIds: string[]) => { ok: true; crystal: Record<string, unknown> } | Fail
@@ -574,7 +685,8 @@ const crystalSanitizers: Record<
   post: sanitizePostCrystal,
   comment: sanitizeCommentCrystal,
   reaction: sanitizeReactionCrystal,
-  share: () => ({ ok: true, crystal: {} })
+  share: () => ({ ok: true, crystal: {} }),
+  record: sanitizeRecordCrystal
 };
 
 export type ValidatedCrystal = { ok: true; thingtime: string[]; crystal: Record<string, unknown>; requiresTarget: boolean };
