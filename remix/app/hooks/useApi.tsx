@@ -253,6 +253,8 @@ export function useApi() {
     },
     profile: {
       get: useCallback(async (args) => getJson(`/api/v1/users/profile${toQuery(args)}`), []),
+      // public people search (the /search People rail)
+      search: useCallback(async (args) => getJson(`/api/v1/users/search${toQuery(args)}`), []),
       update: useCallback(
         async (args) => {
           const { displayName, bio, avatarUrl, bannerUrl } = args;

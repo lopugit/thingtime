@@ -18,6 +18,9 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // structured/text search (/api/v1/things/search) — read-only but query-shaped,
   // so it gets its own generous-but-bounded window (anonymous callers key by IP)
   'things.search': { limit: 120, windowMs: 60_000, enabled: true },
+  // public people search (/api/v1/users/search) — bounded like things.search;
+  // it only ever returns public profile projections
+  'users.search': { limit: 120, windowMs: 60_000, enabled: true },
   // service accounts do legitimate bulk writes (e.g. chunked snapshot sync), so
   // they get a higher ceiling — but a BOUNDED one, never an exemption: anyone
   // can provision a service account, so accountKind confers no trust

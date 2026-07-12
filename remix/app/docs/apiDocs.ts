@@ -2147,6 +2147,47 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'users-search',
+    group: 'profile',
+    title: 'Search people',
+    endpoint: '/api/v1/users/search',
+    summary: 'Public people search — matches usernames and display names for the /search People rail.',
+    detail:
+      'Escaped-literal, case-insensitive matching on username and displayName only (never email — an ' +
+      'address can’t be reversed to an account). Returns public profile projections: username, ' +
+      'displayName, bio, avatar/banner URLs, createdAt. Users live in the users collection, not ' +
+      'things, so /api/v1/things/search never sees them — this endpoint is how the search page ' +
+      'surfaces people alongside things.',
+    auth: {
+      mode: 'optional',
+      description: 'Works logged out; anonymous callers are rate-limited per hashed IP.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET ?q=<text>&limit= — empty q returns an empty list.',
+      'Render results as profile links (/profile/<username>).',
+      'Handle 429 rate-limited.'
+    ],
+    requestExamples: [
+      {
+        name: 'Find people',
+        description: 'Match usernames and display names.',
+        method: 'GET',
+        query: { q: 'lopu', limit: 8 }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Matching public profiles.',
+        body: {
+          ok: true,
+          users: [{ id: '664f…', username: 'lopu', displayName: 'Lopu', bio: 'Making Thingtime 🦄', avatarUrl: null }]
+        }
+      }
+    ]
+  }),
+  endpoint({
     id: 'vercel-deployments',
     group: 'vercel',
     title: 'Vercel deployments',

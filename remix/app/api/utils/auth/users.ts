@@ -225,6 +225,24 @@ export const searchUsersForAdmin = async (query: string, limit = 20): Promise<Ad
   return docs.map(toAdminRow);
 };
 
+// Public people search for /search — matches username or display name
+// (escaped literal, case-insensitive) and returns ONLY the public profile
+// projection. Never matches email: that would let anyone reverse an address
+// to an account.
+export const searchUsersPublic = async (query: string, limit = 8): Promise<PublicProfile[]> => {
+  const q = (query || '').trim().slice(0, 100);
+  if (!q) return [];
+  const users = await getUsersCollection();
+  const pattern = { $regex: escapeRegex(q), $options: 'i' };
+  const docs = await users
+    .find({ $or: [{ username: pattern }, { displayName: pattern }] } as any)
+    .project({ username: 1, displayName: 1, bio: 1, avatarUrl: 1, bannerUrl: 1, createdAt: 1 })
+    .sort({ username: 1 })
+    .limit(Math.min(20, Math.max(1, limit)))
+    .toArray();
+  return docs.map(toPublicProfile);
+};
+
 // Current DB-flagged admins (env admins are surfaced separately in the config).
 export const listAdmins = async (): Promise<AdminUserRow[]> => {
   const users = await getUsersCollection();

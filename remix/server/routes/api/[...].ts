@@ -58,6 +58,7 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/things/update': () => import('../../../app/routes/api/v1/things/update/_update'),
   'v1/things/user': () => import('../../../app/routes/api/v1/things/user/_user'),
   'v1/users/profile': () => import('../../../app/routes/api/v1/users/profile/_profile'),
+  'v1/users/search': () => import('../../../app/routes/api/v1/users/search/_search'),
   'v1/vercel/deployments': () => import('../../../app/routes/api/v1/vercel/deployments/_deployments'),
   'v1/vercel/status': () => import('../../../app/routes/api/v1/vercel/status/_status'),
   'v1/vercel/status-data': () => import('../../../app/routes/api/v1/vercel/status-data/_status-data'),

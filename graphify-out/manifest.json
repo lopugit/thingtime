@@ -785,9 +785,9 @@
     "semantic_hash": ""
   },
   "remix/app/api/utils/auth/users.ts": {
-    "mtime": 1783814170.1000645,
-    "ast_hash": "429886bd4e3961eb404f33f71219d953",
-    "semantic_hash": "429886bd4e3961eb404f33f71219d953"
+    "mtime": 1783829922.6788669,
+    "ast_hash": "840ed3151440b4103f4094b45a6b6778",
+    "semantic_hash": ""
   },
   "remix/app/api/utils/crypto/cryptoTools.server.ts": {
     "mtime": 1783814170.1002724,
@@ -1185,8 +1185,8 @@
     "semantic_hash": "2c876691ea163b0306ebf575cf88e1b4"
   },
   "remix/app/hooks/useApi.tsx": {
-    "mtime": 1783825112.856009,
-    "ast_hash": "2404f4ac3f2b1088d265720d66f1c24a",
+    "mtime": 1783830225.5397959,
+    "ast_hash": "e674c957095c858bf5ecd2c3120d8178",
     "semantic_hash": ""
   },
   "remix/app/hooks/useAsyncFetcher.tsx": {
@@ -1530,8 +1530,8 @@
     "semantic_hash": "3e068c437e00eacf7136b9836e06d3a0"
   },
   "remix/server/routes/api/[...].ts": {
-    "mtime": 1783824763.12733,
-    "ast_hash": "1dcd1cfb2e119b211fc855120565266d",
+    "mtime": 1783830196.1725712,
+    "ast_hash": "58c16cd890eb5a62094567fbcc964d7e",
     "semantic_hash": ""
   },
   "remix/server/routes/api/root-data.get.ts": {
@@ -3270,8 +3270,8 @@
     "semantic_hash": "f33d517f220a280930d5f773399b28a0"
   },
   "remix/app/docs/apiDocs.ts": {
-    "mtime": 1783828038.4565012,
-    "ast_hash": "56853fd7316c4b3e6c158f60dbc5bd7f",
+    "mtime": 1783830223.4385715,
+    "ast_hash": "9d5d86935df3961292f92762b5f0ca1b",
     "semantic_hash": ""
   },
   "remix/app/routes/docs/api.tsx": {
@@ -3640,8 +3640,8 @@
     "semantic_hash": "72315d91a917dab861c5a059d418c3f2"
   },
   "remix/app/api/utils/rateLimit/config.ts": {
-    "mtime": 1783824766.9213467,
-    "ast_hash": "aa3fedf2a6dbdd510ce22c58d9288fe9",
+    "mtime": 1783830199.3504283,
+    "ast_hash": "05971dcda1315090ce02d4beb79c76c2",
     "semantic_hash": ""
   },
   "remix/app/api/utils/rateLimit/enforce.ts": {
@@ -3810,13 +3810,13 @@
     "semantic_hash": ""
   },
   "remix/app/components/Search/SearchPage.tsx": {
-    "mtime": 1783827992.777098,
-    "ast_hash": "4e697b781c86ed14221001aff9677863",
+    "mtime": 1783830292.6941457,
+    "ast_hash": "0b8a18f87416c47b40d13925fce52c7d",
     "semantic_hash": ""
   },
   "remix/app/components/Search/searchTypes.ts": {
-    "mtime": 1783828002.5382333,
-    "ast_hash": "42c2a8483b3978d1f7c540a66a6c8bcd",
+    "mtime": 1783830234.0904906,
+    "ast_hash": "01c2d44333eaf2958288aa4929bac687",
     "semantic_hash": ""
   },
   "remix/app/routes/api/v1/things/search/_search.tsx": {
@@ -3837,6 +3837,11 @@
   "PRs/63-claude-search-page-mongodb-query-154eb4--search-page-query-builder-ranked-text-search-by-schema.md": {
     "mtime": 1783826718.4849105,
     "ast_hash": "d89c3db10f7967d735e0e16cd99bd92b",
+    "semantic_hash": ""
+  },
+  "remix/app/routes/api/v1/users/search/_search.tsx": {
+    "mtime": 1783829927.1156397,
+    "ast_hash": "fdca51d8e6150f0c8533a790689ac000",
     "semantic_hash": ""
   }
 }

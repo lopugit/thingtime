@@ -35,6 +35,15 @@ export type SearchPost = {
   createdAt: string;
 };
 
+// public profile projection from /api/v1/users/search (the People rail)
+export type SearchPerson = {
+  id: string;
+  username: string;
+  displayName: string | null;
+  bio: string | null;
+  avatarUrl: string | null;
+};
+
 export type SearchResponse = {
   ok: boolean;
   error?: string;

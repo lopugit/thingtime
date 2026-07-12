@@ -11,7 +11,7 @@ import {
   Text
 } from '@chakra-ui/react';
 import { Plus, Search as SearchIcon, Sparkles, X } from 'lucide-react';
-import { useLocation, useNavigate } from 'react-router';
+import { Link as RouterLink, useLocation, useNavigate } from 'react-router';
 
 import { Rainbow } from '~/components/Rainbow/Rainbow';
 import { useLopu } from '~/components/Lopu/useLopu';
@@ -23,6 +23,7 @@ import type {
   ConditionRow,
   RowValueType,
   SchemaSource,
+  SearchPerson,
   SearchPost,
   SearchResponse,
   SearchThing
@@ -249,11 +250,56 @@ type CachedSearch = {
   sort: string;
   things: SearchThing[];
   posts: Record<string, SearchPost>;
+  people?: SearchPerson[];
   total: number | null;
   totalCapped: boolean;
   ranked: boolean;
   nextCursor: string | null;
 };
+
+function PersonCard({ person }: { person: SearchPerson }) {
+  return (
+    <Flex
+      as={RouterLink}
+      _hover={{ background: 'var(--tt-surface-hover, #ececee)' }}
+      align="center"
+      {...CARD_STYLES}
+      gap={3}
+      maxWidth="100%"
+      px={3}
+      py={2}
+      to={`/profile/${encodeURIComponent(person.username)}`}
+    >
+      <Center
+        background="var(--tt-surface-alt, #f5f5f7)"
+        borderRadius="full"
+        flexShrink={0}
+        height="34px"
+        overflow="hidden"
+        width="34px"
+      >
+        {person.avatarUrl ? (
+          <img alt="" src={person.avatarUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        ) : (
+          <Text fontSize="sm">{(person.displayName || person.username).slice(0, 1).toUpperCase()}</Text>
+        )}
+      </Center>
+      <Box minWidth={0}>
+        <Text color="var(--tt-text, #33333c)" fontSize="sm" fontWeight="600" isTruncated>
+          {person.displayName || person.username}
+          <Text as="span" color="var(--tt-muted, #9a9aa6)" fontWeight="400" ml={1.5}>
+            @{person.username}
+          </Text>
+        </Text>
+        {person.bio ? (
+          <Text color="var(--tt-muted, #9a9aa6)" fontSize="xs" isTruncated>
+            {person.bio}
+          </Text>
+        ) : null}
+      </Box>
+    </Flex>
+  );
+}
 
 const previewValue = (value: unknown): string => {
   if (value === null) return 'null';
@@ -370,6 +416,7 @@ export const SearchPage = () => {
   // localStorage, the fresh search reconciles in the background
   const [things, setThings] = React.useState<SearchThing[]>(cached?.things || []);
   const [posts, setPosts] = React.useState<Record<string, SearchPost>>(cached?.posts || {});
+  const [people, setPeople] = React.useState<SearchPerson[]>(cached?.people || []);
   const [total, setTotal] = React.useState<number | null>(cached?.total ?? null);
   const [totalCapped, setTotalCapped] = React.useState(cached?.totalCapped || false);
   const [ranked, setRanked] = React.useState(cached?.ranked || false);
@@ -425,8 +472,18 @@ export const SearchPage = () => {
       };
 
       try {
-        const resp = (await apiRef.current.v1.things.search(body)) as SearchResponse;
+        // people ride along on first-page text searches — users aren't things
+        // (separate collection), so they get their own endpoint, in parallel
+        const wantPeople = !cursor && !!current.q.trim();
+        const [resp, peopleResp] = (await Promise.all([
+          apiRef.current.v1.things.search(body),
+          wantPeople
+            ? apiRef.current.v1.profile.search({ q: current.q.trim(), limit: 8 }).catch(() => null)
+            : Promise.resolve(null)
+        ])) as [SearchResponse, { users?: SearchPerson[] } | null];
         if (seq !== requestSeqRef.current) return;
+
+        if (!cursor) setPeople(wantPeople ? peopleResp?.users || [] : []);
 
         setThings((prev) => {
           if (!cursor) return resp.things || [];
@@ -451,6 +508,7 @@ export const SearchPage = () => {
             sort: current.sort,
             things: (resp.things || []).slice(0, PAGE_SIZE),
             posts: resp.posts || {},
+            people: wantPeople ? peopleResp?.users || [] : [],
             total: resp.total ?? null,
             totalCapped: !!resp.totalCapped,
             ranked: !!resp.ranked,
@@ -887,11 +945,24 @@ export const SearchPage = () => {
           ) : null}
         </Flex>
 
+        {people.length ? (
+          <Flex direction="column" gap={2}>
+            <Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="11px" fontWeight="700">
+              People
+            </Text>
+            <Flex direction="column" gap={2}>
+              {people.map((person) => (
+                <PersonCard key={person.id} person={person} />
+              ))}
+            </Flex>
+          </Flex>
+        ) : null}
+
         <Flex direction="column" gap={3}>
           {things.map((thing) => (
             <ThingResultCard key={thing.id} post={posts[thing.id] || null} thing={thing} />
           ))}
-          {!things.length && !loading ? (
+          {!things.length && !people.length && !loading ? (
             <Box {...CARD_STYLES} p={8} textAlign="center">
               <Text color="var(--tt-muted, #9a9aa6)">
                 Nothing matched — loosen a filter, or try plain words up top ✨
