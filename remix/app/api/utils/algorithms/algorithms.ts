@@ -8,7 +8,7 @@ import {
   getUsersCollection
 } from '../mongodb/collections';
 import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
-import { setUserActiveFeedAlgorithm } from '../auth/users';
+import { clearUserActiveFeedAlgorithm, setUserActiveFeedAlgorithm } from '../auth/users';
 import {
   applyEventsToWeights,
   emptyWeights,
@@ -360,30 +360,19 @@ export const deleteAlgorithm = async (ownerId: string, shareId: unknown): Promis
   if (typeof shareId !== 'string' || !shareId.trim()) return fail(400, 'Algorithm id is required');
   const id = shareId.trim();
 
-  // delete from whichever store holds the doc — things first, legacy fallback
+  // delete from BOTH stores — a migration that crashed between thing-upsert and
+  // legacy-delete leaves a twin; removing only one would let the dual-era read
+  // resurrect the "deleted" algorithm (and the next migration re-create it)
   const things = await getThingsCollection();
-  const thingRes = await things.deleteOne({ shareId: id, ownerId, thingtime: 'feed-algorithm' } as any);
-  let deleted = thingRes.deletedCount > 0;
-  if (!deleted) {
-    const algorithms = await getFeedAlgorithmsCollection();
-    const res = await algorithms.deleteOne({ shareId: id, ownerId } as any);
-    deleted = res.deletedCount > 0;
-  }
-  if (!deleted) return fail(404, 'Algorithm not found');
+  const [thingRes, legacyRes] = await Promise.all([
+    things.deleteOne({ shareId: id, ownerId, thingtime: 'feed-algorithm' } as any),
+    (await getFeedAlgorithmsCollection()).deleteOne({ shareId: id, ownerId } as any)
+  ]);
+  if (!thingRes.deletedCount && !legacyRes.deletedCount) return fail(404, 'Algorithm not found');
 
   // don't leave the owner's active algorithm dangling at a deleted id — the
-  // owner's user doc may live in either era (users are things too)
-  const now = new Date();
-  const cleared = await things.updateOne(
-    { shareId: String(ownerId), thingtime: 'user', 'secure.meta.activeFeedAlgorithmId': id } as any,
-    { $set: { 'secure.meta.activeFeedAlgorithmId': null, updatedAt: now } }
-  );
-  if (!cleared.matchedCount && ObjectId.isValid(ownerId)) {
-    await (await getUsersCollection()).updateOne(
-      { _id: new ObjectId(ownerId), 'meta.activeFeedAlgorithmId': id },
-      { $set: { 'meta.activeFeedAlgorithmId': null, updatedAt: now } }
-    );
-  }
+  // users-store layout (secure blob, either era) is owned by auth/users
+  await clearUserActiveFeedAlgorithm(String(ownerId), id);
   // orphaned branches keep working — parentId is lineage metadata, not a live link
   return { ok: true };
 };

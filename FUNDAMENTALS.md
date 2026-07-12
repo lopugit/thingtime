@@ -37,22 +37,27 @@ kind declared through the `thingtime` schema-id array (see
 
 | Collection | Holds |
 | ---------- | ----- |
-| `things`   | ALL Thingtime data. System kinds: `user` (public profile in `crystal`, credentials as BinData under root `secure`, uniqueness via BinData `uniqueKeys`), `theme`, `feed-algorithm`, `waitlist`, `schema`; content kinds: `post`, `comment`, `reaction`, `share`, `data` |
+| `things`   | ALL Thingtime data. System kinds: `user` (public profile in `crystal`, all private state as a single BinData `secure` blob, uniqueness via BinData `uniqueKeys`), `theme`, `feed-algorithm`, `waitlist`, `schema`; content kinds: `post`, `comment`, `reaction`, `share`, `data` |
 | `sessions` | server-side sessions / JWT records (revocation; `userId` = the user thing's `shareId`) |
 | `rosters`  | account-switcher rosters (TTL-reaped) |
 | `emailVerifications` | pending email-verification tokens |
 | `lopuMusingRateLimits` / `rateLimits` | rate-limit windows |
 | `settings` | admin-editable app settings singletons |
-| `users` / `themes` / `feedAlgorithms` / `waitlist` | LEGACY, frozen — reads fall back here until the admin migrations (`/api/v1/admin/migrations`) convert them; nothing writes to them anymore |
+| `users` / `themes` / `feedAlgorithms` / `waitlist` | LEGACY — new records are always written as things; a legacy doc is only ever *updated in place* (dual-era fallback) until the admin migrations (`/api/v1/admin/migrations`) convert it into a thing and delete it. No NEW records land here. |
 
 System-kind rules (never bypass):
-- System kinds are **protected**: the generic `/api/v1/things` CRUD refuses
-  them — only their dedicated utils write them (register, profile, themes,
-  algorithms, waitlist).
-- Secrets live under root `secure` as **BinData** (the search wildcard text
-  index tokenizes strings only, so binary secrets are unsearchable), never in
-  `crystal`; `uniqueKeys` elements are BinData for the same reason, with PII
-  keys additionally sha256-hashed.
+- **Protected** kinds — `user`, `theme`, `feed-algorithm`, `waitlist` — are
+  refused by the generic `/api/v1/things` CRUD; only their dedicated utils
+  write them (register, profile, themes, algorithms, waitlist). The `schema`
+  kind is NOT protected: anyone may publish a schema thing (the builtins are
+  seeded system-owned ones, user schemas are community-published).
+- Private state lives under root `secure` as a single **BinData blob** (the
+  search wildcard text index tokenizes string *fields* only, so a binary blob
+  is entirely unsearchable — no field inside it can ever leak via `q=<value>`),
+  never in `crystal`; the one queryable flag (`admin`) is a root boolean.
+  `uniqueKeys` elements are BinData for the same reason, PII keys additionally
+  sha256-hashed. New writers use the shared builders/helpers in `auth/users.ts`
+  so nothing hand-rolls the binary encoding.
 
 ### Appended/child data is relational — never an unbounded embedded array
 

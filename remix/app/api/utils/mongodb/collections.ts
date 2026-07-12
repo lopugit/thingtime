@@ -104,6 +104,12 @@ export const ensureIndexes = async () => {
         // login + people-search lookups on user things (thingtime is the only
         // multikey field here, so the compound is legal)
         db.collection('things').createIndex({ thingtime: 1, 'crystal.username': 1 }),
+        // admin roster: a partial index over just the (rare) admin user things,
+        // so listAdmins is a few-entry scan, not a full-user-base fetch+filter
+        db.collection('things').createIndex(
+          { secureAdmin: 1 },
+          { partialFilterExpression: { secureAdmin: true } }
+        ),
         db.collection('things').createIndex({ kind: 1, visibility: 1, createdAt: -1, shareId: 1 }),
         db.collection('things').createIndex({ kind: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
         db.collection('things').createIndex({ thingtime: 1, ownerId: 1, createdAt: -1, shareId: 1 }),

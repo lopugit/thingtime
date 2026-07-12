@@ -41,7 +41,11 @@ const actionExport = async ({ request }) => {
 
   const thingsCollection = await getCollection();
 
-  const things = await thingsCollection.find().toArray();
+  // Admin debug dump — but user/system things now carry credentials + private
+  // state under `secure` (and uniqueKeys). Project those out so this route
+  // never becomes a one-request credential/PII exfiltration path even for an
+  // admin session; the debug view only ever needed the public doc shape.
+  const things = await thingsCollection.find({}, { projection: { secure: 0, uniqueKeys: 0 } }).toArray();
 
   return earlyReturn({
     status: 200,

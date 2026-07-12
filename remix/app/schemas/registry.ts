@@ -505,13 +505,14 @@ const rateLimitSchema: ThingtimeSchema = {
 // ---------------------------------------------------------------------------
 // System kinds — the satellite collections collapsing into things (see
 // claude-todo/12-everything-is-a-thing-collections.md). These kinds are
-// PROTECTED: the generic /api/v1/things CRUD refuses them; only their
-// dedicated utils (register, profile update, themes/algorithms/waitlist
-// routes) may write them, passing createThing's internal system option.
-// Sensitive values live under the root `secure` field (never crystal, never
-// projected, stored as BinData so the $** text index can't tokenize them) and
+// PROTECTED: the generic /api/v1/things CRUD unconditionally refuses them.
+// Only their dedicated utils (register, profile update, themes/algorithms/
+// waitlist) write them, each a direct insert that owns the right secure/
+// uniqueKeys shape — they do NOT go through createThing. Private state lives
+// under the root `secure` field (never crystal, never projected, a single
+// BinData blob so the $** text index can't tokenize any field inside it) and
 // uniqueness rides the root `uniqueKeys` array (multikey unique sparse index;
-// PII keys are hashed).
+// BinData elements, PII keys hashed).
 
 export const PROTECTED_THINGTIME = ['user', 'theme', 'feed-algorithm', 'waitlist'] as const;
 export const isProtectedThingtime = (ids: string[]): boolean =>

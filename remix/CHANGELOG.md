@@ -7,6 +7,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 **Author legend** — every entry is attributed:
 
 - **Codex (AI)** — change made by the Codex AI assistant.
+- **Claude (AI)** — change made by the Claude AI assistant.
 - **Lopu** — change made manually by the developer.
 
 > When you make a manual change, add a bullet under `[Unreleased]` ending with

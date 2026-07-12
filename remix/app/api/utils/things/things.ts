@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { ObjectId } from 'mongodb';
+import { Binary, ObjectId } from 'mongodb';
 
 import { ensureIndexes, getThingsCollection, getUsersCollection } from '../mongodb/collections';
-import { pushUserRecentReaction } from '../auth/users';
+import { findUserByUsername, pushUserRecentReaction } from '../auth/users';
 import { sanitizeReactionToken } from '~/utils/reactionTokens';
 import {
   ACL_ALL,
@@ -75,11 +75,14 @@ export type ThingDoc = {
   updatedAt: Date;
   // System kinds only (user/theme/feed-algorithm/waitlist — the collections
   // collapsing into things): generalized uniqueness (multikey unique sparse
-  // index; PII keys hashed) and private state. `secure` is NEVER projected,
-  // is unreachable by the search field grammar, and its sensitive strings are
-  // stored as BinData so the $** text index cannot tokenize them.
-  uniqueKeys?: string[];
-  secure?: Record<string, any>;
+  // index; elements are BinData, PII keys hashed) and private state. `secure`
+  // is NEVER projected, is unreachable by the search field grammar, and is a
+  // single opaque BinData blob so the $** text index cannot tokenize any field
+  // inside it. `secureAdmin` is the one queryable flag (a boolean — booleans
+  // aren't text-indexed either).
+  uniqueKeys?: Binary[];
+  secure?: Binary;
+  secureAdmin?: boolean;
   // v1 residue fields (unset by the things v1→v2 migration). kind 'reaction'
   // and 'comment' cover the interim relational era (parentId/token/commentId
   // docs) written by main's pre-unification model — read + migrated like the
@@ -255,6 +258,9 @@ const sanitizeTags = (value: unknown): string[] | Fail => {
 // prefix (reactionShareId). Reserving it means a client can never pre-create a
 // thing at a migration destination id to hijack or delete migrated data.
 export const MIGRATION_RESERVED_ID_PREFIX = 'react-';
+// Builtin-schema seed mints shareId `schema-<id>` deterministically — reserve
+// the prefix so a client can't pre-claim (and impersonate) a builtin schema.
+export const SCHEMA_RESERVED_ID_PREFIX = 'schema-';
 
 // Seeding passes fixed shareIds for idempotency (and Magic relies on ids
 // round-tripping), so client-supplied ids are allowed — but they must be sane
@@ -268,7 +274,10 @@ const sanitizeShareId = (value: unknown): string | null | Fail => {
   if (trimmed.length > MAX_SHARE_ID_CHARS || /[$.\s]/.test(trimmed)) {
     return fail(400, 'shareId must be a short id without spaces, dots, or $');
   }
-  if (trimmed.startsWith(MIGRATION_RESERVED_ID_PREFIX)) {
+  if (trimmed.startsWith(MIGRATION_RESERVED_ID_PREFIX) || trimmed.startsWith(SCHEMA_RESERVED_ID_PREFIX)) {
+    // 'react-' (reaction migration) and 'schema-' (builtin-schema seed) are
+    // deterministic migration destinations — a client must never squat one,
+    // or it blocks the seed/migration and impersonates a builtin schema
     return fail(400, 'shareId uses a reserved prefix');
   }
   return trimmed;
@@ -291,16 +300,6 @@ export type CreateThingInput = {
 
 type CreateThingResult = Fail | { ok: true; doc: ThingDoc };
 
-// Internal-only extensions for the dedicated system-kind utils (register,
-// themes, algorithms, waitlist). Routes never construct this — the generic
-// /api/v1/things CRUD always calls without it, so protected kinds and the
-// secure/uniqueKeys fields are unreachable from the public surface.
-export type SystemThingOptions = {
-  system?: boolean;
-  secure?: Record<string, any>;
-  uniqueKeys?: string[];
-};
-
 // audience for a new thing: explicit acl > legacy visibility name > default
 const resolveInputAcl = (input: { acl?: unknown; visibility?: unknown }): string[] | null | Fail => {
   if (input.acl !== undefined && input.acl !== null) {
@@ -319,16 +318,17 @@ const resolveInputAcl = (input: { acl?: unknown; visibility?: unknown }): string
 export const createThing = async (
   ownerId: string,
   input: CreateThingInput,
-  viewer: Viewer = null,
-  systemOptions: SystemThingOptions = {}
+  viewer: Viewer = null
 ): Promise<CreateThingResult> => {
   const asOwner = viewer && viewer.id === ownerId ? viewer : { id: ownerId };
   const validated = validateThingtimeCrystal(input.thingtime, input.crystal);
   if (isFail(validated)) return validated;
 
-  // system kinds are written only by their dedicated utils — otherwise anyone
-  // could mint user/waitlist/theme/algorithm things through the generic CRUD
-  if (isProtectedThingtime(validated.thingtime) && !systemOptions.system) {
+  // system kinds are written ONLY by their dedicated utils (register, themes,
+  // algorithms, waitlist — each a direct insert with the right secure/uniqueKeys
+  // shape). The generic path unconditionally refuses them, so nobody can mint a
+  // user/theme/algorithm/waitlist thing (or a fake account) through /api/v1/things.
+  if (isProtectedThingtime(validated.thingtime)) {
     return fail(403, `${validated.thingtime.join('+')} things are managed by their own endpoints`);
   }
 
@@ -412,9 +412,6 @@ export const createThing = async (
     createdAt: now,
     updatedAt: now
   };
-  if (systemOptions.uniqueKeys?.length) doc.uniqueKeys = systemOptions.uniqueKeys;
-  if (systemOptions.secure) doc.secure = systemOptions.secure;
-
   try {
     await things.insertOne(doc as any);
   } catch (err: any) {
@@ -983,8 +980,9 @@ export const listUserPosts = async (
 ): Promise<{ ok: true; posts: PublicPost[]; nextCursor: string | null; postCount?: number } | Fail> => {
   const viewer = asViewer(viewerInput);
   if (typeof username !== 'string' || !username.trim()) return fail(400, 'username is required');
-  const users = await getUsersCollection();
-  const user = await users.findOne({ username: username.trim().toLowerCase() });
+  // dual-era: findUserByUsername resolves user things first, legacy second —
+  // a bare users.findOne would 404 every things-era + migrated account
+  const user = await findUserByUsername(username.trim());
   if (!user) return fail(404, 'User not found');
 
   const ownerId = String(user._id);
@@ -1054,7 +1052,14 @@ export const listThings = async (
     match = { targetId: target.shareId };
   } else {
     if (!viewer?.id) return fail(401, 'Unauthorized');
-    match = { ownerId: viewer.id, $or: [{ thingtime: { $exists: true } }, { kind: 'post' }] };
+    // your OWN things, but not your account/theme/algorithm/waitlist things —
+    // those are managed by their dedicated endpoints and would otherwise show
+    // up as inert, non-editable entries (edit/delete 403) in the data browser
+    match = {
+      ownerId: viewer.id,
+      thingtime: { $nin: [...PROTECTED_THINGTIME] },
+      $or: [{ thingtime: { $exists: true } }, { kind: 'post' }]
+    };
   }
   if (thingtime.length) {
     // v1 posts have no thingtime array — a 'post' filter must match them too
@@ -1336,22 +1341,18 @@ export const sharePost = async (
   return { ok: true, post: (await toPublicPosts([created.doc], viewer))[0] };
 };
 
-export const deleteThing = async (
-  viewerInput: string | Viewer,
-  shareId: unknown,
-  options: { system?: boolean } = {}
-): Promise<Fail | { ok: true }> => {
+export const deleteThing = async (viewerInput: string | Viewer, shareId: unknown): Promise<Fail | { ok: true }> => {
   const viewer = asViewer(viewerInput);
   if (!viewer?.id) return fail(401, 'Unauthorized');
   if (typeof shareId !== 'string' || !shareId.trim()) return fail(400, 'Thing id is required');
   const things = await getThingsCollection();
-  // system kinds (a user's own account thing!) are never deletable through
-  // the generic DELETE — $nin on the multikey array excludes them atomically
-  const guard = options.system ? {} : { thingtime: { $nin: [...PROTECTED_THINGTIME] } };
+  // system kinds (a user's own account thing!) are never deletable through the
+  // generic DELETE — $nin on the multikey array excludes them atomically. Their
+  // dedicated endpoints (themes, algorithms) own deletion.
   const deleted = (await things.findOneAndDelete({
     shareId: shareId.trim(),
     ownerId: viewer.id,
-    ...guard
+    thingtime: { $nin: [...PROTECTED_THINGTIME] }
   } as any)) as any as ThingDoc | null;
   if (!deleted) return fail(404, 'Thing not found');
   // comments/reactions attached to the deleted thing go with it (v2 things AND
@@ -1383,7 +1384,7 @@ export const updateThing = async (
   viewerInput: string | Viewer,
   shareId: unknown,
   input: UpdateThingInput,
-  options: { replaceCrystal?: boolean; system?: boolean } = {}
+  options: { replaceCrystal?: boolean } = {}
 ): Promise<Fail | { ok: true; thing: PublicThing; post: PublicPost | null }> => {
   const viewer = asViewer(viewerInput);
   if (!viewer?.id) return fail(401, 'Unauthorized');
@@ -1395,7 +1396,7 @@ export const updateThing = async (
   const thingtime = thingtimeOf(doc);
   // system kinds mutate only through their dedicated utils (profile update,
   // themes, algorithms) — never the generic PATCH/PUT surface
-  if (isProtectedThingtime(thingtime) && !options.system) {
+  if (isProtectedThingtime(thingtime)) {
     return fail(403, `${thingtime.join('+')} things are managed by their own endpoints`);
   }
   const patch =

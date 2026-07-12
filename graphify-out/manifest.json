@@ -785,8 +785,8 @@
     "semantic_hash": ""
   },
   "remix/app/api/utils/auth/users.ts": {
-    "mtime": 1783833329.0225317,
-    "ast_hash": "cf0e10a1f338dfac0c78fb57926ce650",
+    "mtime": 1783836335.7507904,
+    "ast_hash": "4d342575c81548a3955ed9f4db1d483d",
     "semantic_hash": ""
   },
   "remix/app/api/utils/crypto/cryptoTools.server.ts": {
@@ -830,8 +830,8 @@
     "semantic_hash": "f65b01f4781159ee3b8a0a9da33d1f5a"
   },
   "remix/app/api/utils/mongodb/collections.ts": {
-    "mtime": 1783832000.1438181,
-    "ast_hash": "6b1f726fdd6fe774286b3675b54b19eb",
+    "mtime": 1783836350.3135095,
+    "ast_hash": "47dc3ffa7c8fd7fe60dc2960cca8bdf6",
     "semantic_hash": ""
   },
   "remix/app/api/utils/mongodb/config.ts": {
@@ -1335,8 +1335,8 @@
     "semantic_hash": "1ebc31f6b32ff15af67b3f1672a0caee"
   },
   "remix/app/routes/api/v1/mongodb/raw-results/_raw-results.tsx": {
-    "mtime": 1783814170.1374495,
-    "ast_hash": "c531c9a74eb1889d81536807ddb5463e",
+    "mtime": 1783836480.4595,
+    "ast_hash": "c32a83dc289535434fe26cd2810b3831",
     "semantic_hash": ""
   },
   "remix/app/routes/api/v1/mongodb/status-data/_status-data.tsx": {
@@ -1580,8 +1580,8 @@
     "semantic_hash": "5e9505d10b125d54dccabb1ddfeeef75"
   },
   "FUNDAMENTALS.md": {
-    "mtime": 1783833590.5434754,
-    "ast_hash": "3d9177ab135dd4458d89ad44494ee032",
+    "mtime": 1783836651.3699548,
+    "ast_hash": "1cc250b4c01555a122fcc5072ddf6a45",
     "semantic_hash": ""
   },
   "README.md": {
@@ -1810,8 +1810,8 @@
     "semantic_hash": "f162fbffa18046af73dfca08802a536f"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1783833615.3631318,
-    "ast_hash": "65bad1b6fdc746f82162c7c369531cd5",
+    "mtime": 1783836762.4886498,
+    "ast_hash": "918fd720576a6e0a46ca68fab3f5d98f",
     "semantic_hash": ""
   },
   "remix/README.md": {
@@ -2955,8 +2955,8 @@
     "semantic_hash": "17f9d65ca49d887be58ba6bfdc3f5a35"
   },
   "remix/app/api/utils/themes/themes.ts": {
-    "mtime": 1783834117.2721822,
-    "ast_hash": "57bd5c20c7d55db762fb94c818f3184f",
+    "mtime": 1783836464.8132849,
+    "ast_hash": "ae16c2252df662b6a1dd5fb82000e1db",
     "semantic_hash": ""
   },
   "remix/app/api/utils/waitlist/waitlist.ts": {
@@ -3100,8 +3100,8 @@
     "semantic_hash": "9857063cfaaca847757bb8e9c4c1feb8"
   },
   "remix/app/api/utils/algorithms/algorithms.ts": {
-    "mtime": 1783833168.439252,
-    "ast_hash": "2950aabd641d36dd87ebd660acf8ead9",
+    "mtime": 1783836445.902837,
+    "ast_hash": "ad0b259fa3c5c714fbf6ac13ae6348ca",
     "semantic_hash": ""
   },
   "remix/app/api/utils/things/feedRanking.ts": {
@@ -3110,8 +3110,8 @@
     "semantic_hash": "70a4a9dbd0d87d97133f4e04742017cf"
   },
   "remix/app/api/utils/things/things.ts": {
-    "mtime": 1783831995.6382368,
-    "ast_hash": "6ec74ca29cdfa8c2887d0fd765c3471c",
+    "mtime": 1783836739.9703176,
+    "ast_hash": "9e7365a15dc389e80ec8800d223be99c",
     "semantic_hash": ""
   },
   "remix/app/components/Feed/Feed.tsx": {
@@ -3725,8 +3725,8 @@
     "semantic_hash": "ce4473a3bfe4f942731be8b737f74d92"
   },
   "remix/app/api/utils/migrations/migrations.ts": {
-    "mtime": 1783834213.099515,
-    "ast_hash": "cddc014024e1281ae396c58357765ef3",
+    "mtime": 1783836594.441616,
+    "ast_hash": "2ca0329d7c4c0fc9aa8a57a060f07152",
     "semantic_hash": ""
   },
   "remix/app/components/Schemas/MigrationsPanel.tsx": {
@@ -3765,8 +3765,8 @@
     "semantic_hash": ""
   },
   "remix/app/schemas/registry.ts": {
-    "mtime": 1783834088.2805662,
-    "ast_hash": "5ba0724457ab02f38cbff846ee7c6472",
+    "mtime": 1783836754.3723927,
+    "ast_hash": "3cd09bb0eafe3157548743d8e2d4852a",
     "semantic_hash": ""
   },
   "PRs/59-claude-unified-thing-crystal-schemas--everything-is-a-thing.md": {
@@ -3805,8 +3805,8 @@
     "semantic_hash": ""
   },
   "remix/app/api/utils/things/search.ts": {
-    "mtime": 1783827807.7373204,
-    "ast_hash": "b3c14383840519d4a6bfba1de4e4fe1d",
+    "mtime": 1783836391.2572718,
+    "ast_hash": "68df0c4b89ba66aa8c97b759e7c3ebdf",
     "semantic_hash": ""
   },
   "remix/app/components/Search/SearchPage.tsx": {
@@ -3845,8 +3845,13 @@
     "semantic_hash": ""
   },
   "claude-todo/12-everything-is-a-thing-collections.md": {
-    "mtime": 1783831395.52842,
-    "ast_hash": "46eb93220a1fd6d5e96586a6bfd2436f",
+    "mtime": 1783836795.8062673,
+    "ast_hash": "7fa10973fa365e2e0e4f7c530c0708c1",
+    "semantic_hash": ""
+  },
+  "PRs/65-claude-everything-is-a-thing-collections--users-themes-algorithms-waitlist-schemas-as-things.md": {
+    "mtime": 1783834875.8378954,
+    "ast_hash": "0e1befc61545e1de30145e7a329824a1",
     "semantic_hash": ""
   }
 }

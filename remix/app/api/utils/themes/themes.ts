@@ -246,15 +246,16 @@ export const deleteTheme = async (
     return { ok: false, status: 400, error: 'Theme id is required' };
   }
   const id = shareId.trim();
-  // Delete from whichever store holds the doc — owner-scoped in the query so
-  // someone else's shareId 404s exactly like an unknown one.
+  // Delete from BOTH stores (owner-scoped, so someone else's shareId 404s like
+  // an unknown one). A migration that crashed between thing-upsert and
+  // legacy-delete leaves a twin; removing only one store would let the dual-era
+  // read resurrect the deleted theme and the next migration re-create it.
   const things = await getThingsCollection();
-  let deleted = (await things.deleteOne({ thingtime: 'theme', shareId: id, ownerId } as any)).deletedCount > 0;
-  if (!deleted) {
-    const themes = await getThemesCollection();
-    deleted = (await themes.deleteOne({ shareId: id, ownerId })).deletedCount > 0;
-  }
-  if (!deleted) {
+  const [thingRes, legacyRes] = await Promise.all([
+    things.deleteOne({ thingtime: 'theme', shareId: id, ownerId } as any),
+    (await getThemesCollection()).deleteOne({ shareId: id, ownerId })
+  ]);
+  if (!thingRes.deletedCount && !legacyRes.deletedCount) {
     return { ok: false, status: 404, error: 'Theme not found' };
   }
   // Don't leave the owner's active theme dangling at a deleted shareId. The

@@ -11,14 +11,20 @@ Every migrated doc becomes a standard thing:
 `{ shareId, schemaVersion, thingtime: ['<kind>'], crystal: {public payload},
 ownerId, acl, tags, createdAt, updatedAt }` plus two NEW root mechanisms:
 
-- **`uniqueKeys: string[]`** — generalized uniqueness. Multikey unique sparse
-  index; each element unique across the collection. Public keys are plain
-  (`username:<u>`); PII keys are hashed (`email:<sha256(email)>`) so the
-  wildcard text index never learns an address and uniqueness still holds.
-- **`secure: {...}`** — root field (NOT crystal) for secrets, omitted from
-  every projection, unreachable by the search field grammar (root whitelist),
-  and its sensitive strings stored as **BinData buffers** so the `$**` text
-  index (strings only) cannot tokenize them: passwordHash, email.
+- **`uniqueKeys: Binary[]`** — generalized uniqueness. Multikey unique sparse
+  index; each element unique across the collection. ALL elements are **BinData**
+  (plain-string keys would tokenize into the `$**` text index and make system
+  things enumerable via `q=email`/`q=username`); PII keys are additionally
+  sha256-hashed (`email:<sha256(email)>`) so not even an exact-binary reader
+  learns an address. Uniqueness holds the same on binary values.
+- **`secure: Binary`** — root field (NOT crystal): ONE opaque **BinData blob**
+  holding ALL private state, omitted from every projection, unreachable by the
+  search field grammar. Because the `$**` text index tokenizes string *fields*
+  only, no field inside the blob can leak via `q=<value>` search. The one field
+  that must stay queryable, `admin`, lives OUTSIDE the blob as the root boolean
+  **`secureAdmin`** (booleans aren't text-indexed either). `buildUserSecure` /
+  `packSecure` / `unpackSecure` in `auth/users.ts` own the encoding so nothing
+  hand-rolls it.
 
 ### Kinds
 

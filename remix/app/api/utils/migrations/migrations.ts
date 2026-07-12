@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { ensureIndexes, getThingtimeDb } from '../mongodb/collections';
 import { reactionShareId } from '../things/things';
-import { toBin, userEmailKey, userUsernameKey } from '../auth/users';
+import { buildUserSecure, toBin, userEmailKey, userUsernameKey } from '../auth/users';
 import { waitlistEmailKey } from '../waitlist/waitlist';
 import { themeAcl } from '../themes/themes';
 import {
@@ -540,12 +540,28 @@ const collectionToThingsMigration = (spec: ConvertSpec): Migration => ({
           }
           // destination verified (fresh atomic insert, or a genuine prior-run
           // twin) — only now is the legacy source removed (thingsMigration's
-          // convention: never delete data that wasn't safely relocated)
+          // convention: never delete data that wasn't safely relocated).
+          //
+          // Data-loss guard: a live write can land on the legacy doc between the
+          // batch snapshot and here (until the thing exists, updateUserStore &
+          // co. target legacy). Re-read fresh; if updatedAt advanced, the thing
+          // we built is stale — rebuild it from the fresh doc before deleting,
+          // and guard the delete on that fresh updatedAt so a write in the
+          // remaining sliver leaves legacy for the next (idempotent) run.
           if (inserted) created += 1;
-          await legacy.deleteOne({ _id: doc._id });
+          const fresh = await legacy.findOne({ _id: doc._id } as any);
+          const freshTime = fresh?.updatedAt ? +new Date(fresh.updatedAt) : 0;
+          const snapTime = doc.updatedAt ? +new Date(doc.updatedAt) : 0;
+          if (fresh && freshTime > snapTime) {
+            const rebuilt = spec.toThing(fresh);
+            if (rebuilt.ok) await things.replaceOne({ shareId: thing.shareId } as any, rebuilt.thing as any);
+          }
+          await legacy.deleteOne(fresh ? ({ _id: doc._id, updatedAt: fresh.updatedAt } as any) : ({ _id: doc._id } as any));
           migrated += 1;
         } catch (err: any) {
-          skip(`error: ${err?.message || String(err)} — left for a later re-run`);
+          // generic note only — never echo err.message (could embed a doc
+          // field value) into the admin-visible migration report
+          skip('conversion error — left for a later re-run');
         }
       }
     }
@@ -576,16 +592,19 @@ const usersToThings = collectionToThingsMigration({
     const shareId = String(doc._id);
     const createdAt = doc.createdAt ? new Date(doc.createdAt) : new Date();
     const updatedAt = doc.updatedAt ? new Date(doc.updatedAt) : createdAt;
-    const secure: Record<string, any> = {
-      email: toBin(doc.email),
-      passwordHash: toBin(doc.passwordHash),
+    // buildUserSecure is THE user-thing secure shape (shared with insertUser),
+    // so migrated + live-written accounts can't drift: opaque BinData blob,
+    // admin extracted to the root boolean
+    const { secure, admin } = buildUserSecure({
+      email: doc.email,
+      passwordHash: doc.passwordHash,
       emailVerified: !!doc.emailVerified,
       accountKind: doc.accountKind === 'service' ? 'service' : 'user',
       emailVerificationRequiredBy: doc.emailVerificationRequiredBy ?? null,
+      storageAllowanceBytes: typeof doc.storageAllowanceBytes === 'number' ? doc.storageAllowanceBytes : undefined,
+      storageUsedBytes: typeof doc.storageUsedBytes === 'number' ? doc.storageUsedBytes : undefined,
       meta: doc.meta || {}
-    };
-    if (typeof doc.storageAllowanceBytes === 'number') secure.storageAllowanceBytes = doc.storageAllowanceBytes;
-    if (typeof doc.storageUsedBytes === 'number') secure.storageUsedBytes = doc.storageUsedBytes;
+    });
     return {
       ok: true,
       thing: {
@@ -607,6 +626,7 @@ const usersToThings = collectionToThingsMigration({
         tags: [],
         uniqueKeys: [userUsernameKey(doc.username), userEmailKey(doc.email)],
         secure,
+        ...(admin ? { secureAdmin: true } : {}),
         createdAt,
         updatedAt
       }
