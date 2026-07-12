@@ -30,6 +30,9 @@ export const action = async ({ request }: { request: Request }) => {
     return json({ ok: false, error: RESET_ERRORS[consumed.reason] }, { status: 400 });
   }
 
-  await applyPasswordReset(consumed.userId, password);
+  const rotated = await applyPasswordReset(consumed.userId, password);
+  if (!rotated) {
+    return json({ ok: false, error: 'This account no longer exists — the password was not changed' }, { status: 400 });
+  }
   return json({ ok: true });
 };

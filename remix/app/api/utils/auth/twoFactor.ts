@@ -1,15 +1,12 @@
-import { ObjectId } from 'mongodb';
+import { getUserTwoFactorEmailEnabled, setUserTwoFactorEmailEnabled } from './users';
 
-import { getUsersCollection } from '../mongodb/collections';
+// Opt-in email 2FA flag lives in user meta (meta.twoFactorEmailEnabled) — login
+// checks it before minting a session (see loginUser.ts). Reads and writes go
+// through the dual-era user store: thing-era users keep the flag inside the
+// secure blob, legacy users under users.meta.
 
-// Opt-in email 2FA flag lives in users.meta.twoFactorEmailEnabled — login
-// checks it before minting a session (see loginUser.ts).
-
-export const getTwoFactorEmailEnabled = async (userId: string): Promise<boolean> => {
-  const users = await getUsersCollection();
-  const doc = await users.findOne({ _id: new ObjectId(userId) }, { projection: { 'meta.twoFactorEmailEnabled': 1 } });
-  return !!doc?.meta?.twoFactorEmailEnabled;
-};
+export const getTwoFactorEmailEnabled = (userId: string): Promise<boolean> =>
+  getUserTwoFactorEmailEnabled(userId);
 
 export type SetTwoFactorResult =
   | { ok: false; status: number; error: string }
@@ -25,10 +22,8 @@ export const setTwoFactorEmailEnabled = async (
   if (enabled && !emailVerified) {
     return { ok: false, status: 400, error: 'Verify your email before enabling email 2FA' };
   }
-  const users = await getUsersCollection();
-  await users.updateOne(
-    { _id: new ObjectId(userId) },
-    { $set: { 'meta.twoFactorEmailEnabled': enabled, updatedAt: new Date() } }
-  );
+  if (!(await setUserTwoFactorEmailEnabled(userId, enabled))) {
+    return { ok: false, status: 404, error: 'Account not found' };
+  }
   return { ok: true, enabled };
 };

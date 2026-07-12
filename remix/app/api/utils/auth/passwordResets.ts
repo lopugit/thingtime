@@ -1,16 +1,14 @@
-import { ObjectId } from 'mongodb';
-
 import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
 import {
   getAuthOtpsCollection,
   getPasswordResetsCollection,
-  getSessionsCollection,
-  getUsersCollection
+  getSessionsCollection
 } from '../mongodb/collections';
 
 import { hashPassword } from './passwords';
 import { newAuthToken } from './tokens';
+import { setUserPasswordHash } from './users';
 
 const ONE_HOUR_MS = 1000 * 60 * 60;
 
@@ -71,13 +69,13 @@ export const consumePasswordReset = async (token: string): Promise<ConsumePasswo
 // Apply the new password and invalidate every other live credential for the
 // user — a reset is a credential rotation, so stolen cookies/tokens must stop
 // working, AND any other outstanding single-use credential (a second reset link
-// or a pending login OTP) must not survive to undo the rotation.
-export const applyPasswordReset = async (userId: string, password: string) => {
+// or a pending login OTP) must not survive to undo the rotation. Returns false
+// when no store holds the user (deleted account) — the rotation did NOT land,
+// so the caller must not report success.
+export const applyPasswordReset = async (userId: string, password: string): Promise<boolean> => {
   const now = new Date();
-  await (await getUsersCollection()).updateOne(
-    { _id: new ObjectId(userId) },
-    { $set: { passwordHash: await hashPassword(password), updatedAt: now } }
-  );
+  const rotated = await setUserPasswordHash(userId, await hashPassword(password));
+  if (!rotated) return false;
   await Promise.all([
     // revoke live sessions (stolen cookies/bearer tokens stop working)
     (await getSessionsCollection()).updateMany({ userId, revokedAt: null }, { $set: { revokedAt: now } }),
@@ -91,4 +89,5 @@ export const applyPasswordReset = async (userId: string, password: string) => {
     // in-flight 2FA login started against it should not be completable
     (await getAuthOtpsCollection()).deleteMany({ userId, consumedAt: null })
   ]);
+  return true;
 };
