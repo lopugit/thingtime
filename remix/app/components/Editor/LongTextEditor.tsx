@@ -14,6 +14,7 @@ import type { OrderedEditorJsChangeQueue } from './editorJsChangeQueue';
 import { acknowledgeLatestEditorJsEcho, shouldAcceptEditorJsSnapshot } from './editorJsChangeReconciliation';
 import type { EditorJsSourceRevision } from './editorJsChangeReconciliation';
 import { watchEditorJsTextFieldKeydowns } from './editorJsKeyboard';
+import { watchEditorJsPopoverViewport } from './editorJsPopoverViewport';
 import { filterListV2ChecklistToolbox } from './editorJsToolbox';
 import { inlineHtmlToText } from './inlineHtmlText';
 import { StyleTune } from './StyleTune';
@@ -396,11 +397,13 @@ const LongTextEditorInner = (props: LongTextEditorInnerProps) => {
 		destroyedRef.current = false;
 		let cancelled = false;
 		let textFieldKeyboardCleanup: (() => void) | undefined;
+		let popoverViewportCleanup: (() => void) | undefined;
 		let editorChangeQueue: OrderedEditorJsChangeQueue<SequencedLongTextValue> | undefined;
 		let saveEditorValue: (() => void) | undefined;
 
 		(async () => {
 			if (!holderRef.current) return;
+			popoverViewportCleanup = watchEditorJsPopoverViewport(holderRef.current);
 
 			const [
 				{ default: EditorJS },
@@ -551,6 +554,7 @@ const LongTextEditorInner = (props: LongTextEditorInnerProps) => {
 
 		return () => {
 			cancelled = true;
+			popoverViewportCleanup?.();
 			// Capture the final DOM state before teardown, then allow already-started
 			// saves to drain. The outer wrapper rejects stale results after an explicit
 			// value replacement while preserving edits across tool-config remounts.
@@ -596,6 +600,7 @@ const LongTextEditorInner = (props: LongTextEditorInnerProps) => {
 				boxShadow: '0 0 0 3px var(--tt-accent-tint, #fff5fa)'
 			}}
 			sx={{
+				'--tt-editor-popover-edge-gap': '8px',
 				// keep editor.js chrome inside our card look
 				// Wide Editor.js positions its 58px + / settings action row to the
 				// left of block content. Reserve that gutter inside the editor;
@@ -610,6 +615,23 @@ const LongTextEditorInner = (props: LongTextEditorInnerProps) => {
 				'.codex-editor__redactor': { paddingBottom: '0 !important' },
 				'.ce-block__content, .ce-toolbar__content': { maxWidth: '100%' },
 				'.ce-toolbar__plus, .ce-toolbar__settings-btn': { color: 'var(--tt-muted, #9a9aa6)' },
+				'@media screen and (max-width: 650px)': {
+					// Editor.js fixes its mobile sheets to the layout viewport. Keep the
+					// opened top-level sheet inside iOS's keyboard/zoom visual viewport.
+					'.ce-popover.ce-popover--opened:not(.ce-popover--inline):not(.ce-popover--nested) > .ce-popover__container': {
+						left: 'calc(var(--tt-editor-visual-viewport-left, 0px) + var(--tt-editor-popover-edge-gap) + var(--thingtime-safe-area-left, 0px))',
+						right: 'auto',
+						bottom:
+							'calc(var(--tt-editor-visual-viewport-bottom-inset, 0px) + var(--tt-editor-popover-edge-gap) + var(--thingtime-safe-area-bottom, 0px))',
+						width:
+							'max(0px, calc(var(--tt-editor-visual-viewport-width, 100vw) - var(--tt-editor-popover-edge-gap) - var(--tt-editor-popover-edge-gap) - var(--thingtime-safe-area-left, 0px) - var(--thingtime-safe-area-right, 0px)))',
+						minWidth: 0,
+						maxWidth:
+							'max(0px, calc(var(--tt-editor-visual-viewport-width, 100vw) - var(--tt-editor-popover-edge-gap) - var(--tt-editor-popover-edge-gap) - var(--thingtime-safe-area-left, 0px) - var(--thingtime-safe-area-right, 0px)))',
+						maxHeight:
+							'max(0px, min(var(--max-height, 270px), calc(var(--tt-editor-visual-viewport-height, 100vh) - var(--tt-editor-popover-edge-gap) - var(--tt-editor-popover-edge-gap) - var(--thingtime-safe-area-top, 0px) - var(--thingtime-safe-area-bottom, 0px))))'
+					}
+				},
 				'.ce-paragraph[data-placeholder]:empty::before': { color: 'var(--tt-faint, #b6b6c0)' },
 				'h1.ce-header, h2.ce-header, h3.ce-header, h4.ce-header, h5.ce-header, h6.ce-header': {
 					fontWeight: 800,
