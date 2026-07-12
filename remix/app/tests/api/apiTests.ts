@@ -3,12 +3,23 @@ import {
   expectNdjson,
   expectRedirectedTo,
   expectStatus,
+  type ApiTestContext,
   type ApiTestDefinition
 } from './apiTestRunner';
 import { apiEndpointDocs } from '~/docs/apiDocs';
 
+const uniqueSuffix = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+// Email tests deliver to the configured test inbox via plus aliases so real
+// sends stay contained: support@x.com → support+signup-<suffix>@x.com.
+const DEFAULT_EMAIL_TEST_RECIPIENT = 'support@thingtime.com';
+const plusAlias = (recipient: string, tag: string) => {
+  const [local, domain] = String(recipient || DEFAULT_EMAIL_TEST_RECIPIENT).split('@');
+  return `${local}+${tag}-${uniqueSuffix()}@${domain || 'thingtime.com'}`;
+};
+
 const uniqueServiceAccountBody = () => {
-  const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const suffix = uniqueSuffix();
 
   return {
     serviceName: `Thingtime API Test ${suffix}`,
@@ -20,6 +31,42 @@ const uniqueServiceAccountBody = () => {
     }
   };
 };
+
+const uniqueEmailRegisterBody = (context: ApiTestContext) => {
+  const suffix = uniqueSuffix();
+
+  return {
+    username: `ses-signup-${suffix}`,
+    password: 'testpass123',
+    email: plusAlias(context.email?.testRecipient || DEFAULT_EMAIL_TEST_RECIPIENT, 'signup'),
+    displayName: 'SES Signup Test',
+    meta: {
+      source: 'thingtime-tests-page',
+      flow: 'email-signup-verification'
+    }
+  };
+};
+
+const uniqueEmailServiceAccountBody = (context: ApiTestContext) => {
+  const suffix = uniqueSuffix();
+
+  return {
+    serviceName: `SES Service Test ${suffix}`,
+    username: `ses-service-${suffix}`,
+    email: plusAlias(context.email?.testRecipient || DEFAULT_EMAIL_TEST_RECIPIENT, 'service'),
+    displayName: 'SES Service Test',
+    meta: {
+      source: 'thingtime-tests-page',
+      flow: 'email-service-account-verification'
+    }
+  };
+};
+
+const uniqueEmailOtpBody = (context: ApiTestContext) => ({
+  email: plusAlias(context.email?.testRecipient || DEFAULT_EMAIL_TEST_RECIPIENT, 'otp'),
+  code: String(Math.floor(100000 + Math.random() * 900000)),
+  expiresMinutes: 10
+});
 
 const isObject = (value: any) => value && typeof value === 'object' && !Array.isArray(value);
 
@@ -185,6 +232,63 @@ export const apiTests: ApiTestDefinition[] = [
     expect: expectStatus([401, 500], 'Login route responded with expected invalid/env-dependent status.')
   },
   {
+    id: 'auth-password-reset-neutral',
+    name: 'Password reset is probe-proof',
+    description: 'Reset requests return ok whether or not the email matches an account (or 429 when the per-IP window is exhausted).',
+    group: 'auth',
+    method: 'POST',
+    path: '/api/v1/auth/password-reset',
+    body: { email: 'tt-api-test-definitely-unregistered@example.invalid' },
+    expect: expectJson(
+      [200, 429],
+      (body, response) => (response.status === 429 ? typeof body?.error === 'string' : body?.ok === true),
+      'Reset request returned a neutral ok response (or was rate-limited with an error shape).'
+    )
+  },
+  {
+    id: 'auth-password-reset-confirm-invalid',
+    name: 'Password reset confirm rejects bad tokens',
+    description: 'Unknown/expired reset tokens are rejected with a 400 error shape.',
+    group: 'auth',
+    method: 'POST',
+    path: '/api/v1/auth/password-reset/confirm',
+    body: { token: 'not-a-real-reset-token', password: 'valid-length-password' },
+    expect: expectJson([400], (body) => body?.ok === false && typeof body?.error === 'string', 'Invalid reset token rejected with an error shape.')
+  },
+  {
+    id: 'auth-two-factor-state-guarded',
+    name: 'Email 2FA state requires auth',
+    description: 'Reading the 2FA state anonymously is rejected with a 401 error shape.',
+    group: 'auth',
+    method: 'GET',
+    path: '/api/v1/auth/two-factor',
+    expect: expectJson(
+      [200, 401],
+      (body) => typeof body?.enabled === 'boolean' || (body?.ok === false && typeof body?.error === 'string'),
+      'Two-factor state returned for a session or was rejected anonymously.'
+    )
+  },
+  {
+    id: 'auth-two-factor-toggle-validates',
+    name: 'Email 2FA toggle validates input',
+    description: 'Toggling 2FA without a boolean enabled flag is rejected before any write.',
+    group: 'auth',
+    method: 'POST',
+    path: '/api/v1/auth/two-factor',
+    body: {},
+    expect: expectJson([400, 401], (body) => body?.ok === false && typeof body?.error === 'string', 'Invalid 2FA toggle rejected with an error shape.')
+  },
+  {
+    id: 'auth-login-otp-invalid-challenge',
+    name: 'Login OTP rejects unknown challenges',
+    description: 'Completing a 2FA login with an unknown challenge id fails with a generic 401 (429 when the login window is exhausted).',
+    group: 'auth',
+    method: 'POST',
+    path: '/api/v1/login',
+    body: { challenge: 'not-a-real-challenge-id', code: '000000' },
+    expect: expectJson([401, 429], (body) => body?.ok === false && typeof body?.error === 'string', 'Unknown OTP challenge rejected with an error shape.')
+  },
+  {
     id: 'auth-resend-verification-empty',
     name: 'Resend verification empty body',
     description: 'The resend route returns ok for empty input so account existence cannot be probed.',
@@ -243,6 +347,87 @@ export const apiTests: ApiTestDefinition[] = [
         deadlineLooksRight
       );
     }, 'Service account response has non-expiring token, seven-day verification window, and 5 GiB allowance.')
+  },
+  {
+    id: 'email-config',
+    name: 'Email test config',
+    description: 'Returns safe email provider/test metadata without exposing SES credentials.',
+    group: 'email',
+    method: 'GET',
+    path: '/api/v1/email/config',
+    expect: expectJson(
+      [200],
+      (body) =>
+        body?.ok === true &&
+        isObject(body?.email) &&
+        ['console', 'ses'].includes(body.email.provider) &&
+        typeof body.email.sesSandbox === 'boolean' &&
+        typeof body.email.testRecipient === 'string',
+      'Email config returned provider, sandbox, and test-recipient metadata.'
+    )
+  },
+  {
+    id: 'email-signup-verification',
+    name: 'Signup verification email',
+    description: 'Creates a throwaway user and sends the normal signup verification email to the configured plus-alias test recipient.',
+    group: 'email',
+    method: 'POST',
+    path: '/api/v1/auth/register',
+    mutates: true,
+    emailSend: true,
+    timeoutMs: 30000,
+    body: uniqueEmailRegisterBody,
+    expect: expectJson([200], (body) => {
+      return (
+        body?.ok === true &&
+        body?.user?.emailVerified === false &&
+        typeof body?.user?.email === 'string' &&
+        body.user.email.includes('@')
+      );
+    }, 'Signup created an unverified user and triggered verification email delivery.')
+  },
+  {
+    id: 'email-service-account-verification',
+    name: 'Service account verification email',
+    description: 'Creates a throwaway service account and sends the service-account verification email to the configured plus-alias test recipient.',
+    group: 'email',
+    method: 'POST',
+    path: '/api/v1/auth/service-account',
+    mutates: true,
+    emailSend: true,
+    timeoutMs: 30000,
+    body: uniqueEmailServiceAccountBody,
+    expect: expectJson([200], (body) => {
+      const payload = decodeJwtPayload(body?.accessToken);
+      return (
+        body?.ok === true &&
+        body?.user?.accountKind === 'service' &&
+        body?.user?.emailVerified === false &&
+        body?.tokenType === 'Bearer' &&
+        !Object.prototype.hasOwnProperty.call(payload || {}, 'exp')
+      );
+    }, 'Service account was created and triggered verification email delivery.')
+  },
+  {
+    id: 'email-otp-helper',
+    name: 'Email OTP helper',
+    description: 'Dev/preview-only check for the OTP email renderer and delivery helper.',
+    group: 'email',
+    method: 'POST',
+    path: '/api/v1/email/test-otp',
+    mutates: true,
+    emailSend: true,
+    timeoutMs: 30000,
+    body: uniqueEmailOtpBody,
+    expect: expectJson(
+      [200, 403],
+      (body, response) =>
+        response.status === 403 ||
+        (body?.ok === true &&
+          ['sent', 'logged'].includes(body?.result?.status) &&
+          typeof body?.result?.emailMessageId === 'string'),
+      'OTP helper sent/logged a message, or was correctly blocked outside local/preview.'
+    )
   },
   {
     id: 'crypto-standards',
@@ -709,6 +894,51 @@ export const apiTests: ApiTestDefinition[] = [
     path: '/api/v1/things',
     body: { thingtime: ['post'], crystal: { type: 'text', text: 'acl test' }, acl: ['not-a-permission'] },
     expect: expectJson([400, 401], (body) => body?.ok === false && typeof body?.error === 'string', 'Malformed acl was rejected with an error shape.')
+  },
+  {
+    id: 'things-schemaless-extended-roundtrip',
+    name: 'Schema-less crystal + extended round-trip',
+    description:
+      'POST without thingtime defaults to ["data"], and the schema-free extended sidecar is stored and returned exactly as given (session) — or rejected anonymously.',
+    group: 'things',
+    method: 'POST',
+    path: '/api/v1/things',
+    mutates: true,
+    body: {
+      crystal: { name: 'tt-api-test-desk', legs: 4, material: 'wood' },
+      extended: { anyShape: true, nested: [1, 'two', { three: 3 }], 'weird key 🔑': 'kept verbatim' },
+      acl: ['tt:user'],
+      tags: ['tt-api-test']
+    },
+    expect: expectJson(
+      [200, 401, 429],
+      (body, response) =>
+        response.status !== 200
+          ? body?.ok === false && typeof body?.error === 'string'
+          : body?.ok === true &&
+            Array.isArray(body?.thing?.thingtime) &&
+            body.thing.thingtime.includes('data') &&
+            body?.thing?.extended?.anyShape === true &&
+            body?.thing?.extended?.['weird key 🔑'] === 'kept verbatim' &&
+            Array.isArray(body?.thing?.extended?.nested) &&
+            body?.thing?.crystal?.legs === 4,
+      'Schema-less create resolved to a data crystal and round-tripped extended verbatim (or was auth/rate limited).'
+    )
+  },
+  {
+    id: 'things-extended-reserved-key-rejected',
+    name: 'Extended rejects the reserved text-index key',
+    description:
+      'An extended payload carrying the tt:textLanguage key is rejected 400 (401 anonymous) — storing it would hijack or break the wildcard text index.',
+    group: 'things',
+    method: 'POST',
+    path: '/api/v1/things',
+    body: { crystal: { name: 'tt-api-test' }, extended: { 'tt:textLanguage': 'klingon' } },
+    expect: expectJson(
+      [400, 401, 429],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Reserved-key extended payload was rejected with an error shape.'
+    )
   },
   {
     id: 'schemas-list',

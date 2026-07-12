@@ -33,10 +33,13 @@ Single Mongo database `thingtime` with these collections:
 
 | Collection | Holds |
 | ---------- | ----- |
-| `users`    | user accounts (hashed passwords + signup metadata + profile fields: bio/avatarUrl/bannerUrl) |
+| `users`    | user accounts (hashed passwords + signup metadata + profile fields: bio/avatarUrl/bannerUrl; `meta.twoFactorEmailEnabled` gates the email-2FA login flow) |
 | `sessions` | server-side sessions / JWT records (for revocation) |
-| `things`   | the actual Thingtime data — feed posts live here as `kind: 'post'` docs (see `/api/v1/things`) |
+| `things`   | the actual Thingtime data — every thing (posts, comments, reactions, shares, data, schemas) as one root shape: `thingtime` schema ids + `crystal` payload (see `/api/v1/things` and `app/schemas/registry.ts`). Every thing also carries a schema-free `extended` property for arbitrary unvalidated JSON (≤512KB, replace-on-write, never structured-searchable) |
 | `emailVerifications` | pending email-verification tokens |
+| `passwordResets` | single-use password-reset tokens (1h TTL; consuming one revokes every live session) |
+| `authOtps` | email-2FA login challenges (sha256 code hashes only, 10-min TTL, attempt-capped) |
+| `email_messages` + `email_events`/`email_suppression_list`/`email_unsubscribes`/`email_templates`/`email_subscriptions`/`email_identities` | the owned email layer — outbox rows for every send plus deliverability satellites (see `api/utils/email/`) |
 | `lopuMusingRateLimits` | rate-limit windows for Lopu musings |
 | `themes`   | saved user themes (shareable by `shareId`; see `/api/v1/themes`) |
 | `waitlist` | launch waitlist emails (`/api/v1/waitlist`) |

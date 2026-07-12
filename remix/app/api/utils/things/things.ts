@@ -16,6 +16,7 @@ import {
   aclAllows,
   aclFromVisibility,
   sanitizeAcl,
+  sanitizeExtended,
   validateThingtimeCrystal,
   visibilityFromAcl,
   type ThingVisibility
@@ -64,6 +65,10 @@ export type ThingDoc = {
   schemaVersion?: number; // absent = v1
   thingtime?: string[];
   crystal?: Record<string, any>;
+  // schema-free sidecar: any JSON ≤ EXTENDED_MAX_BYTES, stored untouched inside
+  // the platform envelope — never validated, structured-searchable, or
+  // interpreted (see sanitizeExtended in schemas/registry.ts)
+  extended?: unknown | null;
   ownerId: string;
   acl?: string[]; // v2 — tt: grants/exclusions (see schemas/registry.ts)
   visibility?: ThingVisibility; // v1 residue (mapped onto acl at read time)
@@ -126,6 +131,7 @@ export type PublicPost = {
   // not visible to the viewer (shareOf null in that case)
   isShare: boolean;
   shareOf: PublicPost | null;
+  extended: unknown | null;
   createdAt: string;
 };
 
@@ -138,6 +144,7 @@ export type PublicThing = {
   acl: string[];
   targetId: string | null;
   crystal: Record<string, any>;
+  extended: unknown | null;
   tags: string[];
   createdAt: string;
   updatedAt: string;
@@ -271,6 +278,7 @@ const sanitizeShareId = (value: unknown): string | null | Fail => {
 export type CreateThingInput = {
   thingtime?: unknown;
   crystal?: unknown;
+  extended?: unknown;
   acl?: unknown;
   visibility?: unknown; // legacy alias, mapped onto acl
   targetId?: unknown;
@@ -314,6 +322,9 @@ export const createThing = async (
 
   const inputAcl = resolveInputAcl(input);
   if (isFail(inputAcl)) return inputAcl;
+
+  const extended = sanitizeExtended(input.extended);
+  if (isFail(extended)) return extended;
 
   // marketplace listings fold their category into tags so filters find them —
   // post crystals only (a free-form data crystal can carry any `listing`
@@ -379,6 +390,7 @@ export const createThing = async (
     schemaVersion: THINGS_SCHEMA_VERSION,
     thingtime: validated.thingtime,
     crystal: validated.crystal,
+    extended: extended.value === undefined ? null : extended.value,
     ownerId,
     acl,
     targetId,
@@ -415,6 +427,7 @@ export type CreatePostInput = {
   text?: unknown;
   images?: unknown;
   listing?: unknown;
+  extended?: unknown;
   acl?: unknown;
   visibility?: unknown;
   tags?: unknown;
@@ -436,6 +449,7 @@ export const createPost = async (
     {
       thingtime: ['post'],
       crystal: { type: input.type, text: input.text, images: input.images, listing: input.listing },
+      extended: input.extended,
       acl: input.acl,
       visibility: input.visibility,
       tags: input.tags,
@@ -662,6 +676,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
       isShare: !!shareTarget && thingtimeOf(doc).includes('share'),
       // only surface originals the viewer is allowed to see
       shareOf: original && canView(original, viewer) ? project(original, false) : null,
+      extended: doc.extended ?? null,
       createdAt: new Date(doc.createdAt).toISOString()
     };
   };
@@ -680,6 +695,7 @@ export const toPublicThings = async (docs: ThingDoc[], _viewer: string | Viewer)
     acl: aclOf(doc),
     targetId: targetIdOf(doc),
     crystal: crystalOf(doc),
+    extended: doc.extended ?? null,
     tags: doc.tags || [],
     createdAt: new Date(doc.createdAt).toISOString(),
     updatedAt: new Date(doc.updatedAt).toISOString()
@@ -1311,6 +1327,7 @@ export const deletePost = deleteThing;
 
 export type UpdateThingInput = {
   crystal?: unknown;
+  extended?: unknown;
   acl?: unknown;
   visibility?: unknown; // legacy alias, mapped onto acl
   tags?: unknown;
@@ -1362,11 +1379,19 @@ export const updateThing = async (
     if (nextAcl) acl = nextAcl;
   }
 
+  // extended replaces as a whole value only when provided (undefined leaves it
+  // untouched, null clears it) — both PATCH and PUT, since deep-merging
+  // arbitrary JSON is ambiguous
+  const extended = sanitizeExtended(input.extended);
+  if (isFail(extended)) return extended;
+  const hasExtendedChange = input.extended !== undefined;
+
   const now = new Date();
   const set: Record<string, any> = {
     schemaVersion: THINGS_SCHEMA_VERSION,
     thingtime,
     crystal: validated.crystal,
+    ...(hasExtendedChange ? { extended: extended.value } : {}),
     targetId: targetIdOf(doc),
     tags,
     acl,
