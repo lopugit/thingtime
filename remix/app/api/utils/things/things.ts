@@ -1364,16 +1364,20 @@ export const updateThing = async (
     const sanitized = sanitizeTags(input.tags);
     if (isFail(sanitized)) return sanitized;
     tags = [...sanitized, ...categoryTag].filter((tag, index, all) => all.indexOf(tag) === index);
-  } else if (categoryTag.length && !tags.includes(categoryTag[0])) {
+  } else if (categoryTag.length) {
     // a listing PATCH that changes the category without resending tags SWAPS
     // the folded category tag — never accumulates stale categories, never
-    // grows the list past the create-time fold's bound
+    // grows the list past the create-time fold's bound. Keyed on the category
+    // actually changing (not tag membership: the new category may coincide
+    // with a user tag, and the old one must STILL come out then).
     const previousCategory = thingtime.includes('post')
       ? ((crystalOf(doc).listing as MarketplaceListing | null | undefined)?.category ?? null)
       : null;
-    tags = [...tags.filter((tag) => tag !== previousCategory), ...categoryTag].filter(
-      (tag, index, all) => all.indexOf(tag) === index
-    );
+    if (previousCategory !== categoryTag[0]) {
+      tags = [...tags.filter((tag) => tag !== previousCategory), ...categoryTag].filter(
+        (tag, index, all) => all.indexOf(tag) === index
+      );
+    }
   }
 
   let acl = aclOf(doc);
