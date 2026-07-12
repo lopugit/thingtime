@@ -107,7 +107,9 @@ export default function App() {
         {mounted ? <ElectronBridgeHost /> : null}
         {mounted ? <NativeBridgeHost /> : null}
         <DevKit />
-        <Nav />
+        {/* /authorize is the "Login with Thingtime" popup — a focused embed
+            surface with its own chrome, so the app nav stays out of it. */}
+        {pathname === '/authorize' ? null : <Nav />}
         <Main>
           <Outlet />
         </Main>

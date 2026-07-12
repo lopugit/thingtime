@@ -18,7 +18,13 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // service accounts do legitimate bulk writes (e.g. chunked snapshot sync), so
   // they get a higher ceiling — but a BOUNDED one, never an exemption: anyone
   // can provision a service account, so accountKind confers no trust
-  'things.write.service': { limit: 600, windowMs: 60_000, enabled: true }
+  'things.write.service': { limit: 600, windowMs: 60_000, enabled: true },
+  // embeddable "Login with Thingtime" (api/utils/apps): app registration is a
+  // rare developer action; authorize mints revocable app sessions; app-data
+  // writes come from third-party pages and are keyed per (user, app)
+  'apps.write': { limit: 30, windowMs: 3_600_000, enabled: true },
+  'oauth.authorize': { limit: 30, windowMs: 600_000, enabled: true },
+  'appData.write': { limit: 120, windowMs: 60_000, enabled: true }
 };
 
 export const RATE_LIMIT_ENDPOINTS = Object.keys(RATE_LIMIT_DEFAULTS);

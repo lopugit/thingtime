@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Login with Thingtime — demo embed</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body {
+        font: 15px/1.55 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        max-width: 640px;
+        margin: 48px auto;
+        padding: 0 20px;
+        color: #1c1c22;
+        background: #fafafb;
+      }
+      @media (prefers-color-scheme: dark) {
+        body { color: #ececef; background: #131318; }
+        input { color: inherit; background: #1c1c22; border-color: #33333d !important; }
+        pre { background: #1c1c22 !important; }
+      }
+      h1 { font-size: 22px; }
+      .row { display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; }
+      input {
+        flex: 1;
+        min-width: 220px;
+        padding: 9px 12px;
+        border: 1px solid #ececef;
+        border-radius: 9px;
+        font: inherit;
+      }
+      button.plain {
+        padding: 9px 14px;
+        border: 1px solid #ececef;
+        border-radius: 9px;
+        background: transparent;
+        color: inherit;
+        font: 600 14px/1.2 inherit;
+        cursor: pointer;
+      }
+      pre {
+        background: #f1f1f4;
+        border-radius: 12px;
+        padding: 14px;
+        overflow-x: auto;
+        font-size: 13px;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      .muted { color: #9a9aa6; font-size: 13px; }
+    </style>
+  </head>
+  <body>
+    <h1>Login with Thingtime — demo embed 🌈</h1>
+    <p class="muted">
+      This page plays the role of a third-party website. Register an app on Thingtime
+      (<code>POST /api/v1/apps</code>) with THIS page's origin on its allowlist, paste the
+      clientId below, and the whole popup → token → data-storage loop runs against the real API.
+    </p>
+
+    <div class="row">
+      <input id="client-id" placeholder="ttapp_… (your app's clientId)" autocomplete="off" />
+    </div>
+    <div class="row" id="login-mount"></div>
+
+    <div class="row">
+      <input id="data-key" placeholder="key (e.g. preferences)" autocomplete="off" />
+      <input id="data-value" placeholder='value JSON (e.g. {"theme":"rainbow"})' autocomplete="off" />
+    </div>
+    <div class="row">
+      <button class="plain" id="btn-set">set</button>
+      <button class="plain" id="btn-get">get</button>
+      <button class="plain" id="btn-list">list</button>
+      <button class="plain" id="btn-delete">delete</button>
+    </div>
+
+    <pre id="log">(waiting — log in first)</pre>
+
+    <script src="./thingtime-login.js"></script>
+    <script>
+      var session = null;
+      var logEl = document.getElementById('log');
+
+      function log(label, value) {
+        logEl.textContent = '[' + label + ']\n' + JSON.stringify(value, null, 2);
+      }
+
+      // Re-render the button whenever the clientId field changes so the click
+      // always uses the current value.
+      var mount = document.getElementById('login-mount');
+      function renderLoginButton() {
+        mount.innerHTML = '';
+        Thingtime.renderButton(mount, {
+          clientId: document.getElementById('client-id').value.trim(),
+          onLogin: function (s) {
+            session = s;
+            log('logged in', { user: s.user, expiresAt: s.expiresAt });
+          },
+          onError: function (err) {
+            log('login error', String(err && err.message ? err.message : err));
+          }
+        });
+      }
+      document.getElementById('client-id').addEventListener('change', renderLoginButton);
+      renderLoginButton();
+
+      function withSession(fn) {
+        if (!session) {
+          log('error', 'Log in first');
+          return;
+        }
+        fn(Thingtime.data(session.token));
+      }
+
+      document.getElementById('btn-set').addEventListener('click', function () {
+        withSession(function (data) {
+          var key = document.getElementById('data-key').value.trim();
+          var raw = document.getElementById('data-value').value.trim();
+          var value;
+          try {
+            value = raw ? JSON.parse(raw) : null;
+          } catch (err) {
+            value = raw; // treat non-JSON input as a plain string
+          }
+          data.set(key, value).then(
+            function (entry) { log('set ' + key, entry); },
+            function (err) { log('set error', String(err.message || err)); }
+          );
+        });
+      });
+
+      document.getElementById('btn-get').addEventListener('click', function () {
+        withSession(function (data) {
+          var key = document.getElementById('data-key').value.trim();
+          data.get(key).then(
+            function (value) { log('get ' + key, value); },
+            function (err) { log('get error', String(err.message || err)); }
+          );
+        });
+      });
+
+      document.getElementById('btn-list').addEventListener('click', function () {
+        withSession(function (data) {
+          data.list().then(
+            function (entries) { log('list', entries); },
+            function (err) { log('list error', String(err.message || err)); }
+          );
+        });
+      });
+
+      document.getElementById('btn-delete').addEventListener('click', function () {
+        withSession(function (data) {
+          var key = document.getElementById('data-key').value.trim();
+          data.remove(key).then(
+            function (deleted) { log('delete ' + key, { deleted: deleted }); },
+            function (err) { log('delete error', String(err.message || err)); }
+          );
+        });
+      });
+    </script>
+  </body>
+</html>

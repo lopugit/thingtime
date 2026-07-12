@@ -1505,6 +1505,217 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'apps',
+    group: 'embed',
+    title: 'Embed apps',
+    endpoint: '/api/v1/apps',
+    summary: 'Register and list the apps that can embed "Login with Thingtime" on other websites.',
+    detail:
+      'An app is what an external website registers before it can show a "Login with Thingtime" button ' +
+      '(via the embed SDK at /sdk/thingtime-login.js). POST { name, origins } registers one: the server ' +
+      'mints the clientId (ttapp_<uuid>) and validates origins — bare https origins like ' +
+      'https://example.com, with http allowed only for localhost dev. Only those exact origins can open ' +
+      'the authorize popup and receive tokens. GET lists your registered apps.',
+    auth: { mode: 'session', description: 'Your own Thingtime session (cookie or full-account Bearer). App-scoped tokens are rejected.' },
+    methods: ['GET', 'POST'],
+    steps: [
+      'POST { name, origins } to register an app and receive its clientId.',
+      'Drop the SDK + clientId into the external site (see /sdk/thingtime-login.js).',
+      'GET to list your apps; update or delete them via /api/v1/apps/update and /api/v1/apps/delete.'
+    ],
+    requestExamples: [
+      { name: 'List apps', description: 'Your registered apps.', method: 'GET' },
+      {
+        name: 'Register an app',
+        description: 'Create an app locked to one origin.',
+        method: 'POST',
+        body: { name: 'Rainbow Notes', origins: ['https://rainbownotes.example'] }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'App registered.',
+        body: {
+          ok: true,
+          app: { clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', name: 'Rainbow Notes', origins: ['https://rainbownotes.example'] }
+        }
+      },
+      { status: 400, description: 'Bad origin.', body: { ok: false, error: 'Origins must be bare https origins like https://example.com (http is allowed for localhost only)' } }
+    ],
+    notes: ['Apps are things (thingtime ["app"]) owned by you; the clientId is public, but tokens only ever reach allowlisted origins.']
+  }),
+  endpoint({
+    id: 'apps-update',
+    group: 'embed',
+    title: 'Update an embed app',
+    endpoint: '/api/v1/apps/update',
+    summary: 'Rename one of your embed apps or change its origin allowlist.',
+    detail:
+      'POST { clientId, name?, origins? }. Origins are re-validated like registration. Removing an origin ' +
+      'takes effect on the next request from any token bound to it — the app-token resolver re-checks the ' +
+      'allowlist every time.',
+    auth: { mode: 'session', description: 'Your own Thingtime session; you can only update apps you own.' },
+    methods: ['POST'],
+    steps: [
+      'POST the clientId plus the fields to change.',
+      'Tokens bound to removed origins stop working immediately.'
+    ],
+    requestExamples: [
+      {
+        name: 'Change origins',
+        description: 'Swap the allowlist to a new domain.',
+        method: 'POST',
+        body: { clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', origins: ['https://new.example'] }
+      }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Updated.', body: { ok: true, app: { clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', name: 'Rainbow Notes', origins: ['https://new.example'] } } },
+      { status: 404, description: 'Not yours / unknown.', body: { ok: false, error: 'App not found' } }
+    ]
+  }),
+  endpoint({
+    id: 'apps-delete',
+    group: 'embed',
+    title: 'Delete an embed app',
+    endpoint: '/api/v1/apps/delete',
+    summary: 'Delete one of your embed apps and revoke every token it ever minted.',
+    detail:
+      'POST { clientId }. Every app-scoped session for the app is revoked, so tokens held by embedding ' +
+      'sites die immediately. End users KEEP their app-data things — that data belongs to them, not the ' +
+      'app developer.',
+    auth: { mode: 'session', description: 'Your own Thingtime session; you can only delete apps you own.' },
+    methods: ['POST'],
+    steps: ['POST the clientId.', 'All app tokens are revoked; user data stays with its users.'],
+    requestExamples: [
+      { name: 'Delete', description: 'Remove the app.', method: 'POST', body: { clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f' } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Deleted.', body: { ok: true } },
+      { status: 404, description: 'Not yours / unknown.', body: { ok: false, error: 'App not found' } }
+    ]
+  }),
+  endpoint({
+    id: 'apps-public',
+    group: 'embed',
+    title: 'Public app lookup',
+    endpoint: '/api/v1/apps/public',
+    summary: 'Anonymous lookup the authorize popup uses to validate a clientId + origin pair.',
+    detail:
+      'GET ?clientId=…&origin=…. Returns the app\'s public face (clientId + name) only when the app ' +
+      'exists AND the origin is on its allowlist, so the popup can refuse unregistered embedders before ' +
+      'any login UI renders. 404 for unknown apps, 403 for origins not on the allowlist.',
+    auth: { mode: 'none', description: 'Anonymous — returns only the app name.' },
+    methods: ['GET'],
+    steps: ['GET with clientId and the embedding page origin.', 'Render the consent screen from the returned name.'],
+    requestExamples: [
+      {
+        name: 'Lookup',
+        description: 'Validate a clientId for an origin.',
+        method: 'GET',
+        query: { clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', origin: 'https://rainbownotes.example' }
+      }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Allowed.', body: { ok: true, app: { clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', name: 'Rainbow Notes' }, origin: 'https://rainbownotes.example' } },
+      { status: 403, description: 'Origin not allowlisted.', body: { ok: false, error: 'This origin is not on the app’s allowlist' } }
+    ]
+  }),
+  endpoint({
+    id: 'oauth-authorize',
+    group: 'embed',
+    title: 'Authorize (mint app token)',
+    endpoint: '/api/v1/oauth/authorize',
+    summary: 'The consent step of the "Login with Thingtime" popup — mints an app-scoped Bearer token.',
+    detail:
+      'POST { clientId, origin } with the user\'s real session cookie (the popup runs on the Thingtime ' +
+      'origin). Validates the app + origin allowlist, then mints a revocable app-scoped session ' +
+      '(purpose "app", 30 days) and returns its Bearer token plus a minimal user object ' +
+      '{ id, username, displayName, avatarUrl } — never email or account internals. App tokens are ' +
+      'rejected by every normal endpoint: they only work on /api/v1/app-data*, so a leaked token can\'t ' +
+      'touch the rest of the account or mint further tokens.',
+    auth: { mode: 'session', description: 'The end user\'s Thingtime session cookie (popup is same-origin).' },
+    methods: ['POST'],
+    steps: [
+      'The SDK opens /authorize?client_id=…&origin=…&state=… in a popup.',
+      'The popup validates via /api/v1/apps/public, has the user log in if needed, and shows consent.',
+      'On approve it POSTs here, then hands the token to the opener via postMessage (targetOrigin = the validated origin).'
+    ],
+    requestExamples: [
+      {
+        name: 'Authorize',
+        description: 'Approve the app for the logged-in user.',
+        method: 'POST',
+        body: { clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', origin: 'https://rainbownotes.example' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Token minted.',
+        body: {
+          ok: true,
+          token: 'eyJhbGciOiJFUzI1NiIs…',
+          tokenType: 'Bearer',
+          expiresAt: '2026-08-11T00:00:00.000Z',
+          user: { id: '664f1c2a9d3e5b0012345678', username: 'lopu', displayName: 'Lopu', avatarUrl: null }
+        }
+      },
+      { status: 403, description: 'Origin not allowlisted.', body: { ok: false, error: 'This origin is not on the app’s allowlist' } }
+    ],
+    notes: ['Revoke by deleting the app, or per-session via the sessions collection — the token dies before its exp like every Thingtime JWT.']
+  }),
+  endpoint({
+    id: 'app-data',
+    group: 'embed',
+    title: 'App data (read/write)',
+    endpoint: '/api/v1/app-data',
+    summary: 'Key/value storage an embedded app keeps in its user\'s Thingtime account.',
+    detail:
+      'Authenticated by an app-scoped Bearer token from /api/v1/oauth/authorize. GET ?key=… returns one ' +
+      'entry ({ entry: null } when unset); GET without key lists every entry for this (user, app). ' +
+      'POST { key, value } inserts or updates one entry — keys are [A-Za-z0-9._:-] up to 128 chars, values ' +
+      'any JSON up to 32KB, at most 200 keys per user per app. Entries are things owned by the END USER ' +
+      '(acl ["tt:user"]), so users can always see and delete what an app stored. CORS: browser calls must ' +
+      'come from the token\'s own bound origin.',
+    auth: { mode: 'bearer', description: 'App-scoped Bearer token only — cookies never authenticate this route.' },
+    methods: ['GET', 'POST'],
+    steps: [
+      'Take the token from Thingtime.login(…) in the SDK.',
+      'GET to read (with ?key for one entry), POST { key, value } to write.',
+      'Values round-trip as JSON; delete keys via /api/v1/app-data/delete.'
+    ],
+    requestExamples: [
+      { name: 'Read one', description: 'One key.', method: 'GET', query: { key: 'preferences' } },
+      { name: 'List all', description: 'Everything this app stored for this user.', method: 'GET' },
+      { name: 'Write', description: 'Upsert a key.', method: 'POST', body: { key: 'preferences', value: { theme: 'rainbow' } } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Entry written.', body: { ok: true, entry: { key: 'preferences', value: { theme: 'rainbow' }, updatedAt: '2026-07-12T00:00:00.000Z' } } },
+      { status: 401, description: 'Missing/expired/revoked token.', body: { ok: false, error: 'Unauthorized' } },
+      { status: 403, description: 'Browser origin ≠ token origin.', body: { ok: false, error: 'Origin does not match this token' } }
+    ]
+  }),
+  endpoint({
+    id: 'app-data-delete',
+    group: 'embed',
+    title: 'App data (delete)',
+    endpoint: '/api/v1/app-data/delete',
+    summary: 'Delete one key/value entry the app stored for this user.',
+    detail:
+      'POST { key } with the app-scoped Bearer token. Returns deleted: false when the key was already ' +
+      'absent. Same CORS + origin binding as /api/v1/app-data.',
+    auth: { mode: 'bearer', description: 'App-scoped Bearer token only.' },
+    methods: ['POST'],
+    steps: ['POST the key to remove.'],
+    requestExamples: [
+      { name: 'Delete', description: 'Remove a key.', method: 'POST', body: { key: 'preferences' } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Removed (or already absent).', body: { ok: true, deleted: true } }
+    ]
+  }),
+  endpoint({
     id: 'things',
     group: 'things',
     title: 'Things (full CRUD)',

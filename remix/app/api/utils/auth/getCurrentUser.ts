@@ -28,6 +28,10 @@ export const resolveSessionUser = async (jti: string, expectedUserId: string): P
   const session = await getLiveSession(jti);
   if (!session) return null;
   if (String(session.userId) !== expectedUserId) return null;
+  // App-scoped tokens (third-party "Login with Thingtime" grants) are never
+  // full account credentials: they only work through the app-token path
+  // (apps/appTokens.ts), which checks purpose === 'app' itself.
+  if (session.purpose === 'app') return null;
 
   const user = await findUserById(expectedUserId);
   if (!user) return null;
