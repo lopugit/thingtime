@@ -1,5 +1,4 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { Binary } from 'mongodb';
 
 import {
   ensureIndexes,
@@ -8,6 +7,7 @@ import {
   getWaitlistCollection
 } from '../mongodb/collections';
 import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
+import { toBin } from '../auth/users';
 
 // Waitlist entries are THINGS now (thingtime ['waitlist'], see claude-todo/12):
 // the crystal stays empty by design, the email lives ONLY under the root
@@ -68,14 +68,11 @@ const consumeJoinQuota = async (request: Request) => {
 
 type JoinResult = { ok: false; status: number; error: string } | { ok: true };
 
-// same BinData wrapper as auth/users — the wildcard text index tokenizes every
-// STRING field, so the email travels as binary (invisible to $text)
-const toBin = (value: string) => new Binary(Buffer.from(value, 'utf8'));
-
-// hashed like auth/users' userEmailKey AND BinData like every uniqueKey —
-// plain-string keys would tokenize into the text index and make the entries
-// enumerable via their prefix token
-const waitlistEmailKey = (email: string) =>
+// hashed like auth/users' userEmailKey AND BinData (auth/users' canonical
+// toBin) like every uniqueKey — plain-string keys would tokenize into the text
+// index and make the entries enumerable via their prefix token. Exported so
+// the waitlist-to-things admin migration mints byte-identical keys.
+export const waitlistEmailKey = (email: string) =>
   toBin(`waitlist-email:${createHash('sha256').update(email.trim().toLowerCase()).digest('hex')}`);
 
 // Join the launch waitlist. Idempotent per email (unique uniqueKeys index +

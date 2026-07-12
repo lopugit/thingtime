@@ -55,8 +55,9 @@ export const toPublicTheme = (doc: any): PublicTheme => ({
 const MAX_THEMES_PER_USER = 100;
 
 // legacy visibility → theme-thing acl. Themes only ever use the two-value
-// subset: public is world-readable, everything else is owner-only.
-const themeAcl = (visibility: 'private' | 'public'): string[] =>
+// subset: public is world-readable, everything else is owner-only. Exported so
+// the themes-to-things admin migration maps visibility identically.
+export const themeAcl = (visibility: 'private' | 'public'): string[] =>
   visibility === 'public' ? [ACL_ALL] : [ACL_OWNER];
 
 // thing → legacy ThemeDoc view. Visibility is DERIVED from the acl (tt:all

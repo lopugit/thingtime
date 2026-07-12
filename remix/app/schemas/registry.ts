@@ -769,10 +769,12 @@ const sanitizeDataCrystal = (input: Record<string, unknown>): { ok: true; crysta
 };
 
 // Schema-thing field names double as crystal paths in the search builder
-// (crystal.<name>): KEY_SEGMENT_PATTERN segments joined by dots.
-const SCHEMA_FIELD_NAME_PATTERN = /^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$/;
-const MAX_SCHEMA_FIELD_NAME_CHARS = 60;
-const MAX_SCHEMA_FIELD_DESCRIPTION_CHARS = 200;
+// (crystal.<name>): KEY_SEGMENT_PATTERN segments joined by dots. Exported so
+// the builtin-schema seed migration maps registry fields onto the exact same
+// grammar sanitizeSchemaCrystal enforces on user-authored schema things.
+export const SCHEMA_FIELD_NAME_PATTERN = /^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$/;
+export const MAX_SCHEMA_FIELD_NAME_CHARS = 60;
+export const MAX_SCHEMA_FIELD_DESCRIPTION_CHARS = 200;
 
 const sanitizeSchemaCrystal = (input: Record<string, unknown>): { ok: true; crystal: Record<string, unknown> } | Fail => {
   const name = typeof input.name === 'string' ? input.name.trim() : '';

@@ -27,22 +27,32 @@ This makes **test, live, and direct-API behaviour one and the same code path.**
 Applies to every entity (users, things, sessions): there is one creation path,
 and everything uses it.
 
-## 3. One database: `thingtime`
+## 3. One database: `thingtime` — and (almost) one collection
 
-Single Mongo database `thingtime` with these collections:
+Single Mongo database `thingtime`. **Everything that can be a thing IS a
+thing**: users, themes, feed algorithms, waitlist entries, schemas, posts,
+comments, reactions, shares, and free-form data all live in `things`, each
+kind declared through the `thingtime` schema-id array (see
+`app/schemas/registry.ts` and `claude-todo/12-everything-is-a-thing-collections.md`).
 
 | Collection | Holds |
 | ---------- | ----- |
-| `users`    | user accounts (hashed passwords + signup metadata + profile fields: bio/avatarUrl/bannerUrl) |
-| `sessions` | server-side sessions / JWT records (for revocation) |
-| `things`   | the actual Thingtime data — feed posts live here as `kind: 'post'` docs (see `/api/v1/things`) |
+| `things`   | ALL Thingtime data. System kinds: `user` (public profile in `crystal`, credentials as BinData under root `secure`, uniqueness via BinData `uniqueKeys`), `theme`, `feed-algorithm`, `waitlist`, `schema`; content kinds: `post`, `comment`, `reaction`, `share`, `data` |
+| `sessions` | server-side sessions / JWT records (revocation; `userId` = the user thing's `shareId`) |
+| `rosters`  | account-switcher rosters (TTL-reaped) |
 | `emailVerifications` | pending email-verification tokens |
-| `lopuMusingRateLimits` | rate-limit windows for Lopu musings |
-| `themes`   | saved user themes (shareable by `shareId`; see `/api/v1/themes`) |
-| `waitlist` | launch waitlist emails (`/api/v1/waitlist`) |
-| `feedAlgorithms` | per-user doomscroll-trained feed algorithms (`/api/v1/algorithms`; active pick lives in `users.meta.activeFeedAlgorithmId`) |
+| `lopuMusingRateLimits` / `rateLimits` | rate-limit windows |
+| `settings` | admin-editable app settings singletons |
+| `users` / `themes` / `feedAlgorithms` / `waitlist` | LEGACY, frozen — reads fall back here until the admin migrations (`/api/v1/admin/migrations`) convert them; nothing writes to them anymore |
 
-(Replaces the earlier inconsistent `auth.users` vs `thingtime.things` split.)
+System-kind rules (never bypass):
+- System kinds are **protected**: the generic `/api/v1/things` CRUD refuses
+  them — only their dedicated utils write them (register, profile, themes,
+  algorithms, waitlist).
+- Secrets live under root `secure` as **BinData** (the search wildcard text
+  index tokenizes strings only, so binary secrets are unsearchable), never in
+  `crystal`; `uniqueKeys` elements are BinData for the same reason, with PII
+  keys additionally sha256-hashed.
 
 ### Appended/child data is relational — never an unbounded embedded array
 

@@ -1580,8 +1580,8 @@
     "semantic_hash": "5e9505d10b125d54dccabb1ddfeeef75"
   },
   "FUNDAMENTALS.md": {
-    "mtime": 1783814169.8369849,
-    "ast_hash": "0fbc17942e98ba3665d8f0356a86c738",
+    "mtime": 1783833590.5434754,
+    "ast_hash": "3d9177ab135dd4458d89ad44494ee032",
     "semantic_hash": ""
   },
   "README.md": {
@@ -1810,8 +1810,8 @@
     "semantic_hash": "f162fbffa18046af73dfca08802a536f"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1783826752.3392363,
-    "ast_hash": "c8fdca97bbd35c24215cb9aff0258a71",
+    "mtime": 1783833615.3631318,
+    "ast_hash": "65bad1b6fdc746f82162c7c369531cd5",
     "semantic_hash": ""
   },
   "remix/README.md": {
@@ -2955,13 +2955,13 @@
     "semantic_hash": "17f9d65ca49d887be58ba6bfdc3f5a35"
   },
   "remix/app/api/utils/themes/themes.ts": {
-    "mtime": 1783833168.4396508,
-    "ast_hash": "d59f6ce02a533c63f6317efa057ca0cc",
+    "mtime": 1783834117.2721822,
+    "ast_hash": "57bd5c20c7d55db762fb94c818f3184f",
     "semantic_hash": ""
   },
   "remix/app/api/utils/waitlist/waitlist.ts": {
-    "mtime": 1783833382.2311895,
-    "ast_hash": "e75de6050464529d0a5366fca811e98d",
+    "mtime": 1783834109.7990036,
+    "ast_hash": "dfad5fd55aa82198ca630fb1e1841acb",
     "semantic_hash": ""
   },
   "remix/app/components/Landing/BrutalButton.tsx": {
@@ -3270,8 +3270,8 @@
     "semantic_hash": "f33d517f220a280930d5f773399b28a0"
   },
   "remix/app/docs/apiDocs.ts": {
-    "mtime": 1783830223.4385715,
-    "ast_hash": "9d5d86935df3961292f92762b5f0ca1b",
+    "mtime": 1783833627.893248,
+    "ast_hash": "c2963e02b00481c63ec763da06018c9b",
     "semantic_hash": ""
   },
   "remix/app/routes/docs/api.tsx": {
@@ -3725,8 +3725,8 @@
     "semantic_hash": "ce4473a3bfe4f942731be8b737f74d92"
   },
   "remix/app/api/utils/migrations/migrations.ts": {
-    "mtime": 1783814170.1013925,
-    "ast_hash": "e66f25a396a3d3824dfc0c11998ed986",
+    "mtime": 1783834213.099515,
+    "ast_hash": "cddc014024e1281ae396c58357765ef3",
     "semantic_hash": ""
   },
   "remix/app/components/Schemas/MigrationsPanel.tsx": {
@@ -3765,8 +3765,8 @@
     "semantic_hash": ""
   },
   "remix/app/schemas/registry.ts": {
-    "mtime": 1783831510.1887035,
-    "ast_hash": "2b51f95788a8b2e9fde4a5ca66d7c7c8",
+    "mtime": 1783834088.2805662,
+    "ast_hash": "5ba0724457ab02f38cbff846ee7c6472",
     "semantic_hash": ""
   },
   "PRs/59-claude-unified-thing-crystal-schemas--everything-is-a-thing.md": {
@@ -3810,8 +3810,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Search/SearchPage.tsx": {
-    "mtime": 1783830292.6941457,
-    "ast_hash": "0b8a18f87416c47b40d13925fce52c7d",
+    "mtime": 1783834567.9888053,
+    "ast_hash": "10c730203c9e3faac8c94be9f0660f43",
     "semantic_hash": ""
   },
   "remix/app/components/Search/searchTypes.ts": {
