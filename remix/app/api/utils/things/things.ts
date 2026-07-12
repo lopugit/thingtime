@@ -37,7 +37,7 @@ import { scorePost, type AlgorithmWeights, type PostFeatures } from './feedRanki
 
 export { REACTION_EMOJIS };
 
-export type PostType = 'text' | 'image' | 'marketplace';
+export type PostType = 'text' | 'image' | 'marketplace' | 'thingtime';
 export type PostVisibility = 'public' | 'friends' | 'family' | 'private';
 export type MarketplaceCategory = 'car' | 'tool' | 'furniture' | 'service' | 'other';
 
@@ -116,6 +116,8 @@ export type PublicPost = {
   text: string;
   images: string[];
   listing: MarketplaceListing | null;
+  // thingtime posts: the free-form structured thing under crystal.thing
+  thing: Record<string, any> | null;
   tags: string[];
   reactionCounts: Record<string, number>;
   viewerReactions: string[];
@@ -150,8 +152,8 @@ export type Viewer = { id: string; username?: string | null } | null;
 export const asViewer = (value: string | Viewer | null | undefined): Viewer =>
   typeof value === 'string' ? { id: value } : value || null;
 
-const POST_TYPES: PostType[] = ['text', 'image', 'marketplace'];
-const VISIBILITIES: PostVisibility[] = ['public', 'friends', 'family', 'private'];
+export const POST_TYPES: PostType[] = ['text', 'image', 'marketplace', 'thingtime'];
+export const VISIBILITIES: PostVisibility[] = ['public', 'friends', 'family', 'private'];
 
 const MAX_TAGS = 12;
 const MAX_TAG_CHARS = 40;
@@ -415,6 +417,7 @@ export type CreatePostInput = {
   text?: unknown;
   images?: unknown;
   listing?: unknown;
+  thing?: unknown;
   acl?: unknown;
   visibility?: unknown;
   tags?: unknown;
@@ -435,7 +438,7 @@ export const createPost = async (
     ownerId,
     {
       thingtime: ['post'],
-      crystal: { type: input.type, text: input.text, images: input.images, listing: input.listing },
+      crystal: { type: input.type, text: input.text, images: input.images, listing: input.listing, thing: input.thing },
       acl: input.acl,
       visibility: input.visibility,
       tags: input.tags,
@@ -653,6 +656,10 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
       text: String(crystal.text || ''),
       images: (crystal.images as string[]) || [],
       listing: (crystal.listing as MarketplaceListing) || null,
+      thing:
+        crystal.thing && typeof crystal.thing === 'object' && !Array.isArray(crystal.thing)
+          ? (crystal.thing as Record<string, any>)
+          : null,
       tags: doc.tags || [],
       reactionCounts: reactionCountsOf(reactions),
       viewerReactions: viewerReactionsOf(reactions, viewerId),
@@ -834,7 +841,8 @@ export const oldestCursorClause = (cursor: { createdAt: Date; id: string }) => (
 });
 
 // type filter must match both eras: v2 keeps type in crystal, v1 at the root
-const typeClause = (types: PostType[]) =>
+// (exported so /search's shortcut filters share the exact same era handling)
+export const typeClause = (types: PostType[]) =>
   types.length ? { $or: [{ 'crystal.type': { $in: types } }, { type: { $in: types } }] } : {};
 
 export const getFeed = async (

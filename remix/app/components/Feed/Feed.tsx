@@ -5,6 +5,14 @@ import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { RAINBOW_TEXT } from '~/theme/rainbow';
+import { invalidNumberField } from '~/components/Search/searchBuilder';
+import {
+  AdvancedFilters,
+  EMPTY_ADVANCED_FILTERS,
+  advancedFiltersActive,
+  advancedSearchBody,
+  type AdvancedFiltersState
+} from './AdvancedFilters';
 import { AlgorithmMenu } from './AlgorithmMenu';
 import { FeedFilters } from './FeedFilters';
 import { PostComposer } from './PostComposer';
@@ -15,6 +23,8 @@ import type { FeedFiltersState, PostChange, PublicPost } from './feedTypes';
 // The /feed page: composer + algorithm picker + filters over an infinite
 // post column. Guest-visible (public posts only); engagement telemetry from
 // useFeedEngagement trains whichever algorithm is active as you scroll.
+// Filters ▸ Advanced swaps the pager onto the structured search API while
+// keeping the same PostList rendering and simple-filter narrowing.
 
 const EMPTY_FILTERS: FeedFiltersState = { types: [], circles: [], from: null, to: null };
 
@@ -27,6 +37,12 @@ export const FeedPage = () => {
 
   const [filters, setFilters] = React.useState<FeedFiltersState>(EMPTY_FILTERS);
   const [algorithmId, setAlgorithmId] = React.useState<string | null>(user?.activeFeedAlgorithmId ?? null);
+
+  // advanced search: the panel edits a draft; Apply snapshots it into
+  // appliedAdvanced (null = normal feed), which the pager keys off
+  const [advancedOpen, setAdvancedOpen] = React.useState(false);
+  const [advanced, setAdvanced] = React.useState<AdvancedFiltersState>(EMPTY_ADVANCED_FILTERS);
+  const [appliedAdvanced, setAppliedAdvanced] = React.useState<AdvancedFiltersState | null>(null);
 
   const [posts, setPosts] = React.useState<PublicPost[]>([]);
   const [nextCursor, setNextCursor] = React.useState<string | null>(null);
@@ -65,6 +81,33 @@ export const FeedPage = () => {
       setLoading(true);
 
       try {
+        if (appliedAdvanced) {
+          // advanced mode: the structured search API, posts projected the same
+          // way the feed projects them — simple filters keep narrowing
+          const resp = await apiRef.current.v1.things.search({
+            ...advancedSearchBody(appliedAdvanced),
+            types: filters.types.length ? filters.types : undefined,
+            circles: filters.circles.length ? filters.circles : undefined,
+            from: filters.from || undefined,
+            to: filters.to || undefined,
+            cursor: reset ? undefined : cursor || undefined,
+            limit: PAGE_SIZE
+          });
+          if (seq !== requestSeqRef.current) return;
+
+          const pagePosts: PublicPost[] = (resp.things || [])
+            .map((thing: any) => (resp.posts || {})[thing.id])
+            .filter(Boolean);
+          setPosts((prev) => {
+            if (reset) return pagePosts;
+            const seen = new Set(prev.map((post) => post.id));
+            return [...prev, ...pagePosts.filter((post) => !seen.has(post.id))];
+          });
+          setNextCursor(resp.nextCursor ?? null);
+          setRanked(!!resp.ranked);
+          return;
+        }
+
         const resp = await apiRef.current.v1.things.feed({
           types: filters.types,
           circles: filters.circles,
@@ -90,7 +133,7 @@ export const FeedPage = () => {
         }
       }
     },
-    [filters, algorithmId]
+    [filters, algorithmId, appliedAdvanced]
   );
 
   // initial fetch + reset whenever the filters or algorithm change — or the
@@ -119,6 +162,34 @@ export const FeedPage = () => {
 
   const handlePosted = React.useCallback((post: PublicPost) => {
     setPosts((prev) => [post, ...prev]);
+  }, []);
+
+  // Apply snapshots the draft (or drops back to the normal feed when the panel
+  // is effectively empty); closing the panel always restores the normal feed
+  const advancedRef = React.useRef(advanced);
+  advancedRef.current = advanced;
+  const handleAdvancedApply = React.useCallback(() => {
+    const draft = advancedRef.current;
+    const invalid = invalidNumberField(draft.rows);
+    if (invalid) {
+      lopuRef.current({
+        title: `"${invalid}" wants a number`,
+        description: 'That value isn’t numeric — fix it or switch the row’s datatype to text.',
+        status: 'error'
+      });
+      return;
+    }
+    setAppliedAdvanced(advancedFiltersActive(draft) ? { ...draft } : null);
+  }, []);
+
+  const handleAdvancedClear = React.useCallback(() => {
+    setAdvanced(EMPTY_ADVANCED_FILTERS);
+    setAppliedAdvanced(null);
+  }, []);
+
+  const handleAdvancedToggle = React.useCallback((open: boolean) => {
+    setAdvancedOpen(open);
+    if (!open) setAppliedAdvanced(null);
   }, []);
 
   // hook the engagement observer onto every rendered card wrapper
@@ -159,7 +230,14 @@ export const FeedPage = () => {
             textTransform="uppercase"
             color="var(--tt-muted, #9a9aa6)"
           >
-            Thingtime · {ranked ? 'Ranked by your algorithm 🧠' : 'Fresh things first ⏱️'}
+            Thingtime ·{' '}
+            {appliedAdvanced
+              ? ranked
+                ? 'Advanced search · best match first 🔬'
+                : 'Advanced search 🔬'
+              : ranked
+                ? 'Ranked by your algorithm 🧠'
+                : 'Fresh things first ⏱️'}
           </Box>
           <Box
             as="h1"
@@ -189,9 +267,24 @@ export const FeedPage = () => {
             getSessionEvents={getSessionEvents}
           />
           <Box marginLeft="auto">
-            <FeedFilters value={filters} onChange={setFilters} />
+            <FeedFilters
+              value={filters}
+              onChange={setFilters}
+              advancedOpen={advancedOpen}
+              onAdvancedToggle={handleAdvancedToggle}
+            />
           </Box>
         </Flex>
+
+        {advancedOpen && (
+          <AdvancedFilters
+            value={advanced}
+            onChange={setAdvanced}
+            onApply={handleAdvancedApply}
+            onClear={handleAdvancedClear}
+            loading={loading}
+          />
+        )}
 
         {user && <PostComposer onPosted={handlePosted} />}
 
@@ -204,9 +297,11 @@ export const FeedPage = () => {
             onPostChanged={handlePostChanged}
             onEngagement={recordEvent}
             emptyLabel={
-              ranked
-                ? 'Your algorithm has nothing to rank yet — try Latest ⏱️'
-                : 'Nothing here yet — be the first to post ✨'
+              appliedAdvanced
+                ? 'Nothing matched — loosen a filter, or try plain words up top ✨'
+                : ranked
+                  ? 'Your algorithm has nothing to rank yet — try Latest ⏱️'
+                  : 'Nothing here yet — be the first to post ✨'
             }
           />
         </Box>

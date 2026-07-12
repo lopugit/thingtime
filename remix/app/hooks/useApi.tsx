@@ -177,11 +177,11 @@ export function useApi() {
       reactionsRecent: useCallback(async () => getJson('/api/v1/things/reactions-recent'), []),
       create: useCallback(
         async (args) => {
-          const { type, text, images, listing, thingtime, crystal, targetId, acl, visibility, tags } = args;
+          const { type, text, images, listing, thing, thingtime, crystal, targetId, acl, visibility, tags } = args;
           // unified shape when thingtime is given, legacy post shape otherwise
           const payload = Array.isArray(thingtime)
             ? { thingtime, crystal, targetId, acl, visibility, tags }
-            : { type, text, images, listing, acl, visibility, tags };
+            : { type, text, images, listing, thing, acl, visibility, tags };
           return asyncFetcher.submit(payload, { action: '/api/v1/things' });
         },
         [asyncFetcher]

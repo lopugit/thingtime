@@ -6,16 +6,21 @@ import { useApi } from '~/hooks/useApi';
 import { LongTextEditor } from '~/components/Editor/LongTextEditor';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { UserAvatarCircle } from '~/components/Nav/Drawer/DrawerContent';
+import { Thingtime } from '~/components/Thingtime/Thingtime';
+import { useThingtime } from '~/components/Thingtime/useThingtime';
 import { RAINBOW } from '~/theme/rainbow';
 import { CIRCLE_META, MARKETPLACE_CATEGORY_META, POST_TYPE_META } from './feedTypes';
 import type { MarketplaceCategory, PostType, PostVisibility, PublicPost } from './feedTypes';
 
 // "What's on your mind?" composer. Collapsed it's a one-line prompt beside
-// the viewer's avatar; expanded it grows type tabs (text/photos/marketplace),
-// a block editor for the body (Editor.js — headings, lists, quotes,
-// checklists serialise to a plain string), image URL rows, listing fields,
-// tag chips and a circle picker. Posts through api.v1.things.create and
-// hands the returned post to onPosted for prepending.
+// the viewer's avatar; expanded it grows type tabs (text/photos/marketplace/
+// thingtime), a block editor for the body (Editor.js — headings, lists,
+// quotes, checklists serialise to a plain string), image URL rows, listing
+// fields, tag chips and a circle picker. The thingtime tab mounts the real
+// <Thingtime> editor over a draft branch of the global thingtime store
+// (localforage-persisted, so half-built things survive reloads). Posts
+// through api.v1.things.create and hands the returned post to onPosted for
+// prepending.
 
 const INK = 'var(--tt-ink, #16161a)';
 const TEXT = 'var(--tt-text, #5a5a66)';
@@ -27,12 +32,17 @@ const RADIUS_MD = 'var(--tt-radius-md, 12px)';
 const MAX_IMAGES = 8;
 const CURRENCIES = ['AUD', 'USD', 'EUR'];
 
+// Where the thingtime-tab draft lives in the global thingtime store — its own
+// top-level branch, well away from the user's 'thingtime' tree.
+const THING_DRAFT_PATH = 'composerDraft';
+
 const isImageUrl = (url: string) => /^https?:\/\/\S+$/i.test(url.trim());
 
 const TEXTAREA_PLACEHOLDERS: Record<PostType, string> = {
   text: "What's on your mind? ✨",
   image: 'Say something about these photos… 🖼️',
-  marketplace: 'Describe your listing… 🏪'
+  marketplace: 'Describe your listing… 🏪',
+  thingtime: 'Say something about this thing… 🌀 (optional)'
 };
 
 export type PostComposerProps = {
@@ -57,6 +67,7 @@ export const PostComposer = (props: PostComposerProps) => {
 
   const api = useApi();
   const lopu = useLopu();
+  const { getThingtime, setThingtime, loading: thingtimeLoading } = useThingtime();
 
   const [expanded, setExpanded] = React.useState(false);
   const [type, setType] = React.useState<PostType>('text');
@@ -87,17 +98,34 @@ export const PostComposer = (props: PostComposerProps) => {
 
   const validImages = images.map((url) => url.trim()).filter(isImageUrl);
 
+  // the thingtime-tab draft lives in the global store (persisted locally) —
+  // read it every render; provider state updates re-render us
+  const draftThing = getThingtime(THING_DRAFT_PATH);
+  const draftReady = !!draftThing && typeof draftThing === 'object' && !Array.isArray(draftThing);
+
+  // seed a starter thing the first time the tab opens (post-hydration only, so
+  // a persisted draft is never clobbered by the pre-hydration empty store)
+  React.useEffect(() => {
+    if (type !== 'thingtime' || !expanded || thingtimeLoading) return;
+    const current = getThingtime(THING_DRAFT_PATH);
+    if (!current || typeof current !== 'object' || Array.isArray(current)) {
+      setThingtime(THING_DRAFT_PATH, { name: '' });
+    }
+  }, [type, expanded, thingtimeLoading, getThingtime, setThingtime]);
+
   const valid =
     type === 'text'
       ? text.trim().length > 0
       : type === 'image'
         ? validImages.length > 0
-        : title.trim().length > 0 &&
-          price.trim() !== '' &&
-          Number.isFinite(Number(price)) &&
-          Number(price) >= 0 &&
-          !!currency &&
-          !!category;
+        : type === 'thingtime'
+          ? draftReady && Object.keys(draftThing).length > 0
+          : title.trim().length > 0 &&
+            price.trim() !== '' &&
+            Number.isFinite(Number(price)) &&
+            Number(price) >= 0 &&
+            !!currency &&
+            !!category;
 
   const reset = () => {
     setExpanded(false);
@@ -134,7 +162,8 @@ export const PostComposer = (props: PostComposerProps) => {
         visibility,
         tags: parsedTags
       };
-      if (type !== 'text') payload.images = validImages;
+      if (type !== 'text' && type !== 'thingtime') payload.images = validImages;
+      if (type === 'thingtime') payload.thing = draftThing;
       if (type === 'marketplace') {
         payload.listing = {
           title: title.trim(),
@@ -149,6 +178,8 @@ export const PostComposer = (props: PostComposerProps) => {
 
       const resp = await api.v1.things.create(payload);
       lopu({ title: 'Posted ✨', status: 'success', duration: 6000 });
+      // the posted thing draft is spent — next thingtime tab starts fresh
+      if (type === 'thingtime') setThingtime(THING_DRAFT_PATH, null);
       reset();
       onPosted(resp.post);
     } catch (err: any) {
@@ -237,8 +268,35 @@ export const PostComposer = (props: PostComposerProps) => {
         </Box>
       </Flex>
 
+      {/* the thing itself — the real Thingtime editor over the draft branch */}
+      {type === 'thingtime' && (
+        <Flex flexDirection="column" rowGap={2}>
+          <Eyebrow>Thing 🌀</Eyebrow>
+          <Box
+            border={BORDER}
+            borderRadius={RADIUS_MD}
+            paddingX={2}
+            paddingY={1}
+            maxWidth="100%"
+            overflowX="auto"
+            background="var(--tt-surface, #fafafb)"
+          >
+            {draftReady ? (
+              <Thingtime path={THING_DRAFT_PATH} thing={draftThing} edit width="100%" maxWidth="100%" />
+            ) : (
+              <Text fontSize="sm" color={MUTED} paddingY={2}>
+                Summoning your thing… 🌀
+              </Text>
+            )}
+          </Box>
+          <Text fontSize="10px" color={MUTED} whiteSpace="normal">
+            Build any thing — fields, nested objects, arrays, numbers, whatever it needs ✨
+          </Text>
+        </Flex>
+      )}
+
       {/* photos */}
-      {type !== 'text' && (
+      {type !== 'text' && type !== 'thingtime' && (
         <Flex flexDirection="column" rowGap={2}>
           <Eyebrow>Photos {type === 'marketplace' ? '(optional) ' : ''}🖼️</Eyebrow>
           {images.map((url, index) => (

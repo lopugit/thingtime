@@ -5,12 +5,11 @@ import {
   Button,
   Center,
   Flex,
-  IconButton,
   Input,
   Select,
   Text
 } from '@chakra-ui/react';
-import { Plus, Search as SearchIcon, Sparkles, X } from 'lucide-react';
+import { Plus, Search as SearchIcon, Sparkles } from 'lucide-react';
 import { Link as RouterLink, useLocation, useNavigate } from 'react-router';
 
 import { Rainbow } from '~/components/Rainbow/Rainbow';
@@ -19,9 +18,15 @@ import { useApi } from '~/hooks/useApi';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { thingtimeSchemas } from '~/schemas/registry';
 import { CARD_STYLES } from '~/theme/card';
+import {
+  ConditionRowsEditor,
+  ROOT_FIELD_SUGGESTIONS,
+  compileRows,
+  invalidNumberField,
+  newRow
+} from './searchBuilder';
 import type {
   ConditionRow,
-  RowValueType,
   SchemaSource,
   SearchPerson,
   SearchPost,
@@ -36,133 +41,6 @@ import type {
 
 const CACHE_KEY = 'tt-search';
 const PAGE_SIZE = 20;
-
-// UI operator vocabulary. `between` is sugar for a gte+lte pair; the rest map
-// 1:1 onto the API grammar (which whitelists them server-side too).
-const OPERATORS: { id: string; label: string; kind: 'value' | 'range' | 'list' | 'exists' | 'type' }[] = [
-  { id: 'contains', label: 'contains', kind: 'value' },
-  { id: 'eq', label: 'is', kind: 'value' },
-  { id: 'ne', label: 'is not', kind: 'value' },
-  { id: 'between', label: 'between', kind: 'range' },
-  { id: 'gt', label: '>', kind: 'value' },
-  { id: 'gte', label: '≥', kind: 'value' },
-  { id: 'lt', label: '<', kind: 'value' },
-  { id: 'lte', label: '≤', kind: 'value' },
-  { id: 'in', label: 'any of', kind: 'list' },
-  { id: 'nin', label: 'none of', kind: 'list' },
-  { id: 'startsWith', label: 'starts with', kind: 'value' },
-  { id: 'endsWith', label: 'ends with', kind: 'value' },
-  { id: 'exists', label: 'exists', kind: 'exists' },
-  { id: 'type', label: 'has type', kind: 'type' }
-];
-
-const DATATYPES = ['string', 'number', 'boolean', 'date', 'array', 'object', 'null'];
-
-const ROOT_FIELD_SUGGESTIONS = ['tags', 'thingtime', 'createdAt', 'updatedAt', 'targetId'];
-
-const opKind = (op: string) => OPERATORS.find((entry) => entry.id === op)?.kind || 'value';
-
-const rowId = () =>
-  typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
-
-const newRow = (partial: Partial<ConditionRow> = {}): ConditionRow => ({
-  id: rowId(),
-  field: '',
-  op: 'contains',
-  value: '',
-  value2: '',
-  valueType: 'auto',
-  ...partial
-});
-
-const PURE_NUMBER = /^-?\d+(\.\d+)?$/;
-
-// GUI string → API scalar, honouring the row's datatype hint. 'auto' reads
-// like a developer would: true/false/null literals and pure numbers become
-// their real types, everything else stays text.
-const coerceValue = (raw: string, valueType: RowValueType): string | number | boolean | null => {
-  const value = raw.trim();
-  if (valueType === 'text') return value;
-  if (valueType === 'number') return PURE_NUMBER.test(value) ? Number(value) : value;
-  if (valueType === 'boolean') return value === 'true';
-  if (valueType === 'null') return null;
-  if (value === 'true') return true;
-  if (value === 'false') return false;
-  if (value === 'null') return null;
-  if (PURE_NUMBER.test(value)) return Number(value);
-  return value;
-};
-
-type ApiCondition = Record<string, unknown>;
-
-// Pre-submit validation: a row explicitly typed 'number' whose value isn't one
-// is a typo the user should hear about, not a silent string comparison.
-const invalidNumberField = (rows: ConditionRow[]): string | null => {
-  for (const row of rows) {
-    if (row.valueType !== 'number' || !row.field.trim()) continue;
-    const kind = opKind(row.op);
-    const values =
-      kind === 'range'
-        ? [row.value, row.value2]
-        : kind === 'list'
-          ? row.value.split(',')
-          : kind === 'value'
-            ? [row.value]
-            : [];
-    for (const value of values) {
-      const trimmed = value.trim();
-      if (trimmed && !PURE_NUMBER.test(trimmed)) return row.field.trim();
-    }
-  }
-  return null;
-};
-
-// Compile GUI rows to the API's condition list. Empty rows are ignored (that's
-// what makes schema prefill browsable — rows appear, you fill what you care
-// about). Returns null when nothing is filled in.
-const compileRows = (rows: ConditionRow[]): ApiCondition[] | null => {
-  const conditions: ApiCondition[] = [];
-  for (const row of rows) {
-    const field = row.field.trim();
-    if (!field) continue;
-    const kind = opKind(row.op);
-
-    if (kind === 'exists') {
-      conditions.push({ field, op: 'exists', value: row.value !== 'false' });
-      continue;
-    }
-    if (kind === 'type') {
-      if (!row.value) continue;
-      conditions.push({ field, op: 'type', value: row.value });
-      continue;
-    }
-    if (kind === 'range') {
-      const low = row.value.trim();
-      const high = row.value2.trim();
-      if (!low && !high) continue;
-      // the API's native between keeps the range atomic in any-of searches
-      conditions.push({
-        field,
-        op: 'between',
-        values: [low ? coerceValue(low, row.valueType) : null, high ? coerceValue(high, row.valueType) : null]
-      });
-      continue;
-    }
-    if (kind === 'list') {
-      const values = row.value
-        .split(',')
-        .map((entry) => entry.trim())
-        .filter(Boolean)
-        .map((entry) => coerceValue(entry, row.valueType));
-      if (!values.length) continue;
-      conditions.push({ field, op: row.op, values });
-      continue;
-    }
-    if (row.valueType !== 'null' && !row.value.trim()) continue;
-    conditions.push({ field, op: row.op, value: coerceValue(row.value, row.valueType) });
-  }
-  return conditions.length ? conditions : null;
-};
 
 // A schema field definition → a prefilled (but empty) builder row.
 const rowFromSchemaField = (field: SchemaSource['fields'][number]): ConditionRow => {
@@ -776,164 +654,13 @@ export const SearchPage = () => {
         ) : null}
 
         {/* builder rows */}
-        {rows.length ? (
-          <Flex direction="column" gap={2}>
-            <datalist id="tt-search-fields">
-              {fieldSuggestions.map((field) => (
-                <option key={field} value={field} />
-              ))}
-            </datalist>
-            {rows.map((row) => {
-              const kindOfOp = opKind(row.op);
-              const enumValues = row.meta?.values;
-              const unit = row.meta?.unit;
-              const rangeHint = row.meta?.min !== undefined || row.meta?.max !== undefined;
-              return (
-                <Flex align="center" gap={2} key={row.id} wrap="wrap">
-                  <Input
-                    list="tt-search-fields"
-                    maxWidth="180px"
-                    onChange={(event) => updateRow(row.id, { field: event.target.value })}
-                    placeholder="field (e.g. legs)"
-                    size="sm"
-                    title={row.meta?.description || 'crystal field path — bare names mean crystal.<name>'}
-                    value={row.field}
-                  />
-                  <Select
-                    maxWidth="130px"
-                    onChange={(event) => updateRow(row.id, { op: event.target.value })}
-                    size="sm"
-                    value={row.op}
-                  >
-                    {OPERATORS.map((operator) => (
-                      <option key={operator.id} value={operator.id}>
-                        {operator.label}
-                      </option>
-                    ))}
-                  </Select>
-
-                  {kindOfOp === 'exists' ? (
-                    <Select
-                      maxWidth="90px"
-                      onChange={(event) => updateRow(row.id, { value: event.target.value })}
-                      size="sm"
-                      value={row.value || 'true'}
-                    >
-                      <option value="true">yes</option>
-                      <option value="false">no</option>
-                    </Select>
-                  ) : kindOfOp === 'type' ? (
-                    <Select
-                      maxWidth="120px"
-                      onChange={(event) => updateRow(row.id, { value: event.target.value })}
-                      placeholder="datatype"
-                      size="sm"
-                      value={row.value}
-                    >
-                      {DATATYPES.map((type) => (
-                        <option key={type} value={type}>
-                          {type}
-                        </option>
-                      ))}
-                    </Select>
-                  ) : kindOfOp === 'range' ? (
-                    <>
-                      <Input
-                        maxWidth="110px"
-                        onChange={(event) => updateRow(row.id, { value: event.target.value })}
-                        placeholder={row.meta?.min !== undefined ? String(row.meta.min) : 'min'}
-                        size="sm"
-                        value={row.value}
-                      />
-                      <Text color="var(--tt-muted, #9a9aa6)" fontSize="sm">
-                        –
-                      </Text>
-                      <Input
-                        maxWidth="110px"
-                        onChange={(event) => updateRow(row.id, { value2: event.target.value })}
-                        placeholder={row.meta?.max !== undefined ? String(row.meta.max) : 'max'}
-                        size="sm"
-                        value={row.value2}
-                      />
-                      {unit || rangeHint ? (
-                        <Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="xs">
-                          {unit || ''}
-                        </Text>
-                      ) : null}
-                    </>
-                  ) : kindOfOp === 'list' && enumValues?.length ? (
-                    <Flex gap={1} wrap="wrap">
-                      {enumValues.map((option) => {
-                        const selected = row.value
-                          .split(',')
-                          .map((entry) => entry.trim())
-                          .filter(Boolean);
-                        const isOn = selected.includes(option);
-                        return (
-                          <Button
-                            colorScheme={isOn ? 'pink' : undefined}
-                            key={option}
-                            onClick={() => {
-                              const next = isOn
-                                ? selected.filter((entry) => entry !== option)
-                                : [...selected, option];
-                              updateRow(row.id, { value: next.join(',') });
-                            }}
-                            size="xs"
-                            variant={isOn ? 'solid' : 'outline'}
-                          >
-                            {option}
-                          </Button>
-                        );
-                      })}
-                    </Flex>
-                  ) : (
-                    <Input
-                      list={enumValues?.length ? `tt-search-values-${row.id}` : undefined}
-                      maxWidth="220px"
-                      onChange={(event) => updateRow(row.id, { value: event.target.value })}
-                      placeholder={kindOfOp === 'list' ? 'value, value, …' : unit ? `value (${unit})` : 'value'}
-                      size="sm"
-                      value={row.value}
-                    />
-                  )}
-                  {enumValues?.length && kindOfOp === 'value' ? (
-                    <datalist id={`tt-search-values-${row.id}`}>
-                      {enumValues.map((option) => (
-                        <option key={option} value={option} />
-                      ))}
-                    </datalist>
-                  ) : null}
-
-                  {kindOfOp === 'value' || kindOfOp === 'range' || kindOfOp === 'list' ? (
-                    <Select
-                      flexShrink={0}
-                      onChange={(event) => updateRow(row.id, { valueType: event.target.value as RowValueType })}
-                      size="sm"
-                      title="value datatype — auto reads true/false/null and numbers as their real types"
-                      value={row.valueType}
-                      width="105px"
-                    >
-                      <option value="auto">auto</option>
-                      <option value="text">text</option>
-                      <option value="number">number</option>
-                      <option value="boolean">bool</option>
-                      <option value="null">null</option>
-                    </Select>
-                  ) : null}
-
-                  <IconButton
-                    aria-label="Remove filter"
-                    icon={<X size={14} />}
-                    onClick={() => removeRow(row.id)}
-                    size="sm"
-                    variant="ghost"
-                  />
-                </Flex>
-              );
-            })}
-          </Flex>
-        ) : null}
+        <ConditionRowsEditor
+          rows={rows}
+          onUpdateRow={updateRow}
+          onRemoveRow={removeRow}
+          fieldSuggestions={fieldSuggestions}
+          datalistId="tt-search-fields"
+        />
 
         {/* results */}
         <Flex align="baseline" gap={2}>
