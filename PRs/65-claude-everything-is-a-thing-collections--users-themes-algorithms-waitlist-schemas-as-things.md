@@ -42,6 +42,27 @@ admin.ts, service accounts, routes) is unchanged.
   kinds (403/404 verified).
 - Every migration re-run converts 0.
 
+## Self-review round 1 (8-finder pass, commit 4b56c57)
+
+An 8-angle adversarial review found + fixed (all live-verified):
+- **Security (live-proven):** the `$**` text index tokenized string fields
+  inside `secure`, so non-BinData fields (service metadata, active-* pointers)
+  were an unauthenticated `q=<secret>` oracle. Fix: `secure` is now a single
+  opaque BinData blob (nothing inside can tokenize); `admin` moved to a root
+  boolean `secureAdmin` (partial-indexed). User things excluded from generic
+  search (were a scrapeable directory + count oracle); raw-results projects out
+  secrets; migration notes no longer echo doc content.
+- **Correctness (multi-finder):** listUserPosts dual-era (profiles 404'd for
+  migrated users); delete-from-both-stores (twin resurrection); migration
+  data-loss window closed (re-read + updatedAt-guarded delete); mergeUserDocs
+  sort-before-cap (legacy users starved); algorithm pointer-clear moved off a
+  dotted secure path the blob broke; `schema-` shareId prefix reserved
+  (squat/impersonation); fromBin Buffer ordering.
+- **Efficiency/quality:** projected + parallelized dual-era reads; removed dead
+  SystemThingOptions (system kinds never go through createThing → unconditional
+  guards); buildUserSecure shared by insert + migration; registry constants
+  deduped; docs reconciled.
+
 ## Implementation trail
 
 Built across loop iterations by a 6-domain touchpoint-mapping workflow, then
