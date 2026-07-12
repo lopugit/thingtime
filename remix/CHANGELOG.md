@@ -65,6 +65,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Details in
   [PRs/63](../PRs/63-claude-search-page-mongodb-query-154eb4--search-page-query-builder-ranked-text-search-by-schema.md).
   — Claude (AI), 2026-07-12
+- Replaced the unfinished `/raw` MongoDB dump with an admin-only no-code Query
+  Workbench: nested filters, typed BSON values, projections, sorting, bounded
+  find/count/distinct/index/stats tools, read-only aggregation pipelines,
+  execution plans, cancellation, request previews, and JSON/table/CSV results.
+  Server-side allowlists, complexity/time/response caps, protected-field probe
+  prevention and redaction, blocked write/server-JavaScript stages, and
+  fail-closed rate limiting keep the tool read-only and bounded. Details in
+  [`PRs/64-codex-mongodb-query-builder--add-no-code-mongodb-query-workbench.md`](../PRs/64-codex-mongodb-query-builder--add-no-code-mongodb-query-workbench.md).
+  — _Codex (AI), 2026-07-12_
+
 - Unified the data model so posts, comments, reactions, and shares are all one
   root **Thing** shape: sub-schemas apply through the `thingtime` array of
   schema ids, payloads live under `crystal`, and every doc in every collection
@@ -254,6 +264,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   _Codex (AI), 2026-07-07_
 
 ### Fixed
+
+- Login and registration now return standalone users to the last page they
+  visited before entering auth, including query strings and hashes. The
+  session-scoped destination is consumed only after success, auth/API/external
+  targets are rejected, direct auth visits keep the existing `/` and
+  `/welcome` fallbacks, and embedded account switching remains in place.
+  Details in
+  [`PRs/64-codex-mongodb-query-builder--add-no-code-mongodb-query-workbench.md`](../PRs/64-codex-mongodb-query-builder--add-no-code-mongodb-query-workbench.md).
+  — _Codex (AI), 2026-07-12_
 
 - Fixed Editor.js autosave echoes remounting the active editor and stealing
   focus after the asynchronous save/parent echo. Changed parent values now

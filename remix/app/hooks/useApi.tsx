@@ -141,15 +141,10 @@ export function useApi() {
       )
     },
     mongodb: {
+      capabilities: useCallback(async () => getJson('/api/v1/mongodb/raw-results'), []),
       rawResults: useCallback(
-        async (args) => {
-          const { query } = args;
-
-          console.log('submitting query', query);
-
-          const ret = asyncFetcher.submit({ query }, { action: '/api/v1/mongodb/raw-results' });
-          return ret;
-        },
+        async (args, options?: { signal?: AbortSignal }) =>
+          asyncFetcher.submit(args, { action: '/api/v1/mongodb/raw-results', signal: options?.signal }),
         [asyncFetcher]
       )
     },

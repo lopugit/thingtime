@@ -4,6 +4,7 @@ import { Link as RouterLink, useNavigate } from 'react-router';
 
 import { useApi } from '~/hooks/useApi';
 import { RAINBOW, RAINBOW_TEXT } from '~/theme/rainbow';
+import { consumeAuthReturnTo } from '~/utils/authReturn';
 import { useThingtime } from '../Thingtime/useThingtime';
 import { useLopu } from '../Lopu/useLopu';
 import { Icon } from '../Icon/Icon';
@@ -77,8 +78,10 @@ export const Register = (props) => {
         if (onSuccess) {
           onSuccess(r.user, r);
         } else {
-          // off to the welcome page (carry the dev verify link along)
-          navigate('/welcome', { state: { verificationLink: r.verificationLink } });
+          navigate(consumeAuthReturnTo('/welcome'), {
+            replace: true,
+            state: { verificationLink: r.verificationLink }
+          });
         }
       } else {
         lopu({

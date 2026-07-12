@@ -70,7 +70,7 @@ export const drawerMenuItems: DrawerTopItem[] = [
 			{ id: 'things-edit', label: 'Edit', icon: '🎨', to: '/edit', mode: 'edit', group: 'Modes' },
 			{ id: 'things-editor', label: 'Editor', icon: '💻', to: '/editor', mode: 'editor', group: 'Modes' },
 			{ id: 'things-search', label: 'Search', icon: '🔍', to: '/search' },
-			{ id: 'things-raw', label: 'Raw results', icon: '🔍', to: '/raw' }
+			{ id: 'things-raw', label: 'MongoDB query', icon: '🔍', to: '/raw' }
 		]
 	},
 	{

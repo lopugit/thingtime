@@ -534,15 +534,38 @@ export const apiTests: ApiTestDefinition[] = [
     expect: expectStatus([200, 500], 'MongoDB get-connection route responded.')
   },
   {
+    id: 'mongodb-query-capabilities',
+    name: 'MongoDB query capabilities',
+    description: 'The no-code query capability catalogue is admin-only and never exposes connection details.',
+    group: 'mongodb',
+    method: 'GET',
+    path: '/api/v1/mongodb/raw-results',
+    expect: expectJson(
+      [200, 401, 403],
+      (body, response) =>
+        response.status === 200
+          ? body?.ok === true && Array.isArray(body?.collections) && Array.isArray(body?.operations) && !('connectionString' in body)
+          : body?.ok === false && typeof body?.error === 'string',
+      'MongoDB query capabilities were returned or correctly admin-gated.'
+    )
+  },
+  {
     id: 'mongodb-raw-results',
-    name: 'MongoDB raw results',
-    description: 'Raw results are admin-only: 401 for non-admins, data or an environment-dependent error for admins.',
+    name: 'MongoDB bounded query',
+    description: 'Runs a bounded find for admins and rejects non-admin callers.',
     group: 'mongodb',
     method: 'POST',
     path: '/api/v1/mongodb/raw-results',
-    body: {},
+    body: { collection: 'things', operation: 'find', filter: {}, limit: 1, maxTimeMS: 5000 },
     timeoutMs: 15000,
-    expect: expectStatus([200, 401, 500], 'MongoDB raw-results route responded.')
+    expect: expectJson(
+      [200, 401, 403, 429, 503],
+      (body, response) =>
+        response.status === 200
+          ? body?.ok === true && Array.isArray(body?.results) && body.results.length <= 1
+          : body?.ok === false && typeof body?.error === 'string',
+      'MongoDB query ran within its limit or returned the expected guard/environment response.'
+    )
   },
   {
     id: 'mongodb-populate',

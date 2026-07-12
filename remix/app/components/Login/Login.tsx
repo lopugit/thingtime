@@ -4,6 +4,7 @@ import { Link as RouterLink, useNavigate } from 'react-router';
 
 import { useApi } from '~/hooks/useApi';
 import { RAINBOW, RAINBOW_TEXT } from '~/theme/rainbow';
+import { consumeAuthReturnTo } from '~/utils/authReturn';
 import { useThingtime } from '../Thingtime/useThingtime';
 import { useLopu } from '../Lopu/useLopu';
 import { Icon } from '../Icon/Icon';
@@ -39,21 +40,22 @@ export const Login = (props) => {
 	const { thingtime } = useThingtime();
 
 	const devMode = thingtime?.devKit?.devMode;
+	const defaultTestUsername = thingtime?.devKit?.testUsers?.default?.username || '';
+	const defaultTestPassword = thingtime?.devKit?.testUsers?.default?.password || '';
 
-
-	const [username, setUsername] = useState(devMode ? thingtime?.devKit?.testUsers?.default?.username : '');
-	const [password, setPassword] = useState(devMode ? thingtime?.devKit?.testUsers?.default?.password : '');
+	const [username, setUsername] = useState(devMode ? defaultTestUsername : '');
+	const [password, setPassword] = useState(devMode ? defaultTestPassword : '');
 
 	const [passwordVisible, setPasswordVisible] = useState(devMode ? true : false);
 
 	React.useEffect(() => {
 		// if devMode is true, set username and password to testUsers
 		if (devMode && !username && !password) {
-			setUsername(thingtime?.devKit?.testUsers?.default?.username || '');
-			setPassword(thingtime?.devKit?.testUsers?.default?.password || '');
+			setUsername(defaultTestUsername);
+			setPassword(defaultTestPassword);
 			setPasswordVisible(true);
 		}
-	}, [devMode]);
+	}, [defaultTestPassword, defaultTestUsername, devMode, password, username]);
 
 	const [loading, setLoading] = useState(false);
 
@@ -121,7 +123,7 @@ export const Login = (props) => {
 				if (onSuccess) {
 					onSuccess(resp.user);
 				} else {
-					navigate('/');
+					navigate(consumeAuthReturnTo('/'), { replace: true });
 				}
 			} else {
 				lopu({

@@ -25,6 +25,9 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // public people search (/api/v1/users/search) — bounded like things.search;
   // it only ever returns public profile projections
   'users.search': { limit: 120, windowMs: 60_000, enabled: true },
+  // Admin-only raw queries can still be expensive; keep accidental repeated
+  // scans bounded independently from the ordinary app APIs.
+  'mongodb.query': { limit: 30, windowMs: 60_000, enabled: true },
   // service accounts do legitimate bulk writes (e.g. chunked snapshot sync), so
   // they get a higher ceiling — but a BOUNDED one, never an exemption: anyone
   // can provision a service account, so accountKind confers no trust

@@ -1,77 +1,59 @@
-import { Flex, Heading } from '@chakra-ui/react';
-import { useLocation } from 'react-router';
+import { json, readJsonBody } from '~/api/http';
 import { requireAdmin } from '~/api/utils/auth/requireAdmin';
-import { getCollection } from '~/api/utils/mongodb/collection';
-import { getConnection } from '~/api/utils/mongodb/connection';
-import { Submit } from '~/components/API/Submit';
-import setup from '~/scripts/mongodb/setup';
+import { MONGO_QUERY_LIMITS } from '~/api/utils/mongodb/queryContract';
+import { mongoQueryCapabilities, runMongoQuery } from '~/api/utils/mongodb/queryRunner';
+import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 
-const routeName = 'Raw Results';
+const privateHeaders = {
+  'Cache-Control': 'private, no-store, max-age=0',
+  Pragma: 'no-cache'
+};
 
-export default function Index() {
-  const { pathname } = useLocation();
-
-  return (
-    <Flex flexDir={'column'}>
-      {/* <Thingtime ></Thingtime> */}
-      <Submit pathname={pathname}></Submit>
-    </Flex>
-  );
-}
-
-const actionExport = async ({ request }) => {
-  // raw docs include every user's private things (and now their crystal
-  // payloads) — admin-only debug endpoint
+const requireQueryAdmin = async (request: Request) => {
   const gate = await requireAdmin(request);
   if ('error' in gate) {
-    return earlyReturn({
-      status: gate.error.status,
-      message: gate.error.message
-    });
+    return {
+      response: json({ ok: false, error: gate.error.message }, { status: gate.error.status, headers: privateHeaders })
+    };
   }
-
-  const connection = await getConnection();
-
-  if (!connection) {
-    return earlyReturn({
-      status: 500,
-      message: `failed to setup mongodb connection`
-    });
-  }
-
-  const thingsCollection = await getCollection();
-
-  // Admin debug dump — but user/system things now carry credentials + private
-  // state under `secure` (and uniqueKeys). Project those out so this route
-  // never becomes a one-request credential/PII exfiltration path even for an
-  // admin session; the debug view only ever needed the public doc shape.
-  const things = await thingsCollection.find({}, { projection: { secure: 0, uniqueKeys: 0 } }).toArray();
-
-  return earlyReturn({
-    status: 200,
-    message: `successful`,
-    data: {
-      rawResults: things
-    }
-  });
+  return { user: gate.user };
 };
 
-const earlyReturn = (args) => {
-  return {
-    status: args?.status || 200,
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: {
-      message: `Early return triggered in ${routeName} action` + (args?.message ? `: ${args.message}` : ''),
-      data: args?.data
-    },
-    cache: {
-      revalidate: 60
-    }
-  };
+// GET /api/v1/mongodb/raw-results — the exact server-owned capabilities used by
+// the no-code builder. It intentionally contains no connection string or data.
+export const loader = async ({ request }: { request: Request }) => {
+  const gate = await requireQueryAdmin(request);
+  if ('response' in gate) return gate.response;
+  return json(mongoQueryCapabilities(), { headers: privateHeaders });
 };
 
-export const action = actionExport;
+// POST /api/v1/mongodb/raw-results — execute one bounded, read-only query. Raw
+// writes stay behind Thingtime's normal entity APIs (FUNDAMENTALS §1/2).
+export const action = async ({ request }: { request: Request }) => {
+  const gate = await requireQueryAdmin(request);
+  if ('response' in gate) return gate.response;
 
-export const rawResultsAction = actionExport;
+  const limit = await enforceRateLimit(request, 'mongodb.query', `user:${gate.user.id}`, { failClosed: true });
+  if (!limit.allowed) {
+    if (limit.unavailable) {
+      return json(
+        { ok: false, error: 'The database query limiter is temporarily unavailable. Please try again shortly.' },
+        { status: 503, headers: { 'Retry-After': '5', ...privateHeaders } }
+      );
+    }
+    const init = rateLimitedResponseInit(limit);
+    return json(
+      { ok: false, error: 'That is a lot of database exploring — please wait a moment 🌸' },
+      { ...init, headers: { ...init.headers, ...privateHeaders } }
+    );
+  }
+
+  const body = await readJsonBody(request, MONGO_QUERY_LIMITS.maxBodyBytes);
+  const result = await runMongoQuery(body, request.signal);
+  if (result.ok === false) {
+    return json({ ok: false, error: result.error }, { status: result.status, headers: privateHeaders });
+  }
+  return json(result, { headers: privateHeaders });
+};
+
+export const rawResultsAction = action;

@@ -6,10 +6,16 @@ import { getRateLimitConfig } from './config';
 // General per-endpoint rate limiter, config-driven (config.ts). Atomic
 // sliding-window over the shared `rateLimits` collection — the same technique as
 // the Lopu-musing limiter, generalised and keyed by endpoint + identity
-// (authenticated user id, else hashed IP). Fails OPEN: if the limiter DB
-// hiccups, user actions are allowed rather than the whole app seizing up.
+// (authenticated user id, else hashed IP). Ordinary actions fail open if the
+// limiter DB hiccups; expensive or sensitive endpoints can opt into failClosed.
 
-export type RateLimitOutcome = { allowed: boolean; limit: number; remaining: number; resetAt: string };
+export type RateLimitOutcome = {
+  allowed: boolean;
+  limit: number;
+  remaining: number;
+  resetAt: string;
+  unavailable?: boolean;
+};
 
 const firstHeaderIp = (value: string | null) => value?.split(',')[0]?.trim() || '';
 
@@ -74,11 +80,13 @@ const consume = async (key: string, limit: number, windowMs: number): Promise<Ra
 
 // Enforce the configured limit for `name` against `identity` (a stable id like
 // `user:<id>`; falls back to the request IP). Returns allowed=true when the
-// endpoint's rule is disabled or the limiter is unavailable.
+// endpoint's rule is disabled or the limiter is unavailable, unless the caller
+// explicitly asks to fail closed.
 export const enforceRateLimit = async (
   request: Request,
   name: string,
-  identity: string | null
+  identity: string | null,
+  options: { failClosed?: boolean } = {}
 ): Promise<RateLimitOutcome> => {
   const config = await getRateLimitConfig();
   const rule = config[name];
@@ -91,7 +99,11 @@ export const enforceRateLimit = async (
     await ensureIndexes();
     return await consume(hash(`${name}:${who}`), rule.limit, rule.windowMs);
   } catch {
-    // fail open — never block a user action because the limiter is down
+    if (options.failClosed) {
+      return { allowed: false, limit: rule.limit, remaining: 0, resetAt: now, unavailable: true };
+    }
+    // Ordinary user actions fail open so a limiter outage cannot seize up the
+    // app; especially expensive/admin-sensitive routes can opt into failClosed.
     return { allowed: true, limit: rule.limit, remaining: rule.limit, resetAt: now };
   }
 };
