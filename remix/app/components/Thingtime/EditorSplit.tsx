@@ -403,7 +403,12 @@ type WindowActions = {
 	maximisedId: string | null;
 };
 
+// the className rides every toolbar control so the frame-drag pointerdown
+// (which starts a drag from anywhere on a frame's toolbar) can tell controls
+// from empty toolbar space — without it, clicking a control on a FLOATING
+// window started a drag instead of firing the action
 const toolbarButtonStyles = {
+	className: 'editor-toolbar-control',
 	alignItems: 'center',
 	justifyContent: 'center',
 	width: '24px',
@@ -609,6 +614,15 @@ const EditorWindow = (props: { leaf: EditorLeaf; actions: WindowActions; context
 	const { leaf, actions, context } = props;
 	const { getThingtime, thingtime } = useThingtime();
 
+	// stable identity per path — Thingtime's memos key on this prop, and a
+	// fresh object per render would defeat them all (recompute + log spam on
+	// every drag/hover/keystroke). The tree root labels itself with the TAIL
+	// (the toolbar input shows the full path).
+	const thingPathProp = React.useMemo(
+		() => ({ key: leaf.path, human: leaf.path.split('.').pop() || leaf.path }),
+		[leaf.path]
+	);
+
 	const [pathDraft, setPathDraft] = React.useState(leaf.path);
 
 	React.useEffect(() => {
@@ -643,7 +657,7 @@ const EditorWindow = (props: { leaf: EditorLeaf; actions: WindowActions; context
 				return;
 			}
 
-			if ((e.target as HTMLElement)?.closest?.('button, input, [contenteditable]')) {
+			if ((e.target as HTMLElement)?.closest?.('button, input, [contenteditable], .editor-toolbar-control')) {
 				return;
 			}
 
@@ -719,8 +733,12 @@ const EditorWindow = (props: { leaf: EditorLeaf; actions: WindowActions; context
 				frame into the layout (plain toolbar drags just move it) */}
 				{inFrame && (
 					<Flex
-						className="tt-frame-dock-handle"
 						{...toolbarButtonStyles}
+						// AFTER the spread — toolbarButtonStyles carries its own
+						// className, and the dock-handle class must win or the
+						// pointerdown guard treats the grip as a plain control and
+						// never starts the place-into-layout drag
+						className="tt-frame-dock-handle"
 						role="button"
 						aria-label="Drag to place this window into the layout"
 						title={`Drag to place into the layout — or hold ${MOD_KEY} while dragging the window`}
@@ -829,7 +847,7 @@ const EditorWindow = (props: { leaf: EditorLeaf; actions: WindowActions; context
 			<Box flex="1" minHeight={0} overflow="auto" paddingX="18px" paddingY="16px">
 				<Thingtime
 					key={`${leaf.id}:${leaf.path}`}
-					path={leaf.path}
+					path={thingPathProp}
 					thing={thing}
 					edit={leaf.edit}
 					codeView={leaf.contentMode === 'code'}
@@ -952,7 +970,7 @@ const FloatingWindowView = (props: {
 
 			const dockHandle = !!target?.closest?.('.tt-frame-dock-handle');
 
-			if (!dockHandle && target?.closest?.('button, input, [contenteditable]')) {
+			if (!dockHandle && target?.closest?.('button, input, [contenteditable], .editor-toolbar-control')) {
 				return;
 			}
 
@@ -1114,6 +1132,39 @@ export const EditorSplit = (props: EditorSplitProps) => {
 
 		setMaximisedId(typeof savedMaximisedId === 'string' && findLeaf(nextTree, savedMaximisedId) ? savedMaximisedId : null);
 	}, []);
+
+	// Renaming a thing's key (Thingtime's updatePath) emits 'path-renamed' —
+	// every window bound to that path (or below it) follows, or its leaf would
+	// point at a key that no longer exists and the window would go blank.
+	// Applies to embedded editors too (the composer's window roots rename).
+	React.useEffect(() => {
+		const subscription = events.subscribe((event: any) => {
+			if (event?.type !== 'path-renamed' || typeof event.from !== 'string' || typeof event.to !== 'string') {
+				return;
+			}
+
+			const rewrite = (leafPath: string) =>
+				leafPath === event.from || leafPath.startsWith(`${event.from}.`)
+					? `${event.to}${leafPath.slice(event.from.length)}`
+					: leafPath;
+			const rewriteNode = (node: EditorNode | null): EditorNode | null => {
+				if (!node) return node;
+				if (node.kind === 'leaf') {
+					const next = rewrite(node.path);
+					return next === node.path ? node : { ...node, path: next };
+				}
+				return { ...node, a: rewriteNode(node.a) as EditorNode, b: rewriteNode(node.b) as EditorNode };
+			};
+
+			setTree((prev) => rewriteNode(prev));
+			setFloating((prev) => prev.map((win) => ({ ...win, node: rewriteNode(win.node) as EditorNode })));
+			setMinimised((prev) => prev.map((leaf) => ({ ...leaf, path: rewrite(leaf.path) })));
+		});
+
+		return () => {
+			subscription?.unsubscribe?.();
+		};
+	}, [events]);
 
 	// closing/docking frames must never strand the drawer divider past the
 	// stack's end (a dangling divider would mis-band the next popped frame)

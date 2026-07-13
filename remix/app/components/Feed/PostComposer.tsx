@@ -35,24 +35,19 @@ const RADIUS_MD = 'var(--tt-radius-md, 12px)';
 const MAX_IMAGES = 8;
 const CURRENCIES = ['AUD', 'USD', 'EUR'];
 
-// Where the thingtime-tab draft lives in the global thingtime store — its own
-// top-level branch, well away from the user's 'thingtime' tree. The key IS the
-// label the editor shows, so the composer presents one friendly root property.
-const THING_DRAFT_PATH = 'New Thing';
-// pre-rename draft home (one release of drafts lived here) — migrated on seed
-const LEGACY_DRAFT_PATH = 'composerDraft';
+// The thingtime-tab draft lives under a SESSION-SCOPED branch of the global
+// store: tmp.<sessionId>.New Thing. A fresh session id per composer mount (and
+// pruning tmp wholesale on seed) means drafts never persist across reloads and
+// no stale draft can ever resurface — the editor always opens on one clean
+// "New Thing" root (the key IS the label the editor shows).
+const DRAFT_ROOT_KEY = 'New Thing';
+const DRAFT_TMP_KEY = 'tmp';
 
 // the in-post editor's default height; drag the handle for anything else
 const DEFAULT_EDITOR_HEIGHT = 440;
 const MIN_EDITOR_HEIGHT = 120;
 
 const isImageUrl = (url: string) => /^https?:\/\/\S+$/i.test(url.trim());
-
-// a draft that is exactly { name: '' } is pre-rename seed residue, not content
-const isEmptyNameResidue = (value: any): boolean => {
-  const keys = value && typeof value === 'object' && !Array.isArray(value) ? Object.keys(value) : null;
-  return !!keys && keys.length === 1 && keys[0] === 'name' && value.name === '';
-};
 
 // A thing "has content" once any leaf holds a real value — numbers, booleans,
 // and deliberate nulls count; empty strings don't, so the auto-seeded
@@ -93,7 +88,7 @@ export const PostComposer = (props: PostComposerProps) => {
 
   const api = useApi();
   const lopu = useLopu();
-  const { getThingtime, setThingtime, loading: thingtimeLoading } = useThingtime();
+  const { getThingtime, setThingtime, loading: thingtimeLoading, events } = useThingtime();
 
   const [expanded, setExpanded] = React.useState(false);
   const [type, setType] = React.useState<PostType>('text');
@@ -135,37 +130,40 @@ export const PostComposer = (props: PostComposerProps) => {
 
   const validImages = images.map((url) => url.trim()).filter(isImageUrl);
 
-  // the thingtime-tab draft lives in the global store (persisted locally) —
-  // read it only when that tab is active (this render path runs per keystroke)
-  const draftThing = type === 'thingtime' ? getThingtime(THING_DRAFT_PATH) : null;
+  // this composer's session-scoped draft home (fresh per mount — see
+  // DRAFT_ROOT_KEY above). State, not a const: renaming the draft's root key
+  // in the editor emits 'path-renamed' and the binding follows.
+  const [draftSessionId] = React.useState(() => `s${Math.random().toString(36).slice(2, 10)}`);
+  const [draftPath, setDraftPath] = React.useState(`${DRAFT_TMP_KEY}.${draftSessionId}.${DRAFT_ROOT_KEY}`);
+
+  React.useEffect(() => {
+    const subscription = (events as any)?.subscribe?.((event: any) => {
+      if (event?.type !== 'path-renamed' || typeof event.from !== 'string' || typeof event.to !== 'string') return;
+      setDraftPath((prev) =>
+        prev === event.from || prev.startsWith(`${event.from}.`) ? `${event.to}${prev.slice(event.from.length)}` : prev
+      );
+    });
+    return () => {
+      subscription?.unsubscribe?.();
+    };
+  }, [events]);
+
+  // read the draft only when the tab is active (this render path runs per
+  // keystroke)
+  const draftThing = type === 'thingtime' ? getThingtime(draftPath) : null;
   const draftReady = !!draftThing && typeof draftThing === 'object' && !Array.isArray(draftThing);
 
-  // seed the draft branch the first time the tab opens (post-hydration only,
-  // so a persisted draft is never clobbered by the pre-hydration empty store).
-  // Drafts from the pre-rename composerDraft branch migrate across once, and
-  // the old default child is stripped: a draft that is exactly { name: '' }
-  // collapses to the bare New Thing root.
+  // Seed ONCE per mount, post-hydration: replacing the whole tmp branch prunes
+  // abandoned sessions from the persisted blob and starts this one clean. The
+  // once-guard matters — setThingtime/getThingtime change identity on every
+  // store write, and a re-running seed used to clobber the draft right after
+  // a change-type action turned it into a non-object (string/boolean/…).
+  const seededRef = React.useRef(false);
   React.useEffect(() => {
-    if (type !== 'thingtime' || !expanded || thingtimeLoading) return;
-    const current = getThingtime(THING_DRAFT_PATH);
-    if (current && typeof current === 'object' && !Array.isArray(current)) {
-      if (isEmptyNameResidue(current)) setThingtime(THING_DRAFT_PATH, {});
-      return;
-    }
-    const legacy = getThingtime(LEGACY_DRAFT_PATH);
-    if (
-      legacy &&
-      typeof legacy === 'object' &&
-      !Array.isArray(legacy) &&
-      Object.keys(legacy).length &&
-      !isEmptyNameResidue(legacy)
-    ) {
-      setThingtime(THING_DRAFT_PATH, legacy);
-      setThingtime(LEGACY_DRAFT_PATH, null);
-      return;
-    }
-    setThingtime(THING_DRAFT_PATH, {});
-  }, [type, expanded, thingtimeLoading, getThingtime, setThingtime]);
+    if (seededRef.current || thingtimeLoading || type !== 'thingtime' || !expanded) return;
+    seededRef.current = true;
+    setThingtime(DRAFT_TMP_KEY, { [draftSessionId]: { [DRAFT_ROOT_KEY]: {} } });
+  }, [type, expanded, thingtimeLoading, setThingtime, draftSessionId]);
 
   // which optional field groups are in play (marketplace always has both;
   // thingtime opts in per toggle)
@@ -249,7 +247,7 @@ export const PostComposer = (props: PostComposerProps) => {
       const resp = await api.v1.things.create(payload);
       lopu({ title: 'Posted ✨', status: 'success', duration: 6000 });
       // the posted thing draft is spent — next thingtime tab starts fresh
-      if (type === 'thingtime') setThingtime(THING_DRAFT_PATH, null);
+      if (type === 'thingtime') setThingtime(draftPath, {});
       reset();
       onPosted(resp.post);
     } catch (err: any) {
@@ -380,7 +378,7 @@ export const PostComposer = (props: PostComposerProps) => {
             the same pass) — the placeholder only covers the true cold start
             while the localforage blob loads, per the optimistic-render rule */}
             {!thingtimeLoading ? (
-              <EditorSplit initialPath={THING_DRAFT_PATH} embedded height="100%" onApi={handleEditorApi} />
+              <EditorSplit initialPath={draftPath} embedded height="100%" onApi={handleEditorApi} />
             ) : (
               <Flex
                 alignItems="center"

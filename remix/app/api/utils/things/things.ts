@@ -493,8 +493,8 @@ export type CreatePostInput = {
   text?: unknown;
   images?: unknown;
   listing?: unknown;
-  extended?: unknown;
   thing?: unknown;
+  extended?: unknown;
   acl?: unknown;
   visibility?: unknown;
   tags?: unknown;

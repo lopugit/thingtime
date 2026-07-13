@@ -1160,11 +1160,16 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 			if (typeof args?.value === 'string') {
 				try {
 					const parentKeys = Object.keys(parent);
+					// the parent holds this thing under the path's LAST segment — a
+					// root mounted at a dotted path (an editor window on
+					// tmp.<session>.New Thing) must match 'New Thing', not the full
+					// dotted string, or the rename silently no-ops
+					const currentKey = safeSplit(path).pop?.() ?? path;
 					// create new object with new key order
 					const newObject = {};
 
 					parentKeys.forEach((key) => {
-						if (key === path) {
+						if (key === currentKey) {
 							newObject[args.value] = parent[key];
 							return;
 						}
@@ -1174,6 +1179,15 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 					// set new object
 					setThingtime(parentPath, newObject, {
 						namespace: thingtimeMachineNamespace
+					});
+
+					// anything bound to this path by STRING (editor windows, the
+					// composer's draft binding) must follow the rename or it points
+					// at a key that no longer exists — announce it on the bus
+					events?.next?.({
+						type: 'path-renamed',
+						from: safeJoin(fullPath),
+						to: safeJoin([...safeSplit(parentPath), args.value])
 					});
 
 					if (!thingtimeRef?.current) {
@@ -1204,7 +1218,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 				}
 			}
 		},
-		[parent, path, parentPath, setThingtime]
+		[parent, path, parentPath, setThingtime, fullPath, events]
 	);
 
 	const pathRef = React.useRef(null);
@@ -1235,7 +1249,10 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 				</>
 			);
 		}
-	}, [renderedPath, pl, chakraChild, editMode, props?.pathPl]);
+		// updatePath MUST be a dep: it closes over `parent`, which is undefined on
+		// a root's first render when the store seeds after mount (the composer's
+		// draft). Pinning the mount-time closure makes every later rename throw.
+	}, [renderedPath, pl, chakraChild, editMode, props?.pathPl, updatePath]);
 
 	// Leaf values can collapse to their property path just like nested things
 	// collapse to their path + summary badge. A path is required so a root-level
@@ -1410,7 +1427,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 				onMouseLeave={handleMouseEvent}
 				{...(props.chakras || {})}
 				className={`thing uuid-${uuid} edit-${editMode ? 'true' : 'false'}`}
-				data-path={props?.path}
+				data-path={typeof props?.path === 'string' ? props.path : props?.path?.key || undefined}
 			>
 				{/* {uuid?.current} */}
 				{!chakraChild && !chakra && (

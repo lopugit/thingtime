@@ -1,4 +1,5 @@
-import { ensureIndexes, getThingsCollection, getUsersCollection } from '../mongodb/collections';
+import { findUserByUsername } from '../auth/users';
+import { ensureIndexes, getThingsCollection } from '../mongodb/collections';
 import { KEY_SEGMENT_PATTERN, MAX_TEXT_CHARS, PROTECTED_THINGTIME } from '~/schemas/registry';
 import {
   POST_TYPES,
@@ -422,13 +423,14 @@ export const searchThings = async (viewerInput: string | Viewer, query: SearchQu
   );
 
   // author: one username → ownerId. An unknown username matches nothing —
-  // that's an empty result, not an error (filters are exploratory).
+  // that's an empty result, not an error (filters are exploratory). Dual-era:
+  // findUserByUsername resolves user things first, legacy users second, and
+  // its adapter's _id IS the ownerId posts carry in either era.
   if (query.author !== undefined && query.author !== null && query.author !== '') {
     if (typeof query.author !== 'string' || query.author.trim().length > MAX_AUTHOR_CHARS) {
       return fail(400, 'author must be a username');
     }
-    const users = await getUsersCollection();
-    const authorDoc = await users.findOne({ username: query.author.trim().toLowerCase() }, { projection: { _id: 1 } });
+    const authorDoc = await findUserByUsername(query.author.trim());
     if (!authorDoc) return emptyResult;
     clauses.push({ ownerId: String(authorDoc._id) });
   }
