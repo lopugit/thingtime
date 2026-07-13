@@ -1,6 +1,8 @@
 import React from 'react';
 import { Box, Flex, Grid, Text } from '@chakra-ui/react';
 
+import { ChakraThingRenderer, isChakraThingNode } from './ChakraThingRenderer';
+import type { ChakraThingNode } from './ChakraThingRenderer';
 import { HtmlThingRenderer } from './HtmlThingRenderer';
 import type { HtmlThingNode } from './HtmlThingRenderer';
 import { registerKindRenderer } from './kindRegistry';
@@ -730,6 +732,14 @@ const ElementRenderer = ({ value }: { value: HtmlThingNode; context: KindRenderC
 	</Box>
 );
 
+// ————— 🎛 chakra (JSON → Chakra components) —————
+
+const ChakraKindRenderer = ({ value }: { value: ChakraThingNode; context: KindRenderContext }) => (
+	<Box width="100%">
+		<ChakraThingRenderer node={value} />
+	</Box>
+);
+
 // ————— registration —————
 // Wrapped in an exported function (called lazily by kindRegistry) instead of running
 // at module scope: remix/package.json sets "sideEffects": false, so a bare
@@ -1048,6 +1058,19 @@ registerKindRenderer({
 		return thing as HtmlThingNode;
 	},
 	render: ElementRenderer
+});
+
+registerKindRenderer({
+	kind: 'chakra',
+	title: 'Chakra (components as data)',
+	emoji: '🎛',
+	category: 'Builder',
+	description:
+		'Serialised Chakra UI component trees — chakra, props, children as pure JSON — rendered through a sanitising allowlist gate.',
+	aliases: ['chakra-component'],
+	match: (thing) => isChakraThingNode(thing),
+	adapt: (thing): ChakraThingNode | null => (isChakraThingNode(thing) ? (thing as ChakraThingNode) : null),
+	render: ChakraKindRenderer
 });
 
 };

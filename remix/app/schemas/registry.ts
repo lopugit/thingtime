@@ -28,6 +28,8 @@ export type ThingtimeSchemaField = {
   // enum values / string max chars / array max items, when they apply
   values?: string[];
   max?: number;
+  // set by Thingtime on write — never supplied by the creator
+  system?: boolean;
 };
 
 // root: the Thing schema every things-collection doc follows.
@@ -45,6 +47,11 @@ export type ThingtimeSchema = {
   detail: string;
   // crystal schemas only: thing must point at another thing via targetId
   requiresTarget?: boolean;
+  // the thingtime ids a thing of this kind actually carries (default [id]) —
+  // e.g. share things ride ["post","share"]
+  appliedThingtime?: string[];
+  // dedicated write path, for kinds the generic things CRUD refuses
+  createdVia?: string;
   fields: ThingtimeSchemaField[];
   example: Record<string, unknown>;
 };
@@ -230,17 +237,17 @@ const rootThingSchema: ThingtimeSchema = {
     'external apps park their data in. Crystals are optionally schema-less too: omit thingtime ' +
     'and it defaults to ["data"], the bounded free-form crystal.',
   fields: [
-    { name: 'shareId', type: 'id', required: true, description: 'Public id — the only id clients ever see.' },
-    { name: 'schemaVersion', type: 'number', required: true, description: 'Root schema version this doc was written at (docs without one are version 1).' },
+    { name: 'shareId', type: 'id', required: true, system: true, description: 'Public id — the only id clients ever see.' },
+    { name: 'schemaVersion', type: 'number', required: true, system: true, description: 'Root schema version this doc was written at (docs without one are version 1).' },
     { name: 'thingtime', type: 'string[]', required: true, description: 'Thingtime Schema ids applied to this thing, e.g. ["post"] or ["post","share"]. Omitting it on create defaults to ["data"] — the schema-less crystal.' },
     { name: 'crystal', type: 'object', required: true, description: 'The sub-schema payload, validated against every schema in thingtime.' },
     { name: 'extended', type: 'record', required: false, description: `Schema-free sidecar: any JSON up to ${EXTENDED_MAX_BYTES} bytes, stored untouched, never validated, structured-searchable, or interpreted. Replace-on-write; null clears it.` },
-    { name: 'ownerId', type: 'id', required: true, description: 'The owning user id.' },
+    { name: 'ownerId', type: 'id', required: true, system: true, description: 'The owning user id.' },
     { name: 'acl', type: 'string[]', required: true, max: 16, description: 'Permission entries: tt:all, tt:user (owner), tt:userFriends, tt:userFamily, tt:user/<username>, each optionally "-" prefixed to exclude; tt:inherit on target-attached things. Most specific matching entry decides; owners always view.' },
     { name: 'targetId', type: 'id', required: false, description: 'shareId of the thing this thing is about (comment → post, reaction → post, share → root post).' },
     { name: 'tags', type: 'string[]', required: true, max: 12, description: 'Lowercased tags, max 12 × 40 chars.' },
-    { name: 'createdAt', type: 'date', required: true, description: 'Creation time.' },
-    { name: 'updatedAt', type: 'date', required: true, description: 'Last mutation time.' }
+    { name: 'createdAt', type: 'date', required: true, system: true, description: 'Creation time.' },
+    { name: 'updatedAt', type: 'date', required: true, system: true, description: 'Last mutation time.' }
   ],
   example: {
     shareId: '4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f',
@@ -335,6 +342,7 @@ const shareSchema: ThingtimeSchema = {
     'in feeds with its own caption (the post crystal text) while targetId points at the ROOT ' +
     'shared thing (re-shares never nest). Share counts are computed live from these things.',
   requiresTarget: true,
+  appliedThingtime: ['post', 'share'],
   fields: [],
   example: {}
 };
@@ -416,6 +424,11 @@ export const MAX_SCHEMA_UNIT_CHARS = 20;
 // MAX_DATA_CRYSTAL_DEPTH — a schema can never describe a shape deeper than
 // what can be stored or searched.
 export const MAX_SCHEMA_FIELD_DEPTH = 6;
+// `render`: the optional serialised component tree a schema can carry (chakra
+// or element shaped) — caps match the client renderers' node/depth gates.
+export const MAX_SCHEMA_RENDER_BYTES = 32 * 1024;
+export const MAX_SCHEMA_RENDER_DEPTH = 24;
+export const MAX_SCHEMA_RENDER_NODES = 600;
 export const SCHEMA_FIELD_TYPES = ['string', 'number', 'boolean', 'date', 'enum', 'string[]', 'object', 'array'] as const;
 export type SchemaFieldType = (typeof SCHEMA_FIELD_TYPES)[number];
 
@@ -467,7 +480,14 @@ const schemaThingSchema: ThingtimeSchema = {
         'min?/max?/unit? (number), maxLength? (string), minItems?/maxItems? (arrays), ' +
         'children? (object), items? (array) }.'
     },
-    { name: 'forkOf', type: 'string', required: false, description: 'shareId of the schema this one was forked from (provenance only).' }
+    { name: 'forkOf', type: 'string', required: false, description: 'shareId of the schema this one was forked from (provenance only).' },
+    {
+      name: 'render',
+      type: 'record',
+      required: false,
+      description:
+        `Optional serialised component preview — a chakra tree ({ chakra: "Box", props, children }) or element tree ({ tag: "div", props, children }), max ${MAX_SCHEMA_RENDER_BYTES} bytes / ${MAX_SCHEMA_RENDER_NODES} nodes, always drawn through the sanitising allowlist renderers.`
+    }
   ],
   example: {
     name: 'Table',
@@ -519,6 +539,7 @@ const saveThingSchema: ThingtimeSchema = {
     'personal by construction. List yours via GET /api/v1/things?thingtime=save or filter ' +
     '/api/v1/schemas/browse with library=1.',
   requiresTarget: true,
+  createdVia: 'POST /api/v1/things/save',
   fields: [],
   example: {}
 };
@@ -703,6 +724,7 @@ const userThingSchema: ThingtimeSchema = {
     'POST /api/v1/auth/register or /api/v1/auth/service-account — the generic things CRUD ' +
     'refuses this kind. Migrated users keep their legacy id as shareId, so ownerId references, ' +
     'sessions, and rosters keep working unchanged.',
+  createdVia: 'POST /api/v1/auth/register',
   fields: [
     { name: 'username', type: 'string', required: true, description: 'Unique, lowercased.' },
     { name: 'ttid', type: 'string', required: true, description: 'Thingtime id (currently the username).' },
@@ -727,6 +749,7 @@ const themeThingSchema: ThingtimeSchema = {
     'migration so existing share links keep resolving. Written only through /api/v1/themes ' +
     '(the 100-per-user cap and token validation live there); the generic things CRUD refuses ' +
     'this kind.',
+  createdVia: 'POST /api/v1/themes',
   fields: [
     { name: 'name', type: 'string', required: true, max: 60, description: 'Theme name.' },
     { name: 'theme', type: 'object', required: true, description: 'Resolved theme tokens.' }
@@ -746,6 +769,7 @@ const feedAlgorithmThingSchema: ThingtimeSchema = {
     '["tt:user"] — weights encode reading habits. Written only through /api/v1/algorithms*; ' +
     'the generic things CRUD refuses this kind. shareIds are preserved by the migration so ' +
     'users.meta.activeFeedAlgorithmId pointers keep working.',
+  createdVia: 'POST /api/v1/algorithms',
   fields: [
     { name: 'name', type: 'string', required: true, max: 60, description: 'Algorithm name.' },
     { name: 'emoji', type: 'string', required: true, description: 'Display emoji.' },
@@ -770,6 +794,7 @@ const waitlistThingSchema: ThingtimeSchema = {
     'hashed uniqueKey. System-owned and private (ownerId "system", acl ["tt:user"]) so no ' +
     'viewer ever matches it. Written only through /api/v1/waitlist; duplicate joins are ' +
     'treated as success.',
+  createdVia: 'POST /api/v1/waitlist',
   fields: [],
   example: {}
 };
@@ -1211,6 +1236,73 @@ const sanitizeSchemaFieldList = (
   return { ok: true, fields };
 };
 
+// The optional serialised component preview a schema can carry: a chakra tree
+// ({ type: 'chakra', chakra: 'Box', props, children }) or an element tree
+// ({ tag: 'div', props, children }). This bounds shape/size and storage-safe
+// keys only — SAFETY lives client-side, where render trees are only ever
+// drawn through the sanitising allowlist gates (ChakraThingRenderer /
+// HtmlThingRenderer), never the legacy unsanitised chakra path.
+const SCHEMA_RENDER_BLOCKED_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+const checkSchemaRenderTree = (value: unknown, depth: number, counter: { nodes: number }): true | Fail => {
+  counter.nodes++;
+  if (counter.nodes > MAX_SCHEMA_RENDER_NODES) {
+    return fail(400, `render can hold at most ${MAX_SCHEMA_RENDER_NODES} nodes`);
+  }
+  if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return true;
+  if (depth >= MAX_SCHEMA_RENDER_DEPTH) return fail(400, `render nests at most ${MAX_SCHEMA_RENDER_DEPTH} levels`);
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const checked = checkSchemaRenderTree(entry, depth + 1, counter);
+      if (checked !== true) return checked;
+    }
+    return true;
+  }
+  if (typeof value === 'object') {
+    for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+      if (key.includes('\u0000') || key.includes('.') || key.startsWith('$') || SCHEMA_RENDER_BLOCKED_KEYS.has(key)) {
+        return fail(400, `render keys can’t contain dots or null bytes, start with $, or shadow object internals (${key.slice(0, 40)})`);
+      }
+      const checked = checkSchemaRenderTree(entry, depth + 1, counter);
+      if (checked !== true) return checked;
+    }
+    return true;
+  }
+  return fail(400, 'render must be JSON-serializable (objects, arrays, strings, numbers, booleans)');
+};
+
+const sanitizeSchemaRender = (input: unknown): { ok: true; render: Record<string, unknown> } | Fail => {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return fail(400, 'render must be a serialised component object');
+  }
+  const root = input as Record<string, unknown>;
+  const chakraShaped = typeof root.chakra === 'string' || root.type === 'chakra';
+  const elementShaped = typeof root.tag === 'string';
+  if (!chakraShaped && !elementShaped) {
+    return fail(400, 'render must be chakra shaped ({ chakra: "Box", … }) or element shaped ({ tag: "div", … })');
+  }
+  let serialized: string | undefined;
+  try {
+    serialized = JSON.stringify(input);
+  } catch {
+    return fail(400, 'render must be JSON-serializable');
+  }
+  if (typeof serialized !== 'string') return fail(400, 'render must be JSON-serializable');
+  // same UTF-16 code-unit byte-cap shortcut sanitizeExtended uses
+  if (serialized.length > MAX_SCHEMA_RENDER_BYTES) {
+    return fail(400, `render exceeds the ${MAX_SCHEMA_RENDER_BYTES} byte limit`);
+  }
+  if (serialized.length * 3 > MAX_SCHEMA_RENDER_BYTES) {
+    const bytes = new TextEncoder().encode(serialized).byteLength;
+    if (bytes > MAX_SCHEMA_RENDER_BYTES) {
+      return fail(400, `render exceeds the ${MAX_SCHEMA_RENDER_BYTES} byte limit`);
+    }
+  }
+  const checked = checkSchemaRenderTree(input, 0, { nodes: 0 });
+  if (checked !== true) return checked;
+  return { ok: true, render: root };
+};
+
 const sanitizeSchemaCrystal = (input: Record<string, unknown>): { ok: true; crystal: Record<string, unknown> } | Fail => {
   const name = typeof input.name === 'string' ? input.name.trim() : '';
   if (!name) return fail(400, 'Schemas need a name');
@@ -1228,6 +1320,13 @@ const sanitizeSchemaCrystal = (input: Record<string, unknown>): { ok: true; crys
     const forkOf = typeof input.forkOf === 'string' ? input.forkOf.trim() : '';
     if (!forkOf || forkOf.length > 128 || /[$\s]/.test(forkOf)) return fail(400, 'forkOf must be a thing id');
     crystal.forkOf = forkOf;
+  }
+
+  // optional serialised component preview — bounded here, sanitised on render
+  if (input.render !== undefined && input.render !== null) {
+    const render = sanitizeSchemaRender(input.render);
+    if (isFail(render)) return render;
+    crystal.render = render.render;
   }
 
   return { ok: true, crystal };

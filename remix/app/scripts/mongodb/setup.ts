@@ -3,11 +3,18 @@
 // (see FUNDAMENTALS.md §2). Idempotent: re-running skips existing users.
 // Feed seeding follows the same rule: posts, profiles, reactions, comments and
 // demo algorithms all go through the exact utils the API routes call.
+//
+// Serverless-friendly: every stage takes an optional wall-clock deadline and
+// hands back partial progress (halted: true) when it hits it, so a Vercel
+// populate invocation that can't finish inside its function budget still
+// commits what it managed — repeated idempotent calls converge. Stages can
+// also be selected individually (options.stages) so a converged environment
+// can re-run just one stage without re-walking the others.
 
 import { registerUser } from '~/api/utils/auth/registerUser';
 import { findUserByUsername, updateUserProfile } from '~/api/utils/auth/users';
 import { createAlgorithm, listAlgorithmsForUser } from '~/api/utils/algorithms/algorithms';
-import { addComment, createPost, toggleReaction } from '~/api/utils/things/things';
+import { addComment, createPost, createThing, toggleReaction } from '~/api/utils/things/things';
 
 import { getUsers, type SeedUser } from './data/users';
 import {
@@ -18,12 +25,20 @@ import {
   getProfiles,
   getReactions
 } from './data/feed';
+import { getSampleSchemas } from './data/schemas';
 
-const registerAll = async (users: SeedUser[]) => {
+const FOREVER = Number.POSITIVE_INFINITY;
+
+const registerAll = async (users: SeedUser[], deadlineAt = FOREVER) => {
   let created = 0;
   let skipped = 0;
+  let halted = false;
 
   for (const user of users) {
+    if (Date.now() >= deadlineAt) {
+      halted = true;
+      break;
+    }
     const result = await registerUser(user);
     if (result.ok === true) {
       created++;
@@ -35,10 +50,11 @@ const registerAll = async (users: SeedUser[]) => {
     }
   }
 
-  return { created, skipped, total: users.length };
+  return { created, skipped, total: users.length, halted };
 };
 
-export const saveUsers = async () => registerAll([...(await getUsers()), ...(await getFeedUsers())]);
+export const saveUsers = async (deadlineAt = FOREVER) =>
+  registerAll([...(await getUsers()), ...(await getFeedUsers())], deadlineAt);
 
 const userIdByUsername = async (username: string): Promise<string | null> => {
   const user = await findUserByUsername(username);
@@ -47,10 +63,15 @@ const userIdByUsername = async (username: string): Promise<string | null> => {
 
 // Profiles only apply to users with no profile content yet — re-seeding must
 // never clobber edits a seeded user made through the real profile UI.
-export const saveProfiles = async () => {
+export const saveProfiles = async (deadlineAt = FOREVER) => {
   let applied = 0;
   let skipped = 0;
+  let halted = false;
   for (const profile of await getProfiles()) {
+    if (Date.now() >= deadlineAt) {
+      halted = true;
+      break;
+    }
     const user = await findUserByUsername(profile.username);
     if (!user) continue;
     if (user.bio != null || user.avatarUrl != null || user.bannerUrl != null) {
@@ -67,20 +88,25 @@ export const saveProfiles = async () => {
     }
     applied++;
   }
-  return { applied, skipped };
+  return { applied, skipped, halted };
 };
 
 // Posts carry fixed shareIds; createPost 409s on a duplicate, which we treat
 // as an idempotent skip (matching registerUser). Reactions/comments only apply
 // to posts created in THIS run so re-seeding never toggles reactions off or
 // duplicates comments.
-export const savePosts = async () => {
+export const savePosts = async (deadlineAt = FOREVER) => {
   const createdIds = new Set<string>();
   let created = 0;
   let skipped = 0;
+  let halted = false;
 
   const posts = await getPosts();
   for (const post of posts) {
+    if (Date.now() >= deadlineAt) {
+      halted = true;
+      break;
+    }
     const userId = await userIdByUsername(post.username);
     if (!userId) throw new Error(`Seed post ${post.shareId}: unknown user ${post.username}`);
 
@@ -107,6 +133,10 @@ export const savePosts = async () => {
 
   let reactions = 0;
   for (const reaction of await getReactions()) {
+    if (Date.now() >= deadlineAt) {
+      halted = true;
+      break;
+    }
     if (!createdIds.has(reaction.postShareId)) continue;
     const userId = await userIdByUsername(reaction.username);
     if (!userId) continue;
@@ -116,6 +146,10 @@ export const savePosts = async () => {
 
   let comments = 0;
   for (const comment of await getComments()) {
+    if (Date.now() >= deadlineAt) {
+      halted = true;
+      break;
+    }
     if (!createdIds.has(comment.postShareId)) continue;
     const userId = await userIdByUsername(comment.username);
     if (!userId) continue;
@@ -123,17 +157,22 @@ export const savePosts = async () => {
     if (result.ok === true) comments++;
   }
 
-  return { created, skipped, total: posts.length, reactions, comments };
+  return { created, skipped, total: posts.length, reactions, comments, halted };
 };
 
 // Demo algorithms — skipped when the user already has one by the same name,
 // so re-seeding never duplicates or clobbers real usage.
-export const saveAlgorithms = async () => {
+export const saveAlgorithms = async (deadlineAt = FOREVER) => {
   let created = 0;
   let skipped = 0;
+  let halted = false;
 
   const seeds = await getAlgorithms();
   for (const seed of seeds) {
+    if (Date.now() >= deadlineAt) {
+      halted = true;
+      break;
+    }
     const userId = await userIdByUsername(seed.username);
     if (!userId) continue;
 
@@ -154,16 +193,103 @@ export const saveAlgorithms = async () => {
     created++;
   }
 
-  return { created, skipped, total: seeds.length };
+  return { created, skipped, total: seeds.length, halted };
 };
 
-export const setup = async () => {
+// Sample schema things ride fixed shareIds (sample-schema-<slug>) through the
+// real createThing path — a duplicate 409s into an idempotent skip, matching
+// the post fixtures. Several carry `extended` sidecars and serialised `render`
+// components, so the seeded DB exercises both pipelines end-to-end.
+export const saveSchemas = async (deadlineAt = FOREVER) => {
+  let created = 0;
+  let skipped = 0;
+  let halted = false;
+
+  const seeds = await getSampleSchemas();
+  for (const seed of seeds) {
+    if (Date.now() >= deadlineAt) {
+      halted = true;
+      break;
+    }
+    const userId = await userIdByUsername(seed.owner);
+    if (!userId) throw new Error(`Seed schema ${seed.slug}: unknown user ${seed.owner}`);
+
+    const crystal: Record<string, unknown> = {
+      name: seed.name,
+      description: seed.description,
+      fields: seed.fields
+    };
+    if (seed.render) crystal.render = seed.render;
+
+    const result = await createThing(userId, {
+      thingtime: ['schema'],
+      crystal,
+      acl: ['tt:all'],
+      tags: seed.tags || [],
+      extended: seed.extended,
+      shareId: `sample-schema-${seed.slug}`,
+      createdAt: seed.ageHours ? new Date(Date.now() - seed.ageHours * 3_600_000) : undefined
+    });
+
+    if (result.ok === true) {
+      created++;
+    } else if (result.status === 409) {
+      skipped++;
+    } else {
+      throw new Error(`Seed schema ${seed.slug} failed: ${result.error}`);
+    }
+  }
+
+  return { created, skipped, total: seeds.length, halted };
+};
+
+export const SETUP_STAGES = ['users', 'profiles', 'posts', 'algorithms', 'schemas'] as const;
+export type SetupStage = (typeof SETUP_STAGES)[number];
+
+export type SetupOptions = {
+  // wall-clock deadline (ms epoch): stages hand back partial progress when
+  // they hit it, so serverless invocations converge across repeated calls
+  deadlineAt?: number;
+  // run only these stages (default: all, in order)
+  stages?: SetupStage[];
+};
+
+export const setup = async (options: SetupOptions = {}) => {
+  const deadlineAt = options.deadlineAt ?? FOREVER;
+  const wants = (stage: SetupStage) => !options.stages || options.stages.includes(stage);
+  const overBudget = () => Date.now() >= deadlineAt;
   try {
-    const users = await saveUsers();
-    const profiles = await saveProfiles();
-    const posts = await savePosts();
-    const algorithms = await saveAlgorithms();
-    return { ok: true as const, ...users, profiles, posts, algorithms };
+    let halted = false;
+    const users = wants('users') && !overBudget() ? await saveUsers(deadlineAt) : null;
+    halted = halted || !!users?.halted;
+    const profiles = wants('profiles') && !overBudget() ? await saveProfiles(deadlineAt) : null;
+    halted = halted || !!profiles?.halted;
+    const posts = wants('posts') && !overBudget() ? await savePosts(deadlineAt) : null;
+    halted = halted || !!posts?.halted;
+    const algorithms = wants('algorithms') && !overBudget() ? await saveAlgorithms(deadlineAt) : null;
+    halted = halted || !!algorithms?.halted;
+    const schemas = wants('schemas') && !overBudget() ? await saveSchemas(deadlineAt) : null;
+    halted = halted || !!schemas?.halted;
+    // complete means every REQUESTED stage ran to its end this invocation —
+    // a stage skipped for budget (null while wanted) also counts as halted
+    const skippedForBudget = SETUP_STAGES.some(
+      (stage) =>
+        wants(stage) &&
+        ((stage === 'users' && !users) ||
+          (stage === 'profiles' && !profiles) ||
+          (stage === 'posts' && !posts) ||
+          (stage === 'algorithms' && !algorithms) ||
+          (stage === 'schemas' && !schemas))
+    );
+    return {
+      ok: true as const,
+      complete: !halted && !skippedForBudget,
+      ...(users || {}),
+      profiles,
+      posts,
+      algorithms,
+      schemas
+    };
   } catch (err: any) {
     return { ok: false as const, error: err?.message || String(err) };
   }

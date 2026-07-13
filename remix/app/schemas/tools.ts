@@ -52,9 +52,45 @@ export const flattenSchemaFields = (
   return out;
 };
 
+// Flatten a field tree for DISPLAY — unlike flattenSchemaFields (search paths)
+// this keeps every leaf: record/id/unknown types, childless objects, the data
+// schema's '*' wildcard. Powers the "all properties" chips on schema cards.
+export const flattenSchemaFieldsForDisplay = (
+  fields: SchemaThingField[] | undefined,
+  base = '',
+  depth = 0,
+  inArray = false
+): FlatSchemaField[] => {
+  if (!Array.isArray(fields) || depth > 8) return [];
+  const out: FlatSchemaField[] = [];
+  for (const field of fields) {
+    if (!field || typeof field.name !== 'string' || !field.name) continue;
+    const path = base ? `${base}.${field.name}` : field.name;
+    if (field.type === 'object' && Array.isArray(field.children) && field.children.length) {
+      out.push(...flattenSchemaFieldsForDisplay(field.children, path, depth + 1, inArray));
+      continue;
+    }
+    if (field.type === 'array') {
+      const items = field.items as SchemaItemSpec | undefined;
+      if (items?.type === 'object' && Array.isArray(items.children) && items.children.length) {
+        out.push(...flattenSchemaFieldsForDisplay(items.children, path, depth + 1, true));
+        continue;
+      }
+    }
+    out.push({ path, field, depth, inArray });
+  }
+  return out;
+};
+
 // Compact type label for chips: "number 0–12 cm", "enum wood|plastic|…",
 // "text ≤80", "list<text> ≤6", "object ×3", "list<object>"
 export const describeSchemaField = (field: SchemaThingField | SchemaItemSpec): string => {
+  switch (field.type as string) {
+    case 'record':
+      return 'json';
+    case 'id':
+      return 'id';
+  }
   switch (field.type) {
     case 'number': {
       const range =
@@ -77,7 +113,7 @@ export const describeSchemaField = (field: SchemaThingField | SchemaItemSpec): s
     case 'date':
       return 'date';
     case 'object':
-      return `object ×${(field.children || []).length}`;
+      return field.children?.length ? `object ×${field.children.length}` : 'object';
     case 'array': {
       const items = field.items as SchemaItemSpec | undefined;
       return `list<${items ? describeSchemaField(items).split(' ')[0] : '?'}>${

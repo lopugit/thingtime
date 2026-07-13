@@ -47,12 +47,19 @@ export type SchemaCardSource = {
   entry?: BrowseSchemaEntry; // community only
   registry?: ThingtimeSchema; // builtin only
   forkOf?: string | null;
+  // optional serialised component preview (chakra/element tree) — drawn only
+  // through the sanitising allowlist renderers
+  render?: Record<string, unknown> | null;
 };
 
 export const entryToCardSource = (entry: BrowseSchemaEntry): SchemaCardSource | null => {
   const name = typeof entry.crystal?.name === 'string' ? entry.crystal.name : '';
   if (!name) return null;
   const fields = Array.isArray(entry.crystal?.fields) ? (entry.crystal.fields as SchemaThingField[]) : [];
+  const render =
+    entry.crystal?.render && typeof entry.crystal.render === 'object' && !Array.isArray(entry.crystal.render)
+      ? (entry.crystal.render as Record<string, unknown>)
+      : null;
   return {
     key: entry.id,
     origin: 'community',
@@ -61,7 +68,8 @@ export const entryToCardSource = (entry: BrowseSchemaEntry): SchemaCardSource | 
     description: typeof entry.crystal?.description === 'string' ? entry.crystal.description : '',
     fields,
     entry,
-    forkOf: typeof entry.crystal?.forkOf === 'string' ? entry.crystal.forkOf : null
+    forkOf: typeof entry.crystal?.forkOf === 'string' ? entry.crystal.forkOf : null,
+    render
   };
 };
 
