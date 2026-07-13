@@ -23,7 +23,8 @@ const eyebrow = {
 
 const ENDPOINT_LABELS: Record<string, string> = {
   'things.react': 'Reactions',
-  'things.comment': 'Comments'
+  'things.comment': 'Comments',
+  'mongodb.query': 'MongoDB queries'
 };
 
 const RateLimitEditor = () => {

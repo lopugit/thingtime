@@ -34,9 +34,12 @@ export function useApi() {
   const v1 = {
     login: useCallback(
       async (args) => {
-        const { username, password } = args;
+        const { username, password, challenge, code } = args;
 
-        const ret = asyncFetcher.submit({ username, password }, { action: '/api/v1/login' });
+        // two-step email 2FA: the second call swaps the emailed code for the
+        // session the password step withheld
+        const body = challenge ? { challenge, code } : { username, password };
+        const ret = asyncFetcher.submit(body, { action: '/api/v1/login' });
         ret.then(refreshRootData).catch(() => {});
         return ret;
       },
@@ -64,6 +67,28 @@ export function useApi() {
         },
         [asyncFetcher]
       ),
+      passwordReset: {
+        // neutral response by design — never confirms the account exists
+        request: useCallback(
+          async (args) => asyncFetcher.submit({ email: args?.email }, { action: '/api/v1/auth/password-reset' }),
+          [asyncFetcher]
+        ),
+        confirm: useCallback(
+          async (args) =>
+            asyncFetcher.submit(
+              { token: args?.token, password: args?.password },
+              { action: '/api/v1/auth/password-reset/confirm' }
+            ),
+          [asyncFetcher]
+        )
+      },
+      twoFactor: {
+        get: useCallback(async () => getJson('/api/v1/auth/two-factor'), []),
+        set: useCallback(
+          async (args) => asyncFetcher.submit({ enabled: !!args?.enabled }, { action: '/api/v1/auth/two-factor' }),
+          [asyncFetcher]
+        )
+      },
       logout: useCallback(
         async (args?: { all?: boolean }) => {
           const ret = asyncFetcher.submit(args?.all ? { all: true } : {}, { action: '/api/v1/auth/logout' });
@@ -116,15 +141,10 @@ export function useApi() {
       )
     },
     mongodb: {
+      capabilities: useCallback(async () => getJson('/api/v1/mongodb/raw-results'), []),
       rawResults: useCallback(
-        async (args) => {
-          const { query } = args;
-
-          console.log('submitting query', query);
-
-          const ret = asyncFetcher.submit({ query }, { action: '/api/v1/mongodb/raw-results' });
-          return ret;
-        },
+        async (args, options?: { signal?: AbortSignal }) =>
+          asyncFetcher.submit(args, { action: '/api/v1/mongodb/raw-results', signal: options?.signal }),
         [asyncFetcher]
       )
     },
@@ -188,6 +208,11 @@ export function useApi() {
       ),
       react: useCallback(
         async (args) => asyncFetcher.submit({ id: args?.id, emoji: args?.emoji ?? null }, { action: '/api/v1/things/react' }),
+        [asyncFetcher]
+      ),
+      // toggle a private "add to my library" save on any visible thing
+      save: useCallback(
+        async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/things/save' }),
         [asyncFetcher]
       ),
       comment: useCallback(
@@ -299,7 +324,9 @@ export function useApi() {
     },
     schemas: {
       list: useCallback(async () => getJson('/api/v1/schemas'), []),
-      get: useCallback(async (id) => getJson(`/api/v1/schemas${toQuery({ id })}`), [])
+      get: useCallback(async (id) => getJson(`/api/v1/schemas${toQuery({ id })}`), []),
+      // paginated UGC schema browsing — { q, sort, cursor, limit, library, mine }
+      browse: useCallback(async (args) => getJson(`/api/v1/schemas/browse${toQuery(args)}`), [])
     },
     waitlist: {
       join: useCallback(

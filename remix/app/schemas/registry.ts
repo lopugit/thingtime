@@ -179,6 +179,15 @@ export const MAX_IMAGES = 8;
 export const MAX_IMAGE_URL_CHARS = 2048;
 export const MAX_COMMENT_CHARS = 1000;
 
+// Extended (the schema-free sidecar every thing carries) — see sanitizeExtended
+// below for the full story.
+export const EXTENDED_MAX_BYTES = 512 * 1024;
+export const MAX_EXTENDED_DEPTH = 64;
+// The wildcard text index's language_override field name. Data-crystal keys
+// can never collide with it (their grammar bans ':'), but extended accepts any
+// key — except this one, which would hijack or break the text index.
+export const EXTENDED_RESERVED_KEY = 'tt:textLanguage';
+
 // The schema version each collection's docs are written at today. Docs with no
 // schemaVersion field predate versioning and count as version 1 everywhere.
 export const COLLECTION_SCHEMA_VERSIONS: Record<string, number> = {
@@ -189,7 +198,11 @@ export const COLLECTION_SCHEMA_VERSIONS: Record<string, number> = {
   themes: 2,
   waitlist: 2,
   feedAlgorithms: 2,
-  lopuMusingRateLimits: 2
+  lopuMusingRateLimits: 2,
+  // born at 2 (no v1 era): single-use auth tokens + the email outbox
+  passwordResets: 2,
+  authOtps: 2,
+  email_messages: 2
 };
 
 export const LEGACY_SCHEMA_VERSION = 1;
@@ -210,12 +223,18 @@ const rootThingSchema: ThingtimeSchema = {
     'public except one user; owners always see their own things). Things that attach to another ' +
     'thing (comments, reactions) carry ["tt:inherit"] and are as visible as their target. The ' +
     'legacy visibility names (public/friends/family/private) are still accepted as input and ' +
-    'derived on the wire.',
+    'derived on the wire. Beside the schema’d crystal, every thing carries a schema-free ' +
+    '`extended` property: any JSON up to 512KB, stored and returned as-is, never validated or ' +
+    'interpreted, and not structured-searchable (/search field conditions can’t target it, ' +
+    'though its string content is indexed by the wildcard text index) — the open sidecar ' +
+    'external apps park their data in. Crystals are optionally schema-less too: omit thingtime ' +
+    'and it defaults to ["data"], the bounded free-form crystal.',
   fields: [
     { name: 'shareId', type: 'id', required: true, description: 'Public id — the only id clients ever see.' },
     { name: 'schemaVersion', type: 'number', required: true, description: 'Root schema version this doc was written at (docs without one are version 1).' },
-    { name: 'thingtime', type: 'string[]', required: true, description: 'Thingtime Schema ids applied to this thing, e.g. ["post"] or ["post","share"].' },
+    { name: 'thingtime', type: 'string[]', required: true, description: 'Thingtime Schema ids applied to this thing, e.g. ["post"] or ["post","share"]. Omitting it on create defaults to ["data"] — the schema-less crystal.' },
     { name: 'crystal', type: 'object', required: true, description: 'The sub-schema payload, validated against every schema in thingtime.' },
+    { name: 'extended', type: 'record', required: false, description: `Schema-free sidecar: any JSON up to ${EXTENDED_MAX_BYTES} bytes, stored untouched, never validated, structured-searchable, or interpreted. Replace-on-write; null clears it.` },
     { name: 'ownerId', type: 'id', required: true, description: 'The owning user id.' },
     { name: 'acl', type: 'string[]', required: true, max: 16, description: 'Permission entries: tt:all, tt:user (owner), tt:userFriends, tt:userFamily, tt:user/<username>, each optionally "-" prefixed to exclude; tt:inherit on target-attached things. Most specific matching entry decides; owners always view.' },
     { name: 'targetId', type: 'id', required: false, description: 'shareId of the thing this thing is about (comment → post, reaction → post, share → root post).' },
@@ -339,6 +358,8 @@ const dataSchema: ThingtimeSchema = {
   title: 'Data',
   summary: 'Free-form structured data — any JSON shape, searchable by real datatypes on /search.',
   detail:
+    'The default schema when a thing declares none: creating a thing without thingtime (just a ' +
+    'crystal) resolves to ["data"], so crystals are optionally schema-less. ' +
     'The open half of Thingtime: a data thing’s crystal holds whatever structure you give it ' +
     '(numbers stay numbers, booleans stay booleans), bounded but never schema-gated. Search it ' +
     'with real datatype conditions on /search (legs ≥ 3, material in wood/concrete, height ' +
@@ -382,37 +403,51 @@ const dataSchema: ThingtimeSchema = {
 // builder. Field defs are bounded and whitelisted — never arbitrary JSON.
 export const MAX_SCHEMA_NAME_CHARS = 60;
 export const MAX_SCHEMA_DESCRIPTION_CHARS = 500;
-export const MAX_SCHEMA_FIELDS = 40;
+export const MAX_SCHEMA_FIELDS = 40; // total field nodes, counting nested children/items
 export const MAX_SCHEMA_ENUM_VALUES = 30;
 export const MAX_SCHEMA_ENUM_VALUE_CHARS = 60;
 export const MAX_SCHEMA_UNIT_CHARS = 20;
-export const SCHEMA_FIELD_TYPES = ['string', 'number', 'boolean', 'date', 'enum', 'string[]'] as const;
+// Matches the search grammar's MAX_FIELD_DEPTH and data crystals'
+// MAX_DATA_CRYSTAL_DEPTH — a schema can never describe a shape deeper than
+// what can be stored or searched.
+export const MAX_SCHEMA_FIELD_DEPTH = 6;
+export const SCHEMA_FIELD_TYPES = ['string', 'number', 'boolean', 'date', 'enum', 'string[]', 'object', 'array'] as const;
 export type SchemaFieldType = (typeof SCHEMA_FIELD_TYPES)[number];
+
+// An array field types its entries with an unnamed field def.
+export type SchemaItemSpec = Omit<SchemaThingField, 'name' | 'required'>;
 
 export type SchemaThingField = {
   name: string;
   type: SchemaFieldType;
   description?: string;
-  values?: string[]; // enum types
+  required?: boolean; // present only when true
+  values?: string[]; // enum types: the allowed values (text dropdowns)
   min?: number; // number types
   max?: number; // number types
   unit?: string; // number types, display only (e.g. "cm")
+  maxLength?: number; // string / string[] entry types: max characters
+  minItems?: number; // array / string[] types
+  maxItems?: number; // array / string[] types
+  children?: SchemaThingField[]; // object types: nested named fields
+  items?: SchemaItemSpec; // array types: the entry shape
 };
 
 const schemaThingSchema: ThingtimeSchema = {
   id: 'schema',
-  version: 1,
+  version: 2,
   kind: 'crystal',
   collection: null,
   title: 'Schema',
-  summary: 'A user-authored data shape — browse them on /search to prefill structured searches.',
+  summary: 'A user-authored data shape — browse them on /schemas, search with them on /search.',
   detail:
     'Anyone can publish a schema thing describing a shape (e.g. "Table": legs, material ' +
-    'wood/plastic/concrete, width/height/depth). Things that follow a schema simply carry its ' +
-    'fields in their crystal — schemas are discovery + search sugar, never a validation gate ' +
-    '(Thingtime searches real datatypes, not schema registrations). The /search page lists ' +
-    'public schema things next to the built-in crystal schemas and prefills its query builder ' +
-    'from the field definitions.',
+    'wood/plastic/concrete, width/height/depth). Fields nest arbitrarily (object children, typed ' +
+    'array items) with per-field constraints: required, number min/max, string maxLength, enum ' +
+    'value lists, array min/maxItems. Things that follow a schema simply carry its fields in ' +
+    'their crystal — schemas are discovery + search sugar, never a validation gate (Thingtime ' +
+    'searches real datatypes, not schema registrations). /schemas browses every published ' +
+    'schema; /search prefills its query builder from the field definitions.',
   fields: [
     { name: 'name', type: 'string', required: true, max: MAX_SCHEMA_NAME_CHARS, description: 'Display name, e.g. "Table".' },
     { name: 'description', type: 'string', required: false, max: MAX_SCHEMA_DESCRIPTION_CHARS, description: 'What this shape describes.' },
@@ -422,52 +457,65 @@ const schemaThingSchema: ThingtimeSchema = {
       required: true,
       max: MAX_SCHEMA_FIELDS,
       description:
-        `Field definitions, max ${MAX_SCHEMA_FIELDS}: { name, type (${SCHEMA_FIELD_TYPES.join('/')}), ` +
-        'description?, values? (enum), min?/max?/unit? (number) }.'
-    }
+        `Field definition tree, max ${MAX_SCHEMA_FIELDS} nodes, ${MAX_SCHEMA_FIELD_DEPTH} levels: ` +
+        `{ name, type (${SCHEMA_FIELD_TYPES.join('/')}), description?, required?, values? (enum), ` +
+        'min?/max?/unit? (number), maxLength? (string), minItems?/maxItems? (arrays), ' +
+        'children? (object), items? (array) }.'
+    },
+    { name: 'forkOf', type: 'string', required: false, description: 'shareId of the schema this one was forked from (provenance only).' }
   ],
   example: {
     name: 'Table',
     description: 'Tables of all kinds — dining, coffee, standing desks.',
     fields: [
-      { name: 'legs', type: 'number', min: 0, max: 12 },
+      { name: 'legs', type: 'number', min: 0, max: 12, required: true },
       { name: 'material', type: 'enum', values: ['wood', 'plastic', 'concrete', 'metal', 'glass'] },
       { name: 'width', type: 'number', min: 0, unit: 'cm' },
       { name: 'height', type: 'number', min: 0, unit: 'cm' },
       { name: 'depth', type: 'number', min: 0, unit: 'cm' },
-      { name: 'features', type: 'string[]', description: 'e.g. sit/stand, extendable, foldable' }
+      { name: 'features', type: 'string[]', maxItems: 12, description: 'e.g. sit/stand, extendable, foldable' },
+      {
+        name: 'maker',
+        type: 'object',
+        children: [
+          { name: 'name', type: 'string', required: true, maxLength: 80 },
+          { name: 'country', type: 'string' }
+        ]
+      },
+      {
+        name: 'finishes',
+        type: 'array',
+        maxItems: 6,
+        items: {
+          type: 'object',
+          children: [
+            { name: 'color', type: 'string', required: true },
+            { name: 'sheen', type: 'enum', values: ['matte', 'satin', 'gloss'] }
+          ]
+        }
+      }
     ]
   }
 };
 
-const userSchema: ThingtimeSchema = {
-  id: 'user',
-  version: COLLECTION_SCHEMA_VERSIONS.users,
-  kind: 'collection',
-  collection: 'users',
-  title: 'User',
-  summary: 'A user account (or service account) — hashed password, profile, verification state.',
-  detail: 'Created only via POST /api/v1/auth/register or /api/v1/auth/service-account.',
-  fields: [
-    { name: 'ttid', type: 'string', required: true, description: 'Thingtime id (currently the username).' },
-    { name: 'username', type: 'string', required: true, description: 'Unique, lowercased.' },
-    { name: 'email', type: 'string', required: true, description: 'Unique, lowercased.' },
-    { name: 'passwordHash', type: 'string', required: true, description: 'bcrypt hash — never leaves the server.' },
-    { name: 'displayName', type: 'string', required: false, description: 'Optional display name.' },
-    { name: 'bio', type: 'string', required: false, description: 'Profile bio.' },
-    { name: 'avatarUrl', type: 'string', required: false, description: 'Avatar image URL.' },
-    { name: 'bannerUrl', type: 'string', required: false, description: 'Profile banner URL.' },
-    { name: 'emailVerified', type: 'boolean', required: true, description: 'Whether the email is verified.' },
-    { name: 'accountKind', type: 'enum', required: false, values: ['user', 'service'], description: 'Human or service account.' },
-    { name: 'emailVerificationRequiredBy', type: 'date', required: false, description: 'Service accounts stop authenticating unverified past this.' },
-    { name: 'storageAllowanceBytes', type: 'number', required: false, description: 'Storage allowance.' },
-    { name: 'storageUsedBytes', type: 'number', required: false, description: 'Storage used.' },
-    { name: 'meta', type: 'record', required: true, description: 'Grab-bag: activeThemeId, activeFeedAlgorithmId, service metadata.' },
-    { name: 'schemaVersion', type: 'number', required: true, description: 'Collection schema version.' },
-    { name: 'createdAt', type: 'date', required: true, description: 'Signup time.' },
-    { name: 'updatedAt', type: 'date', required: true, description: 'Last update time.' }
-  ],
-  example: { ttid: 'rick.deckard', username: 'rick.deckard', email: 'rick@example.com', emailVerified: true, accountKind: 'user', meta: {}, schemaVersion: 2 }
+// Library saves: "add to my library" is a relational child thing (FUNDAMENTALS
+// §3) — one save doc per (user, target), private to the saver, toggled via
+// POST /api/v1/things/save. Zero crystal fields, like `share`.
+const saveThingSchema: ThingtimeSchema = {
+  id: 'save',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Save',
+  summary: 'A private library save of another thing (targetId) — powers "add to my library".',
+  detail:
+    'Created/removed by POST /api/v1/things/save { id }. Saves are always private to their ' +
+    'owner (acl ["tt:user"]) — they never inherit the target\'s audience, so a library is ' +
+    'personal by construction. List yours via GET /api/v1/things?thingtime=save or filter ' +
+    '/api/v1/schemas/browse with library=1.',
+  requiresTarget: true,
+  fields: [],
+  example: {}
 };
 
 const sessionSchema: ThingtimeSchema = {
@@ -512,66 +560,90 @@ const emailVerificationSchema: ThingtimeSchema = {
   example: { token: 'ab12…64hex', userId: '664f…', email: 'rick@example.com', schemaVersion: 2 }
 };
 
-const themeSchema: ThingtimeSchema = {
-  id: 'theme',
-  version: COLLECTION_SCHEMA_VERSIONS.themes,
+const passwordResetSchema: ThingtimeSchema = {
+  id: 'password-reset',
+  version: COLLECTION_SCHEMA_VERSIONS.passwordResets,
   kind: 'collection',
-  collection: 'themes',
-  title: 'Theme',
-  summary: 'A saved user theme, shareable by shareId.',
-  detail: 'Fully resolved token doc; max 100 per user.',
+  collection: 'passwordResets',
+  title: 'Password reset',
+  summary: 'A pending single-use password-reset token.',
+  detail:
+    'Created by POST /api/v1/auth/password-reset and burned atomically by /confirm; expires after ' +
+    'one hour (TTL index reaps the doc). Consuming one rotates the bcrypt hash and revokes every ' +
+    'live session.',
   fields: [
-    { name: 'shareId', type: 'id', required: true, description: 'Public id.' },
-    { name: 'ownerId', type: 'id', required: true, description: 'Theme owner.' },
-    { name: 'name', type: 'string', required: true, max: 60, description: 'Theme name.' },
-    { name: 'theme', type: 'object', required: true, description: 'Resolved theme tokens.' },
-    { name: 'visibility', type: 'enum', required: true, values: ['private', 'public'], description: 'Share visibility.' },
+    { name: 'token', type: 'string', required: true, description: 'Unique single-use token (two UUIDs, ~256 bits).' },
+    { name: 'userId', type: 'id', required: true, description: 'User being reset.' },
+    { name: 'email', type: 'string', required: true, description: 'Address the link was sent to.' },
+    { name: 'expiresAt', type: 'date', required: true, description: 'Expiry (1h) — TTL index reaps the doc.' },
+    { name: 'consumedAt', type: 'date', required: false, description: 'Set once used; racing submits burn exactly one.' },
     { name: 'schemaVersion', type: 'number', required: true, description: 'Collection schema version.' },
-    { name: 'createdAt', type: 'date', required: true, description: 'Creation time.' },
-    { name: 'updatedAt', type: 'date', required: true, description: 'Last update time.' }
+    { name: 'createdAt', type: 'date', required: true, description: 'Request time.' }
   ],
-  example: { shareId: '9a8b…', ownerId: '664f…', name: 'Midnight', visibility: 'private', schemaVersion: 2 }
+  example: { token: 'ab12…64hex', userId: '664f…', email: 'rick@example.com', schemaVersion: 2 }
 };
 
-const waitlistSchema: ThingtimeSchema = {
-  id: 'waitlist',
-  version: COLLECTION_SCHEMA_VERSIONS.waitlist,
+const authOtpSchema: ThingtimeSchema = {
+  id: 'auth-otp',
+  version: COLLECTION_SCHEMA_VERSIONS.authOtps,
   kind: 'collection',
-  collection: 'waitlist',
-  title: 'Waitlist entry',
-  summary: 'A launch-waitlist email.',
-  detail: 'Unique per email; duplicate joins are treated as success.',
+  collection: 'authOtps',
+  title: 'Auth OTP challenge',
+  summary: 'A pending email-2FA login challenge — only a hash of the code is stored.',
+  detail:
+    'Minted when an email-2FA account passes the password step of POST /api/v1/login. Stores ' +
+    'sha256(challenge:code) — never the code — with a 10-minute TTL and an attempt counter ' +
+    'incremented atomically BEFORE each constant-time comparison (capped at 5).',
   fields: [
-    { name: 'email', type: 'string', required: true, max: 254, description: 'Lowercased email.' },
+    { name: 'challenge', type: 'string', required: true, description: 'Unique challenge id returned to the client.' },
+    { name: 'userId', type: 'id', required: true, description: 'User completing login.' },
+    { name: 'purpose', type: 'enum', required: true, values: ['login'], description: 'What the code proves.' },
+    { name: 'codeHash', type: 'string', required: true, description: 'sha256(challenge:code) — plaintext codes are never stored.' },
+    { name: 'attempts', type: 'number', required: true, description: 'Verification attempts so far (max 5, incremented pre-compare).' },
+    { name: 'expiresAt', type: 'date', required: true, description: 'Expiry (10 min) — TTL index reaps the doc.' },
+    { name: 'consumedAt', type: 'date', required: false, description: 'Set once the login completes.' },
     { name: 'schemaVersion', type: 'number', required: true, description: 'Collection schema version.' },
-    { name: 'createdAt', type: 'date', required: true, description: 'Join time.' }
+    { name: 'createdAt', type: 'date', required: true, description: 'Challenge mint time.' }
   ],
-  example: { email: 'rick@example.com', schemaVersion: 2 }
+  example: { challenge: 'cd34…64hex', userId: '664f…', purpose: 'login', attempts: 0, schemaVersion: 2 }
 };
 
-const feedAlgorithmSchema: ThingtimeSchema = {
-  id: 'feed-algorithm',
-  version: COLLECTION_SCHEMA_VERSIONS.feedAlgorithms,
+const emailMessageSchema: ThingtimeSchema = {
+  id: 'email-message',
+  version: COLLECTION_SCHEMA_VERSIONS.email_messages,
   kind: 'collection',
-  collection: 'feedAlgorithms',
-  title: 'Feed algorithm',
-  summary: 'A user-trained feed ranking algorithm.',
-  detail: 'Weights over post types, tags, and authors, trained from engagement events.',
+  collection: 'email_messages',
+  title: 'Email message (outbox)',
+  summary: 'One row per email send — queued, then sent/logged/skipped/failed.',
+  detail:
+    'The owned email layer writes every send here before delivery (SES or console), then stamps ' +
+    'the outcome. Satellite collections back deliverability: email_events (provider events), ' +
+    'email_suppression_list + email_unsubscribes (list hygiene, checked before every send), and ' +
+    'email_templates/email_subscriptions/email_identities (reserved for the owned-email roadmap).',
   fields: [
-    { name: 'shareId', type: 'id', required: true, description: 'Public id.' },
-    { name: 'ownerId', type: 'id', required: true, description: 'Algorithm owner.' },
-    { name: 'name', type: 'string', required: true, max: 60, description: 'Algorithm name.' },
-    { name: 'emoji', type: 'string', required: true, description: 'Display emoji.' },
-    { name: 'parentId', type: 'id', required: false, description: 'Branch lineage parent.' },
-    { name: 'weights', type: 'object', required: true, description: '{ types, tags, authors } weight maps.' },
-    { name: 'eventCount', type: 'number', required: true, description: 'Engagement events trained on.' },
-    { name: 'lastTrainedAt', type: 'date', required: false, description: 'Last training time.' },
+    { name: 'provider', type: 'enum', required: true, values: ['console', 'ses'], description: 'Delivery provider resolved from env.' },
+    { name: 'stream', type: 'enum', required: true, values: ['transactional', 'newsletter'], description: 'Send stream — picks the from-address and unsubscribe rules.' },
+    { name: 'templateKey', type: 'string', required: false, description: 'Dotted template id, e.g. auth.password_reset.' },
+    { name: 'status', type: 'enum', required: true, values: ['queued', 'sent', 'logged', 'skipped', 'failed'], description: 'Delivery lifecycle state.' },
+    { name: 'from', type: 'string', required: true, description: 'From address used.' },
+    { name: 'replyTo', type: 'string', required: false, description: 'Reply-to address (null when unset).' },
+    { name: 'to', type: 'string[]', required: true, description: 'Normalized recipient list.' },
+    { name: 'subject', type: 'string', required: true, description: 'Subject line.' },
+    { name: 'html', type: 'string', required: true, description: 'Rendered HTML body — replaced by a redacted placeholder when sensitive is true.' },
+    { name: 'text', type: 'string', required: true, description: 'Rendered text body — replaced by a redacted placeholder when sensitive is true.' },
+    { name: 'sensitive', type: 'boolean', required: true, description: 'True for secret-bearing mail (OTP codes, reset links); its body is stored redacted so the outbox can’t replay the secret.' },
+    { name: 'metadata', type: 'record', required: false, description: 'Purpose tags for analytics (never secrets).' },
+    { name: 'tags', type: 'record', required: false, description: 'Provider tags ({ stream, template }).' },
+    { name: 'providerMessageId', type: 'string', required: false, description: 'SES message id when delivered.' },
+    { name: 'suppressedRecipients', type: 'string[]', required: false, description: 'Recipients dropped for suppression/unsubscribe (set only when some were skipped).' },
     { name: 'schemaVersion', type: 'number', required: true, description: 'Collection schema version.' },
-    { name: 'createdAt', type: 'date', required: true, description: 'Creation time.' },
-    { name: 'updatedAt', type: 'date', required: true, description: 'Last update time.' }
+    { name: 'createdAt', type: 'date', required: true, description: 'Queue time.' },
+    { name: 'updatedAt', type: 'date', required: true, description: 'Last status change (sentAt/loggedAt/failedAt/skippedAt + error/skippedReason ride alongside per outcome).' }
   ],
-  example: { shareId: '3c4d…', ownerId: '664f…', name: 'Chronological+', emoji: '🧠', eventCount: 0, schemaVersion: 2 }
+  example: { provider: 'console', stream: 'transactional', templateKey: 'auth.email_otp', status: 'logged', schemaVersion: 2 }
 };
+
+
 
 const rateLimitSchema: ThingtimeSchema = {
   id: 'rate-limit',
@@ -593,6 +665,110 @@ const rateLimitSchema: ThingtimeSchema = {
   example: { key: 'waitlist:9f2c…', count: 3, schemaVersion: 2 }
 };
 
+// ---------------------------------------------------------------------------
+// System kinds — the satellite collections collapsing into things (see
+// claude-todo/12-everything-is-a-thing-collections.md). These kinds are
+// PROTECTED: the generic /api/v1/things CRUD unconditionally refuses them.
+// Only their dedicated utils (register, profile update, themes/algorithms/
+// waitlist) write them, each a direct insert that owns the right secure/
+// uniqueKeys shape — they do NOT go through createThing. Private state lives
+// under the root `secure` field (never crystal, never projected, a single
+// BinData blob so the $** text index can't tokenize any field inside it) and
+// uniqueness rides the root `uniqueKeys` array (multikey unique sparse index;
+// BinData elements, PII keys hashed).
+
+export const PROTECTED_THINGTIME = ['user', 'theme', 'feed-algorithm', 'waitlist'] as const;
+export const isProtectedThingtime = (ids: string[]): boolean =>
+  ids.some((id) => (PROTECTED_THINGTIME as readonly string[]).includes(id));
+
+const userThingSchema: ThingtimeSchema = {
+  id: 'user',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'User (thing)',
+  summary: 'A user account as a thing — public profile in crystal, credentials in the secure root field.',
+  detail:
+    'Users are things too: the crystal holds ONLY the public profile (what /api/v1/users/profile ' +
+    'already exposes), so user things are safely listable/searchable like any public thing. ' +
+    'Credentials and private account state (email, passwordHash, verification, storage, meta) ' +
+    'live under the root `secure` field — omitted from every projection, unreachable by the ' +
+    'search grammar, sensitive strings stored as binary so the text index cannot index them. ' +
+    'Username/email uniqueness rides uniqueKeys (email hashed). Created only via ' +
+    'POST /api/v1/auth/register or /api/v1/auth/service-account — the generic things CRUD ' +
+    'refuses this kind. Migrated users keep their legacy id as shareId, so ownerId references, ' +
+    'sessions, and rosters keep working unchanged.',
+  fields: [
+    { name: 'username', type: 'string', required: true, description: 'Unique, lowercased.' },
+    { name: 'ttid', type: 'string', required: true, description: 'Thingtime id (currently the username).' },
+    { name: 'displayName', type: 'string', required: false, description: 'Optional display name.' },
+    { name: 'bio', type: 'string', required: false, description: 'Profile bio.' },
+    { name: 'avatarUrl', type: 'string', required: false, description: 'Avatar image URL.' },
+    { name: 'bannerUrl', type: 'string', required: false, description: 'Profile banner URL.' }
+  ],
+  example: { username: 'rick.deckard', ttid: 'rick.deckard', displayName: 'Rick Deckard', bio: 'Blade runner.' }
+};
+
+const themeThingSchema: ThingtimeSchema = {
+  id: 'theme',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Theme (thing)',
+  summary: 'A saved user theme as a thing — share visibility maps onto the acl.',
+  detail:
+    'The resolved token doc lives in crystal.theme; the legacy visibility enum maps onto the ' +
+    'thing acl (public → ["tt:all"], private → ["tt:user"]). shareIds are preserved by the ' +
+    'migration so existing share links keep resolving. Written only through /api/v1/themes ' +
+    '(the 100-per-user cap and token validation live there); the generic things CRUD refuses ' +
+    'this kind.',
+  fields: [
+    { name: 'name', type: 'string', required: true, max: 60, description: 'Theme name.' },
+    { name: 'theme', type: 'object', required: true, description: 'Resolved theme tokens.' }
+  ],
+  example: { name: 'Midnight', theme: { '--tt-accent': 'hotpink' } }
+};
+
+const feedAlgorithmThingSchema: ThingtimeSchema = {
+  id: 'feed-algorithm',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Feed algorithm (thing)',
+  summary: 'A user-trained feed ranking algorithm as a thing (always private to its owner).',
+  detail:
+    'Weights over post types, tags, and authors, trained from engagement events. Always acl ' +
+    '["tt:user"] — weights encode reading habits. Written only through /api/v1/algorithms*; ' +
+    'the generic things CRUD refuses this kind. shareIds are preserved by the migration so ' +
+    'users.meta.activeFeedAlgorithmId pointers keep working.',
+  fields: [
+    { name: 'name', type: 'string', required: true, max: 60, description: 'Algorithm name.' },
+    { name: 'emoji', type: 'string', required: true, description: 'Display emoji.' },
+    { name: 'parentId', type: 'id', required: false, description: 'Branch lineage parent.' },
+    { name: 'weights', type: 'object', required: true, description: '{ types, tags, authors } weight maps.' },
+    { name: 'eventCount', type: 'number', required: true, description: 'Engagement events trained on.' },
+    { name: 'lastTrainedAt', type: 'date', required: false, description: 'Last training time.' }
+  ],
+  example: { name: 'Chronological+', emoji: '🧠', weights: { types: {}, tags: {}, authors: {} }, eventCount: 0 }
+};
+
+const waitlistThingSchema: ThingtimeSchema = {
+  id: 'waitlist',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Waitlist entry (thing)',
+  summary: 'A launch-waitlist signup as a thing — the email never leaves the secure field.',
+  detail:
+    'The crystal is empty by design: the email lives under the root secure field as binary ' +
+    '(invisible to projections, the search grammar, and the text index) and uniqueness rides a ' +
+    'hashed uniqueKey. System-owned and private (ownerId "system", acl ["tt:user"]) so no ' +
+    'viewer ever matches it. Written only through /api/v1/waitlist; duplicate joins are ' +
+    'treated as success.',
+  fields: [],
+  example: {}
+};
+
 export const thingtimeSchemas: ThingtimeSchema[] = [
   rootThingSchema,
   postSchema,
@@ -601,12 +777,18 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   shareSchema,
   dataSchema,
   schemaThingSchema,
-  userSchema,
+  saveThingSchema,
+  // system kinds (collections collapsing into things — dual-era)
+  userThingSchema,
+  themeThingSchema,
+  feedAlgorithmThingSchema,
+  waitlistThingSchema,
+  // collections that remain collections
   sessionSchema,
   emailVerificationSchema,
-  themeSchema,
-  waitlistSchema,
-  feedAlgorithmSchema,
+  passwordResetSchema,
+  authOtpSchema,
+  emailMessageSchema,
   rateLimitSchema
 ];
 
@@ -621,6 +803,7 @@ export const crystalSchemas = (): ThingtimeSchema[] => thingtimeSchemas.filter((
 
 type Fail = { ok: false; status: number; error: string };
 const fail = (status: number, error: string): Fail => ({ ok: false, status, error });
+const isFail = <T extends { ok: boolean }>(value: T | Fail): value is Fail => value.ok === false;
 
 const isHttpUrl = (value: string) => /^https?:\/\//i.test(value);
 
@@ -783,11 +966,245 @@ const sanitizeDataCrystal = (input: Record<string, unknown>): { ok: true; crysta
   return { ok: true, crystal: sanitized.value as Record<string, unknown> };
 };
 
+// ---------------------------------------------------------------------------
+// Extended — the schema-free sidecar every thing carries. Any JSON structure,
+// stored inside the platform envelope (shareId, acl, timestamps) but never
+// validated against a schema, structured-searchable, or interpreted. Where the
+// data crystal is the bounded, searchable open shape, `extended` is the big
+// opaque one: external apps park whatever they want here. Replace-on-write
+// (null clears, undefined leaves it untouched) — deep-merging arbitrary JSON
+// is ambiguous, so we never do. The caps (EXTENDED_MAX_BYTES /
+// MAX_EXTENDED_DEPTH / EXTENDED_RESERVED_KEY) live with the other caps up top.
+
+// Keys-only walk: values pass through verbatim, but a key that would corrupt
+// storage (BSON null byte, the text-index override) or a stack-hostile depth
+// fails loudly. Never mutates or drops — extended is stored exactly as given.
+const checkExtendedKeys = (value: unknown, depth: number, path: string): true | Fail => {
+  if (depth > MAX_EXTENDED_DEPTH) return fail(400, `extended nests at most ${MAX_EXTENDED_DEPTH} levels (${path || 'root'})`);
+  if (Array.isArray(value)) {
+    for (let index = 0; index < value.length; index++) {
+      const entry = checkExtendedKeys(value[index], depth + 1, `${path}[${index}]`);
+      if (entry !== true) return entry;
+    }
+    return true;
+  }
+  if (value && typeof value === 'object') {
+    for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+      if (key.includes('\u0000')) return fail(400, 'extended keys can’t contain null bytes');
+      if (key === EXTENDED_RESERVED_KEY) {
+        return fail(400, `extended can’t use the reserved key ${EXTENDED_RESERVED_KEY}`);
+      }
+      const checked = checkExtendedKeys(entry, depth + 1, path ? `${path}.${key}` : key);
+      if (checked !== true) return checked;
+    }
+    return true;
+  }
+  return true;
+};
+
+// Three-valued: undefined = not provided (callers keep the existing value),
+// null = clear it, anything else = the whole new value if it's JSON-serializable
+// and fits the byte cap.
+export const sanitizeExtended = (value: unknown): { ok: true; value: unknown } | Fail => {
+  if (value === undefined) return { ok: true, value: undefined };
+  if (value === null) return { ok: true, value: null };
+  let serialized: string | undefined;
+  try {
+    serialized = JSON.stringify(value);
+  } catch {
+    return fail(400, 'extended must be JSON-serializable');
+  }
+  if (typeof serialized !== 'string') return fail(400, 'extended must be JSON-serializable');
+  // Byte cap via UTF-16 code-unit bounds, skipping the full TextEncoder pass in
+  // the common case: every code unit is ≥1 and ≤3 UTF-8 bytes (registry stays
+  // client-pure, so no node Buffer). length > cap ⇒ definitely over; length*3 ≤
+  // cap ⇒ definitely under; only the ambiguous middle band needs a precise
+  // byte count.
+  if (serialized.length > EXTENDED_MAX_BYTES) {
+    return fail(400, `extended exceeds the ${EXTENDED_MAX_BYTES} byte limit`);
+  }
+  if (serialized.length * 3 > EXTENDED_MAX_BYTES) {
+    const bytes = new TextEncoder().encode(serialized).byteLength;
+    if (bytes > EXTENDED_MAX_BYTES) {
+      return fail(400, `extended exceeds the ${EXTENDED_MAX_BYTES} byte limit`);
+    }
+  }
+  const keys = checkExtendedKeys(value, 0, '');
+  if (keys !== true) return keys;
+  return { ok: true, value };
+};
+
 // Schema-thing field names double as crystal paths in the search builder
-// (crystal.<name>): KEY_SEGMENT_PATTERN segments joined by dots.
-const SCHEMA_FIELD_NAME_PATTERN = /^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$/;
-const MAX_SCHEMA_FIELD_NAME_CHARS = 60;
-const MAX_SCHEMA_FIELD_DESCRIPTION_CHARS = 200;
+// (crystal.<name>). A name is ONE path segment — nesting is expressed via
+// `children`/`items`, never dots — so a schema tree bounded by
+// MAX_SCHEMA_FIELD_DEPTH can never flatten to a dotted path deeper than the
+// search grammar's MAX_FIELD_DEPTH or a crystal deeper than
+// MAX_DATA_CRYSTAL_DEPTH. Exported so the builtin-schema seed migration maps
+// registry fields onto the exact same grammar sanitizeSchemaCrystal enforces
+// on user-authored schema things.
+export const SCHEMA_FIELD_NAME_PATTERN = /^[A-Za-z0-9_-]+$/;
+export const MAX_SCHEMA_FIELD_NAME_CHARS = 60;
+export const MAX_SCHEMA_FIELD_DESCRIPTION_CHARS = 200;
+
+// top-level crystal keys that tag data things with their schema — a schema
+// field by either name could never round-trip. Exported so the builder's
+// inline validation and the server sanitizer share one list (lowercased for
+// case-insensitive comparison).
+export const SCHEMA_RESERVED_TOP_LEVEL_FIELD_NAMES: ReadonlySet<string> = new Set(['schema', 'schemaid']);
+
+// whole-number constraint (maxLength/minItems/maxItems); fail-loudly on junk
+const sanitizeCountConstraint = (
+  raw: unknown,
+  label: string,
+  ceiling: number
+): { ok: true; value: number | null } | Fail => {
+  if (raw === undefined || raw === null) return { ok: true, value: null };
+  const num = Number(raw);
+  if (!Number.isInteger(num) || num < 0) return fail(400, `${label} must be a whole number ≥ 0`);
+  if (num > ceiling) return fail(400, `${label} caps at ${ceiling}`);
+  return { ok: true, value: num };
+};
+
+// One recursive walk sanitizes named fields AND unnamed array item specs.
+// Objects nest via `children`, arrays type their entries via `items`; the
+// shared node counter + depth cap bound the whole tree the same way data
+// crystals are bounded.
+const sanitizeSchemaField = (
+  raw: unknown,
+  depth: number,
+  counter: { nodes: number },
+  named: boolean,
+  path: string
+): { ok: true; field: SchemaThingField } | Fail => {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return fail(400, `Each schema field must be an object (${path || 'fields'})`);
+  }
+  counter.nodes += 1;
+  if (counter.nodes > MAX_SCHEMA_FIELDS) {
+    return fail(400, `A schema can define at most ${MAX_SCHEMA_FIELDS} fields (nested ones count)`);
+  }
+  if (depth > MAX_SCHEMA_FIELD_DEPTH) {
+    return fail(400, `Schema fields nest at most ${MAX_SCHEMA_FIELD_DEPTH} levels (${path})`);
+  }
+  const def = raw as Record<string, unknown>;
+
+  let fieldName = '';
+  if (named) {
+    fieldName = typeof def.name === 'string' ? def.name.trim() : '';
+    if (!fieldName || fieldName.length > MAX_SCHEMA_FIELD_NAME_CHARS || !SCHEMA_FIELD_NAME_PATTERN.test(fieldName)) {
+      return fail(400, `Schema field names are letters/numbers/_/- — nest with children, not dots (got ${String(def.name).slice(0, 80)})`);
+    }
+    if (depth === 1 && SCHEMA_RESERVED_TOP_LEVEL_FIELD_NAMES.has(fieldName.toLowerCase())) {
+      return fail(400, `Field name ${fieldName} is reserved (it tags data things with their schema)`);
+    }
+  }
+  const label = path || fieldName || 'items';
+
+  const type = SCHEMA_FIELD_TYPES.includes(def.type as any) ? (def.type as SchemaFieldType) : null;
+  if (!type) return fail(400, `Schema field types are ${SCHEMA_FIELD_TYPES.join(', ')} (${label})`);
+
+  const field = (named ? { name: fieldName, type } : { type }) as SchemaThingField;
+
+  const fieldDescription = typeof def.description === 'string' ? def.description.trim() : '';
+  if (fieldDescription) field.description = fieldDescription.slice(0, MAX_SCHEMA_FIELD_DESCRIPTION_CHARS);
+
+  if (named && (def.required === true || def.required === 'true')) field.required = true;
+
+  if (type === 'enum') {
+    if (!Array.isArray(def.values) || !def.values.length) return fail(400, `Enum field ${label} needs a values list`);
+    if (def.values.length > MAX_SCHEMA_ENUM_VALUES) {
+      return fail(400, `Enum field ${label} can have at most ${MAX_SCHEMA_ENUM_VALUES} values`);
+    }
+    const values: string[] = [];
+    for (const value of def.values) {
+      if (typeof value !== 'string') return fail(400, `Enum field ${label} values must be strings`);
+      // collapse inner whitespace: values are dropdown labels, and the builder
+      // round-trips them one-per-line, so embedded newlines can never survive
+      const trimmed = value.replace(/\s+/g, ' ').trim().slice(0, MAX_SCHEMA_ENUM_VALUE_CHARS);
+      if (trimmed && !values.includes(trimmed)) values.push(trimmed);
+    }
+    if (!values.length) return fail(400, `Enum field ${label} needs a values list`);
+    field.values = values;
+  }
+
+  if (type === 'number') {
+    const min = Number(def.min);
+    const max = Number(def.max);
+    if (def.min !== undefined && def.min !== null) {
+      if (!Number.isFinite(min)) return fail(400, `Field ${label} min must be a number`);
+      field.min = min;
+    }
+    if (def.max !== undefined && def.max !== null) {
+      if (!Number.isFinite(max)) return fail(400, `Field ${label} max must be a number`);
+      field.max = max;
+    }
+    if (field.min !== undefined && field.max !== undefined && field.min > field.max) {
+      return fail(400, `Field ${label} min can’t exceed its max`);
+    }
+    if (typeof def.unit === 'string' && def.unit.trim()) {
+      field.unit = def.unit.trim().slice(0, MAX_SCHEMA_UNIT_CHARS);
+    }
+  }
+
+  if (type === 'string' || type === 'string[]') {
+    const maxLength = sanitizeCountConstraint(def.maxLength, `Field ${label} maxLength`, MAX_TEXT_CHARS);
+    if (isFail(maxLength)) return maxLength;
+    if (maxLength.value !== null && maxLength.value > 0) field.maxLength = maxLength.value;
+  }
+
+  if (type === 'string[]' || type === 'array') {
+    const minItems = sanitizeCountConstraint(def.minItems, `Field ${label} minItems`, MAX_DATA_ARRAY_ITEMS);
+    if (isFail(minItems)) return minItems;
+    const maxItems = sanitizeCountConstraint(def.maxItems, `Field ${label} maxItems`, MAX_DATA_ARRAY_ITEMS);
+    if (isFail(maxItems)) return maxItems;
+    if (minItems.value !== null) field.minItems = minItems.value;
+    if (maxItems.value !== null) field.maxItems = maxItems.value;
+    if (field.minItems !== undefined && field.maxItems !== undefined && field.minItems > field.maxItems) {
+      return fail(400, `Field ${label} minItems can’t exceed its maxItems`);
+    }
+  }
+
+  if (type === 'object') {
+    const children = sanitizeSchemaFieldList(def.children, depth + 1, counter, `${label}.children`);
+    if (isFail(children)) return children;
+    field.children = children.fields;
+  }
+
+  if (type === 'array') {
+    if (!def.items || typeof def.items !== 'object' || Array.isArray(def.items)) {
+      return fail(400, `Array field ${label} needs an items spec ({ type, ... })`);
+    }
+    const items = sanitizeSchemaField(def.items, depth + 1, counter, false, `${label}.items`);
+    if (isFail(items)) return items;
+    field.items = items.field as SchemaItemSpec;
+  }
+
+  return { ok: true, field };
+};
+
+// A sibling list: bounded, recursive, duplicate names rejected case-insensitively
+const sanitizeSchemaFieldList = (
+  raw: unknown,
+  depth: number,
+  counter: { nodes: number },
+  path: string
+): { ok: true; fields: SchemaThingField[] } | Fail => {
+  if (!Array.isArray(raw)) return fail(400, `Schema fields must be a list (${path})`);
+  const fields: SchemaThingField[] = [];
+  const seen = new Set<string>();
+  for (const entry of raw) {
+    const sanitized = sanitizeSchemaField(entry, depth, counter, true, path);
+    if (isFail(sanitized)) return sanitized;
+    const key = sanitized.field.name.toLowerCase();
+    // fail loudly (module convention) — silently dropping a duplicate would
+    // lose a user's field definition with a 200
+    if (seen.has(key)) return fail(400, `Duplicate schema field name: ${sanitized.field.name} (${path})`);
+    seen.add(key);
+    fields.push(sanitized.field);
+  }
+  if (!fields.length) return fail(400, `Schemas need at least one field (${path})`);
+  return { ok: true, fields };
+};
 
 const sanitizeSchemaCrystal = (input: Record<string, unknown>): { ok: true; crystal: Record<string, unknown> } | Fail => {
   const name = typeof input.name === 'string' ? input.name.trim() : '';
@@ -796,72 +1213,197 @@ const sanitizeSchemaCrystal = (input: Record<string, unknown>): { ok: true; crys
 
   const description = typeof input.description === 'string' ? input.description.trim().slice(0, MAX_SCHEMA_DESCRIPTION_CHARS) : '';
 
-  if (!Array.isArray(input.fields)) return fail(400, 'Schema fields must be a list');
-  if (input.fields.length > MAX_SCHEMA_FIELDS) return fail(400, `A schema can have at most ${MAX_SCHEMA_FIELDS} fields`);
+  const sanitized = sanitizeSchemaFieldList(input.fields, 1, { nodes: 0 }, 'fields');
+  if (isFail(sanitized)) return sanitized;
 
-  const fields: SchemaThingField[] = [];
-  const seen = new Set<string>();
-  for (const raw of input.fields) {
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return fail(400, 'Each schema field must be an object');
-    const def = raw as Record<string, unknown>;
+  const crystal: Record<string, unknown> = { name, description, fields: sanitized.fields };
 
-    const fieldName = typeof def.name === 'string' ? def.name.trim() : '';
-    if (!fieldName || fieldName.length > MAX_SCHEMA_FIELD_NAME_CHARS || !SCHEMA_FIELD_NAME_PATTERN.test(fieldName)) {
-      return fail(400, `Schema field names are letters/numbers/_/- with optional dots (got ${String(def.name).slice(0, 80)})`);
-    }
-    const key = fieldName.toLowerCase();
-    // fail loudly (module convention) — silently dropping a duplicate would
-    // lose a user's field definition with a 200
-    if (seen.has(key)) return fail(400, `Duplicate schema field name: ${fieldName}`);
-    seen.add(key);
-
-    const type = SCHEMA_FIELD_TYPES.includes(def.type as any) ? (def.type as SchemaFieldType) : null;
-    if (!type) return fail(400, `Schema field types are ${SCHEMA_FIELD_TYPES.join(', ')}`);
-
-    const field: SchemaThingField = { name: fieldName, type };
-
-    const fieldDescription = typeof def.description === 'string' ? def.description.trim() : '';
-    if (fieldDescription) field.description = fieldDescription.slice(0, MAX_SCHEMA_FIELD_DESCRIPTION_CHARS);
-
-    if (type === 'enum') {
-      if (!Array.isArray(def.values) || !def.values.length) return fail(400, `Enum field ${fieldName} needs a values list`);
-      if (def.values.length > MAX_SCHEMA_ENUM_VALUES) {
-        return fail(400, `Enum field ${fieldName} can have at most ${MAX_SCHEMA_ENUM_VALUES} values`);
-      }
-      const values: string[] = [];
-      for (const value of def.values) {
-        if (typeof value !== 'string') return fail(400, `Enum field ${fieldName} values must be strings`);
-        const trimmed = value.trim().slice(0, MAX_SCHEMA_ENUM_VALUE_CHARS);
-        if (trimmed && !values.includes(trimmed)) values.push(trimmed);
-      }
-      if (!values.length) return fail(400, `Enum field ${fieldName} needs a values list`);
-      field.values = values;
-    }
-
-    if (type === 'number') {
-      const min = Number(def.min);
-      const max = Number(def.max);
-      if (def.min !== undefined && def.min !== null) {
-        if (!Number.isFinite(min)) return fail(400, `Field ${fieldName} min must be a number`);
-        field.min = min;
-      }
-      if (def.max !== undefined && def.max !== null) {
-        if (!Number.isFinite(max)) return fail(400, `Field ${fieldName} max must be a number`);
-        field.max = max;
-      }
-      if (field.min !== undefined && field.max !== undefined && field.min > field.max) {
-        return fail(400, `Field ${fieldName} min can’t exceed its max`);
-      }
-      if (typeof def.unit === 'string' && def.unit.trim()) {
-        field.unit = def.unit.trim().slice(0, MAX_SCHEMA_UNIT_CHARS);
-      }
-    }
-
-    fields.push(field);
+  // fork provenance: a bare thing id, never resolved or trusted on write
+  if (input.forkOf !== undefined && input.forkOf !== null && input.forkOf !== '') {
+    const forkOf = typeof input.forkOf === 'string' ? input.forkOf.trim() : '';
+    if (!forkOf || forkOf.length > 128 || /[$\s]/.test(forkOf)) return fail(400, 'forkOf must be a thing id');
+    crystal.forkOf = forkOf;
   }
-  if (!fields.length) return fail(400, 'Schemas need at least one field');
 
-  return { ok: true, crystal: { name, description, fields } };
+  return { ok: true, crystal };
+};
+
+// ---------------------------------------------------------------------------
+// Value validation against a schema-thing field tree. Pure and shared: the
+// schema builder previews with it, the create-a-thing form validates with it.
+// It is a HELPER, never a write gate — schemas stay discovery/search sugar
+// (things are validated by their thingtime crystal sanitizers, not by
+// user-published schemas).
+
+export type SchemaValueIssue = { path: string; message: string };
+
+const valueAtPath = (value: Record<string, unknown>, path: string[]): unknown => {
+  let current: unknown = value;
+  for (const segment of path) {
+    if (!current || typeof current !== 'object' || Array.isArray(current)) return undefined;
+    current = (current as Record<string, unknown>)[segment];
+  }
+  return current;
+};
+
+const checkSchemaValue = (
+  field: SchemaThingField | (SchemaItemSpec & { name?: string }),
+  value: unknown,
+  path: string,
+  issues: SchemaValueIssue[]
+): void => {
+  const missing = value === undefined || value === null || value === '';
+  if (missing) {
+    if ((field as SchemaThingField).required) issues.push({ path, message: 'required' });
+    return;
+  }
+  switch (field.type) {
+    case 'string':
+      if (typeof value !== 'string') issues.push({ path, message: 'must be text' });
+      else if (field.maxLength && value.length > field.maxLength) {
+        issues.push({ path, message: `caps at ${field.maxLength} characters` });
+      }
+      return;
+    case 'number': {
+      const num = typeof value === 'number' ? value : Number(value);
+      if (typeof value !== 'number' || !Number.isFinite(num)) issues.push({ path, message: 'must be a number' });
+      else {
+        if (field.min !== undefined && num < field.min) issues.push({ path, message: `min ${field.min}` });
+        if (field.max !== undefined && num > field.max) issues.push({ path, message: `max ${field.max}` });
+      }
+      return;
+    }
+    case 'boolean':
+      if (typeof value !== 'boolean') issues.push({ path, message: 'must be true or false' });
+      return;
+    case 'date': {
+      const date = value instanceof Date ? value : new Date(String(value));
+      if (Number.isNaN(date.getTime())) issues.push({ path, message: 'must be a date' });
+      return;
+    }
+    case 'enum':
+      if (typeof value !== 'string' || !(field.values || []).includes(value)) {
+        issues.push({ path, message: `one of: ${(field.values || []).join(', ')}` });
+      }
+      return;
+    case 'string[]': {
+      if (!Array.isArray(value)) {
+        issues.push({ path, message: 'must be a list of text values' });
+        return;
+      }
+      if (field.minItems !== undefined && value.length < field.minItems) {
+        issues.push({ path, message: `needs at least ${field.minItems} entries` });
+      }
+      if (field.maxItems !== undefined && value.length > field.maxItems) {
+        issues.push({ path, message: `caps at ${field.maxItems} entries` });
+      }
+      value.forEach((entry, index) => {
+        if (typeof entry !== 'string') issues.push({ path: `${path}[${index}]`, message: 'must be text' });
+        else if (field.maxLength && entry.length > field.maxLength) {
+          issues.push({ path: `${path}[${index}]`, message: `caps at ${field.maxLength} characters` });
+        }
+      });
+      return;
+    }
+    case 'object': {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        issues.push({ path, message: 'must be an object' });
+        return;
+      }
+      for (const child of field.children || []) {
+        const childValue = valueAtPath(value as Record<string, unknown>, child.name.split('.'));
+        checkSchemaValue(child, childValue, `${path}.${child.name}`, issues);
+      }
+      return;
+    }
+    case 'array': {
+      if (!Array.isArray(value)) {
+        issues.push({ path, message: 'must be a list' });
+        return;
+      }
+      if (field.minItems !== undefined && value.length < field.minItems) {
+        issues.push({ path, message: `needs at least ${field.minItems} entries` });
+      }
+      if (field.maxItems !== undefined && value.length > field.maxItems) {
+        issues.push({ path, message: `caps at ${field.maxItems} entries` });
+      }
+      if (field.items) {
+        value.forEach((entry, index) => checkSchemaValue(field.items!, entry, `${path}[${index}]`, issues));
+      }
+      return;
+    }
+  }
+};
+
+export const validateValueAgainstFields = (
+  fields: SchemaThingField[],
+  value: Record<string, unknown>
+): { ok: boolean; issues: SchemaValueIssue[] } => {
+  const issues: SchemaValueIssue[] = [];
+  const input = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  for (const field of fields || []) {
+    checkSchemaValue(field, valueAtPath(input, field.name.split('.')), field.name, issues);
+  }
+  return { ok: !issues.length, issues };
+};
+
+// System-kind sanitizers: deep validation lives in each kind's dedicated
+// utils (register/profile/themes/algorithms/waitlist) — these enforce the
+// structural bounds so no write path can bypass them.
+export const MAX_USERNAME_CHARS = 60;
+export const MAX_DISPLAY_NAME_CHARS = 80;
+export const MAX_BIO_CHARS = 500;
+export const MAX_PROFILE_URL_CHARS = 64 * 1024;
+
+const boundedString = (value: unknown, max: number): string | null =>
+  typeof value === 'string' && value.trim() ? value.trim().slice(0, max) : null;
+
+const sanitizeUserCrystal = (input: Record<string, unknown>): { ok: true; crystal: Record<string, unknown> } | Fail => {
+  const username = boundedString(input.username, MAX_USERNAME_CHARS)?.toLowerCase();
+  if (!username) return fail(400, 'User things need a username');
+  return {
+    ok: true,
+    crystal: {
+      username,
+      ttid: boundedString(input.ttid, MAX_USERNAME_CHARS) || username,
+      displayName: boundedString(input.displayName, MAX_DISPLAY_NAME_CHARS),
+      bio: boundedString(input.bio, MAX_BIO_CHARS),
+      avatarUrl: boundedString(input.avatarUrl, MAX_PROFILE_URL_CHARS),
+      bannerUrl: boundedString(input.bannerUrl, MAX_PROFILE_URL_CHARS)
+    }
+  };
+};
+
+const sanitizeThemeCrystal = (input: Record<string, unknown>): { ok: true; crystal: Record<string, unknown> } | Fail => {
+  const name = boundedString(input.name, 60);
+  if (!name) return fail(400, 'Themes need a name');
+  if (!input.theme || typeof input.theme !== 'object' || Array.isArray(input.theme)) {
+    return fail(400, 'Themes need a theme token object');
+  }
+  return { ok: true, crystal: { name, theme: input.theme } };
+};
+
+const sanitizeFeedAlgorithmCrystal = (
+  input: Record<string, unknown>
+): { ok: true; crystal: Record<string, unknown> } | Fail => {
+  const name = boundedString(input.name, 60);
+  if (!name) return fail(400, 'Algorithms need a name');
+  const emoji = boundedString(input.emoji, 16) || '🧠';
+  if (!input.weights || typeof input.weights !== 'object' || Array.isArray(input.weights)) {
+    return fail(400, 'Algorithms need a weights object');
+  }
+  const eventCount = Number(input.eventCount);
+  return {
+    ok: true,
+    crystal: {
+      name,
+      emoji,
+      parentId: boundedString(input.parentId, 128),
+      weights: input.weights,
+      eventCount: Number.isFinite(eventCount) && eventCount >= 0 ? Math.floor(eventCount) : 0,
+      lastTrainedAt: boundedString(input.lastTrainedAt, 40)
+    }
+  };
 };
 
 const crystalSanitizers: Record<
@@ -872,8 +1414,13 @@ const crystalSanitizers: Record<
   comment: sanitizeCommentCrystal,
   reaction: sanitizeReactionCrystal,
   share: () => ({ ok: true, crystal: {} }),
+  save: () => ({ ok: true, crystal: {} }),
   schema: sanitizeSchemaCrystal,
-  data: sanitizeDataCrystal
+  data: sanitizeDataCrystal,
+  user: sanitizeUserCrystal,
+  theme: sanitizeThemeCrystal,
+  'feed-algorithm': sanitizeFeedAlgorithmCrystal,
+  waitlist: () => ({ ok: true, crystal: {} })
 };
 
 export type ValidatedCrystal = { ok: true; thingtime: string[]; crystal: Record<string, unknown>; requiresTarget: boolean };
@@ -881,9 +1428,19 @@ export type ValidatedCrystal = { ok: true; thingtime: string[]; crystal: Record<
 // Validates a thingtime schema-id list + raw crystal payload. The sanitized
 // crystal is the union of each schema's sanitized fields — later schemas never
 // clobber earlier ones' keys with undefined.
+//
+// Crystals are optionally schema-less: omitting thingtime (or passing an empty
+// list) defaults to ['data'], so a bare { crystal: {...} } behaves like an
+// extended-style free-form field bag — bounded arbitrary JSON, searchable on
+// /search — without declaring any schema. Storage always carries the resolved
+// non-empty thingtime; schema-lessness is an input convenience, never a stored
+// state.
 export const validateThingtimeCrystal = (thingtime: unknown, crystal: unknown): ValidatedCrystal | Fail => {
-  if (!Array.isArray(thingtime) || !thingtime.length) {
-    return fail(400, 'thingtime must be a non-empty list of schema ids');
+  if (thingtime === undefined || thingtime === null || (Array.isArray(thingtime) && !thingtime.length)) {
+    thingtime = ['data'];
+  }
+  if (!Array.isArray(thingtime)) {
+    return fail(400, 'thingtime must be a list of schema ids (or omitted for a schema-less data thing)');
   }
   const ids: string[] = [];
   for (const entry of thingtime) {

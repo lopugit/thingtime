@@ -7,6 +7,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 **Author legend** — every entry is attributed:
 
 - **Codex (AI)** — change made by the Codex AI assistant.
+- **Claude (AI)** — change made by the Claude AI assistant.
 - **Lopu** — change made manually by the developer.
 
 > When you make a manual change, add a bullet under `[Unreleased]` ending with
@@ -16,8 +17,45 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Changed
+
+- **Everything is a thing, for real now**: users, themes, feed algorithms, and
+  waitlist entries are stored in the `things` collection as protected system
+  kinds (`user`/`theme`/`feed-algorithm`/`waitlist`, plus seeded `schema`
+  things for every builtin kind). Public payloads live in `crystal`; secrets
+  (emails, password hashes) are BinData under the root `secure` field so the
+  search text index can never tokenize them; uniqueness rides BinData
+  `uniqueKeys` (PII hashed). Reads are dual-era (things first, frozen legacy
+  collections as fallback) and admin migrations under `/api/v1/admin/migrations`
+  convert each legacy collection idempotently. Legacy ids are preserved as
+  thing shareIds so sessions, rosters, ownerId joins, share links, and active
+  theme/algorithm pointers keep working unchanged. FUNDAMENTALS §3 rewritten.
+  Details in claude-todo/12-everything-is-a-thing-collections.md.
+  — Claude (AI), 2026-07-12
+
 ### Added
 
+- Extensible data: every `things` doc now carries a schema-free top-level
+  `extended` property — any JSON up to 512KB, stored and returned exactly as
+  given, never validated, structured-searchable, or interpreted;
+  replace-on-write (`null` clears), threaded through create/upsert/patch and
+  both public projections, with one reserved key (`tt:textLanguage`, the text
+  index's language override). Crystals are now optionally schema-less too:
+  omitting `thingtime` on create defaults to `["data"]`, so a bare
+  `{ crystal: {…} }` behaves like an extended-style field bag while staying
+  /search-able. — Claude (AI), 2026-07-12
+- Ported the stranded PR #52/#35 email + auth work onto the unified data
+  model: the owned email layer (`api/utils/email/` — outbox `email_messages`
+  rows for every send, suppression/unsubscribe checks, SES or console
+  delivery, `GET /api/v1/email/config`, dev/preview `POST /api/v1/email/test-otp`),
+  password reset (`POST /api/v1/auth/password-reset` + `/confirm` — probe-proof
+  neutral responses, single-use 1h tokens, revoke-all-sessions on rotation,
+  per-IP `auth.passwordReset` rate limit, `/reset-password` page), and opt-in
+  email 2FA (`GET/POST /api/v1/auth/two-factor`, two-step
+  `POST /api/v1/login { challenge, code }` with hashed attempt-capped OTPs in
+  `authOtps`, per-IP `auth.login` rate limit, Settings → Security toggle, login
+  form code step). Also ports the `/verify-email` landing page the emailed
+  verification links point at. — Claude (AI), 2026-07-12
 - `/search` page + `POST/GET /api/v1/things/search`: a Commander-style search
   over every visible thing — whitelisted MongoDB operator grammar (nested
   all/any groups, bounded primitives only, escaped-literal text ops), ranked
@@ -27,6 +65,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Details in
   [PRs/63](../PRs/63-claude-search-page-mongodb-query-154eb4--search-page-query-builder-ranked-text-search-by-schema.md).
   — Claude (AI), 2026-07-12
+- Replaced the unfinished `/raw` MongoDB dump with an admin-only no-code Query
+  Workbench: nested filters, typed BSON values, projections, sorting, bounded
+  find/count/distinct/index/stats tools, read-only aggregation pipelines,
+  execution plans, cancellation, request previews, and JSON/table/CSV results.
+  Server-side allowlists, complexity/time/response caps, protected-field probe
+  prevention and redaction, blocked write/server-JavaScript stages, and
+  fail-closed rate limiting keep the tool read-only and bounded. Details in
+  [`PRs/64-codex-mongodb-query-builder--add-no-code-mongodb-query-workbench.md`](../PRs/64-codex-mongodb-query-builder--add-no-code-mongodb-query-workbench.md).
+  — _Codex (AI), 2026-07-12_
+
 - Unified the data model so posts, comments, reactions, and shares are all one
   root **Thing** shape: sub-schemas apply through the `thingtime` array of
   schema ids, payloads live under `crystal`, and every doc in every collection
@@ -216,6 +264,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   _Codex (AI), 2026-07-07_
 
 ### Fixed
+
+- Login and registration now return standalone users to the last page they
+  visited before entering auth, including query strings and hashes. The
+  session-scoped destination is consumed only after success, auth/API/external
+  targets are rejected, direct auth visits keep the existing `/` and
+  `/welcome` fallbacks, and embedded account switching remains in place.
+  Details in
+  [`PRs/64-codex-mongodb-query-builder--add-no-code-mongodb-query-workbench.md`](../PRs/64-codex-mongodb-query-builder--add-no-code-mongodb-query-workbench.md).
+  — _Codex (AI), 2026-07-12_
 
 - Fixed Editor.js autosave echoes remounting the active editor and stealing
   focus after the asynchronous save/parent echo. Changed parent values now

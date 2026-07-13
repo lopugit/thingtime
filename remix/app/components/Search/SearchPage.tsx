@@ -5,28 +5,34 @@ import {
   Button,
   Center,
   Flex,
+  IconButton,
   Input,
   Select,
   Text
 } from '@chakra-ui/react';
-import { Plus, Search as SearchIcon, Sparkles } from 'lucide-react';
+import { Plus, Search as SearchIcon, Sparkles, X } from 'lucide-react';
 import { Link as RouterLink, useLocation, useNavigate } from 'react-router';
 
 import { Rainbow } from '~/components/Rainbow/Rainbow';
 import { useLopu } from '~/components/Lopu/useLopu';
+import { SEARCHABLE_CRYSTAL_KINDS } from '~/components/Schemas/schemaBrowseTypes';
 import { useApi } from '~/hooks/useApi';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
-import { thingtimeSchemas } from '~/schemas/registry';
+import { thingtimeSchemas, type SchemaThingField } from '~/schemas/registry';
+import { flattenSchemaFields } from '~/schemas/tools';
 import { CARD_STYLES } from '~/theme/card';
 import {
-  ConditionRowsEditor,
+  DATATYPES,
+  OPERATORS,
   ROOT_FIELD_SUGGESTIONS,
   compileRows,
   invalidNumberField,
-  newRow
+  newRow,
+  opKind
 } from './searchBuilder';
 import type {
   ConditionRow,
+  RowValueType,
   SchemaSource,
   SearchPerson,
   SearchPost,
@@ -75,9 +81,20 @@ const SEARCHABLE_FIELD_NAME = /^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$/;
 const searchableField = (field: { name: string; type: string }) =>
   SEARCHABLE_FIELD_NAME.test(field.name) && field.type !== 'object' && field.type !== 'record';
 
+// display labels for the kind <Select>, rendered from SEARCHABLE_CRYSTAL_KINDS
+// so the dropdown, the builtin schema chips, and /schemas' "Search things"
+// gating can never drift apart
+const KIND_OPTION_LABELS: Record<string, string> = {
+  post: 'posts',
+  data: 'data',
+  schema: 'schemas',
+  comment: 'comments',
+  reaction: 'reactions'
+};
+
 const builtinSchemaSources = (): SchemaSource[] =>
   thingtimeSchemas
-    .filter((schema) => schema.kind === 'crystal')
+    .filter((schema) => schema.kind === 'crystal' && SEARCHABLE_CRYSTAL_KINDS.has(schema.id))
     .map((schema) => ({
       key: `builtin-${schema.id}`,
       name: schema.title,
@@ -96,26 +113,48 @@ const builtinSchemaSources = (): SchemaSource[] =>
         }))
     }));
 
-const schemaThingToSource = (thing: SearchThing): SchemaSource | null => {
+// The seed-builtin-schemas admin migration mirrors every builtin crystal
+// schema into things as a system-owned schema thing (shareId schema-<id>,
+// author resolves to null). The browser already lists builtins from the code
+// registry, so those mirrors are dropped from the community column — without
+// this they'd render twice.
+const seededBuiltinShareIds = new Set(
+  thingtimeSchemas.filter((schema) => schema.kind === 'crystal').map((schema) => `schema-${schema.id}`)
+);
+
+// A schema thing (or browse entry) → a SchemaSource. Nested object/array
+// fields flatten to the dotted crystal paths the search grammar addresses.
+const schemaThingToSource = (
+  thing: Pick<SearchThing, 'id' | 'crystal' | 'author'> & {
+    usageCount?: number;
+    reactionCounts?: Record<string, number>;
+  }
+): SchemaSource | null => {
+  if (seededBuiltinShareIds.has(thing.id) && !thing.author) return null;
   const crystal = thing.crystal || {};
-  const fields = Array.isArray(crystal.fields) ? crystal.fields : [];
+  const fields = Array.isArray(crystal.fields) ? (crystal.fields as SchemaThingField[]) : [];
   if (typeof crystal.name !== 'string' || !fields.length) return null;
+  const reactions = Object.values(thing.reactionCounts || {}).reduce((sum, count) => sum + (count || 0), 0);
   return {
     key: `thing-${thing.id}`,
     name: crystal.name,
     description: typeof crystal.description === 'string' ? crystal.description : '',
     origin: 'community',
     author: thing.author?.username || null,
-    fields: fields
-      .filter((field: any) => field && typeof field.name === 'string' && field.name)
-      .map((field: any) => ({
-        name: field.name,
-        type: typeof field.type === 'string' ? field.type : 'string',
-        description: typeof field.description === 'string' ? field.description : undefined,
-        values: Array.isArray(field.values) ? field.values.filter((v: any) => typeof v === 'string') : undefined,
-        min: Number.isFinite(field.min) ? field.min : undefined,
-        max: Number.isFinite(field.max) ? field.max : undefined,
-        unit: typeof field.unit === 'string' ? field.unit : undefined
+    shareId: thing.id,
+    usageCount: typeof thing.usageCount === 'number' ? thing.usageCount : undefined,
+    reactions: reactions || undefined,
+    fields: flattenSchemaFields(fields)
+      .filter((flat) => SEARCHABLE_FIELD_NAME.test(flat.path))
+      .map((flat) => ({
+        name: flat.path,
+        type: typeof flat.field.type === 'string' ? flat.field.type : 'string',
+        description: typeof flat.field.description === 'string' ? flat.field.description : undefined,
+        values: Array.isArray(flat.field.values) ? flat.field.values.filter((v: any) => typeof v === 'string') : undefined,
+        min: Number.isFinite(flat.field.min) ? flat.field.min : undefined,
+        max: Number.isFinite(flat.field.max) ? flat.field.max : undefined,
+        unit: typeof flat.field.unit === 'string' ? flat.field.unit : undefined,
+        maxLength: Number.isFinite(flat.field.maxLength) ? flat.field.maxLength : undefined
       }))
   };
 };
@@ -190,7 +229,11 @@ const previewValue = (value: unknown): string => {
 };
 
 function CrystalPreview({ crystal }: { crystal: Record<string, any> }) {
-  const entries = Object.entries(crystal || {}).filter(([, value]) => value !== '' && value !== undefined);
+  // schemaId is internal provenance (the schema thing's shareId) — the
+  // human-readable `schema` chip already conveys the shape
+  const entries = Object.entries(crystal || {}).filter(
+    ([key, value]) => key !== 'schemaId' && value !== '' && value !== undefined
+  );
   if (!entries.length) {
     return (
       <Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="xs">
@@ -304,6 +347,16 @@ export const SearchPage = () => {
   const [schemasOpen, setSchemasOpen] = React.useState(false);
   const [communitySchemas, setCommunitySchemas] = React.useState<SchemaSource[]>([]);
   const [activeSchema, setActiveSchema] = React.useState<string | null>(null);
+  // the id of the shape-scope row applySchema pins for community schemas —
+  // only THAT row renders as the locked chip (a hand-typed `schema eq X`
+  // row stays an ordinary editable row)
+  const [pinnedRowId, setPinnedRowId] = React.useState<string | null>(null);
+  // schema rail browsing — same paginated system as /schemas (top/recent/popular)
+  const [schemaQ, setSchemaQ] = React.useState('');
+  const [schemaSort, setSchemaSort] = React.useState<'newest' | 'popular'>('newest');
+  const [schemaCursor, setSchemaCursor] = React.useState<string | null>(null);
+  const [schemasLoading, setSchemasLoading] = React.useState(false);
+  const schemasLoadedRef = React.useRef(false);
 
   const requestSeqRef = React.useRef(0);
   const apiRef = React.useRef(api);
@@ -410,8 +463,12 @@ export const SearchPage = () => {
   );
 
   // first mount: refetch whatever the page painted from cache (or run the
-  // URL's ?q= / an empty browse-recent search) — optimistic render, live data
+  // URL's ?q= / an empty browse-recent search) — optimistic render, live data.
+  // With a ?schema deep link the schema effect owns the first search instead:
+  // running both races them, and the winner's replace-navigate strips ?schema
+  // out from under the loser's cancellable resolution.
   React.useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('schema')) return;
     runSearch();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -433,6 +490,7 @@ export const SearchPage = () => {
     setSort('auto');
     setMode('all');
     setActiveSchema(null);
+    setPinnedRowId(null);
     setPendingUrlSearch(true);
   }, [urlQ]);
   React.useEffect(() => {
@@ -442,31 +500,48 @@ export const SearchPage = () => {
     runSearch();
   }, [pendingUrlSearch, runSearch]);
 
-  // community schemas load lazily when the browser opens
+  // community schemas ride the paginated /api/v1/schemas/browse rail —
+  // newest/popular sorts, text search, cursor pagination (same system as
+  // /schemas). Loading is lazy (first open) and failures stay non-fatal.
+  const schemaRailRef = React.useRef({ schemaQ, schemaSort });
+  schemaRailRef.current = { schemaQ, schemaSort };
+  const schemaSeqRef = React.useRef(0);
+  const loadSchemas = React.useCallback(async (options: { cursor?: string | null } = {}) => {
+    const seq = ++schemaSeqRef.current;
+    const { cursor } = options;
+    setSchemasLoading(true);
+    try {
+      const rail = schemaRailRef.current;
+      const resp: any = await apiRef.current.v1.schemas.browse({
+        q: rail.schemaQ.trim() || undefined,
+        sort: rail.schemaSort,
+        cursor: cursor || undefined,
+        limit: 12
+      });
+      if (seq !== schemaSeqRef.current || !resp?.ok) return;
+      // only a SUCCESSFUL first load marks the rail as loaded — a failed or
+      // rate-limited first fetch must retry when the rail is next opened
+      schemasLoadedRef.current = true;
+      const sources = (resp.schemas || [])
+        .map(schemaThingToSource)
+        .filter((source: SchemaSource | null): source is SchemaSource => !!source);
+      setCommunitySchemas((prev) => {
+        if (!cursor) return sources;
+        const seen = new Set(prev.map((source) => source.key));
+        return [...prev, ...sources.filter((source: SchemaSource) => !seen.has(source.key))];
+      });
+      setSchemaCursor(resp.nextCursor ?? null);
+    } catch {
+      // schema browsing is sugar — the builder still works without it
+    } finally {
+      if (seq === schemaSeqRef.current) setSchemasLoading(false);
+    }
+  }, []);
+
   React.useEffect(() => {
-    if (!schemasOpen || communitySchemas.length) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const resp = (await apiRef.current.v1.things.search({
-          thingtime: 'schema',
-          sort: 'newest',
-          limit: 50
-        })) as SearchResponse;
-        if (cancelled) return;
-        setCommunitySchemas(
-          (resp.things || [])
-            .map(schemaThingToSource)
-            .filter((source): source is SchemaSource => !!source)
-        );
-      } catch {
-        // schema browsing is sugar — the builder still works without it
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [schemasOpen, communitySchemas.length]);
+    if (!schemasOpen || schemasLoadedRef.current) return;
+    loadSchemas();
+  }, [schemasOpen, loadSchemas]);
 
   const schemaSources = React.useMemo(
     () => [...communitySchemas, ...builtinSchemaSources()],
@@ -477,13 +552,80 @@ export const SearchPage = () => {
     setActiveSchema(source.key);
     const prefilled = source.fields.map((field) => rowFromSchemaField(field));
     // community data things carry `schema: "<Name>"` by convention — pin that
-    // condition first so the prefilled search actually scopes to the shape
+    // condition first so the prefilled search actually scopes to the shape;
+    // builtin schemas scope by their thingtime kind instead
     if (source.origin === 'community') {
-      prefilled.unshift(newRow({ field: 'schema', op: 'eq', value: source.name, valueType: 'text' }));
+      const pinned = newRow({ field: 'schema', op: 'eq', value: source.name, valueType: 'text' });
+      prefilled.unshift(pinned);
+      setPinnedRowId(pinned.id);
+      setKind('data');
+    } else {
+      // never force a kind the <Select> doesn't offer — a stuck hidden filter
+      // would show "any kind" while secretly scoping (or zeroing) the search
+      const builtinKind = source.key.replace(/^builtin-/, '');
+      setPinnedRowId(null);
+      setKind(SEARCHABLE_CRYSTAL_KINDS.has(builtinKind) ? builtinKind : '');
     }
     setRows(prefilled);
     setMode('all');
   }, []);
+
+  // /schemas deep-links here with ?schema=<shareId | builtin:id> — resolve the
+  // shape, prefill the refinement form, and run the scoped search.
+  const urlSchema = React.useMemo(
+    () => new URLSearchParams(location.search).get('schema') || '',
+    [location.search]
+  );
+  const appliedUrlSchemaRef = React.useRef<string | null>(null);
+  // render-synced mirror of the CURRENT ?schema — lets an in-flight
+  // resolution detect that the user navigated away (urlSchema changed or
+  // emptied) and drop its result instead of clobbering the newer search
+  const currentUrlSchemaRef = React.useRef(urlSchema);
+  currentUrlSchemaRef.current = urlSchema;
+  React.useEffect(() => {
+    if (!urlSchema || appliedUrlSchemaRef.current === urlSchema) return;
+    appliedUrlSchemaRef.current = urlSchema;
+    // NO cancel-on-cleanup here: StrictMode's simulated unmount (and our own
+    // post-search replace-navigate stripping ?schema) would cancel the only
+    // resolution in flight — the ref already dedupes re-runs, and staleness
+    // is checked against currentUrlSchemaRef when the async result lands
+    (async () => {
+      let source: SchemaSource | null = null;
+      if (urlSchema.startsWith('builtin:')) {
+        const id = urlSchema.slice('builtin:'.length);
+        source = builtinSchemaSources().find((builtin) => builtin.key === `builtin-${id}`) || null;
+      } else {
+        try {
+          const resp: any = await apiRef.current.v1.things.get({ id: urlSchema });
+          if (resp?.ok && resp.thing) source = schemaThingToSource(resp.thing);
+        } catch {
+          // unknown/invisible schema — fall through to the plain page
+        }
+      }
+      // the user navigated away (or a different ?schema took over) while we
+      // resolved — the newer page state owns the search now
+      if (appliedUrlSchemaRef.current !== urlSchema || currentUrlSchemaRef.current !== urlSchema) return;
+      if (!source) {
+        lopuRef.current({ title: 'That schema isn’t visible from here 🥲', status: 'info', duration: 6000 });
+        // the mount search deferred to us — still paint results, and let a
+        // revisit of the same link retry the resolution
+        appliedUrlSchemaRef.current = null;
+        setPendingUrlSearch(true);
+        return;
+      }
+      // make sure the resolved shape has a chip in the rail even before the
+      // rail's own page loads (reset loads may replace it — that's fine)
+      if (source.origin === 'community') {
+        const resolved = source;
+        setCommunitySchemas((prev) => (prev.some((existing) => existing.key === resolved.key) ? prev : [resolved, ...prev]));
+      }
+      setQ('');
+      setSort('auto');
+      setSchemasOpen(true);
+      applySchema(source);
+      setPendingUrlSearch(true);
+    })();
+  }, [urlSchema, applySchema]);
 
   const updateRow = React.useCallback((id: string, patch: Partial<ConditionRow>) => {
     setRows((prev) => prev.map((row) => (row.id === id ? { ...row, ...patch } : row)));
@@ -493,12 +635,15 @@ export const SearchPage = () => {
     setRows((prev) => prev.filter((row) => row.id !== id));
   }, []);
 
+  const activeSchemaSource = React.useMemo(
+    () => (activeSchema ? schemaSources.find((source) => source.key === activeSchema) || null : null),
+    [activeSchema, schemaSources]
+  );
+
   const fieldSuggestions = React.useMemo(() => {
-    const fromSchema = activeSchema
-      ? schemaSources.find((source) => source.key === activeSchema)?.fields.map((field) => field.name) || []
-      : [];
+    const fromSchema = activeSchemaSource?.fields.map((field) => field.name) || [];
     return [...new Set([...fromSchema, ...ROOT_FIELD_SUGGESTIONS])];
-  }, [activeSchema, schemaSources]);
+  }, [activeSchemaSource]);
 
   const submit = React.useCallback(
     (event?: React.FormEvent) => {
@@ -591,11 +736,11 @@ export const SearchPage = () => {
           ) : null}
           <Select maxWidth="140px" onChange={(event) => setKind(event.target.value)} size="xs" value={kind}>
             <option value="">any kind</option>
-            <option value="post">posts</option>
-            <option value="data">data</option>
-            <option value="schema">schemas</option>
-            <option value="comment">comments</option>
-            <option value="reaction">reactions</option>
+            {[...SEARCHABLE_CRYSTAL_KINDS].map((kindOption) => (
+              <option key={kindOption} value={kindOption}>
+                {KIND_OPTION_LABELS[kindOption] || kindOption}
+              </option>
+            ))}
           </Select>
           <Select maxWidth="130px" onChange={(event) => setSort(event.target.value)} size="xs" value={sort}>
             <option value="auto">auto sort</option>
@@ -608,6 +753,8 @@ export const SearchPage = () => {
               onClick={() => {
                 setRows([]);
                 setActiveSchema(null);
+                setPinnedRowId(null);
+                setKind('');
               }}
               size="xs"
               variant="ghost"
@@ -617,12 +764,50 @@ export const SearchPage = () => {
           ) : null}
         </Flex>
 
-        {/* schema browser */}
+        {/* schema browser — same paginated rail as /schemas */}
         {schemasOpen ? (
           <Box {...CARD_STYLES} p={4}>
-            <Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="11px" fontWeight="700" mb={3}>
-              Pick a shape to search by — its fields prefill the builder
-            </Text>
+            <Flex align="center" gap={2} mb={3} wrap="wrap">
+              <Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="11px" fontWeight="700">
+                Pick a shape to search by
+              </Text>
+              <Box flex={1} />
+              <Input
+                maxWidth="180px"
+                onChange={(event) => setSchemaQ(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    loadSchemas();
+                  }
+                }}
+                placeholder="find a schema…"
+                size="xs"
+                value={schemaQ}
+              />
+              <Button
+                onClick={() => {
+                  setSchemaSort('newest');
+                  schemaRailRef.current = { ...schemaRailRef.current, schemaSort: 'newest' };
+                  loadSchemas();
+                }}
+                size="xs"
+                variant={schemaSort === 'newest' ? 'solid' : 'ghost'}
+              >
+                Recent
+              </Button>
+              <Button
+                onClick={() => {
+                  setSchemaSort('popular');
+                  schemaRailRef.current = { ...schemaRailRef.current, schemaSort: 'popular' };
+                  loadSchemas();
+                }}
+                size="xs"
+                variant={schemaSort === 'popular' ? 'solid' : 'ghost'}
+              >
+                Popular
+              </Button>
+            </Flex>
             <Flex gap={2} wrap="wrap">
               {schemaSources.map((source) => (
                 <Button
@@ -630,37 +815,269 @@ export const SearchPage = () => {
                   colorScheme={activeSchema === source.key ? 'pink' : undefined}
                   onClick={() => applySchema(source)}
                   size="sm"
-                  title={source.description}
+                  title={[source.description, source.usageCount ? `${source.usageCount} things use this` : '']
+                    .filter(Boolean)
+                    .join(' · ')}
                   variant={activeSchema === source.key ? 'solid' : 'outline'}
                 >
                   {source.name}
                   {source.origin === 'community' ? (
                     <Text as="span" color="var(--tt-muted, #9a9aa6)" fontSize="10px" ml={1.5}>
                       {source.author ? `@${source.author}` : 'community'}
+                      {source.usageCount ? ` · ${source.usageCount}` : ''}
+                      {source.reactions ? ` · ${source.reactions}❤` : ''}
                     </Text>
                   ) : null}
                 </Button>
               ))}
-              {!schemaSources.length ? (
+              {!schemaSources.length && !schemasLoading ? (
                 <Text color="var(--tt-muted, #9a9aa6)" fontSize="sm">
                   No schemas yet.
                 </Text>
               ) : null}
+              {schemaCursor ? (
+                <Button isLoading={schemasLoading} onClick={() => loadSchemas({ cursor: schemaCursor })} size="sm" variant="ghost">
+                  more…
+                </Button>
+              ) : null}
             </Flex>
             <Text color="var(--tt-muted, #9a9aa6)" fontSize="xs" mt={3}>
-              Anyone can publish a schema: POST /api/v1/things with thingtime ["schema"] — see /schemas.
+              Browse, fork, and build schemas at{' '}
+              <Text as={RouterLink} color="var(--tt-text, #33333c)" textDecoration="underline" to="/schemas">
+                /schemas
+              </Text>{' '}
+              ✨
             </Text>
           </Box>
         ) : null}
 
+        {/* active-schema refinement header — fill only what you care about */}
+        {activeSchemaSource ? (
+          <Flex align="baseline" gap={2} wrap="wrap">
+            <Text color="var(--tt-ink, #16161a)" fontSize="sm" fontWeight="700">
+              Refine {activeSchemaSource.name}
+            </Text>
+            {activeSchemaSource.author ? (
+              <Text color="var(--tt-muted, #9a9aa6)" fontSize="xs">
+                @{activeSchemaSource.author}
+              </Text>
+            ) : null}
+            <Text color="var(--tt-muted, #9a9aa6)" fontSize="xs">
+              fill only the properties you care about — empty rows are skipped
+            </Text>
+          </Flex>
+        ) : null}
+
         {/* builder rows */}
-        <ConditionRowsEditor
-          rows={rows}
-          onUpdateRow={updateRow}
-          onRemoveRow={removeRow}
-          fieldSuggestions={fieldSuggestions}
-          datalistId="tt-search-fields"
-        />
+        {rows.length ? (
+          <Flex direction="column" gap={2}>
+            <datalist id="tt-search-fields">
+              {fieldSuggestions.map((field) => (
+                <option key={field} value={field} />
+              ))}
+            </datalist>
+            {rows.map((row) => {
+              const kindOfOp = opKind(row.op);
+              const enumValues = row.meta?.values;
+              const unit = row.meta?.unit;
+              const rangeHint = row.meta?.min !== undefined || row.meta?.max !== undefined;
+              // ONLY the row applySchema pinned for a community schema renders
+              // as the locked chip (removing it un-scopes the search) — a
+              // hand-typed `schema eq X` row stays editable
+              if (activeSchemaSource?.origin === 'community' && row.id === pinnedRowId) {
+                return (
+                  <Flex align="center" gap={2} key={row.id}>
+                    <Flex
+                      align="center"
+                      background="var(--tt-surface-alt, #f5f5f7)"
+                      borderRadius="full"
+                      gap={1.5}
+                      paddingX={3}
+                      paddingY={1}
+                    >
+                      <Sparkles size={12} />
+                      <Text color="var(--tt-text, #33333c)" fontSize="xs" fontWeight="600">
+                        shape · {row.value}
+                      </Text>
+                    </Flex>
+                    <IconButton
+                      aria-label="Remove shape scope"
+                      icon={<X size={14} />}
+                      onClick={() => {
+                        removeRow(row.id);
+                        setActiveSchema(null);
+                        setPinnedRowId(null);
+                      }}
+                      size="sm"
+                      variant="ghost"
+                    />
+                  </Flex>
+                );
+              }
+              return (
+                <Flex align="center" gap={2} key={row.id} wrap="wrap">
+                  {row.meta?.type ? (
+                    <Flex direction="column" flexShrink={0} minWidth="140px" maxWidth="180px">
+                      <Text
+                        color="var(--tt-ink, #16161a)"
+                        fontFamily="var(--tt-font-mono, monospace)"
+                        fontSize="13px"
+                        isTruncated
+                        title={row.meta?.description || row.field}
+                      >
+                        {row.field}
+                      </Text>
+                      <Text color="var(--tt-faint, #b6b6c0)" fontSize="10px">
+                        {row.meta.type}
+                        {unit ? ` · ${unit}` : ''}
+                      </Text>
+                    </Flex>
+                  ) : (
+                    <Input
+                      list="tt-search-fields"
+                      maxWidth="180px"
+                      onChange={(event) => updateRow(row.id, { field: event.target.value })}
+                      placeholder="field (e.g. legs)"
+                      size="sm"
+                      title={row.meta?.description || 'crystal field path — bare names mean crystal.<name>'}
+                      value={row.field}
+                    />
+                  )}
+                  <Select
+                    maxWidth="130px"
+                    onChange={(event) => updateRow(row.id, { op: event.target.value })}
+                    size="sm"
+                    value={row.op}
+                  >
+                    {OPERATORS.map((operator) => (
+                      <option key={operator.id} value={operator.id}>
+                        {operator.label}
+                      </option>
+                    ))}
+                  </Select>
+
+                  {kindOfOp === 'exists' ? (
+                    <Select
+                      maxWidth="90px"
+                      onChange={(event) => updateRow(row.id, { value: event.target.value })}
+                      size="sm"
+                      value={row.value || 'true'}
+                    >
+                      <option value="true">yes</option>
+                      <option value="false">no</option>
+                    </Select>
+                  ) : kindOfOp === 'type' ? (
+                    <Select
+                      maxWidth="120px"
+                      onChange={(event) => updateRow(row.id, { value: event.target.value })}
+                      placeholder="datatype"
+                      size="sm"
+                      value={row.value}
+                    >
+                      {DATATYPES.map((type) => (
+                        <option key={type} value={type}>
+                          {type}
+                        </option>
+                      ))}
+                    </Select>
+                  ) : kindOfOp === 'range' ? (
+                    <>
+                      <Input
+                        maxWidth="110px"
+                        onChange={(event) => updateRow(row.id, { value: event.target.value })}
+                        placeholder={row.meta?.min !== undefined ? String(row.meta.min) : 'min'}
+                        size="sm"
+                        value={row.value}
+                      />
+                      <Text color="var(--tt-muted, #9a9aa6)" fontSize="sm">
+                        –
+                      </Text>
+                      <Input
+                        maxWidth="110px"
+                        onChange={(event) => updateRow(row.id, { value2: event.target.value })}
+                        placeholder={row.meta?.max !== undefined ? String(row.meta.max) : 'max'}
+                        size="sm"
+                        value={row.value2}
+                      />
+                      {unit || rangeHint ? (
+                        <Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="xs">
+                          {unit || ''}
+                        </Text>
+                      ) : null}
+                    </>
+                  ) : kindOfOp === 'list' && enumValues?.length ? (
+                    <Flex gap={1} wrap="wrap">
+                      {enumValues.map((option) => {
+                        const selected = row.value
+                          .split(',')
+                          .map((entry) => entry.trim())
+                          .filter(Boolean);
+                        const isOn = selected.includes(option);
+                        return (
+                          <Button
+                            colorScheme={isOn ? 'pink' : undefined}
+                            key={option}
+                            onClick={() => {
+                              const next = isOn
+                                ? selected.filter((entry) => entry !== option)
+                                : [...selected, option];
+                              updateRow(row.id, { value: next.join(',') });
+                            }}
+                            size="xs"
+                            variant={isOn ? 'solid' : 'outline'}
+                          >
+                            {option}
+                          </Button>
+                        );
+                      })}
+                    </Flex>
+                  ) : (
+                    <Input
+                      list={enumValues?.length ? `tt-search-values-${row.id}` : undefined}
+                      maxWidth="220px"
+                      onChange={(event) => updateRow(row.id, { value: event.target.value })}
+                      placeholder={kindOfOp === 'list' ? 'value, value, …' : unit ? `value (${unit})` : 'value'}
+                      size="sm"
+                      value={row.value}
+                    />
+                  )}
+                  {enumValues?.length && kindOfOp === 'value' ? (
+                    <datalist id={`tt-search-values-${row.id}`}>
+                      {enumValues.map((option) => (
+                        <option key={option} value={option} />
+                      ))}
+                    </datalist>
+                  ) : null}
+
+                  {kindOfOp === 'value' || kindOfOp === 'range' || kindOfOp === 'list' ? (
+                    <Select
+                      flexShrink={0}
+                      onChange={(event) => updateRow(row.id, { valueType: event.target.value as RowValueType })}
+                      size="sm"
+                      title="value datatype — auto reads true/false/null and numbers as their real types"
+                      value={row.valueType}
+                      width="105px"
+                    >
+                      <option value="auto">auto</option>
+                      <option value="text">text</option>
+                      <option value="number">number</option>
+                      <option value="boolean">bool</option>
+                      <option value="null">null</option>
+                    </Select>
+                  ) : null}
+
+                  <IconButton
+                    aria-label="Remove filter"
+                    icon={<X size={14} />}
+                    onClick={() => removeRow(row.id)}
+                    size="sm"
+                    variant="ghost"
+                  />
+                </Flex>
+              );
+            })}
+          </Flex>
+        ) : null}
 
         {/* results */}
         <Flex align="baseline" gap={2}>

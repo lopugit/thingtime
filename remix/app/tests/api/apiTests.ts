@@ -3,12 +3,27 @@ import {
   expectNdjson,
   expectRedirectedTo,
   expectStatus,
+  type ApiTestContext,
   type ApiTestDefinition
 } from './apiTestRunner';
 import { apiEndpointDocs } from '~/docs/apiDocs';
 
+// crypto-sourced randomness: these suffixes end up in registered usernames /
+// email aliases, and Web Crypto is available everywhere this runs (browser
+// tests page + Node ≥ 18), so there's no reason to trip CodeQL over
+// Math.random here
+const uniqueSuffix = () => `${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+
+// Email tests deliver to the configured test inbox via plus aliases so real
+// sends stay contained: support@x.com → support+signup-<suffix>@x.com.
+const DEFAULT_EMAIL_TEST_RECIPIENT = 'support@thingtime.com';
+const plusAlias = (recipient: string, tag: string) => {
+  const [local, domain] = String(recipient || DEFAULT_EMAIL_TEST_RECIPIENT).split('@');
+  return `${local}+${tag}-${uniqueSuffix()}@${domain || 'thingtime.com'}`;
+};
+
 const uniqueServiceAccountBody = () => {
-  const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const suffix = uniqueSuffix();
 
   return {
     serviceName: `Thingtime API Test ${suffix}`,
@@ -20,6 +35,59 @@ const uniqueServiceAccountBody = () => {
     }
   };
 };
+
+const uniqueEmailRegisterBody = (context: ApiTestContext) => {
+  const suffix = uniqueSuffix();
+
+  return {
+    username: `ses-signup-${suffix}`,
+    password: 'testpass123',
+    email: plusAlias(context.email?.testRecipient || DEFAULT_EMAIL_TEST_RECIPIENT, 'signup'),
+    displayName: 'SES Signup Test',
+    meta: {
+      source: 'thingtime-tests-page',
+      flow: 'email-signup-verification'
+    }
+  };
+};
+
+const uniqueEmailServiceAccountBody = (context: ApiTestContext) => {
+  const suffix = uniqueSuffix();
+
+  return {
+    serviceName: `SES Service Test ${suffix}`,
+    username: `ses-service-${suffix}`,
+    email: plusAlias(context.email?.testRecipient || DEFAULT_EMAIL_TEST_RECIPIENT, 'service'),
+    displayName: 'SES Service Test',
+    meta: {
+      source: 'thingtime-tests-page',
+      flow: 'email-service-account-verification'
+    }
+  };
+};
+
+// an unbiased 6-digit test OTP from a CSPRNG. Rejection sampling + a
+// division-based reduction (no modulo on the CSPRNG output) is the canonical
+// unbiased pattern — uniformity is irrelevant for a test code, but this keeps
+// CodeQL's insecure-randomness AND biased-random rules clear.
+const SIX_DIGIT_SPAN = 900000; // 100000–999999 inclusive
+const sixDigitCode = () => {
+  const bucket = Math.floor(0x1_0000_0000 / SIX_DIGIT_SPAN); // 2^32 / span, floored
+  const limit = bucket * SIX_DIGIT_SPAN; // largest multiple of span ≤ 2^32
+  const buf = new Uint32Array(1);
+  let rand: number;
+  do {
+    crypto.getRandomValues(buf);
+    rand = buf[0];
+  } while (rand >= limit); // reject the biased tail
+  return String(100000 + Math.floor(rand / bucket));
+};
+
+const uniqueEmailOtpBody = (context: ApiTestContext) => ({
+  email: plusAlias(context.email?.testRecipient || DEFAULT_EMAIL_TEST_RECIPIENT, 'otp'),
+  code: sixDigitCode(),
+  expiresMinutes: 10
+});
 
 const isObject = (value: any) => value && typeof value === 'object' && !Array.isArray(value);
 
@@ -177,12 +245,69 @@ export const apiTests: ApiTestDefinition[] = [
   {
     id: 'auth-login-invalid',
     name: 'Login invalid credentials',
-    description: 'Login rejects invalid credentials, or surfaces environment failure if MongoDB is unavailable.',
+    description: 'Login rejects invalid credentials, is rate-limited, or surfaces environment failure if MongoDB is unavailable.',
     group: 'auth',
     method: 'POST',
     path: '/api/v1/login',
     body: { username: 'thingtime-test-missing-user', password: 'not-a-real-password' },
-    expect: expectStatus([401, 500], 'Login route responded with expected invalid/env-dependent status.')
+    expect: expectStatus([401, 429, 500], 'Login route responded with expected invalid/rate-limited/env-dependent status.')
+  },
+  {
+    id: 'auth-password-reset-neutral',
+    name: 'Password reset is probe-proof',
+    description: 'Reset requests return ok whether or not the email matches an account (or 429 when the per-IP window is exhausted).',
+    group: 'auth',
+    method: 'POST',
+    path: '/api/v1/auth/password-reset',
+    body: { email: 'tt-api-test-definitely-unregistered@example.invalid' },
+    expect: expectJson(
+      [200, 429],
+      (body, response) => (response.status === 429 ? typeof body?.error === 'string' : body?.ok === true),
+      'Reset request returned a neutral ok response (or was rate-limited with an error shape).'
+    )
+  },
+  {
+    id: 'auth-password-reset-confirm-invalid',
+    name: 'Password reset confirm rejects bad tokens',
+    description: 'Unknown/expired reset tokens are rejected with a 400 error shape.',
+    group: 'auth',
+    method: 'POST',
+    path: '/api/v1/auth/password-reset/confirm',
+    body: { token: 'not-a-real-reset-token', password: 'valid-length-password' },
+    expect: expectJson([400], (body) => body?.ok === false && typeof body?.error === 'string', 'Invalid reset token rejected with an error shape.')
+  },
+  {
+    id: 'auth-two-factor-state-guarded',
+    name: 'Email 2FA state requires auth',
+    description: 'Reading the 2FA state anonymously is rejected with a 401 error shape.',
+    group: 'auth',
+    method: 'GET',
+    path: '/api/v1/auth/two-factor',
+    expect: expectJson(
+      [200, 401],
+      (body) => typeof body?.enabled === 'boolean' || (body?.ok === false && typeof body?.error === 'string'),
+      'Two-factor state returned for a session or was rejected anonymously.'
+    )
+  },
+  {
+    id: 'auth-two-factor-toggle-validates',
+    name: 'Email 2FA toggle validates input',
+    description: 'Toggling 2FA without a boolean enabled flag is rejected before any write.',
+    group: 'auth',
+    method: 'POST',
+    path: '/api/v1/auth/two-factor',
+    body: {},
+    expect: expectJson([400, 401], (body) => body?.ok === false && typeof body?.error === 'string', 'Invalid 2FA toggle rejected with an error shape.')
+  },
+  {
+    id: 'auth-login-otp-invalid-challenge',
+    name: 'Login OTP rejects unknown challenges',
+    description: 'Completing a 2FA login with an unknown challenge id fails with a generic 401 (429 when the login window is exhausted).',
+    group: 'auth',
+    method: 'POST',
+    path: '/api/v1/login',
+    body: { challenge: 'not-a-real-challenge-id', code: '000000' },
+    expect: expectJson([401, 429], (body) => body?.ok === false && typeof body?.error === 'string', 'Unknown OTP challenge rejected with an error shape.')
   },
   {
     id: 'auth-resend-verification-empty',
@@ -243,6 +368,93 @@ export const apiTests: ApiTestDefinition[] = [
         deadlineLooksRight
       );
     }, 'Service account response has non-expiring token, seven-day verification window, and 5 GiB allowance.')
+  },
+  {
+    id: 'email-config',
+    name: 'Email test config',
+    description: 'Returns safe email provider/test metadata without exposing SES credentials.',
+    group: 'email',
+    method: 'GET',
+    path: '/api/v1/email/config',
+    expect: expectJson(
+      [200],
+      (body) =>
+        body?.ok === true &&
+        isObject(body?.email) &&
+        ['console', 'ses'].includes(body.email.provider) &&
+        typeof body.email.sesSandbox === 'boolean' &&
+        typeof body.email.testRecipient === 'string',
+      'Email config returned provider, sandbox, and test-recipient metadata.'
+    )
+  },
+  {
+    id: 'email-signup-verification',
+    name: 'Signup verification email',
+    description: 'Creates a throwaway user and sends the normal signup verification email to the configured plus-alias test recipient.',
+    group: 'email',
+    method: 'POST',
+    path: '/api/v1/auth/register',
+    mutates: true,
+    emailSend: true,
+    timeoutMs: 30000,
+    body: uniqueEmailRegisterBody,
+    expect: expectJson([200], (body) => {
+      return (
+        body?.ok === true &&
+        body?.user?.emailVerified === false &&
+        typeof body?.user?.email === 'string' &&
+        body.user.email.includes('@')
+      );
+    }, 'Signup created an unverified user and triggered verification email delivery.')
+  },
+  {
+    id: 'email-service-account-verification',
+    name: 'Service account verification email',
+    description: 'Creates a throwaway service account and sends the service-account verification email to the configured plus-alias test recipient.',
+    group: 'email',
+    method: 'POST',
+    path: '/api/v1/auth/service-account',
+    mutates: true,
+    emailSend: true,
+    timeoutMs: 30000,
+    body: uniqueEmailServiceAccountBody,
+    expect: expectJson([200], (body) => {
+      const payload = decodeJwtPayload(body?.accessToken);
+      return (
+        body?.ok === true &&
+        body?.user?.accountKind === 'service' &&
+        body?.user?.emailVerified === false &&
+        body?.tokenType === 'Bearer' &&
+        !Object.prototype.hasOwnProperty.call(payload || {}, 'exp')
+      );
+    }, 'Service account was created and triggered verification email delivery.')
+  },
+  {
+    id: 'email-otp-helper',
+    name: 'Email OTP helper',
+    description: 'Dev/preview-only check for the OTP email renderer and delivery helper.',
+    group: 'email',
+    method: 'POST',
+    path: '/api/v1/email/test-otp',
+    mutates: true,
+    emailSend: true,
+    timeoutMs: 30000,
+    body: uniqueEmailOtpBody,
+    expect: expectJson(
+      // 403 outside dev/preview; 400 if the env's test recipient differs from
+      // the fallback used before /email/config resolves; otherwise the helper
+      // ran — any terminal delivery status with a real outbox id is a pass (a
+      // sandbox can legitimately report 'failed'/'skipped' for an unverified
+      // recipient while still exercising the renderer + outbox path)
+      [200, 400, 403],
+      (body, response) =>
+        response.status === 403 ||
+        response.status === 400 ||
+        (body?.ok === true &&
+          ['sent', 'logged', 'failed', 'skipped'].includes(body?.result?.status) &&
+          typeof body?.result?.emailMessageId === 'string'),
+      'OTP helper exercised the delivery path (any terminal status), was recipient-rejected (400), or blocked outside local/preview (403).'
+    )
   },
   {
     id: 'crypto-standards',
@@ -343,15 +555,38 @@ export const apiTests: ApiTestDefinition[] = [
     expect: expectStatus([200, 500], 'MongoDB get-connection route responded.')
   },
   {
+    id: 'mongodb-query-capabilities',
+    name: 'MongoDB query capabilities',
+    description: 'The no-code query capability catalogue is admin-only and never exposes connection details.',
+    group: 'mongodb',
+    method: 'GET',
+    path: '/api/v1/mongodb/raw-results',
+    expect: expectJson(
+      [200, 401, 403],
+      (body, response) =>
+        response.status === 200
+          ? body?.ok === true && Array.isArray(body?.collections) && Array.isArray(body?.operations) && !('connectionString' in body)
+          : body?.ok === false && typeof body?.error === 'string',
+      'MongoDB query capabilities were returned or correctly admin-gated.'
+    )
+  },
+  {
     id: 'mongodb-raw-results',
-    name: 'MongoDB raw results',
-    description: 'Raw results are admin-only: 401 for non-admins, data or an environment-dependent error for admins.',
+    name: 'MongoDB bounded query',
+    description: 'Runs a bounded find for admins and rejects non-admin callers.',
     group: 'mongodb',
     method: 'POST',
     path: '/api/v1/mongodb/raw-results',
-    body: {},
+    body: { collection: 'things', operation: 'find', filter: {}, limit: 1, maxTimeMS: 5000 },
     timeoutMs: 15000,
-    expect: expectStatus([200, 401, 500], 'MongoDB raw-results route responded.')
+    expect: expectJson(
+      [200, 401, 403, 429, 503],
+      (body, response) =>
+        response.status === 200
+          ? body?.ok === true && Array.isArray(body?.results) && body.results.length <= 1
+          : body?.ok === false && typeof body?.error === 'string',
+      'MongoDB query ran within its limit or returned the expected guard/environment response.'
+    )
   },
   {
     id: 'mongodb-populate',
@@ -711,6 +946,51 @@ export const apiTests: ApiTestDefinition[] = [
     expect: expectJson([400, 401], (body) => body?.ok === false && typeof body?.error === 'string', 'Malformed acl was rejected with an error shape.')
   },
   {
+    id: 'things-schemaless-extended-roundtrip',
+    name: 'Schema-less crystal + extended round-trip',
+    description:
+      'POST without thingtime defaults to ["data"], and the schema-free extended sidecar is stored and returned exactly as given (session) — or rejected anonymously.',
+    group: 'things',
+    method: 'POST',
+    path: '/api/v1/things',
+    mutates: true,
+    body: {
+      crystal: { name: 'tt-api-test-desk', legs: 4, material: 'wood' },
+      extended: { anyShape: true, nested: [1, 'two', { three: 3 }], 'weird key 🔑': 'kept verbatim' },
+      acl: ['tt:user'],
+      tags: ['tt-api-test']
+    },
+    expect: expectJson(
+      [200, 401, 429],
+      (body, response) =>
+        response.status !== 200
+          ? body?.ok === false && typeof body?.error === 'string'
+          : body?.ok === true &&
+            Array.isArray(body?.thing?.thingtime) &&
+            body.thing.thingtime.includes('data') &&
+            body?.thing?.extended?.anyShape === true &&
+            body?.thing?.extended?.['weird key 🔑'] === 'kept verbatim' &&
+            Array.isArray(body?.thing?.extended?.nested) &&
+            body?.thing?.crystal?.legs === 4,
+      'Schema-less create resolved to a data crystal and round-tripped extended verbatim (or was auth/rate limited).'
+    )
+  },
+  {
+    id: 'things-extended-reserved-key-rejected',
+    name: 'Extended rejects the reserved text-index key',
+    description:
+      'An extended payload carrying the tt:textLanguage key is rejected 400 (401 anonymous) — storing it would hijack or break the wildcard text index.',
+    group: 'things',
+    method: 'POST',
+    path: '/api/v1/things',
+    body: { crystal: { name: 'tt-api-test' }, extended: { 'tt:textLanguage': 'klingon' } },
+    expect: expectJson(
+      [400, 401, 429],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Reserved-key extended payload was rejected with an error shape.'
+    )
+  },
+  {
     id: 'schemas-list',
     name: 'Schemas registry',
     description: 'The public schema registry returns every Thingtime Schema plus collection versions.',
@@ -749,6 +1029,70 @@ export const apiTests: ApiTestDefinition[] = [
     method: 'GET',
     path: '/api/v1/schemas?id=not-a-real-schema',
     expect: expectJson([404], (body) => body?.ok === false && typeof body?.error === 'string', 'Unknown schema returned a 404 error shape.')
+  },
+  {
+    id: 'schemas-browse-newest',
+    name: 'Browse published schemas',
+    description: 'The paginated UGC schema browser returns decorated entries (reactions, saved, usage).',
+    group: 'schemas',
+    method: 'GET',
+    path: '/api/v1/schemas/browse?sort=newest&limit=5',
+    expect: expectJson(
+      [200],
+      (body) =>
+        body?.ok === true &&
+        Array.isArray(body?.schemas) &&
+        'nextCursor' in body &&
+        body.schemas.every(
+          (entry: any) =>
+            typeof entry?.id === 'string' &&
+            entry?.reactionCounts !== undefined &&
+            Array.isArray(entry?.viewerReactions) &&
+            typeof entry?.saved === 'boolean' &&
+            typeof entry?.usageCount === 'number'
+        ),
+      'Browse returned decorated schema entries with a cursor field.'
+    )
+  },
+  {
+    id: 'schemas-browse-popular',
+    name: 'Browse schemas by popularity',
+    description: 'sort=popular ranks schema things by reaction count over a bounded window.',
+    group: 'schemas',
+    method: 'GET',
+    path: '/api/v1/schemas/browse?sort=popular&limit=5',
+    expect: expectJson(
+      [200],
+      (body) => body?.ok === true && Array.isArray(body?.schemas),
+      'Popular browse returned a schema page.'
+    )
+  },
+  {
+    id: 'schemas-browse-library-guarded',
+    name: 'Library filter needs auth',
+    description: 'library=1 returns the caller’s saved schemas when signed in and 401 anonymously.',
+    group: 'schemas',
+    method: 'GET',
+    path: '/api/v1/schemas/browse?library=1',
+    expect: expectJson(
+      [200, 401],
+      (body) => (body?.ok === true && Array.isArray(body?.schemas)) || (body?.ok === false && typeof body?.error === 'string'),
+      'Library browse returned saved schemas (signed in) or the 401 error shape (anonymous).'
+    )
+  },
+  {
+    id: 'things-save-guarded',
+    name: 'Library save needs auth + a real thing',
+    description: 'POST /api/v1/things/save is 401 anonymous; signed in, a bogus id is 404.',
+    group: 'things',
+    method: 'POST',
+    path: '/api/v1/things/save',
+    body: { id: 'not-a-real-thing-id' },
+    expect: expectJson(
+      [401, 404],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Save toggle rejected the call with the expected error shape.'
+    )
   },
   {
     id: 'admin-migrations-guarded',
