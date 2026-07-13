@@ -1065,8 +1065,8 @@
     "semantic_hash": "92d444e302d23d08505fc8d2c8624a24"
   },
   "remix/app/components/Thingtime/Thingtime.tsx": {
-    "mtime": 1783951621.9053462,
-    "ast_hash": "62fd199a023e40ed6644960b000ce66e",
+    "mtime": 1783954314.4276056,
+    "ast_hash": "c69bed46f1ce4f9c58eddda634664333",
     "semantic_hash": ""
   },
   "remix/app/components/Thingtime/ThingtimeDemo.tsx": {
@@ -1325,9 +1325,9 @@
     "semantic_hash": "11db7718e14121035125de377c508dc0"
   },
   "remix/app/routes/api/v1/mongodb/populate/_populate.tsx": {
-    "mtime": 1783455151.4459116,
-    "ast_hash": "1ebc31f6b32ff15af67b3f1672a0caee",
-    "semantic_hash": "1ebc31f6b32ff15af67b3f1672a0caee"
+    "mtime": 1783954291.1975203,
+    "ast_hash": "b020d0af7490b53d1936a75d443eb13f",
+    "semantic_hash": ""
   },
   "remix/app/routes/api/v1/mongodb/raw-results/_raw-results.tsx": {
     "mtime": 1783947776.757021,
@@ -1445,9 +1445,9 @@
     "semantic_hash": "87af398efb99622f91227ad89e1c6968"
   },
   "remix/app/scripts/mongodb/setup.ts": {
-    "mtime": 1783865958.2267594,
-    "ast_hash": "82c2a7e7988cadb237818d81086dc34e",
-    "semantic_hash": "82c2a7e7988cadb237818d81086dc34e"
+    "mtime": 1783954291.1986825,
+    "ast_hash": "391a54a6adcb1bf7bb1a2d65f1edbce2",
+    "semantic_hash": ""
   },
   "remix/app/sessions.ts": {
     "mtime": 1783455151.4524,
@@ -3385,9 +3385,9 @@
     "semantic_hash": "df76a096821728b672b4d9e8a8adaf00"
   },
   "remix/app/components/Kinds/index.ts": {
-    "mtime": 1783865958.213063,
-    "ast_hash": "f457b80d430ec94e916e3bf780239774",
-    "semantic_hash": "f457b80d430ec94e916e3bf780239774"
+    "mtime": 1783954291.196636,
+    "ast_hash": "15dacf10bdab01933afbfb8980e01643",
+    "semantic_hash": ""
   },
   "remix/app/components/Kinds/kindRegistry.tsx": {
     "mtime": 1783865958.2132301,
@@ -3395,9 +3395,9 @@
     "semantic_hash": "e993625cb75a2d900cc93c1130a1c6d3"
   },
   "remix/app/components/Kinds/kindRenderers.tsx": {
-    "mtime": 1783865958.2133603,
-    "ast_hash": "7f5f90cf707f4ff5ad755062bc21bc48",
-    "semantic_hash": "7f5f90cf707f4ff5ad755062bc21bc48"
+    "mtime": 1783954291.1968725,
+    "ast_hash": "6b93e94b80af48b9221a96ccd6256352",
+    "semantic_hash": ""
   },
   "remix/app/components/Kinds/sampleKindThings.ts": {
     "mtime": 1783865958.214115,
@@ -3760,8 +3760,8 @@
     "semantic_hash": ""
   },
   "remix/app/schemas/registry.ts": {
-    "mtime": 1783951621.9056904,
-    "ast_hash": "5b3eec5177d205592887f87dec3fe56e",
+    "mtime": 1783954291.1978061,
+    "ast_hash": "77d3ca2c63fd57b3f0cae3024d50454d",
     "semantic_hash": ""
   },
   "PRs/59-claude-unified-thing-crystal-schemas--everything-is-a-thing.md": {
@@ -3960,13 +3960,13 @@
     "semantic_hash": ""
   },
   "remix/app/components/Schemas/SchemasBrowsePage.tsx": {
-    "mtime": 1783947776.7519517,
-    "ast_hash": "6fb0ca0b14b88a799c8c5fc92431147c",
+    "mtime": 1783954291.197144,
+    "ast_hash": "6b280a5d14eb7c33a50d0a3e407f57b9",
     "semantic_hash": ""
   },
   "remix/app/components/Schemas/schemaBrowseTypes.ts": {
-    "mtime": 1783947776.7524009,
-    "ast_hash": "7d474130f91a5d6e1bb395a2a68903bf",
+    "mtime": 1783954291.1973195,
+    "ast_hash": "3464540dd7a5dbbc0afb513efa1cff1f",
     "semantic_hash": ""
   },
   "remix/app/routes/api/v1/schemas/browse/_browse.tsx": {
@@ -3985,8 +3985,8 @@
     "semantic_hash": ""
   },
   "remix/app/schemas/tools.ts": {
-    "mtime": 1783947776.7595327,
-    "ast_hash": "a20cb19ef7e0e06bf822533a2e29c848",
+    "mtime": 1783954291.1979854,
+    "ast_hash": "9ec8c507981ce7d40bed15c6d324dab0",
     "semantic_hash": ""
   },
   "remix/app/api/utils/mongodb/queryContract.ts": {
@@ -4089,14 +4089,24 @@
     "ast_hash": "b182c47ea3486eb97d18b8dd1731a9a1",
     "semantic_hash": ""
   },
-  "pnpm-workspace.yaml": {
-    "mtime": 1783949321.3008811,
-    "ast_hash": "4deac8c721ea9f9d023aa597ba967098",
+  "remix/app/components/Kinds/ChakraThingRenderer.tsx": {
+    "mtime": 1783954291.1964517,
+    "ast_hash": "77a3d26848ae8c22362b713d0c7d7bb7",
     "semantic_hash": ""
   },
-  "raycast/pnpm-workspace.yaml": {
-    "mtime": 1783949319.4917498,
-    "ast_hash": "7bb23c19c0343fac40d375bacca550d0",
+  "remix/app/scripts/mongodb/data/schemas.ts": {
+    "mtime": 1783954291.1981196,
+    "ast_hash": "4438c5e1b23248324b05b5f6800b2463",
+    "semantic_hash": ""
+  },
+  "remix/app/scripts/mongodb/data/schemasCore.ts": {
+    "mtime": 1783954291.1982872,
+    "ast_hash": "f9c255c053d8ec4c6781c432316e0f73",
+    "semantic_hash": ""
+  },
+  "remix/app/scripts/mongodb/data/schemasShowcase.ts": {
+    "mtime": 1783954291.1984835,
+    "ast_hash": "72c5845dc11fabca1512854eb10b00c0",
     "semantic_hash": ""
   }
 }
