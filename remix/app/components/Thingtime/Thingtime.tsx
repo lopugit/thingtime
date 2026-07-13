@@ -1165,6 +1165,16 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 					// tmp.<session>.New Thing) must match 'New Thing', not the full
 					// dotted string, or the rename silently no-ops
 					const currentKey = safeSplit(path).pop?.() ?? path;
+
+					// paths are dot-joined strings, so a key containing '.' is
+					// unaddressable — it would store as one literal key but every
+					// string binding (editor windows, the composer draft) would
+					// resolve it as two segments and go blank. Refuse the rename;
+					// also skip when this binding is already stale (key not in
+					// parent) so no rewrite or rename event fires for a no-op.
+					if (args.value.includes('.') || !parentKeys.includes(currentKey)) {
+						return;
+					}
 					// create new object with new key order
 					const newObject = {};
 
