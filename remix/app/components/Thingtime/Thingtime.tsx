@@ -1410,7 +1410,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 				onMouseLeave={handleMouseEvent}
 				{...(props.chakras || {})}
 				className={`thing uuid-${uuid} edit-${editMode ? 'true' : 'false'}`}
-				data-path={props?.path}
+				data-path={typeof props?.path === 'string' ? props.path : props?.path?.key || undefined}
 			>
 				{/* {uuid?.current} */}
 				{!chakraChild && !chakra && (

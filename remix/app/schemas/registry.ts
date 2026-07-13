@@ -345,9 +345,14 @@ const shareSchema: ThingtimeSchema = {
 // segment grammar the search API accepts (no $, no dots inside a key), values
 // are depth/size/count-bounded, and when combined with a typed schema (e.g.
 // thingtime ["post","data"]) the typed sanitizer's fields always win.
-export const MAX_DATA_CRYSTAL_DEPTH = 6;
-export const MAX_DATA_CRYSTAL_NODES = 400;
-export const MAX_DATA_ARRAY_ITEMS = 100;
+// Depth is effectively unbounded for real data (JSON bodies are inherently
+// acyclic, so "any nesting as long as it's not circular" holds by
+// construction) — 64 is only a stack-safety rail for the recursive sanitizer,
+// far past anything hand-built or produced by Editor.js docs nested inside
+// things. The true DoS guards are the request body byte cap and the node count.
+export const MAX_DATA_CRYSTAL_DEPTH = 64;
+export const MAX_DATA_CRYSTAL_NODES = 10000;
+export const MAX_DATA_ARRAY_ITEMS = 1000;
 export const MAX_DATA_KEY_CHARS = 60;
 
 const dataSchema: ThingtimeSchema = {

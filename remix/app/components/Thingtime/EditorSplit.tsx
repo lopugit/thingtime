@@ -403,7 +403,12 @@ type WindowActions = {
 	maximisedId: string | null;
 };
 
+// the className rides every toolbar control so the frame-drag pointerdown
+// (which starts a drag from anywhere on a frame's toolbar) can tell controls
+// from empty toolbar space — without it, clicking a control on a FLOATING
+// window started a drag instead of firing the action
 const toolbarButtonStyles = {
+	className: 'editor-toolbar-control',
 	alignItems: 'center',
 	justifyContent: 'center',
 	width: '24px',
@@ -643,7 +648,7 @@ const EditorWindow = (props: { leaf: EditorLeaf; actions: WindowActions; context
 				return;
 			}
 
-			if ((e.target as HTMLElement)?.closest?.('button, input, [contenteditable]')) {
+			if ((e.target as HTMLElement)?.closest?.('button, input, [contenteditable], .editor-toolbar-control')) {
 				return;
 			}
 
@@ -829,7 +834,10 @@ const EditorWindow = (props: { leaf: EditorLeaf; actions: WindowActions; context
 			<Box flex="1" minHeight={0} overflow="auto" paddingX="18px" paddingY="16px">
 				<Thingtime
 					key={`${leaf.id}:${leaf.path}`}
-					path={leaf.path}
+					// the tree root shows the path's TAIL (the toolbar input already
+					// shows the full path) — a composer draft at tmp.<session>.New Thing
+					// reads as "New Thing", not the plumbing
+					path={{ key: leaf.path, human: leaf.path.split('.').pop() || leaf.path }}
 					thing={thing}
 					edit={leaf.edit}
 					codeView={leaf.contentMode === 'code'}
@@ -952,7 +960,7 @@ const FloatingWindowView = (props: {
 
 			const dockHandle = !!target?.closest?.('.tt-frame-dock-handle');
 
-			if (!dockHandle && target?.closest?.('button, input, [contenteditable]')) {
+			if (!dockHandle && target?.closest?.('button, input, [contenteditable], .editor-toolbar-control')) {
 				return;
 			}
 
