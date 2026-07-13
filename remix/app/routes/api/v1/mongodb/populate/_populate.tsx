@@ -31,7 +31,7 @@ const actionExport = async ({ request }) => {
   }
   const budgetMs = Math.min(Math.max(Number(body?.budgetMs) || 8000, 1000), 300_000);
   const requested = Array.isArray(body?.stages)
-    ? body.stages.filter((stage) => SETUP_STAGES.includes(String(stage)))
+    ? body.stages.filter((stage) => (SETUP_STAGES as readonly string[]).includes(String(stage)))
     : [];
 
   const ret = await setup({
