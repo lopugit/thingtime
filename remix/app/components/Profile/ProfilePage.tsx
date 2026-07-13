@@ -1,8 +1,17 @@
 import React from 'react';
 import { Box, Button, Center, Flex, Text } from '@chakra-ui/react';
 import { Link, useNavigate } from 'react-router';
+import { SlidersHorizontal } from 'lucide-react';
 
 import { EditProfileModal } from './EditProfileModal';
+import {
+  AdvancedFilters,
+  advancedSearchBody,
+  searchResponsePosts,
+  useAdvancedFilters,
+  type AdvancedFiltersState
+} from '~/components/Feed/AdvancedFilters';
+import { PostComposer } from '~/components/Feed/PostComposer';
 import { PostList } from '~/components/Feed/PostList';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
@@ -12,7 +21,9 @@ import type { PostChange, PublicPost, PublicProfile } from '~/components/Feed/fe
 
 // Full profile page. SELF mode (no username param, or the param is the logged-in
 // user) shows email/verification + edit/logout controls; PUBLIC mode fetches the
-// stripped PublicProfile projection for any other username.
+// stripped PublicProfile projection for any other username. Self profiles get
+// the feed composer above their posts; every profile gets an Advanced search
+// panel locked to that user's posts (the same structured search as /feed).
 
 export type ProfilePageProps = {
   username?: string;
@@ -161,6 +172,11 @@ export const ProfilePage = (props: ProfilePageProps) => {
   const postsUsername = isSelf && user ? user.username : remote.status === 'loaded' ? remote.profile.username : null;
 
   const fetchUserPosts = api.v1.things.userPosts;
+  // latest-ref (the Feed page's apiRef idiom): search is memoized on the
+  // fetcher, whose identity can change per render — a plain dep would retrigger
+  // the pager effect forever
+  const searchThingsRef = React.useRef(api.v1.things.search);
+  searchThingsRef.current = api.v1.things.search;
   const [posts, setPosts] = React.useState<PublicPost[]>([]);
   const [postsLoading, setPostsLoading] = React.useState(false);
   const [nextCursor, setNextCursor] = React.useState<string | null>(null);
@@ -169,13 +185,45 @@ export const ProfilePage = (props: ProfilePageProps) => {
   const loadingRef = React.useRef(false);
   const generationRef = React.useRef(0);
 
+  // advanced search over this profile's posts — the panel edits a draft;
+  // Apply snapshots it into `applied` (null = plain chrono pager)
+  const advancedFilters = useAdvancedFilters();
+  const appliedAdvanced = advancedFilters.applied;
+
   const loadPage = React.useCallback(
-    async (targetUsername: string, cursor: string | null, generation: number) => {
+    async (
+      targetUsername: string,
+      cursor: string | null,
+      generation: number,
+      advancedState: AdvancedFiltersState | null
+    ) => {
       if (loadingRef.current) return;
       loadingRef.current = true;
       setPostsLoading(true);
 
       try {
+        if (advancedState) {
+          // structured search locked to this profile's user — same PostList,
+          // same optimistic idioms, different pager underneath
+          const resp: any = await searchThingsRef.current({
+            ...advancedSearchBody(advancedState),
+            author: targetUsername,
+            cursor: cursor || undefined,
+            limit: POSTS_PAGE_SIZE
+          });
+          if (generationRef.current !== generation) return;
+
+          const page: PublicPost[] = searchResponsePosts(resp);
+          setPosts((prev) => {
+            if (!cursor) return page;
+            const seen = new Set(prev.map((post) => post.id));
+            return [...prev, ...page.filter((post) => !seen.has(post.id))];
+          });
+          nextCursorRef.current = resp?.nextCursor ?? null;
+          setNextCursor(resp?.nextCursor ?? null);
+          return;
+        }
+
         const resp: any = await fetchUserPosts({
           username: targetUsername,
           cursor: cursor || undefined,
@@ -190,6 +238,9 @@ export const ProfilePage = (props: ProfilePageProps) => {
         if (typeof resp?.postCount === 'number') setPostCount(resp.postCount);
       } catch (err: any) {
         if (generationRef.current !== generation) return;
+        // a failed first page must not leave the previous query's posts posing
+        // as this one's results; a failed load-more keeps the list
+        if (!cursor) setPosts([]);
         nextCursorRef.current = null;
         setNextCursor(null);
         lopuRef.current({
@@ -205,24 +256,47 @@ export const ProfilePage = (props: ProfilePageProps) => {
     [fetchUserPosts]
   );
 
+  // Optimistic rendering: applying/clearing an advanced search over the SAME
+  // profile keeps the last-known posts on screen while the new query loads
+  // (the reset load replaces them when it lands); only a different profile
+  // clears immediately — one user's posts must never linger under another's
+  // header.
+  const lastPostsUsernameRef = React.useRef<string | null>(null);
   React.useEffect(() => {
     generationRef.current += 1;
     const generation = generationRef.current;
     loadingRef.current = false;
     nextCursorRef.current = null;
-    setPosts([]);
+    if (lastPostsUsernameRef.current !== postsUsername) {
+      lastPostsUsernameRef.current = postsUsername;
+      setPosts([]);
+    }
     setNextCursor(null);
-    setPostCount(null);
     setPostsLoading(false);
 
     if (!postsUsername) return;
-    loadPage(postsUsername, null, generation);
-  }, [postsUsername, loadPage]);
+    loadPage(postsUsername, null, generation, appliedAdvanced);
+  }, [postsUsername, loadPage, appliedAdvanced]);
 
   const handleLoadMore = React.useCallback(() => {
     if (!postsUsername || !nextCursorRef.current) return;
-    loadPage(postsUsername, nextCursorRef.current, generationRef.current);
-  }, [postsUsername, loadPage]);
+    loadPage(postsUsername, nextCursorRef.current, generationRef.current, appliedAdvanced);
+  }, [postsUsername, loadPage, appliedAdvanced]);
+
+  // the header count belongs to the profile, not the current filter — reset it
+  // only when the profile under the pager changes
+  React.useEffect(() => {
+    setPostCount(null);
+  }, [postsUsername]);
+
+  // the profile composer prepends the fresh post optimistically (same idiom as
+  // the feed) and keeps the header's post count honest. Deliberately optimistic
+  // even while an advanced search is applied — seeing your own fresh post beats
+  // strict filter fidelity, and the next Apply reconciles the list.
+  const handlePosted = React.useCallback((post: PublicPost) => {
+    setPosts((prev) => [post, ...prev]);
+    setPostCount((prev) => (typeof prev === 'number' ? prev + 1 : prev));
+  }, []);
 
   const handlePostChanged = React.useCallback((id: string, next: PostChange) => {
     setPosts((prev) =>
@@ -506,16 +580,53 @@ export const ProfilePage = (props: ProfilePageProps) => {
       </Box>
 
       <Box mt={8}>
-        <Box mb={3} px={[4, 6]}>
+        <Flex mb={3} px={[4, 6]} alignItems="center" columnGap={2}>
           <Eyebrow>Posts</Eyebrow>
-        </Box>
+          <Button
+            size="xs"
+            variant="outline"
+            marginLeft="auto"
+            fontWeight={600}
+            color={advancedFilters.open || appliedAdvanced ? 'var(--tt-ink, #16161a)' : 'var(--tt-text, #5a5a66)'}
+            borderColor="var(--tt-border, #ececef)"
+            borderRadius="var(--tt-radius-md, 12px)"
+            background={advancedFilters.open ? 'var(--tt-surface-alt, #f5f5f7)' : 'var(--tt-card, #ffffff)'}
+            _hover={{ background: 'var(--tt-surface-alt, #f5f5f7)' }}
+            leftIcon={<SlidersHorizontal size={12} />}
+            onClick={() => advancedFilters.toggle()}
+          >
+            {appliedAdvanced ? 'Advanced · on 🔬' : 'Advanced 🔬'}
+          </Button>
+        </Flex>
+
+        {advancedFilters.open && (
+          <Box mb={4}>
+            <AdvancedFilters
+              value={advancedFilters.draft}
+              onChange={advancedFilters.setDraft}
+              onApply={advancedFilters.apply}
+              onClear={advancedFilters.clear}
+              loading={postsLoading}
+              lockedAuthor={profile.username}
+            />
+          </Box>
+        )}
+
+        {isSelf && user && (
+          <Box mb={4}>
+            <PostComposer onPosted={handlePosted} />
+          </Box>
+        )}
+
         <PostList
           posts={posts}
           loading={postsLoading}
           hasMore={Boolean(nextCursor)}
           onLoadMore={handleLoadMore}
           onPostChanged={handlePostChanged}
-          emptyLabel="No posts yet 📭"
+          emptyLabel={
+            appliedAdvanced ? 'Nothing matched — loosen a filter, or try plain words ✨' : 'No posts yet 📭'
+          }
         />
       </Box>
 

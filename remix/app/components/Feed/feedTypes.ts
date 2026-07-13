@@ -21,7 +21,7 @@ export type FeedAuthor = {
   avatarUrl: string | null;
 };
 
-export type PostType = 'text' | 'image' | 'marketplace';
+export type PostType = 'text' | 'image' | 'marketplace' | 'thingtime';
 export type PostVisibility = 'public' | 'friends' | 'family' | 'private';
 
 export type MarketplaceCategory = 'car' | 'tool' | 'furniture' | 'service' | 'other';
@@ -55,6 +55,8 @@ export type PublicPost = {
   text: string;
   images: string[];
   listing: MarketplaceListing | null;
+  // thingtime posts: the free-form structured thing (crystal.thing)
+  thing: Record<string, any> | null;
   tags: string[];
   reactionCounts: Record<string, number>;
   // every reaction token the viewer has toggled on this post (multi-react)
@@ -117,7 +119,8 @@ export const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '😡'
 export const POST_TYPE_META: Record<PostType, { label: string; emoji: string }> = {
   text: { label: 'Text', emoji: '📝' },
   image: { label: 'Photos', emoji: '🖼️' },
-  marketplace: { label: 'Marketplace', emoji: '🏪' }
+  marketplace: { label: 'Marketplace', emoji: '🏪' },
+  thingtime: { label: 'Thingtime', emoji: '🌀' }
 };
 
 export const CIRCLE_META: Record<PostVisibility, { label: string; emoji: string; hint: string }> = {

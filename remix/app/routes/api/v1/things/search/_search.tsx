@@ -47,7 +47,14 @@ export const loader = async ({ request }: { request: Request }) => {
     to: params.get('to') || undefined,
     sort: params.get('sort') || undefined,
     cursor: params.get('cursor'),
-    limit: Number(params.get('limit')) || undefined
+    limit: Number(params.get('limit')) || undefined,
+    types: params.get('types') || undefined,
+    circles: params.get('circles') || undefined,
+    author: params.get('author') || undefined,
+    minTextChars: params.get('minTextChars') || undefined,
+    maxTextChars: params.get('maxTextChars') || undefined,
+    minReactions: params.get('minReactions') || undefined,
+    minComments: params.get('minComments') || undefined
   });
 };
 
@@ -70,6 +77,13 @@ export const action = async ({ request }: { request: Request }) => {
     to: body?.to,
     sort: body?.sort,
     cursor: body?.cursor,
-    limit: body?.limit
+    limit: body?.limit,
+    types: body?.types,
+    circles: body?.circles,
+    author: body?.author,
+    minTextChars: body?.minTextChars,
+    maxTextChars: body?.maxTextChars,
+    minReactions: body?.minReactions,
+    minComments: body?.minComments
   });
 };

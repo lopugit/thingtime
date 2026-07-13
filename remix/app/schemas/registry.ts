@@ -171,7 +171,7 @@ export const aclAllows = (acl: string[], viewer: AclViewer, ownerId: string): bo
 // quick-pick defaults; any emoji token validated by ~/utils/reactionTokens is
 // accepted as a reaction
 export const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '😡'];
-export const POST_TYPES = ['text', 'image', 'marketplace'] as const;
+export const POST_TYPES = ['text', 'image', 'marketplace', 'thingtime'] as const;
 export const MARKETPLACE_CATEGORIES = ['car', 'tool', 'furniture', 'service', 'other'] as const;
 
 export const MAX_TEXT_CHARS = 5000;
@@ -262,17 +262,21 @@ const postSchema: ThingtimeSchema = {
   kind: 'crystal',
   collection: null,
   title: 'Post',
-  summary: 'A feed post — text, image, or marketplace listing.',
+  summary: 'A feed post — text, image, marketplace listing, or a thingtime thing.',
   detail:
     'The thing shows up in feeds and profile listings. Marketplace posts carry a listing; the ' +
-    'listing category is folded into the root tags so feed filters can find it.',
+    'listing category is folded into the root tags so feed filters can find it. Thingtime posts ' +
+    'carry a free-form structured thing under the reserved `thing` key — the same bounded JSON ' +
+    'grammar as data crystals, but namespaced so the open shape can never ride past the post ' +
+    'whitelist (searchable as crystal.thing.<field> on /search).',
   fields: [
     { name: 'type', type: 'enum', required: true, values: [...POST_TYPES], description: 'What kind of post this is.' },
     { name: 'text', type: 'string', required: false, max: MAX_TEXT_CHARS, description: `Post body (required for text posts), max ${MAX_TEXT_CHARS} chars.` },
     { name: 'images', type: 'string[]', required: false, max: MAX_IMAGES, description: `http(s) image URLs, max ${MAX_IMAGES} × ${MAX_IMAGE_URL_CHARS} chars (image posts need at least one).` },
-    { name: 'listing', type: 'object', required: false, description: 'Marketplace listing { title, price, currency, category, condition, location, sold } — required for marketplace posts.' }
+    { name: 'listing', type: 'object', required: false, description: 'Marketplace listing { title, price, currency, category, condition, location, sold } — required for marketplace posts, optional on thingtime posts.' },
+    { name: 'thing', type: 'record', required: false, description: 'Free-form structured thing payload — required for thingtime posts, bounded like data crystals (searchable as crystal.thing.<field>). Thingtime posts can also carry images and a listing.' }
   ],
-  example: { type: 'text', text: 'Everything is a thing ✨', images: [], listing: null }
+  example: { type: 'text', text: 'Everything is a thing ✨', images: [], listing: null, thing: null }
 };
 
 const commentSchema: ThingtimeSchema = {
@@ -808,7 +812,7 @@ const sanitizePostCrystal = (
   appliedIds: string[]
 ): { ok: true; crystal: Record<string, unknown> } | Fail => {
   const type = POST_TYPES.includes(input.type as any) ? (input.type as string) : null;
-  if (!type) return fail(400, 'Post type must be text, image, or marketplace');
+  if (!type) return fail(400, 'Post type must be text, image, marketplace, or thingtime');
   // share things render the shared original, so their post payload may be
   // an empty caption regardless of type
   const isShare = appliedIds.includes('share');
@@ -832,8 +836,17 @@ const sanitizePostCrystal = (
     }
   }
 
+  // marketplace posts REQUIRE a listing; thingtime posts may opt into one
+  // (the composer's Marketplace toggle) — validated identically when present.
+  // Shares are exempt from the requirement: sharePost re-posts the original's
+  // type with listing null (the shared original renders the listing), which
+  // used to 400 every marketplace share.
   let listing: Record<string, unknown> | null = null;
-  if (type === 'marketplace') {
+  const listingProvided = input.listing !== undefined && input.listing !== null;
+  if (
+    (type === 'marketplace' && !isShare) ||
+    ((type === 'marketplace' || type === 'thingtime') && listingProvided)
+  ) {
     const value = input.listing;
     if (!value || typeof value !== 'object') return fail(400, 'Marketplace posts need listing details');
     const raw = value as Record<string, unknown>;
@@ -853,10 +866,30 @@ const sanitizePostCrystal = (
     listing = { title, price: Math.round(price * 100) / 100, currency, category, condition, location, sold: !!raw.sold };
   }
 
+  // Thingtime posts carry a free-form structured thing under ONE reserved key.
+  // The payload goes through the same bounded data-crystal walker, but living
+  // at crystal.thing (not the crystal root) keeps the post whitelist closed —
+  // the reason ["post","data"] combinations are rejected outright below.
+  let thing: Record<string, unknown> | null = null;
+  if (type === 'thingtime') {
+    const raw = input.thing;
+    if (raw !== undefined && raw !== null) {
+      if (typeof raw !== 'object' || Array.isArray(raw)) {
+        return fail(400, 'Thingtime posts need a thing — an object with at least one field 🌀');
+      }
+      const sanitized = sanitizeDataValue(raw, 1, { nodes: 0 }, 'thing');
+      if (!sanitized.ok) return sanitized;
+      thing = sanitized.value as Record<string, unknown>;
+    }
+    if (!isShare && (!thing || !Object.keys(thing).length)) {
+      return fail(400, 'Thingtime posts need a thing with at least one field 🌀');
+    }
+  }
+
   if (!isShare && type === 'text' && !text) return fail(400, 'Say something first ✍️');
   if (!isShare && type === 'image' && !images.length) return fail(400, 'Image posts need at least one image');
 
-  return { ok: true, crystal: { type, text, images, listing } };
+  return { ok: true, crystal: { type, text, images, listing, thing } };
 };
 
 const sanitizeCommentCrystal = (input: Record<string, unknown>): { ok: true; crystal: Record<string, unknown> } | Fail => {

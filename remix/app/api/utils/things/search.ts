@@ -1,6 +1,8 @@
-import { ensureIndexes, getThingsCollection } from '../mongodb/collections';
-import { KEY_SEGMENT_PATTERN, PROTECTED_THINGTIME } from '~/schemas/registry';
+import { ensureIndexes, getThingsCollection, getUsersCollection } from '../mongodb/collections';
+import { KEY_SEGMENT_PATTERN, MAX_TEXT_CHARS, PROTECTED_THINGTIME } from '~/schemas/registry';
 import {
+  POST_TYPES,
+  VISIBILITIES,
   asViewer,
   canViewInherited,
   chronoCursorClause,
@@ -11,9 +13,12 @@ import {
   parseChronoCursor,
   toPublicPosts,
   toPublicThings,
+  typeClause,
   visibilityQueryFor,
   withMatch,
   type Fail,
+  type PostType,
+  type PostVisibility,
   type PublicPost,
   type PublicThing,
   type ThingDoc,
@@ -77,6 +82,12 @@ const MAX_RANKED_OFFSET = 500;
 // match counts are a UX nicety, never worth a collection scan hanging a request
 const COUNT_LIMIT = 1000;
 const COUNT_MAX_TIME_MS = 2000;
+// Engagement filters (min reactions/comments) can't be expressed as an indexed
+// match — counts live in child things (FUNDAMENTALS §3), so we score a bounded
+// window of the newest/best-matching candidates and page within it by offset.
+// Same determinism trade-off as the ranked feed's RANKED_CANDIDATE_WINDOW.
+const ENGAGEMENT_CANDIDATE_WINDOW = 400;
+const MAX_AUTHOR_CHARS = 64;
 
 // Root fields searchable by name; anything else lives under crystal (bare
 // names like "legs" auto-prefix to crystal.legs so the GUI can stay simple).
@@ -109,6 +120,15 @@ export type SearchQuery = {
   sort?: unknown; // 'relevance' (default with q) | 'newest' (default without) | 'oldest'
   cursor?: unknown;
   limit?: unknown;
+  // shortcut filters (the feed/profile Advanced panel): all optional, all
+  // compiled server-side into the same safe machinery as everything above
+  types?: unknown; // post types (csv), era-aware via typeClause
+  circles?: unknown; // audience circles (csv), narrows visibilityQueryFor
+  author?: unknown; // a username — resolved to ownerId (unknown user = empty result)
+  minTextChars?: unknown; // text length bounds ($strLenCP over both text eras)
+  maxTextChars?: unknown;
+  minReactions?: unknown; // engagement thresholds — bounded-window mode (see below)
+  minComments?: unknown;
 };
 
 export type SearchResult = {
@@ -312,6 +332,22 @@ const parseDate = (value: unknown): Date | null | Fail => {
   return Number.isNaN(date.getTime()) ? fail(400, 'Invalid date') : date;
 };
 
+// shortcut-filter numbers: absent/empty means "no bound", anything else must be
+// a finite non-negative number (floored, sanity-capped)
+const parseCount = (value: unknown, label: string, max: number): number | null | Fail => {
+  if (value === undefined || value === null || value === '') return null;
+  const num = Number(value);
+  if (!Number.isFinite(num) || num < 0) return fail(400, `${label} must be a non-negative number`);
+  return Math.min(Math.floor(num), max);
+};
+
+// Text length over both eras (v2 crystal.text / v1 root text), string-guarded
+// so a data crystal carrying a non-string `text` can't blow up $strLenCP.
+const textLengthExpr = () => {
+  const value = { $ifNull: ['$crystal.text', { $ifNull: ['$text', ''] }] };
+  return { $strLenCP: { $cond: [{ $eq: [{ $type: value }, 'string'] }, value, ''] } };
+};
+
 export const searchThings = async (viewerInput: string | Viewer, query: SearchQuery): Promise<Fail | SearchResult> => {
   const viewer = asViewer(viewerInput);
   const limit = Math.min(Math.max(1, Number(query.limit) || DEFAULT_SEARCH_LIMIT), MAX_SEARCH_LIMIT);
@@ -372,12 +408,65 @@ export const searchThings = async (viewerInput: string | Viewer, query: SearchQu
     clauses.push({ createdAt: range });
   }
 
+  // -- shortcut filters (feed/profile Advanced panel) -----------------------
+
+  const emptyResult: SearchResult = { ok: true, things: [], posts: {}, nextCursor: null, total: 0, totalCapped: false, ranked: false };
+
+  // post types, era-aware (v2 crystal.type / v1 root type)
+  const types = csvList(query.types).filter((entry): entry is PostType => POST_TYPES.includes(entry as PostType));
+  if (types.length) clauses.push(typeClause(types));
+
+  // audience circles narrow the visibility superset below
+  const circles = csvList(query.circles).filter((entry): entry is PostVisibility =>
+    VISIBILITIES.includes(entry as PostVisibility)
+  );
+
+  // author: one username → ownerId. An unknown username matches nothing —
+  // that's an empty result, not an error (filters are exploratory).
+  if (query.author !== undefined && query.author !== null && query.author !== '') {
+    if (typeof query.author !== 'string' || query.author.trim().length > MAX_AUTHOR_CHARS) {
+      return fail(400, 'author must be a username');
+    }
+    const users = await getUsersCollection();
+    const authorDoc = await users.findOne({ username: query.author.trim().toLowerCase() }, { projection: { _id: 1 } });
+    if (!authorDoc) return emptyResult;
+    clauses.push({ ownerId: String(authorDoc._id) });
+  }
+
+  // text length bounds — $expr per matched doc, same cost class as the
+  // grammar's regex operators
+  const minTextChars = parseCount(query.minTextChars, 'minTextChars', MAX_TEXT_CHARS);
+  if (isFail(minTextChars)) return minTextChars;
+  const maxTextChars = parseCount(query.maxTextChars, 'maxTextChars', MAX_TEXT_CHARS);
+  if (isFail(maxTextChars)) return maxTextChars;
+  if (minTextChars !== null || maxTextChars !== null) {
+    // $let binds the length once so $strLenCP runs a single time per doc even
+    // when both bounds are set
+    const bounds: Record<string, any>[] = [];
+    if (minTextChars !== null) bounds.push({ $gte: ['$$textLen', minTextChars] });
+    if (maxTextChars !== null) bounds.push({ $lte: ['$$textLen', maxTextChars] });
+    clauses.push({
+      $expr: {
+        $let: {
+          vars: { textLen: textLengthExpr() },
+          in: bounds.length === 1 ? bounds[0] : { $and: bounds }
+        }
+      }
+    });
+  }
+
+  const minReactions = parseCount(query.minReactions, 'minReactions', 1_000_000);
+  if (isFail(minReactions)) return minReactions;
+  const minComments = parseCount(query.minComments, 'minComments', 1_000_000);
+  if (isFail(minComments)) return minComments;
+  const engagement = minReactions !== null || minComments !== null;
+
   // Same audience model as the feed: the DB match is a superset (public things
   // + the viewer's own), the exact acl verdict happens per doc below. Things
   // carrying ['tt:inherit'] (comments/reactions) only surface for their owner —
   // matching listThings, attached things aren't independently discoverable.
-  const visibility = visibilityQueryFor(viewer, []);
-  if (!visibility) return { ok: true, things: [], posts: {}, nextCursor: null, total: 0, totalCapped: false, ranked: false };
+  const visibility = visibilityQueryFor(viewer, circles);
+  if (!visibility) return emptyResult;
 
   const baseMatch = withMatch(visibility, ...clauses);
   const ranked = sort === 'relevance';
@@ -387,6 +476,126 @@ export const searchThings = async (viewerInput: string | Viewer, query: SearchQu
 
   await ensureIndexes();
   const things = await getThingsCollection();
+
+  // -- engagement-window mode ------------------------------------------------
+  // Reaction/comment counts are aggregated from child things at read time
+  // (never stored on the parent), so they can't be part of the indexed match.
+  // Instead: take a bounded window of the newest (or best-matching) candidates,
+  // batch-count their children (one $group per era — never N+1), filter by the
+  // thresholds, and page by offset within the filtered window. Counts sum raw
+  // docs across eras (embedded residue + interim kind docs + v2 things) with
+  // NO (user, token) dedup, unlike the cards' mergedReactionsOf — so a post
+  // holding the same reaction in two era representations can over-count a
+  // filter verdict until the things v1→v2 admin migration collapses the
+  // residue. Exact dedup would mean shipping every (owner, token) pair for up
+  // to 400 posts over the wire; a threshold heuristic doesn't justify that.
+  if (engagement) {
+    const offset = Math.min(Math.max(0, Number(query.cursor) || 0), ENGAGEMENT_CANDIDATE_WINDOW);
+    const windowSort = ranked
+      ? { score: { $meta: 'textScore' }, createdAt: -1, shareId: 1 }
+      : sort === 'oldest'
+        ? { createdAt: 1, shareId: 1 }
+        : { createdAt: -1, shareId: 1 };
+
+    const candidates = (await things
+      .aggregate([
+        { $match: match },
+        { $sort: windowSort },
+        { $limit: ENGAGEMENT_CANDIDATE_WINDOW },
+        {
+          $project: {
+            shareId: 1,
+            embeddedComments: { $size: { $ifNull: ['$comments', []] } },
+            embeddedReactions: {
+              $sum: {
+                $map: {
+                  input: { $objectToArray: { $ifNull: ['$reactions', {}] } },
+                  as: 'entry',
+                  in: { $size: { $ifNull: ['$$entry.v', []] } }
+                }
+              }
+            }
+          }
+        }
+      ])
+      .toArray()) as any as { shareId: string; embeddedComments: number; embeddedReactions: number }[];
+
+    const ids = candidates.map((candidate) => candidate.shareId);
+    const [v2Counts, legacyCounts] = ids.length
+      ? await Promise.all([
+          things
+            .aggregate([
+              { $match: { targetId: { $in: ids }, thingtime: { $in: ['comment', 'reaction'] } } },
+              {
+                $group: {
+                  _id: '$targetId',
+                  comments: { $sum: { $cond: [{ $in: ['comment', { $ifNull: ['$thingtime', []] }] }, 1, 0] } },
+                  reactions: { $sum: { $cond: [{ $in: ['reaction', { $ifNull: ['$thingtime', []] }] }, 1, 0] } }
+                }
+              }
+            ])
+            .toArray() as Promise<any[]>,
+          things
+            .aggregate([
+              { $match: { parentId: { $in: ids }, kind: { $in: ['comment', 'reaction'] } } },
+              {
+                $group: {
+                  _id: '$parentId',
+                  comments: { $sum: { $cond: [{ $eq: ['$kind', 'comment'] }, 1, 0] } },
+                  reactions: { $sum: { $cond: [{ $eq: ['$kind', 'reaction'] }, 1, 0] } }
+                }
+              }
+            ])
+            .toArray() as Promise<any[]>
+        ])
+      : [[], []];
+
+    const countsById = new Map<string, { comments: number; reactions: number }>();
+    const bump = (id: string, comments: number, reactions: number) => {
+      const entry = countsById.get(id) || { comments: 0, reactions: 0 };
+      entry.comments += comments;
+      entry.reactions += reactions;
+      countsById.set(id, entry);
+    };
+    for (const row of v2Counts) bump(String(row._id), row.comments || 0, row.reactions || 0);
+    for (const row of legacyCounts) bump(String(row._id), row.comments || 0, row.reactions || 0);
+    for (const candidate of candidates) bump(candidate.shareId, candidate.embeddedComments || 0, candidate.embeddedReactions || 0);
+
+    const filtered = candidates.filter((candidate) => {
+      const counts = countsById.get(candidate.shareId) || { comments: 0, reactions: 0 };
+      if (minReactions !== null && counts.reactions < minReactions) return false;
+      if (minComments !== null && counts.comments < minComments) return false;
+      return true;
+    });
+
+    const pageIds = filtered.slice(offset, offset + limit).map((candidate) => candidate.shareId);
+    const pageDocs = pageIds.length
+      ? ((await things.find({ shareId: { $in: pageIds } } as any).toArray()) as any as ThingDoc[])
+      : [];
+    const docsById = new Map(pageDocs.map((doc) => [doc.shareId, doc]));
+    const page = pageIds.map((id) => docsById.get(id)).filter(Boolean) as ThingDoc[];
+
+    const verdicts = await Promise.all(page.map((doc) => canViewInherited(doc, viewer)));
+    const visible = page.filter((_, index) => verdicts[index]);
+
+    const publicThings = await toPublicThings(visible, viewer);
+    const postDocs = visible.filter((doc) => isPostThing(doc));
+    const postProjections = postDocs.length ? await toPublicPosts(postDocs, viewer) : [];
+    const posts: Record<string, PublicPost> = {};
+    for (const post of postProjections) posts[post.id] = post;
+
+    return {
+      ok: true,
+      things: publicThings,
+      posts,
+      nextCursor: offset + limit < filtered.length ? String(offset + limit) : null,
+      // the window bounds the count — when the window itself filled up, there
+      // may be more matches beyond it
+      total: filtered.length,
+      totalCapped: candidates.length >= ENGAGEMENT_CANDIDATE_WINDOW,
+      ranked
+    };
+  }
 
   const fetchPage = async (): Promise<{ docs: ThingDoc[]; nextCursor: string | null }> => {
     if (ranked) {

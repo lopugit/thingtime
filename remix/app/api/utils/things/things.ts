@@ -12,6 +12,7 @@ import {
   ACL_OWNER,
   COLLECTION_SCHEMA_VERSIONS,
   MAX_TEXT_CHARS,
+  POST_TYPES as REGISTRY_POST_TYPES,
   PROTECTED_THINGTIME,
   REACTION_EMOJIS,
   aclAllows,
@@ -40,7 +41,9 @@ import { scorePost, type AlgorithmWeights, type PostFeatures } from './feedRanki
 
 export { REACTION_EMOJIS };
 
-export type PostType = 'text' | 'image' | 'marketplace';
+// derived from the registry's whitelist so the validation gate and the feed's
+// type filters can never drift
+export type PostType = (typeof REGISTRY_POST_TYPES)[number];
 export type PostVisibility = 'public' | 'friends' | 'family' | 'private';
 export type MarketplaceCategory = 'car' | 'tool' | 'furniture' | 'service' | 'other';
 
@@ -133,6 +136,8 @@ export type PublicPost = {
   text: string;
   images: string[];
   listing: MarketplaceListing | null;
+  // thingtime posts: the free-form structured thing under crystal.thing
+  thing: Record<string, any> | null;
   tags: string[];
   reactionCounts: Record<string, number>;
   viewerReactions: string[];
@@ -169,8 +174,8 @@ export type Viewer = { id: string; username?: string | null } | null;
 export const asViewer = (value: string | Viewer | null | undefined): Viewer =>
   typeof value === 'string' ? { id: value } : value || null;
 
-const POST_TYPES: PostType[] = ['text', 'image', 'marketplace'];
-const VISIBILITIES: PostVisibility[] = ['public', 'friends', 'family', 'private'];
+export const POST_TYPES: PostType[] = [...REGISTRY_POST_TYPES];
+export const VISIBILITIES: PostVisibility[] = ['public', 'friends', 'family', 'private'];
 
 const MAX_TAGS = 12;
 const MAX_TAG_CHARS = 40;
@@ -489,6 +494,7 @@ export type CreatePostInput = {
   images?: unknown;
   listing?: unknown;
   extended?: unknown;
+  thing?: unknown;
   acl?: unknown;
   visibility?: unknown;
   tags?: unknown;
@@ -509,7 +515,7 @@ export const createPost = async (
     ownerId,
     {
       thingtime: ['post'],
-      crystal: { type: input.type, text: input.text, images: input.images, listing: input.listing },
+      crystal: { type: input.type, text: input.text, images: input.images, listing: input.listing, thing: input.thing },
       extended: input.extended,
       acl: input.acl,
       visibility: input.visibility,
@@ -749,6 +755,10 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
       text: String(crystal.text || ''),
       images: (crystal.images as string[]) || [],
       listing: (crystal.listing as MarketplaceListing) || null,
+      thing:
+        crystal.thing && typeof crystal.thing === 'object' && !Array.isArray(crystal.thing)
+          ? (crystal.thing as Record<string, any>)
+          : null,
       tags: doc.tags || [],
       reactionCounts: reactionCountsOf(reactions),
       viewerReactions: viewerReactionsOf(reactions, viewerId),
@@ -932,7 +942,8 @@ export const oldestCursorClause = (cursor: { createdAt: Date; id: string }) => (
 });
 
 // type filter must match both eras: v2 keeps type in crystal, v1 at the root
-const typeClause = (types: PostType[]) =>
+// (exported so /search's shortcut filters share the exact same era handling)
+export const typeClause = (types: PostType[]) =>
   types.length ? { $or: [{ 'crystal.type': { $in: types } }, { type: { $in: types } }] } : {};
 
 export const getFeed = async (
@@ -1510,16 +1521,31 @@ export const updateThing = async (
     if (isFail(provenance)) return provenance;
   }
 
+  // post crystals only — see the identical guard in createThing
+  const patchedListing = thingtime.includes('post')
+    ? (validated.crystal.listing as MarketplaceListing | null | undefined)
+    : null;
+  const categoryTag = patchedListing && typeof patchedListing.category === 'string' ? [patchedListing.category] : [];
+
   let tags = doc.tags || [];
   if (input.tags !== undefined) {
     const sanitized = sanitizeTags(input.tags);
     if (isFail(sanitized)) return sanitized;
-    // post crystals only — see the identical guard in createThing
-    const listing = thingtime.includes('post')
-      ? (validated.crystal.listing as MarketplaceListing | null | undefined)
-      : null;
-    const categoryTag = listing && typeof listing.category === 'string' ? [listing.category] : [];
     tags = [...sanitized, ...categoryTag].filter((tag, index, all) => all.indexOf(tag) === index);
+  } else if (categoryTag.length) {
+    // a listing PATCH that changes the category without resending tags SWAPS
+    // the folded category tag — never accumulates stale categories, never
+    // grows the list past the create-time fold's bound. Keyed on the category
+    // actually changing (not tag membership: the new category may coincide
+    // with a user tag, and the old one must STILL come out then).
+    const previousCategory = thingtime.includes('post')
+      ? ((crystalOf(doc).listing as MarketplaceListing | null | undefined)?.category ?? null)
+      : null;
+    if (previousCategory !== categoryTag[0]) {
+      tags = [...tags.filter((tag) => tag !== previousCategory), ...categoryTag].filter(
+        (tag, index, all) => all.indexOf(tag) === index
+      );
+    }
   }
 
   let acl = aclOf(doc);

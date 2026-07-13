@@ -476,6 +476,32 @@ const LongTextEditorInner = (props: LongTextEditorInnerProps) => {
 				...(enabled('style') ? { style: StyleTune as any } : {})
 			};
 
+			// Editor.js's ReadOnly module clears the DOCUMENT selection while a new
+			// instance prepares (ReadOnly.toggleReadOnly → removeAllRanges). With
+			// several editors live-syncing one store path (the composer's in-post
+			// editor + its popout), an echo remounts the non-typing instance and
+			// that global wipe eats the typist's caret mid-keystroke — focus stays
+			// on their block but the next keys land at its start. Capture a
+			// selection that lives OUTSIDE this holder before init and put it back
+			// after isReady (only if still wiped and still attached, so a user who
+			// re-clicked meanwhile is never fought).
+			const foreignSelection = (() => {
+				const selection = window.getSelection();
+				if (!selection || selection.rangeCount === 0) return null;
+				const range = selection.getRangeAt(0);
+				if (holderRef.current?.contains(range.startContainer)) return null;
+				return range.cloneRange();
+			})();
+			const restoreForeignSelection = () => {
+				if (!foreignSelection || !foreignSelection.startContainer.isConnected) return;
+				const selection = window.getSelection();
+				// rangeCount > 0 means someone re-established a caret after the wipe
+				// (the user clicked, or — version-dependent — Editor.js placed one in
+				// its own holder); fighting it risks worse than the wipe. Empirically
+				// our Editor.js build leaves the selection cleared, so this restores.
+				if (selection && selection.rangeCount === 0) selection.addRange(foreignSelection);
+			};
+
 			let editor: any;
 			editorChangeQueue = createOrderedEditorJsChangeQueue<SequencedLongTextValue, string>({
 				getSignature: (snapshot) => getEditorJsValueSignature(snapshot.value),
@@ -516,10 +542,15 @@ const LongTextEditorInner = (props: LongTextEditorInnerProps) => {
 			await editor.isReady;
 
 			if (cancelled) {
+				// a superseded init still wiped the document selection — restore
+				// AFTER its teardown so destroy can't re-clear what we put back
 				editor.destroy?.();
 				editorRef.current = null;
+				restoreForeignSelection();
 				return;
 			}
+
+			restoreForeignSelection();
 
 			// Editor.js's block listener mistakes empty internal lines in tool
 			// textboxes for block boundaries. Bind before that outer listener so

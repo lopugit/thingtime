@@ -1762,7 +1762,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     steps: [
-      'POST { thingtime: ["post"], crystal: { type, text, images, listing }, acl, tags } — or the legacy post body — to create.',
+      'POST { thingtime: ["post"], crystal: { type, text, images, listing, thing }, acl, tags } — or the legacy post body — to create. type is text, image, marketplace, or thingtime.',
+      'Thingtime posts (type "thingtime") carry a free-form structured thing under crystal.thing — bounded like data crystals and searchable as crystal.thing.<field> on /search. They can also carry images and an optional marketplace listing (validated like a marketplace post’s when present).',
       'Omit thingtime entirely to create a schema-less thing: { crystal: { any: "shape" } } defaults to thingtime ["data"].',
       'Optionally add extended: any JSON up to 512KB, stored untouched and returned as-is — replace-on-write, null clears it. It is not structured-searchable (/search field conditions can’t target it), though its string content is indexed by the wildcard text index like any field.',
       'Attached kinds (comment, reaction) require targetId and carry acl ["tt:inherit"]; shares carry thingtime ["post","share"].',
@@ -1791,6 +1792,20 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           thingtime: ['post'],
           crystal: { type: 'text', text: 'Bonfire at ours on Saturday 🔥' },
           acl: ['-tt:all', 'tt:userFriends', 'tt:user']
+        }
+      },
+      {
+        name: 'Create thingtime post',
+        description: 'A post carrying any structured thing — searchable by its real datatypes on /search.',
+        method: 'POST',
+        body: {
+          thingtime: ['post'],
+          crystal: {
+            type: 'thingtime',
+            text: 'My new standing desk 🌀',
+            thing: { name: 'Walnut standing desk', legs: 4, material: 'wood', height: 130, sitStand: true }
+          },
+          tags: ['furniture']
         }
       },
       {
@@ -1968,6 +1983,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'POST { q?, mode: "all"|"any", conditions: [{ field, op, value | values } | { mode, conditions: [...] }], thingtime?, tags?, from?, to?, sort?, cursor?, limit? } for structured searches.',
       'Range searches are one atomic between condition ({ field, op: "between", values: [low, high] }, either end open); enum picks are one in condition.',
       'sort defaults to relevance with q, newest otherwise (oldest also supported); ranked pages cursor by offset, chronological pages by the standard createdAt_shareId cursor.',
+      'Shortcut filters (the feed/profile Advanced panel) compose with everything above: types (post types, csv), circles (audience circles, csv), author (one username — unknown usernames match nothing), minTextChars/maxTextChars (post text length), and minReactions/minComments.',
+      'Engagement thresholds (minReactions/minComments) count child things at read time, so they search a bounded window of the newest (or best-matching) 400 candidates and page within it by offset — the same determinism trade-off as the ranked feed.',
       'The response carries things (generic projections), posts (full post projections keyed by thing id), nextCursor, and a capped approximate total (a visibility-superset count, only computed on the first page).',
       'Handle 400 invalid grammar and 429 rate-limited.'
     ],
@@ -2019,6 +2036,19 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         body: {
           q: 'table',
           conditions: [{ field: 'legs', op: 'gte', value: 4 }]
+        }
+      },
+      {
+        name: 'Advanced feed shortcuts',
+        description: 'The feed/profile Advanced panel: popular long-form posts by one user, tagged desk.',
+        method: 'POST',
+        body: {
+          thingtime: ['post'],
+          author: 'rick.deckard',
+          tags: 'desk',
+          minReactions: 5,
+          minComments: 2,
+          minTextChars: 200
         }
       }
     ],
