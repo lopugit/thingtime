@@ -15,6 +15,15 @@ Repository-wide AI guidance lives in the single canonical `AI_ALL.md`.
 Claude, and other compatible tools read the same instructions. Update
 `AI_ALL.md` only; keep both symlinks intact.
 
+## Thingtime MCP
+
+The standalone [`MCP/`](MCP/) package is a consent-first bridge for importing
+AI desktop conversations, settings, attachments, and export metadata into a
+private normalized staging format. It supports explicit current-chat handoff
+from any MCP host, ChatGPT and Claude JSON exports, and a portable connector
+manifest for other apps. See [`MCP/README.md`](MCP/README.md) for setup and the
+current ThingtimeDB integration boundary.
+
 # 💹 Donate on Indiegogo to save humanity 🩷
 
 ### You can get Merch 🌈 + other benefits 🦄💯

@@ -569,6 +569,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   storage is unavailable. Official API docs, auth smoke coverage, and focused
   policy/rollover/idempotency tests ship with it. — Codex (AI), 2026-07-19
 
+- Added the standalone consent-first Thingtime MCP foundation under `MCP/`:
+  MCP desktop hosts can explicitly stage their current chat, user-approved
+  ChatGPT/Claude exports and a portable app manifest normalize into one schema,
+  allowlisted local attachments are copied into private staging, credential-like
+  metadata is redacted, and relational `ai-chat`/`ai-chat-message` ThingtimeDB
+  records can be previewed without writing to the platform. — _Codex (AI),
+  2026-07-13_
+
 - Extensible data: every `things` doc now carries a schema-free top-level
   `extended` property — any JSON up to 512KB, stored and returned exactly as
   given, never validated, structured-searchable, or interpreted;
