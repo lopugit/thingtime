@@ -17,7 +17,8 @@ import { BookOpen, Columns3, GitFork, LayoutGrid, Library, Plus, Rows3, Search, 
 import { useLocation, useNavigate } from 'react-router';
 
 import { Rainbow } from '~/components/Rainbow/Rainbow';
-import { RenderThing } from '~/components/Kinds';
+import { ChakraThingRenderer, HtmlThingRenderer, RenderThing, isChakraThingNode } from '~/components/Kinds';
+import type { ChakraThingNode, HtmlThingNode } from '~/components/Kinds';
 import { EmojiPicker } from '~/components/Emoji/EmojiPicker';
 import { useRecentReactions } from '~/components/Emoji/useRecentReactions';
 import { timeAgo } from '~/components/Feed/feedTypes';
@@ -25,8 +26,9 @@ import { useLopu } from '~/components/Lopu/useLopu';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
-import { crystalSchemas } from '~/schemas/registry';
-import { describeSchemaField, flattenSchemaFields, generateSampleFromFields } from '~/schemas/tools';
+import { crystalSchemas, getThingtimeSchema, thingtimeSchemas } from '~/schemas/registry';
+import type { SchemaThingField } from '~/schemas/registry';
+import { describeSchemaField, flattenSchemaFieldsForDisplay, generateSampleFromFields } from '~/schemas/tools';
 
 import { SchemaBuilder, type BuilderPrefill } from './SchemaBuilder';
 import { SchemaThingForm } from './SchemaThingForm';
@@ -82,6 +84,29 @@ const monoLabel = {
   textTransform: 'uppercase' as const
 };
 
+// the root Thing schema's system-stamped fields (shareId, ownerId, createdAt…)
+// — every card shows these under "thingtime adds", sourced from one place
+const systemThingFields = () =>
+  ((getThingtimeSchema('thing')?.fields || []) as unknown as SchemaThingField[]).filter(
+    (field) => (field as { system?: boolean }).system
+  );
+
+const ShapeChip = ({ children, dim }: { children: React.ReactNode; dim?: boolean }) => (
+  <Flex
+    align="center"
+    background="var(--tt-surface-alt, #f5f5f7)"
+    borderRadius="var(--tt-radius-xs, 7px)"
+    gap={1.5}
+    opacity={dim ? 0.66 : 1}
+    paddingX={2}
+    paddingY={0.5}
+  >
+    <Text color="var(--tt-ink, #16161a)" fontFamily="var(--tt-font-mono, monospace)" fontSize="11px">
+      {children}
+    </Text>
+  </Flex>
+);
+
 // ---------------------------------------------------------------------------
 // Sample preview: rendered via the kind registry when a renderer exists for
 // the schema's name, else an honest generated-sample chip card.
@@ -131,7 +156,17 @@ const SampleRender = ({ source }: { source: SchemaCardSource }) => {
       overflow="hidden"
       padding={3}
     >
-      <RenderThing context={{ size: 'card' }} fallback={<SamplePreview source={source} />} thing={thing} />
+      {source.render ? (
+        // the schema ships its own serialised component — drawn through the
+        // sanitising allowlist gates, never the legacy unsanitised chakra path
+        isChakraThingNode(source.render) ? (
+          <ChakraThingRenderer node={source.render as ChakraThingNode} />
+        ) : (
+          <HtmlThingRenderer node={source.render as HtmlThingNode} />
+        )
+      ) : (
+        <RenderThing context={{ size: 'card' }} fallback={<SamplePreview source={source} />} thing={thing} />
+      )}
     </Box>
   );
 };
@@ -148,11 +183,27 @@ type SchemaCardProps = {
   onSearchThings: (source: SchemaCardSource) => void;
 };
 
+const COLLAPSED_FIELD_CHIPS = 8;
+
 const SchemaCard = React.memo(({ source, onReact, onSave, onFork, onCreateThing, onSearchThings }: SchemaCardProps) => {
   const entry = source.entry;
-  const flat = React.useMemo(() => flattenSchemaFields(source.fields), [source.fields]);
+  const registry = source.registry;
+  const isRoot = registry?.kind === 'root';
+  const flat = React.useMemo(() => flattenSchemaFieldsForDisplay(source.fields), [source.fields]);
+  const [showAllFields, setShowAllFields] = React.useState(false);
   const { recent } = useRecentReactions();
   const [pickerOpen, setPickerOpen] = React.useState(false);
+
+  // the thingtime ids a thing of this kind actually carries — community
+  // schemas describe data crystals, share rides ["post","share"], etc.
+  const appliedIds = isRoot ? [] : registry ? registry.appliedThingtime || [registry.id] : ['data'];
+  const inherits = isRoot ? [] : ['thing', ...appliedIds.filter((id) => id !== registry?.id)];
+  const crystalFieldNames = React.useMemo(() => {
+    if (!registry) return ['schema', ...source.fields.map((field) => field.name)];
+    return appliedIds.flatMap((id) => (getThingtimeSchema(id)?.fields || []).map((field) => field.name));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [registry, source.fields]);
+  const systemFields = React.useMemo(systemThingFields, []);
 
   const reactionEntries = Object.entries(entry?.reactionCounts || {}).filter(([, count]) => count > 0);
 
@@ -205,32 +256,104 @@ const SchemaCard = React.memo(({ source, onReact, onSave, onFork, onCreateThing,
         </Text>
       )}
 
-      {flat.length > 0 && (
-        <Flex gap={1.5} wrap="wrap">
-          {flat.slice(0, 8).map((field) => (
-            <Flex
-              align="center"
-              background="var(--tt-surface-alt, #f5f5f7)"
-              borderRadius="var(--tt-radius-xs, 7px)"
-              gap={1.5}
-              key={field.path}
+      {inherits.length > 0 && (
+        <Flex align="center" gap={1.5} wrap="wrap">
+          <Text {...monoLabel}>inherits</Text>
+          {inherits.map((id) => (
+            <Badge
+              background="var(--tt-surface, #fafafb)"
+              border="1px solid var(--tt-border, #ececef)"
+              borderRadius="full"
+              color="var(--tt-text, #33333c)"
+              fontSize="10px"
+              key={id}
               paddingX={2}
-              paddingY={0.5}
+              textTransform="none"
+              title={getThingtimeSchema(id)?.summary}
             >
-              <Text color="var(--tt-ink, #16161a)" fontFamily="var(--tt-font-mono, monospace)" fontSize="11px">
-                {field.path}
-              </Text>
-              <Text color="var(--tt-muted, #9a9aa6)" fontSize="10px">
-                {describeSchemaField(field.field)}
-                {field.field.required ? ' *' : ''}
-              </Text>
-            </Flex>
+              {getThingtimeSchema(id)?.title || id}
+            </Badge>
           ))}
-          {flat.length > 8 && (
-            <Text alignSelf="center" color="var(--tt-faint, #b6b6c0)" fontSize="11px">
-              +{flat.length - 8} more
-            </Text>
+        </Flex>
+      )}
+
+      {flat.length > 0 && (
+        <Flex align="center" gap={1.5} wrap="wrap">
+          <Text {...monoLabel}>fields</Text>
+          {(showAllFields ? flat : flat.slice(0, COLLAPSED_FIELD_CHIPS)).map((field) => {
+            const system = Boolean((field.field as { system?: boolean }).system);
+            return (
+              <Flex
+                align="center"
+                background="var(--tt-surface-alt, #f5f5f7)"
+                borderRadius="var(--tt-radius-xs, 7px)"
+                gap={1.5}
+                key={field.path}
+                opacity={system ? 0.7 : 1}
+                paddingX={2}
+                paddingY={0.5}
+                title={field.field.description}
+              >
+                <Text color="var(--tt-ink, #16161a)" fontFamily="var(--tt-font-mono, monospace)" fontSize="11px">
+                  {field.path}
+                </Text>
+                <Text color="var(--tt-muted, #9a9aa6)" fontSize="10px">
+                  {describeSchemaField(field.field)}
+                  {field.field.required ? ' *' : ''}
+                  {system ? ' ⚙' : ''}
+                </Text>
+              </Flex>
+            );
+          })}
+          {flat.length > COLLAPSED_FIELD_CHIPS && (
+            <Button
+              color="var(--tt-muted, #9a9aa6)"
+              fontSize="11px"
+              height="auto"
+              minWidth={0}
+              onClick={() => setShowAllFields((open) => !open)}
+              padding={0}
+              size="xs"
+              variant="link"
+            >
+              {showAllFields ? 'show less' : `+${flat.length - COLLAPSED_FIELD_CHIPS} more`}
+            </Button>
           )}
+        </Flex>
+      )}
+
+      {!isRoot && (
+        <Flex align="center" gap={1.5} wrap="wrap">
+          <Text {...monoLabel}>on create</Text>
+          {registry?.createdVia ? (
+            <ShapeChip>via {registry.createdVia}</ShapeChip>
+          ) : (
+            <>
+              <ShapeChip>thingtime: [{appliedIds.map((id) => `"${id}"`).join(', ')}]</ShapeChip>
+              {registry?.requiresTarget && <ShapeChip>targetId *</ShapeChip>}
+              <ShapeChip>
+                crystal: {'{ '}
+                {crystalFieldNames.length ? crystalFieldNames.join(', ') : '…'}
+                {' }'}
+              </ShapeChip>
+              <ShapeChip dim>acl?</ShapeChip>
+              <ShapeChip dim>tags?</ShapeChip>
+              <ShapeChip dim>extended?</ShapeChip>
+            </>
+          )}
+        </Flex>
+      )}
+
+      {!isRoot && (
+        <Flex align="center" gap={1.5} wrap="wrap">
+          <Text {...monoLabel} title="System props stamped by Thingtime — from the root Thing schema every thing inherits">
+            thingtime adds
+          </Text>
+          {systemFields.map((field) => (
+            <ShapeChip dim key={field.name}>
+              {field.name}: {describeSchemaField(field)}
+            </ShapeChip>
+          ))}
         </Flex>
       )}
 
@@ -307,17 +430,21 @@ const SchemaCard = React.memo(({ source, onReact, onSave, onFork, onCreateThing,
             {entry.saved ? 'In my library' : 'Add to library'}
           </Button>
         )}
-        <Button leftIcon={<Sparkles size={14} />} onClick={() => onCreateThing(source)} size="xs" variant="outline">
-          Create a thing
-        </Button>
+        {!isRoot && (
+          <Button leftIcon={<Sparkles size={14} />} onClick={() => onCreateThing(source)} size="xs" variant="outline">
+            Create a thing
+          </Button>
+        )}
         {searchableSchemaSource(source) && (
           <Button leftIcon={<Search size={14} />} onClick={() => onSearchThings(source)} size="xs" variant="outline">
             Search things
           </Button>
         )}
-        <Button leftIcon={<GitFork size={14} />} onClick={() => onFork(source)} size="xs" variant="outline">
-          Fork
-        </Button>
+        {!isRoot && (
+          <Button leftIcon={<GitFork size={14} />} onClick={() => onFork(source)} size="xs" variant="outline">
+            Fork
+          </Button>
+        )}
         {source.origin === 'builtin' && (
           <Button
             as="a"
@@ -437,11 +564,13 @@ export const SchemasBrowsePage = () => {
     runBrowse({ sortOverride: updates.sort, scopeOverride: updates.scope });
   };
 
-  // builtin registry schemas (platform) — filtered client-side by q
+  // builtin registry schemas (platform) — the root Thing schema leads (every
+  // thing inherits it), then the crystal schemas; filtered client-side by q
   const builtinSources = React.useMemo(() => {
     if (scope !== 'all') return [];
     const needle = q.trim().toLowerCase();
-    return crystalSchemas()
+    return thingtimeSchemas
+      .filter((schema) => schema.kind === 'root' || schema.kind === 'crystal')
       .map(registryToCardSource)
       .filter((source) => !needle || source.name.toLowerCase().includes(needle) || source.description.toLowerCase().includes(needle));
   }, [scope, q]);
@@ -654,34 +783,47 @@ export const SchemasBrowsePage = () => {
           </Button>
         </Flex>
 
+        {/* same rainbow-ringed input as /search — 2px ring, clipped */}
         <form onSubmit={submit}>
-          <Center height="56px" position="relative">
-            <Rainbow opacity={0.6} position="absolute" repeats={2} thickness={10} />
-            <Flex
-              align="center"
-              background="var(--tt-card, #ffffff)"
-              borderRadius="full"
-              gap={2}
-              height="100%"
-              paddingX={5}
+          <Center position="relative" width="100%">
+            <Center
+              borderRadius="var(--tt-radius-sm, 9px)"
+              height="56px"
+              overflow="hidden"
+              padding="2px"
               position="relative"
               width="100%"
             >
-              <Search color="var(--tt-muted, #9a9aa6)" size={16} />
-              <Input
-                _placeholder={{ color: 'var(--tt-muted, #9a9aa6)' }}
-                border="none"
-                onChange={(event) => setQ(event.target.value)}
-                outline="none"
-                padding={0}
-                placeholder="Search every schema…"
-                value={q}
-                variant="unstyled"
-              />
-              <Button colorScheme="pink" isLoading={loading && !entries.length} size="sm" type="submit">
-                Search
-              </Button>
-            </Flex>
+              <Rainbow opacity={0.6} position="absolute" repeats={2} thickness={10} />
+              <Flex
+                align="center"
+                background="var(--tt-card, #ffffff)"
+                borderRadius="var(--tt-radius-xs, 7px)"
+                gap={2}
+                height="100%"
+                position="relative"
+                px={3}
+                width="100%"
+                zIndex={1}
+              >
+                <Search color="var(--tt-muted, #9a9aa6)" size={18} />
+                <Input
+                  _placeholder={{ color: 'var(--tt-muted, #9a9aa6)' }}
+                  border="none"
+                  fontSize="md"
+                  height="100%"
+                  onChange={(event) => setQ(event.target.value)}
+                  outline="none"
+                  padding={0}
+                  placeholder="Search every schema…"
+                  value={q}
+                  variant="unstyled"
+                />
+                <Button colorScheme="pink" isLoading={loading && !entries.length} size="sm" type="submit" variant="solid">
+                  Search
+                </Button>
+              </Flex>
+            </Center>
           </Center>
         </form>
 

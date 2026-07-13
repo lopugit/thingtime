@@ -7,7 +7,7 @@
 import { registerUser } from '~/api/utils/auth/registerUser';
 import { findUserByUsername, updateUserProfile } from '~/api/utils/auth/users';
 import { createAlgorithm, listAlgorithmsForUser } from '~/api/utils/algorithms/algorithms';
-import { addComment, createPost, toggleReaction } from '~/api/utils/things/things';
+import { addComment, createPost, createThing, toggleReaction } from '~/api/utils/things/things';
 
 import { getUsers, type SeedUser } from './data/users';
 import {
@@ -18,6 +18,7 @@ import {
   getProfiles,
   getReactions
 } from './data/feed';
+import { getSampleSchemas } from './data/schemas';
 
 const registerAll = async (users: SeedUser[]) => {
   let created = 0;
@@ -157,13 +158,56 @@ export const saveAlgorithms = async () => {
   return { created, skipped, total: seeds.length };
 };
 
+// Sample schema things ride fixed shareIds (sample-schema-<slug>) through the
+// real createThing path — a duplicate 409s into an idempotent skip, matching
+// the post fixtures. Several carry `extended` sidecars and serialised `render`
+// components, so the seeded DB exercises both pipelines end-to-end.
+export const saveSchemas = async () => {
+  let created = 0;
+  let skipped = 0;
+
+  const seeds = await getSampleSchemas();
+  for (const seed of seeds) {
+    const userId = await userIdByUsername(seed.owner);
+    if (!userId) throw new Error(`Seed schema ${seed.slug}: unknown user ${seed.owner}`);
+
+    const crystal: Record<string, unknown> = {
+      name: seed.name,
+      description: seed.description,
+      fields: seed.fields
+    };
+    if (seed.render) crystal.render = seed.render;
+
+    const result = await createThing(userId, {
+      thingtime: ['schema'],
+      crystal,
+      acl: ['tt:all'],
+      tags: seed.tags || [],
+      extended: seed.extended,
+      shareId: `sample-schema-${seed.slug}`,
+      createdAt: seed.ageHours ? new Date(Date.now() - seed.ageHours * 3_600_000) : undefined
+    });
+
+    if (result.ok === true) {
+      created++;
+    } else if (result.status === 409) {
+      skipped++;
+    } else {
+      throw new Error(`Seed schema ${seed.slug} failed: ${result.error}`);
+    }
+  }
+
+  return { created, skipped, total: seeds.length };
+};
+
 export const setup = async () => {
   try {
     const users = await saveUsers();
     const profiles = await saveProfiles();
     const posts = await savePosts();
     const algorithms = await saveAlgorithms();
-    return { ok: true as const, ...users, profiles, posts, algorithms };
+    const schemas = await saveSchemas();
+    return { ok: true as const, ...users, profiles, posts, algorithms, schemas };
   } catch (err: any) {
     return { ok: false as const, error: err?.message || String(err) };
   }
