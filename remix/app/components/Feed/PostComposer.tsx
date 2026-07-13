@@ -88,7 +88,7 @@ export const PostComposer = (props: PostComposerProps) => {
 
   const api = useApi();
   const lopu = useLopu();
-  const { getThingtime, setThingtime, loading: thingtimeLoading } = useThingtime();
+  const { getThingtime, setThingtime, loading: thingtimeLoading, events } = useThingtime();
 
   const [expanded, setExpanded] = React.useState(false);
   const [type, setType] = React.useState<PostType>('text');
@@ -131,9 +131,22 @@ export const PostComposer = (props: PostComposerProps) => {
   const validImages = images.map((url) => url.trim()).filter(isImageUrl);
 
   // this composer's session-scoped draft home (fresh per mount — see
-  // DRAFT_ROOT_KEY above)
+  // DRAFT_ROOT_KEY above). State, not a const: renaming the draft's root key
+  // in the editor emits 'path-renamed' and the binding follows.
   const [draftSessionId] = React.useState(() => `s${Math.random().toString(36).slice(2, 10)}`);
-  const draftPath = `${DRAFT_TMP_KEY}.${draftSessionId}.${DRAFT_ROOT_KEY}`;
+  const [draftPath, setDraftPath] = React.useState(`${DRAFT_TMP_KEY}.${draftSessionId}.${DRAFT_ROOT_KEY}`);
+
+  React.useEffect(() => {
+    const subscription = (events as any)?.subscribe?.((event: any) => {
+      if (event?.type !== 'path-renamed' || typeof event.from !== 'string' || typeof event.to !== 'string') return;
+      setDraftPath((prev) =>
+        prev === event.from || prev.startsWith(`${event.from}.`) ? `${event.to}${prev.slice(event.from.length)}` : prev
+      );
+    });
+    return () => {
+      subscription?.unsubscribe?.();
+    };
+  }, [events]);
 
   // read the draft only when the tab is active (this render path runs per
   // keystroke)

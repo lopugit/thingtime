@@ -23,6 +23,12 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] Change type on the `New Thing` root (context menu → change type):
       string shows a text editor that accepts input; boolean shows a boolean
       editor; the seed effect must NOT clobber the converted value back to {}.
+- [ ] Rename the `New Thing` root TWICE in a row (click the key, type, Enter;
+      repeat) on a FRESH page load: both renames must land in the store, not
+      just the visible text. Regression class: memoized JSX pinning a
+      mount-time `updatePath` whose `parent` was undefined pre-seed, and
+      string path bindings (editor leaf, composer draftPath) not following
+      the first rename (`path-renamed` bus event).
 - [ ] The in-post editor height-drags via the bottom handle (mouse and touch)
       with no upper limit, and never below the small floor.
 
