@@ -1651,6 +1651,21 @@ export const countPublicPosts = async (ownerId: string): Promise<number> => {
   return things.countDocuments(withMatch(postMatch(), { ownerId }, circleClause('public')) as any);
 };
 
+// Existence probe for idempotent seeding: which of these shareIds already have
+// a things doc. One indexed query instead of a per-item create→409 round trip,
+// so a time-boxed serverless seed run spends its budget creating, not
+// re-walking skips. Kept here so no script touches the collection directly.
+export const listExistingThingShareIds = async (shareIds: string[]): Promise<Set<string>> => {
+  const wanted = [...new Set(shareIds.filter((id) => typeof id === 'string' && id.trim()))];
+  if (!wanted.length) return new Set();
+  const things = await getThingsCollection();
+  const docs = await things
+    .find({ shareId: { $in: wanted } } as any)
+    .project({ shareId: 1 })
+    .toArray();
+  return new Set(docs.map((doc) => String(doc.shareId)));
+};
+
 // Feature lookup used by algorithm training — only returns posts the engaging
 // user can actually see.
 export const getPostFeatures = async (

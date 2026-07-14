@@ -14,7 +14,7 @@
 import { registerUser } from '~/api/utils/auth/registerUser';
 import { findUserByUsername, updateUserProfile } from '~/api/utils/auth/users';
 import { createAlgorithm, listAlgorithmsForUser } from '~/api/utils/algorithms/algorithms';
-import { addComment, createPost, createThing, toggleReaction } from '~/api/utils/things/things';
+import { addComment, createPost, createThing, listExistingThingShareIds, toggleReaction } from '~/api/utils/things/things';
 
 import { getUsers, type SeedUser } from './data/users';
 import {
@@ -39,6 +39,12 @@ const registerAll = async (users: SeedUser[], deadlineAt = FOREVER) => {
       halted = true;
       break;
     }
+    // cheap existence read first — the register path hashes the password
+    // before its own duplicate check, which adds up inside a time-box
+    if (await findUserByUsername(user.username)) {
+      skipped++;
+      continue;
+    }
     const result = await registerUser(user);
     if (result.ok === true) {
       created++;
@@ -59,6 +65,16 @@ export const saveUsers = async (deadlineAt = FOREVER) =>
 const userIdByUsername = async (username: string): Promise<string | null> => {
   const user = await findUserByUsername(username);
   return user ? String(user._id) : null;
+};
+
+// per-run username → id cache: fixtures reuse the same 8 seed users, so one
+// lookup each instead of one per seeded item (matters inside a time-box)
+const makeUserIdCache = () => {
+  const cache = new Map<string, string | null>();
+  return async (username: string): Promise<string | null> => {
+    if (!cache.has(username)) cache.set(username, await userIdByUsername(username));
+    return cache.get(username) ?? null;
+  };
 };
 
 // Profiles only apply to users with no profile content yet — re-seeding must
@@ -100,14 +116,21 @@ export const savePosts = async (deadlineAt = FOREVER) => {
   let created = 0;
   let skipped = 0;
   let halted = false;
+  const lookupUserId = makeUserIdCache();
 
   const posts = await getPosts();
+  // one existence query up front — re-runs skip without per-item round trips
+  const existing = await listExistingThingShareIds(posts.map((post) => post.shareId));
   for (const post of posts) {
+    if (existing.has(post.shareId)) {
+      skipped++;
+      continue;
+    }
     if (Date.now() >= deadlineAt) {
       halted = true;
       break;
     }
-    const userId = await userIdByUsername(post.username);
+    const userId = await lookupUserId(post.username);
     if (!userId) throw new Error(`Seed post ${post.shareId}: unknown user ${post.username}`);
 
     const result = await createPost(userId, {
@@ -133,12 +156,12 @@ export const savePosts = async (deadlineAt = FOREVER) => {
 
   let reactions = 0;
   for (const reaction of await getReactions()) {
+    if (!createdIds.has(reaction.postShareId)) continue;
     if (Date.now() >= deadlineAt) {
       halted = true;
       break;
     }
-    if (!createdIds.has(reaction.postShareId)) continue;
-    const userId = await userIdByUsername(reaction.username);
+    const userId = await lookupUserId(reaction.username);
     if (!userId) continue;
     const result = await toggleReaction(userId, reaction.postShareId, reaction.emoji);
     if (result.ok === true) reactions++;
@@ -146,12 +169,12 @@ export const savePosts = async (deadlineAt = FOREVER) => {
 
   let comments = 0;
   for (const comment of await getComments()) {
+    if (!createdIds.has(comment.postShareId)) continue;
     if (Date.now() >= deadlineAt) {
       halted = true;
       break;
     }
-    if (!createdIds.has(comment.postShareId)) continue;
-    const userId = await userIdByUsername(comment.username);
+    const userId = await lookupUserId(comment.username);
     if (!userId) continue;
     const result = await addComment(userId, comment.postShareId, comment.text);
     if (result.ok === true) comments++;
@@ -204,14 +227,21 @@ export const saveSchemas = async (deadlineAt = FOREVER) => {
   let created = 0;
   let skipped = 0;
   let halted = false;
+  const lookupUserId = makeUserIdCache();
 
   const seeds = await getSampleSchemas();
+  // one existence query up front — re-runs skip without per-item round trips
+  const existing = await listExistingThingShareIds(seeds.map((seed) => `sample-schema-${seed.slug}`));
   for (const seed of seeds) {
+    if (existing.has(`sample-schema-${seed.slug}`)) {
+      skipped++;
+      continue;
+    }
     if (Date.now() >= deadlineAt) {
       halted = true;
       break;
     }
-    const userId = await userIdByUsername(seed.owner);
+    const userId = await lookupUserId(seed.owner);
     if (!userId) throw new Error(`Seed schema ${seed.slug}: unknown user ${seed.owner}`);
 
     const crystal: Record<string, unknown> = {
