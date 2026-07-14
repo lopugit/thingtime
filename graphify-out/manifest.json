@@ -3395,8 +3395,8 @@
     "semantic_hash": "e993625cb75a2d900cc93c1130a1c6d3"
   },
   "remix/app/components/Kinds/kindRenderers.tsx": {
-    "mtime": 1783954291.1968725,
-    "ast_hash": "6b93e94b80af48b9221a96ccd6256352",
+    "mtime": 1784027889.2056048,
+    "ast_hash": "435e1c2d66044e6b380a07baddc82ed1",
     "semantic_hash": ""
   },
   "remix/app/components/Kinds/sampleKindThings.ts": {
@@ -4107,6 +4107,16 @@
   "remix/app/scripts/mongodb/data/schemasShowcase.ts": {
     "mtime": 1783954291.1984835,
     "ast_hash": "72c5845dc11fabca1512854eb10b00c0",
+    "semantic_hash": ""
+  },
+  "pnpm-workspace.yaml": {
+    "mtime": 1784027674.2915976,
+    "ast_hash": "4deac8c721ea9f9d023aa597ba967098",
+    "semantic_hash": ""
+  },
+  "raycast/pnpm-workspace.yaml": {
+    "mtime": 1784027673.0090926,
+    "ast_hash": "7bb23c19c0343fac40d375bacca550d0",
     "semantic_hash": ""
   }
 }

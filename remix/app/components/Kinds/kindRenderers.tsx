@@ -483,7 +483,7 @@ const ComparisonRenderer = ({ value, context }: { value: ComparisonValue; contex
 				) : null}
 				<Flex flexDirection="column" rowGap={3}>
 					{value.names.map((name, itemIdx) => (
-						<Box key={name} background="var(--tt-surface, #fafafb)" border="1px solid var(--tt-border-light, #f0f0f2)" borderRadius="var(--tt-radius-md, 12px)" padding={3}>
+						<Box key={`${name}-${itemIdx}`} background="var(--tt-surface, #fafafb)" border="1px solid var(--tt-border-light, #f0f0f2)" borderRadius="var(--tt-radius-md, 12px)" padding={3}>
 							<Text fontSize="sm" fontWeight={800} color="var(--tt-ink, #16161a)">
 								{name}
 							</Text>
@@ -518,8 +518,8 @@ const ComparisonRenderer = ({ value, context }: { value: ComparisonValue; contex
 							<Box as="th" padding={3} textAlign="left">
 								<MutedMono>Criteria</MutedMono>
 							</Box>
-							{value.names.map((name) => (
-								<Box as="th" key={name} padding={3} textAlign="left">
+							{value.names.map((name, itemIdx) => (
+								<Box as="th" key={`${name}-${itemIdx}`} padding={3} textAlign="left">
 									<Text fontSize="sm" fontWeight={800} color="var(--tt-ink, #16161a)" whiteSpace="nowrap">
 										{name}
 									</Text>
