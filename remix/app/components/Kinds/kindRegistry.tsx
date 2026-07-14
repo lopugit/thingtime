@@ -101,6 +101,11 @@ export const resolveKindRenderer = (thing: unknown): KindRenderer | undefined =>
 
 	const record = thing as Record<string, unknown>;
 
+	// a `render:` prop names the renderer directly ({ render: 'markdown', … })
+	// and outranks the thing's own kind — data can opt into any template
+	const named = getKindRenderer(typeof record.render === 'string' ? record.render : null);
+	if (named) return named;
+
 	// explicit kind wins
 	const explicit = getKindRenderer(typeof record.kind === 'string' ? record.kind : null);
 	if (explicit) return explicit;

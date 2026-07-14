@@ -13,6 +13,8 @@ import {
 import { Plus, Search as SearchIcon, Sparkles, X } from 'lucide-react';
 import { Link as RouterLink, useLocation, useNavigate } from 'react-router';
 
+import { getEditorJsDoc } from '~/components/Editor/editorJsValue';
+import { inlineHtmlToText } from '~/components/Editor/inlineHtmlText';
 import { Rainbow } from '~/components/Rainbow/Rainbow';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { SEARCHABLE_CRYSTAL_KINDS } from '~/components/Schemas/schemaBrowseTypes';
@@ -215,8 +217,40 @@ function PersonCard({ person }: { person: SearchPerson }) {
   );
 }
 
+// Editor.js docs (rich-text) preview as their plain text, not raw block JSON.
+// Chips clip at 160 chars, so a couple of hundred chars of text is plenty —
+// bail out of the block walk once we have them.
+const richTextPreview = (value: unknown): string | null => {
+  const doc = getEditorJsDoc(value);
+  if (!doc) return null;
+
+  const parts: string[] = [];
+  for (const block of doc.blocks.slice(0, 24)) {
+    const data = (block?.data || {}) as Record<string, unknown>;
+    if (typeof data.text === 'string') {
+      parts.push(inlineHtmlToText(data.text));
+    } else if (Array.isArray(data.items)) {
+      parts.push(
+        data.items
+          .slice(0, 24)
+          .map((item) => {
+            const record = (item || {}) as Record<string, unknown>;
+            return inlineHtmlToText(typeof item === 'string' ? item : ((record.text ?? record.content) as string) || '');
+          })
+          .filter(Boolean)
+          .join(' · ')
+      );
+    }
+    if (parts.join(' ').length > 240) break;
+  }
+
+  return parts.filter(Boolean).join(' ').trim() || '📄 rich text';
+};
+
 const previewValue = (value: unknown): string => {
   if (value === null) return 'null';
+  const richText = richTextPreview(value);
+  if (richText) return richText;
   if (typeof value === 'string') return value;
   try {
     return JSON.stringify(value);
@@ -276,7 +310,10 @@ const ThingResultCard = React.memo(function ThingResultCard({
 }) {
   const created = new Date(thing.createdAt);
   const when = Number.isNaN(created.getTime()) ? '' : created.toLocaleDateString();
-  const title = post?.text || thing.crystal?.name || thing.crystal?.title || thing.crystal?.text || '';
+  // crystal name/title/text fields can hold an Editor.js doc — surface its
+  // plain text as the title instead of "[object Object]"
+  const titleSource = post?.text || thing.crystal?.name || thing.crystal?.title || thing.crystal?.text || '';
+  const title = typeof titleSource === 'string' ? titleSource : richTextPreview(titleSource) || '';
 
   return (
     <Box {...CARD_STYLES} p={4}>

@@ -367,8 +367,16 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	const editorJsDoc = React.useMemo(() => getEditorJsDoc(thing), [thing]);
 
 	const chakra = React.useMemo(() => {
+		// untrusted trees (other users' things mounted in feeds/search via
+		// ThingView) must never reach the chakra path — it spreads thing.props
+		// verbatim into Chakra components, which is only safe for data the
+		// viewer authored themselves
+		if (props?.untrusted) {
+			return false;
+		}
+
 		return !editMode && typeof thing?.chakra === 'string' && thing?.chakra;
-	}, [thing?.chakra, editMode]);
+	}, [thing?.chakra, editMode, props?.untrusted]);
 
 	const parentPath = React.useMemo(() => {
 		const parentPath = fullPath?.slice(0, -1);
@@ -694,6 +702,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 								edit={editMode}
 								codeView={codeView}
 								render={render}
+								untrusted={props?.untrusted}
 								circular={seen?.includes?.(nextThing)}
 								depth={depth + 1}
 								parent={thing}

@@ -27,6 +27,7 @@ import { MoreHorizontal, Plus, Send } from 'lucide-react';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '~/components/Lopu/useLopu';
+import { ThingView } from '~/components/Thingtime/ThingView';
 import { EmojiPicker } from '~/components/Emoji/EmojiPicker';
 import { useRecentReactions } from '~/components/Emoji/useRecentReactions';
 import { sanitizeReactionToken, splitEmojis } from '~/utils/reactionTokens';
@@ -292,90 +293,6 @@ const ListingBlock = ({ post, hideImage }: { post: PublicPost; hideImage?: boole
   );
 };
 
-// Read-only structured view of a thingtime post's thing. Flattens the bounded
-// JSON into indented key/value rows (a compact cousin of the /search crystal
-// preview) so a 400-node crystal can never wall-of-text the feed — deep or
-// long things truncate with a row count.
-const THING_PREVIEW_MAX_ROWS = 24;
-const THING_PREVIEW_MAX_DEPTH = 4;
-
-type ThingRow = { id: number; indent: number; label: string; value: string | null };
-
-const formatThingScalar = (value: unknown): string => {
-  if (value === null) return 'null';
-  if (typeof value === 'string') return value.length > 200 ? `${value.slice(0, 200)}…` : value;
-  return String(value);
-};
-
-const flattenThing = (thing: Record<string, any>): { rows: ThingRow[]; truncated: boolean } => {
-  const rows: ThingRow[] = [];
-  let truncated = false;
-  const walk = (value: unknown, label: string, indent: number) => {
-    if (rows.length >= THING_PREVIEW_MAX_ROWS) {
-      truncated = true;
-      return;
-    }
-    if (value && typeof value === 'object') {
-      const entries = Array.isArray(value)
-        ? value.map((entry, index) => [String(index + 1), entry] as const)
-        : Object.entries(value as Record<string, unknown>);
-      rows.push({ id: rows.length, indent, label, value: entries.length ? null : Array.isArray(value) ? '[]' : '{}' });
-      if (indent + 1 >= THING_PREVIEW_MAX_DEPTH && entries.length) {
-        truncated = true;
-        return;
-      }
-      for (const [key, entry] of entries) walk(entry, key, indent + 1);
-      return;
-    }
-    rows.push({ id: rows.length, indent, label, value: formatThingScalar(value) });
-  };
-  Object.entries(thing).forEach(([key, value]) => walk(value, key, 0));
-  return { rows, truncated };
-};
-
-const ThingBlock = ({ thing, compact }: { thing: Record<string, any>; compact?: boolean }) => {
-  const { rows, truncated } = React.useMemo(() => flattenThing(thing), [thing]);
-  if (!rows.length) return null;
-
-  return (
-    <Box
-      border={BORDER}
-      borderRadius={RADIUS_MD}
-      background="var(--tt-surface, #fafafb)"
-      paddingX={3}
-      paddingY={2}
-      maxWidth="100%"
-      overflowX="auto"
-    >
-      <Flex flexDirection="column" rowGap="2px">
-        {rows.map((row) => (
-          <Flex key={row.id} columnGap={2} paddingLeft={`${row.indent * 14}px`} alignItems="baseline">
-            <Text
-              fontFamily="mono"
-              fontSize={compact ? '11px' : 'xs'}
-              color={MUTED}
-              flexShrink={0}
-              whiteSpace="nowrap"
-            >
-              {row.label}
-            </Text>
-            {row.value !== null && (
-              <Text fontSize={compact ? 'xs' : 'sm'} color={INK} whiteSpace="pre-wrap" wordBreak="break-word">
-                {row.value}
-              </Text>
-            )}
-          </Flex>
-        ))}
-      </Flex>
-      {truncated && (
-        <Text marginTop={1} fontSize="10px" color={MUTED}>
-          …there's more to this thing 🌀
-        </Text>
-      )}
-    </Box>
-  );
-};
-
 // Body by post type — shared between the main card and nested shares.
 const PostBody = ({ post, compact }: { post: PublicPost; compact?: boolean }) => (
   <Flex flexDirection="column" rowGap={compact ? 2 : 3}>
@@ -388,8 +305,10 @@ const PostBody = ({ post, compact }: { post: PublicPost; compact?: boolean }) =>
     {post.type === 'marketplace' && <ListingBlock post={post} />}
     {/* thingtime: the thing leads; opted-in photos and listing follow. The
     grid owns the photos, so the listing skips its header image (it would
-    repeat the first photo). */}
-    {post.type === 'thingtime' && post.thing && <ThingBlock thing={post.thing} compact={compact} />}
+    repeat the first photo). The thing mounts as the NATIVE Thingtime tree
+    (sandboxed — see ThingView), rendered through its kind renderer when one
+    resolves, with a corner icon flipping between the two views. */}
+    {post.type === 'thingtime' && post.thing && <ThingView thing={post.thing} compact={compact} />}
     {post.type === 'thingtime' && !!post.images?.length && (
       <ImageGrid images={post.images} alt={post.text || 'Thing photo'} />
     )}

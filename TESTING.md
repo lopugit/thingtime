@@ -69,6 +69,26 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] Single-editor echo: typing continuously through several autosaves in
       one editor never remounts or resets it (signature echo acknowledgment).
 
+## Feed thing rendering (`remix/app/components/Thingtime/ThingView.tsx`)
+
+- [ ] A thingtime post renders its thing as the NATIVE Thingtime tree in view
+      mode — right-click opens the thing context menu, Toggle Edit Mode makes
+      values editable (numbers get steppers, booleans a switch, Editor.js
+      docs the block editor), and edits stay LOCAL: reloading the feed
+      restores the server value, and neither the viewer's persisted
+      thingtime blob nor the composer's tmp draft branch is touched.
+- [ ] A thing that resolves a kind renderer (a `render:` prop naming a kind,
+      an explicit kind, or a structural match — in that priority order)
+      shows the RENDERED form by default, with a small corner 🌀 icon back
+      to the Thingtime view and ✨ back again; things resolving no renderer
+      show the tree with no corner icon.
+- [ ] Editor.js docs render as rich text by default everywhere: a rich-text
+      post body (feed + profile), a nested rich-text value inside a tree,
+      and /search crystal chips (plain-text preview, never raw block JSON).
+- [ ] A hostile thing carrying `chakra`/`props` fields must NOT render
+      Chakra components in the feed (untrusted trees show plain data rows) —
+      Thingtime's chakra path only runs for the viewer's own trusted trees.
+
 ## Thing context menu (`remix/app/components/Thingtime/ContextMenu/`)
 
 - [ ] Open the hover (popover) menu from a row inside a SMALL editor box: the
