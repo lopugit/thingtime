@@ -19,6 +19,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- **Feed things render natively** (`ThingView`): thingtime posts mount the real
+  Thingtime component — right-click context menu, collapse, and view⇄edit
+  toggling — over a sandboxed store, defaulting to view mode. Things resolving a
+  kind renderer (a `render:` prop, explicit kind, or structural match — first
+  that adapts wins) or an Editor.js `rich-text` value render through that
+  renderer by default, with a corner icon flipping back to the Thingtime tree.
+  Untrusted feed/search data is fenced: an explicit safe-kind allowlist, every
+  `href`/`src`/`url()` sink scheme-guarded (`safeUrl`/`safeCssUrl`), the chakra
+  path + `window.meta` writes disabled, Cmd+Z contained so it can't corrupt the
+  viewer's real tree, and large things bounded (collapse + scroll box). Detail
+  in `PRs/69-…`. — Claude (AI), 2026-07-15
 - **Everything is a thing, for real now**: users, themes, feed algorithms, and
   waitlist entries are stored in the `things` collection as protected system
   kinds (`user`/`theme`/`feed-algorithm`/`waitlist`, plus seeded `schema`

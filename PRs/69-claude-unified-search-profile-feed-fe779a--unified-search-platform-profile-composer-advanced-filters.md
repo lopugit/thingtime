@@ -76,3 +76,21 @@ all fixed and re-verified live:
   data isn't mislabeled "rich text"; numeric search titles no longer vanish.
   Per-node `console.log`s in Thingtime gated behind `TT_DEBUG` (they mount at
   feed scale now).
+
+### 2026-07-15 — Review rounds 2 & 3 (recursive)
+
+- **safeCssUrl made genuinely breakout-proof** (node-verified against a CSS
+  rule-injection payload): strips C0 control chars + DEL + U+2028/U+2029 + quotes
+  /backslash/angle brackets and encodes parens, but preserves spaces (legal in a
+  quoted url string — stripping them corrupted real image URLs).
+- **Audio/Book/Movie placeholder fallbacks** gated on the sanitized value (a
+  rejected `data:`/unsafe URL now shows the emoji placeholder, not a blank box).
+- **Completed the URL-sink sweep**: the core `kindRenderers.tsx` renderers
+  (Video `src`/`poster`/`href`/poster-bg, Listing image, Profile banner) were
+  still interpolating untrusted values raw into unquoted `url()`/attributes;
+  now all route through `safeUrl`/`safeCssUrl`. Avatar-based sinks were already
+  safe via the hardened `Avatar` primitive; `tel:`/`mailto:`/fixed-host map
+  links are scheme-locked; RichTextBlocks image/embed keep their regex guards.
+- A final independent whole-codebase completeness sweep + correctness review
+  returned zero findings — every untrusted→URL/markup sink is guarded,
+  scheme-locked, or regex-checked.
