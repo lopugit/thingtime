@@ -2,6 +2,7 @@ import React from 'react';
 import { Box } from '@chakra-ui/react';
 
 import {
+	blocksToText,
 	EDITOR_JS_HEADING_FONT_SIZES,
 	EDITOR_JS_HEADING_LEVELS,
 	getEditorJsValueSignature,
@@ -16,7 +17,6 @@ import type { EditorJsSourceRevision } from './editorJsChangeReconciliation';
 import { watchEditorJsTextFieldKeydowns } from './editorJsKeyboard';
 import { watchEditorJsPopoverViewport } from './editorJsPopoverViewport';
 import { filterListV2ChecklistToolbox } from './editorJsToolbox';
-import { inlineHtmlToText } from './inlineHtmlText';
 import { StyleTune } from './StyleTune';
 
 export { getEditorJsDoc, isEditorJsDoc, parseEditorJsDocString } from './editorJsValue';
@@ -252,89 +252,10 @@ export const textToBlocks = (text: string): EditorJsDoc['blocks'] => {
 	return blocks.length ? blocks : [{ type: 'paragraph', data: { text: escapeInline(text) } }];
 };
 
-// ————— blocks → plain text (the inverse) —————
-
-const checklistItems = (data: Record<string, unknown>): Array<{ text: string; checked: boolean }> =>
-	(Array.isArray(data.items) ? data.items : []).map((item) => {
-		const record = (item || {}) as Record<string, unknown>;
-		return { text: inlineHtmlToText(record.text ?? record.content ?? item), checked: record.checked === true };
-	});
-
-export const blocksToText = (blocks: EditorJsDoc['blocks']): string =>
-	blocks
-		.map((block) => {
-			const data = block.data || {};
-			if (block.type === 'header') {
-				const level = Math.max(1, Math.min(6, Number(data.level) || 2));
-				return `${'#'.repeat(level)} ${inlineHtmlToText(data.text)}`;
-			}
-			if (block.type === 'list') {
-				// List v2 items are { content, meta: { checked }, items: [...] };
-				// v1 items are plain strings — serialise both, nesting by indent
-				const style = String(data.style ?? 'unordered');
-				const serializeItems = (items: unknown[], depth: number): string =>
-					items
-						.map((item, idx) => {
-							const record = (item || {}) as Record<string, unknown>;
-							const meta = (record.meta || {}) as Record<string, unknown>;
-							const text = inlineHtmlToText(typeof item === 'string' ? item : record.text ?? record.content);
-							const indent = '  '.repeat(depth);
-							const line =
-								style === 'checklist'
-									? `${indent}- [${record.checked === true || meta.checked === true ? 'x' : ' '}] ${text}`
-									: style === 'ordered'
-									? `${indent}${idx + 1}. ${text}`
-									: `${indent}- ${text}`;
-							const children = Array.isArray(record.items) && record.items.length ? `\n${serializeItems(record.items, depth + 1)}` : '';
-							return line + children;
-						})
-						.join('\n');
-				return serializeItems(Array.isArray(data.items) ? data.items : [], 0);
-			}
-			if (block.type === 'checklist') {
-				return checklistItems(data)
-					.map((item) => `- [${item.checked ? 'x' : ' '}] ${item.text}`)
-					.join('\n');
-			}
-			if (block.type === 'quote') {
-				const caption = inlineHtmlToText(data.caption);
-				return `> ${inlineHtmlToText(data.text)}${caption ? `\n> — ${caption}` : ''}`;
-			}
-			if (block.type === 'delimiter') {
-				return '---';
-			}
-			if (block.type === 'code') {
-				return `\`\`\`\n${String(data.code ?? '')}\n\`\`\``;
-			}
-			if (block.type === 'table') {
-				const content = (Array.isArray(data.content) ? data.content : []) as unknown[][];
-				if (!content.length) return '';
-				const rows = content.map((row) => `| ${(Array.isArray(row) ? row : []).map((cell) => inlineHtmlToText(cell)).join(' | ')} |`);
-				if (data.withHeadings === true && content[0]) {
-					rows.splice(1, 0, `| ${content[0].map(() => '---').join(' | ')} |`);
-				}
-				return rows.join('\n');
-			}
-			if (block.type === 'warning') {
-				const title = inlineHtmlToText(data.title);
-				const message = inlineHtmlToText(data.message);
-				return `⚠️ ${title}${message ? ` — ${message}` : ''}`;
-			}
-			if (block.type === 'image') {
-				const file = (data.file || {}) as Record<string, unknown>;
-				const url = String(data.url ?? file.url ?? '');
-				if (!url) return inlineHtmlToText(data.caption);
-				return `![${inlineHtmlToText(data.caption)}](${url})`;
-			}
-			if (block.type === 'embed') {
-				const source = String(data.source ?? data.embed ?? '');
-				const caption = inlineHtmlToText(data.caption);
-				return source ? `${source}${caption ? `\n${caption}` : ''}` : caption;
-			}
-			return inlineHtmlToText(data.text);
-		})
-		.filter((piece) => piece.trim() !== '')
-		.join('\n\n');
+// blocks → plain text now lives in editorJsValue (a light, editor-free module
+// preview surfaces can import). Re-exported here (from the local import above)
+// for existing importers, e.g. Thingtime, that reach it through LongTextEditor.
+export { blocksToText };
 
 // ————— the component —————
 

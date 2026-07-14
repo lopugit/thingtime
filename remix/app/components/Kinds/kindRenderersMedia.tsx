@@ -3,6 +3,7 @@ import { Box, Flex, Grid, Text } from '@chakra-ui/react';
 
 import { registerKindRenderer } from './kindRegistry';
 import type { KindRenderContext } from './kindRegistry';
+import { safeCssUrl, safeUrl } from './safeUrl';
 import { getEditorJsHeadingFontSize, isEditorJsDoc, normalizeEditorJsHeadingLevel } from '~/components/Editor/editorJsValue';
 import { inlineHtmlToText, sanitizeEditorJsInlineHtml } from '~/components/Editor/inlineHtmlText';
 import { sanitizeStyleTokens, styleTokensToCss } from '~/components/Editor/styleTokens';
@@ -33,17 +34,20 @@ type ImageValue = { images: Array<{ src: string | null; alt: string }>; caption:
 const ImageRenderer = ({ value }: { value: ImageValue; context: KindRenderContext }) => (
 	<KindCard padding={0}>
 		<Grid gap="2px" templateColumns={value.images.length > 1 ? 'repeat(auto-fit, minmax(140px, 1fr))' : '1fr'}>
-			{value.images.slice(0, 6).map((image, idx) => (
+			{value.images.slice(0, 6).map((image, idx) => {
+				const src = safeUrl(image.src);
+				return (
 				<Box key={idx} position="relative" paddingTop={value.images.length > 1 ? '75%' : '56%'}>
-					{image.src ? (
-						<Box as="img" src={image.src} alt={image.alt} position="absolute" inset={0} width="100%" height="100%" objectFit="cover" />
+					{src ? (
+						<Box as="img" src={src} alt={image.alt} position="absolute" inset={0} width="100%" height="100%" objectFit="cover" />
 					) : (
 						<Flex position="absolute" inset={0} alignItems="center" justifyContent="center" background="var(--tt-surface-alt, #f5f5f7)" fontSize="34px">
 							🖼️
 						</Flex>
 					)}
 				</Box>
-			))}
+				);
+			})}
 		</Grid>
 		{value.caption || value.credit ? (
 			<Flex alignItems="baseline" columnGap={2} justifyContent="space-between" padding={3}>
@@ -65,7 +69,7 @@ const AudioRenderer = ({ value }: { value: AudioValue; context: KindRenderContex
 				alignItems="center"
 				justifyContent="center"
 				background={value.artwork ? undefined : 'linear-gradient(135deg, #2b2540, #4a2d55)'}
-				backgroundImage={value.artwork ? `url(${value.artwork})` : undefined}
+				backgroundImage={safeCssUrl(value.artwork)}
 				backgroundSize="cover"
 				borderRadius="var(--tt-radius-md, 12px)"
 				flexShrink={0}
@@ -81,7 +85,7 @@ const AudioRenderer = ({ value }: { value: AudioValue; context: KindRenderContex
 					{value.artist ? <MutedMono>{value.artist}</MutedMono> : null}
 					{value.duration ? <MutedMono>· {value.duration}</MutedMono> : null}
 				</Flex>
-				{value.src ? <Box as="audio" controls preload="none" src={value.src} marginTop={2} width="100%" /> : null}
+				{safeUrl(value.src) ? <Box as="audio" controls preload="none" src={safeUrl(value.src)} marginTop={2} width="100%" /> : null}
 			</Box>
 		</Flex>
 	</KindCard>
@@ -210,7 +214,7 @@ const BookRenderer = ({ value }: { value: BookValue; context: KindRenderContext 
 				alignItems="center"
 				justifyContent="center"
 				background={value.cover ? undefined : 'linear-gradient(160deg, #4b6cb7, #182848)'}
-				backgroundImage={value.cover ? `url(${value.cover})` : undefined}
+				backgroundImage={safeCssUrl(value.cover)}
 				backgroundSize="cover"
 				borderRadius="6px"
 				boxShadow="2px 3px 10px rgba(0,0,0,0.22)"
@@ -250,7 +254,7 @@ const MovieRenderer = ({ value }: { value: MovieValue; context: KindRenderContex
 				alignItems="center"
 				justifyContent="center"
 				background={value.poster ? undefined : 'linear-gradient(160deg, #232526, #414345)'}
-				backgroundImage={value.poster ? `url(${value.poster})` : undefined}
+				backgroundImage={safeCssUrl(value.poster)}
 				backgroundSize="cover"
 				flexShrink={0}
 				fontSize="30px"
@@ -284,20 +288,24 @@ const MovieRenderer = ({ value }: { value: MovieValue; context: KindRenderContex
 
 type LinkValue = { url: string; title: string; description: string; site: string; image: string | null };
 
-const LinkRenderer = ({ value }: { value: LinkValue; context: KindRenderContext }) => (
-	<Box as="a" href={value.url} target="_blank" rel="noopener noreferrer" display="block" _hover={{ textDecoration: 'none' }}>
+const LinkRenderer = ({ value }: { value: LinkValue; context: KindRenderContext }) => {
+	const href = safeUrl(value.url);
+	const imageBg = safeCssUrl(value.image);
+	const card = (
 		<KindCard padding={0}>
 			<Flex>
 				<Box flex="1" minWidth={0} padding={4}>
 					<MutedMono>{value.site || value.url.replace(/^https?:\/\//, '').split('/')[0]}</MutedMono>
 					<CardTitle size="sm">{value.title || value.url}</CardTitle>
 					<BodyText lines={2}>{value.description}</BodyText>
-					<Text color="var(--tt-link, #2f8fd6)" fontSize="xs" fontWeight={700} marginTop={2}>
-						Open link ↗
-					</Text>
+					{href ? (
+						<Text color="var(--tt-link, #2f8fd6)" fontSize="xs" fontWeight={700} marginTop={2}>
+							Open link ↗
+						</Text>
+					) : null}
 				</Box>
-				{value.image ? (
-					<Box backgroundImage={`url(${value.image})`} backgroundPosition="center" backgroundSize="cover" flexShrink={0} width="110px" />
+				{imageBg ? (
+					<Box backgroundImage={imageBg} backgroundPosition="center" backgroundSize="cover" flexShrink={0} width="110px" />
 				) : (
 					<Flex alignItems="center" justifyContent="center" background="var(--tt-surface-alt, #f5f5f7)" flexShrink={0} fontSize="26px" width="82px">
 						🔗
@@ -305,8 +313,17 @@ const LinkRenderer = ({ value }: { value: LinkValue; context: KindRenderContext 
 				)}
 			</Flex>
 		</KindCard>
-	</Box>
-);
+	);
+
+	// only make the card a real link when the URL is a safe protocol; an
+	// unsafe (javascript:/data:/…) url renders the same card, not clickable
+	if (!href) return card;
+	return (
+		<Box as="a" href={href} target="_blank" rel="noopener noreferrer" display="block" _hover={{ textDecoration: 'none' }}>
+			{card}
+		</Box>
+	);
+};
 
 // ————— 📎 file —————
 
@@ -345,8 +362,8 @@ const FileRenderer = ({ value }: { value: FileValue; context: KindRenderContext 
 					{value.modifiedAt ? <MutedMono>· {maybeTimeAgo(value.modifiedAt)}</MutedMono> : null}
 				</Flex>
 			</Box>
-			{value.url ? (
-				<Box as="a" href={value.url} target="_blank" rel="noopener noreferrer" color="var(--tt-link, #2f8fd6)" fontSize="sm" fontWeight={800}>
+			{safeUrl(value.url) ? (
+				<Box as="a" href={safeUrl(value.url)} target="_blank" rel="noopener noreferrer" color="var(--tt-link, #2f8fd6)" fontSize="sm" fontWeight={800}>
 					⬇
 				</Box>
 			) : null}
@@ -412,8 +429,8 @@ const RepositoryRenderer = ({ value }: { value: RepoValue; context: KindRenderCo
 			) : null}
 			{value.stars !== null ? <StatCell label="stars" value={`⭐ ${value.stars.toLocaleString()}`} /> : null}
 			{value.forks !== null ? <StatCell label="forks" value={`🔱 ${value.forks.toLocaleString()}`} /> : null}
-			{value.url ? (
-				<Box as="a" href={value.url} target="_blank" rel="noopener noreferrer" color="var(--tt-link, #2f8fd6)" fontSize="xs" fontWeight={700} marginLeft="auto">
+			{safeUrl(value.url) ? (
+				<Box as="a" href={safeUrl(value.url)} target="_blank" rel="noopener noreferrer" color="var(--tt-link, #2f8fd6)" fontSize="xs" fontWeight={700} marginLeft="auto">
 					View ↗
 				</Box>
 			) : null}

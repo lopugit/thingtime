@@ -11,7 +11,9 @@ export {
 	RenderThing,
 	getKindRenderer,
 	getKindRenderers,
+	isKindSafeForUntrusted,
 	registerKindRenderer,
+	resolveKindRender,
 	resolveKindRenderer
 } from './kindRegistry';
 export type { KindRenderContext, KindRenderer, RenderThingProps } from './kindRegistry';

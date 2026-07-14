@@ -39,3 +39,40 @@ Verified live (worktree stack, desktop 900px + mobile 375px): feed, profile,
 persistence across re-renders, corner-icon flips both ways. TESTING.md
 checklists run: "Feed thing rendering", "Thing context menu" (menu open/
 anchor behaviour in feed cards).
+
+### 2026-07-15 — Hardening pass (recursive review follow-up)
+
+The first cut exposed the kind-renderer path to untrusted cross-user feed
+content for the first time. A multi-angle review surfaced several real issues,
+all fixed and re-verified live:
+
+- **Untrusted XSS / layout-hijack.** Kind renderers put URLs verbatim into
+  `href`/`src`/`backgroundImage`, and `chakra`/`element` render arbitrary
+  layout. Now: `resolveKindRender` (registry) resolves render:→kind→match and
+  returns the first candidate that ADAPTS; ThingView only auto-renders kinds
+  on an explicit `UNTRUSTED_SAFE_KINDS` allowlist (the 13 vetted media/content
+  kinds), everything else (incl. chakra/element) falls back to the sanitising
+  native tree. `safeUrl`/`safeCssUrl` (safeUrl.ts) scheme-guard every href/src
+  sink in kindRenderersMedia + kindPrimitives, so `javascript:`/`data:` URLs
+  can't reach a link or media element. Verified via DOM: no
+  `a[href^="javascript:"]`, no fixed high-z overlay from post content.
+- **Undo corrupting the real tree.** Editing a feed thing and pressing
+  Cmd/Ctrl+Z would hit the root provider's global undo listener and mutate the
+  viewer's persisted tree. ThingView now contains the keydown (stopPropagation,
+  no preventDefault) so native field undo works and the real tree is untouched.
+  Verified: an in-tree Cmd+Z does not reach `window`; an out-of-tree one does.
+- **Sandbox integrity.** Shares the app's real event bus (so the single-open
+  context-menu protocol coordinates across cards); a dirty-guard stops feed
+  refetches from clobbering in-progress edits; `window.meta.things` writes are
+  disabled for untrusted trees; each ThingView uses a unique store key; the
+  `Everything` context value is memoized; `cloneTree` dropped its shared-ref
+  shallow fallback.
+- **Bounds.** A large thing (≥150 nodes) mounts collapsed and scrolls within a
+  maxHeight box, restoring the DoS/wall-of-text protection the old ThingBlock
+  provided.
+- **Reuse / regressions.** `blocksToText` moved into the light `editorJsValue`
+  module (re-exported from LongTextEditor) and SearchPage now reuses it — one
+  canonical serializer; returns null on empty so non-Editor.js `{blocks:[]}`
+  data isn't mislabeled "rich text"; numeric search titles no longer vanish.
+  Per-node `console.log`s in Thingtime gated behind `TT_DEBUG` (they mount at
+  feed scale now).

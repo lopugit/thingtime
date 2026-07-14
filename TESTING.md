@@ -85,9 +85,24 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] Editor.js docs render as rich text by default everywhere: a rich-text
       post body (feed + profile), a nested rich-text value inside a tree,
       and /search crystal chips (plain-text preview, never raw block JSON).
-- [ ] A hostile thing carrying `chakra`/`props` fields must NOT render
-      Chakra components in the feed (untrusted trees show plain data rows) —
-      Thingtime's chakra path only runs for the viewer's own trusted trees.
+- [ ] Untrusted (other users') things are only auto-rendered for the
+      vetted-safe kinds (rich-text, image, audio, playlist, podcast, article,
+      quote, book, movie, link, file, code, repository); every other kind —
+      including the arbitrary-markup `chakra`/`element` kinds — falls back to
+      the sanitising native tree with no rendered toggle.
+- [ ] SECURITY (feed + search): a thing shaped as `kind:'link'` with
+      `url:'javascript:…'` renders a card that is NOT a clickable link (no
+      anchor, no "Open link"); a `chakra`/`element` thing with
+      `props:{position:'fixed',inset:0,zIndex:99999,…}` renders as a data
+      tree, NOT a viewport overlay; image/audio/cover URLs with unsafe schemes
+      fall back to the emoji placeholder. Verify via DOM: no `a[href^=
+      "javascript:"]`, no fixed/absolute high-z overlay from post content.
+- [ ] Editing a feed thing (context menu → Toggle Edit Mode) and pressing
+      Cmd/Ctrl+Z does NOT undo the viewer's own persisted tree — the keydown
+      is contained to the sandbox (native field undo still works).
+- [ ] A very large thing (deeply nested, hundreds of nodes) mounts COLLAPSED
+      and scrolls within a bounded box — it never mass-mounts nodes or
+      wall-of-texts the feed.
 
 ## Thing context menu (`remix/app/components/Thingtime/ContextMenu/`)
 
