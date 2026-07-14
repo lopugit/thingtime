@@ -62,14 +62,19 @@ const ImageRenderer = ({ value }: { value: ImageValue; context: KindRenderContex
 
 type AudioValue = { title: string; artist: string; src: string | null; duration: string; artwork: string | null };
 
-const AudioRenderer = ({ value }: { value: AudioValue; context: KindRenderContext }) => (
+const AudioRenderer = ({ value }: { value: AudioValue; context: KindRenderContext }) => {
+	// gate the gradient + emoji placeholder on the SANITIZED artwork so an
+	// unsafe URL falls back to the placeholder, not a blank box
+	const artwork = safeCssUrl(value.artwork);
+	const src = safeUrl(value.src);
+	return (
 	<KindCard>
 		<Flex alignItems="center" columnGap={3}>
 			<Flex
 				alignItems="center"
 				justifyContent="center"
-				background={value.artwork ? undefined : 'linear-gradient(135deg, #2b2540, #4a2d55)'}
-				backgroundImage={safeCssUrl(value.artwork)}
+				background={artwork ? undefined : 'linear-gradient(135deg, #2b2540, #4a2d55)'}
+				backgroundImage={artwork}
 				backgroundSize="cover"
 				borderRadius="var(--tt-radius-md, 12px)"
 				flexShrink={0}
@@ -77,7 +82,7 @@ const AudioRenderer = ({ value }: { value: AudioValue; context: KindRenderContex
 				height="56px"
 				width="56px"
 			>
-				{!value.artwork ? '🎵' : ''}
+				{!artwork ? '🎵' : ''}
 			</Flex>
 			<Box flex="1" minWidth={0}>
 				<CardTitle size="sm">{value.title}</CardTitle>
@@ -85,11 +90,12 @@ const AudioRenderer = ({ value }: { value: AudioValue; context: KindRenderContex
 					{value.artist ? <MutedMono>{value.artist}</MutedMono> : null}
 					{value.duration ? <MutedMono>· {value.duration}</MutedMono> : null}
 				</Flex>
-				{safeUrl(value.src) ? <Box as="audio" controls preload="none" src={safeUrl(value.src)} marginTop={2} width="100%" /> : null}
+				{src ? <Box as="audio" controls preload="none" src={src} marginTop={2} width="100%" /> : null}
 			</Box>
 		</Flex>
 	</KindCard>
-);
+	);
+};
 
 // ————— 📻 playlist —————
 
@@ -207,14 +213,16 @@ const QuoteRenderer = ({ value }: { value: QuoteValue; context: KindRenderContex
 
 type BookValue = { title: string; author: string; cover: string | null; rating: number | null; pages: number | null; year: string; blurb: string };
 
-const BookRenderer = ({ value }: { value: BookValue; context: KindRenderContext }) => (
+const BookRenderer = ({ value }: { value: BookValue; context: KindRenderContext }) => {
+	const cover = safeCssUrl(value.cover);
+	return (
 	<KindCard>
 		<Flex columnGap={4}>
 			<Flex
 				alignItems="center"
 				justifyContent="center"
-				background={value.cover ? undefined : 'linear-gradient(160deg, #4b6cb7, #182848)'}
-				backgroundImage={safeCssUrl(value.cover)}
+				background={cover ? undefined : 'linear-gradient(160deg, #4b6cb7, #182848)'}
+				backgroundImage={cover}
 				backgroundSize="cover"
 				borderRadius="6px"
 				boxShadow="2px 3px 10px rgba(0,0,0,0.22)"
@@ -223,7 +231,7 @@ const BookRenderer = ({ value }: { value: BookValue; context: KindRenderContext 
 				height="110px"
 				width="76px"
 			>
-				{!value.cover ? '📕' : ''}
+				{!cover ? '📕' : ''}
 			</Flex>
 			<Box flex="1" minWidth={0}>
 				<CardTitle>{value.title}</CardTitle>
@@ -241,27 +249,30 @@ const BookRenderer = ({ value }: { value: BookValue; context: KindRenderContext 
 			</Box>
 		</Flex>
 	</KindCard>
-);
+	);
+};
 
 // ————— 🎬 movie —————
 
 type MovieValue = { title: string; year: string; poster: string | null; rating: number | null; runtime: string; genres: string[]; synopsis: string };
 
-const MovieRenderer = ({ value }: { value: MovieValue; context: KindRenderContext }) => (
+const MovieRenderer = ({ value }: { value: MovieValue; context: KindRenderContext }) => {
+	const poster = safeCssUrl(value.poster);
+	return (
 	<KindCard padding={0}>
 		<Flex>
 			<Flex
 				alignItems="center"
 				justifyContent="center"
-				background={value.poster ? undefined : 'linear-gradient(160deg, #232526, #414345)'}
-				backgroundImage={safeCssUrl(value.poster)}
+				background={poster ? undefined : 'linear-gradient(160deg, #232526, #414345)'}
+				backgroundImage={poster}
 				backgroundSize="cover"
 				flexShrink={0}
 				fontSize="30px"
 				minHeight="150px"
 				width="100px"
 			>
-				{!value.poster ? '🎬' : ''}
+				{!poster ? '🎬' : ''}
 			</Flex>
 			<Box flex="1" minWidth={0} padding={4}>
 				<CardTitle>
@@ -282,7 +293,8 @@ const MovieRenderer = ({ value }: { value: MovieValue; context: KindRenderContex
 			</Box>
 		</Flex>
 	</KindCard>
-);
+	);
+};
 
 // ————— 🔗 link —————
 

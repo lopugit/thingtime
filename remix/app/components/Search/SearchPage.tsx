@@ -291,12 +291,11 @@ const ThingResultCard = React.memo(function ThingResultCard({
 }) {
   const created = new Date(thing.createdAt);
   const when = Number.isNaN(created.getTime()) ? '' : created.toLocaleDateString();
-  // crystal name/title/text fields can hold an Editor.js doc — surface its
-  // plain text as the title. Non-string, non-rich-text values (a numeric name,
-  // say) fall back to previewValue so they still show instead of vanishing.
+  // crystal name/title/text fields can hold an Editor.js doc — previewValue
+  // surfaces its plain text (and falls back to JSON for other non-string
+  // values, e.g. a numeric name, so they still show instead of vanishing).
   const titleSource = post?.text || thing.crystal?.name || thing.crystal?.title || thing.crystal?.text || '';
-  const title =
-    typeof titleSource === 'string' ? titleSource : titleSource ? richTextPreview(titleSource) ?? previewValue(titleSource) : '';
+  const title = typeof titleSource === 'string' ? titleSource : titleSource ? previewValue(titleSource) : '';
 
   return (
     <Box {...CARD_STYLES} p={4}>
