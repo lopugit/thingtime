@@ -28,7 +28,7 @@ export const safeUrl = (value: unknown): string | undefined =>
 export const safeCssUrl = (value: unknown): string | undefined => {
 	if (typeof value !== 'string' || !isSafeUrl(value)) return undefined;
 	const cleaned = value
-		.replace(/[\u0000-\u0020"'\\<>]/g, '')
+		.replace(/[\u0000-\u001F\u007F\u2028\u2029"'\\<>]/g, '')
 		.replace(/\(/g, '%28')
 		.replace(/\)/g, '%29');
 	return `url("${cleaned}")`;
