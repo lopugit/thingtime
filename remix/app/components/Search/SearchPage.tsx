@@ -374,6 +374,21 @@ export const SearchPage = () => {
   const [schemasLoading, setSchemasLoading] = React.useState(false);
   const schemasLoadedRef = React.useRef(false);
 
+  // false once the user leaves /search — an in-flight search resolving after
+  // navigation must never replace-navigate them back here
+  const mountedRef = React.useRef(true);
+  React.useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  // whether any search has actually run (or cached results represent one) —
+  // gates the "Nothing matched" empty state, which would otherwise show on a
+  // fresh visit where no search has been fired yet
+  const [hasSearched, setHasSearched] = React.useState(!!cached);
+
   const requestSeqRef = React.useRef(0);
   const apiRef = React.useRef(api);
   apiRef.current = api;
@@ -391,6 +406,7 @@ export const SearchPage = () => {
     async (options: { cursor?: string | null } = {}) => {
       const { cursor } = options;
       const seq = ++requestSeqRef.current;
+      setHasSearched(true);
       setLoading(true);
 
       const current = cursor ? submittedRef.current : stateRef.current;
@@ -463,10 +479,15 @@ export const SearchPage = () => {
           };
           writeLocalCache(CACHE_KEY, snapshot);
 
-          // keep the URL shareable for plain text searches
-          const params = new URLSearchParams();
-          if (current.q.trim()) params.set('q', current.q.trim());
-          navigate({ pathname: '/search', search: params.toString() ? `?${params}` : '' }, { replace: true });
+          // keep the URL shareable for plain text searches — but only while
+          // the user is still HERE. If they navigated away mid-flight, syncing
+          // ?q= would yank them back to /search (and, with replace, eat the
+          // history entry of wherever they went).
+          if (mountedRef.current) {
+            const params = new URLSearchParams();
+            if (current.q.trim()) params.set('q', current.q.trim());
+            navigate({ pathname: '/search', search: params.toString() ? `?${params}` : '' }, { replace: true });
+          }
         }
       } catch (err: any) {
         if (seq !== requestSeqRef.current) return;
@@ -478,13 +499,17 @@ export const SearchPage = () => {
     [navigate]
   );
 
-  // first mount: refetch whatever the page painted from cache (or run the
-  // URL's ?q= / an empty browse-recent search) — optimistic render, live data.
-  // With a ?schema deep link the schema effect owns the first search instead:
-  // running both races them, and the winner's replace-navigate strips ?schema
-  // out from under the loser's cancellable resolution.
+  // first mount: only an EXPLICIT deep link searches automatically. A ?q=
+  // (Commander's "Search things for…") runs that text search; a ?schema deep
+  // link's search is owned by the schema effect instead (running both races
+  // them, and the winner's replace-navigate strips ?schema out from under the
+  // loser's cancellable resolution). A plain /search visit fires nothing —
+  // cached results still paint instantly, but no search runs until the user
+  // asks for one.
   React.useEffect(() => {
-    if (new URLSearchParams(window.location.search).get('schema')) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('schema')) return;
+    if (!params.get('q')) return;
     runSearch();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -957,7 +982,9 @@ export const SearchPage = () => {
           {!things.length && !people.length && !loading ? (
             <Box {...CARD_STYLES} p={8} textAlign="center">
               <Text color="var(--tt-muted, #9a9aa6)">
-                Nothing matched — loosen a filter, or try plain words up top ✨
+                {hasSearched
+                  ? 'Nothing matched — loosen a filter, or try plain words up top ✨'
+                  : 'Type a few words, add a filter, or pick a schema — then hit Search ✨'}
               </Text>
             </Box>
           ) : null}

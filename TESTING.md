@@ -140,3 +140,15 @@ is fixed, and cite the checklist you ran in the PR description.
       an error), min reactions/comments (bounded-window mode), text length.
 - [ ] Profile panels are locked to the profile's user (no By-user field) and
       the header post count stays the profile total, not the filtered count.
+
+## Search page (`remix/app/components/Search/SearchPage.tsx`)
+
+- [ ] Visiting plain `/search` fires NO search request (check the network
+      tab): last-cached results still paint instantly, and with no cache the
+      empty state invites a search ("then hit Search"), never claims
+      "Nothing matched".
+- [ ] Deep links still auto-run their search: `/search?q=…` (Commander's
+      "Search things for…") and `/search?schema=…` (from /schemas).
+- [ ] Submit a search and navigate to another page BEFORE it resolves: you
+      stay on that page — the resolving search must never replace-navigate
+      back to `/search` (or eat the destination's history entry).
