@@ -11,7 +11,7 @@ import {
   Text
 } from '@chakra-ui/react';
 import { Plus, Search as SearchIcon, Sparkles, X } from 'lucide-react';
-import { Link as RouterLink, useLocation, useNavigate } from 'react-router';
+import { Link as RouterLink, useLocation, useNavigate, useNavigation } from 'react-router';
 
 import { blocksToText, getEditorJsDoc } from '~/components/Editor/editorJsValue';
 import { Rainbow } from '~/components/Rainbow/Rainbow';
@@ -336,6 +336,7 @@ export const SearchPage = () => {
   const lopu = useLopu();
   const location = useLocation();
   const navigate = useNavigate();
+  const navigation = useNavigation();
 
   const cached = React.useMemo(() => readLocalCache<CachedSearch>(CACHE_KEY), []);
   const urlQ = React.useMemo(() => new URLSearchParams(location.search).get('q') || '', [location.search]);
@@ -350,7 +351,8 @@ export const SearchPage = () => {
   const [sort, setSort] = React.useState(freshFromUrl ? 'auto' : cached?.sort || 'auto');
 
   // optimistic first paint: last-known results render instantly from
-  // localStorage, the fresh search reconciles in the background
+  // localStorage and simply stay — nothing refetches until the user (or a
+  // ?q=/?schema deep link) runs a search
   const [things, setThings] = React.useState<SearchThing[]>(cached?.things || []);
   const [posts, setPosts] = React.useState<Record<string, SearchPost>>(cached?.posts || {});
   const [people, setPeople] = React.useState<SearchPerson[]>(cached?.people || []);
@@ -384,10 +386,25 @@ export const SearchPage = () => {
     };
   }, []);
 
-  // whether any search has actually run (or cached results represent one) —
-  // gates the "Nothing matched" empty state, which would otherwise show on a
-  // fresh visit where no search has been fired yet
-  const [hasSearched, setHasSearched] = React.useState(!!cached);
+  // render-synced mirrors of the router position: the resolve-time ?q= sync
+  // must only fire while the user is still exactly where they submitted —
+  // same history entry, no navigation pending. The data router keeps this
+  // page mounted while the NEXT route's loaders run, so mountedRef alone
+  // can't see an in-progress departure; Back within /search never unmounts.
+  const locationKeyRef = React.useRef(location.key);
+  locationKeyRef.current = location.key;
+  const navigationIdleRef = React.useRef(true);
+  navigationIdleRef.current = navigation.state === 'idle';
+  // the last ?q= runSearch itself pushed into the URL — the urlQ effect uses
+  // it to tell our own echo from an external navigation (comparing against
+  // live input state breaks when the input was cache-restored, never searched)
+  const lastSyncedQRef = React.useRef<string | null>(null);
+
+  // whether the result area reflects an actual search — cached results are
+  // one, and a ?q= deep link is about to run one. Gates the "Nothing matched"
+  // empty state, which would otherwise show on a fresh visit where no search
+  // has been fired yet
+  const [hasSearched, setHasSearched] = React.useState(!!cached || !!urlQ);
 
   const requestSeqRef = React.useRef(0);
   const apiRef = React.useRef(api);
@@ -406,11 +423,12 @@ export const SearchPage = () => {
     async (options: { cursor?: string | null } = {}) => {
       const { cursor } = options;
       const seq = ++requestSeqRef.current;
-      setHasSearched(true);
+      // where the user was when they asked — the resolve-time URL sync must
+      // never fire from anywhere else
+      const submittedLocationKey = locationKeyRef.current;
       setLoading(true);
 
       const current = cursor ? submittedRef.current : stateRef.current;
-      if (!cursor) submittedRef.current = current;
 
       const invalidField = invalidNumberField(current.rows);
       if (invalidField) {
@@ -445,6 +463,11 @@ export const SearchPage = () => {
             : Promise.resolve(null)
         ])) as [SearchResponse, { users?: SearchPerson[] } | null];
         if (seq !== requestSeqRef.current) return;
+        setHasSearched(true);
+        // only a RESOLVED first page owns load-more continuation — committing
+        // submittedRef at submit time would let a failed search's params be
+        // mixed with the painted result set's cursor by a later Load more
+        if (!cursor) submittedRef.current = current;
 
         if (!cursor) setPeople(wantPeople ? peopleResp?.users || [] : []);
 
@@ -480,12 +503,19 @@ export const SearchPage = () => {
           writeLocalCache(CACHE_KEY, snapshot);
 
           // keep the URL shareable for plain text searches — but only while
-          // the user is still HERE. If they navigated away mid-flight, syncing
-          // ?q= would yank them back to /search (and, with replace, eat the
-          // history entry of wherever they went).
-          if (mountedRef.current) {
+          // the user is still HERE: still mounted, same history entry as when
+          // they submitted, and no navigation in flight. A replace-navigate
+          // fired outside those bounds yanks the user back to /search, aborts
+          // a pending departure (data routers keep us mounted while the next
+          // route's loaders run), or silently undoes a Back within /search.
+          if (
+            mountedRef.current &&
+            navigationIdleRef.current &&
+            locationKeyRef.current === submittedLocationKey
+          ) {
             const params = new URLSearchParams();
             if (current.q.trim()) params.set('q', current.q.trim());
+            lastSyncedQRef.current = current.q.trim();
             navigate({ pathname: '/search', search: params.toString() ? `?${params}` : '' }, { replace: true });
           }
         }
@@ -523,8 +553,11 @@ export const SearchPage = () => {
     if (urlQ === lastUrlQRef.current) return;
     lastUrlQRef.current = urlQ;
     if (!urlQ) return;
-    // runSearch syncs ?q= after every submit — our own echo is not a new search
-    if (urlQ === stateRef.current.q.trim()) return;
+    // runSearch syncs ?q= after every submit — our own echo is not a new
+    // search. Compare against the q the sync actually pushed, NOT live input
+    // state: a cache-restored, never-searched input matching the URL must
+    // still search (e.g. Commander re-running yesterday's query)
+    if (urlQ === lastSyncedQRef.current) return;
     setQ(urlQ);
     setRows([]);
     setKind('');
@@ -644,14 +677,20 @@ export const SearchPage = () => {
         }
       }
       // the user navigated away (or a different ?schema took over) while we
-      // resolved — the newer page state owns the search now
+      // resolved — the newer page state owns the search now. Refs freeze on
+      // unmount, so mountedRef must be checked too: navigating after unmount
+      // would recreate the yank-back bug from this effect.
+      if (!mountedRef.current) return;
       if (appliedUrlSchemaRef.current !== urlSchema || currentUrlSchemaRef.current !== urlSchema) return;
       if (!source) {
         lopuRef.current({ title: 'That schema isn’t visible from here 🥲', status: 'info', duration: 6000 });
-        // the mount search deferred to us — still paint results, and let a
-        // revisit of the same link retry the resolution
+        // let a revisit of the same link retry the resolution, and strip the
+        // dead ?schema so the page returns to plain-visit behavior (cached
+        // paint / invite state) — no search anybody didn't ask for
         appliedUrlSchemaRef.current = null;
-        setPendingUrlSearch(true);
+        const params = new URLSearchParams(window.location.search);
+        params.delete('schema');
+        navigate({ pathname: '/search', search: params.toString() ? `?${params}` : '' }, { replace: true });
         return;
       }
       // make sure the resolved shape has a chip in the rail even before the
@@ -666,7 +705,7 @@ export const SearchPage = () => {
       applySchema(source);
       setPendingUrlSearch(true);
     })();
-  }, [urlSchema, applySchema]);
+  }, [urlSchema, applySchema, navigate]);
 
   const updateRow = React.useCallback((id: string, patch: Partial<ConditionRow>) => {
     setRows((prev) => prev.map((row) => (row.id === id ? { ...row, ...patch } : row)));
@@ -980,7 +1019,9 @@ export const SearchPage = () => {
           {things.map((thing) => (
             <ThingResultCard key={thing.id} post={posts[thing.id] || null} thing={thing} />
           ))}
-          {!things.length && !people.length && !loading ? (
+          {/* while a ?schema deep link resolves, neither copy is true yet —
+              hold the box until its search settles (which strips ?schema) */}
+          {!things.length && !people.length && !loading && !urlSchema ? (
             <Box {...CARD_STYLES} p={8} textAlign="center">
               <Text color="var(--tt-muted, #9a9aa6)">
                 {hasSearched

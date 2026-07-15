@@ -151,4 +151,19 @@ is fixed, and cite the checklist you ran in the PR description.
       "Search things for…") and `/search?schema=…` (from /schemas).
 - [ ] Submit a search and navigate to another page BEFORE it resolves: you
       stay on that page — the resolving search must never replace-navigate
-      back to `/search` (or eat the destination's history entry).
+      back to `/search` (or eat the destination's history entry). This
+      includes loader-bearing destinations (`/login`, `/welcome`, `/status`)
+      where /search stays mounted while the departure is pending, and Back
+      from `/search?q=…` to plain `/search` (must not be undone).
+- [ ] With a cache-restored query (input pre-filled from a previous session,
+      no search run yet), Commander's "Search things for…" with that same
+      text still fires a fresh search — the ?q= echo guard compares against
+      the last q the page itself synced, never live input state.
+- [ ] A submit rejected by number-validation, or a failed request, keeps the
+      invite empty state ("then hit Search") — only a RESOLVED search may
+      claim "Nothing matched". A failed first page also must not poison
+      Load more: it continues the previous result set's query, not the
+      failed one's params.
+- [ ] A dead `?schema=` deep link (unknown/invisible shareId) toasts, strips
+      the param from the URL, and fires NO fallback search; while a live
+      `?schema=` resolves, no empty-state copy shows at all.

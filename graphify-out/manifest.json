@@ -1805,8 +1805,8 @@
     "semantic_hash": "f162fbffa18046af73dfca08802a536f"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1784124482.144989,
-    "ast_hash": "1b9a7d8d47c31d818e253602e0c9a1de",
+    "mtime": 1784125319.1515129,
+    "ast_hash": "e9eefc14eca02115463a05bf50ff9587",
     "semantic_hash": ""
   },
   "remix/README.md": {
@@ -3805,8 +3805,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Search/SearchPage.tsx": {
-    "mtime": 1784124193.507207,
-    "ast_hash": "cc1d95defffdd809a0f236a29c8e01a8",
+    "mtime": 1784125016.1575065,
+    "ast_hash": "bb883f14d656a74d49a0b9f7fd065317",
     "semantic_hash": ""
   },
   "remix/app/components/Search/searchTypes.ts": {
@@ -4080,8 +4080,8 @@
     "semantic_hash": ""
   },
   "TESTING.md": {
-    "mtime": 1784123391.7841594,
-    "ast_hash": "71783eec04a01ef3f30f9aaf21d244c4",
+    "mtime": 1784125050.4177306,
+    "ast_hash": "08d1929bbfa7cbb4201844232a9084f7",
     "semantic_hash": ""
   },
   "remix/app/components/Kinds/ChakraThingRenderer.tsx": {

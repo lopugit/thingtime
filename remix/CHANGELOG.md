@@ -28,7 +28,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   without a refetch, and a fresh visit shows an invite empty state instead of
   "Nothing matched". The input's rainbow ring also renders at full strength
   from the first frame (new `Rainbow` `instant` prop) instead of fading in
-  over ten seconds. — Claude (AI), 2026-07-16
+  over ten seconds. Review hardening: the URL sync also respects pending
+  departures to loader-bearing routes and Back within /search (location-key +
+  navigation-idle guards), Commander re-running a cache-restored query fires
+  a real search (echo guard now tracks the last synced q, not live input),
+  failed/aborted searches keep the invite state and can't poison Load more
+  pagination, and a dead `?schema=` link strips itself without firing an
+  unrequested fallback search. — Claude (AI), 2026-07-16
 
 ### Changed
 
