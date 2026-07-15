@@ -3805,8 +3805,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Search/SearchPage.tsx": {
-    "mtime": 1784125016.1575065,
-    "ast_hash": "bb883f14d656a74d49a0b9f7fd065317",
+    "mtime": 1784125657.6121101,
+    "ast_hash": "1f5660dfe8d12cb6cb1d40d2e12105c7",
     "semantic_hash": ""
   },
   "remix/app/components/Search/searchTypes.ts": {

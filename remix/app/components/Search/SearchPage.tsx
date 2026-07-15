@@ -552,12 +552,16 @@ export const SearchPage = () => {
   React.useEffect(() => {
     if (urlQ === lastUrlQRef.current) return;
     lastUrlQRef.current = urlQ;
-    if (!urlQ) return;
     // runSearch syncs ?q= after every submit — our own echo is not a new
     // search. Compare against the q the sync actually pushed, NOT live input
     // state: a cache-restored, never-searched input matching the URL must
     // still search (e.g. Commander re-running yesterday's query)
     if (urlQ === lastSyncedQRef.current) return;
+    // the URL provably moved off the q we synced (e.g. Back stripped it) — a
+    // future identical ?q= is a real navigation, not our echo. Must clear
+    // BEFORE the empty-q return below, which is exactly the Back case.
+    lastSyncedQRef.current = null;
+    if (!urlQ) return;
     setQ(urlQ);
     setRows([]);
     setKind('');
