@@ -713,7 +713,8 @@ export const SearchPage = () => {
               position="relative"
               width="100%"
             >
-              <Rainbow opacity={0.6} position="absolute" repeats={2} thickness={10} />
+              {/* instant: the page's centerpiece shouldn't fade in over 10s */}
+              <Rainbow instant opacity={0.6} position="absolute" repeats={2} thickness={10} />
               <Flex
                 align="center"
                 background="var(--tt-card, #ffffff)"

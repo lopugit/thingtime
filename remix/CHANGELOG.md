@@ -26,7 +26,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   auto-fires a search — only explicit deep links (`?q=` from Commander,
   `?schema=` from /schemas) auto-run; plain visits paint last-cached results
   without a refetch, and a fresh visit shows an invite empty state instead of
-  "Nothing matched". — Claude (AI), 2026-07-16
+  "Nothing matched". The input's rainbow ring also renders at full strength
+  from the first frame (new `Rainbow` `instant` prop) instead of fading in
+  over ten seconds. — Claude (AI), 2026-07-16
 
 ### Changed
 
