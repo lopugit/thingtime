@@ -17,6 +17,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Fixed
+
+- **/search no longer hijacks navigation or searches uninvited**: a search
+  resolving after the user already left the page used to replace-navigate
+  them back to `/search` (the post-search `?q=` URL sync); it now only syncs
+  the URL while the page is still mounted. Entering `/search` also no longer
+  auto-fires a search — only explicit deep links (`?q=` from Commander,
+  `?schema=` from /schemas) auto-run; plain visits paint last-cached results
+  without a refetch, and a fresh visit shows an invite empty state instead of
+  "Nothing matched". — Claude (AI), 2026-07-16
+
 ### Changed
 
 - **Feed things render natively** (`ThingView`): thingtime posts mount the real
