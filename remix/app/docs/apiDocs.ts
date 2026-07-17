@@ -1990,7 +1990,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'GET with the app-scoped Bearer token; requires the things scope. Returns exactly the set the ' +
       'user ticked on the consent screen — read-only, ownership re-checked at read time (things the ' +
       'user has since deleted drop out), projected to content fields only ({ shareId, thingtime, ' +
-      'crystal, tags, createdAt, updatedAt }). Same CORS + origin binding as /api/v1/app-data.',
+      'crystal, tags, createdAt, updatedAt }) — never acl/owner internals or the extended sidecar. ' +
+      'Same CORS + origin binding as /api/v1/app-data.',
     auth: { mode: 'bearer', description: 'App-scoped Bearer token with the things scope.' },
     methods: ['GET'],
     steps: ['Request the things scope (SDK scopes/optionalScopes).', 'The user picks items on the consent screen.', 'GET here to read exactly those.'],

@@ -1623,7 +1623,12 @@ export const validateThingtimeCrystal = (thingtime: unknown, crystal: unknown): 
     const schema = getThingtimeSchema(id)!;
     if (schema.requiresTarget) requiresTarget = true;
     const sanitizer = crystalSanitizers[id];
-    if (!sanitizer) return fail(400, `Unknown thingtime schema: ${id}`);
+    if (!sanitizer) {
+      // Registered crystal kinds with no generic sanitizer (app, app-data) are
+      // written ONLY by their dedicated endpoints. /docs/schemas lists them, so
+      // refuse with the real reason instead of pretending they don't exist.
+      return fail(403, `${id} things are managed by their own endpoints`);
+    }
     const sanitized = sanitizer(input, ids);
     if (sanitized.ok === false) return sanitized;
     Object.assign(merged, sanitized.crystal);
