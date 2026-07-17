@@ -473,6 +473,81 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'auth-password-reset',
+    group: 'auth',
+    title: 'Password reset request',
+    endpoint: '/api/v1/auth/password-reset',
+    summary: 'Emails a single-use password reset link to a registered address.',
+    detail:
+      'Use this to start a password reset. The route always returns ok so account existence cannot be probed; when the email matches an account, a one-hour single-use reset link is delivered through the Thingtime email service. Requests are rate-limited per IP — the neutral response would otherwise hide a mail bomb.',
+    auth: {
+      mode: 'none',
+      description: 'Public request endpoint — identity is proven later by the emailed token.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST the account email address.',
+      'Treat the ok response as neutral — it does not confirm the account exists.',
+      'The user opens the emailed link (/reset-password?token=…), which carries a single-use token valid for one hour.',
+      'Finish with /api/v1/auth/password-reset/confirm using that token and the new password.',
+      'Handle 429 when the per-IP request window is exhausted.'
+    ],
+    requestExamples: [
+      {
+        name: 'Request a reset link',
+        description: 'Ask for a password reset email.',
+        method: 'POST',
+        body: { email: 'ada@example.com' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Request accepted (whether or not the account exists). Local/preview runs also return resetLink.',
+        body: { ok: true }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'auth-password-reset-confirm',
+    group: 'auth',
+    title: 'Password reset confirm',
+    endpoint: '/api/v1/auth/password-reset/confirm',
+    summary: 'Burns a reset token, sets the new password, and revokes all sessions.',
+    detail:
+      'Use this with the token from the reset email. On success the password is replaced and every live session for the account is revoked, so stolen cookies or bearer tokens stop working immediately.',
+    auth: {
+      mode: 'none',
+      description: 'The single-use emailed token is the credential.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST the reset token together with the new password (minimum 6 characters).',
+      'Tokens are single-use and expire after one hour — expired/used tokens return 400.',
+      'All existing sessions are revoked on success; the user logs in again with the new password.'
+    ],
+    requestExamples: [
+      {
+        name: 'Set a new password',
+        description: 'Consume a reset token and rotate the password.',
+        method: 'POST',
+        body: { token: 'reset-token-from-the-email', password: 'a-new-password' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Password rotated and sessions revoked.',
+        body: { ok: true }
+      },
+      {
+        status: 400,
+        description: 'Missing/expired/used token or invalid password.',
+        body: { ok: false, error: 'This reset link has expired — request a new one' }
+      }
+    ]
+  }),
+  endpoint({
     id: 'auth-register',
     group: 'auth',
     title: 'Register user',
@@ -626,6 +701,51 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     notes: ['The bearer token is intentionally non-expiring; rotate it by creating a replacement service account when needed.']
   }),
   endpoint({
+    id: 'auth-two-factor',
+    group: 'auth',
+    title: 'Email 2FA settings',
+    endpoint: '/api/v1/auth/two-factor',
+    summary: 'Reads or toggles opt-in email 2FA for the current account.',
+    detail:
+      'When enabled, POST /api/v1/login stops minting sessions from a password alone: it returns { requiresOtp, challenge } and emails a security code that completes the login. Enabling requires a verified email address.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires the httpOnly session cookie or an Authorization: Bearer token.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET returns the current enabled state for the session user.',
+      'POST { enabled: true } turns email 2FA on (requires a verified email).',
+      'POST { enabled: false } turns it off.',
+      'Subsequent logins follow the two-step challenge flow documented on /api/v1/login.'
+    ],
+    requestExamples: [
+      {
+        name: 'Enable email 2FA',
+        description: 'Require an emailed security code on every login.',
+        method: 'POST',
+        body: { enabled: true }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Setting applied.',
+        body: { ok: true, enabled: true }
+      },
+      {
+        status: 400,
+        description: 'Email not verified yet.',
+        body: { ok: false, error: 'Verify your email before enabling email 2FA' }
+      },
+      {
+        status: 401,
+        description: 'No session or bearer token.',
+        body: { ok: false, error: 'Unauthorized' }
+      }
+    ]
+  }),
+  endpoint({
     id: 'auth-verify-email',
     group: 'auth',
     title: 'Verify email',
@@ -707,6 +827,91 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         status: 400,
         description: 'Unknown intent.',
         body: { ok: false, error: 'Unknown crypto action.' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'email-config',
+    group: 'email',
+    title: 'Email delivery config',
+    endpoint: '/api/v1/email/config',
+    summary: 'Returns the sanitized email delivery configuration for diagnostics.',
+    detail:
+      'Use this to check which provider (console or SES), region, sender addresses, and sandbox settings the runtime resolved — no credentials are ever included.',
+    auth: {
+      mode: 'none',
+      description: 'Public diagnostic endpoint returning non-secret configuration only.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET the endpoint (POST behaves identically).',
+      'Read provider to confirm whether real SES delivery or console logging is active.',
+      'Use sesSandbox and testRecipient to plan /tests email checks.'
+    ],
+    requestExamples: [
+      {
+        name: 'Read email config',
+        description: 'Inspect the resolved delivery configuration.',
+        method: 'GET'
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Sanitized email configuration.',
+        body: {
+          ok: true,
+          email: {
+            provider: 'console',
+            region: 'us-east-1',
+            configurationSetName: null,
+            transactionalFrom: 'Thingtime <no-reply@thingtime.com>',
+            newsletterFrom: 'Thingtime Updates <updates@thingtime.com>',
+            sesSandbox: false,
+            sandboxSendDelayMs: 0,
+            testRecipient: 'support@thingtime.com',
+            testRecipientDomain: 'thingtime.com'
+          }
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'email-test-otp',
+    group: 'email',
+    title: 'Email OTP test send',
+    endpoint: '/api/v1/email/test-otp',
+    summary: 'Sends a test security-code email to the configured test recipient.',
+    detail:
+      'Dev/preview-only helper for the /tests page: it exercises the OTP template and delivery service end to end. Production environments return 403, and recipients are restricted to the configured test address (or a plus alias of it).',
+    auth: {
+      mode: 'none',
+      description: 'Gated by environment (local development and Vercel previews), not by session.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST an email matching the configured test recipient or one of its plus aliases.',
+      'Optionally pass code and expiresMinutes; a random six-digit code is generated otherwise.',
+      'Inspect the returned delivery result and the email_messages record it created.'
+    ],
+    requestExamples: [
+      {
+        name: 'Send a test OTP',
+        description: 'Deliver a security-code email to the test recipient.',
+        method: 'POST',
+        body: { email: 'support+otp-test@thingtime.com' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Test email queued/sent.',
+        body: { ok: true, result: { delivered: false, via: 'console', status: 'logged' } }
+      },
+      {
+        status: 403,
+        description: 'Not a dev/preview environment.',
+        body: { ok: false, error: 'Email OTP test sends are available only in local development and Vercel previews.' }
       }
     ]
   }),
@@ -861,9 +1066,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     methods: ['POST'],
     steps: [
       'POST username and password.',
+      'If the account has email 2FA enabled, the response is { requiresOtp: true, challenge } and a code is emailed — POST { challenge, code } to this same endpoint to finish.',
       'Store the Set-Cookie response header for browser clients.',
       'Use /api/v1/auth/me after login to confirm the current user.',
-      'Handle 401 for invalid credentials and 500 for unavailable backing services.'
+      'Handle 401 for invalid credentials/codes, 429 for rate-limited attempts or exhausted OTP retries, and 500 for unavailable backing services.'
     ],
     requestExamples: [
       {
@@ -871,6 +1077,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'Authenticate a username/password account.',
         method: 'POST',
         body: { username: 'ada-lovelace', password: 'replace-with-the-user-password' }
+      },
+      {
+        name: 'Complete email 2FA login',
+        description: 'Finish a login that returned requiresOtp using the emailed security code.',
+        method: 'POST',
+        body: { challenge: 'challenge-id-from-the-first-response', code: '123456' }
       }
     ],
     responseExamples: [
@@ -878,6 +1090,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         status: 200,
         description: 'Login succeeded and auth cookie was set.',
         body: { ok: true, user: { id: '64f000000000000000000002', username: 'ada-lovelace' } }
+      },
+      {
+        status: 200,
+        description: 'Email 2FA is enabled — a security code was emailed; no session yet.',
+        body: { ok: true, requiresOtp: true, challenge: 'challenge-id', expiresAt: '2026-01-01T00:10:00.000Z' }
       },
       {
         status: 401,
@@ -1944,7 +2161,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares.',
     detail:
-      'Everything is a thing: one root Thing schema per doc, sub-schemas applied via the thingtime array of schema ids (see /schemas), the payload under crystal, and the audience under acl — tt: grants plus "-"-prefixed exclusions where the most specific matching entry wins (["tt:all"] public, ["-tt:all","tt:userFriends","tt:user"] friends-only, ["tt:all","-tt:user/somebody"] public except one user; owners always see their own things). POST creates (unified shape or the legacy post body — same path), GET reads one thing / lists a target’s attached things / lists your own, PUT upserts by id (create-or-replace), PATCH merges a partial update, DELETE removes an owned thing and its attached comments/reactions. The legacy visibility names still work as input and are derived on the wire.',
+      'Everything is a thing: one root Thing schema per doc, sub-schemas applied via the thingtime array of schema ids (see /schemas), the payload under crystal, and the audience under acl — tt: grants plus "-"-prefixed exclusions where the most specific matching entry wins (["tt:all"] public, ["-tt:all","tt:userFriends","tt:user"] friends-only, ["tt:all","-tt:user/somebody"] public except one user; owners always see their own things). POST creates (unified shape or the legacy post body — same path), GET reads one thing / lists a target’s attached things / lists your own, PUT upserts by id (create-or-replace), PATCH merges a partial update, DELETE removes an owned thing and its attached comments/reactions. The legacy visibility names still work as input and are derived on the wire. Crystals are optionally schema-less: omit thingtime and it defaults to ["data"], the bounded free-form crystal. Beside the crystal, every thing also carries a schema-free extended property — any JSON up to 512KB, stored and returned exactly as given, never validated or interpreted, and not structured-searchable (/search field conditions can’t target it, though its string content is indexed by the wildcard text index). extended replaces as a whole value on write (deep-merging arbitrary JSON is ambiguous) and null clears it — the open sidecar external apps park their data in.',
     auth: {
       mode: 'session-or-bearer',
       description:
@@ -1952,10 +2169,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     steps: [
-      'POST { thingtime: ["post"], crystal: { type, text, images, listing }, acl, tags } — or the legacy post body — to create.',
+      'POST { thingtime: ["post"], crystal: { type, text, images, listing, thing }, acl, tags } — or the legacy post body — to create. type is text, image, marketplace, or thingtime.',
+      'Thingtime posts (type "thingtime") carry a free-form structured thing under crystal.thing — bounded like data crystals and searchable as crystal.thing.<field> on /search. They can also carry images and an optional marketplace listing (validated like a marketplace post’s when present).',
+      'Omit thingtime entirely to create a schema-less thing: { crystal: { any: "shape" } } defaults to thingtime ["data"].',
+      'Optionally add extended: any JSON up to 512KB, stored untouched and returned as-is — replace-on-write, null clears it. It is not structured-searchable (/search field conditions can’t target it), though its string content is indexed by the wildcard text index like any field.',
       'Attached kinds (comment, reaction) require targetId and carry acl ["tt:inherit"]; shares carry thingtime ["post","share"].',
       'GET ?id= reads one thing; GET ?target=&thingtime=comment lists a visible thing’s comments; GET ?thingtime=&cursor=&limit= lists your own things.',
-      'PUT { id, thingtime, crystal, acl? } creates the thing at that id (201) or replaces the owned thing’s crystal whole (200); PATCH { id, crystal?, acl?, tags? } merges.',
+      'PUT { id, thingtime, crystal, acl? } creates the thing at that id (201) or replaces the owned thing’s crystal whole (200); PATCH { id, crystal?, extended?, acl?, tags? } merges crystal fields (extended still replaces whole).',
       'DELETE ?id= (or body { id }) removes an owned thing; attached comments/reactions go with it, shares survive with an original-unavailable placeholder.',
       'Handle 401 unauthenticated, 400 invalid payload or acl, 404 missing target/thing, and 413 oversized payload.'
     ],
@@ -1979,6 +2199,20 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           thingtime: ['post'],
           crystal: { type: 'text', text: 'Bonfire at ours on Saturday 🔥' },
           acl: ['-tt:all', 'tt:userFriends', 'tt:user']
+        }
+      },
+      {
+        name: 'Create thingtime post',
+        description: 'A post carrying any structured thing — searchable by its real datatypes on /search.',
+        method: 'POST',
+        body: {
+          thingtime: ['post'],
+          crystal: {
+            type: 'thingtime',
+            text: 'My new standing desk 🌀',
+            thing: { name: 'Walnut standing desk', legs: 4, material: 'wood', height: 130, sitStand: true }
+          },
+          tags: ['furniture']
         }
       },
       {
@@ -2010,6 +2244,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           thingtime: ['comment'],
           crystal: { text: 'So say we all 🚀' },
           targetId: 'post_123'
+        }
+      },
+      {
+        name: 'Create a schema-less thing',
+        description: 'No thingtime needed — a bare crystal defaults to ["data"], and extended carries anything else as-is.',
+        method: 'POST',
+        body: {
+          crystal: { name: 'Walnut standing desk', legs: 4, material: 'wood' },
+          extended: { myApp: { mood: 'curious', readingList: ['FUNDAMENTALS.md', { title: 'Everything is a thing', progress: 0.42 }] } },
+          acl: ['tt:user']
         }
       },
       {
@@ -2110,10 +2354,144 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       }
     ],
     notes: [
+      'System kinds (user, theme, feed-algorithm, waitlist) are protected: this endpoint refuses to create, update, or delete them — they are managed exclusively by their dedicated endpoints (auth/register, users/profile, themes, algorithms, waitlist).',
       'acl entries: tt:all, tt:user (owner), tt:userFriends, tt:userFamily, tt:user/<username>, each optionally "-" prefixed; the most specific matching entry decides and owners always view. Circles resolve to the owner only until a relationship graph exists.',
       'Every doc stores the root schemaVersion it was written at; admins migrate older docs via /api/v1/admin/migrations.',
       'Browse every schema kind at /schemas or GET /api/v1/schemas.',
       'The comment/react/share/update/delete sub-routes remain as sugar over this endpoint.'
+    ]
+  }),
+  endpoint({
+    id: 'things-search',
+    group: 'things',
+    title: 'Search things',
+    endpoint: '/api/v1/things/search',
+    summary: 'Structured MongoDB-style search plus Google-like ranked text search over every thing you can see.',
+    detail:
+      'The search behind /search. Two modes that compose: q runs a ranked text search (weighted ' +
+      'wildcard text index over every string field — relevance-sorted like a web search), and ' +
+      'conditions runs a structured query built from a whitelisted operator grammar: eq, ne, gt, ' +
+      'gte, lt, lte, between, in, nin, exists, type, contains, startsWith, endsWith. Fields address the ' +
+      'crystal by path (bare names auto-prefix, so "legs" means crystal.legs) plus the root ' +
+      'fields tags, thingtime, createdAt, updatedAt, shareId, and targetId. Conditions nest into ' +
+      'all/any groups (depth ≤ 3, ≤ 32 conditions); values must be bounded primitives, and text ' +
+      'operators escape to literal matching — raw regex and query operators from the client never ' +
+      'reach the database. Results honour the same audience model as the feed: public things plus ' +
+      'your own, with exact acl evaluation per doc; attached tt:inherit things (comments, ' +
+      'reactions) only surface for their owner.',
+    auth: {
+      mode: 'optional',
+      description:
+        'Works logged out (tt:all things only, throttled per IP). Authenticated searches also see your own things.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET ?q=<text>&thingtime=&tags=&sort=&cursor=&limit= for the simple shareable form.',
+      'POST { q?, mode: "all"|"any", conditions: [{ field, op, value | values } | { mode, conditions: [...] }], thingtime?, tags?, from?, to?, sort?, cursor?, limit? } for structured searches.',
+      'Range searches are one atomic between condition ({ field, op: "between", values: [low, high] }, either end open); enum picks are one in condition.',
+      'sort defaults to relevance with q, newest otherwise (oldest also supported); ranked pages cursor by offset, chronological pages by the standard createdAt_shareId cursor.',
+      'Shortcut filters (the feed/profile Advanced panel) compose with everything above: types (post types, csv), circles (audience circles, csv), author (one username — unknown usernames match nothing), minTextChars/maxTextChars (post text length), and minReactions/minComments.',
+      'Engagement thresholds (minReactions/minComments) count child things at read time, so they search a bounded window of the newest (or best-matching) 400 candidates and page within it by offset — the same determinism trade-off as the ranked feed.',
+      'The response carries things (generic projections), posts (full post projections keyed by thing id), nextCursor, and a capped approximate total (a visibility-superset count, only computed on the first page).',
+      'Handle 400 invalid grammar and 429 rate-limited.'
+    ],
+    requestExamples: [
+      {
+        name: 'Ranked text search',
+        description: 'Google-style: relevance-ranked matches across every string field of every visible thing.',
+        method: 'GET',
+        query: { q: 'standing desk walnut', limit: 20 }
+      },
+      {
+        name: 'Structured property search',
+        description: 'Real datatype conditions on crystal fields — a 60–130cm sit/stand table with wood or concrete top.',
+        method: 'POST',
+        body: {
+          mode: 'all',
+          conditions: [
+            { field: 'legs', op: 'gte', value: 3 },
+            { field: 'material', op: 'in', values: ['wood', 'concrete'] },
+            { field: 'height', op: 'between', values: [60, 130] },
+            { field: 'features', op: 'contains', value: 'sit/stand' }
+          ]
+        }
+      },
+      {
+        name: 'Any-of groups + datatype checks',
+        description: 'Nested all/any groups compose; type/exists conditions search by developer datatype.',
+        method: 'POST',
+        body: {
+          mode: 'all',
+          conditions: [
+            { field: 'price', op: 'type', value: 'number' },
+            {
+              mode: 'any',
+              conditions: [
+                { field: 'condition', op: 'eq', value: 'new' },
+                { field: 'price', op: 'lt', value: 100 }
+              ]
+            }
+          ],
+          thingtime: ['post'],
+          sort: 'newest'
+        }
+      },
+      {
+        name: 'Text + structure together',
+        description: 'Relevance-ranked text matching, narrowed by structured conditions.',
+        method: 'POST',
+        body: {
+          q: 'table',
+          conditions: [{ field: 'legs', op: 'gte', value: 4 }]
+        }
+      },
+      {
+        name: 'Advanced feed shortcuts',
+        description: 'The feed/profile Advanced panel: popular long-form posts by one user, tagged desk.',
+        method: 'POST',
+        body: {
+          thingtime: ['post'],
+          author: 'rick.deckard',
+          tags: 'desk',
+          minReactions: 5,
+          minComments: 2,
+          minTextChars: 200
+        }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Matches, newest or best first.',
+        body: {
+          ok: true,
+          things: [
+            {
+              id: 'thing_123',
+              thingtime: ['post'],
+              crystal: { type: 'text', text: 'Standing desk, walnut top, 60–130cm' },
+              tags: ['furniture'],
+              acl: ['tt:all'],
+              visibility: 'public'
+            }
+          ],
+          posts: { thing_123: { id: 'thing_123', type: 'text', text: 'Standing desk, walnut top, 60–130cm' } },
+          nextCursor: null,
+          total: 1,
+          totalCapped: false,
+          ranked: true
+        }
+      },
+      {
+        status: 400,
+        description: 'A condition failed the grammar.',
+        body: { ok: false, error: 'Unknown search operator: where (use eq, ne, gt, gte, lt, lte, between, in, nin, exists, type, contains, startsWith, endsWith)' }
+      }
+    ],
+    notes: [
+      'Browse schemas to search by on /search — picking one prefills conditions from its field definitions (user-authored schema things use thingtime ["schema"]).',
+      'contains/startsWith/endsWith match escaped literals case-insensitively; raw regex is deliberately not accepted.',
+      'The text index weights crystal.name/crystal.text highest, then titles and tags, then everything else.'
     ]
   }),
   endpoint({
@@ -2262,6 +2640,44 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'things-save',
+    group: 'things',
+    title: 'Save to library',
+    endpoint: '/api/v1/things/save',
+    summary: 'Toggles a private library save of a visible thing ("add to my library").',
+    detail:
+      'Saves are relational child things (thingtime ["save"], targetId = the saved thing, acl ' +
+      '["tt:user"]) — always private to the saver, never inheriting the target audience, so a ' +
+      'library is personal by construction. Toggling an existing save removes it. List saved ' +
+      'schemas via /api/v1/schemas/browse?library=1, or raw saves via GET /api/v1/things?thingtime=save.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST the id of the thing to save (or unsave).',
+      'The thing must be visible to the current user.',
+      'Use the returned saved boolean to flip the UI state optimistically.',
+      'Handle 401 unauthenticated and 404 for missing or not-visible things.'
+    ],
+    requestExamples: [
+      {
+        name: 'Toggle save',
+        description: 'Add or remove a thing from the caller library.',
+        method: 'POST',
+        body: { id: 'schema_table_001' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Save toggled.',
+        body: { ok: true, saved: true }
+      }
+    ]
+  }),
+  endpoint({
     id: 'things-reactions-recent',
     group: 'things',
     title: 'Recent reactions',
@@ -2349,8 +2765,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     },
     methods: ['POST'],
     steps: [
-      'POST the thing id plus any of crystal, visibility, and tags.',
+      'POST the thing id plus any of crystal, extended, visibility, and tags.',
       'Crystal fields you omit keep their current values; included fields are validated by the thing schemas.',
+      'extended replaces as a whole value when provided (null clears it) — it is never deep-merged.',
       'The current user must own the thing.',
       'Handle 401 unauthenticated, 404 missing or unowned things, and 400 invalid patches.'
     ],
@@ -2458,6 +2875,47 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         status: 401,
         description: 'Anonymous caller attempted a profile update.',
         body: { ok: false, error: 'Unauthorized' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'users-search',
+    group: 'profile',
+    title: 'Search people',
+    endpoint: '/api/v1/users/search',
+    summary: 'Public people search — matches usernames and display names for the /search People rail.',
+    detail:
+      'Escaped-literal, case-insensitive matching on username and displayName only (never email — an ' +
+      'address can’t be reversed to an account). Returns public profile projections: username, ' +
+      'displayName, bio, avatar/banner URLs, createdAt. Users live in the users collection, not ' +
+      'things, so /api/v1/things/search never sees them — this endpoint is how the search page ' +
+      'surfaces people alongside things.',
+    auth: {
+      mode: 'optional',
+      description: 'Works logged out; anonymous callers are rate-limited per hashed IP.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET ?q=<text>&limit= — empty q returns an empty list.',
+      'Render results as profile links (/profile/<username>).',
+      'Handle 429 rate-limited.'
+    ],
+    requestExamples: [
+      {
+        name: 'Find people',
+        description: 'Match usernames and display names.',
+        method: 'GET',
+        query: { q: 'lopu', limit: 8 }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Matching public profiles.',
+        body: {
+          ok: true,
+          users: [{ id: '664f…', username: 'lopu', displayName: 'Lopu', bio: 'Making Thingtime 🦄', avatarUrl: null }]
+        }
       }
     ]
   }),
@@ -2616,7 +3074,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/schemas',
     summary: 'Returns every Thingtime Schema — the root thing schema, crystal sub-schemas, and collection schemas.',
     detail:
-      'The registry the API validates against, as data: field lists, versions, examples, and the schema version each collection currently writes. Browse the same registry visually at /schemas.',
+      'The registry the API validates against, as data: field lists, versions, examples, and the schema version each collection currently writes. Browse the same registry visually at /docs/schemas; published community schemas live at /schemas.',
     auth: {
       mode: 'none',
       description: 'Public — schemas describe shapes, never data.'
@@ -2646,6 +3104,69 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         status: 200,
         description: 'Registry returned.',
         body: { ok: true, schemas: [{ id: 'thing', kind: 'root', version: 2 }], collectionVersions: { things: 2 } }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'schemas-browse',
+    group: 'schemas',
+    title: 'Browse published schemas',
+    endpoint: '/api/v1/schemas/browse',
+    summary: 'Paginated browsing of user-published schema things — newest, oldest, popular, or text-searched.',
+    detail:
+      'The UGC side of /schemas: schema things (thingtime ["schema"]) with cursor pagination. ' +
+      'sort=popular ranks by reaction count over a bounded window; q rides the same hardened ' +
+      'text search as /api/v1/things/search; library=1 returns only the caller saved schemas ' +
+      '(save recency order); mine=1 returns only the caller own schemas. Every entry carries ' +
+      'reactionCounts, viewerReactions, saved, and usageCount (public data things whose crystal ' +
+      'schema field names it). Built-in registry schemas are not included — clients merge them ' +
+      'from GET /api/v1/schemas.',
+    auth: {
+      mode: 'optional',
+      description: 'Anonymous callers see public schemas; library=1 and mine=1 require auth.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET with sort=newest|oldest|popular, optional q, limit (max 50).',
+      'Page with the returned nextCursor until it is null (cursors are opaque).',
+      'Pass library=1 for the caller saved schemas, mine=1 for their own.',
+      'Handle 401 for library/mine without auth and 429 when rate-limited.'
+    ],
+    requestExamples: [
+      {
+        name: 'Popular schemas',
+        description: 'First page of the most-reacted schemas.',
+        method: 'GET',
+        query: { sort: 'popular', limit: 20 }
+      },
+      {
+        name: 'Search schemas',
+        description: 'Relevance-ranked text search.',
+        method: 'GET',
+        query: { q: 'table', limit: 20 }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Schema page returned.',
+        body: {
+          ok: true,
+          schemas: [
+            {
+              id: 'schema_table_001',
+              thingtime: ['schema'],
+              crystal: { name: 'Table', description: 'Tables of all kinds.', fields: [{ name: 'legs', type: 'number', min: 0, max: 12 }] },
+              reactionCounts: { '🔥': 3 },
+              viewerReactions: [],
+              saved: false,
+              usageCount: 12
+            }
+          ],
+          nextCursor: null,
+          total: 1,
+          totalCapped: false
+        }
       }
     ]
   }),

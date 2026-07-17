@@ -1,6 +1,7 @@
 import { getThingtimeDb } from './collections';
 import { MONGO_QUERY_LIMITS, type MongoQueryRequest, type MongoQuerySuccess } from './queryContract';
 import {
+  hardenThingsQuery,
   mongoQueryCapabilities,
   normalizeMongoQueryRequest,
   redactMongoValue,
@@ -79,8 +80,11 @@ export const runMongoQuery = async (
   body: MongoQueryRequest,
   signal?: AbortSignal
 ): Promise<Fail | MongoQuerySuccess> => {
-  const normalized = await normalizeMongoQueryRequest(body || {});
-  if ('status' in normalized) return normalized;
+  const checked = await normalizeMongoQueryRequest(body || {});
+  if ('status' in checked) return checked;
+  const hardened = hardenThingsQuery(checked);
+  if ('status' in hardened) return hardened;
+  const normalized = hardened;
 
   const started = performance.now();
   try {

@@ -19,14 +19,7 @@ import { Database, FlaskConical, Play } from 'lucide-react';
 
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useApi } from '~/hooks/useApi';
-
-const CARD_STYLES = {
-  bg: 'var(--tt-card, #ffffff)',
-  border: '1px solid',
-  borderColor: 'var(--tt-border, #ececef)',
-  borderRadius: 'var(--tt-radius-lg, 16px)',
-  boxShadow: 'var(--tt-shadow-card, 0 1px 2px rgba(0, 0, 0, 0.05))'
-} as const;
+import { CARD_STYLES } from '~/theme/card';
 
 type CollectionCensus = {
   collection: string;

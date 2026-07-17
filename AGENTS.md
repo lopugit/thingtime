@@ -69,6 +69,9 @@
   reads `VERCEL_GIT_COMMIT_REF` from the system env at build and runtime.
 - If local web dev 500s with a missing `bcrypt_lib.node` native binding, run `corepack pnpm --dir remix run ensure-bcrypt`, then restart the PM2-managed `tt-nitro-react-router-9999` app. The app `postinstall`, `dev`, and `build` scripts also run this check automatically.
 - For rendered browser validation in Codex Desktop, prefer the in-app Browser first when it is available. If localhost is blocked there, or the user explicitly asks for Chrome, use the Codex Chrome tab control workflow (`chrome:control-chrome`) before falling back to standalone Playwright. Keep Chrome checks read-only unless the user requested an action, and do not inspect cookies, local storage, passwords, or profile data.
+- Before finishing a PR, run the manual checklists in `TESTING.md` for every
+  area the PR touches, and add a line there whenever a new bug class is fixed
+  (canonical rule mirrored in `CLAUDE.md`).
 - For layout or alignment changes, always verify the affected screen in a live
   browser window before finishing. Use screenshot evidence or measured element
   bounds across the relevant desktop/mobile viewport so centering, max-width,

@@ -27,6 +27,7 @@ import { MoreHorizontal, Plus, Send } from 'lucide-react';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '~/components/Lopu/useLopu';
+import { ThingView } from '~/components/Thingtime/ThingView';
 import { EmojiPicker } from '~/components/Emoji/EmojiPicker';
 import { useRecentReactions } from '~/components/Emoji/useRecentReactions';
 import { sanitizeReactionToken, splitEmojis } from '~/utils/reactionTokens';
@@ -237,7 +238,7 @@ const ImageGrid = ({ images, alt }: { images: string[]; alt: string }) => {
   );
 };
 
-const ListingBlock = ({ post }: { post: PublicPost }) => {
+const ListingBlock = ({ post, hideImage }: { post: PublicPost; hideImage?: boolean }) => {
   const listing = post.listing;
   if (!listing) return null;
 
@@ -245,7 +246,7 @@ const ListingBlock = ({ post }: { post: PublicPost }) => {
 
   return (
     <Box border={BORDER} borderRadius={RADIUS_MD} overflow="hidden" opacity={listing.sold ? 0.6 : 1}>
-      {post.images?.[0] && (
+      {!hideImage && post.images?.[0] && (
         <Image
           src={post.images[0]}
           alt={listing.title}
@@ -302,6 +303,16 @@ const PostBody = ({ post, compact }: { post: PublicPost; compact?: boolean }) =>
     )}
     {post.type === 'image' && <ImageGrid images={post.images} alt={post.text || 'Post photo'} />}
     {post.type === 'marketplace' && <ListingBlock post={post} />}
+    {/* thingtime: the thing leads; opted-in photos and listing follow. The
+    grid owns the photos, so the listing skips its header image (it would
+    repeat the first photo). The thing mounts as the NATIVE Thingtime tree
+    (sandboxed — see ThingView), rendered through its kind renderer when one
+    resolves, with a corner icon flipping between the two views. */}
+    {post.type === 'thingtime' && post.thing && <ThingView thing={post.thing} compact={compact} />}
+    {post.type === 'thingtime' && !!post.images?.length && (
+      <ImageGrid images={post.images} alt={post.text || 'Thing photo'} />
+    )}
+    {post.type === 'thingtime' && post.listing && <ListingBlock post={post} hideImage={!!post.images?.length} />}
   </Flex>
 );
 

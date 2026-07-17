@@ -43,9 +43,9 @@ const docsNav = [
   },
   {
     label: 'Schemas',
-    to: '/schemas',
+    to: '/docs/schemas',
     icon: Gem,
-    description: 'Browse every Thingtime Schema kind'
+    description: 'Reference for every Thingtime Schema kind'
   },
   {
     label: 'Design mockups',

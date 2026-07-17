@@ -12,7 +12,7 @@ import {
   toPublicThings,
   updateThing,
   upsertThing,
-  type Viewer
+  viewerOf
 } from '~/api/utils/things/things';
 
 // Route a unified mutation to the rate-limit key its dedicated sub-route would
@@ -29,17 +29,16 @@ const rateLimitKeyFor = (body: any, accountKind: string): string => {
   return accountKind === 'service' ? 'things.write.service' : 'things.write';
 };
 
-// Things are small JSON payloads (crystal fields: text + image URLs + listing).
-const MAX_BODY_BYTES = 256 * 1024;
+// Crystal payloads are small (text + image URLs + listing), but every thing
+// also carries the schema-free `extended` sidecar (up to EXTENDED_MAX_BYTES =
+// 512KB, enforced by sanitizeExtended) — the body cap leaves headroom for both.
+const MAX_BODY_BYTES = 768 * 1024;
 
 const csv = (value: string | null): string[] =>
   (value || '')
     .split(',')
     .map((entry) => entry.trim())
     .filter(Boolean);
-
-const viewerOf = (user: { id: string; username: string } | null): Viewer =>
-  user ? { id: user.id, username: user.username } : null;
 
 // GET /api/v1/things?id=<shareId> — read one thing (post projection included
 // for post things).
@@ -73,13 +72,16 @@ export const loader = async ({ request }: { request: Request }) => {
 };
 
 // One endpoint, full CRUD (the GET loader above is the R):
-// - POST   /api/v1/things — create. Unified shape { thingtime, crystal, acl?,
-//   visibility?, targetId?, tags? } or the legacy post shape { type, text,
-//   images, listing, visibility, tags } — same code path underneath.
+// - POST   /api/v1/things — create. Unified shape { thingtime, crystal,
+//   extended?, acl?, visibility?, targetId?, tags? } or the legacy post shape
+//   { type, text, images, listing, visibility, tags } — same code path
+//   underneath. thingtime may be omitted when a crystal is present: schema-less
+//   crystals default to ["data"].
 // - PUT    /api/v1/things — upsert by id: { id, thingtime, crystal, acl?, ... }
 //   creates the thing at that id or replaces the owned thing's crystal whole.
-// - PATCH  /api/v1/things — partial update: { id, crystal?, acl?, visibility?,
-//   tags? } — crystal fields merge over the existing crystal.
+// - PATCH  /api/v1/things — partial update: { id, crystal?, extended?, acl?,
+//   visibility?, tags? } — crystal fields merge over the existing crystal;
+//   extended replaces whole (null clears it).
 // - DELETE /api/v1/things?id= (or body { id }) — delete an owned thing.
 export const action = async ({ request }: { request: Request }) => {
   const user = await getCurrentUser(request);
@@ -109,7 +111,14 @@ export const action = async ({ request }: { request: Request }) => {
   }
 
   if (method === 'POST') {
-    if (Array.isArray(body?.thingtime)) {
+    // Unified shape whenever the body opts into the thing vocabulary: an
+    // explicit `thingtime`, or a schema-less `crystal` (defaults to ["data"]).
+    // Legacy post bodies carry neither key. Routing on key PRESENCE (not shape)
+    // keeps the decision in one place — validateThingtimeCrystal raises the
+    // right error for a malformed thingtime/crystal instead of the request
+    // silently falling through to the legacy post path.
+    const isUnified = body && typeof body === 'object' && ('thingtime' in body || 'crystal' in body);
+    if (isUnified) {
       const result = await createThing(user.id, body, viewer);
       if (result.ok === false) {
         return json({ ok: false, error: result.error }, { status: result.status });

@@ -51,6 +51,9 @@
   installs, and local generated state needed for validation. The current
   dependency directories alone are roughly 1.5 GB when present, and
   generated-output patterns can make managed worktrees larger.
+- Before finishing a PR, run the manual checklists in `TESTING.md` for every
+  area the PR touches, and add a line there whenever a new bug class is fixed
+  (rule mirrored in `AGENTS.md`).
 - For layout or alignment changes, always verify the affected screen in a live
   browser window before finishing. Use screenshot evidence or measured element
   bounds across the relevant desktop/mobile viewport so centering, max-width,

@@ -12,9 +12,19 @@ export type RateLimitConfig = Record<string, RateLimitRule>;
 export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   'things.react': { limit: 60, windowMs: 60_000, enabled: true },
   'things.comment': { limit: 20, windowMs: 60_000, enabled: true },
+  // library save toggles (POST /api/v1/things/save) — same shape as reactions
+  'things.save': { limit: 60, windowMs: 60_000, enabled: true },
+  // schema browsing (/api/v1/schemas/browse) — read-only, bounded like search
+  'schemas.browse': { limit: 120, windowMs: 60_000, enabled: true },
   // any other mutating write through /api/v1/things (create/upsert/patch/delete
   // posts and other thing kinds) — reactions/comments route to their own keys
   'things.write': { limit: 60, windowMs: 60_000, enabled: true },
+  // structured/text search (/api/v1/things/search) — read-only but query-shaped,
+  // so it gets its own generous-but-bounded window (anonymous callers key by IP)
+  'things.search': { limit: 120, windowMs: 60_000, enabled: true },
+  // public people search (/api/v1/users/search) — bounded like things.search;
+  // it only ever returns public profile projections
+  'users.search': { limit: 120, windowMs: 60_000, enabled: true },
   // Admin-only raw queries can still be expensive; keep accidental repeated
   // scans bounded independently from the ordinary app APIs.
   'mongodb.query': { limit: 30, windowMs: 60_000, enabled: true },
@@ -27,7 +37,13 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // writes come from third-party pages and are keyed per (user, app)
   'apps.write': { limit: 30, windowMs: 3_600_000, enabled: true },
   'oauth.authorize': { limit: 30, windowMs: 600_000, enabled: true },
-  'appData.write': { limit: 120, windowMs: 60_000, enabled: true }
+  'appData.write': { limit: 120, windowMs: 60_000, enabled: true },
+  // password-reset requests email any address you name — the classic mail-bomb
+  // + enumeration vector, so the window is tight (anonymous, keyed by IP)
+  'auth.passwordReset': { limit: 5, windowMs: 15 * 60_000, enabled: true },
+  // login attempts (password step and OTP step share the endpoint): bounds
+  // credential stuffing and OTP-email sends beyond the per-challenge attempt cap
+  'auth.login': { limit: 30, windowMs: 60_000, enabled: true }
 };
 
 export const RATE_LIMIT_ENDPOINTS = Object.keys(RATE_LIMIT_DEFAULTS);

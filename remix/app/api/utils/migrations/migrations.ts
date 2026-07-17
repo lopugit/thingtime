@@ -1,6 +1,24 @@
+import { randomUUID } from 'node:crypto';
+
 import { ensureIndexes, getThingtimeDb } from '../mongodb/collections';
 import { reactionShareId } from '../things/things';
-import { ACL_INHERIT, ACL_OWNER, COLLECTION_SCHEMA_VERSIONS, LEGACY_SCHEMA_VERSION, aclFromVisibility } from '~/schemas/registry';
+import { buildUserSecure, toBin, userEmailKey, userUsernameKey } from '../auth/users';
+import { waitlistEmailKey } from '../waitlist/waitlist';
+import { themeAcl } from '../themes/themes';
+import {
+  ACL_ALL,
+  ACL_INHERIT,
+  ACL_OWNER,
+  COLLECTION_SCHEMA_VERSIONS,
+  LEGACY_SCHEMA_VERSION,
+  MAX_SCHEMA_FIELD_DESCRIPTION_CHARS,
+  MAX_SCHEMA_FIELD_NAME_CHARS,
+  SCHEMA_FIELD_NAME_PATTERN,
+  SCHEMA_FIELD_TYPES,
+  aclFromVisibility,
+  thingtimeSchemas,
+  type ThingtimeSchemaField
+} from '~/schemas/registry';
 
 // Admin-run database schema-version migrations. Every collection stores the
 // root-level schemaVersion each doc was written at (docs without one predate
@@ -375,8 +393,518 @@ const thingsMigration: Migration = {
   }
 };
 
+// ---------------------------------------------------------------------------
+// Collection → things migrations (claude-todo/12: everything is a thing).
+// users, themes, feedAlgorithms, and waitlist collapse into the things
+// collection. The destination shapes are EXACTLY what the new-write paths
+// produce (auth/users insertUser, themes saveTheme, algorithms
+// createAlgorithm, waitlist joinWaitlist) so migrated docs and things-era
+// docs are indistinguishable to every dual-era read. Deterministic
+// destination ids (preserved shareIds; the legacy users._id hex string) plus
+// the unique shareId/uniqueKeys indexes make re-runs idempotent, and a legacy
+// source doc is deleted only after its destination is verified genuinely ours
+// (the thingsMigration relational convention) — a foreign doc squatting a
+// destination id can never hijack or destroy legacy data: the doc is skipped,
+// noted, and retried on a later run once the collision is resolved (dual-era
+// reads keep serving the legacy doc meanwhile).
+
+const CONVERT_BATCH = 200;
+// per-doc collision/error notes are useful, but a pathological collection
+// must not produce a multi-MB report through json() and the admin toast
+const MAX_MIGRATION_NOTES = 25;
+
+const makeNotes = () => {
+  const notes: string[] = [];
+  let overflow = 0;
+  return {
+    push: (note: string) => {
+      if (notes.length < MAX_MIGRATION_NOTES) notes.push(note);
+      else overflow += 1;
+    },
+    list: () => (overflow ? [...notes, `…plus ${overflow} more note(s) truncated`] : notes)
+  };
+};
+
+type BuiltThing = { ok: true; thing: Record<string, any> } | { ok: false; reason: string };
+
+type ConvertSpec = {
+  id: string;
+  collection: string; // legacy source collection
+  kind: string; // destination thingtime schema id
+  title: string;
+  description: string;
+  // never the email or any other secret — labels land in admin-visible notes
+  label: (doc: any) => string;
+  // build the destination thing; { ok:false } skips + notes a malformed doc
+  toThing: (doc: any) => BuiltThing;
+  // when the destination shareId is NOT deterministic (waitlist mints uuids),
+  // locate the existing counterpart by its uniqueKeys instead
+  findExisting?: (things: any, doc: any, thing: Record<string, any>) => Promise<any>;
+  // is the doc sitting at the destination genuinely this legacy doc's twin?
+  isGenuine: (twin: any, doc: any, thing: Record<string, any>) => boolean;
+};
+
+const collectionToThingsMigration = (spec: ConvertSpec): Migration => ({
+  id: spec.id,
+  collection: spec.collection,
+  fromVersion: COLLECTION_SCHEMA_VERSIONS[spec.collection],
+  toVersion: THINGS_VERSION,
+  title: spec.title,
+  description: spec.description,
+  // the whole remaining legacy collection is pending, whatever its stamped
+  // schemaVersion — presence in the legacy collection IS the legacy era
+  pending: async () => {
+    const db = await getThingtimeDb();
+    return db.collection(spec.collection).countDocuments({});
+  },
+  run: async ({ dryRun }) => {
+    await ensureIndexes();
+    const db = await getThingtimeDb();
+    const things = db.collection('things');
+    const legacy = db.collection(spec.collection);
+    const notes = makeNotes();
+
+    const matched = await legacy.countDocuments({});
+    const existing = await things.countDocuments({ thingtime: spec.kind } as any);
+    notes.push(`${existing} ${spec.kind} thing(s) already in things`);
+
+    if (dryRun) {
+      notes.push(`${matched} legacy ${spec.collection} doc(s) would be converted to ${spec.kind} things and removed`);
+      return { dryRun, matched, migrated: 0, created: 0, skipped: 0, notes: notes.list() };
+    }
+
+    let migrated = 0;
+    let created = 0;
+    let skipped = 0;
+
+    // batch through the legacy collection; collided/malformed docs stay put
+    // and would re-match forever, so exclude the ones skipped this run
+    const skippedIds: any[] = [];
+    for (;;) {
+      const filter = skippedIds.length ? { _id: { $nin: skippedIds } } : {};
+      const batch = (await legacy.find(filter as any).limit(CONVERT_BATCH).toArray()) as any[];
+      if (!batch.length) break;
+      for (const doc of batch) {
+        const skip = (reason: string) => {
+          notes.push(`${spec.collection} ${spec.label(doc)}: ${reason}`);
+          skipped += 1;
+          skippedIds.push(doc._id);
+        };
+        try {
+          const built = spec.toThing(doc);
+          if (!built.ok) {
+            skip(`${built.reason} — left for a later re-run`);
+            continue;
+          }
+          const thing = built.thing;
+
+          let twin = spec.findExisting ? await spec.findExisting(things, doc, thing) : null;
+          let inserted = false;
+          if (!twin) {
+            try {
+              if (spec.findExisting) {
+                // non-deterministic shareId — the unique uniqueKeys index is
+                // what dedupes concurrent/partial runs
+                await things.insertOne(thing as any);
+                inserted = true;
+              } else {
+                // atomic claim of the deterministic destination id: either we
+                // created the doc at shareId (upsertedCount, genuinely ours by
+                // construction) or something already sits there — re-read it
+                // and let the genuine check decide
+                const res = await things.updateOne(
+                  { shareId: thing.shareId } as any,
+                  { $setOnInsert: thing },
+                  { upsert: true }
+                );
+                inserted = !!res.upsertedCount;
+                if (!inserted) twin = await things.findOne({ shareId: thing.shareId } as any);
+              }
+            } catch (err: any) {
+              if (err?.code !== 11000) throw err;
+              // a unique index (shareId race, or a uniqueKeys element held by
+              // another doc) blocked the insert — re-read the counterpart and
+              // let the genuine check decide; nothing was written
+              twin = spec.findExisting
+                ? await spec.findExisting(things, doc, thing)
+                : await things.findOne({ shareId: thing.shareId } as any);
+              if (!twin) {
+                skip('unique key held by a foreign doc — left for a later re-run');
+                continue;
+              }
+            }
+          }
+          if (!inserted && (!twin || !spec.isGenuine(twin, doc, thing))) {
+            skip('destination id held by a foreign doc — left for a later re-run');
+            continue;
+          }
+          // destination verified (fresh atomic insert, or a genuine prior-run
+          // twin) — only now is the legacy source removed (thingsMigration's
+          // convention: never delete data that wasn't safely relocated).
+          //
+          // Data-loss guard: a live write can land on the legacy doc between the
+          // batch snapshot and here (until the thing exists, updateUserStore &
+          // co. target legacy). Re-read fresh; if updatedAt advanced, the thing
+          // we built is stale — rebuild it from the fresh doc before deleting,
+          // and guard the delete on that fresh updatedAt so a write in the
+          // remaining sliver leaves legacy for the next (idempotent) run.
+          if (inserted) created += 1;
+          const fresh = await legacy.findOne({ _id: doc._id } as any);
+          const freshTime = fresh?.updatedAt ? +new Date(fresh.updatedAt) : 0;
+          const snapTime = doc.updatedAt ? +new Date(doc.updatedAt) : 0;
+          if (fresh && freshTime > snapTime) {
+            const rebuilt = spec.toThing(fresh);
+            if (rebuilt.ok) await things.replaceOne({ shareId: thing.shareId } as any, rebuilt.thing as any);
+          }
+          await legacy.deleteOne(fresh ? ({ _id: doc._id, updatedAt: fresh.updatedAt } as any) : ({ _id: doc._id } as any));
+          migrated += 1;
+        } catch (err: any) {
+          // generic note only — never echo err.message (could embed a doc
+          // field value) into the admin-visible migration report
+          skip('conversion error — left for a later re-run');
+        }
+      }
+    }
+
+    return { dryRun, matched, migrated, created, skipped, notes: notes.list() };
+  }
+});
+
+const usersToThings = collectionToThingsMigration({
+  id: 'users-to-things',
+  collection: 'users',
+  kind: 'user',
+  title: 'Move user accounts into things',
+  description:
+    'Converts each legacy users doc into a user thing (thingtime ["user"]) shaped exactly like ' +
+    'insertUser writes new accounts: public profile in crystal, credentials/private state under ' +
+    'the root secure field (email + passwordHash as BinData so the wildcard text index cannot ' +
+    'tokenize them), uniqueness via BinData uniqueKeys (username plain, email sha256-hashed), ' +
+    'ownerId = shareId, acl ["tt:all"]. The legacy _id hex string is preserved as the thing ' +
+    'shareId so sessions, rosters, and every ownerId reference keep working unchanged. Each ' +
+    'legacy doc is deleted only once its user thing is verified in place; collisions are skipped ' +
+    'and noted for a later re-run (dual-era reads keep serving the legacy doc meanwhile).',
+  label: (doc) => (typeof doc?.username === 'string' && doc.username ? doc.username : String(doc?._id)),
+  toThing: (doc) => {
+    if (typeof doc?.username !== 'string' || !doc.username) return { ok: false, reason: 'missing username' };
+    if (typeof doc?.email !== 'string' || !doc.email) return { ok: false, reason: 'missing email' };
+    if (typeof doc?.passwordHash !== 'string' || !doc.passwordHash) return { ok: false, reason: 'missing passwordHash' };
+    const shareId = String(doc._id);
+    const createdAt = doc.createdAt ? new Date(doc.createdAt) : new Date();
+    const updatedAt = doc.updatedAt ? new Date(doc.updatedAt) : createdAt;
+    // buildUserSecure is THE user-thing secure shape (shared with insertUser),
+    // so migrated + live-written accounts can't drift: opaque BinData blob,
+    // admin extracted to the root boolean
+    const { secure, admin } = buildUserSecure({
+      email: doc.email,
+      passwordHash: doc.passwordHash,
+      emailVerified: !!doc.emailVerified,
+      accountKind: doc.accountKind === 'service' ? 'service' : 'user',
+      emailVerificationRequiredBy: doc.emailVerificationRequiredBy ?? null,
+      storageAllowanceBytes: typeof doc.storageAllowanceBytes === 'number' ? doc.storageAllowanceBytes : undefined,
+      storageUsedBytes: typeof doc.storageUsedBytes === 'number' ? doc.storageUsedBytes : undefined,
+      meta: doc.meta || {}
+    });
+    return {
+      ok: true,
+      thing: {
+        shareId,
+        schemaVersion: THINGS_VERSION,
+        thingtime: ['user'],
+        crystal: {
+          username: doc.username,
+          ttid: doc.ttid || doc.username,
+          displayName: doc.displayName ?? null,
+          bio: doc.bio ?? null,
+          avatarUrl: doc.avatarUrl ?? null,
+          bannerUrl: doc.bannerUrl ?? null
+        },
+        // users own themselves (insertUser convention)
+        ownerId: shareId,
+        acl: [ACL_ALL],
+        targetId: null,
+        tags: [],
+        uniqueKeys: [userUsernameKey(doc.username), userEmailKey(doc.email)],
+        secure,
+        secureVersion: 0, // matches insertUser — optimistic-concurrency token
+        ...(admin ? { secureAdmin: true } : {}),
+        createdAt,
+        updatedAt
+      }
+    };
+  },
+  isGenuine: (twin, doc, thing) =>
+    Array.isArray(twin?.thingtime) &&
+    twin.thingtime.includes('user') &&
+    String(twin.ownerId) === thing.shareId &&
+    twin.crystal?.username === doc.username
+});
+
+const themesToThings = collectionToThingsMigration({
+  id: 'themes-to-things',
+  collection: 'themes',
+  kind: 'theme',
+  title: 'Move saved themes into things',
+  description:
+    'Converts each legacy themes doc into a theme thing (thingtime ["theme"]) shaped exactly ' +
+    'like saveTheme writes new themes: the resolved token doc in crystal { name, theme }, the ' +
+    'legacy visibility enum mapped onto the acl (public → ["tt:all"], private → ["tt:user"]). ' +
+    'shareIds are preserved so existing share links and users.meta.activeThemeId pointers keep ' +
+    'resolving. Each legacy doc is deleted only once its theme thing is verified in place; ' +
+    'collisions are skipped and noted for a later re-run.',
+  label: (doc) => String(doc?.shareId || doc?._id),
+  toThing: (doc) => {
+    if (typeof doc?.shareId !== 'string' || !doc.shareId) return { ok: false, reason: 'missing shareId' };
+    if (typeof doc?.name !== 'string' || !doc.name) return { ok: false, reason: 'missing name' };
+    if (!doc.theme || typeof doc.theme !== 'object' || Array.isArray(doc.theme)) {
+      return { ok: false, reason: 'missing theme tokens' };
+    }
+    const createdAt = doc.createdAt ? new Date(doc.createdAt) : new Date();
+    const updatedAt = doc.updatedAt ? new Date(doc.updatedAt) : createdAt;
+    return {
+      ok: true,
+      thing: {
+        shareId: doc.shareId,
+        schemaVersion: THINGS_VERSION,
+        thingtime: ['theme'],
+        crystal: { name: doc.name, theme: doc.theme },
+        ownerId: String(doc.ownerId),
+        acl: themeAcl(doc.visibility === 'public' ? 'public' : 'private'),
+        targetId: null,
+        tags: [],
+        createdAt,
+        updatedAt
+      }
+    };
+  },
+  isGenuine: (twin, doc) =>
+    Array.isArray(twin?.thingtime) && twin.thingtime.includes('theme') && String(twin.ownerId) === String(doc.ownerId)
+});
+
+const feedAlgorithmsToThings = collectionToThingsMigration({
+  id: 'feed-algorithms-to-things',
+  collection: 'feedAlgorithms',
+  kind: 'feed-algorithm',
+  title: 'Move feed algorithms into things',
+  description:
+    'Converts each legacy feedAlgorithms doc into a feed-algorithm thing (thingtime ' +
+    '["feed-algorithm"]) shaped exactly like createAlgorithm writes new ones: the trained ' +
+    'profile in crystal { name, emoji, parentId, weights, eventCount, lastTrainedAt }, ALWAYS ' +
+    'private (acl ["tt:user"] — weights encode reading habits), targetId null so the ' +
+    'reaction-unique partial index can never collide on crystal.emoji. shareIds are preserved so ' +
+    'users.meta.activeFeedAlgorithmId pointers keep working. Each legacy doc is deleted only ' +
+    'once its thing is verified in place; collisions are skipped and noted for a later re-run.',
+  label: (doc) => String(doc?.shareId || doc?._id),
+  toThing: (doc) => {
+    if (typeof doc?.shareId !== 'string' || !doc.shareId) return { ok: false, reason: 'missing shareId' };
+    if (typeof doc?.name !== 'string' || !doc.name) return { ok: false, reason: 'missing name' };
+    const createdAt = doc.createdAt ? new Date(doc.createdAt) : new Date();
+    const updatedAt = doc.updatedAt ? new Date(doc.updatedAt) : createdAt;
+    return {
+      ok: true,
+      thing: {
+        shareId: doc.shareId,
+        schemaVersion: THINGS_VERSION,
+        thingtime: ['feed-algorithm'],
+        crystal: {
+          name: doc.name,
+          emoji: typeof doc.emoji === 'string' && doc.emoji ? doc.emoji : '🧠',
+          parentId: doc.parentId ?? null,
+          weights: doc.weights && typeof doc.weights === 'object' ? doc.weights : { types: {}, tags: {}, authors: {} },
+          eventCount: typeof doc.eventCount === 'number' && doc.eventCount >= 0 ? doc.eventCount : 0,
+          lastTrainedAt: doc.lastTrainedAt ? new Date(doc.lastTrainedAt) : null
+        },
+        ownerId: String(doc.ownerId),
+        acl: [ACL_OWNER],
+        // branch lineage lives ONLY in crystal.parentId (createAlgorithm
+        // convention): a string targetId + crystal.emoji would collide in the
+        // things_reaction_unique partial index
+        targetId: null,
+        tags: [],
+        createdAt,
+        updatedAt
+      }
+    };
+  },
+  isGenuine: (twin, doc) =>
+    Array.isArray(twin?.thingtime) &&
+    twin.thingtime.includes('feed-algorithm') &&
+    String(twin.ownerId) === String(doc.ownerId)
+});
+
+const waitlistToThings = collectionToThingsMigration({
+  id: 'waitlist-to-things',
+  collection: 'waitlist',
+  kind: 'waitlist',
+  title: 'Move waitlist signups into things',
+  description:
+    'Converts each legacy waitlist doc into a waitlist thing (thingtime ["waitlist"]) shaped ' +
+    'exactly like joinWaitlist mints new signups: uuid shareId, empty crystal, the email ONLY ' +
+    'under the root secure field as BinData, uniqueness via the hashed BinData ' +
+    'waitlist-email uniqueKey, system-owned and private (ownerId "system", acl ["tt:user"]). ' +
+    'Emails whose things-era entry already exists are not duplicated (the uniqueKeys index is ' +
+    'the dedup source of truth) — their legacy doc is simply removed. Each legacy doc is deleted ' +
+    'only once its things-era entry is verified in place.',
+  // never the email — labels land in admin-visible notes
+  label: (doc) => String(doc?._id),
+  toThing: (doc) => {
+    if (typeof doc?.email !== 'string' || !doc.email.trim()) return { ok: false, reason: 'missing email' };
+    const email = doc.email.trim().toLowerCase();
+    const createdAt = doc.createdAt ? new Date(doc.createdAt) : new Date();
+    return {
+      ok: true,
+      thing: {
+        shareId: randomUUID(),
+        schemaVersion: THINGS_VERSION,
+        thingtime: ['waitlist'],
+        crystal: {},
+        // system-owned + owner-only: 'system' is never minted as a real user
+        // id, so no viewer matches these through any read path
+        ownerId: 'system',
+        acl: [ACL_OWNER],
+        targetId: null,
+        tags: [],
+        uniqueKeys: [waitlistEmailKey(email)],
+        secure: { email: toBin(email) },
+        createdAt,
+        updatedAt: createdAt
+      }
+    };
+  },
+  // random shareId — the hashed-email uniqueKey is the deterministic identity
+  findExisting: async (things, _doc, thing) => things.findOne({ uniqueKeys: thing.uniqueKeys[0] } as any),
+  isGenuine: (twin) =>
+    Array.isArray(twin?.thingtime) && twin.thingtime.includes('waitlist') && twin.ownerId === 'system'
+});
+
+// ---------------------------------------------------------------------------
+// Builtin-schema seeding: every builtin crystal schema in the code registry
+// becomes a system-owned, public schema THING so /search's community schema
+// browser lists them next to user-published ones. The code registry remains
+// the validation source of truth — these things are read-only discovery
+// mirrors, seeded through the migrations framework so drift surfaces as
+// pending work in the admin census.
+
+const BUILTIN_SCHEMA_SHARE_PREFIX = 'schema-';
+
+const builtinCrystalSchemas = () => thingtimeSchemas.filter((schema) => schema.kind === 'crystal');
+const builtinSchemaShareIds = () => builtinCrystalSchemas().map((schema) => `${BUILTIN_SCHEMA_SHARE_PREFIX}${schema.id}`);
+
+// Map a registry field onto the schema-thing field grammar enforced by
+// sanitizeSchemaCrystal ({ name, type, description?, values? }): 'id' fields
+// are strings on the wire; object/record shapes and names outside the field
+// grammar (the data schema's '*' catch-all) don't fit and are skipped — an
+// explicitly lossy projection, since schema things are search sugar, never a
+// validation gate.
+const builtinSchemaField = (field: ThingtimeSchemaField): Record<string, any> | null => {
+  const type = field.type === 'id' ? 'string' : field.type;
+  if (!(SCHEMA_FIELD_TYPES as readonly string[]).includes(type)) return null;
+  if (field.name.length > MAX_SCHEMA_FIELD_NAME_CHARS || !SCHEMA_FIELD_NAME_PATTERN.test(field.name)) return null;
+  const out: Record<string, any> = { name: field.name, type };
+  if (field.description) out.description = field.description.slice(0, MAX_SCHEMA_FIELD_DESCRIPTION_CHARS);
+  if (type === 'enum' && Array.isArray(field.values) && field.values.length) out.values = [...field.values];
+  return out;
+};
+
+const genuineSeededSchema = (twin: any): boolean =>
+  !!twin && Array.isArray(twin.thingtime) && twin.thingtime.includes('schema') && twin.ownerId === 'system';
+
+const seedBuiltinSchemas: Migration = {
+  id: 'seed-builtin-schemas',
+  collection: 'things',
+  fromVersion: THINGS_VERSION,
+  toVersion: THINGS_VERSION,
+  title: 'Seed builtin crystal schemas as schema things',
+  description:
+    'Every builtin crystal schema in the code registry (post, comment, reaction, share, data, ' +
+    'schema, user, theme, feed-algorithm, waitlist) is seeded as a system-owned public schema ' +
+    'thing — thingtime ["schema"], shareId schema-<id>, uniqueKeys ["schema:<id>"], acl ' +
+    '["tt:all"] — so the /search schema browser lists them. Fields are projected onto the ' +
+    'schema-thing field grammar (object/record shapes are skipped). The code registry stays the ' +
+    'validation source of truth. Idempotent: re-runs upsert by shareId and create nothing that ' +
+    'already exists; a foreign doc squatting a destination id is skipped and noted.',
+  pending: async () => {
+    const db = await getThingtimeDb();
+    const ids = builtinSchemaShareIds();
+    const seeded = await db
+      .collection('things')
+      .countDocuments({ shareId: { $in: ids }, thingtime: 'schema', ownerId: 'system' } as any);
+    return ids.length - seeded;
+  },
+  run: async ({ dryRun }) => {
+    await ensureIndexes();
+    const db = await getThingtimeDb();
+    const things = db.collection('things');
+    const notes = makeNotes();
+    const schemas = builtinCrystalSchemas();
+    const matched = schemas.length;
+
+    if (dryRun) {
+      const seeded = await things.countDocuments({
+        shareId: { $in: builtinSchemaShareIds() },
+        thingtime: 'schema',
+        ownerId: 'system'
+      } as any);
+      notes.push(`${matched - seeded} builtin schema thing(s) would be created (${seeded} of ${matched} already seeded)`);
+      return { dryRun, matched, migrated: 0, created: 0, skipped: 0, notes: notes.list() };
+    }
+
+    let created = 0;
+    let skipped = 0;
+    let alreadySeeded = 0;
+
+    for (const schema of schemas) {
+      const shareId = `${BUILTIN_SCHEMA_SHARE_PREFIX}${schema.id}`;
+      try {
+        const fields = schema.fields
+          .map(builtinSchemaField)
+          .filter((field): field is Record<string, any> => field !== null);
+        const now = new Date();
+        const thing = {
+          shareId,
+          schemaVersion: THINGS_VERSION,
+          thingtime: ['schema'],
+          crystal: { name: schema.title, description: schema.summary, fields },
+          ownerId: 'system',
+          acl: [ACL_ALL],
+          targetId: null,
+          tags: [],
+          uniqueKeys: [toBin(`schema:${schema.id}`)],
+          createdAt: now,
+          updatedAt: now
+        };
+        const res = await things.updateOne({ shareId } as any, { $setOnInsert: thing }, { upsert: true });
+        if (res.upsertedCount) {
+          created += 1;
+          continue;
+        }
+        const twin = await things.findOne({ shareId } as any);
+        if (genuineSeededSchema(twin)) {
+          alreadySeeded += 1;
+        } else {
+          notes.push(`schema ${schema.id}: shareId ${shareId} held by a foreign doc — left unseeded`);
+          skipped += 1;
+        }
+      } catch (err: any) {
+        if (err?.code === 11000) notes.push(`schema ${schema.id}: unique key held by a foreign doc — left unseeded`);
+        else notes.push(`schema ${schema.id}: error: ${err?.message || String(err)} — left unseeded`);
+        skipped += 1;
+      }
+    }
+
+    if (created) notes.push(`${created} builtin schema thing(s) seeded`);
+    if (alreadySeeded) notes.push(`${alreadySeeded} builtin schema thing(s) already seeded`);
+    return { dryRun, matched, migrated: created, created, skipped: skipped + alreadySeeded, notes: notes.list() };
+  }
+};
+
 export const migrations: Migration[] = [
   thingsMigration,
+  usersToThings,
+  themesToThings,
+  feedAlgorithmsToThings,
+  waitlistToThings,
+  seedBuiltinSchemas,
   stampMigration('users', 'User docs already match the v2 shape — stamps schemaVersion.'),
   stampMigration('sessions', 'Session docs already match the v2 shape — stamps schemaVersion.'),
   stampMigration('emailVerifications', 'Email verification docs already match the v2 shape — stamps schemaVersion.'),

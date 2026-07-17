@@ -7,6 +7,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 **Author legend** — every entry is attributed:
 
 - **Codex (AI)** — change made by the Codex AI assistant.
+- **Claude (AI)** — change made by the Claude AI assistant.
 - **Lopu** — change made manually by the developer.
 
 > When you make a manual change, add a bullet under `[Unreleased]` ending with
@@ -16,8 +17,84 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Fixed
+
+- **/search no longer hijacks navigation or searches uninvited**: a search
+  resolving after the user already left the page used to replace-navigate
+  them back to `/search` (the post-search `?q=` URL sync); it now only syncs
+  the URL while the page is still mounted. Entering `/search` also no longer
+  auto-fires a search — only explicit deep links (`?q=` from Commander,
+  `?schema=` from /schemas) auto-run; plain visits paint last-cached results
+  without a refetch, and a fresh visit shows an invite empty state instead of
+  "Nothing matched". The input's rainbow ring also renders at full strength
+  from the first frame (new `Rainbow` `instant` prop) instead of fading in
+  over ten seconds. Review hardening: the URL sync also respects pending
+  departures to loader-bearing routes and Back within /search (location-key +
+  navigation-idle guards), Commander re-running a cache-restored query fires
+  a real search (echo guard now tracks the last synced q, not live input),
+  failed/aborted searches keep the invite state and can't poison Load more
+  pagination, and a dead `?schema=` link strips itself without firing an
+  unrequested fallback search. — Claude (AI), 2026-07-16
+
+### Changed
+
+- **Feed things render natively** (`ThingView`): thingtime posts mount the real
+  Thingtime component — right-click context menu, collapse, and view⇄edit
+  toggling — over a sandboxed store, defaulting to view mode. Things resolving a
+  kind renderer (a `render:` prop, explicit kind, or structural match — first
+  that adapts wins) or an Editor.js `rich-text` value render through that
+  renderer by default, with a corner icon flipping back to the Thingtime tree.
+  Untrusted feed/search data is fenced: an explicit safe-kind allowlist, every
+  `href`/`src`/`url()` sink scheme-guarded (`safeUrl`/`safeCssUrl`), the chakra
+  path + `window.meta` writes disabled, Cmd+Z contained so it can't corrupt the
+  viewer's real tree, and large things bounded (collapse + scroll box). Detail
+  in `PRs/69-…`. — Claude (AI), 2026-07-15
+- **Everything is a thing, for real now**: users, themes, feed algorithms, and
+  waitlist entries are stored in the `things` collection as protected system
+  kinds (`user`/`theme`/`feed-algorithm`/`waitlist`, plus seeded `schema`
+  things for every builtin kind). Public payloads live in `crystal`; secrets
+  (emails, password hashes) are BinData under the root `secure` field so the
+  search text index can never tokenize them; uniqueness rides BinData
+  `uniqueKeys` (PII hashed). Reads are dual-era (things first, frozen legacy
+  collections as fallback) and admin migrations under `/api/v1/admin/migrations`
+  convert each legacy collection idempotently. Legacy ids are preserved as
+  thing shareIds so sessions, rosters, ownerId joins, share links, and active
+  theme/algorithm pointers keep working unchanged. FUNDAMENTALS §3 rewritten.
+  Details in claude-todo/12-everything-is-a-thing-collections.md.
+  — Claude (AI), 2026-07-12
+
 ### Added
 
+- Extensible data: every `things` doc now carries a schema-free top-level
+  `extended` property — any JSON up to 512KB, stored and returned exactly as
+  given, never validated, structured-searchable, or interpreted;
+  replace-on-write (`null` clears), threaded through create/upsert/patch and
+  both public projections, with one reserved key (`tt:textLanguage`, the text
+  index's language override). Crystals are now optionally schema-less too:
+  omitting `thingtime` on create defaults to `["data"]`, so a bare
+  `{ crystal: {…} }` behaves like an extended-style field bag while staying
+  /search-able. — Claude (AI), 2026-07-12
+- Ported the stranded PR #52/#35 email + auth work onto the unified data
+  model: the owned email layer (`api/utils/email/` — outbox `email_messages`
+  rows for every send, suppression/unsubscribe checks, SES or console
+  delivery, `GET /api/v1/email/config`, dev/preview `POST /api/v1/email/test-otp`),
+  password reset (`POST /api/v1/auth/password-reset` + `/confirm` — probe-proof
+  neutral responses, single-use 1h tokens, revoke-all-sessions on rotation,
+  per-IP `auth.passwordReset` rate limit, `/reset-password` page), and opt-in
+  email 2FA (`GET/POST /api/v1/auth/two-factor`, two-step
+  `POST /api/v1/login { challenge, code }` with hashed attempt-capped OTPs in
+  `authOtps`, per-IP `auth.login` rate limit, Settings → Security toggle, login
+  form code step). Also ports the `/verify-email` landing page the emailed
+  verification links point at. — Claude (AI), 2026-07-12
+- `/search` page + `POST/GET /api/v1/things/search`: a Commander-style search
+  over every visible thing — whitelisted MongoDB operator grammar (nested
+  all/any groups, bounded primitives only, escaped-literal text ops), ranked
+  text search via a weighted wildcard text index, new free-form `data` and
+  user-authored `schema` crystal schemas, search-by-schema prefill, a pinned
+  Commander "Search things" row, and a `things.search` rate-limit window.
+  Details in
+  [PRs/63](../PRs/63-claude-search-page-mongodb-query-154eb4--search-page-query-builder-ranked-text-search-by-schema.md).
+  — Claude (AI), 2026-07-12
 - Replaced the unfinished `/raw` MongoDB dump with an admin-only no-code Query
   Workbench: nested filters, typed BSON values, projections, sorting, bounded
   find/count/distinct/index/stats tools, read-only aggregation pipelines,

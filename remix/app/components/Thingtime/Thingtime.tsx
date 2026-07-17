@@ -31,6 +31,12 @@ type ThingtimeProps = {
 // cascade update read the fresh value, not a memoized element's stale prop.
 const CollapseCascadeContext = React.createContext<boolean | null>(null);
 
+// Verbose per-node render/effect logging — off by default. The tree now mounts
+// at feed scale (one per thingtime post via ThingView), so unconditional logs
+// would flood the console and retain rendered payloads in memory for the whole
+// session. Flip to true only for local debugging.
+const TT_DEBUG = false;
+
 const numberStepButtonStyles = {
 	alignItems: 'center',
 	justifyContent: 'center',
@@ -321,18 +327,22 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	const fullPath = React.useMemo(() => {
 		const fullPathReturn = safeSplit(props?.fullPath || props?.path?.key || props?.path);
 
-		console.log('[tt] fullPathReturn', fullPathReturn);
+		if (TT_DEBUG) console.log('[tt] fullPathReturn', fullPathReturn);
 
-		// store this thing in the global db
-		// Massive security leak issue
-		try {
-			window.meta.things[safeJoin(fullPathReturn)] = props?.thing;
-		} catch {
-			// nothing
+		// store this thing in the global db — NEVER for untrusted (other users')
+		// trees: this page-global would otherwise collect hostile feed payloads
+		// (the "Massive security leak" the code already flags), and every feed
+		// ThingView would clobber the same keys.
+		if (!props?.untrusted) {
+			try {
+				window.meta.things[safeJoin(fullPathReturn)] = props?.thing;
+			} catch {
+				// nothing
+			}
 		}
 
 		return fullPathReturn;
-	}, [safeJoin(props?.fullPath), safeJoin(props?.path), safeJoin(props?.path?.key), props?.thing]);
+	}, [safeJoin(props?.fullPath), safeJoin(props?.path), safeJoin(props?.path?.key), props?.thing, props?.untrusted]);
 
 	// TODO
 	// attempt at making seedling button work with <Thingtime path argument only
@@ -367,13 +377,21 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	const editorJsDoc = React.useMemo(() => getEditorJsDoc(thing), [thing]);
 
 	const chakra = React.useMemo(() => {
+		// untrusted trees (other users' things mounted in feeds/search via
+		// ThingView) must never reach the chakra path — it spreads thing.props
+		// verbatim into Chakra components, which is only safe for data the
+		// viewer authored themselves
+		if (props?.untrusted) {
+			return false;
+		}
+
 		return !editMode && typeof thing?.chakra === 'string' && thing?.chakra;
-	}, [thing?.chakra, editMode]);
+	}, [thing?.chakra, editMode, props?.untrusted]);
 
 	const parentPath = React.useMemo(() => {
 		const parentPath = fullPath?.slice(0, -1);
 
-		console.log('[tt] parentPath', parentPath);
+		if (TT_DEBUG) console.log('[tt] parentPath', parentPath);
 
 		if (!parentPath) {
 			return 'thingtime';
@@ -387,7 +405,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	}, [parentPath, getThingtime]);
 
 	React.useEffect(() => {
-		console.log('[tt][useEffect][thingtime, props?.fullPath, childrenRef] props?.fullPath', props?.fullPath);
+		if (TT_DEBUG) console.log('[tt][useEffect][thingtime, props?.fullPath, childrenRef] props?.fullPath', props?.fullPath);
 		createDependancies();
 	}, [thingtime, safeJoin(props?.fullPath), childrenRef]);
 
@@ -694,6 +712,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 								edit={editMode}
 								codeView={codeView}
 								render={render}
+								untrusted={props?.untrusted}
 								circular={seen?.includes?.(nextThing)}
 								depth={depth + 1}
 								parent={thing}
@@ -759,7 +778,8 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		safeJoin(fullPath),
 		chakra,
 		collapseScope,
-		props?.pathPl
+		props?.pathPl,
+		props?.untrusted
 	]);
 
 	React.useEffect(() => {
@@ -772,7 +792,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 			if (chakra) {
 				const ChakraComponent = Chakras[chakra];
 
-				console.log('Thingtime is chakra', fullPath, chakra);
+				if (TT_DEBUG) console.log('Thingtime is chakra', fullPath, chakra);
 
 				const rawChildren = thing?.rawChildren;
 
@@ -811,9 +831,11 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 							VOID_ELEMENTS.includes(ChakraComponent?.render?.displayName) ||
 							VOID_ELEMENTS.includes(ChakraComponent?.displayName);
 
-						console.log('Thingtime found ChakraComponent', fullPath, ChakraComponent);
-						console.log('Thingtime found thing?.props', fullPath, thing?.props);
-						console.log('Thingtime found isVoid', isVoid, ChakraComponent);
+						if (TT_DEBUG) {
+							console.log('Thingtime found ChakraComponent', fullPath, ChakraComponent);
+							console.log('Thingtime found thing?.props', fullPath, thing?.props);
+							console.log('Thingtime found isVoid', isVoid, ChakraComponent);
+						}
 
 						const ret = isVoid ? (
 							<ChakraComponent {...(thing?.props || {})}></ChakraComponent>
@@ -1012,9 +1034,11 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 
 	const atomicValue = React.useMemo(() => {
 		const debug: any = {};
-		console.log('[tt][Thingtime.tsx][atomicValue][debug]', debug);
-		// log renderableValue
-		console.log('renderableValue', props?.debugId, renderableValue);
+		if (TT_DEBUG) {
+			console.log('[tt][Thingtime.tsx][atomicValue][debug]', debug);
+			// log renderableValue
+			console.log('renderableValue', props?.debugId, renderableValue);
+		}
 		if (editorJsDoc) {
 			debug.editorJs = true;
 			return (
@@ -1036,7 +1060,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		}
 
 		if (editMode) {
-			console.log('[tt] atomicVaulue type', type);
+			if (TT_DEBUG) console.log('[tt] atomicVaulue type', type);
 			if (type === 'boolean') {
 				debug.boolean = true;
 				return (
@@ -1160,11 +1184,26 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 			if (typeof args?.value === 'string') {
 				try {
 					const parentKeys = Object.keys(parent);
+					// the parent holds this thing under the path's LAST segment — a
+					// root mounted at a dotted path (an editor window on
+					// tmp.<session>.New Thing) must match 'New Thing', not the full
+					// dotted string, or the rename silently no-ops
+					const currentKey = safeSplit(path).pop?.() ?? path;
+
+					// paths are dot-joined strings, so a key containing '.' is
+					// unaddressable — it would store as one literal key but every
+					// string binding (editor windows, the composer draft) would
+					// resolve it as two segments and go blank. Refuse the rename;
+					// also skip when this binding is already stale (key not in
+					// parent) so no rewrite or rename event fires for a no-op.
+					if (args.value.includes('.') || !parentKeys.includes(currentKey)) {
+						return;
+					}
 					// create new object with new key order
 					const newObject = {};
 
 					parentKeys.forEach((key) => {
-						if (key === path) {
+						if (key === currentKey) {
 							newObject[args.value] = parent[key];
 							return;
 						}
@@ -1174,6 +1213,15 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 					// set new object
 					setThingtime(parentPath, newObject, {
 						namespace: thingtimeMachineNamespace
+					});
+
+					// anything bound to this path by STRING (editor windows, the
+					// composer's draft binding) must follow the rename or it points
+					// at a key that no longer exists — announce it on the bus
+					events?.next?.({
+						type: 'path-renamed',
+						from: safeJoin(fullPath),
+						to: safeJoin([...safeSplit(parentPath), args.value])
 					});
 
 					if (!thingtimeRef?.current) {
@@ -1204,7 +1252,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 				}
 			}
 		},
-		[parent, path, parentPath, setThingtime]
+		[parent, path, parentPath, setThingtime, fullPath, events]
 	);
 
 	const pathRef = React.useRef(null);
@@ -1235,7 +1283,10 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 				</>
 			);
 		}
-	}, [renderedPath, pl, chakraChild, editMode, props?.pathPl]);
+		// updatePath MUST be a dep: it closes over `parent`, which is undefined on
+		// a root's first render when the store seeds after mount (the composer's
+		// draft). Pinning the mount-time closure makes every later rename throw.
+	}, [renderedPath, pl, chakraChild, editMode, props?.pathPl, updatePath]);
 
 	// Leaf values can collapse to their property path just like nested things
 	// collapse to their path + summary badge. A path is required so a root-level
@@ -1369,6 +1420,8 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 
 	// should be absolute last
 	React.useEffect(() => {
+		// never register untrusted (other users') trees in this page global
+		if (props?.untrusted) return;
 		try {
 			window.meta.things[uuid] = {
 				thing: props?.thing,
@@ -1410,7 +1463,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 				onMouseLeave={handleMouseEvent}
 				{...(props.chakras || {})}
 				className={`thing uuid-${uuid} edit-${editMode ? 'true' : 'false'}`}
-				data-path={props?.path}
+				data-path={typeof props?.path === 'string' ? props.path : props?.path?.key || undefined}
 			>
 				{/* {uuid?.current} */}
 				{!chakraChild && !chakra && (
