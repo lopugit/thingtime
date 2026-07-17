@@ -1,4 +1,6 @@
 // @ts-ignore Node 24's direct TypeScript test runner requires the extension.
+import { safeErrorText } from '../errors/safeError.ts';
+// @ts-ignore Node 24's direct TypeScript test runner requires the extension.
 import {
   MONGO_BLOCKED_QUERY_KEYS,
   MONGO_BSON_VALUE_TYPES,
@@ -347,12 +349,10 @@ export const redactMongoValue = (value: unknown, state?: RedactionState): { valu
 };
 
 export const safeMongoError = (error: unknown) => {
-  const message = error instanceof Error ? error.message : 'MongoDB query failed';
-  return message
-    .replace(/(mongodb(?:\+srv)?:\/\/)([^@\s/]+)@/gi, '$1***@')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 500);
+  // Raw driver messages can embed connection strings and server internals
+  // (CodeQL js/stack-trace-exposure) — respond with the error class + server
+  // codeName only; the full error is logged server-side by safeErrorText.
+  return safeErrorText(error, 'mongodb query', 'MongoDB query failed');
 };
 
 export const mongoQueryCapabilities = () => ({

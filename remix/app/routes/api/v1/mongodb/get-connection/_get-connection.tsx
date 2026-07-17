@@ -1,5 +1,6 @@
 import { Flex } from '@chakra-ui/react';
 import { useLocation } from 'react-router';
+import { safeErrorText } from '~/api/utils/errors/safeError';
 import { getMongoUri, sanitiseMongoHost } from '~/api/utils/mongodb/config';
 import { Submit } from '~/components/API/Submit';
 
@@ -31,7 +32,10 @@ const actionExport = async () => {
 			}
 		});
 	} catch (err: any) {
-		return earlyReturn({ status: 500, message: err?.message || `No valid MongoDB connection found` });
+		return earlyReturn({
+			status: 500,
+			message: safeErrorText(err, 'mongodb get-connection', 'No valid MongoDB connection found')
+		});
 	}
 };
 
