@@ -133,7 +133,7 @@ export const PostComposer = (props: PostComposerProps) => {
   // this composer's session-scoped draft home (fresh per mount — see
   // DRAFT_ROOT_KEY above). State, not a const: renaming the draft's root key
   // in the editor emits 'path-renamed' and the binding follows.
-  const [draftSessionId] = React.useState(() => `s${Math.random().toString(36).slice(2, 10)}`);
+  const [draftSessionId] = React.useState(() => `s${crypto.randomUUID().replace(/-/g, '').slice(0, 10)}`);
   const [draftPath, setDraftPath] = React.useState(`${DRAFT_TMP_KEY}.${draftSessionId}.${DRAFT_ROOT_KEY}`);
 
   React.useEffect(() => {
