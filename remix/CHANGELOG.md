@@ -19,6 +19,42 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **PR #69 final-review hardening round**: a multi-agent review of the unified
+  /search + profile/feed branch surfaced a batch of merge-blocking issues, all
+  fixed here — Claude (AI), 2026-07-17:
+  - **Advanced filters no longer 400 + wipe results on numeric values**: the
+    query builder's default `contains` operator coerced `4`/`true`/`null` to
+    real types, which the server rejects for text-only operators, clearing the
+    visible feed. `contains`/`startsWith`/`endsWith` now keep the raw string.
+  - **Composer no longer destroys a user's `tmp` things**: seeding the thingtime
+    draft replaced the whole `tmp` store branch; it now prunes only prior
+    composer sessions and preserves any user-authored `tmp` keys.
+  - **Untrusted schema render can't paint a full-viewport overlay**: the Chakra
+    thing renderer allowed arbitrary `position` CSS, enabling a clickjacking /
+    phishing overlay on the schema-browse page. Out-of-flow positioning
+    (`fixed`/`absolute`/`sticky`) is now stripped at every nesting level.
+  - **`/api/v1/email/config` is dev/preview-only**: the endpoint exposed SES
+    region, sender identities, and the test-recipient email with no auth; it now
+    gates on `shouldShowDevVerificationLink()` like its sibling `test-otp`.
+  - **Collection→things migration no longer drops writes that raced an earlier
+    pass**: the delete guard compared fresh legacy data only to the batch
+    snapshot, so a retry deleted newer legacy writes while the thing kept stale
+    data. It now reconciles against what the destination twin actually reflects
+    and preserves the destination's shareId when rebuilding.
+  - **Data-crystal keys reject prototype accessors**: `__proto__` matched the key
+    grammar and was silently dropped by `out[key] = …` (a contract violation);
+    it now fails loudly, consistent with the render-tree sanitizer.
+  - **/search and feed Advanced filters agree on relevance-without-text**:
+    `/search` sent `sort=relevance` with an empty query (server 400); it now
+    drops to server-pick like the feed panel does.
+  - **Re-clicking Search with an unchanged Advanced draft refetches** instead of
+    silently no-op'ing on React's identical-state bail-out.
+  - **`/verify-email` renders real copy for crafted `state` params** (own-property
+    lookup instead of a prototype-chain hit that blanked the card).
+  - **Password-reset confirm is now IP-throttled** (`auth.passwordResetConfirm`),
+    and a few PR-introduced `tsc` errors (schema browse cursors, migration
+    fail-reason narrowing) were cleared.
+
 - **/search no longer hijacks navigation or searches uninvited**: a search
   resolving after the user already left the page used to replace-navigate
   them back to `/search` (the post-search `?q=` URL sync); it now only syncs

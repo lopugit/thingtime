@@ -147,6 +147,33 @@ const safeCssText = (value: string): boolean => {
 	return !text.includes('javascript:') && !text.includes('expression(') && !text.includes('@import');
 };
 
+// Out-of-flow positioning lets untrusted content escape its container and paint
+// a full-viewport overlay (clickjacking / phishing / a beacon via background
+// url()). Blocking script isn't enough — a positioned Box over the real UI is
+// itself the attack. Keep in-flow values (static/relative) so legitimate schema
+// cards still lay out; drop fixed/absolute/sticky wherever they appear.
+const POSITION_PROPS = new Set(['position', 'pos']);
+const OUT_OF_FLOW_POSITIONS = new Set(['fixed', 'absolute', 'sticky']);
+
+// scrub blocked position values at any nesting (bare string, responsive object,
+// array); returns undefined when nothing safe is left so the prop is dropped
+const scrubPositionValue = (value: unknown): unknown => {
+	if (typeof value === 'string') return OUT_OF_FLOW_POSITIONS.has(value.trim().toLowerCase()) ? undefined : value;
+	if (Array.isArray(value)) {
+		const out = value.map(scrubPositionValue).filter((entry) => entry !== undefined);
+		return out.length ? out : undefined;
+	}
+	if (value && typeof value === 'object') {
+		const out: Record<string, unknown> = {};
+		Object.entries(value as Record<string, unknown>).forEach(([key, entry]) => {
+			const scrubbed = scrubPositionValue(entry);
+			if (scrubbed !== undefined) out[key] = scrubbed;
+		});
+		return Object.keys(out).length ? out : undefined;
+	}
+	return value;
+};
+
 const sanitizeValue = (value: unknown, depth: number): unknown => {
 	if (typeof value === 'string') return safeCssText(value) ? value : undefined;
 	if (typeof value === 'number' || typeof value === 'boolean') return value;
@@ -161,7 +188,9 @@ const sanitizeValue = (value: unknown, depth: number): unknown => {
 		const out: Record<string, unknown> = {};
 		Object.entries(value as Record<string, unknown>).forEach(([key, entry]) => {
 			if (/^on/i.test(key) || BLOCKED_PROPS.has(key)) return;
-			const sanitized = sanitizeValue(entry, depth + 1);
+			let sanitized = sanitizeValue(entry, depth + 1);
+			// nested position (sx / style / pseudo / selector blocks)
+			if (POSITION_PROPS.has(key)) sanitized = scrubPositionValue(sanitized);
 			if (sanitized !== undefined) out[key] = sanitized;
 		});
 		return Object.keys(out).length ? out : undefined;
@@ -180,7 +209,9 @@ const sanitizeProps = (props: unknown): Record<string, unknown> => {
 			if (typeof value === 'string' && isSafeUrl(value)) out[key] = value;
 			return;
 		}
-		const sanitized = sanitizeValue(value, 0);
+		let sanitized = sanitizeValue(value, 0);
+		// top-level position (and its `pos` shorthand)
+		if (POSITION_PROPS.has(key)) sanitized = scrubPositionValue(sanitized);
 		if (sanitized !== undefined) out[key] = sanitized;
 	});
 

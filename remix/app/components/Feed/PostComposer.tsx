@@ -37,11 +37,17 @@ const CURRENCIES = ['AUD', 'USD', 'EUR'];
 
 // The thingtime-tab draft lives under a SESSION-SCOPED branch of the global
 // store: tmp.<sessionId>.New Thing. A fresh session id per composer mount (and
-// pruning tmp wholesale on seed) means drafts never persist across reloads and
-// no stale draft can ever resurface — the editor always opens on one clean
-// "New Thing" root (the key IS the label the editor shows).
+// pruning prior composer sessions on seed) means drafts never persist across
+// reloads and no stale draft can ever resurface — the editor always opens on
+// one clean "New Thing" root (the key IS the label the editor shows).
 const DRAFT_ROOT_KEY = 'New Thing';
 const DRAFT_TMP_KEY = 'tmp';
+
+// A composer session id is `s` + 10 hex chars (see draftSessionId below). `tmp`
+// is a plain user-writable root key in the Thingtime editor, so seeding must
+// prune only these composer-owned branches and leave any user-authored `tmp`
+// keys untouched.
+const COMPOSER_SESSION_KEY = /^s[0-9a-f]{10}$/;
 
 // the in-post editor's default height; drag the handle for anything else
 const DEFAULT_EDITOR_HEIGHT = 440;
@@ -153,17 +159,25 @@ export const PostComposer = (props: PostComposerProps) => {
   const draftThing = type === 'thingtime' ? getThingtime(draftPath) : null;
   const draftReady = !!draftThing && typeof draftThing === 'object' && !Array.isArray(draftThing);
 
-  // Seed ONCE per mount, post-hydration: replacing the whole tmp branch prunes
-  // abandoned sessions from the persisted blob and starts this one clean. The
-  // once-guard matters — setThingtime/getThingtime change identity on every
-  // store write, and a re-running seed used to clobber the draft right after
-  // a change-type action turned it into a non-object (string/boolean/…).
+  // Seed ONCE per mount, post-hydration: rewrite the tmp branch keeping any
+  // user-authored keys, dropping only prior composer sessions (abandoned
+  // drafts in the persisted blob), and starting this one clean. The once-guard
+  // matters — setThingtime/getThingtime change identity on every store write,
+  // and a re-running seed used to clobber the draft right after a change-type
+  // action turned it into a non-object (string/boolean/…).
   const seededRef = React.useRef(false);
   React.useEffect(() => {
     if (seededRef.current || thingtimeLoading || type !== 'thingtime' || !expanded) return;
     seededRef.current = true;
-    setThingtime(DRAFT_TMP_KEY, { [draftSessionId]: { [DRAFT_ROOT_KEY]: {} } });
-  }, [type, expanded, thingtimeLoading, setThingtime, draftSessionId]);
+    const currentTmp = getThingtime(DRAFT_TMP_KEY);
+    const preserved: Record<string, unknown> = {};
+    if (currentTmp && typeof currentTmp === 'object' && !Array.isArray(currentTmp)) {
+      for (const [key, value] of Object.entries(currentTmp as Record<string, unknown>)) {
+        if (!COMPOSER_SESSION_KEY.test(key)) preserved[key] = value;
+      }
+    }
+    setThingtime(DRAFT_TMP_KEY, { ...preserved, [draftSessionId]: { [DRAFT_ROOT_KEY]: {} } });
+  }, [type, expanded, thingtimeLoading, getThingtime, setThingtime, draftSessionId]);
 
   // which optional field groups are in play (marketplace always has both;
   // thingtime opts in per toggle)

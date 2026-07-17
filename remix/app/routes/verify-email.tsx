@@ -67,7 +67,10 @@ const COPY = {
 export default function VerifyEmail() {
   const [searchParams] = useSearchParams();
   const state = searchParams.get('state') || 'missing';
-  const copy = COPY[state] || COPY.missing;
+  // own-property check — a bare COPY[state] lookup would resolve inherited
+  // prototype members (?state=__proto__, constructor, toString) to a truthy
+  // value, skip the || fallback, and render a blank card.
+  const copy = Object.prototype.hasOwnProperty.call(COPY, state) ? COPY[state] : COPY.missing;
 
   const [email, setEmail] = useState(searchParams.get('email') || '');
   const [sending, setSending] = useState(false);

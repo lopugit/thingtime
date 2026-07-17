@@ -944,6 +944,12 @@ export const KEY_SEGMENT_PATTERN = /^[A-Za-z0-9_-]+$/;
 // loudly (never silently drops) so writers know exactly what didn't fit.
 const DATA_KEY_PATTERN = KEY_SEGMENT_PATTERN;
 
+// Prototype-chain accessors match DATA_KEY_PATTERN (letters/underscores) but
+// `out[key] = value` on them mutates the prototype instead of creating an own
+// property, so the value is silently dropped — a contract violation. Reject them
+// loudly. Shared with the render-tree sanitizer below.
+const PROTOTYPE_POLLUTION_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
 const sanitizeDataValue = (
   value: unknown,
   depth: number,
@@ -980,6 +986,9 @@ const sanitizeDataValue = (
     for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
       if (key.length > MAX_DATA_KEY_CHARS || !DATA_KEY_PATTERN.test(key)) {
         return fail(400, `Data keys are letters/numbers/_/- up to ${MAX_DATA_KEY_CHARS} chars (got ${key.slice(0, 80)})`);
+      }
+      if (PROTOTYPE_POLLUTION_KEYS.has(key)) {
+        return fail(400, `Data keys cannot be prototype accessors (got ${key})`);
       }
       const sanitized = sanitizeDataValue(entry, depth + 1, counter, path ? `${path}.${key}` : key);
       if (!sanitized.ok) return sanitized;
@@ -1242,7 +1251,7 @@ const sanitizeSchemaFieldList = (
 // keys only — SAFETY lives client-side, where render trees are only ever
 // drawn through the sanitising allowlist gates (ChakraThingRenderer /
 // HtmlThingRenderer), never the legacy unsanitised chakra path.
-const SCHEMA_RENDER_BLOCKED_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+const SCHEMA_RENDER_BLOCKED_KEYS = PROTOTYPE_POLLUTION_KEYS;
 
 const checkSchemaRenderTree = (value: unknown, depth: number, counter: { nodes: number }): true | Fail => {
   counter.nodes++;

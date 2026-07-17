@@ -442,12 +442,18 @@ export const SearchPage = () => {
       }
 
       const conditions = compileRows(current.rows);
+      // relevance needs a text query — the server 400s otherwise, so drop it to
+      // server-pick (auto) when q is empty, matching the feed Advanced panel
+      const effectiveSort =
+        current.sort === 'auto' || (current.sort === 'relevance' && !current.q.trim())
+          ? undefined
+          : current.sort;
       const body: Record<string, unknown> = {
         q: current.q.trim() || undefined,
         mode: current.mode,
         conditions: conditions || undefined,
         thingtime: current.kind || undefined,
-        sort: current.sort === 'auto' ? undefined : current.sort,
+        sort: effectiveSort,
         cursor: cursor || undefined,
         limit: PAGE_SIZE
       };
