@@ -4,6 +4,7 @@ import { getJwtIssuer } from '~/api/utils/auth/jwt';
 import { resolveAppToken } from '~/api/utils/apps/appTokens';
 import { appCorsHeaders, appDataPreflight } from '~/api/utils/apps/cors';
 import { scopeCovers } from '~/api/utils/apps/scopes';
+import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 
 // GET /api/v1/oauth/userinfo — the SSO identity endpoint: a platform holding
 // an app-scoped Bearer token reads the user it was granted for. Every field
@@ -26,6 +27,15 @@ export const loader = async ({ request }: { request: Request }) => {
 
   if (requestOrigin && requestOrigin !== ctx.origin) {
     return json({ ok: false, error: 'Origin does not match this token' }, { status: 403, headers: cors });
+  }
+
+  const limit = await enforceRateLimit(request, 'oauth.read', `user:${ctx.user.id}:app:${ctx.clientId}`);
+  if (!limit.allowed) {
+    const init = rateLimitedResponseInit(limit);
+    return json(
+      { ok: false, error: 'Reading too fast — take a breather 🌸' },
+      { ...init, headers: { ...init.headers, ...cors } }
+    );
   }
 
   const issuer = getJwtIssuer().replace(/\/+$/, '');

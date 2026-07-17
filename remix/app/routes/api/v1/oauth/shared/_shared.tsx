@@ -4,6 +4,7 @@ import { resolveAppToken } from '~/api/utils/apps/appTokens';
 import { appCorsHeaders, appDataPreflight } from '~/api/utils/apps/cors';
 import { scopeCovers } from '~/api/utils/apps/scopes';
 import { getSharedThings } from '~/api/utils/apps/sharedThings';
+import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 
 // GET /api/v1/oauth/shared — the things the user HAND-PICKED to share with
 // this app on the consent screen ('things' picker scope). Read-only, exactly
@@ -26,6 +27,15 @@ export const loader = async ({ request }: { request: Request }) => {
     return json(
       { ok: false, error: 'This token was not granted the things scope' },
       { status: 403, headers: cors }
+    );
+  }
+
+  const limit = await enforceRateLimit(request, 'oauth.read', `user:${ctx.user.id}:app:${ctx.clientId}`);
+  if (!limit.allowed) {
+    const init = rateLimitedResponseInit(limit);
+    return json(
+      { ok: false, error: 'Reading too fast — take a breather 🌸' },
+      { ...init, headers: { ...init.headers, ...cors } }
     );
   }
 

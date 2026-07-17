@@ -51,6 +51,15 @@ export const loader = async ({ request }: { request: Request }) => {
   if (resolved instanceof Response) return resolved;
   const { ctx, cors } = resolved;
 
+  const limit = await enforceRateLimit(request, 'oauth.read', `user:${ctx.user.id}:app:${ctx.clientId}`);
+  if (!limit.allowed) {
+    const init = rateLimitedResponseInit(limit);
+    return json(
+      { ok: false, error: 'Reading too fast — take a breather 🌸' },
+      { ...init, headers: { ...init.headers, ...cors } }
+    );
+  }
+
   const url = new URL(request.url);
   const key = url.searchParams.get('key');
 

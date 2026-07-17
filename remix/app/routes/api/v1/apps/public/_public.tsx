@@ -2,6 +2,7 @@ import { json } from '~/api/http';
 
 import { appAllowsOrigin, findAppByClientId, normalizeAppOrigin, toEmbedApp } from '~/api/utils/apps/apps';
 import { describeScopes, parseScopeParam, scopeCovers } from '~/api/utils/apps/scopes';
+import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 
 // GET /api/v1/apps/public?clientId=…&origin=…&scope=…&optional_scope=… —
 // anonymous lookup used by the authorize popup to render its consent screen.
@@ -11,6 +12,12 @@ import { describeScopes, parseScopeParam, scopeCovers } from '~/api/utils/apps/s
 // origin is on its allowlist, so the popup can refuse to run for unregistered
 // embedders before any login UI shows.
 export const loader = async ({ request }: { request: Request }) => {
+  // Anonymous endpoint — bound per IP before any DB work.
+  const limit = await enforceRateLimit(request, 'apps.public', null);
+  if (!limit.allowed) {
+    return json({ ok: false, error: 'Too many requests — slow down a little 🌸' }, rateLimitedResponseInit(limit));
+  }
+
   const url = new URL(request.url);
   const clientId = (url.searchParams.get('clientId') || url.searchParams.get('client_id') || '').trim();
   const origin = normalizeAppOrigin(url.searchParams.get('origin'));
