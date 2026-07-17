@@ -5,8 +5,14 @@ import { verifyPassword } from './passwords';
 import { createSession } from './sessions';
 import { findUserById, findUserByUsername, PublicUser, toPublicUser } from './users';
 
+// Machine-readable failure reason for the 2FA (OTP) step, so the client decides
+// whether to abandon the challenge from a STABLE code instead of matching server
+// copy. 'challenge_invalid' / 'too_many_attempts' mean the challenge is dead
+// (go back to the password step); 'wrong_code' means let the user retry.
+export type LoginFailReason = 'too_many_attempts' | 'wrong_code' | 'challenge_invalid';
+
 export type LoginResult =
-  | { ok: false; status: number; error: string }
+  | { ok: false; status: number; error: string; reason?: LoginFailReason }
   | { ok: true; requiresOtp: true; challenge: string; expiresAt: string }
   | { ok: true; user: PublicUser; jwt: string; jti: string };
 
@@ -70,15 +76,15 @@ export const completeOtpLogin = async ({
   });
   if (result.ok === false) {
     if (result.reason === 'too_many_attempts') {
-      return { ok: false, status: 429, error: 'Too many attempts — request a new code by logging in again' };
+      return { ok: false, status: 429, reason: 'too_many_attempts', error: 'Too many attempts — request a new code by logging in again' };
     }
     if (result.reason === 'wrong_code') {
-      return { ok: false, status: 401, error: 'Invalid security code' };
+      return { ok: false, status: 401, reason: 'wrong_code', error: 'Invalid security code' };
     }
-    return { ok: false, status: 401, error: 'This login challenge is no longer valid — log in again' };
+    return { ok: false, status: 401, reason: 'challenge_invalid', error: 'This login challenge is no longer valid — log in again' };
   }
 
   const user = await findUserById(result.userId);
-  if (!user) return { ok: false, status: 401, error: 'This login challenge is no longer valid — log in again' };
+  if (!user) return { ok: false, status: 401, reason: 'challenge_invalid', error: 'This login challenge is no longer valid — log in again' };
   return issueSession(user);
 };

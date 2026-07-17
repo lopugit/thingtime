@@ -537,10 +537,41 @@ const stripThingsIngress = (stages: unknown): { stages: Record<string, unknown>[
   return { stages: output };
 };
 
+// Does a $match body use $text anywhere (top-level or inside $and/$or)? $text is
+// only legal as the FIRST pipeline stage, so a $text $match can't be displaced by
+// the protected-field strip.
+const matchUsesText = (match: unknown): boolean => {
+  if (!match || typeof match !== 'object') return false;
+  if ('$text' in (match as Record<string, unknown>)) return true;
+  for (const value of Object.values(match as Record<string, unknown>)) {
+    if (Array.isArray(value) && value.some((entry) => matchUsesText(entry))) return true;
+  }
+  return false;
+};
+
 export const hardenThingsQuery = (query: NormalizedMongoQuery): NormalizedMongoQuery | MongoQueryFail => {
   const walked = stripThingsIngress(query.pipeline);
   if ('status' in walked) return walked;
-  const pipeline = query.collection === 'things' ? [PROTECTED_THING_STRIP, ...walked.stages] : walked.stages;
+  let pipeline = walked.stages;
+  if (query.collection === 'things') {
+    // The protected-field strip is an output $project, so it normally goes first.
+    // But $text is only legal as the FIRST pipeline stage — prepending the strip
+    // ahead of a `{ $match: { $text } }` makes MongoDB reject the whole query
+    // ($text is an advertised things capability, and this PR adds the wildcard
+    // text index behind it). When the pipeline opens with a $text $match — already
+    // validated at normalize time to reference no protected field — hoist it ahead
+    // of the strip; the strip follows immediately, so protected fields are still
+    // removed from every output doc and never reach a later stage.
+    const [first, ...rest] = walked.stages;
+    const firstIsTextMatch =
+      !!first &&
+      typeof first === 'object' &&
+      '$match' in (first as Record<string, unknown>) &&
+      matchUsesText((first as Record<string, unknown>).$match);
+    pipeline = firstIsTextMatch
+      ? [first as Record<string, unknown>, PROTECTED_THING_STRIP, ...rest]
+      : [PROTECTED_THING_STRIP, ...walked.stages];
+  }
 
   let projection = query.projection;
   if (query.collection === 'things') {

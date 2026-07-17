@@ -144,11 +144,12 @@ export const Login = (props) => {
 				duration: 6000,
 			});
 			// Only bounce back to the password step when the challenge itself is
-			// dead (expired/consumed, or its own attempts exhausted). Match the
-			// specific server phrasings — NOT the login rate-limiter's "Too many
-			// login attempts" 429, which shares the word "attempts" but leaves the
-			// challenge valid, and NOT "Invalid security code" (let them retry).
-			if (otpChallenge && err?.error && /no longer valid|request a new code/i.test(err.error)) {
+			// dead — keyed off the server's STABLE reason code, not error copy.
+			// 'challenge_invalid' (expired/consumed) and 'too_many_attempts' (the
+			// challenge's own attempt limit) kill the challenge; the login
+			// rate-limiter's 429 carries NO reason (challenge stays valid), and
+			// 'wrong_code' lets the user retry — neither bounces.
+			if (otpChallenge && (err?.reason === 'challenge_invalid' || err?.reason === 'too_many_attempts')) {
 				setOtpChallenge(null);
 				setOtpCode('');
 			}

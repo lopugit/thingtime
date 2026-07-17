@@ -226,24 +226,39 @@ export const buildUserSecure = (
 const findUserThing = async (filter: Record<string, unknown>) =>
   (await getThingsCollection()).findOne({ thingtime: 'user', ...filter } as any);
 
+// User resolution runs on every authenticated request (getCurrentUser), so the
+// two stores are probed CONCURRENTLY (thing wins) rather than serially — until
+// the users→things migration completes, a legacy account would otherwise pay
+// two back-to-back round trips on the hottest path. Mirrors searchUsersForAdmin.
 export const findUserByUsername = async (username: string) => {
-  const thing = await findUserThing({ 'crystal.username': username.trim().toLowerCase() });
+  const normalized = username.trim().toLowerCase();
+  const [thing, legacy] = await Promise.all([
+    findUserThing({ 'crystal.username': normalized }),
+    getUsersCollection().then((c) => c.findOne({ username: normalized }))
+  ]);
   if (thing) return userThingToDoc(thing);
-  return (await getUsersCollection()).findOne({ username: username.trim().toLowerCase() });
+  return legacy;
 };
 
 export const findUserByEmail = async (email: string) => {
   // the hashed uniqueKey is the exact-match path — no email string in any index
-  const thing = await (await getThingsCollection()).findOne({ uniqueKeys: userEmailKey(email) } as any);
+  const [thing, legacy] = await Promise.all([
+    getThingsCollection().then((c) => c.findOne({ uniqueKeys: userEmailKey(email) } as any)),
+    getUsersCollection().then((c) => c.findOne({ email: email.trim().toLowerCase() }))
+  ]);
   if (thing) return userThingToDoc(thing);
-  return (await getUsersCollection()).findOne({ email: email.trim().toLowerCase() });
+  return legacy;
 };
 
 export const findUserById = async (id: string) => {
-  const thing = await findUserThing({ shareId: String(id) });
+  const [thing, legacy] = await Promise.all([
+    findUserThing({ shareId: String(id) }),
+    ObjectId.isValid(id)
+      ? getUsersCollection().then((c) => c.findOne({ _id: new ObjectId(id) }))
+      : Promise.resolve(null)
+  ]);
   if (thing) return userThingToDoc(thing);
-  if (!ObjectId.isValid(id)) return null;
-  return (await getUsersCollection()).findOne({ _id: new ObjectId(id) });
+  return legacy;
 };
 
 // New accounts are user things. The id is minted ObjectId-shaped so every
@@ -302,21 +317,29 @@ const updateUserStore = async (userId: string, thingUpdate: any, legacyUpdate: a
 // read and write, we re-read and re-apply — so two concurrent mutations of
 // DIFFERENT fields never clobber each other (proven necessary: a naive
 // last-write-wins reverted emailVerified under a racing reaction write).
-// Returns false when there is no user thing (caller falls back to legacy).
+//
+// Returns one of three outcomes so callers never conflate them:
+//   'mutated'   — the write landed (return success)
+//   'missing'   — no user thing exists (fall back to the legacy users store)
+//   'contended' — the thing exists but we lost every CAS round; the mutation did
+//                 NOT persist. Callers must surface a failure (a burned-token
+//                 password reset must not claim the password rotated) and must
+//                 NOT fall through to legacy (the doc is a thing, not legacy).
 // generous ceiling: retries only ever loop on genuine concurrent writes to the
 // SAME user (rare — a couple at most in practice), and each contended writer
 // needs up to (N concurrent) attempts to win a round, so the cap must comfortably
 // exceed realistic burst width
 const SECURE_CAS_ATTEMPTS = 20;
+type SecureMutateResult = 'mutated' | 'missing' | 'contended';
 const mutateUserThingSecure = async (
   userId: string,
   mutate: (secure: SecurePayload) => void
-): Promise<boolean> => {
+): Promise<SecureMutateResult> => {
   const things = await getThingsCollection();
   const base = { shareId: String(userId), thingtime: 'user' } as any;
   for (let attempt = 0; attempt < SECURE_CAS_ATTEMPTS; attempt++) {
     const thing = await things.findOne(base, { projection: { secure: 1, secureVersion: 1 } });
-    if (!thing) return false;
+    if (!thing) return 'missing';
     const version = (thing as any).secureVersion; // number | undefined (pre-versioned docs)
     const secure = unpackSecure((thing as any).secure);
     if (!secure.meta) secure.meta = {};
@@ -327,18 +350,28 @@ const mutateUserThingSecure = async (
       { ...base, ...guard },
       { $set: { secure: packSecure(secure), secureVersion: (version ?? 0) + 1, updatedAt: new Date() } }
     );
-    if (res.modifiedCount) return true;
+    if (res.modifiedCount) return 'mutated';
     // lost the CAS — another writer won; small jittered backoff so a burst of
     // writers doesn't keep colliding on the same round, then re-read and re-apply
     if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 3 * attempt + Math.floor(Math.random() * 5)));
   }
-  // the thing exists but we lost every CAS under extreme contention — report
-  // handled so the caller doesn't wrongly fall through to the legacy store
-  return true;
+  return 'contended';
 };
 
+// Thrown by the secure-blob setters when a things-era write loses every CAS
+// round (never persisted). Routes propagate it as a 5xx so the caller retries,
+// rather than the write silently reporting success.
+class SecureWriteContendedError extends Error {
+  constructor(userId: string) {
+    super(`secure blob write contended for user ${userId} — mutation did not persist`);
+    this.name = 'SecureWriteContendedError';
+  }
+}
+
 export const markEmailVerified = async (userId: string) => {
-  if (await mutateUserThingSecure(userId, (s) => { s.emailVerified = true; })) return;
+  const result = await mutateUserThingSecure(userId, (s) => { s.emailVerified = true; });
+  if (result === 'mutated') return;
+  if (result === 'contended') throw new SecureWriteContendedError(userId);
   if (!ObjectId.isValid(userId)) return;
   await (await getUsersCollection()).updateOne(
     { _id: new ObjectId(userId) },
@@ -351,7 +384,12 @@ export const markEmailVerified = async (userId: string) => {
 // miss here would log the user out everywhere while the OLD password keeps
 // working (a failed rotation the user believes succeeded).
 export const setUserPasswordHash = async (userId: string, passwordHash: string): Promise<boolean> => {
-  if (await mutateUserThingSecure(userId, (s) => { s.passwordHash = passwordHash; })) return true;
+  const result = await mutateUserThingSecure(userId, (s) => { s.passwordHash = passwordHash; });
+  if (result === 'mutated') return true;
+  // Contended: the rotation never landed. Throw rather than return — the reset
+  // route has already burned the token, so a false success would leave the user
+  // locked out with the OLD password still working.
+  if (result === 'contended') throw new SecureWriteContendedError(userId);
   if (!ObjectId.isValid(userId)) return false;
   const res = await (await getUsersCollection()).updateOne(
     { _id: new ObjectId(userId) },
@@ -381,7 +419,11 @@ export const getUserTwoFactorEmailEnabled = async (userId: string): Promise<bool
 // Returns whether a store matched the user — enabling 2FA must never report
 // success without the flag actually landing (login would then skip the OTP).
 export const setUserTwoFactorEmailEnabled = async (userId: string, enabled: boolean): Promise<boolean> => {
-  if (await mutateUserThingSecure(userId, (s) => { s.meta!.twoFactorEmailEnabled = enabled; })) return true;
+  const result = await mutateUserThingSecure(userId, (s) => { s.meta!.twoFactorEmailEnabled = enabled; });
+  if (result === 'mutated') return true;
+  // Contended: the flag never landed. Throw rather than report success — a false
+  // "enabled" would make login skip the OTP step the user thinks they turned on.
+  if (result === 'contended') throw new SecureWriteContendedError(userId);
   if (!ObjectId.isValid(userId)) return false;
   const res = await (await getUsersCollection()).updateOne(
     { _id: new ObjectId(userId) },
@@ -392,7 +434,9 @@ export const setUserTwoFactorEmailEnabled = async (userId: string, enabled: bool
 
 // Set (or clear, with null) the user's active theme shareId in meta.
 export const setUserActiveTheme = async (userId: string, themeShareId: string | null) => {
-  if (await mutateUserThingSecure(userId, (s) => { s.meta!.activeThemeId = themeShareId; })) return;
+  const result = await mutateUserThingSecure(userId, (s) => { s.meta!.activeThemeId = themeShareId; });
+  if (result === 'mutated') return;
+  if (result === 'contended') throw new SecureWriteContendedError(userId);
   if (!ObjectId.isValid(userId)) return;
   await (await getUsersCollection()).updateOne(
     { _id: new ObjectId(userId) },
@@ -408,7 +452,8 @@ export const clearUserActiveTheme = async (userId: string, themeShareId: string)
     if (s.meta!.activeThemeId === themeShareId) s.meta!.activeThemeId = null;
   });
   // A matched user thing (cleared or pointer already moved) needs no legacy write.
-  if (cleared) return;
+  if (cleared === 'mutated') return;
+  if (cleared === 'contended') throw new SecureWriteContendedError(userId);
   if (!ObjectId.isValid(userId)) return;
   await (await getUsersCollection()).updateOne(
     { _id: new ObjectId(userId), 'meta.activeThemeId': themeShareId },
@@ -418,7 +463,9 @@ export const clearUserActiveTheme = async (userId: string, themeShareId: string)
 
 // Set (or clear, with null) the user's active feed algorithm shareId in meta.
 export const setUserActiveFeedAlgorithm = async (userId: string, algorithmShareId: string | null) => {
-  if (await mutateUserThingSecure(userId, (s) => { s.meta!.activeFeedAlgorithmId = algorithmShareId; })) return;
+  const result = await mutateUserThingSecure(userId, (s) => { s.meta!.activeFeedAlgorithmId = algorithmShareId; });
+  if (result === 'mutated') return;
+  if (result === 'contended') throw new SecureWriteContendedError(userId);
   if (!ObjectId.isValid(userId)) return;
   await (await getUsersCollection()).updateOne(
     { _id: new ObjectId(userId) },
@@ -433,7 +480,8 @@ export const clearUserActiveFeedAlgorithm = async (userId: string, algorithmShar
   const cleared = await mutateUserThingSecure(userId, (s) => {
     if (s.meta!.activeFeedAlgorithmId === algorithmShareId) s.meta!.activeFeedAlgorithmId = null;
   });
-  if (cleared) return;
+  if (cleared === 'mutated') return;
+  if (cleared === 'contended') throw new SecureWriteContendedError(userId);
   if (!ObjectId.isValid(userId)) return;
   await (await getUsersCollection()).updateOne(
     { _id: new ObjectId(userId), 'meta.activeFeedAlgorithmId': algorithmShareId },
@@ -453,12 +501,15 @@ const MAX_RECENT_REACTIONS = 500;
 // in a single update.
 export const pushUserRecentReaction = async (userId: string, token: string): Promise<string[]> => {
   let updated: string[] | null = null;
-  const ok = await mutateUserThingSecure(userId, (s) => {
+  const result = await mutateUserThingSecure(userId, (s) => {
     const prev = Array.isArray(s.meta!.recentReactions) ? (s.meta!.recentReactions as string[]) : [];
     updated = [token, ...prev.filter((t) => t !== token)].slice(0, MAX_RECENT_REACTIONS);
     s.meta!.recentReactions = updated;
   });
-  if (ok) return updated || [];
+  // A user thing exists (mutated, or contended — the recents MRU is cosmetic, so
+  // returning the optimistic list on contention is fine and reconciles on the
+  // next read; never fall through to legacy for a thing-era user).
+  if (result !== 'missing') return updated || [];
 
   if (!ObjectId.isValid(userId)) return [];
   const users = await getUsersCollection();
@@ -509,7 +560,10 @@ export type AdminUserRow = {
   envAdmin: boolean; // admin via ADMIN_USERNAMES — can't be demoted from the UI
 };
 
-const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// Escape user-supplied text before embedding it in a Mongo $regex — shared with
+// things/search.ts so both search surfaces strip the same metacharacters (a
+// regex-injection / ReDoS fix must never patch only one copy).
+export const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const toAdminRow = (doc: any): AdminUserRow => ({
   id: String(doc._id),
@@ -526,12 +580,30 @@ const toAdminRow = (doc: any): AdminUserRow => ({
 export const setUserAdmin = async (userId: string, admin: boolean): Promise<AdminUserRow | null> => {
   // admin is a ROOT boolean on user things (queryable by listAdmins; booleans
   // aren't text-indexed), so it's a plain $set — not blob content.
-  const updatedAny = await updateUserStore(
-    userId,
-    { $set: { secureAdmin: admin === true, updatedAt: new Date() } },
-    { $set: { 'meta.admin': admin === true, updatedAt: new Date() } }
-  );
-  if (!updatedAny) return null;
+  //
+  // Write BOTH stores (not updateUserStore's thing-first/legacy-fallback): a
+  // dual-era twin left by an interrupted migration would otherwise keep a stale
+  // meta.admin:true in the legacy doc that the dual-store listAdmins read would
+  // resurrect — so a demote appears not to take. Mirrors deleteAlgorithm's
+  // dual-delete. Best-effort per store; either matching counts as applied.
+  const now = new Date();
+  const [thingRes, legacyRes] = await Promise.all([
+    getThingsCollection().then((c) =>
+      c.updateOne(
+        { shareId: String(userId), thingtime: 'user' } as any,
+        { $set: { secureAdmin: admin === true, updatedAt: now } }
+      )
+    ),
+    ObjectId.isValid(userId)
+      ? getUsersCollection().then((c) =>
+          c.updateOne(
+            { _id: new ObjectId(userId) },
+            { $set: { 'meta.admin': admin === true, updatedAt: now } }
+          )
+        )
+      : Promise.resolve({ matchedCount: 0 } as { matchedCount: number })
+  ]);
+  if (!thingRes.matchedCount && !legacyRes.matchedCount) return null;
   const updated = await findUserById(userId);
   return updated ? toAdminRow(updated) : null;
 };

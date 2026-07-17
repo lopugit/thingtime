@@ -1,4 +1,4 @@
-import { findUserByUsername } from '../auth/users';
+import { escapeRegex, findUserByUsername } from '../auth/users';
 import { ensureIndexes, getThingsCollection } from '../mongodb/collections';
 import { KEY_SEGMENT_PATTERN, MAX_TEXT_CHARS, PROTECTED_THINGTIME } from '~/schemas/registry';
 import {
@@ -12,6 +12,7 @@ import {
   isPostThing,
   oldestCursorClause,
   parseChronoCursor,
+  thingtimeInClause,
   toPublicPosts,
   toPublicThings,
   typeClause,
@@ -194,8 +195,6 @@ const sanitizeScalar = (field: string, value: unknown): Scalar | Fail => {
   return fail(400, 'Condition values must be strings, numbers, booleans, or null');
 };
 
-const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
 // gt/gte/lt/lte/between operands: ordered scalars only
 const sanitizeOrdered = (field: string, op: string, value: unknown): string | number | Date | Fail => {
   const scalar = sanitizeScalar(field, value);
@@ -283,7 +282,7 @@ const buildCondition = (input: SearchCondition): Record<string, any> | Fail => {
       if (typeof value !== 'string' || !value.length) {
         return fail(400, `${op} conditions need a text value (field ${field})`);
       }
-      const literal = escapeRegExp(value);
+      const literal = escapeRegex(value);
       const pattern = op === 'startsWith' ? `^${literal}` : op === 'endsWith' ? `${literal}$` : literal;
       return { [field]: { $regex: pattern, $options: 'i' } };
     }
@@ -349,6 +348,25 @@ const textLengthExpr = () => {
   return { $strLenCP: { $cond: [{ $eq: [{ $type: value }, 'string'] }, value, ''] } };
 };
 
+// Exact per-doc ACL projection for one page of search results: keep only the
+// docs the viewer may actually see (the DB match is a superset — canViewInherited
+// is the authoritative check), then project the public thing + post shapes. This
+// is the shared tail of BOTH paging paths (engagement window + chrono/ranked), so
+// a visibility fix can never accidentally patch one branch and leak from the other.
+const projectVisiblePage = async (
+  page: ThingDoc[],
+  viewer: Viewer
+): Promise<{ things: PublicThing[]; posts: Record<string, PublicPost> }> => {
+  const verdicts = await Promise.all(page.map((doc) => canViewInherited(doc, viewer)));
+  const visible = page.filter((_, index) => verdicts[index]);
+  const things = await toPublicThings(visible, viewer);
+  const postDocs = visible.filter((doc) => isPostThing(doc));
+  const postProjections = postDocs.length ? await toPublicPosts(postDocs, viewer) : [];
+  const posts: Record<string, PublicPost> = {};
+  for (const post of postProjections) posts[post.id] = post;
+  return { things, posts };
+};
+
 export const searchThings = async (viewerInput: string | Viewer, query: SearchQuery): Promise<Fail | SearchResult> => {
   const viewer = asViewer(viewerInput);
   const limit = Math.min(Math.max(1, Number(query.limit) || DEFAULT_SEARCH_LIMIT), MAX_SEARCH_LIMIT);
@@ -379,12 +397,7 @@ export const searchThings = async (viewerInput: string | Viewer, query: SearchQu
 
   const thingtime = csvList(query.thingtime);
   if (thingtime.length) {
-    // v1 posts have no thingtime array — a 'post' filter must match them too
-    clauses.push(
-      thingtime.includes('post')
-        ? { $or: [{ thingtime: { $in: thingtime } }, { kind: 'post' }] }
-        : { thingtime: { $in: thingtime } }
-    );
+    clauses.push(thingtimeInClause(thingtime));
   }
 
   // Protected system kinds are NOT discoverable through the generic search:
@@ -472,6 +485,21 @@ export const searchThings = async (viewerInput: string | Viewer, query: SearchQu
 
   const baseMatch = withMatch(visibility, ...clauses);
   const ranked = sort === 'relevance';
+
+  // A cursor is minted for one paging mode and is meaningless in another: offset
+  // modes (engagement filters, relevance ranking) mint a plain integer offset,
+  // chrono modes mint `${ms}_${shareId}`. Silently coercing across modes —
+  // Number(chronoCursor) is NaN → offset 0, or parseChronoCursor(offset) → null —
+  // resurfaces page one and duplicates results once the client appends. Reject a
+  // cursor that doesn't match the active mode so the client restarts cleanly.
+  if (query.cursor !== undefined && query.cursor !== null && query.cursor !== '') {
+    const cursorStr = typeof query.cursor === 'string' ? query.cursor : '';
+    const validForMode = engagement || ranked ? /^\d+$/.test(cursorStr) : parseChronoCursor(cursorStr) !== null;
+    if (!validForMode) {
+      return fail(400, 'This cursor doesn’t match the current sort or filters — start a new search');
+    }
+  }
+
   // $text must sit in a top-level $and (withMatch provides exactly that)
   const textClause = q ? { $text: { $search: q } } : null;
   const match = textClause ? withMatch(textClause, visibility, ...clauses) : baseMatch;
@@ -577,14 +605,7 @@ export const searchThings = async (viewerInput: string | Viewer, query: SearchQu
     const docsById = new Map(pageDocs.map((doc) => [doc.shareId, doc]));
     const page = pageIds.map((id) => docsById.get(id)).filter(Boolean) as ThingDoc[];
 
-    const verdicts = await Promise.all(page.map((doc) => canViewInherited(doc, viewer)));
-    const visible = page.filter((_, index) => verdicts[index]);
-
-    const publicThings = await toPublicThings(visible, viewer);
-    const postDocs = visible.filter((doc) => isPostThing(doc));
-    const postProjections = postDocs.length ? await toPublicPosts(postDocs, viewer) : [];
-    const posts: Record<string, PublicPost> = {};
-    for (const post of postProjections) posts[post.id] = post;
+    const { things: publicThings, posts } = await projectVisiblePage(page, viewer);
 
     return {
       ok: true,
@@ -645,16 +666,8 @@ export const searchThings = async (viewerInput: string | Viewer, query: SearchQu
   const page = docs.slice(0, limit);
 
   // exact acl evaluation — the DB match is only a superset; the cursor advances
-  // over the raw page so filtered docs are skipped, not resurfaced. Verdicts
-  // resolve concurrently (inherit chains each cost lookups).
-  const verdicts = await Promise.all(page.map((doc) => canViewInherited(doc, viewer)));
-  const visible = page.filter((_, index) => verdicts[index]);
-
-  const publicThings = await toPublicThings(visible, viewer);
-  const postDocs = visible.filter((doc) => isPostThing(doc));
-  const postProjections = postDocs.length ? await toPublicPosts(postDocs, viewer) : [];
-  const posts: Record<string, PublicPost> = {};
-  for (const post of postProjections) posts[post.id] = post;
+  // over the raw page so filtered docs are skipped, not resurfaced.
+  const { things: publicThings, posts } = await projectVisiblePage(page, viewer);
 
   return { ok: true, things: publicThings, posts, nextCursor, total, totalCapped, ranked };
 };

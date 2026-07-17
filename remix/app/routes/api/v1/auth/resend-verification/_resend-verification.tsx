@@ -1,5 +1,6 @@
 import { json } from '~/api/http';
 
+import { resolveTrustedOrigin } from '~/api/utils/auth/appOrigin';
 import { shouldShowDevVerificationLink } from '~/api/utils/auth/devVerification';
 import { sendVerificationEmail } from '~/api/utils/auth/email';
 import { createEmailVerification } from '~/api/utils/auth/emailVerifications';
@@ -16,7 +17,7 @@ export const action = async ({ request }: { request: Request }) => {
     const user = await findUserByEmail(String(email));
     if (user && !user.emailVerified) {
       const verification = await createEmailVerification({ userId: String(user._id), email: user.email });
-      const link = `${new URL(request.url).origin}/api/v1/auth/verify-email?token=${verification.token}`;
+      const link = `${resolveTrustedOrigin(request)}/api/v1/auth/verify-email?token=${verification.token}`;
       // Fire-and-forget so a send failure can't turn the neutral response into
       // a 500 (which would leak that this email belongs to an unverified user).
       void sendVerificationEmail({ to: user.email, link }).catch(() => {});

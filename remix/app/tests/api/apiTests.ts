@@ -250,7 +250,19 @@ export const apiTests: ApiTestDefinition[] = [
     method: 'POST',
     path: '/api/v1/login',
     body: { username: 'thingtime-test-missing-user', password: 'not-a-real-password' },
-    expect: expectStatus([401, 429, 500], 'Login route responded with expected invalid/rate-limited/env-dependent status.')
+    // Assert the body shape per status, not just the code — a bare status list
+    // would go green if the login route returned 429 for EVERY request (a
+    // fail-closed/misconfigured limiter locking out real users), the exact
+    // failure this test exists to catch. A 429 must at least carry the rate-limit
+    // error shape; a 401/500 must be a real rejection (ok:false + error).
+    expect: expectJson(
+      [401, 429, 500],
+      (body, response) =>
+        response.status === 429
+          ? typeof body?.error === 'string'
+          : body?.ok === false && typeof body?.error === 'string',
+      'Login rejects invalid credentials (ok:false + error), or is rate-limited/env-limited with an error shape.'
+    )
   },
   {
     id: 'auth-password-reset-neutral',

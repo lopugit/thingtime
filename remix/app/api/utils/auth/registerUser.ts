@@ -117,7 +117,19 @@ export const createUserAccount = async (input: CreateUserAccountInput): Promise<
     if (err?.code === 11000) {
       const kv = err?.keyValue?.uniqueKeys;
       const uniqueKey = typeof kv === 'string' ? kv : kv?.buffer ? Buffer.from(kv.buffer).toString('utf8') : '';
-      const field = err?.keyPattern?.email || uniqueKey.startsWith('email:') ? 'Email' : 'Username';
+      // keyPattern.email is set for the legacy per-field index; uniqueKey carries
+      // an 'email:'/'username:' prefix for things-era hashed keys. When neither is
+      // decodable (mongos / older servers omit keyValue), DON'T default to
+      // Username — misreporting an email collision sends the user chasing new
+      // usernames that can never succeed. Re-check the DB to classify instead.
+      let field: 'Email' | 'Username';
+      if (err?.keyPattern?.email || uniqueKey.startsWith('email:')) {
+        field = 'Email';
+      } else if (err?.keyPattern?.username || uniqueKey.startsWith('username:')) {
+        field = 'Username';
+      } else {
+        field = (await findUserByEmail(email)) ? 'Email' : 'Username';
+      }
       return { ok: false, status: 409, error: `${field} already registered` };
     }
     throw err;

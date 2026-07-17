@@ -65,21 +65,36 @@ let indexesEnsured: Promise<void> | null = null;
 // options evolve (partial filters, text weights/overrides), drop the old
 // definition by name and recreate — idempotent, and the only alternative is a
 // manual migration per deploy.
+//
+// Order matters for UNIQUE indexes: create the new index BEFORE dropping the
+// legacy-named one. Dropping first opens a window with no index at all — for a
+// unique index that means the uniqueness constraint briefly disappears, so
+// racing upserts (e.g. reaction toggles) could insert duplicates. MongoDB (4.2+)
+// lets same-key indexes with distinct names / partial-filter options coexist, so
+// create-then-drop keeps a constraint active throughout the swap.
 const createIndexReplacing = async (
   collection: any,
   keys: Record<string, any>,
   options: Record<string, any> & { name: string },
   legacyNames: string[] = []
 ) => {
-  for (const legacy of legacyNames) {
-    await collection.dropIndex(legacy).catch(() => {}); // absent = fine
-  }
   try {
     await collection.createIndex(keys, options);
   } catch (err: any) {
     if (err?.code !== 85 && err?.code !== 86) throw err;
+    // The new spec conflicts with an existing index of the same name (evolved
+    // options) or a legacy name (same spec, different name) — drop the conflicting
+    // definitions and recreate. This is the only branch with a no-index window,
+    // and it fires only when options genuinely changed (text weights/overrides),
+    // never for the steady-state unique-index swap above.
     await collection.dropIndex(options.name).catch(() => {});
+    for (const legacy of legacyNames) await collection.dropIndex(legacy).catch(() => {});
     await collection.createIndex(keys, options);
+  }
+  // New index is in place — now prune any legacy-named siblings of the same shape.
+  for (const legacy of legacyNames) {
+    if (legacy === options.name) continue;
+    await collection.dropIndex(legacy).catch(() => {}); // absent = fine
   }
 };
 

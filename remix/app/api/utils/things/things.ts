@@ -248,6 +248,15 @@ const targetIdOf = (doc: ThingDoc): string | null => {
 // thingtime:['post',...]; v1 posts carry kind:'post' (migration unsets kind).
 const postMatch = () => ({ $or: [{ thingtime: 'post' }, { kind: 'post' }] });
 
+// Query fragment for a `thingtime in [...]` filter that stays era-correct: v1
+// posts have no thingtime array, so a 'post' filter must also match kind:'post'.
+// Shared by listThings and things/search so the two never disagree on which
+// legacy posts exist (the single source the era semantics live behind).
+export const thingtimeInClause = (thingtime: string[]) =>
+  thingtime.includes('post')
+    ? { $or: [{ thingtime: { $in: thingtime } }, { kind: 'post' }] }
+    : { thingtime: { $in: thingtime } };
+
 export const withMatch = (base: Record<string, any>, ...clauses: Record<string, any>[]) => {
   const and = [base, ...clauses].filter((clause) => Object.keys(clause).length);
   return and.length > 1 ? { $and: and } : and[0] || {};
@@ -1123,11 +1132,7 @@ export const listThings = async (
     };
   }
   if (thingtime.length) {
-    // v1 posts have no thingtime array — a 'post' filter must match them too
-    const clause = thingtime.includes('post')
-      ? { $or: [{ thingtime: { $in: thingtime } }, { kind: 'post' }] }
-      : { thingtime: { $in: thingtime } };
-    match = withMatch(match, clause);
+    match = withMatch(match, thingtimeInClause(thingtime));
   }
 
   const parsed = parseChronoCursor(query.cursor);

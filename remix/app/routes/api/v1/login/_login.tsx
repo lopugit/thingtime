@@ -34,7 +34,9 @@ export const action = async ({ request }: { request: Request }) => {
       : await loginUser({ username: body?.username, password: body?.password });
 
   if (result.ok === false) {
-    return json({ ok: false, error: result.error }, { status: result.status });
+    // Propagate the stable OTP failure reason (when present) so the client can
+    // decide whether to abandon the 2FA challenge without matching error copy.
+    return json({ ok: false, error: result.error, reason: result.reason }, { status: result.status });
   }
 
   if ('requiresOtp' in result) {
