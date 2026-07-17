@@ -790,8 +790,8 @@
     "semantic_hash": ""
   },
   "remix/app/api/utils/crypto/cryptoTools.server.ts": {
-    "mtime": 1784278604.0273995,
-    "ast_hash": "7402639c9c6d111633537d26c86876a1",
+    "mtime": 1784297368.121908,
+    "ast_hash": "6875050c2f602da99e34900adfae5b23",
     "semantic_hash": ""
   },
   "remix/app/api/utils/getUser.ts": {
@@ -800,8 +800,8 @@
     "semantic_hash": "4414bbd342342dd679eb33869bf8234e"
   },
   "remix/app/api/utils/health/statusTarget.ts": {
-    "mtime": 1784278604.0341008,
-    "ast_hash": "e87b752fc1a2b25b57e4a40ba3432dd7",
+    "mtime": 1784297368.1226044,
+    "ast_hash": "efbcf032e8bd53a98276aa70f00f64a2",
     "semantic_hash": ""
   },
   "remix/app/api/utils/lopu/fallbacks.ts": {
@@ -835,8 +835,8 @@
     "semantic_hash": ""
   },
   "remix/app/api/utils/mongodb/config.ts": {
-    "mtime": 1784278604.040471,
-    "ast_hash": "707ca9fb600bddbffb682debd11dfb05",
+    "mtime": 1784297368.1230235,
+    "ast_hash": "9f91c0e8d39c89043571f4b99d173093",
     "semantic_hash": ""
   },
   "remix/app/api/utils/mongodb/connection.ts": {
@@ -860,8 +860,8 @@
     "semantic_hash": "501c01c3b816e9d7e919ce6b52d5273f"
   },
   "remix/app/api/utils/mongodb/status.ts": {
-    "mtime": 1784278604.0481787,
-    "ast_hash": "5c3207d6e31031d82613ff842ec6ce3c",
+    "mtime": 1784297368.1239064,
+    "ast_hash": "ee865a023ea43cf7b2caf16d0b063b67",
     "semantic_hash": ""
   },
   "remix/app/api/utils/userCheckExists.ts": {
@@ -885,8 +885,8 @@
     "semantic_hash": "a277b57c33c60f211d21b8932505a8f9"
   },
   "remix/app/api/utils/vercel/status.ts": {
-    "mtime": 1784278604.0680764,
-    "ast_hash": "1123a7205694a19d8f532ef037e36195",
+    "mtime": 1784297368.1247206,
+    "ast_hash": "30728f11e4899a5906b49dbc7391914b",
     "semantic_hash": ""
   },
   "remix/app/components/API/Submit.tsx": {
@@ -1285,8 +1285,8 @@
     "semantic_hash": "6044212030574f1cb97ef1bc46ff50e9"
   },
   "remix/app/routes/api/v1/crypto/_crypto.tsx": {
-    "mtime": 1784278604.0990834,
-    "ast_hash": "fe83aaef61f69bfd9a7477d92d7dbc31",
+    "mtime": 1784297368.125093,
+    "ast_hash": "26506aa65b1f2fb351240e366fa6fd08",
     "semantic_hash": ""
   },
   "remix/app/routes/api/v1/health/frontend/_frontend.tsx": {
@@ -1295,8 +1295,8 @@
     "semantic_hash": "309f2a464eec6d0bf8867d39b2c8874b"
   },
   "remix/app/routes/api/v1/health/mongodb/_mongodb.tsx": {
-    "mtime": 1784278604.099768,
-    "ast_hash": "00991da7f3c8aa55ce016f920184d1f1",
+    "mtime": 1784297368.1254783,
+    "ast_hash": "e03e9dd616eb380a9fea2fb20cd18675",
     "semantic_hash": ""
   },
   "remix/app/routes/api/v1/health/nitro/_nitro.tsx": {
@@ -1305,8 +1305,8 @@
     "semantic_hash": "d3056007f4358850868439bbef1a52b2"
   },
   "remix/app/routes/api/v1/health/vercel/_vercel.tsx": {
-    "mtime": 1784278604.0999813,
-    "ast_hash": "5b1f94bc4a3a6b3ee4c9b47690f56aab",
+    "mtime": 1784297368.125766,
+    "ast_hash": "a894c8d639cddbca6a53d79e0c4222ef",
     "semantic_hash": ""
   },
   "remix/app/routes/api/v1/login/_login.tsx": {
@@ -1320,13 +1320,13 @@
     "semantic_hash": "0dc94c9c6c612a33a733f0d1c5b5c865"
   },
   "remix/app/routes/api/v1/mongodb/get-connection/_get-connection.tsx": {
-    "mtime": 1784278604.1003287,
-    "ast_hash": "11db7718e14121035125de377c508dc0",
+    "mtime": 1784297368.1261156,
+    "ast_hash": "1e10ae05b2e351467d0e6fba8bd64f8e",
     "semantic_hash": ""
   },
   "remix/app/routes/api/v1/mongodb/populate/_populate.tsx": {
-    "mtime": 1784278604.1010978,
-    "ast_hash": "f762185481489235d4d96f9a00b55aa7",
+    "mtime": 1784297368.1264074,
+    "ast_hash": "0b084b503b4082742875c4c92e9efc34",
     "semantic_hash": ""
   },
   "remix/app/routes/api/v1/mongodb/raw-results/_raw-results.tsx": {
@@ -3280,8 +3280,8 @@
     "semantic_hash": "0afa4b35f5e8032223493be1df022c1f"
   },
   "remix/server/utils/apiFallback.ts": {
-    "mtime": 1784278604.3475358,
-    "ast_hash": "956a1bde9058bf8ea691436cab84ae78",
+    "mtime": 1784297368.1266906,
+    "ast_hash": "51e1f4f61e0b540aebff1116837b3bf5",
     "semantic_hash": ""
   },
   "PRs/39-codex-api-docs-endpoints--add-api-self-documentation-routes.md": {
@@ -3635,8 +3635,8 @@
     "semantic_hash": "72315d91a917dab861c5a059d418c3f2"
   },
   "remix/app/api/utils/rateLimit/config.ts": {
-    "mtime": 1784278960.485833,
-    "ast_hash": "154ad98e94d4589e1138f68ff5793876",
+    "mtime": 1784297368.124181,
+    "ast_hash": "2c392e526486edc7cf829ef59f30b0eb",
     "semantic_hash": ""
   },
   "remix/app/api/utils/rateLimit/enforce.ts": {
@@ -3810,8 +3810,8 @@
     "semantic_hash": ""
   },
   "remix/app/api/utils/mongodb/querySafety.ts": {
-    "mtime": 1784278604.0476239,
-    "ast_hash": "2d25058ec59322018c1108ae61308bc6",
+    "mtime": 1784297368.1235664,
+    "ast_hash": "818bfbc3b85973add6c6ed8c54777267",
     "semantic_hash": ""
   },
   "remix/app/components/MongoDB/BsonValueEditor.tsx": {
@@ -4232,6 +4232,11 @@
   "remix/public/sdk/demo.html": {
     "mtime": 1784278604.3463058,
     "ast_hash": "b4fc61e4213496c23b0f31870cc57089",
+    "semantic_hash": ""
+  },
+  "remix/app/api/utils/errors/safeError.ts": {
+    "mtime": 1784297368.1222866,
+    "ast_hash": "5e7571a8153d3a82dc98d089897858d8",
     "semantic_hash": ""
   }
 }
