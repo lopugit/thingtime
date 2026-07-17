@@ -7,8 +7,7 @@ import {
   verifyJwtInput,
   verifySignedMessageInput
 } from '~/api/utils/crypto/cryptoTools.server';
-
-const errorMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));
+import { safeErrorText } from '~/api/utils/errors/safeError';
 
 export const loader = async () => {
   return json({
@@ -44,6 +43,6 @@ export const action = async ({ request }: { request: Request }) => {
 
     return json({ ok: false, error: 'Unknown crypto action.' }, { status: 400 });
   } catch (err) {
-    return json({ ok: false, error: errorMessage(err) }, { status: 400 });
+    return json({ ok: false, error: safeErrorText(err, 'crypto action', 'Crypto action failed') }, { status: 400 });
   }
 };

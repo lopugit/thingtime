@@ -1,3 +1,5 @@
+import { PublicError, safeErrorText } from '../errors/safeError';
+
 export type BasicServiceHealthStatus = {
   ok: boolean;
   service: 'frontend' | 'nitro';
@@ -154,7 +156,7 @@ export const fetchRemoteJson = async <T,>(
     });
 
     if (!response.ok) {
-      throw new Error(`Remote status returned ${response.status}`);
+      throw new PublicError(`Remote status returned ${response.status}`);
     }
 
     return {
@@ -189,6 +191,6 @@ export const unavailableServiceStatus = (
     checkedAt: new Date().toISOString(),
     origin,
     targetOrigin: origin,
-    error: error instanceof Error ? error.message : String(error)
+    error: safeErrorText(error, `service health: ${service}`, 'Service unavailable')
   };
 };

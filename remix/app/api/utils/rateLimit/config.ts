@@ -28,6 +28,10 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // Admin-only raw queries can still be expensive; keep accidental repeated
   // scans bounded independently from the ordinary app APIs.
   'mongodb.query': { limit: 30, windowMs: 60_000, enabled: true },
+  // Admin-only DB seed/populate is very heavy (registers fixture users, seeds
+  // showcase posts/schemas) — bound it tightly so repeated runs can't hammer
+  // the DB or burn serverless compute. Enforced fail-closed at the route.
+  'mongodb.populate': { limit: 3, windowMs: 60_000, enabled: true },
   // service accounts do legitimate bulk writes (e.g. chunked snapshot sync), so
   // they get a higher ceiling — but a BOUNDED one, never an exemption: anyone
   // can provision a service account, so accountKind confers no trust
