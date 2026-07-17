@@ -48,6 +48,13 @@ export const newRow = (partial: Partial<ConditionRow> = {}): ConditionRow => ({
 
 export const PURE_NUMBER = /^-?\d+(\.\d+)?$/;
 
+// Substring/prefix/suffix operators are text-only server-side (search.ts rejects
+// non-string values with a 400). With the default op `contains` + datatype
+// `auto`, a bare numeric/true/false/null value would otherwise coerce to a real
+// number/boolean/null and 400 — wiping the results list — so these ops always
+// keep the raw string regardless of the row's datatype hint.
+export const TEXT_ONLY_OPS = new Set(['contains', 'startsWith', 'endsWith']);
+
 // GUI string → API scalar, honouring the row's datatype hint. 'auto' reads
 // like a developer would: true/false/null literals and pure numbers become
 // their real types, everything else stays text.
@@ -130,7 +137,8 @@ export const compileRows = (rows: ConditionRow[]): ApiCondition[] | null => {
       continue;
     }
     if (row.valueType !== 'null' && !row.value.trim()) continue;
-    conditions.push({ field, op: row.op, value: coerceValue(row.value, row.valueType) });
+    const valueType = TEXT_ONLY_OPS.has(row.op) ? 'text' : row.valueType;
+    conditions.push({ field, op: row.op, value: coerceValue(row.value, valueType) });
   }
   return conditions.length ? conditions : null;
 };

@@ -18,7 +18,8 @@ import { Rainbow } from '~/components/Rainbow/Rainbow';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { SEARCHABLE_CRYSTAL_KINDS } from '~/components/Schemas/schemaBrowseTypes';
 import { useApi } from '~/hooks/useApi';
-import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
+import { clearLocalCache, readLocalCache, writeLocalCache } from '~/hooks/localCache';
+import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { thingtimeSchemas, type SchemaThingField } from '~/schemas/registry';
 import { flattenSchemaFields } from '~/schemas/tools';
 import { CARD_STYLES } from '~/theme/card';
@@ -43,7 +44,12 @@ import type {
 // that compiles GUI rows into the API's whitelisted MongoDB operator grammar,
 // plus a schema browser that prefills the builder from a shape's fields.
 
-const CACHE_KEY = 'tt-search';
+// Search snapshots can contain the viewer's OWN private things (visibilityQueryFor
+// adds an ownerId clause), so the cache is scoped per user id — never a shared
+// global key — and the pre-scoping global blob is purged on mount. Mirrors the
+// per-user convention of tt-two-factor-${id} / useRecentReactions keyFor(userId).
+const LEGACY_CACHE_KEY = 'tt-search';
+const cacheKeyFor = (userId: string | null | undefined) => (userId ? `tt-search-${userId}` : null);
 const PAGE_SIZE = 20;
 
 // A schema field definition → a prefilled (but empty) builder row.
@@ -337,8 +343,18 @@ export const SearchPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const navigation = useNavigation();
+  const user = useCurrentUser();
 
-  const cached = React.useMemo(() => readLocalCache<CachedSearch>(CACHE_KEY), []);
+  const cacheKey = cacheKeyFor(user?.id);
+  // Purge any pre-scoping global 'tt-search' blob (it may hold another account's
+  // private results) once, so it can never paint for the wrong principal.
+  React.useEffect(() => {
+    clearLocalCache(LEGACY_CACHE_KEY);
+  }, []);
+  const cached = React.useMemo(
+    () => (cacheKey ? readLocalCache<CachedSearch>(cacheKey) : null),
+    [cacheKey]
+  );
   const urlQ = React.useMemo(() => new URLSearchParams(location.search).get('q') || '', [location.search]);
   // a NEW ?q= (e.g. the Commander's "Search things for…" row) means a fresh
   // text search — don't drag the previous session's filters into it
@@ -442,12 +458,18 @@ export const SearchPage = () => {
       }
 
       const conditions = compileRows(current.rows);
+      // relevance needs a text query — the server 400s otherwise, so drop it to
+      // server-pick (auto) when q is empty, matching the feed Advanced panel
+      const effectiveSort =
+        current.sort === 'auto' || (current.sort === 'relevance' && !current.q.trim())
+          ? undefined
+          : current.sort;
       const body: Record<string, unknown> = {
         q: current.q.trim() || undefined,
         mode: current.mode,
         conditions: conditions || undefined,
         thingtime: current.kind || undefined,
-        sort: current.sort === 'auto' ? undefined : current.sort,
+        sort: effectiveSort,
         cursor: cursor || undefined,
         limit: PAGE_SIZE
       };
@@ -500,7 +522,7 @@ export const SearchPage = () => {
             ranked: !!resp.ranked,
             nextCursor: resp.nextCursor ?? null
           };
-          writeLocalCache(CACHE_KEY, snapshot);
+          if (cacheKey) writeLocalCache(cacheKey, snapshot);
 
           // keep the URL shareable for plain text searches — but only while
           // the user is still HERE: still mounted, same history entry as when

@@ -1,6 +1,7 @@
 import { json, readJsonBody } from '~/api/http';
 
 import { applyPasswordReset, consumePasswordReset } from '~/api/utils/auth/passwordResets';
+import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 
 const MAX_BODY_BYTES = 16 * 1024;
 
@@ -13,6 +14,16 @@ const RESET_ERRORS: Record<string, string> = {
 // POST /api/v1/auth/password-reset/confirm — { token, password } — burn the
 // reset token, set the new password, and revoke every live session.
 export const action = async ({ request }: { request: Request }) => {
+  // throttle by IP before any token work — bounds repeated token guesses and
+  // password-set hammering (its own bucket, keyed anonymously)
+  const limit = await enforceRateLimit(request, 'auth.passwordResetConfirm', null);
+  if (!limit.allowed) {
+    return json(
+      { ok: false, error: 'Too many reset attempts — try again soon 🌸' },
+      rateLimitedResponseInit(limit)
+    );
+  }
+
   const body = await readJsonBody(request, MAX_BODY_BYTES);
   const token = typeof body?.token === 'string' ? body.token.trim() : '';
   const password = typeof body?.password === 'string' ? body.password : '';

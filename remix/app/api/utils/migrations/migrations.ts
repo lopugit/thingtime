@@ -493,7 +493,8 @@ const collectionToThingsMigration = (spec: ConvertSpec): Migration => ({
         try {
           const built = spec.toThing(doc);
           if (!built.ok) {
-            skip(`${built.reason} — left for a later re-run`);
+            const reason = 'reason' in built ? built.reason : 'conversion failed';
+            skip(`${reason} — left for a later re-run`);
             continue;
           }
           const thing = built.thing;
@@ -551,10 +552,30 @@ const collectionToThingsMigration = (spec: ConvertSpec): Migration => ({
           if (inserted) created += 1;
           const fresh = await legacy.findOne({ _id: doc._id } as any);
           const freshTime = fresh?.updatedAt ? +new Date(fresh.updatedAt) : 0;
-          const snapTime = doc.updatedAt ? +new Date(doc.updatedAt) : 0;
-          if (fresh && freshTime > snapTime) {
+          // What the destination thing currently reflects. On a fresh insert
+          // that's this batch's snapshot (the thing we just built from `doc`).
+          // On a prior-run twin it's the twin's OWN updatedAt — comparing only
+          // against the batch snapshot missed this: a twin an earlier pass built
+          // from older legacy data was never refreshed, so the guarded delete
+          // then dropped a legacy write that had raced that earlier pass.
+          const destinationShareId = inserted ? thing.shareId : twin?.shareId ?? thing.shareId;
+          const destinationTime = inserted
+            ? doc.updatedAt
+              ? +new Date(doc.updatedAt)
+              : 0
+            : twin?.updatedAt
+              ? +new Date(twin.updatedAt)
+              : 0;
+          if (fresh && freshTime > destinationTime) {
             const rebuilt = spec.toThing(fresh);
-            if (rebuilt.ok) await things.replaceOne({ shareId: thing.shareId } as any, rebuilt.thing as any);
+            // keep the destination's shareId so references never rotate — a
+            // random-shareId spec would otherwise mint a new id on rebuild
+            if (rebuilt.ok) {
+              await things.replaceOne(
+                { shareId: destinationShareId } as any,
+                { ...rebuilt.thing, shareId: destinationShareId } as any
+              );
+            }
           }
           await legacy.deleteOne(fresh ? ({ _id: doc._id, updatedAt: fresh.updatedAt } as any) : ({ _id: doc._id } as any));
           migrated += 1;

@@ -226,7 +226,7 @@ const browseLibrary = async (
   await ensureIndexes();
   const collection = await getThingsCollection();
 
-  const cursorDoc = parseChronoCursor(cursor);
+  const cursorDoc = parseChronoCursor(typeof cursor === 'string' ? cursor : undefined);
   const match = withMatch(
     { ownerId: viewer.id, thingtime: 'save' },
     ...(cursorDoc ? [chronoCursorClause(cursorDoc)] : [])
@@ -264,7 +264,7 @@ const browseMine = async (
   await ensureIndexes();
   const collection = await getThingsCollection();
 
-  const cursorDoc = parseChronoCursor(cursor);
+  const cursorDoc = parseChronoCursor(typeof cursor === 'string' ? cursor : undefined);
   const match = withMatch(
     { ownerId: viewer.id, thingtime: 'schema' },
     ...(cursorDoc ? [sort === 'oldest' ? oldestCursorClause(cursorDoc) : chronoCursorClause(cursorDoc)] : [])
