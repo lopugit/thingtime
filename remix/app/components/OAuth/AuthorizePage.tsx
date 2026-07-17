@@ -324,28 +324,47 @@ export const AuthorizePage = () => {
     }
     if (!user) return;
 
-    fetchJson(`/api/v1/things/user?username=${encodeURIComponent(user.username)}&limit=${MAX_PICKER_THINGS}`).then(
-      (resp) => {
-        // Distinguish "no things" from "couldn't load" — a failed fetch must
-        // not masquerade as an empty Thingtime (with a retry, not a dead end).
+    // The server clamps each page to its own max (currently 50), so a single
+    // request can't fill the 100-thing share cap — follow nextCursor until we
+    // have MAX_PICKER_THINGS or run out of posts.
+    let cancelled = false;
+    (async () => {
+      const posts: any[] = [];
+      let cursor: string | null = null;
+      let failed = false;
+      do {
+        const url =
+          `/api/v1/things/user?username=${encodeURIComponent(user.username)}&limit=${MAX_PICKER_THINGS}` +
+          (cursor ? `&cursor=${encodeURIComponent(cursor)}` : '');
+        const resp = await fetchJson(url);
+        if (cancelled) return;
         if (!resp?.ok || !Array.isArray(resp.posts)) {
-          setPickerError(true);
-          setPickerThings([]);
-          return;
+          failed = true;
+          break;
         }
-        setPickerError(false);
-        setPickerThings(
-          resp.posts.map((post: any) => ({
-            id: String(post.id ?? post.shareId ?? ''),
-            label:
-              (typeof post.text === 'string' && post.text.trim().slice(0, 60)) ||
-              (typeof post.crystal?.text === 'string' && post.crystal.text.trim().slice(0, 60)) ||
-              (Array.isArray(post.tags) && post.tags.length ? `#${post.tags[0]}` : 'Untitled thing'),
-            detail: Array.isArray(post.thingtime) ? post.thingtime.join(' + ') : post.type || 'thing'
-          })).filter((thing: PickerThing) => thing.id)
-        );
-      }
-    );
+        posts.push(...resp.posts);
+        cursor = typeof resp.nextCursor === 'string' && resp.nextCursor ? resp.nextCursor : null;
+      } while (cursor && posts.length < MAX_PICKER_THINGS);
+
+      // Distinguish "no things" from "couldn't load" — a failed fetch must
+      // not masquerade as an empty Thingtime (with a retry, not a dead end).
+      // A mid-pagination failure surfaces the retry banner rather than
+      // silently passing off a partial list as everything.
+      setPickerError(failed);
+      setPickerThings(
+        posts.slice(0, MAX_PICKER_THINGS).map((post: any) => ({
+          id: String(post.id ?? post.shareId ?? ''),
+          label:
+            (typeof post.text === 'string' && post.text.trim().slice(0, 60)) ||
+            (typeof post.crystal?.text === 'string' && post.crystal.text.trim().slice(0, 60)) ||
+            (Array.isArray(post.tags) && post.tags.length ? `#${post.tags[0]}` : 'Untitled thing'),
+          detail: Array.isArray(post.thingtime) ? post.thingtime.join(' + ') : post.type || 'thing'
+        })).filter((thing: PickerThing) => thing.id)
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [thingsActive, pickerThings, sandbox, user]);
 
   const pickedIds = React.useMemo(
@@ -397,7 +416,14 @@ export const AuthorizePage = () => {
       return;
     }
 
-    if (!verifiedOrigin) return;
+    // Don't mint a grant we can't deliver: if the opener is gone (popup opened
+    // directly, or the embedding page closed), the token would be issued into
+    // the void while the user sees a false "signed in".
+    if (!verifiedOrigin || typeof window === 'undefined' || !window.opener) {
+      setIssueError('This window lost its connection to the app that opened it. Close it and start the sign-in again from the app.');
+      setIssuing(false);
+      return;
+    }
 
     const resp = await fetchJson('/api/v1/oauth/authorize', {
       method: 'POST',
@@ -414,7 +440,7 @@ export const AuthorizePage = () => {
     });
 
     if (resp?.ok && resp.token) {
-      postToOpener({
+      const delivered = postToOpener({
         type: 'thingtime:login',
         ok: true,
         token: resp.token,
@@ -424,8 +450,17 @@ export const AuthorizePage = () => {
         sharedThings: resp.sharedThings,
         user: resp.user
       });
-      setDone('approved');
-      setTimeout(() => window.close(), 400);
+      if (delivered) {
+        setDone('approved');
+        setTimeout(() => window.close(), 400);
+      } else {
+        // Opener vanished during the mint: the grant now exists (listed under
+        // Connected apps) but the app never received it — say so instead of
+        // showing a false "signed in".
+        setIssueError(
+          'The app window closed before the sign-in could be handed over. Close this window and start again from the app — no token was shared.'
+        );
+      }
     } else {
       setIssueError(resp?.error || 'Could not authorize — please try again.');
     }

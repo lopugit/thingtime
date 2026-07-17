@@ -128,8 +128,10 @@
       }
 
       function onMessage(event) {
-        // Only trust the Thingtime origin, and only our own login attempt.
+        // Only trust the Thingtime origin, only our own popup window, and
+        // only our own login attempt (state echo).
         if (event.origin !== base) return;
+        if (event.source !== popup) return;
         var data = event.data;
         if (!data || data.type !== 'thingtime:login' || data.state !== state) return;
 
@@ -138,7 +140,9 @@
             token: data.token,
             tokenType: data.tokenType || 'Bearer',
             expiresAt: data.expiresAt,
-            scopes: data.scopes || ['profile', 'app-data'],
+            // Trust only what the server says was granted — never fabricate a
+            // default scope list the user may not have consented to.
+            scopes: Array.isArray(data.scopes) ? data.scopes : [],
             sharedThings: data.sharedThings || 0,
             sandbox: data.sandbox === true,
             user: data.user
