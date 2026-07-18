@@ -33,7 +33,7 @@ Single Mongo database `thingtime`. **Everything that can be a thing IS a
 thing**: users, themes, feed algorithms, waitlist entries, schemas, posts,
 comments, reactions, shares, and free-form data all live in `things`, each
 kind declared through the `thingtime` schema-id array (see
-`app/schemas/registry.ts` and `claude-todo/12-everything-is-a-thing-collections.md`).
+`app/schemas/registry.ts` and `TODO/claude-todo/16-everything-is-a-thing-collections.md`).
 
 | Collection | Holds |
 | ---------- | ----- |

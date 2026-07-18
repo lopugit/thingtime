@@ -24,6 +24,7 @@ future Claude sessions (use alongside `graphify-out/` for codebase orientation).
 | 12 | Multi-emoji reactions + custom emoji picker + optimistic UI (native keyboard, typed multi-emoji tokens, paginated recents, no loading flashes) | 🟢 Built, live-tested locally | [12-reactions-and-optimistic-ui.md](./12-reactions-and-optimistic-ui.md) |
 | 13 | Admin role + admin-configurable rate limits (env-allowlist + `meta.admin`, promote/demote UI, global rate-limit config, react/comment throttling) | 🟢 Built, live-tested locally | [13-admin-and-rate-limits.md](./13-admin-and-rate-limits.md) |
 | 14 | Editor.js block drag/drop reordering (desktop pointer, mobile long-press, keyboard alternative, autosave/undo-safe) | 🔴 Not started | [14-editorjs-block-drag-drop.md](./14-editorjs-block-drag-drop.md) |
+| 16 | Everything is a thing — collapse satellite collections (users/themes/feedAlgorithms/waitlist → `things`; `uniqueKeys` + `secure` mechanisms, dual-era migrations) | 🟡 In build (PR #69 stack) | [16-everything-is-a-thing-collections.md](./16-everything-is-a-thing-collections.md) |
 
 ## Conventions (see `FUNDAMENTALS.md`)
 
