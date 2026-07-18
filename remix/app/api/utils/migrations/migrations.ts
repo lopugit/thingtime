@@ -12,13 +12,10 @@ import {
   ACL_OWNER,
   COLLECTION_SCHEMA_VERSIONS,
   LEGACY_SCHEMA_VERSION,
-  MAX_SCHEMA_FIELD_DESCRIPTION_CHARS,
-  MAX_SCHEMA_FIELD_NAME_CHARS,
-  SCHEMA_FIELD_NAME_PATTERN,
-  SCHEMA_FIELD_TYPES,
   aclFromVisibility,
+  projectBuiltinSchemaCrystal,
   thingtimeSchemas,
-  type ThingtimeSchemaField
+  validateThingtimeCrystal
 } from '~/schemas/registry';
 
 // Admin-run database schema-version migrations. Every collection stores the
@@ -801,32 +798,30 @@ const waitlistToThings = collectionToThingsMigration({
 
 // ---------------------------------------------------------------------------
 // Builtin-schema seeding: every builtin crystal schema in the code registry
-// becomes a system-owned, public schema THING so /search's community schema
-// browser lists them next to user-published ones. The code registry remains
-// the validation source of truth — these things are read-only discovery
-// mirrors, seeded through the migrations framework so drift surfaces as
-// pending work in the admin census.
+// becomes a system-owned, public schema THING. These are real schema things,
+// not search sugar: each crystal is projected onto the schema-thing grammar
+// (projectBuiltinSchemaCrystal — lives in the registry beside the grammar it
+// mirrors) and then passed through validateThingtimeCrystal(['schema']) — the
+// exact write gate user-published schemas clear in createThing — before it is
+// stored. A builtin that fails validation is a BUG reported loudly, never a
+// silent skip. The envelope stays migration-built (not createThing) because it
+// needs system-only powers the generic CRUD rightly refuses: ownerId 'system',
+// the reserved 'schema-' shareId prefix (sanitizeShareId blocks it against
+// squatters), uniqueKeys, and reconciling upserts. Re-runs self-heal drift —
+// a genuine seeded doc whose crystal no longer matches the validated registry
+// projection is refreshed in place — and pending() counts missing AND stale
+// docs, so drift genuinely surfaces in the admin census.
 
 const BUILTIN_SCHEMA_SHARE_PREFIX = 'schema-';
 
 const builtinCrystalSchemas = () => thingtimeSchemas.filter((schema) => schema.kind === 'crystal');
 const builtinSchemaShareIds = () => builtinCrystalSchemas().map((schema) => `${BUILTIN_SCHEMA_SHARE_PREFIX}${schema.id}`);
 
-// Map a registry field onto the schema-thing field grammar enforced by
-// sanitizeSchemaCrystal ({ name, type, description?, values? }): 'id' fields
-// are strings on the wire; object/record shapes and names outside the field
-// grammar (the data schema's '*' catch-all) don't fit and are skipped — an
-// explicitly lossy projection, since schema things are search sugar, never a
-// validation gate.
-const builtinSchemaField = (field: ThingtimeSchemaField): Record<string, any> | null => {
-  const type = field.type === 'id' ? 'string' : field.type;
-  if (!(SCHEMA_FIELD_TYPES as readonly string[]).includes(type)) return null;
-  if (field.name.length > MAX_SCHEMA_FIELD_NAME_CHARS || !SCHEMA_FIELD_NAME_PATTERN.test(field.name)) return null;
-  const out: Record<string, any> = { name: field.name, type };
-  if (field.description) out.description = field.description.slice(0, MAX_SCHEMA_FIELD_DESCRIPTION_CHARS);
-  if (type === 'enum' && Array.isArray(field.values) && field.values.length) out.values = [...field.values];
-  return out;
-};
+// Registry schema -> the validated schema-thing crystal the seed stores. One
+// call chains the shared projection + the shared write gate, so seeded
+// builtins and user publishes can never drift onto different grammars.
+const builtinSchemaCrystal = (schema: (typeof thingtimeSchemas)[number]) =>
+  validateThingtimeCrystal(['schema'], projectBuiltinSchemaCrystal(schema));
 
 const genuineSeededSchema = (twin: any): boolean =>
   !!twin && Array.isArray(twin.thingtime) && twin.thingtime.includes('schema') && twin.ownerId === 'system';
@@ -838,20 +833,40 @@ const seedBuiltinSchemas: Migration = {
   toVersion: THINGS_VERSION,
   title: 'Seed builtin crystal schemas as schema things',
   description:
-    'Every builtin crystal schema in the code registry (post, comment, reaction, share, data, ' +
-    'schema, user, theme, feed-algorithm, waitlist) is seeded as a system-owned public schema ' +
-    'thing — thingtime ["schema"], shareId schema-<id>, uniqueKeys ["schema:<id>"], acl ' +
-    '["tt:all"] — so the /search schema browser lists them. Fields are projected onto the ' +
-    'schema-thing field grammar (object/record shapes are skipped). The code registry stays the ' +
-    'validation source of truth. Idempotent: re-runs upsert by shareId and create nothing that ' +
-    'already exists; a foreign doc squatting a destination id is skipped and noted.',
+    'Every builtin crystal schema in the code registry (all 13 crystal kinds: post, comment, ' +
+    'reaction, share, data, schema, save, app, app-data, user, theme, feed-algorithm, waitlist) ' +
+    'is seeded as a system-owned public schema thing — thingtime ["schema"], shareId ' +
+    'schema-<id>, uniqueKeys ["schema:<id>"], acl ["tt:all"]. Each crystal is projected onto ' +
+    'the schema-thing field grammar and validated through validateThingtimeCrystal(["schema"]) ' +
+    '— the same gate user-published schemas pass — before writing; open record shapes and ' +
+    'reserved names are projected away, and a validation failure is reported as a bug. ' +
+    'Idempotent and self-healing: re-runs upsert by shareId, refresh genuine seeded docs whose ' +
+    'crystal drifted from the registry, and skip+note foreign docs squatting a destination id.',
   pending: async () => {
     const db = await getThingtimeDb();
-    const ids = builtinSchemaShareIds();
-    const seeded = await db
+    const schemas = builtinCrystalSchemas();
+    const docs = await db
       .collection('things')
-      .countDocuments({ shareId: { $in: ids }, thingtime: 'schema', ownerId: 'system' } as any);
-    return ids.length - seeded;
+      .find({ shareId: { $in: builtinSchemaShareIds() } } as any)
+      .project({ shareId: 1, thingtime: 1, ownerId: 1, crystal: 1 })
+      .toArray();
+    const byShareId = new Map(docs.map((doc: any) => [doc.shareId, doc]));
+    let count = 0;
+    for (const schema of schemas) {
+      const twin = byShareId.get(`${BUILTIN_SCHEMA_SHARE_PREFIX}${schema.id}`);
+      // missing or squatted → unfinished work either way
+      if (!genuineSeededSchema(twin)) {
+        count += 1;
+        continue;
+      }
+      const validated = builtinSchemaCrystal(schema);
+      // projection no longer validates (registry/grammar drift) or the stored
+      // crystal differs from the validated projection — both are pending work
+      if (validated.ok === false || JSON.stringify(twin.crystal ?? {}) !== JSON.stringify(validated.crystal)) {
+        count += 1;
+      }
+    }
+    return count;
   },
   run: async ({ dryRun }) => {
     await ensureIndexes();
@@ -861,32 +876,28 @@ const seedBuiltinSchemas: Migration = {
     const schemas = builtinCrystalSchemas();
     const matched = schemas.length;
 
-    if (dryRun) {
-      const seeded = await things.countDocuments({
-        shareId: { $in: builtinSchemaShareIds() },
-        thingtime: 'schema',
-        ownerId: 'system'
-      } as any);
-      notes.push(`${matched - seeded} builtin schema thing(s) would be created (${seeded} of ${matched} already seeded)`);
-      return { dryRun, matched, migrated: 0, created: 0, skipped: 0, notes: notes.list() };
-    }
-
     let created = 0;
+    let refreshed = 0;
     let skipped = 0;
     let alreadySeeded = 0;
 
     for (const schema of schemas) {
       const shareId = `${BUILTIN_SCHEMA_SHARE_PREFIX}${schema.id}`;
       try {
-        const fields = schema.fields
-          .map(builtinSchemaField)
-          .filter((field): field is Record<string, any> => field !== null);
+        const validated = builtinSchemaCrystal(schema);
+        if (validated.ok === false) {
+          // the registry projection broke the schema-thing grammar — a code
+          // bug to fix (builtinSchemaProjection.test.ts pins this), not data
+          notes.push(`schema ${schema.id}: projection failed validation (${validated.error}) — left unseeded, fix the registry`);
+          skipped += 1;
+          continue;
+        }
         const now = new Date();
         const thing = {
           shareId,
           schemaVersion: THINGS_VERSION,
-          thingtime: ['schema'],
-          crystal: { name: schema.title, description: schema.summary, fields },
+          thingtime: validated.thingtime,
+          crystal: validated.crystal,
           ownerId: 'system',
           acl: [ACL_ALL],
           targetId: null,
@@ -895,18 +906,37 @@ const seedBuiltinSchemas: Migration = {
           createdAt: now,
           updatedAt: now
         };
-        const res = await things.updateOne({ shareId } as any, { $setOnInsert: thing }, { upsert: true });
-        if (res.upsertedCount) {
+        if (!dryRun) {
+          const res = await things.updateOne({ shareId } as any, { $setOnInsert: thing }, { upsert: true });
+          if (res.upsertedCount) {
+            created += 1;
+            continue;
+          }
+        }
+        const twin = await things.findOne({ shareId } as any);
+        if (dryRun && !twin) {
           created += 1;
           continue;
         }
-        const twin = await things.findOne({ shareId } as any);
-        if (genuineSeededSchema(twin)) {
-          alreadySeeded += 1;
-        } else {
+        if (!genuineSeededSchema(twin)) {
           notes.push(`schema ${schema.id}: shareId ${shareId} held by a foreign doc — left unseeded`);
           skipped += 1;
+          continue;
         }
+        if (JSON.stringify(twin!.crystal ?? {}) !== JSON.stringify(validated.crystal)) {
+          if (!dryRun) {
+            // genuineness lives IN the filter — a foreign doc matches nothing,
+            // preserving the same anti-squat guarantee as the skip above
+            await things.updateOne(
+              { shareId, ownerId: 'system', thingtime: 'schema' } as any,
+              { $set: { crystal: validated.crystal, updatedAt: now } }
+            );
+          }
+          notes.push(`schema ${schema.id}: crystal ${dryRun ? 'would be ' : ''}refreshed from the registry`);
+          refreshed += 1;
+          continue;
+        }
+        alreadySeeded += 1;
       } catch (err: any) {
         if (err?.code === 11000) notes.push(`schema ${schema.id}: unique key held by a foreign doc — left unseeded`);
         else notes.push(`schema ${schema.id}: error: ${safeErrorText(err, 'migrations seedBuiltinSchemas')} — left unseeded`);
@@ -914,9 +944,17 @@ const seedBuiltinSchemas: Migration = {
       }
     }
 
-    if (created) notes.push(`${created} builtin schema thing(s) seeded`);
-    if (alreadySeeded) notes.push(`${alreadySeeded} builtin schema thing(s) already seeded`);
-    return { dryRun, matched, migrated: created, created, skipped: skipped + alreadySeeded, notes: notes.list() };
+    if (created) notes.push(`${created} builtin schema thing(s) ${dryRun ? 'would be ' : ''}seeded`);
+    if (refreshed) notes.push(`${refreshed} builtin schema thing(s) ${dryRun ? 'would be ' : ''}refreshed`);
+    if (alreadySeeded) notes.push(`${alreadySeeded} builtin schema thing(s) already seeded and current`);
+    return {
+      dryRun,
+      matched,
+      migrated: dryRun ? 0 : created + refreshed,
+      created: dryRun ? 0 : created,
+      skipped: skipped + alreadySeeded,
+      notes: notes.list()
+    };
   }
 };
 

@@ -51,19 +51,27 @@ const getPath = (value: Record<string, unknown>, path: string[]): unknown => {
   return current;
 };
 
+// Clearing a leaf (next === undefined) DELETES the key and collapses now-empty
+// parent objects, so an optional object like post.listing returns to "missing"
+// when its inputs are cleared — a lingering { price: undefined } would otherwise
+// trap publish behind the object's required children (checkSchemaValue only
+// treats absent/null/'' as missing).
 const setPath = (value: Record<string, unknown>, path: string[], next: unknown): Record<string, unknown> => {
   if (!path.length) return value;
   const [head, ...rest] = path;
-  const child =
-    rest.length === 0
-      ? next
-      : setPath(
-          (value[head] && typeof value[head] === 'object' && !Array.isArray(value[head])
-            ? (value[head] as Record<string, unknown>)
-            : {}) as Record<string, unknown>,
-          rest,
-          next
-        );
+  let child = next;
+  if (rest.length) {
+    const branch =
+      value[head] && typeof value[head] === 'object' && !Array.isArray(value[head])
+        ? (value[head] as Record<string, unknown>)
+        : {};
+    const updated = setPath(branch, rest, next);
+    child = Object.keys(updated).length ? updated : undefined;
+  }
+  if (child === undefined) {
+    const { [head]: _removed, ...remaining } = value;
+    return remaining;
+  }
   return { ...value, [head]: child };
 };
 
@@ -161,6 +169,12 @@ const FieldRow = ({ field, value, onChange, base }: FieldRowProps) => {
   const current = getPath(value, path);
 
   if (field.type === 'object') {
+    // once any child holds a value the object is "provided" and its required
+    // children validate — mirror the escape hatch: clear drops the subtree so
+    // an optional object (post.listing) can return to missing without
+    // reopening the modal (a toggled-off Switch still stores false)
+    const hasValue =
+      !!current && typeof current === 'object' && !Array.isArray(current) && Object.keys(current).length > 0;
     return (
       <Flex
         border="1px solid var(--tt-border, #ececef)"
@@ -169,10 +183,27 @@ const FieldRow = ({ field, value, onChange, base }: FieldRowProps) => {
         gap={2}
         padding={2.5}
       >
-        <Text color="var(--tt-ink, #16161a)" fontSize="13px" fontWeight={600}>
-          {field.name}
-          {field.required ? ' *' : ''}
-        </Text>
+        <Flex align="center" justify="space-between">
+          <Text color="var(--tt-ink, #16161a)" fontSize="13px" fontWeight={600}>
+            {field.name}
+            {field.required ? ' *' : ''}
+          </Text>
+          {hasValue && !field.required ? (
+            <Button
+              color="var(--tt-muted, #9a9aa6)"
+              fontSize="12px"
+              fontWeight={500}
+              height="auto"
+              minWidth="0"
+              onClick={() => onChange(path, undefined)}
+              padding="2px 6px"
+              size="xs"
+              variant="ghost"
+            >
+              clear
+            </Button>
+          ) : null}
+        </Flex>
         {(field.children || []).map((child) => (
           <FieldRow base={path} field={child} key={child.name} onChange={onChange} value={value} />
         ))}
