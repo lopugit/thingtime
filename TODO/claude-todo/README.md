@@ -24,6 +24,7 @@ future Claude sessions (use alongside `graphify-out/` for codebase orientation).
 | 12 | Multi-emoji reactions + custom emoji picker + optimistic UI (native keyboard, typed multi-emoji tokens, paginated recents, no loading flashes) | 🟢 Built, live-tested locally | [12-reactions-and-optimistic-ui.md](./12-reactions-and-optimistic-ui.md) |
 | 13 | Admin role + admin-configurable rate limits (env-allowlist + `meta.admin`, promote/demote UI, global rate-limit config, react/comment throttling) | 🟢 Built, live-tested locally | [13-admin-and-rate-limits.md](./13-admin-and-rate-limits.md) |
 | 14 | Editor.js block drag/drop reordering (desktop pointer, mobile long-press, keyboard alternative, autosave/undo-safe) | 🔴 Not started | [14-editorjs-block-drag-drop.md](./14-editorjs-block-drag-drop.md) |
+| 15 | Custom schema presentation via declarative vocabulary (data describes; versioned code interprets — never hydrate functions from documents) | 📐 Standing principle | [15-declarative-schema-presentation-vocabulary.md](./15-declarative-schema-presentation-vocabulary.md) |
 
 ## Conventions (see `FUNDAMENTALS.md`)
 
