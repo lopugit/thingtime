@@ -24,6 +24,7 @@ import { conceptEntries } from './concepts/entries';
 
 const referenceLinks = [
   { label: 'API reference', to: '/docs/api', detail: `${apiEndpointDocs.length} endpoints with JSON -docs routes` },
+  { label: 'Login with Thingtime', to: '/docs/embed', detail: 'Embed SDK, permission scopes, SSO userinfo' },
   { label: 'Thingtime Schemas', to: '/docs/schemas', detail: `${thingtimeSchemas.length} schemas across root, crystal, and collection kinds` },
   { label: 'Design mockups', to: '/docs/design', detail: `${designEntries.length} standalone bundles` },
   { label: 'Design system', to: '/docs/design-system', detail: `${designSystemEntries.length} component ${designSystemEntries.length === 1 ? 'entry' : 'entries'}` },

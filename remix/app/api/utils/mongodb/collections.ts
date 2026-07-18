@@ -221,6 +221,24 @@ export const ensureIndexes = async () => {
           { commentId: 1 },
           { unique: true, partialFilterExpression: { kind: 'comment' } }
         ),
+        // Embed apps ("Login with Thingtime", api/utils/apps): one thing per
+        // clientId, ever — a second doc claiming an existing clientId (however
+        // created) could answer origin lookups with a different allowlist, so
+        // uniqueness is structural. Only app things carry crystal.clientId;
+        // app-data things reference the app as crystal.appId instead.
+        db.collection('things').createIndex(
+          { 'crystal.clientId': 1 },
+          { unique: true, partialFilterExpression: { 'crystal.clientId': { $exists: true } } }
+        ),
+        // App data: one thing per (user, app, key) — set() stays an idempotent
+        // insert-or-update under races, and the index serves list-by-(user, app).
+        db.collection('things').createIndex(
+          { ownerId: 1, 'crystal.appId': 1, 'crystal.key': 1 },
+          {
+            unique: true,
+            partialFilterExpression: { 'crystal.appId': { $exists: true }, 'crystal.key': { $exists: true } }
+          }
+        ),
         db.collection('feedAlgorithms').createIndex({ shareId: 1 }, { unique: true }),
         db.collection('feedAlgorithms').createIndex({ ownerId: 1 }),
         // global app settings singletons (rate-limit config lives here)

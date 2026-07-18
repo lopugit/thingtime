@@ -1748,6 +1748,414 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'apps',
+    group: 'embed',
+    title: 'Embed apps',
+    endpoint: '/api/v1/apps',
+    summary: 'Register and list the apps that can embed "Login with Thingtime" on other websites.',
+    detail:
+      'An app is what an external website registers before it can show a "Login with Thingtime" button ' +
+      '(via the embed SDK at /sdk/thingtime-login.js). POST { name, origins } registers one: the server ' +
+      'mints the clientId (ttapp_<uuid>) and validates origins — bare https origins like ' +
+      'https://example.com, with http allowed only for localhost dev. Only those exact origins can open ' +
+      'the authorize popup and receive tokens. GET lists your registered apps.',
+    auth: { mode: 'session-or-bearer', description: 'Your own Thingtime session (cookie or full-account Bearer). App-scoped tokens are rejected.' },
+    methods: ['GET', 'POST'],
+    steps: [
+      'POST { name, origins } to register an app and receive its clientId.',
+      'Drop the SDK + clientId into the external site (see /sdk/thingtime-login.js).',
+      'GET to list your apps; update or delete them via /api/v1/apps/update and /api/v1/apps/delete.'
+    ],
+    requestExamples: [
+      { name: 'List apps', description: 'Your registered apps.', method: 'GET' },
+      {
+        name: 'Register an app',
+        description: 'Create an app locked to one origin.',
+        method: 'POST',
+        body: { name: 'Rainbow Notes', origins: ['https://rainbownotes.example'] }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'App registered.',
+        body: {
+          ok: true,
+          app: { clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', name: 'Rainbow Notes', origins: ['https://rainbownotes.example'] }
+        }
+      },
+      { status: 400, description: 'Bad origin.', body: { ok: false, error: 'Origins must be bare https origins like https://example.com (http is allowed for localhost only)' } }
+    ],
+    notes: ['Apps are things (thingtime ["app"]) owned by you; the clientId is public, but tokens only ever reach allowlisted origins.']
+  }),
+  endpoint({
+    id: 'apps-update',
+    group: 'embed',
+    title: 'Update an embed app',
+    endpoint: '/api/v1/apps/update',
+    summary: 'Rename one of your embed apps or change its origin allowlist.',
+    detail:
+      'POST { clientId, name?, origins? }. Origins are re-validated like registration. Removing an origin ' +
+      'takes effect on the next request from any token bound to it — the app-token resolver re-checks the ' +
+      'allowlist every time.',
+    auth: { mode: 'session-or-bearer', description: 'Your own Thingtime session (cookie or full-account Bearer); you can only update apps you own.' },
+    methods: ['POST'],
+    steps: [
+      'POST the clientId plus the fields to change.',
+      'Tokens bound to removed origins stop working immediately.'
+    ],
+    requestExamples: [
+      {
+        name: 'Change origins',
+        description: 'Swap the allowlist to a new domain.',
+        method: 'POST',
+        body: { clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', origins: ['https://new.example'] }
+      }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Updated.', body: { ok: true, app: { clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', name: 'Rainbow Notes', origins: ['https://new.example'] } } },
+      { status: 404, description: 'Not yours / unknown.', body: { ok: false, error: 'App not found' } }
+    ]
+  }),
+  endpoint({
+    id: 'apps-delete',
+    group: 'embed',
+    title: 'Delete an embed app',
+    endpoint: '/api/v1/apps/delete',
+    summary: 'Delete one of your embed apps and revoke every token it ever minted.',
+    detail:
+      'POST { clientId }. Every app-scoped session for the app is revoked, so tokens held by embedding ' +
+      'sites die immediately. End users KEEP their app-data things — that data belongs to them, not the ' +
+      'app developer.',
+    auth: { mode: 'session-or-bearer', description: 'Your own Thingtime session (cookie or full-account Bearer); you can only delete apps you own.' },
+    methods: ['POST'],
+    steps: ['POST the clientId.', 'All app tokens are revoked; user data stays with its users.'],
+    requestExamples: [
+      { name: 'Delete', description: 'Remove the app.', method: 'POST', body: { clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f' } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Deleted.', body: { ok: true } },
+      { status: 404, description: 'Not yours / unknown.', body: { ok: false, error: 'App not found' } }
+    ]
+  }),
+  endpoint({
+    id: 'apps-public',
+    group: 'embed',
+    title: 'Public app lookup',
+    endpoint: '/api/v1/apps/public',
+    summary: 'Anonymous lookup the authorize popup uses to validate a clientId + origin pair.',
+    detail:
+      'GET ?clientId=…&origin=…&scope=…&optional_scope=…. Returns the app\'s public face (clientId + ' +
+      'name) plus the REQUIRED (`scope`) and OPTIONAL (`optional_scope`) permission sets as descriptor ' +
+      'entries ({ id, title, description, kind, baseline }) for the consent screen\'s permissions ' +
+      'selector — only when the app exists AND the origin is on its allowlist, so the popup can refuse ' +
+      'unregistered embedders before any login UI renders. Scope paths are hierarchical dot paths from ' +
+      '/api/v1/oauth/scopes (unknown names 400; empty scope → profile + app-data). 404 for unknown ' +
+      'apps, 403 for origins not on the allowlist.',
+    auth: { mode: 'none', description: 'Anonymous — returns only the app name + scope descriptors.' },
+    methods: ['GET'],
+    steps: ['GET with clientId, the embedding page origin, and the requested scope set.', 'Render the consent screen from the returned name + scope descriptors.'],
+    requestExamples: [
+      {
+        name: 'Lookup',
+        description: 'Validate a clientId for an origin: require app-data, offer email + avatar.',
+        method: 'GET',
+        query: {
+          clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f',
+          origin: 'https://rainbownotes.example',
+          scope: 'profile.username app-data',
+          optional_scope: 'email profile.avatar'
+        }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Allowed.',
+        body: {
+          ok: true,
+          app: { clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', name: 'Rainbow Notes' },
+          origin: 'https://rainbownotes.example',
+          requiredScopes: [
+            { id: 'profile.username', title: 'Username', description: 'Your @username — the login identity itself.', kind: 'field', baseline: true },
+            { id: 'app-data', title: 'App storage', description: 'Store its own data for you in your Thingtime account — only its own, nothing else.', kind: 'capability' }
+          ],
+          optionalScopes: [
+            { id: 'email', title: 'Email address', description: 'The email address on your Thingtime account.', kind: 'field' },
+            { id: 'profile.avatar', title: 'Avatar', description: 'Your profile picture.', kind: 'field' }
+          ]
+        }
+      },
+      { status: 403, description: 'Origin not allowlisted.', body: { ok: false, error: 'This origin is not on the app’s allowlist' } }
+    ]
+  }),
+  endpoint({
+    id: 'oauth-authorize',
+    group: 'embed',
+    title: 'Authorize (mint app token)',
+    endpoint: '/api/v1/oauth/authorize',
+    summary: 'The consent step of the "Login with Thingtime" popup — mints an app-scoped Bearer token.',
+    detail:
+      'POST { clientId, origin, scope?, optionalScope?, extra?, scopes?, sharedThings? } with the ' +
+      'user\'s real session cookie (the popup runs on the Thingtime origin). `scope` is the REQUIRED ' +
+      'floor the platform declared (the grant must cover all of it — the user\'s alternative is ' +
+      'Cancel); `optionalScope` its nice-to-haves; `scopes` the paths the user approved, which may — ' +
+      'unless extra=\'0\' — include ANY known scope the user volunteered beyond the request ("auto" ' +
+      'sharing). `sharedThings` carries the shareIds hand-picked for the things scope (each must be ' +
+      'owned by the user, max 100). Mints a revocable app-scoped session (purpose "app", 30 days, ' +
+      'meta { scopes, sharedThings }) and returns its Bearer token, the granted scopes, and a user ' +
+      'object shaped by the grant (id + username always; displayName/avatarUrl only when granted). ' +
+      'App tokens are rejected by every normal endpoint: they only work on /api/v1/app-data*, ' +
+      '/api/v1/oauth/userinfo, and /api/v1/oauth/shared, so a leaked token can\'t touch the rest of ' +
+      'the account or mint further tokens.',
+    auth: { mode: 'session', description: 'The end user\'s Thingtime session cookie (popup is same-origin).' },
+    methods: ['POST'],
+    steps: [
+      'The SDK opens /authorize?client_id=…&origin=…&state=…&scope=… in a popup.',
+      'The popup validates via /api/v1/apps/public, has the user log in if needed, and shows the consent + permissions selector.',
+      'On approve it POSTs here with the user\'s selection, then hands the token to the opener via postMessage (targetOrigin = the validated origin).'
+    ],
+    requestExamples: [
+      {
+        name: 'Authorize',
+        description: 'Grant the required floor + email, declining the avatar the app offered.',
+        method: 'POST',
+        body: {
+          clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f',
+          origin: 'https://rainbownotes.example',
+          scope: 'profile.username app-data',
+          optionalScope: 'email profile.avatar',
+          scopes: ['profile.username', 'app-data', 'email']
+        }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Token minted (the grant covers the required floor; avatar declined).',
+        body: {
+          ok: true,
+          token: '<app-scoped-jwt>',
+          tokenType: 'Bearer',
+          expiresAt: '2026-08-11T00:00:00.000Z',
+          scopes: ['profile.username', 'app-data', 'email'],
+          sharedThings: 0,
+          user: { id: '664f1c2a9d3e5b0012345678', username: 'lopu' }
+        }
+      },
+      { status: 400, description: 'Grant missed a required scope.', body: { ok: false, error: 'The app requires the app-data permission — cancel instead if you’d rather not share it' } },
+      { status: 403, description: 'Origin not allowlisted.', body: { ok: false, error: 'This origin is not on the app’s allowlist' } }
+    ],
+    notes: ['Revocable from both sides: the developer deletes the app (/api/v1/apps/delete), or the user disconnects it (/api/v1/oauth/grants/revoke) — the token dies before its exp like every Thingtime JWT.']
+  }),
+  endpoint({
+    id: 'oauth-scopes',
+    group: 'embed',
+    title: 'Scope catalog',
+    endpoint: '/api/v1/oauth/scopes',
+    summary: 'The public catalog of permission-scope paths platforms can request.',
+    detail:
+      'Anonymous. Scopes are hierarchical dot paths — granting an ancestor (profile) covers every ' +
+      'descendant (profile.avatar); profile.username is the always-granted baseline identity. Each ' +
+      'entry carries the consent-screen wording ({ id, title, description, kind, baseline }); kinds: ' +
+      'namespace, field, capability, picker. The authorize popup renders its permissions selector and ' +
+      '"share more" section from this catalog, so new scopes added here appear everywhere at once.',
+    auth: { mode: 'none', description: 'Anonymous — documentation data.' },
+    methods: ['GET'],
+    steps: ['GET the catalog.', 'Request paths via the SDK scopes/optionalScopes options.'],
+    requestExamples: [{ name: 'Catalog', description: 'Every scope path.', method: 'GET' }],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'The catalog (abridged).',
+        body: {
+          ok: true,
+          scopes: [
+            { id: 'profile.username', title: 'Username', description: 'Your @username — the login identity itself.', kind: 'field', baseline: true },
+            { id: 'profile.avatar', title: 'Avatar', description: 'Your profile picture.', kind: 'field' },
+            { id: 'things', title: 'Things you choose', description: 'Read-only access to specific things you hand-pick…', kind: 'picker' }
+          ],
+          defaults: ['profile', 'app-data']
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'oauth-shared',
+    group: 'embed',
+    title: 'Shared things (picker grant)',
+    endpoint: '/api/v1/oauth/shared',
+    summary: 'Read the things the user hand-picked to share with your app.',
+    detail:
+      'GET with the app-scoped Bearer token; requires the things scope. Returns exactly the set the ' +
+      'user ticked on the consent screen — read-only, ownership re-checked at read time (things the ' +
+      'user has since deleted drop out), projected to content fields only ({ shareId, thingtime, ' +
+      'crystal, tags, createdAt, updatedAt }) — never acl/owner internals or the extended sidecar. ' +
+      'Same CORS + origin binding as /api/v1/app-data.',
+    auth: { mode: 'bearer', description: 'App-scoped Bearer token with the things scope.' },
+    methods: ['GET'],
+    steps: ['Request the things scope (SDK scopes/optionalScopes).', 'The user picks items on the consent screen.', 'GET here to read exactly those.'],
+    requestExamples: [{ name: 'Read', description: 'The shared set.', method: 'GET' }],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'The user shared one thing.',
+        body: {
+          ok: true,
+          things: [
+            { shareId: '4f6b2c1e-…', thingtime: ['post'], crystal: { type: 'text', text: 'Sunset over the bay 🌅' }, tags: [], createdAt: '2026-07-10T00:00:00.000Z', updatedAt: '2026-07-10T00:00:00.000Z' }
+          ]
+        }
+      },
+      { status: 403, description: 'Token lacks the things scope.', body: { ok: false, error: 'This token was not granted the things scope' } }
+    ]
+  }),
+  endpoint({
+    id: 'oauth-grants',
+    group: 'embed',
+    title: 'Connected apps (grants)',
+    endpoint: '/api/v1/oauth/grants',
+    summary: 'List the apps connected to YOUR account via "Login with Thingtime".',
+    detail:
+      'GET with your own session. One entry per connected app, aggregated over your live app sessions: ' +
+      'the app name (null if it was since deleted), the union of scopes you granted, how many live ' +
+      'sessions it holds, first/last grant times, and the latest expiry. Disconnect one with ' +
+      '/api/v1/oauth/grants/revoke.',
+    auth: { mode: 'session-or-bearer', description: 'Your own Thingtime session. App-scoped tokens are rejected.' },
+    methods: ['GET'],
+    steps: ['GET to see every app connected to your account.', 'POST the clientId to /api/v1/oauth/grants/revoke to disconnect one.'],
+    requestExamples: [{ name: 'List', description: 'Apps connected to your account.', method: 'GET' }],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Connected apps.',
+        body: {
+          ok: true,
+          grants: [
+            {
+              clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f',
+              appName: 'Rainbow Notes',
+              scopes: ['profile', 'app-data'],
+              sessions: 1,
+              firstGrantedAt: '2026-07-12T00:00:00.000Z',
+              lastGrantedAt: '2026-07-12T00:00:00.000Z',
+              expiresAt: '2026-08-11T00:00:00.000Z'
+            }
+          ]
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'oauth-grants-revoke',
+    group: 'embed',
+    title: 'Disconnect an app',
+    endpoint: '/api/v1/oauth/grants/revoke',
+    summary: 'Revoke every app session YOU granted to one app — its tokens stop working immediately.',
+    detail:
+      'POST { clientId } with your own session. Revokes all of your live app-scoped sessions for that ' +
+      'clientId (other users are unaffected); the app-token resolver checks session liveness on every ' +
+      'request, so any token the app still holds for you dies instantly. This is the end-user ' +
+      'counterpart to the developer-side /api/v1/apps/delete.',
+    auth: { mode: 'session-or-bearer', description: 'Your own Thingtime session. App-scoped tokens are rejected.' },
+    methods: ['POST'],
+    steps: ['Find the clientId via /api/v1/oauth/grants.', 'POST it here; revoked reports how many sessions died.'],
+    requestExamples: [
+      { name: 'Disconnect', description: 'Cut an app off from your account.', method: 'POST', body: { clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f' } }
+    ],
+    responseExamples: [{ status: 200, description: 'Revoked.', body: { ok: true, revoked: 1 } }]
+  }),
+  endpoint({
+    id: 'oauth-userinfo',
+    group: 'embed',
+    title: 'Userinfo (SSO identity)',
+    endpoint: '/api/v1/oauth/userinfo',
+    summary: 'Resolve the user an app-scoped token was granted for — the SSO identity endpoint.',
+    detail:
+      'GET with the app-scoped Bearer token. Returns the granted scopes plus a user object shaped ' +
+      'field-by-field by the grant: id, username, and a profileUrl Thingtime link always ' +
+      '(profile.username baseline); displayName, avatarUrl, bio, bannerUrl each under their ' +
+      'profile.<field> path (a granted profile namespace covers them all); email under the email ' +
+      'scope; sharedThings reports the picker count. Platforms call this to sync the account on ' +
+      'their side and light up features for whatever the user shared. Same CORS + origin binding as ' +
+      '/api/v1/app-data.',
+    auth: { mode: 'bearer', description: 'App-scoped Bearer token only.' },
+    methods: ['GET'],
+    steps: ['GET with the token from Thingtime.login(…).', 'Read user + scopes; email appears only under the email scope.'],
+    requestExamples: [{ name: 'Lookup', description: 'Who is this token?', method: 'GET' }],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Identity — avatar + email granted, bio/banner/displayName were not.',
+        body: {
+          ok: true,
+          scopes: ['profile.username', 'app-data', 'profile.avatar', 'email'],
+          sharedThings: 0,
+          user: {
+            id: '664f1c2a9d3e5b0012345678',
+            username: 'lopu',
+            profileUrl: 'https://thingtime.com/profile/lopu',
+            avatarUrl: null,
+            email: 'lopu@example.com'
+          }
+        }
+      },
+      { status: 401, description: 'Missing/expired/revoked token.', body: { ok: false, error: 'Unauthorized' } }
+    ]
+  }),
+  endpoint({
+    id: 'app-data',
+    group: 'embed',
+    title: 'App data (read/write)',
+    endpoint: '/api/v1/app-data',
+    summary: 'Key/value storage an embedded app keeps in its user\'s Thingtime account.',
+    detail:
+      'Authenticated by an app-scoped Bearer token from /api/v1/oauth/authorize. GET ?key=… returns one ' +
+      'entry ({ entry: null } when unset); GET without key lists every entry for this (user, app). ' +
+      'POST { key, value } inserts or updates one entry — keys are [A-Za-z0-9._:-] up to 128 chars ' +
+      '(first char must be a letter or digit), values ' +
+      'any JSON up to 32KB, at most 200 keys per user per app. Entries are things owned by the END USER ' +
+      '(acl ["tt:user"]), so users can always see and delete what an app stored. CORS: browser calls must ' +
+      'come from the token\'s own bound origin. Requires the app-data scope — 403 when the user declined ' +
+      'it on the consent screen.',
+    auth: { mode: 'bearer', description: 'App-scoped Bearer token with the app-data scope — cookies never authenticate this route.' },
+    methods: ['GET', 'POST'],
+    steps: [
+      'Take the token from Thingtime.login(…) in the SDK.',
+      'GET to read (with ?key for one entry), POST { key, value } to write.',
+      'Values round-trip as JSON; delete keys via /api/v1/app-data/delete.'
+    ],
+    requestExamples: [
+      { name: 'Read one', description: 'One key.', method: 'GET', query: { key: 'preferences' } },
+      { name: 'List all', description: 'Everything this app stored for this user.', method: 'GET' },
+      { name: 'Write', description: 'Upsert a key.', method: 'POST', body: { key: 'preferences', value: { theme: 'rainbow' } } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Entry written.', body: { ok: true, entry: { key: 'preferences', value: { theme: 'rainbow' }, updatedAt: '2026-07-12T00:00:00.000Z' } } },
+      { status: 401, description: 'Missing/expired/revoked token.', body: { ok: false, error: 'Unauthorized' } },
+      { status: 403, description: 'Browser origin ≠ token origin.', body: { ok: false, error: 'Origin does not match this token' } }
+    ]
+  }),
+  endpoint({
+    id: 'app-data-delete',
+    group: 'embed',
+    title: 'App data (delete)',
+    endpoint: '/api/v1/app-data/delete',
+    summary: 'Delete one key/value entry the app stored for this user.',
+    detail:
+      'POST { key } with the app-scoped Bearer token. Returns deleted: false when the key was already ' +
+      'absent. Same CORS + origin binding as /api/v1/app-data.',
+    auth: { mode: 'bearer', description: 'App-scoped Bearer token only.' },
+    methods: ['POST'],
+    steps: ['POST the key to remove.'],
+    requestExamples: [
+      { name: 'Delete', description: 'Remove a key.', method: 'POST', body: { key: 'preferences' } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Removed (or already absent).', body: { ok: true, deleted: true } }
+    ]
+  }),
+  endpoint({
     id: 'things',
     group: 'things',
     title: 'Things (full CRUD)',

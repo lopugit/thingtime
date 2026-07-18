@@ -186,6 +186,15 @@ export const MAX_IMAGES = 8;
 export const MAX_IMAGE_URL_CHARS = 2048;
 export const MAX_COMMENT_CHARS = 1000;
 
+// Embeddable "Login with Thingtime" apps (see api/utils/apps): registered by a
+// developer user, identified by clientId, locked to an origin allowlist.
+export const MAX_APP_NAME_CHARS = 80;
+export const MAX_APP_ORIGINS = 20;
+export const MAX_APPS_PER_USER = 20;
+export const MAX_APP_DATA_KEY_CHARS = 128;
+export const MAX_APP_DATA_VALUE_BYTES = 32 * 1024;
+export const MAX_APP_DATA_KEYS_PER_APP_USER = 200;
+
 // Extended (the schema-free sidecar every thing carries) — see sanitizeExtended
 // below for the full story.
 export const EXTENDED_MAX_BYTES = 512 * 1024;
@@ -691,6 +700,48 @@ const rateLimitSchema: ThingtimeSchema = {
   example: { key: 'waitlist:9f2c…', count: 3, schemaVersion: 2 }
 };
 
+const appSchema: ThingtimeSchema = {
+  id: 'app',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'App',
+  summary: 'A registered third-party app that can embed "Login with Thingtime".',
+  detail:
+    'Created only through /api/v1/apps (no generic-route sanitizer on purpose — the server mints ' +
+    'the clientId and validates the origin allowlist, so neither can be forged through /api/v1/things). ' +
+    'The clientId identifies the app to the embed SDK; origins is the exact list of web origins ' +
+    'allowed to open the authorize popup and receive tokens. Deleting the app revokes every ' +
+    'app-scoped session minted for it.',
+  fields: [
+    { name: 'clientId', type: 'id', required: true, description: 'Server-minted public app id (ttapp_<uuid>) used by the embed SDK.' },
+    { name: 'name', type: 'string', required: true, max: MAX_APP_NAME_CHARS, description: `App name shown on the consent screen, max ${MAX_APP_NAME_CHARS} chars.` },
+    { name: 'origins', type: 'string[]', required: true, max: MAX_APP_ORIGINS, description: `Allowed web origins (https, or http for localhost dev), max ${MAX_APP_ORIGINS}.` }
+  ],
+  example: { clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', name: 'Rainbow Notes', origins: ['https://rainbownotes.example'] }
+};
+
+const appDataSchema: ThingtimeSchema = {
+  id: 'app-data',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'App data',
+  summary: 'A key/value entry a third-party app stores in a user\'s Thingtime account.',
+  detail:
+    'Written only through /api/v1/app-data with an app-scoped Bearer token (no generic-route ' +
+    'sanitizer on purpose), one thing per (user, app, key) — relational, atomic, and bounded per ' +
+    `FUNDAMENTALS.md §3: values cap at ${MAX_APP_DATA_VALUE_BYTES / 1024}KB of JSON and each app can hold ` +
+    `${MAX_APP_DATA_KEYS_PER_APP_USER} keys per user. Owned by the END USER (acl ["tt:user"]), not the app ` +
+    'developer, so users can see and delete what an app has stored for them.',
+  fields: [
+    { name: 'appId', type: 'id', required: true, description: 'The clientId of the app this entry belongs to.' },
+    { name: 'key', type: 'string', required: true, max: MAX_APP_DATA_KEY_CHARS, description: `Entry key ([A-Za-z0-9._:-], first char alphanumeric, max ${MAX_APP_DATA_KEY_CHARS} chars).` },
+    { name: 'value', type: 'object', required: true, description: `Arbitrary JSON value, max ${MAX_APP_DATA_VALUE_BYTES / 1024}KB serialized.` }
+  ],
+  example: { appId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', key: 'preferences', value: { theme: 'rainbow' } }
+};
+
 // ---------------------------------------------------------------------------
 // System kinds — the satellite collections collapsing into things (see
 // claude-todo/12-everything-is-a-thing-collections.md). These kinds are
@@ -808,6 +859,8 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   dataSchema,
   schemaThingSchema,
   saveThingSchema,
+  appSchema,
+  appDataSchema,
   // system kinds (collections collapsing into things — dual-era)
   userThingSchema,
   themeThingSchema,
@@ -1589,7 +1642,12 @@ export const validateThingtimeCrystal = (thingtime: unknown, crystal: unknown): 
     const schema = getThingtimeSchema(id)!;
     if (schema.requiresTarget) requiresTarget = true;
     const sanitizer = crystalSanitizers[id];
-    if (!sanitizer) return fail(400, `Unknown thingtime schema: ${id}`);
+    if (!sanitizer) {
+      // Registered crystal kinds with no generic sanitizer (app, app-data) are
+      // written ONLY by their dedicated endpoints. /docs/schemas lists them, so
+      // refuse with the real reason instead of pretending they don't exist.
+      return fail(403, `${id} things are managed by their own endpoints`);
+    }
     const sanitized = sanitizer(input, ids);
     if (sanitized.ok === false) return sanitized;
     Object.assign(merged, sanitized.crystal);

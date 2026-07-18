@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { ensureIndexes, getThingtimeDb } from '../mongodb/collections';
+import { safeErrorText } from '../errors/safeError';
 import { reactionShareId } from '../things/things';
 import { buildUserSecure, toBin, userEmailKey, userUsernameKey } from '../auth/users';
 import { waitlistEmailKey } from '../waitlist/waitlist';
@@ -908,7 +909,7 @@ const seedBuiltinSchemas: Migration = {
         }
       } catch (err: any) {
         if (err?.code === 11000) notes.push(`schema ${schema.id}: unique key held by a foreign doc — left unseeded`);
-        else notes.push(`schema ${schema.id}: error: ${err?.message || String(err)} — left unseeded`);
+        else notes.push(`schema ${schema.id}: error: ${safeErrorText(err, 'migrations seedBuiltinSchemas')} — left unseeded`);
         skipped += 1;
       }
     }
