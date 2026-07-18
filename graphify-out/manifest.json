@@ -3730,8 +3730,8 @@
     "semantic_hash": ""
   },
   "remix/app/components/Schemas/SchemasPage.tsx": {
-    "mtime": 1784376652.473615,
-    "ast_hash": "72e91086c69231104e113c9b1630cf88",
+    "mtime": 1784380221.7366936,
+    "ast_hash": "307fb6355c9686bcf3e60d58af194b24",
     "semantic_hash": ""
   },
   "remix/app/routes/api/v1/admin/migrations/_migrations.tsx": {
