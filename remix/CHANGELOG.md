@@ -17,6 +17,25 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Performance
+
+- **Collection→things migration batches each phase per page (PR #69 review, c16)**:
+  `collectionToThingsMigration.run` processed legacy docs one-by-one with 3-4
+  sequential Mongo round trips each (upsert claim, twin re-read, fresh legacy
+  read, optional replace, delete) plus a growing `$nin` page filter — migrating
+  ~50k accounts cost ~150-200k serial round trips inside a single admin request
+  (timeout territory). Each ~200-doc page now runs as batched ops: one unordered
+  `bulkWrite` of `$setOnInsert` upserts (deterministic-shareId specs) classified
+  via `upsertedIds`, one `shareId` `$in` re-read for the genuine check, a batched
+  `findExistingMany` lookup for the uuid-shareId waitlist path, one legacy `_id`
+  `$in` fresh read, and batched relocate/guarded-delete `bulkWrite`s — O(pages)
+  round trips instead of O(docs). Every guard is preserved verbatim: the
+  updatedAt data-loss guard still leaves a raced legacy doc for the next run, and
+  collisions / foreign-held ids / malformed docs still fall back to per-doc skip.
+  Validated with a dry-run + real run against seeded legacy users (3 pages), the
+  race-guard rebuild path, foreign-collision skip, waitlist dedup, and idempotent
+  re-runs — Claude (AI), 2026-07-18.
+
 ### Fixed
 
 - **Per-feature promotion survives rewritten historical merge commits and
