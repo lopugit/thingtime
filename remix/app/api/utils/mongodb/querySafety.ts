@@ -558,16 +558,36 @@ export const hardenThingsQuery = (query: NormalizedMongoQuery): NormalizedMongoQ
     // But $text is only legal as the FIRST pipeline stage — prepending the strip
     // ahead of a `{ $match: { $text } }` makes MongoDB reject the whole query
     // ($text is an advertised things capability, and this PR adds the wildcard
-    // text index behind it). When the pipeline opens with a $text $match — already
-    // validated at normalize time to reference no protected field — hoist it ahead
-    // of the strip; the strip follows immediately, so protected fields are still
-    // removed from every output doc and never reach a later stage.
+    // text index behind it). When the pipeline opens with a $text $match we hoist
+    // it ahead of the strip; the strip follows immediately, so protected fields
+    // are still removed from every output doc and never reach a LATER stage.
+    //
+    // Security: a hoisted $match runs on RAW documents (before the strip), exactly
+    // like a find-filter — so it must obey the same probe rules the find path uses
+    // (COMPUTE_PROBE_PREDICATES), NOT the looser pipeline scan (NO_PROBE_PREDICATES,
+    // which only blocks named references and was safe only while the strip always
+    // ran first). Otherwise an admin could combine $text with a whole-document
+    // probe ($expr/$objectToArray over $$ROOT) in that first stage and turn it into
+    // a boolean oracle over secure/uniqueKeys before they are stripped. Reject any
+    // such probe; $text itself only reads the text index and stays allowed.
     const [first, ...rest] = walked.stages;
     const firstIsTextMatch =
       !!first &&
       typeof first === 'object' &&
       '$match' in (first as Record<string, unknown>) &&
       matchUsesText((first as Record<string, unknown>).$match);
+    if (firstIsTextMatch) {
+      const probe = findProtectedQueryReference((first as Record<string, unknown>).$match, {
+        matchPath: isSensitiveFieldPath,
+        blockedPredicates: COMPUTE_PROBE_PREDICATES
+      });
+      if (probe) {
+        return fail(
+          400,
+          `A $text $match on things can't also use ${probe} — it runs before the protected-field strip`
+        );
+      }
+    }
     pipeline = firstIsTextMatch
       ? [first as Record<string, unknown>, PROTECTED_THING_STRIP, ...rest]
       : [PROTECTED_THING_STRIP, ...walked.stages];
