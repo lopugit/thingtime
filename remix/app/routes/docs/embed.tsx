@@ -321,6 +321,16 @@ export default function DocsEmbed() {
           <Text color="var(--tt-muted, #9a9aa6)" fontSize="sm" fontFamily="mono">
             /docs/embed
           </Text>
+          <ChakraLink
+            color="var(--tt-docs-accent-ink, #0f5132)"
+            fontFamily="mono"
+            fontSize="sm"
+            fontWeight="700"
+            href="/sdk/demo.html"
+            isExternal
+          >
+            /sdk/demo.html · live demo ↗
+          </ChakraLink>
         </Flex>
         <Heading size="lg" mb={3}>
           Login with Thingtime 🌈
