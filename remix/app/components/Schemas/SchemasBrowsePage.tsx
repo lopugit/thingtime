@@ -26,7 +26,7 @@ import { useLopu } from '~/components/Lopu/useLopu';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
-import { crystalSchemas, getThingtimeSchema, thingtimeSchemas } from '~/schemas/registry';
+import { getThingtimeSchema, thingtimeSchemas } from '~/schemas/registry';
 import type { SchemaThingField } from '~/schemas/registry';
 import { describeSchemaField, flattenSchemaFieldsForDisplay, generateSampleFromFields } from '~/schemas/tools';
 
@@ -34,6 +34,7 @@ import { SchemaBuilder, type BuilderPrefill } from './SchemaBuilder';
 import { SchemaThingForm } from './SchemaThingForm';
 import {
   entryToCardSource,
+  isSeededBuiltinMirror,
   registryToCardSource,
   searchableSchemaSource,
   type BrowseSchemaEntry,
@@ -577,18 +578,15 @@ export const SchemasBrowsePage = () => {
 
   // the seed-builtin-schemas migration mirrors builtin crystal schemas into
   // things (shareId schema-<id>, system-owned → author null); the registry
-  // column already shows those, so the mirrors are dropped from community
-  const seededBuiltinIds = React.useMemo(
-    () => new Set(crystalSchemas().map((schema) => `schema-${schema.id}`)),
-    []
-  );
+  // column already shows those, so the mirrors are dropped from community via
+  // the rule shared with /search (isSeededBuiltinMirror in schemaBrowseTypes)
   const communitySources = React.useMemo(
     () =>
       entries
-        .filter((entry) => !(seededBuiltinIds.has(entry.id) && !entry.author))
+        .filter((entry) => !isSeededBuiltinMirror(entry.id, entry.author))
         .map(entryToCardSource)
         .filter(Boolean) as SchemaCardSource[],
-    [entries, seededBuiltinIds]
+    [entries]
   );
   const sources = React.useMemo(() => [...builtinSources, ...communitySources], [builtinSources, communitySources]);
 
