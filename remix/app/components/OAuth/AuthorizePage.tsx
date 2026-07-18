@@ -168,6 +168,13 @@ const ScopeRow = ({ scope, checked, locked, onChange }: ScopeRowProps) => (
 );
 
 export const AuthorizePage = () => {
+  // A framed consent screen is always hostile: the SDK opens a POPUP (token
+  // delivery needs window.opener), so the only reason this page sits in an
+  // iframe is a UI-redress attempt. Production also frame-denies /authorize
+  // via response headers (scripts/patch-vercel-output.mjs); this guard covers
+  // dev servers and any host that loses that header config.
+  const framed = typeof window !== 'undefined' && window.self !== window.top;
+
   const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
   const clientId = (params.get('client_id') || params.get('clientId') || '').trim();
   const origin = (params.get('origin') || '').trim();
@@ -485,7 +492,20 @@ export const AuthorizePage = () => {
 
   let body: React.ReactNode;
 
-  if (invalidReason) {
+  if (framed) {
+    body = (
+      <Flex sx={cardSx}>
+        <Kicker>Thingtime · Login with Thingtime</Kicker>
+        <Box as="h1" fontSize="20px" fontWeight="700">
+          This page can’t be embedded
+        </Box>
+        <Box color="var(--tt-muted, #9a9aa6)" fontSize="14px">
+          Login with Thingtime only runs in its own popup window. Head back to the app and start the
+          sign-in again.
+        </Box>
+      </Flex>
+    );
+  } else if (invalidReason) {
     body = (
       <Flex sx={cardSx}>
         <Kicker>Thingtime · Login with Thingtime</Kicker>

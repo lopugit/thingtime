@@ -101,6 +101,15 @@ export const findAppByClientId = async (clientId: string) => {
   return things.findOne({ thingtime: 'app', 'crystal.clientId': clientId.trim() });
 };
 
+// Batch counterpart for grant listings: one indexed query instead of one
+// findAppByClientId round-trip per connected app.
+export const findAppsByClientIds = async (clientIds: string[]) => {
+  const ids = clientIds.filter((id) => typeof id === 'string' && id.trim()).map((id) => id.trim());
+  if (!ids.length) return [];
+  const things = await getThingsCollection();
+  return things.find({ thingtime: 'app', 'crystal.clientId': { $in: ids } }).toArray();
+};
+
 export const appAllowsOrigin = (appDoc: any, origin: string): boolean => {
   const normalized = normalizeAppOrigin(origin);
   if (!normalized) return false;

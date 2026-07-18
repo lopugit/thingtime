@@ -49,6 +49,9 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // token-gated, keyed per (user, app); a backstop against a compromised or
   // abusive integration hammering the resolution + read path
   'oauth.read': { limit: 300, windowMs: 60_000, enabled: true },
+  // connected-apps listing (GET /oauth/grants) — session-authed but it
+  // aggregates over the user's live app sessions, so keep repeat reads bounded
+  'oauth.grants': { limit: 60, windowMs: 60_000, enabled: true },
   // password-reset requests email any address you name — the classic mail-bomb
   // + enumeration vector, so the window is tight (anonymous, keyed by IP)
   'auth.passwordReset': { limit: 5, windowMs: 15 * 60_000, enabled: true },

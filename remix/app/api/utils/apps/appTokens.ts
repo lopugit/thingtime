@@ -2,9 +2,11 @@ import { signJwt, verifyJwt } from '../auth/jwt';
 import { createSession, getLiveSession } from '../auth/sessions';
 import { findUserById, toPublicUser } from '../auth/users';
 import type { PublicUser } from '../auth/users';
+import { getSessionsCollection } from '../mongodb/collections';
 import { appAllowsOrigin, findAppByClientId } from './apps';
 import { sessionScopes } from './scopes';
 import type { AppScopeId } from './scopes';
+import { MAX_APP_SESSIONS_PER_APP_USER } from '~/schemas/registry';
 
 // App-scoped tokens: the credential a third-party site holds after a user
 // approves "Login with Thingtime". Same revocable-JWT model as every other
@@ -53,6 +55,23 @@ export const issueAppToken = async (
     meta: { clientId, origin, scopes, sharedThings }
   });
   const token = await signJwt({ sub: userId, jti: session.jti, expiresIn: '30d' });
+
+  // Bound accumulation: keep only the newest N live sessions for this
+  // (user, app) and revoke the rest. Racing mints can briefly overshoot the
+  // cap (each keeps its own newest-N view); the next mint prunes the drift.
+  // The find is served by the sessions userId index.
+  const sessions = await getSessionsCollection();
+  const liveForApp = { purpose: 'app', userId, 'meta.clientId': clientId, revokedAt: null };
+  const keep = await sessions
+    .find(liveForApp, { projection: { jti: 1 } })
+    .sort({ createdAt: -1 })
+    .limit(MAX_APP_SESSIONS_PER_APP_USER)
+    .toArray();
+  await sessions.updateMany(
+    { ...liveForApp, jti: { $nin: keep.map((doc: any) => doc.jti) } },
+    { $set: { revokedAt: new Date() } }
+  );
+
   return { token, tokenType: 'Bearer', expiresAt, scopes, sharedThings };
 };
 

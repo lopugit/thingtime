@@ -1,5 +1,5 @@
 import { getSessionsCollection } from '../mongodb/collections';
-import { findAppByClientId } from './apps';
+import { findAppsByClientIds } from './apps';
 import { sessionScopes } from './scopes';
 import type { AppScopeId } from './scopes';
 
@@ -27,12 +27,24 @@ const liveAppSessionsFilter = (userId: string) => ({
   $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }]
 });
 
+// Hard read bound for the aggregation below. issueAppToken caps live sessions
+// at MAX_APP_SESSIONS_PER_APP_USER per app, so reaching this would take ~100
+// distinct connected apps — the bound exists so the read can never be huge
+// even if that invariant slips.
+const MAX_GRANT_SESSIONS_READ = 1000;
+
 // One entry per connected app, aggregated over the user's live app sessions.
 export const listGrants = async (userId: string): Promise<AppGrant[]> => {
-  const sessions = await (await getSessionsCollection())
-    .find(liveAppSessionsFilter(userId))
-    .sort({ createdAt: 1 })
-    .toArray();
+  // Newest first + limit keeps the read bounded while preferring the sessions
+  // that determine expiresAt/lastGrantedAt; reversed so the grouping below
+  // still sees ascending createdAt (firstGrantedAt = group[0]).
+  const sessions = (
+    await (await getSessionsCollection())
+      .find(liveAppSessionsFilter(userId))
+      .sort({ createdAt: -1 })
+      .limit(MAX_GRANT_SESSIONS_READ)
+      .toArray()
+  ).reverse();
 
   const byClient = new Map<string, any[]>();
   for (const session of sessions) {
@@ -43,9 +55,12 @@ export const listGrants = async (userId: string): Promise<AppGrant[]> => {
     byClient.set(clientId, group);
   }
 
+  const appDocs = await findAppsByClientIds([...byClient.keys()]);
+  const appsByClientId = new Map(appDocs.map((doc: any) => [doc.crystal?.clientId, doc]));
+
   const grants: AppGrant[] = [];
   for (const [clientId, group] of byClient) {
-    const app = await findAppByClientId(clientId);
+    const app = appsByClientId.get(clientId);
     const newest = group[group.length - 1];
     // The union of scopes across live sessions — what the app can do overall.
     const scopes: AppScopeId[] = [];

@@ -194,6 +194,10 @@ export const MAX_APPS_PER_USER = 20;
 export const MAX_APP_DATA_KEY_CHARS = 128;
 export const MAX_APP_DATA_VALUE_BYTES = 32 * 1024;
 export const MAX_APP_DATA_KEYS_PER_APP_USER = 200;
+// Live app sessions one user can hold for one app: re-approvals mint fresh
+// sessions, so without a cap a re-running embed accumulates grants without
+// bound. Newest N survive — multi-device keeps working up to the cap.
+export const MAX_APP_SESSIONS_PER_APP_USER = 10;
 
 // Extended (the schema-free sidecar every thing carries) — see sanitizeExtended
 // below for the full story.

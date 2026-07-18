@@ -107,6 +107,18 @@ export const ensureIndexes = async () => {
         db.collection('users').createIndex({ email: 1 }, { unique: true }),
         db.collection('sessions').createIndex({ jti: 1 }, { unique: true }),
         db.collection('sessions').createIndex({ userId: 1 }),
+        // TTL: reap sessions once expiresAt passes. getLiveSession already
+        // treats past-expiry docs as dead, so deletion removes nothing usable —
+        // without it expired/revoked sessions (app grants especially) pile up
+        // forever. Docs with expiresAt: null are exempt (TTL skips non-dates).
+        db.collection('sessions').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+        // deleteApp revokes app sessions by clientId ACROSS users — without
+        // this the sweep scans the whole sessions collection. Partial so the
+        // (much larger) browser/service session population stays out.
+        db.collection('sessions').createIndex(
+          { 'meta.clientId': 1 },
+          { partialFilterExpression: { purpose: 'app' } }
+        ),
         // account-switcher rosters: one doc per browser, entries reference
         // sessions by jti; TTL reaps rosters abandoned past their rolling expiry
         db.collection('rosters').createIndex({ rosterId: 1 }, { unique: true }),
