@@ -1,0 +1,632 @@
+# AI-powered PR conflict resolution.
+#
+# Supersedes .github/workflows/pr-conflict-resolver.yml (PR #81), which gave
+# the model unrestricted Bash(git:*)/Bash(gh:*); exactly one push-triggered
+# resolver may exist or they race each other's pushes.
+#
+# When any branch is pushed, every open PR (drafts included) that TARGETS that
+# branch is checked for merge conflicts. Conflicting same-repo PRs get the base
+# branch merged into their head, with Claude resolving the conflicted files,
+# and the merge commit pushed back to the PR branch.
+#
+# Secrets:
+# - ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN (one required): powers the
+#   resolution agent (OAuth token via `/install-github-app` in the claude CLI).
+# - CONFLICT_RESOLVER_PAT (optional): a PAT with repo + workflow scope. Without
+#   it, pushes use GITHUB_TOKEN, which GitHub rejects whenever the merge brings
+#   ANY change under .github/workflows/ (workflow runs are then skipped early,
+#   before AI spend, with a comment explaining the manual step). With it, those
+#   merges push fine AND the pushed merge commit retriggers CI + this workflow
+#   (natural stacked-PR cascade).
+#
+# Security model (the AI is treated as untrusted — conflicted file content can
+# prompt-inject it):
+# - The model has NO shell and NO git access — it ONLY edits files in the
+#   working tree (Read/Grep/Glob/Edit/Write). All git operations (staging,
+#   commit, push) are deterministic workflow steps. This removes the entire
+#   git-flag exec surface (e.g. `git grep -O<cmd>`, `git diff --output`,
+#   inline-env prefixes) that a git-subcommand allowlist could never fully
+#   close for untrusted input.
+# - The scope invariant is ENFORCED from git's object store alone: the verify
+#   step recomputes the auto-merge with `git merge-tree --write-tree` (HEAD is
+#   still the pre-merge commit mid-merge), stages ONLY the recomputed
+#   conflicted paths, and diffs the staged index tree against the auto-merge
+#   tree — every changed path must be a recomputed conflicted path (or
+#   graphify-out/**, reset deterministically before the model runs, with its
+#   staged subtree OID checked to equal the base side). Nothing the verify
+#   step trusts lives anywhere the model could write; RUNNER_TEMP files are
+#   informational only.
+# - No network (WebFetch/WebSearch disallowed). .git/**, /proc/**, RUNNER_TEMP,
+#   and $HOME git config are denied to the file tools as defense-in-depth, and
+#   user/system git config is pinned to /dev/null (GIT_CONFIG_GLOBAL/SYSTEM) so
+#   a stray write can't reconfigure git; enforcement does not rely on these
+#   holding.
+# - persist-credentials: false — no token in .git/config for the model to
+#   read; the push step injects auth via GIT_CONFIG_* env at push time only,
+#   and pushes to an explicit https URL (immune to remote-URL tampering).
+# - All deterministic git steps run hook-proof (core.hooksPath=/dev/null,
+#   core.fsmonitor=false via job-level GIT_CONFIG_* env), so a planted
+#   .git/hooks script can never execute.
+# - Staged conflicted files are scanned for the raw/base64 ANTHROPIC_API_KEY
+#   before commit. This scan is BEST-EFFORT, not a boundary: a determined
+#   injection could smuggle an exotic encoding past it. The actual boundary
+#   for same-repo collaborators (the only principals who can reach this code
+#   path) is that the commit lands on a reviewable PR branch, plus
+#   GitGuardian's push protection. ANTHROPIC_API_KEY necessarily sits in the
+#   model's own process env; treat it as exposed to same-repo collaborators
+#   who can engineer a conflict, and scope/rotate it accordingly.
+# - Fork PRs are skipped: we can't push to them, and running the model over
+#   untrusted content with secrets in the environment is not acceptable.
+# - GITHUB_TOKEN pushes don't retrigger `push` workflows (no self-loops);
+#   stacked PRs are cascaded via repository_dispatch (always creates runs,
+#   needs only contents:write), with a depth cap as a loop guard.
+#
+# graphify-out/** is never given to the AI. The repo's merge driver for
+# graph.json is not configured in CI, so git would silently text-merge it into
+# a mixed base+head union (the poisoned-pair state CLAUDE.md forbids). Instead,
+# when BOTH sides touched graphify-out since the merge base, the whole
+# directory is deterministically reset to the base side before anything else,
+# and the PR comment tells the author to run `graphify update .` locally.
+
+name: Resolve PR conflicts (AI)
+
+run-name: "Resolve PR conflicts under ${{ github.event.client_payload.branch || inputs.branch || github.ref_name }}"
+
+on:
+  push:
+    branches:
+      - "**"
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Base branch to scan for conflicting PRs"
+        required: true
+        type: string
+      depth:
+        description: "Internal: stacked-PR cascade depth (leave at 0)"
+        required: false
+        default: "0"
+        type: string
+  repository_dispatch:
+    types: [resolve-conflicts-cascade]
+
+# One run per base branch; a newer push supersedes an in-flight resolution
+# (the push is atomic, so cancelling mid-run never half-publishes anything).
+concurrency:
+  group: resolve-conflicts-${{ github.event.client_payload.branch || inputs.branch || github.ref_name }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  detect:
+    name: Find conflicting PRs based on this branch
+    # Branch deletions also fire `push`; there is nothing to scan then.
+    if: github.event_name != 'push' || github.event.deleted == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pull-requests: read
+    outputs:
+      prs: ${{ steps.scan.outputs.prs }}
+      any: ${{ steps.scan.outputs.any }}
+    steps:
+      - name: Scan open PRs targeting this branch
+        id: scan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TARGET: ${{ github.event.client_payload.branch || inputs.branch || github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          query() {
+            gh pr list --repo "$REPO" --base "$TARGET" --state open \
+              --json number,headRefName,isCrossRepository,isDraft,mergeable \
+              --limit 100
+          }
+
+          # GitHub computes mergeability lazily after a base push; poll until
+          # every PR has a verdict (querying is itself what triggers compute).
+          prs="$(query)"
+          for attempt in 1 2 3 4 5 6 7 8; do
+            unknown="$(jq '[.[] | select(.mergeable == "UNKNOWN")] | length' <<<"$prs")"
+            [ "$unknown" -eq 0 ] && break
+            echo "attempt $attempt: $unknown PR(s) still computing mergeability; retrying..."
+            sleep 10
+            prs="$(query)"
+          done
+
+          echo "Open PRs based on $TARGET:"
+          jq -r '.[] | "  #\(.number) \(.headRefName) draft=\(.isDraft) mergeable=\(.mergeable) fork=\(.isCrossRepository)"' <<<"$prs"
+
+          skipped="$(jq -r '[.[] | select(.isCrossRepository) | select(.mergeable == "CONFLICTING") | .number] | join(", ")' <<<"$prs")"
+          [ -n "$skipped" ] && echo "::warning::Skipping conflicting fork PR(s) #$skipped — cannot push to fork branches."
+          still_unknown="$(jq -r '[.[] | select(.mergeable == "UNKNOWN") | .number] | join(", ")' <<<"$prs")"
+          [ -n "$still_unknown" ] && echo "::warning::PR(s) #$still_unknown still UNKNOWN after polling; they will be re-checked on the next push."
+
+          conflicting="$(jq -c '[.[] | select(.isCrossRepository | not) | select(.mergeable == "CONFLICTING") | {number: .number, head: .headRefName}]' <<<"$prs")"
+          echo "prs=$conflicting" >> "$GITHUB_OUTPUT"
+          echo "any=$(jq 'length > 0' <<<"$conflicting")" >> "$GITHUB_OUTPUT"
+
+  resolve:
+    name: "Resolve PR #${{ matrix.pr.number }}"
+    needs: detect
+    if: needs.detect.outputs.any == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
+    strategy:
+      fail-fast: false
+      matrix:
+        pr: ${{ fromJSON(needs.detect.outputs.prs) }}
+    env:
+      REPO: ${{ github.repository }}
+      BASE_REF: ${{ github.event.client_payload.branch || inputs.branch || github.ref_name }}
+      HEAD_REF: ${{ matrix.pr.head }}
+      PR_NUMBER: ${{ matrix.pr.number }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      # True when CONFLICT_RESOLVER_PAT exists (a boolean, never the secret
+      # itself — the secret is scoped to the push step only, so it is not in
+      # the environment while the model runs).
+      HAS_WORKFLOW_PUSH: ${{ secrets.CONFLICT_RESOLVER_PAT != '' }}
+      # Hook-proof every git invocation in this job (including the model's):
+      # a planted .git/hooks script or fsmonitor command must never execute.
+      # GIT_CONFIG_* env has higher precedence than anything in .git/config.
+      GIT_CONFIG_COUNT: "2"
+      GIT_CONFIG_KEY_0: core.hooksPath
+      GIT_CONFIG_VALUE_0: /dev/null
+      GIT_CONFIG_KEY_1: core.fsmonitor
+      GIT_CONFIG_VALUE_1: "false"
+      # Never read user/system git config: a model-written ~/.gitconfig could
+      # otherwise define external diff/merge drivers (arbitrary exec via
+      # allowlisted git commands), url.insteadOf push redirects, or custom
+      # merge drivers that skew the verify step's merge-tree re-derivation.
+      GIT_CONFIG_GLOBAL: /dev/null
+      GIT_CONFIG_SYSTEM: /dev/null
+    steps:
+      - name: Check out PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.pr.head }}
+          # fetch-depth 0 brings all branches, so origin/$BASE_REF is already
+          # local — no authenticated fetch needed later.
+          fetch-depth: 0
+          # Keep the token out of .git/config: the model has Read access to
+          # the workspace, and the push step supplies its own auth.
+          persist-credentials: false
+
+      - name: Merge base into head
+        id: merge
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # zdiff3 markers show ours + BASE + theirs, so the model can infer
+          # each side's intent from the file alone (it has no git access).
+          git config merge.conflictStyle zdiff3
+
+          base="origin/$BASE_REF"
+          git rev-parse --verify --quiet "$base" >/dev/null
+          pre_merge="$(git rev-parse HEAD)"
+          echo "$pre_merge" > "$RUNNER_TEMP/pre_merge_sha.txt"
+
+          clean=true
+          git merge --no-edit "$base" || clean=false
+
+          # graphify-out determinism: the repo's graph.json merge driver is not
+          # configured in CI, so git text-merges it — producing a mixed
+          # base+head graph/manifest pair that CLAUDE.md explicitly forbids.
+          # When BOTH sides touched graphify-out since the merge base, reset
+          # the WHOLE directory to the base side (one side, never mixed).
+          # One-sided changes are left alone: git already took that side
+          # uniformly.
+          graphify_reset=false
+          mb="$(git merge-base "$pre_merge" "$base")"
+          if ! git diff --quiet "$mb" "$pre_merge" -- graphify-out/ 2>/dev/null \
+             && ! git diff --quiet "$mb" "$base" -- graphify-out/ 2>/dev/null; then
+            graphify_reset=true
+            git rm -rfq --ignore-unmatch -- graphify-out/
+            # rev-parse on <rev>:<path> is the reliable existence test for a
+            # tree path (ls-tree -d with a trailing-slash pathspec lists the
+            # directory's children, not the directory, and can be empty).
+            if git rev-parse --verify --quiet "$base:graphify-out" >/dev/null; then
+              git checkout "$base" -- graphify-out/
+            fi
+            if [ "$clean" = true ]; then
+              # merge auto-committed; fold the reset in (amend keeps both parents)
+              git commit --amend --no-edit
+            fi
+          fi
+          echo "graphify_reset=$graphify_reset" >> "$GITHUB_OUTPUT"
+
+          if [ "$clean" = false ]; then
+            git diff --name-only --diff-filter=U > "$RUNNER_TEMP/conflicted.txt"
+            if [ ! -s "$RUNNER_TEMP/conflicted.txt" ]; then
+              # the graphify reset was the only conflict — finish the merge
+              # deterministically, zero AI spend
+              git commit --no-edit
+              clean=true
+            fi
+          fi
+
+          if [ "$clean" = false ]; then
+            echo "Conflicted paths:"
+            cat "$RUNNER_TEMP/conflicted.txt"
+          fi
+          echo "conflicted=$([ "$clean" = true ] && echo false || echo true)" >> "$GITHUB_OUTPUT"
+
+          # Workflow-file guard: GITHUB_TOKEN pushes are rejected if the merge
+          # introduces ANY change under .github/workflows/ relative to the head
+          # we push to — including cleanly-merged ones (e.g. a workflow newly
+          # added on the base). Detect that here, BEFORE any AI spend. A PAT
+          # with workflow scope lifts this.
+          # (`git diff --cached $pre_merge` compares the index — which equals
+          # HEAD after a clean merge — against the pre-merge head, so it works
+          # for both the clean and the mid-merge state.)
+          if [ "$HAS_WORKFLOW_PUSH" != "true" ] \
+             && git diff --cached --name-only "$pre_merge" -- .github/workflows/ | grep -q .; then
+            echo "workflows_blocked=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::This merge changes .github/workflows/**, which GITHUB_TOKEN cannot push. Merge the base manually, or add a CONFLICT_RESOLVER_PAT secret with workflow scope."
+            exit 1
+          fi
+
+          # No pre-AI snapshot is taken: the verify step re-derives both the
+          # conflicted set and the auto-merge baseline from git's object store
+          # (`git merge-tree --write-tree`), so there is nothing here for the
+          # model to tamper with. conflicted.txt above is informational only.
+
+      - name: Require an AI credential
+        if: steps.merge.outputs.conflicted == 'true'
+        env:
+          HAS_AI_CREDENTIAL: ${{ secrets.ANTHROPIC_API_KEY != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+        run: |
+          set -euo pipefail
+          if [ "$HAS_AI_CREDENTIAL" != "true" ]; then
+            echo "::error::Add the ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN repo secret to enable the AI conflict resolver (claude CLI: /install-github-app)."
+            exit 1
+          fi
+
+      - name: Resolve conflicts with Claude
+        if: steps.merge.outputs.conflicted == 'true'
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ github.token }}
+          prompt: |
+            You are resolving git merge conflicts inside a GitHub Actions runner by
+            EDITING FILES ONLY. You have NO shell and NO git access — that is
+            intentional. A later deterministic step stages, verifies, commits, and
+            pushes what you leave in the working tree. Do not attempt to run git or
+            any command; just edit the conflicted files in place.
+
+            Situation: base branch "${{ github.event.client_payload.branch || inputs.branch || github.ref_name }}"
+            was merged into "${{ matrix.pr.head }}" (the head of PR #${{ matrix.pr.number }}),
+            and the merge stopped on conflicts. Conflicted files currently contain
+            zdiff3 conflict markers:
+
+                <<<<<<< (ours = the PR head branch)
+                ...head side...
+                ||||||| (the common ancestor / base of the two sides)
+                ...original...
+                =======
+                ...base-branch side...
+                >>>>>>> (theirs = the branch being merged in)
+
+            Method:
+            1. Use the Grep tool to find every file containing a line that starts with
+               "<<<<<<<" — those are your conflicts (search the whole workspace).
+            2. For each conflicted file, read it in full. The three-way markers show
+               both sides AND their common ancestor, so you can tell what each side
+               changed and why. Rewrite the conflicted region to the semantic UNION —
+               preserve BOTH sides' intent unless they are genuinely mutually
+               exclusive; when they are, prefer the base-branch (theirs) side and
+               re-apply the head (ours) intent adapted on top of it. Remove ALL
+               conflict markers (the <<<<<<<, |||||||, =======, and >>>>>>> lines).
+            3. Rules:
+               - graphify-out/** has ALREADY been handled deterministically before you
+                 ran. Never touch anything under graphify-out/.
+               - pnpm-lock.yaml / package-lock.json: only take one side wholesale, and
+                 only if the corresponding package.json resolved fully to that SAME
+                 side. If package.json needed a true union of dependency changes,
+                 LEAVE THE LOCKFILE'S MARKERS IN PLACE and say why — a human must
+                 regenerate it (the run will then stop for manual resolution).
+               - Edit ONLY files that contain conflict markers. Do not create, rename,
+                 or delete files, and do not edit non-conflicted files. (Only the
+                 conflicted files are staged afterward; anything else you change is
+                 ignored, and out-of-scope edits are rejected mechanically.)
+            4. If a conflict cannot be resolved with high confidence, LEAVE its markers
+               in place rather than guessing — the workflow then stops and asks a human.
+
+            When you are done, every file you could confidently resolve should have no
+            conflict markers left, and you should have touched nothing else.
+          claude_args: |
+            --model claude-opus-4-8
+            --max-turns 80
+            --allowedTools "Read,Grep,Glob,Edit,Write"
+            --disallowedTools "WebFetch,WebSearch,Bash,Edit(.gitattributes),Write(.gitattributes),Edit(**/.gitattributes),Write(**/.gitattributes),Read(./.git/**),Edit(./.git/**),Write(./.git/**),Read(**/.git/**),Edit(**/.git/**),Write(**/.git/**),Read(/proc/**),Edit(/proc/**),Write(/proc/**),Read(/home/runner/work/_temp/**),Edit(/home/runner/work/_temp/**),Write(/home/runner/work/_temp/**),Read(/home/runner/.gitconfig*),Edit(/home/runner/.gitconfig*),Write(/home/runner/.gitconfig*),Edit(/home/runner/.config/git/**),Write(/home/runner/.config/git/**)"
+
+      - name: Verify resolution and commit
+        if: steps.merge.outputs.conflicted == 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          GRAPHIFY_RESET: ${{ steps.merge.outputs.graphify_reset }}
+        run: |
+          set -euo pipefail
+
+          # The merge must still be in progress (the model must not have
+          # committed or aborted it).
+          if [ ! -f .git/MERGE_HEAD ]; then
+            echo "::error::Merge is no longer in progress — refusing to continue."
+            exit 1
+          fi
+
+          # Belt to the .git/** write-deny: a merge/clean/smudge/textconv driver
+          # defined in local .git/config would be EXECUTED by the git add /
+          # merge-tree below if an attribute referenced it (arbitrary code exec).
+          # A normal CI checkout configures none; if one appears, .git was
+          # tampered with — abort rather than rely solely on the file-tool deny.
+          if git config --local --list --name-only 2>/dev/null \
+             | grep -qiE '^(merge|filter|diff)\.[^.]+\.(driver|clean|smudge|process|textconv|command)$'; then
+            echo "::error::Unexpected local git driver configured — refusing (possible .git tampering):"
+            git config --local --list --name-only | grep -iE '^(merge|filter|diff)\.[^.]+\.(driver|clean|smudge|process|textconv|command)$' || true
+            exit 1
+          fi
+
+          # Everything this step trusts is RE-DERIVED from git's object store.
+          # The model has NO git access at all — it only edited files in the
+          # working tree — so nothing it can do influences this recomputation.
+          # RUNNER_TEMP files from earlier steps are NOT trusted here.
+          #
+          # HEAD is still the pre-merge head commit during a merge, so
+          # merge-tree recomputes the exact auto-merge baseline and the exact
+          # conflicted set the merge step saw.
+          #
+          # CRITICAL: run merge-tree from an EMPTY cwd with GIT_DIR set, so no
+          # in-tree .gitattributes is consulted. A model-planted working-tree
+          # .gitattributes (e.g. "clean.txt merge=binary") would otherwise make
+          # merge-tree reclassify a cleanly-auto-merged file as conflicted,
+          # smuggling it into the allowed set. Attributes here come only from
+          # .git/info/attributes (model can't write it) + builtin; the sole
+          # merge= attribute the repo actually uses targets graphify-out/,
+          # which is validated separately (subtree OID), so ignoring in-tree
+          # attributes is safe. SHAs are resolved before the cd.
+          merge_head="$(git rev-parse MERGE_HEAD)"
+          head_sha="$(git rev-parse HEAD)"
+          git_dir="$(git rev-parse --absolute-git-dir)"
+          # --no-messages: output is exactly <tree-oid>\n<conflicted names...>
+          # (verified empirically; without it an informational section follows
+          # after a blank line). The sed stop-at-blank is belt-and-braces.
+          attic="$(mktemp -d)"
+          merge_out="$(cd "$attic" && GIT_DIR="$git_dir" GIT_ATTR_NOSYSTEM=1 \
+            git -c core.attributesFile=/dev/null merge-tree --write-tree --no-messages --name-only "$head_sha" "$merge_head")" || true
+          rmdir "$attic" 2>/dev/null || true
+          automerge_tree="$(printf '%s\n' "$merge_out" | head -1)"
+          git rev-parse --verify --quiet "$automerge_tree^{tree}" >/dev/null || {
+            echo "::error::Could not recompute the auto-merge tree."; exit 1;
+          }
+          printf '%s\n' "$merge_out" | tail -n +2 | sed -n '/^$/q;p' | sort -u > "$RUNNER_TEMP/conflicted-derived.txt"
+
+          # DETERMINISTIC STAGING: the model only edited the working tree; we
+          # stage its resolutions ourselves, and ONLY for the recomputed
+          # conflicted paths (never a path the model might have invented). A
+          # file that still carries markers is left UNMERGED on purpose so the
+          # ls-files -u guard below catches it. A file the model deleted while
+          # resolving a modify/delete is staged as a deletion.
+          while IFS= read -r path; do
+            [ -n "$path" ] || continue
+            if [ ! -e "$path" ]; then
+              git rm -q --ignore-unmatch -- "$path" || true
+            elif grep -qE '^(<{7}|\|{7}|>{7})( |$)' "$path"; then
+              echo "::warning::$path still has conflict markers — leaving it unmerged."
+            else
+              git add -- "$path"
+            fi
+          done < "$RUNNER_TEMP/conflicted-derived.txt"
+
+          # Any unmerged path left now is an unresolved conflict.
+          if [ -n "$(git ls-files -u)" ]; then
+            echo "::error::Unresolved paths remain:"
+            git ls-files -u | awk -F'\t' '{print $2}' | sort -u
+            exit 1
+          fi
+
+          # ENFORCE the scope invariant: diff the staged index tree against the
+          # recomputed auto-merge tree; every changed path must be a recomputed
+          # conflicted path. graphify-out/** is NOT blanket-allowed — when the
+          # merge step reset it, the staged subtree must equal the base side
+          # EXACTLY (subtree OID compare), so the model cannot smuggle content
+          # under the reset's cover; when no reset ran, graphify-out paths are
+          # held to the same conflicted-set rule as everything else.
+          index_tree="$(git write-tree)"
+          changed="$(git diff-tree -r --name-only "$automerge_tree" "$index_tree")"
+          graphify_changed=false
+          if [ -n "$changed" ]; then
+            while IFS= read -r path; do
+              case "$path" in graphify-out/*) graphify_changed=true; continue ;; esac
+              if ! grep -qxF "$path" "$RUNNER_TEMP/conflicted-derived.txt"; then
+                echo "::error::Staged change outside the recomputed conflicted set: $path — refusing to commit."
+                exit 1
+              fi
+            done <<<"$changed"
+          fi
+          if [ "$graphify_changed" = true ]; then
+            if [ "$GRAPHIFY_RESET" = "true" ]; then
+              staged_sub="$(git rev-parse --verify --quiet "$index_tree:graphify-out" || echo missing)"
+              base_sub="$(git rev-parse --verify --quiet "origin/$BASE_REF:graphify-out" || echo missing)"
+              if [ "$staged_sub" != "$base_sub" ]; then
+                echo "::error::graphify-out was reset to the base side, but the staged subtree no longer matches it — refusing to commit."
+                exit 1
+              fi
+            else
+              # no reset ran, so graphify-out paths must individually be
+              # recomputed conflicts (same rule as everything else)
+              while IFS= read -r path; do
+                case "$path" in
+                  graphify-out/*)
+                    if ! grep -qxF "$path" "$RUNNER_TEMP/conflicted-derived.txt"; then
+                      echo "::error::Staged graphify-out change outside the recomputed conflicted set: $path — refusing to commit."
+                      exit 1
+                    fi
+                    ;;
+                esac
+              done <<<"$changed"
+            fi
+          fi
+
+          # Leftover-marker + secret scan, against STAGED content (what ships),
+          # scoped to the recomputed conflicted set. '=======' alone is
+          # skipped: legit in markdown setext underlines. Best-effort backstop,
+          # not a boundary (see header).
+          keyfile="$RUNNER_TEMP/scan-needles.txt"
+          : > "$keyfile"
+          for secret in "${ANTHROPIC_API_KEY:-}" "${CLAUDE_CODE_OAUTH_TOKEN:-}"; do
+            [ -n "$secret" ] || continue
+            printf '%s\n' "$secret" >> "$keyfile"
+            printf '%s' "$secret" | base64 -w0 >> "$keyfile"
+            printf '\n' >> "$keyfile"
+          done
+          # Materialize each staged blob to a temp file and grep the FILE (not
+          # a pipe): a pipe would let grep -q's early exit kill `git show` with
+          # SIGPIPE, which under pipefail surfaces as exit 141 that the `if`
+          # reads as "no match" — a secret near the top of a large staged file
+          # would then slip past. (Process substitution avoids the pipe but is
+          # unreliable on older bash; a temp file is unambiguous everywhere.)
+          blob="$RUNNER_TEMP/staged-blob"
+          while IFS= read -r path; do
+            git show ":$path" > "$blob" 2>/dev/null || true
+            if grep -qE '^(<{7}|>{7})( |$)' "$blob"; then
+              echo "::error::Conflict markers left in staged $path"
+              rm -f "$blob"; exit 1
+            fi
+            if [ -s "$keyfile" ] && grep -qFf "$keyfile" "$blob"; then
+              echo "::error::Staged $path contains secret material — refusing to commit."
+              rm -f "$blob"; exit 1
+            fi
+          done < "$RUNNER_TEMP/conflicted-derived.txt"
+          rm -f "$keyfile" "$blob"
+
+          if [ -n "$(git diff --name-only)" ]; then
+            echo "::warning::Unstaged edits left behind (not committed):"
+            git diff --name-only
+          fi
+
+          # ', '-joined list (paste -sd would CYCLE the two delimiter chars)
+          conflicted_list="$(sed '$!s/$/,/' "$RUNNER_TEMP/conflicted-derived.txt" | tr '\n' ' ' | sed 's/ $//')"
+          git commit \
+            -m "Merge $BASE_REF into $HEAD_REF (AI-resolved conflicts)" \
+            -m "Conflicted paths: $conflicted_list" \
+            -m "Resolved by the resolve-pr-conflicts workflow: $RUN_URL" \
+            -m "Co-Authored-By: Claude <noreply@anthropic.com>"
+
+      - name: Push merge commit
+        id: push
+        env:
+          PUSH_PAT: ${{ secrets.CONFLICT_RESOLVER_PAT }}
+          DEFAULT_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          token="${PUSH_PAT:-$DEFAULT_TOKEN}"
+          # Auth via GIT_CONFIG_* env (never argv, never .git/config), pushing
+          # to the explicit canonical URL so a tampered remote can't redirect.
+          auth="$(printf 'x-access-token:%s' "$token" | base64 -w0)"
+          export GIT_CONFIG_COUNT=3
+          export GIT_CONFIG_KEY_2="http.https://github.com/.extraheader"
+          export GIT_CONFIG_VALUE_2="AUTHORIZATION: basic $auth"
+          git push "https://github.com/$REPO.git" "HEAD:refs/heads/$HEAD_REF"
+
+      - name: Comment on PR (resolved)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GRAPHIFY_RESET: ${{ steps.merge.outputs.graphify_reset }}
+        run: |
+          set -euo pipefail
+          body="$RUNNER_TEMP/comment.md"
+          {
+            echo "🤝 Merged \`$BASE_REF\` into \`$HEAD_REF\` — conflicts auto-resolved by the [resolve-pr-conflicts workflow]($RUN_URL)."
+            echo
+            # conflicted-derived.txt is written by the verify step AFTER the
+            # model finished (recomputed from git), so it is the trustworthy
+            # list; plain conflicted.txt only exists on non-AI paths.
+            if [ -s "$RUNNER_TEMP/conflicted-derived.txt" ]; then
+              echo "Conflicted files:"
+              sed 's/^/- `/; s/$/`/' "$RUNNER_TEMP/conflicted-derived.txt"
+            else
+              echo "No AI resolution was needed by merge time; the branch was updated with a plain merge commit."
+            fi
+            if [ "$GRAPHIFY_RESET" = "true" ]; then
+              echo
+              echo "> graphify-out/ was reset wholesale to the \`$BASE_REF\` side (repo rule: one side, never mixed — the graph merge driver is unavailable in CI). Run \`graphify update .\` locally to refresh the outputs for this branch."
+            fi
+            if [ "$HAS_WORKFLOW_PUSH" != "true" ]; then
+              echo
+              echo "> Note: this push used \`GITHUB_TOKEN\`, so GitHub Actions checks did not re-run on the merge commit (Vercel and other app-based checks did)."
+            fi
+            echo
+            echo "Please review the merge commit before relying on it."
+          } > "$body"
+          gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file "$body"
+
+      - name: Cascade to PRs stacked on this head
+        # With a PAT, the push itself retriggers this workflow for the head
+        # branch (natural cascade) — dispatching too would double-run it.
+        if: env.HAS_WORKFLOW_PUSH != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPTH: ${{ github.event.client_payload.depth || inputs.depth || '0' }}
+        run: |
+          set -euo pipefail
+          case "$DEPTH" in (*[!0-9]*) DEPTH=99 ;; esac
+          if [ "$DEPTH" -ge 3 ]; then
+            echo "Cascade depth cap reached ($DEPTH) — not dispatching further."
+            exit 0
+          fi
+          stacked="$(gh pr list --repo "$REPO" --base "$HEAD_REF" --state open --json number --jq 'length')"
+          if [ "$stacked" -gt 0 ]; then
+            echo "$stacked open PR(s) are based on $HEAD_REF — dispatching a follow-up scan."
+            # repository_dispatch always creates a run (from the default
+            # branch's workflow file) and needs only contents:write. Non-fatal:
+            # a missed cascade is re-covered by the next real push.
+            if ! gh api "repos/$REPO/dispatches" \
+                 -f event_type=resolve-conflicts-cascade \
+                 -f "client_payload[branch]=$HEAD_REF" \
+                 -f "client_payload[depth]=$((DEPTH + 1))"; then
+              echo "::warning::Cascade dispatch failed (transient API error?) — the next real push re-covers it."
+            fi
+          else
+            echo "No PRs are stacked on $HEAD_REF."
+          fi
+
+      - name: Comment on PR (needs attention)
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUSH_OUTCOME: ${{ steps.push.outcome }}
+          WF_BLOCKED: ${{ steps.merge.outputs.workflows_blocked }}
+        run: |
+          set -euo pipefail
+          body="$RUNNER_TEMP/comment.md"
+          {
+            if [ "$PUSH_OUTCOME" = "success" ]; then
+              echo "⚠️ Conflicts with \`$BASE_REF\` were resolved and pushed, but a follow-up step failed — see the [workflow run]($RUN_URL). The merge commit itself is on the branch."
+            elif [ "$WF_BLOCKED" = "true" ]; then
+              echo "⚠️ Merging \`$BASE_REF\` into this branch changes \`.github/workflows/\`, which the default token cannot push. Merge the base branch manually (\`git merge $BASE_REF\`), or add a \`CONFLICT_RESOLVER_PAT\` secret (repo + workflow scope) so this workflow can handle it. [Workflow run]($RUN_URL)"
+            else
+              echo "⚠️ Could not auto-resolve conflicts with \`$BASE_REF\` — manual resolution needed. See the [workflow run]($RUN_URL)."
+              # prefer the verify step's recomputed list when it exists; the
+              # merge step's list is informational (pre-AI)
+              list="$RUNNER_TEMP/conflicted-derived.txt"
+              [ -s "$list" ] || list="$RUNNER_TEMP/conflicted.txt"
+              if [ -s "$list" ]; then
+                echo
+                echo "Conflicted files (as recorded by the merge step):"
+                sed 's/^/- `/; s/$/`/' "$list"
+              fi
+            fi
+          } > "$body"
+          gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file "$body" || true
