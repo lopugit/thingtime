@@ -93,11 +93,25 @@ const decorate = async (viewer: Viewer, things: PublicThing[]): Promise<BrowseSc
 
   const collection = await getThingsCollection();
   const visibility = visibilityQueryFor(viewer, []);
+  const viewerId = viewer?.id || null;
 
-  const [reactionDocs, saved, usageDocs] = await Promise.all([
+  const [reactionGroups, saved, usageDocs] = await Promise.all([
+    // Aggregate reaction counts server-side (one $group per (target, emoji))
+    // instead of shipping every raw reaction doc for the page's schemas over the
+    // wire — a schema with thousands of reactions would otherwise stream them all
+    // just to be reduced to per-token counts in JS. viewerReacted is folded in so
+    // no per-doc ownerId comparison is needed on the app server.
     collection
-      .find({ thingtime: 'reaction', targetId: { $in: ids } } as any)
-      .project({ targetId: 1, ownerId: 1, 'crystal.emoji': 1 })
+      .aggregate([
+        { $match: { thingtime: 'reaction', targetId: { $in: ids } } },
+        {
+          $group: {
+            _id: { t: '$targetId', e: '$crystal.emoji' },
+            count: { $sum: 1 },
+            viewerReacted: { $max: { $cond: [{ $eq: ['$ownerId', viewerId] }, 1, 0] } }
+          }
+        }
+      ])
       .toArray(),
     savedTargetIds(viewer, ids),
     visibility
@@ -131,15 +145,13 @@ const decorate = async (viewer: Viewer, things: PublicThing[]): Promise<BrowseSc
   ]);
 
   const reactionsByTarget = new Map<string, { counts: Record<string, number>; viewer: string[] }>();
-  for (const doc of reactionDocs as any[]) {
-    const targetId = String(doc.targetId);
-    const token = typeof doc.crystal?.emoji === 'string' ? doc.crystal.emoji : null;
-    if (!token) continue;
+  for (const row of reactionGroups as any[]) {
+    const targetId = row._id?.t != null ? String(row._id.t) : null;
+    const token = typeof row._id?.e === 'string' ? row._id.e : null;
+    if (!targetId || !token) continue;
     const entry = reactionsByTarget.get(targetId) || { counts: {}, viewer: [] };
-    entry.counts[token] = (entry.counts[token] || 0) + 1;
-    if (viewer?.id && String(doc.ownerId) === viewer.id && !entry.viewer.includes(token)) {
-      entry.viewer.push(token);
-    }
+    entry.counts[token] = (entry.counts[token] || 0) + (Number(row.count) || 0);
+    if (row.viewerReacted && !entry.viewer.includes(token)) entry.viewer.push(token);
     reactionsByTarget.set(targetId, entry);
   }
 
@@ -177,30 +189,50 @@ const browsePopular = async (
 
   await ensureIndexes();
   const collection = await getThingsCollection();
-  const [docs, total] = await Promise.all([
-    collection
-      .aggregate([
-        { $match: match },
-        {
-          $lookup: {
-            from: 'things',
-            let: { sid: '$shareId' },
-            pipeline: [
-              { $match: { $and: [{ $expr: { $eq: ['$targetId', '$$sid'] } }, { thingtime: 'reaction' }] } },
-              { $count: 'count' }
-            ],
-            as: 'reactionStats'
-          }
-        },
-        { $addFields: { reactionCount: { $ifNull: [{ $first: '$reactionStats.count' }, 0] } } },
-        { $project: { reactionStats: 0 } },
-        { $sort: { reactionCount: -1, createdAt: -1, shareId: 1 } },
-        { $skip: offset },
-        { $limit: limit + 1 }
-      ])
-      .toArray() as Promise<ThingDoc[]>,
+
+  // Rank in two indexed passes instead of a per-schema $lookup (which ran a
+  // reaction sub-pipeline for EVERY schema in the visibility superset on every
+  // request): (1) collect candidate schema ids, (2) one $group over reaction
+  // things by targetId. Sort the counts in memory (same order the $sort used:
+  // reactionCount desc, createdAt desc, shareId asc) and page by offset.
+  const [candidates, total] = await Promise.all([
+    collection.find(match as any).project({ shareId: 1, createdAt: 1 }).toArray() as Promise<
+      { shareId: string; createdAt: Date }[]
+    >,
     cappedCount(collection, match, cursor)
   ]);
+
+  const candidateIds = candidates.map((candidate) => candidate.shareId);
+  const reactionCounts = new Map<string, number>();
+  if (candidateIds.length) {
+    const grouped = (await collection
+      .aggregate([
+        { $match: { thingtime: 'reaction', targetId: { $in: candidateIds } } },
+        { $group: { _id: '$targetId', count: { $sum: 1 } } }
+      ])
+      .toArray()) as any[];
+    for (const row of grouped) reactionCounts.set(String(row._id), Number(row.count) || 0);
+  }
+
+  const ranked = candidates
+    .map((candidate) => ({
+      shareId: candidate.shareId,
+      createdAt: candidate.createdAt,
+      reactionCount: reactionCounts.get(candidate.shareId) || 0
+    }))
+    .sort(
+      (a, b) =>
+        b.reactionCount - a.reactionCount ||
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime() ||
+        (a.shareId < b.shareId ? -1 : a.shareId > b.shareId ? 1 : 0)
+    );
+
+  const pageIds = ranked.slice(offset, offset + limit + 1).map((entry) => entry.shareId);
+  const fetched = pageIds.length
+    ? ((await collection.find({ shareId: { $in: pageIds } } as any).toArray()) as any as ThingDoc[])
+    : [];
+  const byId = new Map(fetched.map((doc) => [doc.shareId, doc]));
+  const docs = pageIds.map((id) => byId.get(id)).filter(Boolean) as ThingDoc[];
 
   const page = docs.slice(0, limit);
   const visibleFlags = await Promise.all(page.map((doc) => canViewInherited(doc, viewer)));

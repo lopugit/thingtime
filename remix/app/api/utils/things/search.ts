@@ -1,6 +1,12 @@
 import { escapeRegex, findUserByUsername } from '../auth/users';
 import { ensureIndexes, getThingsCollection } from '../mongodb/collections';
-import { KEY_SEGMENT_PATTERN, MAX_TEXT_CHARS, PROTECTED_THINGTIME } from '~/schemas/registry';
+import {
+  KEY_SEGMENT_PATTERN,
+  MAX_TEXT_CHARS,
+  PROTECTED_THINGTIME,
+  SEARCHABLE_ROOT_FIELDS,
+  SEARCH_DATATYPES
+} from '~/schemas/registry';
 import {
   POST_TYPES,
   VISIBILITIES,
@@ -58,16 +64,12 @@ export const SEARCH_OPERATORS = [
 export type SearchOperator = (typeof SEARCH_OPERATORS)[number];
 
 // friendly datatype names → mongo $type aliases ('number' covers int/long/
-// double/decimal, which is exactly the developer-datatype semantics we want)
-const TYPE_ALIASES: Record<string, string> = {
-  string: 'string',
-  number: 'number',
-  boolean: 'bool',
-  date: 'date',
-  array: 'array',
-  object: 'object',
-  null: 'null'
-};
+// double/decimal, which is exactly the developer-datatype semantics we want).
+// Keys are the shared SEARCH_DATATYPES (registry) so server + client never drift;
+// only 'boolean' remaps (→ 'bool'), the rest are identity.
+const TYPE_ALIASES: Record<string, string> = Object.fromEntries(
+  SEARCH_DATATYPES.map((name) => [name, name === 'boolean' ? 'bool' : name])
+);
 
 const MAX_CONDITIONS = 32;
 const MAX_GROUP_DEPTH = 3;
@@ -93,7 +95,8 @@ const MAX_AUTHOR_CHARS = 64;
 
 // Root fields searchable by name; anything else lives under crystal (bare
 // names like "legs" auto-prefix to crystal.legs so the GUI can stay simple).
-const ROOT_FIELDS = new Set(['tags', 'thingtime', 'createdAt', 'updatedAt', 'shareId', 'targetId']);
+// Sourced from the shared registry list so the client suggestions can't drift.
+const ROOT_FIELDS = new Set<string>(SEARCHABLE_ROOT_FIELDS);
 const DATE_FIELDS = new Set(['createdAt', 'updatedAt']);
 // the same grammar data-crystal keys are stored under — a storable key is
 // always a searchable key (single source: schemas/registry.ts)

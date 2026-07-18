@@ -606,15 +606,20 @@ export const SearchPage = () => {
   const schemaRailRef = React.useRef({ schemaQ, schemaSort });
   schemaRailRef.current = { schemaQ, schemaSort };
   const schemaSeqRef = React.useRef(0);
-  const loadSchemas = React.useCallback(async (options: { cursor?: string | null } = {}) => {
+  const loadSchemas = React.useCallback(
+    async (options: { cursor?: string | null; sort?: 'newest' | 'popular' } = {}) => {
     const seq = ++schemaSeqRef.current;
     const { cursor } = options;
     setSchemasLoading(true);
     try {
       const rail = schemaRailRef.current;
+      // An explicit sort override wins over the ref — a sort button changes the
+      // sort and reloads in one click, before the setSchemaSort re-render syncs
+      // the ref, so passing it as an argument avoids a stale-ref pre-write dance.
+      const sort = options.sort ?? rail.schemaSort;
       const resp: any = await apiRef.current.v1.schemas.browse({
         q: rail.schemaQ.trim() || undefined,
-        sort: rail.schemaSort,
+        sort,
         cursor: cursor || undefined,
         limit: 12
       });
@@ -895,8 +900,7 @@ export const SearchPage = () => {
               <Button
                 onClick={() => {
                   setSchemaSort('newest');
-                  schemaRailRef.current = { ...schemaRailRef.current, schemaSort: 'newest' };
-                  loadSchemas();
+                  loadSchemas({ sort: 'newest' });
                 }}
                 size="xs"
                 variant={schemaSort === 'newest' ? 'solid' : 'ghost'}
@@ -906,8 +910,7 @@ export const SearchPage = () => {
               <Button
                 onClick={() => {
                   setSchemaSort('popular');
-                  schemaRailRef.current = { ...schemaRailRef.current, schemaSort: 'popular' };
-                  loadSchemas();
+                  loadSchemas({ sort: 'popular' });
                 }}
                 size="xs"
                 variant={schemaSort === 'popular' ? 'solid' : 'ghost'}

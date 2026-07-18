@@ -18,6 +18,28 @@ export const isSafeUrl = (value: string): boolean => {
 export const safeUrl = (value: unknown): string | undefined =>
 	typeof value === 'string' && isSafeUrl(value) ? value : undefined;
 
+// Shared untrusted-content screening for BOTH thing renderers (Chakra + HTML),
+// so a new CSS-escape vector or handler-prop bypass is patched in ONE place
+// instead of drifting between two copied deny-lists.
+
+// Block CSS escape hatches anywhere a string value lands (backgroundImage can
+// carry url(…), sx/style carry whole blocks): javascript: URLs, expression(),
+// and @import. Returns true when the value is free of all three.
+export const isSafeCssText = (value: unknown): boolean => {
+	const text = String(value).toLowerCase();
+	return !text.includes('javascript:') && !text.includes('expression(') && !text.includes('@import');
+};
+
+// Event-handler prop screen (onClick, onError, …) — untrusted data must never
+// wire up a React/DOM handler.
+export const isEventHandlerProp = (key: string): boolean => /^on/i.test(key);
+
+// External links must drop the opener (reverse-tabnabbing): mutates the given
+// already-sanitized props object in place when target === '_blank'.
+export const applyNoOpener = (props: Record<string, unknown>): void => {
+	if (props.target === '_blank') props.rel = 'noopener noreferrer';
+};
+
 // CSS `url("…")` value for backgroundImage, or undefined. Scheme-checked like
 // safeUrl, then every character that could terminate or escape the url("…")
 // string token — C0 control chars and whitespace (a raw newline ends a CSS

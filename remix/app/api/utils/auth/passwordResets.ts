@@ -7,16 +7,15 @@ import {
 } from '../mongodb/collections';
 
 import { hashPassword } from './passwords';
-import { newAuthToken } from './tokens';
+import { consumeSingleUseToken, createSingleUseToken, type ConsumeTokenResult } from './singleUseTokens';
 import { setUserPasswordHash } from './users';
 
 const ONE_HOUR_MS = 1000 * 60 * 60;
 
-const newToken = newAuthToken;
-
-// Issue a single-use, time-limited password reset token — mirrors the
-// emailVerifications token pattern (single-use burn, short TTL).
-export const createPasswordReset = async ({
+// Issue a single-use, time-limited password reset token. Thin wrapper over the
+// shared single-use-token helper (see singleUseTokens.ts) — the same machinery
+// behind email verification, so a hardening fix reaches both credentials.
+export const createPasswordReset = ({
   userId,
   email,
   expiresInMs = ONE_HOUR_MS
@@ -24,47 +23,20 @@ export const createPasswordReset = async ({
   userId: string;
   email: string;
   expiresInMs?: number;
-}) => {
-  const now = new Date();
-  const doc = {
-    token: newToken(),
-    userId,
-    email: email.trim().toLowerCase(),
+}) =>
+  createSingleUseToken({
+    getCollection: getPasswordResetsCollection,
     schemaVersion: COLLECTION_SCHEMA_VERSIONS.passwordResets,
-    createdAt: now,
-    expiresAt: new Date(now.getTime() + expiresInMs),
-    consumedAt: null as Date | null
-  };
-  await (await getPasswordResetsCollection()).insertOne(doc);
-  return doc;
-};
+    userId,
+    email,
+    expiresInMs
+  });
 
-export type ConsumePasswordResetResult =
-  | { ok: true; userId: string; email: string }
-  | { ok: false; reason: 'invalid' | 'used' | 'expired' };
+export type ConsumePasswordResetResult = ConsumeTokenResult;
 
 // Validate + burn a reset token atomically (two racing submits: one wins).
-export const consumePasswordReset = async (token: string): Promise<ConsumePasswordResetResult> => {
-  const coll = await getPasswordResetsCollection();
-  const now = new Date();
-
-  const consumed = await coll.findOneAndUpdate(
-    {
-      token,
-      consumedAt: null,
-      expiresAt: { $gt: now }
-    },
-    { $set: { consumedAt: now } },
-    { returnDocument: 'after' }
-  );
-
-  if (consumed) return { ok: true, userId: consumed.userId, email: consumed.email };
-
-  const doc = await coll.findOne({ token });
-  if (!doc) return { ok: false, reason: 'invalid' };
-  if (doc.consumedAt) return { ok: false, reason: 'used' };
-  return { ok: false, reason: 'expired' };
-};
+export const consumePasswordReset = (token: string): Promise<ConsumePasswordResetResult> =>
+  consumeSingleUseToken(getPasswordResetsCollection, token);
 
 // Apply the new password and invalidate every other live credential for the
 // user — a reset is a credential rotation, so stolen cookies/tokens must stop

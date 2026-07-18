@@ -58,7 +58,7 @@ import {
 	WrapItem
 } from '@chakra-ui/react';
 
-import { isSafeUrl } from './safeUrl';
+import { applyNoOpener, isEventHandlerProp, isSafeCssText, isSafeUrl } from './safeUrl';
 
 // JSON → Chakra renderer: the serialised-component half of "everything is a
 // thing". A node is either a string/number (text) or:
@@ -140,13 +140,6 @@ const MAX_NODES = 600;
 const MAX_DEPTH = 24;
 const MAX_PROP_DEPTH = 4;
 
-// block css escape hatches anywhere a string value lands (bg can carry
-// url(…), sx carries whole style blocks)
-const safeCssText = (value: string): boolean => {
-	const text = value.toLowerCase();
-	return !text.includes('javascript:') && !text.includes('expression(') && !text.includes('@import');
-};
-
 // Out-of-flow positioning lets untrusted content escape its container and paint
 // a full-viewport overlay (clickjacking / phishing / a beacon via background
 // url()). Blocking script isn't enough — a positioned Box over the real UI is
@@ -175,7 +168,7 @@ const scrubPositionValue = (value: unknown): unknown => {
 };
 
 const sanitizeValue = (value: unknown, depth: number): unknown => {
-	if (typeof value === 'string') return safeCssText(value) ? value : undefined;
+	if (typeof value === 'string') return isSafeCssText(value) ? value : undefined;
 	if (typeof value === 'number' || typeof value === 'boolean') return value;
 	if (Array.isArray(value)) {
 		if (depth >= MAX_PROP_DEPTH) return undefined;
@@ -187,7 +180,7 @@ const sanitizeValue = (value: unknown, depth: number): unknown => {
 		if (depth >= MAX_PROP_DEPTH) return undefined;
 		const out: Record<string, unknown> = {};
 		Object.entries(value as Record<string, unknown>).forEach(([key, entry]) => {
-			if (/^on/i.test(key) || BLOCKED_PROPS.has(key)) return;
+			if (isEventHandlerProp(key) || BLOCKED_PROPS.has(key)) return;
 			let sanitized = sanitizeValue(entry, depth + 1);
 			// nested position (sx / style / pseudo / selector blocks)
 			if (POSITION_PROPS.has(key)) sanitized = scrubPositionValue(sanitized);
@@ -204,7 +197,7 @@ const sanitizeProps = (props: unknown): Record<string, unknown> => {
 	const out: Record<string, unknown> = {};
 	Object.entries(props as Record<string, unknown>).forEach(([key, value]) => {
 		// no event handlers, no internals, no element swapping
-		if (/^on/i.test(key) || BLOCKED_PROPS.has(key)) return;
+		if (isEventHandlerProp(key) || BLOCKED_PROPS.has(key)) return;
 		if (URL_PROPS.has(key)) {
 			if (typeof value === 'string' && isSafeUrl(value)) out[key] = value;
 			return;
@@ -216,9 +209,7 @@ const sanitizeProps = (props: unknown): Record<string, unknown> => {
 	});
 
 	// external links never keep the opener
-	if (out.target === '_blank') {
-		out.rel = 'noopener noreferrer';
-	}
+	applyNoOpener(out);
 
 	return out;
 };

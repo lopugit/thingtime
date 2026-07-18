@@ -2,6 +2,8 @@ import React from 'react';
 import { Button, Flex, IconButton, Input, Select, Text } from '@chakra-ui/react';
 import { X } from 'lucide-react';
 
+import { SEARCHABLE_ROOT_FIELDS, SEARCH_DATATYPES } from '~/schemas/registry';
+
 import type { ConditionRow, RowValueType } from './searchTypes';
 
 // The query-builder core shared by /search and the feed/profile Advanced
@@ -27,9 +29,13 @@ export const OPERATORS: { id: string; label: string; kind: 'value' | 'range' | '
   { id: 'type', label: 'has type', kind: 'type' }
 ];
 
-export const DATATYPES = ['string', 'number', 'boolean', 'date', 'array', 'object', 'null'];
+// Derived from the shared registry lists so the client can't offer a datatype
+// the server rejects, or miss a root field the server searches (shareId was
+// exactly this drift). See schemas/registry.ts SEARCH_DATATYPES /
+// SEARCHABLE_ROOT_FIELDS — the single source shared with things/search.ts.
+export const DATATYPES = [...SEARCH_DATATYPES];
 
-export const ROOT_FIELD_SUGGESTIONS = ['tags', 'thingtime', 'createdAt', 'updatedAt', 'targetId'];
+export const ROOT_FIELD_SUGGESTIONS = [...SEARCHABLE_ROOT_FIELDS];
 
 export const opKind = (op: string) => OPERATORS.find((entry) => entry.id === op)?.kind || 'value';
 

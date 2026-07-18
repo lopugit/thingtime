@@ -940,6 +940,16 @@ const sanitizeReactionCrystal = (input: Record<string, unknown>): { ok: true; cr
 // can never drift (a storable key MUST be a searchable key).
 export const KEY_SEGMENT_PATTERN = /^[A-Za-z0-9_-]+$/;
 
+// Single source for the search grammar's root fields + datatypes, shared by the
+// server compiler (things/search.ts) AND the client query builder (Search
+// components) so the two can't drift — a root field the server searches but the
+// client never suggests (shareId was exactly this) is the drift this prevents.
+// Root fields are searchable by bare name; anything else auto-prefixes to crystal.
+export const SEARCHABLE_ROOT_FIELDS = ['tags', 'thingtime', 'createdAt', 'updatedAt', 'shareId', 'targetId'] as const;
+// Friendly datatype names offered by the `type` operator (mapped to Mongo $type
+// aliases server-side — 'boolean' → 'bool', the rest are identity).
+export const SEARCH_DATATYPES = ['string', 'number', 'boolean', 'date', 'array', 'object', 'null'] as const;
+
 // Free-form data crystals: any JSON, bounded and key-validated. The walk fails
 // loudly (never silently drops) so writers know exactly what didn't fit.
 const DATA_KEY_PATTERN = KEY_SEGMENT_PATTERN;
