@@ -4230,8 +4230,8 @@
     "semantic_hash": ""
   },
   "remix/public/sdk/demo.html": {
-    "mtime": 1784376652.6718886,
-    "ast_hash": "b4fc61e4213496c23b0f31870cc57089",
+    "mtime": 1784379846.2059793,
+    "ast_hash": "32114f6124720a4e35d5dc90b8461ef9",
     "semantic_hash": ""
   },
   "remix/app/api/utils/errors/safeError.ts": {
