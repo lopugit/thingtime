@@ -15,9 +15,10 @@ export const loader = async ({ request }: { request: Request }) => {
   return json({ ok: true, apps: await listApps(user.id) });
 };
 
-// POST /api/v1/apps — { name, origins } — register a new embed app. The
-// server mints the clientId; origins are validated (https, or http on
-// localhost for dev).
+// POST /api/v1/apps — { name, origins? } — register a new embed app. The
+// server mints the clientId; origins are optional reference metadata (SSO is
+// default-open per api/utils/apps/apps.ts) but entries are still validated
+// (https, or http on localhost for dev).
 export const action = async ({ request }: { request: Request }) => {
   const user = await getCurrentUser(request);
   if (!user) {

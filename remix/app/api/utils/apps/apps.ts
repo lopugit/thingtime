@@ -14,6 +14,16 @@ import {
 // crystal { clientId, name, origins }, owned by the developer user. Apps are
 // created ONLY here (the schema has no generic-route sanitizer), the server
 // mints the clientId, and a partial unique index keeps clientId one-of-a-kind.
+//
+// ORIGINS ARE DEFAULT-OPEN (owner decision, 2026-07): ANY valid web origin may
+// open the authorize popup and receive a token for any registered app — so
+// Thingtime SSO "just works" from preview deploys (Vercel previews, branch
+// URLs) without the developer pre-registering each one. `origins` is kept as
+// optional reference metadata only; nothing enforces it. The load-bearing
+// protections are per-token, not per-list: every token is bound to the exact
+// origin that requested it (embed routes require request Origin === token
+// origin), the popup postMessages only to that origin, the consent screen
+// shows the requesting host, and deleting the app revokes every token.
 
 type Fail = { ok: false; status: number; error: string };
 const fail = (status: number, error: string): Fail => ({ ok: false, status, error });
@@ -28,7 +38,7 @@ export type PublicApp = {
 
 // The shape shown to ANONYMOUS callers (the authorize popup before login):
 // just enough to render a consent screen, nothing about the owner or the
-// full origin allowlist.
+// reference origins list.
 export type EmbedApp = {
   clientId: string;
   name: string;
@@ -65,9 +75,13 @@ export const sanitizeAppName = (value: unknown): string | null => {
   return name;
 };
 
+// Origins are optional reference metadata (see the default-open note above):
+// omitted/empty is fine, but anything provided must still be a clean origin so
+// the stored list stays meaningful.
 export const sanitizeAppOrigins = (value: unknown): string[] | Fail => {
-  if (!Array.isArray(value) || !value.length) {
-    return fail(400, 'origins must be a non-empty list of web origins');
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) {
+    return fail(400, 'origins must be a list of web origins');
   }
   if (value.length > MAX_APP_ORIGINS) {
     return fail(400, `An app can have at most ${MAX_APP_ORIGINS} origins`);
@@ -108,13 +122,6 @@ export const findAppsByClientIds = async (clientIds: string[]) => {
   if (!ids.length) return [];
   const things = await getThingsCollection();
   return things.find({ thingtime: 'app', 'crystal.clientId': { $in: ids } }).toArray();
-};
-
-export const appAllowsOrigin = (appDoc: any, origin: string): boolean => {
-  const normalized = normalizeAppOrigin(origin);
-  if (!normalized) return false;
-  const origins = appDoc?.crystal?.origins;
-  return Array.isArray(origins) && origins.includes(normalized);
 };
 
 export const createApp = async (

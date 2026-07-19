@@ -3,7 +3,7 @@ import { createSession, getLiveSession } from '../auth/sessions';
 import { findUserById, toPublicUser } from '../auth/users';
 import type { PublicUser } from '../auth/users';
 import { getSessionsCollection } from '../mongodb/collections';
-import { appAllowsOrigin, findAppByClientId } from './apps';
+import { findAppByClientId } from './apps';
 import { sessionScopes } from './scopes';
 import type { AppScopeId } from './scopes';
 import { MAX_APP_SESSIONS_PER_APP_USER } from '~/schemas/registry';
@@ -86,8 +86,10 @@ export type AppTokenContext = {
 
 // Resolve an app-scoped Bearer token, or null. Bearer-only on purpose: app
 // tokens live in third-party page JS and never ride a Thingtime cookie, so a
-// cross-site request can't use ambient credentials. The grant also dies with
-// its app: the app must still exist and must still allow the bound origin.
+// cross-site request can't use ambient credentials. The grant dies with its
+// app: the app must still exist. Origins are default-open (apps.ts), so the
+// registered list is never re-checked here — the binding that matters is the
+// token's own meta.origin, which the embed routes compare to request Origin.
 export const resolveAppToken = async (request: Request): Promise<AppTokenContext | null> => {
   const header = request.headers.get('Authorization');
   if (!header?.startsWith('Bearer ')) return null;
@@ -106,7 +108,7 @@ export const resolveAppToken = async (request: Request): Promise<AppTokenContext
   if (typeof clientId !== 'string' || typeof origin !== 'string') return null;
 
   const app = await findAppByClientId(clientId);
-  if (!app || !appAllowsOrigin(app, origin)) return null;
+  if (!app) return null;
 
   const user = await findUserById(claims.sub);
   if (!user) return null;

@@ -117,6 +117,26 @@ is fixed, and cite the checklist you ran in the PR description.
       thing-context-menu) still lay out statically inside their canvases
       (`inline` mode).
 
+## Embed SSO / "Login with Thingtime" (`remix/app/components/OAuth/AuthorizePage.tsx`, `remix/app/api/utils/apps/`)
+
+- [ ] Origins are DEFAULT-OPEN (owner decision): `/authorize?client_id=<real
+      ttapp>&origin=<https origin NOT on the app's origins list>` (e.g. a
+      Vercel preview URL) shows the login → consent flow, never "This origin
+      is not on the app's allowlist". `/api/v1/apps/public` returns ok for
+      any valid origin; only unknown clientIds (404) and malformed origins
+      (400 — e.g. http on a non-localhost host) refuse.
+- [ ] Registering an app without `origins` works (`POST /api/v1/apps
+      { name }` → `origins: []`); updating origins to `[]` works; a bad
+      entry (`ftp://…`, non-localhost http) still 400s.
+- [ ] Token binding is per-token, not per-list: a minted app token works on
+      `/api/v1/oauth/userinfo` with `Origin:` = the origin that opened the
+      popup, is 403-rejected ("Origin does not match this token") from any
+      other Origin, and KEEPS working after the app's origins list is edited.
+      Deleting the app still kills its tokens.
+- [ ] The consent screen always displays the requesting origin host next to
+      the app name (both logged-out and consent states) — with open origins
+      this display is the user's phishing signal; it must never be dropped.
+
 ## Data crystals & nesting depth (`remix/app/schemas/registry.ts`)
 
 - [ ] Post a thingtime post whose thing contains an Editor.js document (or

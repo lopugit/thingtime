@@ -1,7 +1,7 @@
 import { json, readJsonBody } from '~/api/http';
 
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
-import { appAllowsOrigin, findAppByClientId, normalizeAppOrigin } from '~/api/utils/apps/apps';
+import { findAppByClientId, normalizeAppOrigin } from '~/api/utils/apps/apps';
 import { issueAppToken } from '~/api/utils/apps/appTokens';
 import { parseScopeParam, sanitizeGrantedScopes, scopeCovers } from '~/api/utils/apps/scopes';
 import { sanitizeSharedThings } from '~/api/utils/apps/sharedThings';
@@ -9,7 +9,8 @@ import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit
 
 // POST /api/v1/oauth/authorize — the consent step of the "Login with
 // Thingtime" popup. Body:
-//   clientId, origin       — the app + the embedding origin (allowlist-checked)
+//   clientId, origin       — the app + the embedding origin (any valid origin;
+//                            default-open per apps.ts — the token is BOUND to it)
 //   scope                  — space-delimited REQUIRED scopes the platform declared
 //   optionalScope          — space-delimited OPTIONAL scopes it also asked for
 //   extra                  — '0' when the platform opted out of volunteer sharing
@@ -64,10 +65,6 @@ export const action = async ({ request }: { request: Request }) => {
 
   const app = await findAppByClientId(clientId);
   if (!app) return json({ ok: false, error: 'App not found' }, { status: 404 });
-
-  if (!appAllowsOrigin(app, origin)) {
-    return json({ ok: false, error: 'This origin is not on the app’s allowlist' }, { status: 403 });
-  }
 
   const grant = await issueAppToken(user.id, clientId, origin, granted.scopes, sharedThings);
 

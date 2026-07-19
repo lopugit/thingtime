@@ -6,7 +6,9 @@ import { Register } from '~/components/Login/Register';
 
 // The "Login with Thingtime" popup (route /authorize, opened by the embed SDK
 // from a third-party site). Flow: validate clientId + origin against
-// /api/v1/apps/public → log in (or register) if needed → consent, where the
+// /api/v1/apps/public (the app must exist; the origin just has to be a valid
+// web origin — origins are default-open so preview deploys work, see
+// api/utils/apps/apps.ts) → log in (or register) if needed → consent, where the
 // permissions selector shows the platform's REQUIRED scopes (locked), its
 // OPTIONAL scopes (toggles), and — unless the platform opted out — a "share
 // more" section where the user can volunteer extra profile fields and
@@ -382,8 +384,9 @@ export const AuthorizePage = () => {
   // ---- approve / cancel ----------------------------------------------------
 
   const postToOpener = (payload: Record<string, unknown>) => {
-    // targetOrigin is the server-validated origin — the token can only land on
-    // the allowlisted embedding page, even if the opener navigated elsewhere.
+    // targetOrigin is the server-normalized origin — the token can only land
+    // on the exact embedding page the flow started from, even if the opener
+    // navigated elsewhere.
     if (typeof window !== 'undefined' && window.opener && verifiedOrigin) {
       window.opener.postMessage({ ...payload, state }, verifiedOrigin);
       return true;
@@ -521,8 +524,8 @@ export const AuthorizePage = () => {
           </Button>
         ) : (
           <Box color="var(--tt-muted, #9a9aa6)" fontSize="13px">
-            If you run this site, register the app (and this exact origin) under Thingtime apps, then reload —
-            or try the sandbox from /sdk/demo.html.
+            If you run this site, register an app under Thingtime apps and use its clientId — any origin
+            (even a preview URL) can open the login from there. Or try the sandbox from /sdk/demo.html.
           </Box>
         )}
       </Flex>

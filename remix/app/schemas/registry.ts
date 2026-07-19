@@ -203,7 +203,8 @@ export const MAX_IMAGE_URL_CHARS = 2048;
 export const MAX_COMMENT_CHARS = 1000;
 
 // Embeddable "Login with Thingtime" apps (see api/utils/apps): registered by a
-// developer user, identified by clientId, locked to an origin allowlist.
+// developer user, identified by clientId. SSO origins are default-open; the
+// origins list is optional reference metadata.
 export const MAX_APP_NAME_CHARS = 80;
 export const MAX_APP_ORIGINS = 20;
 export const MAX_APPS_PER_USER = 20;
@@ -752,14 +753,15 @@ const appSchema: ThingtimeSchema = {
   summary: 'A registered third-party app that can embed "Login with Thingtime".',
   detail:
     'Created only through /api/v1/apps (no generic-route sanitizer on purpose — the server mints ' +
-    'the clientId and validates the origin allowlist, so neither can be forged through /api/v1/things). ' +
-    'The clientId identifies the app to the embed SDK; origins is the exact list of web origins ' +
-    'allowed to open the authorize popup and receive tokens. Deleting the app revokes every ' +
-    'app-scoped session minted for it.',
+    'the clientId, so it cannot be forged through /api/v1/things). The clientId identifies the app ' +
+    'to the embed SDK. SSO origins are default-open: any valid web origin can open the authorize ' +
+    'popup and receive tokens (so preview deploys work without registration); origins is an ' +
+    'optional reference list, and each token is bound to the exact origin that requested it. ' +
+    'Deleting the app revokes every app-scoped session minted for it.',
   fields: [
     { name: 'clientId', type: 'id', required: true, description: 'Server-minted public app id (ttapp_<uuid>) used by the embed SDK.' },
     { name: 'name', type: 'string', required: true, max: MAX_APP_NAME_CHARS, description: `App name shown on the consent screen, max ${MAX_APP_NAME_CHARS} chars.` },
-    { name: 'origins', type: 'string[]', required: true, max: MAX_APP_ORIGINS, description: `Allowed web origins (https, or http for localhost dev), max ${MAX_APP_ORIGINS}.` }
+    { name: 'origins', type: 'string[]', required: false, max: MAX_APP_ORIGINS, description: `Optional reference list of the app's web origins (https, or http for localhost dev), max ${MAX_APP_ORIGINS}. Not enforced — SSO is open to any origin by default.` }
   ],
   example: { clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', name: 'Rainbow Notes', origins: ['https://rainbownotes.example'] }
 };

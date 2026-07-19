@@ -1755,14 +1755,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     summary: 'Register and list the apps that can embed "Login with Thingtime" on other websites.',
     detail:
       'An app is what an external website registers before it can show a "Login with Thingtime" button ' +
-      '(via the embed SDK at /sdk/thingtime-login.js). POST { name, origins } registers one: the server ' +
-      'mints the clientId (ttapp_<uuid>) and validates origins — bare https origins like ' +
-      'https://example.com, with http allowed only for localhost dev. Only those exact origins can open ' +
-      'the authorize popup and receive tokens. GET lists your registered apps.',
+      '(via the embed SDK at /sdk/thingtime-login.js). POST { name, origins? } registers one: the server ' +
+      'mints the clientId (ttapp_<uuid>). SSO is open to any origin by default — localhost, preview ' +
+      'deploys, and production all work without pre-registering them; each token is bound to the exact ' +
+      'origin that opened the popup. `origins` is an optional reference list; entries are still ' +
+      'validated as bare https origins like https://example.com (http allowed only for localhost dev). ' +
+      'GET lists your registered apps.',
     auth: { mode: 'session-or-bearer', description: 'Your own Thingtime session (cookie or full-account Bearer). App-scoped tokens are rejected.' },
     methods: ['GET', 'POST'],
     steps: [
-      'POST { name, origins } to register an app and receive its clientId.',
+      'POST { name } (origins optional) to register an app and receive its clientId.',
       'Drop the SDK + clientId into the external site (see /sdk/thingtime-login.js).',
       'GET to list your apps; update or delete them via /api/v1/apps/update and /api/v1/apps/delete.'
     ],
@@ -1770,7 +1772,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       { name: 'List apps', description: 'Your registered apps.', method: 'GET' },
       {
         name: 'Register an app',
-        description: 'Create an app locked to one origin.',
+        description: 'Create an app — the optional origins list is just a reference note.',
         method: 'POST',
         body: { name: 'Rainbow Notes', origins: ['https://rainbownotes.example'] }
       }
@@ -1786,28 +1788,28 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       },
       { status: 400, description: 'Bad origin.', body: { ok: false, error: 'Origins must be bare https origins like https://example.com (http is allowed for localhost only)' } }
     ],
-    notes: ['Apps are things (thingtime ["app"]) owned by you; the clientId is public, but tokens only ever reach allowlisted origins.']
+    notes: ['Apps are things (thingtime ["app"]) owned by you; the clientId is public. Tokens are bound to the exact origin that requested them and only ever postMessage back to it.']
   }),
   endpoint({
     id: 'apps-update',
     group: 'embed',
     title: 'Update an embed app',
     endpoint: '/api/v1/apps/update',
-    summary: 'Rename one of your embed apps or change its origin allowlist.',
+    summary: 'Rename one of your embed apps or update its reference origins list.',
     detail:
-      'POST { clientId, name?, origins? }. Origins are re-validated like registration. Removing an origin ' +
-      'takes effect on the next request from any token bound to it — the app-token resolver re-checks the ' +
-      'allowlist every time.',
+      'POST { clientId, name?, origins? }. Origins are re-validated like registration, but they are ' +
+      'reference metadata only — SSO is open to any origin by default, and editing the list never ' +
+      'revokes tokens. Delete the app (/api/v1/apps/delete) to revoke everything it minted.',
     auth: { mode: 'session-or-bearer', description: 'Your own Thingtime session (cookie or full-account Bearer); you can only update apps you own.' },
     methods: ['POST'],
     steps: [
       'POST the clientId plus the fields to change.',
-      'Tokens bound to removed origins stop working immediately.'
+      'Existing tokens keep working — only deleting the app revokes them.'
     ],
     requestExamples: [
       {
         name: 'Change origins',
-        description: 'Swap the allowlist to a new domain.',
+        description: 'Point the reference list at a new domain.',
         method: 'POST',
         body: { clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', origins: ['https://new.example'] }
       }
@@ -1848,17 +1850,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'GET ?clientId=…&origin=…&scope=…&optional_scope=…. Returns the app\'s public face (clientId + ' +
       'name) plus the REQUIRED (`scope`) and OPTIONAL (`optional_scope`) permission sets as descriptor ' +
       'entries ({ id, title, description, kind, baseline }) for the consent screen\'s permissions ' +
-      'selector — only when the app exists AND the origin is on its allowlist, so the popup can refuse ' +
-      'unregistered embedders before any login UI renders. Scope paths are hierarchical dot paths from ' +
-      '/api/v1/oauth/scopes (unknown names 400; empty scope → profile + app-data). 404 for unknown ' +
-      'apps, 403 for origins not on the allowlist.',
+      'selector — when the app exists and the origin is a valid web origin. SSO is open to any origin ' +
+      'by default (preview deploys work unregistered); the normalized origin is echoed back and ' +
+      'becomes the token\'s binding + the popup\'s postMessage target. Scope paths are hierarchical ' +
+      'dot paths from /api/v1/oauth/scopes (unknown names 400; empty scope → profile + app-data). ' +
+      '404 for unknown apps, 400 for malformed origins.',
     auth: { mode: 'none', description: 'Anonymous — returns only the app name + scope descriptors.' },
     methods: ['GET'],
     steps: ['GET with clientId, the embedding page origin, and the requested scope set.', 'Render the consent screen from the returned name + scope descriptors.'],
     requestExamples: [
       {
         name: 'Lookup',
-        description: 'Validate a clientId for an origin: require app-data, offer email + avatar.',
+        description: 'Validate a clientId from an embedding origin: require app-data, offer email + avatar.',
         method: 'GET',
         query: {
           clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f',
@@ -1886,7 +1889,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           ]
         }
       },
-      { status: 403, description: 'Origin not allowlisted.', body: { ok: false, error: 'This origin is not on the app’s allowlist' } }
+      { status: 400, description: 'Malformed origin.', body: { ok: false, error: 'origin must be a valid web origin' } }
     ]
   }),
   endpoint({
@@ -1943,8 +1946,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           user: { id: '664f1c2a9d3e5b0012345678', username: 'lopu' }
         }
       },
-      { status: 400, description: 'Grant missed a required scope.', body: { ok: false, error: 'The app requires the app-data permission — cancel instead if you’d rather not share it' } },
-      { status: 403, description: 'Origin not allowlisted.', body: { ok: false, error: 'This origin is not on the app’s allowlist' } }
+      { status: 400, description: 'Grant missed a required scope.', body: { ok: false, error: 'The app requires the app-data permission — cancel instead if you’d rather not share it' } }
     ],
     notes: ['Revocable from both sides: the developer deletes the app (/api/v1/apps/delete), or the user disconnects it (/api/v1/oauth/grants/revoke) — the token dies before its exp like every Thingtime JWT.']
   }),
