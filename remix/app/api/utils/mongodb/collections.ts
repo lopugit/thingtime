@@ -520,9 +520,22 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // Embed apps ("Login with Thingtime", api/utils/apps): one thing per
     // clientId, ever — a second doc claiming an existing clientId (however
     // created) could answer origin lookups with a different allowlist, so
-    // uniqueness is structural. Only app things carry crystal.clientId;
-    // app-data things reference the app as crystal.appId instead.
-		col.createIndex({ 'crystal.clientId': 1 }, { unique: true, partialFilterExpression: { 'crystal.clientId': { $exists: true } } }),
+    // uniqueness is structural. Scoped to thingtime:'app' for the same
+    // reason the reaction index requires a string targetId: a free-form data
+    // thing may legitimately carry a `clientId` key, and an exists-only
+    // filter 409s it against an unrelated app. Narrowing keeps the security
+    // property intact because every lookup in api/utils/apps/apps.ts already
+    // filters thingtime:'app' — a data thing can never answer one.
+    createIndexReplacing(
+      col,
+      { 'crystal.clientId': 1 },
+      {
+        name: 'things_app_client_unique',
+        unique: true,
+        partialFilterExpression: { thingtime: 'app', 'crystal.clientId': { $exists: true } }
+      },
+      ['crystal.clientId_1']
+    ),
     // Immutable subscription-tier revisions: one (tierId, version) ever,
     // at most one live revision per stable tier id, plus the status/order
     // scan used by the admin Live / Draft / Archived sections.
@@ -558,12 +571,23 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
     ),
     // App data: one thing per (user, app, key) — set() stays an idempotent
     // insert-or-update under races, and the index serves list-by-(user, app).
-    col.createIndex(
+    // Same scoping: setAppData's filter is thingtime:'app-data', so without
+    // it here a plain data thing carrying appId+key squats the slot (app
+    // writes then miss it, insert 11000 three times, and 503 permanently),
+    // and two ordinary data things sharing those values 409 each other.
+    createIndexReplacing(
+      col,
       { ownerId: 1, 'crystal.appId': 1, 'crystal.key': 1 },
       {
+        name: 'things_app_data_unique',
         unique: true,
-        partialFilterExpression: { 'crystal.appId': { $exists: true }, 'crystal.key': { $exists: true } }
-      }
+        partialFilterExpression: {
+          thingtime: 'app-data',
+          'crystal.appId': { $exists: true },
+          'crystal.key': { $exists: true }
+        }
+      },
+      ['ownerId_1_crystal.appId_1_crystal.key_1']
     ),
     // Protected per-(app, user) storage ledgers. App-owner management and
     // the admin directory enumerate one app's users newest-first; keeping
