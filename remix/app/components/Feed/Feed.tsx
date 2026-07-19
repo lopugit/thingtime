@@ -5,6 +5,7 @@ import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { RAINBOW_TEXT } from '~/theme/rainbow';
+import { AdvancedFilters, advancedSearchBody, searchResponsePosts, useAdvancedFilters } from './AdvancedFilters';
 import { AlgorithmMenu } from './AlgorithmMenu';
 import { FeedFilters } from './FeedFilters';
 import { PostComposer } from './PostComposer';
@@ -15,6 +16,8 @@ import type { FeedFiltersState, PostChange, PublicPost } from './feedTypes';
 // The /feed page: composer + algorithm picker + filters over an infinite
 // post column. Guest-visible (public posts only); engagement telemetry from
 // useFeedEngagement trains whichever algorithm is active as you scroll.
+// Filters ▸ Advanced swaps the pager onto the structured search API while
+// keeping the same PostList rendering and simple-filter narrowing.
 
 const EMPTY_FILTERS: FeedFiltersState = { types: [], circles: [], from: null, to: null };
 
@@ -27,6 +30,11 @@ export const FeedPage = () => {
 
   const [filters, setFilters] = React.useState<FeedFiltersState>(EMPTY_FILTERS);
   const [algorithmId, setAlgorithmId] = React.useState<string | null>(user?.activeFeedAlgorithmId ?? null);
+
+  // advanced search: the panel edits a draft; Apply snapshots it into
+  // `applied` (null = normal feed), which the pager keys off
+  const advancedFilters = useAdvancedFilters();
+  const appliedAdvanced = advancedFilters.applied;
 
   const [posts, setPosts] = React.useState<PublicPost[]>([]);
   const [nextCursor, setNextCursor] = React.useState<string | null>(null);
@@ -65,6 +73,31 @@ export const FeedPage = () => {
       setLoading(true);
 
       try {
+        if (appliedAdvanced) {
+          // advanced mode: the structured search API, posts projected the same
+          // way the feed projects them — simple filters keep narrowing
+          const resp = await apiRef.current.v1.things.search({
+            ...advancedSearchBody(appliedAdvanced),
+            types: filters.types.length ? filters.types : undefined,
+            circles: filters.circles.length ? filters.circles : undefined,
+            from: filters.from || undefined,
+            to: filters.to || undefined,
+            cursor: reset ? undefined : cursor || undefined,
+            limit: PAGE_SIZE
+          });
+          if (seq !== requestSeqRef.current) return;
+
+          const pagePosts: PublicPost[] = searchResponsePosts(resp);
+          setPosts((prev) => {
+            if (reset) return pagePosts;
+            const seen = new Set(prev.map((post) => post.id));
+            return [...prev, ...pagePosts.filter((post) => !seen.has(post.id))];
+          });
+          setNextCursor(resp.nextCursor ?? null);
+          setRanked(!!resp.ranked);
+          return;
+        }
+
         const resp = await apiRef.current.v1.things.feed({
           types: filters.types,
           circles: filters.circles,
@@ -81,6 +114,10 @@ export const FeedPage = () => {
         setRanked(!!resp.ranked);
       } catch (err: any) {
         if (seq !== requestSeqRef.current) return;
+        // a failed RESET must not leave the previous query's posts posing as
+        // this one's results (the optimistic keep only covers the happy path);
+        // a failed load-more keeps the list it was extending
+        if (reset) setPosts([]);
         setNextCursor(null);
         lopuRef.current({ title: err?.error || 'Could not load the feed 😞', status: 'error' });
       } finally {
@@ -90,14 +127,23 @@ export const FeedPage = () => {
         }
       }
     },
-    [filters, algorithmId]
+    [filters, algorithmId, appliedAdvanced]
   );
 
-  // initial fetch + reset whenever the filters or algorithm change — or the
-  // viewer does (an account switch can keep the same algorithm id, e.g. null,
-  // so `load`'s identity alone wouldn't refetch the new account's feed)
+  // initial fetch + reset whenever the filters, algorithm, or advanced search
+  // change — or the viewer does (an account switch can keep the same algorithm
+  // id, e.g. null, so `load`'s identity alone wouldn't refetch the new
+  // account's feed). Optimistic rendering: the last-known posts stay on screen
+  // while the new query loads (reset replaces them when it lands) — only a
+  // viewer change clears immediately, so one account's circle posts never
+  // linger into another's session.
+  const lastViewerRef = React.useRef(user?.id ?? null);
   React.useEffect(() => {
-    setPosts([]);
+    const viewerId = user?.id ?? null;
+    if (lastViewerRef.current !== viewerId) {
+      lastViewerRef.current = viewerId;
+      setPosts([]);
+    }
     setNextCursor(null);
     load({ reset: true });
   }, [load, user?.id]);
@@ -117,6 +163,9 @@ export const FeedPage = () => {
     );
   }, []);
 
+  // deliberately optimistic even while an advanced search is applied: seeing
+  // your own fresh post beats strict filter fidelity, and the next Apply or
+  // page reload reconciles the list
   const handlePosted = React.useCallback((post: PublicPost) => {
     setPosts((prev) => [post, ...prev]);
   }, []);
@@ -159,7 +208,14 @@ export const FeedPage = () => {
             textTransform="uppercase"
             color="var(--tt-muted, #9a9aa6)"
           >
-            Thingtime · {ranked ? 'Ranked by your algorithm 🧠' : 'Fresh things first ⏱️'}
+            Thingtime ·{' '}
+            {appliedAdvanced
+              ? ranked
+                ? 'Advanced search · best match first 🔬'
+                : 'Advanced search 🔬'
+              : ranked
+                ? 'Ranked by your algorithm 🧠'
+                : 'Fresh things first ⏱️'}
           </Box>
           <Box
             as="h1"
@@ -189,9 +245,24 @@ export const FeedPage = () => {
             getSessionEvents={getSessionEvents}
           />
           <Box marginLeft="auto">
-            <FeedFilters value={filters} onChange={setFilters} />
+            <FeedFilters
+              value={filters}
+              onChange={setFilters}
+              advancedOpen={advancedFilters.open}
+              onAdvancedToggle={advancedFilters.toggle}
+            />
           </Box>
         </Flex>
+
+        {advancedFilters.open && (
+          <AdvancedFilters
+            value={advancedFilters.draft}
+            onChange={advancedFilters.setDraft}
+            onApply={advancedFilters.apply}
+            onClear={advancedFilters.clear}
+            loading={loading}
+          />
+        )}
 
         {user && <PostComposer onPosted={handlePosted} />}
 
@@ -204,9 +275,11 @@ export const FeedPage = () => {
             onPostChanged={handlePostChanged}
             onEngagement={recordEvent}
             emptyLabel={
-              ranked
-                ? 'Your algorithm has nothing to rank yet — try Latest ⏱️'
-                : 'Nothing here yet — be the first to post ✨'
+              appliedAdvanced
+                ? 'Nothing matched — loosen a filter, or try plain words up top ✨'
+                : ranked
+                  ? 'Your algorithm has nothing to rank yet — try Latest ⏱️'
+                  : 'Nothing here yet — be the first to post ✨'
             }
           />
         </Box>

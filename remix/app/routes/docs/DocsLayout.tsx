@@ -13,7 +13,7 @@ import {
   Stack,
   Text
 } from '@chakra-ui/react';
-import { BookOpen, Boxes, ChevronDown, ChevronRight, Component, Gem, GripVertical, Menu, PanelLeftClose, PanelLeftOpen, Search, ServerCog, Shapes, X } from 'lucide-react';
+import { BookOpen, Boxes, ChevronDown, ChevronRight, Component, Gem, GripVertical, KeyRound, Menu, PanelLeftClose, PanelLeftOpen, Search, ServerCog, Shapes, X } from 'lucide-react';
 import { Link as RouterLink, Outlet, useLocation, useSearchParams } from 'react-router';
 
 import { apiEndpointDocs, type ApiEndpointDoc } from '~/docs/apiDocs';
@@ -36,10 +36,16 @@ const docsNav = [
     description: 'Endpoint docs'
   },
   {
+    label: 'Login with Thingtime',
+    to: '/docs/embed',
+    icon: KeyRound,
+    description: 'Embed SDK + SSO guide'
+  },
+  {
     label: 'Schemas',
-    to: '/schemas',
+    to: '/docs/schemas',
     icon: Gem,
-    description: 'Browse every Thingtime Schema kind'
+    description: 'Reference for every Thingtime Schema kind'
   },
   {
     label: 'Design mockups',

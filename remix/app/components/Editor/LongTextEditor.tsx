@@ -2,6 +2,7 @@ import React from 'react';
 import { Box } from '@chakra-ui/react';
 
 import {
+	blocksToText,
 	EDITOR_JS_HEADING_FONT_SIZES,
 	EDITOR_JS_HEADING_LEVELS,
 	getEditorJsValueSignature,
@@ -16,7 +17,6 @@ import type { EditorJsSourceRevision } from './editorJsChangeReconciliation';
 import { watchEditorJsTextFieldKeydowns } from './editorJsKeyboard';
 import { watchEditorJsPopoverViewport } from './editorJsPopoverViewport';
 import { filterListV2ChecklistToolbox } from './editorJsToolbox';
-import { inlineHtmlToText } from './inlineHtmlText';
 import { StyleTune } from './StyleTune';
 
 export { getEditorJsDoc, isEditorJsDoc, parseEditorJsDocString } from './editorJsValue';
@@ -252,89 +252,10 @@ export const textToBlocks = (text: string): EditorJsDoc['blocks'] => {
 	return blocks.length ? blocks : [{ type: 'paragraph', data: { text: escapeInline(text) } }];
 };
 
-// ————— blocks → plain text (the inverse) —————
-
-const checklistItems = (data: Record<string, unknown>): Array<{ text: string; checked: boolean }> =>
-	(Array.isArray(data.items) ? data.items : []).map((item) => {
-		const record = (item || {}) as Record<string, unknown>;
-		return { text: inlineHtmlToText(record.text ?? record.content ?? item), checked: record.checked === true };
-	});
-
-export const blocksToText = (blocks: EditorJsDoc['blocks']): string =>
-	blocks
-		.map((block) => {
-			const data = block.data || {};
-			if (block.type === 'header') {
-				const level = Math.max(1, Math.min(6, Number(data.level) || 2));
-				return `${'#'.repeat(level)} ${inlineHtmlToText(data.text)}`;
-			}
-			if (block.type === 'list') {
-				// List v2 items are { content, meta: { checked }, items: [...] };
-				// v1 items are plain strings — serialise both, nesting by indent
-				const style = String(data.style ?? 'unordered');
-				const serializeItems = (items: unknown[], depth: number): string =>
-					items
-						.map((item, idx) => {
-							const record = (item || {}) as Record<string, unknown>;
-							const meta = (record.meta || {}) as Record<string, unknown>;
-							const text = inlineHtmlToText(typeof item === 'string' ? item : record.text ?? record.content);
-							const indent = '  '.repeat(depth);
-							const line =
-								style === 'checklist'
-									? `${indent}- [${record.checked === true || meta.checked === true ? 'x' : ' '}] ${text}`
-									: style === 'ordered'
-									? `${indent}${idx + 1}. ${text}`
-									: `${indent}- ${text}`;
-							const children = Array.isArray(record.items) && record.items.length ? `\n${serializeItems(record.items, depth + 1)}` : '';
-							return line + children;
-						})
-						.join('\n');
-				return serializeItems(Array.isArray(data.items) ? data.items : [], 0);
-			}
-			if (block.type === 'checklist') {
-				return checklistItems(data)
-					.map((item) => `- [${item.checked ? 'x' : ' '}] ${item.text}`)
-					.join('\n');
-			}
-			if (block.type === 'quote') {
-				const caption = inlineHtmlToText(data.caption);
-				return `> ${inlineHtmlToText(data.text)}${caption ? `\n> — ${caption}` : ''}`;
-			}
-			if (block.type === 'delimiter') {
-				return '---';
-			}
-			if (block.type === 'code') {
-				return `\`\`\`\n${String(data.code ?? '')}\n\`\`\``;
-			}
-			if (block.type === 'table') {
-				const content = (Array.isArray(data.content) ? data.content : []) as unknown[][];
-				if (!content.length) return '';
-				const rows = content.map((row) => `| ${(Array.isArray(row) ? row : []).map((cell) => inlineHtmlToText(cell)).join(' | ')} |`);
-				if (data.withHeadings === true && content[0]) {
-					rows.splice(1, 0, `| ${content[0].map(() => '---').join(' | ')} |`);
-				}
-				return rows.join('\n');
-			}
-			if (block.type === 'warning') {
-				const title = inlineHtmlToText(data.title);
-				const message = inlineHtmlToText(data.message);
-				return `⚠️ ${title}${message ? ` — ${message}` : ''}`;
-			}
-			if (block.type === 'image') {
-				const file = (data.file || {}) as Record<string, unknown>;
-				const url = String(data.url ?? file.url ?? '');
-				if (!url) return inlineHtmlToText(data.caption);
-				return `![${inlineHtmlToText(data.caption)}](${url})`;
-			}
-			if (block.type === 'embed') {
-				const source = String(data.source ?? data.embed ?? '');
-				const caption = inlineHtmlToText(data.caption);
-				return source ? `${source}${caption ? `\n${caption}` : ''}` : caption;
-			}
-			return inlineHtmlToText(data.text);
-		})
-		.filter((piece) => piece.trim() !== '')
-		.join('\n\n');
+// blocks → plain text now lives in editorJsValue (a light, editor-free module
+// preview surfaces can import). Re-exported here (from the local import above)
+// for existing importers, e.g. Thingtime, that reach it through LongTextEditor.
+export { blocksToText };
 
 // ————— the component —————
 
@@ -476,6 +397,32 @@ const LongTextEditorInner = (props: LongTextEditorInnerProps) => {
 				...(enabled('style') ? { style: StyleTune as any } : {})
 			};
 
+			// Editor.js's ReadOnly module clears the DOCUMENT selection while a new
+			// instance prepares (ReadOnly.toggleReadOnly → removeAllRanges). With
+			// several editors live-syncing one store path (the composer's in-post
+			// editor + its popout), an echo remounts the non-typing instance and
+			// that global wipe eats the typist's caret mid-keystroke — focus stays
+			// on their block but the next keys land at its start. Capture a
+			// selection that lives OUTSIDE this holder before init and put it back
+			// after isReady (only if still wiped and still attached, so a user who
+			// re-clicked meanwhile is never fought).
+			const foreignSelection = (() => {
+				const selection = window.getSelection();
+				if (!selection || selection.rangeCount === 0) return null;
+				const range = selection.getRangeAt(0);
+				if (holderRef.current?.contains(range.startContainer)) return null;
+				return range.cloneRange();
+			})();
+			const restoreForeignSelection = () => {
+				if (!foreignSelection || !foreignSelection.startContainer.isConnected) return;
+				const selection = window.getSelection();
+				// rangeCount > 0 means someone re-established a caret after the wipe
+				// (the user clicked, or — version-dependent — Editor.js placed one in
+				// its own holder); fighting it risks worse than the wipe. Empirically
+				// our Editor.js build leaves the selection cleared, so this restores.
+				if (selection && selection.rangeCount === 0) selection.addRange(foreignSelection);
+			};
+
 			let editor: any;
 			editorChangeQueue = createOrderedEditorJsChangeQueue<SequencedLongTextValue, string>({
 				getSignature: (snapshot) => getEditorJsValueSignature(snapshot.value),
@@ -516,10 +463,15 @@ const LongTextEditorInner = (props: LongTextEditorInnerProps) => {
 			await editor.isReady;
 
 			if (cancelled) {
+				// a superseded init still wiped the document selection — restore
+				// AFTER its teardown so destroy can't re-clear what we put back
 				editor.destroy?.();
 				editorRef.current = null;
+				restoreForeignSelection();
 				return;
 			}
+
+			restoreForeignSelection();
 
 			// Editor.js's block listener mistakes empty internal lines in tool
 			// textboxes for block boundaries. Bind before that outer listener so

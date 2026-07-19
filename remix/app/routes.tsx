@@ -6,11 +6,13 @@ import {
 
 import App from './root';
 import type { RootLoaderData } from './root-data.server';
+import Authorize from './routes/authorize';
 import Branding from './routes/branding/_index';
 import BrandingOld from './routes/branding_old';
 import CryptoPage from './routes/crypto';
 import DocsLayout from './routes/docs/DocsLayout';
 import DocsApi from './routes/docs/api';
+import DocsEmbed from './routes/docs/embed';
 import DocsConcepts from './routes/docs/concepts/index';
 import DocsDesign from './routes/docs/design';
 import DocsDesignSystem from './routes/docs/design-system/index';
@@ -26,12 +28,16 @@ import Profile from './routes/profile';
 import Rainbow from './routes/rainbow.$';
 import Raw from './routes/raw';
 import Register from './routes/register';
+import ResetPassword from './routes/reset-password';
 import SchemasRoute from './routes/schemas';
+import DocsSchemas from './routes/docs/schemas';
+import SearchRoute from './routes/search';
 import StatusPage from './routes/status';
 import ThingtimeUrl from './routes/$';
 import TestsPage from './routes/tests';
 import Themes from './routes/themes';
 import VercelPage from './routes/vercel';
+import VerifyEmail from './routes/verify-email';
 import Welcome from './routes/welcome';
 
 const fetchJson = async <T,>(url: string, init: RequestInit = {}) => {
@@ -90,6 +96,9 @@ export const router = createBrowserRouter([
     loader: rootLoader,
     children: [
       { index: true, element: <Index /> },
+      // "Login with Thingtime" popup (embed SDK) — no guest/user guard: it
+      // handles both states itself (login form → consent screen).
+      { path: 'authorize', element: <Authorize /> },
       { path: 'branding', element: <Branding /> },
       { path: 'branding_old', element: <BrandingOld /> },
       { path: 'crypto', element: <CryptoPage /> },
@@ -98,12 +107,14 @@ export const router = createBrowserRouter([
         element: <DocsLayout />,
         children: [
           { index: true, element: <DocsIndex /> },
+          { path: 'embed', element: <DocsEmbed /> },
           { path: 'api', element: <DocsApi /> },
           { path: 'api/:group', element: <DocsApi /> },
           { path: 'api/:group/:docId', element: <DocsApi /> },
           { path: 'design', element: <DocsDesign /> },
           { path: 'design-system', element: <DocsDesignSystem /> },
-          { path: 'concepts', element: <DocsConcepts /> }
+          { path: 'concepts', element: <DocsConcepts /> },
+          { path: 'schemas', element: <DocsSchemas /> }
         ]
       },
       { path: 'edge', element: <Edge /> },
@@ -120,13 +131,14 @@ export const router = createBrowserRouter([
       { path: 'rainbow/*', element: <Rainbow /> },
       { path: 'raw', element: <Raw /> },
       { path: 'register', element: <Register />, loader: requireGuest('/welcome') },
-      {
-        // Schema browser rides in the docs chrome (drawer + nav) — docsNav
-        // `to` values are absolute so links keep working under /schemas.
-        path: 'schemas',
-        element: <DocsLayout />,
-        children: [{ index: true, element: <SchemasRoute /> }]
-      },
+      // password-reset + verification landing pages work logged-out by design
+      // (the emailed token/link is the credential, not the session)
+      { path: 'reset-password', element: <ResetPassword /> },
+      { path: 'verify-email', element: <VerifyEmail /> },
+      // Schema BROWSING/BUILDING lives at /schemas (standalone, like /search);
+      // the registry reference docs moved to /docs/schemas.
+      { path: 'schemas', element: <SchemasRoute /> },
+      { path: 'search', element: <SearchRoute /> },
       {
         path: 'status',
         element: <StatusPage />,

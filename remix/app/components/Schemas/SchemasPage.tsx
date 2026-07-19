@@ -29,6 +29,7 @@ import {
   type ThingtimeSchemaField,
   type ThingtimeSchemaKind
 } from '~/schemas/registry';
+import { CARD_STYLES } from '~/theme/card';
 
 const CODE_BG = '#0b0b0f';
 const CODE_BORDER = 'var(--tt-dark-border, #2a2a33)';
@@ -38,14 +39,6 @@ const CODE_GREEN = 'var(--tt-dark-accent, #59ff9c)';
 const CODE_BLUE = '#59bdff';
 const CODE_YELLOW = '#ffc20e';
 const CODE_ACCENT = 'var(--tt-accent, hotpink)';
-
-const CARD_STYLES = {
-  bg: 'var(--tt-card, #ffffff)',
-  border: '1px solid',
-  borderColor: 'var(--tt-border, #ececef)',
-  borderRadius: 'var(--tt-radius-lg, 16px)',
-  boxShadow: 'var(--tt-shadow-card, 0 1px 2px rgba(0, 0, 0, 0.05))'
-} as const;
 
 type SchemaSection = {
   kind: ThingtimeSchemaKind;

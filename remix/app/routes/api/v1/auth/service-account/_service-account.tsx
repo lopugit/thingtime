@@ -1,4 +1,5 @@
 import { json } from '~/api/http';
+import { resolveTrustedOrigin } from '~/api/utils/auth/appOrigin';
 import { shouldShowDevVerificationLink } from '~/api/utils/auth/devVerification';
 import { provisionServiceAccount } from '~/api/utils/auth/serviceAccounts';
 
@@ -11,7 +12,7 @@ export const action = async ({ request }: { request: Request }) => {
   }
 
   const body = await request.json().catch(() => ({}));
-  const result = await provisionServiceAccount({ ...body, origin: new URL(request.url).origin });
+  const result = await provisionServiceAccount({ ...body, origin: resolveTrustedOrigin(request) });
 
   if (result.ok === false) {
     return json({ ok: false, error: result.error }, { status: result.status });

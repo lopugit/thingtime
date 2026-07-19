@@ -1,6 +1,7 @@
 import { json } from '~/api/http';
 
 import { mergeAccountSession } from '~/api/utils/auth/accounts';
+import { resolveTrustedOrigin } from '~/api/utils/auth/appOrigin';
 import { serializeAuthCookie } from '~/api/utils/auth/authCookie';
 import { shouldShowDevVerificationLink } from '~/api/utils/auth/devVerification';
 import { registerUser } from '~/api/utils/auth/registerUser';
@@ -18,7 +19,7 @@ import { registerUser } from '~/api/utils/auth/registerUser';
 // own authenticated endpoints.
 export const action = async ({ request }: { request: Request }) => {
   const body = await request.json().catch(() => ({}));
-  const origin = new URL(request.url).origin;
+  const origin = resolveTrustedOrigin(request);
 
   // (Env-allowlist admin usernames are reserved in createUserAccount — the
   // single chokepoint covering this route, service-account, and seeding.)
