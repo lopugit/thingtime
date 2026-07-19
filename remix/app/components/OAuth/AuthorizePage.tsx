@@ -761,9 +761,14 @@ export const AuthorizePage = () => {
       justifyContent="center"
       width="100%"
       minHeight="100vh"
+      sx={{
+        '@supports (min-height: 100dvh)': {
+          minHeight: '100dvh'
+        }
+      }}
       background="var(--tt-surface, #fafafb)"
       paddingX={4}
-      paddingY={8}
+      paddingY={4}
     >
       {body}
     </Flex>

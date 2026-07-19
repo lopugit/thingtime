@@ -5,103 +5,384 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Login with Thingtime — demo embed</title>
     <style>
-      :root { color-scheme: light dark; }
-      body {
-        font: 15px/1.55 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        max-width: 640px;
-        margin: 48px auto;
-        padding: 0 20px;
-        color: #1c1c22;
-        background: #fafafb;
+      /* Thingtime design language, mirrored from the app's tokens:
+         card #fff / border #ececef / radius 20 / panel shadow, muted #9a9aa6,
+         mono uppercase kickers, docs accent green, dark scheme #131318. */
+      :root {
+        color-scheme: light dark;
+        --surface: #fafafb;
+        --card: #ffffff;
+        --card-alt: #f5f5f7;
+        --border: #ececef;
+        --ink: #1c1c22;
+        --muted: #9a9aa6;
+        --muted-strong: #6e6e7a;
+        --kicker: #7c7c88;
+        --accent-ink: #0f5132;
+        --accent-soft: #d7f5df;
+        --check: #0f5132;
+        --check-border: #c9c9d1;
+        --tick: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.5l2.5 2.5 4.5-5' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+        --code-bg: #0b0b0f;
+        --code-border: #2a2a33;
+        --code-text: #e6e6ec;
+        --shadow-panel: 0 24px 60px -28px rgba(20, 20, 40, 0.28);
+        --rainbow: linear-gradient(90deg, #ff5f6d, #ffc371, #47e891, #3ec6ff, #b06ab3, #ff5f6d);
       }
       @media (prefers-color-scheme: dark) {
-        body { color: #ececef; background: #131318; }
-        input { color: inherit; background: #1c1c22; border-color: #33333d !important; }
-        pre { background: #1c1c22 !important; }
+        :root {
+          --surface: #131318;
+          --card: #1c1c22;
+          --card-alt: #24242c;
+          --border: #30303a;
+          --ink: #ececef;
+          --muted: #8a8a95;
+          --muted-strong: #a2a2ad;
+          --kicker: #8f8f9a;
+          --accent-ink: #7ee2a8;
+          --accent-soft: rgba(89, 255, 156, 0.12);
+          --check: #59ff9c;
+          --check-border: #55555f;
+          --tick: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.5l2.5 2.5 4.5-5' fill='none' stroke='%23131318' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+          --shadow-panel: 0 24px 60px -28px rgba(0, 0, 0, 0.65);
+        }
       }
-      h1 { font-size: 22px; }
-      .row { display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; }
-      input {
-        flex: 1;
-        min-width: 220px;
-        padding: 9px 12px;
-        border: 1px solid #ececef;
-        border-radius: 9px;
+
+      * { box-sizing: border-box; }
+      body {
+        font: 15px/1.55 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        margin: 0;
+        padding: 48px 20px 72px;
+        color: var(--ink);
+        background: var(--surface);
+      }
+      .page {
+        max-width: 680px;
+        margin: 0 auto;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+
+      .mono, .kicker, .chip-note, code {
+        font-family: ui-monospace, Menlo, Monaco, 'Cascadia Mono', monospace;
+      }
+      code { font-size: 0.92em; }
+
+      .kicker {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--kicker);
+      }
+
+      header.hero { padding: 0 4px; }
+      header.hero h1 {
+        font-size: 26px;
+        line-height: 1.25;
+        letter-spacing: -0.01em;
+        margin: 10px 0 12px;
+      }
+      header.hero p { margin: 0; color: var(--muted); }
+      header.hero .links { margin-top: 14px; display: flex; gap: 26px; flex-wrap: wrap; }
+      a.accent {
+        color: var(--accent-ink);
+        font-weight: 700;
+        font-size: 13px;
+        text-decoration: none;
+        font-family: ui-monospace, Menlo, monospace;
+      }
+      a.accent:hover { text-decoration: underline; }
+
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        box-shadow: var(--shadow-panel);
+        padding: 24px 26px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+      .card > .kicker { margin-bottom: -2px; }
+
+      input[type='text'],
+      .text-input {
+        width: 100%;
+        padding: 11px 14px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
         font: inherit;
-      }
-      button.plain {
-        padding: 9px 14px;
-        border: 1px solid #ececef;
-        border-radius: 9px;
-        background: transparent;
         color: inherit;
-        font: 600 14px/1.2 inherit;
+        background: var(--surface);
+        outline: none;
+      }
+      input[type='text']:focus, .text-input:focus {
+        border-color: var(--muted);
+      }
+
+      .chip-note {
+        align-self: flex-start;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        padding: 4px 12px;
+        border-radius: 999px;
+        background: var(--card-alt);
+        border: 1px dashed var(--border);
+        color: var(--muted-strong);
+        /* Hanging indent so wrapped lines align with the text, not the emoji. */
+        text-indent: -1.9em;
+        padding-left: calc(12px + 1.9em);
+      }
+
+      .scope-groups { display: flex; flex-direction: column; gap: 12px; }
+      .scope-group { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+      .scope-group > .kicker { min-width: 76px; }
+      .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+      label.chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 13px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        background: var(--card);
+        font-family: ui-monospace, Menlo, monospace;
+        font-size: 13px;
+        cursor: pointer;
+        user-select: none;
+        transition: background 120ms ease, border-color 120ms ease;
+      }
+      label.chip:hover { background: var(--card-alt); }
+      label.chip.locked { color: var(--muted); background: var(--card-alt); cursor: default; }
+      label.chip input[type='checkbox'] {
+        appearance: none;
+        -webkit-appearance: none;
+        width: 15px;
+        height: 15px;
+        margin: 0;
+        flex: none;
+        border: 1.5px solid var(--check-border);
+        border-radius: 4px;
+        background: var(--card);
+        cursor: inherit;
+      }
+      label.chip input[type='checkbox']:checked {
+        border-color: var(--check);
+        background: var(--check) var(--tick) center / 10px no-repeat;
+      }
+      label.chip input[type='checkbox']:disabled { opacity: 0.6; }
+
+      .controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+      .controls > .kicker { min-width: 76px; }
+      select {
+        font: 500 13px/1.4 ui-monospace, Menlo, monospace;
+        color: inherit;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 7px 12px;
         cursor: pointer;
       }
-      pre {
-        background: #f1f1f4;
-        border-radius: 12px;
-        padding: 14px;
-        overflow-x: auto;
+
+      .stage {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 108px;
+        padding: 24px;
+        border: 1px dashed var(--border);
+        border-radius: 14px;
+        background:
+          radial-gradient(circle at 1px 1px, var(--border) 1px, transparent 0) 0 0 / 18px 18px,
+          var(--surface);
+      }
+
+      .field-row { display: flex; gap: 10px; flex-wrap: wrap; }
+      .field-row > input[type='text'] { flex: 1; min-width: 200px; width: auto; }
+
+      .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+      button.plain {
+        padding: 8px 16px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        background: var(--card);
+        color: inherit;
+        font: 600 13px/1.2 ui-monospace, Menlo, monospace;
+        cursor: pointer;
+        transition: background 120ms ease, transform 120ms ease;
+      }
+      button.plain:hover { background: var(--card-alt); }
+      button.plain:active { transform: translateY(1px); }
+
+      .console {
+        border: 2px solid var(--code-border);
+        border-radius: 14px;
+        overflow: hidden;
+        background: var(--code-bg);
+      }
+      .console-bar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 9px 12px;
+        background: rgba(255, 255, 255, 0.04);
+        border-bottom: 2px solid var(--code-border);
+      }
+      .console-bar .dots { display: flex; gap: 6px; }
+      .console-bar .dots i { width: 10px; height: 10px; border-radius: 999px; display: block; }
+      .console-bar .dots i:nth-child(1) { background: #ff5f57; }
+      .console-bar .dots i:nth-child(2) { background: #febc2e; }
+      .console-bar .dots i:nth-child(3) { background: #28c840; }
+      .console-bar span {
+        font-family: ui-monospace, Menlo, monospace;
+        font-size: 11px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: #8a8a95;
+      }
+      pre#log {
+        margin: 0;
+        padding: 16px;
+        min-height: 96px;
+        max-height: 380px;
+        overflow: auto;
+        font-family: ui-monospace, Menlo, monospace;
         font-size: 13px;
+        line-height: 1.6;
+        color: var(--code-text);
         white-space: pre-wrap;
         word-break: break-word;
       }
-      .muted { color: #9a9aa6; font-size: 13px; }
+
+      footer.small-print {
+        padding: 0 4px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      footer.small-print a { color: var(--accent-ink); font-weight: 600; }
+
+      /* A slim rainbow ribbon up top keeps it unmistakably Thingtime. */
+      .ribbon {
+        height: 4px;
+        border-radius: 999px;
+        background: var(--rainbow);
+        opacity: 0.85;
+      }
+
+      @media (max-width: 480px) {
+        body { padding: 28px 14px 56px; }
+        .card { padding: 18px 16px; border-radius: 16px; }
+        header.hero h1 { font-size: 22px; }
+        .scope-group > .kicker, .controls > .kicker { min-width: 100%; }
+      }
     </style>
   </head>
   <body>
-    <h1>Login with Thingtime — demo embed 🌈</h1>
-    <p class="muted">
-      This page plays the role of a third-party website. With the prefilled "Your App" id the
-      button runs a <strong>sandbox</strong> — the real consent popup with the full permissions
-      selector, a pretend token, nothing actually shared. Paste a real <code>ttapp_…</code>
-      clientId (register via <code>POST /api/v1/apps</code> with this page's origin) and the same
-      loop runs live against the real API.
-    </p>
+    <div class="page">
+      <div class="ribbon" aria-hidden="true"></div>
 
-    <div class="row">
-      <input id="client-id" value="Your App" autocomplete="off" />
-    </div>
-    <p class="muted" id="mode-note" style="margin: -4px 0 0;"></p>
-    <div class="row" style="align-items:center; gap:14px; font-size:13px; flex-wrap: wrap;">
-      <span class="muted">Require:</span>
-      <label><input type="checkbox" checked disabled /> profile.username</label>
-      <label><input type="checkbox" id="req-app-data" checked /> app-data</label>
-      <span class="muted">Optional:</span>
-      <label><input type="checkbox" id="opt-email" checked /> email</label>
-      <label><input type="checkbox" id="opt-avatar" checked /> profile.avatar</label>
-      <label><input type="checkbox" id="opt-things" /> things</label>
-    </div>
-    <div class="row" style="align-items:center; gap:14px; font-size:13px;">
-      <label><input type="checkbox" id="allow-extra" checked /> allow extra sharing</label>
-      <select id="btn-theme">
-        <option value="light">light</option>
-        <option value="dark">dark</option>
-        <option value="rainbow">rainbow</option>
-      </select>
-      <select id="btn-size">
-        <option value="sm">sm</option>
-        <option value="md" selected>md</option>
-        <option value="lg">lg</option>
-      </select>
-    </div>
-    <div class="row" id="login-mount"></div>
+      <header class="hero">
+        <div class="kicker">Thingtime SDK · Sandbox Playground</div>
+        <h1>Login with Thingtime — demo embed 🌈</h1>
+        <p>
+          This page plays the role of a third-party website. With the prefilled
+          <strong>"Your App"</strong> id the button runs a <strong>sandbox</strong> — the real consent
+          popup with the full permissions selector, a pretend token, nothing actually shared. Paste a
+          real <code>ttapp_…</code> clientId (register via <code>POST /api/v1/apps</code> with this
+          page's origin) and the same loop runs live against the real API.
+        </p>
+        <div class="links">
+          <a class="accent" href="/docs/embed">/docs/embed · integration guide ↗</a>
+          <a class="accent" href="/docs/api/embed">/docs/api · endpoint reference ↗</a>
+        </div>
+      </header>
 
-    <div class="row">
-      <input id="data-key" placeholder="key (e.g. preferences)" autocomplete="off" />
-      <input id="data-value" placeholder='value JSON (e.g. {"theme":"rainbow"})' autocomplete="off" />
-    </div>
-    <div class="row">
-      <button class="plain" id="btn-userinfo">userinfo</button>
-      <button class="plain" id="btn-shared">shared</button>
-      <button class="plain" id="btn-set">set</button>
-      <button class="plain" id="btn-get">get</button>
-      <button class="plain" id="btn-list">list</button>
-      <button class="plain" id="btn-delete">delete</button>
-    </div>
+      <section class="card">
+        <div class="kicker">1 · Your app</div>
+        <input id="client-id" type="text" value="Your App" autocomplete="off" spellcheck="false" />
+        <span class="chip-note" id="mode-note"></span>
+      </section>
 
-    <pre id="log">(waiting — log in first)</pre>
+      <section class="card">
+        <div class="kicker">2 · Permissions</div>
+        <div class="scope-groups">
+          <div class="scope-group">
+            <span class="kicker">Require</span>
+            <div class="chips">
+              <label class="chip locked"><input type="checkbox" checked disabled /> profile.username</label>
+              <label class="chip"><input type="checkbox" id="req-app-data" checked /> app-data</label>
+            </div>
+          </div>
+          <div class="scope-group">
+            <span class="kicker">Optional</span>
+            <div class="chips">
+              <label class="chip"><input type="checkbox" id="opt-email" checked /> email</label>
+              <label class="chip"><input type="checkbox" id="opt-avatar" checked /> profile.avatar</label>
+              <label class="chip"><input type="checkbox" id="opt-things" /> things</label>
+            </div>
+          </div>
+          <div class="scope-group">
+            <span class="kicker">Extras</span>
+            <div class="chips">
+              <label class="chip"><input type="checkbox" id="allow-extra" checked /> allow extra sharing</label>
+            </div>
+          </div>
+        </div>
+        <div class="controls">
+          <span class="kicker">Button</span>
+          <select id="btn-theme" aria-label="Button theme">
+            <option value="light">theme: light</option>
+            <option value="dark">theme: dark</option>
+            <option value="rainbow">theme: rainbow</option>
+          </select>
+          <select id="btn-size" aria-label="Button size">
+            <option value="sm">size: sm</option>
+            <option value="md" selected>size: md</option>
+            <option value="lg">size: lg</option>
+          </select>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="kicker">3 · The button</div>
+        <div class="stage">
+          <div id="login-mount"></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="kicker">4 · Call the APIs with the session token</div>
+        <div class="field-row">
+          <input id="data-key" type="text" placeholder="key (e.g. preferences)" autocomplete="off" spellcheck="false" />
+          <input id="data-value" type="text" placeholder='value JSON (e.g. {"theme":"rainbow"})' autocomplete="off" spellcheck="false" />
+        </div>
+        <div class="actions">
+          <button class="plain" id="btn-userinfo">userinfo</button>
+          <button class="plain" id="btn-shared">shared</button>
+          <button class="plain" id="btn-set">set</button>
+          <button class="plain" id="btn-get">get</button>
+          <button class="plain" id="btn-list">list</button>
+          <button class="plain" id="btn-delete">delete</button>
+        </div>
+        <div class="console">
+          <div class="console-bar">
+            <div class="dots" aria-hidden="true"><i></i><i></i><i></i></div>
+            <span>console</span>
+          </div>
+          <pre id="log">(waiting — log in first)</pre>
+        </div>
+      </section>
+
+      <footer class="small-print">
+        Sandbox sessions hold a pretend token, so the API buttons explain themselves instead of
+        calling the live endpoints. Full integration guide:
+        <a href="/docs/embed">/docs/embed</a>.
+      </footer>
+    </div>
 
     <script src="./thingtime-login.js"></script>
     <script>
