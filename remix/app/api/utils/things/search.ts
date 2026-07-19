@@ -213,6 +213,13 @@ const sanitizeOrdered = (field: string, op: string, value: unknown): string | nu
 };
 
 const buildCondition = (input: SearchCondition): Record<string, any> | Fail => {
+  // Non-object entries reach here from buildGroup's isGroup() dispatch: strings
+  // and numbers fall through to sanitizeFieldPath(undefined) and 400 on their
+  // own, but null/undefined would throw on the .field read and escape the route
+  // as a 500 instead. Reject every non-object shape up front.
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return fail(400, 'Each condition must be an object');
+  }
   const field = sanitizeFieldPath(input.field);
   if (isFail(field)) return field;
 
