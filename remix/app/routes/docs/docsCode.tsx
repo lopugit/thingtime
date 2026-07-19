@@ -50,13 +50,17 @@ export const copyToClipboard = async (value: string) => {
 const KEYWORDS =
   'const|let|var|await|async|function|return|if|else|throw|new|typeof|import|from|with|do|end|require|payload|response|request|headers|method|body|JSON|Net|HTTP|URI|document|window';
 
+const KEYWORD_TEST = new RegExp(`^(${KEYWORDS})$`);
+
 const tokenColor = (token: string, line: string, index: number, language: CodeLanguage) => {
   if (token.startsWith('#') || token.startsWith('//')) return CODE_MUTED;
   if (language === 'html' && (token.startsWith('<') || token === '>' || token === '/>')) return CODE_ACCENT;
   if (token === '$') return CODE_ACCENT;
+  // Numbers before the dash rule so negatives read as numbers, not CLI flags
+  // (flag tokens always contain a letter, so the ordering is safe for shell).
+  if (/^-?\d+(?:\.\d+)?$/.test(token)) return CODE_YELLOW;
   if (token.startsWith('-')) return CODE_BLUE;
   if (/^(GET|POST|PUT|PATCH|DELETE|HEAD)$/.test(token)) return CODE_YELLOW;
-  if (/^-?\d+(?:\.\d+)?$/.test(token)) return CODE_YELLOW;
   if (/^(true|false|null|None|True|False)$/.test(token)) return CODE_ACCENT;
   if (/^['"]/.test(token)) {
     if (language === 'json' && token.startsWith('"') && /^\s*:/.test(line.slice(index + token.length))) {
@@ -66,7 +70,7 @@ const tokenColor = (token: string, line: string, index: number, language: CodeLa
     return CODE_GREEN;
   }
 
-  if (new RegExp(`^(${KEYWORDS})$`).test(token)) {
+  if (KEYWORD_TEST.test(token)) {
     return CODE_BLUE;
   }
 
@@ -77,7 +81,7 @@ const tokenColor = (token: string, line: string, index: number, language: CodeLa
 
 const buildTokenPattern = (tagAlternative: string) =>
   new RegExp(
-    `${tagAlternative}("(?:\\\\.|[^"\\\\])*")|('(?:\\\\.|[^'\\\\])*')|(#[^\\n]*)|(\\/\\/[^\\n]*)|(\\$)|\\b(${KEYWORDS})\\b|\\b(GET|POST|PUT|PATCH|DELETE|HEAD)\\b|(--?[A-Za-z][A-Za-z0-9-]*)|(-?\\b\\d+(?:\\.\\d+)?\\b)|\\b(true|false|null|None|True|False)\\b|([{}\\[\\]():,.;=+\\\\])`,
+    `${tagAlternative}("(?:\\\\.|[^"\\\\])*")|('(?:\\\\.|[^'\\\\])*')|(#[^\\n]*)|((?<!:)\\/\\/[^\\n]*)|(\\$)|\\b(${KEYWORDS})\\b|\\b(GET|POST|PUT|PATCH|DELETE|HEAD)\\b|(--?[A-Za-z][A-Za-z0-9-]*)|(-?\\b\\d+(?:\\.\\d+)?\\b)|\\b(true|false|null|None|True|False)\\b|([{}\\[\\]():,.;=+\\\\])`,
     'g'
   );
 
@@ -177,8 +181,29 @@ export function CodeBlock({
   framed?: boolean;
   maxH?: string;
 }) {
-  const lines = String(children || '').split('\n');
-  const lineLangs = lineLanguages(lines, language);
+  // Tokenizing is the docs' hottest render path (every keystroke in the
+  // /docs/api search re-renders every visible sample) — highlight once per
+  // (code, language) pair, not once per render.
+  const highlightedLines = React.useMemo(() => {
+    const lines = String(children || '').split('\n');
+    const lineLangs = lineLanguages(lines, language);
+
+    return lines.map((line, index) => (
+      <Box
+        as="span"
+        display="grid"
+        gap={3}
+        gridTemplateColumns="3ch minmax(0, 1fr)"
+        key={`${index}-${line}`}
+        whiteSpace="pre"
+      >
+        <Box as="span" color={CODE_MUTED} textAlign="right" userSelect="none">
+          {index + 1}
+        </Box>
+        <Box as="span">{highlightLine(line, lineLangs[index])}</Box>
+      </Box>
+    ));
+  }, [children, language]);
 
   return (
     <Box
@@ -200,24 +225,22 @@ export function CodeBlock({
       ) : null}
       <Box as="pre" m={0} minW="max-content" px={{ base: 3, md: 4 }} py={framed ? 4 : 3} pr={framed ? 12 : 4}>
         <Box as="code" display="block">
-          {lines.map((line, index) => (
-            <Box
-              as="span"
-              display="grid"
-              gap={3}
-              gridTemplateColumns="3ch minmax(0, 1fr)"
-              key={`${index}-${line}`}
-              whiteSpace="pre"
-            >
-              <Box as="span" color={CODE_MUTED} textAlign="right" userSelect="none">
-                {index + 1}
-              </Box>
-              <Box as="span">{highlightLine(line, lineLangs[index])}</Box>
-            </Box>
-          ))}
+          {highlightedLines}
         </Box>
       </Box>
     </Box>
+  );
+}
+
+// Decorative mac-style traffic lights shared by every docs window chrome
+// (editor windows here, the faux-browser frame on /docs/embed).
+export function WindowTrafficLights() {
+  return (
+    <Flex aria-hidden="true" flexShrink={0} gap="6px">
+      <Box bg="#ff5f57" borderRadius="full" boxSize="10px" />
+      <Box bg="#febc2e" borderRadius="full" boxSize="10px" />
+      <Box bg="#28c840" borderRadius="full" boxSize="10px" />
+    </Flex>
   );
 }
 
@@ -252,11 +275,7 @@ export function CodeWindow({
         px={3}
         py={2}
       >
-        <Flex flexShrink={0} gap="6px">
-          <Box bg="#ff5f57" borderRadius="full" boxSize="10px" />
-          <Box bg="#febc2e" borderRadius="full" boxSize="10px" />
-          <Box bg="#28c840" borderRadius="full" boxSize="10px" />
-        </Flex>
+        <WindowTrafficLights />
         <Text
           color={CODE_MUTED}
           fontFamily="var(--tt-font-mono, ui-monospace, Menlo, monospace)"

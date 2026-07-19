@@ -17,7 +17,7 @@ import {
 } from '@chakra-ui/react';
 import { Link as RouterLink } from 'react-router';
 
-import { CodeBlock, CodeWindow } from './docsCode';
+import { CodeWindow, WindowTrafficLights } from './docsCode';
 
 // /docs/embed — the "Login with Thingtime" integration guide for platforms:
 // SDK quick start, themed button config, permission scopes, token usage
@@ -125,31 +125,45 @@ const getSdk = () =>
 
 // Load /sdk/thingtime-login.js once — the exact script third-party sites use —
 // so the docs preview exercises the real SDK, not a lookalike.
-const useThingtimeSdk = () => {
-  const [ready, setReady] = React.useState(() => Boolean(getSdk()?.renderButton));
+type SdkState = 'loading' | 'ready' | 'failed';
+
+const useThingtimeSdk = (): SdkState => {
+  const [state, setState] = React.useState<SdkState>(() =>
+    getSdk()?.renderButton ? 'ready' : 'loading'
+  );
 
   React.useEffect(() => {
-    if (ready) return undefined;
+    if (state !== 'loading') return undefined;
 
     const existing = document.querySelector<HTMLScriptElement>('script[data-thingtime-sdk]');
     const script = existing || document.createElement('script');
-    const onReady = () => setReady(Boolean(getSdk()?.renderButton));
+    // 'load' fired but no global = the script served but isn't the SDK.
+    const onLoad = () => setState(getSdk()?.renderButton ? 'ready' : 'failed');
+    const onError = () => setState('failed');
+    // A pre-existing tag may have already fired 'error' before we attached —
+    // no event will ever come, so a quiet timeout is the only stuck-state exit.
+    const timer = window.setTimeout(() => setState('failed'), 10000);
 
-    script.addEventListener('load', onReady);
+    script.addEventListener('load', onLoad);
+    script.addEventListener('error', onError);
 
     if (!existing) {
       script.async = true;
       script.dataset.thingtimeSdk = '';
       script.src = '/sdk/thingtime-login.js';
       document.head.appendChild(script);
-    } else {
-      onReady();
+    } else if (getSdk()?.renderButton) {
+      setState('ready');
     }
 
-    return () => script.removeEventListener('load', onReady);
-  }, [ready]);
+    return () => {
+      window.clearTimeout(timer);
+      script.removeEventListener('load', onLoad);
+      script.removeEventListener('error', onError);
+    };
+  }, [state]);
 
-  return ready;
+  return state;
 };
 
 const BUTTON_THEMES = ['light', 'dark', 'rainbow'] as const;
@@ -159,7 +173,8 @@ const BUTTON_SIZES = ['sm', 'md', 'lg'] as const;
 // actual /authorize consent popup in sandbox mode (pretend token, nothing
 // shared) — the same flow demo.html drives with a non-ttapp_ clientId.
 function LoginButtonPreview() {
-  const ready = useThingtimeSdk();
+  const sdkState = useThingtimeSdk();
+  const ready = sdkState === 'ready';
   const mountRef = React.useRef<HTMLDivElement | null>(null);
   const [theme, setTheme] = React.useState<(typeof BUTTON_THEMES)[number]>('light');
   const [size, setSize] = React.useState<(typeof BUTTON_SIZES)[number]>('md');
@@ -222,11 +237,7 @@ function LoginButtonPreview() {
         px={3}
         py={2}
       >
-        <Flex flexShrink={0} gap="6px">
-          <Box bg="#ff5f57" borderRadius="full" boxSize="10px" />
-          <Box bg="#febc2e" borderRadius="full" boxSize="10px" />
-          <Box bg="#28c840" borderRadius="full" boxSize="10px" />
-        </Flex>
+        <WindowTrafficLights />
         <Box
           bg="var(--tt-surface, #ffffff)"
           border="1px solid"
@@ -284,9 +295,18 @@ function LoginButtonPreview() {
         </Flex>
         <Flex align="center" minH="52px">
           <Box ref={mountRef} />
-          {!ready ? (
+          {sdkState === 'loading' ? (
             <Text color="var(--tt-muted, #9a9aa6)" fontSize="sm">
               Loading the SDK…
+            </Text>
+          ) : null}
+          {sdkState === 'failed' ? (
+            <Text color="var(--tt-muted, #9a9aa6)" fontSize="sm">
+              Couldn&apos;t load the SDK (blocked or offline) — try the{' '}
+              <ChakraLink as={RouterLink} textDecoration="underline" to="/sdk/demo.html" reloadDocument>
+                standalone demo
+              </ChakraLink>{' '}
+              instead.
             </Text>
           ) : null}
         </Flex>
