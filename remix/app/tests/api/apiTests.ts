@@ -1044,6 +1044,16 @@ export const apiTests: ApiTestDefinition[] = [
     )
   },
   {
+    id: 'things-search-null-condition',
+    name: 'Search rejects null conditions',
+    description: 'A conditions list carrying null is rejected with a 400 error shape instead of a 500.',
+    group: 'things',
+    method: 'POST',
+    path: '/api/v1/things/search',
+    body: { conditions: [null] },
+    expect: expectJson([400], (body) => body?.ok === false && typeof body?.error === 'string', 'Null condition entry was rejected with a 400 error shape.')
+  },
+  {
     id: 'admin-rate-limits-guarded',
     name: 'Rate-limit config is admin-only',
     description: 'Reading the global rate-limit config requires an admin session.',

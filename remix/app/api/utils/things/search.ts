@@ -213,6 +213,7 @@ const sanitizeOrdered = (field: string, op: string, value: unknown): string | nu
 };
 
 const buildCondition = (input: SearchCondition): Record<string, any> | Fail => {
+  if (!input || typeof input !== 'object') return fail(400, 'Each condition must be an object');
   const field = sanitizeFieldPath(input.field);
   if (isFail(field)) return field;
 
