@@ -1,56 +1,106 @@
 import { getMongoUri } from './config';
+import { getActiveMongoDbName, getActiveMongoUri, isCustomMongoEndpointActive } from './endpoint';
 import { getMongoDb } from './mongodb';
 
-// Memoised client so a single request (and a warm serverless instance) reuses
-// one connection instead of opening a new MongoClient per collection lookup.
-let clientPromise: Promise<any> | null = null;
+// Memoised clients keyed by connection URI so a single request (and a warm
+// serverless instance) reuses one connection per endpoint instead of opening a
+// new MongoClient per collection lookup. The home deployment's client is
+// pinned; custom endpoint clients (the request-scoped override — see
+// endpoint.ts) are kept LRU-bounded so an API client cycling many URLs can't
+// accumulate unbounded open connections.
+const clientCache = new Map<string, Promise<any>>();
+const MAX_CUSTOM_CLIENTS = 6;
 
-const getClientCached = async () => {
-  if (!clientPromise) {
-    clientPromise = (async () => {
-      const { MongoClient } = await getMongoDb();
-      const client = new MongoClient(getMongoUri(), {});
-      await client.connect();
-      return client;
-    })().catch((err) => {
-      // don't cache a failed connection — let the next call retry
-      clientPromise = null;
-      throw err;
-    });
+const getClientCachedFor = (uri: string, isHome: boolean) => {
+  const cached = clientCache.get(uri);
+  if (cached) {
+    // LRU touch — Map iteration order is insertion order
+    clientCache.delete(uri);
+    clientCache.set(uri, cached);
+    return cached;
   }
-  return clientPromise;
+
+  const entry = (async () => {
+    const { MongoClient } = await getMongoDb();
+    // custom endpoints get tight timeouts so an unreachable override fails a
+    // request in seconds instead of hanging it on driver defaults
+    const client = new MongoClient(uri, isHome ? {} : { serverSelectionTimeoutMS: 5000, connectTimeoutMS: 5000 });
+    await client.connect();
+    return client;
+  })().catch((err) => {
+    // don't cache a failed connection — let the next call retry
+    clientCache.delete(uri);
+    throw err;
+  });
+  clientCache.set(uri, entry);
+
+  // Evict the oldest custom clients beyond the cap (never the home client).
+  let homeUri: string | null = null;
+  try {
+    homeUri = getMongoUri();
+  } catch {
+    // home unconfigured — everything counts as custom for eviction purposes
+  }
+  const customUris = [...clientCache.keys()].filter((key) => key !== homeUri);
+  for (const staleUri of customUris.slice(0, Math.max(0, customUris.length - MAX_CUSTOM_CLIENTS))) {
+    const stale = clientCache.get(staleUri);
+    clientCache.delete(staleUri);
+    customIndexesEnsured.delete(staleUri);
+    stale?.then((client: any) => client.close()).catch(() => {});
+  }
+
+  return entry;
 };
 
-// Single `thingtime` database (see FUNDAMENTALS.md §3).
-export const getThingtimeDb = async () => (await getClientCached()).db('thingtime');
+// Home deployment database — identity, auth and every control-plane
+// collection live here REGARDLESS of any active endpoint override.
+export const getHomeThingtimeDb = async () => (await getClientCachedFor(getMongoUri(), true)).db('thingtime');
 
-export const getUsersCollection = async () => (await getThingtimeDb()).collection('users');
-export const getSessionsCollection = async () => (await getThingtimeDb()).collection('sessions');
-export const getRostersCollection = async () => (await getThingtimeDb()).collection('rosters');
+// Active data-plane database. Single `thingtime` database (see FUNDAMENTALS.md
+// §3) — unless the request carries a custom MongoDB endpoint override
+// (endpoint.ts), in which case the override's URI + db name serve the open
+// data plane for this request.
+export const getThingtimeDb = async () => {
+  if (!isCustomMongoEndpointActive()) return getHomeThingtimeDb();
+  const uri = getActiveMongoUri();
+  const db = (await getClientCachedFor(uri, false)).db(getActiveMongoDbName());
+  ensureCustomDataIndexes(uri, db);
+  return db;
+};
+
+export const getUsersCollection = async () => (await getHomeThingtimeDb()).collection('users');
+export const getSessionsCollection = async () => (await getHomeThingtimeDb()).collection('sessions');
+export const getRostersCollection = async () => (await getHomeThingtimeDb()).collection('rosters');
+// The open `things` DATA PLANE (posts, comments, reactions, shares, data,
+// schemas, app-data) follows the request's active endpoint override. Identity
+// and the protected system kinds (user, theme, feed-algorithm, waitlist) are
+// written by their dedicated utils through getHomeThingsCollection instead, so
+// a custom endpoint can never capture logins or protected-kind writes.
 export const getThingsCollection = async () => (await getThingtimeDb()).collection('things');
-export const getEmailVerificationsCollection = async () => (await getThingtimeDb()).collection('emailVerifications');
+export const getHomeThingsCollection = async () => (await getHomeThingtimeDb()).collection('things');
+export const getEmailVerificationsCollection = async () => (await getHomeThingtimeDb()).collection('emailVerifications');
 export const getLopuMusingRateLimitsCollection = async () =>
-  (await getThingtimeDb()).collection('lopuMusingRateLimits');
-export const getThemesCollection = async () => (await getThingtimeDb()).collection('themes');
-export const getWaitlistCollection = async () => (await getThingtimeDb()).collection('waitlist');
-export const getFeedAlgorithmsCollection = async () => (await getThingtimeDb()).collection('feedAlgorithms');
+  (await getHomeThingtimeDb()).collection('lopuMusingRateLimits');
+export const getThemesCollection = async () => (await getHomeThingtimeDb()).collection('themes');
+export const getWaitlistCollection = async () => (await getHomeThingtimeDb()).collection('waitlist');
+export const getFeedAlgorithmsCollection = async () => (await getHomeThingtimeDb()).collection('feedAlgorithms');
 // Global, admin-editable app settings (singleton docs keyed by `key`, e.g. the
 // rate-limit config) and the general per-endpoint rate-limit windows.
-export const getSettingsCollection = async () => (await getThingtimeDb()).collection('settings');
-export const getRateLimitsCollection = async () => (await getThingtimeDb()).collection('rateLimits');
+export const getSettingsCollection = async () => (await getHomeThingtimeDb()).collection('settings');
+export const getRateLimitsCollection = async () => (await getHomeThingtimeDb()).collection('rateLimits');
 // Owned email layer (see api/utils/email): every send writes an outbox row to
 // email_messages; events/suppression/unsubscribes back deliverability.
-export const getEmailMessagesCollection = async () => (await getThingtimeDb()).collection('email_messages');
-export const getEmailEventsCollection = async () => (await getThingtimeDb()).collection('email_events');
-export const getEmailTemplatesCollection = async () => (await getThingtimeDb()).collection('email_templates');
-export const getEmailSubscriptionsCollection = async () => (await getThingtimeDb()).collection('email_subscriptions');
-export const getEmailSuppressionListCollection = async () => (await getThingtimeDb()).collection('email_suppression_list');
-export const getEmailUnsubscribesCollection = async () => (await getThingtimeDb()).collection('email_unsubscribes');
-export const getEmailIdentitiesCollection = async () => (await getThingtimeDb()).collection('email_identities');
+export const getEmailMessagesCollection = async () => (await getHomeThingtimeDb()).collection('email_messages');
+export const getEmailEventsCollection = async () => (await getHomeThingtimeDb()).collection('email_events');
+export const getEmailTemplatesCollection = async () => (await getHomeThingtimeDb()).collection('email_templates');
+export const getEmailSubscriptionsCollection = async () => (await getHomeThingtimeDb()).collection('email_subscriptions');
+export const getEmailSuppressionListCollection = async () => (await getHomeThingtimeDb()).collection('email_suppression_list');
+export const getEmailUnsubscribesCollection = async () => (await getHomeThingtimeDb()).collection('email_unsubscribes');
+export const getEmailIdentitiesCollection = async () => (await getHomeThingtimeDb()).collection('email_identities');
 // Single-use auth tokens: password-reset links and login OTP challenges, both
 // TTL-reaped (mirrors emailVerifications).
-export const getPasswordResetsCollection = async () => (await getThingtimeDb()).collection('passwordResets');
-export const getAuthOtpsCollection = async () => (await getThingtimeDb()).collection('authOtps');
+export const getPasswordResetsCollection = async () => (await getHomeThingtimeDb()).collection('passwordResets');
+export const getAuthOtpsCollection = async () => (await getHomeThingtimeDb()).collection('authOtps');
 
 // Idempotently create server-side collections + their indexes. createIndex
 // creates the collection if it doesn't exist yet, so this also bootstraps an
@@ -98,10 +148,139 @@ const createIndexReplacing = async (
   }
 };
 
+// Data-plane (`things`) index definitions, shared by the home ensure below and
+// the lazy per-endpoint ensure for CUSTOM data-plane DBs — a fresh override DB
+// bootstraps with the same structural guarantees (unique shareId/uniqueKeys,
+// reaction dedup, page-sort + text-search support) as the home db.
+//
+// everything in `things` is a thing (see api/utils/things + app/schemas);
+// shareId is included so the (createdAt desc, shareId asc) page sort is
+// fully index-provided instead of an in-memory sort per request. The
+// kind-prefixed indexes serve v1-era docs until the things migration
+// runs; the thingtime-prefixed ones serve v2 (multikey on the schema-id
+// array), and targetId serves comment/reaction/share lookups.
+const createThingsDataIndexes = (db: any): Promise<any>[] => [
+  db.collection('things').createIndex({ shareId: 1 }, { unique: true, sparse: true }),
+  // generalized uniqueness for system kinds (username:<u>, hashed email
+  // keys, schema:<id>, …): multikey unique — each element unique across
+  // the collection; sparse so ordinary things skip the index entirely
+  db.collection('things').createIndex({ uniqueKeys: 1 }, { unique: true, sparse: true }),
+  // login + people-search lookups on user things (thingtime is the only
+  // multikey field here, so the compound is legal)
+  db.collection('things').createIndex({ thingtime: 1, 'crystal.username': 1 }),
+  // admin roster: a partial index over just the (rare) admin user things,
+  // so listAdmins is a few-entry scan, not a full-user-base fetch+filter
+  db.collection('things').createIndex(
+    { secureAdmin: 1 },
+    { partialFilterExpression: { secureAdmin: true } }
+  ),
+  db.collection('things').createIndex({ kind: 1, visibility: 1, createdAt: -1, shareId: 1 }),
+  db.collection('things').createIndex({ kind: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
+  db.collection('things').createIndex({ thingtime: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
+  db.collection('things').createIndex({ targetId: 1, thingtime: 1, createdAt: 1, shareId: 1 }),
+  // schema-usage counting (schemas/browse decorate): data things are
+  // grouped by crystal.schemaId (stamped) with a crystal.schema name
+  // fallback for pre-stamp docs — both need index support or every
+  // schema browse page scans the whole data partition
+  db.collection('things').createIndex({ thingtime: 1, 'crystal.schemaId': 1 }),
+  db.collection('things').createIndex({ thingtime: 1, 'crystal.schema': 1 }),
+  // acl and thingtime are both arrays — Mongo forbids two multikey fields
+  // in one compound index, so the audience index stands alone
+  db.collection('things').createIndex({ acl: 1, createdAt: -1, shareId: 1 }),
+  // One weighted wildcard text index powers /api/v1/things/search ranked
+  // text mode across every string field of every thing (a collection can
+  // hold at most ONE text index — this is it; wildcard is deliberate:
+  // data crystals hold arbitrary user keys, and searching them is the
+  // feature). The language_override name is honoured INSIDE embedded
+  // documents too (verified: a crystal key with the override name and an
+  // unsupported value fails the insert), so it must be a name no crystal
+  // can ever contain — ':' is outside the data-key grammar, making
+  // 'tt:textLanguage' unwritable through every sanitizer.
+  createIndexReplacing(
+    db.collection('things'),
+    { '$**': 'text' },
+    {
+      name: 'things_text_search',
+      weights: { 'crystal.name': 10, 'crystal.text': 10, 'crystal.title': 8, 'crystal.listing.title': 8, tags: 6 },
+      default_language: 'english',
+      language_override: 'tt:textLanguage'
+    }
+  ),
+  // One reaction per (target, user, emoji token): makes toggle-on an
+  // idempotent upsert and dedups even under races. The partial filter
+  // requires a STRING targetId as well as crystal.emoji — reactions
+  // always attach to a target, while free-form data things (targetId
+  // null) may legitimately carry an `emoji` key and must never collide
+  // here (verified: the emoji-exists-only filter 409'd the second data
+  // thing sharing an emoji value).
+  createIndexReplacing(
+    db.collection('things'),
+    { targetId: 1, ownerId: 1, 'crystal.emoji': 1 },
+    {
+      name: 'things_reaction_unique',
+      unique: true,
+      partialFilterExpression: { targetId: { $type: 'string' }, 'crystal.emoji': { $exists: true } }
+    },
+    ['targetId_1_ownerId_1_crystal.emoji_1']
+  ),
+  // Legacy relational era (kind:'reaction'/'comment' docs written by the
+  // pre-unification relational model): aggregation + dedup indexes stay
+  // until the things migration converts those docs to thingtime things.
+  db.collection('things').createIndex({ kind: 1, parentId: 1, createdAt: 1 }),
+  db.collection('things').createIndex(
+    { parentId: 1, ownerId: 1, token: 1 },
+    { unique: true, partialFilterExpression: { kind: 'reaction' } }
+  ),
+  db.collection('things').createIndex(
+    { commentId: 1 },
+    { unique: true, partialFilterExpression: { kind: 'comment' } }
+  ),
+  // Embed apps ("Login with Thingtime", api/utils/apps): one thing per
+  // clientId, ever — a second doc claiming an existing clientId (however
+  // created) could answer origin lookups with a different allowlist, so
+  // uniqueness is structural. Only app things carry crystal.clientId;
+  // app-data things reference the app as crystal.appId instead.
+  db.collection('things').createIndex(
+    { 'crystal.clientId': 1 },
+    { unique: true, partialFilterExpression: { 'crystal.clientId': { $exists: true } } }
+  ),
+  // App data: one thing per (user, app, key) — set() stays an idempotent
+  // insert-or-update under races, and the index serves list-by-(user, app).
+  db.collection('things').createIndex(
+    { ownerId: 1, 'crystal.appId': 1, 'crystal.key': 1 },
+    {
+      unique: true,
+      partialFilterExpression: { 'crystal.appId': { $exists: true }, 'crystal.key': { $exists: true } }
+    }
+  )
+];
+
+// Lazily ensure the data-plane indexes on a CUSTOM endpoint's database, once
+// per URI per process. Fire-and-forget by design: the first requests against a
+// fresh override DB must not block on (potentially slow, e.g. the wildcard
+// text index over a large foreign collection) index builds — reads simply run
+// unindexed until the builds land. A failed run clears the memo so a later
+// request retries.
+const customIndexesEnsured = new Map<string, Promise<void>>();
+const ensureCustomDataIndexes = (uri: string, db: any) => {
+  if (customIndexesEnsured.has(uri)) return;
+  const run = Promise.all(createThingsDataIndexes(db)).then(
+    () => undefined,
+    (err) => {
+      customIndexesEnsured.delete(uri);
+      console.error('[mongodb] data-plane index ensure failed for custom endpoint:', err?.message || err);
+    }
+  );
+  customIndexesEnsured.set(uri, run);
+};
+
 export const ensureIndexes = async () => {
   if (!indexesEnsured) {
     indexesEnsured = (async () => {
-      const db = await getThingtimeDb();
+      // HOME db explicitly — ensureIndexes can run inside a request that
+      // carries a custom endpoint override (e.g. via enforceRateLimit), and
+      // the control-plane index set must never land on an override DB.
+      const db = await getHomeThingtimeDb();
       await Promise.all([
         db.collection('users').createIndex({ username: 1 }, { unique: true }),
         db.collection('users').createIndex({ email: 1 }, { unique: true }),
@@ -152,105 +331,8 @@ export const ensureIndexes = async () => {
         db.collection('themes').createIndex({ shareId: 1 }, { unique: true }),
         db.collection('themes').createIndex({ ownerId: 1 }),
         db.collection('waitlist').createIndex({ email: 1 }, { unique: true }),
-        // everything in `things` is a thing (see api/utils/things + app/schemas);
-        // shareId is included so the (createdAt desc, shareId asc) page sort is
-        // fully index-provided instead of an in-memory sort per request. The
-        // kind-prefixed indexes serve v1-era docs until the things migration
-        // runs; the thingtime-prefixed ones serve v2 (multikey on the schema-id
-        // array), and targetId serves comment/reaction/share lookups.
-        db.collection('things').createIndex({ shareId: 1 }, { unique: true, sparse: true }),
-        // generalized uniqueness for system kinds (username:<u>, hashed email
-        // keys, schema:<id>, …): multikey unique — each element unique across
-        // the collection; sparse so ordinary things skip the index entirely
-        db.collection('things').createIndex({ uniqueKeys: 1 }, { unique: true, sparse: true }),
-        // login + people-search lookups on user things (thingtime is the only
-        // multikey field here, so the compound is legal)
-        db.collection('things').createIndex({ thingtime: 1, 'crystal.username': 1 }),
-        // admin roster: a partial index over just the (rare) admin user things,
-        // so listAdmins is a few-entry scan, not a full-user-base fetch+filter
-        db.collection('things').createIndex(
-          { secureAdmin: 1 },
-          { partialFilterExpression: { secureAdmin: true } }
-        ),
-        db.collection('things').createIndex({ kind: 1, visibility: 1, createdAt: -1, shareId: 1 }),
-        db.collection('things').createIndex({ kind: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
-        db.collection('things').createIndex({ thingtime: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
-        db.collection('things').createIndex({ targetId: 1, thingtime: 1, createdAt: 1, shareId: 1 }),
-        // schema-usage counting (schemas/browse decorate): data things are
-        // grouped by crystal.schemaId (stamped) with a crystal.schema name
-        // fallback for pre-stamp docs — both need index support or every
-        // schema browse page scans the whole data partition
-        db.collection('things').createIndex({ thingtime: 1, 'crystal.schemaId': 1 }),
-        db.collection('things').createIndex({ thingtime: 1, 'crystal.schema': 1 }),
-        // acl and thingtime are both arrays — Mongo forbids two multikey fields
-        // in one compound index, so the audience index stands alone
-        db.collection('things').createIndex({ acl: 1, createdAt: -1, shareId: 1 }),
-        // One weighted wildcard text index powers /api/v1/things/search ranked
-        // text mode across every string field of every thing (a collection can
-        // hold at most ONE text index — this is it; wildcard is deliberate:
-        // data crystals hold arbitrary user keys, and searching them is the
-        // feature). The language_override name is honoured INSIDE embedded
-        // documents too (verified: a crystal key with the override name and an
-        // unsupported value fails the insert), so it must be a name no crystal
-        // can ever contain — ':' is outside the data-key grammar, making
-        // 'tt:textLanguage' unwritable through every sanitizer.
-        createIndexReplacing(
-          db.collection('things'),
-          { '$**': 'text' },
-          {
-            name: 'things_text_search',
-            weights: { 'crystal.name': 10, 'crystal.text': 10, 'crystal.title': 8, 'crystal.listing.title': 8, tags: 6 },
-            default_language: 'english',
-            language_override: 'tt:textLanguage'
-          }
-        ),
-        // One reaction per (target, user, emoji token): makes toggle-on an
-        // idempotent upsert and dedups even under races. The partial filter
-        // requires a STRING targetId as well as crystal.emoji — reactions
-        // always attach to a target, while free-form data things (targetId
-        // null) may legitimately carry an `emoji` key and must never collide
-        // here (verified: the emoji-exists-only filter 409'd the second data
-        // thing sharing an emoji value).
-        createIndexReplacing(
-          db.collection('things'),
-          { targetId: 1, ownerId: 1, 'crystal.emoji': 1 },
-          {
-            name: 'things_reaction_unique',
-            unique: true,
-            partialFilterExpression: { targetId: { $type: 'string' }, 'crystal.emoji': { $exists: true } }
-          },
-          ['targetId_1_ownerId_1_crystal.emoji_1']
-        ),
-        // Legacy relational era (kind:'reaction'/'comment' docs written by the
-        // pre-unification relational model): aggregation + dedup indexes stay
-        // until the things migration converts those docs to thingtime things.
-        db.collection('things').createIndex({ kind: 1, parentId: 1, createdAt: 1 }),
-        db.collection('things').createIndex(
-          { parentId: 1, ownerId: 1, token: 1 },
-          { unique: true, partialFilterExpression: { kind: 'reaction' } }
-        ),
-        db.collection('things').createIndex(
-          { commentId: 1 },
-          { unique: true, partialFilterExpression: { kind: 'comment' } }
-        ),
-        // Embed apps ("Login with Thingtime", api/utils/apps): one thing per
-        // clientId, ever — a second doc claiming an existing clientId (however
-        // created) could answer origin lookups with a different allowlist, so
-        // uniqueness is structural. Only app things carry crystal.clientId;
-        // app-data things reference the app as crystal.appId instead.
-        db.collection('things').createIndex(
-          { 'crystal.clientId': 1 },
-          { unique: true, partialFilterExpression: { 'crystal.clientId': { $exists: true } } }
-        ),
-        // App data: one thing per (user, app, key) — set() stays an idempotent
-        // insert-or-update under races, and the index serves list-by-(user, app).
-        db.collection('things').createIndex(
-          { ownerId: 1, 'crystal.appId': 1, 'crystal.key': 1 },
-          {
-            unique: true,
-            partialFilterExpression: { 'crystal.appId': { $exists: true }, 'crystal.key': { $exists: true } }
-          }
-        ),
+        // the shared data-plane (`things`) index set — see createThingsDataIndexes
+        ...createThingsDataIndexes(db),
         db.collection('feedAlgorithms').createIndex({ shareId: 1 }, { unique: true }),
         db.collection('feedAlgorithms').createIndex({ ownerId: 1 }),
         // global app settings singletons (rate-limit config lives here)

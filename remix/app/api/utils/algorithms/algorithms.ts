@@ -1,10 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { ObjectId } from 'mongodb';
 
+// feed-algorithm is a PROTECTED system kind: algorithm things stay on the home
+// deployment DB even while a data-plane endpoint override is active.
 import {
   ensureIndexes,
   getFeedAlgorithmsCollection,
-  getThingsCollection,
+  getHomeThingsCollection as getThingsCollection,
   getUsersCollection
 } from '../mongodb/collections';
 import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';

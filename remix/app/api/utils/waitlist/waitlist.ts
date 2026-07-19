@@ -1,9 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto';
 
+// waitlist is a PROTECTED system kind: waitlist things stay on the home
+// deployment DB even while a data-plane endpoint override is active.
 import {
   ensureIndexes,
+  getHomeThingsCollection as getThingsCollection,
   getLopuMusingRateLimitsCollection,
-  getThingsCollection,
   getWaitlistCollection
 } from '../mongodb/collections';
 import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';

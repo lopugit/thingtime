@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto';
 
-import { ensureIndexes, getSessionsCollection, getThingsCollection } from '../mongodb/collections';
+// Embed apps are auth-plane ("Login with Thingtime" clientId → allowlist
+// lookups): app things stay on the home deployment DB even while a data-plane
+// endpoint override is active, so an override can never answer origin checks.
+import { ensureIndexes, getHomeThingsCollection as getThingsCollection, getSessionsCollection } from '../mongodb/collections';
 import {
   ACL_OWNER,
   COLLECTION_SCHEMA_VERSIONS,

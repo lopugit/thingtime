@@ -167,3 +167,26 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] A dead `?schema=` deep link (unknown/invisible shareId) toasts, strips
       the param from the URL, and fires NO fallback search; while a live
       `?schema=` resolves, no empty-state copy shows at all.
+
+## MongoDB data endpoint (`/mongodb-status`, `remix/app/components/MongoDB/MongoEndpointConfig.tsx`)
+
+- [ ] Logged OUT: paste a reachable `mongodb://` URL → "Use for this session"
+      flips the page to the Custom endpoint badge, the footer indicator reads
+      "MongoDB (custom)", and the feed/search read from that DB. "Use" on the
+      Thingtime row returns everything to default.
+- [ ] An unreachable URL is rejected at activation (422 toast, e.g.
+      `MongoServerSelectionError (ECONNREFUSED)`) and the previous endpoint
+      stays active — a bad URL must never brick the session's data calls.
+- [ ] A non-mongodb scheme (`http://…`), whitespace, or a >2048-char URL is
+      rejected with a clear validation message.
+- [ ] Logged IN: "Save to my endpoints" persists the endpoint (survives
+      logout/login and other browsers); the raw URL/credentials NEVER appear
+      in any API response, page, or error — only host + db name.
+- [ ] While a custom endpoint is active: login/logout, profile, themes,
+      account switcher and saved-endpoint management still work (identity is
+      home-pinned); posts created land in the CUSTOM db; admin routes
+      (migrations especially) still operate on the home DB.
+- [ ] Removing the saved endpoint the session currently uses also clears the
+      override (page falls back to Thingtime default without a reload).
+- [ ] The `tt_mongo` cookie is httpOnly + session-scoped: closing the browser
+      drops the override; document.cookie can't read it.

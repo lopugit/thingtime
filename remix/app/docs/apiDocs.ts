@@ -1142,6 +1142,122 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'mongodb-endpoint',
+    group: 'mongodb',
+    title: 'MongoDB data endpoint',
+    endpoint: '/api/v1/mongodb/endpoint',
+    summary: 'Read or change the MongoDB endpoint the data plane uses for this browser session.',
+    detail:
+      'Thin-frontend mode: the session can point the open data plane (things, feed, search, comments, reactions, schemas, app-data) at any reachable MongoDB. Identity, auth and the protected system kinds always stay on the home Thingtime DB. The override is an httpOnly session cookie (tt_mongo) — or send an x-tt-mongo-url header per request from API clients. Activation probes the endpoint (connect + ping) before accepting it. Responses never include the URL itself, only the credentials-stripped host and db name.',
+    auth: {
+      mode: 'optional',
+      description:
+        'Works logged out for { url } and { reset }. Selecting a saved endpoint ({ savedId }) requires a signed-in session.'
+    },
+    methods: ['GET', 'POST', 'DELETE'],
+    steps: [
+      'GET to read the active endpoint: { endpoint: { custom, host, dbName, savedId }, defaultHost }.',
+      'POST { url } with a mongodb:// or mongodb+srv:// URL to activate it for this browser session.',
+      'POST { savedId } (signed in) to activate one of your saved endpoints.',
+      'POST { reset: true } or send DELETE to return to the Thingtime default.',
+      'A failed probe returns 422 with a safe error — the previous endpoint stays active.'
+    ],
+    requestExamples: [
+      {
+        name: 'Read active endpoint',
+        description: 'Which MongoDB the data plane currently uses.',
+        method: 'GET'
+      },
+      {
+        name: 'Activate a custom endpoint',
+        description: 'Point the data plane at a custom MongoDB for this session.',
+        method: 'POST',
+        body: { url: 'mongodb://localhost:27017/mydb' }
+      },
+      {
+        name: 'Back to default',
+        description: 'Clear the override.',
+        method: 'POST',
+        body: { reset: true }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Custom endpoint active.',
+        body: {
+          ok: true,
+          endpoint: { custom: true, host: 'localhost:27017', dbName: 'mydb', savedId: null },
+          defaultHost: 'cluster0.mongodb.net'
+        }
+      },
+      {
+        status: 422,
+        description: 'Endpoint unreachable — nothing changed.',
+        body: { ok: false, error: 'MongoServerSelectionError (ECONNREFUSED)' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'mongodb-endpoints',
+    group: 'mongodb',
+    title: 'Saved MongoDB endpoints',
+    endpoint: '/api/v1/mongodb/endpoints',
+    summary: 'Manage the signed-in user’s saved data-plane MongoDB endpoints.',
+    detail:
+      'Saved endpoints persist in the user’s private secure state on the home DB, with the Thingtime default always available. Saved URLs may embed credentials, so responses only ever return the sanitized host and db name. Activate a saved endpoint via POST /api/v1/mongodb/endpoint with { savedId }.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Session cookie or Bearer token. Endpoints belong to the signed-in account.'
+    },
+    methods: ['GET', 'POST', 'DELETE'],
+    steps: [
+      'GET to list saved endpoints; the one active for this session carries active: true.',
+      'POST { name?, url } to save an endpoint (probed first; duplicates and >20 entries are rejected).',
+      'DELETE { id } to remove one — if it is the session’s active endpoint the override is cleared too.',
+      'Activate with POST /api/v1/mongodb/endpoint { savedId }.'
+    ],
+    requestExamples: [
+      {
+        name: 'List saved endpoints',
+        description: 'All endpoints saved to this account.',
+        method: 'GET'
+      },
+      {
+        name: 'Save an endpoint',
+        description: 'Persist a custom MongoDB endpoint.',
+        method: 'POST',
+        body: { name: 'Homelab', url: 'mongodb://user:pass@localhost:27017/mydb' }
+      },
+      {
+        name: 'Remove an endpoint',
+        description: 'Delete a saved endpoint by id.',
+        method: 'DELETE',
+        body: { id: '665f0c2ab1d2c300a1b2c3d4' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Saved endpoints.',
+        body: {
+          ok: true,
+          endpoints: [
+            {
+              id: '665f0c2ab1d2c300a1b2c3d4',
+              name: 'Homelab',
+              host: 'localhost:27017',
+              dbName: 'mydb',
+              createdAt: '2026-07-19T00:00:00.000Z',
+              active: true
+            }
+          ],
+          activeSavedId: '665f0c2ab1d2c300a1b2c3d4'
+        }
+      }
+    ]
+  }),
+  endpoint({
     id: 'mongodb-get-connection',
     group: 'mongodb',
     title: 'MongoDB connection config',
