@@ -72,6 +72,15 @@ const blankField = (partial: Partial<DraftField> = {}): DraftField => ({
   ...partial
 });
 
+// Builtin cards prefill with registry-vocabulary fields: open 'record' bags
+// (theme tokens, algorithm weights, app-data values, the schema fields tree)
+// can't be expressed in the builder grammar, so they're DROPPED from fork
+// prefills rather than silently coerced to 'string' — a fork asserting
+// "theme is text" would publish a wrong grammar the builder used to block
+// back when these were childless objects.
+export const draftableSchemaFields = (fields: SchemaThingField[]): SchemaThingField[] =>
+  fields.filter((field) => (field.type as string) !== 'record');
+
 const fromSchemaField = (field: SchemaThingField): DraftField =>
   blankField({
     name: field.name || '',
@@ -85,7 +94,7 @@ const fromSchemaField = (field: SchemaThingField): DraftField =>
     maxLength: field.maxLength !== undefined ? String(field.maxLength) : '',
     minItems: field.minItems !== undefined ? String(field.minItems) : '',
     maxItems: field.maxItems !== undefined ? String(field.maxItems) : '',
-    children: (field.children || []).map(fromSchemaField),
+    children: draftableSchemaFields(field.children || []).map(fromSchemaField),
     items: field.items ? fromSchemaField({ name: 'items', ...field.items } as SchemaThingField) : null
   });
 
@@ -386,9 +395,12 @@ export const SchemaBuilder = ({ prefill, onClose, onCreated }: SchemaBuilderProp
   const lopu = useLopu();
   const [name, setName] = React.useState(prefill?.name || '');
   const [description, setDescription] = React.useState(prefill?.description || '');
-  const [drafts, setDrafts] = React.useState<DraftField[]>(() =>
-    prefill?.fields?.length ? prefill.fields.map(fromSchemaField) : [blankField()]
-  );
+  const [drafts, setDrafts] = React.useState<DraftField[]>(() => {
+    const prefilled = prefill?.fields?.length ? draftableSchemaFields(prefill.fields).map(fromSchemaField) : [];
+    // an all-record prefill (nothing draftable) starts from the blank row the
+    // builder's remove-last-field logic assumes exists
+    return prefilled.length ? prefilled : [blankField()];
+  });
   const [publishing, setPublishing] = React.useState(false);
   const [showPreview, setShowPreview] = React.useState(true);
 

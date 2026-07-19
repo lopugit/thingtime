@@ -7,7 +7,12 @@
 // imported by the client (/schemas page), the docs, and the server API layer
 // alike — the same apiDocs.ts pattern.
 
-import { MAX_REACTION_EMOJIS, sanitizeReactionToken } from '~/utils/reactionTokens';
+// Relative with an explicit extension (not `~/`) so bare `node --test` can
+// load this module without a path-alias loader — reactionTokens is itself
+// import-free, keeping the pure chain intact for the colocated
+// builtin-projection test.
+// @ts-ignore Node 24 executes TypeScript directly and requires the extension.
+import { MAX_REACTION_EMOJIS, sanitizeReactionToken } from '../utils/reactionTokens.ts';
 
 export type ThingtimeFieldType =
   | 'string'
@@ -28,6 +33,17 @@ export type ThingtimeSchemaField = {
   // enum values / string max chars / array max items, when they apply
   values?: string[];
   max?: number;
+  // unit of `max` when it is NOT the default (chars for strings, items for
+  // lists) — e.g. reaction.emoji caps EMOJI, not UTF-16 chars. A non-default
+  // unit keeps `max` out of the seeded schema-thing grammar, whose
+  // maxLength/maxItems are defined in the default units.
+  maxUnit?: string;
+  // number floor, when it applies (e.g. listing price >= 0)
+  min?: number;
+  // 'object' fields with a KNOWN closed shape declare it here so the builtin
+  // seed can mirror it into the schema-thing grammar; genuinely open bags are
+  // typed 'record' instead and stay opaque by design
+  children?: ThingtimeSchemaField[];
   // set by Thingtime on write — never supplied by the creator
   system?: boolean;
 };
@@ -293,7 +309,23 @@ const postSchema: ThingtimeSchema = {
     { name: 'type', type: 'enum', required: true, values: [...POST_TYPES], description: 'What kind of post this is.' },
     { name: 'text', type: 'string', required: false, max: MAX_TEXT_CHARS, description: `Post body (required for text posts), max ${MAX_TEXT_CHARS} chars.` },
     { name: 'images', type: 'string[]', required: false, max: MAX_IMAGES, description: `http(s) image URLs, max ${MAX_IMAGES} × ${MAX_IMAGE_URL_CHARS} chars (image posts need at least one).` },
-    { name: 'listing', type: 'object', required: false, description: 'Marketplace listing { title, price, currency, category, condition, location, sold } — required for marketplace posts, optional on thingtime posts.' },
+    {
+      name: 'listing',
+      type: 'object',
+      required: false,
+      description: 'Marketplace listing — required for marketplace posts, optional on thingtime posts.',
+      // mirrors the exact shape sanitizePostCrystal accepts, so the seeded
+      // builtin mirror carries the real grammar instead of an opaque object
+      children: [
+        { name: 'title', type: 'string', required: true, max: 120, description: 'Listing title, max 120 chars.' },
+        { name: 'price', type: 'number', required: true, min: 0, max: 1_000_000_000, description: 'Non-negative price, rounded to cents.' },
+        { name: 'currency', type: 'string', required: false, max: 3, description: '3-letter currency code, defaults to AUD.' },
+        { name: 'category', type: 'enum', required: false, values: [...MARKETPLACE_CATEGORIES], description: 'Marketplace category, defaults to other.' },
+        { name: 'condition', type: 'enum', required: false, values: ['new', 'used'], description: 'Item condition.' },
+        { name: 'location', type: 'string', required: false, max: 120, description: 'Free-text location, max 120 chars.' },
+        { name: 'sold', type: 'boolean', required: false, description: 'Whether the listing has sold.' }
+      ]
+    },
     { name: 'thing', type: 'record', required: false, description: 'Free-form structured thing payload — required for thingtime posts, bounded like data crystals (searchable as crystal.thing.<field>). Thingtime posts can also carry images and a listing.' }
   ],
   example: { type: 'text', text: 'Everything is a thing ✨', images: [], listing: null, thing: null }
@@ -337,6 +369,9 @@ const reactionSchema: ThingtimeSchema = {
       type: 'string',
       required: true,
       max: MAX_REACTION_EMOJIS,
+      // emoji count, NOT UTF-16 chars (every emoji is 2+ code units) — keeps
+      // the projection from publishing a maxLength that rejects legal tokens
+      maxUnit: 'emoji',
       description: `The reaction token — one emoji or a multi-emoji group (max ${MAX_REACTION_EMOJIS} emoji, emoji-only).`
     }
   ],
@@ -476,15 +511,19 @@ const schemaThingSchema: ThingtimeSchema = {
     'wood/plastic/concrete, width/height/depth). Fields nest arbitrarily (object children, typed ' +
     'array items) with per-field constraints: required, number min/max, string maxLength, enum ' +
     'value lists, array min/maxItems. Things that follow a schema simply carry its fields in ' +
-    'their crystal — schemas are discovery + search sugar, never a validation gate (Thingtime ' +
-    'searches real datatypes, not schema registrations). /schemas browses every published ' +
+    'their crystal — a schema never gates OTHER things\' writes (Thingtime searches real ' +
+    'datatypes, not schema registrations), but schema things themselves are validated on write ' +
+    'like any crystal, builtin seeds included. /schemas browses every published ' +
     'schema; /search prefills its query builder from the field definitions.',
   fields: [
     { name: 'name', type: 'string', required: true, max: MAX_SCHEMA_NAME_CHARS, description: 'Display name, e.g. "Table".' },
     { name: 'description', type: 'string', required: false, max: MAX_SCHEMA_DESCRIPTION_CHARS, description: 'What this shape describes.' },
     {
+      // 'record', not 'object': the field-definition tree is recursive (children
+      // of children), which the closed schema-thing grammar can't express — an
+      // open-but-bounded structure is the honest classification
       name: 'fields',
-      type: 'object',
+      type: 'record',
       required: true,
       max: MAX_SCHEMA_FIELDS,
       description:
@@ -741,7 +780,7 @@ const appDataSchema: ThingtimeSchema = {
   fields: [
     { name: 'appId', type: 'id', required: true, description: 'The clientId of the app this entry belongs to.' },
     { name: 'key', type: 'string', required: true, max: MAX_APP_DATA_KEY_CHARS, description: `Entry key ([A-Za-z0-9._:-], first char alphanumeric, max ${MAX_APP_DATA_KEY_CHARS} chars).` },
-    { name: 'value', type: 'object', required: true, description: `Arbitrary JSON value, max ${MAX_APP_DATA_VALUE_BYTES / 1024}KB serialized.` }
+    { name: 'value', type: 'record', required: true, description: `Arbitrary JSON value, max ${MAX_APP_DATA_VALUE_BYTES / 1024}KB serialized.` }
   ],
   example: { appId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', key: 'preferences', value: { theme: 'rainbow' } }
 };
@@ -807,7 +846,7 @@ const themeThingSchema: ThingtimeSchema = {
   createdVia: 'POST /api/v1/themes',
   fields: [
     { name: 'name', type: 'string', required: true, max: 60, description: 'Theme name.' },
-    { name: 'theme', type: 'object', required: true, description: 'Resolved theme tokens.' }
+    { name: 'theme', type: 'record', required: true, description: 'Resolved theme tokens.' }
   ],
   example: { name: 'Midnight', theme: { '--tt-accent': 'hotpink' } }
 };
@@ -829,7 +868,7 @@ const feedAlgorithmThingSchema: ThingtimeSchema = {
     { name: 'name', type: 'string', required: true, max: 60, description: 'Algorithm name.' },
     { name: 'emoji', type: 'string', required: true, description: 'Display emoji.' },
     { name: 'parentId', type: 'id', required: false, description: 'Branch lineage parent.' },
-    { name: 'weights', type: 'object', required: true, description: '{ types, tags, authors } weight maps.' },
+    { name: 'weights', type: 'record', required: true, description: '{ types, tags, authors } weight maps — open keys, so the shape stays a record.' },
     { name: 'eventCount', type: 'number', required: true, description: 'Engagement events trained on.' },
     { name: 'lastTrainedAt', type: 'date', required: false, description: 'Last training time.' }
   ],
@@ -1158,6 +1197,65 @@ export const MAX_SCHEMA_FIELD_DESCRIPTION_CHARS = 200;
 // case-insensitive comparison).
 export const SCHEMA_RESERVED_TOP_LEVEL_FIELD_NAMES: ReadonlySet<string> = new Set(['schema', 'schemaid']);
 
+// ---------------------------------------------------------------------------
+// Builtin-schema projection: maps a code-registry crystal schema onto the
+// schema-thing grammar sanitizeSchemaCrystal enforces, so the seed migration
+// can publish builtin mirrors through validateThingtimeCrystal(['schema'], …)
+// — the SAME write gate every user-published schema passes. Lives here, next
+// to the grammar it must stay congruent with; the colocated
+// builtinSchemaProjection.test.ts pins that congruence so registry/grammar
+// drift fails a test instead of seeding an invalid thing.
+//
+// Deliberately dropped (each an open shape the closed grammar can't express,
+// or a name the grammar reserves):
+// - 'record' fields — documented open bags (data's '*', schema's fields tree,
+//   theme tokens, algorithm weights, app-data values)
+// - reserved top-level names ('schema'/'schemaid' — data's convention field IS
+//   the tagging namespace the reservation protects)
+// - names outside the field grammar (the '*' catch-all)
+// 'id' fields project as 'string' (ids are strings on the wire). Everything
+// else carries through: required, enum values, number min/max, string
+// maxLength / string[] maxItems (registry `max`), object children (recursed —
+// an object whose children ALL project away is dropped, since a childless
+// object can't validate).
+const projectBuiltinField = (field: ThingtimeSchemaField, depth: number): Record<string, unknown> | null => {
+  const type = field.type === 'id' ? 'string' : field.type;
+  if (type === 'record') return null;
+  if (!(SCHEMA_FIELD_TYPES as readonly string[]).includes(type)) return null;
+  if (field.name.length > MAX_SCHEMA_FIELD_NAME_CHARS || !SCHEMA_FIELD_NAME_PATTERN.test(field.name)) return null;
+  if (depth === 1 && SCHEMA_RESERVED_TOP_LEVEL_FIELD_NAMES.has(field.name.toLowerCase())) return null;
+  const out: Record<string, unknown> = { name: field.name, type };
+  if (field.description) out.description = field.description.slice(0, MAX_SCHEMA_FIELD_DESCRIPTION_CHARS);
+  if (field.required) out.required = true;
+  if (type === 'enum' && Array.isArray(field.values) && field.values.length) out.values = [...field.values];
+  if (type === 'number') {
+    if (typeof field.min === 'number') out.min = field.min;
+    if (typeof field.max === 'number') out.max = field.max;
+  }
+  // `max` maps onto the grammar's constraints only in their default units —
+  // a declared non-default maxUnit (reaction.emoji counts emoji, not chars)
+  // would publish a machine-readable cap that rejects legal values
+  const maxInDefaultUnit = typeof field.max === 'number' && !field.maxUnit;
+  if (type === 'string' && maxInDefaultUnit) out.maxLength = field.max;
+  if (type === 'string[]' && maxInDefaultUnit) out.maxItems = field.max;
+  if (type === 'object') {
+    const children = (field.children || [])
+      .map((child) => projectBuiltinField(child, depth + 1))
+      .filter((child): child is Record<string, unknown> => child !== null);
+    if (!children.length) return null;
+    out.children = children;
+  }
+  return out;
+};
+
+export const projectBuiltinSchemaCrystal = (schema: ThingtimeSchema): Record<string, unknown> => ({
+  name: schema.title,
+  description: schema.summary,
+  fields: schema.fields
+    .map((field) => projectBuiltinField(field, 1))
+    .filter((field): field is Record<string, unknown> => field !== null)
+});
+
 // whole-number constraint (maxLength/minItems/maxItems); fail-loudly on junk
 const sanitizeCountConstraint = (
   raw: unknown,
@@ -1293,7 +1391,12 @@ const sanitizeSchemaFieldList = (
   raw: unknown,
   depth: number,
   counter: { nodes: number },
-  path: string
+  path: string,
+  // top-level only: zero-field marker schemas are legal (share/save/waitlist —
+  // "this thing IS the payload"), so the builtin seed validates through the
+  // exact same grammar as user publishes. Nested children keep the >=1 rule: a
+  // childless object node is meaningless.
+  allowEmpty = false
 ): { ok: true; fields: SchemaThingField[] } | Fail => {
   if (!Array.isArray(raw)) return fail(400, `Schema fields must be a list (${path})`);
   const fields: SchemaThingField[] = [];
@@ -1308,7 +1411,7 @@ const sanitizeSchemaFieldList = (
     seen.add(key);
     fields.push(sanitized.field);
   }
-  if (!fields.length) return fail(400, `Schemas need at least one field (${path})`);
+  if (!fields.length && !allowEmpty) return fail(400, `Schemas need at least one field (${path})`);
   return { ok: true, fields };
 };
 
@@ -1386,7 +1489,7 @@ const sanitizeSchemaCrystal = (input: Record<string, unknown>): { ok: true; crys
 
   const description = typeof input.description === 'string' ? input.description.trim().slice(0, MAX_SCHEMA_DESCRIPTION_CHARS) : '';
 
-  const sanitized = sanitizeSchemaFieldList(input.fields, 1, { nodes: 0 }, 'fields');
+  const sanitized = sanitizeSchemaFieldList(input.fields, 1, { nodes: 0 }, 'fields', true);
   if (isFail(sanitized)) return sanitized;
 
   const crystal: Record<string, unknown> = { name, description, fields: sanitized.fields };
@@ -1411,9 +1514,10 @@ const sanitizeSchemaCrystal = (input: Record<string, unknown>): { ok: true; crys
 // ---------------------------------------------------------------------------
 // Value validation against a schema-thing field tree. Pure and shared: the
 // schema builder previews with it, the create-a-thing form validates with it.
-// It is a HELPER, never a write gate — schemas stay discovery/search sugar
-// (things are validated by their thingtime crystal sanitizers, not by
-// user-published schemas).
+// It is a HELPER, never a write gate — a schema never gates OTHER things'
+// writes (things are validated by their thingtime crystal sanitizers, not by
+// user-published schemas). Schema things THEMSELVES are validated on write
+// like any crystal, builtin seeds included.
 
 export type SchemaValueIssue = { path: string; message: string };
 
