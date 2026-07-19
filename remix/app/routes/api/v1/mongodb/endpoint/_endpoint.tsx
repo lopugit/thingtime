@@ -65,7 +65,7 @@ export const action = async ({ request }: { request: Request }) => {
   }
 
   const user = await getCurrentUser(request);
-  const rate = await enforceRateLimit(request, 'mongodb-endpoint', user ? `user:${user.id}` : null);
+  const rate = await enforceRateLimit(request, 'mongodb.endpoint', user ? `user:${user.id}` : null);
   if (!rate.allowed) {
     return json({ ok: false, error: 'Too many endpoint changes — try again shortly' }, rateLimitedResponseInit(rate));
   }

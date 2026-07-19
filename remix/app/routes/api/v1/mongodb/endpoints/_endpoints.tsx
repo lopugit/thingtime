@@ -63,7 +63,7 @@ export const action = async ({ request }: { request: Request }) => {
     return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
   }
 
-  const rate = await enforceRateLimit(request, 'mongodb-endpoints', `user:${user.id}`);
+  const rate = await enforceRateLimit(request, 'mongodb.endpoints', `user:${user.id}`);
   if (!rate.allowed) {
     return json({ ok: false, error: 'Too many endpoint changes — try again shortly' }, rateLimitedResponseInit(rate));
   }
