@@ -3176,9 +3176,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'admin',
     title: 'Migration status',
     endpoint: '/api/v1/admin/migrations',
-    summary: 'Per-collection schema-version census plus registered migrations and their pending doc counts.',
+    summary: 'Per-collection schema-version census, storage generations, and registered migrations with pending counts.',
     detail:
-      'Every doc stores the root-level schemaVersion it was written at (docs without one count as version 1). This endpoint reports how many docs sit at each version per collection and which registered migrations still have work to do.',
+      'Every doc stores the root-level schemaVersion it was written at (docs without one count as version 1), and every ' +
+      'collection lives in a versioned physical collection — logical `things` at version 2 is the physical collection ' +
+      '`things_v2`. This endpoint reports how many docs sit at each version per collection, every physical collection ' +
+      'generation on the server (current, stale, or ahead), any legacy collections adoption could not rename, and which ' +
+      'registered migrations still have work to do.',
     auth: {
       mode: 'session-or-bearer',
       description:
@@ -3188,6 +3192,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: [
       'GET as an allowlisted admin.',
       'Read collections for the per-version doc census.',
+      'Read generations for every physical collection and its stale/current status.',
       'Read migrations for pending counts per registered migration.',
       'Handle 401 for anonymous or non-admin callers.'
     ],
@@ -3205,9 +3210,23 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         body: {
           ok: true,
           collections: [
-            { collection: 'things', currentVersion: 2, total: 42, versions: { '1': 24, '2': 18 }, pendingMigrations: ['things-v1-to-v2'] }
+            {
+              collection: 'things',
+              physical: 'things_v2',
+              currentVersion: 2,
+              total: 42,
+              versions: { '1': 24, '2': 18 },
+              pendingMigrations: ['things-v1-to-v2']
+            }
           ],
-          migrations: [{ id: 'things-v1-to-v2', collection: 'things', fromVersion: 1, toVersion: 2, pending: 24 }]
+          generations: [
+            { collection: 'things', physical: 'things_v2', version: 2, docs: 42, current: true, stale: false },
+            { collection: 'things', physical: 'things', version: null, docs: 42, current: false, stale: true }
+          ],
+          adoptionIssues: [],
+          migrations: [
+            { id: 'things-v1-to-v2', collection: 'things', fromVersion: 1, toVersion: 2, destructive: false, pending: 24 }
+          ]
         }
       },
       {
@@ -3224,7 +3243,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/admin/migrations/run',
     summary: 'Runs (or dry-runs) a registered schema-version migration.',
     detail:
-      'Migrations are idempotent, so re-running after a partial failure only touches what is left. The things v1→v2 migration explodes embedded comments/reactions into standalone things, converts share posts to thingtime ["post","share"], moves post payloads under crystal, and stamps schemaVersion; the other collections stamp the version they already conform to.',
+      'Migrations are idempotent, so re-running after a partial failure only touches what is left. The things v1→v2 ' +
+      'migration explodes embedded comments/reactions into standalone things, converts share posts to thingtime ' +
+      '["post","share"], moves post payloads under crystal, and stamps schemaVersion; the other collections stamp the ' +
+      'version they already conform to. merge-legacy-collections folds leftover unversioned collections into their ' +
+      'versioned successors, and drop-stale-collection-generations removes superseded physical collections — that one ' +
+      'is destructive and additionally requires confirm: true on the non-dry run.',
     auth: {
       mode: 'session-or-bearer',
       description:
@@ -3234,6 +3258,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: [
       'POST the migration id from /api/v1/admin/migrations.',
       'Pass dryRun: true first to see matched counts without writing.',
+      'Pass confirm: true when running a destructive migration for real.',
       'Read the report for matched, migrated, created, skipped, and notes.',
       'Handle 401 non-admin callers and 404 unknown migration ids.'
     ],

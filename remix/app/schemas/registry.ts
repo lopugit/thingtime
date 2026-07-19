@@ -226,6 +226,14 @@ export const EXTENDED_RESERVED_KEY = 'tt:textLanguage';
 
 // The schema version each collection's docs are written at today. Docs with no
 // schemaVersion field predate versioning and count as version 1 everywhere.
+//
+// This map is also the canonical registry of EVERY Thingtime collection: the
+// value doubles as the version suffix of the physical MongoDB collection the
+// code reads and writes — logical `things` at version 2 lives in the physical
+// collection `things_v2` (see api/utils/mongodb/collectionNames.ts). Bumping a
+// value here points the code at the NEXT physical generation; a registered
+// migration copies data forward, and stale generations are dropped via the
+// drop-stale-collection-generations migration once verified.
 export const COLLECTION_SCHEMA_VERSIONS: Record<string, number> = {
   things: 2,
   users: 2,
@@ -238,7 +246,19 @@ export const COLLECTION_SCHEMA_VERSIONS: Record<string, number> = {
   // born at 2 (no v1 era): single-use auth tokens + the email outbox
   passwordResets: 2,
   authOtps: 2,
-  email_messages: 2
+  email_messages: 2,
+  // still at 1: docs carry no schemaVersion stamp yet (v1 is the pre-stamp
+  // era), so their physical collections are <name>_v1 until a real shape
+  // migration bumps them
+  rosters: 1,
+  settings: 1,
+  rateLimits: 1,
+  email_events: 1,
+  email_templates: 1,
+  email_subscriptions: 1,
+  email_suppression_list: 1,
+  email_unsubscribes: 1,
+  email_identities: 1
 };
 
 export const LEGACY_SCHEMA_VERSION = 1;
