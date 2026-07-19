@@ -140,9 +140,6 @@ const useThingtimeSdk = (): SdkState => {
     // 'load' fired but no global = the script served but isn't the SDK.
     const onLoad = () => setState(getSdk()?.renderButton ? 'ready' : 'failed');
     const onError = () => setState('failed');
-    // A pre-existing tag may have already fired 'error' before we attached —
-    // no event will ever come, so a quiet timeout is the only stuck-state exit.
-    const timer = window.setTimeout(() => setState('failed'), 10000);
 
     script.addEventListener('load', onLoad);
     script.addEventListener('error', onError);
@@ -156,8 +153,16 @@ const useThingtimeSdk = (): SdkState => {
       setState('ready');
     }
 
+    // Only the pre-existing-tag path needs a stuck-state exit: its 'error'
+    // may have fired before we attached, so no event will ever come. A fresh
+    // injection reliably settles via load/error — no timer, so a slow network
+    // keeps "Loading…" instead of being falsely failed at an arbitrary cutoff.
+    const timer = existing
+      ? window.setTimeout(() => setState(getSdk()?.renderButton ? 'ready' : 'failed'), 10000)
+      : undefined;
+
     return () => {
-      window.clearTimeout(timer);
+      if (timer !== undefined) window.clearTimeout(timer);
       script.removeEventListener('load', onLoad);
       script.removeEventListener('error', onError);
     };

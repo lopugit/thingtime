@@ -79,11 +79,20 @@ const tokenColor = (token: string, line: string, index: number, language: CodeLa
   return CODE_TEXT;
 };
 
-const buildTokenPattern = (tagAlternative: string) =>
-  new RegExp(
-    `${tagAlternative}("(?:\\\\.|[^"\\\\])*")|('(?:\\\\.|[^'\\\\])*')|(#[^\\n]*)|((?<!:)\\/\\/[^\\n]*)|(\\$)|\\b(${KEYWORDS})\\b|\\b(GET|POST|PUT|PATCH|DELETE|HEAD)\\b|(--?[A-Za-z][A-Za-z0-9-]*)|(-?\\b\\d+(?:\\.\\d+)?\\b)|\\b(true|false|null|None|True|False)\\b|([{}\\[\\]():,.;=+\\\\])`,
-    'g'
-  );
+const tokenPatternSource = (tagAlternative: string, commentAlternative: string) =>
+  `${tagAlternative}("(?:\\\\.|[^"\\\\])*")|('(?:\\\\.|[^'\\\\])*')|(#[^\\n]*)|(${commentAlternative})|(\\$)|\\b(${KEYWORDS})\\b|\\b(GET|POST|PUT|PATCH|DELETE|HEAD)\\b|(--?[A-Za-z][A-Za-z0-9-]*)|(-?\\b\\d+(?:\\.\\d+)?\\b)|\\b(true|false|null|None|True|False)\\b|([{}\\[\\]():,.;=+\\\\])`;
+
+// The lookbehind keeps a bare URL's protocol slashes from reading as a `//`
+// comment. Pre-16.4 WebKit (older iOS WKWebViews) lacks lookbehind and this
+// is a runtime-built RegExp, so falling back to the plain rule (cosmetic URL
+// mis-highlight) beats throwing at module eval and crashing every docs page.
+const buildTokenPattern = (tagAlternative: string) => {
+  try {
+    return new RegExp(tokenPatternSource(tagAlternative, '(?<!:)\\/\\/[^\\n]*'), 'g');
+  } catch {
+    return new RegExp(tokenPatternSource(tagAlternative, '\\/\\/[^\\n]*'), 'g');
+  }
+};
 
 const TOKEN_PATTERN = buildTokenPattern('');
 // The html grammar adds tag delimiters (<div, </script, >, />) up front so
