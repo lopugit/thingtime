@@ -71,8 +71,12 @@ const fieldConstraints = (field: ThingtimeSchemaField) => {
     bits.push(`one of: ${field.values.join(', ')}`);
   }
 
+  if (field.min !== undefined) {
+    bits.push(`min ${field.min}`);
+  }
+
   if (field.max !== undefined) {
-    bits.push(`max ${field.max}`);
+    bits.push(`max ${field.max}${field.maxUnit ? ` ${field.maxUnit}` : ''}`);
   }
 
   return bits.join(' · ');
@@ -80,6 +84,19 @@ const fieldConstraints = (field: ThingtimeSchemaField) => {
 
 // SchemasPage-specific copy affordance: the link-icon deeplink/URL variant.
 // Code copying is handled by the shared docs CodeBlock's built-in button.
+
+// Registry object fields can declare a closed child shape (e.g. post.listing);
+// flatten those into dotted-path rows so the docs table documents the nesting
+// the same way schema cards chip it (listing.title, listing.price, …).
+const flattenDocFields = (
+  fields: ThingtimeSchemaField[],
+  prefix = ''
+): Array<ThingtimeSchemaField & { path: string }> =>
+  fields.flatMap((field) => {
+    const path = prefix ? `${prefix}.${field.name}` : field.name;
+    const row = { ...field, path };
+    return field.children?.length ? [row, ...flattenDocFields(field.children, path)] : [row];
+  });
 function CopyValueButton({
   label,
   size = 'sm',
@@ -187,13 +204,13 @@ function SchemaCard({ copyHref, schema }: { copyHref: string; schema: ThingtimeS
                 </Tr>
               </Thead>
               <Tbody>
-                {schema.fields.map((field) => {
+                {flattenDocFields(schema.fields).map((field) => {
                   const constraints = fieldConstraints(field);
 
                   return (
-                    <Tr key={field.name}>
+                    <Tr key={field.path}>
                       <Td fontFamily="mono" fontSize="xs" fontWeight="700" whiteSpace="nowrap">
-                        {field.name}
+                        {field.path}
                       </Td>
                       <Td color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="xs" whiteSpace="nowrap">
                         {field.type}

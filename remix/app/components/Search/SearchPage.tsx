@@ -16,12 +16,16 @@ import { Link as RouterLink, useLocation, useNavigate, useNavigation } from 'rea
 import { blocksToText, getEditorJsDoc } from '~/components/Editor/editorJsValue';
 import { Rainbow } from '~/components/Rainbow/Rainbow';
 import { useLopu } from '~/components/Lopu/useLopu';
-import { SEARCHABLE_CRYSTAL_KINDS } from '~/components/Schemas/schemaBrowseTypes';
+import {
+  SEARCHABLE_CRYSTAL_KINDS,
+  entryToSearchSource,
+  registryToCardSource,
+  toSearchSource
+} from '~/components/Schemas/schemaBrowseTypes';
 import { useApi } from '~/hooks/useApi';
 import { clearLocalCache, readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
-import { thingtimeSchemas, type SchemaThingField } from '~/schemas/registry';
-import { flattenSchemaFields } from '~/schemas/tools';
+import { thingtimeSchemas } from '~/schemas/registry';
 import { CARD_STYLES } from '~/theme/card';
 import {
   ConditionRowsEditor,
@@ -78,13 +82,6 @@ const rowFromSchemaField = (field: SchemaSource['fields'][number]): ConditionRow
   return newRow({ field: field.name, op: 'contains', meta });
 };
 
-// only fields the search grammar can actually address prefill a row — the
-// data schema's illustrative '*' wildcard and object/record payload fields
-// (e.g. a schema thing's own `fields` array) would just 400 on submit
-const SEARCHABLE_FIELD_NAME = /^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$/;
-const searchableField = (field: { name: string; type: string }) =>
-  SEARCHABLE_FIELD_NAME.test(field.name) && field.type !== 'object' && field.type !== 'record';
-
 // display labels for the kind <Select>, rendered from SEARCHABLE_CRYSTAL_KINDS
 // so the dropdown, the builtin schema chips, and /schemas' "Search things"
 // gating can never drift apart
@@ -96,72 +93,17 @@ const KIND_OPTION_LABELS: Record<string, string> = {
   reaction: 'reactions'
 };
 
-const builtinSchemaSources = (): SchemaSource[] =>
+// builtin crystal schemas the query builder can scope to → SchemaSource, via
+// the shared registry→card→search converters (schemaBrowseTypes). One mapper
+// (toSearchSource) shapes both builtin and community shapes, so their field
+// metadata — and the seeded-builtin dedup — can never drift between /search
+// and /schemas.
+const builtinSearchSources = (): SchemaSource[] =>
   thingtimeSchemas
     .filter((schema) => schema.kind === 'crystal' && SEARCHABLE_CRYSTAL_KINDS.has(schema.id))
-    .map((schema) => ({
-      key: `builtin-${schema.id}`,
-      name: schema.title,
-      description: schema.summary,
-      origin: 'builtin' as const,
-      fields: schema.fields
-        .filter((field) => searchableField(field))
-        .map((field) => ({
-          name: field.name,
-          type: field.type === 'enum' ? 'enum' : field.type,
-          description: field.description,
-          values: field.values,
-          max: undefined,
-          min: undefined,
-          unit: undefined
-        }))
-    }));
-
-// The seed-builtin-schemas admin migration mirrors every builtin crystal
-// schema into things as a system-owned schema thing (shareId schema-<id>,
-// author resolves to null). The browser already lists builtins from the code
-// registry, so those mirrors are dropped from the community column — without
-// this they'd render twice.
-const seededBuiltinShareIds = new Set(
-  thingtimeSchemas.filter((schema) => schema.kind === 'crystal').map((schema) => `schema-${schema.id}`)
-);
-
-// A schema thing (or browse entry) → a SchemaSource. Nested object/array
-// fields flatten to the dotted crystal paths the search grammar addresses.
-const schemaThingToSource = (
-  thing: Pick<SearchThing, 'id' | 'crystal' | 'author'> & {
-    usageCount?: number;
-    reactionCounts?: Record<string, number>;
-  }
-): SchemaSource | null => {
-  if (seededBuiltinShareIds.has(thing.id) && !thing.author) return null;
-  const crystal = thing.crystal || {};
-  const fields = Array.isArray(crystal.fields) ? (crystal.fields as SchemaThingField[]) : [];
-  if (typeof crystal.name !== 'string' || !fields.length) return null;
-  const reactions = Object.values(thing.reactionCounts || {}).reduce((sum, count) => sum + (count || 0), 0);
-  return {
-    key: `thing-${thing.id}`,
-    name: crystal.name,
-    description: typeof crystal.description === 'string' ? crystal.description : '',
-    origin: 'community',
-    author: thing.author?.username || null,
-    shareId: thing.id,
-    usageCount: typeof thing.usageCount === 'number' ? thing.usageCount : undefined,
-    reactions: reactions || undefined,
-    fields: flattenSchemaFields(fields)
-      .filter((flat) => SEARCHABLE_FIELD_NAME.test(flat.path))
-      .map((flat) => ({
-        name: flat.path,
-        type: typeof flat.field.type === 'string' ? flat.field.type : 'string',
-        description: typeof flat.field.description === 'string' ? flat.field.description : undefined,
-        values: Array.isArray(flat.field.values) ? flat.field.values.filter((v: any) => typeof v === 'string') : undefined,
-        min: Number.isFinite(flat.field.min) ? flat.field.min : undefined,
-        max: Number.isFinite(flat.field.max) ? flat.field.max : undefined,
-        unit: typeof flat.field.unit === 'string' ? flat.field.unit : undefined,
-        maxLength: Number.isFinite(flat.field.maxLength) ? flat.field.maxLength : undefined
-      }))
-  };
-};
+    .map(registryToCardSource)
+    .map(toSearchSource)
+    .filter((source): source is SchemaSource => !!source);
 
 type CachedSearch = {
   q: string;
@@ -628,7 +570,7 @@ export const SearchPage = () => {
       // rate-limited first fetch must retry when the rail is next opened
       schemasLoadedRef.current = true;
       const sources = (resp.schemas || [])
-        .map(schemaThingToSource)
+        .map(entryToSearchSource)
         .filter((source: SchemaSource | null): source is SchemaSource => !!source);
       setCommunitySchemas((prev) => {
         if (!cursor) return sources;
@@ -649,7 +591,7 @@ export const SearchPage = () => {
   }, [schemasOpen, loadSchemas]);
 
   const schemaSources = React.useMemo(
-    () => [...communitySchemas, ...builtinSchemaSources()],
+    () => [...communitySchemas, ...builtinSearchSources()],
     [communitySchemas]
   );
 
@@ -698,11 +640,11 @@ export const SearchPage = () => {
       let source: SchemaSource | null = null;
       if (urlSchema.startsWith('builtin:')) {
         const id = urlSchema.slice('builtin:'.length);
-        source = builtinSchemaSources().find((builtin) => builtin.key === `builtin-${id}`) || null;
+        source = builtinSearchSources().find((builtin) => builtin.key === `builtin-${id}`) || null;
       } else {
         try {
           const resp: any = await apiRef.current.v1.things.get({ id: urlSchema });
-          if (resp?.ok && resp.thing) source = schemaThingToSource(resp.thing);
+          if (resp?.ok && resp.thing) source = entryToSearchSource(resp.thing);
         } catch {
           // unknown/invisible schema — fall through to the plain page
         }

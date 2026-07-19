@@ -25,8 +25,8 @@ import { timeAgo } from '~/components/Feed/feedTypes';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
-import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
-import { crystalSchemas, getThingtimeSchema, thingtimeSchemas } from '~/schemas/registry';
+import { clearLocalCache, readLocalCache, writeLocalCache } from '~/hooks/localCache';
+import { getThingtimeSchema, thingtimeSchemas } from '~/schemas/registry';
 import type { SchemaThingField } from '~/schemas/registry';
 import { describeSchemaField, flattenSchemaFieldsForDisplay, generateSampleFromFields } from '~/schemas/tools';
 
@@ -34,6 +34,7 @@ import { SchemaBuilder, type BuilderPrefill } from './SchemaBuilder';
 import { SchemaThingForm } from './SchemaThingForm';
 import {
   entryToCardSource,
+  isSeededBuiltinMirror,
   registryToCardSource,
   searchableSchemaSource,
   type BrowseSchemaEntry,
@@ -41,7 +42,13 @@ import {
   type SchemaCardSource
 } from './schemaBrowseTypes';
 
-const CACHE_KEY = 'tt-schemas';
+// Per-user cache key. A browse snapshot carries viewer-scoped data (viewerReactions/
+// saved flags, the viewer's own private schemas in mine/library scope, and even
+// their private things in 'all' scope via visibilityQueryFor) — so it must never
+// live under a shared global key that another account could paint from. Mirrors
+// SearchPage's tt-search-<userId> convention (legacy global key purged on mount).
+const LEGACY_CACHE_KEY = 'tt-schemas';
+const cacheKeyFor = (userId: string | null | undefined) => (userId ? `tt-schemas-${userId}` : null);
 const PAGE_SIZE = 20;
 
 type ViewMode = 'feed' | 'grid' | 'columns';
@@ -465,12 +472,23 @@ SchemaCard.displayName = 'SchemaCard';
 // ---------------------------------------------------------------------------
 
 export const SchemasBrowsePage = () => {
-  const cached = React.useMemo(() => readLocalCache<CachedSchemas>(CACHE_KEY), []);
   const navigate = useNavigate();
   const location = useLocation();
   const api = useApi();
   const lopu = useLopu();
   const user = useCurrentUser();
+
+  const cacheKey = cacheKeyFor(user?.id);
+  // Purge any pre-scoping global 'tt-schemas' blob (it may hold another
+  // account's private/viewer-scoped schemas) once, so it can never paint for
+  // the wrong principal.
+  React.useEffect(() => {
+    clearLocalCache(LEGACY_CACHE_KEY);
+  }, []);
+  const cached = React.useMemo(
+    () => (cacheKey ? readLocalCache<CachedSchemas>(cacheKey) : null),
+    [cacheKey]
+  );
 
   const [q, setQ] = React.useState(cached?.q || '');
   const [sort, setSort] = React.useState<SortMode>(cached?.sort || 'newest');
@@ -492,6 +510,9 @@ export const SchemasBrowsePage = () => {
   const requestSeqRef = React.useRef(0);
   const stateRef = React.useRef({ q, sort, scope, loading, nextCursor });
   stateRef.current = { q, sort, scope, loading, nextCursor };
+  // keep the current per-user key reachable inside the stable runBrowse callback
+  const cacheKeyRef = React.useRef(cacheKey);
+  cacheKeyRef.current = cacheKey;
 
   // Legacy deep links: /schemas#schema-<id> anchors moved to /docs/schemas.
   React.useEffect(() => {
@@ -540,7 +561,8 @@ export const SchemasBrowsePage = () => {
             total: resp.total,
             totalCapped: resp.totalCapped
           };
-          writeLocalCache(CACHE_KEY, snapshot);
+          // Only persist when signed in, and always under the per-user key.
+          if (cacheKeyRef.current) writeLocalCache(cacheKeyRef.current, snapshot);
         }
       } catch (err: any) {
         if (seq !== requestSeqRef.current) return;
@@ -577,18 +599,15 @@ export const SchemasBrowsePage = () => {
 
   // the seed-builtin-schemas migration mirrors builtin crystal schemas into
   // things (shareId schema-<id>, system-owned → author null); the registry
-  // column already shows those, so the mirrors are dropped from community
-  const seededBuiltinIds = React.useMemo(
-    () => new Set(crystalSchemas().map((schema) => `schema-${schema.id}`)),
-    []
-  );
+  // column already shows those, so the mirrors are dropped from community via
+  // the rule shared with /search (isSeededBuiltinMirror in schemaBrowseTypes)
   const communitySources = React.useMemo(
     () =>
       entries
-        .filter((entry) => !(seededBuiltinIds.has(entry.id) && !entry.author))
+        .filter((entry) => !isSeededBuiltinMirror(entry.id, entry.author))
         .map(entryToCardSource)
         .filter(Boolean) as SchemaCardSource[],
-    [entries, seededBuiltinIds]
+    [entries]
   );
   const sources = React.useMemo(() => [...builtinSources, ...communitySources], [builtinSources, communitySources]);
 

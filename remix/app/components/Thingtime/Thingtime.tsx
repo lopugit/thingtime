@@ -209,7 +209,17 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		return typeof props?.depth === 'number' ? props?.depth : 0;
 	}, [props?.depth]);
 
-	const [editMode, setEditMode] = React.useState(props?.edit === true ? true : false);
+	const [editModeState, setEditMode] = React.useState(props?.edit === true ? true : false);
+
+	// Untrusted trees (other users' things mounted read-only in feeds / search /
+	// profiles) must NEVER reach the raw editor: LongTextEditor's Editor.js renders
+	// stored block data via innerHTML WITHOUT re-sanitizing, so an attacker's post
+	// could execute script once a viewer toggled edit on a nested leaf. Pin editMode
+	// false whenever untrusted so no toggle path (context menu, corner toggle, or a
+	// props.edit sync) can mount the editor for content we don't trust — untrusted
+	// content then only ever renders through the sanitizing read path. Trusted trees
+	// are unchanged (editMode === editModeState).
+	const editMode = props?.untrusted ? false : editModeState;
 
 	// {} code view: same tree, more developer chrome (type icons, key counts,
 	// [n] array indices, boolean pills). Propagates to children.
