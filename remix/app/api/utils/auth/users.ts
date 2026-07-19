@@ -126,15 +126,28 @@ export const fromBin = (value: any): string => {
   return '';
 };
 
-// A user thing's entire private state is ONE opaque BinData blob (`secure`).
-// The $** wildcard text index tokenizes string FIELDS only — binary is
-// invisible to it — so blobbing the whole subdocument means no field inside it
-// (email, passwordHash, service metadata, active-* pointers, reaction MRU, or
-// any field a future kind adds) can ever leak via q=<value> search enumeration.
-// The one field that must stay QUERYABLE (admin, for listAdmins) lives OUTSIDE
-// the blob as a boolean — booleans aren't text-indexed either. Legacy-era user
-// docs keep their plaintext subdocument shape (the `users` collection has no
-// text index, so nothing there is searchable).
+// A user thing's private state is the opaque BinData blob (`secure`). The $**
+// wildcard text index tokenizes string FIELDS only — binary is invisible to it
+// — so blobbing the whole subdocument means no field inside it (email,
+// passwordHash, service metadata, active-* pointers, or any field a future kind
+// adds) can ever leak via q=<value> search enumeration.
+//
+// Two private fields deliberately live OUTSIDE the blob as ROOT fields, because
+// the blob's read-modify-write + `secureVersion` CAS is too heavy for them:
+//   • `secureAdmin`  — a boolean, so listAdmins can query it (booleans aren't
+//                      text-indexed either).
+//   • `secureRecentReactions` — the reaction MRU (see MAX_RECENT_REACTIONS). It
+//                      is the hottest user write (one per reaction toggle), so
+//                      it needs targeted atomic $pull/$push instead of
+//                      re-serializing the whole blob under CAS on every toggle.
+//                      Stored as a BSON ARRAY OF BinData elements: a real array
+//                      (so $pull/$push/$slice mutate it in place) whose elements
+//                      are binary (so the $** text index can't tokenize the
+//                      emoji tokens — same guarantee `secure` relies on). A
+//                      plain string array here WOULD be enumerable via
+//                      q=<emoji>, which is exactly why it is not one.
+// Legacy-era user docs keep their plaintext subdocument shape (the `users`
+// collection has no text index, so nothing there is searchable).
 type SecurePayload = {
   email?: string;
   passwordHash?: string;
@@ -143,7 +156,9 @@ type SecurePayload = {
   emailVerificationRequiredBy?: string | null; // ISO in the blob
   storageAllowanceBytes?: number;
   storageUsedBytes?: number;
-  meta?: Record<string, any>; // never carries `admin` (that's the root boolean)
+  // never carries `admin` (root boolean) or `recentReactions` (root BinData
+  // array — buildUserSecure strips it out); those are root fields, not blob body
+  meta?: Record<string, any>;
 };
 
 export const packSecure = (payload: SecurePayload) => new Binary(Buffer.from(JSON.stringify(payload), 'utf8'));
@@ -156,6 +171,13 @@ export const unpackSecure = (value: any): SecurePayload => {
     return {};
   }
 };
+
+// The reaction MRU (secureRecentReactions) is a BSON array of BinData tokens —
+// each emoji token wrapped in binary so the $** text index can't tokenize it.
+// These convert between that on-disk shape and the string[] the picker uses.
+export const packRecentReactions = (tokens: string[]): Binary[] => tokens.map(toBin);
+const unpackRecentReactions = (value: any): string[] =>
+  Array.isArray(value) ? value.map(fromBin).filter((t) => t !== '') : [];
 
 // uniqueKeys are BinData too — plain-string keys would tokenize into the text
 // index and make user things enumerable via q=email/q=username, and the email
@@ -197,17 +219,25 @@ const userThingToDoc = (thing: any): any => {
 };
 
 // Build the packed secure blob for a user (shared by insertUser + the
-// users-to-things migration so their shapes can't drift). admin is returned
-// separately — it lives as a root boolean, never in the blob.
+// users-to-things migration so their shapes can't drift). `admin` and
+// `recentReactions` are returned separately — they live as ROOT fields
+// (secureAdmin boolean, secureRecentReactions BinData array), never in the blob.
 export const buildUserSecure = (
   doc: Pick<
     UserDoc,
     'email' | 'passwordHash' | 'emailVerified' | 'accountKind' | 'emailVerificationRequiredBy' | 'meta'
   > & { storageAllowanceBytes?: number; storageUsedBytes?: number }
-): { secure: Binary; admin: boolean } => {
+): { secure: Binary; admin: boolean; recentReactions: string[] } => {
   const meta = { ...(doc.meta || {}) };
   const admin = meta.admin === true;
   delete meta.admin; // admin is the root boolean, not blob content
+  // recentReactions is the root secureRecentReactions array, not blob content —
+  // strip it here so a migrated user's legacy meta.recentReactions moves to the
+  // atomic field instead of bloating the CAS-serialized blob.
+  const recentReactions = Array.isArray(meta.recentReactions)
+    ? (meta.recentReactions as string[]).filter((t) => typeof t === 'string').slice(0, MAX_RECENT_REACTIONS)
+    : [];
+  delete meta.recentReactions;
   const payload: SecurePayload = {
     email: doc.email,
     passwordHash: doc.passwordHash,
@@ -220,7 +250,7 @@ export const buildUserSecure = (
   };
   if (doc.storageAllowanceBytes !== undefined) payload.storageAllowanceBytes = doc.storageAllowanceBytes;
   if (doc.storageUsedBytes !== undefined) payload.storageUsedBytes = doc.storageUsedBytes;
-  return { secure: packSecure(payload), admin };
+  return { secure: packSecure(payload), admin, recentReactions };
 };
 
 const findUserThing = async (filter: Record<string, unknown>) =>
@@ -268,7 +298,7 @@ export const findUserById = async (id: string) => {
 export const insertUser = async (doc: UserDoc & { schemaVersion?: number }) => {
   const shareId = new ObjectId().toHexString();
   const now = doc.createdAt instanceof Date ? doc.createdAt : new Date();
-  const { secure, admin } = buildUserSecure(doc);
+  const { secure, admin, recentReactions } = buildUserSecure(doc);
 
   const thing = {
     shareId,
@@ -291,6 +321,9 @@ export const insertUser = async (doc: UserDoc & { schemaVersion?: number }) => {
     secureVersion: 0, // optimistic-concurrency token for blob mutations
     // sparse boolean, queryable by listAdmins (booleans aren't text-indexed)
     ...(admin ? { secureAdmin: true } : {}),
+    // reaction MRU as a BinData array (text-index-invisible, atomically mutable);
+    // only present when a migrated account arrives with prior recents
+    ...(recentReactions.length ? { secureRecentReactions: packRecentReactions(recentReactions) } : {}),
     createdAt: now,
     updatedAt: now
   };
@@ -489,28 +522,46 @@ export const clearUserActiveFeedAlgorithm = async (userId: string, algorithmShar
   );
 };
 
-// Recently-used reaction tokens live in meta.recentReactions as a most-recent-
-// first MRU list, so the custom-emoji picker's "Recently Used" follows the user
-// across devices and roster accounts (same tier as activeThemeId). Capped high
-// enough to feel unlimited while keeping the user doc lean; it is NOT projected
-// onto the public user (fetched lazily by the picker instead).
+// Recently-used reaction tokens are the user's MRU list for the custom-emoji
+// picker's "Recently Used", so it follows the user across devices and roster
+// accounts. For a user thing they live in the root secureRecentReactions BinData
+// array (see the SecurePayload doc block); the `users` legacy store keeps them
+// in meta.recentReactions. Capped high enough to feel unlimited while keeping
+// the doc lean; NOT projected onto the public user (fetched lazily by picker).
 const MAX_RECENT_REACTIONS = 500;
 
 // Push a token to the front of the user's recents (de-duped) and return the
-// updated MRU list. Two writes because Mongo can't $pull and $push one field
-// in a single update.
+// updated MRU list. This is the HOTTEST user write (one per reaction toggle), so
+// the thing-era path uses TARGETED ATOMIC array ops on secureRecentReactions —
+// $pull the token then $push it at the front with $slice — instead of the secure
+// blob's read-modify-write + secureVersion CAS + retry. That means a reaction
+// toggle no longer re-serializes the whole blob, never bumps secureVersion, and
+// never contends the CAS against a concurrent secure write (email verify, 2FA,
+// theme pointer, …). Two writes because Mongo can't $pull and $push one path in
+// a single update — the same non-atomic-pair pattern the legacy store uses; a
+// concurrent toggle of the same token can leave a transient duplicate that the
+// next push of that token removes (cosmetic, self-healing, matches legacy).
 export const pushUserRecentReaction = async (userId: string, token: string): Promise<string[]> => {
-  let updated: string[] | null = null;
-  const result = await mutateUserThingSecure(userId, (s) => {
-    const prev = Array.isArray(s.meta!.recentReactions) ? (s.meta!.recentReactions as string[]) : [];
-    updated = [token, ...prev.filter((t) => t !== token)].slice(0, MAX_RECENT_REACTIONS);
-    s.meta!.recentReactions = updated;
-  });
-  // A user thing exists (mutated, or contended — the recents MRU is cosmetic, so
-  // returning the optimistic list on contention is fine and reconciles on the
-  // next read; never fall through to legacy for a thing-era user).
-  if (result !== 'missing') return updated || [];
+  const things = await getThingsCollection();
+  const base = { shareId: String(userId), thingtime: 'user' } as any;
+  const bin = toBin(token);
+  // de-dupe first; matchedCount tells us whether a user thing exists at all
+  const pull = await things.updateOne(base, { $pull: { secureRecentReactions: bin } } as any);
+  if (pull.matchedCount) {
+    // unshift + cap, returning the post-image so the caller doesn't re-read
+    const after = await things.findOneAndUpdate(
+      base,
+      {
+        $push: { secureRecentReactions: { $each: [bin], $position: 0, $slice: MAX_RECENT_REACTIONS } },
+        $set: { updatedAt: new Date() }
+      } as any,
+      { projection: { secureRecentReactions: 1 }, returnDocument: 'after' }
+    );
+    return unpackRecentReactions((after as any)?.secureRecentReactions);
+  }
 
+  // No user thing — legacy users store (plaintext array; that collection has no
+  // text index, so plain-string tokens are safe there).
   if (!ObjectId.isValid(userId)) return [];
   const users = await getUsersCollection();
   const _id = new ObjectId(userId);
@@ -534,11 +585,17 @@ export const getUserRecentReactions = async (userId: string): Promise<string[]> 
   const things = await getThingsCollection();
   const thing = await things.findOne(
     { shareId: String(userId), thingtime: 'user' } as any,
-    { projection: { secure: 1 } }
+    { projection: { secureRecentReactions: 1, secure: 1 } }
   );
   if (thing) {
-    const list = unpackSecure((thing as any).secure).meta?.recentReactions;
-    return Array.isArray(list) ? (list as string[]) : [];
+    const list = unpackRecentReactions((thing as any).secureRecentReactions);
+    if (list.length) return list;
+    // Transitional bridge: a user thing written before the MRU moved out of the
+    // blob still carries it at secure.meta.recentReactions. Read it so recents
+    // survive the cutover; the next pushUserRecentReaction migrates it to the
+    // atomic field. (Harmless once every doc has been pushed to at least once.)
+    const legacyInBlob = unpackSecure((thing as any).secure).meta?.recentReactions;
+    return Array.isArray(legacyInBlob) ? (legacyInBlob as string[]) : [];
   }
   if (!ObjectId.isValid(userId)) return [];
   const doc = await (await getUsersCollection()).findOne(

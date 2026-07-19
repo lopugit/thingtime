@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { ensureIndexes, getThingtimeDb } from '../mongodb/collections';
 import { safeErrorText } from '../errors/safeError';
 import { reactionShareId } from '../things/things';
-import { buildUserSecure, toBin, userEmailKey, userUsernameKey } from '../auth/users';
+import { buildUserSecure, packRecentReactions, toBin, userEmailKey, userUsernameKey } from '../auth/users';
 import { waitlistEmailKey } from '../waitlist/waitlist';
 import { themeAcl } from '../themes/themes';
 import {
@@ -615,9 +615,10 @@ const usersToThings = collectionToThingsMigration({
     const createdAt = doc.createdAt ? new Date(doc.createdAt) : new Date();
     const updatedAt = doc.updatedAt ? new Date(doc.updatedAt) : createdAt;
     // buildUserSecure is THE user-thing secure shape (shared with insertUser),
-    // so migrated + live-written accounts can't drift: opaque BinData blob,
-    // admin extracted to the root boolean
-    const { secure, admin } = buildUserSecure({
+    // so migrated + live-written accounts can't drift: opaque BinData blob, with
+    // admin + the reaction MRU extracted to their root fields (secureAdmin
+    // boolean, secureRecentReactions BinData array)
+    const { secure, admin, recentReactions } = buildUserSecure({
       email: doc.email,
       passwordHash: doc.passwordHash,
       emailVerified: !!doc.emailVerified,
@@ -650,6 +651,7 @@ const usersToThings = collectionToThingsMigration({
         secure,
         secureVersion: 0, // matches insertUser — optimistic-concurrency token
         ...(admin ? { secureAdmin: true } : {}),
+        ...(recentReactions.length ? { secureRecentReactions: packRecentReactions(recentReactions) } : {}),
         createdAt,
         updatedAt
       }

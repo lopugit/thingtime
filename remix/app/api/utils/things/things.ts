@@ -87,10 +87,14 @@ export type ThingDoc = {
   // is NEVER projected, is unreachable by the search field grammar, and is a
   // single opaque BinData blob so the $** text index cannot tokenize any field
   // inside it. `secureAdmin` is the one queryable flag (a boolean — booleans
-  // aren't text-indexed either).
+  // aren't text-indexed either). `secureRecentReactions` is the reaction MRU
+  // pulled OUT of the blob onto the root (auth/users.ts) so the hot toggle write
+  // is a targeted atomic $pull/$push instead of a whole-blob CAS; its elements
+  // are BinData so the $** text index can't tokenize the emoji tokens.
   uniqueKeys?: Binary[];
   secure?: Binary;
   secureAdmin?: boolean;
+  secureRecentReactions?: Binary[];
   // v1 residue fields (unset by the things v1→v2 migration). kind 'reaction'
   // and 'comment' cover the interim relational era (parentId/token/commentId
   // docs) written by main's pre-unification model — read + migrated like the
