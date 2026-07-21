@@ -943,7 +943,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         name: 'Introspect a bearer token',
         description: 'Check whether a stored token is still usable.',
         method: 'POST',
-        body: { token: 'eyJhbGciOiJFUzI1NiIsImtpZCI6InRoaW5ndGltZS1lczI1Ni0xIn0…' }
+        body: { token: '<jwt>' }
       }
     ],
     responseExamples: [
