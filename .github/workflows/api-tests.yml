@@ -71,12 +71,12 @@ jobs:
         run: tail -200 /tmp/tt-dev.log
 
   typecheck:
-    # First step of the strictness ratchet (TODO item 15): visible but not yet
-    # blocking — the baseline has pre-existing errors. Flip continue-on-error
-    # off once the baseline is clean.
+    # First step of the strictness ratchet (TODO item 15): the baseline has
+    # pre-existing errors, so this job REPORTS the error count (job summary)
+    # instead of failing the PR. Make the final step exit non-zero on errors
+    # once the baseline is clean, then start turning strict flags on.
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    continue-on-error: true
     defaults:
       run:
         working-directory: remix
@@ -97,4 +97,19 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Typecheck (non-blocking baseline)
-        run: pnpm exec tsc --noEmit
+        run: |
+          set +e
+          pnpm exec tsc --noEmit > /tmp/tsc.log 2>&1
+          status=$?
+          errors=$(grep -c "error TS" /tmp/tsc.log || true)
+          {
+            echo "## Typecheck baseline (non-blocking)"
+            echo ""
+            echo "\`tsc --noEmit\` exit ${status} — **${errors} error(s)**"
+            echo ""
+            echo '```'
+            head -40 /tmp/tsc.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "tsc reported ${errors} error(s); baseline job is informational only."
+          exit 0
