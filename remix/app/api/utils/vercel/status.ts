@@ -1,4 +1,6 @@
 import { PublicError, safeErrorText } from '../errors/safeError';
+import { getVercelWebhookStatusForBranch } from './webhookStatus';
+import type { VercelWebhookDeploymentStatus } from './webhookStatus';
 
 export type VercelDeploymentStatus = {
   branch?: string;
@@ -17,6 +19,8 @@ export type VercelDeploymentStatus = {
   lastReadyLabel?: string;
   lastReadyUrl?: string;
   latestDeploymentUrl?: string;
+  // 'webhook' = served from the persisted webhook event (no Vercel API call)
+  source?: 'webhook' | 'api';
   state:
     | 'local'
     | 'ready'
@@ -784,6 +788,34 @@ const getTokenlessFallback = ({
   };
 };
 
+// Serve a webhook-recorded deployment event as the footer status shape.
+const webhookDeploymentStatus = (
+  webhook: VercelWebhookDeploymentStatus,
+  fallback: VercelDeploymentStatus
+): VercelDeploymentStatus => {
+  const state: VercelDeploymentStatus['state'] = webhook.state;
+
+  return {
+    ...fallback,
+    branch: webhook.branch || fallback.branch,
+    buildId: webhook.deploymentId,
+    buildPageUrl: webhook.inspectorUrl || fallback.buildPageUrl,
+    buildPhase: formatBuildPhase(undefined, state),
+    buildProgress: state === 'ready' ? 100 : state === 'error' ? 0 : undefined,
+    commitSha: webhook.commitSha || fallback.commitSha,
+    configured: true,
+    environment: webhook.environment || fallback.environment,
+    hasError: state === 'error',
+    label: `Vercel: ${state}`,
+    lastReadyAt: state === 'ready' ? new Date(webhook.eventAt).toISOString() : fallback.lastReadyAt,
+    lastReadyLabel: state === 'ready' ? formatRelativeTime(webhook.eventAt) : fallback.lastReadyLabel,
+    lastReadyUrl: state === 'ready' && webhook.url ? webhook.url : fallback.lastReadyUrl,
+    latestDeploymentUrl: webhook.url || fallback.latestDeploymentUrl,
+    source: 'webhook',
+    state
+  };
+};
+
 export const getVercelDeploymentStatus = async (): Promise<VercelDeploymentStatus> => {
   try {
     const branch = process.env.VERCEL_GIT_COMMIT_REF || process.env.THINGTIME_BRANCH_NAME;
@@ -815,6 +847,16 @@ export const getVercelDeploymentStatus = async (): Promise<VercelDeploymentStatu
       environment,
       deploymentUrl
     });
+
+    // TODO 5: webhook-pushed status. A terminal webhook state (ready / error /
+    // canceled) means no build is running — serve the persisted event and spend
+    // zero Vercel API calls. A non-terminal state (queued) falls through to the
+    // API for live build-progress checks; tokenless deployments serve whatever
+    // the webhook recorded either way, which beats the static fallback.
+    const webhookStatus = await getVercelWebhookStatusForBranch(branch).catch(() => null);
+    if (webhookStatus && (webhookStatus.state !== 'queued' || !token)) {
+      return webhookDeploymentStatus(webhookStatus, fallback);
+    }
 
     if (!token) {
       return fallback;
