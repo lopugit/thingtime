@@ -60,6 +60,7 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/oauth/userinfo': () => import('../../../app/routes/api/v1/oauth/userinfo/_userinfo'),
   'v1/schemas': () => import('../../../app/routes/api/v1/schemas/_schemas'),
   'v1/schemas/browse': () => import('../../../app/routes/api/v1/schemas/browse/_browse'),
+  'v1/teapot': () => import('../../../app/routes/api/v1/teapot/_teapot'),
   'v1/template': () => import('../../../app/routes/api/v1/template/_template'),
   'v1/themes': () => import('../../../app/routes/api/v1/themes/_themes'),
   'v1/themes/active': () => import('../../../app/routes/api/v1/themes/active/_active'),
@@ -148,6 +149,20 @@ export default defineHandler(async (event) => {
       });
     }
 
+    // 🔮 the teapot's -docs twin is real but unlisted (claude-todo/10):
+    // it never appears in /docs/api, yet the self-describing convention holds
+    if (path === 'v1/teapot-docs') {
+      return jsonResponse({
+        ok: true,
+        endpoint: '/api/v1/teapot',
+        methods: ['GET', 'POST'],
+        summary: 'Politely declines to brew coffee.',
+        detail:
+          'RFC 2324 lives here. Every documented endpoint serves JSON docs at -docs — including the ones you were never told about. Congratulations on your curiosity. 🫖',
+        responses: [{ status: 418, description: 'Short and stout, with a brew-time haiku.' }]
+      });
+    }
+
     const doc = getApiDocByPath(path);
     if (!doc) {
       return jsonResponse({ ok: false, error: 'API docs not found' }, { status: 404 });
@@ -163,7 +178,9 @@ export default defineHandler(async (event) => {
   const loadModule = routeModules[path];
 
   if (!loadModule) {
-    return new Response('Not found', { status: 404 });
+    // 🔮 even the 404 speaks Lopu (claude-todo/10) — same {ok, error} envelope
+    // as every other API response instead of a bare text body
+    return jsonResponse({ ok: false, error: 'Lopu looked everywhere and found no such endpoint 🤷‍♂️' }, { status: 404 });
   }
 
   const route = await loadModule();
