@@ -20,7 +20,11 @@ jobs:
         working-directory: remix
     steps:
       - uses: actions/checkout@v4
+      # The pnpm pin lives in remix/package.json, but action-setup only reads
+      # the repo-root package.json — so the version must be explicit here.
       - uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -51,7 +55,11 @@ jobs:
       TT_API_PORT: '10000'
     steps:
       - uses: actions/checkout@v4
+      # The pnpm pin lives in remix/package.json, but action-setup only reads
+      # the repo-root package.json — so the version must be explicit here.
       - uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
       - uses: actions/setup-node@v4
         with:
           node-version: 24
