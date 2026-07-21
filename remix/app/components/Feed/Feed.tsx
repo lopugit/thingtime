@@ -1,5 +1,6 @@
 import React from 'react';
-import { Box, Flex } from '@chakra-ui/react';
+import { Box, Flex, Text } from '@chakra-ui/react';
+import { useSearchParams } from 'react-router';
 
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
@@ -68,6 +69,23 @@ export const FeedPage = () => {
   const viewerIdRef = React.useRef(user?.id ?? null);
   viewerIdRef.current = user?.id ?? null;
 
+  // public tag feeds (claude-todo/10 ✨): /feed?tag=<tag> narrows the feed to
+  // one tag — shareable, guest-visible topic hubs. Tag chips on PostCards link
+  // here; the banner clears back to the full feed.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tagParam = (searchParams.get('tag') || '').trim().toLowerCase() || null;
+
+  const clearTagParam = React.useCallback(() => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('tag');
+        return next;
+      },
+      { replace: true }
+    );
+  }, [setSearchParams]);
+
   const load = React.useCallback(
     async (options: { reset?: boolean; cursor?: string | null } = {}) => {
       const { reset, cursor } = options;
@@ -109,6 +127,7 @@ export const FeedPage = () => {
         const resp = await apiRef.current.v1.things.feed({
           types: filters.types,
           circles: filters.circles,
+          tag: tagParam || undefined,
           from: filters.from,
           to: filters.to,
           algorithm: algorithmId ?? 'latest',
@@ -139,7 +158,7 @@ export const FeedPage = () => {
         }
       }
     },
-    [filters, algorithmId, appliedAdvanced]
+    [filters, algorithmId, appliedAdvanced, tagParam]
   );
 
   // initial fetch + reset whenever the filters, algorithm, or advanced search
@@ -247,6 +266,38 @@ export const FeedPage = () => {
             Feed 📰
           </Box>
         </Flex>
+
+        {tagParam && (
+          <Flex
+            alignItems="center"
+            columnGap={2}
+            padding="8px 12px"
+            borderRadius="var(--tt-radius-md, 12px)"
+            border="1px solid var(--tt-border, #ececef)"
+            background="var(--tt-card, #fff)"
+          >
+            <Text fontSize="sm" color="var(--tt-text, #5a5a66)">
+              Posts tagged{' '}
+              <Text as="span" fontFamily="mono" fontWeight={700} color="var(--tt-ink, #16161a)">
+                #{tagParam}
+              </Text>
+            </Text>
+            <Box
+              as="button"
+              type="button"
+              marginLeft="auto"
+              onClick={clearTagParam}
+              fontSize="13px"
+              fontWeight={600}
+              color="var(--tt-muted, #9a9aa6)"
+              cursor="pointer"
+              _hover={{ color: 'var(--tt-ink, #16161a)' }}
+              title="Back to the full feed"
+            >
+              Clear ✕
+            </Box>
+          </Flex>
+        )}
 
         {/* controls */}
         <Flex alignItems="center" columnGap={2}>

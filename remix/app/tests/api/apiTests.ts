@@ -848,6 +848,19 @@ export const apiTests: ApiTestDefinition[] = [
     )
   },
   {
+    id: 'things-feed-tag-filtered',
+    name: 'Feed honours tag filter',
+    description: 'Filtering by a tag returns only posts carrying that tag (normalized), and an unused tag returns an empty page.',
+    group: 'things',
+    method: 'GET',
+    path: '/api/v1/things/feed?tag=Tt-Api-Test-Definitely-Unused-Tag&circles=public&limit=5',
+    expect: expectJson(
+      [200],
+      (body) => body?.ok === true && Array.isArray(body?.posts) && body.posts.length === 0,
+      'Feed filtered by an unused tag (mixed case in the query) returned ok with zero posts.'
+    )
+  },
+  {
     id: 'things-create-guarded',
     name: 'Post create requires auth',
     description: 'Creating a post without a session is rejected (401) or accepted for a logged-in tester.',

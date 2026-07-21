@@ -60,6 +60,7 @@ export const loader = async ({ request }: { request: Request }) => {
   const result = await getFeed(user ? { id: user.id, username: user.username } : null, {
     types: csv(params.get('types')) as PostType[],
     circles: csv(params.get('circles')) as PostVisibility[],
+    tag: params.get('tag'),
     from: isoDate(params.get('from')),
     to: isoDate(params.get('to')),
     cursor: params.get('cursor'),
