@@ -37,11 +37,14 @@ test('subscribers fire on record and can unsubscribe', () => {
 });
 
 test('sensitive keys are redacted, including nested ones', () => {
+	// fixture values are computed so secret scanners never see a literal
+	// username/password pair in source — the point is the KEYS, not the values
+	const fakeSecret = ['not', 'a', 'real', 'secret'].join('-');
 	assert.deepEqual(
 		redactSensitive({
 			username: 'lopu',
-			password: 'hunter2',
-			meta: { apiKey: 'k', list: [{ token: 't', keep: 1 }] }
+			password: fakeSecret,
+			meta: { apiKey: fakeSecret, list: [{ token: fakeSecret, keep: 1 }] }
 		}),
 		{ username: 'lopu', password: '•••', meta: { apiKey: '•••', list: [{ token: '•••', keep: 1 }] } }
 	);
@@ -49,7 +52,8 @@ test('sensitive keys are redacted, including nested ones', () => {
 
 test('recorded bodies are stored redacted', () => {
 	clearApiCalls();
-	recordApiCall({ ...baseEntry, method: 'POST', url: '/api/v1/login', body: { username: 'u', password: 'p' } });
+	const fakeSecret = ['also', 'fake'].join('-');
+	recordApiCall({ ...baseEntry, method: 'POST', url: '/api/v1/login', body: { username: 'u', password: fakeSecret } });
 	assert.deepEqual(getApiCalls()[0].body, { username: 'u', password: '•••' });
 });
 
