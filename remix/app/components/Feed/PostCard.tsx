@@ -592,6 +592,31 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
           <PostBody post={post} />
         )}
 
+        {/* tags — each chip links to that tag's public feed (claude-todo/10 ✨) */}
+        {post.tags?.length > 0 && (
+          <Flex columnGap={1} rowGap={1} flexWrap="wrap">
+            {post.tags.map((tag) => (
+              <Text
+                key={tag}
+                as={Link}
+                to={`/feed?tag=${encodeURIComponent(tag)}`}
+                fontFamily="mono"
+                fontSize="12px"
+                fontWeight={600}
+                color={MUTED}
+                paddingX={2}
+                paddingY="1px"
+                borderRadius="999px"
+                border={BORDER}
+                _hover={{ color: INK, background: 'var(--tt-surface-hover, #ececee)' }}
+                title={`See every post tagged #${tag}`}
+              >
+                #{tag}
+              </Text>
+            ))}
+          </Flex>
+        )}
+
         {/* reaction chips + counts row — each chip toggles that reaction */}
         {(reactionEntries.length > 0 || post.commentCount > 0 || post.shareCount > 0) && (
           <Flex alignItems="center" fontSize="xs" color={MUTED} columnGap={2} rowGap={1} flexWrap="wrap">
