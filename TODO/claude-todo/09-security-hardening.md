@@ -121,8 +121,15 @@ revive only tagged values.
 - [ ] Login / register / resend-verification return 429 past a per-IP (and
       per-username, for login) threshold, reusing the existing quota util.
 - [ ] Register/login enforce a body-size cap; `meta` is whitelisted/bounded.
-- [ ] Function values are no longer revived via `eval`; a CSP without
-      `unsafe-eval` is in place and the app still hydrates.
-- [ ] The `Date.parse` reviver no longer coerces plain strings (verified by a
-      round-trip test: seed `"Post 1"`, save, reload, assert it is still a string).
-- [ ] Regression coverage added to `remix/app/tests/api/apiTests.ts`.
+- [x] Function values are no longer revived via `eval`; a CSP without
+      `unsafe-eval` is in place and the app still hydrates. — PR #99
+- [x] The `Date.parse` reviver no longer coerces plain strings (verified by a
+      round-trip test: seed `"Post 1"`, save, reload, assert it is still a string). — PR #99
+- [x] Regression coverage added — `remix/app/Providers/thingtimePersistCodec.test.ts`
+      (`npm run test:persist`). The codec is client-side, so coverage lives beside
+      it rather than in the fetch-based `apiTests.ts`. — PR #99
+
+**§C (persisted-state `eval` + CSP) and §D (Date.parse corruption) shipped in
+PR #99.** The codec moved to `remix/app/Providers/thingtimePersistCodec.ts`
+(pure/React-free). §A (unauth admin/data endpoints) and §B (auth rate limiting)
+remain open.
