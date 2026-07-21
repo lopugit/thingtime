@@ -114,7 +114,7 @@ export const CommanderV1 = (props: commanderArgs) => {
 
 	const command = React.useMemo(() => {
 		const debug: any = {};
-		console.log('[tt][CommanderV1Deprecated.tsx][command useMemo][debug]', debug);
+		if (import.meta.env.DEV) console.log('[tt][CommanderV1Deprecated.tsx][command useMemo][debug]', debug);
 		// const sanitizedCommand = sanitise(value)
 		// const sanitizedCommand = inputValue
 		const sanitizedInput = virtualValue;
@@ -333,7 +333,7 @@ export const CommanderV1 = (props: commanderArgs) => {
 
 	const allCommanderKeyListener = React.useCallback(
 		(e: any) => {
-			console.log('commander key listener e?.code', e?.code);
+			if (import.meta.env.DEV) console.log('commander key listener e?.code', e?.code);
 			thingtimeRef.current = thingtime;
 			if (e?.metaKey && e?.code === 'KeyP') {
 				e.preventDefault();

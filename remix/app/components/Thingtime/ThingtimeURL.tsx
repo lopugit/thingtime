@@ -20,7 +20,7 @@ export const ThingtimeURL = (props) => {
   }, [matches]);
 
   const path = React.useMemo(() => {
-    console.log('ThingtimeURL location', location);
+    if (import.meta.env.DEV) console.log('ThingtimeURL location', location);
 
     // mode prefixes ('/things', '/edit', '/editor') are stripped by the shared
     // parser, so '/edit' shows the root thing in edit mode rather than a thing
@@ -29,12 +29,12 @@ export const ThingtimeURL = (props) => {
   }, [location, pathname]);
 
   const thing = React.useMemo(() => {
-    console.log('[tt][ThingtimeURL.tsx/thing] getting new thing from path', path);
+    if (import.meta.env.DEV) console.log('[tt][ThingtimeURL.tsx/thing] getting new thing from path', path);
     // remove /things/ from path
 
     const ret = getThingtime(path);
 
-    console.log('[tt][ThingtimeURL.tsx/thing] got thing at path', path, 'value: ', ret);
+    if (import.meta.env.DEV) console.log('[tt][ThingtimeURL.tsx/thing] got thing at path', path, 'value: ', ret);
 
     return ret;
   }, [path, getThingtime]);
@@ -47,12 +47,13 @@ export const ThingtimeURL = (props) => {
 
   const inEditMode = mode === 'edit';
 
-  console.log('[tt][ThingtimeURL.tsx/return', {
-    inEditorMode,
-    inEditMode,
-    path,
-    thing
-  });
+  if (import.meta.env.DEV)
+    console.log('[tt][ThingtimeURL.tsx/return', {
+      inEditorMode,
+      inEditMode,
+      path,
+      thing
+    });
 
   // editor mode: sub-splittable multi-window workspace, each window with its
   // own path, mode, and scroll context
