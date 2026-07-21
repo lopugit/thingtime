@@ -11,8 +11,11 @@ import { useLopu } from '../Lopu/useLopu';
 
 import { sanitise } from '~/functions/sanitise';
 import { usePath } from '~/hooks/usePath';
+import { useTtTheme } from '~/hooks/useTtTheme';
 import { getParentPath } from '~/smarts';
 import { SECRET_WORDS, partyMode, rainbowFlash, pickSparkle } from '~/eggs/eggs';
+import { matchCommanderCommands, runCommanderCommand } from './commanderCommands';
+import type { CommanderCommandContext } from './commanderCommands';
 
 export const CommanderV2 = (props) => {
 	const { thingtime, setThingtime, getThingtime, thingtimeRef, paths } = useThingtime();
@@ -24,6 +27,22 @@ export const CommanderV2 = (props) => {
 
 	const navigate = useNavigate();
 	const lopu = useLopu();
+	const { setPreset: setThemePreset, builtinThemes } = useTtTheme();
+
+	// ⌨️ `>` command registry (claude-todo/10). Side effects are injected so the
+	// registry itself stays DOM-free and unit-testable.
+	const commandContext = React.useMemo<CommanderCommandContext>(
+		() => ({
+			navigate: (to) => navigate(to),
+			lopu,
+			setThemePreset,
+			builtinThemeNames: builtinThemes?.map((theme) => theme.name) || [],
+			// >undo/>redo re-dispatch the chord the app-wide timeline listener
+			// already handles (useThingtimeMachine) — no new provider API needed
+			dispatchKeydown: (init) => window.dispatchEvent(new KeyboardEvent('keydown', init))
+		}),
+		[navigate, lopu, setThemePreset, builtinThemes]
+	);
 
 	const commanderId = React.useMemo(() => {
 		return props?.id || 'global';
@@ -174,25 +193,61 @@ export const CommanderV2 = (props) => {
 		}
 	}, [inputValue, paths]);
 
+	// `>` prefix = command mode: the dropdown lists matching registry commands
+	// instead of the search row + fuzzy paths
+	const commandMode = React.useMemo(() => {
+		return (inputValue || '').trim().startsWith('>');
+	}, [inputValue]);
+
+	const commandMatches = React.useMemo(() => {
+		return commandMode ? matchCommanderCommands(inputValue) : [];
+	}, [commandMode, inputValue]);
+
 	// dropdown rows: index 0 is the pinned "Search things" row (→ /search), the
-	// fuzzy path suggestions follow at index 1+
+	// fuzzy path suggestions follow at index 1+. In command mode the rows are
+	// the matching commands, indexed from 0.
 	const showSuggestions = React.useMemo(() => {
+		if (commandMode) {
+			return commandMatches.length > 0 && commanderActive && !commanderSettings?.commanderActive?.hideSuggestionsOnToggle;
+		}
 		return inputValue?.length && commanderActive && !commanderSettings?.commanderActive?.hideSuggestionsOnToggle;
 	}, [
 		inputValue,
 		suggestions,
 		commanderActive,
 		commanderId,
+		commandMode,
+		commandMatches,
 		thingtime?.settings?.commander,
 		commanderSettings?.commanderActive?.hideSuggestionsOnToggle
 	]);
 
 	const suggestionRowCount = React.useMemo(() => {
+		if (commandMode) {
+			return commandMatches.length;
+		}
 		return (suggestions?.length || 0) + 1;
-	}, [suggestions]);
+	}, [suggestions, commandMode, commandMatches]);
 
 	const selectSuggestion = React.useCallback(
 		(suggestionIdx) => {
+			if (commandMode) {
+				const command = commandMatches?.[suggestionIdx];
+				if (!command) return;
+				const takesArgs = /[<[]/.test(command.usage);
+				if (takesArgs) {
+					// complete to ">name " and keep the palette open for the argument
+					setInputValue(`>${command.name} `);
+					setHoveredSuggestion(null);
+					inputRef?.current?.focus?.();
+					return;
+				}
+				runCommanderCommand(`>${command.name}`, commandContext);
+				setInputValue('');
+				setHoveredSuggestion(null);
+				closeCommander();
+				return;
+			}
 			if (suggestionIdx === 0) {
 				const query = (inputValue || '').trim();
 				console.log('Commander search row selected, navigating to /search', { query });
@@ -228,7 +283,7 @@ export const CommanderV2 = (props) => {
 		},
 		// closeCommander is declared below — referenced in the closure body only
 		// (calling it at select time is fine; naming it in deps would hit the TDZ)
-		[setInputValue, setContextPath, setShowContext, suggestions, inputValue, navigate, changePath]
+		[setInputValue, setContextPath, setShowContext, suggestions, inputValue, navigate, changePath, commandMode, commandMatches, commandContext]
 	);
 
 	const commandContainsPath = React.useMemo(() => {
@@ -267,6 +322,21 @@ export const CommanderV2 = (props) => {
 	}, [thingtime?.settings?.commander, commanderSettings?.commanderActive, commanderId, closeCommander, openCommander]);
 
 	const executeCommand = React.useCallback(() => {
+		// ⌨️ `>` commands run through the registry and never fall through to the
+		// path/setter machinery below. A hovered dropdown row wins over the raw
+		// input (same rule as path suggestions).
+		if (commanderActive && commandMode) {
+			if (typeof hoveredSuggestion === 'number' && commandMatches?.[hoveredSuggestion]) {
+				selectSuggestion(hoveredSuggestion);
+				return;
+			}
+			runCommanderCommand(inputValue, commandContext);
+			setInputValue('');
+			setHoveredSuggestion(null);
+			closeCommander();
+			return;
+		}
+
 		// 🥚 Easter egg: secret words typed into the Commander and Entered.
 		const secret = (inputValue || '').trim().toLowerCase();
 		const secretWord = commanderActive ? SECRET_WORDS[secret] : undefined;
@@ -380,7 +450,10 @@ export const CommanderV2 = (props) => {
 		inputValue,
 		closeCommander,
 		navigate,
-		lopu
+		lopu,
+		commandMode,
+		commandMatches,
+		commandContext
 	]);
 
 	const allCommanderKeyListener = React.useCallback(
@@ -448,14 +521,36 @@ export const CommanderV2 = (props) => {
 		};
 	}, [allCommanderKeyListener]);
 
+	// ⌨️ Cmd/Ctrl+K opens the Commander from anywhere (claude-todo/10). Only the
+	// global (nav) instance listens so multiple mounted Commanders don't fight.
+	// Unlike allCommanderKeyListener above, this must fire when the input is NOT
+	// focused — that's the whole point.
 	React.useEffect(() => {
-		// row 0 is the pinned search row — it previews the raw input, not a path
-		if (typeof hoveredSuggestion === 'number' && hoveredSuggestion > 0) {
+		if (!global) {
+			return;
+		}
+		const cmdKListener = (e: any) => {
+			if ((e?.metaKey || e?.ctrlKey) && !e?.altKey && !e?.shiftKey && (e?.code === 'KeyK' || e?.key?.toLowerCase?.() === 'k')) {
+				e.preventDefault();
+				toggleCommander();
+			}
+		};
+		window.addEventListener('keydown', cmdKListener);
+
+		return () => {
+			window.removeEventListener('keydown', cmdKListener);
+		};
+	}, [global, toggleCommander]);
+
+	React.useEffect(() => {
+		// row 0 is the pinned search row — it previews the raw input, not a path.
+		// command mode never previews rows into the input either.
+		if (!commandMode && typeof hoveredSuggestion === 'number' && hoveredSuggestion > 0) {
 			setVirtualValue(suggestions?.[hoveredSuggestion - 1]);
 		} else {
 			setVirtualValue(inputValue);
 		}
-	}, [hoveredSuggestion, inputValue, suggestions]);
+	}, [hoveredSuggestion, inputValue, suggestions, commandMode]);
 
 	React.useEffect(() => {
 		setVirtualValue(inputValue);
@@ -555,43 +650,73 @@ export const CommanderV2 = (props) => {
 							onMouseLeave={() => setHoveredSuggestion(null)}
 							paddingY={3}
 						>
-							<Flex
-								background={hoveredSuggestion === 0 ? 'var(--tt-surface-hover, #ececee)' : null}
-								_hover={{
-									background: 'var(--tt-surface-hover, #ececee)'
-								}}
-								cursor="pointer"
-								fontFamily="mono"
-								fontSize="13px"
-								color="var(--tt-text, #5a5a66)"
-								onClick={() => selectSuggestion(0)}
-								onMouseEnter={() => setHoveredSuggestion(0)}
-								paddingX={4}
-								paddingY={1}
-							>
-								🔍 Search things for “{inputValue}”
-							</Flex>
-							{suggestions?.map((suggestion, i) => {
-								return (
-									<Flex
-										key={i}
-										background={hoveredSuggestion === i + 1 ? 'var(--tt-surface-hover, #ececee)' : null}
-										_hover={{
-											background: 'var(--tt-surface-hover, #ececee)'
-										}}
-										cursor="pointer"
-										fontFamily="mono"
-										fontSize="13px"
-										color="var(--tt-text, #5a5a66)"
-										onClick={() => selectSuggestion(i + 1)}
-										onMouseEnter={() => setHoveredSuggestion(i + 1)}
-										paddingX={4}
-										paddingY={1}
-									>
-										{suggestion}
-									</Flex>
-								);
-							})}
+							{commandMode &&
+								commandMatches?.map((commandEntry, i) => {
+									return (
+										<Flex
+											key={commandEntry.name}
+											alignItems="baseline"
+											gap={2}
+											background={hoveredSuggestion === i ? 'var(--tt-surface-hover, #ececee)' : null}
+											_hover={{
+												background: 'var(--tt-surface-hover, #ececee)'
+											}}
+											cursor="pointer"
+											fontFamily="mono"
+											fontSize="13px"
+											color="var(--tt-text, #5a5a66)"
+											onClick={() => selectSuggestion(i)}
+											onMouseEnter={() => setHoveredSuggestion(i)}
+											paddingX={4}
+											paddingY={1}
+										>
+											{commandEntry.usage}
+											<Flex as="span" color="var(--tt-muted, #9a9aa6)" fontFamily="body" fontSize="12px">
+												{commandEntry.description}
+											</Flex>
+										</Flex>
+									);
+								})}
+							{!commandMode && (
+								<Flex
+									background={hoveredSuggestion === 0 ? 'var(--tt-surface-hover, #ececee)' : null}
+									_hover={{
+										background: 'var(--tt-surface-hover, #ececee)'
+									}}
+									cursor="pointer"
+									fontFamily="mono"
+									fontSize="13px"
+									color="var(--tt-text, #5a5a66)"
+									onClick={() => selectSuggestion(0)}
+									onMouseEnter={() => setHoveredSuggestion(0)}
+									paddingX={4}
+									paddingY={1}
+								>
+									🔍 Search things for “{inputValue}”
+								</Flex>
+							)}
+							{!commandMode &&
+								suggestions?.map((suggestion, i) => {
+									return (
+										<Flex
+											key={i}
+											background={hoveredSuggestion === i + 1 ? 'var(--tt-surface-hover, #ececee)' : null}
+											_hover={{
+												background: 'var(--tt-surface-hover, #ececee)'
+											}}
+											cursor="pointer"
+											fontFamily="mono"
+											fontSize="13px"
+											color="var(--tt-text, #5a5a66)"
+											onClick={() => selectSuggestion(i + 1)}
+											onMouseEnter={() => setHoveredSuggestion(i + 1)}
+											paddingX={4}
+											paddingY={1}
+										>
+											{suggestion}
+										</Flex>
+									);
+								})}
 						</Flex>
 						{showContext && (
 							<Flex
