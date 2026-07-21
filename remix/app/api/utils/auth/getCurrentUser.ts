@@ -2,6 +2,7 @@ import { getAuthToken } from './authCookie';
 import { verifyJwt } from './jwt';
 import type { JwtClaims } from './jwt';
 import { getLiveSession } from './sessions';
+import type { SessionDoc } from './sessions';
 import { findUserById, toPublicUserWithStorage } from './users';
 import type { PublicUser } from './users';
 
@@ -61,6 +62,45 @@ export const resolveTokenUser = async (token: string): Promise<ResolvedTokenUser
   if (!user) return null;
 
   return { user, claims };
+};
+
+export type TokenIntrospection =
+  | { active: false }
+  | {
+      active: true;
+      sub: string;
+      jti: string;
+      purpose: NonNullable<SessionDoc['purpose']>;
+      iat: number;
+      exp: number | null;
+    };
+
+// Revocation-aware token status for external verifiers (RFC 7662 shape). JWKS
+// lets platforms check signature/issuer/expiry offline; this answers the one
+// question offline verification cannot: is the session still live in Mongo?
+// Unlike resolveSessionUser it also reports purpose:'app' sessions — external
+// "Login with Thingtime" platforms are the main caller — because introspection
+// only reports status, it never grants the credential any capability.
+export const introspectToken = async (token: string): Promise<TokenIntrospection> => {
+  const claims = await verifyJwt(token);
+  if (!claims) return { active: false };
+
+  const session = await getLiveSession(claims.jti);
+  if (!session) return { active: false };
+  if (String(session.userId) !== claims.sub) return { active: false };
+
+  const user = await findUserById(claims.sub);
+  if (!user) return { active: false };
+  if (!serviceAccountAuthenticationAllowed(user)) return { active: false };
+
+  return {
+    active: true,
+    sub: claims.sub,
+    jti: claims.jti,
+    purpose: session.purpose ?? 'browser',
+    iat: Math.floor(new Date(session.createdAt).getTime() / 1000),
+    exp: session.expiresAt ? Math.floor(new Date(session.expiresAt).getTime() / 1000) : null
+  };
 };
 
 // Resolve the authenticated user for a request, or null.

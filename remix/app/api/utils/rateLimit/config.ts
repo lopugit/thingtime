@@ -139,7 +139,11 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // interactive action, so the budget is per-hour like app registration
   'emojis.write': { limit: 30, windowMs: 3_600_000, enabled: true },
   // follow/unfollow toggles (also classifies messenger requests)
-  'users.follow': { limit: 60, windowMs: 60_000, enabled: true }
+  'users.follow': { limit: 60, windowMs: 60_000, enabled: true },
+  // token introspection (POST /api/v1/auth/introspect) — read-only status
+  // checks by external platforms; two cheap DB reads per call, keyed by IP for
+  // anonymous callers, bounded like the other public reads
+  'auth.introspect': { limit: 120, windowMs: 60_000, enabled: true }
 };
 
 export const RATE_LIMIT_ENDPOINTS = Object.keys(RATE_LIMIT_DEFAULTS);
