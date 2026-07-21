@@ -168,7 +168,7 @@ const Hero = () => {
 		if (!address || joining) return;
 		setJoining(true);
 		try {
-			await api.v1.waitlist.join({ email: address });
+			const resp: any = await api.v1.waitlist.join({ email: address });
 			setJoined(true);
 			try {
 				window.localStorage.setItem('tt-waitlist-joined', 'true');
@@ -176,7 +176,15 @@ const Hero = () => {
 				// ignore
 			}
 			burstAtEvent(event, 120);
-			lopu({ title: "You're on the waitlist! 💖", description: "We'll write soon. No spam, only rainbows.", status: 'success' });
+			// first contact is a gift: the API sends a fortune from Lopu's musing
+			// library — surface it as the welcome (claude-todo/10 ✨)
+			const fortune = typeof resp?.fortune === 'string' && resp.fortune ? resp.fortune : null;
+			lopu({
+				title: "You're on the waitlist! 💖",
+				description: fortune ? `Your welcome fortune: ${fortune}` : "We'll write soon. No spam, only rainbows.",
+				status: 'success',
+				duration: fortune ? 9000 : undefined
+			});
 		} catch (error: any) {
 			lopu({
 				title: 'Waitlist hiccup 🌧️',

@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 
-import { FALLBACK_MUSINGS } from './fallbacks';
+import { pickFallbackMusing } from './fallbacks';
 
 // 🦄 Lopu's musings — a little message generated from the user's real-world
 // context (approximate location + current weather + local time of day).
@@ -38,7 +38,8 @@ export type LopuStreamEvent =
 // Rotate through the big fallback library by time (no RNG — not security-
 // sensitive, and CodeQL flags any range-reduction of a secure RNG). With ~370
 // lines this gives plenty of variety while the endpoint stays live with no keys.
-const pickFallback = () => FALLBACK_MUSINGS[Date.now() % FALLBACK_MUSINGS.length];
+// The picker itself lives in fallbacks.ts (shared with the waitlist fortune).
+const pickFallback = pickFallbackMusing;
 
 // Same time-based rotation for the mode, so each click feels a little different.
 const ALL_MODES: LopuMode[] = ['weather', 'musing', 'quote', 'commented', 'surprise', 'fallback'];
