@@ -1,0 +1,78 @@
+# CI (TODO 15 DX ratchet): build gate + typecheck ratchet + unit tests + the
+# full /tests API suite run headlessly against a real dev stack + Mongo.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build + typecheck ratchet + unit tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: remix
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: remix/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build:client
+      # Fails only if the tsc error count grows past scripts/typecheck-baseline.json
+      - run: pnpm run typecheck:ratchet
+      - run: pnpm run test:unit
+
+  api-tests:
+    name: API suite (headless /tests runner)
+    runs-on: ubuntu-latest
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+    defaults:
+      run:
+        working-directory: remix
+    env:
+      MONGODB_CONNECTION_STRING: mongodb://127.0.0.1:27017/thingtime
+      JWT_SECRET: ci-only-jwt-secret-not-production
+      TT_WEB_PORT: '9999'
+      TT_HMR_PORT: '9998'
+      TT_API_PORT: '10000'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: remix/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: Start dev stack
+        run: |
+          nohup npm run dev > /tmp/tt-dev.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -sf -o /dev/null http://127.0.0.1:9999/; then
+              echo "dev stack up after ${i} tries"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "dev stack failed to boot"
+          tail -100 /tmp/tt-dev.log
+          exit 1
+      - name: Run API suite
+        run: TT_TEST_BASE_URL=http://127.0.0.1:9999 npm test
+      - name: Dev-stack log on failure
+        if: failure()
+        run: tail -200 /tmp/tt-dev.log

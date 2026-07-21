@@ -610,7 +610,9 @@ export const apiTests: ApiTestDefinition[] = [
     mutates: true,
     body: {},
     timeoutMs: 30000,
-    expect: expectStatus([200, 500], 'MongoDB populate route responded.')
+    // 403 = the admin gate holding for non-admin runs (the endpoint is
+    // admin-only + rate-limited since the security hardening) — that's a pass.
+    expect: expectStatus([200, 403, 500], 'MongoDB populate route responded (or was correctly admin-gated).')
   },
   {
     id: 'template-action',
@@ -735,10 +737,12 @@ export const apiTests: ApiTestDefinition[] = [
     group: 'things',
     method: 'GET',
     path: '/api/v1/things/quota?key=api-test',
+    // 401 anonymous, 403 SERVICE_ACCOUNT_REQUIRED when the suite's earlier
+    // register tests left a browser session cookie — both mean the guard held.
     expect: expectJson(
-      [401],
-      (body) => body?.ok === false && body?.code === 'UNAUTHORIZED',
-      'Anonymous quota read was rejected.'
+      [401, 403],
+      (body) => body?.ok === false && (body?.code === 'UNAUTHORIZED' || body?.code === 'SERVICE_ACCOUNT_REQUIRED'),
+      'Non-service quota read was rejected.'
     )
   },
   {
@@ -755,10 +759,12 @@ export const apiTests: ApiTestDefinition[] = [
       count: 1,
       policy: { dailyLimit: 1, rollingLimit: 1, rollingWindowMs: 1_000 }
     },
+    // 401 anonymous, 403 SERVICE_ACCOUNT_REQUIRED with a browser session — see
+    // the quota-read guard above.
     expect: expectJson(
-      [401],
-      (body) => body?.ok === false && body?.code === 'UNAUTHORIZED',
-      'Anonymous quota write was rejected before initialization.'
+      [401, 403],
+      (body) => body?.ok === false && (body?.code === 'UNAUTHORIZED' || body?.code === 'SERVICE_ACCOUNT_REQUIRED'),
+      'Non-service quota write was rejected before initialization.'
     )
   },
   {
@@ -965,10 +971,12 @@ export const apiTests: ApiTestDefinition[] = [
     path: '/api/v1/things',
     mutates: true,
     body: { id: 'api-test-upsert-001', thingtime: ['post'], crystal: { type: 'text', text: 'API test upsert 🧪' }, acl: ['tt:user'] },
+    // 404 = authenticated session, id not found (PUT updates an existing thing
+    // rather than blind-creating) — the guard + id requirement both held.
     expect: expectJson(
-      [200, 201, 401],
+      [200, 201, 401, 404],
       (body) => (body?.ok === true && typeof body?.created === 'boolean') || (body?.ok === false && typeof body?.error === 'string'),
-      'Unified PUT either upserted (session) or was rejected (anonymous).'
+      'Unified PUT upserted (session), was rejected (anonymous), or 404ed an unknown id.'
     )
   },
   {
@@ -1147,9 +1155,9 @@ export const apiTests: ApiTestDefinition[] = [
     method: 'GET',
     path: '/api/v1/admin/migrations',
     expect: expectJson(
-      [200, 401],
+      [200, 401, 403],
       (body) => (body?.ok === true && Array.isArray(body?.collections)) || (body?.ok === false && typeof body?.error === 'string'),
-      'Migration status either returned the census (admin) or was rejected (non-admin).'
+      'Migration status either returned the census (admin) or was rejected (401 anonymous / 403 non-admin).'
     )
   },
   {
@@ -1162,9 +1170,9 @@ export const apiTests: ApiTestDefinition[] = [
     mutates: true,
     body: { migration: 'things-v1-to-v2', dryRun: true },
     expect: expectJson(
-      [200, 401],
+      [200, 401, 403],
       (body) => (body?.ok === true && body?.report?.dryRun === true) || (body?.ok === false && typeof body?.error === 'string'),
-      'Dry-run either reported (admin) or was rejected (non-admin).'
+      'Dry-run either reported (admin) or was rejected (401 anonymous / 403 non-admin).'
     )
   },
   {
