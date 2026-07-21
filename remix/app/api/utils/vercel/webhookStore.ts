@@ -56,6 +56,8 @@ export const verifyVercelSignature = (rawBody: string, signature: string | null)
 const EVENT_STATES: Record<string, VercelWebhookBranchStatus['state']> = {
   'deployment.created': 'building',
   'deployment.succeeded': 'ready',
+  // an existing deployment promoted to production is live → ready
+  'deployment.promoted': 'ready',
   // older event name kept for compatibility with existing webhook configs
   'deployment.ready': 'ready',
   'deployment.error': 'error',
