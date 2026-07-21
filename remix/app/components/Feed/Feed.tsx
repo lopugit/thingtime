@@ -1,10 +1,11 @@
 import React from 'react';
-import { Box, Flex } from '@chakra-ui/react';
+import { Box, Button, Flex, Text } from '@chakra-ui/react';
+import { useSearchParams } from 'react-router';
 
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '~/components/Lopu/useLopu';
-import { RAINBOW_TEXT } from '~/theme/rainbow';
+import { RAINBOW, RAINBOW_TEXT } from '~/theme/rainbow';
 import { AdvancedFilters, advancedSearchBody, searchResponsePosts, useAdvancedFilters } from './AdvancedFilters';
 import { AlgorithmMenu } from './AlgorithmMenu';
 import { FeedFilters } from './FeedFilters';
@@ -54,6 +55,101 @@ export const FeedPage = () => {
   const { observeCard, recordEvent, sessionEventCount, getSessionEvents } = useFeedEngagement({
     activeAlgorithmId: algorithmId
   });
+
+  // "try my feed brain 🧠" (claude-todo/10): /feed?algorithm=<shareId> shows a
+  // branch invitation. The preview endpoint only resolves explicitly shared
+  // algorithms and never returns weights — branching copies them into the
+  // visitor's OWN private algorithm.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const sharedAlgorithmParam = searchParams.get('algorithm');
+  const getSharedAlgorithm = api.v1.algorithms.getShared;
+  const [sharedPreview, setSharedPreview] = React.useState<{
+    id: string;
+    name: string;
+    emoji: string;
+    eventCount: number;
+    ownerUsername: string | null;
+  } | null>(null);
+  const [branchingShared, setBranchingShared] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!sharedAlgorithmParam) {
+      setSharedPreview(null);
+      return;
+    }
+    let cancelled = false;
+    getSharedAlgorithm({ id: sharedAlgorithmParam })
+      .then((resp: any) => {
+        if (cancelled) return;
+        if (resp?.ok && resp?.algorithm) {
+          setSharedPreview(resp.algorithm);
+        } else {
+          setSharedPreview(null);
+          lopuRef.current({
+            title: 'That feed brain is no longer shared 🌫️',
+            description: 'The link may have been turned off by its owner.',
+            status: 'info'
+          });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setSharedPreview(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sharedAlgorithmParam, getSharedAlgorithm]);
+
+  const clearSharedParam = React.useCallback(() => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('algorithm');
+        return next;
+      },
+      { replace: true }
+    );
+  }, [setSearchParams]);
+
+  const handleBranchShared = React.useCallback(async () => {
+    if (!sharedPreview) return;
+    if (!user) {
+      lopuRef.current({
+        title: 'Log in to branch this feed brain 🗝️',
+        description: 'Your copy starts with the same taste and trains privately as you scroll.',
+        status: 'info',
+        link: { label: 'Log in 🗝️', href: '/login' }
+      });
+      return;
+    }
+    setBranchingShared(true);
+    try {
+      const created: any = await api.v1.algorithms.create({
+        name: sharedPreview.name,
+        emoji: sharedPreview.emoji,
+        branchFrom: sharedPreview.id
+      });
+      if (!created?.algorithm) throw created;
+      await api.v1.algorithms.setActive({ algorithmId: created.algorithm.id });
+      setAlgorithmId(created.algorithm.id);
+      setSharedPreview(null);
+      clearSharedParam();
+      lopuRef.current({
+        title: `Branched "${created.algorithm.name}" ${created.algorithm.emoji} 🌿`,
+        description: 'It is now your active algorithm — it trains as you scroll and is yours alone.',
+        status: 'success',
+        duration: 8000
+      });
+    } catch (err: any) {
+      lopuRef.current({
+        title: 'Branch failed 😔',
+        description: err?.error || 'Please try again in a moment.',
+        status: 'error'
+      });
+    } finally {
+      setBranchingShared(false);
+    }
+  }, [sharedPreview, user, api.v1.algorithms, clearSharedParam]);
 
   // pager machinery — a sequence guard drops stale responses when the
   // filters/algorithm change mid-flight
@@ -247,6 +343,34 @@ export const FeedPage = () => {
             Feed 📰
           </Box>
         </Flex>
+
+        {sharedPreview && (
+          <Box p="1.5px" borderRadius="var(--tt-radius-md, 12px)" background={RAINBOW} backgroundSize="calc(100px + 200%)" sx={{ animation: 'var(--tt-rainbow-anim, moving-rainbow 5s linear infinite)' }}>
+            <Flex
+              alignItems="center"
+              columnGap={3}
+              rowGap={2}
+              flexWrap="wrap"
+              padding={3}
+              borderRadius="calc(var(--tt-radius-md, 12px) - 1.5px)"
+              background="var(--tt-card, #fff)"
+            >
+              <Text fontSize="sm" color="var(--tt-text, #5a5a66)">
+                {sharedPreview.ownerUsername ? `@${sharedPreview.ownerUsername} shared their` : 'Someone shared their'} feed
+                brain <strong>&ldquo;{sharedPreview.name}&rdquo; {sharedPreview.emoji}</strong>
+                {sharedPreview.eventCount > 0 ? ` — trained on ${sharedPreview.eventCount.toLocaleString()} scrolls` : ' — still an egg 🥚'}
+              </Text>
+              <Flex marginLeft="auto" columnGap={2}>
+                <Button size="sm" isLoading={branchingShared} onClick={handleBranchShared}>
+                  Branch a copy 🌿
+                </Button>
+                <Button size="sm" variant="ghost" color="var(--tt-muted, #9a9aa6)" onClick={clearSharedParam}>
+                  Dismiss
+                </Button>
+              </Flex>
+            </Flex>
+          </Box>
+        )}
 
         {/* controls */}
         <Flex alignItems="center" columnGap={2}>

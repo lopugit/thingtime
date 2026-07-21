@@ -4278,8 +4278,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'algorithms',
     title: 'Update feed algorithm',
     endpoint: '/api/v1/algorithms/update',
-    summary: 'Renames or restyles one of the current user feed algorithms.',
-    detail: 'Use this endpoint from the settings algorithm manager to update algorithm display metadata without changing its learned weights.',
+    summary: 'Renames, restyles, or toggles sharing on one of the current user feed algorithms.',
+    detail:
+      'Use this endpoint from the settings algorithm manager to update algorithm display metadata without changing its learned weights. shared (strict boolean) turns the "try my feed brain" branch invitation on or off: while true, anyone with the /feed?algorithm=<id> link can read the tiny preview and branch a private copy; the algorithm itself stays private either way.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -4304,6 +4305,41 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         status: 200,
         description: 'Algorithm updated.',
         body: { ok: true, algorithm: { id: 'algorithm_123', name: 'Home projects' } }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'algorithms-shared',
+    group: 'algorithms',
+    title: 'Shared feed algorithm preview',
+    endpoint: '/api/v1/algorithms/shared',
+    summary: 'Reads the public preview of an explicitly shared feed algorithm ("try my feed brain").',
+    detail:
+      'Resolves only algorithms whose owner turned sharing on. Returns identity and training size (name, emoji, eventCount, ownerUsername) — never weights or interests, which stay private to the owner. Branch a copy by POSTing /api/v1/algorithms with branchFrom set to this id. Unknown, unshared, and private ids all 404 identically.',
+    auth: {
+      mode: 'none',
+      description: 'Public and anonymous — possession of the share link plus the owner sharing flag is the gate.'
+    },
+    methods: ['GET'],
+    steps: [
+      'Send id (the share link id from /feed?algorithm=<id>) as a query parameter.',
+      'Show the preview and offer to branch a copy.',
+      'POST /api/v1/algorithms with { name, emoji, branchFrom: id } while authenticated to branch.',
+      'Treat 404 as not shared without assuming whether the algorithm exists.'
+    ],
+    requestExamples: [
+      {
+        name: 'Read shared algorithm preview',
+        description: 'Fetch the branch-invitation preview.',
+        method: 'GET',
+        query: { id: 'algorithm_123' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Shared algorithm preview.',
+        body: { ok: true, algorithm: { id: 'algorithm_123', name: 'Night Owl', emoji: '🦉', eventCount: 1234, ownerUsername: 'rick' } }
       }
     ]
   }),
