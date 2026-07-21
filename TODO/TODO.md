@@ -20,6 +20,11 @@
    fallback verifier and the legacy secret from deployment environments.
 
 4. **Add revocation-aware token introspection for external platforms.**
+   _✅ Done 2026-07-21: `POST /api/v1/auth/introspect` — RFC 7662-style, rides
+   the shared `resolveTokenUser` path (signature + exp + live Mongo session),
+   bare `active:false` for anything invalid (no probe oracle), rate-limited
+   per IP, documented on `/docs/api`. Live-verified: mint → active:true,
+   logout → active:false while the JWT signature is still valid._
 
    `/api/v1/auth/jwks` lets third parties verify token signature, issuer, and
    expiry offline. If an external integration needs live session revocation

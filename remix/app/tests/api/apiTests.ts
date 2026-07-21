@@ -158,6 +158,37 @@ export const apiTests: ApiTestDefinition[] = [
     expect: expectJson([200, 503], (body) => Array.isArray(body?.keys), 'JWKS body contains a keys array.')
   },
   {
+    id: 'auth-introspect-missing-token',
+    name: 'Introspection requires a token',
+    description: 'POSTing without a token is rejected with a 400 error shape (429 when the per-IP window is exhausted).',
+    group: 'auth',
+    method: 'POST',
+    path: '/api/v1/auth/introspect',
+    body: {},
+    expect: expectJson(
+      [400, 429],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Introspection without a token rejected with an error shape.'
+    )
+  },
+  {
+    id: 'auth-introspect-invalid-token',
+    name: 'Introspection is a non-oracle for bad tokens',
+    description: 'Malformed/unknown tokens introspect as a bare active: false with no failure reason (RFC 7662 §2.2).',
+    group: 'auth',
+    method: 'POST',
+    path: '/api/v1/auth/introspect',
+    body: { token: 'not-a-real-thingtime-token' },
+    expect: expectJson(
+      [200, 429],
+      (body, response) =>
+        response.status === 429
+          ? typeof body?.error === 'string'
+          : body?.ok === true && body?.active === false && !('sub' in body) && !('username' in body),
+      'Invalid token introspected as bare active: false (or rate-limited with an error shape).'
+    )
+  },
+  {
     id: 'auth-me-anonymous',
     name: 'Current user anonymous',
     description: 'Anonymous requests resolve to a null current user.',

@@ -17,6 +17,20 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Added
+
+- **`POST /api/v1/auth/introspect` — revocation-aware token introspection**
+  (TODO #4): JWKS lets platforms verify signature/issuer/expiry offline, but
+  a revoked session keeps a valid signature until `exp` (service tokens never
+  expire). The new RFC 7662-style endpoint rides the same shared
+  `resolveTokenUser` path every authenticated request uses (JWT verify + live
+  Mongo session + user checks), so `active` flips to false the moment a
+  session is logged out or revoked. Inactive tokens return a bare
+  `active: false` (no probe oracle); possession of the token is the only
+  credential; per-IP rate limit `auth.introspect` (120/min, admin-editable);
+  16 KiB body cap. Documented on `/docs/api` with `/tests` coverage —
+  Claude (AI), 2026-07-21.
+
 ### Fixed
 
 - **PR #69 final-review hardening round**: a multi-agent review of the unified

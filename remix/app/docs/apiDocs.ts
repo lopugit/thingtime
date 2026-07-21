@@ -374,6 +374,64 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'auth-introspect',
+    group: 'auth',
+    title: 'Token introspection',
+    endpoint: '/api/v1/auth/introspect',
+    summary: 'RFC 7662-style introspection with live revocation status for Thingtime bearer tokens.',
+    detail:
+      'JWKS lets platforms verify signature, issuer, and expiry offline, but a revoked session keeps a valid signature until exp (and service tokens never expire). POST the token here to also check the live Mongo session: active flips to false the moment the session is logged out or revoked. Inactive tokens return a bare active: false with no reason, so the endpoint cannot be used as a probe oracle. Requests are rate limited per IP.',
+    auth: {
+      mode: 'none',
+      description: 'Public endpoint, rate limited per IP. Possession of the token is the only credential — nothing is revealed the holder could not decode themselves.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST { token } with the Thingtime bearer token to check.',
+      'Treat active: false as revoked/expired/invalid — no distinction is made on purpose.',
+      'When active is true, use sub / username / account_kind / jti / exp / iat as the live token facts.',
+      'For high-value operations, prefer this over offline JWKS verification whenever revocation latency matters.'
+    ],
+    requestExamples: [
+      {
+        name: 'Introspect a bearer token',
+        description: 'Check whether a token is still active (session not revoked).',
+        method: 'POST',
+        body: { token: 'eyJhbGciOiJFUzI1NiIsImtpZCI6InRoaW5ndGltZSJ9...' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Token is valid and its session is still live.',
+        body: {
+          ok: true,
+          active: true,
+          token_type: 'Bearer',
+          sub: '64f000000000000000000001',
+          username: 'service-sync',
+          account_kind: 'service',
+          jti: 'a4fab99b-5b3d-4e95-a54d-0cb514ef7892',
+          iat: 1784600000
+        }
+      },
+      {
+        status: 200,
+        description: 'Token is expired, revoked, malformed, or unknown — deliberately indistinguishable.',
+        body: { ok: true, active: false }
+      },
+      {
+        status: 400,
+        description: 'No token supplied.',
+        body: { ok: false, error: 'token is required' }
+      }
+    ],
+    notes: [
+      'exp is omitted for non-expiring service-account tokens.',
+      'App-scoped "Login with Thingtime" tokens report active: false here — they are not full account credentials and validate only through their own app-token endpoints.'
+    ]
+  }),
+  endpoint({
     id: 'auth-logout',
     group: 'auth',
     title: 'Logout',

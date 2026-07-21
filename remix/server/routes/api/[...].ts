@@ -28,6 +28,7 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/auth/accounts': () => import('../../../app/routes/api/v1/auth/accounts/_accounts'),
   'v1/auth/accounts/remove': () => import('../../../app/routes/api/v1/auth/accounts/remove/_remove'),
   'v1/auth/accounts/switch': () => import('../../../app/routes/api/v1/auth/accounts/switch/_switch'),
+  'v1/auth/introspect': () => import('../../../app/routes/api/v1/auth/introspect/_introspect'),
   'v1/auth/jwks': () => import('../../../app/routes/api/v1/auth/jwks/_jwks'),
   'v1/auth/logout': () => import('../../../app/routes/api/v1/auth/logout/_logout'),
   'v1/auth/me': () => import('../../../app/routes/api/v1/auth/me/_me'),
