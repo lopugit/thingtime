@@ -31,9 +31,24 @@ export const ThingtimeContext = createContext<EverythingTypes | null>(null);
 
 // wrap flatted parse and stringify with a function reviver and replacer
 
+// Only strings the replacer itself wrote via toISOString() may revive as Dates.
+// V8's Date.parse accepts everyday strings ("Post 1", "2024", "5 April"), so a
+// lenient check silently rewrote user data as ISO strings after one
+// save/reload cycle.
+const LEGACY_ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+
 const reviver = (key: string, value: any) => {
-	// if value is a Date, return it as a Date object
-	if (typeof value === 'string' && !isNaN(Date.parse(value))) {
+	// current scheme: Dates persist tagged, mirroring ttype:'function'
+	if (value?.ttype === 'date') {
+		const revived = new Date(value.iso);
+		if (!isNaN(revived.getTime())) {
+			return revived;
+		}
+		return typeof value.iso === 'string' ? value.iso : value;
+	}
+
+	// legacy scheme: untagged toISOString() output from the previous replacer
+	if (typeof value === 'string' && LEGACY_ISO_DATE_PATTERN.test(value) && !isNaN(Date.parse(value))) {
 		return new Date(value);
 	}
 
@@ -72,10 +87,17 @@ const reviver = (key: string, value: any) => {
 	return value;
 };
 
-const replacer = (key: string, value: any) => {
-	// if value is a Date, return it as a string
-	if (value instanceof Date) {
-		return value.toISOString();
+const replacer = function (this: any, key: string, value: any) {
+	// JSON.stringify runs Date.prototype.toJSON before the replacer, so `value`
+	// is already an ISO string here — the original Date only survives on the
+	// holder. Persist it tagged (mirroring ttype:'function') so revival never
+	// has to guess whether a string is a Date.
+	const original = this?.[key];
+	if (original instanceof Date && !isNaN(original.getTime())) {
+		return {
+			ttype: 'date',
+			iso: original.toISOString()
+		};
 	}
 
 	// if value is a function, return it as an object with ttype and code properties
