@@ -91,7 +91,8 @@ const replacer = function (this: any, key: string, value: any) {
 	const raw = this?.[key];
 
 	// if the raw value is a Date, return it as an object with ttype and iso properties
-	if (raw instanceof Date) {
+	// (skip Invalid Date — toISOString() would throw; toJSON already made value null)
+	if (raw instanceof Date && !isNaN(raw.getTime())) {
 		return {
 			ttype: 'date',
 			iso: raw.toISOString()
