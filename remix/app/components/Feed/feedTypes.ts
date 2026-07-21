@@ -179,3 +179,16 @@ export const timeAgo = (iso: string): string => {
   if (seconds < 7 * 86400) return `${Math.floor(seconds / 86400)}d`;
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 };
+
+// Append a fetched page onto an existing post list, dropping any post whose id
+// is already present. Ranked feed pagination re-scores a moving candidate
+// window (and training shifts weights between pages), so later pages can
+// re-serve ids from earlier pages; cursor pagers can also re-serve a post when
+// the window shifts under a fresh insert. Duplicate ids would collide as React
+// keys in PostList.
+export const appendPostsDeduped = (prev: PublicPost[], page: PublicPost[]): PublicPost[] => {
+  if (!page.length) return prev;
+  const seen = new Set(prev.map((post) => post.id));
+  const fresh = page.filter((post) => !seen.has(post.id));
+  return fresh.length ? [...prev, ...fresh] : prev;
+};

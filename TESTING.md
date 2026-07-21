@@ -908,6 +908,11 @@ is fixed, and cite the checklist you ran in the PR description.
       an error), min reactions/comments (bounded-window mode), text length.
 - [ ] Profile panels are locked to the profile's user (no By-user field) and
       the header post count stays the profile total, not the filtered count.
+- [ ] Paginated appends never duplicate a post id (`appendPostsDeduped` in
+      `feedTypes.ts`): scroll the feed through several pages in BOTH latest and
+      ranked modes and on a profile with >20 posts, then confirm every rendered
+      `[data-thing-id]` is unique (ranked re-scores a moving window, so later
+      pages can re-serve earlier ids; duplicates collide as React keys).
 
 ## Search page (`remix/app/components/Search/SearchPage.tsx`)
 

@@ -12,6 +12,7 @@ import { PostComposer } from './PostComposer';
 import { PostList } from './PostList';
 import { useFeedEngagement } from './useFeedEngagement';
 import { mergeReactionOverlays } from './reactionOverlay';
+import { appendPostsDeduped } from './feedTypes';
 import type { FeedFiltersState, PostChange, PublicPost } from './feedTypes';
 
 // The /feed page: composer + algorithm picker + filters over an infinite
@@ -96,11 +97,7 @@ export const FeedPage = () => {
           if (seq !== requestSeqRef.current) return;
 
           const pagePosts: PublicPost[] = mergeReactionOverlays(startedAt, searchResponsePosts(resp));
-          setPosts((prev) => {
-            if (reset) return pagePosts;
-            const seen = new Set(prev.map((post) => post.id));
-            return [...prev, ...pagePosts.filter((post) => !seen.has(post.id))];
-          });
+          setPosts((prev) => (reset ? pagePosts : appendPostsDeduped(prev, pagePosts)));
           setNextCursor(resp.nextCursor ?? null);
           setRanked(!!resp.ranked);
           return;
@@ -120,7 +117,7 @@ export const FeedPage = () => {
 
         setPosts((prev) => {
           const page = mergeReactionOverlays(startedAt, resp.posts || []);
-          return reset ? page : [...prev, ...page];
+          return reset ? page : appendPostsDeduped(prev, page);
         });
         setNextCursor(resp.nextCursor ?? null);
         setRanked(!!resp.ranked);

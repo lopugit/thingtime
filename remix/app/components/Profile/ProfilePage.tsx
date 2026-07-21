@@ -19,6 +19,7 @@ import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { RAINBOW, RAINBOW_TEXT } from '~/theme/rainbow';
+import { appendPostsDeduped } from '~/components/Feed/feedTypes';
 import type { PostChange, PublicPost, PublicProfile } from '~/components/Feed/feedTypes';
 import { LOGIN_TO_CLAIM_LABEL, getUserDisplayName, getUserIdentityDetail, getUserMention } from '~/utils/userIdentity';
 
@@ -196,11 +197,7 @@ export const ProfilePage = (props: ProfilePageProps) => {
           if (generationRef.current !== generation) return;
 
           const page: PublicPost[] = mergeReactionOverlays(startedAt, searchResponsePosts(resp));
-          setPosts((prev) => {
-            if (!cursor) return page;
-            const seen = new Set(prev.map((post) => post.id));
-            return [...prev, ...page.filter((post) => !seen.has(post.id))];
-          });
+          setPosts((prev) => (cursor ? appendPostsDeduped(prev, page) : page));
           nextCursorRef.current = resp?.nextCursor ?? null;
           setNextCursor(resp?.nextCursor ?? null);
           return;
@@ -214,7 +211,7 @@ export const ProfilePage = (props: ProfilePageProps) => {
         if (generationRef.current !== generation) return;
 
         const page: PublicPost[] = mergeReactionOverlays(startedAt, Array.isArray(resp?.posts) ? resp.posts : []);
-        setPosts((prev) => (cursor ? [...prev, ...page] : page));
+        setPosts((prev) => (cursor ? appendPostsDeduped(prev, page) : page));
         nextCursorRef.current = resp?.nextCursor ?? null;
         setNextCursor(resp?.nextCursor ?? null);
         if (typeof resp?.postCount === 'number') setPostCount(resp.postCount);
