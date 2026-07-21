@@ -17,6 +17,10 @@ interface ReorderableListProps {
 	items: ReorderableEntry[];
 	onReorder: (ids: string[]) => void;
 	disabled?: boolean;
+	// restrict where a drag may start (e.g. a dedicated handle) so a list of
+	// composite entries can nest other ReorderableLists without both arming
+	// from the same pointerdown
+	shouldStartDrag?: (event: React.PointerEvent) => boolean;
 }
 
 const HOLD_MS = 280;
@@ -33,7 +37,9 @@ interface DragState {
 }
 
 export const ReorderableList = (props: ReorderableListProps) => {
-	const { items, onReorder, disabled } = props;
+	const { items, onReorder, disabled, shouldStartDrag } = props;
+	const shouldStartDragRef = React.useRef(shouldStartDrag);
+	shouldStartDragRef.current = shouldStartDrag;
 
 	const ids = React.useMemo(() => items.map((item) => item.id), [items]);
 	const idsRef = React.useRef(ids);
@@ -177,6 +183,10 @@ export const ReorderableList = (props: ReorderableListProps) => {
 
 			// primary button / touch only
 			if (event.pointerType === 'mouse' && event.button !== 0) {
+				return;
+			}
+
+			if (shouldStartDragRef.current && !shouldStartDragRef.current(event)) {
 				return;
 			}
 
