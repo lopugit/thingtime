@@ -5643,7 +5643,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/users/profile',
     summary: 'Reads public profiles or updates the current user profile fields.',
     detail:
-      'GET returns a stripped public projection that never includes email or verification fields. POST updates the caller display name, bio, avatar URL, or banner URL.',
+      'GET returns a stripped public projection that never includes email or verification fields, plus wornTheme ({id, name} of the profile owner’s active theme, resolved through the public share gate — null when unset or private). POST updates the caller display name, bio, avatar URL, or banner URL.',
     auth: {
       mode: 'optional',
       description: 'GET is public. POST requires an auth cookie or Authorization: Bearer token.'

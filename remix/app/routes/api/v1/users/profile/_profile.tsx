@@ -2,10 +2,12 @@ import { json } from '~/api/http';
 
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { findUserByUsername, toPublicProfile, updateUserProfile } from '~/api/utils/auth/users';
+import { getSharedTheme } from '~/api/utils/themes/themes';
 import { countPublicPosts } from '~/api/utils/things/things';
 
 // GET /api/v1/users/profile?username= — a user's public profile (safe
-// projection: never email/verification/storage) + their public post count.
+// projection: never email/verification/storage) + their public post count +
+// the theme they're wearing ("wear my theme", claude-todo/10 ✨).
 export const loader = async ({ request }: { request: Request }) => {
   const params = new URL(request.url).searchParams;
   const username = (params.get('username') || '').trim();
@@ -20,7 +22,19 @@ export const loader = async ({ request }: { request: Request }) => {
 
   const postCount = await countPublicPosts(String(user._id));
 
-  return json({ ok: true, profile: toPublicProfile(user), postCount });
+  // The worn theme is resolved through the same public gate share links use
+  // (getSharedTheme), so a PRIVATE active theme yields null — the raw
+  // activeThemeId never rides the public profile payload, and a chip shows
+  // iff its ?apply link would resolve for the visitor.
+  const activeThemeId = typeof user.meta?.activeThemeId === 'string' ? user.meta.activeThemeId : null;
+  const worn = activeThemeId ? await getSharedTheme(activeThemeId) : null;
+
+  return json({
+    ok: true,
+    profile: toPublicProfile(user),
+    postCount,
+    wornTheme: worn ? { id: worn.id, name: worn.name } : null
+  });
 };
 
 // Profile updates may carry small data:image URIs for avatar/banner.
