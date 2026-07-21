@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 
+import { recordApiCall } from './apiRequestLog';
 import { useAsyncFetcher } from './useAsyncFetcher';
 
 const refreshRootData = () => {
@@ -8,8 +9,24 @@ const refreshRootData = () => {
 
 // GET helper mirroring useAsyncFetcher semantics: parses JSON and throws the
 // parsed payload on !ok so callers catch { ok: false, error } shapes.
+// Every call is recorded in the DevKit request log (method/path/status/ms).
 const getJson = async (url: string) => {
-  const response = await fetch(url, { credentials: 'include' });
+  const started = performance.now();
+  let response: Response;
+  try {
+    response = await fetch(url, { credentials: 'include' });
+  } catch (err) {
+    recordApiCall({ at: Date.now(), method: 'GET', url, status: 0, ok: false, durationMs: Math.round(performance.now() - started) });
+    throw err;
+  }
+  recordApiCall({
+    at: Date.now(),
+    method: 'GET',
+    url,
+    status: response.status,
+    ok: response.ok,
+    durationMs: Math.round(performance.now() - started)
+  });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw data;
   return data;

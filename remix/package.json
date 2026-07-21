@@ -20,6 +20,7 @@
     "preview": "node .output/server/index.mjs",
     "sync:nitro-template": "node scripts/sync-nitro-template.mjs",
     "test:autosave": "node --test app/Providers/*.test.ts",
+    "test:hooks": "node --test app/hooks/*.test.ts",
     "test:editorjs": "node --test app/components/Editor/*.test.ts app/components/Kinds/*.test.ts",
     "test:quota": "node --test app/api/utils/things/quotaCore.test.ts",
     "test:schemas": "node --test app/schemas/*.test.ts",

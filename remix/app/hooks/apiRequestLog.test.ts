@@ -1,0 +1,69 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+// @ts-ignore Node 24 executes this TypeScript test directly and requires the .ts extension.
+import {
+	MAX_API_LOG_ENTRIES,
+	buildCurlForEntry,
+	clearApiCalls,
+	getApiCalls,
+	recordApiCall,
+	redactSensitive,
+	subscribeApiCalls
+} from './apiRequestLog.ts';
+
+const baseEntry = { at: 1, method: 'GET', url: '/api/v1/health', status: 200, ok: true, durationMs: 12 };
+
+test('ring buffer keeps the newest entries first and caps at the limit', () => {
+	clearApiCalls();
+	for (let i = 0; i < MAX_API_LOG_ENTRIES + 5; i++) {
+		recordApiCall({ ...baseEntry, url: `/api/v1/call-${i}` });
+	}
+	const calls = getApiCalls();
+	assert.equal(calls.length, MAX_API_LOG_ENTRIES);
+	assert.equal(calls[0].url, `/api/v1/call-${MAX_API_LOG_ENTRIES + 4}`);
+	assert.equal(calls[calls.length - 1].url, '/api/v1/call-5');
+});
+
+test('subscribers fire on record and can unsubscribe', () => {
+	clearApiCalls();
+	let fired = 0;
+	const unsubscribe = subscribeApiCalls(() => fired++);
+	recordApiCall(baseEntry);
+	assert.equal(fired, 1);
+	unsubscribe();
+	recordApiCall(baseEntry);
+	assert.equal(fired, 1);
+});
+
+test('sensitive keys are redacted, including nested ones', () => {
+	assert.deepEqual(
+		redactSensitive({
+			username: 'lopu',
+			password: 'hunter2',
+			meta: { apiKey: 'k', list: [{ token: 't', keep: 1 }] }
+		}),
+		{ username: 'lopu', password: '•••', meta: { apiKey: '•••', list: [{ token: '•••', keep: 1 }] } }
+	);
+});
+
+test('recorded bodies are stored redacted', () => {
+	clearApiCalls();
+	recordApiCall({ ...baseEntry, method: 'POST', url: '/api/v1/login', body: { username: 'u', password: 'p' } });
+	assert.deepEqual(getApiCalls()[0].body, { username: 'u', password: '•••' });
+});
+
+test('buildCurlForEntry mirrors the docs curl shape', () => {
+	clearApiCalls();
+	recordApiCall({ ...baseEntry, method: 'POST', url: '/api/v1/things', body: { text: "it's alive" } });
+	const curl = buildCurlForEntry(getApiCalls()[0], 'http://127.0.0.1:9999');
+	assert.match(curl, /^curl -X POST 'http:\/\/127\.0\.0\.1:9999\/api\/v1\/things' \\\n/);
+	assert.match(curl, /-b 'tt_session=<your session cookie>'/);
+	assert.match(curl, /-H 'Content-Type: application\/json'/);
+	// single quotes in the body survive shell quoting
+	assert.match(curl, /--data '\{"text":"it'\\''s alive"\}'/);
+
+	const getCurl = buildCurlForEntry({ ...baseEntry, id: 1 } as any, 'https://thingtime.com');
+	assert.ok(!getCurl.includes('--data'));
+	assert.ok(!getCurl.includes('Content-Type'));
+});

@@ -1,5 +1,7 @@
 import { useCallback, useState } from 'react';
 
+import { recordApiCall } from './apiRequestLog';
+
 export function useAsyncFetcher() {
   const [defaultOpts, setDefaultOpts] = useState({
     method: 'POST',
@@ -25,12 +27,39 @@ export function useAsyncFetcher() {
         body = formData;
       }
 
-      const response = await fetch(nextOpts.action, {
+      // DevKit request log: every mutation is timed + recorded (body is
+      // redacted by the recorder before it is stored)
+      const loggedBody = nextOpts.encType === 'application/json' ? data || {} : undefined;
+      const started = performance.now();
+      let response: Response;
+      try {
+        response = await fetch(nextOpts.action, {
+          method: nextOpts.method || 'POST',
+          credentials: 'include',
+          headers,
+          body,
+          signal: nextOpts.signal
+        });
+      } catch (err) {
+        recordApiCall({
+          at: Date.now(),
+          method: nextOpts.method || 'POST',
+          url: nextOpts.action,
+          status: 0,
+          ok: false,
+          durationMs: Math.round(performance.now() - started),
+          body: loggedBody
+        });
+        throw err;
+      }
+      recordApiCall({
+        at: Date.now(),
         method: nextOpts.method || 'POST',
-        credentials: 'include',
-        headers,
-        body,
-        signal: nextOpts.signal
+        url: nextOpts.action,
+        status: response.status,
+        ok: response.ok,
+        durationMs: Math.round(performance.now() - started),
+        body: loggedBody
       });
       const contentType = response.headers.get('Content-Type') || '';
       const payload = contentType.includes('application/json')
