@@ -610,7 +610,9 @@ export const apiTests: ApiTestDefinition[] = [
     mutates: true,
     body: {},
     timeoutMs: 30000,
-    expect: expectStatus([200, 500], 'MongoDB populate route responded.')
+    // 401/403: the seed endpoint is auth-gated, so an anonymous or non-admin
+    // session is correctly refused — still a healthy response for this probe
+    expect: expectStatus([200, 401, 403, 500], 'MongoDB populate route responded.')
   },
   {
     id: 'template-action',
