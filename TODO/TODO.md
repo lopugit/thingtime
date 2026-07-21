@@ -149,9 +149,16 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     or `e.isComposing`; also normalise `e.key.toLowerCase() === 'z'` (Shift+Z
     reports `'Z'`, making the redo branch at L101 unreachable in most browsers).
 
-14. **🧹 Remove render-time debug leaks in the hot path.**
+14. **✅ FIXED — 🧹 Remove render-time debug leaks in the hot path.**
 
-    `useThingtime.tsx` (L33–39, L46–57) pushes `{uuid, value, timestamp}` into an
+    The `useThingtime.tsx` `window.useThingtimeScope` leak was already removed
+    on main before this pass (stale line refs). Finished on
+    `claude/todo14-debug-leaks-s3`: removed the per-render `commanderActive`
+    log and per-keypress key-listener log in `CommanderV2.tsx`, and all four
+    per-render logs in `ThingtimeURL.tsx` (which retained `thing` object
+    references). Event-driven logs (click/close conditions) left as-is.
+
+    Original report: `useThingtime.tsx` (L33–39, L46–57) pushes `{uuid, value, timestamp}` into an
     unbounded per-instance array on `window.useThingtimeScope` on **every render**
     of **every** consumer — a module-level object that leaks across SSR requests
     and grows for the life of the tab; nothing ever trims it and it ships in prod
