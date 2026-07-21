@@ -6,12 +6,16 @@
 
    The current PR fix keeps Emotion SSR styles in the React document tree and removes the visible unstyled-content jump. Remaining work: make local Vite dev-mode `hydrateRoot(document, ...)` pass without React document mismatch warnings/errors, then verify the same flow in production build/serve.
 
-2. **Tighten verification-link origin trust.**
+2. **✅ FIXED — Tighten verification-link origin trust.**
 
-   Email verification links are still built from the request origin. Move them
-   to a canonical `APP_URL` or explicit host allowlist before relying on real
-   email delivery, so unexpected or spoofed hosts cannot generate verification
-   URLs on the wrong origin.
+   Largely done before this pass: `resolveTrustedOrigin`
+   (`remix/app/api/utils/auth/appOrigin.ts`) already prefers `APP_URL` and all
+   four email-link routes use it. Finished on
+   `claude/todo2-verification-link-origin-s3`: the APP_URL-unset fallback now
+   only trusts deploy hosts (localhost/127.0.0.1, `*.thingtime.com`,
+   `*.vercel.app`, `*.ts.net`); any other Host header gets the canonical
+   `https://thingtime.com` instead — spoofed hosts can no longer steer emailed
+   token links. Set `APP_URL` in Vercel prod to bypass the fallback entirely.
 
 3. **Remove legacy HS256 JWT fallback after ES256 migration.**
 
