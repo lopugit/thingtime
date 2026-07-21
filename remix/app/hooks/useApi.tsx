@@ -234,6 +234,11 @@ export function useApi() {
     },
     algorithms: {
       list: useCallback(async () => getJson('/api/v1/algorithms'), []),
+      // share-link preview (identity + training size only, never weights)
+      getShared: useCallback(
+        async (args) => getJson(`/api/v1/algorithms/shared?id=${encodeURIComponent(args?.id || '')}`),
+        []
+      ),
       create: useCallback(
         async (args) => {
           const { name, emoji, branchFrom, events } = args;
@@ -243,7 +248,7 @@ export function useApi() {
       ),
       update: useCallback(
         async (args) =>
-          asyncFetcher.submit({ id: args?.id, name: args?.name, emoji: args?.emoji }, { action: '/api/v1/algorithms/update' }),
+          asyncFetcher.submit({ id: args?.id, name: args?.name, emoji: args?.emoji, shared: args?.shared }, { action: '/api/v1/algorithms/update' }),
         [asyncFetcher]
       ),
       remove: useCallback(
