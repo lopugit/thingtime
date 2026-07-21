@@ -118,9 +118,13 @@ revive only tagged values.
 
 - [ ] A1–A3 require auth (or are dev-gated + removed from the prod dispatcher);
       any that remain apply visibility filtering.
-- [ ] Login / register / resend-verification return 429 past a per-IP (and
+- [x] Login / register / resend-verification return 429 past a per-IP (and
       per-username, for login) threshold, reusing the existing quota util.
-- [ ] Register/login enforce a body-size cap; `meta` is whitelisted/bounded.
+      Login + resend already enforced the shared `enforceRateLimit`; register
+      now does too (`auth.register`, 10/10min per IP). — PR #99
+- [x] Register/login enforce a body-size cap; `meta` is whitelisted/bounded.
+      Register now reads via `readJsonBody(request, 16 KB)` (413 over cap); the
+      route already whitelists fields and never passes `meta`. — PR #99
 - [x] Function values are no longer revived via `eval`; a CSP without
       `unsafe-eval` is in place and the app still hydrates. — PR #99
 - [x] The `Date.parse` reviver no longer coerces plain strings (verified by a
@@ -129,7 +133,7 @@ revive only tagged values.
       (`npm run test:persist`). The codec is client-side, so coverage lives beside
       it rather than in the fetch-based `apiTests.ts`. — PR #99
 
-**§C (persisted-state `eval` + CSP) and §D (Date.parse corruption) shipped in
-PR #99.** The codec moved to `remix/app/Providers/thingtimePersistCodec.ts`
-(pure/React-free). §A (unauth admin/data endpoints) and §B (auth rate limiting)
-remain open.
+**§B (auth rate limiting — register), §C (persisted-state `eval` + CSP), and §D
+(Date.parse corruption) shipped in PR #99.** The persist codec moved to
+`remix/app/Providers/thingtimePersistCodec.ts` (pure/React-free). §A (unauth
+admin/data endpoints — raw-results, populate, service-account) remains open.
