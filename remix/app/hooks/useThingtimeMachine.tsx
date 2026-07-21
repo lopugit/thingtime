@@ -30,6 +30,14 @@ export interface TimelineEvent {
 	// additional properties can be added as needed
 }
 
+// Targets where the browser's native text undo must keep owning Cmd/Ctrl+Z.
+const isEditableTarget = (target: EventTarget | null): boolean => {
+	const el = target as HTMLElement | null;
+	if (!el) return false;
+	const tag = el.tagName;
+	return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable === true;
+};
+
 // ™
 export const useThingtimeLine = (Everything) => {
 	// NOTE:
@@ -80,7 +88,17 @@ export const useThingtimeLine = (Everything) => {
 			// @undoRedoEventKeyShortcutEventListener
 			// if ctrl + z, restore thingtime from localstorage timeline
 
-			if ((e?.ctrlKey || e?.metaKey) && e?.key === 'z') {
+			// Shift+Z reports key 'Z', so lowercase before matching — otherwise the
+			// redo branch below is unreachable in most browsers.
+			if ((e?.ctrlKey || e?.metaKey) && e?.key?.toLowerCase() === 'z') {
+				// Native text undo owns this shortcut inside editable targets (post
+				// composer, comment boxes, login form) and during IME composition —
+				// a window-wide preventDefault here would fire a thingtime undo and
+				// mutate unrelated state instead.
+				if (e?.isComposing || isEditableTarget(e?.target)) {
+					return;
+				}
+
 				e?.preventDefault();
 
 				const eventType = e.shiftKey ? 'redo' : 'undo';
