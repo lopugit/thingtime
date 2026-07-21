@@ -1,4 +1,5 @@
 import { PublicError, safeErrorText } from '../errors/safeError';
+import { getPersistedBranchStatus, isVercelWebhookConfigured } from './webhookStore';
 
 export { isVercelStatusEnabled } from './environment';
 
@@ -806,6 +807,37 @@ export const getVercelDeploymentStatus = async (): Promise<VercelDeploymentStatu
       environment,
       deploymentUrl
     });
+
+    // Webhook-fed fast path (TODO item 5): once Vercel pushes deployment
+    // events to /api/v1/vercel/webhook, terminal states are served from the
+    // persisted doc without spending Vercel API calls — a ready deployment
+    // stays ready until the next webhook event says otherwise. Mid-build
+    // states still fall through to the live poll for phase/progress detail.
+    if (isVercelWebhookConfigured()) {
+      const persisted = await getPersistedBranchStatus(branch);
+      if (persisted && (persisted.state === 'ready' || persisted.state === 'error' || persisted.state === 'canceled')) {
+        const lastReadyAtMs = persisted.lastReadyAt ? Date.parse(persisted.lastReadyAt) : undefined;
+        return {
+          ...fallback,
+          buildId: persisted.deploymentId,
+          buildPageUrl: persisted.inspectorUrl || fallback.buildPageUrl,
+          buildPhase: undefined,
+          buildProgress: persisted.state === 'ready' ? 100 : 0,
+          configured: true,
+          environment: persisted.environment || environment,
+          // Mongo persists undefined as null — normalise so ready states don't
+          // serialise an error:null field
+          error: persisted.error || undefined,
+          hasError: persisted.state === 'error',
+          lastReadyAt: persisted.lastReadyAt,
+          lastReadyLabel: formatRelativeTime(Number.isFinite(lastReadyAtMs) ? lastReadyAtMs : undefined),
+          lastReadyUrl: persisted.lastReadyUrl || persisted.deploymentUrl,
+          latestDeploymentUrl: persisted.deploymentUrl || fallback.latestDeploymentUrl,
+          label: `Vercel: ${persisted.state}`,
+          state: persisted.state
+        };
+      }
+    }
 
     if (!token) {
       return fallback;
