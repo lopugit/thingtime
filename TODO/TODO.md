@@ -93,9 +93,14 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
    failures per IP/username window; cap body size; whitelist/bound `meta`.
    Full spec: `claude-todo/09-security-hardening.md`.
 
-9. **🐛 DATA CORRUPTION: the persist reviver turns ordinary strings into Dates.**
+9. **✅ FIXED — 🐛 DATA CORRUPTION: the persist reviver turns ordinary strings into Dates.**
 
-   `ThingtimeProvider` (`remix/app/Providers/ThingtimeProvider.tsx` L30–34, used
+   Fixed on `claude/todo9-date-reviver-strict`: the reviver now revives only
+   exact `toISOString()` output (flatted's `Date.toJSON` is the actual persist
+   format — the replacer never sees a `Date`), so everyday strings survive
+   persist/reload untouched while real Dates and legacy saves still round-trip.
+
+   Original report: `ThingtimeProvider` (`remix/app/Providers/ThingtimeProvider.tsx` L30–34, used
    at L89 / L379–382) revives **any** string that passes V8's lenient
    `Date.parse` into a `Date` when rehydrating from localforage. Everyday values
    like `"Post 1"`, `"1"`, `"2024"`, `"March 2024"`, `"5 April"` become `Date`

@@ -31,10 +31,22 @@ export const ThingtimeContext = createContext<EverythingTypes | null>(null);
 
 // wrap flatted parse and stringify with a function reviver and replacer
 
+// Dates persist as bare toISOString() output (flatted calls Date.toJSON before
+// any replacer runs), so only that exact shape may revive as a Date. Anything
+// looser (V8's lenient Date.parse) turns everyday strings like "Post 1",
+// "2024" or "March 2024" into Dates, which then re-persist as ISO strings —
+// permanently corrupting user data after one save/reload cycle.
+const ISO_DATE_STRING_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+
+const reviveDate = (iso: string): Date | string => {
+	const time = Date.parse(iso);
+	return isNaN(time) ? iso : new Date(time);
+};
+
 const reviver = (key: string, value: any) => {
-	// if value is a Date, return it as a Date object
-	if (typeof value === 'string' && !isNaN(Date.parse(value))) {
-		return new Date(value);
+	// revive ONLY exact toISOString() output as a Date
+	if (typeof value === 'string' && ISO_DATE_STRING_PATTERN.test(value)) {
+		return reviveDate(value);
 	}
 
 	// if value is a function, return it as a function
@@ -73,10 +85,9 @@ const reviver = (key: string, value: any) => {
 };
 
 const replacer = (key: string, value: any) => {
-	// if value is a Date, return it as a string
-	if (value instanceof Date) {
-		return value.toISOString();
-	}
+	// no Date branch: flatted invokes Date.toJSON before the replacer, so Dates
+	// arrive here already as toISOString() strings; the reviver's strict
+	// pattern restores exactly that shape
 
 	// if value is a function, return it as an object with ttype and code properties
 	if (typeof value === 'function') {
