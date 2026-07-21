@@ -1,5 +1,14 @@
 # 07 — Cross-tab sync for persisted thingtime state
 
+> **Status (2026-07-21): 🟢 Built.** `remix/app/Providers/thingtimeSyncChannel.ts`
+> broadcasts every local `setThingtime` write on `BroadcastChannel('thingtime')`
+> using the persist path's flatted codec; other tabs apply it through the normal
+> mutation queue with `{ ignoreUndoRedo: true, fromRemote: true }` (no echo, no
+> undo pollution, pre-hydration messages held in order). Live-verified in two
+> tabs both directions, incl. the stale-tab clobber scenario and a 20-write
+> burst. Unit tests: `thingtimeSyncChannel.test.ts` (runs in `test:autosave`).
+> Remaining optional hardening: the cold-tab revision diff below (plan step 5).
+
 ## What it's for
 
 Two open tabs on the same origin should share one live thingtime state instead
