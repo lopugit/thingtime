@@ -75,7 +75,7 @@ export const PostList = (props: PostListProps) => {
         <Box key={post.id} data-thing-id={post.id}>
           <PostCard
             post={post}
-            onChanged={(next) => onPostChanged(post.id, next)}
+            onChanged={onPostChanged}
             onEngagement={onEngagement}
           />
         </Box>

@@ -124,9 +124,10 @@ const RADIUS_MD = 'var(--tt-radius-md, 12px)';
 
 export type PostCardProps = {
   post: PublicPost;
-  // a value replaces the post (null = deleted); a function applies a delta to
-  // the freshest post (used by optimistic reactions)
-  onChanged?: (next: PostChange) => void;
+  // id-first so parents can pass one stable handler to every card (keeps
+  // React.memo effective); a value replaces the post (null = deleted), a
+  // function applies a delta to the freshest post (used by optimistic reactions)
+  onChanged?: (id: string, next: PostChange) => void;
   // card-level signals: expand/react/comment/share
   onEngagement?: (event: EngagementEvent) => void;
 };
@@ -367,7 +368,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     try {
       await api.v1.things.remove({ id: post.id });
       lopu({ title: 'Post deleted 🗑️', status: 'success', duration: 6000 });
-      onChanged?.(null);
+      onChanged?.(post.id, null);
     } catch (err: any) {
       lopu({ title: err?.error || 'Could not delete that post 😞', status: 'error' });
     }
@@ -389,16 +390,16 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     // Optimistic + reconcile + revert all touch ONLY this token, applied to the
     // freshest post — so a concurrent reaction on another token isn't clobbered
     // by a stale full snapshot (and out-of-order responses stay consistent).
-    onChanged?.((prev) => applyReactionToggle(prev, token, adding));
+    onChanged?.(post.id, (prev) => applyReactionToggle(prev, token, adding));
     if (adding) onEngagement?.({ thingId: post.id, signal: 'react' });
 
     try {
       const resp = await api.v1.things.react({ id: post.id, emoji: token });
-      onChanged?.((prev) => reconcileReactionToken(prev, token, resp.reactionCounts, resp.viewerReactions));
+      onChanged?.(post.id, (prev) => reconcileReactionToken(prev, token, resp.reactionCounts, resp.viewerReactions));
       // record recents only on a successful ADD (server records the same)
       if (adding) pushRecent(token, resp.recentReactions);
     } catch (err: any) {
-      onChanged?.((prev) => applyReactionToggle(prev, token, !adding)); // undo just this token
+      onChanged?.(post.id, (prev) => applyReactionToggle(prev, token, !adding)); // undo just this token
       lopu({ title: err?.error || 'Reaction did not stick 😞', status: 'error' });
     }
   };
@@ -418,7 +419,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     setCommenting(true);
     try {
       const resp = await api.v1.things.comment({ id: post.id, text });
-      onChanged?.({ ...post, comments: [...post.comments, resp.comment], commentCount: resp.commentCount });
+      onChanged?.(post.id, { ...post, comments: [...post.comments, resp.comment], commentCount: resp.commentCount });
       onEngagement?.({ thingId: post.id, signal: 'comment' });
       setCommentText('');
     } catch (err: any) {
@@ -446,7 +447,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
         visibility: shareVisibility
       });
       lopu({ title: 'Shared ✨', status: 'success', duration: 6000 });
-      onChanged?.({ ...post, shareCount: post.shareCount + 1 });
+      onChanged?.(post.id, { ...post, shareCount: post.shareCount + 1 });
       onEngagement?.({ thingId: post.id, signal: 'share' });
       setShareOpen(false);
       setShareText('');
