@@ -73,7 +73,15 @@ const TEXTAREA_PLACEHOLDERS: Record<PostType, string> = {
 };
 
 export type PostComposerProps = {
+  // in comment mode this receives the created comment (post-shaped — comments
+  // share the post schema)
   onPosted: (post: PublicPost) => void;
+  // compose a COMMENT on this thing instead of a top-level post — starts
+  // expanded, hides the circle picker (comments inherit the thread root's
+  // audience) and posts through api.v1.things.comment
+  parentId?: string;
+  // called when the comment composer's close button is pressed
+  onClose?: () => void;
 };
 
 const Eyebrow = ({ children }: { children: React.ReactNode }) => (
@@ -90,13 +98,15 @@ const Eyebrow = ({ children }: { children: React.ReactNode }) => (
 );
 
 export const PostComposer = (props: PostComposerProps) => {
-  const { onPosted } = props;
+  const { onPosted, parentId, onClose } = props;
+
+  const isComment = !!parentId;
 
   const api = useApi();
   const lopu = useLopu();
   const { getThingtime, setThingtime, loading: thingtimeLoading, events } = useThingtime();
 
-  const [expanded, setExpanded] = React.useState(false);
+  const [expanded, setExpanded] = React.useState(isComment);
   const [type, setType] = React.useState<PostType>('text');
   const [text, setText] = React.useState('');
   const [images, setImages] = React.useState<string[]>([]);
@@ -208,7 +218,7 @@ export const PostComposer = (props: PostComposerProps) => {
           : listingValid;
 
   const reset = () => {
-    setExpanded(false);
+    setExpanded(isComment);
     setType('text');
     setText('');
     setComposerSession((session) => session + 1);
@@ -241,9 +251,10 @@ export const PostComposer = (props: PostComposerProps) => {
       const payload: any = {
         type,
         text: text.trim(),
-        visibility,
         tags: parsedTags
       };
+      // comments inherit the thread root's audience server-side
+      if (!isComment) payload.visibility = visibility;
       if (showPhotos) payload.images = validImages;
       if (type === 'thingtime') payload.thing = draftThing;
       if (showListing) {
@@ -258,12 +269,14 @@ export const PostComposer = (props: PostComposerProps) => {
         };
       }
 
-      const resp = await api.v1.things.create(payload);
-      lopu({ title: 'Posted ✨', status: 'success', duration: 6000 });
+      const resp = isComment
+        ? await api.v1.things.comment({ id: parentId, ...payload })
+        : await api.v1.things.create(payload);
+      lopu({ title: isComment ? 'Commented 💬' : 'Posted ✨', status: 'success', duration: 6000 });
       // the posted thing draft is spent — next thingtime tab starts fresh
       if (type === 'thingtime') setThingtime(draftPath, {});
       reset();
-      onPosted(resp.post);
+      onPosted(isComment ? resp.comment : resp.post);
     } catch (err: any) {
       lopu({ title: err?.error || 'Post did not go through 😞', status: 'error' });
     }
@@ -333,7 +346,7 @@ export const PostComposer = (props: PostComposerProps) => {
           color={MUTED}
           marginLeft="auto"
           borderRadius="8px"
-          onClick={() => setExpanded(false)}
+          onClick={() => (isComment ? onClose?.() : setExpanded(false))}
         />
       </Flex>
 
@@ -587,22 +600,24 @@ export const PostComposer = (props: PostComposerProps) => {
         )}
       </Flex>
 
-      {/* footer: circle + post */}
+      {/* footer: circle + post (comments inherit the thread's circle) */}
       <Flex alignItems="center" columnGap={2} borderTop={BORDER} paddingTop={3}>
-        <Select
-          size="sm"
-          width="150px"
-          borderRadius={RADIUS_SM}
-          value={visibility}
-          onChange={(event) => setVisibility(event.target.value as PostVisibility)}
-          aria-label="Who can see this post"
-        >
-          {(Object.keys(CIRCLE_META) as PostVisibility[]).map((key) => (
-            <option key={key} value={key}>
-              {CIRCLE_META[key].emoji} {CIRCLE_META[key].label}
-            </option>
-          ))}
-        </Select>
+        {!isComment && (
+          <Select
+            size="sm"
+            width="150px"
+            borderRadius={RADIUS_SM}
+            value={visibility}
+            onChange={(event) => setVisibility(event.target.value as PostVisibility)}
+            aria-label="Who can see this post"
+          >
+            {(Object.keys(CIRCLE_META) as PostVisibility[]).map((key) => (
+              <option key={key} value={key}>
+                {CIRCLE_META[key].emoji} {CIRCLE_META[key].label}
+              </option>
+            ))}
+          </Select>
+        )}
         <Button
           marginLeft="auto"
           size="sm"
@@ -618,7 +633,7 @@ export const PostComposer = (props: PostComposerProps) => {
           isLoading={posting}
           onClick={handlePost}
         >
-          Post ✨
+          {isComment ? 'Comment 💬' : 'Post ✨'}
         </Button>
       </Flex>
     </Flex>

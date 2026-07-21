@@ -36,10 +36,24 @@ export type MarketplaceListing = {
   sold: boolean;
 };
 
+// Comments share the post schema — rich comments are ["post","comment"]
+// things, so the payload carries the post vocabulary plus reactions and a
+// reply count. Legacy-era comments arrive with the text-only defaults.
 export type PostComment = {
   id: string;
+  thingtime: string[];
   author: FeedAuthor | null;
+  type: PostType;
   text: string;
+  images: string[];
+  listing: MarketplaceListing | null;
+  thing: Record<string, any> | null;
+  tags: string[];
+  reactionCounts: Record<string, number>;
+  viewerReactions: string[];
+  // direct replies — the comment's own /post/:id page shows the thread
+  commentCount: number;
+  targetId: string | null;
   createdAt: string;
 };
 

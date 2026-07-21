@@ -340,7 +340,10 @@ const commentSchema: ThingtimeSchema = {
   summary: 'A comment on another thing.',
   detail:
     'A standalone thing pointing at its target via targetId, carrying acl ["tt:inherit"] so it ' +
-    'is visible exactly when the target is. Comments used to live embedded inside post docs — ' +
+    'is visible exactly when the target is. Comments share the post schema: a rich comment is a ' +
+    '["post","comment"] thing carrying the full post vocabulary (photos, listing, thingtime ' +
+    'thing), the post crystal rules apply, and comments are reactable and commentable like any ' +
+    'post — each has its own /post/:id page. Comments used to live embedded inside post docs — ' +
     'the things v1→v2 migration explodes them into these.',
   requiresTarget: true,
   fields: [
@@ -1018,7 +1021,14 @@ const sanitizePostCrystal = (
   return { ok: true, crystal: { type, text, images, listing, thing } };
 };
 
-const sanitizeCommentCrystal = (input: Record<string, unknown>): { ok: true; crystal: Record<string, unknown> } | Fail => {
+const sanitizeCommentCrystal = (
+  input: Record<string, unknown>,
+  ids?: string[]
+): { ok: true; crystal: Record<string, unknown> } | Fail => {
+  // Rich comments are ["post","comment"] things — the post sanitizer owns the
+  // whole crystal there (its own text/image/listing rules apply, so an
+  // image-only comment is legal the same way an image-only post is).
+  if (ids?.includes('post')) return { ok: true, crystal: {} };
   const text = typeof input.text === 'string' ? input.text.trim() : '';
   if (!text) return fail(400, 'Comment text is required');
   if (text.length > MAX_COMMENT_CHARS) return fail(400, `Comment is too long (max ${MAX_COMMENT_CHARS})`);

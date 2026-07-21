@@ -22,7 +22,7 @@ import {
   Tooltip
 } from '@chakra-ui/react';
 import { Link } from 'react-router';
-import { MoreHorizontal, Plus, Send } from 'lucide-react';
+import { Maximize2, MoreHorizontal, Plus, Send } from 'lucide-react';
 
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
@@ -32,13 +32,15 @@ import { EmojiPicker } from '~/components/Emoji/EmojiPicker';
 import { useRecentReactions } from '~/components/Emoji/useRecentReactions';
 import { sanitizeReactionToken, splitEmojis } from '~/utils/reactionTokens';
 import { RAINBOW } from '~/theme/rainbow';
+import { PostComposer } from './PostComposer';
+import { ReactionControl } from './ReactionControl';
 import {
   CIRCLE_META,
   MARKETPLACE_CATEGORY_META,
   REACTION_EMOJIS,
   timeAgo
 } from './feedTypes';
-import type { EngagementEvent, FeedAuthor, PostChange, PostVisibility, PublicPost } from './feedTypes';
+import type { EngagementEvent, FeedAuthor, PostChange, PostComment, PostVisibility, PublicPost } from './feedTypes';
 
 // Keep reaction displays from running off the card: cap how many individual
 // emoji show before an ellipsis, so one long multi-emoji token (🥳🥳🥳…) can't
@@ -129,10 +131,22 @@ export type PostCardProps = {
   onChanged?: (next: PostChange) => void;
   // card-level signals: expand/react/comment/share
   onEngagement?: (event: EngagementEvent) => void;
+  // the /post/:id page opens with the conversation expanded
+  defaultCommentsOpen?: boolean;
 };
 
 const authorName = (author: FeedAuthor | null) =>
   author?.displayName || author?.username || 'Anonymous 👻';
+
+// Every post/comment timestamp is a permalink to its /post/:id page, the way
+// timestamps work on every major platform.
+const TimestampLink = ({ id, createdAt, fontSize = 'xs' }: { id: string; createdAt: string; fontSize?: string }) => (
+  <Link to={`/post/${id}`} title={new Date(createdAt).toLocaleString()}>
+    <Text as="span" fontSize={fontSize} color={MUTED} _hover={{ textDecoration: 'underline', color: INK }}>
+      {timeAgo(createdAt)}
+    </Text>
+  </Link>
+);
 
 export const AuthorAvatar = (props: { author: FeedAuthor | null; size?: string; fontSize?: string }) => {
   const { author, size = '36px', fontSize = 'sm' } = props;
@@ -238,7 +252,7 @@ const ImageGrid = ({ images, alt }: { images: string[]; alt: string }) => {
   );
 };
 
-const ListingBlock = ({ post, hideImage }: { post: PublicPost; hideImage?: boolean }) => {
+const ListingBlock = ({ post, hideImage }: { post: Pick<PublicPost, 'images' | 'listing'>; hideImage?: boolean }) => {
   const listing = post.listing;
   if (!listing) return null;
 
@@ -293,8 +307,10 @@ const ListingBlock = ({ post, hideImage }: { post: PublicPost; hideImage?: boole
   );
 };
 
-// Body by post type — shared between the main card and nested shares.
-const PostBody = ({ post, compact }: { post: PublicPost; compact?: boolean }) => (
+// Body by post type — shared between the main card, nested shares, and
+// comment rows (comments share the post schema, so PostComment fits too).
+type PostBodyShape = Pick<PublicPost, 'type' | 'text' | 'images' | 'listing' | 'thing'>;
+const PostBody = ({ post, compact }: { post: PostBodyShape; compact?: boolean }) => (
   <Flex flexDirection="column" rowGap={compact ? 2 : 3}>
     {post.text && (
       <Text fontSize={compact ? 'sm' : 'md'} color={TEXT} whiteSpace="normal">
@@ -325,25 +341,179 @@ const SharedPostCard = ({ post }: { post: PublicPost }) => (
         {authorName(post.author)}
       </Text>
       <Text fontSize="xs" color={MUTED} flexShrink={0}>
-        · {timeAgo(post.createdAt)}
+        ·
       </Text>
+      <Box flexShrink={0}>
+        <TimestampLink id={post.id} createdAt={post.createdAt} />
+      </Box>
     </Flex>
     <PostBody post={post} compact />
   </Box>
 );
 
-// memoised: engagement telemetry re-renders the feed page frequently, and an
-// unchanged post reference should never re-render its card
-export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
-  const { post, onChanged, onEngagement } = props;
+// The quick-reaction strip inside the picker popover — the standard emojis
+// plus a ＋ opening the full custom picker (when the host provides one).
+const QuickReactionRow = (props: {
+  viewerSet: Set<string>;
+  onPick: (emoji: string) => void;
+  onMore?: () => void;
+}) => {
+  const { viewerSet, onPick, onMore } = props;
+  return (
+    <Flex columnGap={0.5} padding={1.5} alignItems="center">
+      {REACTION_EMOJIS.map((emoji) => (
+        <Center
+          key={emoji}
+          as="button"
+          type="button"
+          width="34px"
+          height="34px"
+          fontSize="lg"
+          borderRadius="999px"
+          background={viewerSet.has(emoji) ? 'var(--tt-surface-hover, #ececee)' : 'transparent'}
+          boxShadow={viewerSet.has(emoji) ? 'inset 0 0 0 1.5px var(--tt-accent, #7c5cff)' : 'none'}
+          _hover={{ background: 'var(--tt-surface-hover, #ececee)', transform: 'scale(1.2)' }}
+          transition="transform 0.12s ease-out"
+          aria-label={`React ${emoji}`}
+          onClick={() => onPick(emoji)}
+        >
+          {emoji}
+        </Center>
+      ))}
+      {onMore && (
+        <Center
+          as="button"
+          type="button"
+          width="34px"
+          height="34px"
+          borderRadius="999px"
+          color={MUTED}
+          background="var(--tt-surface-alt, #f5f5f7)"
+          _hover={{ background: 'var(--tt-surface-hover, #ececee)', color: INK, transform: 'scale(1.2)' }}
+          transition="transform 0.12s ease-out"
+          aria-label="Choose a custom emoji"
+          title="Choose a custom emoji"
+          onClick={onMore}
+        >
+          <Plus size={16} strokeWidth={2.4} />
+        </Center>
+      )}
+    </Flex>
+  );
+};
+
+// A comment row — comments share the post schema, so each row is reactable
+// (tap to 👍, hold/hover for the picker), renders rich post bodies, and links
+// to its own /post/:id page (also where its replies live).
+const CommentRow = (props: {
+  comment: PostComment;
+  onChanged: (next: PostComment) => void;
+  onEngagement?: (event: EngagementEvent) => void;
+}) => {
+  const { comment, onChanged, onEngagement } = props;
 
   const api = useApi();
   const user = useCurrentUser();
   const lopu = useLopu();
 
-  const [commentsOpen, setCommentsOpen] = React.useState(false);
+  const viewerSet = new Set(comment.viewerReactions || []);
+  const reactionEntries = Object.entries(comment.reactionCounts || {})
+    .filter(([, count]) => count > 0)
+    .sort((a, b) => b[1] - a[1]);
+  const reactionTotal = reactionEntries.reduce((sum, [, count]) => sum + count, 0);
+  const topEmojis = reactionEntries
+    .slice(0, 3)
+    .map(([token]) => truncateToken(token).text)
+    .join('');
+
+  const handleReact = async (rawToken: string) => {
+    if (!user) {
+      lopu({ title: 'Log in to react 🗝️', status: 'info', duration: 6000 });
+      return;
+    }
+    const token = sanitizeReactionToken(rawToken);
+    if (!token) return;
+    try {
+      const resp = await api.v1.things.react({ id: comment.id, emoji: token });
+      onChanged({ ...comment, reactionCounts: resp.reactionCounts, viewerReactions: resp.viewerReactions });
+      if (resp.viewerReactions?.includes(token)) onEngagement?.({ thingId: comment.id, signal: 'react' });
+    } catch (err: any) {
+      lopu({ title: err?.error || 'Reaction did not stick 😞', status: 'error' });
+    }
+  };
+
+  return (
+    <Flex columnGap={2} alignItems="flex-start">
+      <AuthorAvatar author={comment.author} size="22px" fontSize="10px" />
+      <Box flex="1" minWidth={0}>
+        <Box background="var(--tt-surface-alt, #f5f5f7)" borderRadius={RADIUS_MD} paddingX={3} paddingY={2}>
+          <Flex alignItems="baseline" columnGap={2}>
+            <Text fontSize="xs" fontWeight={700} color={INK} noOfLines={1}>
+              {authorName(comment.author)}
+            </Text>
+            <Box flexShrink={0}>
+              <TimestampLink id={comment.id} createdAt={comment.createdAt} fontSize="10px" />
+            </Box>
+          </Flex>
+          <PostBody post={comment} compact />
+        </Box>
+        <Flex alignItems="center" columnGap={2} paddingX={2} paddingTop={0.5} fontSize="11px" color={MUTED}>
+          <ReactionControl
+            enabled={!!user}
+            onQuickTap={() => handleReact('👍')}
+            content={(close) => (
+              <QuickReactionRow
+                viewerSet={viewerSet}
+                onPick={(emoji) => {
+                  close();
+                  handleReact(emoji);
+                }}
+              />
+            )}
+            trigger={
+              <Box
+                as="button"
+                type="button"
+                fontSize="11px"
+                fontWeight={viewerSet.size ? 700 : 600}
+                color={viewerSet.size ? INK : MUTED}
+                _hover={{ color: INK }}
+              >
+                {viewerSet.size ? [...viewerSet].slice(0, 3).join('') : '👍'} React
+              </Box>
+            }
+          />
+          {reactionTotal > 0 && (
+            <Text as="span" flexShrink={0} title="Reactions">
+              {topEmojis} {reactionTotal}
+            </Text>
+          )}
+          <Link to={`/post/${comment.id}`}>
+            <Text as="span" fontSize="11px" fontWeight={600} _hover={{ color: INK }}>
+              {comment.commentCount > 0
+                ? `${comment.commentCount} repl${comment.commentCount === 1 ? 'y' : 'ies'} 💬`
+                : 'Reply 💬'}
+            </Text>
+          </Link>
+        </Flex>
+      </Box>
+    </Flex>
+  );
+};
+
+// memoised: engagement telemetry re-renders the feed page frequently, and an
+// unchanged post reference should never re-render its card
+export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
+  const { post, onChanged, onEngagement, defaultCommentsOpen } = props;
+
+  const api = useApi();
+  const user = useCurrentUser();
+  const lopu = useLopu();
+
+  const [commentsOpen, setCommentsOpen] = React.useState(!!defaultCommentsOpen);
   const [commentText, setCommentText] = React.useState('');
   const [commenting, setCommenting] = React.useState(false);
+  const [richCommentOpen, setRichCommentOpen] = React.useState(false);
   const [shareOpen, setShareOpen] = React.useState(false);
   const [shareText, setShareText] = React.useState('');
   const [shareVisibility, setShareVisibility] = React.useState<PostVisibility>('public');
@@ -418,13 +588,33 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     setCommenting(true);
     try {
       const resp = await api.v1.things.comment({ id: post.id, text });
-      onChanged?.({ ...post, comments: [...post.comments, resp.comment], commentCount: resp.commentCount });
+      onChanged?.((prev) => ({ ...prev, comments: [...prev.comments, resp.comment], commentCount: resp.commentCount }));
       onEngagement?.({ thingId: post.id, signal: 'comment' });
       setCommentText('');
     } catch (err: any) {
       lopu({ title: err?.error || 'Comment did not send 😞', status: 'error' });
     }
     setCommenting(false);
+  };
+
+  // the rich composer posts through api.v1.things.comment itself and hands
+  // back the created comment (post-shaped — comments share the post schema)
+  const handleRichCommented = (comment: PostComment) => {
+    onChanged?.((prev) => ({
+      ...prev,
+      comments: [...prev.comments, comment],
+      commentCount: prev.commentCount + 1
+    }));
+    onEngagement?.({ thingId: post.id, signal: 'comment' });
+    setRichCommentOpen(false);
+  };
+
+  // a comment changed (reaction toggled) — swap it inside the freshest post
+  const handleCommentChanged = (next: PostComment) => {
+    onChanged?.((prev) => ({
+      ...prev,
+      comments: prev.comments.map((comment) => (comment.id === next.id ? next : comment))
+    }));
   };
 
   const handleShareClick = () => {
@@ -467,13 +657,13 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
   };
 
   const reactionPreview = summarizeReactions(viewerReactions, post.reactionCounts || {});
+  // tap/click, touch-and-hold, and hover are handled by ReactionControl
   const reactButton = (
     <Button
       {...actionButtonStyles}
       minWidth={0}
       color={viewerReactions.length ? INK : MUTED}
       fontWeight={viewerReactions.length ? 700 : 600}
-      onClick={() => handleReact('👍')}
     >
       <Flex
         as="span"
@@ -535,8 +725,8 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
               )}
               <Text as="span" fontSize="xs" color={MUTED}>
                 {post.author?.username ? `@${post.author.username} · ` : ''}
-                {timeAgo(post.createdAt)}
               </Text>
+              <TimestampLink id={post.id} createdAt={post.createdAt} />
               <Tooltip label={`${circle.label} — ${circle.hint}`} fontSize="xs" borderRadius="8px" hasArrow>
                 <Text as="span" fontSize="xs" cursor="default">
                   {circle.emoji}
@@ -643,57 +833,26 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
         {/* action row */}
         <Flex borderTop={BORDER} paddingTop={2} columnGap={1}>
           {user ? (
-            <Box position="relative">
-              {/* hover: quick reactions + a ＋ that opens the full picker */}
-              <Popover trigger="hover" placement="top" openDelay={150} isLazy>
-                <PopoverTrigger>{reactButton}</PopoverTrigger>
-                <PopoverContent
-                  width="auto"
-                  border={BORDER}
-                  borderRadius="999px"
-                  boxShadow="var(--tt-shadow-panel, 0px 18px 60px rgba(0, 0, 0, 0.22))"
-                  zIndex={10}
-                  _focusVisible={{ outline: 'none' }}
-                >
-                  <Flex columnGap={0.5} padding={1.5} alignItems="center">
-                    {REACTION_EMOJIS.map((emoji) => (
-                      <Center
-                        key={emoji}
-                        as="button"
-                        type="button"
-                        width="34px"
-                        height="34px"
-                        fontSize="lg"
-                        borderRadius="999px"
-                        background={viewerSet.has(emoji) ? 'var(--tt-surface-hover, #ececee)' : 'transparent'}
-                        boxShadow={viewerSet.has(emoji) ? 'inset 0 0 0 1.5px var(--tt-accent, #7c5cff)' : 'none'}
-                        _hover={{ background: 'var(--tt-surface-hover, #ececee)', transform: 'scale(1.2)' }}
-                        transition="transform 0.12s ease-out"
-                        aria-label={`React ${emoji}`}
-                        onClick={() => handleReact(emoji)}
-                      >
-                        {emoji}
-                      </Center>
-                    ))}
-                    <Center
-                      as="button"
-                      type="button"
-                      width="34px"
-                      height="34px"
-                      borderRadius="999px"
-                      color={MUTED}
-                      background="var(--tt-surface-alt, #f5f5f7)"
-                      _hover={{ background: 'var(--tt-surface-hover, #ececee)', color: INK, transform: 'scale(1.2)' }}
-                      transition="transform 0.12s ease-out"
-                      aria-label="Choose a custom emoji"
-                      title="Choose a custom emoji"
-                      onClick={() => setPickerOpen(true)}
-                    >
-                      <Plus size={16} strokeWidth={2.4} />
-                    </Center>
-                  </Flex>
-                </PopoverContent>
-              </Popover>
+            <Box position="relative" display="flex" flex="1">
+              {/* hover OR touch-and-hold: quick reactions + a ＋ that opens the
+              full picker; a plain tap/click quick-reacts 👍 */}
+              <ReactionControl
+                trigger={reactButton}
+                onQuickTap={() => handleReact('👍')}
+                content={(close) => (
+                  <QuickReactionRow
+                    viewerSet={viewerSet}
+                    onPick={(emoji) => {
+                      close();
+                      handleReact(emoji);
+                    }}
+                    onMore={() => {
+                      close();
+                      setPickerOpen(true);
+                    }}
+                  />
+                )}
+              />
 
               {/* click: the full native-emoji picker (multi-select), anchored here */}
               <Popover
@@ -725,7 +884,12 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
               </Popover>
             </Box>
           ) : (
-            reactButton
+            <ReactionControl
+              enabled={false}
+              trigger={reactButton}
+              onQuickTap={() => handleReact('👍')}
+              content={() => null}
+            />
           )}
 
           <Button {...actionButtonStyles} onClick={toggleComments}>
@@ -813,56 +977,49 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
             )}
 
             {post.comments.map((comment) => (
-              <Flex key={comment.id} columnGap={2} alignItems="flex-start">
-                <AuthorAvatar author={comment.author} size="22px" fontSize="10px" />
-                <Box
-                  flex="1"
-                  minWidth={0}
-                  background="var(--tt-surface-alt, #f5f5f7)"
-                  borderRadius={RADIUS_MD}
-                  paddingX={3}
-                  paddingY={2}
-                >
-                  <Flex alignItems="baseline" columnGap={2}>
-                    <Text fontSize="xs" fontWeight={700} color={INK} noOfLines={1}>
-                      {authorName(comment.author)}
-                    </Text>
-                    <Text fontSize="10px" color={MUTED} flexShrink={0}>
-                      {timeAgo(comment.createdAt)}
-                    </Text>
-                  </Flex>
-                  <Text fontSize="sm" color={TEXT} whiteSpace="normal">
-                    {comment.text}
-                  </Text>
-                </Box>
-              </Flex>
+              <CommentRow key={comment.id} comment={comment} onChanged={handleCommentChanged} onEngagement={onEngagement} />
             ))}
 
             {user ? (
-              <Flex columnGap={2}>
-                <Input
-                  size="sm"
-                  borderRadius="999px"
-                  placeholder="Write a comment… 💬"
-                  value={commentText}
-                  onChange={(event) => setCommentText(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' && !event.shiftKey) {
-                      event.preventDefault();
-                      submitComment();
-                    }
-                  }}
-                />
-                <IconButton
-                  aria-label="Send comment"
-                  icon={<Send size={14} />}
-                  size="sm"
-                  variant="outline"
-                  borderRadius="999px"
-                  isLoading={commenting}
-                  isDisabled={!commentText.trim()}
-                  onClick={submitComment}
-                />
+              <Flex flexDirection="column" rowGap={2}>
+                <Flex columnGap={2}>
+                  <Input
+                    size="sm"
+                    borderRadius="999px"
+                    placeholder="Write a comment… 💬"
+                    value={commentText}
+                    onChange={(event) => setCommentText(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' && !event.shiftKey) {
+                        event.preventDefault();
+                        submitComment();
+                      }
+                    }}
+                  />
+                  <Tooltip label="Comment with photos, a listing, a thing & more" fontSize="xs" borderRadius="8px" hasArrow>
+                    <IconButton
+                      aria-label="Open full comment composer"
+                      icon={<Maximize2 size={14} />}
+                      size="sm"
+                      variant={richCommentOpen ? 'solid' : 'outline'}
+                      borderRadius="999px"
+                      onClick={() => setRichCommentOpen((open) => !open)}
+                    />
+                  </Tooltip>
+                  <IconButton
+                    aria-label="Send comment"
+                    icon={<Send size={14} />}
+                    size="sm"
+                    variant="outline"
+                    borderRadius="999px"
+                    isLoading={commenting}
+                    isDisabled={!commentText.trim()}
+                    onClick={submitComment}
+                  />
+                </Flex>
+                {richCommentOpen && (
+                  <PostComposer parentId={post.id} onPosted={handleRichCommented as any} onClose={() => setRichCommentOpen(false)} />
+                )}
               </Flex>
             ) : (
               <Text fontSize="xs" color={MUTED}>
