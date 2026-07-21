@@ -6,6 +6,8 @@ import { fileURLToPath, URL } from 'node:url';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
+import { devCsp } from './scripts/csp.mjs';
+
 const designDocsBase = '/docs/design-bundles';
 const designDocsDir = fileURLToPath(new URL('../docs/design', import.meta.url));
 const thingtimeProductionOrigin = 'https://thingtime.com';
@@ -146,6 +148,12 @@ export default defineConfig({
     host: '127.0.0.1',
     port: devPorts.web,
     strictPort: true,
+    // Same CSP as production (scripts/csp.mjs) with dev-only allowances
+    // (react-refresh inline preamble, HMR websocket) — and still no
+    // 'unsafe-eval', so eval regressions surface in dev too.
+    headers: {
+      'Content-Security-Policy': devCsp
+    },
     allowedHosts: ['lopus-macbook-pro-2.tail9606f9.ts.net'],
     hmr: {
       port: devPorts.hmr

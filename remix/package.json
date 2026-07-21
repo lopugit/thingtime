@@ -23,7 +23,8 @@
     "test:editorjs": "node --test app/components/Editor/*.test.ts app/components/Kinds/*.test.ts",
     "test:quota": "node --test app/api/utils/things/quotaCore.test.ts",
     "test:schemas": "node --test app/schemas/*.test.ts",
-    "verify:vercel-output": "node scripts/verify-vercel-output.mjs"
+    "verify:vercel-output": "node scripts/verify-vercel-output.mjs",
+    "test:persist": "node --test app/Providers/thingtimePersistCodec.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.105.0",

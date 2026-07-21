@@ -2,6 +2,8 @@
 
 import { readFileSync } from 'node:fs';
 
+import { authorizeCsp, prodCsp } from './csp.mjs';
+
 const readJson = (path) => JSON.parse(readFileSync(path, 'utf8'));
 const indexHtml = readFileSync('.vercel/output/static/index.html', 'utf8');
 const config = readJson('.vercel/output/config.json');
@@ -58,7 +60,7 @@ const authorizeHeadersIndex = routes.findIndex(
     typeof route.src === 'string' &&
     route.src.includes('/authorize') &&
     route.headers?.['X-Frame-Options'] === 'DENY' &&
-    route.headers?.['Content-Security-Policy'] === "frame-ancestors 'none'"
+    route.headers?.['Content-Security-Policy'] === authorizeCsp
 );
 if (authorizeHeadersIndex === -1) {
   throw new Error('Vercel output config does not frame-deny the /authorize consent page.');
@@ -67,4 +69,29 @@ if (authorizeHeadersIndex > spaIndex) {
   throw new Error('Vercel output stamps /authorize frame-deny headers after the SPA fallback.');
 }
 
-console.log('[verify] Vercel output includes the Vite shell, filesystem route, SPA fallback, and /authorize frame-deny.');
+const cspHeadersIndex = routes.findIndex(
+  (route) =>
+    route.continue === true &&
+    route.src === '/(?:.*)' &&
+    route.headers?.['Content-Security-Policy'] === prodCsp
+);
+if (cspHeadersIndex === -1) {
+  throw new Error('Vercel output config does not stamp the global Content-Security-Policy.');
+}
+if (cspHeadersIndex > spaIndex) {
+  throw new Error('Vercel output stamps the global CSP after the SPA fallback.');
+}
+if (cspHeadersIndex > authorizeHeadersIndex) {
+  throw new Error('Vercel output stamps the global CSP after the /authorize override, so /authorize would lose frame-ancestors.');
+}
+for (const route of routes) {
+  const csp = route.headers?.['Content-Security-Policy'];
+  if (typeof csp === 'string' && csp.includes('unsafe-eval')) {
+    throw new Error(`Vercel output CSP re-introduces 'unsafe-eval' (route ${route.src}).`);
+  }
+}
+if (!authorizeCsp.includes("frame-ancestors 'none'")) {
+  throw new Error("/authorize CSP lost frame-ancestors 'none'.");
+}
+
+console.log('[verify] Vercel output includes the Vite shell, filesystem route, SPA fallback, global CSP (no unsafe-eval), and /authorize frame-deny.');
