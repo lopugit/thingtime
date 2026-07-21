@@ -6,12 +6,11 @@
 
    The current PR fix keeps Emotion SSR styles in the React document tree and removes the visible unstyled-content jump. Remaining work: make local Vite dev-mode `hydrateRoot(document, ...)` pass without React document mismatch warnings/errors, then verify the same flow in production build/serve.
 
-2. **Tighten verification-link origin trust.**
-
-   Email verification links are still built from the request origin. Move them
-   to a canonical `APP_URL` or explicit host allowlist before relying on real
-   email delivery, so unexpected or spoofed hosts cannot generate verification
-   URLs on the wrong origin.
+2. **Tighten verification-link origin trust.** ✅ Shipped (verified on main
+   2026-07-21): `remix/app/api/utils/auth/appOrigin.ts` `resolveTrustedOrigin`
+   prefers the server-configured `APP_URL` and only falls back to the request
+   origin when `APP_URL` is unset (local dev/preview). Remaining ops step:
+   set `APP_URL` in production/preview deployment envs.
 
 3. **Remove legacy HS256 JWT fallback after ES256 migration.**
 
@@ -55,6 +54,13 @@ readers, 3 finder tracks each adversarially verified, 3 idea lenses). Every item
 below was confirmed by reading the cited code — file/line refs are load-bearing._
 
 7. **🔒 URGENT SECURITY: lock down the unauthenticated admin/data endpoints.**
+
+   > ✅ **Status update (verified on main 2026-07-21):** A1 and A2 are fixed.
+   > `raw-results` (`_raw-results.tsx`) now requires admin (`requireAdmin`) +
+   > fail-closed rate limiting and only executes bounded read-only queries via
+   > `runMongoQuery`; `populate` (`_populate.tsx`) is admin-only + fail-closed
+   > rate-limited. A3 (service-account minting) hardening is in flight in
+   > PRs #100/#103. Do not re-claim A1/A2.
 
    Three live, prod-registered endpoints have **no auth, no rate limit, no env
    gate**:
@@ -150,6 +156,11 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     reports `'Z'`, making the redo branch at L101 unreachable in most browsers).
 
 14. **🧹 Remove render-time debug leaks in the hot path.**
+
+    > ✅ Mostly fixed (verified on main 2026-07-21): the unbounded
+    > `window.useThingtimeScope` per-render array push is gone from
+    > `useThingtime.tsx`. Small remainder: `ThingtimeURL.tsx` still has 4
+    > render-path `console.log`s (dev-gate or remove).
 
     `useThingtime.tsx` (L33–39, L46–57) pushes `{uuid, value, timestamp}` into an
     unbounded per-instance array on `window.useThingtimeScope` on **every render**

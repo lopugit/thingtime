@@ -17,6 +17,12 @@ second one (single source of truth).
 
 ## A. Unauthenticated admin / data endpoints (highest priority)
 
+> ✅ **A1 + A2 shipped (verified on main 2026-07-21):** both routes now call
+> `requireAdmin` (401/403) and `enforceRateLimit(..., { failClosed: true })`;
+> `raw-results` additionally runs only bounded read-only queries through
+> `runMongoQuery` (no raw `find().toArray()` dump). A3 is being hardened in
+> PRs #100/#103 — check those before claiming.
+
 Three endpoints are registered in the **production** Nitro dispatcher
 (`remix/server/routes/api/[...].ts` L32–33) with no `getCurrentUser` check, no
 rate limit, and no `NODE_ENV` gate.
