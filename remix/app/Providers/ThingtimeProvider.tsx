@@ -12,6 +12,8 @@ import { safeJoin } from '~/utils';
 import { createLatestRevisionAutosave } from './latestRevisionAutosave';
 import type { LatestRevisionAutosaveCoordinator } from './latestRevisionAutosave';
 import { drainThingtimeMutationQueue } from './thingtimeMutationQueue';
+import { createThingtimeCrossTabSync } from './thingtimeCrossTabSync';
+import type { ThingtimeCrossTabSync } from './thingtimeCrossTabSync';
 export interface ThingtimeTypes {
 	thingtime: any;
 	set: any;
@@ -164,6 +166,18 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 		});
 	}
 
+	// Cross-tab identity + channel. The id only has to differ between tabs, so a
+	// per-provider-instance random id is enough; the channel itself is created in
+	// an effect (client-only) and stays behind a ref so setThingtime can publish.
+	const crossTabIdRef = React.useRef<string>('');
+	if (!crossTabIdRef.current) {
+		crossTabIdRef.current =
+			typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+				? crypto.randomUUID()
+				: `tt-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+	}
+	const crossTabSyncRef = React.useRef<ThingtimeCrossTabSync | null>(null);
+
 	const [loading, setLoading] = React.useState(true);
 
 	const [events] = React.useState(() => new Subject());
@@ -201,6 +215,8 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 	type SetThingtimeOptions = {
 		ignoreUndoRedo?: boolean;
 		namespace?: string;
+		/** Internal: the write arrived from another tab — apply it, never re-publish it. */
+		fromCrossTab?: boolean;
 	};
 
 	interface SetThingtimeProps {
@@ -347,7 +363,14 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 				namespace: 'default'
 			}
 		) => {
-			setThingtimeQueueRef.current.push({ path, value, options, timestamp: Date.now() });
+			const timestamp = Date.now();
+			setThingtimeQueueRef.current.push({ path, value, options, timestamp });
+			// Writes that arrived from another tab are applied only; everything else
+			// is published so open tabs converge instead of clobbering each other on
+			// their next full-tree persist.
+			if (!options?.fromCrossTab) {
+				crossTabSyncRef.current?.publish(path, value, timestamp);
+			}
 			if (setThingtimeFlushScheduledRef.current) return;
 			setThingtimeFlushScheduledRef.current = true;
 			queueMicrotask(flushSetThingtimeQueue);
@@ -497,6 +520,39 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 
 		// not sure why this used to have @undoRedoEventKeyShortcutEventListener here.. ?
 	}, [setThingtime, events, getThingtime, loading, thingtimeState, setThingtimeObjectWrapper]);
+
+	// Cross-tab live sync: publish local writes, apply remote ones through the
+	// same queued write path. Remote writes use ignoreUndoRedo so undo/redo
+	// timelines stay per-tab, and fromCrossTab so they are never re-published
+	// (no echo loops).
+	React.useEffect(() => {
+		const sync = createThingtimeCrossTabSync({
+			tabId: crossTabIdRef.current,
+			encode: (value) => {
+				const encoded = stringify({ v: value });
+				if (!encoded) throw new Error('Thingtime cross-tab sync could not serialize the value');
+				return encoded;
+			},
+			decode: (encoded) => {
+				const parsed = parse(encoded);
+				if (!parsed || typeof parsed !== 'object') {
+					throw new Error('Thingtime cross-tab sync could not decode the payload');
+				}
+				return parsed.v;
+			},
+			onRemoteWrite: (path, value) => {
+				setThingtime(path as PathArray, value, { ignoreUndoRedo: true, fromCrossTab: true });
+			},
+			onError: (error, context) => {
+				console.error(`[tt] Thingtime cross-tab sync ${context.phase} failed`, error);
+			}
+		});
+		crossTabSyncRef.current = sync;
+		return () => {
+			crossTabSyncRef.current = null;
+			sync.close();
+		};
+	}, [setThingtime]);
 
 	React.useEffect(() => {
 		const persistence = persistenceRef.current;

@@ -1,5 +1,12 @@
 # 07 — Cross-tab sync for persisted thingtime state
 
+> **Status 2026-07-21:** Built. `BroadcastChannel('thingtime')` live sync via
+> `remix/app/Providers/thingtimeCrossTabSync.ts`, wired into
+> `ThingtimeProvider` (`setThingtime` publishes, remote writes apply through
+> the same queue with `ignoreUndoRedo` + `fromCrossTab`). Unit-tested in
+> `thingtimeCrossTabSync.test.ts` (`npm run test:autosave` picks it up).
+> The optional cold-tab revision-counter hardening (Plan step 5) remains open.
+
 ## What it's for
 
 Two open tabs on the same origin should share one live thingtime state instead

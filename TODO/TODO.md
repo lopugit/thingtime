@@ -33,7 +33,10 @@
    failed events, persist the latest project status server-side, and have the
    footer/dashboard read the cached status instead of polling Vercel directly.
 
-6. **Add cross-tab sync for persisted thingtime state.**
+6. **Add cross-tab sync for persisted thingtime state.** ✅ Built 2026-07-21:
+   `BroadcastChannel('thingtime')` live sync (`thingtimeCrossTabSync.ts` +
+   `ThingtimeProvider` wiring), unit-tested and verified live in two tabs.
+   Optional cold-tab revision-counter hardening remains open (spec step 5).
 
    `ThingtimeProvider` (`remix/app/Providers/ThingtimeProvider.tsx`, persist
    effect around lines 420–450) persists the ENTIRE thingtime object to
