@@ -31,9 +31,21 @@ export const ThingtimeContext = createContext<EverythingTypes | null>(null);
 
 // wrap flatted parse and stringify with a function reviver and replacer
 
+// exact Date.prototype.toISOString() shape — anything looser (e.g. "2024",
+// "Post 1", "March 2024") passes lenient Date.parse and must stay a string
+const isoDatePattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+
 const reviver = (key: string, value: any) => {
-	// if value is a Date, return it as a Date object
-	if (typeof value === 'string' && !isNaN(Date.parse(value))) {
+	// if value is a tagged Date, return it as a Date object
+	if (value?.ttype === 'date') {
+		if (typeof value.iso === 'string' && isoDatePattern.test(value.iso)) {
+			return new Date(value.iso);
+		}
+		return value?.iso ?? value;
+	}
+
+	// legacy persisted Dates were stored as bare toISOString() strings
+	if (typeof value === 'string' && isoDatePattern.test(value)) {
 		return new Date(value);
 	}
 
@@ -72,10 +84,18 @@ const reviver = (key: string, value: any) => {
 	return value;
 };
 
-const replacer = (key: string, value: any) => {
-	// if value is a Date, return it as a string
-	if (value instanceof Date) {
-		return value.toISOString();
+const replacer = function (this: any, key: string, value: any) {
+	// flatted (like JSON.stringify) applies Date.prototype.toJSON before the
+	// replacer runs, so `value` is already a string here — check the raw
+	// value on the holder object instead
+	const raw = this?.[key];
+
+	// if the raw value is a Date, return it as an object with ttype and iso properties
+	if (raw instanceof Date) {
+		return {
+			ttype: 'date',
+			iso: raw.toISOString()
+		};
 	}
 
 	// if value is a function, return it as an object with ttype and code properties

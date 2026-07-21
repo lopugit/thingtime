@@ -95,6 +95,16 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
 
 9. **🐛 DATA CORRUPTION: the persist reviver turns ordinary strings into Dates.**
 
+   ✅ **Fixed 2026-07-21** (`claude/persist-reviver-strict-date`): Dates now
+   persist as tagged `{ttype:'date', iso}` objects (mirroring the
+   `ttype:'function'` scheme; tagged via the replacer holder because flatted
+   applies `Date.prototype.toJSON` before the replacer runs), and the reviver
+   only revives tagged values plus bare strings matching the exact
+   `toISOString()` shape for backward compat with previously persisted state.
+   Ordinary strings like `"Post 1"`, `"2024"`, `"March 2024"` stay strings —
+   verified live via flatted round-trips in the running app and a planted
+   marker surviving a persist→reload→re-persist cycle.
+
    `ThingtimeProvider` (`remix/app/Providers/ThingtimeProvider.tsx` L30–34, used
    at L89 / L379–382) revives **any** string that passes V8's lenient
    `Date.parse` into a `Date` when rehydrating from localforage. Everyday values
