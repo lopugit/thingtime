@@ -69,7 +69,11 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // request — a resource-amplification + mailbox-spam vector if unbounded, and
   // the only auth endpoint that was still unthrottled. Anonymous, keyed by IP;
   // generous enough for legit retries (and shared NAT), admin-tunable.
-  'auth.register': { limit: 10, windowMs: 10 * 60_000, enabled: true }
+  'auth.register': { limit: 10, windowMs: 10 * 60_000, enabled: true },
+  // token introspection (/api/v1/auth/introspect) — an unauthenticated live-DB
+  // lookup external integrations may call per request; bounded per IP like the
+  // other public reads so it can't be hammered
+  'auth.introspect': { limit: 300, windowMs: 60_000, enabled: true }
 };
 
 export const RATE_LIMIT_ENDPOINTS = Object.keys(RATE_LIMIT_DEFAULTS);

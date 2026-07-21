@@ -88,7 +88,36 @@ const getLegacySecret = ({ allowDevFallback }: { allowDevFallback: boolean }) =>
 };
 
 export type JwtClaims = { sub: string; jti: string };
+// The full set of standard claims an external verifier / introspection caller
+// cares about, on top of the sub/jti we always require.
+export type VerifiedJwtClaims = JwtClaims & { iss?: string; exp?: number; iat?: number };
 export type PublicJwks = { keys: Array<Record<string, unknown>> };
+
+// Verify a token against the ES256 key, then the legacy HS256 secret, and
+// return the raw verified payload (or null). Shared by verifyJwt (mapped to
+// sub/jti) and verifyJwtClaims (the fuller introspection view) so both go
+// through exactly one verification path.
+const verifyToken = async (token: string): Promise<Record<string, any> | null> => {
+  const es256Key = getEs256VerifyKey();
+  if (es256Key) {
+    try {
+      const { payload } = await jwtVerify(token, await es256Key, { algorithms: ['ES256'] });
+      return payload as Record<string, any>;
+    } catch {
+      // Try the legacy HS256 verifier below for sessions minted before ES256.
+    }
+  }
+
+  const legacySecret = getLegacySecret({ allowDevFallback: process.env.NODE_ENV !== 'production' });
+  if (!legacySecret) return null;
+
+  try {
+    const { payload } = await jwtVerify(token, legacySecret, { algorithms: ['HS256'] });
+    return payload as Record<string, any>;
+  } catch {
+    return null;
+  }
+};
 
 // Sign a JWT carrying the user id (sub) + session id (jti) so the session can
 // be revoked server-side (see sessions.ts).
@@ -130,27 +159,24 @@ export const signJwt = async ({
 };
 
 export const verifyJwt = async (token: string): Promise<JwtClaims | null> => {
-  const es256Key = getEs256VerifyKey();
-  if (es256Key) {
-    try {
-      const { payload } = await jwtVerify(token, await es256Key, { algorithms: ['ES256'] });
-      if (!payload.sub || !payload.jti) return null;
-      return { sub: String(payload.sub), jti: String(payload.jti) };
-    } catch {
-      // Try the legacy HS256 verifier below for sessions minted before ES256.
-    }
-  }
+  const payload = await verifyToken(token);
+  if (!payload?.sub || !payload?.jti) return null;
+  return { sub: String(payload.sub), jti: String(payload.jti) };
+};
 
-  const legacySecret = getLegacySecret({ allowDevFallback: process.env.NODE_ENV !== 'production' });
-  if (!legacySecret) return null;
-
-  try {
-    const { payload } = await jwtVerify(token, legacySecret, { algorithms: ['HS256'] });
-    if (!payload.sub || !payload.jti) return null;
-    return { sub: String(payload.sub), jti: String(payload.jti) };
-  } catch {
-    return null;
-  }
+// Like verifyJwt but also surfaces iss/exp/iat for RFC 7662-style introspection.
+// Signature + expiry are enforced by jwtVerify; revocation is a separate live
+// check against the sessions collection (see auth/introspect.ts).
+export const verifyJwtClaims = async (token: string): Promise<VerifiedJwtClaims | null> => {
+  const payload = await verifyToken(token);
+  if (!payload?.sub || !payload?.jti) return null;
+  return {
+    sub: String(payload.sub),
+    jti: String(payload.jti),
+    iss: payload.iss !== undefined ? String(payload.iss) : undefined,
+    exp: typeof payload.exp === 'number' ? payload.exp : undefined,
+    iat: typeof payload.iat === 'number' ? payload.iat : undefined
+  };
 };
 
 export const getPublicJwks = async (): Promise<PublicJwks> => {

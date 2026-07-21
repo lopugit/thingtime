@@ -335,6 +335,62 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'auth-introspect',
+    group: 'auth',
+    title: 'Token introspection',
+    endpoint: '/api/v1/auth/introspect',
+    summary: 'Report the LIVE status of a Thingtime bearer token, including server-side revocation.',
+    detail:
+      'JWKS lets you verify a token’s signature/issuer/expiry offline, but offline verification cannot see a logout or a deleted session. POST a token here to get its live status: the route re-checks the Mongo session the token’s jti points at. Returns the standard { active } introspection shape and never returns user PII.',
+    auth: {
+      mode: 'none',
+      description: 'Public. Provide the token to introspect in the body or as an Authorization: Bearer header — never the caller’s own cookie. Bounded per IP.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST { token } (or send Authorization: Bearer <jwt>) with the token you want to check.',
+      'Read active: true → the token’s signature and expiry are valid AND its session is live (not revoked/expired).',
+      'active: false → treat the token as unusable (bad signature, expired, revoked, or an app-scoped grant).',
+      'Do not cache the result — the endpoint returns Cache-Control: no-store so revocation is seen promptly.'
+    ],
+    requestExamples: [
+      {
+        name: 'Introspect a token',
+        description: 'Check whether a bearer token is still live.',
+        method: 'POST',
+        body: { token: '<thingtime-jwt>' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Token is valid and its session is live.',
+        headers: { 'Cache-Control': 'no-store' },
+        body: {
+          active: true,
+          sub: '64f000000000000000000001',
+          jti: '2f1c9b4e-0000-0000-0000-000000000000',
+          iss: 'https://thingtime.com',
+          token_type: 'Bearer',
+          purpose: 'browser',
+          exp: 1924905600,
+          iat: 1722297600
+        }
+      },
+      {
+        status: 200,
+        description: 'Token is missing, malformed, expired, or its session was revoked.',
+        headers: { 'Cache-Control': 'no-store' },
+        body: { active: false }
+      },
+      {
+        status: 429,
+        description: 'Per-IP introspection window exhausted.',
+        body: { ok: false, error: 'Too many introspection requests — try again soon 🌸' }
+      }
+    ]
+  }),
+  endpoint({
     id: 'auth-jwks',
     group: 'auth',
     title: 'JWKS discovery',

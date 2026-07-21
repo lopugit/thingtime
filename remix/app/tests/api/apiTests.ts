@@ -367,6 +367,25 @@ export const apiTests: ApiTestDefinition[] = [
     expect: expectRedirectedTo('/login?verify=missing')
   },
   {
+    id: 'auth-introspect-invalid',
+    name: 'Introspect rejects a garbage token',
+    description: 'A malformed/unknown token is reported inactive (RFC 7662 { active:false }, not an HTTP error), or 429 when the per-IP window is exhausted.',
+    group: 'auth',
+    method: 'POST',
+    path: '/api/v1/auth/introspect',
+    body: { token: 'not.a.valid.jwt' },
+    // 200 → must be the introspection shape with active:false (never leaks user
+    // fields for a bad token); 429 → the rate-limit error shape.
+    expect: expectJson(
+      [200, 429],
+      (body, response) =>
+        response.status === 429
+          ? typeof body?.error === 'string'
+          : body?.active === false && body?.sub === undefined,
+      'Garbage token reported inactive (or rate-limited with an error shape).'
+    )
+  },
+  {
     id: 'auth-service-account-validation',
     name: 'Service account email validation',
     description: 'The service account endpoint is public but requires a valid email.',
