@@ -64,7 +64,11 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   'auth.resendVerification': { limit: 5, windowMs: 15 * 60_000, enabled: true },
   // login attempts (password step and OTP step share the endpoint): bounds
   // credential stuffing and OTP-email sends beyond the per-challenge attempt cap
-  'auth.login': { limit: 30, windowMs: 60_000, enabled: true }
+  'auth.login': { limit: 30, windowMs: 60_000, enabled: true },
+  // public signup: every call hashes a password and sends a verification email,
+  // so bound mass account creation + mail sends per IP. Seeding/fixtures call
+  // registerUser in-process, so this HTTP-route limit never throttles them.
+  'auth.register': { limit: 20, windowMs: 15 * 60_000, enabled: true }
 };
 
 export const RATE_LIMIT_ENDPOINTS = Object.keys(RATE_LIMIT_DEFAULTS);
