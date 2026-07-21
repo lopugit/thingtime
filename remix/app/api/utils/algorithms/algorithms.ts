@@ -398,7 +398,7 @@ export const trackEngagement = async (
   ownerId: string,
   activeAlgorithmId: string | null,
   input: { algorithmId?: unknown; events?: unknown }
-): Promise<Fail | { ok: true; trained: boolean; applied: number }> => {
+): Promise<Fail | { ok: true; trained: boolean; applied: number; eventCount?: number }> => {
   const events = sanitizeEvents(input.events);
   if (!events.length) {
     return fail(400, 'events are required');
@@ -414,7 +414,7 @@ export const trackEngagement = async (
 
   const features = await getPostFeatures(ownerId, events.map((event) => event.thingId));
   const trained = applyEventsToWeights(doc.weights || emptyWeights(), events, features);
-  if (!trained.applied) return { ok: true, trained: false, applied: 0 };
+  if (!trained.applied) return { ok: true, trained: false, applied: 0, eventCount: doc.eventCount || 0 };
 
   // training writes go to the store the doc lives in. weights is replaced as a
   // WHOLE object (one crystal.weights path, never per-key dotted paths) so tag
@@ -437,5 +437,7 @@ export const trackEngagement = async (
       } as any
     );
   }
-  return { ok: true, trained: true, applied: trained.applied };
+  // authoritative post-flush total so clients can detect growth-stage
+  // crossings (🥚→🐣→🐥→🧠) without double-counting session events
+  return { ok: true, trained: true, applied: trained.applied, eventCount: (doc.eventCount || 0) + trained.applied };
 };

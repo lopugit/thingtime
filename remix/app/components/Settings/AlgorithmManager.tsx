@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, Button, Flex, Input, Spinner, Text } from '@chakra-ui/react';
 
+import { growthStageFor } from '~/components/Feed/algorithmGrowth';
 import { POST_TYPE_META, PostType, PublicAlgorithm, timeAgo } from '~/components/Feed/feedTypes';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useApi } from '~/hooks/useApi';
@@ -244,6 +245,9 @@ export const AlgorithmManager = () => {
 
   const metaFor = (algorithm: PublicAlgorithm): string => {
     const parts: string[] = [];
+    // growth stage (🥚→🐣→🐥→🧠) leads the line — the label is the design
+    const stage = growthStageFor(algorithm.eventCount);
+    parts.push(`${stage.name} ${stage.emoji}`);
     parts.push(`${algorithm.eventCount} moment${algorithm.eventCount === 1 ? '' : 's'}`);
     parts.push(algorithm.lastTrainedAt ? trainedLabel(algorithm.lastTrainedAt) : 'untrained');
     const parent = algorithm.parentId

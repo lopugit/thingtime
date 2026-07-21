@@ -25,6 +25,7 @@ import {
   useIsMobileViewport
 } from '~/components/Nav/Drawer/useDrawer';
 import { RAINBOW } from '~/theme/rainbow';
+import { growthStageFor } from './algorithmGrowth';
 import type { EngagementEvent, PublicAlgorithm } from './feedTypes';
 
 // The feed's algorithm picker: "Latest" (pure chronological) plus every
@@ -301,6 +302,12 @@ export const AlgorithmMenu = (props: AlgorithmMenuProps) => {
 
   const buttonLabel = value === null ? '⏱️ Latest' : active ? `${active.emoji} ${active.name}` : '🧠 Algorithm';
 
+  // growth stage (🥚→🐣→🐥→🧠): server-counted signals + this session's
+  // not-yet-refetched events. The slight overlap after a flush lands before a
+  // list refetch can only ever nudge the total forward — stages are monotonic,
+  // so the dot never regresses mid-session.
+  const activeStage = active ? growthStageFor((active.eventCount || 0) + sessionEventCount) : null;
+
   const modalTitle =
     modalMode === 'branch'
       ? 'Branch algorithm 🌿'
@@ -337,8 +344,8 @@ export const AlgorithmMenu = (props: AlgorithmMenuProps) => {
                 width="6px"
                 height="6px"
                 borderRadius="999px"
-                background="var(--tt-rainbow-3, #58ca70)"
-                title="Learning as you scroll 🧠"
+                background={activeStage?.color || 'var(--tt-rainbow-3, #58ca70)'}
+                title={activeStage ? `${activeStage.name} ${activeStage.emoji} — ${activeStage.tip}` : 'Learning as you scroll 🧠'}
                 sx={{
                   animation: 'tt-training-pulse 1.6s ease-in-out infinite',
                   '@keyframes tt-training-pulse': {
@@ -368,8 +375,14 @@ export const AlgorithmMenu = (props: AlgorithmMenuProps) => {
                 <Box as="span" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
                   {algorithm.emoji} {algorithm.name}
                 </Box>
-                <Text as="span" fontSize="10px" color={MUTED} flexShrink={0}>
-                  · {algorithm.eventCount} events
+                <Text
+                  as="span"
+                  fontSize="10px"
+                  color={MUTED}
+                  flexShrink={0}
+                  title={growthStageFor(algorithm.eventCount).tip}
+                >
+                  · {algorithm.eventCount} events {growthStageFor(algorithm.eventCount).emoji}
                 </Text>
                 {value === algorithm.id && <Check size={13} style={{ marginLeft: 'auto', flexShrink: 0 }} />}
               </Flex>
