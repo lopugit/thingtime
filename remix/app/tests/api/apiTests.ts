@@ -158,6 +158,30 @@ export const apiTests: ApiTestDefinition[] = [
     expect: expectJson([200, 503], (body) => Array.isArray(body?.keys), 'JWKS body contains a keys array.')
   },
   {
+    id: 'auth-introspect-invalid',
+    name: 'Introspect invalid token',
+    description: 'Introspection reports active:false for a garbage token without leaking why.',
+    group: 'auth',
+    method: 'POST',
+    path: '/api/v1/auth/introspect',
+    body: { token: 'not-a-real-jwt' },
+    expect: expectJson(
+      [200],
+      (body) => body?.ok === true && body?.active === false && body?.sub === undefined,
+      'Invalid token resolved as inactive with no identity fields.'
+    )
+  },
+  {
+    id: 'auth-introspect-validation',
+    name: 'Introspect requires a token',
+    description: 'Introspection fails validation when no token is supplied.',
+    group: 'auth',
+    method: 'POST',
+    path: '/api/v1/auth/introspect',
+    body: {},
+    expect: expectJson([400], (body) => body?.ok === false && Boolean(body?.error), 'Missing token returned validation error.')
+  },
+  {
     id: 'auth-me-anonymous',
     name: 'Current user anonymous',
     description: 'Anonymous requests resolve to a null current user.',

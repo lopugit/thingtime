@@ -374,6 +374,46 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'auth-introspect',
+    group: 'auth',
+    title: 'Token introspection',
+    endpoint: '/api/v1/auth/introspect',
+    summary: 'Reports whether a bearer token is still live (not revoked) in MongoDB — the online half of JWKS.',
+    detail:
+      'JWKS lets external platforms verify a token signature, issuer, and expiry offline. Introspection adds live revocation status: it re-verifies the token, then checks the backing session in MongoDB, so a token whose session was logged out or revoked reports active: false even though its signature is still valid. App-scoped "Login with Thingtime" tokens report purpose: "app" with their client_id; full account sessions report purpose: "session" with the username. Every invalid, expired, or revoked token returns the same { active: false } so the endpoint never reveals why a token stopped working.',
+    auth: {
+      mode: 'none',
+      description: 'Anonymous like JWKS, but rate limited per IP. Send the token to check in the JSON body, not a cookie.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST { "token": "<jwt>" } with the token you want to check.',
+      'Read active: true and honor the returned purpose (session or app) and identity fields.',
+      'Treat active: false as "do not accept" without inferring the reason.',
+      'Poll no faster than your integration needs — the endpoint is rate limited per IP.'
+    ],
+    requestExamples: [
+      {
+        name: 'Introspect a token',
+        description: 'Check whether a bearer token is still live.',
+        method: 'POST',
+        body: { token: '<jwt>' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Token is live and belongs to a full account session.',
+        body: { ok: true, active: true, sub: 'user-id', jti: 'session-jti', purpose: 'session', username: 'ada' }
+      },
+      {
+        status: 200,
+        description: 'Token was revoked, expired, or never valid.',
+        body: { ok: true, active: false }
+      }
+    ]
+  }),
+  endpoint({
     id: 'auth-logout',
     group: 'auth',
     title: 'Logout',

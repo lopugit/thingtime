@@ -19,11 +19,17 @@
    ES256 signing shipped. After the 30-day auth cookie window, remove the
    fallback verifier and the legacy secret from deployment environments.
 
-4. **Add revocation-aware token introspection for external platforms.**
+4. **✅ FIXED — Add revocation-aware token introspection for external platforms.**
 
-   `/api/v1/auth/jwks` lets third parties verify token signature, issuer, and
-   expiry offline. If an external integration needs live session revocation
-   status, add a server-side introspection endpoint that checks Mongo sessions.
+   Shipped on `claude/todo4-token-introspection-s3`: `POST /api/v1/auth/introspect`
+   (`introspection.ts` + route) re-verifies the token then checks the backing
+   Mongo session, returning `{active}` plus `sub/jti/exp/iat/purpose` — the
+   online revocation half that `jwks` can't answer. App tokens report
+   `purpose:'app'`+`client_id`; account sessions `purpose:'session'`+`username`;
+   every invalid/expired/revoked shape returns an identical `{active:false}` so
+   it's not an oracle. Anonymous like jwks but rate limited (`auth.introspect`,
+   120/min/IP). Live-verified: a session token reports active, then `active:false`
+   after logout. API doc + 2 apiTests added.
 
 5. **Replace Vercel status polling with Vercel webhooks.**
 
