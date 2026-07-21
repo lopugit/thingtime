@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { extname, isAbsolute, join, normalize, relative } from 'node:path';
@@ -131,6 +132,45 @@ const designDocsStaticPlugin = () => ({
   }
 });
 
+// Build-only CSP, delivered as a meta tag so it applies wherever the static
+// shell is hosted (Vercel serves index.html directly, bypassing Nitro headers).
+// script-src carries sha256 hashes for the shell's own inline scripts instead
+// of 'unsafe-inline', so injected inline/remote scripts are blocked.
+// 'unsafe-eval' stays for now: smarts + the Commander evaluate user-typed JS by
+// design — dropping it is blocked on migrating them off eval (TODO 10 notes).
+// No frame-ancestors on purpose: embedding Thingtime is a feature (embed SDK,
+// default-open SSO origins). Dev is untouched (apply: 'build').
+const cspMetaPlugin = () => ({
+  name: 'thingtime-csp-meta',
+  apply: 'build' as const,
+  transformIndexHtml: {
+    order: 'post' as const,
+    handler(html: string) {
+      const inlineScriptHashes = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(
+        ([, body]) => `'sha256-${createHash('sha256').update(body).digest('base64')}'`
+      );
+      const csp = [
+        "default-src 'self'",
+        ["script-src 'self' 'unsafe-eval'", ...inlineScriptHashes].join(' '),
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+        "font-src 'self' data: https://fonts.gstatic.com",
+        "img-src 'self' data: blob: https:",
+        "media-src 'self' data: blob: https:",
+        "connect-src 'self' https: wss:",
+        "worker-src 'self' blob:",
+        "frame-src 'self' https:",
+        "object-src 'none'",
+        "base-uri 'self'"
+      ].join('; ');
+
+      return html.replace(
+        '<meta charset="utf-8" />',
+        `<meta charset="utf-8" />\n    <meta http-equiv="Content-Security-Policy" content="${csp}" />`
+      );
+    }
+  }
+});
+
 export default defineConfig({
   build: {
     outDir: 'dist',
@@ -173,5 +213,5 @@ export default defineConfig({
       }
     }
   },
-  plugins: [react(), designDocsStaticPlugin()]
+  plugins: [react(), designDocsStaticPlugin(), cspMetaPlugin()]
 });
