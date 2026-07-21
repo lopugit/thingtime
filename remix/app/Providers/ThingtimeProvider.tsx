@@ -164,6 +164,21 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 		});
 	}
 
+	// Cross-tab sync (claude-todo/07): every tab publishes its writes on a
+	// BroadcastChannel and applies the other tabs' writes through the same
+	// setThingtime queue, so two tabs stop clobbering each other's persisted
+	// tree (each tab used to re-persist its own stale full tree,
+	// last-writer-wins). Remote writes skip the undo timeline (timelines stay
+	// per-tab) and are never re-published, so there are no echo loops.
+	const tabIdRef = React.useRef<string | null>(null);
+	if (!tabIdRef.current) {
+		tabIdRef.current =
+			typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+				? crypto.randomUUID()
+				: `tt-tab-${Math.random().toString(36).slice(2)}`;
+	}
+	const broadcastRef = React.useRef<BroadcastChannel | null>(null);
+
 	const [loading, setLoading] = React.useState(true);
 
 	const [events] = React.useState(() => new Subject());
@@ -201,6 +216,9 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 	type SetThingtimeOptions = {
 		ignoreUndoRedo?: boolean;
 		namespace?: string;
+		// internal: marks a write applied from another tab's broadcast so it is
+		// not re-published (prevents echo loops between tabs)
+		remote?: boolean;
 	};
 
 	interface SetThingtimeProps {
@@ -347,7 +365,18 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 				namespace: 'default'
 			}
 		) => {
-			setThingtimeQueueRef.current.push({ path, value, options, timestamp: Date.now() });
+			const timestamp = Date.now();
+			setThingtimeQueueRef.current.push({ path, value, options, timestamp });
+
+			if (!options?.remote) {
+				try {
+					broadcastRef.current?.postMessage({ path, value, sourceTabId: tabIdRef.current, timestamp });
+				} catch {
+					// values that can't structured-clone (e.g. functions) stay tab-local;
+					// state still converges via the next clonable write or reload
+				}
+			}
+
 			if (setThingtimeFlushScheduledRef.current) return;
 			setThingtimeFlushScheduledRef.current = true;
 			queueMicrotask(flushSetThingtimeQueue);
@@ -472,6 +501,30 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 			clearTimeout(retryTimer);
 		};
 	}, [flushSetThingtimeQueue, restoreThingtime]);
+
+	// cross-tab channel lifecycle. Where BroadcastChannel is unavailable (very
+	// old WebKit) we degrade silently to the pre-sync behaviour — no second
+	// storage mechanism (claude-todo/07 §4).
+	React.useEffect(() => {
+		if (typeof BroadcastChannel === 'undefined') return;
+
+		const channel = new BroadcastChannel('thingtime');
+		broadcastRef.current = channel;
+		channel.onmessage = (event: MessageEvent) => {
+			const message = event?.data;
+			if (!message || typeof message !== 'object') return;
+			if (message.sourceTabId === tabIdRef.current) return;
+			if (message.path === undefined || !('value' in message)) return;
+			// apply through the normal queue: ordered with local writes, held until
+			// hydration resolves, and re-persisted by the single persist path
+			setThingtime(message.path, message.value, { ignoreUndoRedo: true, namespace: 'remote', remote: true });
+		};
+
+		return () => {
+			broadcastRef.current = null;
+			channel.close();
+		};
+	}, [setThingtime]);
 
 	// thingtime change listener
 	React.useEffect(() => {

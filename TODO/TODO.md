@@ -34,6 +34,12 @@
    footer/dashboard read the cached status instead of polling Vercel directly.
 
 6. **Add cross-tab sync for persisted thingtime state.**
+   _✅ Done 2026-07-21: `BroadcastChannel('thingtime')` in `ThingtimeProvider` —
+   each write publishes `{path, value, sourceTabId, timestamp}`; other tabs
+   apply via the existing `setThingtime` queue with `ignoreUndoRedo` + a
+   `remote` flag (no echo loops); single persist path kept; degrades silently
+   without BroadcastChannel. Live-verified in two tabs both directions +
+   reload convergence — see `claude-todo/07-cross-tab-thingtime-sync.md`._
 
    `ThingtimeProvider` (`remix/app/Providers/ThingtimeProvider.tsx`, persist
    effect around lines 420–450) persists the ENTIRE thingtime object to

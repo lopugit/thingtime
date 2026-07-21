@@ -17,6 +17,23 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Added
+
+- **Cross-tab sync for persisted thingtime state** (TODO #6 /
+  `claude-todo/07`): tabs used to clobber each other's saved state —
+  each tab persisted its own full in-memory tree on every change,
+  last-writer-wins, and other tabs only saw changes after a reload.
+  `ThingtimeProvider` now opens a `BroadcastChannel('thingtime')`: every
+  local `setThingtime` write publishes `{path, value, sourceTabId,
+  timestamp}` (unclonable values like functions stay tab-local), and other
+  tabs apply it through the same queued `setThingtime` path with
+  `ignoreUndoRedo` and an internal `remote` flag so undo timelines stay
+  per-tab and nothing re-publishes (no echo loops). The single persist path
+  is unchanged; browsers without `BroadcastChannel` keep today's behaviour.
+  Live-verified across two tabs in both directions, including the
+  stale-tab-clobber case and reload-from-storage convergence —
+  Claude (AI), 2026-07-21.
+
 ### Fixed
 
 - **PR #69 final-review hardening round**: a multi-agent review of the unified
