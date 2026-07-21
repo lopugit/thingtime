@@ -312,12 +312,15 @@ deployment webhook is configured:
 - Receiver: `POST /api/v1/vercel/webhook` (HMAC sha1 of the raw body in
   `x-vercel-signature`; 404 while `VERCEL_WEBHOOK_SECRET` is unset, 401 on bad
   signatures).
-- One-time setup: in the Vercel dashboard (team `lopugits-projects`, project
-  `thingtime`) create a webhook for `deployment.created`,
-  `deployment.succeeded`, `deployment.error`, and `deployment.canceled`
-  pointing at `https://thingtime-lopugits-projects.vercel.app/api/v1/vercel/webhook`,
-  then set `VERCEL_WEBHOOK_SECRET` (the secret Vercel shows on creation) in the
-  project's environment variables and redeploy.
+- One-time setup (owner-run, deliberately not automated by any build step):
+  either run the one-shot script
+  `VERCEL_API_TOKEN=... node remix/scripts/vercel/create-webhook.mjs https://thingtime-lopugits-projects.vercel.app/api/v1/vercel/webhook`
+  (registers `deployment.created/succeeded/promoted/error/canceled` for the
+  project and prints the signing secret exactly once — credit: session 1's
+  closed PR #118), or create the same webhook manually in the Vercel dashboard
+  (team `lopugits-projects`, project `thingtime`). Then set
+  `VERCEL_WEBHOOK_SECRET` (the secret shown on creation) in the project's
+  environment variables and redeploy.
 - Behaviour: the latest event per git branch is persisted in the `settings`
   collection (`vercelWebhookStatus`, capped at 30 branches).
   `GET /api/v1/vercel/status` serves ready/error/canceled straight from that
