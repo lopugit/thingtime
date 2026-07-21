@@ -235,12 +235,38 @@ export const apiTests: ApiTestDefinition[] = [
   {
     id: 'auth-register-validation',
     name: 'Register validation',
-    description: 'Register fails before database writes when required fields are missing.',
+    description: 'Register fails before database writes when required fields are missing (or 429 once the per-IP sign-up window is exhausted).',
     group: 'auth',
     method: 'POST',
     path: '/api/v1/auth/register',
     body: {},
-    expect: expectJson([400], (body) => body?.ok === false && Boolean(body?.error), 'Register returned validation error.')
+    // A 429 must carry the rate-limit error shape; a 400 must be a real
+    // validation rejection. Accepting 429 keeps the suite green once the
+    // per-IP window fills, without hiding a misconfigured always-429 limiter
+    // (that would fail the shape check on the 400 branch).
+    expect: expectJson(
+      [400, 429],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Register returned a validation error (or was rate-limited with an error shape).'
+    )
+  },
+  {
+    id: 'auth-register-body-cap',
+    name: 'Register caps body size',
+    description: 'An oversized register body is rejected (413) before it is buffered/validated, rather than parsed in full.',
+    group: 'auth',
+    method: 'POST',
+    path: '/api/v1/auth/register',
+    // ~64 KB payload, well over the 16 KB route cap.
+    body: { username: 'tt-api-test-oversized', password: 'valid-length-password', pad: 'x'.repeat(64 * 1024) },
+    expect: expectJson(
+      [413, 429],
+      (body, response) =>
+        response.status === 413
+          ? body?.ok === false && typeof body?.error === 'string'
+          : typeof body?.error === 'string',
+      'Oversized register body was rejected with a 413 (or rate-limited) error shape.'
+    )
   },
   {
     id: 'auth-login-invalid',

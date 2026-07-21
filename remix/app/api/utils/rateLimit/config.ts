@@ -64,7 +64,12 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   'auth.resendVerification': { limit: 5, windowMs: 15 * 60_000, enabled: true },
   // login attempts (password step and OTP step share the endpoint): bounds
   // credential stuffing and OTP-email sends beyond the per-challenge attempt cap
-  'auth.login': { limit: 30, windowMs: 60_000, enabled: true }
+  'auth.login': { limit: 30, windowMs: 60_000, enabled: true },
+  // signups create a user + bcrypt hash + verification email/outbox row per
+  // request — a resource-amplification + mailbox-spam vector if unbounded, and
+  // the only auth endpoint that was still unthrottled. Anonymous, keyed by IP;
+  // generous enough for legit retries (and shared NAT), admin-tunable.
+  'auth.register': { limit: 10, windowMs: 10 * 60_000, enabled: true }
 };
 
 export const RATE_LIMIT_ENDPOINTS = Object.keys(RATE_LIMIT_DEFAULTS);
