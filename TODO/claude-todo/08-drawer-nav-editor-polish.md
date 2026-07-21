@@ -29,7 +29,12 @@ fixed/refined independently rather than needing a full plan doc.
 
 ## 3. Fix/finish `/branding` page + SVG → PNG rendering concept
 
-- Status: not started / prototype removed.
+- Status: ✅ SVG → PNG export shipped (2026-07-21, session 1): `/branding` now
+  has a "Logo exports" section — four variants rendered as SVG from a shared
+  voxel-matrix module (`components/Branding/logoMatrix.ts`, also consumed by
+  `Logo.tsx`) with client-side PNG export at 256–2048px. Reviving the removed
+  displacement-map prototype remains an open owner decision.
+- Previous status: not started / prototype removed.
 - What exists: `remix/app/components/Branding/Branding.tsx` is currently a
   bare 15-line placeholder (heading + a few `<Logo>` variants). A related SVG
   displacement-map rendering prototype
