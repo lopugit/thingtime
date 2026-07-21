@@ -1,6 +1,13 @@
-# 14 — Editor.js block drag/drop reordering 🔴
+# 14 — Editor.js block drag/drop reordering 🟢
 
-**Status:** Not started.
+**Status:** Shipped 2026-07-21 (session 2) — `editorJsBlockReorder.ts` wired
+into `LongTextEditor`: grip pointer-drag with drop indicator + edge
+autoscroll, touch long-press (400 ms; early movement stays a scroll),
+Alt+Shift+ArrowUp/Down keyboard moves with an aria-live position
+announcement, Escape/pointercancel abort. Every completed gesture is exactly
+one `editor.blocks.move()`, so it rides the existing onChange → ordered save
+queue → Thingtime timeline as ONE history event; first/last no-ops never call
+move. Unit tests cover the boundary/no-op/autoscroll/keybinding math.
 
 ## Goal
 

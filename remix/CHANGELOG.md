@@ -17,6 +17,21 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Added
+
+- **Editor.js block reordering — drag, long-press, and keyboard**
+  (`claude-todo/14`): the six-dot grip now starts a pointer drag past a 5 px
+  threshold (a plain click still opens block settings), with a drop-indicator
+  line and edge autoscroll; touch long-presses the grip (early movement is
+  treated as scroll and never hijacked); Alt+Shift+ArrowUp/Down moves the
+  active block with a visually-hidden aria-live announcement. Every completed
+  gesture issues exactly one `editor.blocks.move()`, so it flows through the
+  existing onChange → ordered save queue → undo timeline as one history
+  event; dropping a block back onto itself never calls move. Escape and
+  pointer cancellation abort cleanly. New `editorJsBlockReorder.ts` +
+  unit tests; wired in `LongTextEditor` beside the other holder watchers —
+  Claude (AI), 2026-07-21.
+
 ### Fixed
 
 - **PR #69 final-review hardening round**: a multi-agent review of the unified

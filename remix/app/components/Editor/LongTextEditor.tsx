@@ -14,6 +14,7 @@ import { createOrderedEditorJsChangeQueue } from './editorJsChangeQueue';
 import type { OrderedEditorJsChangeQueue } from './editorJsChangeQueue';
 import { acknowledgeLatestEditorJsEcho, shouldAcceptEditorJsSnapshot } from './editorJsChangeReconciliation';
 import type { EditorJsSourceRevision } from './editorJsChangeReconciliation';
+import { watchEditorJsBlockReorder } from './editorJsBlockReorder';
 import { watchEditorJsTextFieldKeydowns } from './editorJsKeyboard';
 import { watchEditorJsPopoverViewport } from './editorJsPopoverViewport';
 import { filterListV2ChecklistToolbox } from './editorJsToolbox';
@@ -318,6 +319,7 @@ const LongTextEditorInner = (props: LongTextEditorInnerProps) => {
 		destroyedRef.current = false;
 		let cancelled = false;
 		let textFieldKeyboardCleanup: (() => void) | undefined;
+		let blockReorderCleanup: (() => void) | undefined;
 		let popoverViewportCleanup: (() => void) | undefined;
 		let editorChangeQueue: OrderedEditorJsChangeQueue<SequencedLongTextValue> | undefined;
 		let saveEditorValue: (() => void) | undefined;
@@ -478,6 +480,14 @@ const LongTextEditorInner = (props: LongTextEditorInnerProps) => {
 			// the browser keeps native deletion and cursor movement in the field.
 			textFieldKeyboardCleanup = watchEditorJsTextFieldKeydowns(holderRef.current);
 
+			// grip drag / long-press / Alt+Shift+Arrow block reordering — every
+			// completed gesture is a single editor.blocks.move, so it flows through
+			// the normal onChange → ordered queue → undo timeline as one event
+			blockReorderCleanup = watchEditorJsBlockReorder(holderRef.current, {
+				getEditor: () => (destroyedRef.current ? null : editorRef.current),
+				isReadOnly: () => readonlyRef.current
+			});
+
 			// register in the window.meta debug db (same convention as
 			// Thingtime.tsx) so devtools/tests can drive editor.js's own API
 			try {
@@ -513,6 +523,7 @@ const LongTextEditorInner = (props: LongTextEditorInnerProps) => {
 			saveEditorValue?.();
 			const drained = editorChangeQueue?.close() ?? Promise.resolve();
 			destroyedRef.current = true;
+			blockReorderCleanup?.();
 			textFieldKeyboardCleanup?.();
 			rawInputCleanupRef.current?.();
 			rawInputCleanupRef.current = null;
