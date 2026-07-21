@@ -37,6 +37,7 @@ import StatusPage from './routes/status';
 import ThingtimeUrl from './routes/$';
 import TestsPage from './routes/tests';
 import Themes from './routes/themes';
+import ThemesGallery from './routes/themes.gallery';
 import ThingPage from './routes/thing';
 import VercelPage from './routes/vercel';
 import VerifyEmail from './routes/verify-email';
@@ -169,6 +170,7 @@ export const router = createBrowserRouter([
       { path: 'settings', element: <SettingsRoute /> },
       { path: 'tests', element: <TestsPage /> },
       { path: 'themes', element: <Themes /> },
+      { path: 'themes/gallery', element: <ThemesGallery /> },
       { path: 'welcome', element: <Welcome />, loader: requireUser('/register') },
       { path: '*', element: <ThingtimeUrl /> }
     ]
