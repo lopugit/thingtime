@@ -6354,8 +6354,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [
       {
         status: 200,
-        description: 'Email accepted.',
-        body: { ok: true }
+        description: 'Email accepted — includes a welcome fortune from Lopu (deterministic, time-rotated).',
+        body: { ok: true, fortune: 'Tiny things become big things. Keep tending the little ones. ✨' }
       },
       {
         status: 400,
