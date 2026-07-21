@@ -158,9 +158,20 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     bundles. `ThingtimeURL.tsx` (L23–55) and `CommanderV2` (L337, per-keypress)
     also log on every render. Dev-gate or remove.
 
-15. **🛠️ DX ratchet: add typecheck, a headless test runner, and CI.**
+15. **🟡 PARTLY DONE — 🛠️ DX ratchet: add typecheck, a headless test runner, and CI.**
 
-    `remix/package.json` has no `typecheck`/`test` script; `tsconfig` disables
+    Shipped on `claude/todo15-headless-tests-ci-s3`: `typecheck` (`tsc --noEmit`,
+    surfaces the current ~121-error backlog), a headless HTTP runner
+    (`remix/scripts/run-api-tests.mjs` reusing the canonical `apiTests.ts` +
+    `apiTestRunner.ts` — 224/226 pass live, rest are rate-limit/mutation-gated),
+    an aggregate `test` script, and a `.github/workflows/ci.yml` (unit tests +
+    build gate; typecheck non-blocking). A tiny resolve hook
+    (`scripts/ts-alias-loader.mjs`) also fixed the previously-broken
+    `test:editorjs` suite. **Still open** (deferred, not in that PR):
+    progressively enabling tsc strictness, unifying the two drifted
+    `ThingtimeTypes` interfaces, and finishing the Commander V1→V2 migration.
+
+    Original report: `remix/package.json` has no `typecheck`/`test` script; `tsconfig` disables
     `strict`/`noImplicitAny`/`strictNullChecks`; no CI (`.github/` absent). The
     58+ API tests in `remix/app/tests/api/apiTests.ts` run only via the
     interactive `/tests` page, though `apiTestRunner.ts` is plain fetch and
