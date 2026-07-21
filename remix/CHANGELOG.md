@@ -167,6 +167,21 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   staged locally (takes effect on the next sudo mongod restart +
   one-time initiate). — Claude (AI), 2026-08-08
 
+### Security
+
+- **Service-account provisioning is now rate limited and input-capped**
+  (TODO #7 / `claude-todo/09` A3, the last open item of the three): the public
+  `POST /api/v1/auth/service-account` route previously accepted unlimited
+  anonymous requests, each minting a non-expiring bearer token + a 5 GiB
+  storage-allowance account. It now enforces the shared Mongo-backed limiter
+  fail-closed per IP (`auth.serviceAccount`, default 10 / 15 min,
+  admin-editable), caps the request body at 16 KiB via `readJsonBody`, and
+  whitelists provisioning fields instead of spreading the raw body (privileged
+  meta is already stripped at the `createUserAccount` chokepoint —
+  defense-in-depth). API docs and `/tests` coverage updated; the sibling
+  raw-results/populate lockdowns from the same TODO shipped earlier —
+  Claude (AI), 2026-07-21.
+
 ### Added
 
 - **Promotion PR rebase protection (`no-ai-rebase`)**: the promotion workflow
