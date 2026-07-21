@@ -179,3 +179,16 @@ is fixed, and cite the checklist you ran in the PR description.
       blocking) swaps "Loading the SDK…" for the failure notice with the
       standalone-demo link within ~10s — the preview must never show a
       permanent loading state.
+
+## Auth endpoint rate limiting (`remix/app/routes/api/v1/auth/register/_register.tsx`)
+
+- [ ] `POST /api/v1/auth/register` returns 429 past the `auth.register` window
+      (default 10 / 15 min per IP), checked BEFORE the body is read, so a burst
+      of empty-body signups (each 400) still trips the cap. Verify per-IP
+      isolation with distinct `X-Forwarded-For` values — one IP's cap must not
+      throttle another.
+- [ ] Register rejects an oversize body with 413 (`readJsonBody` 16 KiB cap)
+      before any bcrypt/DB work; a normal signup from a fresh IP still returns
+      `ok:true` and sets the auth cookie.
+- [ ] Seeding (`registerAll` in `scripts/mongodb/setup.ts`) is unaffected — it
+      calls `registerUser` directly and never crosses the HTTP rate limiter.

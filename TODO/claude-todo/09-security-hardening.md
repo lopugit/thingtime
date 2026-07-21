@@ -118,9 +118,16 @@ revive only tagged values.
 
 - [ ] A1–A3 require auth (or are dev-gated + removed from the prod dispatcher);
       any that remain apply visibility filtering.
-- [ ] Login / register / resend-verification return 429 past a per-IP (and
+- [x] Login / register / resend-verification return 429 past a per-IP (and
       per-username, for login) threshold, reusing the existing quota util.
-- [ ] Register/login enforce a body-size cap; `meta` is whitelisted/bounded.
+      (login + resend-verification + password-reset already enforced;
+      **register** added on `claude/lockdown-unauth-endpoints-s7`, 2026-07-21 —
+      new `auth.register` rule, 10 per 15 min per IP, checked before the body
+      read; service-account throttle is the sibling s? branch.)
+- [x] Register/login enforce a body-size cap; `meta` is whitelisted/bounded.
+      (register now reads via `readJsonBody(request, 16*1024)` → 413 on
+      oversize; `meta` was already stripped of privileged keys at the
+      `createUserAccount` chokepoint and register never forwards caller `meta`.)
 - [ ] Function values are no longer revived via `eval`; a CSP without
       `unsafe-eval` is in place and the app still hydrates.
 - [ ] The `Date.parse` reviver no longer coerces plain strings (verified by a

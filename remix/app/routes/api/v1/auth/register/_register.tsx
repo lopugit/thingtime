@@ -1,10 +1,13 @@
-import { json } from '~/api/http';
+import { json, readJsonBody } from '~/api/http';
 
 import { mergeAccountSession } from '~/api/utils/auth/accounts';
 import { resolveTrustedOrigin } from '~/api/utils/auth/appOrigin';
 import { serializeAuthCookie } from '~/api/utils/auth/authCookie';
 import { shouldShowDevVerificationLink } from '~/api/utils/auth/devVerification';
 import { registerUser } from '~/api/utils/auth/registerUser';
+import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
+
+const MAX_BODY_BYTES = 16 * 1024;
 
 // POST /api/v1/auth/register — { username, password, email, displayName? }
 // On success: creates the user, logs them in (sets the httpOnly auth cookie),
@@ -18,7 +21,14 @@ import { registerUser } from '~/api/utils/auth/registerUser';
 // a caller could mass-assign themselves admin. Legit meta is set later via its
 // own authenticated endpoints.
 export const action = async ({ request }: { request: Request }) => {
-  const body = await request.json().catch(() => ({}));
+  // Each signup costs a bcrypt hash + a verification email before any auth
+  // exists — throttle by IP ahead of the body read, like login/password-reset.
+  const limit = await enforceRateLimit(request, 'auth.register', null);
+  if (!limit.allowed) {
+    return json({ ok: false, error: 'Too many signups from here — try again soon 🌸' }, rateLimitedResponseInit(limit));
+  }
+
+  const body = await readJsonBody(request, MAX_BODY_BYTES);
   const origin = resolveTrustedOrigin(request);
 
   // (Env-allowlist admin usernames are reserved in createUserAccount — the
