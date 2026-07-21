@@ -151,7 +151,16 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
 
 14. **🧹 Remove render-time debug leaks in the hot path.**
 
-    `useThingtime.tsx` (L33–39, L46–57) pushes `{uuid, value, timestamp}` into an
+    ✅ **Fixed 2026-07-21** (`claude/debug-leak-cleanup`): the
+    `window.useThingtimeScope` per-render array was already gone from main
+    (`useThingtime.tsx` is now a thin context hook); this branch removes the
+    remaining hot-path console noise — three per-render/per-memo logs plus the
+    render-body dump in `ThingtimeURL.tsx` (which logged full thing values on
+    every navigation render, in prod too) and the per-render `commanderActive`
+    log + per-keypress key-code log in `CommanderV2.tsx`. Event-scoped logs
+    (open/close/nav/error) are left in place.
+
+    Original report: `useThingtime.tsx` (L33–39, L46–57) pushes `{uuid, value, timestamp}` into an
     unbounded per-instance array on `window.useThingtimeScope` on **every render**
     of **every** consumer — a module-level object that leaks across SSR requests
     and grows for the life of the tab; nothing ever trims it and it ships in prod

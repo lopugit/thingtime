@@ -17,9 +17,6 @@ import { SECRET_WORDS, partyMode, rainbowFlash, pickSparkle } from '~/eggs/eggs'
 export const CommanderV2 = (props) => {
 	const { thingtime, setThingtime, getThingtime, thingtimeRef, paths } = useThingtime();
 
-	// log settings.commander.nav.commanderActive
-	console.log('thingtime.settings.commander.nav.commanderActive', thingtime?.settings?.commander?.nav?.commanderActive);
-
 	const { mode, changePath } = usePath();
 
 	const navigate = useNavigate();
@@ -391,7 +388,6 @@ export const CommanderV2 = (props) => {
 				return;
 			}
 
-			console.log('commander key listener e?.code', e?.code);
 			thingtimeRef.current = thingtime;
 			if (e?.metaKey && e?.code === 'KeyP') {
 				e.preventDefault();
