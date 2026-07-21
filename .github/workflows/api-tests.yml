@@ -1,0 +1,100 @@
+name: API tests
+
+# Runs the same suite as the interactive /tests page, headlessly, against a
+# real dev stack (Vite + Nitro) and a real MongoDB — no mocks, per
+# FUNDAMENTALS.md (seed and test by calling the real API).
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: api-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: remix
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+    env:
+      MONGODB_CONNECTION_STRING: mongodb://127.0.0.1:27017/
+      # CI-only HS256 secret; the suite never needs the production ES256 keys
+      JWT_SECRET: ci-only-api-tests-secret
+      TT_WEB_PORT: '9999'
+      TT_HMR_PORT: '9998'
+      TT_API_PORT: '10000'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: remix/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: remix/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Start dev stack
+        run: |
+          nohup npm run dev > /tmp/tt-dev.log 2>&1 &
+          echo "started dev stack"
+
+      - name: Wait for the API to come up
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf "http://127.0.0.1:${TT_WEB_PORT}/api/v1/mongodb/status" > /dev/null; then
+              echo "API is up"; exit 0
+            fi
+            sleep 2
+          done
+          echo "API did not come up in time"; tail -100 /tmp/tt-dev.log; exit 1
+
+      - name: Run API test suite
+        run: pnpm exec tsx scripts/run-api-tests.mts --base "http://127.0.0.1:${TT_WEB_PORT}"
+
+      - name: Dev stack logs on failure
+        if: failure()
+        run: tail -200 /tmp/tt-dev.log
+
+  typecheck:
+    # First step of the strictness ratchet (TODO item 15): visible but not yet
+    # blocking — the baseline has pre-existing errors. Flip continue-on-error
+    # off once the baseline is clean.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    defaults:
+      run:
+        working-directory: remix
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: remix/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: remix/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck (non-blocking baseline)
+        run: pnpm exec tsc --noEmit
