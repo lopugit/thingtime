@@ -17,6 +17,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Added
+
+- **Post permalinks + copy-link share** (`claude-todo/10` growth item): posts
+  finally have URLs. `/post/:id` renders the existing `PostCard` through
+  `GET /api/v1/things?id=` — the same `canView` gating as the feed, so guests
+  see public posts (and hit the existing login funnel when they try to react)
+  while private posts land on a friendly not-found state. The share popover
+  gains `Copy link 🔗` with a Lopu toast and a show-the-link fallback when the
+  clipboard is unavailable (plain-http dev). Live-verified: permalink render,
+  copy toast, unknown-id state — Claude (AI), 2026-07-21.
+
 ### Fixed
 
 - **PR #69 final-review hardening round**: a multi-agent review of the unified

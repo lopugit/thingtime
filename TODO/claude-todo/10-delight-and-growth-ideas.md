@@ -67,7 +67,11 @@ systems. Reusable whimsy exports (from the review):
 
 ## ✨ Features (growth / stickiness)
 
-- **Post permalinks + copy-link share** *(M)*. Posts live only inside the feed
+- ✅ **Post permalinks + copy-link share** *(M — shipped 2026-07-21, session 2)*.
+  `/post/:id` renders the existing `PostCard` via `GET /api/v1/things?id=`
+  (same `canView` gating as the feed; guests see public posts and hit the
+  login funnel on interaction), plus `Copy link 🔗` in the share popover with
+  a clipboard fallback toast. Posts live only inside the feed
   column — nothing is linkable, so nothing spreads. Add `/post/:id` rendering the
   existing `PostCard` read-only, a `Copy link 🔗` in the share popover
   (`PostCard.tsx` L260–348), and a `things/get` endpoint. Guests hitting the link

@@ -435,6 +435,20 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     setShareOpen((open) => !open);
   };
 
+  // Copy the public permalink (/post/:id). Clipboard access needs a secure
+  // context — fall back to showing the link in the toast so it's still
+  // grabbable over plain http (e.g. LAN dev).
+  const handleCopyLink = async () => {
+    const link = `${window.location.origin}/post/${post.id}`;
+    try {
+      await navigator.clipboard.writeText(link);
+      lopu({ title: 'Link copied 🔗', status: 'success', duration: 4000 });
+    } catch {
+      lopu({ title: link, description: 'Copy it from here 🔗', status: 'info', duration: 10000 });
+    }
+    setShareOpen(false);
+  };
+
   const handleShare = async () => {
     if (sharing) return;
 
@@ -797,6 +811,17 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
                   onClick={handleShare}
                 >
                   Share ✨
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  borderRadius={RADIUS_MD}
+                  borderColor="var(--tt-border, #ececef)"
+                  color={TEXT}
+                  _hover={{ background: 'var(--tt-surface-alt, #f5f5f7)' }}
+                  onClick={handleCopyLink}
+                >
+                  Copy link 🔗
                 </Button>
               </Flex>
             </PopoverContent>
