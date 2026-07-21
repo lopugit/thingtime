@@ -165,8 +165,10 @@ ActionIcon.displayName = 'ActionIcon';
 export type PostCardProps = {
   post: PublicPost;
   // a value replaces the post (null = deleted); a function applies a delta to
-  // the freshest post (used by optimistic reactions)
-  onChanged?: (next: PostChange) => void;
+  // the freshest post (used by optimistic reactions). Takes the post id so the
+  // SAME handler identity can be passed to every card — a per-card closure
+  // would defeat React.memo below and repaint the whole column on any change.
+  onChanged?: (id: string, next: PostChange) => void;
   // card-level signals: expand/react/comment/share
   onEngagement?: (event: EngagementEvent) => void;
   // the /post/:id page opens with the conversation expanded
@@ -1135,7 +1137,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     try {
       await api.v1.things.remove({ id: post.id });
       lopu({ title: 'Post deleted 🗑️', status: 'success', duration: 6000 });
-      onChanged?.(null);
+      onChanged?.(post.id, null);
     } catch (err: any) {
       lopu({ title: err?.error || 'Could not delete that post 😞', status: 'error' });
     }
@@ -1235,7 +1237,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     // Each updater notes its applied result in the reaction overlay so
     // background fetches snapshotted before the tap merge instead of
     // clobbering (idempotent under strict-mode double-invoke).
-    onChanged?.((prev) => {
+    onChanged?.(post.id, (prev) => {
       const next = applyReactionToggle(prev, token, adding);
       noteLocalReactions(next.id, next.reactionCounts, next.viewerReactions);
       return next;
@@ -1243,7 +1245,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     if (adding) onEngagement?.({ thingId: post.id, signal: 'react' });
 
     const reconcileLocalToken = (reactionCounts: Record<string, number>, viewerReactions: string[]) => {
-      onChanged?.((current) => {
+      onChanged?.(post.id, (current) => {
         const next = reconcileReactionToken(current, token, reactionCounts, viewerReactions);
         noteLocalReactions(next.id, next.reactionCounts, next.viewerReactions);
         return next;
@@ -1326,7 +1328,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
 
     const pendingComment = buildPendingComment(user, post.id, text);
     clearCommentDraft();
-    onChanged?.((prev) => ({
+    onChanged?.(post.id, (prev) => ({
       ...prev,
       comments: [...prev.comments, pendingComment],
       commentCount: prev.commentCount + 1
@@ -1335,13 +1337,13 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
 
     try {
       const resp = await api.v1.things.comment({ id: post.id, text });
-      onChanged?.((prev) => ({
+      onChanged?.(post.id, (prev) => ({
         ...prev,
         comments: prev.comments.map((comment) => (comment.id === pendingComment.id ? resp.comment : comment)),
         commentCount: resp.commentCount
       }));
     } catch (err: any) {
-      onChanged?.((prev) => ({
+      onChanged?.(post.id, (prev) => ({
         ...prev,
         comments: prev.comments.filter((comment) => comment.id !== pendingComment.id),
         commentCount: Math.max(0, prev.commentCount - 1)
@@ -1354,7 +1356,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
   // the rich composer posts through api.v1.things.comment itself and hands
   // back the created comment (post-shaped — comments share the post schema)
   const handleRichCommented = (comment: PostComment) => {
-    onChanged?.((prev) => ({
+    onChanged?.(post.id, (prev) => ({
       ...prev,
       comments: [...prev.comments, comment],
       commentCount: prev.commentCount + 1
@@ -1365,7 +1367,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
 
   // a comment changed (reaction toggled) — swap it inside the freshest post
   const handleCommentChanged = (id: string, change: CommentChange) => {
-    onChanged?.((prev) => ({
+    onChanged?.(post.id, (prev) => ({
       ...prev,
       comments: prev.comments.map((comment) => (comment.id === id ? applyCommentChange(comment, change) : comment))
     }));
@@ -1377,13 +1379,13 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
   const handleRepost = async () => {
     if (sharing) return;
     setSharing(true);
-    onChanged?.((prev) => ({ ...prev, shareCount: prev.shareCount + 1 }));
+    onChanged?.(post.id, (prev) => ({ ...prev, shareCount: prev.shareCount + 1 }));
     onEngagement?.({ thingId: post.id, signal: 'share' });
     lopu({ title: 'Reposted 🔁', status: 'success', duration: 6000 });
     try {
       await api.v1.things.share({ id: post.id, visibility: post.visibility });
     } catch (err: any) {
-      onChanged?.((prev) => ({ ...prev, shareCount: Math.max(0, prev.shareCount - 1) }));
+      onChanged?.(post.id, (prev) => ({ ...prev, shareCount: Math.max(0, prev.shareCount - 1) }));
       lopu({ title: err?.error || 'Repost failed 😞', status: 'error' });
     }
     setSharing(false);
@@ -1400,7 +1402,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
         visibility: quoteVisibility
       });
       lopu({ title: 'Quoted ✨', status: 'success', duration: 6000 });
-      onChanged?.((prev) => ({ ...prev, shareCount: prev.shareCount + 1 }));
+      onChanged?.(post.id, (prev) => ({ ...prev, shareCount: prev.shareCount + 1 }));
       onEngagement?.({ thingId: post.id, signal: 'share' });
       setQuoteOpen(false);
       setQuoteText('');

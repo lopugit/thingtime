@@ -77,11 +77,10 @@ export const PostList = (props: PostListProps) => {
     <Flex flexDirection="column" rowGap={4} width="100%">
       {posts.map((post) => (
         <Box key={post.id} data-thing-id={post.id} ref={(element: HTMLDivElement | null) => observeView(element, post.id)}>
-          <PostCard
-            post={post}
-            onChanged={(next) => onPostChanged(post.id, next)}
-            onEngagement={onEngagement}
-          />
+          {/* pass the handler straight through (PostCard supplies its own id) —
+              a per-card arrow here would be a fresh prop every render and
+              defeat PostCard's React.memo, repainting every card on scroll */}
+          <PostCard post={post} onChanged={onPostChanged} onEngagement={onEngagement} />
         </Box>
       ))}
 

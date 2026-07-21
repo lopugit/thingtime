@@ -819,6 +819,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   `TT_VERIFY_ADMIN_USER`/`TT_VERIFY_ADMIN_PASS` of an env-admin). See the
   detailed PR note in `PRs/`. — Claude (AI), 2026-08-02
 
+### Performance
+
+- **PostCard's `React.memo` actually bails now** (TODO #12): `PostList` passed
+  a fresh per-card arrow for `onChanged`, so every engagement event / scroll
+  re-render repainted every card in the column. `PostCard`'s contract is now
+  `onChanged(id, next)` and `PostList` passes the consumers'
+  `useCallback`-stable `handlePostChanged` straight through (Feed and
+  ProfilePage already used that exact signature). Live-verified: reactions,
+  comments, and both consumers behave identically — Claude (AI), 2026-07-21.
+
 ### Fixed
 
 - **Sync main→develop fallback PR is now PAT-authored**: the **Sync main into
