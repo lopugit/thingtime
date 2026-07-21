@@ -1,0 +1,161 @@
+import { createHmac, timingSafeEqual } from 'node:crypto';
+
+import { getSettingsCollection } from '../mongodb/collections';
+
+// Vercel webhook → persisted deployment status (TODO item 5).
+//
+// Instead of every status request spending Vercel API calls (even when the
+// deployment has been ready for days), Vercel pushes deployment lifecycle
+// events to POST /api/v1/vercel/webhook. We persist the latest status per git
+// branch in the shared `settings` collection, and getVercelDeploymentStatus
+// serves terminal states (ready/error/canceled) straight from that document —
+// the live Vercel API is only consulted mid-build (for phase/progress detail)
+// or when no webhook data exists yet.
+//
+// The feature is opt-in via VERCEL_WEBHOOK_SECRET: when the secret is unset the
+// webhook route 404s and the status path behaves exactly as before.
+
+export type VercelWebhookBranchStatus = {
+  branch: string;
+  commitSha?: string;
+  deploymentId?: string;
+  deploymentUrl?: string;
+  // Vercel inspector page for the deployment — the footer's build link
+  inspectorUrl?: string;
+  environment?: string;
+  error?: string;
+  // when Vercel emitted the event (payload.createdAt)
+  eventAt: string;
+  eventType: string;
+  recordedAt: string;
+  state: 'building' | 'ready' | 'error' | 'canceled';
+  // carried across builds so the footer can show "last ready" while building
+  lastReadyAt?: string;
+  lastReadyUrl?: string;
+};
+
+const SETTINGS_KEY = 'vercelWebhookStatus';
+const MAX_TRACKED_BRANCHES = 30;
+
+export const isVercelWebhookConfigured = () => Boolean(process.env.VERCEL_WEBHOOK_SECRET?.trim());
+
+// Vercel signs the RAW request body with HMAC-SHA1 (hex) in x-vercel-signature.
+export const verifyVercelSignature = (rawBody: string, signature: string | null): boolean => {
+  const secret = process.env.VERCEL_WEBHOOK_SECRET?.trim();
+  if (!secret || !signature) return false;
+  const expected = createHmac('sha1', secret).update(rawBody).digest('hex');
+  const provided = signature.trim().toLowerCase();
+  if (provided.length !== expected.length) return false;
+  try {
+    return timingSafeEqual(Buffer.from(expected, 'utf8'), Buffer.from(provided, 'utf8'));
+  } catch {
+    return false;
+  }
+};
+
+const EVENT_STATES: Record<string, VercelWebhookBranchStatus['state']> = {
+  'deployment.created': 'building',
+  'deployment.succeeded': 'ready',
+  // older event name kept for compatibility with existing webhook configs
+  'deployment.ready': 'ready',
+  'deployment.error': 'error',
+  'deployment.canceled': 'canceled'
+};
+
+const asString = (value: unknown): string | undefined => (typeof value === 'string' && value ? value : undefined);
+
+const getBranchFromMeta = (meta: Record<string, unknown> | undefined): string | undefined =>
+  asString(meta?.githubCommitRef) || asString(meta?.gitlabCommitRef) || asString(meta?.bitbucketCommitRef);
+
+// Extract the fields we persist from a Vercel webhook envelope. Returns null
+// for event types we don't track (they're still 200-acked by the route).
+export const parseVercelWebhookEvent = (
+  envelope: any
+): { branch: string; next: Omit<VercelWebhookBranchStatus, 'lastReadyAt' | 'lastReadyUrl' | 'recordedAt'> } | null => {
+  const eventType = asString(envelope?.type);
+  const state = eventType ? EVENT_STATES[eventType] : undefined;
+  if (!eventType || !state) return null;
+
+  const deployment = envelope?.payload?.deployment;
+  const meta = typeof deployment?.meta === 'object' && deployment?.meta !== null ? deployment.meta : undefined;
+  const branch = getBranchFromMeta(meta);
+  if (!branch) return null;
+
+  const eventAtMs = Number(envelope?.createdAt);
+  const rawUrl = asString(deployment?.url);
+
+  return {
+    branch,
+    next: {
+      branch,
+      commitSha: asString(meta?.githubCommitSha) || asString(meta?.gitlabCommitSha) || asString(meta?.bitbucketCommitSha),
+      deploymentId: asString(deployment?.id) || asString(deployment?.uid),
+      deploymentUrl: rawUrl ? (rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`) : undefined,
+      inspectorUrl: asString(deployment?.inspectorUrl),
+      environment: asString(envelope?.payload?.target) || undefined,
+      error: state === 'error' ? asString(envelope?.payload?.errorMessage) || 'Deployment failed' : undefined,
+      eventAt: Number.isFinite(eventAtMs) && eventAtMs > 0 ? new Date(eventAtMs).toISOString() : new Date().toISOString(),
+      eventType,
+      state
+    }
+  };
+};
+
+const loadDoc = async () => (await getSettingsCollection()).findOne({ key: SETTINGS_KEY });
+
+// Persist one event. Out-of-order guard: an event for a DIFFERENT deployment is
+// ignored when it's older than what we already have (late delivery for a
+// superseded build); for the SAME deployment, terminal states always win over
+// 'building' regardless of timestamps.
+export const recordVercelWebhookEvent = async (envelope: any): Promise<VercelWebhookBranchStatus | null> => {
+  const parsed = parseVercelWebhookEvent(envelope);
+  if (!parsed) return null;
+
+  const { branch, next } = parsed;
+  const doc = await loadDoc();
+  const branches: Record<string, VercelWebhookBranchStatus> =
+    doc?.branches && typeof doc.branches === 'object' ? { ...doc.branches } : {};
+  const existing = branches[branch];
+
+  if (existing) {
+    const sameDeployment = existing.deploymentId && existing.deploymentId === next.deploymentId;
+    const older = Date.parse(next.eventAt) < Date.parse(existing.eventAt);
+    if (!sameDeployment && older) return existing;
+    if (sameDeployment && older && existing.state !== 'building') return existing;
+  }
+
+  const entry: VercelWebhookBranchStatus = {
+    ...next,
+    recordedAt: new Date().toISOString(),
+    lastReadyAt: next.state === 'ready' ? next.eventAt : existing?.lastReadyAt,
+    lastReadyUrl: next.state === 'ready' ? next.deploymentUrl : existing?.lastReadyUrl
+  };
+  branches[branch] = entry;
+
+  // cap tracked branches so preview-branch churn can't grow the doc unbounded
+  const keep = Object.values(branches)
+    .sort((a, b) => Date.parse(b.recordedAt) - Date.parse(a.recordedAt))
+    .slice(0, MAX_TRACKED_BRANCHES);
+  const capped: Record<string, VercelWebhookBranchStatus> = {};
+  for (const item of keep) capped[item.branch] = item;
+
+  await (await getSettingsCollection()).updateOne(
+    { key: SETTINGS_KEY },
+    { $set: { key: SETTINGS_KEY, branches: capped, updatedAt: new Date() } },
+    { upsert: true }
+  );
+
+  return entry;
+};
+
+export const getPersistedBranchStatus = async (branch?: string): Promise<VercelWebhookBranchStatus | null> => {
+  if (!branch) return null;
+  try {
+    const doc = await loadDoc();
+    const entry = doc?.branches?.[branch];
+    return entry && typeof entry === 'object' ? (entry as VercelWebhookBranchStatus) : null;
+  } catch {
+    // status is advisory — a store hiccup must never break the status endpoint
+    return null;
+  }
+};
