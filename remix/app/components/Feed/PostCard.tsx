@@ -594,7 +594,9 @@ const CommentRow = (props: {
             const pendings = (prev || []).filter(
               (reply) => isPendingComment(reply) && !fetched.some((entry) => entry.id === reply.id)
             );
-            return [...fetched, ...pendings];
+            // defensive: never render the same reply twice whatever the payload
+            const merged = [...fetched, ...pendings];
+            return merged.filter((reply, index) => merged.findIndex((entry) => entry.id === reply.id) === index);
           });
         })
         .catch(() => setReplies((prev) => prev ?? []))

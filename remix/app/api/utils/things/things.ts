@@ -666,6 +666,9 @@ const resolveRelated = async (docs: ThingDoc[]): Promise<RelatedThings> => {
 
   const pushComment = (target: string, entry: CommentEntry) => {
     const list = commentsByTarget.get(target) || [];
+    // a doc can surface through more than one pass (a comment page's doc is
+    // ALSO its parent's child) — never list the same reply twice
+    if (list.some((existing) => existing.id === entry.id)) return;
     list.push(entry);
     commentsByTarget.set(target, list);
   };
@@ -706,7 +709,14 @@ const resolveRelated = async (docs: ThingDoc[]): Promise<RelatedThings> => {
 
   // Second pass: comments are things too — their own reactions and direct
   // reply counts, one batched query each across every comment on the page.
-  const commentIds = [...commentsByTarget.values()].flat().map((entry) => entry.id);
+  // page docs' own children were already fetched by pass 1 (comments
+  // targeting the page ids) — a comment-page doc appearing again as its
+  // parent's child must not re-fetch its replies (that doubled them)
+  const pageIdSet = new Set(ids);
+  const commentIds = [...commentsByTarget.values()]
+    .flat()
+    .map((entry) => entry.id)
+    .filter((id) => !pageIdSet.has(id));
   if (commentIds.length) {
     const [commentReactions, replyDocGroups] = await Promise.all([
       things
