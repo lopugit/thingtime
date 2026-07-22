@@ -209,9 +209,11 @@ const MAX_COMMENTS_PER_POST = 500;
 const MAX_REACTION_KEYS_PER_POST = 100;
 const MAX_REACTIONS_PER_USER_PER_POST = 20;
 const RETURNED_COMMENTS = 20;
-// nested replies shipped per comment (threads render two levels deep by
-// default; deeper/more loads on demand)
+// nested replies shipped per comment: REPLIES_PER_LEVEL per parent, and
+// SHIPPED_REPLY_LEVELS levels BELOW the direct children (direct + 2 = three
+// visible levels per payload; deeper/more loads on demand)
 const REPLIES_PER_LEVEL = 5;
+const SHIPPED_REPLY_LEVELS = 2;
 const MAX_FEED_LIMIT = 50;
 const DEFAULT_FEED_LIMIT = 20;
 // Ranked feeds score the newest N filter-matching posts, then page within
@@ -707,42 +709,54 @@ const resolveRelated = async (docs: ThingDoc[]): Promise<RelatedThings> => {
   }
   for (const row of shareCounts) shareCountByTarget.set(String(row._id), row.count);
 
-  // Second pass: comments are things too — their own reactions and direct
-  // reply counts, one batched query each across every comment on the page.
-  // page docs' own children were already fetched by pass 1 (comments
-  // targeting the page ids) — a comment-page doc appearing again as its
-  // parent's child must not re-fetch its replies (that doubled them)
+  // Deeper levels, one batched round-trip per level: threads ship THREE
+  // levels of replies (REPLIES_PER_LEVEL per parent per level) so opening any
+  // visible thread never needs a fetch — the client lazily fetches level 4+.
+  // Each processed level fetches its comments' own reactions; the last level
+  // fetches direct reply COUNTS only (no docs). Page docs' own children were
+  // already fetched by pass 1 against the page ids, so page ids are excluded
+  // (a comment-page doc reappearing as its parent's child once doubled its
+  // replies), and seenIds keeps cycles/self-references out.
   const pageIdSet = new Set(ids);
-  const commentIds = [...commentsByTarget.values()]
+  const seenIds = new Set<string>(ids);
+  let levelIds = [...commentsByTarget.values()]
     .flat()
     .map((entry) => entry.id)
     .filter((id) => !pageIdSet.has(id));
-  if (commentIds.length) {
-    const [commentReactions, replyDocGroups] = await Promise.all([
+  for (let depth = 0; depth <= SHIPPED_REPLY_LEVELS && levelIds.length; depth++) {
+    const withDocs = depth < SHIPPED_REPLY_LEVELS;
+    const [levelReactions, replyGroups] = await Promise.all([
       things
-        .find({ targetId: { $in: commentIds }, thingtime: 'reaction' } as any)
+        .find({ targetId: { $in: levelIds }, thingtime: 'reaction' } as any)
         .sort({ createdAt: 1, shareId: 1 })
         .toArray() as Promise<any[]>,
-      // level-2 replies ride along (latest REPLIES_PER_LEVEL per comment) so
-      // threads render two levels deep without a fetch per comment
       things
-        .aggregate([
-          { $match: { targetId: { $in: commentIds }, thingtime: 'comment' } },
-          { $sort: { createdAt: -1, shareId: 1 } },
-          { $group: { _id: '$targetId', count: { $sum: 1 }, docs: { $push: '$$ROOT' } } },
-          { $project: { count: 1, docs: { $slice: ['$docs', REPLIES_PER_LEVEL] } } }
-        ])
+        .aggregate(
+          withDocs
+            ? [
+                { $match: { targetId: { $in: levelIds }, thingtime: 'comment' } },
+                { $sort: { createdAt: -1, shareId: 1 } },
+                { $group: { _id: '$targetId', count: { $sum: 1 }, docs: { $push: '$$ROOT' } } },
+                { $project: { count: 1, docs: { $slice: ['$docs', REPLIES_PER_LEVEL] } } }
+              ]
+            : [
+                { $match: { targetId: { $in: levelIds }, thingtime: 'comment' } },
+                { $group: { _id: '$targetId', count: { $sum: 1 } } }
+              ]
+        )
         .toArray() as Promise<any[]>
     ]);
-    for (const doc of commentReactions as ThingDoc[]) {
+    for (const doc of levelReactions as ThingDoc[]) {
       pushReaction(doc.targetId as string, { userId: doc.ownerId, emoji: String(doc.crystal?.emoji || '') });
     }
-    const replyIds: string[] = [];
-    for (const group of replyDocGroups) {
+    const nextLevelIds: string[] = [];
+    for (const group of replyGroups) {
       commentCountByTarget.set(String(group._id), group.count);
       // stored newest-first for the slice; readers want oldest → newest
-      for (const doc of (group.docs as ThingDoc[]).reverse()) {
-        replyIds.push(doc.shareId);
+      for (const doc of ((group.docs as ThingDoc[]) || []).reverse()) {
+        if (seenIds.has(doc.shareId)) continue;
+        seenIds.add(doc.shareId);
+        nextLevelIds.push(doc.shareId);
         pushComment(String(group._id), {
           id: doc.shareId,
           userId: doc.ownerId,
@@ -752,25 +766,7 @@ const resolveRelated = async (docs: ThingDoc[]): Promise<RelatedThings> => {
         });
       }
     }
-    // third pass: the level-2 replies' own reactions + direct reply counts
-    if (replyIds.length) {
-      const [replyReactions, replyReplyCounts] = await Promise.all([
-        things
-          .find({ targetId: { $in: replyIds }, thingtime: 'reaction' } as any)
-          .sort({ createdAt: 1, shareId: 1 })
-          .toArray() as Promise<any[]>,
-        things
-          .aggregate([
-            { $match: { targetId: { $in: replyIds }, thingtime: 'comment' } },
-            { $group: { _id: '$targetId', count: { $sum: 1 } } }
-          ])
-          .toArray() as Promise<any[]>
-      ]);
-      for (const doc of replyReactions as ThingDoc[]) {
-        pushReaction(doc.targetId as string, { userId: doc.ownerId, emoji: String(doc.crystal?.emoji || '') });
-      }
-      for (const row of replyReplyCounts) commentCountByTarget.set(String(row._id), row.count);
-    }
+    levelIds = nextLevelIds;
   }
 
   return { commentsByTarget, reactionsByTarget, shareCountByTarget, commentCountByTarget };

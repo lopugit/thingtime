@@ -458,13 +458,13 @@ const ReplySkeleton = () => {
     endColor: 'var(--tt-surface-hover, #ececee)'
   };
   return (
-    <Flex flexDirection="column" rowGap={2} paddingTop={1} aria-label="Loading replies" role="status">
-      {[0, 1].map((index) => (
+    <Flex flexDirection="column" rowGap={4} paddingY={2} aria-label="Loading replies" role="status">
+      {[0, 1, 2].map((index) => (
         <Flex key={index} columnGap={2} alignItems="flex-start">
           <SkeletonCircle size="22px" flexShrink={0} {...shimmer} />
           <Flex flex="1" minWidth={0} flexDirection="column" rowGap={1.5} paddingTop="2px">
             <Skeleton height="9px" width="30%" borderRadius="999px" {...shimmer} />
-            <Skeleton height="13px" width={index ? '62%' : '82%'} borderRadius="999px" {...shimmer} />
+            <Skeleton height="13px" width={['82%', '62%', '72%'][index]} borderRadius="999px" {...shimmer} />
           </Flex>
         </Flex>
       ))}
@@ -608,9 +608,12 @@ const CommentRow = (props: {
     [api, comment.id, comment.commentCount, pending]
   );
 
-  // prefetch-ahead: fill this row's missing depth as soon as it renders (and
-  // again if the reply count grows under us)
+  // prefetch-ahead: fill this row's missing depth as soon as it renders —
+  // once; opens and show-mores force fresh fetches afterwards
+  const prefetchedRef = React.useRef(false);
   React.useEffect(() => {
+    if (prefetchedRef.current) return;
+    prefetchedRef.current = true;
     fetchThread();
   }, [fetchThread]);
 
