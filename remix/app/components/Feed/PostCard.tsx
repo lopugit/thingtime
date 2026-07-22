@@ -490,7 +490,7 @@ const CommentRow = (props: {
   // a stored draft reopens its thread on mount — continue where you left off
   React.useEffect(() => {
     if (draftHydrated && replyText.trim()) {
-      setRepliesOpen(true);
+      openThread();
       setReplyInputOpen(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -539,12 +539,40 @@ const CommentRow = (props: {
     }
   };
 
+  // opening the thread ALWAYS loads it when nothing is loaded yet — the
+  // first page of replies must appear immediately, never just a show-more
+  // button. Loaded replies + reveal depth persist across close/reopen
+  // (component state) and reset when the page is left or refreshed.
+  const openThread = () => {
+    setRepliesOpen(true);
+    if (replies === null && comment.commentCount > 0 && !repliesLoading) {
+      setRepliesLoading(true);
+      api.v1.things
+        .get({ id: comment.id })
+        .then((resp: any) =>
+          setReplies((prev) => {
+            const fetched: PostComment[] = resp?.post?.comments || [];
+            // keep any optimistic sends that raced the fetch
+            const pendings = (prev || []).filter((reply) => isPendingComment(reply));
+            return [...fetched, ...pendings];
+          })
+        )
+        .catch(() => setReplies((prev) => prev ?? []))
+        .finally(() => setRepliesLoading(false));
+    }
+  };
+
+  const toggleThread = () => {
+    if (repliesOpen) setRepliesOpen(false);
+    else openThread();
+  };
+
   const toggleReplyInput = () => {
     if (replyInputOpen) {
       setReplyInputOpen(false);
       return;
     }
-    setRepliesOpen(true);
+    openThread();
     setReplyInputOpen(true);
     replyFocus?.requestOpen(comment.id);
   };
@@ -579,7 +607,10 @@ const CommentRow = (props: {
 
     try {
       const resp = await api.v1.things.comment({ id: comment.id, text });
-      setReplies((prev) => (prev || []).map((reply) => (reply.id === pendingReply.id ? resp.comment : reply)));
+      setReplies((prev) => {
+        const mapped = (prev || []).map((reply) => (reply.id === pendingReply.id ? resp.comment : reply));
+        return mapped.filter((reply, index) => mapped.findIndex((entry) => entry.id === reply.id) === index);
+      });
     } catch (err: any) {
       setReplies((prev) => (prev || []).filter((reply) => reply.id !== pendingReply.id));
       onChanged({ ...comment, commentCount: Math.max(0, comment.commentCount) });
@@ -693,7 +724,7 @@ const CommentRow = (props: {
               color={repliesOpen ? INK : MUTED}
               _hover={{ color: INK }}
               aria-expanded={repliesOpen}
-              onClick={() => setRepliesOpen((open) => !open)}
+              onClick={toggleThread}
             >
               {comment.commentCount} repl{comment.commentCount === 1 ? 'y' : 'ies'} 🧵
             </Box>
