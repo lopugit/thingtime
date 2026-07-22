@@ -26,6 +26,7 @@ import { Maximize2, MoreHorizontal, Plus, Send } from 'lucide-react';
 
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useOutsideTapClose } from '~/hooks/useOutsideTapClose';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { ThingView } from '~/components/Thingtime/ThingView';
 import { EmojiPicker } from '~/components/Emoji/EmojiPicker';
@@ -519,6 +520,10 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
   const [shareVisibility, setShareVisibility] = React.useState<PostVisibility>('public');
   const [sharing, setSharing] = React.useState(false);
   const [pickerOpen, setPickerOpen] = React.useState(false);
+  // outside-tap close (NOT closeOnBlur): dismissing the mobile keyboard blurs
+  // the search/caption field and must not close these popovers
+  const pickerContentRef = useOutsideTapClose<HTMLElement>(pickerOpen, () => setPickerOpen(false));
+  const shareContentRef = useOutsideTapClose<HTMLElement>(shareOpen, () => setShareOpen(false));
   const expandSentRef = React.useRef(false);
 
   const { recent, pushRecent } = useRecentReactions();
@@ -860,12 +865,13 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
                 onClose={() => setPickerOpen(false)}
                 placement="top-start"
                 isLazy
-                closeOnBlur
+                closeOnBlur={false}
               >
                 <PopoverAnchor>
                   <Box position="absolute" left={0} bottom="100%" width="1px" height="1px" pointerEvents="none" />
                 </PopoverAnchor>
                 <PopoverContent
+                  ref={pickerContentRef as any}
                   width="auto"
                   border={BORDER}
                   borderRadius="var(--tt-radius-lg, 16px)"
@@ -901,7 +907,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
             onClose={() => setShareOpen(false)}
             placement="top"
             isLazy
-            closeOnBlur
+            closeOnBlur={false}
           >
             <PopoverTrigger>
               <Button {...actionButtonStyles} onClick={handleShareClick}>
@@ -909,6 +915,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
               </Button>
             </PopoverTrigger>
             <PopoverContent
+              ref={shareContentRef as any}
               width="260px"
               border={BORDER}
               borderRadius={RADIUS_MD}
