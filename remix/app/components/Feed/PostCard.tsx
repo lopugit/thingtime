@@ -25,6 +25,7 @@ import { Link } from 'react-router';
 import { Maximize2, MoreHorizontal, Plus, Send } from 'lucide-react';
 
 import { useApi } from '~/hooks/useApi';
+import { useCommentDraft } from '~/hooks/useCommentDraft';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useOutsideTapClose } from '~/hooks/useOutsideTapClose';
 import { useLopu } from '~/components/Lopu/useLopu';
@@ -407,6 +408,46 @@ const QuickReactionRow = (props: {
   );
 };
 
+// Only one EMPTY reply input is open at a time across a card's comment tree:
+// opening a reply announces itself here and rows whose draft is empty close
+// themselves. Rows with a typed draft stay open — never lose user text.
+const ReplyFocusContext = React.createContext<{ openId: string | null; requestOpen: (id: string) => void } | null>(
+  null
+);
+
+// The viewer as a FeedAuthor embed — optimistic comments render instantly
+// with the real author identity while the server write is in flight.
+const viewerAsAuthor = (user: any): FeedAuthor | null =>
+  user
+    ? {
+        id: user.id,
+        username: user.username,
+        displayName: user.displayName ?? null,
+        avatarUrl: user.avatarUrl ?? null
+      }
+    : null;
+
+// A locally-built comment shown the instant the user hits send; swapped for
+// the server's copy when the write lands (id is provisional until then).
+const buildPendingComment = (user: any, targetId: string, text: string): PostComment => ({
+  id: `pending-${Math.random().toString(36).slice(2)}`,
+  thingtime: ['comment'],
+  author: viewerAsAuthor(user),
+  type: 'text',
+  text,
+  images: [],
+  listing: null,
+  thing: null,
+  tags: [],
+  reactionCounts: {},
+  viewerReactions: [],
+  commentCount: 0,
+  targetId,
+  createdAt: new Date().toISOString()
+});
+
+const isPendingComment = (comment: PostComment) => comment.id.startsWith('pending-');
+
 // A comment row — comments share the post schema, so each row is reactable
 // (tap to 👍, hold/hover for the picker — optimistic, no wait), renders rich
 // post bodies, and replies INLINE: the Reply control opens a reply input and
@@ -421,13 +462,37 @@ const CommentRow = (props: {
   const api = useApi();
   const user = useCurrentUser();
   const lopu = useLopu();
+  const { recent, pushRecent } = useRecentReactions();
+  const replyFocus = React.useContext(ReplyFocusContext);
 
   const [repliesOpen, setRepliesOpen] = React.useState(false);
   // null = not loaded yet; loaded lists live here so replies render inline
   const [replies, setReplies] = React.useState<PostComment[] | null>(null);
   const [repliesLoading, setRepliesLoading] = React.useState(false);
-  const [replyText, setReplyText] = React.useState('');
-  const [replying, setReplying] = React.useState(false);
+  // reply text persists as a per-user draft — leave and pick it up later
+  const { value: replyText, setValue: setReplyText, clear: clearReplyDraft, hydrated: draftHydrated } = useCommentDraft(
+    user?.id,
+    comment.id
+  );
+  const pending = isPendingComment(comment);
+
+  // ＋ in the quick row opens the full custom picker (same as posts)
+  const [pickerOpen, setPickerOpen] = React.useState(false);
+  const pickerContentRef = useOutsideTapClose<HTMLElement>(pickerOpen, () => setPickerOpen(false));
+
+  // a stored draft reopens its thread on mount — continue where you left off
+  React.useEffect(() => {
+    if (draftHydrated && replyText.trim()) setRepliesOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftHydrated]);
+
+  // another reply opened somewhere in this card — close ONLY if our draft is
+  // empty (typed text always keeps its input open)
+  React.useEffect(() => {
+    if (!replyFocus) return;
+    if (replyFocus.openId !== comment.id && repliesOpen && !replyText.trim()) setRepliesOpen(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [replyFocus?.openId]);
 
   const viewerSet = new Set(comment.viewerReactions || []);
   const reactionEntries = Object.entries(comment.reactionCounts || {})
@@ -457,6 +522,7 @@ const CommentRow = (props: {
     try {
       const resp = await api.v1.things.react({ id: comment.id, emoji: token });
       onChanged({ ...optimistic, reactionCounts: resp.reactionCounts, viewerReactions: resp.viewerReactions });
+      if (adding) pushRecent(token, resp.recentReactions);
     } catch (err: any) {
       onChanged(comment); // revert to the pre-toggle snapshot
       lopu({ title: err?.error || 'Reaction did not stick 😞', status: 'error' });
@@ -466,7 +532,9 @@ const CommentRow = (props: {
   const toggleReplies = async () => {
     const opening = !repliesOpen;
     setRepliesOpen(opening);
-    if (!opening || replies !== null || comment.commentCount === 0) return;
+    if (!opening) return;
+    replyFocus?.requestOpen(comment.id);
+    if (replies !== null || comment.commentCount === 0) return;
     setRepliesLoading(true);
     try {
       const resp = await api.v1.things.get({ id: comment.id });
@@ -477,20 +545,27 @@ const CommentRow = (props: {
     setRepliesLoading(false);
   };
 
+  // optimistic: the reply renders the moment you hit send; the server copy
+  // swaps in when the write lands, and a failure restores your text
   const submitReply = async () => {
     const text = replyText.trim();
-    if (!text || replying) return;
-    setReplying(true);
+    if (!text) return;
+
+    const pendingReply = buildPendingComment(user, comment.id, text);
+    clearReplyDraft();
+    setReplies((prev) => [...(prev || []), pendingReply]);
+    onChanged({ ...comment, commentCount: comment.commentCount + 1 });
+    onEngagement?.({ thingId: comment.id, signal: 'comment' });
+
     try {
       const resp = await api.v1.things.comment({ id: comment.id, text });
-      setReplies((prev) => [...(prev || []), resp.comment]);
-      onChanged({ ...comment, commentCount: comment.commentCount + 1 });
-      onEngagement?.({ thingId: comment.id, signal: 'comment' });
-      setReplyText('');
+      setReplies((prev) => (prev || []).map((reply) => (reply.id === pendingReply.id ? resp.comment : reply)));
     } catch (err: any) {
+      setReplies((prev) => (prev || []).filter((reply) => reply.id !== pendingReply.id));
+      onChanged({ ...comment, commentCount: Math.max(0, comment.commentCount) });
+      setReplyText(text); // give the draft back
       lopu({ title: err?.error || 'Reply did not send 😞', status: 'error' });
     }
-    setReplying(false);
   };
 
   const handleReplyChanged = (next: PostComment) => {
@@ -498,7 +573,7 @@ const CommentRow = (props: {
   };
 
   return (
-    <Flex columnGap={2} alignItems="flex-start">
+    <Flex columnGap={2} alignItems="flex-start" opacity={pending ? 0.6 : 1} transition="opacity 0.2s ease">
       <AuthorAvatar author={comment.author} size="22px" fontSize="10px" />
       <Box flex="1" minWidth={0}>
         <Box background="var(--tt-surface-alt, #f5f5f7)" borderRadius={RADIUS_MD} paddingX={3} paddingY={2}>
@@ -513,8 +588,9 @@ const CommentRow = (props: {
           <PostBody post={comment} compact />
         </Box>
         <Flex alignItems="center" columnGap={2} paddingX={2} paddingTop={0.5} fontSize="11px" color={MUTED}>
-          <ReactionControl
-            enabled={!!user}
+          <Box position="relative" display="flex">
+            <ReactionControl
+            enabled={!!user && !pending}
             onQuickTap={() => handleReact('👍')}
             content={(close) => (
               <QuickReactionRow
@@ -522,6 +598,10 @@ const CommentRow = (props: {
                 onPick={(emoji) => {
                   close();
                   handleReact(emoji);
+                }}
+                onMore={() => {
+                  close();
+                  setPickerOpen(true);
                 }}
               />
             )}
@@ -537,7 +617,26 @@ const CommentRow = (props: {
                 {viewerSet.size ? [...viewerSet].slice(0, 3).join('') : '👍'} React
               </Box>
             }
-          />
+            />
+            {/* the full custom picker (multi-select), anchored above the row */}
+            <Popover isOpen={pickerOpen} onClose={() => setPickerOpen(false)} placement="top-start" isLazy closeOnBlur={false}>
+              <PopoverAnchor>
+                <Box position="absolute" left={0} bottom="100%" width="1px" height="1px" pointerEvents="none" />
+              </PopoverAnchor>
+              <PopoverContent
+                ref={pickerContentRef as any}
+                width="auto"
+                border={BORDER}
+                borderRadius="var(--tt-radius-lg, 16px)"
+                background="var(--tt-card, #fff)"
+                boxShadow="var(--tt-shadow-panel, 0px 18px 60px rgba(0, 0, 0, 0.22))"
+                zIndex={20}
+                _focusVisible={{ outline: 'none' }}
+              >
+                <EmojiPicker onPick={handleReact} recent={recent} activeTokens={comment.viewerReactions} autoFocus />
+              </PopoverContent>
+            </Popover>
+          </Box>
           {reactionTotal > 0 && (
             <Text as="span" flexShrink={0} title="Reactions">
               {topEmojis} {reactionTotal}
@@ -591,7 +690,6 @@ const CommentRow = (props: {
                   size="xs"
                   variant="outline"
                   borderRadius="999px"
-                  isLoading={replying}
                   isDisabled={!replyText.trim()}
                   onClick={submitReply}
                 />
@@ -618,9 +716,12 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
   const lopu = useLopu();
 
   const [commentsOpen, setCommentsOpen] = React.useState(!!defaultCommentsOpen);
-  const [commentText, setCommentText] = React.useState('');
-  const [commenting, setCommenting] = React.useState(false);
+  // the comment text persists as a per-user draft — leave and pick it up later
+  const { value: commentText, setValue: setCommentText, clear: clearCommentDraft } = useCommentDraft(user?.id, post.id);
   const [richCommentOpen, setRichCommentOpen] = React.useState(false);
+  // one EMPTY reply input at a time across this card's comment tree
+  const [openReplyId, setOpenReplyId] = React.useState<string | null>(null);
+  const replyFocus = React.useMemo(() => ({ openId: openReplyId, requestOpen: setOpenReplyId }), [openReplyId]);
   const [shareOpen, setShareOpen] = React.useState(false);
   const [shareText, setShareText] = React.useState('');
   const [shareVisibility, setShareVisibility] = React.useState<PostVisibility>('public');
@@ -692,20 +793,37 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     }
   };
 
+  // optimistic: the comment renders the moment you hit send; the server copy
+  // swaps in when the write lands, and a failure restores your text
   const submitComment = async () => {
     const text = commentText.trim();
-    if (!text || commenting) return;
+    if (!text) return;
 
-    setCommenting(true);
+    const pendingComment = buildPendingComment(user, post.id, text);
+    clearCommentDraft();
+    onChanged?.((prev) => ({
+      ...prev,
+      comments: [...prev.comments, pendingComment],
+      commentCount: prev.commentCount + 1
+    }));
+    onEngagement?.({ thingId: post.id, signal: 'comment' });
+
     try {
       const resp = await api.v1.things.comment({ id: post.id, text });
-      onChanged?.((prev) => ({ ...prev, comments: [...prev.comments, resp.comment], commentCount: resp.commentCount }));
-      onEngagement?.({ thingId: post.id, signal: 'comment' });
-      setCommentText('');
+      onChanged?.((prev) => ({
+        ...prev,
+        comments: prev.comments.map((comment) => (comment.id === pendingComment.id ? resp.comment : comment)),
+        commentCount: resp.commentCount
+      }));
     } catch (err: any) {
+      onChanged?.((prev) => ({
+        ...prev,
+        comments: prev.comments.filter((comment) => comment.id !== pendingComment.id),
+        commentCount: Math.max(0, prev.commentCount - 1)
+      }));
+      setCommentText(text); // give the draft back
       lopu({ title: err?.error || 'Comment did not send 😞', status: 'error' });
     }
-    setCommenting(false);
   };
 
   // the rich composer posts through api.v1.things.comment itself and hands
@@ -810,6 +928,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
   );
 
   return (
+    <ReplyFocusContext.Provider value={replyFocus}>
     <Box
       background="var(--tt-card, #ffffff)"
       border={BORDER}
@@ -1125,7 +1244,6 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
                     size="sm"
                     variant="outline"
                     borderRadius="999px"
-                    isLoading={commenting}
                     isDisabled={!commentText.trim()}
                     onClick={submitComment}
                   />
@@ -1143,5 +1261,6 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
         )}
       </Flex>
     </Box>
+    </ReplyFocusContext.Provider>
   );
 });
