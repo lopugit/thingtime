@@ -38,6 +38,7 @@ import { sanitizeReactionToken, splitEmojis } from '~/utils/reactionTokens';
 import { RAINBOW } from '~/theme/rainbow';
 import { PostComposer } from './PostComposer';
 import { ReactionControl } from './ReactionControl';
+import { fetchThreadInto, getCachedThread, prefetchNextDepth, setCachedThread, warmAvatars } from './threadCache';
 import {
   CIRCLE_META,
   MARKETPLACE_CATEGORY_META,
@@ -493,9 +494,10 @@ const CommentRow = (props: {
   const { recent, pushRecent } = useRecentReactions();
   const replyFocus = React.useContext(ReplyFocusContext);
 
-  // threads ship two levels deep — preloaded replies render immediately
+  // threads ship two levels deep — cached or preloaded replies render
+  // immediately (the cache survives collapse/re-expand remounts and reloads)
   const [replies, setReplies] = React.useState<PostComment[] | null>(
-    comment.comments?.length ? comment.comments : null
+    () => getCachedThread(comment.id) ?? (comment.comments?.length ? comment.comments : null)
   );
   const [repliesOpen, setRepliesOpen] = React.useState(depth === 1 && !!comment.comments?.length);
   // the reply INPUT is separate from thread visibility: threads stay open,
@@ -588,10 +590,14 @@ const CommentRow = (props: {
       fetchingRef.current = true;
       // skeleton only when there is truly nothing to paint
       if (repliesStateRef.current === null && comment.commentCount > 0) setRepliesLoading(true);
-      api.v1.things
-        .get({ id: comment.id })
-        .then((resp: any) => {
-          const fetched: PostComment[] = resp?.post?.comments || [];
+      fetchThreadInto(api, comment.id)
+        .then((fetched) => {
+          if (fetched === null) {
+            setReplies((prev) => prev ?? []);
+            return;
+          }
+          // stay one depth ahead: pull the level BELOW what just arrived
+          prefetchNextDepth(api, fetched);
           setReplies((prev) => {
             // keep optimistic sends that raced the fetch, drop ones the
             // server copy now covers
@@ -603,7 +609,6 @@ const CommentRow = (props: {
             return merged.filter((reply, index) => merged.findIndex((entry) => entry.id === reply.id) === index);
           });
         })
-        .catch(() => setReplies((prev) => prev ?? []))
         .finally(() => {
           fetchingRef.current = false;
           setRepliesLoading(false);
@@ -665,7 +670,9 @@ const CommentRow = (props: {
       const resp = await api.v1.things.comment({ id: comment.id, text });
       setReplies((prev) => {
         const mapped = (prev || []).map((reply) => (reply.id === pendingReply.id ? resp.comment : reply));
-        return mapped.filter((reply, index) => mapped.findIndex((entry) => entry.id === reply.id) === index);
+        const deduped = mapped.filter((reply, index) => mapped.findIndex((entry) => entry.id === reply.id) === index);
+        setCachedThread(comment.id, deduped.filter((reply) => !isPendingComment(reply)));
+        return deduped;
       });
     } catch (err: any) {
       setReplies((prev) => (prev || []).filter((reply) => reply.id !== pendingReply.id));
@@ -678,7 +685,11 @@ const CommentRow = (props: {
   // the rich composer posts through api.v1.things.comment itself and hands
   // back the created reply (post-shaped)
   const handleRichReplied = (reply: PostComment) => {
-    setReplies((prev) => [...(prev || []), reply]);
+    setReplies((prev) => {
+      const next = [...(prev || []), reply];
+      setCachedThread(comment.id, next.filter((entry) => !isPendingComment(entry)));
+      return next;
+    });
     setRepliesOpen(true);
     onChanged({ ...comment, commentCount: comment.commentCount + 1 });
     onEngagement?.({ thingId: comment.id, signal: 'comment' });
@@ -891,6 +902,23 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
   const [openReplyId, setOpenReplyId] = React.useState<string | null>(null);
   // comments page 5 at a time — "show more" reveals 5 older ones per click
   const [visibleComments, setVisibleComments] = React.useState(5);
+
+  // stay a depth ahead from the moment the post arrives: warm shipped
+  // avatars and prefetch the first HIDDEN depth (short level-1 threads and
+  // every shipped level-2 comment with replies) into the thread cache
+  const prefetchedPostRef = React.useRef(false);
+  React.useEffect(() => {
+    if (prefetchedPostRef.current) return;
+    prefetchedPostRef.current = true;
+    warmAvatars(post.comments);
+    for (const comment of post.comments) {
+      if (comment.commentCount > (comment.comments?.length || 0) && !getCachedThread(comment.id)) {
+        void fetchThreadInto(api, comment.id);
+      }
+      prefetchNextDepth(api, comment.comments);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [post.id]);
   const replyFocus = React.useMemo(() => ({ openId: openReplyId, requestOpen: setOpenReplyId }), [openReplyId]);
   const [shareOpen, setShareOpen] = React.useState(false);
   const [shareText, setShareText] = React.useState('');

@@ -1,12 +1,25 @@
 import React from 'react';
-import { Box, Button, Flex, IconButton, Image, Input, Select, Text } from '@chakra-ui/react';
+import {
+  Box,
+  Button,
+  Flex,
+  IconButton,
+  Image,
+  Input,
+  Modal,
+  ModalContent,
+  ModalOverlay,
+  Select,
+  Text
+} from '@chakra-ui/react';
 import { PictureInPicture2, X } from 'lucide-react';
 
 import { useApi } from '~/hooks/useApi';
 import { LongTextEditor } from '~/components/Editor/LongTextEditor';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { UserAvatarCircle } from '~/components/Nav/Drawer/DrawerContent';
-import { EditorSplit, startPointerGesture } from '~/components/Thingtime/EditorSplit';
+import { EditorSplit } from '~/components/Thingtime/EditorSplit';
+import { ThingView } from '~/components/Thingtime/ThingView';
 import { useThingtime } from '~/components/Thingtime/useThingtime';
 import { RAINBOW } from '~/theme/rainbow';
 import { CIRCLE_META, MARKETPLACE_CATEGORY_META, POST_TYPE_META } from './feedTypes';
@@ -125,7 +138,9 @@ export const PostComposer = (props: PostComposerProps) => {
   // button duplicates the window into one of the editor's own floating frames)
   const [thingPhotos, setThingPhotos] = React.useState(false);
   const [thingListing, setThingListing] = React.useState(false);
-  const [editorHeight, setEditorHeight] = React.useState(DEFAULT_EDITOR_HEIGHT);
+  // the thing edits in a bottom-sheet modal (nested comment composers can't
+  // host a full editor inline, and mobile needs the room)
+  const [thingModalOpen, setThingModalOpen] = React.useState(false);
   const editorApiRef = React.useRef<{ popOutDuplicate: () => void } | null>(null);
   const handleEditorApi = React.useCallback((api: { popOutDuplicate: () => void } | null) => {
     editorApiRef.current = api;
@@ -330,8 +345,8 @@ export const PostComposer = (props: PostComposerProps) => {
       boxShadow="var(--tt-shadow-card, 0px 1px 2px rgba(22, 22, 26, 0.05))"
       padding={4}
     >
-      {/* type tabs */}
-      <Flex columnGap={1} alignItems="center">
+      {/* type tabs — wrap on narrow screens so labels never overlap */}
+      <Flex columnGap={1} rowGap={1} alignItems="center" flexWrap="wrap">
         {(Object.keys(POST_TYPE_META) as PostType[]).map((key) => (
           <Button
             key={key}
@@ -392,67 +407,104 @@ export const PostComposer = (props: PostComposerProps) => {
               >
                 {POST_TYPE_META.marketplace.emoji} Marketplace
               </Button>
-              <IconButton
-                aria-label="Pop the editor out"
-                icon={<PictureInPicture2 size={13} />}
-                size="xs"
-                variant="ghost"
-                color={MUTED}
-                borderRadius="8px"
-                title="Pop out a floating, resizable, splittable editor window (the in-post editor stays)"
-                onClick={() => editorApiRef.current?.popOutDuplicate()}
-              />
             </Flex>
           </Flex>
 
-          <Box height={`${editorHeight}px`} maxWidth="100%">
-            {/* mount as soon as the store hydrates (the seed effect writes in
-            the same pass) — the placeholder only covers the true cold start
-            while the localforage blob loads, per the optimistic-render rule */}
-            {!thingtimeLoading ? (
-              <EditorSplit initialPath={draftPath} embedded chromeless height="100%" onApi={handleEditorApi} />
+          {/* tappable preview — the real editing happens in the bottom-sheet
+          modal (nested comment composers can't host a full editor inline, and
+          mobile needs the room) */}
+          <Box
+            as="button"
+            type="button"
+            textAlign="left"
+            width="100%"
+            minHeight="88px"
+            border={BORDER}
+            borderRadius={RADIUS_MD}
+            background="var(--tt-surface, #fafafb)"
+            padding={3}
+            _hover={{ background: 'var(--tt-surface-alt, #f5f5f7)' }}
+            onClick={() => setThingModalOpen(true)}
+          >
+            {thingtimeLoading ? (
+              <Text fontSize="sm" color={MUTED}>
+                Summoning your thing… 🌀
+              </Text>
+            ) : draftReady && thingHasContent(draftThing) ? (
+              <ThingView thing={draftThing as Record<string, any>} compact />
             ) : (
-              <Flex
-                alignItems="center"
-                justifyContent="center"
-                height="100%"
-                border={BORDER}
-                borderRadius={RADIUS_MD}
-                background="var(--tt-surface, #fafafb)"
-              >
-                <Text fontSize="sm" color={MUTED}>
-                  Summoning your thing… 🌀
-                </Text>
-              </Flex>
+              <Text fontSize="md" color={MUTED}>
+                Imagine.. 🌀
+              </Text>
             )}
+            <Text fontSize="10px" color={MUTED} paddingTop={2}>
+              Tap to build your thing — fields, nested objects, arrays, whatever it needs ✨
+            </Text>
           </Box>
 
-          {/* height drag handle — pointer events, so touch drags too; grow as
-          far as you like (only a small floor so the editor can't vanish) */}
-          <Flex
-            justifyContent="center"
-            paddingY="2px"
-            cursor="ns-resize"
-            borderRadius={RADIUS_SM}
-            sx={{ touchAction: 'none' }}
-            _hover={{ background: 'var(--tt-surface-alt, #f5f5f7)' }}
-            title="Drag to resize the editor"
-            onPointerDown={(event) => {
-              event.preventDefault();
-              const startY = event.clientY;
-              const origin = editorHeight;
-              startPointerGesture(event, (move) => {
-                setEditorHeight(Math.max(MIN_EDITOR_HEIGHT, origin + move.clientY - startY));
-              });
-            }}
+          {/* bottom-sheet editor: flush left/right/bottom, padded + rounded
+          top on mobile; a centered sheet on desktop */}
+          <Modal
+            isOpen={thingModalOpen}
+            onClose={() => setThingModalOpen(false)}
+            size="full"
+            motionPreset="slideInBottom"
+            autoFocus={false}
           >
-            <Box width="44px" height="4px" borderRadius="999px" background="var(--tt-faint, #b6b6c0)" />
-          </Flex>
-
-          <Text fontSize="10px" color={MUTED} whiteSpace="normal">
-            Build any thing — fields, nested objects, arrays, numbers, whatever it needs ✨ Split the editor, or pop
-            it out into its own window ↗️
-          </Text>
+            <ModalOverlay background="rgba(20, 20, 26, 0.45)" />
+            <ModalContent
+              position="fixed"
+              left={0}
+              right={0}
+              bottom={0}
+              top={['calc(var(--thingtime-safe-area-top, 0px) + 44px)', '8vh']}
+              marginY={0}
+              marginX={[0, 'auto']}
+              width="100%"
+              maxWidth={['100%', '680px']}
+              // size="full" forces 100vh — pin the height to the anchored gap
+              // so the sheet ends exactly at the bottom edge
+              height={['calc(100dvh - var(--thingtime-safe-area-top, 0px) - 44px)', '92vh']}
+              minHeight={0}
+              borderTopRadius="var(--tt-radius-lg, 16px)"
+              borderBottomRadius={0}
+              overflow="hidden"
+              display="flex"
+              flexDirection="column"
+              background="var(--tt-card, #ffffff)"
+            >
+              <Flex
+                alignItems="center"
+                columnGap={2}
+                paddingX={4}
+                paddingY={3}
+                borderBottom={BORDER}
+                flexShrink={0}
+              >
+                <Eyebrow>Thing 🌀</Eyebrow>
+                <Flex marginLeft="auto" columnGap={1} alignItems="center">
+                  <IconButton
+                    aria-label="Pop the editor out"
+                    icon={<PictureInPicture2 size={13} />}
+                    size="xs"
+                    variant="ghost"
+                    color={MUTED}
+                    borderRadius="8px"
+                    title="Pop out a floating, resizable, splittable editor window"
+                    onClick={() => editorApiRef.current?.popOutDuplicate()}
+                  />
+                  <Button size="xs" borderRadius={RADIUS_SM} onClick={() => setThingModalOpen(false)}>
+                    Done ✨
+                  </Button>
+                </Flex>
+              </Flex>
+              <Box flex="1" minHeight={0}>
+                {!thingtimeLoading && thingModalOpen && (
+                  <EditorSplit initialPath={draftPath} embedded chromeless height="100%" onApi={handleEditorApi} />
+                )}
+              </Box>
+            </ModalContent>
+          </Modal>
         </Flex>
       )}
 
