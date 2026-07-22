@@ -17,6 +17,8 @@ import {
   PopoverContent,
   PopoverTrigger,
   Select,
+  Skeleton,
+  SkeletonCircle,
   Text,
   Textarea,
   Tooltip
@@ -448,6 +450,28 @@ const buildPendingComment = (user: any, targetId: string, text: string): PostCom
 
 const isPendingComment = (comment: PostComment) => comment.id.startsWith('pending-');
 
+// Left-to-right shimmer placeholder shaped like comment rows — the ONLY
+// loading state threads show, and only on a cold open with nothing cached.
+const ReplySkeleton = () => {
+  const shimmer = {
+    startColor: 'var(--tt-surface-alt, #f5f5f7)',
+    endColor: 'var(--tt-surface-hover, #ececee)'
+  };
+  return (
+    <Flex flexDirection="column" rowGap={2} paddingTop={1} aria-label="Loading replies" role="status">
+      {[0, 1].map((index) => (
+        <Flex key={index} columnGap={2} alignItems="flex-start">
+          <SkeletonCircle size="22px" flexShrink={0} {...shimmer} />
+          <Flex flex="1" minWidth={0} flexDirection="column" rowGap={1.5} paddingTop="2px">
+            <Skeleton height="9px" width="30%" borderRadius="999px" {...shimmer} />
+            <Skeleton height="13px" width={index ? '62%' : '82%'} borderRadius="999px" {...shimmer} />
+          </Flex>
+        </Flex>
+      ))}
+    </Flex>
+  );
+};
+
 // A comment row — comments share the post schema, so each row is reactable
 // (tap to 👍, hold/hover for the picker — optimistic, no wait), renders rich
 // post bodies, and replies INLINE: the Reply control opens a reply input and
@@ -539,27 +563,59 @@ const CommentRow = (props: {
     }
   };
 
-  // opening the thread ALWAYS loads it when nothing is loaded yet — the
-  // first page of replies must appear immediately, never just a show-more
-  // button. Loaded replies + reveal depth persist across close/reopen
-  // (component state) and reset when the page is left or refreshed.
-  const openThread = () => {
-    setRepliesOpen(true);
-    if (replies === null && comment.commentCount > 0 && !repliesLoading) {
-      setRepliesLoading(true);
+  // Thread data model: stale-while-revalidate with prefetch-ahead.
+  // - Every rendered row auto-fetches its missing reply depth on mount, so
+  //   revealing a level is instant — and freshly revealed rows prefetch THE
+  //   NEXT depth themselves, cascading as you go deeper.
+  // - Opening / show-more reveals cached replies immediately and still fires
+  //   a background refetch so live comments added meanwhile reconcile in.
+  // - The skeleton shows only on a cold open with nothing cached (rare).
+  // Loaded replies + reveal depth persist across close/reopen (component
+  // state) and reset when the page is left or refreshed.
+  const repliesStateRef = React.useRef(replies);
+  repliesStateRef.current = replies;
+  const fetchingRef = React.useRef(false);
+
+  const fetchThread = React.useCallback(
+    (options?: { force?: boolean }) => {
+      if (fetchingRef.current || pending) return;
+      const loaded = repliesStateRef.current?.length ?? 0;
+      if (!options?.force && (comment.commentCount === 0 || loaded >= comment.commentCount)) return;
+      fetchingRef.current = true;
+      // skeleton only when there is truly nothing to paint
+      if (repliesStateRef.current === null && comment.commentCount > 0) setRepliesLoading(true);
       api.v1.things
         .get({ id: comment.id })
-        .then((resp: any) =>
+        .then((resp: any) => {
+          const fetched: PostComment[] = resp?.post?.comments || [];
           setReplies((prev) => {
-            const fetched: PostComment[] = resp?.post?.comments || [];
-            // keep any optimistic sends that raced the fetch
-            const pendings = (prev || []).filter((reply) => isPendingComment(reply));
+            // keep optimistic sends that raced the fetch, drop ones the
+            // server copy now covers
+            const pendings = (prev || []).filter(
+              (reply) => isPendingComment(reply) && !fetched.some((entry) => entry.id === reply.id)
+            );
             return [...fetched, ...pendings];
-          })
-        )
+          });
+        })
         .catch(() => setReplies((prev) => prev ?? []))
-        .finally(() => setRepliesLoading(false));
-    }
+        .finally(() => {
+          fetchingRef.current = false;
+          setRepliesLoading(false);
+        });
+    },
+    [api, comment.id, comment.commentCount, pending]
+  );
+
+  // prefetch-ahead: fill this row's missing depth as soon as it renders (and
+  // again if the reply count grows under us)
+  React.useEffect(() => {
+    fetchThread();
+  }, [fetchThread]);
+
+  const openThread = () => {
+    setRepliesOpen(true);
+    // instant reveal from cache + background live refresh
+    fetchThread({ force: true });
   };
 
   const toggleThread = () => {
@@ -577,20 +633,11 @@ const CommentRow = (props: {
     replyFocus?.requestOpen(comment.id);
   };
 
-  // 5 more per click; when the preload is short of the full thread, fetch the
-  // complete reply list first
-  const showMoreReplies = async () => {
-    if ((replies?.length || 0) < comment.commentCount && !repliesLoading) {
-      setRepliesLoading(true);
-      try {
-        const resp = await api.v1.things.get({ id: comment.id });
-        setReplies((prev) => resp?.post?.comments || prev || []);
-      } catch {
-        // keep whatever we have
-      }
-      setRepliesLoading(false);
-    }
+  // 5 more per click, revealed instantly from the prefetched cache; a
+  // background refetch reconciles any live comments added in the meantime
+  const showMoreReplies = () => {
     setVisibleReplies((count) => count + 5);
+    fetchThread({ force: true });
   };
 
   // optimistic: the reply renders the moment you hit send; the server copy
@@ -734,7 +781,9 @@ const CommentRow = (props: {
         {/* inline thread: replies + reply input, right here on the page */}
         {(repliesOpen || replyInputOpen) && (
           <Flex flexDirection="column" rowGap={2} paddingTop={2}>
-            {repliesOpen && ((replies?.length || 0) > visibleReplies || comment.commentCount > (replies?.length || 0)) && (
+            {repliesOpen &&
+              !(repliesLoading && replies === null) &&
+              ((replies?.length || 0) > visibleReplies || comment.commentCount > (replies?.length || 0)) && (
               <Box
                 as="button"
                 type="button"
@@ -748,11 +797,7 @@ const CommentRow = (props: {
                 Show more replies 💬
               </Box>
             )}
-            {repliesLoading && (
-              <Text fontSize="11px" color={MUTED}>
-                Loading replies… 💬
-              </Text>
-            )}
+            {repliesLoading && replies === null && <ReplySkeleton />}
             {repliesOpen &&
               (replies || []).slice(-visibleReplies).map((reply) => (
                 <CommentRow key={reply.id} comment={reply} onChanged={handleReplyChanged} onEngagement={onEngagement} />
