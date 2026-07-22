@@ -140,6 +140,9 @@ export type PublicComment = {
   // direct replies (comments are commentable — their own /post/:id page shows
   // the thread)
   commentCount: number;
+  // nested replies (threads ship two levels deep, ≤ REPLIES_PER_LEVEL each,
+  // oldest → newest; deeper levels arrive empty and load on demand)
+  comments?: PublicComment[];
   targetId: string | null;
   createdAt: string;
 };
@@ -206,6 +209,9 @@ const MAX_COMMENTS_PER_POST = 500;
 const MAX_REACTION_KEYS_PER_POST = 100;
 const MAX_REACTIONS_PER_USER_PER_POST = 20;
 const RETURNED_COMMENTS = 20;
+// nested replies shipped per comment (threads render two levels deep by
+// default; deeper/more loads on demand)
+const REPLIES_PER_LEVEL = 5;
 const MAX_FEED_LIMIT = 50;
 const DEFAULT_FEED_LIMIT = 20;
 // Ranked feeds score the newest N filter-matching posts, then page within
@@ -702,25 +708,90 @@ const resolveRelated = async (docs: ThingDoc[]): Promise<RelatedThings> => {
   // reply counts, one batched query each across every comment on the page.
   const commentIds = [...commentsByTarget.values()].flat().map((entry) => entry.id);
   if (commentIds.length) {
-    const [commentReactions, replyCounts] = await Promise.all([
+    const [commentReactions, replyDocGroups] = await Promise.all([
       things
         .find({ targetId: { $in: commentIds }, thingtime: 'reaction' } as any)
         .sort({ createdAt: 1, shareId: 1 })
         .toArray() as Promise<any[]>,
+      // level-2 replies ride along (latest REPLIES_PER_LEVEL per comment) so
+      // threads render two levels deep without a fetch per comment
       things
         .aggregate([
           { $match: { targetId: { $in: commentIds }, thingtime: 'comment' } },
-          { $group: { _id: '$targetId', count: { $sum: 1 } } }
+          { $sort: { createdAt: -1, shareId: 1 } },
+          { $group: { _id: '$targetId', count: { $sum: 1 }, docs: { $push: '$$ROOT' } } },
+          { $project: { count: 1, docs: { $slice: ['$docs', REPLIES_PER_LEVEL] } } }
         ])
         .toArray() as Promise<any[]>
     ]);
     for (const doc of commentReactions as ThingDoc[]) {
       pushReaction(doc.targetId as string, { userId: doc.ownerId, emoji: String(doc.crystal?.emoji || '') });
     }
-    for (const row of replyCounts) commentCountByTarget.set(String(row._id), row.count);
+    const replyIds: string[] = [];
+    for (const group of replyDocGroups) {
+      commentCountByTarget.set(String(group._id), group.count);
+      // stored newest-first for the slice; readers want oldest → newest
+      for (const doc of (group.docs as ThingDoc[]).reverse()) {
+        replyIds.push(doc.shareId);
+        pushComment(String(group._id), {
+          id: doc.shareId,
+          userId: doc.ownerId,
+          text: String(doc.crystal?.text || ''),
+          createdAt: new Date(doc.createdAt),
+          doc
+        });
+      }
+    }
+    // third pass: the level-2 replies' own reactions + direct reply counts
+    if (replyIds.length) {
+      const [replyReactions, replyReplyCounts] = await Promise.all([
+        things
+          .find({ targetId: { $in: replyIds }, thingtime: 'reaction' } as any)
+          .sort({ createdAt: 1, shareId: 1 })
+          .toArray() as Promise<any[]>,
+        things
+          .aggregate([
+            { $match: { targetId: { $in: replyIds }, thingtime: 'comment' } },
+            { $group: { _id: '$targetId', count: { $sum: 1 } } }
+          ])
+          .toArray() as Promise<any[]>
+      ]);
+      for (const doc of replyReactions as ThingDoc[]) {
+        pushReaction(doc.targetId as string, { userId: doc.ownerId, emoji: String(doc.crystal?.emoji || '') });
+      }
+      for (const row of replyReplyCounts) commentCountByTarget.set(String(row._id), row.count);
+    }
   }
 
   return { commentsByTarget, reactionsByTarget, shareCountByTarget, commentCountByTarget };
+};
+
+// Total comment count for whole threads (every descendant, not just direct
+// children) — one $graphLookup per page of ids, following targetId chains
+// through v2 comment things.
+const resolveThreadCounts = async (ids: string[]): Promise<Map<string, number>> => {
+  const totals = new Map<string, number>();
+  if (!ids.length) return totals;
+  const things = await getThingsCollection();
+  const rows = (await things
+    .aggregate([
+      { $match: { shareId: { $in: ids } } },
+      { $project: { shareId: 1 } },
+      {
+        $graphLookup: {
+          from: things.collectionName,
+          startWith: '$shareId',
+          connectFromField: 'shareId',
+          connectToField: 'targetId',
+          as: 'thread',
+          restrictSearchWithMatch: { thingtime: 'comment' }
+        }
+      },
+      { $project: { shareId: 1, total: { $size: '$thread' } } }
+    ])
+    .toArray()) as any[];
+  for (const row of rows) totals.set(String(row.shareId), row.total);
+  return totals;
 };
 
 // Merge a post's v1 embedded comments with its standalone comment things.
@@ -789,45 +860,57 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
   const originalsById = new Map(originals.map((doc) => [doc.shareId, doc]));
 
   const related = await resolveRelated([...docs, ...originals]);
+  // total thread sizes (all descendants) for the "N comments" counters
+  const threadCounts = await resolveThreadCounts([...docs, ...originals].map((doc) => doc.shareId));
 
   const userIds: string[] = [];
   [...docs, ...originals].forEach((doc) => {
     userIds.push(doc.ownerId);
-    mergedCommentsOf(doc, related)
-      .slice(-RETURNED_COMMENTS)
-      .forEach((comment) => userIds.push(comment.userId));
+    (doc.comments || []).slice(-RETURNED_COMMENTS).forEach((comment) => userIds.push(comment.userId));
   });
+  // every standalone comment entry across all levels (level-2 replies included)
+  for (const entries of related.commentsByTarget.values()) {
+    entries.forEach((entry) => userIds.push(entry.userId));
+  }
   const profiles = await resolveProfiles(userIds);
+
+  // comments share the post schema — surface the post vocabulary (rich
+  // ["post","comment"] bodies, reactions, reply counts); legacy-era entries
+  // (no doc) fall back to the text-only defaults. Recurses through the
+  // preloaded reply levels (resolveRelated ships two).
+  const buildComment = (comment: CommentEntry, parentId: string): PublicComment => {
+    const commentCrystal = comment.doc ? crystalOf(comment.doc) : {};
+    const commentReactions = related.reactionsByTarget.get(comment.id) || [];
+    const replies = related.commentsByTarget.get(comment.id) || [];
+    return {
+      id: comment.id,
+      thingtime: comment.doc ? thingtimeOf(comment.doc) : ['comment'],
+      author: profiles.get(comment.userId) || null,
+      type: (commentCrystal.type as PostType) || 'text',
+      text: comment.text,
+      images: (commentCrystal.images as string[]) || [],
+      listing: (commentCrystal.listing as MarketplaceListing) || null,
+      thing:
+        commentCrystal.thing && typeof commentCrystal.thing === 'object' && !Array.isArray(commentCrystal.thing)
+          ? (commentCrystal.thing as Record<string, any>)
+          : null,
+      tags: comment.doc?.tags || [],
+      reactionCounts: reactionCountsOf(commentReactions),
+      viewerReactions: viewerReactionsOf(commentReactions, viewerId),
+      commentCount: related.commentCountByTarget.get(comment.id) || 0,
+      comments: replies.map((reply) => buildComment(reply, comment.id)),
+      targetId: parentId,
+      createdAt: comment.createdAt.toISOString()
+    };
+  };
 
   const project = (doc: ThingDoc, withShare: boolean): PublicPost => {
     const crystal = crystalOf(doc);
     const allComments = mergedCommentsOf(doc, related);
-    // comments share the post schema — surface the post vocabulary (rich
-    // ["post","comment"] bodies, reactions, reply counts); legacy-era entries
-    // (no doc) fall back to the text-only defaults
-    const comments = allComments.slice(-RETURNED_COMMENTS).map((comment): PublicComment => {
-      const commentCrystal = comment.doc ? crystalOf(comment.doc) : {};
-      const commentReactions = related.reactionsByTarget.get(comment.id) || [];
-      return {
-        id: comment.id,
-        thingtime: comment.doc ? thingtimeOf(comment.doc) : ['comment'],
-        author: profiles.get(comment.userId) || null,
-        type: (commentCrystal.type as PostType) || 'text',
-        text: comment.text,
-        images: (commentCrystal.images as string[]) || [],
-        listing: (commentCrystal.listing as MarketplaceListing) || null,
-        thing:
-          commentCrystal.thing && typeof commentCrystal.thing === 'object' && !Array.isArray(commentCrystal.thing)
-            ? (commentCrystal.thing as Record<string, any>)
-            : null,
-        tags: comment.doc?.tags || [],
-        reactionCounts: reactionCountsOf(commentReactions),
-        viewerReactions: viewerReactionsOf(commentReactions, viewerId),
-        commentCount: related.commentCountByTarget.get(comment.id) || 0,
-        targetId: doc.shareId,
-        createdAt: comment.createdAt.toISOString()
-      };
-    });
+    const comments = allComments.slice(-RETURNED_COMMENTS).map((comment) => buildComment(comment, doc.shareId));
+    // the counter reports the WHOLE thread: v2 descendants via $graphLookup
+    // plus the legacy-era entries (no doc) that graph traversal can't see
+    const totalComments = (threadCounts.get(doc.shareId) ?? 0) + allComments.filter((entry) => !entry.doc).length;
     const reactions = mergedReactionsOf(doc, related);
 
     const shareTarget = targetIdOf(doc);
@@ -853,7 +936,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
       tags: doc.tags || [],
       reactionCounts: reactionCountsOf(reactions),
       viewerReactions: viewerReactionsOf(reactions, viewerId),
-      commentCount: allComments.length,
+      commentCount: totalComments,
       comments,
       shareCount: liveShareCountOf(doc, related),
       isShare: !!shareTarget && thingtimeOf(doc).includes('share'),

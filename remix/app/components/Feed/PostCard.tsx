@@ -465,9 +465,16 @@ const CommentRow = (props: {
   const { recent, pushRecent } = useRecentReactions();
   const replyFocus = React.useContext(ReplyFocusContext);
 
-  const [repliesOpen, setRepliesOpen] = React.useState(false);
-  // null = not loaded yet; loaded lists live here so replies render inline
-  const [replies, setReplies] = React.useState<PostComment[] | null>(null);
+  // threads ship two levels deep — preloaded replies render immediately
+  const [replies, setReplies] = React.useState<PostComment[] | null>(
+    comment.comments?.length ? comment.comments : null
+  );
+  const [repliesOpen, setRepliesOpen] = React.useState(!!comment.comments?.length);
+  // the reply INPUT is separate from thread visibility: threads stay open,
+  // but only one empty input exists at a time (ReplyFocusContext)
+  const [replyInputOpen, setReplyInputOpen] = React.useState(false);
+  const [visibleReplies, setVisibleReplies] = React.useState(5);
+  const [richReplyOpen, setRichReplyOpen] = React.useState(false);
   const [repliesLoading, setRepliesLoading] = React.useState(false);
   // reply text persists as a per-user draft — leave and pick it up later
   const { value: replyText, setValue: setReplyText, clear: clearReplyDraft, hydrated: draftHydrated } = useCommentDraft(
@@ -482,7 +489,10 @@ const CommentRow = (props: {
 
   // a stored draft reopens its thread on mount — continue where you left off
   React.useEffect(() => {
-    if (draftHydrated && replyText.trim()) setRepliesOpen(true);
+    if (draftHydrated && replyText.trim()) {
+      setRepliesOpen(true);
+      setReplyInputOpen(true);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftHydrated]);
 
@@ -490,7 +500,7 @@ const CommentRow = (props: {
   // empty (typed text always keeps its input open)
   React.useEffect(() => {
     if (!replyFocus) return;
-    if (replyFocus.openId !== comment.id && repliesOpen && !replyText.trim()) setRepliesOpen(false);
+    if (replyFocus.openId !== comment.id && replyInputOpen && !replyText.trim()) setReplyInputOpen(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [replyFocus?.openId]);
 
@@ -529,20 +539,30 @@ const CommentRow = (props: {
     }
   };
 
-  const toggleReplies = async () => {
-    const opening = !repliesOpen;
-    setRepliesOpen(opening);
-    if (!opening) return;
-    replyFocus?.requestOpen(comment.id);
-    if (replies !== null || comment.commentCount === 0) return;
-    setRepliesLoading(true);
-    try {
-      const resp = await api.v1.things.get({ id: comment.id });
-      setReplies(resp?.post?.comments || []);
-    } catch {
-      setReplies([]);
+  const toggleReplyInput = () => {
+    if (replyInputOpen) {
+      setReplyInputOpen(false);
+      return;
     }
-    setRepliesLoading(false);
+    setRepliesOpen(true);
+    setReplyInputOpen(true);
+    replyFocus?.requestOpen(comment.id);
+  };
+
+  // 5 more per click; when the preload is short of the full thread, fetch the
+  // complete reply list first
+  const showMoreReplies = async () => {
+    if ((replies?.length || 0) < comment.commentCount && !repliesLoading) {
+      setRepliesLoading(true);
+      try {
+        const resp = await api.v1.things.get({ id: comment.id });
+        setReplies((prev) => resp?.post?.comments || prev || []);
+      } catch {
+        // keep whatever we have
+      }
+      setRepliesLoading(false);
+    }
+    setVisibleReplies((count) => count + 5);
   };
 
   // optimistic: the reply renders the moment you hit send; the server copy
@@ -566,6 +586,16 @@ const CommentRow = (props: {
       setReplyText(text); // give the draft back
       lopu({ title: err?.error || 'Reply did not send 😞', status: 'error' });
     }
+  };
+
+  // the rich composer posts through api.v1.things.comment itself and hands
+  // back the created reply (post-shaped)
+  const handleRichReplied = (reply: PostComment) => {
+    setReplies((prev) => [...(prev || []), reply]);
+    setRepliesOpen(true);
+    onChanged({ ...comment, commentCount: comment.commentCount + 1 });
+    onEngagement?.({ thingId: comment.id, signal: 'comment' });
+    setRichReplyOpen(false);
   };
 
   const handleReplyChanged = (next: PostComment) => {
@@ -647,58 +677,105 @@ const CommentRow = (props: {
             type="button"
             fontSize="11px"
             fontWeight={600}
-            color={repliesOpen ? INK : MUTED}
+            color={replyInputOpen ? INK : MUTED}
             _hover={{ color: INK }}
-            aria-expanded={repliesOpen}
-            onClick={toggleReplies}
+            aria-expanded={replyInputOpen}
+            onClick={toggleReplyInput}
           >
-            {comment.commentCount > 0
-              ? `${comment.commentCount} repl${comment.commentCount === 1 ? 'y' : 'ies'} 💬`
-              : 'Reply 💬'}
+            Reply 💬
           </Box>
+          {comment.commentCount > 0 && (
+            <Box
+              as="button"
+              type="button"
+              fontSize="11px"
+              fontWeight={600}
+              color={repliesOpen ? INK : MUTED}
+              _hover={{ color: INK }}
+              aria-expanded={repliesOpen}
+              onClick={() => setRepliesOpen((open) => !open)}
+            >
+              {comment.commentCount} repl{comment.commentCount === 1 ? 'y' : 'ies'} 🧵
+            </Box>
+          )}
         </Flex>
 
         {/* inline thread: replies + reply input, right here on the page */}
-        {repliesOpen && (
+        {(repliesOpen || replyInputOpen) && (
           <Flex flexDirection="column" rowGap={2} paddingTop={2}>
+            {repliesOpen && ((replies?.length || 0) > visibleReplies || comment.commentCount > (replies?.length || 0)) && (
+              <Box
+                as="button"
+                type="button"
+                alignSelf="flex-start"
+                fontSize="11px"
+                fontWeight={600}
+                color={MUTED}
+                _hover={{ color: INK }}
+                onClick={showMoreReplies}
+              >
+                Show more replies 💬
+              </Box>
+            )}
             {repliesLoading && (
               <Text fontSize="11px" color={MUTED}>
                 Loading replies… 💬
               </Text>
             )}
-            {(replies || []).map((reply) => (
-              <CommentRow key={reply.id} comment={reply} onChanged={handleReplyChanged} onEngagement={onEngagement} />
-            ))}
-            {user ? (
-              <Flex columnGap={2}>
-                <Input
-                  size="xs"
-                  borderRadius="999px"
-                  placeholder={`Reply to ${authorName(comment.author)}… 💬`}
-                  value={replyText}
-                  onChange={(event) => setReplyText(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' && !event.shiftKey) {
-                      event.preventDefault();
-                      submitReply();
-                    }
-                  }}
-                />
-                <IconButton
-                  aria-label="Send reply"
-                  icon={<Send size={12} />}
-                  size="xs"
-                  variant="outline"
-                  borderRadius="999px"
-                  isDisabled={!replyText.trim()}
-                  onClick={submitReply}
-                />
-              </Flex>
-            ) : (
-              <Text fontSize="11px" color={MUTED}>
-                Log in to reply 🗝️
-              </Text>
-            )}
+            {repliesOpen &&
+              (replies || []).slice(-visibleReplies).map((reply) => (
+                <CommentRow key={reply.id} comment={reply} onChanged={handleReplyChanged} onEngagement={onEngagement} />
+              ))}
+            {replyInputOpen &&
+              (user ? (
+                <Flex flexDirection="column" rowGap={2}>
+                  <Flex columnGap={2}>
+                    <Input
+                      size="xs"
+                      borderRadius="999px"
+                      placeholder={`Reply to ${authorName(comment.author)}… 💬`}
+                      value={replyText}
+                      onChange={(event) => setReplyText(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' && !event.shiftKey) {
+                          event.preventDefault();
+                          submitReply();
+                        }
+                      }}
+                    />
+                    <Tooltip label="Reply with photos, a listing, a thing & more" fontSize="xs" borderRadius="8px" hasArrow>
+                      <IconButton
+                        aria-label="Open full reply composer"
+                        icon={<Maximize2 size={12} />}
+                        size="xs"
+                        variant={richReplyOpen ? 'solid' : 'outline'}
+                        borderRadius="999px"
+                        onClick={() => setRichReplyOpen((open) => !open)}
+                      />
+                    </Tooltip>
+                    <IconButton
+                      aria-label="Send reply"
+                      icon={<Send size={12} />}
+                      size="xs"
+                      variant="outline"
+                      borderRadius="999px"
+                      isDisabled={!replyText.trim()}
+                      onClick={submitReply}
+                    />
+                  </Flex>
+                  {richReplyOpen && (
+                    <PostComposer
+                      parentId={comment.id}
+                      onPosted={handleRichReplied as any}
+                      onClose={() => setRichReplyOpen(false)}
+                    />
+                  )}
+                </Flex>
+              ) : (
+                <Text fontSize="11px" color={MUTED}>
+                  Log in to reply 🗝️
+                </Text>
+              ))}
           </Flex>
         )}
       </Box>
@@ -721,6 +798,8 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
   const [richCommentOpen, setRichCommentOpen] = React.useState(false);
   // one EMPTY reply input at a time across this card's comment tree
   const [openReplyId, setOpenReplyId] = React.useState<string | null>(null);
+  // comments page 5 at a time — "show more" reveals 5 older ones per click
+  const [visibleComments, setVisibleComments] = React.useState(5);
   const replyFocus = React.useMemo(() => ({ openId: openReplyId, requestOpen: setOpenReplyId }), [openReplyId]);
   const [shareOpen, setShareOpen] = React.useState(false);
   const [shareText, setShareText] = React.useState('');
@@ -1047,7 +1126,14 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
             })}
             <Flex alignItems="center" columnGap={2} marginLeft="auto">
               {post.commentCount > 0 && (
-                <Text as="span">
+                <Text
+                  as="button"
+                  type="button"
+                  fontWeight={600}
+                  _hover={{ color: INK, textDecoration: 'underline' }}
+                  aria-expanded={commentsOpen}
+                  onClick={toggleComments}
+                >
                   {post.commentCount} comment{post.commentCount === 1 ? '' : 's'}
                 </Text>
               )}
@@ -1202,13 +1288,22 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
         {/* comments */}
         {commentsOpen && (
           <Flex flexDirection="column" rowGap={3}>
-            {post.commentCount > post.comments.length && (
-              <Text fontSize="xs" color={MUTED} whiteSpace="normal">
-                Showing the latest {post.comments.length} of {post.commentCount} comments 💬
-              </Text>
+            {post.comments.length > visibleComments && (
+              <Box
+                as="button"
+                type="button"
+                alignSelf="flex-start"
+                fontSize="xs"
+                fontWeight={600}
+                color={MUTED}
+                _hover={{ color: INK }}
+                onClick={() => setVisibleComments((count) => count + 5)}
+              >
+                Show more comments 💬
+              </Box>
             )}
 
-            {post.comments.map((comment) => (
+            {post.comments.slice(-visibleComments).map((comment) => (
               <CommentRow key={comment.id} comment={comment} onChanged={handleCommentChanged} onEngagement={onEngagement} />
             ))}
 

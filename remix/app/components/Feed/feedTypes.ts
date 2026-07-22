@@ -53,6 +53,9 @@ export type PostComment = {
   viewerReactions: string[];
   // direct replies — the comment's own /post/:id page shows the thread
   commentCount: number;
+  // nested replies (threads ship two levels deep, ≤ 5 per level, oldest →
+  // newest; deeper levels arrive empty and load on demand)
+  comments?: PostComment[];
   targetId: string | null;
   createdAt: string;
 };
