@@ -480,8 +480,12 @@ const CommentRow = (props: {
   comment: PostComment;
   onChanged: (next: PostComment) => void;
   onEngagement?: (event: EngagementEvent) => void;
+  // 1 = a post's direct comment; grows down the thread. Only depth-1 rows
+  // auto-open their preloaded replies (the default two-level view) — deeper
+  // rows reveal ONE more depth per tap.
+  depth?: number;
 }) => {
-  const { comment, onChanged, onEngagement } = props;
+  const { comment, onChanged, onEngagement, depth = 1 } = props;
 
   const api = useApi();
   const user = useCurrentUser();
@@ -493,7 +497,7 @@ const CommentRow = (props: {
   const [replies, setReplies] = React.useState<PostComment[] | null>(
     comment.comments?.length ? comment.comments : null
   );
-  const [repliesOpen, setRepliesOpen] = React.useState(!!comment.comments?.length);
+  const [repliesOpen, setRepliesOpen] = React.useState(depth === 1 && !!comment.comments?.length);
   // the reply INPUT is separate from thread visibility: threads stay open,
   // but only one empty input exists at a time (ReplyFocusContext)
   const [replyInputOpen, setReplyInputOpen] = React.useState(false);
@@ -805,7 +809,13 @@ const CommentRow = (props: {
             {repliesLoading && replies === null && <ReplySkeleton />}
             {repliesOpen &&
               (replies || []).slice(-visibleReplies).map((reply) => (
-                <CommentRow key={reply.id} comment={reply} onChanged={handleReplyChanged} onEngagement={onEngagement} />
+                <CommentRow
+                  key={reply.id}
+                  comment={reply}
+                  onChanged={handleReplyChanged}
+                  onEngagement={onEngagement}
+                  depth={depth + 1}
+                />
               ))}
             {replyInputOpen &&
               (user ? (

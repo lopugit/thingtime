@@ -210,10 +210,11 @@ const MAX_REACTION_KEYS_PER_POST = 100;
 const MAX_REACTIONS_PER_USER_PER_POST = 20;
 const RETURNED_COMMENTS = 20;
 // nested replies shipped per comment: REPLIES_PER_LEVEL per parent, and
-// SHIPPED_REPLY_LEVELS levels BELOW the direct children (direct + 2 = three
-// visible levels per payload; deeper/more loads on demand)
+// SHIPPED_REPLY_LEVELS levels BELOW the direct children (direct + 1 = two
+// visible levels per payload — the UI reveals one more depth per expand,
+// each made instant by the per-row prefetch of ITS OWN two-level payload)
 const REPLIES_PER_LEVEL = 5;
-const SHIPPED_REPLY_LEVELS = 2;
+const SHIPPED_REPLY_LEVELS = 1;
 const MAX_FEED_LIMIT = 50;
 const DEFAULT_FEED_LIMIT = 20;
 // Ranked feeds score the newest N filter-matching posts, then page within
