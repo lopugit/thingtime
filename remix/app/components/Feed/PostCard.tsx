@@ -864,6 +864,9 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     }
   };
 
+  // Opening shows the first page of comments (5); "Show more" reveals 5 more
+  // per click. The revealed count is REMEMBERED across close/reopen (it's
+  // component state), and resets only when the page is left or refreshed.
   const toggleComments = () => {
     setCommentsOpen((open) => !open);
     if (!expandSentRef.current) {
