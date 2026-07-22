@@ -58,7 +58,11 @@ const truncateToken = (token: string): { text: string; truncated: boolean } => {
 // Apply one token's toggle to a post, idempotently (a no-op if the post already
 // reflects it). Used for optimistic paint + revert against the FRESHEST post, so
 // a concurrent reaction on a different token is never clobbered.
-const applyReactionToggle = (prev: PublicPost, token: string, adding: boolean): PublicPost => {
+const applyReactionToggle = <T extends Pick<PublicPost, 'reactionCounts' | 'viewerReactions'>>(
+  prev: T,
+  token: string,
+  adding: boolean
+): T => {
   const has = prev.viewerReactions.includes(token);
   if (adding === has) return prev;
   const reactionCounts = { ...prev.reactionCounts };
@@ -404,8 +408,9 @@ const QuickReactionRow = (props: {
 };
 
 // A comment row — comments share the post schema, so each row is reactable
-// (tap to 👍, hold/hover for the picker), renders rich post bodies, and links
-// to its own /post/:id page (also where its replies live).
+// (tap to 👍, hold/hover for the picker — optimistic, no wait), renders rich
+// post bodies, and replies INLINE: the Reply control opens a reply input and
+// the thread right here (the /post/:id permalink stays on the timestamp).
 const CommentRow = (props: {
   comment: PostComment;
   onChanged: (next: PostComment) => void;
@@ -417,6 +422,13 @@ const CommentRow = (props: {
   const user = useCurrentUser();
   const lopu = useLopu();
 
+  const [repliesOpen, setRepliesOpen] = React.useState(false);
+  // null = not loaded yet; loaded lists live here so replies render inline
+  const [replies, setReplies] = React.useState<PostComment[] | null>(null);
+  const [repliesLoading, setRepliesLoading] = React.useState(false);
+  const [replyText, setReplyText] = React.useState('');
+  const [replying, setReplying] = React.useState(false);
+
   const viewerSet = new Set(comment.viewerReactions || []);
   const reactionEntries = Object.entries(comment.reactionCounts || {})
     .filter(([, count]) => count > 0)
@@ -427,6 +439,8 @@ const CommentRow = (props: {
     .map(([token]) => truncateToken(token).text)
     .join('');
 
+  // optimistic: repaint immediately, reconcile with the server's counts,
+  // revert on failure — same principle as post reactions
   const handleReact = async (rawToken: string) => {
     if (!user) {
       lopu({ title: 'Log in to react 🗝️', status: 'info', duration: 6000 });
@@ -434,13 +448,53 @@ const CommentRow = (props: {
     }
     const token = sanitizeReactionToken(rawToken);
     if (!token) return;
+
+    const adding = !viewerSet.has(token);
+    const optimistic = applyReactionToggle(comment, token, adding);
+    onChanged(optimistic);
+    if (adding) onEngagement?.({ thingId: comment.id, signal: 'react' });
+
     try {
       const resp = await api.v1.things.react({ id: comment.id, emoji: token });
-      onChanged({ ...comment, reactionCounts: resp.reactionCounts, viewerReactions: resp.viewerReactions });
-      if (resp.viewerReactions?.includes(token)) onEngagement?.({ thingId: comment.id, signal: 'react' });
+      onChanged({ ...optimistic, reactionCounts: resp.reactionCounts, viewerReactions: resp.viewerReactions });
     } catch (err: any) {
+      onChanged(comment); // revert to the pre-toggle snapshot
       lopu({ title: err?.error || 'Reaction did not stick 😞', status: 'error' });
     }
+  };
+
+  const toggleReplies = async () => {
+    const opening = !repliesOpen;
+    setRepliesOpen(opening);
+    if (!opening || replies !== null || comment.commentCount === 0) return;
+    setRepliesLoading(true);
+    try {
+      const resp = await api.v1.things.get({ id: comment.id });
+      setReplies(resp?.post?.comments || []);
+    } catch {
+      setReplies([]);
+    }
+    setRepliesLoading(false);
+  };
+
+  const submitReply = async () => {
+    const text = replyText.trim();
+    if (!text || replying) return;
+    setReplying(true);
+    try {
+      const resp = await api.v1.things.comment({ id: comment.id, text });
+      setReplies((prev) => [...(prev || []), resp.comment]);
+      onChanged({ ...comment, commentCount: comment.commentCount + 1 });
+      onEngagement?.({ thingId: comment.id, signal: 'comment' });
+      setReplyText('');
+    } catch (err: any) {
+      lopu({ title: err?.error || 'Reply did not send 😞', status: 'error' });
+    }
+    setReplying(false);
+  };
+
+  const handleReplyChanged = (next: PostComment) => {
+    setReplies((prev) => (prev || []).map((reply) => (reply.id === next.id ? next : reply)));
   };
 
   return (
@@ -489,14 +543,66 @@ const CommentRow = (props: {
               {topEmojis} {reactionTotal}
             </Text>
           )}
-          <Link to={`/post/${comment.id}`}>
-            <Text as="span" fontSize="11px" fontWeight={600} _hover={{ color: INK }}>
-              {comment.commentCount > 0
-                ? `${comment.commentCount} repl${comment.commentCount === 1 ? 'y' : 'ies'} 💬`
-                : 'Reply 💬'}
-            </Text>
-          </Link>
+          <Box
+            as="button"
+            type="button"
+            fontSize="11px"
+            fontWeight={600}
+            color={repliesOpen ? INK : MUTED}
+            _hover={{ color: INK }}
+            aria-expanded={repliesOpen}
+            onClick={toggleReplies}
+          >
+            {comment.commentCount > 0
+              ? `${comment.commentCount} repl${comment.commentCount === 1 ? 'y' : 'ies'} 💬`
+              : 'Reply 💬'}
+          </Box>
         </Flex>
+
+        {/* inline thread: replies + reply input, right here on the page */}
+        {repliesOpen && (
+          <Flex flexDirection="column" rowGap={2} paddingTop={2}>
+            {repliesLoading && (
+              <Text fontSize="11px" color={MUTED}>
+                Loading replies… 💬
+              </Text>
+            )}
+            {(replies || []).map((reply) => (
+              <CommentRow key={reply.id} comment={reply} onChanged={handleReplyChanged} onEngagement={onEngagement} />
+            ))}
+            {user ? (
+              <Flex columnGap={2}>
+                <Input
+                  size="xs"
+                  borderRadius="999px"
+                  placeholder={`Reply to ${authorName(comment.author)}… 💬`}
+                  value={replyText}
+                  onChange={(event) => setReplyText(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && !event.shiftKey) {
+                      event.preventDefault();
+                      submitReply();
+                    }
+                  }}
+                />
+                <IconButton
+                  aria-label="Send reply"
+                  icon={<Send size={12} />}
+                  size="xs"
+                  variant="outline"
+                  borderRadius="999px"
+                  isLoading={replying}
+                  isDisabled={!replyText.trim()}
+                  onClick={submitReply}
+                />
+              </Flex>
+            ) : (
+              <Text fontSize="11px" color={MUTED}>
+                Log in to reply 🗝️
+              </Text>
+            )}
+          </Flex>
+        )}
       </Box>
     </Flex>
   );

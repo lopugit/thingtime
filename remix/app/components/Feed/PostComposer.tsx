@@ -186,7 +186,10 @@ export const PostComposer = (props: PostComposerProps) => {
         if (!COMPOSER_SESSION_KEY.test(key)) preserved[key] = value;
       }
     }
-    setThingtime(DRAFT_TMP_KEY, { ...preserved, [draftSessionId]: { [DRAFT_ROOT_KEY]: {} } });
+    // seed the session BRANCH only — the draft value itself starts undefined,
+    // so the editor opens on a truly blank "Imagine.." slate instead of an
+    // empty object rendering as {} chrome
+    setThingtime(DRAFT_TMP_KEY, { ...preserved, [draftSessionId]: {} });
   }, [type, expanded, thingtimeLoading, getThingtime, setThingtime, draftSessionId]);
 
   // which optional field groups are in play (marketplace always has both;
@@ -274,7 +277,9 @@ export const PostComposer = (props: PostComposerProps) => {
         : await api.v1.things.create(payload);
       lopu({ title: isComment ? 'Commented 💬' : 'Posted ✨', status: 'success', duration: 6000 });
       // the posted thing draft is spent — next thingtime tab starts fresh
-      if (type === 'thingtime') setThingtime(draftPath, {});
+      // (reset the whole session branch so the draft value is undefined again,
+      // not an empty {} that would render as an object)
+      if (type === 'thingtime') setThingtime(`${DRAFT_TMP_KEY}.${draftSessionId}`, {});
       reset();
       onPosted(isComment ? resp.comment : resp.post);
     } catch (err: any) {
@@ -405,7 +410,7 @@ export const PostComposer = (props: PostComposerProps) => {
             the same pass) — the placeholder only covers the true cold start
             while the localforage blob loads, per the optimistic-render rule */}
             {!thingtimeLoading ? (
-              <EditorSplit initialPath={draftPath} embedded height="100%" onApi={handleEditorApi} />
+              <EditorSplit initialPath={draftPath} embedded chromeless height="100%" onApi={handleEditorApi} />
             ) : (
               <Flex
                 alignItems="center"
