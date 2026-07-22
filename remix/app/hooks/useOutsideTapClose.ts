@@ -16,9 +16,24 @@ export const useOutsideTapClose = <T extends HTMLElement = HTMLDivElement>(isOpe
     if (!isOpen) return;
     const handlePointerDown = (event: PointerEvent) => {
       const node = ref.current;
-      if (node && event.target instanceof Node && !node.contains(event.target)) {
-        closeRef.current();
+      if (!node || !(event.target instanceof Node) || node.contains(event.target)) return;
+
+      // On touch, an outside tap while the on-screen keyboard is up (a text
+      // field inside the popover is focused) should only dismiss the
+      // keyboard — the popover stays open; the NEXT outside tap closes it.
+      if (event.pointerType === 'touch') {
+        const active = document.activeElement as HTMLElement | null;
+        const keyboardOpen =
+          !!active &&
+          node.contains(active) &&
+          (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable);
+        if (keyboardOpen) {
+          active.blur();
+          return;
+        }
       }
+
+      closeRef.current();
     };
     document.addEventListener('pointerdown', handlePointerDown, true);
     return () => document.removeEventListener('pointerdown', handlePointerDown, true);
