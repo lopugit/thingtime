@@ -135,6 +135,14 @@ is fixed, and cite the checklist you ran in the PR description.
       reply count — reactions/edits made elsewhere reconcile in within a
       beat. Regression: cache-complete threads skipped the mount refetch and
       froze reply reactions at the cached snapshot forever.
+- [ ] RACE (devtools: delay `/api/v1/things?id=` responses ~3s): tap a
+      reaction while a thread/feed/permalink fetch is in flight — the tap
+      must survive the stale response landing (no disappear/reappear, no
+      wrong counts), and a fresh reload must converge on the server truth.
+      All server-copy ingestion merges through `reactionOverlay` stamped
+      with the fetch START time; every local mutation notes itself there.
+      Regression class: background refetches snapshotted pre-tap clobbered
+      optimistic (even acked) reactions wholesale on ingest.
 - [ ] Comment rows: reply is an icon-only toggle under the bubble with the
       merged react control right beside it — a SINGLE tap hearts the comment
       (❤️, optimistic, tap again to unheart) while hover / touch-and-hold

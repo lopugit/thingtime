@@ -1,4 +1,5 @@
 import type { PostComment } from './feedTypes';
+import { mergeReactionOverlays } from './reactionOverlay';
 
 // Loaded reply threads, cached OUTSIDE component state so collapsing a parent
 // (which unmounts its child rows) never forgets what was already fetched —
@@ -50,12 +51,19 @@ const persist = () => {
   }, 250);
 };
 
-export const getCachedThread = (id: string): PostComment[] | null => load().get(id)?.replies ?? null;
+// Reads merge through the viewer's reaction overlay stamped with the entry's
+// write time — a cached copy older than the viewer's last tap can't hand a
+// stale reaction state to whoever seeds from it.
+export const getCachedThread = (id: string): PostComment[] | null => {
+  const entry = load().get(id);
+  if (!entry) return null;
+  return mergeReactionOverlays(entry.at, entry.replies);
+};
 
-export const setCachedThread = (id: string, replies: PostComment[]) => {
+export const setCachedThread = (id: string, replies: PostComment[], at = Date.now()) => {
   const map = load();
   map.delete(id); // re-insert at the end (newest) for the MAX_ENTRIES slice
-  map.set(id, { replies, at: Date.now() });
+  map.set(id, { replies, at });
   persist();
 };
 
@@ -81,11 +89,14 @@ const inflight = new Map<string, Promise<PostComment[] | null>>();
 export const fetchThreadInto = (api: any, id: string): Promise<PostComment[] | null> => {
   const existing = inflight.get(id);
   if (existing) return existing;
+  // stamp the START: a response snapshotted before a tap that lands after it
+  // must not clobber the tap — the overlay merge decides per comment
+  const startedAt = Date.now();
   const request = api.v1.things
     .get({ id })
     .then((resp: any) => {
-      const fetched: PostComment[] = resp?.post?.comments || [];
-      setCachedThread(id, fetched);
+      const fetched: PostComment[] = mergeReactionOverlays(startedAt, resp?.post?.comments || []);
+      setCachedThread(id, fetched, startedAt);
       warmAvatars(fetched);
       return fetched;
     })

@@ -5,6 +5,7 @@ import { ArrowLeft } from 'lucide-react';
 
 import { useApi } from '~/hooks/useApi';
 import { PostCard } from '~/components/Feed/PostCard';
+import { mergeReactionOverlay } from '~/components/Feed/reactionOverlay';
 import { RAINBOW_TEXT } from '~/theme/rainbow';
 import type { PostChange, PublicPost } from '~/components/Feed/feedTypes';
 
@@ -35,11 +36,18 @@ export const PostPage = () => {
     setError(null);
     setData(null);
 
+    // stamp the START — a response snapshotted before a reaction tap that
+    // lands after it merges through the viewer's overlay, never clobbers it
+    const startedAt = Date.now();
     api.v1.things
       .get({ id: id || '' })
       .then((resp: any) => {
         if (cancelled) return;
-        setData({ post: resp.post ?? null, parent: resp.parent ?? null, root: resp.root ?? null });
+        setData({
+          post: resp.post ? mergeReactionOverlay(startedAt, resp.post) : null,
+          parent: resp.parent ? mergeReactionOverlay(startedAt, resp.parent) : null,
+          root: resp.root ? mergeReactionOverlay(startedAt, resp.root) : null
+        });
       })
       .catch((err: any) => {
         if (cancelled) return;

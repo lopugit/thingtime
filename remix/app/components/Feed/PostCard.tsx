@@ -38,6 +38,7 @@ import { sanitizeReactionToken, splitEmojis } from '~/utils/reactionTokens';
 import { RAINBOW } from '~/theme/rainbow';
 import { PostComposer } from './PostComposer';
 import { ReactionControl } from './ReactionControl';
+import { mergeReactionOverlays, noteLocalReactions } from './reactionOverlay';
 import { fetchThreadInto, getCachedThread, prefetchNextDepth, setCachedThread, warmAvatars } from './threadCache';
 import {
   CIRCLE_META,
@@ -574,7 +575,10 @@ const CommentRow = (props: {
   // threads ship two levels deep — cached or preloaded replies render
   // immediately (the cache survives collapse/re-expand remounts and reloads)
   const [replies, setReplies] = React.useState<PostComment[] | null>(
-    () => getCachedThread(comment.id) ?? (comment.comments?.length ? comment.comments : null)
+    // both seeds are older than any tap this session: the cache merges its
+    // own write-time through the reaction overlay, payload copies merge at
+    // epoch 0 so a remount can't resurrect pre-tap reaction state
+    () => getCachedThread(comment.id) ?? (comment.comments?.length ? mergeReactionOverlays(0, comment.comments) : null)
   );
   const [repliesOpen, setRepliesOpen] = React.useState((depth === 1 && !!comment.comments?.length) || !!defaultOpen);
   // the reply INPUT is separate from thread visibility: threads stay open,
@@ -632,14 +636,19 @@ const CommentRow = (props: {
 
     const adding = !viewerSet.has(token);
     const optimistic = applyReactionToggle(comment, token, adding);
+    // note every local mutation so background fetches snapshotted BEFORE it
+    // merge through instead of clobbering (reactionOverlay contract)
+    noteLocalReactions(comment.id, optimistic.reactionCounts, optimistic.viewerReactions);
     onChanged(optimistic);
     if (adding) onEngagement?.({ thingId: comment.id, signal: 'react' });
 
     try {
       const resp = await api.v1.things.react({ id: comment.id, emoji: token });
+      noteLocalReactions(comment.id, resp.reactionCounts, resp.viewerReactions);
       onChanged({ ...optimistic, reactionCounts: resp.reactionCounts, viewerReactions: resp.viewerReactions });
       if (adding) pushRecent(token, resp.recentReactions);
     } catch (err: any) {
+      noteLocalReactions(comment.id, comment.reactionCounts, comment.viewerReactions);
       onChanged(comment); // revert to the pre-toggle snapshot
       lopu({ title: err?.error || 'Reaction did not stick 😞', status: 'error' });
     }
@@ -1105,16 +1114,31 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     // Optimistic + reconcile + revert all touch ONLY this token, applied to the
     // freshest post — so a concurrent reaction on another token isn't clobbered
     // by a stale full snapshot (and out-of-order responses stay consistent).
-    onChanged?.((prev) => applyReactionToggle(prev, token, adding));
+    // Each updater notes its applied result in the reaction overlay so
+    // background fetches snapshotted before the tap merge instead of
+    // clobbering (idempotent under strict-mode double-invoke).
+    onChanged?.((prev) => {
+      const next = applyReactionToggle(prev, token, adding);
+      noteLocalReactions(next.id, next.reactionCounts, next.viewerReactions);
+      return next;
+    });
     if (adding) onEngagement?.({ thingId: post.id, signal: 'react' });
 
     try {
       const resp = await api.v1.things.react({ id: post.id, emoji: token });
-      onChanged?.((prev) => reconcileReactionToken(prev, token, resp.reactionCounts, resp.viewerReactions));
+      onChanged?.((prev) => {
+        const next = reconcileReactionToken(prev, token, resp.reactionCounts, resp.viewerReactions);
+        noteLocalReactions(next.id, next.reactionCounts, next.viewerReactions);
+        return next;
+      });
       // record recents only on a successful ADD (server records the same)
       if (adding) pushRecent(token, resp.recentReactions);
     } catch (err: any) {
-      onChanged?.((prev) => applyReactionToggle(prev, token, !adding)); // undo just this token
+      onChanged?.((prev) => {
+        const next = applyReactionToggle(prev, token, !adding); // undo just this token
+        noteLocalReactions(next.id, next.reactionCounts, next.viewerReactions);
+        return next;
+      });
       lopu({ title: err?.error || 'Reaction did not stick 😞', status: 'error' });
     }
   };
