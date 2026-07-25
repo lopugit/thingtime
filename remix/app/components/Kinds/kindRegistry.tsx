@@ -13,13 +13,20 @@ import React from 'react';
 //              this is the polymorphism layer: many shapes, one template
 //   - render:  the component
 //
-// resolveKindRenderer() picks explicit kind first, then falls back to
-// structural matching, so feeds/search can render mixed data automatically.
+// Resolution order (resolveKindRender): a `render:` prop naming a renderer,
+// then explicit `kind`, then structural matching — and for each candidate the
+// renderer is only chosen if its adapt() actually produces a value, so a
+// coincidental `render`/`kind` string that a renderer can't adapt cascades to
+// the next candidate instead of blanking the card.
 
 export type KindRenderContext = {
 	// how much room the renderer has — 'card' (feed/search), 'full' (own page),
 	// 'compact' (inside a nested viewer row)
 	size?: 'compact' | 'card' | 'full';
+	// the thing is other people's data (a feed/search post), so renderers and
+	// callers must not trust its URLs/markup. ThingView sets this; the trusted
+	// surfaces (concept docs, schema browse, the viewer's own tree) leave it off.
+	untrusted?: boolean;
 	// invoked when the renderer wants to open the raw nested data
 	onInspect?: () => void;
 };
@@ -95,25 +102,79 @@ export const getKindRenderer = (kind?: string | null): KindRenderer | undefined 
 	);
 };
 
-export const resolveKindRenderer = (thing: unknown): KindRenderer | undefined => {
+// Kinds whose renderers are verified safe to auto-render for UNTRUSTED (other
+// users') data: their output is sanitising text/media cards and every href/src
+// sink is scheme-guarded (see kindRenderersMedia + kindPrimitives). This is an
+// explicit allowlist, not a denylist, so it fails closed — a newly added kind
+// is NOT auto-rendered in feeds/search until its renderer's sinks are vetted
+// and its id added here. Untrusted things resolving any other kind (including
+// the arbitrary-markup 'element'/'chakra' kinds, and the commerce/social/etc.
+// renderers whose URL sinks aren't audited yet) fall back to the sanitising
+// native tree. Trusted surfaces (the viewer's own things, concept docs, schema
+// browse) render every kind and never consult this set.
+const UNTRUSTED_SAFE_KINDS = new Set([
+	'rich-text',
+	'image',
+	'audio',
+	'playlist',
+	'podcast',
+	'article',
+	'quote',
+	'book',
+	'movie',
+	'link',
+	'file',
+	'code',
+	'repository'
+]);
+
+export const isKindSafeForUntrusted = (kind?: string | null): boolean =>
+	!!kind && UNTRUSTED_SAFE_KINDS.has(String(kind).toLowerCase());
+
+// The candidates a thing resolves, in priority order: a `render:` prop naming a
+// renderer, the explicit `kind`, then every structural match. Deduped so the
+// same renderer isn't tried twice.
+const resolutionCandidates = (record: Record<string, unknown>): KindRenderer[] => {
+	const candidates: KindRenderer[] = [];
+	const push = (renderer?: KindRenderer) => {
+		if (renderer && !candidates.includes(renderer)) candidates.push(renderer);
+	};
+
+	push(getKindRenderer(typeof record.render === 'string' ? record.render : null));
+	push(getKindRenderer(typeof record.kind === 'string' ? record.kind : null));
+	for (const renderer of registry) {
+		try {
+			if (renderer.match?.(record) === true) push(renderer);
+		} catch {
+			// a throwing matcher just doesn't match
+		}
+	}
+	return candidates;
+};
+
+// Resolve the renderer AND its adapted value in one pass: the first candidate
+// whose adapt() yields a value wins. Returning the value here means callers
+// (RenderThing, ThingView) never re-run adapt, and a candidate that resolves by
+// name/kind but can't adapt the actual shape cascades instead of blanking.
+export const resolveKindRender = (thing: unknown): { renderer: KindRenderer; value: unknown } | null => {
 	ensureBuiltinKinds();
-	if (!thing || typeof thing !== 'object' || Array.isArray(thing)) return undefined;
+	if (!thing || typeof thing !== 'object' || Array.isArray(thing)) return null;
 
 	const record = thing as Record<string, unknown>;
-
-	// explicit kind wins
-	const explicit = getKindRenderer(typeof record.kind === 'string' ? record.kind : null);
-	if (explicit) return explicit;
-
-	// then structural matching (data-shape polymorphism)
-	return registry.find((renderer) => {
+	for (const renderer of resolutionCandidates(record)) {
+		let value: unknown = null;
 		try {
-			return renderer.match?.(record) === true;
+			value = renderer.adapt(record);
 		} catch {
-			return false;
+			value = null;
 		}
-	});
+		if (value !== null && value !== undefined) return { renderer, value };
+	}
+	return null;
 };
+
+export const resolveKindRenderer = (thing: unknown): KindRenderer | undefined =>
+	resolveKindRender(thing)?.renderer;
 
 export type RenderThingProps = {
 	thing: unknown;
@@ -125,19 +186,10 @@ export type RenderThingProps = {
 // The dispatcher: <RenderThing thing={anyJson}/> renders the right template
 // for the thing's kind, or the fallback when nothing matches.
 export const RenderThing = ({ thing, context = {}, fallback = null }: RenderThingProps) => {
-	const renderer = resolveKindRenderer(thing);
+	const resolved = resolveKindRender(thing);
 
-	if (!renderer) return <>{fallback}</>;
+	if (!resolved) return <>{fallback}</>;
 
-	let value: unknown = null;
-	try {
-		value = renderer.adapt(thing as Record<string, unknown>);
-	} catch {
-		value = null;
-	}
-
-	if (value === null || value === undefined) return <>{fallback}</>;
-
-	const Component = renderer.render;
-	return <Component value={value} context={context} />;
+	const Component = resolved.renderer.render;
+	return <Component value={resolved.value} context={context} />;
 };

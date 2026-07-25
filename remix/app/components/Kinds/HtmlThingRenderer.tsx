@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { isSafeUrl } from './safeUrl';
+import { applyNoOpener, isEventHandlerProp, isSafeCssText, isSafeUrl } from './safeUrl';
 
 // JSON → DOM renderer: lets people build their own html/css components as
 // plain JSON things (stored in Mongo like any other thing) and render them
@@ -123,8 +123,7 @@ const sanitizeStyle = (style: unknown): React.CSSProperties | undefined => {
 	Object.entries(style as Record<string, unknown>).forEach(([key, value]) => {
 		if (typeof value !== 'string' && typeof value !== 'number') return;
 		// block css escape hatches (url(javascript:…), expression(), imports)
-		const text = String(value).toLowerCase();
-		if (text.includes('javascript:') || text.includes('expression(') || text.includes('@import')) return;
+		if (!isSafeCssText(value)) return;
 		out[key] = value as string | number;
 	});
 	return out;
@@ -136,7 +135,7 @@ const sanitizeProps = (props: unknown): Record<string, unknown> => {
 	const out: Record<string, unknown> = {};
 	Object.entries(props as Record<string, unknown>).forEach(([key, value]) => {
 		// no event handlers, no dangerouslySetInnerHTML, whitelist only
-		if (/^on/i.test(key)) return;
+		if (isEventHandlerProp(key)) return;
 		if (!ALLOWED_PROPS.has(key)) return;
 
 		if (key === 'style') {
@@ -159,9 +158,7 @@ const sanitizeProps = (props: unknown): Record<string, unknown> => {
 	});
 
 	// external links never keep the opener
-	if (out.target === '_blank') {
-		out.rel = 'noopener noreferrer';
-	}
+	applyNoOpener(out);
 
 	return out;
 };

@@ -1,11 +1,14 @@
 import React from 'react';
 import { Box, Flex, Grid, Text } from '@chakra-ui/react';
 
+import { ChakraThingRenderer, isChakraThingNode } from './ChakraThingRenderer';
+import type { ChakraThingNode } from './ChakraThingRenderer';
 import { HtmlThingRenderer } from './HtmlThingRenderer';
 import type { HtmlThingNode } from './HtmlThingRenderer';
 import { registerKindRenderer } from './kindRegistry';
 import type { KindRenderContext } from './kindRegistry';
 import { Avatar, KindBadge, KindCard, MutedMono, Sparkline, formatPrice, maybeTimeAgo, toArray, toNumberOr, toStringOr } from './kindPrimitives';
+import { safeCssUrl, safeUrl } from './safeUrl';
 
 // The original core kind renderers: the templates a feed/search/page can use
 // to render things by kind. Category files (kindRenderersMedia/Social/
@@ -83,15 +86,22 @@ type VideoValue = {
 	views: string;
 };
 
-const VideoRenderer = ({ value }: { value: VideoValue; context: KindRenderContext }) => (
+const VideoRenderer = ({ value }: { value: VideoValue; context: KindRenderContext }) => {
+	// scheme-guard every URL sink so untrusted video data can't reach a
+	// javascript: link, an unsafe media src/poster, or a CSS url() breakout
+	const src = safeUrl(value.src);
+	const poster = safeUrl(value.poster);
+	const posterBg = safeCssUrl(value.poster);
+	const url = safeUrl(value.url);
+	return (
 	<KindCard padding={0}>
 		<Box position="relative" width="100%" paddingTop="56.25%" background="var(--tt-ink, #16161a)">
-			{value.src ? (
+			{src ? (
 				<Box
 					as="video"
 					controls
-					poster={value.poster || undefined}
-					src={value.src}
+					poster={poster || undefined}
+					src={src}
 					position="absolute"
 					inset={0}
 					width="100%"
@@ -99,17 +109,13 @@ const VideoRenderer = ({ value }: { value: VideoValue; context: KindRenderContex
 				/>
 			) : (
 				<Flex
-					as={value.url ? 'a' : 'div'}
-					{...(value.url ? { href: value.url, target: '_blank', rel: 'noopener noreferrer' } : {})}
+					as={url ? 'a' : 'div'}
+					{...(url ? { href: url, target: '_blank', rel: 'noopener noreferrer' } : {})}
 					alignItems="center"
 					justifyContent="center"
 					position="absolute"
 					inset={0}
-					backgroundImage={
-						value.poster
-							? `url(${value.poster})`
-							: 'linear-gradient(135deg, #2b2540 0%, #4a2d55 55%, #1c2a42 100%)'
-					}
+					backgroundImage={posterBg || 'linear-gradient(135deg, #2b2540 0%, #4a2d55 55%, #1c2a42 100%)'}
 					backgroundSize="cover"
 					backgroundPosition="center"
 				>
@@ -155,7 +161,8 @@ const VideoRenderer = ({ value }: { value: VideoValue; context: KindRenderContex
 			</Flex>
 		</Box>
 	</KindCard>
-);
+	);
+};
 
 // ————— 🏪 marketplace listing —————
 
@@ -171,23 +178,25 @@ type ListingValue = {
 	seller: string;
 };
 
-const ListingRenderer = ({ value }: { value: ListingValue; context: KindRenderContext }) => (
+const ListingRenderer = ({ value }: { value: ListingValue; context: KindRenderContext }) => {
+	const imageBg = safeCssUrl(value.image);
+	return (
 	<KindCard padding={0}>
 		<Flex flexWrap="wrap">
 			<Box
 				background={
-					value.image
+					imageBg
 						? undefined
 						: 'linear-gradient(135deg, var(--tt-accent-tint, #fff5fa) 0%, var(--tt-surface-alt, #f5f5f7) 100%)'
 				}
-				backgroundImage={value.image ? `url(${value.image})` : undefined}
+				backgroundImage={imageBg}
 				backgroundPosition="center"
 				backgroundSize="cover"
 				flex="1 1 180px"
 				minHeight="150px"
 				position="relative"
 			>
-				{!value.image ? (
+				{!imageBg ? (
 					<Flex alignItems="center" height="100%" justifyContent="center" fontSize="42px" opacity={0.85}>
 						🏪
 					</Flex>
@@ -220,7 +229,8 @@ const ListingRenderer = ({ value }: { value: ListingValue; context: KindRenderCo
 			</Box>
 		</Flex>
 	</KindCard>
-);
+	);
+};
 
 // ————— 📊 dashboard —————
 
@@ -481,7 +491,7 @@ const ComparisonRenderer = ({ value, context }: { value: ComparisonValue; contex
 				) : null}
 				<Flex flexDirection="column" rowGap={3}>
 					{value.names.map((name, itemIdx) => (
-						<Box key={name} background="var(--tt-surface, #fafafb)" border="1px solid var(--tt-border-light, #f0f0f2)" borderRadius="var(--tt-radius-md, 12px)" padding={3}>
+						<Box key={`${name}-${itemIdx}`} background="var(--tt-surface, #fafafb)" border="1px solid var(--tt-border-light, #f0f0f2)" borderRadius="var(--tt-radius-md, 12px)" padding={3}>
 							<Text fontSize="sm" fontWeight={800} color="var(--tt-ink, #16161a)">
 								{name}
 							</Text>
@@ -516,8 +526,8 @@ const ComparisonRenderer = ({ value, context }: { value: ComparisonValue; contex
 							<Box as="th" padding={3} textAlign="left">
 								<MutedMono>Criteria</MutedMono>
 							</Box>
-							{value.names.map((name) => (
-								<Box as="th" key={name} padding={3} textAlign="left">
+							{value.names.map((name, itemIdx) => (
+								<Box as="th" key={`${name}-${itemIdx}`} padding={3} textAlign="left">
 									<Text fontSize="sm" fontWeight={800} color="var(--tt-ink, #16161a)" whiteSpace="nowrap">
 										{name}
 									</Text>
@@ -624,16 +634,18 @@ type ProfileValue = {
 	stats: Array<{ label: string; value: string }>;
 };
 
-const ProfileRenderer = ({ value }: { value: ProfileValue; context: KindRenderContext }) => (
+const ProfileRenderer = ({ value }: { value: ProfileValue; context: KindRenderContext }) => {
+	const bannerBg = safeCssUrl(value.bannerUrl);
+	return (
 	<KindCard padding={0}>
 		<Box
 			height="72px"
 			background={
-				value.bannerUrl
+				bannerBg
 					? undefined
 					: 'linear-gradient(90deg, #ffd1e8 0%, #ffe9c7 30%, #d5f6dd 60%, #cfe4ff 100%)'
 			}
-			backgroundImage={value.bannerUrl ? `url(${value.bannerUrl})` : undefined}
+			backgroundImage={bannerBg}
 			backgroundPosition="center"
 			backgroundSize="cover"
 		/>
@@ -666,7 +678,8 @@ const ProfileRenderer = ({ value }: { value: ProfileValue; context: KindRenderCo
 			) : null}
 		</Box>
 	</KindCard>
-);
+	);
+};
 
 // ————— 🍳 recipe —————
 
@@ -727,6 +740,14 @@ const RecipeRenderer = ({ value }: { value: RecipeValue; context: KindRenderCont
 const ElementRenderer = ({ value }: { value: HtmlThingNode; context: KindRenderContext }) => (
 	<Box width="100%">
 		<HtmlThingRenderer node={value} />
+	</Box>
+);
+
+// ————— 🎛 chakra (JSON → Chakra components) —————
+
+const ChakraKindRenderer = ({ value }: { value: ChakraThingNode; context: KindRenderContext }) => (
+	<Box width="100%">
+		<ChakraThingRenderer node={value} />
 	</Box>
 );
 
@@ -1048,6 +1069,19 @@ registerKindRenderer({
 		return thing as HtmlThingNode;
 	},
 	render: ElementRenderer
+});
+
+registerKindRenderer({
+	kind: 'chakra',
+	title: 'Chakra (components as data)',
+	emoji: '🎛',
+	category: 'Builder',
+	description:
+		'Serialised Chakra UI component trees — chakra, props, children as pure JSON — rendered through a sanitising allowlist gate.',
+	aliases: ['chakra-component'],
+	match: (thing) => isChakraThingNode(thing),
+	adapt: (thing): ChakraThingNode | null => (isChakraThingNode(thing) ? (thing as ChakraThingNode) : null),
+	render: ChakraKindRenderer
 });
 
 };

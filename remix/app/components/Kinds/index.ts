@@ -11,11 +11,15 @@ export {
 	RenderThing,
 	getKindRenderer,
 	getKindRenderers,
+	isKindSafeForUntrusted,
 	registerKindRenderer,
+	resolveKindRender,
 	resolveKindRenderer
 } from './kindRegistry';
 export type { KindRenderContext, KindRenderer, RenderThingProps } from './kindRegistry';
 export { HtmlThingRenderer } from './HtmlThingRenderer';
 export type { HtmlThingNode } from './HtmlThingRenderer';
+export { ChakraThingRenderer, isChakraThingNode } from './ChakraThingRenderer';
+export type { ChakraThingNode } from './ChakraThingRenderer';
 export { RichTextBlocks } from './kindRenderersMedia';
 export { sampleKindThings } from './sampleKindThings';

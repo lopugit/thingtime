@@ -49,6 +49,7 @@ export default function App() {
   const rootData = useLoaderData() as RootLoaderData;
   const { envFromCookie, titlePrefix } = rootData;
   const { pathname, search, hash } = useLocation();
+  const isAuthorizePopup = pathname === '/authorize';
   const revalidator = useRevalidator();
   const [mounted, setMounted] = React.useState(false);
 
@@ -111,12 +112,19 @@ export default function App() {
         <ThemeHost />
         {mounted ? <ElectronBridgeHost /> : null}
         {mounted ? <NativeBridgeHost /> : null}
-        <DevKit />
-        <Nav />
-        <Main>
+        {/* /authorize is the "Login with Thingtime" popup — a focused embed
+            surface with its own chrome, so the app shell (nav, drawer trigger,
+            DevKit bubble, Main's footer + its 900px spacer) stays out of it. */}
+        {isAuthorizePopup ? null : <DevKit />}
+        {isAuthorizePopup ? null : <Nav />}
+        {isAuthorizePopup ? (
           <Outlet />
-        </Main>
-        <DrawerSystem />
+        ) : (
+          <Main>
+            <Outlet />
+          </Main>
+        )}
+        {isAuthorizePopup ? null : <DrawerSystem />}
         {/* App-wide confetti canvas + easter eggs (🥚 party mode, window.tt). */}
         <ConfettiCanvas />
         {mounted ? <EasterEggs /> : null}

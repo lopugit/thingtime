@@ -19,21 +19,24 @@ import { Database, FlaskConical, Play } from 'lucide-react';
 
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useApi } from '~/hooks/useApi';
-
-const CARD_STYLES = {
-  bg: 'var(--tt-card, #ffffff)',
-  border: '1px solid',
-  borderColor: 'var(--tt-border, #ececef)',
-  borderRadius: 'var(--tt-radius-lg, 16px)',
-  boxShadow: 'var(--tt-shadow-card, 0 1px 2px rgba(0, 0, 0, 0.05))'
-} as const;
+import { CARD_STYLES } from '~/theme/card';
 
 type CollectionCensus = {
   collection: string;
+  physical: string;
   currentVersion: number;
   total: number;
   versions: Record<string, number>;
   pendingMigrations: string[];
+};
+
+type CollectionGeneration = {
+  collection: string;
+  physical: string;
+  version: number | null;
+  docs: number;
+  current: boolean;
+  stale: boolean;
 };
 
 type Migration = {
@@ -43,6 +46,7 @@ type Migration = {
   toVersion: number;
   title: string;
   description: string;
+  destructive: boolean;
   pending: number;
 };
 
@@ -57,6 +61,8 @@ type MigrationReport = {
 
 type MigrationsStatus = {
   collections: CollectionCensus[];
+  generations: CollectionGeneration[];
+  adoptionIssues: string[];
   migrations: Migration[];
 };
 
@@ -89,7 +95,12 @@ export function MigrationsPanel() {
   const fetchStatus = React.useCallback(async () => {
     try {
       const data = await getMigrations();
-      setStatus({ collections: data?.collections || [], migrations: data?.migrations || [] });
+      setStatus({
+        collections: data?.collections || [],
+        generations: data?.generations || [],
+        adoptionIssues: data?.adoptionIssues || [],
+        migrations: data?.migrations || []
+      });
       setError(null);
     } catch (err: any) {
       setError(err?.error || 'Failed to load migration status');
@@ -108,7 +119,9 @@ export function MigrationsPanel() {
       setConfirmId(null);
 
       try {
-        const result = await migrationsRun({ migration: migration.id, dryRun });
+        // the inline Really run? step IS the confirmation — destructive
+        // migrations additionally require the API to hear it explicitly
+        const result = await migrationsRun({ migration: migration.id, dryRun, confirm: !dryRun });
 
         lopu({
           title: dryRun ? `Dry run: ${migration.id}` : 'Migration complete',
@@ -185,6 +198,22 @@ export function MigrationsPanel() {
 
       {status ? (
         <Stack spacing={5}>
+          {status.adoptionIssues.length ? (
+            <Box {...CARD_STYLES} borderColor="var(--tt-warning, #d69e2e)" p={4}>
+              <Flex align="center" gap={2} mb={1}>
+                <Badge colorScheme="orange">adoption</Badge>
+                <Text fontSize="sm" fontWeight="700">
+                  Legacy collections not yet adopted
+                </Text>
+              </Flex>
+              {status.adoptionIssues.map((issue) => (
+                <Text color="var(--tt-text, #5a5a66)" fontFamily="mono" fontSize="xs" key={issue} mt={1}>
+                  {issue}
+                </Text>
+              ))}
+            </Box>
+          ) : null}
+
           <Box {...CARD_STYLES} overflow="hidden">
             <Box borderBottom="1px solid" borderColor="var(--tt-border, #ececef)" px={5} py={4}>
               <Heading as="h4" fontSize="md">
@@ -192,10 +221,11 @@ export function MigrationsPanel() {
               </Heading>
             </Box>
             <Box overflowX="auto">
-              <Table minW="640px" size="sm">
+              <Table minW="720px" size="sm">
                 <Thead>
                   <Tr>
                     <Th>Collection</Th>
+                    <Th>Physical</Th>
                     <Th>Current</Th>
                     <Th isNumeric>Docs</Th>
                     <Th>Versions</Th>
@@ -207,6 +237,9 @@ export function MigrationsPanel() {
                     <Tr key={entry.collection}>
                       <Td fontFamily="mono" fontSize="xs" fontWeight="700" whiteSpace="nowrap">
                         {entry.collection}
+                      </Td>
+                      <Td color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="xs" whiteSpace="nowrap">
+                        {entry.physical}
                       </Td>
                       <Td>
                         <Badge colorScheme="blue">v{entry.currentVersion}</Badge>
@@ -224,6 +257,60 @@ export function MigrationsPanel() {
                           </Badge>
                         ) : (
                           <Badge colorScheme="green">up to date</Badge>
+                        )}
+                      </Td>
+                    </Tr>
+                  ))}
+                </Tbody>
+              </Table>
+            </Box>
+          </Box>
+
+          <Box {...CARD_STYLES} overflow="hidden">
+            <Box borderBottom="1px solid" borderColor="var(--tt-border, #ececef)" px={5} py={4}>
+              <Heading as="h4" fontSize="md">
+                Storage generations
+              </Heading>
+              <Text color="var(--tt-muted, #9a9aa6)" fontSize="xs" mt={1}>
+                Every physical collection on the server. Stale generations are what
+                drop-stale-collection-generations removes once nothing needs them.
+              </Text>
+            </Box>
+            <Box overflowX="auto">
+              <Table minW="640px" size="sm">
+                <Thead>
+                  <Tr>
+                    <Th>Physical collection</Th>
+                    <Th>Collection</Th>
+                    <Th>Generation</Th>
+                    <Th isNumeric>Docs</Th>
+                    <Th>Status</Th>
+                  </Tr>
+                </Thead>
+                <Tbody>
+                  {status.generations.map((generation) => (
+                    <Tr key={generation.physical}>
+                      <Td fontFamily="mono" fontSize="xs" fontWeight="700" whiteSpace="nowrap">
+                        {generation.physical}
+                      </Td>
+                      <Td fontFamily="mono" fontSize="xs" whiteSpace="nowrap">
+                        {generation.collection}
+                      </Td>
+                      <Td>
+                        <Badge colorScheme={generation.version === null ? 'purple' : 'blue'}>
+                          {generation.version === null ? 'legacy' : `v${generation.version}`}
+                        </Badge>
+                      </Td>
+                      <Td fontFamily="mono" fontSize="xs" isNumeric>
+                        {generation.docs}
+                      </Td>
+                      <Td>
+                        {generation.current ? (
+                          <Badge colorScheme="green">current</Badge>
+                        ) : generation.stale ? (
+                          <Badge colorScheme="orange">stale</Badge>
+                        ) : (
+                          <Badge colorScheme="purple">ahead</Badge>
                         )}
                       </Td>
                     </Tr>
@@ -251,9 +338,12 @@ export function MigrationsPanel() {
                       >
                         {migration.collection}
                       </Badge>
-                      <Badge colorScheme="blue">
-                        v{migration.fromVersion} → v{migration.toVersion}
-                      </Badge>
+                      {migration.toVersion ? (
+                        <Badge colorScheme="blue">
+                          v{migration.fromVersion} → v{migration.toVersion}
+                        </Badge>
+                      ) : null}
+                      {migration.destructive ? <Badge colorScheme="red">destructive</Badge> : null}
                       <Badge colorScheme={migration.pending ? 'orange' : 'green'}>{migration.pending} pending</Badge>
                     </Flex>
 

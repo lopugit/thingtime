@@ -51,6 +51,9 @@
   installs, and local generated state needed for validation. The current
   dependency directories alone are roughly 1.5 GB when present, and
   generated-output patterns can make managed worktrees larger.
+- Before finishing a PR, run the manual checklists in `TESTING.md` for every
+  area the PR touches, and add a line there whenever a new bug class is fixed
+  (rule mirrored in `AGENTS.md`).
 - For layout or alignment changes, always verify the affected screen in a live
   browser window before finishing. Use screenshot evidence or measured element
   bounds across the relevant desktop/mobile viewport so centering, max-width,
@@ -101,7 +104,7 @@
 Read `FUNDAMENTALS.md` before adding features. Non-negotiables:
 - All data access goes through the Thingtime API (`remix/app/routes/api/v1/...`) + the API utils layer. UI/scripts/tests never touch MongoDB directly.
 - **Seed and test by calling the real API** (e.g. seed users via `POST /api/v1/auth/register`), never by writing to Mongo directly — so seeded data and real signups share one code path.
-- One `thingtime` db (`users`, `sessions`, `things`); one connection source (`mongodb/config.ts` `getMongoUri()`).
+- One `thingtime` db — everything-is-a-thing: entities (users, themes, feed algorithms, waitlist, posts, comments, schemas…) live in `things` by `kind`, plus `sessions` and the single-purpose auth/email satellites (`passwordResets`, `authOtps`, `email_*`, `rosters`). `users`/`themes`/`feedAlgorithms`/`waitlist` are LEGACY — updated in place, never new records. One connection source (`mongodb/config.ts` `getMongoUri()`). Physical collections are VERSIONED: logical `things` lives at `things_v2` (`COLLECTION_SCHEMA_VERSIONS` × `mongodb/collectionNames.ts`); always go through `getCollection()`/the named getters, never a raw collection-name string. Stale generations are dropped only via the admin `drop-stale-collection-generations` migration. Canonical list in `FUNDAMENTALS.md` §3.
 - Appended/child data (reactions, comments, any accumulating list) is **relational** — its own atomic `things` doc (`kind`) linked by `parentId`, aggregated on read, never an unbounded embedded array/map on the parent. Canonical rule in `FUNDAMENTALS.md` §3 ("Appended/child data is relational").
 - Auth: httpOnly cookie carrying a signed JWT (`jti`/`sub`/`exp`) + a Mongo `sessions` doc for revocation; Bearer token supported for API clients.
 - All user-facing notifications go through the Lopu toast (`components/Lopu/useLopu.tsx` — `useLopu()` / `useLopuStream()`), never raw Chakra `useToast` or `alert()`.
