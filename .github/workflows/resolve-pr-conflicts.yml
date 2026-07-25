@@ -538,31 +538,61 @@ jobs:
       - name: Refresh graphify outputs (AST-only, no API key)
         id: graphify
         if: steps.merge.outputs.graphify_reset == 'true'
+        # This refresh is a nicety, never worth losing a verified resolution:
+        # any failure here must not skip the push step below, which is what
+        # actually publishes the merge commit.
+        continue-on-error: true
+        timeout-minutes: 10
+        env:
+          # Pinned: the AST cache is version-namespaced and untracked, so CI
+          # always re-extracts. An unpinned upgrade whose output format drifted
+          # would rewrite graph.json/GRAPH_REPORT.md wholesale (~37k lines) and
+          # guarantee a graphify-out conflict on the NEXT merge — i.e. the step
+          # would manufacture the condition it exists to resolve.
+          GRAPHIFY_VERSION: "0.9.4"
         run: |
           set -euo pipefail
 
-          # Index exactly what was committed — nothing the model left behind.
+          # Index exactly what was committed, and nothing the model left behind.
+          # -x is REQUIRED: without it, ignored paths survive, and the model can
+          # write ignored files that graphify reads and folds into TRACKED output
+          # (graphify-out/.graphify_labels.json becomes community labels in
+          # GRAPH_REPORT.md; graphify-out/cache/ast/** is keyed by a hash the
+          # model can enumerate and would inject nodes/edges into graph.json).
+          # That would smuggle model-authored content past the verify step.
           git reset -q --hard HEAD
-          git clean -qfd
+          git clean -qffdx
+          # Belt: restore graphify-out from the commit outright.
+          rm -rf graphify-out
+          git checkout -q HEAD -- graphify-out/ 2>/dev/null || true
 
-          if ! (pipx install graphifyy >/dev/null 2>&1 || pip install --user graphifyy >/dev/null 2>&1); then
-            echo "::warning::graphify CLI could not be installed in CI — keeping the base branch's graph as-is."
+          if ! (pipx install "graphifyy==$GRAPHIFY_VERSION" >/dev/null 2>&1 \
+                || pip install --user "graphifyy==$GRAPHIFY_VERSION" >/dev/null 2>&1); then
+            echo "::warning::graphify $GRAPHIFY_VERSION could not be installed in CI — keeping the base branch's graph as-is."
             echo "refreshed=failed" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           export PATH="$HOME/.local/bin:$PATH"
 
-          # AST/text-only extraction: no LLM, no API key, no network calls.
+          # AST/text-only extraction: no LLM, no API key.
           if ! graphify update .; then
             echo "::warning::\`graphify update\` failed in CI — keeping the base branch's graph as-is."
             echo "refreshed=failed" >> "$GITHUB_OUTPUT"
-            git checkout -q -- graphify-out/ 2>/dev/null || true
+            git reset -q --hard HEAD
             exit 0
           fi
 
-          # Only graphify-out may change; anything else means the CLI touched
-          # source, so refuse rather than push it.
-          git add -A -- graphify-out/
+          # Stage ONLY the portable outputs the repo tracks — never the whole
+          # subtree, which would sweep in graphify's leftovers (.graph.tmp.json,
+          # needs_update) and the untracked derived viz.
+          for f in graph.json GRAPH_REPORT.md manifest.json cost.json; do
+            p="graphify-out/$f"
+            if [ -e "$p" ] || git ls-files --error-unmatch -- "$p" >/dev/null 2>&1; then
+              git add -A -- "$p"
+            fi
+          done
+
+          # Anything changed outside graphify-out/ means the CLI touched source.
           if [ -n "$(git status --porcelain --untracked-files=no -- . ':(exclude)graphify-out/')" ]; then
             echo "::error::graphify update modified files outside graphify-out/ — refusing to commit the refresh."
             git reset -q --hard HEAD
@@ -576,7 +606,7 @@ jobs:
           else
             git commit -q \
               -m "chore: refresh graphify outputs after conflict merge" \
-              -m "AST/text-only \`graphify update\` (no semantic extraction); run graphify locally with an LLM backend if semantic data is needed." \
+              -m "AST/text-only \`graphify update\` (graphify $GRAPHIFY_VERSION, no semantic extraction); run graphify locally with an LLM backend if semantic data is needed." \
               -m "Refreshed by the resolve-pr-conflicts workflow: $RUN_URL"
             echo "refreshed=true" >> "$GITHUB_OUTPUT"
           fi
