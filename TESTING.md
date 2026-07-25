@@ -168,6 +168,29 @@ is fixed, and cite the checklist you ran in the PR description.
       the param from the URL, and fires NO fallback search; while a live
       `?schema=` resolves, no empty-state copy shows at all.
 
+## Admin migrations & collection generations (`remix/app/components/Schemas/MigrationsPanel.tsx`)
+
+- [ ] As an admin (register a throwaway user, restart dev with
+      `ADMIN_USERNAMES=<user>`), the census table shows every registry
+      collection with its logical name AND physical `<name>_v<N>` name.
+- [ ] The Storage generations table lists every physical collection with a
+      current / stale / ahead badge, and doc counts.
+- [ ] After first boot against a pre-versioning db, adoption has renamed
+      unversioned collections in place (`things` → `things_v2`) — data (users,
+      sessions, posts) is still all there, no re-login required.
+- [ ] `merge-legacy-collections` dry-run reports per-collection copy counts and
+      writes nothing; the real run copies only docs missing at the destination
+      (re-run reports 0) and never deletes a legacy collection.
+- [ ] `drop-stale-collection-generations` shows the red destructive badge;
+      dry-run lists exactly what would drop with doc counts; a non-dry run
+      without `confirm: true` is rejected by the API (the panel sends it after
+      the inline Really run? confirmation); the run refuses to drop a legacy
+      collection that still has unmerged docs and says so in the notes.
+- [ ] Raw admin Mongo queries (`/api/v1/mongodb/raw-results`) still take
+      LOGICAL collection names ('things'), including `$lookup`/`$unionWith`
+      pipeline targets and collectionStats, and hit the versioned physical
+      collections.
+
 ## Docs code windows & embed SDK preview (`remix/app/routes/docs/docsCode.tsx`, `remix/app/routes/docs/embed.tsx`)
 
 - [ ] Shell samples with bare URLs (`curl -X POST https://…`) highlight the

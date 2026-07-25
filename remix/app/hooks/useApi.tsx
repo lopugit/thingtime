@@ -134,7 +134,7 @@ export function useApi() {
       migrationsRun: useCallback(
         async (args) =>
           asyncFetcher.submit(
-            { migration: args?.migration, dryRun: args?.dryRun },
+            { migration: args?.migration, dryRun: args?.dryRun, confirm: args?.confirm },
             { action: '/api/v1/admin/migrations/run' }
           ),
         [asyncFetcher]
