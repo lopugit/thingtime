@@ -117,6 +117,27 @@ is fixed, and cite the checklist you ran in the PR description.
       thing-context-menu) still lay out statically inside their canvases
       (`inline` mode).
 
+## Post engagement row & comment threads (`remix/app/components/Feed/PostCard.tsx`)
+
+- [ ] The action row is icon + count ONLY (no text labels): 💬 comments,
+      🔁 repost, ↗ share on the left, and the merged react button pinned to
+      the card's RIGHT edge. Every react control — post button and each
+      comment/reply column, any depth — shares that one right edge.
+- [ ] The merged react button shows EVERYONE's reactions (top token emojis +
+      total, heart outline at zero) and tints accent when the viewer holds a
+      reaction. Click, hover, and touch-and-hold all open the quick-react
+      popup; picking an emoji applies optimistically (no wait), and ＋ opens
+      the full custom picker.
+- [ ] Comment rows: reply is an icon-only toggle under the bubble; the
+      thread reveal is a "View N replies / Hide replies" text link BELOW the
+      comment; "Show more replies/comments" reveals from BELOW the lists.
+      Reply avatars (20px) are smaller than parent comment avatars (28px).
+- [ ] Repost is a menu: instant "Repost" posts immediately (toast + count
+      bump); "Quote post" opens the caption + circle popover. Share is
+      OUTWARD only: native share sheet where available, otherwise copy-link
+      with the Lopu toast — logged-out users can still share, while react /
+      repost nudge them to log in.
+
 ## Data crystals & nesting depth (`remix/app/schemas/registry.ts`)
 
 - [ ] Post a thingtime post whose thing contains an Editor.js document (or

@@ -4,12 +4,16 @@ import { Popover, PopoverContent, PopoverTrigger } from '@chakra-ui/react';
 // The reaction button + picker opener shared by posts and comments. The picker
 // popover is CONTROLLED so every input works:
 //   desktop  — hover opens it (small delay), leaving both sides closes it
-//   mobile   — touch-and-hold (~400ms) opens it; a plain tap quick-reacts
-//   keyboard — Enter/Space quick-reacts
+//   mobile   — touch-and-hold (~400ms) opens it
+//   tap / Enter/Space — default mode quick-reacts via onQuickTap; in tapOpens
+//   mode (what every post/comment react button uses) the tap OPENS the picker
+//   instead, so onQuickTap only fires on disabled (guest) triggers
 // Chakra's trigger="hover" never fires on touch, which is why this exists.
 //
-// `trigger` is cloned with the press/hover handlers; `content` renders inside
-// the popover and receives close() so picking an emoji can dismiss it.
+// `trigger` is cloned with the press/hover handlers; its own onClick becomes
+// the control's click handler (opens the picker in tapOpens mode, otherwise
+// fires onQuickTap); `content` renders inside the popover and receives
+// close() so picking an emoji can dismiss it.
 
 const BORDER = '1px solid var(--tt-border, #ececef)';
 
@@ -26,10 +30,14 @@ export type ReactionControlProps = {
   onQuickTap: () => void;
   // guests skip the picker entirely — onQuickTap still fires (login nudge)
   enabled?: boolean;
+  // merged-button mode: a plain tap/click OPENS the picker too (FB/IG-style —
+  // the button shows the reactions, every input path reveals the popup);
+  // onQuickTap then only fires for disabled (guest) triggers
+  tapOpens?: boolean;
 };
 
 export const ReactionControl = (props: ReactionControlProps) => {
-  const { trigger, content, onQuickTap, enabled = true } = props;
+  const { trigger, content, onQuickTap, enabled = true, tapOpens = false } = props;
 
   const [isOpen, setIsOpen] = React.useState(false);
 
@@ -92,6 +100,16 @@ export const ReactionControl = (props: ReactionControlProps) => {
       // this click is the tail of the long-press — the picker is open
       longPressFiredRef.current = false;
       event.preventDefault();
+      return;
+    }
+    if (tapOpens && enabled) {
+      // click always lands OPEN (not toggled) — a hover-opened popup stays up;
+      // dismissal is outside-tap / mouse-leave / picking an emoji.
+      // preventDefault stops Chakra's PopoverTrigger onToggle from running
+      // after us and closing an already-open popup (same trick as long-press).
+      event.preventDefault();
+      clearTimer(hoverTimerRef);
+      open();
       return;
     }
     close();

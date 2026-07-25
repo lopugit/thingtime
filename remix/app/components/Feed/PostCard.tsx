@@ -15,7 +15,6 @@ import {
   Popover,
   PopoverAnchor,
   PopoverContent,
-  PopoverTrigger,
   Select,
   Skeleton,
   SkeletonCircle,
@@ -24,7 +23,7 @@ import {
   Tooltip
 } from '@chakra-ui/react';
 import { Link } from 'react-router';
-import { Maximize2, MoreHorizontal, Plus, Send } from 'lucide-react';
+import { Heart, Maximize2, MessageCircle, MoreHorizontal, Plus, Repeat2, Send, Share } from 'lucide-react';
 
 import { useApi } from '~/hooks/useApi';
 import { useCommentDraft } from '~/hooks/useCommentDraft';
@@ -46,18 +45,6 @@ import {
   timeAgo
 } from './feedTypes';
 import type { EngagementEvent, FeedAuthor, PostChange, PostComment, PostVisibility, PublicPost } from './feedTypes';
-
-// Keep reaction displays from running off the card: cap how many individual
-// emoji show before an ellipsis, so one long multi-emoji token (🥳🥳🥳…) can't
-// blow out a chip or the React-button preview.
-const MAX_PREVIEW_EMOJIS = 6;
-
-// Truncate a single token's emoji for chip display.
-const truncateToken = (token: string): { text: string; truncated: boolean } => {
-  const parts = splitEmojis(token);
-  if (parts.length <= MAX_PREVIEW_EMOJIS) return { text: token, truncated: false };
-  return { text: parts.slice(0, MAX_PREVIEW_EMOJIS).join(''), truncated: true };
-};
 
 // Apply one token's toggle to a post, idempotently (a no-op if the post already
 // reflects it). Used for optimistic paint + revert against the FRESHEST post, so
@@ -98,33 +85,21 @@ const reconcileReactionToken = (
   return { ...prev, reactionCounts, viewerReactions };
 };
 
-// Compact preview of the viewer's reactions for the React button: each token is
-// its own group (gapped from the next) carrying its use-count, capped across all
-// groups at MAX_PREVIEW_EMOJIS emoji then an ellipsis.
-const summarizeReactions = (
-  tokens: string[],
-  counts: Record<string, number>
-): { groups: Array<{ key: string; emoji: string; count: number }>; truncated: boolean } => {
-  const groups: Array<{ key: string; emoji: string; count: number }> = [];
-  let shown = 0;
-  let truncated = false;
-  for (const token of tokens) {
-    if (shown >= MAX_PREVIEW_EMOJIS) {
-      truncated = true;
-      break;
-    }
-    const parts = splitEmojis(token);
-    const slice = parts.slice(0, MAX_PREVIEW_EMOJIS - shown);
-    if (slice.length < parts.length) truncated = true;
-    groups.push({ key: token, emoji: slice.join(''), count: counts[token] || 1 });
-    shown += slice.length;
-  }
-  return { groups, truncated };
-};
+// Compact everyone's-reactions summary for the merged react button: the lead
+// emoji of the top tokens (by count). FB/X-style — the button IS the counts,
+// so one glyph per token keeps it tight however wild the custom tokens get.
+// Joined with a zero-width space so adjacent leads can't shape into one glyph
+// (two lone regional indicators would otherwise merge into a flag).
+const topReactionEmojis = (entries: Array<[string, number]>, max: number) =>
+  entries
+    .slice(0, max)
+    .map(([token]) => splitEmojis(token)[0] || token)
+    .join('​');
 
 // The typed post renderer for the feed / profile columns. Renders text,
-// photo-grid and marketplace bodies, one-level share nesting, the reaction
-// picker, comments and the share popover. All mutations go through
+// photo-grid and marketplace bodies, one-level share nesting, the merged
+// reaction control, comments, and the repost menu (instant repost + quote
+// composer) plus the outward share-link action. All mutations go through
 // api.v1.things and bubble optimistic updates up via onChanged.
 
 const INK = 'var(--tt-ink, #16161a)';
@@ -132,6 +107,41 @@ const TEXT = 'var(--tt-text, #5a5a66)';
 const MUTED = 'var(--tt-muted, #9a9aa6)';
 const BORDER = '1px solid var(--tt-border, #ececef)';
 const RADIUS_MD = 'var(--tt-radius-md, 12px)';
+const ACCENT = 'var(--tt-accent, #7c5cff)';
+
+// X-style action button: icon + count, NO text label (`label` is a11y/tooltip
+// only). forwardRef so it can also serve as a Chakra MenuButton via `as`.
+const ActionIcon = React.forwardRef<HTMLButtonElement, {
+  icon: React.ReactNode;
+  label: string;
+  count?: number;
+  active?: boolean;
+} & Record<string, any>>((props, ref) => {
+  const { icon, label, count, active, ...rest } = props;
+  return (
+    <Flex
+      ref={ref}
+      as="button"
+      type="button"
+      alignItems="center"
+      columnGap={1.5}
+      paddingX={2}
+      height="32px"
+      borderRadius="999px"
+      fontSize="sm"
+      fontWeight={600}
+      color={active ? INK : MUTED}
+      _hover={{ background: 'var(--tt-surface-hover, #ececee)', color: INK }}
+      aria-label={label}
+      title={label}
+      {...rest}
+    >
+      {icon}
+      {(count ?? 0) > 0 && <Text as="span">{count}</Text>}
+    </Flex>
+  );
+});
+ActionIcon.displayName = 'ActionIcon';
 
 export type PostCardProps = {
   post: PublicPost;
@@ -411,6 +421,35 @@ const QuickReactionRow = (props: {
   );
 };
 
+// The full custom EmojiPicker in a popover, anchored to the top-right of its
+// relative parent — shared by the post react button and every comment row.
+const AnchoredEmojiPicker = (props: {
+  isOpen: boolean;
+  onClose: () => void;
+  contentRef: React.RefObject<HTMLElement>;
+  onPick: (emoji: string) => void;
+  recent: string[];
+  activeTokens: string[];
+}) => (
+  <Popover isOpen={props.isOpen} onClose={props.onClose} placement="top-end" isLazy closeOnBlur={false}>
+    <PopoverAnchor>
+      <Box position="absolute" right={0} bottom="100%" width="1px" height="1px" pointerEvents="none" />
+    </PopoverAnchor>
+    <PopoverContent
+      ref={props.contentRef as any}
+      width="auto"
+      border={BORDER}
+      borderRadius="var(--tt-radius-lg, 16px)"
+      background="var(--tt-card, #fff)"
+      boxShadow="var(--tt-shadow-panel, 0px 18px 60px rgba(0, 0, 0, 0.22))"
+      zIndex={20}
+      _focusVisible={{ outline: 'none' }}
+    >
+      <EmojiPicker onPick={props.onPick} recent={props.recent} activeTokens={props.activeTokens} autoFocus />
+    </PopoverContent>
+  </Popover>
+);
+
 // Only one EMPTY reply input is open at a time across a card's comment tree:
 // opening a reply announces itself here and rows whose draft is empty close
 // themselves. Rows with a typed draft stay open — never lose user text.
@@ -462,7 +501,7 @@ const ReplySkeleton = () => {
     <Flex flexDirection="column" rowGap={4} paddingY={2} aria-label="Loading replies" role="status">
       {[0, 1, 2].map((index) => (
         <Flex key={index} columnGap={2} alignItems="flex-start">
-          <SkeletonCircle size="22px" flexShrink={0} {...shimmer} />
+          <SkeletonCircle size="20px" flexShrink={0} {...shimmer} />
           <Flex flex="1" minWidth={0} flexDirection="column" rowGap={1.5} paddingTop="2px">
             <Skeleton height="9px" width="30%" borderRadius="999px" {...shimmer} />
             <Skeleton height="13px" width={['82%', '62%', '72%'][index]} borderRadius="999px" {...shimmer} />
@@ -474,9 +513,10 @@ const ReplySkeleton = () => {
 };
 
 // A comment row — comments share the post schema, so each row is reactable
-// (tap to 👍, hold/hover for the picker — optimistic, no wait), renders rich
-// post bodies, and replies INLINE: the Reply control opens a reply input and
-// the thread right here (the /post/:id permalink stays on the timestamp).
+// (tap, touch-and-hold, or hover opens the merged reaction popup — applying a
+// pick is optimistic, no wait; guests get a login nudge), renders rich post
+// bodies, and replies INLINE: the reply icon opens a reply input and the
+// thread right here (the /post/:id permalink stays on the timestamp).
 const CommentRow = (props: {
   comment: PostComment;
   onChanged: (next: PostComment) => void;
@@ -539,10 +579,6 @@ const CommentRow = (props: {
     .filter(([, count]) => count > 0)
     .sort((a, b) => b[1] - a[1]);
   const reactionTotal = reactionEntries.reduce((sum, [, count]) => sum + count, 0);
-  const topEmojis = reactionEntries
-    .slice(0, 3)
-    .map(([token]) => truncateToken(token).text)
-    .join('');
 
   // optimistic: repaint immediately, reconcile with the server's counts,
   // revert on failure — same principle as post reactions
@@ -551,6 +587,8 @@ const CommentRow = (props: {
       lopu({ title: 'Log in to react 🗝️', status: 'info', duration: 6000 });
       return;
     }
+    // an in-flight comment only has a provisional id — nothing to react to yet
+    if (pending) return;
     const token = sanitizeReactionToken(rawToken);
     if (!token) return;
 
@@ -700,107 +738,150 @@ const CommentRow = (props: {
     setReplies((prev) => (prev || []).map((reply) => (reply.id === next.id ? next : reply)));
   };
 
-  return (
-    <Flex columnGap={2} alignItems="flex-start" opacity={pending ? 0.6 : 1} transition="opacity 0.2s ease">
-      <AuthorAvatar author={comment.author} size="22px" fontSize="10px" />
-      <Box flex="1" minWidth={0}>
-        <Box background="var(--tt-surface-alt, #f5f5f7)" borderRadius={RADIUS_MD} paddingX={3} paddingY={2}>
-          <Flex alignItems="baseline" columnGap={2}>
-            <Text fontSize="xs" fontWeight={700} color={INK} noOfLines={1}>
-              {authorName(comment.author)}
-            </Text>
-            <Box flexShrink={0}>
-              <TimestampLink id={comment.id} createdAt={comment.createdAt} fontSize="10px" />
-            </Box>
-          </Flex>
-          <PostBody post={comment} compact />
-        </Box>
-        <Flex alignItems="center" columnGap={2} paddingX={2} paddingTop={0.5} fontSize="11px" color={MUTED}>
-          <Box position="relative" display="flex">
-            <ReactionControl
-            enabled={!!user && !pending}
-            onQuickTap={() => handleReact('👍')}
-            content={(close) => (
-              <QuickReactionRow
-                viewerSet={viewerSet}
-                onPick={(emoji) => {
-                  close();
-                  handleReact(emoji);
-                }}
-                onMore={() => {
-                  close();
-                  setPickerOpen(true);
-                }}
-              />
-            )}
-            trigger={
-              <Box
-                as="button"
-                type="button"
-                fontSize="11px"
-                fontWeight={viewerSet.size ? 700 : 600}
-                color={viewerSet.size ? INK : MUTED}
-                _hover={{ color: INK }}
-              >
-                {viewerSet.size ? [...viewerSet].slice(0, 3).join('') : '👍'} React
-              </Box>
-            }
-            />
-            {/* the full custom picker (multi-select), anchored above the row */}
-            <Popover isOpen={pickerOpen} onClose={() => setPickerOpen(false)} placement="top-start" isLazy closeOnBlur={false}>
-              <PopoverAnchor>
-                <Box position="absolute" left={0} bottom="100%" width="1px" height="1px" pointerEvents="none" />
-              </PopoverAnchor>
-              <PopoverContent
-                ref={pickerContentRef as any}
-                width="auto"
-                border={BORDER}
-                borderRadius="var(--tt-radius-lg, 16px)"
-                background="var(--tt-card, #fff)"
-                boxShadow="var(--tt-shadow-panel, 0px 18px 60px rgba(0, 0, 0, 0.22))"
-                zIndex={20}
-                _focusVisible={{ outline: 'none' }}
-              >
-                <EmojiPicker onPick={handleReact} recent={recent} activeTokens={comment.viewerReactions} autoFocus />
-              </PopoverContent>
-            </Popover>
-          </Box>
-          {reactionTotal > 0 && (
-            <Text as="span" flexShrink={0} title="Reactions">
-              {topEmojis} {reactionTotal}
-            </Text>
-          )}
-          <Box
+  // parent comments carry the bigger avatar; replies step down (IG-style)
+  const avatarSize = depth === 1 ? '28px' : '20px';
+  const avatarFont = depth === 1 ? '11px' : '9px';
+  // IG/FB-style indent cap: past this depth, deeper replies render at the SAME
+  // indent (logical nesting stays unbounded) so long chains can't squeeze the
+  // bubbles off a 375px viewport. -28px undoes this row's avatar (20px) + gap.
+  const MAX_INDENT_DEPTH = 4;
+  const threadIndent = depth >= MAX_INDENT_DEPTH ? '-28px' : undefined;
+
+  // the merged react control: shows EVERYONE's reactions (top emojis + total,
+  // heart outline when none) and lives in a fixed right-edge column so every
+  // react button on the card — post and any comment depth — lines up
+  const reactColumn = (
+    <Box position="relative" display="flex" flexShrink={0} alignSelf="flex-start">
+      <ReactionControl
+        enabled={!!user && !pending}
+        tapOpens
+        onQuickTap={() => handleReact('👍')}
+        content={(close) => (
+          <QuickReactionRow
+            viewerSet={viewerSet}
+            onPick={(emoji) => {
+              close();
+              handleReact(emoji);
+            }}
+            onMore={() => {
+              close();
+              setPickerOpen(true);
+            }}
+          />
+        )}
+        trigger={
+          <Flex
             as="button"
             type="button"
-            fontSize="11px"
-            fontWeight={600}
-            color={replyInputOpen ? INK : MUTED}
-            _hover={{ color: INK }}
-            aria-expanded={replyInputOpen}
-            onClick={toggleReplyInput}
+            flexDirection="column"
+            alignItems="center"
+            rowGap="1px"
+            minWidth="30px"
+            paddingTop="7px"
+            paddingX={1}
+            color={viewerSet.size ? ACCENT : MUTED}
+            _hover={{ color: viewerSet.size ? ACCENT : INK }}
+            aria-label="React"
+            title="React"
           >
-            Reply 💬
-          </Box>
-          {comment.commentCount > 0 && (
-            <Box
-              as="button"
-              type="button"
-              fontSize="11px"
-              fontWeight={600}
-              color={repliesOpen ? INK : MUTED}
-              _hover={{ color: INK }}
-              aria-expanded={repliesOpen}
-              onClick={toggleThread}
-            >
-              {comment.commentCount} repl{comment.commentCount === 1 ? 'y' : 'ies'} 🧵
+            {reactionEntries.length ? (
+              <Text as="span" fontSize="13px" lineHeight="1" sx={{ whiteSpace: 'nowrap' }}>
+                {topReactionEmojis(reactionEntries, 2)}
+              </Text>
+            ) : (
+              <Heart size={14} strokeWidth={2.2} />
+            )}
+            {reactionTotal > 0 && (
+              <Text as="span" fontSize="10px" lineHeight="1.4" fontWeight={viewerSet.size ? 700 : 600}>
+                {reactionTotal}
+              </Text>
+            )}
+          </Flex>
+        }
+      />
+      {/* the full custom picker (multi-select), anchored above the column */}
+      <AnchoredEmojiPicker
+        isOpen={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        contentRef={pickerContentRef}
+        onPick={handleReact}
+        recent={recent}
+        activeTokens={comment.viewerReactions}
+      />
+    </Box>
+  );
+
+  return (
+    <Flex columnGap={2} alignItems="flex-start" opacity={pending ? 0.6 : 1} transition="opacity 0.2s ease">
+      <AuthorAvatar author={comment.author} size={avatarSize} fontSize={avatarFont} />
+      <Box flex="1" minWidth={0}>
+        <Flex columnGap={1.5} alignItems="flex-start">
+          <Box flex="1" minWidth={0}>
+            <Box background="var(--tt-surface-alt, #f5f5f7)" borderRadius={RADIUS_MD} paddingX={3} paddingY={2}>
+              <Flex alignItems="baseline" columnGap={2}>
+                <Text fontSize="xs" fontWeight={700} color={INK} noOfLines={1}>
+                  {authorName(comment.author)}
+                </Text>
+                <Box flexShrink={0}>
+                  <TimestampLink id={comment.id} createdAt={comment.createdAt} fontSize="10px" />
+                </Box>
+              </Flex>
+              <PostBody post={comment} compact />
             </Box>
-          )}
+            {/* icon-only actions (no labels): reply toggles the inline input */}
+            <Flex alignItems="center" columnGap={1} paddingX={1} paddingTop={0.5}>
+              <Flex
+                as="button"
+                type="button"
+                alignItems="center"
+                padding={1}
+                borderRadius="999px"
+                color={replyInputOpen ? INK : MUTED}
+                _hover={{ color: INK }}
+                aria-label={`Reply to ${authorName(comment.author)}`}
+                title="Reply"
+                aria-expanded={replyInputOpen}
+                onClick={toggleReplyInput}
+              >
+                <MessageCircle size={13} strokeWidth={2.2} />
+              </Flex>
+            </Flex>
+            {/* thread reveal lives BELOW the comment (FB/IG-style) */}
+            {!pending && comment.commentCount > 0 && (
+              <Flex alignItems="center" columnGap={2} paddingX={1} paddingTop={0.5}>
+                <Box width="20px" height="1px" background="var(--tt-border, #ececef)" flexShrink={0} />
+                <Box
+                  as="button"
+                  type="button"
+                  fontSize="11px"
+                  fontWeight={600}
+                  color={repliesOpen ? INK : MUTED}
+                  _hover={{ color: INK }}
+                  aria-expanded={repliesOpen}
+                  onClick={toggleThread}
+                >
+                  {repliesOpen ? 'Hide replies' : `View ${comment.commentCount} repl${comment.commentCount === 1 ? 'y' : 'ies'}`}
+                </Box>
+              </Flex>
+            )}
+          </Box>
+          {reactColumn}
         </Flex>
 
         {/* inline thread: replies + reply input, right here on the page */}
         {(repliesOpen || replyInputOpen) && (
-          <Flex flexDirection="column" rowGap={2} paddingTop={2}>
+          <Flex flexDirection="column" rowGap={2} paddingTop={2} marginLeft={threadIndent}>
+            {repliesLoading && replies === null && <ReplySkeleton />}
+            {repliesOpen &&
+              (replies || []).slice(-visibleReplies).map((reply) => (
+                <CommentRow
+                  key={reply.id}
+                  comment={reply}
+                  onChanged={handleReplyChanged}
+                  onEngagement={onEngagement}
+                  depth={depth + 1}
+                />
+              ))}
             {repliesOpen &&
               !(repliesLoading && replies === null) &&
               ((replies?.length || 0) > visibleReplies || comment.commentCount > (replies?.length || 0)) && (
@@ -814,20 +895,9 @@ const CommentRow = (props: {
                 _hover={{ color: INK }}
                 onClick={showMoreReplies}
               >
-                Show more replies 💬
+                Show previous replies 💬
               </Box>
             )}
-            {repliesLoading && replies === null && <ReplySkeleton />}
-            {repliesOpen &&
-              (replies || []).slice(-visibleReplies).map((reply) => (
-                <CommentRow
-                  key={reply.id}
-                  comment={reply}
-                  onChanged={handleReplyChanged}
-                  onEngagement={onEngagement}
-                  depth={depth + 1}
-                />
-              ))}
             {replyInputOpen &&
               (user ? (
                 <Flex flexDirection="column" rowGap={2}>
@@ -920,15 +990,17 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [post.id]);
   const replyFocus = React.useMemo(() => ({ openId: openReplyId, requestOpen: setOpenReplyId }), [openReplyId]);
-  const [shareOpen, setShareOpen] = React.useState(false);
-  const [shareText, setShareText] = React.useState('');
-  const [shareVisibility, setShareVisibility] = React.useState<PostVisibility>('public');
+  // repost split (X-style): instant repost or a QUOTE with caption + circle;
+  // both default to the original post's circle (never widen the audience)
+  const [quoteOpen, setQuoteOpen] = React.useState(false);
+  const [quoteText, setQuoteText] = React.useState('');
+  const [quoteVisibility, setQuoteVisibility] = React.useState<PostVisibility>(post.visibility);
   const [sharing, setSharing] = React.useState(false);
   const [pickerOpen, setPickerOpen] = React.useState(false);
   // outside-tap close (NOT closeOnBlur): dismissing the mobile keyboard blurs
   // the search/caption field and must not close these popovers
   const pickerContentRef = useOutsideTapClose<HTMLElement>(pickerOpen, () => setPickerOpen(false));
-  const shareContentRef = useOutsideTapClose<HTMLElement>(shareOpen, () => setShareOpen(false));
+  const quoteContentRef = useOutsideTapClose<HTMLElement>(quoteOpen, () => setQuoteOpen(false));
   const expandSentRef = React.useRef(false);
 
   const { recent, pushRecent } = useRecentReactions();
@@ -936,10 +1008,12 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
   const isOwner = !!user && !!post.author && user.id === post.author.id;
   const circle = CIRCLE_META[post.visibility] || CIRCLE_META.public;
 
-  // Every reaction token on the post, most-used first, as clickable chips.
+  // Every reaction token on the post, most-used first — feeds the merged
+  // react button (top emojis + total count).
   const reactionEntries = Object.entries(post.reactionCounts || {})
     .filter(([, count]) => count > 0)
     .sort((a, b) => b[1] - a[1]);
+  const reactionTotal = reactionEntries.reduce((sum, [, count]) => sum + count, 0);
   const viewerReactions = post.viewerReactions || [];
   const viewerSet = new Set(viewerReactions);
 
@@ -1047,85 +1121,94 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     }));
   };
 
-  const handleShareClick = () => {
-    if (!user) {
-      lopu({ title: 'Log in to share ↗️', status: 'info', duration: 6000 });
-      return;
-    }
-    setShareOpen((open) => !open);
-  };
-
-  const handleShare = async () => {
+  // Instant repost (X-style "Repost" — no caption, straight out). Optimistic:
+  // count + toast paint immediately, revert on failure. Inherits the original
+  // post's circle so a non-public post never widens its audience.
+  const handleRepost = async () => {
     if (sharing) return;
-
     setSharing(true);
+    onChanged?.((prev) => ({ ...prev, shareCount: prev.shareCount + 1 }));
+    onEngagement?.({ thingId: post.id, signal: 'share' });
+    lopu({ title: 'Reposted 🔁', status: 'success', duration: 6000 });
     try {
-      await api.v1.things.share({
-        id: post.id,
-        text: shareText.trim() || undefined,
-        visibility: shareVisibility
-      });
-      lopu({ title: 'Shared ✨', status: 'success', duration: 6000 });
-      onChanged?.({ ...post, shareCount: post.shareCount + 1 });
-      onEngagement?.({ thingId: post.id, signal: 'share' });
-      setShareOpen(false);
-      setShareText('');
+      await api.v1.things.share({ id: post.id, visibility: post.visibility });
     } catch (err: any) {
-      lopu({ title: err?.error || 'Share failed 😞', status: 'error' });
+      onChanged?.((prev) => ({ ...prev, shareCount: Math.max(0, prev.shareCount - 1) }));
+      lopu({ title: err?.error || 'Repost failed 😞', status: 'error' });
     }
     setSharing(false);
   };
 
-  const actionButtonStyles = {
-    flex: 1,
-    size: 'sm' as const,
-    variant: 'ghost' as const,
-    fontWeight: 600,
-    color: MUTED,
-    borderRadius: RADIUS_MD,
-    _hover: { background: 'var(--tt-surface-hover, #ececee)', color: INK }
+  // Quote repost — caption + circle picker, from the repost menu
+  const handleQuote = async () => {
+    if (sharing) return;
+    setSharing(true);
+    try {
+      await api.v1.things.share({
+        id: post.id,
+        text: quoteText.trim() || undefined,
+        visibility: quoteVisibility
+      });
+      lopu({ title: 'Quoted ✨', status: 'success', duration: 6000 });
+      onChanged?.((prev) => ({ ...prev, shareCount: prev.shareCount + 1 }));
+      onEngagement?.({ thingId: post.id, signal: 'share' });
+      setQuoteOpen(false);
+      setQuoteText('');
+    } catch (err: any) {
+      lopu({ title: err?.error || 'Quote failed 😞', status: 'error' });
+    }
+    setSharing(false);
   };
 
-  const reactionPreview = summarizeReactions(viewerReactions, post.reactionCounts || {});
-  // tap/click, touch-and-hold, and hover are handled by ReactionControl
+  // The share icon is OUTWARD share: the native share sheet where the
+  // platform has one, copy-link everywhere else. Works logged out too.
+  const handleShareLink = async () => {
+    const url = `${window.location.origin}/post/${post.id}`;
+    try {
+      if (typeof navigator !== 'undefined' && (navigator as any).share) {
+        await (navigator as any).share({ url });
+      } else {
+        await navigator.clipboard.writeText(url);
+        lopu({ title: 'Link copied 🔗', status: 'success', duration: 4000 });
+      }
+      onEngagement?.({ thingId: post.id, signal: 'share' });
+    } catch (err: any) {
+      if (err?.name === 'AbortError') return; // dismissed the share sheet
+      // clipboard unavailable (http origin) — hand the link over anyway
+      lopu({ title: `Copy this link: ${url}`, status: 'info', duration: 10000 });
+    }
+  };
+
+  // The merged react button: everyone's reactions AT the button (top emojis +
+  // total, heart outline when none); tap/hold/hover all open the picker.
   const reactButton = (
-    <Button
-      {...actionButtonStyles}
-      minWidth={0}
-      color={viewerReactions.length ? INK : MUTED}
-      fontWeight={viewerReactions.length ? 700 : 600}
+    <Flex
+      as="button"
+      type="button"
+      alignItems="center"
+      columnGap={1.5}
+      paddingX={2}
+      height="32px"
+      borderRadius="999px"
+      fontSize="sm"
+      color={viewerReactions.length ? ACCENT : MUTED}
+      _hover={{ background: 'var(--tt-surface-hover, #ececee)', color: viewerReactions.length ? ACCENT : INK }}
+      aria-label="React"
+      title="React"
     >
-      <Flex
-        as="span"
-        alignItems="center"
-        columnGap={1.5}
-        marginRight={1}
-        maxWidth="220px"
-        overflow="hidden"
-        sx={{ whiteSpace: 'nowrap' }}
-      >
-        {viewerReactions.length ? (
-          <>
-            {reactionPreview.groups.map((group) => (
-              <Flex as="span" key={group.key} alignItems="center" columnGap="2px" flexShrink={0}>
-                <Text as="span">{group.emoji}</Text>
-                <Text as="span" fontSize="0.72em" opacity={0.7}>
-                  {group.count}
-                </Text>
-              </Flex>
-            ))}
-            {reactionPreview.truncated && (
-              <Text as="span" flexShrink={0}>
-                …
-              </Text>
-            )}
-          </>
-        ) : (
-          <Text as="span">👍</Text>
-        )}
-      </Flex>
-      React
-    </Button>
+      {reactionEntries.length ? (
+        <Text as="span" fontSize="md" lineHeight="1" sx={{ whiteSpace: 'nowrap' }}>
+          {topReactionEmojis(reactionEntries, 3)}
+        </Text>
+      ) : (
+        <Heart size={18} strokeWidth={2.2} />
+      )}
+      {reactionTotal > 0 && (
+        <Text as="span" fontWeight={viewerReactions.length ? 700 : 600}>
+          {reactionTotal}
+        </Text>
+      )}
+    </Flex>
   );
 
   return (
@@ -1213,68 +1296,123 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
           <PostBody post={post} />
         )}
 
-        {/* reaction chips + counts row — each chip toggles that reaction */}
-        {(reactionEntries.length > 0 || post.commentCount > 0 || post.shareCount > 0) && (
-          <Flex alignItems="center" fontSize="xs" color={MUTED} columnGap={2} rowGap={1} flexWrap="wrap">
-            {reactionEntries.map(([token, count]) => {
-              const mine = viewerSet.has(token);
-              const { text, truncated } = truncateToken(token);
-              return (
-                <Flex
-                  as="button"
-                  type="button"
-                  key={token}
-                  alignItems="center"
-                  columnGap={1}
-                  paddingX={2}
-                  paddingY="1px"
-                  maxWidth="100%"
-                  borderRadius="999px"
-                  border={mine ? '1px solid var(--tt-accent, #7c5cff)' : BORDER}
-                  background={mine ? 'var(--tt-accent-soft, rgba(124, 92, 255, 0.12))' : 'transparent'}
-                  color={mine ? INK : MUTED}
-                  cursor={user ? 'pointer' : 'default'}
-                  _hover={user ? { background: 'var(--tt-surface-hover, #ececee)' } : undefined}
-                  onClick={() => handleReact(token)}
-                  title={token}
-                >
-                  <Text as="span" sx={{ whiteSpace: 'nowrap' }}>
-                    {text}
-                    {truncated ? '…' : ''}
-                  </Text>
-                  <Text as="span">{count}</Text>
-                </Flex>
-              );
-            })}
-            <Flex alignItems="center" columnGap={2} marginLeft="auto">
-              {post.commentCount > 0 && (
-                <Text
-                  as="button"
-                  type="button"
-                  fontWeight={600}
-                  _hover={{ color: INK, textDecoration: 'underline' }}
-                  aria-expanded={commentsOpen}
-                  onClick={toggleComments}
-                >
-                  {post.commentCount} comment{post.commentCount === 1 ? '' : 's'}
-                </Text>
-              )}
-              {post.shareCount > 0 && (
-                <Text as="span">
-                  {post.shareCount} share{post.shareCount === 1 ? '' : 's'}
-                </Text>
-              )}
-            </Flex>
-          </Flex>
-        )}
+        {/* action row — icons + counts only (X-style, no labels); the react
+        control is pinned RIGHT so it shares one edge with every comment's
+        react column (IG-style alignment) */}
+        <Flex borderTop={BORDER} paddingTop={2} alignItems="center" columnGap={[1, 2]}>
+          <ActionIcon
+            icon={<MessageCircle size={18} strokeWidth={2.2} />}
+            count={post.commentCount}
+            label={commentsOpen ? 'Hide comments' : 'Show comments'}
+            active={commentsOpen}
+            aria-expanded={commentsOpen}
+            onClick={toggleComments}
+          />
 
-        {/* action row */}
-        <Flex borderTop={BORDER} paddingTop={2} columnGap={1}>
+          {/* repost: instant repost OR quote (caption + circle) */}
           {user ? (
-            <Box position="relative" display="flex" flex="1">
-              {/* hover OR touch-and-hold: quick reactions + a ＋ that opens the
-              full picker; a plain tap/click quick-reacts 👍 */}
+            <Box position="relative" display="flex">
+              <Menu placement="top" autoSelect={false}>
+                <MenuButton
+                  as={ActionIcon}
+                  icon={<Repeat2 size={18} strokeWidth={2.2} />}
+                  count={post.shareCount}
+                  label="Repost"
+                />
+                <MenuList minWidth="170px" borderRadius={RADIUS_MD} zIndex={10}>
+                  <MenuItem fontSize="sm" onClick={handleRepost}>
+                    Repost 🔁
+                  </MenuItem>
+                  <MenuItem fontSize="sm" onClick={() => setQuoteOpen(true)}>
+                    Quote post ✏️
+                  </MenuItem>
+                </MenuList>
+              </Menu>
+
+              {/* the quote composer, anchored above the repost button */}
+              <Popover isOpen={quoteOpen} onClose={() => setQuoteOpen(false)} placement="top" isLazy closeOnBlur={false}>
+                <PopoverAnchor>
+                  <Box position="absolute" left={0} bottom="100%" width="1px" height="1px" pointerEvents="none" />
+                </PopoverAnchor>
+                <PopoverContent
+                  ref={quoteContentRef as any}
+                  width="260px"
+                  border={BORDER}
+                  borderRadius={RADIUS_MD}
+                  boxShadow="var(--tt-shadow-panel, 0px 18px 60px rgba(0, 0, 0, 0.22))"
+                  zIndex={10}
+                >
+                  <Flex flexDirection="column" rowGap={2} padding={3}>
+                    <Text
+                      fontFamily="mono"
+                      fontSize="10px"
+                      fontWeight={600}
+                      letterSpacing="0.08em"
+                      textTransform="uppercase"
+                      color={MUTED}
+                    >
+                      Quote this post ✏️
+                    </Text>
+                    <Textarea
+                      size="sm"
+                      rows={2}
+                      resize="none"
+                      borderRadius="var(--tt-radius-sm, 9px)"
+                      placeholder="Add your thoughts…"
+                      value={quoteText}
+                      onChange={(event) => setQuoteText(event.target.value)}
+                    />
+                    <Select
+                      size="sm"
+                      borderRadius="var(--tt-radius-sm, 9px)"
+                      value={quoteVisibility}
+                      onChange={(event) => setQuoteVisibility(event.target.value as PostVisibility)}
+                    >
+                      {(Object.keys(CIRCLE_META) as PostVisibility[]).map((key) => (
+                        <option key={key} value={key}>
+                          {CIRCLE_META[key].emoji} {CIRCLE_META[key].label}
+                        </option>
+                      ))}
+                    </Select>
+                    <Button
+                      size="sm"
+                      color="white"
+                      fontFamily="heading"
+                      fontWeight={600}
+                      background={RAINBOW}
+                      backgroundSize="calc(100px + 200%)"
+                      sx={{ animation: 'var(--tt-rainbow-anim, moving-rainbow 5s linear infinite)' }}
+                      _hover={{ opacity: 0.9 }}
+                      borderRadius={RADIUS_MD}
+                      isLoading={sharing}
+                      onClick={handleQuote}
+                    >
+                      Quote ✨
+                    </Button>
+                  </Flex>
+                </PopoverContent>
+              </Popover>
+            </Box>
+          ) : (
+            <ActionIcon
+              icon={<Repeat2 size={18} strokeWidth={2.2} />}
+              count={post.shareCount}
+              label="Repost"
+              onClick={() => lopu({ title: 'Log in to repost 🔁', status: 'info', duration: 6000 })}
+            />
+          )}
+
+          {/* outward share: native sheet / copy link */}
+          <ActionIcon icon={<Share size={18} strokeWidth={2.2} />} label="Share" onClick={handleShareLink} />
+
+          <Box flex="1" />
+
+          {user ? (
+            <Box position="relative" display="flex">
+              {/* tap, touch-and-hold, or hover: quick reactions + a ＋ that
+              opens the full picker */}
               <ReactionControl
+                tapOpens
                 trigger={reactButton}
                 onQuickTap={() => handleReact('👍')}
                 content={(close) => (
@@ -1292,35 +1430,15 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
                 )}
               />
 
-              {/* click: the full native-emoji picker (multi-select), anchored here */}
-              <Popover
+              {/* ＋: the full native-emoji picker (multi-select), anchored here */}
+              <AnchoredEmojiPicker
                 isOpen={pickerOpen}
                 onClose={() => setPickerOpen(false)}
-                placement="top-start"
-                isLazy
-                closeOnBlur={false}
-              >
-                <PopoverAnchor>
-                  <Box position="absolute" left={0} bottom="100%" width="1px" height="1px" pointerEvents="none" />
-                </PopoverAnchor>
-                <PopoverContent
-                  ref={pickerContentRef as any}
-                  width="auto"
-                  border={BORDER}
-                  borderRadius="var(--tt-radius-lg, 16px)"
-                  background="var(--tt-card, #fff)"
-                  boxShadow="var(--tt-shadow-panel, 0px 18px 60px rgba(0, 0, 0, 0.22))"
-                  zIndex={20}
-                  _focusVisible={{ outline: 'none' }}
-                >
-                  <EmojiPicker
-                    onPick={handleReact}
-                    recent={recent}
-                    activeTokens={viewerReactions}
-                    autoFocus
-                  />
-                </PopoverContent>
-              </Popover>
+                contentRef={pickerContentRef}
+                onPick={handleReact}
+                recent={recent}
+                activeTokens={viewerReactions}
+              />
             </Box>
           ) : (
             <ReactionControl
@@ -1330,86 +1448,17 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
               content={() => null}
             />
           )}
-
-          <Button {...actionButtonStyles} onClick={toggleComments}>
-            Comment 💬
-          </Button>
-
-          <Popover
-            isOpen={shareOpen}
-            onClose={() => setShareOpen(false)}
-            placement="top"
-            isLazy
-            closeOnBlur={false}
-          >
-            <PopoverTrigger>
-              <Button {...actionButtonStyles} onClick={handleShareClick}>
-                Share ↗️
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent
-              ref={shareContentRef as any}
-              width="260px"
-              border={BORDER}
-              borderRadius={RADIUS_MD}
-              boxShadow="var(--tt-shadow-panel, 0px 18px 60px rgba(0, 0, 0, 0.22))"
-              zIndex={10}
-            >
-              <Flex flexDirection="column" rowGap={2} padding={3}>
-                <Text
-                  fontFamily="mono"
-                  fontSize="10px"
-                  fontWeight={600}
-                  letterSpacing="0.08em"
-                  textTransform="uppercase"
-                  color={MUTED}
-                >
-                  Share this post ↗️
-                </Text>
-                <Textarea
-                  size="sm"
-                  rows={2}
-                  resize="none"
-                  borderRadius="var(--tt-radius-sm, 9px)"
-                  placeholder="Say something (optional)…"
-                  value={shareText}
-                  onChange={(event) => setShareText(event.target.value)}
-                />
-                <Select
-                  size="sm"
-                  borderRadius="var(--tt-radius-sm, 9px)"
-                  value={shareVisibility}
-                  onChange={(event) => setShareVisibility(event.target.value as PostVisibility)}
-                >
-                  {(Object.keys(CIRCLE_META) as PostVisibility[]).map((key) => (
-                    <option key={key} value={key}>
-                      {CIRCLE_META[key].emoji} {CIRCLE_META[key].label}
-                    </option>
-                  ))}
-                </Select>
-                <Button
-                  size="sm"
-                  color="white"
-                  fontFamily="heading"
-                  fontWeight={600}
-                  background={RAINBOW}
-                  backgroundSize="calc(100px + 200%)"
-                  sx={{ animation: 'var(--tt-rainbow-anim, moving-rainbow 5s linear infinite)' }}
-                  _hover={{ opacity: 0.9 }}
-                  borderRadius={RADIUS_MD}
-                  isLoading={sharing}
-                  onClick={handleShare}
-                >
-                  Share ✨
-                </Button>
-              </Flex>
-            </PopoverContent>
-          </Popover>
         </Flex>
 
         {/* comments */}
         {commentsOpen && (
           <Flex flexDirection="column" rowGap={3}>
+            {post.comments.slice(-visibleComments).map((comment) => (
+              <CommentRow key={comment.id} comment={comment} onChanged={handleCommentChanged} onEngagement={onEngagement} />
+            ))}
+
+            {/* the reveal control sits BELOW the conversation (FB-style);
+            the OLDER comments it reveals render above the visible list */}
             {post.comments.length > visibleComments && (
               <Box
                 as="button"
@@ -1421,13 +1470,9 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
                 _hover={{ color: INK }}
                 onClick={() => setVisibleComments((count) => count + 5)}
               >
-                Show more comments 💬
+                Show previous comments 💬
               </Box>
             )}
-
-            {post.comments.slice(-visibleComments).map((comment) => (
-              <CommentRow key={comment.id} comment={comment} onChanged={handleCommentChanged} onEngagement={onEngagement} />
-            ))}
 
             {user ? (
               <Flex flexDirection="column" rowGap={2}>
