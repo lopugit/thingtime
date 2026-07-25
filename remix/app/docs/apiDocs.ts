@@ -2363,6 +2363,140 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'things-quota',
+    group: 'things',
+    title: 'Atomic service quota',
+    endpoint: '/api/v1/things/quota',
+    summary: 'Atomically reserve daily work and acquire rolling-window permits for a service account.',
+    detail:
+      'A server-to-server coordination primitive stored as one private, deterministic data Thing per service-account owner + key. ' +
+      'GET ?key= returns bounded status. POST performs reserve, permit, release, or reset with one atomic Mongo findOneAndUpdate, ' +
+      'so concurrent serverless invocations cannot oversubscribe a daily or rolling cap. The first reserve pins the policy. ' +
+      'Every time decision uses Thingtime server time; request bodies cannot supply now. State and lookups are always scoped to the authenticated owner.',
+    auth: {
+      mode: 'session-or-bearer',
+      description:
+        'Requires a live service-purpose Thingtime credential, supplied as Authorization: Bearer or the tt_auth cookie. Ordinary browser sessions, user accounts, and app-scoped tokens are rejected.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'POST reserve with a globally unique reservationId, positive count, and policy. A replay with the same count is idempotent; a different count is 409.',
+      'Before each expensive unit, POST permit with a permitId beginning with reservationId + ":". granted false is a normal 200 response; wait until retryAt before retrying.',
+      'If a reserved unit became a cache hit before its permit, POST release with that same would-be child id as releaseId. Replays never decrement twice.',
+      'GET status for daily and rolling remaining values. An authenticated service can POST reset for its own key; reset preserves in-flight identities and rolling permits.',
+      'Treat 503 as fail-closed. No work should continue when quota state is unavailable.'
+    ],
+    requestExamples: [
+      {
+        name: 'Read status',
+        description: 'Read this service account quota.',
+        method: 'GET',
+        query: { key: 'pokeworld:block-generation' }
+      },
+      {
+        name: 'Reserve blocks',
+        description: 'Reserve three daily generation slots.',
+        method: 'POST',
+        body: {
+          key: 'pokeworld:block-generation',
+          operation: 'reserve',
+          reservationId: '8b0c9547-3575-4a87-b6bb-e95c9d3fb4dd',
+          count: 3,
+          policy: { dailyLimit: 500, rollingLimit: 9, rollingWindowMs: 5000 }
+        }
+      },
+      {
+        name: 'Acquire permit',
+        description: 'Acquire one of nine rolling-window permits.',
+        method: 'POST',
+        body: {
+          key: 'pokeworld:block-generation',
+          operation: 'permit',
+          reservationId: '8b0c9547-3575-4a87-b6bb-e95c9d3fb4dd',
+          permitId: '8b0c9547-3575-4a87-b6bb-e95c9d3fb4dd:946647,488524'
+        }
+      },
+      {
+        name: 'Release cache hit',
+        description: 'Return one reserved daily slot before it acquires a permit.',
+        method: 'POST',
+        body: {
+          key: 'pokeworld:block-generation',
+          operation: 'release',
+          reservationId: '8b0c9547-3575-4a87-b6bb-e95c9d3fb4dd',
+          releaseId: '8b0c9547-3575-4a87-b6bb-e95c9d3fb4dd:946647,488524'
+        }
+      },
+      {
+        name: 'Reset daily usage',
+        description: 'Clear daily use without cancelling in-flight work.',
+        method: 'POST',
+        body: { key: 'pokeworld:block-generation', operation: 'reset' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Reservation accepted.',
+        body: {
+          ok: true,
+          status: {
+            key: 'pokeworld:block-generation',
+            policy: { dailyLimit: 500, rollingLimit: 9, rollingWindowMs: 5000 },
+            dayKey: '2026-07-19',
+            dailyUsed: 3,
+            dailyRemaining: 497,
+            rollingUsed: 0,
+            rollingRemaining: 9,
+            rollingResetAt: null
+          },
+          reservation: {
+            dayKey: '2026-07-19',
+            reservationId: '8b0c9547-3575-4a87-b6bb-e95c9d3fb4dd'
+          }
+        }
+      },
+      {
+        status: 200,
+        description: 'Rolling cap reached; retry at the server epoch timestamp.',
+        body: {
+          ok: true,
+          status: { rollingUsed: 9, rollingRemaining: 0 },
+          permit: {
+            permitId: '8b0c9547-3575-4a87-b6bb-e95c9d3fb4dd:946647,488524',
+            granted: false,
+            retryAt: 1784462405010
+          }
+        }
+      },
+      {
+        status: 409,
+        description: 'A caller tried to change a pinned policy.',
+        body: {
+          ok: false,
+          error: 'Quota policy is already pinned to different limits',
+          code: 'QUOTA_POLICY_CONFLICT'
+        }
+      },
+      {
+        status: 413,
+        description: 'The JSON body exceeded the 16 KiB route cap.',
+        body: { ok: false, error: 'Request body too large' }
+      },
+      {
+        status: 503,
+        description: 'Fail-closed storage error.',
+        body: { ok: false, error: 'Quota store is unavailable', code: 'QUOTA_UNAVAILABLE' }
+      }
+    ],
+    notes: [
+      'Keys are 1-128 safe characters. Reservation, permit, and release ids are bounded; permitId/releaseId must begin with reservationId + ":".',
+      'Policy bounds: dailyLimit 1-10000, rollingLimit 1-1000, rollingWindowMs 100-86400000.',
+      'Errors include a stable code: INVALID_REQUEST, QUOTA_NOT_FOUND, QUOTA_POLICY_CONFLICT, QUOTA_RESERVATION_CONFLICT, QUOTA_DAILY_LIMIT, QUOTA_RESERVATION_EXPIRED, QUOTA_PERMIT_CONFLICT, QUOTA_RELEASE_CONFLICT, or QUOTA_UNAVAILABLE.',
+      'The raw quota Thing is private (acl ["tt:user"]); responses expose only the bounded status and operation result.'
+    ]
+  }),
+  endpoint({
     id: 'things-search',
     group: 'things',
     title: 'Search things',

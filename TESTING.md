@@ -190,3 +190,15 @@ is fixed, and cite the checklist you ran in the PR description.
       LOGICAL collection names ('things'), including `$lookup`/`$unionWith`
       pipeline targets and collectionStats, and hit the versioned physical
       collections.
+
+## Docs code windows & embed SDK preview (`remix/app/routes/docs/docsCode.tsx`, `remix/app/routes/docs/embed.tsx`)
+
+- [ ] Shell samples with bare URLs (`curl -X POST https://…`) highlight the
+      URL as plain text — never as a `//` comment from the protocol slashes
+      onward; real `//` and `#` comment lines still render muted.
+- [ ] JSON samples color negative numbers as numbers (yellow), not as CLI
+      flags (blue); shell flags (`-H`, `--data`) stay flag-blue.
+- [ ] On /docs/embed, blocking `/sdk/thingtime-login.js` (devtools request
+      blocking) swaps "Loading the SDK…" for the failure notice with the
+      standalone-demo link within ~10s — the preview must never show a
+      permanent loading state.
