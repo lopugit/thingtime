@@ -1370,9 +1370,9 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
           <PostBody post={post} />
         )}
 
-        {/* action row — icons + counts only (X-style, no labels); the react
-        control is pinned RIGHT so it shares one edge with every comment's
-        react column (IG-style alignment) */}
+        {/* action row — icons + counts only (X-style, no labels); the merged
+        react control sits right beside the comments icon (comment rows keep
+        their IG-style right-aligned react columns) */}
         <Flex borderTop={BORDER} paddingTop={2} alignItems="center" columnGap={[1, 2]}>
           <ActionIcon
             icon={<MessageCircle size={18} strokeWidth={2.2} />}
@@ -1382,6 +1382,48 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
             aria-expanded={commentsOpen}
             onClick={toggleComments}
           />
+
+          {user ? (
+            <Box position="relative" display="flex">
+              {/* tap, touch-and-hold, or hover: quick reactions + a ＋ that
+              opens the full picker */}
+              <ReactionControl
+                tapOpens
+                trigger={reactButton}
+                onQuickTap={() => handleReact('👍')}
+                content={(close) => (
+                  <QuickReactionRow
+                    viewerSet={viewerSet}
+                    onPick={(emoji) => {
+                      close();
+                      handleReact(emoji);
+                    }}
+                    onMore={() => {
+                      close();
+                      setPickerOpen(true);
+                    }}
+                  />
+                )}
+              />
+
+              {/* ＋: the full native-emoji picker (multi-select), anchored here */}
+              <AnchoredEmojiPicker
+                isOpen={pickerOpen}
+                onClose={() => setPickerOpen(false)}
+                contentRef={pickerContentRef}
+                onPick={handleReact}
+                recent={recent}
+                activeTokens={viewerReactions}
+              />
+            </Box>
+          ) : (
+            <ReactionControl
+              enabled={false}
+              trigger={reactButton}
+              onQuickTap={() => handleReact('👍')}
+              content={() => null}
+            />
+          )}
 
           {/* repost: instant repost OR quote (caption + circle) */}
           {user ? (
@@ -1478,50 +1520,6 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
 
           {/* outward share: native sheet / copy link */}
           <ActionIcon icon={<Share size={18} strokeWidth={2.2} />} label="Share" onClick={handleShareLink} />
-
-          <Box flex="1" />
-
-          {user ? (
-            <Box position="relative" display="flex">
-              {/* tap, touch-and-hold, or hover: quick reactions + a ＋ that
-              opens the full picker */}
-              <ReactionControl
-                tapOpens
-                trigger={reactButton}
-                onQuickTap={() => handleReact('👍')}
-                content={(close) => (
-                  <QuickReactionRow
-                    viewerSet={viewerSet}
-                    onPick={(emoji) => {
-                      close();
-                      handleReact(emoji);
-                    }}
-                    onMore={() => {
-                      close();
-                      setPickerOpen(true);
-                    }}
-                  />
-                )}
-              />
-
-              {/* ＋: the full native-emoji picker (multi-select), anchored here */}
-              <AnchoredEmojiPicker
-                isOpen={pickerOpen}
-                onClose={() => setPickerOpen(false)}
-                contentRef={pickerContentRef}
-                onPick={handleReact}
-                recent={recent}
-                activeTokens={viewerReactions}
-              />
-            </Box>
-          ) : (
-            <ReactionControl
-              enabled={false}
-              trigger={reactButton}
-              onQuickTap={() => handleReact('👍')}
-              content={() => null}
-            />
-          )}
         </Flex>
 
         {/* comments — the post's conversation, or a FOCUSED thread panel:

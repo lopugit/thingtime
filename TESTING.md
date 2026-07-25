@@ -119,10 +119,11 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Post engagement row & comment threads (`remix/app/components/Feed/PostCard.tsx`)
 
-- [ ] The action row is icon + count ONLY (no text labels): 💬 comments,
-      🔁 repost, ↗ share on the left, and the merged react button pinned to
-      the card's RIGHT edge. Every react control — post button and each
-      comment/reply column, any depth — shares that one right edge.
+- [ ] The action row is icon + count ONLY (no text labels): 💬 comments with
+      the merged react button DIRECTLY beside it, then 🔁 repost and ↗ share.
+      Comment/reply react columns stay pinned to the card's right edge at
+      every depth, and the react popup + full picker open without clipping
+      from the button's left-side position.
 - [ ] The merged react button shows EVERYONE's reactions (top token emojis +
       total, heart outline at zero) and tints accent when the viewer holds a
       reaction. Click, hover, and touch-and-hold all open the quick-react
@@ -137,6 +138,12 @@ is fixed, and cite the checklist you ran in the PR description.
       new top-level row (slide-right animation; the back arrow slides left to
       return one level), with its replies restarting at depth 1 — repeatable
       indefinitely. Closing comments exits the drill-down back to the root.
+- [ ] The server never caps thread depth either: replying at depth 65+ still
+      creates, and a deep comment's permalink resolves its parent AND walks
+      all the way back to the root post. Cycle safety in the visibility and
+      parent-chain walks is a visited set, never a depth rail (regression
+      class: 4-hop, then 64-hop caps 404ing deep replies as "Post not
+      found").
 - [ ] Repost is a menu: instant "Repost" posts immediately (toast + count
       bump); "Quote post" opens the caption + circle popover. Share is
       OUTWARD only: native share sheet where available, otherwise copy-link
@@ -146,9 +153,13 @@ is fixed, and cite the checklist you ran in the PR description.
 ## Data crystals & nesting depth (`remix/app/schemas/registry.ts`)
 
 - [ ] Post a thingtime post whose thing contains an Editor.js document (or
-      any structure) nested well past 6 levels: it must save (depth rail is
-      64, a stack-safety bound only, with node/array caps as the real
-      guards).
+      any structure) nested well past 6 levels: it must save. There is NO
+      validator depth rail (the walk is iterative, so nesting never touches
+      the JS call stack); the only depth bound is MongoDB's physical BSON
+      limit (MAX_STORABLE_NESTING, probed at 179 crystal levels on mongod
+      8.0; crystal.thing payloads get one less), reported as a precise 400
+      naming MongoDB — never a raw driver 500. Circular or repeated object
+      references also 400 loudly (identity WeakSet).
 - [ ] Oversized payloads still fail loudly: >10000 nodes, >1000 array items,
       or a key with `$`/dots must 400 with a precise message, never silently
       drop data.
