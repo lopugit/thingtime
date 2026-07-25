@@ -58,6 +58,10 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // reset-token redemption: throttle repeated token guesses / password sets
   // before any token work (its own bucket so it can't starve reset requests)
   'auth.passwordResetConfirm': { limit: 10, windowMs: 15 * 60_000, enabled: true },
+  // resend-verification emails any address you name — the same unauthenticated
+  // mail-bomb + enumeration vector as password reset, so bound it the same way
+  // (anonymous, keyed by IP) instead of leaving the real SES sender uncapped
+  'auth.resendVerification': { limit: 5, windowMs: 15 * 60_000, enabled: true },
   // login attempts (password step and OTP step share the endpoint): bounds
   // credential stuffing and OTP-email sends beyond the per-challenge attempt cap
   'auth.login': { limit: 30, windowMs: 60_000, enabled: true }

@@ -35,6 +35,21 @@ comments, reactions, shares, and free-form data all live in `things`, each
 kind declared through the `thingtime` schema-id array (see
 `app/schemas/registry.ts` and `TODO/claude-todo/16-everything-is-a-thing-collections.md`).
 
+**Physical collections are versioned.** The names below are *logical* — the
+vocabulary of code, docs, and the admin query API. On the MongoDB server each
+collection physically lives at `<name>_v<N>`, where `N` is that collection's
+entry in `COLLECTION_SCHEMA_VERSIONS` (`app/schemas/registry.ts`): logical
+`things` at version 2 is the physical collection `things_v2`. The mapping has
+exactly one implementation (`api/utils/mongodb/collectionNames.ts`), every
+handle flows through `getCollection()` in `api/utils/mongodb/collections.ts`,
+and on first db contact an adoption pass renames any unversioned legacy
+collection in place (instant, index-preserving). Bumping a collection's
+version points the code at the next physical generation; the superseded one
+stays behind as a frozen snapshot until the admin runs the destructive
+`drop-stale-collection-generations` migration — run the migration, verify,
+then everything below the current version can safely be deleted. Runbook and
+edge cases live in `api/utils/migrations/migrations.ts`.
+
 | Collection | Holds |
 | ---------- | ----- |
 | `things`   | ALL Thingtime data. System kinds: `user` (public profile in `crystal`, all private state as a single BinData `secure` blob, uniqueness via BinData `uniqueKeys`), `theme`, `feed-algorithm`, `waitlist`, `schema`; content kinds: `post`, `comment`, `reaction`, `share`, `data`. Every thing also carries a schema-free `extended` property for arbitrary unvalidated JSON (≤512KB, replace-on-write, never structured-searchable) |

@@ -18,11 +18,12 @@ import {
   Thead,
   Tr
 } from '@chakra-ui/react';
-import { ArrowRight, Check, Code2, Copy, Link2 } from 'lucide-react';
+import { ArrowRight, Check, Code2, Link2 } from 'lucide-react';
 import { Link as RouterLink, useLocation } from 'react-router';
 
 import { MigrationsPanel } from '~/components/Schemas/MigrationsPanel';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { CodeBlock, copyToClipboard } from '~/routes/docs/docsCode';
 import {
   thingtimeSchemas,
   type ThingtimeSchema,
@@ -30,15 +31,6 @@ import {
   type ThingtimeSchemaKind
 } from '~/schemas/registry';
 import { CARD_STYLES } from '~/theme/card';
-
-const CODE_BG = '#0b0b0f';
-const CODE_BORDER = 'var(--tt-dark-border, #2a2a33)';
-const CODE_TEXT = '#e6e6ec';
-const CODE_MUTED = 'var(--tt-dark-muted, #8a8a95)';
-const CODE_GREEN = 'var(--tt-dark-accent, #59ff9c)';
-const CODE_BLUE = '#59bdff';
-const CODE_YELLOW = '#ffc20e';
-const CODE_ACCENT = 'var(--tt-accent, hotpink)';
 
 type SchemaSection = {
   kind: ThingtimeSchemaKind;
@@ -79,50 +71,37 @@ const fieldConstraints = (field: ThingtimeSchemaField) => {
     bits.push(`one of: ${field.values.join(', ')}`);
   }
 
+  if (field.min !== undefined) {
+    bits.push(`min ${field.min}`);
+  }
+
   if (field.max !== undefined) {
-    bits.push(`max ${field.max}`);
+    bits.push(`max ${field.max}${field.maxUnit ? ` ${field.maxUnit}` : ''}`);
   }
 
   return bits.join(' · ');
 };
 
-const copyToClipboard = async (value: string) => {
-  try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(value);
-      return true;
-    }
-  } catch {
-    // Fall through to the legacy path for sandboxed preview browsers.
-  }
+// SchemasPage-specific copy affordance: the link-icon deeplink/URL variant.
+// Code copying is handled by the shared docs CodeBlock's built-in button.
 
-  try {
-    const textarea = document.createElement('textarea');
-    textarea.value = value;
-    textarea.setAttribute('readonly', '');
-    textarea.style.left = '-9999px';
-    textarea.style.opacity = '0';
-    textarea.style.position = 'fixed';
-    textarea.style.top = '0';
-    document.body.appendChild(textarea);
-    textarea.focus();
-    textarea.select();
-    textarea.setSelectionRange(0, textarea.value.length);
-    const copied = document.execCommand('copy');
-    document.body.removeChild(textarea);
-    return copied;
-  } catch {
-    return false;
-  }
-};
-
+// Registry object fields can declare a closed child shape (e.g. post.listing);
+// flatten those into dotted-path rows so the docs table documents the nesting
+// the same way schema cards chip it (listing.title, listing.price, …).
+const flattenDocFields = (
+  fields: ThingtimeSchemaField[],
+  prefix = ''
+): Array<ThingtimeSchemaField & { path: string }> =>
+  fields.flatMap((field) => {
+    const path = prefix ? `${prefix}.${field.name}` : field.name;
+    const row = { ...field, path };
+    return field.children?.length ? [row, ...flattenDocFields(field.children, path)] : [row];
+  });
 function CopyValueButton({
-  kind = 'link',
   label,
   size = 'sm',
   value
 }: {
-  kind?: 'code' | 'link';
   label: string;
   size?: 'xs' | 'sm';
   value: string;
@@ -137,23 +116,6 @@ function CopyValueButton({
       window.setTimeout(() => setCopied(false), 1100);
     }
   }, [value]);
-
-  if (kind === 'code') {
-    return (
-      <IconButton
-        aria-label={copied ? 'Copied' : label}
-        bg="rgba(255, 255, 255, 0.08)"
-        border="1px solid rgba(255, 255, 255, 0.08)"
-        color={copied ? CODE_GREEN : CODE_TEXT}
-        _hover={{ bg: 'rgba(255, 255, 255, 0.14)' }}
-        icon={<Icon as={copied ? Check : Copy} boxSize={4} />}
-        onClick={copy}
-        size="sm"
-        type="button"
-        variant="ghost"
-      />
-    );
-  }
 
   const compact = size === 'xs';
 
@@ -170,85 +132,6 @@ function CopyValueButton({
       type="button"
       variant="ghost"
     />
-  );
-}
-
-// Minimal JSON-only highlighter — keys blue, strings green, numbers yellow,
-// literals accent (same palette as the docs API CodeBlock).
-const highlightJsonLine = (line: string) => {
-  const pattern = /("(?:\\.|[^"\\])*")(\s*:)?|(-?\d+(?:\.\d+)?)|\b(true|false|null)\b/g;
-  const parts: React.ReactNode[] = [];
-  let cursor = 0;
-
-  for (const match of line.matchAll(pattern)) {
-    const [token, str, colon, num, literal] = match;
-    const index = match.index || 0;
-
-    if (index > cursor) {
-      parts.push(line.slice(cursor, index));
-    }
-
-    const color = str ? (colon ? CODE_BLUE : CODE_GREEN) : num ? CODE_YELLOW : literal ? CODE_ACCENT : CODE_TEXT;
-
-    parts.push(
-      <Box as="span" color={color} key={`${index}-${token}`}>
-        {str && colon ? str : token}
-      </Box>
-    );
-
-    if (str && colon) {
-      parts.push(colon);
-    }
-
-    cursor = index + token.length;
-  }
-
-  if (cursor < line.length) {
-    parts.push(line.slice(cursor));
-  }
-
-  return parts.length ? parts : ' ';
-};
-
-function CodeBlock({ children }: { children: string }) {
-  const lines = String(children || '').split('\n');
-
-  return (
-    <Box
-      bg={CODE_BG}
-      border="2px solid"
-      borderColor={CODE_BORDER}
-      color={CODE_TEXT}
-      fontFamily="var(--tt-font-mono, ui-monospace, Menlo, monospace)"
-      fontSize={{ base: '12px', md: '13px' }}
-      lineHeight="1.75"
-      maxH="320px"
-      overflow="auto"
-      position="relative"
-    >
-      <Box position="absolute" right={2} top={2} zIndex={1}>
-        <CopyValueButton kind="code" label="Copy JSON" value={children} />
-      </Box>
-      <Box as="pre" m={0} minW="max-content" px={{ base: 3, md: 4 }} py={4} pr={12}>
-        <Box as="code" display="block">
-          {lines.map((line, index) => (
-            <Box
-              as="span"
-              display="grid"
-              gap={3}
-              gridTemplateColumns="3ch minmax(0, 1fr)"
-              key={`${index}-${line}`}
-              whiteSpace="pre"
-            >
-              <Box as="span" color={CODE_MUTED} textAlign="right" userSelect="none">
-                {index + 1}
-              </Box>
-              <Box as="span">{highlightJsonLine(line)}</Box>
-            </Box>
-          ))}
-        </Box>
-      </Box>
-    </Box>
   );
 }
 
@@ -321,13 +204,13 @@ function SchemaCard({ copyHref, schema }: { copyHref: string; schema: ThingtimeS
                 </Tr>
               </Thead>
               <Tbody>
-                {schema.fields.map((field) => {
+                {flattenDocFields(schema.fields).map((field) => {
                   const constraints = fieldConstraints(field);
 
                   return (
-                    <Tr key={field.name}>
+                    <Tr key={field.path}>
                       <Td fontFamily="mono" fontSize="xs" fontWeight="700" whiteSpace="nowrap">
-                        {field.name}
+                        {field.path}
                       </Td>
                       <Td color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="xs" whiteSpace="nowrap">
                         {field.type}
@@ -363,7 +246,7 @@ function SchemaCard({ copyHref, schema }: { copyHref: string; schema: ThingtimeS
         <Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="11px" fontWeight="700" mb={2}>
           Example
         </Text>
-        <CodeBlock>{JSON.stringify(schema.example, null, 2)}</CodeBlock>
+        <CodeBlock language="json">{JSON.stringify(schema.example, null, 2)}</CodeBlock>
       </Box>
     </Box>
   );

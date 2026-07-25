@@ -1,0 +1,257 @@
+name: PR Conflict Resolver
+
+# When any branch is pushed, find every open PR (drafts included) that
+# TARGETS the pushed branch, and resolve merge conflicts on each one:
+#
+#   1. graphify-only conflicts (all conflicted paths under a graphify-out/
+#      tree) are resolved MECHANICALLY, no AI needed: take the base branch's
+#      side for the whole tree (repo rule — never hand-merge generated graph
+#      files), re-run `graphify update` (text/AST-only extraction, no LLM),
+#      push, and comment a note that semantic AI extraction still needs a
+#      local run.
+#   2. Real code conflicts are resolved by an AI agent (claude-code-action)
+#      that merges the base in, resolves thoughtfully, pushes, and comments
+#      a summary — requires the ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN
+#      repo secret (claude CLI: /install-github-app).
+#   3. Code conflicts with NO AI credential configured: abort, leave one
+#      deduped PR comment explaining what is needed, and fail the job.
+#
+# Loop safety: pushes made with the default GITHUB_TOKEN never trigger
+# workflows, so the resolver's own pushes cannot re-trigger this workflow.
+
+on:
+  push:
+    branches: ['**']
+  workflow_dispatch:
+    inputs:
+      base:
+        description: 'Base branch to scan for conflicting PRs (defaults to the branch this run is dispatched from)'
+        required: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
+
+concurrency:
+  group: pr-conflict-resolver-${{ inputs.base || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  find-conflicting-prs:
+    name: Find conflicting PRs targeting ${{ inputs.base || github.ref_name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      prs: ${{ steps.scan.outputs.prs }}
+    steps:
+      - name: Scan open + draft PRs whose base is the pushed branch
+        id: scan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_BRANCH: ${{ inputs.base || github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          # Open PRs (drafts included) targeting the pushed branch.
+          # Fork PRs are skipped: this token cannot push a resolution to a fork.
+          mapfile -t candidates < <(gh pr list --repo "$REPO" --base "$BASE_BRANCH" \
+            --state open --limit 100 \
+            --json number,isCrossRepository \
+            --jq '.[] | select(.isCrossRepository | not) | .number')
+
+          if [ "${#candidates[@]}" -eq 0 ]; then
+            echo "No open PRs target $BASE_BRANCH."
+            echo "prs=[]" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # GitHub recomputes mergeability lazily after the base moves; poll
+          # each PR until the state settles instead of trusting the first read.
+          conflicting=()
+          for pr in "${candidates[@]}"; do
+            state="UNKNOWN"
+            for attempt in $(seq 1 10); do
+              state=$(gh pr view "$pr" --repo "$REPO" --json mergeable --jq .mergeable)
+              [ "$state" != "UNKNOWN" ] && break
+              sleep 15
+            done
+            echo "PR #$pr mergeable=$state"
+            if [ "$state" = "CONFLICTING" ]; then
+              conflicting+=("$pr")
+            fi
+          done
+
+          prs=$(printf '%s\n' "${conflicting[@]:-}" | jq -R 'select(length > 0) | tonumber' | jq -sc .)
+          echo "prs=$prs" >> "$GITHUB_OUTPUT"
+
+  resolve:
+    name: 'Resolve conflicts in PR #${{ matrix.pr }}'
+    needs: find-conflicting-prs
+    if: needs.find-conflicting-prs.outputs.prs != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        pr: ${{ fromJson(needs.find-conflicting-prs.outputs.prs) }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BASE_BRANCH: ${{ inputs.base || github.ref_name }}
+      PR_NUMBER: ${{ matrix.pr }}
+      HAS_AI_CREDENTIAL: ${{ (secrets.ANTHROPIC_API_KEY != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN != '') && 'true' || 'false' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check out PR head branch
+        run: |
+          gh pr checkout "$PR_NUMBER"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Attempt merge of base into PR head
+        id: merge
+        run: |
+          set -euo pipefail
+          git fetch origin "$BASE_BRANCH"
+          if git merge "origin/$BASE_BRANCH" --no-edit; then
+            echo "clean=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "clean=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Push clean merge (mergeability race)
+        if: steps.merge.outputs.clean == 'true'
+        run: |
+          set -euo pipefail
+          git push origin HEAD
+          gh pr comment "$PR_NUMBER" --body "🤖 **PR Conflict Resolver**: GitHub reported this PR as conflicting with \`$BASE_BRANCH\`, but merging the base in applied cleanly. Pushed the merge commit to keep the branch current."
+
+      - name: Classify conflicts
+        id: classify
+        if: steps.merge.outputs.clean == 'false'
+        run: |
+          set -euo pipefail
+          mapfile -t conflicts < <(git diff --name-only --diff-filter=U)
+          printf 'Conflicted: %s\n' "${conflicts[@]}"
+          graphify_only=true
+          for f in "${conflicts[@]}"; do
+            case "$f" in
+              graphify-out/*|*/graphify-out/*) ;;
+              *) graphify_only=false ;;
+            esac
+          done
+          echo "graphify_only=$graphify_only" >> "$GITHUB_OUTPUT"
+
+      - name: Mechanically resolve graphify-only conflicts (no AI needed)
+        if: steps.classify.outputs.graphify_only == 'true'
+        run: |
+          set -euo pipefail
+
+          # Repo rule: never hand-merge generated graph files. Take the base
+          # branch's side for every conflicted path, tracking which graphify
+          # roots (".", "remix", ...) need a graph refresh afterwards.
+          # "theirs" during this merge is the base branch = MERGE_HEAD.
+          refresh_roots=()
+          while IFS= read -r -d '' f; do
+            case "$f" in
+              graphify-out/*) root="." ;;
+              *) root="${f%%/graphify-out/*}" ;;
+            esac
+            case " ${refresh_roots[*]-} " in
+              *" $root "*) ;;
+              *) refresh_roots+=("$root") ;;
+            esac
+            if git cat-file -e "MERGE_HEAD:$f" 2>/dev/null; then
+              git checkout MERGE_HEAD -- "$f"
+              git add -- "$f"
+            else
+              git rm -q -f -- "$f"
+            fi
+          done < <(git diff --name-only --diff-filter=U -z)
+
+          # Re-run graphify text/AST-only extraction so the graph reflects the
+          # merged code. `graphify update` needs no LLM or API key.
+          refresh_note="✅ Re-ran \`graphify update\` (text/AST-only extraction) on the merged code."
+          if pipx install graphifyy >/dev/null 2>&1 || pip install --user graphifyy >/dev/null 2>&1; then
+            export PATH="$HOME/.local/bin:$PATH"
+            for root in "${refresh_roots[@]}"; do
+              if graphify update "$root"; then
+                git add -A -- "$root/graphify-out" || true
+              else
+                refresh_note="⚠️ \`graphify update $root\` failed in CI — the base branch's graph was kept as-is; re-run \`graphify update\` locally."
+              fi
+            done
+          else
+            refresh_note="⚠️ The graphify CLI could not be installed in CI — the base branch's graph was kept as-is; re-run \`graphify update\` locally."
+          fi
+
+          git commit -m "Merge origin/$BASE_BRANCH into PR #$PR_NUMBER head: graphify-out taken from base + text-only graph refresh"
+          git push origin HEAD
+
+          gh pr comment "$PR_NUMBER" --body "🤖 **PR Conflict Resolver**: this PR only conflicted with \`$BASE_BRANCH\` under \`graphify-out/\` (generated graph files), so it was resolved mechanically — the base branch's side was taken wholesale per the repo rule.
+
+          $refresh_note
+
+          ⚠️ **Semantic AI extraction was NOT run** (CI runs text/AST extraction only). If docs, Markdown, or other non-code corpus files changed, run the semantic update path locally (e.g. \`graphify update .\` with the local LLM proxy) and push the refreshed outputs."
+
+      - name: Reset merge state for the AI resolver
+        if: steps.classify.outputs.graphify_only == 'false' && env.HAS_AI_CREDENTIAL == 'true'
+        run: git merge --abort
+
+      - name: Resolve conflicts with Claude
+        if: steps.classify.outputs.graphify_only == 'false' && env.HAS_AI_CREDENTIAL == 'true'
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            You are resolving merge conflicts for PR #${{ matrix.pr }} in ${{ github.repository }}.
+
+            The base branch `${{ inputs.base || github.ref_name }}` just moved and this PR now
+            conflicts with it. You are already on the PR head branch in a full clone.
+
+            Steps:
+            1. Run: git fetch origin && git merge origin/${{ inputs.base || github.ref_name }} --no-edit
+               (it will stop on conflicts).
+            2. Resolve every conflict thoughtfully, preserving the intent of BOTH the PR's
+               changes and the new base-branch changes. Read the surrounding code as needed.
+               Never discard either side's work just to make a conflict disappear.
+            3. Repo rule for graphify-out/: never hand-merge those generated files. Take the
+               base branch's side for the ENTIRE directory:
+               git checkout --theirs -- graphify-out/ && git add -A graphify-out/
+               (for delete/modify conflicts in that directory, resolve wholesale toward the
+               base side with git rm / git add as git status indicates).
+            4. Stage the resolved files and complete the merge commit. Keep the default merge
+               commit message, appending a one-line summary of the notable resolution choices.
+            5. Push to the PR head branch: git push origin HEAD.
+            6. Comment on PR #${{ matrix.pr }} (gh pr comment) with a concise summary of what
+               conflicted and how each conflict was resolved, so the author can review the calls.
+
+            If a conflict is genuinely ambiguous — both sides changed the same behavior in
+            incompatible ways and the correct combined behavior cannot be determined from the
+            code — do NOT push a guess. Run git merge --abort and instead comment on the PR
+            listing exactly which files/hunks need a human decision and why.
+          claude_args: |
+            --max-turns 80
+            --allowedTools "Bash(git:*),Bash(gh:*),Read,Edit,MultiEdit,Write,Grep,Glob,LS"
+
+      - name: Code conflicts but no AI credential configured
+        if: steps.classify.outputs.graphify_only == 'false' && env.HAS_AI_CREDENTIAL != 'true'
+        run: |
+          set -euo pipefail
+          git merge --abort || true
+          marker="<!-- pr-conflict-resolver:no-credential -->"
+          if ! gh pr view "$PR_NUMBER" --json comments --jq '.comments[].body' | grep -qF "$marker"; then
+            gh pr comment "$PR_NUMBER" --body "$marker
+          🤖 **PR Conflict Resolver**: this PR conflicts with \`$BASE_BRANCH\` in real source files (beyond \`graphify-out/\`), and no AI credential is configured in this repo, so automatic resolution was skipped.
+
+          To enable AI conflict resolution, add the \`ANTHROPIC_API_KEY\` or \`CLAUDE_CODE_OAUTH_TOKEN\` Actions secret (easiest: run \`/install-github-app\` from the \`claude\` CLI). Until then, please resolve the conflicts manually."
+          fi
+          echo "::error::PR #$PR_NUMBER has non-graphify conflicts and no ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN secret is configured."
+          exit 1

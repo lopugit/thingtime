@@ -81,8 +81,12 @@ export const entryToCardSource = (entry: BrowseSchemaEntry): SchemaCardSource | 
 // aren't searchable, so "Search things" for those builtins would dead-end.
 export const SEARCHABLE_CRYSTAL_KINDS = new Set(['post', 'data', 'schema', 'comment', 'reaction']);
 
-export const searchableSchemaSource = (source: Pick<SchemaCardSource, 'origin' | 'id'>): boolean =>
-  source.origin === 'community' || SEARCHABLE_CRYSTAL_KINDS.has(source.id);
+// Fieldless shapes are excluded: toSearchSource returns null for them (nothing
+// to search by), so a "Search things" button / post-create deep link would
+// dead-end in the "not visible" toast. Zero-field marker schemas are legal on
+// the write path, so this predicate must gate on fields, not just origin.
+export const searchableSchemaSource = (source: Pick<SchemaCardSource, 'origin' | 'id' | 'fields'>): boolean =>
+  source.fields.length > 0 && (source.origin === 'community' || SEARCHABLE_CRYSTAL_KINDS.has(source.id));
 
 export const registryToCardSource = (schema: ThingtimeSchema): SchemaCardSource => ({
   key: `builtin:${schema.id}`,

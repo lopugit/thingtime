@@ -24,11 +24,19 @@ const getSesClient = (config: EmailConfig) => {
   return client;
 };
 
+// SESv2 MessageTag Name AND Value accept only ASCII letters, digits, '_' and
+// '-'. Our template keys are dotted (e.g. 'auth.verify_email', 'newsletter.
+// generic'), and a single invalid char makes SendEmail reject the WHOLE message
+// with BadRequestException — which, because sends are fire-and-forget + fail
+// open, would silently drop every verification / reset / OTP / newsletter email.
+// Coerce any disallowed char to '_' (never empty — the pattern requires >=1).
+const sanitizeSesTag = (value: string) => (value.replace(/[^A-Za-z0-9_-]/g, '_') || '_').slice(0, 256);
+
 const toSesTags = (tags: Record<string, string> | undefined) =>
   tags
     ? Object.entries(tags).map(([Name, Value]) => ({
-        Name: Name.slice(0, 256),
-        Value: Value.slice(0, 256)
+        Name: sanitizeSesTag(Name),
+        Value: sanitizeSesTag(Value)
       }))
     : undefined;
 

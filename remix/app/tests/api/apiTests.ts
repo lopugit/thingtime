@@ -729,6 +729,39 @@ export const apiTests: ApiTestDefinition[] = [
     )
   },
   {
+    id: 'things-quota-read-service-guarded',
+    name: 'Service quota read requires service credentials',
+    description: 'Anonymous callers cannot inspect an owner-scoped service quota.',
+    group: 'things',
+    method: 'GET',
+    path: '/api/v1/things/quota?key=api-test',
+    expect: expectJson(
+      [401],
+      (body) => body?.ok === false && body?.code === 'UNAUTHORIZED',
+      'Anonymous quota read was rejected.'
+    )
+  },
+  {
+    id: 'things-quota-write-service-guarded',
+    name: 'Service quota write requires service credentials',
+    description: 'Anonymous callers cannot reserve quota or initialize a quota Thing.',
+    group: 'things',
+    method: 'POST',
+    path: '/api/v1/things/quota',
+    body: {
+      key: 'api-test',
+      operation: 'reserve',
+      reservationId: 'api-test-reservation',
+      count: 1,
+      policy: { dailyLimit: 1, rollingLimit: 1, rollingWindowMs: 1_000 }
+    },
+    expect: expectJson(
+      [401],
+      (body) => body?.ok === false && body?.code === 'UNAUTHORIZED',
+      'Anonymous quota write was rejected before initialization.'
+    )
+  },
+  {
     id: 'things-feed-filtered',
     name: 'Feed honours type filter',
     description: 'Filtering by marketplace type returns only marketplace posts.',
