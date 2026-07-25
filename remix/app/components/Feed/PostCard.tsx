@@ -884,13 +884,14 @@ const CommentRow = (props: {
               </Flex>
               {reactControl}
             </Flex>
-            {/* thread reveal lives BELOW the comment (FB/IG-style) */}
+            {/* thread reveal lives BELOW the comment (FB/IG-style), left
+            edge flush with the reply icon */}
             {!pending && comment.commentCount > 0 && (
-              <Flex alignItems="center" columnGap={2} paddingX={1} paddingTop={0.5}>
-                <Box width="20px" height="1px" background="var(--tt-border, #ececef)" flexShrink={0} />
+              <Flex alignItems="center" paddingX={1} paddingTop={0.5}>
                 <Box
                   as="button"
                   type="button"
+                  paddingX={1}
                   fontSize="11px"
                   fontWeight={600}
                   color={repliesOpen ? INK : MUTED}
