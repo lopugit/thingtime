@@ -124,11 +124,17 @@ is fixed, and cite the checklist you ran in the PR description.
       Comment rows mirror the pattern — reply icon then react control inline
       under the bubble (no right-edge column) — and the react popup + full
       picker open without clipping from the left-side positions.
-- [ ] The merged react button shows EVERYONE's reactions (top token emojis +
-      total, heart outline at zero) and tints accent when the viewer holds a
-      reaction. Click, hover, and touch-and-hold all open the quick-react
-      popup; picking an emoji applies optimistically (no wait), and ＋ opens
-      the full custom picker.
+- [ ] The merged react button shows ALL the viewer's own reaction tokens
+      FIRST, then the crowd's top remaining tokens by count (+ total; heart
+      outline at zero), and tints accent when the viewer holds a reaction.
+      Click, hover, and touch-and-hold all open the quick-react popup on the
+      POST button; picking an emoji applies optimistically (no wait), and ＋
+      opens the full custom picker.
+- [ ] Threads that mount OPEN (the two-level ship, drill-panel roots)
+      revalidate in the background even when the cache already covers their
+      reply count — reactions/edits made elsewhere reconcile in within a
+      beat. Regression: cache-complete threads skipped the mount refetch and
+      froze reply reactions at the cached snapshot forever.
 - [ ] Comment rows: reply is an icon-only toggle under the bubble with the
       merged react control right beside it — a SINGLE tap hearts the comment
       (❤️, optimistic, tap again to unheart) while hover / touch-and-hold

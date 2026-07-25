@@ -86,14 +86,22 @@ const reconcileReactionToken = (
   return { ...prev, reactionCounts, viewerReactions };
 };
 
-// Compact everyone's-reactions summary for the merged react button: the lead
-// emoji of the top tokens (by count). FB/X-style — the button IS the counts,
-// so one glyph per token keeps it tight however wild the custom tokens get.
+// Compact everyone's-reactions summary for the merged react button: EVERY
+// token the viewer reacted with (your full set always shows), then the
+// crowd's top remaining tokens by count, capped at maxOthers. FB/X-style —
+// the button IS the counts, so one lead glyph per token keeps it tight
+// however wild the custom tokens get.
 // Joined with a zero-width space so adjacent leads can't shape into one glyph
 // (two lone regional indicators would otherwise merge into a flag).
-const topReactionEmojis = (entries: Array<[string, number]>, max: number) =>
-  entries
-    .slice(0, max)
+const reactionDisplayEmojis = (
+  entries: Array<[string, number]>,
+  viewerSet: Set<string>,
+  maxOthers: number
+) =>
+  [
+    ...entries.filter(([token]) => viewerSet.has(token)),
+    ...entries.filter(([token]) => !viewerSet.has(token)).slice(0, maxOthers),
+  ]
     .map(([token]) => splitEmojis(token)[0] || token)
     .join('​');
 
@@ -686,12 +694,16 @@ const CommentRow = (props: {
   );
 
   // prefetch-ahead: fill this row's missing depth as soon as it renders —
-  // once; opens and show-mores force fresh fetches afterwards
+  // once; opens and show-mores force fresh fetches afterwards. Rows that
+  // MOUNT with their thread open (the two-level ship, drill-panel roots)
+  // force the refetch: a cache-complete thread would otherwise skip it and
+  // freeze reply reactions/edits at the cached snapshot forever.
   const prefetchedRef = React.useRef(false);
   React.useEffect(() => {
     if (prefetchedRef.current) return;
     prefetchedRef.current = true;
-    fetchThread();
+    fetchThread({ force: repliesOpen });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchThread]);
 
   const openThread = () => {
@@ -822,7 +834,7 @@ const CommentRow = (props: {
           >
             {reactionEntries.length ? (
               <Text as="span" fontSize="13px" lineHeight="1" sx={{ whiteSpace: 'nowrap' }}>
-                {topReactionEmojis(reactionEntries, 2)}
+                {reactionDisplayEmojis(reactionEntries, viewerSet, 2)}
               </Text>
             ) : (
               <Heart size={13} strokeWidth={2.2} />
@@ -1278,7 +1290,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     >
       {reactionEntries.length ? (
         <Text as="span" fontSize="md" lineHeight="1" sx={{ whiteSpace: 'nowrap' }}>
-          {topReactionEmojis(reactionEntries, 3)}
+          {reactionDisplayEmojis(reactionEntries, viewerSet, 3)}
         </Text>
       ) : (
         <Heart size={18} strokeWidth={2.2} />
