@@ -785,14 +785,15 @@ const CommentRow = (props: {
   const avatarFont = depth === 1 ? '11px' : '9px';
 
   // the merged react control: shows EVERYONE's reactions (top emojis + total,
-  // heart outline when none) and lives in a fixed right-edge column so every
-  // react button on the card — post and any comment depth — lines up
-  const reactColumn = (
-    <Box position="relative" display="flex" flexShrink={0} alignSelf="flex-start">
+  // heart outline when none) and sits INLINE beside the reply icon under the
+  // bubble, mirroring the post's comments-then-react row. A single tap hearts
+  // the comment (default ReactionControl mode — no tapOpens); hover or
+  // touch-and-hold still opens the quick-react popup.
+  const reactControl = (
+    <Box position="relative" display="flex" flexShrink={0}>
       <ReactionControl
         enabled={!!user && !pending}
-        tapOpens
-        onQuickTap={() => handleReact('👍')}
+        onQuickTap={() => handleReact('❤️')}
         content={(close) => (
           <QuickReactionRow
             viewerSet={viewerSet}
@@ -810,12 +811,10 @@ const CommentRow = (props: {
           <Flex
             as="button"
             type="button"
-            flexDirection="column"
             alignItems="center"
-            rowGap="1px"
-            minWidth="30px"
-            paddingTop="7px"
-            paddingX={1}
+            columnGap={1}
+            padding={1}
+            borderRadius="999px"
             color={viewerSet.size ? ACCENT : MUTED}
             _hover={{ color: viewerSet.size ? ACCENT : INK }}
             aria-label="React"
@@ -826,10 +825,10 @@ const CommentRow = (props: {
                 {topReactionEmojis(reactionEntries, 2)}
               </Text>
             ) : (
-              <Heart size={14} strokeWidth={2.2} />
+              <Heart size={13} strokeWidth={2.2} />
             )}
             {reactionTotal > 0 && (
-              <Text as="span" fontSize="10px" lineHeight="1.4" fontWeight={viewerSet.size ? 700 : 600}>
+              <Text as="span" fontSize="11px" lineHeight="1" fontWeight={viewerSet.size ? 700 : 600}>
                 {reactionTotal}
               </Text>
             )}
@@ -865,7 +864,8 @@ const CommentRow = (props: {
               </Flex>
               <PostBody post={comment} compact />
             </Box>
-            {/* icon-only actions (no labels): reply toggles the inline input */}
+            {/* icon-only actions (no labels): reply toggles the inline input,
+            and the merged react control sits right beside it */}
             <Flex alignItems="center" columnGap={1} paddingX={1} paddingTop={0.5}>
               <Flex
                 as="button"
@@ -882,6 +882,7 @@ const CommentRow = (props: {
               >
                 <MessageCircle size={13} strokeWidth={2.2} />
               </Flex>
+              {reactControl}
             </Flex>
             {/* thread reveal lives BELOW the comment (FB/IG-style) */}
             {!pending && comment.commentCount > 0 && (
@@ -902,7 +903,6 @@ const CommentRow = (props: {
               </Flex>
             )}
           </Box>
-          {reactColumn}
         </Flex>
 
         {/* inline thread: replies + reply input, right here on the page */}
@@ -942,6 +942,11 @@ const CommentRow = (props: {
                     <Input
                       size="xs"
                       borderRadius="999px"
+                      borderColor="var(--tt-border, #ececef)"
+                      color="var(--tt-ink-soft, #4f4f58)"
+                      _placeholder={{ color: MUTED }}
+                      _hover={{ borderColor: MUTED }}
+                      focusBorderColor={MUTED}
                       placeholder={`Reply to ${authorName(comment.author)}… 💬`}
                       value={replyText}
                       onChange={(event) => setReplyText(event.target.value)}
@@ -1596,6 +1601,11 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
                   <Input
                     size="sm"
                     borderRadius="999px"
+                    borderColor="var(--tt-border, #ececef)"
+                    color="var(--tt-ink-soft, #4f4f58)"
+                    _placeholder={{ color: MUTED }}
+                    _hover={{ borderColor: MUTED }}
+                    focusBorderColor={MUTED}
                     placeholder="Write a comment… 💬"
                     value={commentText}
                     onChange={(event) => setCommentText(event.target.value)}

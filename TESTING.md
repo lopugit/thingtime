@@ -121,18 +121,25 @@ is fixed, and cite the checklist you ran in the PR description.
 
 - [ ] The action row is icon + count ONLY (no text labels): 💬 comments with
       the merged react button DIRECTLY beside it, then 🔁 repost and ↗ share.
-      Comment/reply react columns stay pinned to the card's right edge at
-      every depth, and the react popup + full picker open without clipping
-      from the button's left-side position.
+      Comment rows mirror the pattern — reply icon then react control inline
+      under the bubble (no right-edge column) — and the react popup + full
+      picker open without clipping from the left-side positions.
 - [ ] The merged react button shows EVERYONE's reactions (top token emojis +
       total, heart outline at zero) and tints accent when the viewer holds a
       reaction. Click, hover, and touch-and-hold all open the quick-react
       popup; picking an emoji applies optimistically (no wait), and ＋ opens
       the full custom picker.
-- [ ] Comment rows: reply is an icon-only toggle under the bubble; the
-      thread reveal is a "View N replies / Hide replies" text link BELOW the
-      comment; "Show previous replies/comments" reveals from BELOW the lists.
-      Reply avatars (20px) are smaller than parent comment avatars (28px).
+- [ ] Comment rows: reply is an icon-only toggle under the bubble with the
+      merged react control right beside it — a SINGLE tap hearts the comment
+      (❤️, optimistic, tap again to unheart) while hover / touch-and-hold
+      opens the quick-react popup (the POST button's click still opens the
+      popup). The thread reveal is a "View N replies / Hide replies" text
+      link BELOW the comment; "Show previous replies/comments" reveals from
+      BELOW the lists. Reply avatars (20px) are smaller than parent comment
+      avatars (28px).
+- [ ] The "Write a comment… / Reply to…" pills are subdued: house grey
+      border + muted placeholder (never Chakra's default near-black
+      outline).
 - [ ] Threads never flatten and have NO max depth: opening replies (or the
       reply input) at visual depth 4 slides that comment in as the panel's
       new top-level row (slide-right animation; the back arrow slides left to
