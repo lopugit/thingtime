@@ -130,8 +130,13 @@ is fixed, and cite the checklist you ran in the PR description.
       the full custom picker.
 - [ ] Comment rows: reply is an icon-only toggle under the bubble; the
       thread reveal is a "View N replies / Hide replies" text link BELOW the
-      comment; "Show more replies/comments" reveals from BELOW the lists.
+      comment; "Show previous replies/comments" reveals from BELOW the lists.
       Reply avatars (20px) are smaller than parent comment avatars (28px).
+- [ ] Threads never flatten and have NO max depth: opening replies (or the
+      reply input) at visual depth 4 slides that comment in as the panel's
+      new top-level row (slide-right animation; the back arrow slides left to
+      return one level), with its replies restarting at depth 1 — repeatable
+      indefinitely. Closing comments exits the drill-down back to the root.
 - [ ] Repost is a menu: instant "Repost" posts immediately (toast + count
       bump); "Quote post" opens the caption + circle popover. Share is
       OUTWARD only: native share sheet where available, otherwise copy-link

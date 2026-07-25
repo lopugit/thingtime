@@ -22,8 +22,9 @@ import {
   Textarea,
   Tooltip
 } from '@chakra-ui/react';
+import { keyframes } from '@emotion/react';
 import { Link } from 'react-router';
-import { Heart, Maximize2, MessageCircle, MoreHorizontal, Plus, Repeat2, Send, Share } from 'lucide-react';
+import { ArrowLeft, Heart, Maximize2, MessageCircle, MoreHorizontal, Plus, Repeat2, Send, Share } from 'lucide-react';
 
 import { useApi } from '~/hooks/useApi';
 import { useCommentDraft } from '~/hooks/useCommentDraft';
@@ -457,6 +458,28 @@ const ReplyFocusContext = React.createContext<{ openId: string | null; requestOp
   null
 );
 
+// Thread depth is UNBOUNDED, but only this many levels ever indent at once.
+// Opening replies at the cap REFOCUSES the panel on that comment: it slides in
+// as the new top-level row (back arrow slides you out) and its replies restart
+// at depth 1 — so any depth stays readable on any viewport, no flattening.
+const MAX_VISUAL_DEPTH = 4;
+
+const ThreadFocusContext = React.createContext<{
+  maxDepth: number;
+  focusThread: (comment: PostComment) => void;
+} | null>(null);
+
+// Drill-down navigation: push slides the new panel in from the right, back
+// (pop) slides the restored panel in from the left.
+const SLIDE_IN_RIGHT = keyframes({
+  from: { opacity: 0.3, transform: 'translateX(32px)' },
+  to: { opacity: 1, transform: 'translateX(0)' }
+});
+const SLIDE_IN_LEFT = keyframes({
+  from: { opacity: 0.3, transform: 'translateX(-32px)' },
+  to: { opacity: 1, transform: 'translateX(0)' }
+});
+
 // The viewer as a FeedAuthor embed — optimistic comments render instantly
 // with the real author identity while the server write is in flight.
 const viewerAsAuthor = (user: any): FeedAuthor | null =>
@@ -523,23 +546,29 @@ const CommentRow = (props: {
   onEngagement?: (event: EngagementEvent) => void;
   // 1 = a post's direct comment; grows down the thread. Only depth-1 rows
   // auto-open their preloaded replies (the default two-level view) — deeper
-  // rows reveal ONE more depth per tap.
+  // rows reveal ONE more depth per tap, and rows AT the visual cap refocus
+  // the panel on themselves instead of nesting further.
   depth?: number;
+  // the focused root of a drilled-in thread panel opens its replies on mount
+  defaultOpen?: boolean;
 }) => {
-  const { comment, onChanged, onEngagement, depth = 1 } = props;
+  const { comment, onChanged, onEngagement, depth = 1, defaultOpen } = props;
 
   const api = useApi();
   const user = useCurrentUser();
   const lopu = useLopu();
   const { recent, pushRecent } = useRecentReactions();
   const replyFocus = React.useContext(ReplyFocusContext);
+  const threadFocus = React.useContext(ThreadFocusContext);
+  // at the cap, reveals hand over to the drill-down panel instead of nesting
+  const atVisualCap = !!threadFocus && depth >= threadFocus.maxDepth;
 
   // threads ship two levels deep — cached or preloaded replies render
   // immediately (the cache survives collapse/re-expand remounts and reloads)
   const [replies, setReplies] = React.useState<PostComment[] | null>(
     () => getCachedThread(comment.id) ?? (comment.comments?.length ? comment.comments : null)
   );
-  const [repliesOpen, setRepliesOpen] = React.useState(depth === 1 && !!comment.comments?.length);
+  const [repliesOpen, setRepliesOpen] = React.useState((depth === 1 && !!comment.comments?.length) || !!defaultOpen);
   // the reply INPUT is separate from thread visibility: threads stay open,
   // but only one empty input exists at a time (ReplyFocusContext)
   const [replyInputOpen, setReplyInputOpen] = React.useState(false);
@@ -558,8 +587,9 @@ const CommentRow = (props: {
   const pickerContentRef = useOutsideTapClose<HTMLElement>(pickerOpen, () => setPickerOpen(false));
 
   // a stored draft reopens its thread on mount — continue where you left off
+  // (cap rows stay closed: their input lives in the drilled-in panel)
   React.useEffect(() => {
-    if (draftHydrated && replyText.trim()) {
+    if (draftHydrated && replyText.trim() && !atVisualCap) {
       openThread();
       setReplyInputOpen(true);
     }
@@ -671,6 +701,12 @@ const CommentRow = (props: {
   };
 
   const toggleThread = () => {
+    // at the cap the thread never nests deeper — the panel REFOCUSES on this
+    // comment (slide-in, back arrow) and its replies restart at depth 1
+    if (atVisualCap) {
+      threadFocus?.focusThread(comment);
+      return;
+    }
     if (repliesOpen) setRepliesOpen(false);
     else openThread();
   };
@@ -678,6 +714,12 @@ const CommentRow = (props: {
   const toggleReplyInput = () => {
     if (replyInputOpen) {
       setReplyInputOpen(false);
+      return;
+    }
+    // replying at the cap also drills in, so the input (and the reply it
+    // creates) is visible in context rather than hidden below the cap
+    if (atVisualCap) {
+      threadFocus?.focusThread(comment);
       return;
     }
     openThread();
@@ -741,11 +783,6 @@ const CommentRow = (props: {
   // parent comments carry the bigger avatar; replies step down (IG-style)
   const avatarSize = depth === 1 ? '28px' : '20px';
   const avatarFont = depth === 1 ? '11px' : '9px';
-  // IG/FB-style indent cap: past this depth, deeper replies render at the SAME
-  // indent (logical nesting stays unbounded) so long chains can't squeeze the
-  // bubbles off a 375px viewport. -28px undoes this row's avatar (20px) + gap.
-  const MAX_INDENT_DEPTH = 4;
-  const threadIndent = depth >= MAX_INDENT_DEPTH ? '-28px' : undefined;
 
   // the merged react control: shows EVERYONE's reactions (top emojis + total,
   // heart outline when none) and lives in a fixed right-edge column so every
@@ -870,7 +907,7 @@ const CommentRow = (props: {
 
         {/* inline thread: replies + reply input, right here on the page */}
         {(repliesOpen || replyInputOpen) && (
-          <Flex flexDirection="column" rowGap={2} paddingTop={2} marginLeft={threadIndent}>
+          <Flex flexDirection="column" rowGap={2} paddingTop={2}>
             {repliesLoading && replies === null && <ReplySkeleton />}
             {repliesOpen &&
               (replies || []).slice(-visibleReplies).map((reply) => (
@@ -965,6 +1002,13 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
   const lopu = useLopu();
 
   const [commentsOpen, setCommentsOpen] = React.useState(!!defaultCommentsOpen);
+  // drill-down thread focus: the stack of comments the viewer zoomed into.
+  // The top of the stack renders as the panel's top-level row (depth 1); the
+  // back arrow pops one level. navDirRef picks the slide direction.
+  const [focusStack, setFocusStack] = React.useState<PostComment[]>([]);
+  const [threadNavCount, setThreadNavCount] = React.useState(0);
+  const navDirRef = React.useRef<'push' | 'pop'>('push');
+  const focusedComment = focusStack.length ? focusStack[focusStack.length - 1] : null;
   // the comment text persists as a per-user draft — leave and pick it up later
   const { value: commentText, setValue: setCommentText, clear: clearCommentDraft } = useCommentDraft(user?.id, post.id);
   const [richCommentOpen, setRichCommentOpen] = React.useState(false);
@@ -1059,13 +1103,43 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
 
   // Opening shows the first page of comments (5); "Show more" reveals 5 more
   // per click. The revealed count is REMEMBERED across close/reopen (it's
-  // component state), and resets only when the page is left or refreshed.
+  // component state); closing exits any drilled-in thread so a reopen starts
+  // at the conversation root.
   const toggleComments = () => {
-    setCommentsOpen((open) => !open);
+    setCommentsOpen((open) => {
+      if (open) {
+        setFocusStack([]);
+        setThreadNavCount(0);
+      }
+      return !open;
+    });
     if (!expandSentRef.current) {
       expandSentRef.current = true;
       onEngagement?.({ thingId: post.id, signal: 'expand' });
     }
+  };
+
+  // Drill into a deep comment: it slides in as the panel's new top level.
+  const focusThread = React.useCallback((comment: PostComment) => {
+    navDirRef.current = 'push';
+    setThreadNavCount((count) => count + 1);
+    setFocusStack((stack) => [...stack, comment]);
+  }, []);
+
+  const popThreadFocus = () => {
+    navDirRef.current = 'pop';
+    setThreadNavCount((count) => count + 1);
+    setFocusStack((stack) => stack.slice(0, -1));
+  };
+
+  const threadFocusValue = React.useMemo(
+    () => ({ maxDepth: MAX_VISUAL_DEPTH, focusThread }),
+    [focusThread]
+  );
+
+  // reactions etc. on the focused row update the top-of-stack snapshot
+  const handleFocusedChanged = (next: PostComment) => {
+    setFocusStack((stack) => stack.map((entry, index) => (index === stack.length - 1 ? next : entry)));
   };
 
   // optimistic: the comment renders the moment you hit send; the server copy
@@ -1450,9 +1524,53 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
           )}
         </Flex>
 
-        {/* comments */}
-        {commentsOpen && (
-          <Flex flexDirection="column" rowGap={3}>
+        {/* comments — the post's conversation, or a FOCUSED thread panel:
+        drilling past the visual depth cap slides the deep comment in as the
+        new top level (back arrow slides out), so thread depth is unbounded
+        without flattening or squeezing the layout */}
+        {commentsOpen && focusedComment && (
+          <ThreadFocusContext.Provider value={threadFocusValue}>
+            <Flex
+              key={focusedComment.id}
+              flexDirection="column"
+              rowGap={3}
+              sx={{ animation: `${navDirRef.current === 'pop' ? SLIDE_IN_LEFT : SLIDE_IN_RIGHT} 0.22s ease-out` }}
+            >
+              <Flex alignItems="center" columnGap={2}>
+                <Flex
+                  as="button"
+                  type="button"
+                  alignItems="center"
+                  padding={1}
+                  borderRadius="999px"
+                  color={MUTED}
+                  _hover={{ color: INK, background: 'var(--tt-surface-hover, #ececee)' }}
+                  aria-label="Back to the previous thread level"
+                  title="Back"
+                  onClick={popThreadFocus}
+                >
+                  <ArrowLeft size={16} strokeWidth={2.2} />
+                </Flex>
+                <Text fontSize="xs" fontWeight={700} color={MUTED}>
+                  Thread 🧵
+                </Text>
+              </Flex>
+              <CommentRow
+                comment={focusedComment}
+                onChanged={handleFocusedChanged}
+                onEngagement={onEngagement}
+                defaultOpen
+              />
+            </Flex>
+          </ThreadFocusContext.Provider>
+        )}
+        {commentsOpen && !focusedComment && (
+          <ThreadFocusContext.Provider value={threadFocusValue}>
+          <Flex
+            flexDirection="column"
+            rowGap={3}
+            sx={threadNavCount > 0 ? { animation: `${SLIDE_IN_LEFT} 0.22s ease-out` } : undefined}
+          >
             {post.comments.slice(-visibleComments).map((comment) => (
               <CommentRow key={comment.id} comment={comment} onChanged={handleCommentChanged} onEngagement={onEngagement} />
             ))}
@@ -1520,6 +1638,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
               </Text>
             )}
           </Flex>
+          </ThreadFocusContext.Provider>
         )}
       </Flex>
     </Box>

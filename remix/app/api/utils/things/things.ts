@@ -990,13 +990,25 @@ const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
   return aclAllows(aclOf(doc), viewer, doc.ownerId);
 };
 
-export const canViewInherited = async (doc: ThingDoc, viewer: Viewer, depth = 0): Promise<boolean> => {
+export const canViewInherited = async (
+  doc: ThingDoc,
+  viewer: Viewer,
+  depth = 0,
+  seen?: Set<string>
+): Promise<boolean> => {
   if (!aclOf(doc).includes(ACL_INHERIT)) return canView(doc, viewer);
-  // comment-on-comment chains resolve through their targets, bounded so a
-  // pathological cycle can't loop forever
-  if (depth >= 4) return false;
+  // comment-on-comment chains resolve through their targets. Legitimate
+  // thread depth is UNBOUNDED (the UI drills down instead of flattening) —
+  // the visited set breaks pathological cycles, and the 64 rail is stack
+  // safety only, same as the crystal depth rail.
+  if (depth >= 64) return false;
+  const visited = seen ?? new Set<string>();
+  if (doc.shareId) {
+    if (visited.has(doc.shareId)) return false;
+    visited.add(doc.shareId);
+  }
   const target = doc.targetId ? await findThing(doc.targetId) : null;
-  return !!target && (await canViewInherited(target, viewer, depth + 1));
+  return !!target && (await canViewInherited(target, viewer, depth + 1, visited));
 };
 
 // Coarse DB-level audience match per requested circle, covering both eras.
@@ -1275,12 +1287,15 @@ export const getThing = async (
   let parent: PublicPost | null = null;
   let root: PublicPost | null = null;
   if (isComment && targetIdOf(doc)) {
-    // walk up the thread, bounded like canViewInherited's inherit chain
+    // walk up the thread — depth is unbounded, so the rail (64) is stack
+    // safety and the visited set breaks pathological cycles
     const chain: ThingDoc[] = [];
     let cursor: ThingDoc = doc;
-    for (let depth = 0; depth < 4; depth++) {
+    const seenChain = new Set<string>(doc.shareId ? [doc.shareId] : []);
+    for (let depth = 0; depth < 64; depth++) {
       const up = targetIdOf(cursor) ? await findThing(targetIdOf(cursor)) : null;
-      if (!up) break;
+      if (!up || (up.shareId && seenChain.has(up.shareId))) break;
+      if (up.shareId) seenChain.add(up.shareId);
       chain.push(up);
       if (!thingtimeOf(up).includes('comment')) break;
       cursor = up;
