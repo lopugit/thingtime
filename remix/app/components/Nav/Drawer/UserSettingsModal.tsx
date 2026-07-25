@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router';
 import { X } from 'lucide-react';
 
 import { DRAWER_MODAL_OVERLAY_Z, DRAWER_MODAL_Z, DRAWER_TOP_LEVEL_DEFAULT_LIMIT, useDrawer, useIsMobileViewport } from './useDrawer';
+import { drawerMenuItems, filterDrawerItemsByAuth } from './drawerMenu';
 import { AccountSwitcher } from '../../Account/AccountSwitcher';
 import { useLopu } from '../../Lopu/useLopu';
 import { ColorControl } from '../../ThemeSettings/controls';
@@ -64,7 +65,9 @@ export const UserSettingsModal = () => {
 		topLevelLimitIsUnlimited,
 		setTopLevelLimit,
 		setTopLevelLimitUnlimited,
-		resetOrdering
+		resetOrdering,
+		closeOnClick,
+		setCloseOnClickFor
 	} = useDrawer();
 
 	const isMobile = useIsMobileViewport();
@@ -664,6 +667,45 @@ export const UserSettingsModal = () => {
 					</Button>,
 					'Restore the default drag-reordered menu layout'
 				)}
+
+				{/* per-item mobile dismiss: navigating items default ON; off keeps
+				the drawer open for that item (submenu browsing) */}
+				<Flex flexDirection="column" paddingY={2}>
+					<Text fontSize="sm">Close after click</Text>
+					<Text fontSize="xs" opacity={0.55}>
+						Which menu items dismiss the drawer when tapped on mobile
+					</Text>
+					<Flex flexDirection="column" paddingTop={2}>
+						{filterDrawerItemsByAuth(drawerMenuItems, !!user).map((top) => (
+							<React.Fragment key={top.id}>
+								<Flex alignItems="center" columnGap={4} paddingY={1}>
+									<Text fontSize="sm">
+										{top.icon} {top.label}
+									</Text>
+									<Switch
+										size="sm"
+										marginLeft="auto"
+										isChecked={closeOnClick?.[top.id] !== false}
+										onChange={(event) => setCloseOnClickFor(top.id, event.target.checked)}
+									></Switch>
+								</Flex>
+								{filterDrawerItemsByAuth(top.children || [], !!user).map((child) => (
+									<Flex key={child.id} alignItems="center" columnGap={4} paddingY={0.5} paddingLeft={4}>
+										<Text fontSize="xs" opacity={0.8}>
+											{child.icon} {child.label}
+										</Text>
+										<Switch
+											size="sm"
+											marginLeft="auto"
+											isChecked={closeOnClick?.[child.id] !== false}
+											onChange={(event) => setCloseOnClickFor(child.id, event.target.checked)}
+										></Switch>
+									</Flex>
+								))}
+							</React.Fragment>
+						))}
+					</Flex>
+				</Flex>
 			</Flex>
 
 			{/* theming */}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Center, Flex, Text } from '@chakra-ui/react';
+import { Box, Center, Flex, Image, Text } from '@chakra-ui/react';
 import { useLocation, useMatches, useNavigate } from 'react-router';
 import { ChevronDown, Search } from 'lucide-react';
 
@@ -25,6 +25,22 @@ interface DrawerContentProps {
 
 export const UserAvatarCircle = (props: { size?: string; fontSize?: string }) => {
 	const user = useCurrentUser();
+
+	// a set avatar always wins — the rainbow initial is only the fallback
+	if (user?.avatarUrl) {
+		return (
+			<Image
+				src={user.avatarUrl}
+				alt={user.displayName || user.username}
+				width={props?.size || '28px'}
+				height={props?.size || '28px'}
+				borderRadius="999px"
+				objectFit="cover"
+				flexShrink={0}
+				border="1px solid var(--tt-border, #ececef)"
+			/>
+		);
+	}
 
 	const initial = (user?.displayName || user?.username || '?').trim().charAt(0).toUpperCase();
 
@@ -55,6 +71,7 @@ export const DrawerContent = (props: DrawerContentProps) => {
 		topLevelLimitIsUnlimited,
 		ordering,
 		setOrderingFor,
+		closesOnClick,
 		selectedItem,
 		setSelectedItem,
 		collapsedGroups,
@@ -194,11 +211,16 @@ export const DrawerContent = (props: DrawerContentProps) => {
 			setSelectedItem(item.id);
 			if (item.to) {
 				navigate(item.to);
+				// a navigating click dismisses the surface (mobile panel / popup)
+				// unless the item's "close after click" setting is off — turning
+				// it off restores the old explore-the-submenu behaviour per item
+				if (closesOnClick(item.id)) {
+					onNavigate?.();
+				}
 			}
-			// intentionally no onNavigate: keep the surface open so the
-			// second-level menu can be explored
+			// items without a destination only select — the surface stays open
 		},
-		[setSelectedItem, navigate]
+		[setSelectedItem, navigate, closesOnClick, onNavigate]
 	);
 
 	const onSubItemClick = React.useCallback(
@@ -215,9 +237,11 @@ export const DrawerContent = (props: DrawerContentProps) => {
 			} else if (item.to) {
 				navigate(item.to);
 			}
-			onNavigate?.();
+			if (closesOnClick(item.id)) {
+				onNavigate?.();
+			}
 		},
-		[navigate, onNavigate, onThingRoute, pathname]
+		[navigate, onNavigate, onThingRoute, pathname, closesOnClick]
 	);
 
 	const onTopReorder = React.useCallback(

@@ -171,6 +171,21 @@ is fixed, and cite the checklist you ran in the PR description.
       with the Lopu toast — logged-out users can still share, while react /
       repost nudge them to log in.
 
+## Drawer navigation & settings (`remix/app/components/Nav/Drawer/`)
+
+- [ ] On mobile, clicking a NAVIGATING drawer item (top-level or sub-item)
+      closes the drawer after navigating; items without a destination only
+      select their submenu and keep it open. The desktop panel never
+      auto-closes (split view).
+- [ ] Settings → Drawer → "Close after click" lists every menu item (auth
+      filtered, children nested under their top item) with per-item
+      switches defaulting ON; turning one off keeps the drawer open for
+      that item's clicks and persists across reloads.
+- [ ] The drawer footer avatar, composer avatars, and account switcher rows
+      show the user's avatar IMAGE when one is set — the rainbow initial
+      circle is only the no-avatar fallback (regression: UserAvatarCircle
+      ignored avatarUrl entirely).
+
 ## Data crystals & nesting depth (`remix/app/schemas/registry.ts`)
 
 - [ ] Post a thingtime post whose thing contains an Editor.js document (or
