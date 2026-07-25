@@ -25,6 +25,7 @@ import {
   type ThingVisibility
 } from '~/schemas/registry';
 import { scorePost, type AlgorithmWeights, type PostFeatures } from './feedRanking';
+import { resolveInheritChain } from './aclChainCore';
 
 // Everything in thingtime.things is a thing (see app/schemas/registry.ts):
 // one root Thing schema, sub-schemas applied via the `thingtime` array of
@@ -822,13 +823,12 @@ const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
   return aclAllows(aclOf(doc), viewer, doc.ownerId);
 };
 
-export const canViewInherited = async (doc: ThingDoc, viewer: Viewer, depth = 0): Promise<boolean> => {
-  if (!aclOf(doc).includes(ACL_INHERIT)) return canView(doc, viewer);
-  // comment-on-comment chains resolve through their targets, bounded so a
-  // pathological cycle can't loop forever
-  if (depth >= 4) return false;
-  const target = doc.targetId ? await findThing(doc.targetId) : null;
-  return !!target && (await canViewInherited(target, viewer, depth + 1));
+// Target-attached things resolve visibility through their inherit chain (see
+// aclChainCore for the cycle-safe walk — legitimate deep comment chains must
+// never be cut off, only cycles and broken/missing targets fail closed).
+export const canViewInherited = async (doc: ThingDoc, viewer: Viewer): Promise<boolean> => {
+  const terminal = await resolveInheritChain(doc, (d) => aclOf(d).includes(ACL_INHERIT), findThing);
+  return !!terminal && canView(terminal, viewer);
 };
 
 // Coarse DB-level audience match per requested circle, covering both eras.
