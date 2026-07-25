@@ -668,12 +668,12 @@ export const UserSettingsModal = () => {
 					'Restore the default drag-reordered menu layout'
 				)}
 
-				{/* per-item mobile dismiss: navigating items default ON; off keeps
-				the drawer open for that item (submenu browsing) */}
+				{/* per-item dismiss: navigating items default ON; off keeps the
+				drawer open for that item (submenu browsing) */}
 				<Flex flexDirection="column" paddingY={2}>
 					<Text fontSize="sm">Close after click</Text>
 					<Text fontSize="xs" opacity={0.55}>
-						Which menu items dismiss the drawer when tapped on mobile
+						Which menu items close the drawer when clicked (desktop and mobile)
 					</Text>
 					<Flex flexDirection="column" paddingTop={2}>
 						{filterDrawerItemsByAuth(drawerMenuItems, !!user).map((top) => (

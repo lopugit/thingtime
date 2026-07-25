@@ -173,10 +173,10 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Drawer navigation & settings (`remix/app/components/Nav/Drawer/`)
 
-- [ ] On mobile, clicking a NAVIGATING drawer item (top-level or sub-item)
-      closes the drawer after navigating; items without a destination only
-      select their submenu and keep it open. The desktop panel never
-      auto-closes (split view).
+- [ ] Clicking a NAVIGATING drawer item (top-level or sub-item) closes the
+      drawer after navigating on BOTH desktop and mobile; items without a
+      destination only select their submenu and keep it open. Search keeps
+      its own "Search closes drawer" setting on desktop.
 - [ ] Settings → Drawer → "Close after click" lists every menu item (auth
       filtered, children nested under their top item) with per-item
       switches defaulting ON; turning one off keeps the drawer open for

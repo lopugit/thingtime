@@ -168,9 +168,9 @@ export const useDrawer = () => {
 	const ordering = drawerSettings?.userDrawerOrdering || {};
 	const selectedItem = drawerSettings?.selectedItem || 'home';
 	const collapsedGroups = drawerSettings?.collapsedGroups || {};
-	// per-item "close drawer after click" — default ON for navigating items;
-	// an explicit false keeps the drawer open for that item (submenu browsing).
-	// Only bites where onNavigate actually dismisses (mobile panel, popup).
+	// per-item "close drawer after click" — default ON for navigating items on
+	// BOTH viewports; an explicit false keeps the drawer open for that item
+	// (submenu browsing). Search has its own setting (searchClosesDrawer).
 	const closeOnClick = drawerSettings?.closeOnClick || {};
 
 	// Drawer chrome state is UI preference, not content — keep it out of the
