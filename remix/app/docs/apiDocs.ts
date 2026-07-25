@@ -2259,7 +2259,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       },
       {
         name: 'Read one thing',
-        description: 'Fetch a thing by id (posts include the full post projection).',
+        description:
+          'Fetch a thing by id (posts AND comments include the full post projection; comments also return parent and root for thread navigation — the /post/:id permalink pages are backed by this).',
         method: 'GET',
         query: { id: 'post_123' }
       },
@@ -2634,19 +2635,19 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'things',
     title: 'Comment on post',
     endpoint: '/api/v1/things/comment',
-    summary: 'Adds a comment to a post visible to the current user.',
+    summary: 'Adds a comment — comments share the post schema — to a thing visible to the current user.',
     detail:
-      'Comments are standalone things (thingtime ["comment"]) pointing at their target via targetId and inheriting its visibility — this route is sugar over the unified thing path. Visibility is re-checked before writing so private or circle-limited posts cannot be commented on by unauthorized viewers.',
+      'Simple comments are standalone things (thingtime ["comment"]) pointing at their target via targetId and inheriting its visibility — this route is sugar over the unified thing path. Comments share the post schema: sending post fields (type, images, listing, thing, tags) creates a RICH comment, a full ["post","comment"] thing validated by the post crystal rules, so comments can carry photos, marketplace listings, and thingtime things. Comments are reactable and commentable like any post, and every comment has its own /post/:id permalink. The id may be a post or another comment (replies). Visibility is re-checked before writing so private or circle-limited posts cannot be commented on by unauthorized viewers.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
     },
     methods: ['POST'],
     steps: [
-      'POST id and text.',
-      'The post must be visible to the current user.',
-      'Use commentCount from the response to update the card.',
-      'Handle 401 unauthenticated, 404 not visible, and 400 invalid text.'
+      'POST id and text for a simple comment, or id plus post fields (type, images, listing, thing, tags) for a rich comment.',
+      'The target thing (post or comment) must be visible to the current user.',
+      'The response comment carries the post vocabulary (reactionCounts, viewerReactions, commentCount) — use it and commentCount to update the card.',
+      'Handle 401 unauthenticated, 404 not visible, and 400 invalid payload.'
     ],
     requestExamples: [
       {
@@ -2654,13 +2655,32 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'Comment on a visible post.',
         method: 'POST',
         body: { id: 'post_123', text: 'I am interested.' }
+      },
+      {
+        name: 'Add rich comment',
+        description: 'Comment with photos, like a full post.',
+        method: 'POST',
+        body: { id: 'post_123', type: 'image', text: 'Here it is!', images: ['https://example.com/photo.jpg'] }
       }
     ],
     responseExamples: [
       {
         status: 200,
-        description: 'Comment added.',
-        body: { ok: true, comment: { text: 'I am interested.' }, commentCount: 1 }
+        description: 'Comment added (post-shaped: reactions, reply count, permalink id).',
+        body: {
+          ok: true,
+          comment: {
+            id: 'comment_123',
+            thingtime: ['comment'],
+            type: 'text',
+            text: 'I am interested.',
+            reactionCounts: {},
+            viewerReactions: [],
+            commentCount: 0,
+            targetId: 'post_123'
+          },
+          commentCount: 1
+        }
       }
     ]
   }),
