@@ -168,6 +168,10 @@ export const useDrawer = () => {
 	const ordering = drawerSettings?.userDrawerOrdering || {};
 	const selectedItem = drawerSettings?.selectedItem || 'home';
 	const collapsedGroups = drawerSettings?.collapsedGroups || {};
+	// per-item "close drawer after click" — default ON for navigating items on
+	// BOTH viewports; an explicit false keeps the drawer open for that item
+	// (submenu browsing). Search has its own setting (searchClosesDrawer).
+	const closeOnClick = drawerSettings?.closeOnClick || {};
 
 	// Drawer chrome state is UI preference, not content — keep it out of the
 	// undo/redo timeline.
@@ -245,6 +249,23 @@ export const useDrawer = () => {
 		setDrawerSetting('userDrawerOrdering', {});
 	}, [setDrawerSetting]);
 
+	const closesOnClick = React.useCallback(
+		(itemId: string) => {
+			return closeOnClick?.[itemId] !== false;
+		},
+		[closeOnClick]
+	);
+
+	const setCloseOnClickFor = React.useCallback(
+		(itemId: string, value: boolean) => {
+			setDrawerSetting('closeOnClick', {
+				...closeOnClick,
+				[itemId]: !!value
+			});
+		},
+		[closeOnClick, setDrawerSetting]
+	);
+
 	const toggleGroupCollapsed = React.useCallback(
 		(groupKey: string) => {
 			setDrawerSetting('collapsedGroups', {
@@ -289,6 +310,9 @@ export const useDrawer = () => {
 		ordering,
 		setOrderingFor,
 		resetOrdering,
+		closeOnClick,
+		closesOnClick,
+		setCloseOnClickFor,
 		selectedItem,
 		setSelectedItem,
 		collapsedGroups,
