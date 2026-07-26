@@ -945,9 +945,15 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 
 			if (typeKey === 'editorjs') {
 				let source = '';
+				// empty containers convert to a BLANK document (placeholder showing),
+				// not a paragraph containing the literal "{}" / "[]"
+				const isEmptyContainer =
+					thing !== null &&
+					typeof thing === 'object' &&
+					(thing instanceof Array ? thing.length === 0 : Object.keys(thing).length === 0);
 				if (typeof thing === 'string') {
 					source = thing;
-				} else if (thing !== null && thing !== undefined) {
+				} else if (thing !== null && thing !== undefined && !isEmptyContainer) {
 					try {
 						source = JSON.stringify(thing, null, 2) ?? String(thing);
 					} catch {
@@ -1272,6 +1278,13 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 			return <></>;
 		}
 
+		// composer draft roots hide their key ("New Thing") — the value IS the
+		// editor; the hover/hold context trigger still renders (see the
+		// hideRootPath gate on the thingPathDom actions row below)
+		if (props?.hideRootPath) {
+			return null;
+		}
+
 		if (renderedPath) {
 			return (
 				<>
@@ -1296,7 +1309,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		// updatePath MUST be a dep: it closes over `parent`, which is undefined on
 		// a root's first render when the store seeds after mount (the composer's
 		// draft). Pinning the mount-time closure makes every later rename throw.
-	}, [renderedPath, pl, chakraChild, editMode, props?.pathPl, updatePath]);
+	}, [renderedPath, pl, chakraChild, editMode, props?.pathPl, props?.hideRootPath, updatePath]);
 
 	// Leaf values can collapse to their property path just like nested things
 	// collapse to their path + summary badge. A path is required so a root-level
@@ -1490,7 +1503,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 							<Flex className="thingPathDom-raw" data-tt-zone="key">
 								{pathDom}
 							</Flex>
-							{(editMode || codeView) && (
+							{(editMode || codeView) && !props?.hideRootPath && (
 								<Box
 									className="thingTypeIcon"
 									// marginTop={-3}
@@ -1553,7 +1566,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 									{thing instanceof Array ? `[…] ${thing.length}` : `{…} ${keys?.length || 0}`}
 								</Flex>
 							)}
-							{pathDom && (
+							{(pathDom || props?.hideRootPath) && (
 								<Flex className="thingPathDom" flexDirection="row" alignItems="center" columnGap="2px" paddingLeft={1}>
 									{/* hover quick actions: collapse/expand beside the context
 									icon (the row's "double whammy") — always in layout so

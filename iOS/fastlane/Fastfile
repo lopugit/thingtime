@@ -132,6 +132,16 @@ platform :ios do
     )
   end
 
+  desc "Upload an already-built IPA to TestFlight (IPA_PATH overrides the default build output)"
+  lane :upload do
+    upload_to_testflight(
+      api_key: app_store_api_key,
+      ipa: ENV["IPA_PATH"] || File.join(OUTPUT_DIRECTORY, OUTPUT_NAME),
+      skip_waiting_for_build_processing: true,
+      distribute_external: false
+    )
+  end
+
   private_lane :app_store_api_key do
     app_store_connect_api_key(
       key_id: ENV.fetch("ASC_KEY_ID"),
