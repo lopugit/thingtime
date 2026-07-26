@@ -104,6 +104,19 @@ is fixed, and cite the checklist you ran in the PR description.
       and scrolls within a bounded box — it never mass-mounts nodes or
       wall-of-texts the feed.
 
+## Post interactions & inherit chains (`remix/app/api/utils/things/things.ts`)
+
+- [ ] Reacting, commenting, saving, sharing, and opening the `/post/:id`
+      permalink all work on a comment nested DEEP in a reply chain (build a
+      6+-deep comment-on-comment chain via the UI or API and interact with the
+      deepest one) — visibility resolves through the whole `tt:inherit` chain,
+      never "Post not found" for a legitimately deep reply. Chain resolution
+      is bounded by cycle detection (`aclChainCore.ts`, `npm run test:acl`),
+      NOT by a small depth cap: a depth cap silently orphaned deep replies
+      while the feed still rendered them.
+- [ ] A comment whose parent chain is broken (target deleted) fails closed:
+      not viewable, not reactable, permalink 404s.
+
 ## Thing context menu (`remix/app/components/Thingtime/ContextMenu/`)
 
 - [ ] Open the hover (popover) menu from a row inside a SMALL editor box: the
@@ -117,12 +130,85 @@ is fixed, and cite the checklist you ran in the PR description.
       thing-context-menu) still lay out statically inside their canvases
       (`inline` mode).
 
+## Post engagement row & comment threads (`remix/app/components/Feed/PostCard.tsx`)
+
+- [ ] The action row is icon + count ONLY (no text labels): 💬 comments with
+      the merged react button DIRECTLY beside it, then 🔁 repost and ↗ share.
+      Comment rows mirror the pattern — reply icon then react control inline
+      under the bubble (no right-edge column) — and the react popup + full
+      picker open without clipping from the left-side positions.
+- [ ] The merged react button shows ALL the viewer's own reaction tokens
+      FIRST, then the crowd's top remaining tokens by count (+ total; heart
+      outline at zero), and tints accent when the viewer holds a reaction.
+      Click, hover, and touch-and-hold all open the quick-react popup on the
+      POST button; picking an emoji applies optimistically (no wait), and ＋
+      opens the full custom picker.
+- [ ] Threads that mount OPEN (the two-level ship, drill-panel roots)
+      revalidate in the background even when the cache already covers their
+      reply count — reactions/edits made elsewhere reconcile in within a
+      beat. Regression: cache-complete threads skipped the mount refetch and
+      froze reply reactions at the cached snapshot forever.
+- [ ] RACE (devtools: delay `/api/v1/things?id=` responses ~3s): tap a
+      reaction while a thread/feed/permalink fetch is in flight — the tap
+      must survive the stale response landing (no disappear/reappear, no
+      wrong counts), and a fresh reload must converge on the server truth.
+      All server-copy ingestion merges through `reactionOverlay` stamped
+      with the fetch START time; every local mutation notes itself there.
+      Regression class: background refetches snapshotted pre-tap clobbered
+      optimistic (even acked) reactions wholesale on ingest.
+- [ ] Comment rows: reply is an icon-only toggle under the bubble with the
+      merged react control right beside it — a SINGLE tap hearts the comment
+      (❤️, optimistic, tap again to unheart) while hover / touch-and-hold
+      opens the quick-react popup (the POST button's click still opens the
+      popup). The thread reveal is a "View N replies / Hide replies" text
+      link BELOW the comment; "Show previous replies/comments" reveals from
+      BELOW the lists. Reply avatars (20px) are smaller than parent comment
+      avatars (28px).
+- [ ] The "Write a comment… / Reply to…" pills are subdued: house grey
+      border + muted placeholder (never Chakra's default near-black
+      outline).
+- [ ] Threads never flatten and have NO max depth: opening replies (or the
+      reply input) at visual depth 4 slides that comment in as the panel's
+      new top-level row (slide-right animation; the back arrow slides left to
+      return one level), with its replies restarting at depth 1 — repeatable
+      indefinitely. Closing comments exits the drill-down back to the root.
+- [ ] The server never caps thread depth either: replying at depth 65+ still
+      creates, and a deep comment's permalink resolves its parent AND walks
+      all the way back to the root post. Cycle safety in the visibility and
+      parent-chain walks is a visited set, never a depth rail (regression
+      class: 4-hop, then 64-hop caps 404ing deep replies as "Post not
+      found").
+- [ ] Repost is a menu: instant "Repost" posts immediately (toast + count
+      bump); "Quote post" opens the caption + circle popover. Share is
+      OUTWARD only: native share sheet where available, otherwise copy-link
+      with the Lopu toast — logged-out users can still share, while react /
+      repost nudge them to log in.
+
+## Drawer navigation & settings (`remix/app/components/Nav/Drawer/`)
+
+- [ ] Clicking a NAVIGATING drawer item (top-level or sub-item) closes the
+      drawer after navigating on BOTH desktop and mobile; items without a
+      destination only select their submenu and keep it open. Search keeps
+      its own "Search closes drawer" setting on desktop.
+- [ ] Settings → Drawer → "Close after click" lists every menu item (auth
+      filtered, children nested under their top item) with per-item
+      switches defaulting ON; turning one off keeps the drawer open for
+      that item's clicks and persists across reloads.
+- [ ] The drawer footer avatar, composer avatars, and account switcher rows
+      show the user's avatar IMAGE when one is set — the rainbow initial
+      circle is only the no-avatar fallback (regression: UserAvatarCircle
+      ignored avatarUrl entirely).
+
 ## Data crystals & nesting depth (`remix/app/schemas/registry.ts`)
 
 - [ ] Post a thingtime post whose thing contains an Editor.js document (or
-      any structure) nested well past 6 levels: it must save (depth rail is
-      64, a stack-safety bound only, with node/array caps as the real
-      guards).
+      any structure) nested well past 6 levels: it must save. There is NO
+      validator depth rail (the walk is iterative, so nesting never touches
+      the JS call stack); the only depth bound is MongoDB's physical BSON
+      limit (MAX_STORABLE_NESTING, probed at 179 crystal levels on mongod
+      8.0; crystal.thing payloads get one less), reported as a precise 400
+      naming MongoDB — never a raw driver 500. Circular or repeated object
+      references also 400 loudly (identity WeakSet).
 - [ ] Oversized payloads still fail loudly: >10000 nodes, >1000 array items,
       or a key with `$`/dots must 400 with a precise message, never silently
       drop data.
@@ -167,6 +253,29 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] A dead `?schema=` deep link (unknown/invisible shareId) toasts, strips
       the param from the URL, and fires NO fallback search; while a live
       `?schema=` resolves, no empty-state copy shows at all.
+
+## Admin migrations & collection generations (`remix/app/components/Schemas/MigrationsPanel.tsx`)
+
+- [ ] As an admin (register a throwaway user, restart dev with
+      `ADMIN_USERNAMES=<user>`), the census table shows every registry
+      collection with its logical name AND physical `<name>_v<N>` name.
+- [ ] The Storage generations table lists every physical collection with a
+      current / stale / ahead badge, and doc counts.
+- [ ] After first boot against a pre-versioning db, adoption has renamed
+      unversioned collections in place (`things` → `things_v2`) — data (users,
+      sessions, posts) is still all there, no re-login required.
+- [ ] `merge-legacy-collections` dry-run reports per-collection copy counts and
+      writes nothing; the real run copies only docs missing at the destination
+      (re-run reports 0) and never deletes a legacy collection.
+- [ ] `drop-stale-collection-generations` shows the red destructive badge;
+      dry-run lists exactly what would drop with doc counts; a non-dry run
+      without `confirm: true` is rejected by the API (the panel sends it after
+      the inline Really run? confirmation); the run refuses to drop a legacy
+      collection that still has unmerged docs and says so in the notes.
+- [ ] Raw admin Mongo queries (`/api/v1/mongodb/raw-results`) still take
+      LOGICAL collection names ('things'), including `$lookup`/`$unionWith`
+      pipeline targets and collectionStats, and hit the versioned physical
+      collections.
 
 ## Docs code windows & embed SDK preview (`remix/app/routes/docs/docsCode.tsx`, `remix/app/routes/docs/embed.tsx`)
 
