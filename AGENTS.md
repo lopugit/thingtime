@@ -85,6 +85,10 @@
   batch-aggregated on read (one query per kind, never N+1), never an unbounded
   embedded array/map on the parent. Canonical rule lives in `FUNDAMENTALS.md`
   §3 ("Appended/child data is relational").
+- Physical MongoDB collections are versioned (`things` lives at `things_v2`):
+  always reach collections through `getCollection()`/the named getters in
+  `api/utils/mongodb/collections.ts`, never a raw name string. Canonical rule
+  lives in `FUNDAMENTALS.md` §3 ("Physical collections are versioned").
 - New `/api/v1/...` endpoints must be registered in THREE places or Nitro
   404s them: the route file (`remix/app/routes/api/v1/.../_name.tsx` exporting
   `loader` for GET / `action` for POST), the import map in
