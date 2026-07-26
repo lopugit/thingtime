@@ -1,3 +1,5 @@
+import { PublicError, safeErrorText } from '../errors/safeError';
+
 export type VercelDeploymentStatus = {
   branch?: string;
   commitSha?: string;
@@ -283,7 +285,7 @@ const getVercelDeploymentsPage = async ({
   }
 
   if (!response.ok) {
-    throw new Error(`Vercel API returned ${response.status}`);
+    throw new PublicError(`Vercel API returned ${response.status}`);
   }
 
   const data = await response.json();
@@ -947,7 +949,7 @@ export const getVercelDeploymentStatus = async (): Promise<VercelDeploymentStatu
       }),
       buildPhase: undefined,
       buildPageUrl: fallbackDashboardUrl,
-      error: err?.message || String(err),
+      error: safeErrorText(err, 'vercel status', 'Vercel status unavailable'),
       hasError: true,
       label: 'Vercel: status unavailable',
       state: 'unknown'
@@ -1115,7 +1117,7 @@ export const getVercelDeploymentsOverview = async ({
       deploymentPageCount: 0,
       deploymentScanCount: fallbackDeployments.length,
       deploymentScanLimit: fallbackDeployments.length,
-      error: err?.message || String(err),
+      error: safeErrorText(err, 'vercel deployments overview', 'Vercel deployments unavailable'),
       fetchedAt,
       hasError: true,
       label: 'Vercel deployments unavailable',

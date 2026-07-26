@@ -1,3 +1,5 @@
+import { PublicError } from '../errors/safeError';
+
 const MONGO_PASSWORD_PLACEHOLDER = '<db_password>';
 
 // The only supported MongoDB environment variable pair is:
@@ -9,7 +11,7 @@ export const getMongoUri = () => {
 	const connectionString = process.env.MONGODB_CONNECTION_STRING;
 
 	if (!connectionString) {
-		throw new Error('MONGODB_CONNECTION_STRING is required');
+		throw new PublicError('MONGODB_CONNECTION_STRING is required');
 	}
 
 	if (!connectionString.includes(MONGO_PASSWORD_PLACEHOLDER)) {
@@ -19,7 +21,7 @@ export const getMongoUri = () => {
 	const password = process.env.MONGO_PASS;
 
 	if (!password) {
-		throw new Error('MONGO_PASS is required when MONGODB_CONNECTION_STRING contains <db_password>');
+		throw new PublicError('MONGO_PASS is required when MONGODB_CONNECTION_STRING contains <db_password>');
 	}
 
 	return connectionString.split(MONGO_PASSWORD_PLACEHOLDER).join(encodeURIComponent(password));

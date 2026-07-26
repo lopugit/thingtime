@@ -18,7 +18,11 @@ export const Rainbow = (allProps: any): React.JSX.Element => {
 
   props.expand = props?.expand || true
 
-  const [hidden, setHidden] = React.useState(true)
+  // instant mounts skip the 500ms reveal delay and the slow fade — the
+  // rainbow is fully visible from the first painted frame
+  const instant = props?.instant === true
+
+  const [hidden, setHidden] = React.useState(!instant)
   const repeats = props?.repeats || 1
   const [filter, setFilter] = React.useState(props?.filter)
   const opacity = props?.opacity !== undefined ? props?.opacity : 1
@@ -26,7 +30,7 @@ export const Rainbow = (allProps: any): React.JSX.Element => {
   const [pathWidth, setPathWidth] = React.useState(props?.thickness || 1)
   const [overflow, setOverflow] = React.useState(props?.overflow || "hidden")
   const [opacityTransition, setOpacityTransition] = React.useState(
-    props?.opacityTransition || "all 10000ms ease-out"
+    props?.opacityTransition || (instant ? "none" : "all 10000ms ease-out")
   )
 
   const parentRef = React.useRef(null)
@@ -158,18 +162,25 @@ export const Rainbow = (allProps: any): React.JSX.Element => {
           },
         })
 
-        setTimeout(() => {
+        let reveal = null
+        if (instant) {
           setHidden(false)
-        }, 500)
+        } else {
+          reveal = setTimeout(() => {
+            setHidden(false)
+          }, 500)
+        }
 
         return () => {
           // setHidden(true)
+          if (reveal) clearTimeout(reveal)
           gp.remove()
         }
       }
     }
   }, [
     uuid,
+    instant,
     props?.duration,
     props?.segments,
     props?.samples,

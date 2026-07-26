@@ -10,6 +10,7 @@ export type CurrentUser = {
   avatarUrl: string | null;
   bannerUrl: string | null;
   emailVerified: boolean;
+  isAdmin: boolean;
   createdAt: string;
   accountKind: 'user' | 'service';
   emailVerificationRequiredBy: string | null;

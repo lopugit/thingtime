@@ -2,17 +2,33 @@ import React from 'react';
 
 import { useThingtime } from '../../Thingtime/useThingtime';
 
-// z-index ladder for the drawer system: above the fixed nav (9999),
-// below DevKit (99999+).
+// z-index ladder for the app chrome, above the fixed nav (9999) and below
+// DevKit (99999+). Floating editor windows layer AROUND the drawer (bands
+// 9900+ and 10040+, see EditorSplit) — so everything transient or blocking
+// (popups, the trigger, modals, context menus) sits ABOVE the window bands
+// and the hovered drawer, or frames would cover open menus and dialogs:
+//   9900+   editor windows sent below the drawer
+//   10000   drawer panel
+//   10040+  editor windows above the drawer (their default)
+//   10120   drawer panel while hovered (takes the front, hands it back)
+//   10190   window drag ghosts / drop previews
+//   10220   dropdowns & popups   10230 drawer trigger
+//   10240/10250   modal overlay / modal
 export const DRAWER_Z = 10000;
-export const DRAWER_POPUP_Z = 10001;
-export const DRAWER_TRIGGER_Z = 10002;
-export const DRAWER_MODAL_OVERLAY_Z = 10003;
-export const DRAWER_MODAL_Z = 10004;
+export const DRAWER_POPUP_Z = 10220;
+export const DRAWER_TRIGGER_Z = 10230;
+export const DRAWER_MODAL_OVERLAY_Z = 10240;
+export const DRAWER_MODAL_Z = 10250;
+// while the pointer is over the drawer it outranks floating editor windows
+// (which default to layering above it — see EditorSplit's layer system)
+export const DRAWER_HOVER_Z = 10120;
 
 export const DRAWER_MIN_WIDTH = 220;
 export const DRAWER_MAX_WIDTH = 520;
 export const DRAWER_DEFAULT_WIDTH = 300;
+export const DRAWER_TOP_LEVEL_DEFAULT_LIMIT = 5;
+export const DRAWER_TOP_LEVEL_UNLIMITED = 'unlimited' as const;
+export type DrawerTopLevelLimit = number | typeof DRAWER_TOP_LEVEL_UNLIMITED;
 
 // keep the trigger button and a scrim strip reachable when the persisted
 // width exceeds the viewport (e.g. resized wide on desktop, reopened on a phone)
@@ -32,6 +48,20 @@ export const clampDrawerWidth = (width: any): number => {
 	}
 
 	return Math.min(DRAWER_MAX_WIDTH, Math.max(DRAWER_MIN_WIDTH, Math.round(numeric)));
+};
+
+export const normalizeDrawerTopLevelLimit = (limit: any): DrawerTopLevelLimit => {
+	if (limit === DRAWER_TOP_LEVEL_UNLIMITED || limit === null || typeof limit === 'undefined' || limit === '') {
+		return DRAWER_TOP_LEVEL_UNLIMITED;
+	}
+
+	const numeric = Number(limit);
+
+	if (!Number.isFinite(numeric) || numeric <= 0) {
+		return DRAWER_TOP_LEVEL_UNLIMITED;
+	}
+
+	return Math.max(1, Math.round(numeric));
 };
 
 // Matches Chakra's default md breakpoint (48em) — below it we treat the
@@ -132,11 +162,16 @@ export const useDrawer = () => {
 	const open = !!drawerSettings?.open;
 	const direction: DrawerDirection = drawerSettings?.opens?.direction === 'right' ? 'right' : 'left';
 	const width = clampDrawerWidth(drawerSettings?.width);
-	const topLevelLimit = Math.max(1, Number(drawerSettings?.toplevelitems?.limit) || 5);
+	const topLevelLimit = normalizeDrawerTopLevelLimit(drawerSettings?.toplevelitems?.limit);
+	const topLevelLimitIsUnlimited = topLevelLimit === DRAWER_TOP_LEVEL_UNLIMITED;
 	const searchClosesDrawer = drawerSettings?.searchClosesDrawer !== false;
 	const ordering = drawerSettings?.userDrawerOrdering || {};
 	const selectedItem = drawerSettings?.selectedItem || 'home';
 	const collapsedGroups = drawerSettings?.collapsedGroups || {};
+	// per-item "close drawer after click" — default ON for navigating items on
+	// BOTH viewports; an explicit false keeps the drawer open for that item
+	// (submenu browsing). Search has its own setting (searchClosesDrawer).
+	const closeOnClick = drawerSettings?.closeOnClick || {};
 
 	// Drawer chrome state is UI preference, not content — keep it out of the
 	// undo/redo timeline.
@@ -176,11 +211,15 @@ export const useDrawer = () => {
 	);
 
 	const setTopLevelLimit = React.useCallback(
-		(value: number) => {
-			setDrawerSetting('toplevelitems.limit', Math.max(1, Math.round(Number(value) || 5)));
+		(value: DrawerTopLevelLimit) => {
+			setDrawerSetting('toplevelitems.limit', normalizeDrawerTopLevelLimit(value));
 		},
 		[setDrawerSetting]
 	);
+
+	const setTopLevelLimitUnlimited = React.useCallback(() => {
+		setDrawerSetting('toplevelitems.limit', DRAWER_TOP_LEVEL_UNLIMITED);
+	}, [setDrawerSetting]);
 
 	const setSearchClosesDrawer = React.useCallback(
 		(value: boolean) => {
@@ -209,6 +248,23 @@ export const useDrawer = () => {
 	const resetOrdering = React.useCallback(() => {
 		setDrawerSetting('userDrawerOrdering', {});
 	}, [setDrawerSetting]);
+
+	const closesOnClick = React.useCallback(
+		(itemId: string) => {
+			return closeOnClick?.[itemId] !== false;
+		},
+		[closeOnClick]
+	);
+
+	const setCloseOnClickFor = React.useCallback(
+		(itemId: string, value: boolean) => {
+			setDrawerSetting('closeOnClick', {
+				...closeOnClick,
+				[itemId]: !!value
+			});
+		},
+		[closeOnClick, setDrawerSetting]
+	);
 
 	const toggleGroupCollapsed = React.useCallback(
 		(groupKey: string) => {
@@ -246,12 +302,17 @@ export const useDrawer = () => {
 		width,
 		setWidth,
 		topLevelLimit,
+		topLevelLimitIsUnlimited,
 		setTopLevelLimit,
+		setTopLevelLimitUnlimited,
 		searchClosesDrawer,
 		setSearchClosesDrawer,
 		ordering,
 		setOrderingFor,
 		resetOrdering,
+		closeOnClick,
+		closesOnClick,
+		setCloseOnClickFor,
 		selectedItem,
 		setSelectedItem,
 		collapsedGroups,

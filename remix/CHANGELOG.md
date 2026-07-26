@@ -7,6 +7,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 **Author legend** — every entry is attributed:
 
 - **Codex (AI)** — change made by the Codex AI assistant.
+- **Claude (AI)** — change made by the Claude AI assistant.
 - **Lopu** — change made manually by the developer.
 
 > When you make a manual change, add a bullet under `[Unreleased]` ending with
@@ -16,7 +17,162 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Fixed
+
+- **PR #69 final-review hardening round**: a multi-agent review of the unified
+  /search + profile/feed branch surfaced a batch of merge-blocking issues, all
+  fixed here — Claude (AI), 2026-07-17:
+  - **Advanced filters no longer 400 + wipe results on numeric values**: the
+    query builder's default `contains` operator coerced `4`/`true`/`null` to
+    real types, which the server rejects for text-only operators, clearing the
+    visible feed. `contains`/`startsWith`/`endsWith` now keep the raw string.
+  - **Composer no longer destroys a user's `tmp` things**: seeding the thingtime
+    draft replaced the whole `tmp` store branch; it now prunes only prior
+    composer sessions and preserves any user-authored `tmp` keys.
+  - **Untrusted schema render can't paint a full-viewport overlay**: the Chakra
+    thing renderer allowed arbitrary `position` CSS, enabling a clickjacking /
+    phishing overlay on the schema-browse page. Out-of-flow positioning
+    (`fixed`/`absolute`/`sticky`) is now stripped at every nesting level.
+  - **`/api/v1/email/config` is dev/preview-only**: the endpoint exposed SES
+    region, sender identities, and the test-recipient email with no auth; it now
+    gates on `shouldShowDevVerificationLink()` like its sibling `test-otp`.
+  - **Collection→things migration no longer drops writes that raced an earlier
+    pass**: the delete guard compared fresh legacy data only to the batch
+    snapshot, so a retry deleted newer legacy writes while the thing kept stale
+    data. It now reconciles against what the destination twin actually reflects
+    and preserves the destination's shareId when rebuilding.
+  - **Data-crystal keys reject prototype accessors**: `__proto__` matched the key
+    grammar and was silently dropped by `out[key] = …` (a contract violation);
+    it now fails loudly, consistent with the render-tree sanitizer.
+  - **/search and feed Advanced filters agree on relevance-without-text**:
+    `/search` sent `sort=relevance` with an empty query (server 400); it now
+    drops to server-pick like the feed panel does.
+  - **Re-clicking Search with an unchanged Advanced draft refetches** instead of
+    silently no-op'ing on React's identical-state bail-out.
+  - **`/verify-email` renders real copy for crafted `state` params** (own-property
+    lookup instead of a prototype-chain hit that blanked the card).
+  - **Password-reset confirm is now IP-throttled** (`auth.passwordResetConfirm`),
+    and a few PR-introduced `tsc` errors (schema browse cursors, migration
+    fail-reason narrowing) were cleared.
+
+- **/search no longer hijacks navigation or searches uninvited**: a search
+  resolving after the user already left the page used to replace-navigate
+  them back to `/search` (the post-search `?q=` URL sync); it now only syncs
+  the URL while the page is still mounted. Entering `/search` also no longer
+  auto-fires a search — only explicit deep links (`?q=` from Commander,
+  `?schema=` from /schemas) auto-run; plain visits paint last-cached results
+  without a refetch, and a fresh visit shows an invite empty state instead of
+  "Nothing matched". The input's rainbow ring also renders at full strength
+  from the first frame (new `Rainbow` `instant` prop) instead of fading in
+  over ten seconds. Review hardening: the URL sync also respects pending
+  departures to loader-bearing routes and Back within /search (location-key +
+  navigation-idle guards), Commander re-running a cache-restored query fires
+  a real search (echo guard now tracks the last synced q, not live input),
+  failed/aborted searches keep the invite state and can't poison Load more
+  pagination, and a dead `?schema=` link strips itself without firing an
+  unrequested fallback search. — Claude (AI), 2026-07-16
+
+### Changed
+
+- **Feed things render natively** (`ThingView`): thingtime posts mount the real
+  Thingtime component — right-click context menu, collapse, and view⇄edit
+  toggling — over a sandboxed store, defaulting to view mode. Things resolving a
+  kind renderer (a `render:` prop, explicit kind, or structural match — first
+  that adapts wins) or an Editor.js `rich-text` value render through that
+  renderer by default, with a corner icon flipping back to the Thingtime tree.
+  Untrusted feed/search data is fenced: an explicit safe-kind allowlist, every
+  `href`/`src`/`url()` sink scheme-guarded (`safeUrl`/`safeCssUrl`), the chakra
+  path + `window.meta` writes disabled, Cmd+Z contained so it can't corrupt the
+  viewer's real tree, and large things bounded (collapse + scroll box). Detail
+  in `PRs/69-…`. — Claude (AI), 2026-07-15
+- **Everything is a thing, for real now**: users, themes, feed algorithms, and
+  waitlist entries are stored in the `things` collection as protected system
+  kinds (`user`/`theme`/`feed-algorithm`/`waitlist`, plus seeded `schema`
+  things for every builtin kind). Public payloads live in `crystal`; secrets
+  (emails, password hashes) are BinData under the root `secure` field so the
+  search text index can never tokenize them; uniqueness rides BinData
+  `uniqueKeys` (PII hashed). Reads are dual-era (things first, frozen legacy
+  collections as fallback) and admin migrations under `/api/v1/admin/migrations`
+  convert each legacy collection idempotently. Legacy ids are preserved as
+  thing shareIds so sessions, rosters, ownerId joins, share links, and active
+  theme/algorithm pointers keep working unchanged. FUNDAMENTALS §3 rewritten.
+  Details in claude-todo/12-everything-is-a-thing-collections.md.
+  — Claude (AI), 2026-07-12
+
 ### Added
+
+- **Atomic service-account quotas**: `GET|POST /api/v1/things/quota` stores one
+  private deterministic `data` Thing per service owner + key and atomically
+  reserves daily work, grants rolling-window permits, releases unused slots,
+  and resets daily usage without cancelling in-flight identities. The route
+  accepts only live service-purpose credentials, pins policy on first reserve,
+  uses server time, scopes every mutation by owner, and fails closed when
+  storage is unavailable. Official API docs, auth smoke coverage, and focused
+  policy/rollover/idempotency tests ship with it. — Codex (AI), 2026-07-19
+
+- Extensible data: every `things` doc now carries a schema-free top-level
+  `extended` property — any JSON up to 512KB, stored and returned exactly as
+  given, never validated, structured-searchable, or interpreted;
+  replace-on-write (`null` clears), threaded through create/upsert/patch and
+  both public projections, with one reserved key (`tt:textLanguage`, the text
+  index's language override). Crystals are now optionally schema-less too:
+  omitting `thingtime` on create defaults to `["data"]`, so a bare
+  `{ crystal: {…} }` behaves like an extended-style field bag while staying
+  /search-able. — Claude (AI), 2026-07-12
+- Ported the stranded PR #52/#35 email + auth work onto the unified data
+  model: the owned email layer (`api/utils/email/` — outbox `email_messages`
+  rows for every send, suppression/unsubscribe checks, SES or console
+  delivery, `GET /api/v1/email/config`, dev/preview `POST /api/v1/email/test-otp`),
+  password reset (`POST /api/v1/auth/password-reset` + `/confirm` — probe-proof
+  neutral responses, single-use 1h tokens, revoke-all-sessions on rotation,
+  per-IP `auth.passwordReset` rate limit, `/reset-password` page), and opt-in
+  email 2FA (`GET/POST /api/v1/auth/two-factor`, two-step
+  `POST /api/v1/login { challenge, code }` with hashed attempt-capped OTPs in
+  `authOtps`, per-IP `auth.login` rate limit, Settings → Security toggle, login
+  form code step). Also ports the `/verify-email` landing page the emailed
+  verification links point at. — Claude (AI), 2026-07-12
+- `/search` page + `POST/GET /api/v1/things/search`: a Commander-style search
+  over every visible thing — whitelisted MongoDB operator grammar (nested
+  all/any groups, bounded primitives only, escaped-literal text ops), ranked
+  text search via a weighted wildcard text index, new free-form `data` and
+  user-authored `schema` crystal schemas, search-by-schema prefill, a pinned
+  Commander "Search things" row, and a `things.search` rate-limit window.
+  Details in
+  [PRs/63](../PRs/63-claude-search-page-mongodb-query-154eb4--search-page-query-builder-ranked-text-search-by-schema.md).
+  — Claude (AI), 2026-07-12
+- Replaced the unfinished `/raw` MongoDB dump with an admin-only no-code Query
+  Workbench: nested filters, typed BSON values, projections, sorting, bounded
+  find/count/distinct/index/stats tools, read-only aggregation pipelines,
+  execution plans, cancellation, request previews, and JSON/table/CSV results.
+  Server-side allowlists, complexity/time/response caps, protected-field probe
+  prevention and redaction, blocked write/server-JavaScript stages, and
+  fail-closed rate limiting keep the tool read-only and bounded. Details in
+  [`PRs/64-codex-mongodb-query-builder--add-no-code-mongodb-query-workbench.md`](../PRs/64-codex-mongodb-query-builder--add-no-code-mongodb-query-workbench.md).
+  — _Codex (AI), 2026-07-12_
+
+- Unified the data model so posts, comments, reactions, and shares are all one
+  root **Thing** shape: sub-schemas apply through the `thingtime` array of
+  schema ids, payloads live under `crystal`, and every doc in every collection
+  now stores its root-level `schemaVersion`. Added `GET /api/v1/things`
+  (read/list), `POST /api/v1/things/update`, `GET /api/v1/schemas`, a `/schemas`
+  browser page with an admin Database-migrations panel, and admin-only
+  schema-version migration endpoints (`/api/v1/admin/migrations*`) gated by the
+  admin role (`meta.admin` flag or the `ADMIN_USERNAMES` allowlist); the
+  previously unauthenticated `mongodb/raw-results` dump is now admin-only. Legacy wire shapes stay
+  byte-compatible and reads merge v1 embedded data until the idempotent
+  `things-v1-to-v2` migration runs. Round 2: the stored visibility enum became
+  a generic `acl` permission array (tt: grants plus "-"-prefixed exclusions,
+  most-specific entry wins — e.g. `["tt:all","-tt:user/somebody"]`), with the
+  legacy names still accepted and derived, and `/api/v1/things` grew the full
+  verb set (GET read/list, POST create, PUT upsert, PATCH merge, DELETE).
+  Merged origin/main (multi-emoji reactions, relational comments, meta.admin
+  role system, account switcher) and reconciled onto the unified model; a
+  post-merge adversarial security review then fixed 5 issues (a listThings acl
+  leak of private shares, a reaction-cap DoS bypass on the generic endpoint,
+  missing rate limits on /things, and migration id-squat data loss).
+  Details in
+  [`PRs/59-claude-unified-thing-crystal-schemas--everything-is-a-thing.md`](../PRs/59-claude-unified-thing-crystal-schemas--everything-is-a-thing.md).
+  — _Claude (AI), 2026-07-10_
 
 - Added `docs/email-owned-architecture.md`, a phased plan for owning
   Thingtime email end-to-end with a self-hosted SMTP path, Mongo-backed queues
@@ -189,6 +345,61 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- Login and registration now return standalone users to the last page they
+  visited before entering auth, including query strings and hashes. The
+  session-scoped destination is consumed only after success, auth/API/external
+  targets are rejected, direct auth visits keep the existing `/` and
+  `/welcome` fallbacks, and embedded account switching remains in place.
+  Details in
+  [`PRs/64-codex-mongodb-query-builder--add-no-code-mongodb-query-workbench.md`](../PRs/64-codex-mongodb-query-builder--add-no-code-mongodb-query-workbench.md).
+  — _Codex (AI), 2026-07-12_
+
+- Fixed Editor.js autosave echoes remounting the active editor and stealing
+  focus after the asynchronous save/parent echo. Changed parent values now
+  reach the pending-echo reconciliation path before skipped intermediate
+  signatures are retired, so ordinary local echoes preserve the Editor.js
+  instance while genuine external replacements still refresh it. Added focused
+  coverage for the changed-signature echo case. Details in
+  [`PRs/53-claude-nested-data-viewer-concepts-1ebbbe--nested-data-viewer-concepts-kind-renderers.md`](../PRs/53-claude-nested-data-viewer-concepts-1ebbbe--nested-data-viewer-concepts-kind-renderers.md).
+  — _Codex (AI), 2026-07-11_
+- Fixed Editor.js persistence and duplicate toolbox entries. The List-v2
+  Checklist alias is hidden while the compatible legacy Checklist tool remains,
+  Editor.js snapshots are emitted in change order, and Thingtime now serializes
+  only the latest revision after a 350ms idle window (with a 2s maximum wait)
+  instead of serializing the whole object during every keystroke. Edit/history
+  events remain immediate, LocalForage writes cannot overlap, lifecycle flushes
+  cover background/navigation, and pre-hydration placeholder state is never
+  persisted. Removed per-keystroke full-object logging, React-state queue churn,
+  and unbounded debug snapshots from the same hot path. Details in
+  [`PRs/53-claude-nested-data-viewer-concepts-1ebbbe--nested-data-viewer-concepts-kind-renderers.md`](../PRs/53-claude-nested-data-viewer-concepts-1ebbbe--nested-data-viewer-concepts-kind-renderers.md).
+  — _Codex (AI), 2026-07-11_
+- Fixed Editor.js multiline tool textboxes treating empty internal lines as
+  block boundaries. Quote, warning, image-caption, and embed-caption fields now
+  keep Backspace/Delete and arrow-key editing inside the active textbox at
+  internal line boundaries, while genuine field boundaries, native inputs, and
+  ordinary paragraph, heading, list, and checklist block navigation remain
+  unchanged. Dynamically added Editor.js fields receive the same guard. Details
+  in [`PRs/53-claude-nested-data-viewer-concepts-1ebbbe--nested-data-viewer-concepts-kind-renderers.md`](../PRs/53-claude-nested-data-viewer-concepts-1ebbbe--nested-data-viewer-concepts-kind-renderers.md).
+  — _Codex (AI), 2026-07-11_
+- Fixed Editor.js chrome being clipped by the Thingtime atomic-value scroll
+  wrapper. Rich-text values now keep floating toolboxes visible, wide editors
+  reserve an in-card gutter for both the `+` and six-dot controls, and narrow
+  editors retain Editor.js's mobile bottom-sheet layout. Header blocks now use
+  an explicit H1-H6 scale in edit mode and semantic heading elements with the
+  same scale in view mode, while validated Style Tune sizes still override the
+  defaults. Details in
+  [`PRs/53-claude-nested-data-viewer-concepts-1ebbbe--nested-data-viewer-concepts-kind-renderers.md`](../PRs/53-claude-nested-data-viewer-concepts-1ebbbe--nested-data-viewer-concepts-kind-renderers.md).
+  — _Codex (AI), 2026-07-11_
+- Fixed the Thingtime value editor jumping between its inline string control
+  and Editor.js after Enter/focus/save. Primitive strings now stay plain;
+  Editor.js is a persistent `rich-text` block datatype with content-preserving
+  String ↔ Editor.js context-menu conversions and native-payload detection.
+  Rich-text view rendering now uses the same allowlist sanitizer during SSR
+  and hydration, with bounded detection/rendering and safe URL protocols for
+  hostile or oversized stored documents.
+  Details in
+  [`PRs/53-claude-nested-data-viewer-concepts-1ebbbe--nested-data-viewer-concepts-kind-renderers.md`](../PRs/53-claude-nested-data-viewer-concepts-1ebbbe--nested-data-viewer-concepts-kind-renderers.md).
+  — _Codex (AI), 2026-07-10_
 - Fixed Electron release packaging on GitHub Actions by giving the Electron
   package explicit repository metadata, preventing electron-builder from
   crashing after producing macOS assets when it cannot infer the GitHub repo

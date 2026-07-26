@@ -21,7 +21,7 @@ export type FeedAuthor = {
   avatarUrl: string | null;
 };
 
-export type PostType = 'text' | 'image' | 'marketplace';
+export type PostType = 'text' | 'image' | 'marketplace' | 'thingtime';
 export type PostVisibility = 'public' | 'friends' | 'family' | 'private';
 
 export type MarketplaceCategory = 'car' | 'tool' | 'furniture' | 'service' | 'other';
@@ -36,24 +36,48 @@ export type MarketplaceListing = {
   sold: boolean;
 };
 
+// Comments share the post schema — rich comments are ["post","comment"]
+// things, so the payload carries the post vocabulary plus reactions and a
+// reply count. Legacy-era comments arrive with the text-only defaults.
 export type PostComment = {
   id: string;
+  thingtime: string[];
   author: FeedAuthor | null;
+  type: PostType;
   text: string;
+  images: string[];
+  listing: MarketplaceListing | null;
+  thing: Record<string, any> | null;
+  tags: string[];
+  reactionCounts: Record<string, number>;
+  viewerReactions: string[];
+  // direct replies — the comment's own /post/:id page shows the thread
+  commentCount: number;
+  // nested replies (threads ship two levels deep, ≤ 5 per level, oldest →
+  // newest; deeper levels arrive empty and load on demand)
+  comments?: PostComment[];
+  targetId: string | null;
   createdAt: string;
 };
 
 export type PublicPost = {
   id: string;
   type: PostType;
+  // Thingtime Schema ids applied to the thing, e.g. ['post'] or ['post','share']
+  thingtime: string[];
+  // tt: permission entries; `visibility` above is the derived legacy name
+  acl: string[];
   author: FeedAuthor | null;
   visibility: PostVisibility;
   text: string;
   images: string[];
   listing: MarketplaceListing | null;
+  // thingtime posts: the free-form structured thing (crystal.thing)
+  thing: Record<string, any> | null;
   tags: string[];
   reactionCounts: Record<string, number>;
-  viewerReaction: string | null;
+  // every reaction token the viewer has toggled on this post (multi-react)
+  viewerReactions: string[];
   commentCount: number;
   // latest comments (≤ 20), oldest → newest
   comments: PostComment[];
@@ -64,6 +88,12 @@ export type PublicPost = {
   shareOf: PublicPost | null;
   createdAt: string;
 };
+
+// A post update bubbled up from a card. A value replaces the post (null removes
+// it); a function applies a delta to the FRESHEST post in the list — the form
+// optimistic reactions use so concurrent toggles reconcile per-token instead of
+// clobbering each other with a stale full snapshot.
+export type PostChange = PublicPost | null | ((prev: PublicPost) => PublicPost | null);
 
 export type AlgorithmInterest = {
   kind: 'type' | 'tag' | 'author';
@@ -106,7 +136,8 @@ export const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '😡'
 export const POST_TYPE_META: Record<PostType, { label: string; emoji: string }> = {
   text: { label: 'Text', emoji: '📝' },
   image: { label: 'Photos', emoji: '🖼️' },
-  marketplace: { label: 'Marketplace', emoji: '🏪' }
+  marketplace: { label: 'Marketplace', emoji: '🏪' },
+  thingtime: { label: 'Thingtime', emoji: '🌀' }
 };
 
 export const CIRCLE_META: Record<PostVisibility, { label: string; emoji: string; hint: string }> = {

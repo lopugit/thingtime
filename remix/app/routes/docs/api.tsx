@@ -15,7 +15,7 @@ import {
   Stack,
   Text
 } from '@chakra-ui/react';
-import { ArrowUpRight, Check, Code2, Copy, Link2, Search, ServerCog, TerminalSquare } from 'lucide-react';
+import { ArrowUpRight, Check, Code2, Link2, Search, ServerCog, TerminalSquare } from 'lucide-react';
 
 import {
   apiEndpointDocs,
@@ -23,23 +23,29 @@ import {
   type ApiEndpointDoc,
   type ApiHttpMethod
 } from '~/docs/apiDocs';
+import {
+  CODE_BG,
+  CODE_BORDER,
+  CODE_TEXT,
+  CodeBlock,
+  type CodeLanguage,
+  CopyCodeButton,
+  copyToClipboard
+} from './docsCode';
 import { Link as RouterLink, useLocation, useParams } from 'react-router';
 
-const methodColor = (method: ApiHttpMethod) => (method === 'GET' ? 'blue' : 'purple');
+const METHOD_COLORS: Record<ApiHttpMethod, string> = {
+  GET: 'blue',
+  POST: 'purple',
+  PUT: 'orange',
+  PATCH: 'teal',
+  DELETE: 'red'
+};
+const methodColor = (method: ApiHttpMethod) => METHOD_COLORS[method] || 'purple';
 const groupLabel = (group: string) => group.charAt(0).toUpperCase() + group.slice(1);
 const groupPagePath = (group: string) => `/docs/api/${group}`;
 const docPagePath = (doc: ApiEndpointDoc) => `${groupPagePath(doc.group)}/${doc.id}`;
 const docHashPath = (doc: ApiEndpointDoc) => `/docs/api#api-${doc.id}`;
-const CODE_BG = '#0b0b0f';
-const CODE_BORDER = 'var(--tt-dark-border, #2a2a33)';
-const CODE_TEXT = '#e6e6ec';
-const CODE_MUTED = 'var(--tt-dark-muted, #8a8a95)';
-const CODE_GREEN = 'var(--tt-dark-accent, #59ff9c)';
-const CODE_BLUE = '#59bdff';
-const CODE_YELLOW = '#ffc20e';
-const CODE_ACCENT = 'var(--tt-accent, hotpink)';
-
-type CodeLanguage = 'json' | 'shell' | 'javascript' | 'python' | 'ruby' | 'text';
 
 type DocsPathLink = {
   copyHref: string;
@@ -88,36 +94,6 @@ const groupApiDocs = (docs: ApiEndpointDoc[]) =>
     return groups;
   }, []);
 
-const copyToClipboard = async (value: string) => {
-  try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(value);
-      return true;
-    }
-  } catch {
-    // Fall through to the legacy path for sandboxed preview browsers.
-  }
-
-  try {
-    const textarea = document.createElement('textarea');
-    textarea.value = value;
-    textarea.setAttribute('readonly', '');
-    textarea.style.left = '-9999px';
-    textarea.style.opacity = '0';
-    textarea.style.position = 'fixed';
-    textarea.style.top = '0';
-    document.body.appendChild(textarea);
-    textarea.focus();
-    textarea.select();
-    textarea.setSelectionRange(0, textarea.value.length);
-    const copied = document.execCommand('copy');
-    document.body.removeChild(textarea);
-    return copied;
-  } catch {
-    return false;
-  }
-};
-
 const languageForPlatform = (platform: string): CodeLanguage => {
   if (platform === 'curl' || platform === 'wget') return 'shell';
   if (platform === 'node') return 'javascript';
@@ -134,94 +110,6 @@ const platformLabel = (platform: string) =>
     python: 'Python',
     ruby: 'Ruby'
   })[platform] || platform;
-
-const tokenColor = (token: string, line: string, index: number, language: CodeLanguage) => {
-  if (token.startsWith('#') || token.startsWith('//')) return CODE_MUTED;
-  if (token === '$') return CODE_ACCENT;
-  if (token.startsWith('-')) return CODE_BLUE;
-  if (/^(GET|POST|PUT|PATCH|DELETE|HEAD)$/.test(token)) return CODE_YELLOW;
-  if (/^-?\d+(?:\.\d+)?$/.test(token)) return CODE_YELLOW;
-  if (/^(true|false|null|None|True|False)$/.test(token)) return CODE_ACCENT;
-  if (/^['"]/.test(token)) {
-    if (language === 'json' && token.startsWith('"') && /^\s*:/.test(line.slice(index + token.length))) {
-      return CODE_BLUE;
-    }
-
-    return CODE_GREEN;
-  }
-
-  if (
-    /^(const|let|var|await|async|if|throw|new|import|from|with|do|end|require|payload|response|request|headers|method|body|JSON|Net|HTTP|URI)$/.test(
-      token
-    )
-  ) {
-    return CODE_BLUE;
-  }
-
-  if (/^[{}[\]():,.;=+\\]$/.test(token)) return CODE_MUTED;
-
-  return CODE_TEXT;
-};
-
-const highlightLine = (line: string, language: CodeLanguage) => {
-  const tokenPattern =
-    /("(?:\\.|[^"\\])*")|('(?:\\.|[^'\\])*')|(#[^\n]*)|(\/\/[^\n]*)|(\$)|\b(const|let|var|await|async|if|throw|new|import|from|with|do|end|require|payload|response|request|headers|method|body|JSON|Net|HTTP|URI)\b|\b(GET|POST|PUT|PATCH|DELETE|HEAD)\b|(--?[A-Za-z][A-Za-z0-9-]*)|(-?\b\d+(?:\.\d+)?\b)|\b(true|false|null|None|True|False)\b|([{}[\]():,.;=+\\])/g;
-  const parts: React.ReactNode[] = [];
-  let cursor = 0;
-
-  for (const match of line.matchAll(tokenPattern)) {
-    const token = match[0];
-    const index = match.index || 0;
-
-    if (index > cursor) {
-      parts.push(line.slice(cursor, index));
-    }
-
-    parts.push(
-      <Box as="span" color={tokenColor(token, line, index, language)} key={`${index}-${token}`}>
-        {token}
-      </Box>
-    );
-    cursor = index + token.length;
-  }
-
-  if (cursor < line.length) {
-    parts.push(line.slice(cursor));
-  }
-
-  return parts.length ? parts : '\u00a0';
-};
-
-function CopyCodeButton({ code, label = 'Copy code' }: { code: string; label?: string }) {
-  const [copied, setCopied] = React.useState(false);
-
-  const copy = React.useCallback(async () => {
-    try {
-      const copiedValue = await copyToClipboard(code);
-
-      if (copiedValue) {
-        setCopied(true);
-        window.setTimeout(() => setCopied(false), 1100);
-      }
-    } catch {
-      // Clipboard access can be unavailable in sandboxed preview browsers.
-    }
-  }, [code]);
-
-  return (
-    <IconButton
-      aria-label={copied ? 'Copied' : label}
-      bg="rgba(255, 255, 255, 0.08)"
-      border="1px solid rgba(255, 255, 255, 0.08)"
-      color={copied ? CODE_GREEN : CODE_TEXT}
-      _hover={{ bg: 'rgba(255, 255, 255, 0.14)' }}
-      icon={<Icon as={copied ? Check : Copy} boxSize={4} />}
-      onClick={copy}
-      size="sm"
-      variant="ghost"
-    />
-  );
-}
 
 function CopyDocLinkButton({
   href,
@@ -294,58 +182,6 @@ function DocsPathLinks({ links }: { links: DocsPathLink[] }) {
         </Flex>
       ))}
     </Flex>
-  );
-}
-
-function CodeBlock({
-  children,
-  language = 'text',
-  framed = true
-}: {
-  children: string;
-  language?: CodeLanguage;
-  framed?: boolean;
-}) {
-  const lines = String(children || '').split('\n');
-
-  return (
-    <Box
-      bg={CODE_BG}
-      border={framed ? '2px solid' : '0'}
-      borderColor={CODE_BORDER}
-      color={CODE_TEXT}
-      fontFamily="var(--tt-font-mono, ui-monospace, Menlo, monospace)"
-      fontSize={{ base: '12px', md: '13px' }}
-      lineHeight="1.75"
-      maxH="320px"
-      overflow="auto"
-      position="relative"
-    >
-      {framed ? (
-        <Box position="absolute" right={2} top={2} zIndex={1}>
-          <CopyCodeButton code={children} />
-        </Box>
-      ) : null}
-      <Box as="pre" m={0} minW="max-content" px={{ base: 3, md: 4 }} py={framed ? 4 : 3} pr={framed ? 12 : 4}>
-        <Box as="code" display="block">
-          {lines.map((line, index) => (
-            <Box
-              as="span"
-              display="grid"
-              gap={3}
-              gridTemplateColumns="3ch minmax(0, 1fr)"
-              key={`${index}-${line}`}
-              whiteSpace="pre"
-            >
-              <Box as="span" color={CODE_MUTED} textAlign="right" userSelect="none">
-                {index + 1}
-              </Box>
-              <Box as="span">{highlightLine(line, language)}</Box>
-            </Box>
-          ))}
-        </Box>
-      </Box>
-    </Box>
   );
 }
 

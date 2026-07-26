@@ -1,5 +1,8 @@
 import { getMongoUri } from './config';
 import { getMongoDb } from './mongodb';
+import { COLLECTIONS, physicalCollectionName } from './collectionNames';
+
+export { COLLECTIONS, physicalCollectionName, versionedCollectionName, collectionVersion } from './collectionNames';
 
 // Memoised client so a single request (and a warm serverless instance) reuses
 // one connection instead of opening a new MongoClient per collection lookup.
@@ -21,18 +24,101 @@ const getClientCached = async () => {
   return clientPromise;
 };
 
-// Single `thingtime` database (see FUNDAMENTALS.md §3).
-export const getThingtimeDb = async () => (await getClientCached()).db('thingtime');
+// Issues the last adoption pass could not resolve (rename unsupported /
+// unauthorized). Surfaced through the admin migrations census so a split
+// (legacy collection still holding data beside its versioned successor) is
+// loudly visible, never silent.
+let adoptionIssues: string[] = [];
+export const getAdoptionIssues = () => [...adoptionIssues];
 
-export const getUsersCollection = async () => (await getThingtimeDb()).collection('users');
-export const getSessionsCollection = async () => (await getThingtimeDb()).collection('sessions');
-export const getThingsCollection = async () => (await getThingtimeDb()).collection('things');
-export const getEmailVerificationsCollection = async () => (await getThingtimeDb()).collection('emailVerifications');
-export const getLopuMusingRateLimitsCollection = async () =>
-  (await getThingtimeDb()).collection('lopuMusingRateLimits');
-export const getThemesCollection = async () => (await getThingtimeDb()).collection('themes');
-export const getWaitlistCollection = async () => (await getThingtimeDb()).collection('waitlist');
-export const getFeedAlgorithmsCollection = async () => (await getThingtimeDb()).collection('feedAlgorithms');
+// Adopt physical collection versioning on first db contact: any legacy
+// unversioned collection ("things") whose current versioned name ("things_v2")
+// doesn't exist yet is renamed in place — instant, index-preserving, no doc
+// copying — before any caller can touch a collection handle. Steady state
+// (nothing unversioned left) is a single listCollections round trip.
+//
+// If BOTH names exist (another instance renamed first and writes already
+// landed, or rename is unavailable on this tier and a previous pass fell
+// through), the rename is skipped and the admin-run merge-legacy-collections
+// migration folds the residue forward instead. Rename failures are recorded,
+// never thrown — a degraded adoption must not take the whole API down.
+const adoptVersionedCollections = async (db: any) => {
+  const names = new Set<string>(
+    (await db.listCollections({}, { nameOnly: true }).toArray()).map((entry: any) => entry.name)
+  );
+  const issues: string[] = [];
+  for (const logical of COLLECTIONS) {
+    const physical = physicalCollectionName(logical);
+    if (!names.has(logical)) continue;
+    if (names.has(physical)) {
+      issues.push(`${logical}: legacy collection still exists beside ${physical} — run merge-legacy-collections`);
+      continue;
+    }
+    try {
+      await db.renameCollection(logical, physical);
+    } catch (err: any) {
+      // 48 NamespaceExists / 26 NamespaceNotFound: another instance won the
+      // rename race — either way the destination is in place
+      if (err?.code === 48 || err?.code === 26) continue;
+      // rename unavailable (Atlas M0 free tier) or unauthorized: leave the
+      // legacy collection in place for the merge migration and say so
+      issues.push(`${logical}: rename to ${physical} failed (${err?.codeName || err?.code || 'error'}) — run merge-legacy-collections`);
+    }
+  }
+  adoptionIssues = issues;
+};
+
+// Single `thingtime` database (see FUNDAMENTALS.md §3). The memoised promise
+// includes the adoption pass, so no caller can reach a collection handle
+// before legacy names have been (re)checked.
+let dbPromise: Promise<any> | null = null;
+
+export const getThingtimeDb = async () => {
+  if (!dbPromise) {
+    dbPromise = (async () => {
+      const db = (await getClientCached()).db('thingtime');
+      await adoptVersionedCollections(db);
+      return db;
+    })().catch((err) => {
+      // don't cache a failed adoption — let the next call retry
+      dbPromise = null;
+      throw err;
+    });
+  }
+  return dbPromise;
+};
+
+// THE way to a collection handle: logical name in, current-generation physical
+// collection out. Every read and write in the codebase goes through this (or a
+// named getter below), so nothing can touch a stale generation by accident.
+export const getCollection = async (logical: string) => (await getThingtimeDb()).collection(physicalCollectionName(logical));
+
+export const getUsersCollection = async () => getCollection('users');
+export const getSessionsCollection = async () => getCollection('sessions');
+export const getRostersCollection = async () => getCollection('rosters');
+export const getThingsCollection = async () => getCollection('things');
+export const getEmailVerificationsCollection = async () => getCollection('emailVerifications');
+export const getLopuMusingRateLimitsCollection = async () => getCollection('lopuMusingRateLimits');
+export const getThemesCollection = async () => getCollection('themes');
+export const getWaitlistCollection = async () => getCollection('waitlist');
+export const getFeedAlgorithmsCollection = async () => getCollection('feedAlgorithms');
+// Global, admin-editable app settings (singleton docs keyed by `key`, e.g. the
+// rate-limit config) and the general per-endpoint rate-limit windows.
+export const getSettingsCollection = async () => getCollection('settings');
+export const getRateLimitsCollection = async () => getCollection('rateLimits');
+// Owned email layer (see api/utils/email): every send writes an outbox row to
+// email_messages; events/suppression/unsubscribes back deliverability.
+export const getEmailMessagesCollection = async () => getCollection('email_messages');
+export const getEmailEventsCollection = async () => getCollection('email_events');
+export const getEmailTemplatesCollection = async () => getCollection('email_templates');
+export const getEmailSubscriptionsCollection = async () => getCollection('email_subscriptions');
+export const getEmailSuppressionListCollection = async () => getCollection('email_suppression_list');
+export const getEmailUnsubscribesCollection = async () => getCollection('email_unsubscribes');
+export const getEmailIdentitiesCollection = async () => getCollection('email_identities');
+// Single-use auth tokens: password-reset links and login OTP challenges, both
+// TTL-reaped (mirrors emailVerifications).
+export const getPasswordResetsCollection = async () => getCollection('passwordResets');
+export const getAuthOtpsCollection = async () => getCollection('authOtps');
 
 // Idempotently create server-side collections + their indexes. createIndex
 // creates the collection if it doesn't exist yet, so this also bootstraps an
@@ -42,30 +128,206 @@ export const getFeedAlgorithmsCollection = async () => (await getThingtimeDb()).
 // racy on their own).
 let indexesEnsured: Promise<void> | null = null;
 
+// createIndex with different options than an existing same-key index throws
+// IndexOptionsConflict (85) / IndexKeySpecsConflict (86). For indexes whose
+// options evolve (partial filters, text weights/overrides), drop the old
+// definition by name and recreate — idempotent, and the only alternative is a
+// manual migration per deploy.
+//
+// Order matters for UNIQUE indexes: create the new index BEFORE dropping the
+// legacy-named one. Dropping first opens a window with no index at all — for a
+// unique index that means the uniqueness constraint briefly disappears, so
+// racing upserts (e.g. reaction toggles) could insert duplicates. MongoDB (4.2+)
+// lets same-key indexes with distinct names / partial-filter options coexist, so
+// create-then-drop keeps a constraint active throughout the swap.
+const createIndexReplacing = async (
+  collection: any,
+  keys: Record<string, any>,
+  options: Record<string, any> & { name: string },
+  legacyNames: string[] = []
+) => {
+  try {
+    await collection.createIndex(keys, options);
+  } catch (err: any) {
+    if (err?.code !== 85 && err?.code !== 86) throw err;
+    // The new spec conflicts with an existing index of the same name (evolved
+    // options) or a legacy name (same spec, different name) — drop the conflicting
+    // definitions and recreate. This is the only branch with a no-index window,
+    // and it fires only when options genuinely changed (text weights/overrides),
+    // never for the steady-state unique-index swap above.
+    await collection.dropIndex(options.name).catch(() => {});
+    for (const legacy of legacyNames) await collection.dropIndex(legacy).catch(() => {});
+    await collection.createIndex(keys, options);
+  }
+  // New index is in place — now prune any legacy-named siblings of the same shape.
+  for (const legacy of legacyNames) {
+    if (legacy === options.name) continue;
+    await collection.dropIndex(legacy).catch(() => {}); // absent = fine
+  }
+};
+
 export const ensureIndexes = async () => {
   if (!indexesEnsured) {
     indexesEnsured = (async () => {
       const db = await getThingtimeDb();
+      // indexes land on the current-generation physical collections
+      const col = (logical: string) => db.collection(physicalCollectionName(logical));
       await Promise.all([
-        db.collection('users').createIndex({ username: 1 }, { unique: true }),
-        db.collection('users').createIndex({ email: 1 }, { unique: true }),
-        db.collection('sessions').createIndex({ jti: 1 }, { unique: true }),
-        db.collection('sessions').createIndex({ userId: 1 }),
-        db.collection('emailVerifications').createIndex({ token: 1 }, { unique: true }),
-        db.collection('emailVerifications').createIndex({ userId: 1 }),
-        db.collection('lopuMusingRateLimits').createIndex({ key: 1 }, { unique: true }),
-        db.collection('lopuMusingRateLimits').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
-        db.collection('themes').createIndex({ shareId: 1 }, { unique: true }),
-        db.collection('themes').createIndex({ ownerId: 1 }),
-        db.collection('waitlist').createIndex({ email: 1 }, { unique: true }),
-        // feed posts live in `things` under kind:'post' (see api/utils/things);
+        col('users').createIndex({ username: 1 }, { unique: true }),
+        col('users').createIndex({ email: 1 }, { unique: true }),
+        col('sessions').createIndex({ jti: 1 }, { unique: true }),
+        col('sessions').createIndex({ userId: 1 }),
+        // TTL: reap sessions once expiresAt passes. getLiveSession already
+        // treats past-expiry docs as dead, so deletion removes nothing usable —
+        // without it expired/revoked sessions (app grants especially) pile up
+        // forever. Docs with expiresAt: null are exempt (TTL skips non-dates).
+        col('sessions').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+        // deleteApp revokes app sessions by clientId ACROSS users — without
+        // this the sweep scans the whole sessions collection. Partial so the
+        // (much larger) browser/service session population stays out.
+        col('sessions').createIndex(
+          { 'meta.clientId': 1 },
+          { partialFilterExpression: { purpose: 'app' } }
+        ),
+        // account-switcher rosters: one doc per browser, entries reference
+        // sessions by jti; TTL reaps rosters abandoned past their rolling expiry
+        col('rosters').createIndex({ rosterId: 1 }, { unique: true }),
+        col('rosters').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+        col('emailVerifications').createIndex({ token: 1 }, { unique: true }),
+        col('emailVerifications').createIndex({ userId: 1 }),
+        // password-reset links + login OTP challenges: single-use tokens, TTL
+        // reaps them at expiresAt (consumed docs keep their consumedAt until then)
+        col('passwordResets').createIndex({ token: 1 }, { unique: true }),
+        col('passwordResets').createIndex({ userId: 1 }),
+        col('passwordResets').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+        col('authOtps').createIndex({ challenge: 1 }, { unique: true }),
+        col('authOtps').createIndex({ userId: 1 }),
+        col('authOtps').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+        // owned email layer: outbox + delivery events + list hygiene
+        col('email_messages').createIndex({ createdAt: -1 }),
+        col('email_messages').createIndex({ to: 1 }),
+        col('email_messages').createIndex({ stream: 1, status: 1, createdAt: -1 }),
+        col('email_messages').createIndex({ providerMessageId: 1 }, { sparse: true }),
+        col('email_events').createIndex({ emailMessageId: 1 }),
+        col('email_events').createIndex({ providerMessageId: 1 }),
+        col('email_events').createIndex({ eventType: 1, receivedAt: -1 }),
+        col('email_templates').createIndex({ key: 1 }, { unique: true }),
+        col('email_subscriptions').createIndex({ email: 1, listId: 1 }, { unique: true }),
+        col('email_subscriptions').createIndex({ listId: 1, status: 1 }),
+        col('email_suppression_list').createIndex({ email: 1 }, { unique: true }),
+        col('email_unsubscribes').createIndex({ email: 1, listId: 1 }, { unique: true }),
+        col('email_identities').createIndex({ identity: 1 }, { unique: true }),
+        col('lopuMusingRateLimits').createIndex({ key: 1 }, { unique: true }),
+        col('lopuMusingRateLimits').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+        col('themes').createIndex({ shareId: 1 }, { unique: true }),
+        col('themes').createIndex({ ownerId: 1 }),
+        col('waitlist').createIndex({ email: 1 }, { unique: true }),
+        // everything in `things` is a thing (see api/utils/things + app/schemas);
         // shareId is included so the (createdAt desc, shareId asc) page sort is
-        // fully index-provided instead of an in-memory sort per request
-        db.collection('things').createIndex({ shareId: 1 }, { unique: true, sparse: true }),
-        db.collection('things').createIndex({ kind: 1, visibility: 1, createdAt: -1, shareId: 1 }),
-        db.collection('things').createIndex({ kind: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
-        db.collection('feedAlgorithms').createIndex({ shareId: 1 }, { unique: true }),
-        db.collection('feedAlgorithms').createIndex({ ownerId: 1 })
+        // fully index-provided instead of an in-memory sort per request. The
+        // kind-prefixed indexes serve v1-era docs until the things migration
+        // runs; the thingtime-prefixed ones serve v2 (multikey on the schema-id
+        // array), and targetId serves comment/reaction/share lookups.
+        col('things').createIndex({ shareId: 1 }, { unique: true, sparse: true }),
+        // generalized uniqueness for system kinds (username:<u>, hashed email
+        // keys, schema:<id>, …): multikey unique — each element unique across
+        // the collection; sparse so ordinary things skip the index entirely
+        col('things').createIndex({ uniqueKeys: 1 }, { unique: true, sparse: true }),
+        // login + people-search lookups on user things (thingtime is the only
+        // multikey field here, so the compound is legal)
+        col('things').createIndex({ thingtime: 1, 'crystal.username': 1 }),
+        // admin roster: a partial index over just the (rare) admin user things,
+        // so listAdmins is a few-entry scan, not a full-user-base fetch+filter
+        col('things').createIndex(
+          { secureAdmin: 1 },
+          { partialFilterExpression: { secureAdmin: true } }
+        ),
+        col('things').createIndex({ kind: 1, visibility: 1, createdAt: -1, shareId: 1 }),
+        col('things').createIndex({ kind: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
+        col('things').createIndex({ thingtime: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
+        col('things').createIndex({ targetId: 1, thingtime: 1, createdAt: 1, shareId: 1 }),
+        // schema-usage counting (schemas/browse decorate): data things are
+        // grouped by crystal.schemaId (stamped) with a crystal.schema name
+        // fallback for pre-stamp docs — both need index support or every
+        // schema browse page scans the whole data partition
+        col('things').createIndex({ thingtime: 1, 'crystal.schemaId': 1 }),
+        col('things').createIndex({ thingtime: 1, 'crystal.schema': 1 }),
+        // acl and thingtime are both arrays — Mongo forbids two multikey fields
+        // in one compound index, so the audience index stands alone
+        col('things').createIndex({ acl: 1, createdAt: -1, shareId: 1 }),
+        // One weighted wildcard text index powers /api/v1/things/search ranked
+        // text mode across every string field of every thing (a collection can
+        // hold at most ONE text index — this is it; wildcard is deliberate:
+        // data crystals hold arbitrary user keys, and searching them is the
+        // feature). The language_override name is honoured INSIDE embedded
+        // documents too (verified: a crystal key with the override name and an
+        // unsupported value fails the insert), so it must be a name no crystal
+        // can ever contain — ':' is outside the data-key grammar, making
+        // 'tt:textLanguage' unwritable through every sanitizer.
+        createIndexReplacing(
+          col('things'),
+          { '$**': 'text' },
+          {
+            name: 'things_text_search',
+            weights: { 'crystal.name': 10, 'crystal.text': 10, 'crystal.title': 8, 'crystal.listing.title': 8, tags: 6 },
+            default_language: 'english',
+            language_override: 'tt:textLanguage'
+          }
+        ),
+        // One reaction per (target, user, emoji token): makes toggle-on an
+        // idempotent upsert and dedups even under races. The partial filter
+        // requires a STRING targetId as well as crystal.emoji — reactions
+        // always attach to a target, while free-form data things (targetId
+        // null) may legitimately carry an `emoji` key and must never collide
+        // here (verified: the emoji-exists-only filter 409'd the second data
+        // thing sharing an emoji value).
+        createIndexReplacing(
+          col('things'),
+          { targetId: 1, ownerId: 1, 'crystal.emoji': 1 },
+          {
+            name: 'things_reaction_unique',
+            unique: true,
+            partialFilterExpression: { targetId: { $type: 'string' }, 'crystal.emoji': { $exists: true } }
+          },
+          ['targetId_1_ownerId_1_crystal.emoji_1']
+        ),
+        // Legacy relational era (kind:'reaction'/'comment' docs written by the
+        // pre-unification relational model): aggregation + dedup indexes stay
+        // until the things migration converts those docs to thingtime things.
+        col('things').createIndex({ kind: 1, parentId: 1, createdAt: 1 }),
+        col('things').createIndex(
+          { parentId: 1, ownerId: 1, token: 1 },
+          { unique: true, partialFilterExpression: { kind: 'reaction' } }
+        ),
+        col('things').createIndex(
+          { commentId: 1 },
+          { unique: true, partialFilterExpression: { kind: 'comment' } }
+        ),
+        // Embed apps ("Login with Thingtime", api/utils/apps): one thing per
+        // clientId, ever — a second doc claiming an existing clientId (however
+        // created) could answer origin lookups with a different allowlist, so
+        // uniqueness is structural. Only app things carry crystal.clientId;
+        // app-data things reference the app as crystal.appId instead.
+        col('things').createIndex(
+          { 'crystal.clientId': 1 },
+          { unique: true, partialFilterExpression: { 'crystal.clientId': { $exists: true } } }
+        ),
+        // App data: one thing per (user, app, key) — set() stays an idempotent
+        // insert-or-update under races, and the index serves list-by-(user, app).
+        col('things').createIndex(
+          { ownerId: 1, 'crystal.appId': 1, 'crystal.key': 1 },
+          {
+            unique: true,
+            partialFilterExpression: { 'crystal.appId': { $exists: true }, 'crystal.key': { $exists: true } }
+          }
+        ),
+        col('feedAlgorithms').createIndex({ shareId: 1 }, { unique: true }),
+        col('feedAlgorithms').createIndex({ ownerId: 1 }),
+        // global app settings singletons (rate-limit config lives here)
+        col('settings').createIndex({ key: 1 }, { unique: true }),
+        // general per-endpoint rate-limit windows; TTL reaps expired windows
+        col('rateLimits').createIndex({ key: 1 }, { unique: true }),
+        col('rateLimits').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
       ]);
     })().catch((err) => {
       // don't cache a failed run — let the next call retry

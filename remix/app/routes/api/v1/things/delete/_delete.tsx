@@ -11,7 +11,7 @@ export const action = async ({ request }: { request: Request }) => {
   }
 
   const body = await readJsonBody(request, 64 * 1024);
-  const result = await deletePost(user.id, body.id);
+  const result = await deletePost({ id: user.id, username: user.username }, body.id);
 
   if (result.ok === false) {
     return json({ ok: false, error: result.error }, { status: result.status });

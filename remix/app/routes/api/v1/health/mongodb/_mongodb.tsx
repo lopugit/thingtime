@@ -1,4 +1,5 @@
 import { json } from '~/api/http';
+import { safeErrorText } from '~/api/utils/errors/safeError';
 import { fetchRemoteJson, resolveStatusTarget } from '~/api/utils/health/statusTarget';
 import { getMongoStatus, type MongoConnectionStatus } from '~/api/utils/mongodb/status';
 
@@ -10,7 +11,7 @@ const unavailableMongoStatus = (error: unknown): MongoConnectionStatus => {
     pingMs: null,
     collections: null,
     checkedAt: new Date().toISOString(),
-    error: error instanceof Error ? error.message : String(error)
+    error: safeErrorText(error, 'health: remote mongodb status', 'Remote status unavailable')
   };
 };
 

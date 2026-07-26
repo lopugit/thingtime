@@ -56,6 +56,16 @@ export const thingtimeMinimumValues: any = {
         }
       },
       custom: {
+        editorjs: {
+          type: 'editorjs',
+          label: 'Editor.js',
+          icon: '📝',
+          lucide: 'file-text',
+          value: () => ({
+            kind: 'rich-text',
+            blocks: [{ type: 'paragraph', data: { text: '' } }]
+          })
+        },
         'Thingtime Logo': {
           type: 'chakra',
           value: {
@@ -432,7 +442,7 @@ const defaultValues = {
         direction: 'left'
       },
       toplevelitems: {
-        limit: 5
+        limit: 'unlimited'
       },
       searchClosesDrawer: true,
       userDrawerOrdering: {},

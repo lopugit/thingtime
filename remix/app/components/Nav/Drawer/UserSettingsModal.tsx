@@ -5,8 +5,9 @@ import localforage from 'localforage';
 import { useNavigate } from 'react-router';
 import { X } from 'lucide-react';
 
-import { UserAvatarCircle } from './DrawerContent';
-import { DRAWER_MODAL_OVERLAY_Z, DRAWER_MODAL_Z, useDrawer, useIsMobileViewport } from './useDrawer';
+import { DRAWER_MODAL_OVERLAY_Z, DRAWER_MODAL_Z, DRAWER_TOP_LEVEL_DEFAULT_LIMIT, useDrawer, useIsMobileViewport } from './useDrawer';
+import { drawerMenuItems, filterDrawerItemsByAuth } from './drawerMenu';
+import { AccountSwitcher } from '../../Account/AccountSwitcher';
 import { useLopu } from '../../Lopu/useLopu';
 import { ColorControl } from '../../ThemeSettings/controls';
 import { useThingtime } from '../../Thingtime/useThingtime';
@@ -61,8 +62,12 @@ export const UserSettingsModal = () => {
 		searchClosesDrawer,
 		setSearchClosesDrawer,
 		topLevelLimit,
+		topLevelLimitIsUnlimited,
 		setTopLevelLimit,
-		resetOrdering
+		setTopLevelLimitUnlimited,
+		resetOrdering,
+		closeOnClick,
+		setCloseOnClickFor
 	} = useDrawer();
 
 	const isMobile = useIsMobileViewport();
@@ -73,6 +78,15 @@ export const UserSettingsModal = () => {
 	const { theme, preset, hasOverrides, appliedThemeShareId, builtinThemes, setPreset, setColor, setGeneral, resetOverrides } =
 		useTtTheme();
 	const { thingtime, setThingtime } = useThingtime();
+	const topLevelLimitValue = typeof topLevelLimit === 'number' ? topLevelLimit : DRAWER_TOP_LEVEL_DEFAULT_LIMIT;
+
+	const lowerTopLevelLimit = () => {
+		setTopLevelLimit(topLevelLimitIsUnlimited ? DRAWER_TOP_LEVEL_DEFAULT_LIMIT : topLevelLimitValue - 1);
+	};
+
+	const raiseTopLevelLimit = () => {
+		setTopLevelLimit(topLevelLimitIsUnlimited ? DRAWER_TOP_LEVEL_DEFAULT_LIMIT : topLevelLimitValue + 1);
+	};
 
 	// two-frame mount so the open transition animates from the hidden state
 	const [visible, setVisible] = React.useState(false);
@@ -141,11 +155,20 @@ export const UserSettingsModal = () => {
 	}, [accountModalOpen]);
 
 	const handleLogout = React.useCallback(async () => {
+		let resp;
 		try {
-			await api.v1.auth.logout();
+			resp = await api.v1.auth.logout();
 		} catch (err) {
 			console.error('Logout failed', err);
 			lopu({ title: 'Logout failed', description: 'Please try again in a moment.', status: 'error' });
+			return;
+		}
+
+		// Switcher semantics: other signed-in accounts stay — the next one takes
+		// over and the modal stays open on it. Only a fully signed-out browser
+		// leaves for /login.
+		if (resp?.user) {
+			lopu({ title: `Logged out — switched to @${resp.user.username} ✨`, status: 'success', duration: 6000 });
 			return;
 		}
 
@@ -428,41 +451,21 @@ export const UserSettingsModal = () => {
 				</Center>
 			</Flex>
 
-			{/* account */}
+			{/* account — the switcher lists every signed-in account and hosts the
+			    add / register-new inline forms */}
 			<Flex flexDirection="column" rowGap={3}>
 				<Text fontSize="10px" fontWeight={600} letterSpacing="0.08em" textTransform="uppercase" opacity={0.45}>
 					Account
 				</Text>
-				<Flex alignItems="center" columnGap={3}>
-					<UserAvatarCircle size="44px" fontSize="md"></UserAvatarCircle>
-					<Box minWidth={0}>
-						<Text fontSize="sm" fontWeight={600} noOfLines={1}>
-							{user ? user.displayName || user.username : 'Not logged in'}
-						</Text>
-						{user && (
-							<Text fontSize="xs" opacity={0.6} noOfLines={1}>
-								@{user.username} · {user.email} {user.emailVerified ? '✅' : '· ✉️ unverified'}
-							</Text>
-						)}
-					</Box>
-				</Flex>
+				<AccountSwitcher onNavigate={close} />
 				<Flex columnGap={2} rowGap={2} flexWrap="wrap">
-					{user ? (
+					{user && (
 						<>
 							<Button size="xs" variant="outline" onClick={() => handleGoTo('/profile')}>
 								Profile 👤
 							</Button>
 							<Button size="xs" variant="outline" onClick={handleLogout}>
 								Log out 🗝️
-							</Button>
-						</>
-					) : (
-						<>
-							<Button size="xs" variant="outline" onClick={() => handleGoTo('/login')}>
-								Log in 🗝️
-							</Button>
-							<Button size="xs" variant="outline" onClick={() => handleGoTo('/register')}>
-								Register ➕
 							</Button>
 						</>
 					)}
@@ -635,15 +638,23 @@ export const UserSettingsModal = () => {
 
 				{settingRow(
 					'Top-level items',
-					<Flex alignItems="center" columnGap={2}>
-						<Button size="xs" variant="outline" onClick={() => setTopLevelLimit(topLevelLimit - 1)} isDisabled={topLevelLimit <= 1}>
+					<Flex alignItems="center" columnGap={2} rowGap={2} flexWrap="wrap" justifyContent="flex-end">
+						<Button
+							size="xs"
+							variant="outline"
+							onClick={lowerTopLevelLimit}
+							isDisabled={!topLevelLimitIsUnlimited && topLevelLimitValue <= 1}
+						>
 							−
 						</Button>
-						<Text width="20px" textAlign="center" fontSize="sm">
-							{topLevelLimit}
+						<Text minWidth="74px" textAlign="center" fontSize="sm">
+							{topLevelLimitIsUnlimited ? 'Unlimited' : topLevelLimit}
 						</Text>
-						<Button size="xs" variant="outline" onClick={() => setTopLevelLimit(topLevelLimit + 1)}>
+						<Button size="xs" variant="outline" onClick={raiseTopLevelLimit}>
 							+
+						</Button>
+						<Button size="xs" variant={topLevelLimitIsUnlimited ? 'solid' : 'outline'} onClick={setTopLevelLimitUnlimited}>
+							Unlimited
 						</Button>
 					</Flex>,
 					'How many items show before “More”'
@@ -656,6 +667,45 @@ export const UserSettingsModal = () => {
 					</Button>,
 					'Restore the default drag-reordered menu layout'
 				)}
+
+				{/* per-item dismiss: navigating items default ON; off keeps the
+				drawer open for that item (submenu browsing) */}
+				<Flex flexDirection="column" paddingY={2}>
+					<Text fontSize="sm">Close after click</Text>
+					<Text fontSize="xs" opacity={0.55}>
+						Which menu items close the drawer when clicked (desktop and mobile)
+					</Text>
+					<Flex flexDirection="column" paddingTop={2}>
+						{filterDrawerItemsByAuth(drawerMenuItems, !!user).map((top) => (
+							<React.Fragment key={top.id}>
+								<Flex alignItems="center" columnGap={4} paddingY={1}>
+									<Text fontSize="sm">
+										{top.icon} {top.label}
+									</Text>
+									<Switch
+										size="sm"
+										marginLeft="auto"
+										isChecked={closeOnClick?.[top.id] !== false}
+										onChange={(event) => setCloseOnClickFor(top.id, event.target.checked)}
+									></Switch>
+								</Flex>
+								{filterDrawerItemsByAuth(top.children || [], !!user).map((child) => (
+									<Flex key={child.id} alignItems="center" columnGap={4} paddingY={0.5} paddingLeft={4}>
+										<Text fontSize="xs" opacity={0.8}>
+											{child.icon} {child.label}
+										</Text>
+										<Switch
+											size="sm"
+											marginLeft="auto"
+											isChecked={closeOnClick?.[child.id] !== false}
+											onChange={(event) => setCloseOnClickFor(child.id, event.target.checked)}
+										></Switch>
+									</Flex>
+								))}
+							</React.Fragment>
+						))}
+					</Flex>
+				</Flex>
 			</Flex>
 
 			{/* theming */}

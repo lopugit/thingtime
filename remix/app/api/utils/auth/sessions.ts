@@ -1,15 +1,17 @@
 import { getSessionsCollection } from '../mongodb/collections';
+import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
 const THIRTY_DAYS_MS = 1000 * 60 * 60 * 24 * 30;
 
 export type SessionDoc = {
   jti: string;
   userId: string;
+  schemaVersion: number;
   createdAt: Date;
   expiresAt: Date | null;
   revokedAt: Date | null;
   type: 'tt.session';
-  purpose?: 'browser' | 'service';
+  purpose?: 'browser' | 'service' | 'app';
   meta?: Record<string, any>;
 };
 
@@ -29,6 +31,7 @@ export const createSession = async (
   const session: SessionDoc = {
     jti: crypto.randomUUID(),
     userId,
+    schemaVersion: COLLECTION_SCHEMA_VERSIONS.sessions,
     createdAt: now,
     expiresAt:
       options.expiresAt === undefined

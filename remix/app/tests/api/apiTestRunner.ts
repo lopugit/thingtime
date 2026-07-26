@@ -1,13 +1,16 @@
 export type ApiTestGroup =
+  | 'admin'
   | 'algorithms'
   | 'auth'
   | 'crypto'
   | 'docs'
+  | 'email'
   | 'health'
   | 'lopu'
   | 'mongodb'
   | 'profile'
   | 'root'
+  | 'schemas'
   | 'template'
   | 'themes'
   | 'things'
@@ -18,6 +21,19 @@ export type ApiTestResultStatus = 'pass' | 'fail';
 
 export type ApiTestContext = {
   origin: string;
+  // sanitized /api/v1/email/config payload — lets email tests respect the SES
+  // sandbox send rate (1 msg/sec) and target the configured test recipient
+  email?: {
+    provider: 'console' | 'ses' | string;
+    region: string;
+    configurationSetName: string | null;
+    transactionalFrom: string;
+    newsletterFrom: string;
+    sesSandbox: boolean;
+    sandboxSendDelayMs: number;
+    testRecipient: string;
+    testRecipientDomain: string;
+  };
 };
 
 export type ApiTestExpectation = (args: {
@@ -32,9 +48,12 @@ export type ApiTestDefinition = {
   name: string;
   description: string;
   group: ApiTestGroup;
-  method: 'GET' | 'POST';
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   path: string;
   mutates?: boolean;
+  // sends real email — the runner sleeps before these when the SES sandbox is
+  // active so the 1 msg/sec sandbox limit is respected
+  emailSend?: boolean;
   timeoutMs?: number;
   body?: unknown | ((context: ApiTestContext) => unknown);
   headers?: Record<string, string>;
@@ -57,6 +76,13 @@ export type ApiTestRunOptions = {
 
 export const resolveApiTestBody = (test: ApiTestDefinition, context: ApiTestContext) => {
   return typeof test.body === 'function' ? test.body(context) : test.body;
+};
+
+const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
+const getEmailSendDelayMs = (test: ApiTestDefinition, context: ApiTestContext) => {
+  if (!test.emailSend || !context.email?.sesSandbox) return 0;
+  return Math.max(1000, Number(context.email.sandboxSendDelayMs) || 0);
 };
 
 export const formatRequestPayload = (value: unknown) => {
@@ -179,6 +205,9 @@ export const runApiTest = async (
   const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
 
   try {
+    const delayMs = getEmailSendDelayMs(test, context);
+    if (delayMs) await sleep(delayMs);
+
     const body = options.hasBodyOverride ? options.bodyOverride : resolveApiTestBody(test, context);
     const response = await fetch(test.path, {
       method: test.method,

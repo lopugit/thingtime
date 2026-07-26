@@ -1,5 +1,7 @@
 import { ensureIndexes } from '../mongodb/collections';
+import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
+import { isEnvAdmin } from './admin';
 import { createEmailVerification } from './emailVerifications';
 import { sendVerificationEmail } from './email';
 import { signJwt } from './jwt';
@@ -20,7 +22,7 @@ export type RegisterInput = {
 
 export type RegisterResult =
   | { ok: false; status: number; error: string }
-  | { ok: true; user: PublicUser; jwt: string; verificationLink: string };
+  | { ok: true; user: PublicUser; jwt: string; jti: string; verificationLink: string };
 
 export type CreateUserAccountInput = {
   username: string;
@@ -41,6 +43,18 @@ export type CreateUserAccountResult =
 
 const isEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 
+// Privileged meta keys that must never be set at account creation (only via
+// their own admin-gated / authenticated endpoints).
+const PRIVILEGED_META_KEYS = ['admin'];
+
+// Drop privileged keys from any caller-supplied meta before it's persisted.
+const sanitizeCreateMeta = (meta: unknown): Record<string, any> => {
+  if (!meta || typeof meta !== 'object') return {};
+  const clean: Record<string, any> = { ...(meta as Record<string, any>) };
+  for (const key of PRIVILEGED_META_KEYS) delete clean[key];
+  return clean;
+};
+
 // Single insertion path for user accounts. Browser registration, service
 // account provisioning, and seeding share this validation + schema path.
 export const createUserAccount = async (input: CreateUserAccountInput): Promise<CreateUserAccountResult> => {
@@ -52,6 +66,16 @@ export const createUserAccount = async (input: CreateUserAccountInput): Promise<
   if (password.length < 6) return { ok: false, status: 400, error: 'Password must be at least 6 characters' };
   if (!isEmail(email)) return { ok: false, status: 400, error: 'A valid email is required' };
 
+  // Reserve env-allowlist admin usernames across EVERY creation path (register,
+  // service-account, seed) so no public route can mint an account whose
+  // username grants admin via ADMIN_USERNAMES — this is the single chokepoint,
+  // proof against future parallel creation paths. The username is already
+  // normalized (trim + lowercase), matching how isEnvAdmin + storage compare,
+  // and it catches slugified inputs from the service-account path too. Generic
+  // message avoids leaking which usernames are privileged. Bootstrap: create the
+  // admin account BEFORE adding it to ADMIN_USERNAMES.
+  if (isEnvAdmin(username)) return { ok: false, status: 409, error: 'Username already taken' };
+
   // ensure the collections + unique indexes exist (idempotent, API-side)
   await ensureIndexes();
 
@@ -59,17 +83,22 @@ export const createUserAccount = async (input: CreateUserAccountInput): Promise<
   if (await findUserByEmail(email)) return { ok: false, status: 409, error: 'Email already registered' };
 
   const now = new Date();
-  const userDoc: UserDoc = {
+  // UserDoc's type lives in users.ts; intersect the version stamp in here.
+  const userDoc: UserDoc & { schemaVersion: number } = {
     ttid: username,
     username,
     email,
     passwordHash: await hashPassword(password),
     displayName: input.displayName ?? null,
     emailVerified: input.emailVerified ?? false,
+    schemaVersion: COLLECTION_SCHEMA_VERSIONS.users,
     createdAt: now,
     updatedAt: now,
     accountKind: input.accountKind ?? 'user',
-    meta: input.meta ?? {}
+    // Defense-in-depth: privileged flags can never be set at creation time,
+    // even if a caller sneaks them into meta. `admin` is granted only via the
+    // admin-gated setUserAdmin (auth/admin.ts).
+    meta: sanitizeCreateMeta(input.meta)
   };
 
   if (input.emailVerificationRequiredBy !== undefined) {
@@ -82,9 +111,25 @@ export const createUserAccount = async (input: CreateUserAccountInput): Promise<
   try {
     user = await insertUser(userDoc);
   } catch (err: any) {
-    // a unique index caught a duplicate that raced past the checks above
+    // a unique index caught a duplicate that raced past the checks above —
+    // things-era collisions surface via uniqueKeys ('email:<hash>' or
+    // 'username:<name>'), legacy ones via the old per-field indexes
     if (err?.code === 11000) {
-      const field = err?.keyPattern?.email ? 'Email' : 'Username';
+      const kv = err?.keyValue?.uniqueKeys;
+      const uniqueKey = typeof kv === 'string' ? kv : kv?.buffer ? Buffer.from(kv.buffer).toString('utf8') : '';
+      // keyPattern.email is set for the legacy per-field index; uniqueKey carries
+      // an 'email:'/'username:' prefix for things-era hashed keys. When neither is
+      // decodable (mongos / older servers omit keyValue), DON'T default to
+      // Username — misreporting an email collision sends the user chasing new
+      // usernames that can never succeed. Re-check the DB to classify instead.
+      let field: 'Email' | 'Username';
+      if (err?.keyPattern?.email || uniqueKey.startsWith('email:')) {
+        field = 'Email';
+      } else if (err?.keyPattern?.username || uniqueKey.startsWith('username:')) {
+        field = 'Username';
+      } else {
+        field = (await findUserByEmail(email)) ? 'Email' : 'Username';
+      }
       return { ok: false, status: 409, error: `${field} already registered` };
     }
     throw err;
@@ -118,7 +163,10 @@ export const registerUser = async (input: RegisterInput): Promise<RegisterResult
   const verification = await createEmailVerification({ userId, email });
   const origin = input.origin || process.env.APP_URL || 'http://localhost:9999';
   const verificationLink = `${origin}/api/v1/auth/verify-email?token=${verification.token}`;
-  await sendVerificationEmail({ to: email, link: verificationLink });
+  // Fire-and-forget: a send failure (e.g. fail-closed SES outage) must not fail
+  // a registration whose user + session are already committed — the dev link is
+  // returned regardless and the user can resend from Settings.
+  void sendVerificationEmail({ to: email, link: verificationLink }).catch(() => {});
 
-  return { ok: true, user: toPublicUser(user), jwt, verificationLink };
+  return { ok: true, user: toPublicUser(user), jwt, jti: session.jti, verificationLink };
 };

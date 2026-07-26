@@ -1,6 +1,25 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
-import { ensureIndexes, getLopuMusingRateLimitsCollection, getWaitlistCollection } from '../mongodb/collections';
+import {
+  ensureIndexes,
+  getLopuMusingRateLimitsCollection,
+  getThingsCollection,
+  getWaitlistCollection
+} from '../mongodb/collections';
+import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
+import { toBin } from '../auth/users';
+
+// Waitlist entries are THINGS now (thingtime ['waitlist'], see claude-todo/12):
+// the crystal stays empty by design, the email lives ONLY under the root
+// `secure` field as BinData (the $** text index tokenizes every string field —
+// binary is invisible to it), and uniqueness rides a hashed uniqueKey. The key
+// is scoped with a 'waitlist-' prefix so joining the waitlist never collides
+// with the same address registered as an account (user things use
+// 'email:<hash>'). Entries are system-owned and owner-only (ownerId 'system',
+// acl ['tt:user']) so no viewer ever matches them through any read path.
+// Reads stay dual-era: pre-things signups live in the legacy `waitlist`
+// collection, which is frozen (nothing writes to it anymore) but still
+// consulted so a legacy email never mints a second entry.
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const JOINS_PER_IP_PER_HOUR = 20;
@@ -28,7 +47,14 @@ const consumeJoinQuota = async (request: Request) => {
     const collection = await getLopuMusingRateLimitsCollection();
     const doc = await collection.findOneAndUpdate(
       { key, expiresAt: { $gt: now } },
-      { $inc: { count: 1 }, $setOnInsert: { key, expiresAt: new Date(now.getTime() + WINDOW_MS) } },
+      {
+        $inc: { count: 1 },
+        $setOnInsert: {
+          key,
+          expiresAt: new Date(now.getTime() + WINDOW_MS),
+          schemaVersion: COLLECTION_SCHEMA_VERSIONS.lopuMusingRateLimits
+        }
+      },
       { upsert: true, returnDocument: 'after' }
     );
     const count = doc?.count ?? doc?.value?.count ?? 1;
@@ -42,8 +68,16 @@ const consumeJoinQuota = async (request: Request) => {
 
 type JoinResult = { ok: false; status: number; error: string } | { ok: true };
 
-// Join the launch waitlist. Idempotent per email (unique index); the response
-// deliberately doesn't reveal whether an email was already on the list.
+// hashed like auth/users' userEmailKey AND BinData (auth/users' canonical
+// toBin) like every uniqueKey — plain-string keys would tokenize into the text
+// index and make the entries enumerable via their prefix token. Exported so
+// the waitlist-to-things admin migration mints byte-identical keys.
+export const waitlistEmailKey = (email: string) =>
+  toBin(`waitlist-email:${createHash('sha256').update(email.trim().toLowerCase()).digest('hex')}`);
+
+// Join the launch waitlist. Idempotent per email (unique uniqueKeys index +
+// frozen legacy collection check); the response deliberately doesn't reveal
+// whether an email was already on the list.
 export const joinWaitlist = async (request: Request, input: { email?: unknown }): Promise<JoinResult> => {
   const email = typeof input.email === 'string' ? input.email.trim().toLowerCase().slice(0, 254) : '';
   if (!email || !EMAIL_RE.test(email)) {
@@ -55,9 +89,36 @@ export const joinWaitlist = async (request: Request, input: { email?: unknown })
   }
 
   await ensureIndexes();
-  const waitlist = await getWaitlistCollection();
+
+  // dual-era dedupe: emails that joined before the things era live in the
+  // legacy waitlist collection (indexed { email: 1 } lookup) — never mint a
+  // second, things-era entry for them. Check-then-insert is race-safe here
+  // because legacy is frozen: a concurrent join can only race on the things
+  // uniqueKeys index, which the 11000 catch below already treats as success.
+  const legacy = await getWaitlistCollection();
+  if (await legacy.findOne({ email })) {
+    return { ok: true };
+  }
+
+  const things = await getThingsCollection();
+  const now = new Date();
   try {
-    await waitlist.insertOne({ email, createdAt: new Date() });
+    await things.insertOne({
+      shareId: randomUUID(),
+      schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+      thingtime: ['waitlist'],
+      crystal: {},
+      // system-owned + owner-only: 'system' is never minted as a real user id,
+      // so no viewer matches these through list/search/share paths
+      ownerId: 'system',
+      acl: [ACL_OWNER],
+      targetId: null,
+      tags: [],
+      uniqueKeys: [waitlistEmailKey(email)],
+      secure: { email: toBin(email) },
+      createdAt: now,
+      updatedAt: now
+    } as any);
     return { ok: true };
   } catch (error: any) {
     if (error?.code === 11000) {

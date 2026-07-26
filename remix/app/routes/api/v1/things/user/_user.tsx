@@ -10,7 +10,7 @@ export const loader = async ({ request }: { request: Request }) => {
   const params = new URL(request.url).searchParams;
 
   const result = await listUserPosts(
-    user ? user.id : null,
+    user ? { id: user.id, username: user.username } : null,
     params.get('username') || '',
     params.get('cursor'),
     Number(params.get('limit')) || undefined
