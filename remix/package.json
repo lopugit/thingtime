@@ -20,6 +20,7 @@
     "patch:vercel-output": "node scripts/patch-vercel-output.mjs",
     "preview": "node .output/server/index.mjs",
     "sync:nitro-template": "node scripts/sync-nitro-template.mjs",
+    "test:acl": "node --test app/api/utils/things/aclChainCore.test.ts",
     "test:autosave": "node --test app/Providers/*.test.ts",
     "test:editorjs": "node --test app/components/Editor/*.test.ts app/components/Kinds/*.test.ts",
     "test:quota": "node --test app/api/utils/things/quotaCore.test.ts",
