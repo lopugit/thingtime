@@ -1,6 +1,8 @@
 // @ts-ignore Node 24's direct TypeScript test runner requires the extension.
 import { safeErrorText } from '../errors/safeError.ts';
 // @ts-ignore Node 24's direct TypeScript test runner requires the extension.
+import { isKnownCollection, physicalCollectionName } from './collectionNames.ts';
+// @ts-ignore Node 24's direct TypeScript test runner requires the extension.
 import {
   MONGO_BLOCKED_QUERY_KEYS,
   MONGO_BSON_VALUE_TYPES,
@@ -614,6 +616,56 @@ export const hardenThingsQuery = (query: NormalizedMongoQuery): NormalizedMongoQ
   }
 
   return { ...query, pipeline, projection };
+};
+
+// The whole validation layer above (allowlists, sensitivity checks,
+// stripThingsIngress) speaks LOGICAL collection names — the client-facing
+// vocabulary. Physical collections are versioned (things → things_v2, see
+// collectionNames.ts), so the last step before execution maps every join
+// target in the validated pipeline onto its current physical name. Recursion
+// mirrors stripThingsIngress: $lookup/$unionWith sub-pipelines and $facet
+// branches; $graphLookup carries a from but no sub-pipeline. Unknown strings
+// are left untouched — validation has already rejected anything outside the
+// allowlist, so this never invents a collection.
+export const resolvePipelineCollections = (stages: unknown): Record<string, unknown>[] => {
+  const resolve = (name: unknown) =>
+    typeof name === 'string' && isKnownCollection(name) ? physicalCollectionName(name) : name;
+  const output: Record<string, unknown>[] = [];
+  for (const stage of Array.isArray(stages) ? stages : []) {
+    if (!stage || typeof stage !== 'object') continue;
+    const entry = { ...(stage as Record<string, unknown>) };
+    if (entry.$lookup && typeof entry.$lookup === 'object') {
+      const lookup = { ...(entry.$lookup as Record<string, unknown>) };
+      if (lookup.from !== undefined) lookup.from = resolve(lookup.from);
+      if (Array.isArray(lookup.pipeline)) lookup.pipeline = resolvePipelineCollections(lookup.pipeline);
+      entry.$lookup = lookup;
+    }
+    if (entry.$graphLookup && typeof entry.$graphLookup === 'object') {
+      const graph = { ...(entry.$graphLookup as Record<string, unknown>) };
+      if (graph.from !== undefined) graph.from = resolve(graph.from);
+      entry.$graphLookup = graph;
+    }
+    if (entry.$unionWith !== undefined) {
+      const union = entry.$unionWith;
+      if (typeof union === 'string') {
+        entry.$unionWith = resolve(union);
+      } else if (union && typeof union === 'object') {
+        const copy = { ...(union as Record<string, unknown>) };
+        if (copy.coll !== undefined) copy.coll = resolve(copy.coll);
+        if (Array.isArray(copy.pipeline)) copy.pipeline = resolvePipelineCollections(copy.pipeline);
+        entry.$unionWith = copy;
+      }
+    }
+    if (entry.$facet && typeof entry.$facet === 'object') {
+      const facet: Record<string, unknown> = {};
+      for (const [key, sub] of Object.entries(entry.$facet as Record<string, unknown>)) {
+        facet[key] = resolvePipelineCollections(sub);
+      }
+      entry.$facet = facet;
+    }
+    output.push(entry);
+  }
+  return output;
 };
 
 export const safeMongoError = (error: unknown) => {
