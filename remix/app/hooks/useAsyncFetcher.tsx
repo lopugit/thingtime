@@ -7,7 +7,7 @@ export function useAsyncFetcher() {
   });
 
   const submit = useCallback(
-    async (data, opts: { action: string; method?: string; encType?: string }) => {
+    async (data, opts: { action: string; method?: string; encType?: string; signal?: AbortSignal }) => {
       const nextOpts = { ...defaultOpts, ...opts };
       const headers = new Headers();
       let body: BodyInit | undefined;
@@ -29,7 +29,8 @@ export function useAsyncFetcher() {
         method: nextOpts.method || 'POST',
         credentials: 'include',
         headers,
-        body
+        body,
+        signal: nextOpts.signal
       });
       const contentType = response.headers.get('Content-Type') || '';
       const payload = contentType.includes('application/json')

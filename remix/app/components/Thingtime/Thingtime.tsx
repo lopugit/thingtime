@@ -6,7 +6,11 @@ import { Box, Center, Flex, Input, Select, Spinner, Switch, Textarea } from '@ch
 import { CommanderV1 } from '../Commander/CommanderV1Deprecated';
 import { CommanderV2 } from '../Commander/CommanderV2';
 // import { Magic } from "../Commander/Magic"
+import { blocksToText, getEditorJsDoc, LongTextEditor, textToBlocks } from '../Editor/LongTextEditor';
+import { EDITOR_JS_AUTO_DETECT_LIMITS, isEditorJsDocSafeToEdit } from '../Editor/editorJsValue';
 import { Icon } from '../Icon/Icon';
+import { RichTextBlocks } from '../Kinds/kindRenderersMedia';
+import { useLopu } from '../Lopu/useLopu';
 import { MagicInput } from '../MagicInput/MagicInput';
 import { Safe } from '../Safety/Safe';
 import { ThingContextMenuTrigger } from './ContextMenu/ThingContextMenuTrigger';
@@ -26,6 +30,12 @@ type ThingtimeProps = {
 // Context rather than props so children mounting in the same commit as the
 // cascade update read the fresh value, not a memoized element's stale prop.
 const CollapseCascadeContext = React.createContext<boolean | null>(null);
+
+// Verbose per-node render/effect logging — off by default. The tree now mounts
+// at feed scale (one per thingtime post via ThingView), so unconditional logs
+// would flood the console and retain rendered payloads in memory for the whole
+// session. Flip to true only for local debugging.
+const TT_DEBUG = false;
 
 const numberStepButtonStyles = {
 	alignItems: 'center',
@@ -48,7 +58,9 @@ const numberStepButtonStyles = {
 // Number editor: light rounded input with − / + steppers (the design-mockup
 // pattern), replacing the heavy bordered Chakra NumberInput. Keeps a local
 // draft so partial input ('-', '1.', '') doesn't fight the committed value.
-const NumberValueInput = (props: { value: number; onValueChange: (value: number) => void }) => {
+// Exported so the concept viewers (components/Thingtime/concepts) reuse the
+// exact same number editor as the live tree.
+export const NumberValueInput = (props: { value: number; onValueChange: (value: number) => void }) => {
 	const { value, onValueChange } = props;
 
 	const [draft, setDraft] = React.useState(String(value ?? 0));
@@ -163,6 +175,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	// up to 1 level deep
 
 	const { append } = useThings();
+	const lopu = useLopu();
 
 	const { thingtime, setThingtime, getThingtime, loading, events } = useThingtime();
 
@@ -197,7 +210,17 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		return typeof props?.depth === 'number' ? props?.depth : 0;
 	}, [props?.depth]);
 
-	const [editMode, setEditMode] = React.useState(props?.edit === true ? true : false);
+	const [editModeState, setEditMode] = React.useState(props?.edit === true ? true : false);
+
+	// Untrusted trees (other users' things mounted read-only in feeds / search /
+	// profiles) must NEVER reach the raw editor: LongTextEditor's Editor.js renders
+	// stored block data via innerHTML WITHOUT re-sanitizing, so an attacker's post
+	// could execute script once a viewer toggled edit on a nested leaf. Pin editMode
+	// false whenever untrusted so no toggle path (context menu, corner toggle, or a
+	// props.edit sync) can mount the editor for content we don't trust — untrusted
+	// content then only ever renders through the sanitizing read path. Trusted trees
+	// are unchanged (editMode === editModeState).
+	const editMode = props?.untrusted ? false : editModeState;
 
 	// {} code view: same tree, more developer chrome (type icons, key counts,
 	// [n] array indices, boolean pills). Propagates to children.
@@ -315,11 +338,14 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	const fullPath = React.useMemo(() => {
 		const fullPathReturn = safeSplit(props?.fullPath || props?.path?.key || props?.path);
 
-		console.log('[tt] fullPathReturn', fullPathReturn);
+		if (TT_DEBUG) console.log('[tt] fullPathReturn', fullPathReturn);
 
-		// store this thing in the global db
-		// Massive security leak issue
-		if (!safeEmbed) {
+		// store this thing in the global db — NEVER for untrusted (other users')
+		// trees: this page-global would otherwise collect hostile feed payloads
+		// (the "Massive security leak" the code already flags), and every feed
+		// ThingView would clobber the same keys. Embed-SDK mounts (safeEmbed) live
+		// on third-party pages, so they never touch the page global either.
+		if (!safeEmbed && !props?.untrusted) {
 			try {
 				window.meta.things[safeJoin(fullPathReturn)] = props?.thing;
 			} catch {
@@ -328,7 +354,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		}
 
 		return fullPathReturn;
-	}, [safeJoin(props?.fullPath), safeJoin(props?.path), safeJoin(props?.path?.key), props?.thing]);
+	}, [safeJoin(props?.fullPath), safeJoin(props?.path), safeJoin(props?.path?.key), props?.thing, props?.untrusted, safeEmbed]);
 
 	// TODO
 	// attempt at making seedling button work with <Thingtime path argument only
@@ -357,14 +383,28 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		// }
 	}, [getThingtime, props?.thing, safeJoin(props?.path), uuid, childrenRef.current]);
 
+	// Editor.js is a persisted datatype, not a transient decision based on
+	// string length/focus. JSON-stringified Editor.js output is recognised for
+	// clipboard/API compatibility and promoted to the native shape on edit.
+	const editorJsDoc = React.useMemo(() => getEditorJsDoc(thing), [thing]);
+
 	const chakra = React.useMemo(() => {
-		return !safeEmbed && !editMode && typeof thing?.chakra === 'string' && thing?.chakra;
-	}, [thing?.chakra, editMode, safeEmbed]);
+		// untrusted trees (other users' things mounted in feeds/search via
+		// ThingView) must never reach the chakra path — it spreads thing.props
+		// verbatim into Chakra components, which is only safe for data the
+		// viewer authored themselves. Embed-SDK mounts (safeEmbed) render
+		// JSON-only on third-party pages, so they are excluded for the same reason.
+		if (safeEmbed || props?.untrusted) {
+			return false;
+		}
+
+		return !editMode && typeof thing?.chakra === 'string' && thing?.chakra;
+	}, [thing?.chakra, editMode, props?.untrusted, safeEmbed]);
 
 	const parentPath = React.useMemo(() => {
 		const parentPath = fullPath?.slice(0, -1);
 
-		console.log('[tt] parentPath', parentPath);
+		if (TT_DEBUG) console.log('[tt] parentPath', parentPath);
 
 		if (!parentPath) {
 			return 'thingtime';
@@ -378,7 +418,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	}, [parentPath, getThingtime]);
 
 	React.useEffect(() => {
-		console.log('[tt][useEffect][thingtime, props?.fullPath, childrenRef] props?.fullPath', props?.fullPath);
+		if (TT_DEBUG) console.log('[tt][useEffect][thingtime, props?.fullPath, childrenRef] props?.fullPath', props?.fullPath);
 		createDependancies();
 	}, [thingtime, safeJoin(props?.fullPath), childrenRef]);
 
@@ -409,6 +449,10 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	}, []);
 
 	const keys = React.useMemo(() => {
+		if (editorJsDoc) {
+			return [];
+		}
+
 		if (validKeyTypes?.includes(typeof thing)) {
 			try {
 				const keysRet = Object.keys(thing);
@@ -419,7 +463,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		} else {
 			return [];
 		}
-	}, [thing, thingDep, validKeyTypes]);
+	}, [thing, thingDep, validKeyTypes, editorJsDoc]);
 
 	const type = React.useMemo(() => {
 		if (thing === null) {
@@ -431,7 +475,13 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 
 	const typeIcon = React.useMemo(() => {
 		const size = 7;
-		if (thing instanceof Array) {
+		if (editorJsDoc) {
+			return (
+				<Box as="span" aria-label="Editor.js" fontSize="18px" lineHeight="1">
+					📝
+				</Box>
+			);
+		} else if (thing instanceof Array) {
 			return <Icon name="array" size={size}></Icon>;
 		} else if (type === 'object') {
 			return <Icon name="object" size={size}></Icon>;
@@ -446,7 +496,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		} else {
 			return <Icon name="box" size={size}></Icon>;
 		}
-	}, [type, thing]);
+	}, [type, thing, editorJsDoc]);
 
 	const valuePl = React.useMemo(() => {
 		if (typeof props?.valuePl === 'number') {
@@ -553,59 +603,6 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		return typeof thing === 'object' && thing !== null;
 	}, [chakraChild, chakra, circular, keysToUse, thing]);
 
-	React.useEffect(() => {
-		if (!hasCollapsibleChildren && isCollapsed) {
-			setIsCollapsed(false);
-		}
-	}, [hasCollapsibleChildren, isCollapsed]);
-
-	// context-menu View verbs. The -all variants broadcast over the events bus;
-	// this node hears its own event too (delivery is synchronous), and every
-	// mounted node in the same scope whose path matches collapses/expands
-	const applyCollapse = React.useCallback(
-		(command: 'collapse' | 'expand' | 'collapse-all' | 'expand-all') => {
-			if (command === 'collapse' || command === 'expand') {
-				setIsCollapsed(command === 'collapse');
-				return;
-			}
-
-			events.next({
-				type: 'thingtime-collapse',
-				scope: collapseScope,
-				path: safeJoin(fullPath),
-				collapsed: command === 'collapse-all'
-			});
-		},
-		[events, collapseScope, safeJoin(fullPath)]
-	);
-
-	React.useEffect(() => {
-		const self = safeJoin(fullPath);
-
-		const subscription = events.subscribe((event: any) => {
-			if (event?.type !== 'thingtime-collapse' || event.scope !== collapseScope) {
-				return;
-			}
-
-			const target = typeof event.path === 'string' ? event.path : '';
-
-			if (self !== target && !(target && self.startsWith(`${target}.`))) {
-				return;
-			}
-
-			// mount default for children rendered later + live state now
-			setChildrenDefaultCollapsed(!!event.collapsed);
-
-			if (hasCollapsibleChildren) {
-				setIsCollapsed(!!event.collapsed);
-			}
-		});
-
-		return () => {
-			subscription?.unsubscribe?.();
-		};
-	}, [events, collapseScope, safeJoin(fullPath), hasCollapsibleChildren]);
-
 	// if Thingtime object has "exec" then execute and set thing to returned data
 	React.useEffect(() => {
 		if (safeEmbed) return;
@@ -627,7 +624,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	const AtomicWrapper = React.useCallback((args) => {
 		return (
 			<Flex
-				className="atomic-wrapper"
+				className={['atomic-wrapper', args?.className].filter(Boolean).join(' ')}
 				position="relative"
 				flexDirection="row"
 				flexShrink={1}
@@ -730,6 +727,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 								edit={editMode}
 								codeView={codeView}
 								render={render}
+								untrusted={props?.untrusted}
 								circular={seen?.includes?.(nextThing)}
 								depth={depth + 1}
 								parent={thing}
@@ -797,15 +795,21 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		chakra,
 		safeEmbed,
 		collapseScope,
-		props?.pathPl
+		props?.pathPl,
+		props?.untrusted
 	]);
 
 	React.useEffect(() => {
+		if (editorJsDoc) {
+			setThingtimeChildren(null);
+			return;
+		}
+
 		if (type === 'object' && !circular) {
 			if (chakra) {
 				const ChakraComponent = Chakras[chakra];
 
-				console.log('Thingtime is chakra', fullPath, chakra);
+				if (TT_DEBUG) console.log('Thingtime is chakra', fullPath, chakra);
 
 				const rawChildren = thing?.rawChildren;
 
@@ -844,9 +848,11 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 							VOID_ELEMENTS.includes(ChakraComponent?.render?.displayName) ||
 							VOID_ELEMENTS.includes(ChakraComponent?.displayName);
 
-						console.log('Thingtime found ChakraComponent', fullPath, ChakraComponent);
-						console.log('Thingtime found thing?.props', fullPath, thing?.props);
-						console.log('Thingtime found isVoid', isVoid, ChakraComponent);
+						if (TT_DEBUG) {
+							console.log('Thingtime found ChakraComponent', fullPath, ChakraComponent);
+							console.log('Thingtime found thing?.props', fullPath, thing?.props);
+							console.log('Thingtime found isVoid', isVoid, ChakraComponent);
+						}
 
 						const ret = isVoid ? (
 							<ChakraComponent {...(thing?.props || {})}></ChakraComponent>
@@ -910,6 +916,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		depth,
 		thing,
 		thingDep,
+		editorJsDoc,
 		valuePl,
 		pl
 	]);
@@ -932,6 +939,71 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	const onChangeType = React.useCallback(
 		(args) => {
 			const { type, wrap } = args;
+			const typeKey = String(type?.key || '').toLowerCase();
+			const currentTypeKey = editorJsDoc
+				? 'editorjs'
+				: thing instanceof Array
+					? 'array'
+					: thing === null || thing === undefined
+						? 'any'
+						: typeof thing;
+
+			if (typeKey === currentTypeKey) return;
+
+			if (typeKey === 'editorjs') {
+				let source = '';
+				// empty containers convert to a BLANK document (placeholder showing),
+				// not a paragraph containing the literal "{}" / "[]"
+				const isEmptyContainer =
+					thing !== null &&
+					typeof thing === 'object' &&
+					(thing instanceof Array ? thing.length === 0 : Object.keys(thing).length === 0);
+				if (typeof thing === 'string') {
+					source = thing;
+				} else if (thing !== null && thing !== undefined && !isEmptyContainer) {
+					try {
+						source = JSON.stringify(thing, null, 2) ?? String(thing);
+					} catch {
+						source = String(thing);
+					}
+				}
+				if (source.length > EDITOR_JS_AUTO_DETECT_LIMITS.sourceLength) {
+					lopu({
+						title: 'Kept the value as-is',
+						description: 'This value is too large to convert into an Editor.js document safely.',
+						status: 'error'
+					});
+					return;
+				}
+
+				const next = editorJsDoc
+					? { ...editorJsDoc, kind: 'rich-text' }
+					: { kind: 'rich-text', blocks: textToBlocks(source) };
+				if (!isEditorJsDocSafeToEdit(next)) {
+					lopu({
+						title: 'Kept the value as-is',
+						description: 'This value would create an Editor.js document that is too large or deeply nested to edit safely.',
+						status: 'error'
+					});
+					return;
+				}
+				updateValue({ value: next });
+				return;
+			}
+
+			if (typeKey === 'string' && editorJsDoc) {
+				if (!isEditorJsDocSafeToEdit(editorJsDoc)) {
+					lopu({
+						title: 'Kept the Editor.js document intact',
+						description: 'This document is too large or deeply nested to flatten safely. Nothing was changed.',
+						status: 'error'
+					});
+					return;
+				}
+				updateValue({ value: blocksToText(editorJsDoc.blocks) });
+				return;
+			}
+
 			const typeValue = typeof type?.value === 'function' ? type?.value() : type?.value;
 
 			if (type) {
@@ -950,7 +1022,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 				}
 			}
 		},
-		[updateValue, thing, append, safeJoin(fullPath)]
+		[updateValue, thing, editorJsDoc, append, safeJoin(fullPath), lopu]
 	);
 
 	const onWrapType = React.useCallback(
@@ -985,16 +1057,33 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 
 	const atomicValue = React.useMemo(() => {
 		const debug: any = {};
-		console.log('[tt][Thingtime.tsx][atomicValue][debug]', debug);
-		// log renderableValue
-		console.log('renderableValue', props?.debugId, renderableValue);
+		if (TT_DEBUG) {
+			console.log('[tt][Thingtime.tsx][atomicValue][debug]', debug);
+			// log renderableValue
+			console.log('renderableValue', props?.debugId, renderableValue);
+		}
+		if (editorJsDoc) {
+			debug.editorJs = true;
+			return (
+				<AtomicWrapper paddingLeft={pl} className="editorjs-atomic-wrapper">
+					{editMode ? (
+						<LongTextEditor value={editorJsDoc} onValueChange={(next) => updateValue({ value: next })} />
+					) : (
+						<Box width="100%" minWidth={0} paddingY={2}>
+							<RichTextBlocks blocks={editorJsDoc.blocks} />
+						</Box>
+					)}
+				</AtomicWrapper>
+			);
+		}
+
 		if (renderableValue === null) {
 			debug.noRenderableValue = true;
 			return null;
 		}
 
 		if (editMode) {
-			console.log('[tt] atomicVaulue type', type);
+			if (TT_DEBUG) console.log('[tt] atomicVaulue type', type);
 			if (type === 'boolean') {
 				debug.boolean = true;
 				return (
@@ -1027,6 +1116,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 
 			if (type === 'string') {
 				debug.string = true;
+
 				return (
 					<AtomicWrapper paddingLeft={pl} className="string-atomic-wrapper">
 						<MagicInput value={thing} placeholder="Imagine.." onValueChange={updateValue}></MagicInput>
@@ -1073,7 +1163,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 				{renderableValue}
 			</AtomicWrapper>
 		);
-	}, [renderableValue, pl, type, safeJoin(fullPath), uuid, AtomicWrapper, editMode, thing, thingDep, updateValue]);
+	}, [renderableValue, editorJsDoc, pl, type, safeJoin(fullPath), uuid, AtomicWrapper, editMode, thing, thingDep, updateValue]);
 
 	const contextMenu = (
 		<Flex position="absolute" top={0} right={0} paddingRight={4} userSelect="none">
@@ -1117,11 +1207,26 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 			if (typeof args?.value === 'string') {
 				try {
 					const parentKeys = Object.keys(parent);
+					// the parent holds this thing under the path's LAST segment — a
+					// root mounted at a dotted path (an editor window on
+					// tmp.<session>.New Thing) must match 'New Thing', not the full
+					// dotted string, or the rename silently no-ops
+					const currentKey = safeSplit(path).pop?.() ?? path;
+
+					// paths are dot-joined strings, so a key containing '.' is
+					// unaddressable — it would store as one literal key but every
+					// string binding (editor windows, the composer draft) would
+					// resolve it as two segments and go blank. Refuse the rename;
+					// also skip when this binding is already stale (key not in
+					// parent) so no rewrite or rename event fires for a no-op.
+					if (args.value.includes('.') || !parentKeys.includes(currentKey)) {
+						return;
+					}
 					// create new object with new key order
 					const newObject = {};
 
 					parentKeys.forEach((key) => {
-						if (key === path) {
+						if (key === currentKey) {
 							newObject[args.value] = parent[key];
 							return;
 						}
@@ -1131,6 +1236,15 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 					// set new object
 					setThingtime(parentPath, newObject, {
 						namespace: thingtimeMachineNamespace
+					});
+
+					// anything bound to this path by STRING (editor windows, the
+					// composer's draft binding) must follow the rename or it points
+					// at a key that no longer exists — announce it on the bus
+					events?.next?.({
+						type: 'path-renamed',
+						from: safeJoin(fullPath),
+						to: safeJoin([...safeSplit(parentPath), args.value])
 					});
 
 					if (!thingtimeRef?.current) {
@@ -1161,7 +1275,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 				}
 			}
 		},
-		[parent, path, parentPath, setThingtime]
+		[parent, path, parentPath, setThingtime, fullPath, events]
 	);
 
 	const pathRef = React.useRef(null);
@@ -1169,6 +1283,13 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	const pathDom = React.useMemo(() => {
 		if (chakraChild) {
 			return <></>;
+		}
+
+		// composer draft roots hide their key ("New Thing") — the value IS the
+		// editor; the hover/hold context trigger still renders (see the
+		// hideRootPath gate on the thingPathDom actions row below)
+		if (props?.hideRootPath) {
+			return null;
 		}
 
 		if (renderedPath) {
@@ -1192,7 +1313,81 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 				</>
 			);
 		}
-	}, [renderedPath, pl, chakraChild, editMode, props?.pathPl]);
+		// updatePath MUST be a dep: it closes over `parent`, which is undefined on
+		// a root's first render when the store seeds after mount (the composer's
+		// draft). Pinning the mount-time closure makes every later rename throw.
+	}, [renderedPath, pl, chakraChild, editMode, props?.pathPl, props?.hideRootPath, updatePath]);
+
+	// Leaf values can collapse to their property path just like nested things
+	// collapse to their path + summary badge. A path is required so a root-level
+	// atomic Thing can never collapse into a completely blank row.
+	const hasCollapsibleAtomicValue = Boolean(
+		renderedPath &&
+			!chakraChild &&
+			!chakra &&
+			!circular &&
+			!props?.children &&
+			(thing === null || typeof thing !== 'object')
+	);
+	const hasCollapsibleContent = hasCollapsibleChildren || hasCollapsibleAtomicValue;
+	// Render from the derived capability as well as state. This avoids a blank
+	// frame when an inherited collapse-all reaches a pathless/non-collapsible
+	// value before the cleanup effect resets its stale collapse state.
+	const isContentCollapsed = isCollapsed && hasCollapsibleContent;
+	const collapseActionLabel = `${isContentCollapsed ? 'Expand' : 'Collapse'} ${renderedPath || safeJoin(fullPath)}`.trim();
+
+	React.useEffect(() => {
+		if (!hasCollapsibleContent && isCollapsed) {
+			setIsCollapsed(false);
+		}
+	}, [hasCollapsibleContent, isCollapsed]);
+
+	// context-menu View verbs. The -all variants broadcast over the events bus;
+	// this node hears its own event too (delivery is synchronous), and every
+	// mounted node in the same scope whose path matches collapses/expands
+	const applyCollapse = React.useCallback(
+		(command: 'collapse' | 'expand' | 'collapse-all' | 'expand-all') => {
+			if (command === 'collapse' || command === 'expand') {
+				setIsCollapsed(command === 'collapse');
+				return;
+			}
+
+			events.next({
+				type: 'thingtime-collapse',
+				scope: collapseScope,
+				path: safeJoin(fullPath),
+				collapsed: command === 'collapse-all'
+			});
+		},
+		[events, collapseScope, safeJoin(fullPath)]
+	);
+
+	React.useEffect(() => {
+		const self = safeJoin(fullPath);
+
+		const subscription = events.subscribe((event: any) => {
+			if (event?.type !== 'thingtime-collapse' || event.scope !== collapseScope) {
+				return;
+			}
+
+			const target = typeof event.path === 'string' ? event.path : '';
+
+			if (self !== target && !(target && self.startsWith(`${target}.`))) {
+				return;
+			}
+
+			// mount default for children rendered later + live state now
+			setChildrenDefaultCollapsed(!!event.collapsed);
+
+			if (hasCollapsibleContent) {
+				setIsCollapsed(!!event.collapsed);
+			}
+		});
+
+		return () => {
+			subscription?.unsubscribe?.();
+		};
+	}, [events, collapseScope, safeJoin(fullPath), hasCollapsibleContent]);
 
 	const handleMouseEvent = React.useCallback(
 		(e) => {
@@ -1255,25 +1450,26 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 
 	// should be absolute last
 	React.useEffect(() => {
-		if (!safeEmbed) {
-			try {
-				window.meta.things[uuid] = {
-					thing: props?.thing,
-					props,
-					state: {
-						chakra,
-						chakraChild,
-						circular,
-						depth,
-						fullPath,
-						parent,
-						parentPath,
-						path
-					}
-				};
-			} catch {
-				// nothing
-			}
+		// never register untrusted (other users') trees, or embed-SDK mounts living
+		// on a third-party page, in this page global
+		if (safeEmbed || props?.untrusted) return;
+		try {
+			window.meta.things[uuid] = {
+				thing: props?.thing,
+				props,
+				state: {
+					chakra,
+					chakraChild,
+					circular,
+					depth,
+					fullPath,
+					parent,
+					parentPath,
+					path
+				}
+			};
+		} catch {
+			// nothing
 		}
 	}, [thing, props, uuid, chakra, chakraChild, circular, depth, safeEmbed, safeJoin(fullPath), parent, parentPath, path]);
 
@@ -1298,7 +1494,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 				onMouseLeave={handleMouseEvent}
 				{...(props.chakras || {})}
 				className={`thing uuid-${uuid} edit-${editMode ? 'true' : 'false'}`}
-				data-path={props?.path}
+				data-path={typeof props?.path === 'string' ? props.path : props?.path?.key || undefined}
 			>
 				{/* {uuid?.current} */}
 				{!chakraChild && !chakra && (
@@ -1315,7 +1511,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 							<Flex className="thingPathDom-raw" data-tt-zone="key">
 								{pathDom}
 							</Flex>
-							{(editMode || codeView) && (
+							{(editMode || codeView) && !props?.hideRootPath && (
 								<Box
 									className="thingTypeIcon"
 									// marginTop={-3}
@@ -1327,7 +1523,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 									{typeIcon}
 								</Box>
 							)}
-							{codeView && hasCollapsibleChildren && !isCollapsed && (
+							{codeView && hasCollapsibleChildren && !isContentCollapsed && (
 								<Flex
 									className="thingKeyCount"
 									alignItems="center"
@@ -1348,7 +1544,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 							)}
 							{/* collapsed children fold up into an inline badge on the key
 							row (no indented placeholder row) — click to expand */}
-							{hasCollapsibleChildren && isCollapsed && (
+							{hasCollapsibleChildren && isContentCollapsed && (
 								<Flex
 									className="thingCollapsedBadge"
 									as="button"
@@ -1378,19 +1574,19 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 									{thing instanceof Array ? `[…] ${thing.length}` : `{…} ${keys?.length || 0}`}
 								</Flex>
 							)}
-							{pathDom && (
+							{(pathDom || props?.hideRootPath) && (
 								<Flex className="thingPathDom" flexDirection="row" alignItems="center" columnGap="2px" paddingLeft={1}>
 									{/* hover quick actions: collapse/expand beside the context
 									icon (the row's "double whammy") — always in layout so
 									nothing shifts, revealed on row hover */}
-									{hasCollapsibleChildren && (
+									{hasCollapsibleContent && (
 										<Flex
 											className="thingCollapseQuick"
 											as="button"
 											type="button"
-											aria-label={isCollapsed ? 'Expand' : 'Collapse'}
-											aria-expanded={!isCollapsed}
-											title={isCollapsed ? 'Expand' : 'Collapse'}
+											aria-label={collapseActionLabel}
+											aria-expanded={!isContentCollapsed}
+											title={collapseActionLabel}
 											alignItems="center"
 											justifyContent="center"
 											width="20px"
@@ -1401,7 +1597,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 											cursor="pointer"
 											opacity={showContextIcon ? 1 : 0}
 											transition="opacity 0.15s ease, background 0.15s ease, color 0.15s ease"
-											sx={{ '@media (hover: none)': { opacity: 0.55 } }}
+											sx={{ '@media (hover: none), (max-width: 48em)': { opacity: 1, width: '44px', height: '44px' } }}
 											_hover={{ background: 'var(--tt-surface-hover, #ececee)', color: 'var(--tt-ink, #16161a)' }}
 											_focusVisible={{ opacity: 1, outline: '2px solid var(--tt-accent, hotpink)', outlineOffset: '-2px' }}
 											onClick={(e) => {
@@ -1410,7 +1606,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 												setIsCollapsed((prev) => !prev);
 											}}
 										>
-											<Icon name={isCollapsed ? '▸' : '▾'} lucide={isCollapsed ? 'chevron-right' : 'chevron-down'} size="14px" />
+											<Icon name={isContentCollapsed ? '▸' : '▾'} lucide={isContentCollapsed ? 'chevron-right' : 'chevron-down'} size="14px" />
 										</Flex>
 									)}
 									<ThingContextMenuTrigger
@@ -1429,8 +1625,9 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 										thing={thing}
 										thingType={type}
 										readonly={!editMode}
-										collapsible={hasCollapsibleChildren}
-										collapsed={isCollapsed}
+										collapsible={hasCollapsibleContent}
+										collapsibleChildren={hasCollapsibleChildren}
+										collapsed={isContentCollapsed}
 										onCollapse={applyCollapse}
 										onType={onChangeType}
 										onDelete={deleteValue}
@@ -1445,17 +1642,24 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 				{/* this value will show in a few cases */}
 				{/* Basic types like String, Number, etc.. non-object values */}
 				{/* it will also show if the Thing has standard React children */}
-				{/* overflowX auto (not scroll): scroll reserves a permanent
-				scrollbar track that renders as a stray line under every value */}
-				{!loading && !thingtimeChildren && atomicValue && (
-					<Box className="atomicValue" data-tt-zone="value" width={'100%'} overflowX={'auto'}>
+				{/* Editor.js owns floating toolbar/popover UI, so its datatype must
+				remain overflow-visible. Other atomic values keep horizontal auto
+				overflow (not scroll) to avoid a permanent stray scrollbar track. */}
+				{!loading && !isContentCollapsed && !thingtimeChildren && atomicValue && (
+					<Box
+						className="atomicValue"
+						data-tt-zone="value"
+						width="100%"
+						overflowX={editorJsDoc ? 'visible' : 'auto'}
+						overflowY={editorJsDoc ? 'visible' : undefined}
+					>
 						{atomicValue}
 					</Box>
 				)}
 				{/* render any normal React children as well */}
 				{render && props?.children ? props.children : null}
 				{/* render thingtime children */}
-				{!loading && thingtimeChildren && !isCollapsed && (
+				{!loading && thingtimeChildren && !isContentCollapsed && (
 					<Box className="thingtimeChildren" flexGrow={0} flexShrink={1} width={render ? '100%' : ''}>
 						<CollapseCascadeContext.Provider value={childrenDefaultCollapsed ?? inheritedCollapsed}>
 							{thingtimeChildren}

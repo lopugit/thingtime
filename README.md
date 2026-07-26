@@ -139,6 +139,30 @@ Node.js, Python, and Ruby snippets. The browser reference lives at
 `/docs/api`, and the docs smoke tests live in the `/tests` page under the
 `Docs` group.
 
+## Extensible data — `extended` + schema-less crystals
+
+Schemas are optional scaffolding, not a cage. Two open surfaces on every thing:
+
+- **`extended`** — every `things` doc carries a schema-free `extended`
+  property that accepts **any JSON structure** (512KB/doc cap). Thingtime wraps
+  it in the platform envelope (share ids, `tt:` ACLs, timestamps) but never
+  validates, structure-indexes, or interprets it. Replace-on-write semantics:
+  send `extended` to swap the whole value, `null` to clear it, omit it to leave
+  it untouched (deep-merging arbitrary JSON is ambiguous, so we never do).
+  It is not structured-searchable — `/search` field conditions can't target it
+  — though its string content is indexed by the collection's wildcard text
+  index like any field (so keep secrets out of it). One reserved key:
+  `tt:textLanguage` (the text index's language override).
+- **Schema-less crystals** — `thingtime` is optional on create: a bare
+  `POST /api/v1/things { crystal: { any: 'shape' } }` defaults to
+  `thingtime: ["data"]`, the bounded free-form crystal, so external apps can
+  store structured data without declaring a schema first — and it stays
+  searchable by real datatypes on `/search`.
+
+Together they make Thingtime an open datastore: schema'd crystals get
+validation and typed search, `extended` carries whatever else your app needs
+on the same document. Docs: `/docs/api` → things.
+
 ## MongoDB
 
 MongoDB powers the app status checks and database-backed API routes. Local
@@ -166,6 +190,22 @@ placeholder:
 ```sh
 MONGODB_CONNECTION_STRING="mongodb://localhost:27017/thingtime"
 ```
+
+## Admin access
+
+Schema-version migrations (`/api/v1/admin/migrations*`), the migrations panel on
+`/schemas`, the admin panel, and raw database diagnostics are admin-gated. A
+user is an admin when their user doc has `meta.admin: true` (promote/demote via
+the admin panel or `POST /api/v1/admin/set-admin`) or their username is in the
+bootstrap env allowlist:
+
+```sh
+ADMIN_USERNAMES="your-username,another-admin"
+```
+
+Env-allowlisted usernames are a permanent override (they can't be demoted from
+the UI, so there's always a way back in) and are reserved at registration so
+nobody can squat an admin username before you register it.
 
 ## Auth and Lopu AI
 
@@ -227,6 +267,54 @@ The JWKS endpoint supports offline signature, issuer, and expiry verification.
 It does not tell external platforms whether the backing Mongo session has been
 revoked; add a server-side introspection endpoint before relying on live
 revocation checks outside Thingtime.
+
+### Password reset + email 2FA
+
+`POST /api/v1/auth/password-reset` ({ email }) always answers `{ ok: true }` so
+account existence can't be probed; when the email matches an account it sends a
+single-use one-hour reset link to `/reset-password?token=…`. The confirm step
+(`POST /api/v1/auth/password-reset/confirm`) burns the token atomically, sets
+the new bcrypt hash, and revokes every live session. Requests are rate-limited
+per IP (`auth.passwordReset`). Local dev + Vercel previews surface `resetLink`
+in the JSON, mirroring the register route's dev verification link.
+
+Email 2FA is opt-in per account (`GET/POST /api/v1/auth/two-factor`, requires a
+verified email — toggle lives in Settings → Security). With it on,
+`POST /api/v1/login` stops minting sessions from a password alone: it returns
+`{ requiresOtp: true, challenge, expiresAt }` and emails a 6-digit code (only a
+sha256 hash is stored, 10-minute TTL, atomically attempt-capped at 5); a second
+`POST /api/v1/login { challenge, code }` completes login with a constant-time
+comparison. Login attempts are rate-limited per IP (`auth.login`).
+
+### Email delivery (owned email layer)
+
+All outbound email flows through `remix/app/api/utils/email/` — every send
+writes an outbox row to `email_messages` first, checks the suppression /
+unsubscribe lists, then delivers via AWS SES (or logs to the console in dev).
+Auth wrappers in `api/utils/auth/email.ts` (`sendVerificationEmail`,
+`sendPasswordResetEmail`, `sendEmailOtp`, `sendNewsletterEmail`) carry dotted
+`templateKey`s (`auth.verify_email`, `auth.password_reset`, `auth.email_otp`,
+`newsletter.generic`) and purpose metadata.
+
+```sh
+THINGTIME_EMAIL_PROVIDER="ses"          # 'console' (default) or 'ses'
+AWS_SES_REGION="us-east-1"              # or AWS_REGION
+AWS_SES_ACCESS_KEY_ID="<key id>"        # or AWS_ACCESS_KEY_ID
+AWS_SES_SECRET_ACCESS_KEY="<secret>"    # or AWS_SECRET_ACCESS_KEY
+THINGTIME_EMAIL_TRANSACTIONAL_FROM="Thingtime <no-reply@thingtime.com>"
+THINGTIME_EMAIL_NEWSLETTER_FROM="Thingtime Updates <updates@thingtime.com>"
+THINGTIME_EMAIL_REPLY_TO="support@thingtime.com"
+AWS_SES_CONFIGURATION_SET=""            # or THINGTIME_EMAIL_CONFIGURATION_SET
+THINGTIME_EMAIL_FAIL_CLOSED="false"     # fail-open unless "true"
+SES_SANDBOX="1"                         # test throttle (1 msg/sec) for /tests
+THINGTIME_EMAIL_TEST_RECIPIENT="support@thingtime.com"
+```
+
+Use the SES **API** with an IAM key scoped to `ses:SendEmail` — do not create
+SES SMTP credentials for the app path. `GET /api/v1/email/config` returns the
+sanitized resolved config (never credentials); `POST /api/v1/email/test-otp` is
+a dev/preview-only helper for the `/tests` page restricted to the configured
+test recipient (or a plus alias of it).
 
 ### Service account provisioning
 

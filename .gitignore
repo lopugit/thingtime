@@ -66,6 +66,7 @@ iOS/Thingtime/Resources/Info.plist
 
 # graphify - keep queryable graph + report, ignore machine-specific temp & build artifacts
 graphify-out/.graphify_*
+graphify-out/.vocab.txt
 # cache: semantic/ is tracked (content-addressed extractions -> merge-safe, makes
 # full rebuilds in fresh clones LLM-free); ast/ + stat-index.json stay local
 # (stat-index is keyed by absolute paths)

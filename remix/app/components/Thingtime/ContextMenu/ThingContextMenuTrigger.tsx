@@ -2,6 +2,7 @@ import React from 'react';
 import ClickAwayListener from 'react-click-away-listener';
 import { Center, Flex } from '@chakra-ui/react';
 
+import { getEditorJsDoc } from '../../Editor/editorJsValue';
 import { Icon } from '../../Icon/Icon';
 import { useLopu } from '../../Lopu/useLopu';
 import { useThingtime } from '../useThingtime';
@@ -45,8 +46,10 @@ export interface ThingContextMenuTriggerProps {
 	opacity?: number;
 	transition?: string;
 	iconSize?: number | string;
-	// things with children get View verbs (collapse/expand + all-variants)
+	// any row with hideable content gets collapse/expand; only containers get
+	// the descendant cascade variants
 	collapsible?: boolean;
+	collapsibleChildren?: boolean;
 	collapsed?: boolean;
 	onCollapse?: (command: 'collapse' | 'expand' | 'collapse-all' | 'expand-all') => void;
 	onType?: (args: { type: unknown; wrap?: boolean }) => void;
@@ -98,6 +101,7 @@ export const ThingContextMenuTrigger = (props: ThingContextMenuTriggerProps) => 
 		transition,
 		iconSize = 7,
 		collapsible = false,
+		collapsibleChildren = collapsible,
 		collapsed = false,
 		onCollapse,
 		onType,
@@ -212,6 +216,7 @@ export const ThingContextMenuTrigger = (props: ThingContextMenuTriggerProps) => 
 			key: type.key,
 			label: type.label || type.key,
 			icon: type.icon || type.key,
+			lucide: type.lucide,
 			wrap: type.wrap,
 			value: type.value,
 			group: type.group
@@ -219,6 +224,13 @@ export const ThingContextMenuTrigger = (props: ThingContextMenuTriggerProps) => 
 
 		return mapped.length ? mapped : DEFAULT_THING_TYPES;
 	}, [thingtime?.settings?.types?.javascript, thingtime?.settings?.types?.custom]);
+
+	const selectedTypeKey = React.useMemo(() => {
+		if (getEditorJsDoc(thing)) return 'editorjs';
+		if (thing instanceof Array) return 'array';
+		if (thing === null || thing === undefined) return 'any';
+		return typeof thing;
+	}, [thing]);
 
 	const model = React.useMemo<ThingContextMenuModel>(() => {
 		if (variant === 'new-child') {
@@ -245,8 +257,10 @@ export const ThingContextMenuTrigger = (props: ThingContextMenuTriggerProps) => 
 			readonly,
 			canDelete: !!onDelete,
 			collapsible,
+			collapsibleChildren,
 			collapsed,
-			types
+			types,
+			selectedTypeKey
 		});
 
 		// right-clicking the key zone leads with key-specific verbs
@@ -269,7 +283,7 @@ export const ThingContextMenuTrigger = (props: ThingContextMenuTriggerProps) => 
 		}
 
 		return base;
-	}, [variant, editMode, readonly, onDelete, collapsible, collapsed, types, targetZone, path]);
+	}, [variant, editMode, readonly, onDelete, collapsible, collapsibleChildren, collapsed, types, selectedTypeKey, targetZone, path]);
 
 	// ------------------------------------------------------------------
 	// live command implementations

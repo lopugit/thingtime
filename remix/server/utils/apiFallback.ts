@@ -120,11 +120,23 @@ export const proxyApiRequestToFallback = async (request: Request) => {
   try {
     upstreamResponse = await fetch(fallbackUrl, init);
   } catch (error) {
+    // Never surface the caught exception's message (CodeQL
+    // js/stack-trace-exposure) — log it server-side and respond with the
+    // error class + network code only.
+    console.error('[api fallback] proxy fetch failed', error);
+    const cause = error instanceof Error ? (error as { cause?: unknown }).cause : undefined;
+    const causeCode = cause instanceof Error ? (cause as { code?: unknown }).code : undefined;
+    const detail =
+      error instanceof Error
+        ? typeof causeCode === 'string' || typeof causeCode === 'number'
+          ? `${error.name} (${causeCode})`
+          : error.name
+        : 'Unknown error';
     return new Response(
       JSON.stringify({
         ok: false,
         error: 'Thingtime production API fallback failed',
-        detail: error instanceof Error ? error.message : String(error)
+        detail
       }),
       {
         status: 502,

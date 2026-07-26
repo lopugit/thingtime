@@ -94,7 +94,9 @@ export const provisionServiceAccount = async (
     expiresInMs: SERVICE_EMAIL_VERIFICATION_GRACE_MS
   });
   const verificationLink = `${origin}/api/v1/auth/verify-email?token=${verification.token}`;
-  await sendVerificationEmail({ to: created.user.email, link: verificationLink });
+  // Fire-and-forget so a send failure can't fail provisioning of an
+  // already-created service account (the caller gets the link + token back).
+  void sendVerificationEmail({ to: created.user.email, link: verificationLink }).catch(() => {});
 
   return {
     ok: true,

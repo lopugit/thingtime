@@ -2,7 +2,7 @@ import React from 'react';
 import { Box, Button, Center, Flex, Skeleton, SkeletonCircle, SkeletonText, Text } from '@chakra-ui/react';
 
 import { PostCard } from './PostCard';
-import type { EngagementEvent, PublicPost } from './feedTypes';
+import type { EngagementEvent, PostChange, PublicPost } from './feedTypes';
 
 // The feed column: PostCards + an IntersectionObserver sentinel for infinite
 // scroll (with a manual "Load more" fallback), skeleton cards while loading
@@ -15,7 +15,7 @@ export type PostListProps = {
   hasMore: boolean;
   // called from an IntersectionObserver sentinel
   onLoadMore: () => void;
-  onPostChanged: (id: string, next: PublicPost | null) => void;
+  onPostChanged: (id: string, next: PostChange) => void;
   onEngagement?: (event: EngagementEvent) => void;
   emptyLabel?: string;
 };

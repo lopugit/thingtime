@@ -4,6 +4,7 @@ import { Link as RouterLink, useNavigate } from 'react-router';
 
 import { useApi } from '~/hooks/useApi';
 import { RAINBOW, RAINBOW_TEXT } from '~/theme/rainbow';
+import { consumeAuthReturnTo } from '~/utils/authReturn';
 import { useThingtime } from '../Thingtime/useThingtime';
 import { useLopu } from '../Lopu/useLopu';
 import { Icon } from '../Icon/Icon';
@@ -28,27 +29,41 @@ const inputSx = {
 	}
 };
 
+// Zero-prop on the /login page. Embedded mode (account switcher "Add an
+// account") renders the same form inside a host surface: no navigation on
+// success (onSuccess gets the user — the login API already merged the account
+// into the switcher roster), modal-safe loading, and the register cross-link
+// becomes an in-place mode toggle via onSwitchMode.
 export const Login = (props) => {
+	const { embedded, onSuccess, onSwitchMode } = props || {};
+
 	const { thingtime } = useThingtime();
 
 	const devMode = thingtime?.devKit?.devMode;
+	const defaultTestUsername = thingtime?.devKit?.testUsers?.default?.username || '';
+	const defaultTestPassword = thingtime?.devKit?.testUsers?.default?.password || '';
 
-
-	const [username, setUsername] = useState(devMode ? thingtime?.devKit?.testUsers?.default?.username : '');
-	const [password, setPassword] = useState(devMode ? thingtime?.devKit?.testUsers?.default?.password : '');
+	const [username, setUsername] = useState(devMode ? defaultTestUsername : '');
+	const [password, setPassword] = useState(devMode ? defaultTestPassword : '');
 
 	const [passwordVisible, setPasswordVisible] = useState(devMode ? true : false);
 
 	React.useEffect(() => {
 		// if devMode is true, set username and password to testUsers
 		if (devMode && !username && !password) {
-			setUsername(thingtime?.devKit?.testUsers?.default?.username || '');
-			setPassword(thingtime?.devKit?.testUsers?.default?.password || '');
+			setUsername(defaultTestUsername);
+			setPassword(defaultTestPassword);
 			setPasswordVisible(true);
 		}
-	}, [devMode]);
+	}, [defaultTestPassword, defaultTestUsername, devMode, password, username]);
 
 	const [loading, setLoading] = useState(false);
+
+	// email 2FA: after a valid password on a 2FA account the API returns a
+	// challenge instead of a session — the form swaps into code mode until the
+	// emailed 6-digit code completes the login (or the user goes back)
+	const [otpChallenge, setOtpChallenge] = useState(null);
+	const [otpCode, setOtpCode] = useState('');
 
 	const api = useApi();
 
@@ -73,34 +88,71 @@ export const Login = (props) => {
 	const handleLogin = async (e) => {
 		e?.preventDefault();
 
+		// Don't spend a challenge attempt on an empty/short code — the server
+		// increments the attempt counter before comparing, so a stray submit
+		// would burn one of the five tries against a still-valid challenge.
+		if (otpChallenge && otpCode.trim().length < 6) {
+			lopu({ title: 'Enter the 6-digit code from your email', status: 'info', duration: 4000 });
+			return;
+		}
+
 		setLoading(true);
 
 		try {
-			const resp = await login({ username, password });
+			const resp = otpChallenge
+				? await login({ challenge: otpChallenge, code: otpCode.trim() })
+				: await login({ username, password });
 			setLoginResp(resp);
 
-			if (resp?.ok) {
+			if (resp?.ok && resp?.requiresOtp) {
+				// no session yet — the emailed code is the second half of this login
+				setOtpChallenge(resp.challenge);
+				setOtpCode('');
+				lopu({
+					title: 'Check your email 💌',
+					description: 'We sent a 6-digit security code to finish logging in.',
+					status: 'info',
+					duration: 8000,
+				});
+			} else if (resp?.ok) {
 				lopu({
 					title: `Welcome back, ${resp.user?.username || username}! ✨`,
 					status: 'success',
 					duration: 5000,
 				});
-				navigate('/');
+				if (onSuccess) {
+					onSuccess(resp.user);
+				} else {
+					navigate(consumeAuthReturnTo('/'), { replace: true });
+				}
 			} else {
 				lopu({
-					title: 'Login failed',
+					title: otpChallenge ? 'Code rejected' : 'Login failed',
 					description: resp?.error || 'Invalid username or password',
 					status: 'error',
 					duration: 6000,
 				});
 			}
 		} catch (err) {
+			// asyncFetcher throws the parsed { ok:false, error } payload on !ok
+			// responses (401 bad code, 429 exhausted attempts) — surface it
+			const message = err?.error;
 			lopu({
-				title: 'Network error',
-				description: 'Could not reach the server. Please try again.',
+				title: message ? (otpChallenge ? 'Code rejected' : 'Login failed') : 'Network error',
+				description: message || 'Could not reach the server. Please try again.',
 				status: 'error',
 				duration: 6000,
 			});
+			// Only bounce back to the password step when the challenge itself is
+			// dead — keyed off the server's STABLE reason code, not error copy.
+			// 'challenge_invalid' (expired/consumed) and 'too_many_attempts' (the
+			// challenge's own attempt limit) kill the challenge; the login
+			// rate-limiter's 429 carries NO reason (challenge stays valid), and
+			// 'wrong_code' lets the user retry — neither bounces.
+			if (otpChallenge && (err?.reason === 'challenge_invalid' || err?.reason === 'too_many_attempts')) {
+				setOtpChallenge(null);
+				setOtpCode('');
+			}
 		} finally {
 			setLoading(false);
 		}
@@ -114,7 +166,9 @@ export const Login = (props) => {
 		</>
 	) : null;
 
-	if (loading) {
+	// Embedded hosts keep the form mounted (Button isLoading below) — swapping
+	// in this full-viewport spinner would blow up a modal.
+	if (loading && !embedded) {
 		return (
 			<>
 				<Flex flexDir="column" alignItems="center" justifyContent="center" height="100vh" width="100%">
@@ -144,13 +198,13 @@ export const Login = (props) => {
 				<Flex
 					flexDirection="column"
 					gap={4}
-					width="340px"
+					width={embedded ? '100%' : '340px'}
 					maxWidth="100%"
 					background="var(--tt-card, #ffffff)"
 					border="1px solid var(--tt-border, #ececef)"
-					borderRadius="var(--tt-radius-xl, 20px)"
-					boxShadow="var(--tt-shadow-panel, 0 24px 60px -28px rgba(20, 20, 40, 0.28))"
-					padding={9}
+					borderRadius={embedded ? 'var(--tt-radius-md, 12px)' : 'var(--tt-radius-xl, 20px)'}
+					boxShadow={embedded ? 'none' : 'var(--tt-shadow-panel, 0 24px 60px -28px rgba(20, 20, 40, 0.28))'}
+					padding={embedded ? 5 : 9}
 				>
 					<Flex flexDirection="column" gap={1} paddingBottom={1}>
 						<Box
@@ -161,7 +215,7 @@ export const Login = (props) => {
 							textTransform="uppercase"
 							color="var(--tt-muted, #9a9aa6)"
 						>
-							Thingtime · Login
+							{embedded ? 'Thingtime · Add account' : 'Thingtime · Login'}
 						</Box>
 						<Box
 							as="h1"
@@ -178,43 +232,67 @@ export const Login = (props) => {
 								animation: 'var(--tt-rainbow-anim, moving-rainbow 5s linear infinite)'
 							}}
 						>
-							Welcome back ✨
+							{otpChallenge ? 'Check your email 💌' : embedded ? 'Add an account ✨' : 'Welcome back ✨'}
 						</Box>
 					</Flex>
 
-					<FormControl>
-						<Input
-							sx={inputSx}
-							onChange={(e) => setUsername(e?.target?.value)}
-							placeholder="💌 Username"
-							type="username"
-							value={username}
-						/>
-					</FormControl>
+					{otpChallenge ? (
+						<>
+							<Box fontSize="sm" color="var(--tt-muted, #9a9aa6)">
+								This account has email 2FA on — enter the 6-digit code we just emailed to finish logging in.
+							</Box>
+							<FormControl>
+								<Input
+									sx={inputSx}
+									onChange={(e) => setOtpCode(e?.target?.value)}
+									placeholder="🔢 6-digit code"
+									inputMode="numeric"
+									autoComplete="one-time-code"
+									maxLength={6}
+									value={otpCode}
+									autoFocus
+								/>
+							</FormControl>
+						</>
+					) : (
+						<>
+							<FormControl>
+								<Input
+									sx={inputSx}
+									onChange={(e) => setUsername(e?.target?.value)}
+									placeholder="💌 Username"
+									type="username"
+									value={username}
+								/>
+							</FormControl>
 
-					<FormControl>
-						<InputGroup>
-							<Input
-								sx={inputSx}
-								onChange={(e) => setPassword(e?.target?.value)}
-								placeholder="Password 🔑"
-								type={passwordVisible ? 'text' : 'password'}
-								value={password}
-							/>
-							<InputRightElement>
-								<Box cursor="pointer" onClick={() => setPasswordVisible(!passwordVisible)} opacity={passwordVisible ? 1 : 0.5}>
-									<Icon name={passwordVisible ? '🔓' : '🔒'} />
-								</Box>
-							</InputRightElement>
-						</InputGroup>
-						{/* optional showpassword button/icon */}
-					</FormControl>
+							<FormControl>
+								<InputGroup>
+									<Input
+										sx={inputSx}
+										onChange={(e) => setPassword(e?.target?.value)}
+										placeholder="Password 🔑"
+										type={passwordVisible ? 'text' : 'password'}
+										value={password}
+									/>
+									<InputRightElement>
+										<Box cursor="pointer" onClick={() => setPasswordVisible(!passwordVisible)} opacity={passwordVisible ? 1 : 0.5}>
+											<Icon name={passwordVisible ? '🔓' : '🔒'} />
+										</Box>
+									</InputRightElement>
+								</InputGroup>
+								{/* optional showpassword button/icon */}
+							</FormControl>
+						</>
+					)}
 
 					<Button
 						sx={{
 							animation: 'var(--tt-rainbow-anim, moving-rainbow 5s linear infinite)'
 						}}
 						type="submit"
+						isLoading={embedded ? loading : undefined}
+						loadingText="Logging in…"
 						display="flex"
 						justifyContent="center"
 						width="100%"
@@ -233,19 +311,64 @@ export const Login = (props) => {
 						paddingX={4}
 						paddingY={2}
 					>
-						Login ✨
+						{otpChallenge ? 'Verify code ✨' : embedded ? 'Add account ✨' : 'Login ✨'}
 					</Button>
 
-					<RouterLink to="/register">
+					{otpChallenge ? (
 						<Box
+							as="button"
+							type="button"
+							onClick={() => {
+								setOtpChallenge(null);
+								setOtpCode('');
+							}}
+							textAlign="left"
 							fontSize="xs"
 							color="var(--tt-muted, #9a9aa6)"
 							transition="color 150ms ease"
+							cursor="pointer"
+							_hover={{ color: 'var(--tt-text, #5a5a66)' }}
+						>
+							← Back to password login
+						</Box>
+					) : onSwitchMode ? (
+						<Box
+							as="button"
+							type="button"
+							onClick={onSwitchMode}
+							textAlign="left"
+							fontSize="xs"
+							color="var(--tt-muted, #9a9aa6)"
+							transition="color 150ms ease"
+							cursor="pointer"
 							_hover={{ color: 'var(--tt-text, #5a5a66)' }}
 						>
 							Need an account? Register
 						</Box>
-					</RouterLink>
+					) : (
+						<Flex justifyContent="space-between" gap={2}>
+							<RouterLink to="/register">
+								<Box
+									fontSize="xs"
+									color="var(--tt-muted, #9a9aa6)"
+									transition="color 150ms ease"
+									_hover={{ color: 'var(--tt-text, #5a5a66)' }}
+								>
+									Need an account? Register
+								</Box>
+							</RouterLink>
+							<RouterLink to="/reset-password">
+								<Box
+									fontSize="xs"
+									color="var(--tt-muted, #9a9aa6)"
+									transition="color 150ms ease"
+									_hover={{ color: 'var(--tt-text, #5a5a66)' }}
+								>
+									Forgot password?
+								</Box>
+							</RouterLink>
+						</Flex>
+					)}
 				</Flex>
 			</form>
 		</>

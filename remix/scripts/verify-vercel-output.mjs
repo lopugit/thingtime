@@ -62,4 +62,21 @@ if (serverFallbackIndex !== -1 && serverFallbackIndex < spaIndex) {
   throw new Error('Vercel output checks the Nitro server fallback before the SPA shell.');
 }
 
-console.log('[verify] Vercel output includes the Vite shell, Thingtime embed, filesystem route, and SPA fallback.');
+const authorizeHeadersIndex = routes.findIndex(
+  (route) =>
+    route.continue === true &&
+    typeof route.src === 'string' &&
+    route.src.includes('/authorize') &&
+    route.headers?.['X-Frame-Options'] === 'DENY' &&
+    route.headers?.['Content-Security-Policy'] === "frame-ancestors 'none'"
+);
+if (authorizeHeadersIndex === -1) {
+  throw new Error('Vercel output config does not frame-deny the /authorize consent page.');
+}
+if (authorizeHeadersIndex > spaIndex) {
+  throw new Error('Vercel output stamps /authorize frame-deny headers after the SPA fallback.');
+}
+
+console.log(
+  '[verify] Vercel output includes the Vite shell, Thingtime embed, filesystem route, SPA fallback, and /authorize frame-deny.'
+);

@@ -80,6 +80,14 @@ export const DEFAULT_THING_TYPES: ThingTypeOption[] = [
 	{ key: 'number', label: 'number', icon: '💯', lucide: 'hash', value: 0, group: 'JavaScript' },
 	{ key: 'boolean', label: 'boolean', icon: '🌗', lucide: 'toggle-left', value: false, group: 'JavaScript' },
 	{ key: 'function', label: 'function', icon: '📐', lucide: 'square-function', group: 'JavaScript' },
+	{
+		key: 'editorjs',
+		label: 'Editor.js',
+		icon: '📝',
+		lucide: 'file-text',
+		value: () => ({ kind: 'rich-text', blocks: [{ type: 'paragraph', data: { text: '' } }] }),
+		group: 'Custom'
+	},
 	{ key: 'thingtime-logo', label: 'Thingtime Logo', icon: '🌀', lucide: 'shell', wrap: 'children', group: 'Custom' },
 	{ key: 'violet', label: 'Violet', icon: '🌺', lucide: 'flower-2', group: 'Custom' }
 ];
@@ -91,12 +99,15 @@ export type BuildTypesSubmenuOpts = {
 	// wrappable types drill one level deeper (replace/wrap); disable when
 	// wrapping makes no sense (e.g. new children)
 	wrapLevels?: boolean;
+	// radio-style current representation in the type picker
+	selectedKey?: string;
 };
 
 // One type option row. Wrappable types drill one level deeper (replace/wrap)
 // — infinite depth falls out of the recursion for free.
 const typeAction = (type: ThingTypeOption, opts: BuildTypesSubmenuOpts = {}): ThingContextAction => {
-	const { command = 'change-type', wrapLevels = true } = opts;
+	const { command = 'change-type', wrapLevels = true, selectedKey } = opts;
+	const selected = selectedKey === undefined ? undefined : selectedKey.toLowerCase() === type.key.toLowerCase();
 
 	const base: ThingContextAction = {
 		id: `type-${type.key}`,
@@ -104,7 +115,8 @@ const typeAction = (type: ThingTypeOption, opts: BuildTypesSubmenuOpts = {}): Th
 		payload: { type },
 		label: type.label || type.key,
 		icon: type.icon || type.key,
-		lucide: type.lucide
+		lucide: type.lucide,
+		selected
 	};
 
 	if (!type.wrap || !wrapLevels) {
@@ -385,13 +397,15 @@ export type BuildThingContextMenuModelArgs = {
 	readonly?: boolean;
 	// hide the delete action when the thing has no parent (nothing to remove)
 	canDelete?: boolean;
-	// things with children get the View section (collapse/expand verbs);
-	// collapsed picks which direction leads
+	// rows with hideable content get the View section (collapse/expand verbs);
+	// containers additionally get descendant cascade actions
 	collapsible?: boolean;
+	collapsibleChildren?: boolean;
 	collapsed?: boolean;
 	types?: ThingTypeOption[];
 	templates?: ThingTemplateOption[];
 	permissions?: ThingPermissionOption[];
+	selectedTypeKey?: string;
 	selectedPermissionKey?: string;
 };
 
@@ -403,10 +417,12 @@ export const buildThingContextMenuModel = (args: BuildThingContextMenuModelArgs 
 		readonly = false,
 		canDelete = true,
 		collapsible = false,
+		collapsibleChildren = collapsible,
 		collapsed = false,
 		types = DEFAULT_THING_TYPES,
 		templates = DEFAULT_THING_TEMPLATES,
 		permissions = DEFAULT_THING_PERMISSIONS,
+		selectedTypeKey,
 		selectedPermissionKey = 'private'
 	} = args;
 
@@ -428,16 +444,23 @@ export const buildThingContextMenuModel = (args: BuildThingContextMenuModelArgs 
 
 	// collapse/expand are view state, not mutations — they show in readonly too
 	if (collapsible) {
+		const viewActions: ThingContextAction[] = [
+			collapsed
+				? { id: 'expand', command: 'expand', label: 'Expand', icon: '▾', lucide: 'chevron-down' }
+				: { id: 'collapse', command: 'collapse', label: 'Collapse', icon: '▸', lucide: 'chevron-right' }
+		];
+
+		if (collapsibleChildren) {
+			viewActions.push(
+				{ id: 'collapse-all', command: 'collapse-all', label: 'Collapse all', icon: '🍂', lucide: 'chevrons-down-up', hint: 'This thing + everything inside' },
+				{ id: 'expand-all', command: 'expand-all', label: 'Expand all', icon: '🌳', lucide: 'chevrons-up-down', hint: 'This thing + everything inside' }
+			);
+		}
+
 		sections.push({
 			id: 'view',
 			label: 'View',
-			actions: [
-				collapsed
-					? { id: 'expand', command: 'expand', label: 'Expand', icon: '▾', lucide: 'chevron-down' }
-					: { id: 'collapse', command: 'collapse', label: 'Collapse', icon: '▸', lucide: 'chevron-right' },
-				{ id: 'collapse-all', command: 'collapse-all', label: 'Collapse all', icon: '🍂', lucide: 'chevrons-down-up', hint: 'This thing + everything inside' },
-				{ id: 'expand-all', command: 'expand-all', label: 'Expand all', icon: '🌳', lucide: 'chevrons-up-down', hint: 'This thing + everything inside' }
-			]
+			actions: viewActions
 		});
 	}
 
@@ -452,7 +475,7 @@ export const buildThingContextMenuModel = (args: BuildThingContextMenuModelArgs 
 					icon: '🌀',
 					lucide: 'replace',
 					hint: 'Convert or wrap the current value',
-					submenu: buildTypesSubmenu(types)
+					submenu: buildTypesSubmenu(types, { selectedKey: selectedTypeKey })
 				}
 			]
 		});

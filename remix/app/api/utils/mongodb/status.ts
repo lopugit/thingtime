@@ -1,3 +1,4 @@
+import { safeErrorText } from '../errors/safeError';
 import { getMongoUri, sanitiseMongoHost } from './config';
 import { getMongoDb } from './mongodb';
 
@@ -34,7 +35,7 @@ export const getMongoStatus = async (): Promise<MongoConnectionStatus> => {
 			pingMs: null,
 			collections: null,
 			checkedAt,
-			error: err?.message || String(err)
+			error: safeErrorText(err, 'mongodb status: config', 'MongoDB configuration error')
 		};
 	}
 
@@ -75,7 +76,7 @@ export const getMongoStatus = async (): Promise<MongoConnectionStatus> => {
 			pingMs: null,
 			collections: null,
 			checkedAt,
-			error: err?.message || String(err)
+			error: safeErrorText(err, 'mongodb status: connect', 'MongoDB connection failed')
 		};
 	} finally {
 		try {

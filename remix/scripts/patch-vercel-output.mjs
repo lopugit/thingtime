@@ -12,6 +12,18 @@ const apiCatchAllRoute = routes.find((route) => route.src === '/api/(?:.*)');
 const serverFallbackRoute = routes.find((route) => route.dest === '/__server');
 
 config.routes = [
+  // The /authorize consent popup must never render inside a frame (UI-redress
+  // hardening; token delivery already requires window.opener + a validated
+  // origin). Headers-only route: stamp and continue matching, so the page is
+  // still served by the SPA fallback below.
+  {
+    src: '^/authorize/?$',
+    headers: {
+      'X-Frame-Options': 'DENY',
+      'Content-Security-Policy': "frame-ancestors 'none'"
+    },
+    continue: true
+  },
   { src: '^/$', dest: '/index.html' },
   filesystemRoute ?? { handle: 'filesystem' },
   apiRootDataRoute ?? { src: '/api/root-data', dest: '/api/root-data' },
