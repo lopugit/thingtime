@@ -15,6 +15,9 @@ const serviceEmailVerificationDueAt = (user: any) => {
   return new Date(user.createdAt).getTime() + SERVICE_EMAIL_VERIFICATION_GRACE_MS;
 };
 
+export const serviceAccountAuthenticationAllowed = (user: any, now = Date.now()): boolean =>
+  user.accountKind !== 'service' || !!user.emailVerified || serviceEmailVerificationDueAt(user) >= now;
+
 export type ResolvedTokenUser = { user: PublicUser; claims: JwtClaims };
 
 // Resolve a live session id to its user, or null. This is THE session→user
@@ -35,11 +38,7 @@ export const resolveSessionUser = async (jti: string, expectedUserId: string): P
 
   const user = await findUserById(expectedUserId);
   if (!user) return null;
-  if (
-    user.accountKind === 'service' &&
-    !user.emailVerified &&
-    serviceEmailVerificationDueAt(user) < Date.now()
-  ) {
+  if (!serviceAccountAuthenticationAllowed(user)) {
     return null;
   }
 

@@ -1,6 +1,9 @@
 import { getMongoUri } from './config';
 import { getActiveMongoDbName, getActiveMongoUri, isCustomMongoEndpointActive } from './endpoint';
 import { getMongoDb } from './mongodb';
+import { COLLECTIONS, physicalCollectionName } from './collectionNames';
+
+export { COLLECTIONS, physicalCollectionName, versionedCollectionName, collectionVersion } from './collectionNames';
 
 // Memoised clients keyed by connection URI so a single request (and a warm
 // serverless instance) reuses one connection per endpoint instead of opening a
@@ -52,14 +55,81 @@ const getClientCachedFor = (uri: string, isHome: boolean) => {
   return entry;
 };
 
-// Home deployment database — identity, auth and every control-plane
-// collection live here REGARDLESS of any active endpoint override.
-export const getHomeThingtimeDb = async () => (await getClientCachedFor(getMongoUri(), true)).db('thingtime');
+// Issues the last adoption pass could not resolve (rename unsupported /
+// unauthorized). Surfaced through the admin migrations census so a split
+// (legacy collection still holding data beside its versioned successor) is
+// loudly visible, never silent.
+let adoptionIssues: string[] = [];
+export const getAdoptionIssues = () => [...adoptionIssues];
 
-// Active data-plane database. Single `thingtime` database (see FUNDAMENTALS.md
-// §3) — unless the request carries a custom MongoDB endpoint override
-// (endpoint.ts), in which case the override's URI + db name serve the open
-// data plane for this request.
+// Adopt physical collection versioning on first db contact: any legacy
+// unversioned collection ("things") whose current versioned name ("things_v2")
+// doesn't exist yet is renamed in place — instant, index-preserving, no doc
+// copying — before any caller can touch a collection handle. Steady state
+// (nothing unversioned left) is a single listCollections round trip.
+//
+// If BOTH names exist (another instance renamed first and writes already
+// landed, or rename is unavailable on this tier and a previous pass fell
+// through), the rename is skipped and the admin-run merge-legacy-collections
+// migration folds the residue forward instead. Rename failures are recorded,
+// never thrown — a degraded adoption must not take the whole API down.
+const adoptVersionedCollections = async (db: any) => {
+  const names = new Set<string>(
+    (await db.listCollections({}, { nameOnly: true }).toArray()).map((entry: any) => entry.name)
+  );
+  const issues: string[] = [];
+  for (const logical of COLLECTIONS) {
+    const physical = physicalCollectionName(logical);
+    if (!names.has(logical)) continue;
+    if (names.has(physical)) {
+      issues.push(`${logical}: legacy collection still exists beside ${physical} — run merge-legacy-collections`);
+      continue;
+    }
+    try {
+      await db.renameCollection(logical, physical);
+    } catch (err: any) {
+      // 48 NamespaceExists / 26 NamespaceNotFound: another instance won the
+      // rename race — either way the destination is in place
+      if (err?.code === 48 || err?.code === 26) continue;
+      // rename unavailable (Atlas M0 free tier) or unauthorized: leave the
+      // legacy collection in place for the merge migration and say so
+      issues.push(`${logical}: rename to ${physical} failed (${err?.codeName || err?.code || 'error'}) — run merge-legacy-collections`);
+    }
+  }
+  adoptionIssues = issues;
+};
+
+// Home deployment database — identity, auth and every control-plane
+// collection live here REGARDLESS of any active endpoint override. Single
+// `thingtime` database (see FUNDAMENTALS.md §3). The memoised promise
+// includes the adoption pass, so no caller can reach a collection handle
+// before legacy names have been (re)checked.
+let homeDbPromise: Promise<any> | null = null;
+
+export const getHomeThingtimeDb = async () => {
+  if (!homeDbPromise) {
+    homeDbPromise = (async () => {
+      const db = (await getClientCachedFor(getMongoUri(), true)).db('thingtime');
+      await adoptVersionedCollections(db);
+      return db;
+    })().catch((err) => {
+      // don't cache a failed connection/adoption — let the next call retry
+      homeDbPromise = null;
+      throw err;
+    });
+  }
+  return homeDbPromise;
+};
+
+// Active data-plane database: the home db — unless the request carries a
+// custom MongoDB endpoint override (endpoint.ts), in which case the
+// override's URI + db name serve the open data plane for this request.
+//
+// The adoption pass deliberately does NOT run against a custom endpoint:
+// renaming collections inside a user-supplied database (a foreign `users`
+// collection would become `users_v1`) is not ours to do. An override DB is
+// only ever read and written at the CURRENT generation, via the same
+// physicalCollectionName mapping as home.
 export const getThingtimeDb = async () => {
   if (!isCustomMongoEndpointActive()) return getHomeThingtimeDb();
   const uri = getActiveMongoUri();
@@ -68,39 +138,49 @@ export const getThingtimeDb = async () => {
   return db;
 };
 
-export const getUsersCollection = async () => (await getHomeThingtimeDb()).collection('users');
-export const getSessionsCollection = async () => (await getHomeThingtimeDb()).collection('sessions');
-export const getRostersCollection = async () => (await getHomeThingtimeDb()).collection('rosters');
+// THE way to a collection handle: logical name in, current-generation physical
+// collection out. Every read and write in the codebase goes through one of
+// these two (or a named getter below), so nothing can touch a stale generation
+// by accident. getCollection follows the request's ACTIVE endpoint (the open
+// data plane); getHomeCollection is pinned to the home deployment and is what
+// every identity / auth / control-plane getter uses.
+export const getCollection = async (logical: string) =>
+  (await getThingtimeDb()).collection(physicalCollectionName(logical));
+export const getHomeCollection = async (logical: string) =>
+  (await getHomeThingtimeDb()).collection(physicalCollectionName(logical));
+
+export const getUsersCollection = async () => getHomeCollection('users');
+export const getSessionsCollection = async () => getHomeCollection('sessions');
+export const getRostersCollection = async () => getHomeCollection('rosters');
 // The open `things` DATA PLANE (posts, comments, reactions, shares, data,
 // schemas, app-data) follows the request's active endpoint override. Identity
 // and the protected system kinds (user, theme, feed-algorithm, waitlist) are
 // written by their dedicated utils through getHomeThingsCollection instead, so
 // a custom endpoint can never capture logins or protected-kind writes.
-export const getThingsCollection = async () => (await getThingtimeDb()).collection('things');
-export const getHomeThingsCollection = async () => (await getHomeThingtimeDb()).collection('things');
-export const getEmailVerificationsCollection = async () => (await getHomeThingtimeDb()).collection('emailVerifications');
-export const getLopuMusingRateLimitsCollection = async () =>
-  (await getHomeThingtimeDb()).collection('lopuMusingRateLimits');
-export const getThemesCollection = async () => (await getHomeThingtimeDb()).collection('themes');
-export const getWaitlistCollection = async () => (await getHomeThingtimeDb()).collection('waitlist');
-export const getFeedAlgorithmsCollection = async () => (await getHomeThingtimeDb()).collection('feedAlgorithms');
+export const getThingsCollection = async () => getCollection('things');
+export const getHomeThingsCollection = async () => getHomeCollection('things');
+export const getEmailVerificationsCollection = async () => getHomeCollection('emailVerifications');
+export const getLopuMusingRateLimitsCollection = async () => getHomeCollection('lopuMusingRateLimits');
+export const getThemesCollection = async () => getHomeCollection('themes');
+export const getWaitlistCollection = async () => getHomeCollection('waitlist');
+export const getFeedAlgorithmsCollection = async () => getHomeCollection('feedAlgorithms');
 // Global, admin-editable app settings (singleton docs keyed by `key`, e.g. the
 // rate-limit config) and the general per-endpoint rate-limit windows.
-export const getSettingsCollection = async () => (await getHomeThingtimeDb()).collection('settings');
-export const getRateLimitsCollection = async () => (await getHomeThingtimeDb()).collection('rateLimits');
+export const getSettingsCollection = async () => getHomeCollection('settings');
+export const getRateLimitsCollection = async () => getHomeCollection('rateLimits');
 // Owned email layer (see api/utils/email): every send writes an outbox row to
 // email_messages; events/suppression/unsubscribes back deliverability.
-export const getEmailMessagesCollection = async () => (await getHomeThingtimeDb()).collection('email_messages');
-export const getEmailEventsCollection = async () => (await getHomeThingtimeDb()).collection('email_events');
-export const getEmailTemplatesCollection = async () => (await getHomeThingtimeDb()).collection('email_templates');
-export const getEmailSubscriptionsCollection = async () => (await getHomeThingtimeDb()).collection('email_subscriptions');
-export const getEmailSuppressionListCollection = async () => (await getHomeThingtimeDb()).collection('email_suppression_list');
-export const getEmailUnsubscribesCollection = async () => (await getHomeThingtimeDb()).collection('email_unsubscribes');
-export const getEmailIdentitiesCollection = async () => (await getHomeThingtimeDb()).collection('email_identities');
+export const getEmailMessagesCollection = async () => getHomeCollection('email_messages');
+export const getEmailEventsCollection = async () => getHomeCollection('email_events');
+export const getEmailTemplatesCollection = async () => getHomeCollection('email_templates');
+export const getEmailSubscriptionsCollection = async () => getHomeCollection('email_subscriptions');
+export const getEmailSuppressionListCollection = async () => getHomeCollection('email_suppression_list');
+export const getEmailUnsubscribesCollection = async () => getHomeCollection('email_unsubscribes');
+export const getEmailIdentitiesCollection = async () => getHomeCollection('email_identities');
 // Single-use auth tokens: password-reset links and login OTP challenges, both
 // TTL-reaped (mirrors emailVerifications).
-export const getPasswordResetsCollection = async () => (await getHomeThingtimeDb()).collection('passwordResets');
-export const getAuthOtpsCollection = async () => (await getHomeThingtimeDb()).collection('authOtps');
+export const getPasswordResetsCollection = async () => getHomeCollection('passwordResets');
+export const getAuthOtpsCollection = async () => getHomeCollection('authOtps');
 
 // Idempotently create server-side collections + their indexes. createIndex
 // creates the collection if it doesn't exist yet, so this also bootstraps an
@@ -148,6 +228,11 @@ const createIndexReplacing = async (
   }
 };
 
+// The current-generation physical `things` handle for a db (home OR a custom
+// endpoint): things → things_v2, so the data-plane indexes always land on
+// exactly the collection reads and writes touch.
+const thingsCollection = (db: any) => db.collection(physicalCollectionName('things'));
+
 // Data-plane (`things`) index definitions, shared by the home ensure below and
 // the lazy per-endpoint ensure for CUSTOM data-plane DBs — a fresh override DB
 // bootstraps with the same structural guarantees (unique shareId/uniqueKeys,
@@ -160,33 +245,33 @@ const createIndexReplacing = async (
 // runs; the thingtime-prefixed ones serve v2 (multikey on the schema-id
 // array), and targetId serves comment/reaction/share lookups.
 const createThingsDataIndexes = (db: any): Promise<any>[] => [
-  db.collection('things').createIndex({ shareId: 1 }, { unique: true, sparse: true }),
+  thingsCollection(db).createIndex({ shareId: 1 }, { unique: true, sparse: true }),
   // generalized uniqueness for system kinds (username:<u>, hashed email
   // keys, schema:<id>, …): multikey unique — each element unique across
   // the collection; sparse so ordinary things skip the index entirely
-  db.collection('things').createIndex({ uniqueKeys: 1 }, { unique: true, sparse: true }),
+  thingsCollection(db).createIndex({ uniqueKeys: 1 }, { unique: true, sparse: true }),
   // login + people-search lookups on user things (thingtime is the only
   // multikey field here, so the compound is legal)
-  db.collection('things').createIndex({ thingtime: 1, 'crystal.username': 1 }),
+  thingsCollection(db).createIndex({ thingtime: 1, 'crystal.username': 1 }),
   // admin roster: a partial index over just the (rare) admin user things,
   // so listAdmins is a few-entry scan, not a full-user-base fetch+filter
-  db.collection('things').createIndex(
+  thingsCollection(db).createIndex(
     { secureAdmin: 1 },
     { partialFilterExpression: { secureAdmin: true } }
   ),
-  db.collection('things').createIndex({ kind: 1, visibility: 1, createdAt: -1, shareId: 1 }),
-  db.collection('things').createIndex({ kind: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
-  db.collection('things').createIndex({ thingtime: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
-  db.collection('things').createIndex({ targetId: 1, thingtime: 1, createdAt: 1, shareId: 1 }),
+  thingsCollection(db).createIndex({ kind: 1, visibility: 1, createdAt: -1, shareId: 1 }),
+  thingsCollection(db).createIndex({ kind: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
+  thingsCollection(db).createIndex({ thingtime: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
+  thingsCollection(db).createIndex({ targetId: 1, thingtime: 1, createdAt: 1, shareId: 1 }),
   // schema-usage counting (schemas/browse decorate): data things are
   // grouped by crystal.schemaId (stamped) with a crystal.schema name
   // fallback for pre-stamp docs — both need index support or every
   // schema browse page scans the whole data partition
-  db.collection('things').createIndex({ thingtime: 1, 'crystal.schemaId': 1 }),
-  db.collection('things').createIndex({ thingtime: 1, 'crystal.schema': 1 }),
+  thingsCollection(db).createIndex({ thingtime: 1, 'crystal.schemaId': 1 }),
+  thingsCollection(db).createIndex({ thingtime: 1, 'crystal.schema': 1 }),
   // acl and thingtime are both arrays — Mongo forbids two multikey fields
   // in one compound index, so the audience index stands alone
-  db.collection('things').createIndex({ acl: 1, createdAt: -1, shareId: 1 }),
+  thingsCollection(db).createIndex({ acl: 1, createdAt: -1, shareId: 1 }),
   // One weighted wildcard text index powers /api/v1/things/search ranked
   // text mode across every string field of every thing (a collection can
   // hold at most ONE text index — this is it; wildcard is deliberate:
@@ -197,7 +282,7 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => [
   // can ever contain — ':' is outside the data-key grammar, making
   // 'tt:textLanguage' unwritable through every sanitizer.
   createIndexReplacing(
-    db.collection('things'),
+    thingsCollection(db),
     { '$**': 'text' },
     {
       name: 'things_text_search',
@@ -214,7 +299,7 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => [
   // here (verified: the emoji-exists-only filter 409'd the second data
   // thing sharing an emoji value).
   createIndexReplacing(
-    db.collection('things'),
+    thingsCollection(db),
     { targetId: 1, ownerId: 1, 'crystal.emoji': 1 },
     {
       name: 'things_reaction_unique',
@@ -226,12 +311,12 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => [
   // Legacy relational era (kind:'reaction'/'comment' docs written by the
   // pre-unification relational model): aggregation + dedup indexes stay
   // until the things migration converts those docs to thingtime things.
-  db.collection('things').createIndex({ kind: 1, parentId: 1, createdAt: 1 }),
-  db.collection('things').createIndex(
+  thingsCollection(db).createIndex({ kind: 1, parentId: 1, createdAt: 1 }),
+  thingsCollection(db).createIndex(
     { parentId: 1, ownerId: 1, token: 1 },
     { unique: true, partialFilterExpression: { kind: 'reaction' } }
   ),
-  db.collection('things').createIndex(
+  thingsCollection(db).createIndex(
     { commentId: 1 },
     { unique: true, partialFilterExpression: { kind: 'comment' } }
   ),
@@ -240,13 +325,13 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => [
   // created) could answer origin lookups with a different allowlist, so
   // uniqueness is structural. Only app things carry crystal.clientId;
   // app-data things reference the app as crystal.appId instead.
-  db.collection('things').createIndex(
+  thingsCollection(db).createIndex(
     { 'crystal.clientId': 1 },
     { unique: true, partialFilterExpression: { 'crystal.clientId': { $exists: true } } }
   ),
   // App data: one thing per (user, app, key) — set() stays an idempotent
   // insert-or-update under races, and the index serves list-by-(user, app).
-  db.collection('things').createIndex(
+  thingsCollection(db).createIndex(
     { ownerId: 1, 'crystal.appId': 1, 'crystal.key': 1 },
     {
       unique: true,
@@ -281,65 +366,67 @@ export const ensureIndexes = async () => {
       // carries a custom endpoint override (e.g. via enforceRateLimit), and
       // the control-plane index set must never land on an override DB.
       const db = await getHomeThingtimeDb();
+      // indexes land on the current-generation physical collections
+      const col = (logical: string) => db.collection(physicalCollectionName(logical));
       await Promise.all([
-        db.collection('users').createIndex({ username: 1 }, { unique: true }),
-        db.collection('users').createIndex({ email: 1 }, { unique: true }),
-        db.collection('sessions').createIndex({ jti: 1 }, { unique: true }),
-        db.collection('sessions').createIndex({ userId: 1 }),
+        col('users').createIndex({ username: 1 }, { unique: true }),
+        col('users').createIndex({ email: 1 }, { unique: true }),
+        col('sessions').createIndex({ jti: 1 }, { unique: true }),
+        col('sessions').createIndex({ userId: 1 }),
         // TTL: reap sessions once expiresAt passes. getLiveSession already
         // treats past-expiry docs as dead, so deletion removes nothing usable —
         // without it expired/revoked sessions (app grants especially) pile up
         // forever. Docs with expiresAt: null are exempt (TTL skips non-dates).
-        db.collection('sessions').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+        col('sessions').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
         // deleteApp revokes app sessions by clientId ACROSS users — without
         // this the sweep scans the whole sessions collection. Partial so the
         // (much larger) browser/service session population stays out.
-        db.collection('sessions').createIndex(
+        col('sessions').createIndex(
           { 'meta.clientId': 1 },
           { partialFilterExpression: { purpose: 'app' } }
         ),
         // account-switcher rosters: one doc per browser, entries reference
         // sessions by jti; TTL reaps rosters abandoned past their rolling expiry
-        db.collection('rosters').createIndex({ rosterId: 1 }, { unique: true }),
-        db.collection('rosters').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
-        db.collection('emailVerifications').createIndex({ token: 1 }, { unique: true }),
-        db.collection('emailVerifications').createIndex({ userId: 1 }),
+        col('rosters').createIndex({ rosterId: 1 }, { unique: true }),
+        col('rosters').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+        col('emailVerifications').createIndex({ token: 1 }, { unique: true }),
+        col('emailVerifications').createIndex({ userId: 1 }),
         // password-reset links + login OTP challenges: single-use tokens, TTL
         // reaps them at expiresAt (consumed docs keep their consumedAt until then)
-        db.collection('passwordResets').createIndex({ token: 1 }, { unique: true }),
-        db.collection('passwordResets').createIndex({ userId: 1 }),
-        db.collection('passwordResets').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
-        db.collection('authOtps').createIndex({ challenge: 1 }, { unique: true }),
-        db.collection('authOtps').createIndex({ userId: 1 }),
-        db.collection('authOtps').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+        col('passwordResets').createIndex({ token: 1 }, { unique: true }),
+        col('passwordResets').createIndex({ userId: 1 }),
+        col('passwordResets').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+        col('authOtps').createIndex({ challenge: 1 }, { unique: true }),
+        col('authOtps').createIndex({ userId: 1 }),
+        col('authOtps').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
         // owned email layer: outbox + delivery events + list hygiene
-        db.collection('email_messages').createIndex({ createdAt: -1 }),
-        db.collection('email_messages').createIndex({ to: 1 }),
-        db.collection('email_messages').createIndex({ stream: 1, status: 1, createdAt: -1 }),
-        db.collection('email_messages').createIndex({ providerMessageId: 1 }, { sparse: true }),
-        db.collection('email_events').createIndex({ emailMessageId: 1 }),
-        db.collection('email_events').createIndex({ providerMessageId: 1 }),
-        db.collection('email_events').createIndex({ eventType: 1, receivedAt: -1 }),
-        db.collection('email_templates').createIndex({ key: 1 }, { unique: true }),
-        db.collection('email_subscriptions').createIndex({ email: 1, listId: 1 }, { unique: true }),
-        db.collection('email_subscriptions').createIndex({ listId: 1, status: 1 }),
-        db.collection('email_suppression_list').createIndex({ email: 1 }, { unique: true }),
-        db.collection('email_unsubscribes').createIndex({ email: 1, listId: 1 }, { unique: true }),
-        db.collection('email_identities').createIndex({ identity: 1 }, { unique: true }),
-        db.collection('lopuMusingRateLimits').createIndex({ key: 1 }, { unique: true }),
-        db.collection('lopuMusingRateLimits').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
-        db.collection('themes').createIndex({ shareId: 1 }, { unique: true }),
-        db.collection('themes').createIndex({ ownerId: 1 }),
-        db.collection('waitlist').createIndex({ email: 1 }, { unique: true }),
+        col('email_messages').createIndex({ createdAt: -1 }),
+        col('email_messages').createIndex({ to: 1 }),
+        col('email_messages').createIndex({ stream: 1, status: 1, createdAt: -1 }),
+        col('email_messages').createIndex({ providerMessageId: 1 }, { sparse: true }),
+        col('email_events').createIndex({ emailMessageId: 1 }),
+        col('email_events').createIndex({ providerMessageId: 1 }),
+        col('email_events').createIndex({ eventType: 1, receivedAt: -1 }),
+        col('email_templates').createIndex({ key: 1 }, { unique: true }),
+        col('email_subscriptions').createIndex({ email: 1, listId: 1 }, { unique: true }),
+        col('email_subscriptions').createIndex({ listId: 1, status: 1 }),
+        col('email_suppression_list').createIndex({ email: 1 }, { unique: true }),
+        col('email_unsubscribes').createIndex({ email: 1, listId: 1 }, { unique: true }),
+        col('email_identities').createIndex({ identity: 1 }, { unique: true }),
+        col('lopuMusingRateLimits').createIndex({ key: 1 }, { unique: true }),
+        col('lopuMusingRateLimits').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+        col('themes').createIndex({ shareId: 1 }, { unique: true }),
+        col('themes').createIndex({ ownerId: 1 }),
+        col('waitlist').createIndex({ email: 1 }, { unique: true }),
         // the shared data-plane (`things`) index set — see createThingsDataIndexes
         ...createThingsDataIndexes(db),
-        db.collection('feedAlgorithms').createIndex({ shareId: 1 }, { unique: true }),
-        db.collection('feedAlgorithms').createIndex({ ownerId: 1 }),
+        col('feedAlgorithms').createIndex({ shareId: 1 }, { unique: true }),
+        col('feedAlgorithms').createIndex({ ownerId: 1 }),
         // global app settings singletons (rate-limit config lives here)
-        db.collection('settings').createIndex({ key: 1 }, { unique: true }),
+        col('settings').createIndex({ key: 1 }, { unique: true }),
         // general per-endpoint rate-limit windows; TTL reaps expired windows
-        db.collection('rateLimits').createIndex({ key: 1 }, { unique: true }),
-        db.collection('rateLimits').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
+        col('rateLimits').createIndex({ key: 1 }, { unique: true }),
+        col('rateLimits').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
       ]);
     })().catch((err) => {
       // don't cache a failed run — let the next call retry

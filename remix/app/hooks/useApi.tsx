@@ -134,7 +134,7 @@ export function useApi() {
       migrationsRun: useCallback(
         async (args) =>
           asyncFetcher.submit(
-            { migration: args?.migration, dryRun: args?.dryRun },
+            { migration: args?.migration, dryRun: args?.dryRun, confirm: args?.confirm },
             { action: '/api/v1/admin/migrations/run' }
           ),
         [asyncFetcher]
@@ -250,7 +250,12 @@ export function useApi() {
         [asyncFetcher]
       ),
       comment: useCallback(
-        async (args) => asyncFetcher.submit({ id: args?.id, text: args?.text }, { action: '/api/v1/things/comment' }),
+        // simple text comments send { id, text }; rich comments add
+        // type/images/listing/thing/tags — comments share the post schema
+        async (args) => {
+          const { id, text, type, images, listing, thing, tags } = args || {};
+          return asyncFetcher.submit({ id, text, type, images, listing, thing, tags }, { action: '/api/v1/things/comment' });
+        },
         [asyncFetcher]
       ),
       share: useCallback(

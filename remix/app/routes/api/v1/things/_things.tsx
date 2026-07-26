@@ -56,7 +56,8 @@ export const loader = async ({ request }: { request: Request }) => {
     if (result.ok === false) {
       return json({ ok: false, error: result.error }, { status: result.status });
     }
-    return json({ ok: true, thing: result.thing, post: result.post });
+    // comments project as posts too; parent/root carry their thread context
+    return json({ ok: true, thing: result.thing, post: result.post, parent: result.parent, root: result.root });
   }
 
   const result = await listThings(viewer, {
