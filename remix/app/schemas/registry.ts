@@ -216,9 +216,9 @@ export const MAX_APP_DATA_KEYS_PER_APP_USER = 200;
 export const MAX_APP_SESSIONS_PER_APP_USER = 10;
 
 // Extended (the schema-free sidecar every thing carries) — see sanitizeExtended
-// below for the full story.
+// below for the full story. Nesting has no validator rail — the only depth
+// bound is the database's own (MAX_STORABLE_NESTING below).
 export const EXTENDED_MAX_BYTES = 512 * 1024;
-export const MAX_EXTENDED_DEPTH = 64;
 // The wildcard text index's language_override field name. Data-crystal keys
 // can never collide with it (their grammar bans ':'), but extended accepts any
 // key — except this one, which would hijack or break the text index.
@@ -360,7 +360,10 @@ const commentSchema: ThingtimeSchema = {
   summary: 'A comment on another thing.',
   detail:
     'A standalone thing pointing at its target via targetId, carrying acl ["tt:inherit"] so it ' +
-    'is visible exactly when the target is. Comments used to live embedded inside post docs — ' +
+    'is visible exactly when the target is. Comments share the post schema: a rich comment is a ' +
+    '["post","comment"] thing carrying the full post vocabulary (photos, listing, thingtime ' +
+    'thing), the post crystal rules apply, and comments are reactable and commentable like any ' +
+    'post — each has its own /post/:id page. Comments used to live embedded inside post docs — ' +
     'the things v1→v2 migration explodes them into these.',
   requiresTarget: true,
   fields: [
@@ -419,14 +422,25 @@ const shareSchema: ThingtimeSchema = {
 // JSON shape — this is the "everything is a thing" promise made writable, and
 // what /search's real-datatype queries search over. Keys follow the same
 // segment grammar the search API accepts (no $, no dots inside a key), values
-// are depth/size/count-bounded, and when combined with a typed schema (e.g.
+// are size/count-bounded, and when combined with a typed schema (e.g.
 // thingtime ["post","data"]) the typed sanitizer's fields always win.
-// Depth is effectively unbounded for real data (JSON bodies are inherently
-// acyclic, so "any nesting as long as it's not circular" holds by
-// construction) — 64 is only a stack-safety rail for the recursive sanitizer,
-// far past anything hand-built or produced by Editor.js docs nested inside
-// things. The true DoS guards are the request body byte cap and the node count.
-export const MAX_DATA_CRYSTAL_DEPTH = 64;
+// Depth is unbounded by the validator: the walk is iterative (explicit work
+// stack, so nesting never touches the JS call stack) and circular or repeated
+// object references are rejected by identity (WeakSet) — "any nesting as long
+// as it's not circular" holds for real. The one depth-shaped bound left is
+// the database's, not ours: MongoDB physically caps BSON nesting at 100
+// levels per document, so contents deeper than MAX_STORABLE_NESTING can never
+// be stored — the validator reports that as a precise 400 instead of letting
+// the driver blow up mid-write. The true DoS guards are the request body byte
+// cap and the node count.
+// Probed live against mongod 8.0.1 through the real create API: a crystal
+// whose contents nest 179 levels (crystal root = level 1) inserts; 180 is
+// refused by the server with "BSONObj exceeds maximum nested object depth"
+// (mongod's 180-level user-write depth limit, minus the one thing-envelope
+// level the crystal/extended field sits at). This is the database's physical
+// ceiling, not a validator choice — if mongod ever raises its limit, re-probe
+// and lift this number to match.
+export const MAX_STORABLE_NESTING = 179;
 export const MAX_DATA_CRYSTAL_NODES = 10000;
 export const MAX_DATA_ARRAY_ITEMS = 1000;
 export const MAX_DATA_KEY_CHARS = 60;
@@ -448,8 +462,9 @@ const dataSchema: ThingtimeSchema = {
     'schemas, so the open shape can’t ride past a typed whitelist. Convention: carry a `schema` ' +
     'field naming a published schema thing (e.g. ' +
     '"Table") so schema-driven searches can find you, and tag the thing for feed filters. Keys ' +
-    `are letters/numbers/_/- (max ${MAX_DATA_KEY_CHARS} chars), nesting caps at ` +
-    `${MAX_DATA_CRYSTAL_DEPTH} levels, ${MAX_DATA_CRYSTAL_NODES} values per crystal, arrays at ` +
+    `are letters/numbers/_/- (max ${MAX_DATA_KEY_CHARS} chars), nesting is unbounded up to ` +
+    `MongoDB's own ${MAX_STORABLE_NESTING}-level storage limit (circular references rejected), ` +
+    `${MAX_DATA_CRYSTAL_NODES} values per crystal, arrays at ` +
     `${MAX_DATA_ARRAY_ITEMS} items, strings at ${MAX_TEXT_CHARS} chars.`,
   fields: [
     {
@@ -488,9 +503,9 @@ export const MAX_SCHEMA_FIELDS = 40; // total field nodes, counting nested child
 export const MAX_SCHEMA_ENUM_VALUES = 30;
 export const MAX_SCHEMA_ENUM_VALUE_CHARS = 60;
 export const MAX_SCHEMA_UNIT_CHARS = 20;
-// Matches the search grammar's MAX_FIELD_DEPTH and data crystals'
-// MAX_DATA_CRYSTAL_DEPTH — a schema can never describe a shape deeper than
-// what can be stored or searched.
+// Matches the search grammar's MAX_FIELD_DEPTH and sits far inside data
+// crystals' storable nesting (MAX_STORABLE_NESTING) — a schema can never
+// describe a shape deeper than what can be stored or searched.
 export const MAX_SCHEMA_FIELD_DEPTH = 6;
 // `render`: the optional serialised component tree a schema can carry (chakra
 // or element shaped) — caps match the client renderers' node/depth gates.
@@ -1023,7 +1038,7 @@ const sanitizePostCrystal = (
       if (typeof raw !== 'object' || Array.isArray(raw)) {
         return fail(400, 'Thingtime posts need a thing — an object with at least one field 🌀');
       }
-      const sanitized = sanitizeDataValue(raw, 1, { nodes: 0 }, 'thing');
+      const sanitized = sanitizeDataValue(raw, { path: 'thing', depth: 2 });
       if (!sanitized.ok) return sanitized;
       thing = sanitized.value as Record<string, unknown>;
     }
@@ -1038,7 +1053,14 @@ const sanitizePostCrystal = (
   return { ok: true, crystal: { type, text, images, listing, thing } };
 };
 
-const sanitizeCommentCrystal = (input: Record<string, unknown>): { ok: true; crystal: Record<string, unknown> } | Fail => {
+const sanitizeCommentCrystal = (
+  input: Record<string, unknown>,
+  ids?: string[]
+): { ok: true; crystal: Record<string, unknown> } | Fail => {
+  // Rich comments are ["post","comment"] things — the post sanitizer owns the
+  // whole crystal there (its own text/image/listing rules apply, so an
+  // image-only comment is legal the same way an image-only post is).
+  if (ids?.includes('post')) return { ok: true, crystal: {} };
   const text = typeof input.text === 'string' ? input.text.trim() : '';
   if (!text) return fail(400, 'Comment text is required');
   if (text.length > MAX_COMMENT_CHARS) return fail(400, `Comment is too long (max ${MAX_COMMENT_CHARS})`);
@@ -1076,57 +1098,109 @@ const DATA_KEY_PATTERN = KEY_SEGMENT_PATTERN;
 // loudly. Shared with the render-tree sanitizer below.
 const PROTOTYPE_POLLUTION_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
+// Iterative walk — an explicit work stack instead of recursion, so nesting
+// depth never touches the JS call stack and needs no rail. Cycle safety is
+// identity: any object/array seen twice (circular OR merely repeated) fails
+// loudly. LIFO + reversed pushes keeps document order, so the first failure
+// reported matches what the old recursive walk would have said.
+type DataWalkItem = {
+  value: unknown;
+  path: string;
+  depth: number; // containers only — checked against MongoDB's storable limit
+  key?: string; // object entry key, validated when this item is processed
+  assign: (out: unknown) => void;
+};
+
 const sanitizeDataValue = (
-  value: unknown,
-  depth: number,
-  counter: { nodes: number },
-  path: string
+  input: unknown,
+  // where the walked root actually lives relative to the stored crystal —
+  // crystal.thing payloads sit one level deeper, so their storable nesting
+  // budget is one less and their error paths carry the prefix
+  base?: { path: string; depth: number }
 ): { ok: true; value: unknown } | Fail => {
-  counter.nodes += 1;
-  if (counter.nodes > MAX_DATA_CRYSTAL_NODES) {
-    return fail(400, `Data crystals can hold at most ${MAX_DATA_CRYSTAL_NODES} values`);
-  }
-  if (value === null || typeof value === 'boolean') return { ok: true, value };
-  if (typeof value === 'number') {
-    if (!Number.isFinite(value)) return fail(400, `Data numbers must be finite (${path})`);
-    return { ok: true, value };
-  }
-  if (typeof value === 'string') {
-    if (value.length > MAX_TEXT_CHARS) return fail(400, `Data strings cap at ${MAX_TEXT_CHARS} chars (${path})`);
-    return { ok: true, value };
-  }
-  if (Array.isArray(value)) {
-    if (depth >= MAX_DATA_CRYSTAL_DEPTH) return fail(400, `Data nests at most ${MAX_DATA_CRYSTAL_DEPTH} levels (${path})`);
-    if (value.length > MAX_DATA_ARRAY_ITEMS) return fail(400, `Data arrays cap at ${MAX_DATA_ARRAY_ITEMS} items (${path})`);
-    const out: unknown[] = [];
-    for (let index = 0; index < value.length; index++) {
-      const entry = sanitizeDataValue(value[index], depth + 1, counter, `${path}[${index}]`);
-      if (!entry.ok) return entry;
-      out.push(entry.value);
-    }
-    return { ok: true, value: out };
-  }
-  if (typeof value === 'object') {
-    if (depth >= MAX_DATA_CRYSTAL_DEPTH) return fail(400, `Data nests at most ${MAX_DATA_CRYSTAL_DEPTH} levels (${path})`);
-    const out: Record<string, unknown> = {};
-    for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
-      if (key.length > MAX_DATA_KEY_CHARS || !DATA_KEY_PATTERN.test(key)) {
-        return fail(400, `Data keys are letters/numbers/_/- up to ${MAX_DATA_KEY_CHARS} chars (got ${key.slice(0, 80)})`);
+  let rootOut: unknown;
+  let nodes = 0;
+  const seen = new WeakSet<object>();
+  const stack: DataWalkItem[] = [
+    { value: input, path: base?.path ?? '', depth: base?.depth ?? 1, assign: (out) => { rootOut = out; } },
+  ];
+  while (stack.length) {
+    const item = stack.pop()!;
+    const { value, path, depth } = item;
+    if (item.key !== undefined) {
+      if (item.key.length > MAX_DATA_KEY_CHARS || !DATA_KEY_PATTERN.test(item.key)) {
+        return fail(400, `Data keys are letters/numbers/_/- up to ${MAX_DATA_KEY_CHARS} chars (got ${item.key.slice(0, 80)})`);
       }
-      if (PROTOTYPE_POLLUTION_KEYS.has(key)) {
-        return fail(400, `Data keys cannot be prototype accessors (got ${key})`);
+      if (PROTOTYPE_POLLUTION_KEYS.has(item.key)) {
+        return fail(400, `Data keys cannot be prototype accessors (got ${item.key})`);
       }
-      const sanitized = sanitizeDataValue(entry, depth + 1, counter, path ? `${path}.${key}` : key);
-      if (!sanitized.ok) return sanitized;
-      out[key] = sanitized.value;
     }
-    return { ok: true, value: out };
+    nodes += 1;
+    if (nodes > MAX_DATA_CRYSTAL_NODES) {
+      return fail(400, `Data crystals can hold at most ${MAX_DATA_CRYSTAL_NODES} values`);
+    }
+    if (value === null || typeof value === 'boolean') {
+      item.assign(value);
+      continue;
+    }
+    if (typeof value === 'number') {
+      if (!Number.isFinite(value)) return fail(400, `Data numbers must be finite (${path})`);
+      item.assign(value);
+      continue;
+    }
+    if (typeof value === 'string') {
+      if (value.length > MAX_TEXT_CHARS) return fail(400, `Data strings cap at ${MAX_TEXT_CHARS} chars (${path})`);
+      item.assign(value);
+      continue;
+    }
+    if (Array.isArray(value)) {
+      if (seen.has(value)) return fail(400, `Data can’t hold circular or repeated object references (${path || 'root'})`);
+      seen.add(value);
+      if (depth > MAX_STORABLE_NESTING) {
+        return fail(400, `MongoDB can store at most ${MAX_STORABLE_NESTING} nested levels per crystal (${path || 'root'})`);
+      }
+      if (value.length > MAX_DATA_ARRAY_ITEMS) return fail(400, `Data arrays cap at ${MAX_DATA_ARRAY_ITEMS} items (${path})`);
+      const out: unknown[] = new Array(value.length);
+      item.assign(out);
+      for (let index = value.length - 1; index >= 0; index--) {
+        const slot = index;
+        stack.push({
+          value: value[slot],
+          path: `${path}[${slot}]`,
+          depth: depth + 1,
+          assign: (child) => { out[slot] = child; },
+        });
+      }
+      continue;
+    }
+    if (typeof value === 'object') {
+      if (seen.has(value as object)) return fail(400, `Data can’t hold circular or repeated object references (${path || 'root'})`);
+      seen.add(value as object);
+      if (depth > MAX_STORABLE_NESTING) {
+        return fail(400, `MongoDB can store at most ${MAX_STORABLE_NESTING} nested levels per crystal (${path || 'root'})`);
+      }
+      const out: Record<string, unknown> = {};
+      item.assign(out);
+      const entries = Object.entries(value as Record<string, unknown>);
+      for (let index = entries.length - 1; index >= 0; index--) {
+        const [key, entry] = entries[index];
+        stack.push({
+          value: entry,
+          path: path ? `${path}.${key}` : key,
+          depth: depth + 1,
+          key,
+          assign: (child) => { out[key] = child; },
+        });
+      }
+      continue;
+    }
+    return fail(400, `Data values must be JSON (${path})`);
   }
-  return fail(400, `Data values must be JSON (${path})`);
+  return { ok: true, value: rootOut };
 };
 
 const sanitizeDataCrystal = (input: Record<string, unknown>): { ok: true; crystal: Record<string, unknown> } | Fail => {
-  const sanitized = sanitizeDataValue(input, 0, { nodes: 0 }, '');
+  const sanitized = sanitizeDataValue(input);
   if (!sanitized.ok) return sanitized;
   return { ok: true, crystal: sanitized.value as Record<string, unknown> };
 };
@@ -1139,30 +1213,45 @@ const sanitizeDataCrystal = (input: Record<string, unknown>): { ok: true; crysta
 // opaque one: external apps park whatever they want here. Replace-on-write
 // (null clears, undefined leaves it untouched) — deep-merging arbitrary JSON
 // is ambiguous, so we never do. The caps (EXTENDED_MAX_BYTES /
-// MAX_EXTENDED_DEPTH / EXTENDED_RESERVED_KEY) live with the other caps up top.
+// EXTENDED_RESERVED_KEY) live with the other caps up top; depth has no
+// validator rail — only MongoDB's storable-nesting bound applies.
 
 // Keys-only walk: values pass through verbatim, but a key that would corrupt
-// storage (BSON null byte, the text-index override) or a stack-hostile depth
-// fails loudly. Never mutates or drops — extended is stored exactly as given.
-const checkExtendedKeys = (value: unknown, depth: number, path: string): true | Fail => {
-  if (depth > MAX_EXTENDED_DEPTH) return fail(400, `extended nests at most ${MAX_EXTENDED_DEPTH} levels (${path || 'root'})`);
-  if (Array.isArray(value)) {
-    for (let index = 0; index < value.length; index++) {
-      const entry = checkExtendedKeys(value[index], depth + 1, `${path}[${index}]`);
-      if (entry !== true) return entry;
+// storage (BSON null byte, the text-index override) fails loudly. Iterative
+// (explicit stack) so nesting never touches the JS call stack, with an
+// identity WeakSet against circular/repeated references — belt-and-braces
+// here, since sanitizeExtended's JSON.stringify already rejects true cycles.
+// Never mutates or drops — extended is stored exactly as given.
+const checkExtendedKeys = (root: unknown): true | Fail => {
+  const seen = new WeakSet<object>();
+  const stack: Array<{ value: unknown; path: string; depth: number }> = [
+    { value: root, path: '', depth: 1 },
+  ];
+  while (stack.length) {
+    const { value, path, depth } = stack.pop()!;
+    if (!value || typeof value !== 'object') continue;
+    if (seen.has(value)) return fail(400, `extended can’t hold circular or repeated object references (${path || 'root'})`);
+    seen.add(value);
+    if (depth > MAX_STORABLE_NESTING) {
+      return fail(400, `MongoDB can store at most ${MAX_STORABLE_NESTING} nested levels in extended (${path || 'root'})`);
     }
-    return true;
-  }
-  if (value && typeof value === 'object') {
-    for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+    if (Array.isArray(value)) {
+      for (let index = value.length - 1; index >= 0; index--) {
+        stack.push({ value: value[index], path: `${path}[${index}]`, depth: depth + 1 });
+      }
+      continue;
+    }
+    const entries = Object.entries(value as Record<string, unknown>);
+    for (const [key] of entries) {
       if (key.includes('\u0000')) return fail(400, 'extended keys can’t contain null bytes');
       if (key === EXTENDED_RESERVED_KEY) {
         return fail(400, `extended can’t use the reserved key ${EXTENDED_RESERVED_KEY}`);
       }
-      const checked = checkExtendedKeys(entry, depth + 1, path ? `${path}.${key}` : key);
-      if (checked !== true) return checked;
     }
-    return true;
+    for (let index = entries.length - 1; index >= 0; index--) {
+      const [key, entry] = entries[index];
+      stack.push({ value: entry, path: path ? `${path}.${key}` : key, depth: depth + 1 });
+    }
   }
   return true;
 };
@@ -1194,7 +1283,7 @@ export const sanitizeExtended = (value: unknown): { ok: true; value: unknown } |
       return fail(400, `extended exceeds the ${EXTENDED_MAX_BYTES} byte limit`);
     }
   }
-  const keys = checkExtendedKeys(value, 0, '');
+  const keys = checkExtendedKeys(value);
   if (keys !== true) return keys;
   return { ok: true, value };
 };
@@ -1203,8 +1292,8 @@ export const sanitizeExtended = (value: unknown): { ok: true; value: unknown } |
 // (crystal.<name>). A name is ONE path segment — nesting is expressed via
 // `children`/`items`, never dots — so a schema tree bounded by
 // MAX_SCHEMA_FIELD_DEPTH can never flatten to a dotted path deeper than the
-// search grammar's MAX_FIELD_DEPTH or a crystal deeper than
-// MAX_DATA_CRYSTAL_DEPTH. Exported so the builtin-schema seed migration maps
+// search grammar's MAX_FIELD_DEPTH or a crystal deeper than MongoDB can
+// store. Exported so the builtin-schema seed migration maps
 // registry fields onto the exact same grammar sanitizeSchemaCrystal enforces
 // on user-authored schema things.
 export const SCHEMA_FIELD_NAME_PATTERN = /^[A-Za-z0-9_-]+$/;
