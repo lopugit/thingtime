@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Center, Flex, Text } from '@chakra-ui/react';
+import { Box, Center, Flex, Image, Text } from '@chakra-ui/react';
 import { useLocation, useMatches, useNavigate } from 'react-router';
 import { ChevronDown, Search } from 'lucide-react';
 
@@ -26,6 +26,22 @@ interface DrawerContentProps {
 export const UserAvatarCircle = (props: { size?: string; fontSize?: string }) => {
 	const user = useCurrentUser();
 
+	// a set avatar always wins — the rainbow initial is only the fallback
+	if (user?.avatarUrl) {
+		return (
+			<Image
+				src={user.avatarUrl}
+				alt={user.displayName || user.username}
+				width={props?.size || '28px'}
+				height={props?.size || '28px'}
+				borderRadius="999px"
+				objectFit="cover"
+				flexShrink={0}
+				border="1px solid var(--tt-border, #ececef)"
+			/>
+		);
+	}
+
 	const initial = (user?.displayName || user?.username || '?').trim().charAt(0).toUpperCase();
 
 	return (
@@ -50,11 +66,13 @@ export const DrawerContent = (props: DrawerContentProps) => {
 	const {
 		loading,
 		open,
+		setOpen,
 		direction,
 		topLevelLimit,
 		topLevelLimitIsUnlimited,
 		ordering,
 		setOrderingFor,
+		closesOnClick,
 		selectedItem,
 		setSelectedItem,
 		collapsedGroups,
@@ -188,17 +206,30 @@ export const DrawerContent = (props: DrawerContentProps) => {
 		return buildDrawerSubSections(subItems);
 	}, [subItems]);
 
+	// A navigating menu click dismisses the containing surface on BOTH
+	// viewports: onNavigate covers the popup preview + mobile panel, and
+	// setOpen(false) closes the pinned desktop panel too. Search stays on its
+	// own path (openSearch honours the "Search closes drawer" setting).
+	const dismissAfterNavigate = React.useCallback(() => {
+		onNavigate?.();
+		setOpen(false);
+	}, [onNavigate, setOpen]);
+
 	const onTopItemClick = React.useCallback(
 		(item) => {
 			selectedItemRef.current = item.id;
 			setSelectedItem(item.id);
 			if (item.to) {
 				navigate(item.to);
+				// unless the item's "close after click" setting is off — turning
+				// it off restores the old explore-the-submenu behaviour per item
+				if (closesOnClick(item.id)) {
+					dismissAfterNavigate();
+				}
 			}
-			// intentionally no onNavigate: keep the surface open so the
-			// second-level menu can be explored
+			// items without a destination only select — the surface stays open
 		},
-		[setSelectedItem, navigate]
+		[setSelectedItem, navigate, closesOnClick, dismissAfterNavigate]
 	);
 
 	const onSubItemClick = React.useCallback(
@@ -215,9 +246,11 @@ export const DrawerContent = (props: DrawerContentProps) => {
 			} else if (item.to) {
 				navigate(item.to);
 			}
-			onNavigate?.();
+			if (closesOnClick(item.id)) {
+				dismissAfterNavigate();
+			}
 		},
-		[navigate, onNavigate, onThingRoute, pathname]
+		[navigate, dismissAfterNavigate, onThingRoute, pathname, closesOnClick]
 	);
 
 	const onTopReorder = React.useCallback(
@@ -260,8 +293,8 @@ export const DrawerContent = (props: DrawerContentProps) => {
 
 	const onBrandClick = React.useCallback(() => {
 		navigate('/');
-		onNavigate?.();
-	}, [navigate, onNavigate]);
+		dismissAfterNavigate();
+	}, [navigate, dismissAfterNavigate]);
 
 	const onAvatarClick = React.useCallback(() => {
 		setAccountModalOpen(true);
@@ -504,7 +537,7 @@ export const DrawerContent = (props: DrawerContentProps) => {
 				)}
 
 				{/* editor window/config management, shown with the Things menu */}
-				{selectedTopItem?.id === 'things' && <EditorDrawerSection onNavigate={onNavigate} />}
+				{selectedTopItem?.id === 'things' && <EditorDrawerSection onNavigate={dismissAfterNavigate} />}
 			</Box>
 
 			{/* sticky account footer */}
