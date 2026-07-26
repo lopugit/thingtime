@@ -12,5 +12,11 @@ export const loader = async ({ request }: { request: Request }) => {
   if ('error' in gate) return json({ ok: false, error: gate.error.message }, { status: gate.error.status });
 
   const status = await getMigrationStatus();
-  return json({ ok: true, collections: status.collections, migrations: status.migrations });
+  return json({
+    ok: true,
+    collections: status.collections,
+    generations: status.generations,
+    adoptionIssues: status.adoptionIssues,
+    migrations: status.migrations
+  });
 };
