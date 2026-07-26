@@ -1,6 +1,12 @@
 import { randomUUID } from 'node:crypto';
 
-import { ensureIndexes, getThingtimeDb } from '../mongodb/collections';
+import { ensureIndexes, getAdoptionIssues, getCollection, getThingtimeDb } from '../mongodb/collections';
+import {
+  COLLECTIONS,
+  classifyPhysicalCollections,
+  collectionVersion,
+  physicalCollectionName
+} from '../mongodb/collectionNames';
 import { safeErrorText } from '../errors/safeError';
 import { reactionShareId } from '../things/things';
 import { buildUserSecure, packRecentReactions, toBin, userEmailKey, userUsernameKey } from '../auth/users';
@@ -48,6 +54,12 @@ export type Migration = {
   toVersion: number;
   title: string;
   description: string;
+  // drops data (cleanup migrations): the run endpoint requires an explicit
+  // confirm flag and the panel badges it
+  destructive?: boolean;
+  // physical collections this migration still READS from — the cleanup
+  // migration refuses to drop any collection a pending migration lists here
+  sourcePhysicals?: () => string[];
   pending: () => Promise<number>;
   run: (options: { dryRun: boolean }) => Promise<MigrationReport>;
 };
@@ -70,14 +82,13 @@ const stampMigration = (collection: string, description: string): Migration => {
     title: `Stamp ${collection} schemaVersion ${toVersion}`,
     description,
     pending: async () => {
-      const db = await getThingtimeDb();
-      return db.collection(collection).countDocuments(filter);
+      return (await getCollection(collection)).countDocuments(filter);
     },
     run: async ({ dryRun }) => {
-      const db = await getThingtimeDb();
-      const matched = await db.collection(collection).countDocuments(filter);
+      const target = await getCollection(collection);
+      const matched = await target.countDocuments(filter);
       if (dryRun) return { dryRun, matched, migrated: 0, created: 0, skipped: 0, notes: [] };
-      const result = await db.collection(collection).updateMany(filter, { $set: { schemaVersion: toVersion } });
+      const result = await target.updateMany(filter, { $set: { schemaVersion: toVersion } });
       return { dryRun, matched, migrated: result.modifiedCount, created: 0, skipped: 0, notes: [] };
     }
   };
@@ -116,17 +127,16 @@ const thingsMigration: Migration = {
     'post payloads under crystal, and stamps schemaVersion. Stray non-post docs in the things ' +
     'collection (legacy prototypes) are left untouched and reported.',
   pending: async () => {
-    const db = await getThingtimeDb();
+    const things = await getCollection('things');
     const [posts, relational] = await Promise.all([
-      db.collection('things').countDocuments(legacyPostFilter),
-      db.collection('things').countDocuments(legacyRelationalFilter)
+      things.countDocuments(legacyPostFilter),
+      things.countDocuments(legacyRelationalFilter)
     ]);
     return posts + relational;
   },
   run: async ({ dryRun }) => {
     await ensureIndexes();
-    const db = await getThingtimeDb();
-    const things = db.collection('things');
+    const things = await getCollection('things');
 
     const matched = await things.countDocuments(legacyPostFilter);
     // anything unversioned that is not a v1 post: legacy prototype docs and
@@ -452,14 +462,12 @@ const collectionToThingsMigration = (spec: ConvertSpec): Migration => ({
   // the whole remaining legacy collection is pending, whatever its stamped
   // schemaVersion — presence in the legacy collection IS the legacy era
   pending: async () => {
-    const db = await getThingtimeDb();
-    return db.collection(spec.collection).countDocuments({});
+    return (await getCollection(spec.collection)).countDocuments({});
   },
   run: async ({ dryRun }) => {
     await ensureIndexes();
-    const db = await getThingtimeDb();
-    const things = db.collection('things');
-    const legacy = db.collection(spec.collection);
+    const things = await getCollection('things');
+    const legacy = await getCollection(spec.collection);
     const notes = makeNotes();
 
     const matched = await legacy.countDocuments({});
@@ -845,10 +853,9 @@ const seedBuiltinSchemas: Migration = {
     'Idempotent and self-healing: re-runs upsert by shareId, refresh genuine seeded docs whose ' +
     'crystal drifted from the registry, and skip+note foreign docs squatting a destination id.',
   pending: async () => {
-    const db = await getThingtimeDb();
+    const things = await getCollection('things');
     const schemas = builtinCrystalSchemas();
-    const docs = await db
-      .collection('things')
+    const docs = await things
       .find({ shareId: { $in: builtinSchemaShareIds() } } as any)
       .project({ shareId: 1, thingtime: 1, ownerId: 1, crystal: 1 })
       .toArray();
@@ -872,8 +879,7 @@ const seedBuiltinSchemas: Migration = {
   },
   run: async ({ dryRun }) => {
     await ensureIndexes();
-    const db = await getThingtimeDb();
-    const things = db.collection('things');
+    const things = await getCollection('things');
     const notes = makeNotes();
     const schemas = builtinCrystalSchemas();
     const matched = schemas.length;
@@ -960,6 +966,232 @@ const seedBuiltinSchemas: Migration = {
   }
 };
 
+// ---------------------------------------------------------------------------
+// Physical collection generations (mongodb/collectionNames.ts): every logical
+// collection lives in a versioned physical collection — `things` at version 2
+// is the physical collection `things_v2`. Adoption (mongodb/collections.ts)
+// renames unversioned legacy collections in place on first db contact; the two
+// migrations below cover what adoption can't:
+//
+// - merge-legacy-collections: when a legacy collection still exists BESIDE its
+//   versioned successor (rename unavailable on the db tier, or writes landed
+//   in the new collection before adoption ran), copy the leftover docs forward
+//   by _id. The legacy collection is NEVER deleted here — it stays behind as a
+//   frozen snapshot.
+// - drop-stale-collection-generations: the only place old generations are
+//   removed. A stale generation (unversioned legacy, or _v<N> below current)
+//   is dropped only once nothing still needs it — legacy collections must
+//   have zero unmerged docs, and no registered migration may still be reading
+//   from it (sourcePhysicals + pending). This is the "database is on v5, so
+//   every <v5 collection can safely go" step, and it is explicitly
+//   destructive: the run endpoint requires confirm: true.
+//
+// Future shape migrations follow the same pattern: bump the collection's
+// version in COLLECTION_SCHEMA_VERSIONS (the code immediately targets the new
+// physical collection), register a copy-forward migration that reads the
+// pinned old physical name (declare it in sourcePhysicals so cleanup waits for
+// it), run it, verify, then run the cleanup to drop the superseded generation.
+
+const MERGE_BATCH = 200;
+
+type LegacyResidueRow = {
+  collection: string;
+  physical: string;
+  // docs in the legacy collection whose _id is absent from the current
+  // generation — the exact set merge-legacy-collections still has to copy
+  missing: number;
+};
+
+// The unversioned legacy collections that still exist, with their unmerged-doc
+// counts. Exact by _id ($lookup into the current generation), so "missing: 0"
+// genuinely means every doc has a counterpart and the snapshot is droppable.
+const legacyResidue = async (): Promise<LegacyResidueRow[]> => {
+  const db = await getThingtimeDb();
+  const names = (await db.listCollections({}, { nameOnly: true }).toArray()).map((entry: any) => entry.name);
+  const legacyRows = classifyPhysicalCollections(names).filter((row) => row.version === null);
+  return Promise.all(
+    legacyRows.map(async (row) => {
+      const counted = (await db
+        .collection(row.physical)
+        .aggregate([
+          {
+            $lookup: {
+              from: physicalCollectionName(row.collection),
+              localField: '_id',
+              foreignField: '_id',
+              as: 'copied'
+            }
+          },
+          { $match: { copied: { $size: 0 } } },
+          { $count: 'n' }
+        ])
+        .toArray()) as any[];
+      return { collection: row.collection, physical: row.physical, missing: counted.length ? counted[0].n : 0 };
+    })
+  );
+};
+
+const mergeLegacyCollections: Migration = {
+  id: 'merge-legacy-collections',
+  collection: 'all',
+  fromVersion: 0,
+  toVersion: 0,
+  title: 'Merge leftover legacy collections into their versioned successors',
+  description:
+    'Adoption renames each unversioned legacy collection (things → things_v2) in place on first ' +
+    'db contact. When that rename was not possible — the db tier does not allow renameCollection ' +
+    '(Atlas M0), or writes had already landed in the versioned collection — this migration copies ' +
+    'every leftover legacy doc into the current generation by _id: insert-if-absent, so a doc ' +
+    'already copied (or newer, written post-deploy) is never overwritten, and a doc blocked by a ' +
+    'unique index (a post-deploy write claimed its username/email/token) is skipped and noted — ' +
+    'the versioned collection wins. Legacy collections are never deleted here: they stay behind ' +
+    'as frozen snapshots until drop-stale-collection-generations removes them.',
+  pending: async () => {
+    const residue = await legacyResidue();
+    return residue.reduce((sum, row) => sum + row.missing, 0);
+  },
+  run: async ({ dryRun }) => {
+    await ensureIndexes();
+    const db = await getThingtimeDb();
+    const notes = makeNotes();
+    const residue = await legacyResidue();
+    const matched = residue.reduce((sum, row) => sum + row.missing, 0);
+
+    if (dryRun) {
+      for (const row of residue) {
+        notes.push(`${row.physical}: ${row.missing} doc(s) would be copied to ${physicalCollectionName(row.collection)}`);
+      }
+      return { dryRun, matched, migrated: 0, created: 0, skipped: 0, notes: notes.list() };
+    }
+
+    let created = 0;
+    let skipped = 0;
+
+    for (const row of residue) {
+      if (!row.missing) continue;
+      const legacy = db.collection(row.physical);
+      const destinationName = physicalCollectionName(row.collection);
+      // docs that failed to insert (unique key held by a newer doc at another
+      // _id) would re-match forever — exclude them from later batches
+      const blockedIds: any[] = [];
+      for (;;) {
+        const pipeline: any[] = [
+          ...(blockedIds.length ? [{ $match: { _id: { $nin: blockedIds } } }] : []),
+          {
+            $lookup: { from: destinationName, localField: '_id', foreignField: '_id', as: 'copied' }
+          },
+          { $match: { copied: { $size: 0 } } },
+          { $project: { copied: 0 } },
+          { $limit: MERGE_BATCH }
+        ];
+        const batch = (await legacy.aggregate(pipeline).toArray()) as any[];
+        if (!batch.length) break;
+        try {
+          const result = await db.collection(destinationName).insertMany(batch, { ordered: false });
+          created += result.insertedCount;
+        } catch (err: any) {
+          const writeErrors = err?.writeErrors || [];
+          const duplicates = writeErrors.filter((we: any) => we?.code === 11000);
+          if (writeErrors.length !== duplicates.length && err?.code !== 11000) throw err;
+          created += err?.result?.insertedCount ?? err?.insertedCount ?? 0;
+          for (const we of duplicates) {
+            const doc = batch[we.index];
+            if (doc) blockedIds.push(doc._id);
+            skipped += 1;
+          }
+          if (duplicates.length) {
+            notes.push(`${row.physical}: ${duplicates.length} doc(s) blocked by a unique key — versioned collection wins`);
+          }
+        }
+      }
+    }
+
+    return { dryRun, matched, migrated: created, created, skipped, notes: notes.list() };
+  }
+};
+
+const dropStaleCollectionGenerations: Migration = {
+  id: 'drop-stale-collection-generations',
+  collection: 'all',
+  fromVersion: 0,
+  toVersion: 0,
+  destructive: true,
+  title: 'Drop superseded collection generations',
+  description:
+    'THE delete step of collection versioning — removes physical collections the code no longer ' +
+    'reads: unversioned legacy collections (things) and generations below the current version ' +
+    '(things_v1 once the code is on things_v2). A collection is dropped only when nothing still ' +
+    'needs it: a legacy collection must have zero unmerged docs (merge-legacy-collections is the ' +
+    'source of truth), and any generation a registered migration still reads from (sourcePhysicals) ' +
+    'is kept until that migration reports zero pending. Unknown collections and generations ABOVE ' +
+    'the current version (a rolled-back deploy) are never touched. Dry-run lists every candidate ' +
+    'with its doc count; the real run requires confirm: true. Run it only after the deploy has ' +
+    'settled — instances still on pre-versioning code write to the legacy names.',
+  pending: async () => {
+    const db = await getThingtimeDb();
+    const names = (await db.listCollections({}, { nameOnly: true }).toArray()).map((entry: any) => entry.name);
+    const stale = classifyPhysicalCollections(names).filter((row) => row.stale);
+    if (!stale.length) return 0;
+    const residue = await legacyResidue();
+    const unmerged = new Map(residue.map((row) => [row.physical, row.missing]));
+    let count = 0;
+    for (const row of stale) {
+      if (row.version === null && (unmerged.get(row.physical) ?? 0) > 0) continue;
+      if (await staleGenerationBlocker(row.physical)) continue;
+      count += 1;
+    }
+    return count;
+  },
+  run: async ({ dryRun }) => {
+    const db = await getThingtimeDb();
+    const notes = makeNotes();
+    const names = (await db.listCollections({}, { nameOnly: true }).toArray()).map((entry: any) => entry.name);
+    const stale = classifyPhysicalCollections(names).filter((row) => row.stale);
+    const residue = await legacyResidue();
+    const unmerged = new Map(residue.map((row) => [row.physical, row.missing]));
+
+    let dropped = 0;
+    let skipped = 0;
+
+    for (const row of stale) {
+      const docs = await db.collection(row.physical).estimatedDocumentCount();
+      const missing = row.version === null ? unmerged.get(row.physical) ?? 0 : 0;
+      if (missing > 0) {
+        notes.push(`${row.physical}: kept — ${missing} doc(s) not yet merged (run merge-legacy-collections)`);
+        skipped += 1;
+        continue;
+      }
+      const blocker = await staleGenerationBlocker(row.physical);
+      if (blocker) {
+        notes.push(`${row.physical}: kept — migration ${blocker} still reads it and has pending work`);
+        skipped += 1;
+        continue;
+      }
+      if (dryRun) {
+        notes.push(`${row.physical}: ${docs} doc(s) — would be dropped`);
+        continue;
+      }
+      await db.dropCollection(row.physical);
+      notes.push(`${row.physical}: ${docs} doc(s) — dropped`);
+      dropped += 1;
+    }
+
+    return { dryRun, matched: stale.length, migrated: dropped, created: 0, skipped, notes: notes.list() };
+  }
+};
+
+// Does a registered migration still READ this stale physical collection while
+// having pending work? Cleanup keeps the collection until that migration is
+// done. (Declared via sourcePhysicals on future copy-forward migrations.)
+const staleGenerationBlocker = async (physical: string): Promise<string | null> => {
+  for (const migration of migrations) {
+    const sources = migration.sourcePhysicals?.() || [];
+    if (!sources.includes(physical)) continue;
+    if ((await migration.pending()) > 0) return migration.id;
+  }
+  return null;
+};
+
 export const migrations: Migration[] = [
   thingsMigration,
   usersToThings,
@@ -976,7 +1208,9 @@ export const migrations: Migration[] = [
   stampMigration(
     'lopuMusingRateLimits',
     'Stamps schemaVersion on both rate-limit shapes (musing sliding windows and waitlist counters).'
-  )
+  ),
+  mergeLegacyCollections,
+  dropStaleCollectionGenerations
 ];
 
 export const getMigration = (id: unknown): Migration | null =>
@@ -984,34 +1218,92 @@ export const getMigration = (id: unknown): Migration | null =>
 
 export type CollectionVersionStatus = {
   collection: string;
+  physical: string;
   currentVersion: number;
   total: number;
   versions: Record<string, number>;
   pendingMigrations: string[];
 };
 
-// Per-collection version census + which registered migrations still have work.
+// One physical collection on the server, classified against the registry: the
+// storage-generation view behind "which collections can I safely delete".
+export type CollectionGenerationStatus = {
+  collection: string;
+  physical: string;
+  version: number | null;
+  docs: number;
+  current: boolean;
+  stale: boolean;
+};
+
+// Per-collection version census + storage generations + which registered
+// migrations still have work.
 export const getMigrationStatus = async (): Promise<{
   collections: CollectionVersionStatus[];
-  migrations: Array<Pick<Migration, 'id' | 'collection' | 'fromVersion' | 'toVersion' | 'title' | 'description'> & { pending: number }>;
+  generations: CollectionGenerationStatus[];
+  adoptionIssues: string[];
+  migrations: Array<
+    Pick<Migration, 'id' | 'collection' | 'fromVersion' | 'toVersion' | 'title' | 'description'> & {
+      pending: number;
+      destructive: boolean;
+    }
+  >;
 }> => {
   const db = await getThingtimeDb();
 
   const collections = await Promise.all(
-    Object.entries(COLLECTION_SCHEMA_VERSIONS).map(async ([collection, currentVersion]) => {
-      const rows = (await db
-        .collection(collection)
-        .aggregate([{ $group: { _id: { $ifNull: ['$schemaVersion', LEGACY_SCHEMA_VERSION] }, count: { $sum: 1 } } }])
-        .toArray()) as any[];
+    COLLECTIONS.map(async (collection) => {
+      const rows = (await getCollection(collection).then((target) =>
+        target
+          .aggregate([{ $group: { _id: { $ifNull: ['$schemaVersion', LEGACY_SCHEMA_VERSION] }, count: { $sum: 1 } } }])
+          .toArray()
+      )) as any[];
       const versions: Record<string, number> = {};
       let total = 0;
       rows.forEach((row) => {
         versions[String(row._id)] = row.count;
         total += row.count;
       });
-      return { collection, currentVersion, total, versions, pendingMigrations: [] as string[] };
+      return {
+        collection,
+        physical: physicalCollectionName(collection),
+        currentVersion: collectionVersion(collection),
+        total,
+        versions,
+        pendingMigrations: [] as string[]
+      };
     })
   );
+
+  // every physical collection the server actually has, current or stale — the
+  // admin sees exactly what cleanup would drop before running it
+  const physicalNames = (await db.listCollections({}, { nameOnly: true }).toArray()).map((entry: any) => entry.name);
+  const generations = await Promise.all(
+    classifyPhysicalCollections(physicalNames).map(async (row) => ({
+      collection: row.collection,
+      physical: row.physical,
+      version: row.version,
+      docs: await db.collection(row.physical).estimatedDocumentCount(),
+      current: row.current,
+      stale: row.stale
+    }))
+  );
+  generations.sort((a, b) => a.collection.localeCompare(b.collection) || (a.version ?? 0) - (b.version ?? 0));
+
+  // Adoption issues are derived LIVE from what actually exists right now — a
+  // legacy collection merged and dropped since boot must not keep a stale
+  // warning up. The boot-time pass only contributes the rename-failure REASON
+  // for legacy collections that are still present.
+  const renameFailures = new Map(
+    getAdoptionIssues().flatMap((issue) => (issue.includes('rename to') ? [[issue.split(':')[0], issue] as const] : []))
+  );
+  const adoptionIssues = generations
+    .filter((generation) => generation.version === null)
+    .map(
+      (generation) =>
+        renameFailures.get(generation.collection) ||
+        `${generation.collection}: legacy collection still exists beside ${physicalCollectionName(generation.collection)} — run merge-legacy-collections`
+    );
 
   const withPending = await Promise.all(
     migrations.map(async (migration) => ({
@@ -1021,6 +1313,7 @@ export const getMigrationStatus = async (): Promise<{
       toVersion: migration.toVersion,
       title: migration.title,
       description: migration.description,
+      destructive: !!migration.destructive,
       pending: await migration.pending()
     }))
   );
@@ -1031,15 +1324,21 @@ export const getMigrationStatus = async (): Promise<{
     if (status) status.pendingMigrations.push(migration.id);
   });
 
-  return { collections, migrations: withPending };
+  return { collections, generations, adoptionIssues, migrations: withPending };
 };
 
 export const runMigration = async (
   id: unknown,
-  options: { dryRun?: unknown }
+  options: { dryRun?: unknown; confirm?: unknown }
 ): Promise<Fail | { ok: true; migration: string; report: MigrationReport }> => {
   const migration = getMigration(id);
   if (!migration) return fail(404, 'Unknown migration');
-  const report = await migration.run({ dryRun: options.dryRun === true || options.dryRun === 'true' });
+  const dryRun = options.dryRun === true || options.dryRun === 'true';
+  // destructive migrations (collection drops) never run on an unconfirmed
+  // call — a mis-sent id can cost data, so the API demands intent twice
+  if (migration.destructive && !dryRun && options.confirm !== true) {
+    return fail(400, `Migration ${migration.id} drops data — pass confirm: true to run it`);
+  }
+  const report = await migration.run({ dryRun });
   return { ok: true, migration: migration.id, report };
 };
