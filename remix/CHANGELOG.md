@@ -101,6 +101,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Atomic service-account quotas**: `GET|POST /api/v1/things/quota` stores one
+  private deterministic `data` Thing per service owner + key and atomically
+  reserves daily work, grants rolling-window permits, releases unused slots,
+  and resets daily usage without cancelling in-flight identities. The route
+  accepts only live service-purpose credentials, pins policy on first reserve,
+  uses server time, scopes every mutation by owner, and fails closed when
+  storage is unavailable. Official API docs, auth smoke coverage, and focused
+  policy/rollover/idempotency tests ship with it. — Codex (AI), 2026-07-19
+
 - Extensible data: every `things` doc now carries a schema-free top-level
   `extended` property — any JSON up to 512KB, stored and returned exactly as
   given, never validated, structured-searchable, or interpreted;

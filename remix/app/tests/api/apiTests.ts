@@ -729,6 +729,39 @@ export const apiTests: ApiTestDefinition[] = [
     )
   },
   {
+    id: 'things-quota-read-service-guarded',
+    name: 'Service quota read requires service credentials',
+    description: 'Anonymous callers cannot inspect an owner-scoped service quota.',
+    group: 'things',
+    method: 'GET',
+    path: '/api/v1/things/quota?key=api-test',
+    expect: expectJson(
+      [401],
+      (body) => body?.ok === false && body?.code === 'UNAUTHORIZED',
+      'Anonymous quota read was rejected.'
+    )
+  },
+  {
+    id: 'things-quota-write-service-guarded',
+    name: 'Service quota write requires service credentials',
+    description: 'Anonymous callers cannot reserve quota or initialize a quota Thing.',
+    group: 'things',
+    method: 'POST',
+    path: '/api/v1/things/quota',
+    body: {
+      key: 'api-test',
+      operation: 'reserve',
+      reservationId: 'api-test-reservation',
+      count: 1,
+      policy: { dailyLimit: 1, rollingLimit: 1, rollingWindowMs: 1_000 }
+    },
+    expect: expectJson(
+      [401],
+      (body) => body?.ok === false && body?.code === 'UNAUTHORIZED',
+      'Anonymous quota write was rejected before initialization.'
+    )
+  },
+  {
     id: 'things-feed-filtered',
     name: 'Feed honours type filter',
     description: 'Filtering by marketplace type returns only marketplace posts.',
@@ -860,6 +893,25 @@ export const apiTests: ApiTestDefinition[] = [
     path: '/api/v1/things/comment',
     body: { id: 'not-a-real-post-id', text: 'API test comment' },
     expect: expectJson([401, 404], (body) => body?.ok === false && typeof body?.error === 'string', 'Comment was rejected with an error shape.')
+  },
+  {
+    id: 'things-comment-rich-guarded',
+    name: 'Rich comments are guarded',
+    description: 'Post-shaped comments (images/listing payloads) go through the same auth + visibility gate.',
+    group: 'things',
+    method: 'POST',
+    path: '/api/v1/things/comment',
+    body: { id: 'not-a-real-post-id', type: 'image', text: 'API test rich comment', images: ['https://example.com/x.jpg'] },
+    expect: expectJson([401, 404], (body) => body?.ok === false && typeof body?.error === 'string', 'Rich comment was rejected with an error shape.')
+  },
+  {
+    id: 'things-get-missing',
+    name: 'Single thing lookup 404s cleanly',
+    description: 'The /post/:id backing read rejects unknown ids with an error shape.',
+    group: 'things',
+    method: 'GET',
+    path: '/api/v1/things?id=not-a-real-post-id',
+    expect: expectJson([404], (body) => body?.ok === false && typeof body?.error === 'string', 'Unknown thing returned a 404 error shape.')
   },
   {
     id: 'things-share-guarded',

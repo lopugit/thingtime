@@ -763,7 +763,12 @@ export const AuthorizePage = () => {
       alignItems="center"
       justifyContent="center"
       width="100%"
-      minHeight="100dvh"
+      minHeight="100vh"
+      sx={{
+        '@supports (min-height: 100dvh)': {
+          minHeight: '100dvh'
+        }
+      }}
       background="var(--tt-surface, #fafafb)"
       paddingX={4}
       paddingY={4}
