@@ -24,7 +24,7 @@ import Login from './routes/login';
 import SettingsRoute from './routes/settings';
 import MongoStatusPage from './routes/mongodb-status';
 import Ode from './routes/ode';
-import Post from './routes/post';
+import PostPage from './routes/post';
 import Profile from './routes/profile';
 import Rainbow from './routes/rainbow.$';
 import Raw from './routes/raw';
@@ -127,8 +127,9 @@ export const router = createBrowserRouter([
         loader: () => fetchJson('/api/v1/mongodb/status-data')
       },
       { path: 'ode', element: <Ode /> },
-      // public post permalink — guests see public posts, private ones 404
-      { path: 'post/:id', element: <Post /> },
+      // shareable permalink for any post or comment (timestamps link here);
+      // public to guests, private/missing things land on a not-found state
+      { path: 'post/:id', element: <PostPage /> },
       { path: 'profile', element: <Profile /> },
       { path: 'profile/:username', element: <Profile /> },
       { path: 'rainbow/*', element: <Rainbow /> },
