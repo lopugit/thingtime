@@ -831,7 +831,12 @@ export const ThingContextMenu = (props: ThingContextMenuProps) => {
 	}
 
 	if (presentation === 'modal') {
-		return (
+		if (typeof document === 'undefined') {
+			return null;
+		}
+		// portal to body: position:fixed is trapped (and clipped) by any
+		// transformed ancestor — the composer's embedded editor window is one
+		return createPortal(
 			<Flex
 				className="thing-context-menu-scrim"
 				position="fixed"
@@ -847,15 +852,20 @@ export const ThingContextMenu = (props: ThingContextMenuProps) => {
 				}}
 			>
 				{surface}
-			</Flex>
+			</Flex>,
+			document.body
 		);
 	}
 
 	if (presentation === 'context') {
-		return (
+		if (typeof document === 'undefined') {
+			return null;
+		}
+		return createPortal(
 			<Box position="fixed" top={`${clampedPosition?.y ?? 0}px`} left={`${clampedPosition?.x ?? 0}px`} zIndex={zIndex}>
 				{surface}
-			</Box>
+			</Box>,
+			document.body
 		);
 	}
 
