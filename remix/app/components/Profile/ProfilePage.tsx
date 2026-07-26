@@ -13,6 +13,7 @@ import {
 } from '~/components/Feed/AdvancedFilters';
 import { PostComposer } from '~/components/Feed/PostComposer';
 import { PostList } from '~/components/Feed/PostList';
+import { mergeReactionOverlays } from '~/components/Feed/reactionOverlay';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '~/components/Lopu/useLopu';
@@ -199,6 +200,9 @@ export const ProfilePage = (props: ProfilePageProps) => {
     ) => {
       if (loadingRef.current) return;
       loadingRef.current = true;
+      // stamp the START — responses snapshotted before a reaction tap that
+      // lands after it merge through the viewer's overlay, never clobber it
+      const startedAt = Date.now();
       setPostsLoading(true);
 
       try {
@@ -213,7 +217,7 @@ export const ProfilePage = (props: ProfilePageProps) => {
           });
           if (generationRef.current !== generation) return;
 
-          const page: PublicPost[] = searchResponsePosts(resp);
+          const page: PublicPost[] = mergeReactionOverlays(startedAt, searchResponsePosts(resp));
           setPosts((prev) => {
             if (!cursor) return page;
             const seen = new Set(prev.map((post) => post.id));
@@ -231,7 +235,7 @@ export const ProfilePage = (props: ProfilePageProps) => {
         });
         if (generationRef.current !== generation) return;
 
-        const page: PublicPost[] = Array.isArray(resp?.posts) ? resp.posts : [];
+        const page: PublicPost[] = mergeReactionOverlays(startedAt, Array.isArray(resp?.posts) ? resp.posts : []);
         setPosts((prev) => {
           if (!cursor) return page;
           // a post composed (and prepended) between page loads shifts offsets,
