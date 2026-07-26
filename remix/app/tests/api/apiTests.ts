@@ -921,6 +921,25 @@ export const apiTests: ApiTestDefinition[] = [
     expect: expectJson([401, 404], (body) => body?.ok === false && typeof body?.error === 'string', 'Comment was rejected with an error shape.')
   },
   {
+    id: 'things-comment-rich-guarded',
+    name: 'Rich comments are guarded',
+    description: 'Post-shaped comments (images/listing payloads) go through the same auth + visibility gate.',
+    group: 'things',
+    method: 'POST',
+    path: '/api/v1/things/comment',
+    body: { id: 'not-a-real-post-id', type: 'image', text: 'API test rich comment', images: ['https://example.com/x.jpg'] },
+    expect: expectJson([401, 404], (body) => body?.ok === false && typeof body?.error === 'string', 'Rich comment was rejected with an error shape.')
+  },
+  {
+    id: 'things-get-missing',
+    name: 'Single thing lookup 404s cleanly',
+    description: 'The /post/:id backing read rejects unknown ids with an error shape.',
+    group: 'things',
+    method: 'GET',
+    path: '/api/v1/things?id=not-a-real-post-id',
+    expect: expectJson([404], (body) => body?.ok === false && typeof body?.error === 'string', 'Unknown thing returned a 404 error shape.')
+  },
+  {
     id: 'things-share-guarded',
     name: 'Shares are guarded',
     description: 'Sharing without a session (or an unknown post) is rejected with an error shape.',

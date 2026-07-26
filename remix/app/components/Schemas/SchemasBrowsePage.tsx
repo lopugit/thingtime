@@ -20,6 +20,7 @@ import { Rainbow } from '~/components/Rainbow/Rainbow';
 import { ChakraThingRenderer, HtmlThingRenderer, RenderThing, isChakraThingNode } from '~/components/Kinds';
 import type { ChakraThingNode, HtmlThingNode } from '~/components/Kinds';
 import { EmojiPicker } from '~/components/Emoji/EmojiPicker';
+import { useOutsideTapClose } from '~/hooks/useOutsideTapClose';
 import { useRecentReactions } from '~/components/Emoji/useRecentReactions';
 import { timeAgo } from '~/components/Feed/feedTypes';
 import { useLopu } from '~/components/Lopu/useLopu';
@@ -200,6 +201,9 @@ const SchemaCard = React.memo(({ source, onReact, onSave, onFork, onCreateThing,
   const [showAllFields, setShowAllFields] = React.useState(false);
   const { recent } = useRecentReactions();
   const [pickerOpen, setPickerOpen] = React.useState(false);
+  // outside-tap close (NOT closeOnBlur): dismissing the mobile keyboard blurs
+  // the emoji search field and must not close the picker
+  const pickerContentRef = useOutsideTapClose<HTMLElement>(pickerOpen, () => setPickerOpen(false));
 
   // the thingtime ids a thing of this kind actually carries — community
   // schemas describe data crystals, share rides ["post","share"], etc.
@@ -392,7 +396,7 @@ const SchemaCard = React.memo(({ source, onReact, onSave, onFork, onCreateThing,
               </Button>
             );
           })}
-          <Popover isLazy isOpen={pickerOpen} onClose={() => setPickerOpen(false)} placement="top-start">
+          <Popover isLazy isOpen={pickerOpen} onClose={() => setPickerOpen(false)} placement="top-start" closeOnBlur={false}>
             <PopoverTrigger>
               <Button
                 border="1px dashed var(--tt-border, #ececef)"
@@ -409,7 +413,7 @@ const SchemaCard = React.memo(({ source, onReact, onSave, onFork, onCreateThing,
                 </Flex>
               </Button>
             </PopoverTrigger>
-            <PopoverContent border="1px solid var(--tt-border, #ececef)" width="320px">
+            <PopoverContent ref={pickerContentRef as any} border="1px solid var(--tt-border, #ececef)" width="320px">
               <PopoverBody padding={2}>
                 <EmojiPicker
                   activeTokens={entry.viewerReactions}

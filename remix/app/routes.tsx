@@ -24,6 +24,7 @@ import Login from './routes/login';
 import SettingsRoute from './routes/settings';
 import MongoStatusPage from './routes/mongodb-status';
 import Ode from './routes/ode';
+import PostPage from './routes/post';
 import Profile from './routes/profile';
 import Rainbow from './routes/rainbow.$';
 import Raw from './routes/raw';
@@ -126,6 +127,8 @@ export const router = createBrowserRouter([
         loader: () => fetchJson('/api/v1/mongodb/status-data')
       },
       { path: 'ode', element: <Ode /> },
+      // shareable permalink for any post or comment (timestamps link here)
+      { path: 'post/:id', element: <PostPage /> },
       { path: 'profile', element: <Profile /> },
       { path: 'profile/:username', element: <Profile /> },
       { path: 'rainbow/*', element: <Rainbow /> },
