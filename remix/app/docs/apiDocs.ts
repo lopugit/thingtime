@@ -2315,7 +2315,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       },
       {
         name: 'Read one thing',
-        description: 'Fetch a thing by id (posts include the full post projection).',
+        description:
+          'Fetch a thing by id (posts AND comments include the full post projection; comments also return parent and root for thread navigation — the /post/:id permalink pages are backed by this).',
         method: 'GET',
         query: { id: 'post_123' }
       },
@@ -2690,19 +2691,19 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'things',
     title: 'Comment on post',
     endpoint: '/api/v1/things/comment',
-    summary: 'Adds a comment to a post visible to the current user.',
+    summary: 'Adds a comment — comments share the post schema — to a thing visible to the current user.',
     detail:
-      'Comments are standalone things (thingtime ["comment"]) pointing at their target via targetId and inheriting its visibility — this route is sugar over the unified thing path. Visibility is re-checked before writing so private or circle-limited posts cannot be commented on by unauthorized viewers.',
+      'Simple comments are standalone things (thingtime ["comment"]) pointing at their target via targetId and inheriting its visibility — this route is sugar over the unified thing path. Comments share the post schema: sending post fields (type, images, listing, thing, tags) creates a RICH comment, a full ["post","comment"] thing validated by the post crystal rules, so comments can carry photos, marketplace listings, and thingtime things. Comments are reactable and commentable like any post, and every comment has its own /post/:id permalink. The id may be a post or another comment (replies). Visibility is re-checked before writing so private or circle-limited posts cannot be commented on by unauthorized viewers.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
     },
     methods: ['POST'],
     steps: [
-      'POST id and text.',
-      'The post must be visible to the current user.',
-      'Use commentCount from the response to update the card.',
-      'Handle 401 unauthenticated, 404 not visible, and 400 invalid text.'
+      'POST id and text for a simple comment, or id plus post fields (type, images, listing, thing, tags) for a rich comment.',
+      'The target thing (post or comment) must be visible to the current user.',
+      'The response comment carries the post vocabulary (reactionCounts, viewerReactions, commentCount) — use it and commentCount to update the card.',
+      'Handle 401 unauthenticated, 404 not visible, and 400 invalid payload.'
     ],
     requestExamples: [
       {
@@ -2710,13 +2711,32 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'Comment on a visible post.',
         method: 'POST',
         body: { id: 'post_123', text: 'I am interested.' }
+      },
+      {
+        name: 'Add rich comment',
+        description: 'Comment with photos, like a full post.',
+        method: 'POST',
+        body: { id: 'post_123', type: 'image', text: 'Here it is!', images: ['https://example.com/photo.jpg'] }
       }
     ],
     responseExamples: [
       {
         status: 200,
-        description: 'Comment added.',
-        body: { ok: true, comment: { text: 'I am interested.' }, commentCount: 1 }
+        description: 'Comment added (post-shaped: reactions, reply count, permalink id).',
+        body: {
+          ok: true,
+          comment: {
+            id: 'comment_123',
+            thingtime: ['comment'],
+            type: 'text',
+            text: 'I am interested.',
+            reactionCounts: {},
+            viewerReactions: [],
+            commentCount: 0,
+            targetId: 'post_123'
+          },
+          commentCount: 1
+        }
       }
     ]
   }),
@@ -3366,9 +3386,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'admin',
     title: 'Migration status',
     endpoint: '/api/v1/admin/migrations',
-    summary: 'Per-collection schema-version census plus registered migrations and their pending doc counts.',
+    summary: 'Per-collection schema-version census, storage generations, and registered migrations with pending counts.',
     detail:
-      'Every doc stores the root-level schemaVersion it was written at (docs without one count as version 1). This endpoint reports how many docs sit at each version per collection and which registered migrations still have work to do.',
+      'Every doc stores the root-level schemaVersion it was written at (docs without one count as version 1), and every ' +
+      'collection lives in a versioned physical collection — logical `things` at version 2 is the physical collection ' +
+      '`things_v2`. This endpoint reports how many docs sit at each version per collection, every physical collection ' +
+      'generation on the server (current, stale, or ahead), any legacy collections adoption could not rename, and which ' +
+      'registered migrations still have work to do.',
     auth: {
       mode: 'session-or-bearer',
       description:
@@ -3378,6 +3402,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: [
       'GET as an allowlisted admin.',
       'Read collections for the per-version doc census.',
+      'Read generations for every physical collection and its stale/current status.',
       'Read migrations for pending counts per registered migration.',
       'Handle 401 for anonymous or non-admin callers.'
     ],
@@ -3395,9 +3420,23 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         body: {
           ok: true,
           collections: [
-            { collection: 'things', currentVersion: 2, total: 42, versions: { '1': 24, '2': 18 }, pendingMigrations: ['things-v1-to-v2'] }
+            {
+              collection: 'things',
+              physical: 'things_v2',
+              currentVersion: 2,
+              total: 42,
+              versions: { '1': 24, '2': 18 },
+              pendingMigrations: ['things-v1-to-v2']
+            }
           ],
-          migrations: [{ id: 'things-v1-to-v2', collection: 'things', fromVersion: 1, toVersion: 2, pending: 24 }]
+          generations: [
+            { collection: 'things', physical: 'things_v2', version: 2, docs: 42, current: true, stale: false },
+            { collection: 'things', physical: 'things', version: null, docs: 42, current: false, stale: true }
+          ],
+          adoptionIssues: [],
+          migrations: [
+            { id: 'things-v1-to-v2', collection: 'things', fromVersion: 1, toVersion: 2, destructive: false, pending: 24 }
+          ]
         }
       },
       {
@@ -3414,7 +3453,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/admin/migrations/run',
     summary: 'Runs (or dry-runs) a registered schema-version migration.',
     detail:
-      'Migrations are idempotent, so re-running after a partial failure only touches what is left. The things v1→v2 migration explodes embedded comments/reactions into standalone things, converts share posts to thingtime ["post","share"], moves post payloads under crystal, and stamps schemaVersion; the other collections stamp the version they already conform to.',
+      'Migrations are idempotent, so re-running after a partial failure only touches what is left. The things v1→v2 ' +
+      'migration explodes embedded comments/reactions into standalone things, converts share posts to thingtime ' +
+      '["post","share"], moves post payloads under crystal, and stamps schemaVersion; the other collections stamp the ' +
+      'version they already conform to. merge-legacy-collections folds leftover unversioned collections into their ' +
+      'versioned successors, and drop-stale-collection-generations removes superseded physical collections — that one ' +
+      'is destructive and additionally requires confirm: true on the non-dry run.',
     auth: {
       mode: 'session-or-bearer',
       description:
@@ -3424,6 +3468,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: [
       'POST the migration id from /api/v1/admin/migrations.',
       'Pass dryRun: true first to see matched counts without writing.',
+      'Pass confirm: true when running a destructive migration for real.',
       'Read the report for matched, migrated, created, skipped, and notes.',
       'Handle 401 non-admin callers and 404 unknown migration ids.'
     ],
