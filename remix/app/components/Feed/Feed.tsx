@@ -11,6 +11,7 @@ import { FeedFilters } from './FeedFilters';
 import { PostComposer } from './PostComposer';
 import { PostList } from './PostList';
 import { useFeedEngagement } from './useFeedEngagement';
+import { mergeReactionOverlays } from './reactionOverlay';
 import type { FeedFiltersState, PostChange, PublicPost } from './feedTypes';
 
 // The /feed page: composer + algorithm picker + filters over an infinite
@@ -69,6 +70,9 @@ export const FeedPage = () => {
       if (loadingRef.current && !reset) return;
 
       const seq = ++requestSeqRef.current;
+      // stamp the START — responses snapshotted before a reaction tap that
+      // lands after it merge through the viewer's overlay, never clobber it
+      const startedAt = Date.now();
       loadingRef.current = true;
       setLoading(true);
 
@@ -87,7 +91,7 @@ export const FeedPage = () => {
           });
           if (seq !== requestSeqRef.current) return;
 
-          const pagePosts: PublicPost[] = searchResponsePosts(resp);
+          const pagePosts: PublicPost[] = mergeReactionOverlays(startedAt, searchResponsePosts(resp));
           setPosts((prev) => {
             if (reset) return pagePosts;
             const seen = new Set(prev.map((post) => post.id));
@@ -109,7 +113,10 @@ export const FeedPage = () => {
         });
         if (seq !== requestSeqRef.current) return;
 
-        setPosts((prev) => (reset ? resp.posts || [] : [...prev, ...(resp.posts || [])]));
+        setPosts((prev) => {
+          const page = mergeReactionOverlays(startedAt, resp.posts || []);
+          return reset ? page : [...prev, ...page];
+        });
         setNextCursor(resp.nextCursor ?? null);
         setRanked(!!resp.ranked);
       } catch (err: any) {

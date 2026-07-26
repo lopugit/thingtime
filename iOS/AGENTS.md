@@ -67,6 +67,34 @@ artifacts and should stay untracked.
     plutil -p -
   ```
 
+## Liquid Glass App Icon (`AppIcon.icon`)
+
+- The iOS 26+ home-screen icon is the Icon Composer package at
+  `Thingtime/Resources/AppIcon.icon` (JSON manifest + SVG layers). The legacy
+  `Assets.xcassets/AppIcon.appiconset` stays as the pre-iOS-26 fallback; both
+  share the name `AppIcon` on purpose.
+- Manifest gotchas (actool crashes with a nil-array exception instead of a
+  real error): `color-space-for-untagged-svg-colors` only accepts
+  `display-p3`, and `supported-platforms.squares` must be an array like
+  `["iOS"]`. Keep brand colors exact by using per-layer
+  `fill-specializations` with `srgb:` solid values rather than untagged SVG
+  colors.
+- On a beta-macOS host, release Xcode 26.5's actool crashes on EVERY `.icon`
+  compile while Xcode-beta 27's actool works. Workaround used for build 12
+  (only needed while that mismatch persists): move `AppIcon.icon` aside, run
+  `bundle exec fastlane build` on release Xcode, compile the catalog
+  standalone with the beta actool (`actool AppIcon.icon Assets.xcassets
+  --compile out --app-icon AppIcon --output-partial-info-plist out/pi.plist
+  --compress-pngs --target-device iphone --target-device ipad
+  --minimum-deployment-target 17.0 --platform iphoneos`), swap
+  `Assets.car` + the two fallback `AppIcon*.png` into the IPA's app bundle,
+  re-sign with the Apple Distribution identity plus the app's own
+  entitlements, then upload with `bundle exec fastlane upload`
+  (`IPA_PATH=<swapped.ipa>`). Verify the car with
+  `xcrun assetutil --info` (expect an `Icon Image` record named `AppIcon`).
+- Do not upload archives built with a non-RC beta Xcode; App Store Connect
+  rejects them as `90534`.
+
 ## Common Command
 
 ```sh
