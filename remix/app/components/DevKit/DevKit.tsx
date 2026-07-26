@@ -420,6 +420,31 @@ export const DevKit = (_props) => {
               as="button"
               type="button"
               onPointerDown={(e: React.PointerEvent) => e.stopPropagation()}
+              onClick={() => {
+                // reset: forget the dragged spot, close the panel, and let the
+                // trigger fall back to its default bottom-right corner
+                try {
+                  window.localStorage.removeItem(DEVKIT_TRIGGER_STORAGE_KEY);
+                } catch {
+                  // storage may be unavailable (private mode) — reset anyway
+                }
+                setTriggerPos(null);
+                setPos(null);
+                setOpen(false);
+              }}
+              aria-label="Reset position"
+              title="Reset position — close and send the button back to bottom-right"
+              fontSize="sm"
+              opacity={0.85}
+              marginRight={2}
+              _hover={{ opacity: 1 }}
+            >
+              🎯
+            </Box>
+            <Box
+              as="button"
+              type="button"
+              onPointerDown={(e: React.PointerEvent) => e.stopPropagation()}
               onClick={() => setOpen(false)}
               aria-label="Close"
               fontSize="sm"
