@@ -104,6 +104,19 @@ is fixed, and cite the checklist you ran in the PR description.
       and scrolls within a bounded box — it never mass-mounts nodes or
       wall-of-texts the feed.
 
+## Post interactions & inherit chains (`remix/app/api/utils/things/things.ts`)
+
+- [ ] Reacting, commenting, saving, sharing, and opening the `/post/:id`
+      permalink all work on a comment nested DEEP in a reply chain (build a
+      6+-deep comment-on-comment chain via the UI or API and interact with the
+      deepest one) — visibility resolves through the whole `tt:inherit` chain,
+      never "Post not found" for a legitimately deep reply. Chain resolution
+      is bounded by cycle detection (`aclChainCore.ts`, `npm run test:acl`),
+      NOT by a small depth cap: a depth cap silently orphaned deep replies
+      while the feed still rendered them.
+- [ ] A comment whose parent chain is broken (target deleted) fails closed:
+      not viewable, not reactable, permalink 404s.
+
 ## Thing context menu (`remix/app/components/Thingtime/ContextMenu/`)
 
 - [ ] Open the hover (popover) menu from a row inside a SMALL editor box: the
