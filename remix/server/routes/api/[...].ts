@@ -21,6 +21,7 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/algorithms/update': () => import('../../../app/routes/api/v1/algorithms/update/_update'),
   'v1/app-data': () => import('../../../app/routes/api/v1/app-data/_app-data'),
   'v1/app-data/delete': () => import('../../../app/routes/api/v1/app-data/delete/_delete'),
+  'v1/app-data/shared': () => import('../../../app/routes/api/v1/app-data/shared/_shared'),
   'v1/apps': () => import('../../../app/routes/api/v1/apps/_apps'),
   'v1/apps/delete': () => import('../../../app/routes/api/v1/apps/delete/_delete'),
   'v1/apps/public': () => import('../../../app/routes/api/v1/apps/public/_public'),

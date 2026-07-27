@@ -70,8 +70,19 @@ const SHARED_THINGS_CODE = `Thingtime.shared(session.token).then(function (thing
 const APP_STORAGE_CODE = `var data = Thingtime.data(session.token);
 data.set('preferences', { theme: 'rainbow' });   // any JSON ≤ 32KB, ≤ 200 keys/user
 data.get('preferences').then(function (value) { … });
-data.list();                                     // [{ key, value, updatedAt }, …]
-data.remove('preferences');`;
+data.list();                                     // [{ key, value, visibility, updatedAt }, …]
+data.remove('preferences');
+
+// SHARED entries ('app-data.shared' scope): visible to other users of YOUR
+// app — never other apps, never the public web. Opt-in per entry on write:
+data.set('post:2026-07-27', { text: 'Miso soup 🍲' }, { visibility: 'app' });
+data.shared({ key: 'post:*', limit: 20 }).then(function (page) {
+  // page.entries → [{ key, value, updatedAt, createdAt, author }, …] newest
+  //   first; author = { id, username, displayName?, avatarUrl? } — shaped by
+  //   what THAT author granted, like /oauth/userinfo
+  // page.nextCursor → pass back as { cursor } until null
+});
+// Revoking the grant pulls a user's shared entries from the feed instantly.`;
 
 const SCOPE_ROWS = [
   {
@@ -98,6 +109,11 @@ const SCOPE_ROWS = [
     id: 'app-data',
     shares: 'Read/write the app’s OWN key/value data for this user',
     notes: '/api/v1/app-data* returns 403 without it.'
+  },
+  {
+    id: 'app-data.shared',
+    shares: 'Entries the app marks shared become readable by OTHER users of the same app',
+    notes: 'EXACT consent — app-data does NOT imply it; request it explicitly. Opt-in per entry on write.'
   },
   {
     id: 'things',

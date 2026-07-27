@@ -55,6 +55,26 @@ const endpoint = (doc: Omit<ApiEndpointDoc, 'docsEndpoint'>): ApiEndpointDoc => 
 
 export const apiEndpointDocs: ApiEndpointDoc[] = [
   endpoint({
+    id: 'docs',
+    group: 'docs',
+    title: 'All API docs as Markdown',
+    endpoint: '/api/docs',
+    summary: 'Every Thingtime API endpoint documented in one Markdown file — made for AIs and humans alike.',
+    detail:
+      'GET returns text/markdown covering every endpoint in this catalog: methods, auth, summary, detail, ' +
+      'steps, request/response examples, and a curl call each. If you are an AI (or a person) discovering ' +
+      'the API by scanning /api* routes, fetch this once and you have the whole reference. Per-endpoint ' +
+      'JSON versions also exist at <endpoint>-docs (e.g. /api/v1/things-docs), and the human-readable ' +
+      'browser docs live at /docs/api. Anonymous, no auth.',
+    auth: { mode: 'none', description: 'Public — documentation data.' },
+    methods: ['GET'],
+    steps: ['GET /api/docs and read the Markdown.'],
+    requestExamples: [{ name: 'Fetch the reference', description: 'The whole API as one Markdown document.', method: 'GET' }],
+    responseExamples: [
+      { status: 200, description: 'Markdown document.', headers: { 'Content-Type': 'text/markdown; charset=utf-8' } }
+    ]
+  }),
+  endpoint({
     id: 'admin-rate-limits',
     group: 'admin',
     title: 'Rate-limit config',
@@ -2112,10 +2132,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     detail:
       'Authenticated by an app-scoped Bearer token from /api/v1/oauth/authorize. GET ?key=… returns one ' +
       'entry ({ entry: null } when unset); GET without key lists every entry for this (user, app). ' +
-      'POST { key, value } inserts or updates one entry — keys are [A-Za-z0-9._:-] up to 128 chars ' +
+      'POST { key, value, visibility?, acl? } inserts or updates one entry — keys are [A-Za-z0-9._:-] up to 128 chars ' +
       '(first char must be a letter or digit), values ' +
-      'any JSON up to 32KB, at most 200 keys per user per app. Entries are things owned by the END USER ' +
-      '(acl ["tt:user"]), so users can always see and delete what an app stored. CORS: browser calls must ' +
+      'any JSON up to 32KB, at most 200 keys per user per app. Entries are things owned by the END USER, ' +
+      'and their audience IS the acl array: ["tt:user"] (private, the default) or ' +
+      '["tt:user", "tt:app/<clientId>"] (readable by other users of this one app via /api/v1/app-data/shared). ' +
+      "visibility: 'private' | 'app' is accepted sugar for those two acls and derived back on the wire; " +
+      'marking an entry \'app\' requires the app-data.shared scope, and a write that omits visibility/acl ' +
+      "never changes an existing entry's audience. Users can always see and delete what an app stored. " +
+      'CORS: browser calls must ' +
       'come from the token\'s own bound origin. Requires the app-data scope — 403 when the user declined ' +
       'it on the consent screen.',
     auth: { mode: 'bearer', description: 'App-scoped Bearer token with the app-data scope — cookies never authenticate this route.' },
@@ -2128,10 +2153,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     requestExamples: [
       { name: 'Read one', description: 'One key.', method: 'GET', query: { key: 'preferences' } },
       { name: 'List all', description: 'Everything this app stored for this user.', method: 'GET' },
-      { name: 'Write', description: 'Upsert a key.', method: 'POST', body: { key: 'preferences', value: { theme: 'rainbow' } } }
+      { name: 'Write', description: 'Upsert a key.', method: 'POST', body: { key: 'preferences', value: { theme: 'rainbow' } } },
+      {
+        name: 'Write shared',
+        description: "Upsert a key other users of this app may read (needs the app-data.shared scope).",
+        method: 'POST',
+        body: { key: 'post:2026-07-27', value: { text: 'Miso soup 🍲' }, visibility: 'app' }
+      }
     ],
     responseExamples: [
-      { status: 200, description: 'Entry written.', body: { ok: true, entry: { key: 'preferences', value: { theme: 'rainbow' }, updatedAt: '2026-07-12T00:00:00.000Z' } } },
+      { status: 200, description: 'Entry written.', body: { ok: true, entry: { key: 'preferences', value: { theme: 'rainbow' }, visibility: 'private', acl: ['tt:user'], updatedAt: '2026-07-12T00:00:00.000Z' } } },
       { status: 401, description: 'Missing/expired/revoked token.', body: { ok: false, error: 'Unauthorized' } },
       { status: 403, description: 'Browser origin ≠ token origin.', body: { ok: false, error: 'Origin does not match this token' } }
     ]
@@ -2153,6 +2184,57 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ],
     responseExamples: [
       { status: 200, description: 'Removed (or already absent).', body: { ok: true, deleted: true } }
+    ]
+  }),
+  endpoint({
+    id: 'app-data-shared',
+    group: 'embed',
+    title: 'App data (shared pool)',
+    endpoint: '/api/v1/app-data/shared',
+    summary: "Read the entries every user of this app opted into sharing — the app-scoped social read.",
+    detail:
+      'GET ?key=&prefix=&limit=&cursor= returns entries from ALL users of the calling app whose acl carries ' +
+      'tt:app/<clientId> (written via POST /api/v1/app-data with visibility \'app\'), newest first with a ' +
+      'cursor — never entries from other apps, never private entries. key= matches exactly, key=post:* or ' +
+      "prefix= matches a prefix; limit clamps to 1–50 (default 20). Requires the app-data.shared scope on " +
+      "the calling token, and each entry's author must still hold a live grant covering that scope — a user " +
+      'who disconnects the app (or whose grant expires) drops out of this feed instantly while keeping ' +
+      "their data. Each entry's author is shaped by that AUTHOR's own grant, exactly like /oauth/userinfo: " +
+      'id + username always, displayName/avatarUrl only when that author granted profile.displayName / ' +
+      'profile.avatar. Same CORS + origin binding as /api/v1/app-data. Note the scope is EXACT consent: ' +
+      "granting app-data does NOT imply app-data.shared — apps must request it and users see its own line " +
+      'on the consent screen.',
+    auth: { mode: 'bearer', description: 'App-scoped Bearer token with the app-data.shared scope.' },
+    methods: ['GET'],
+    steps: [
+      "Request the app-data.shared scope in Thingtime.login({ scopes: [...] }).",
+      "Write shared entries with POST /api/v1/app-data { key, value, visibility: 'app' }.",
+      'GET this route (e.g. ?key=post:*) and page with nextCursor until it returns null.',
+      'Render authors from each entry\'s author object — fields mirror what each author consented to.'
+    ],
+    requestExamples: [
+      { name: 'App feed', description: 'Newest shared post entries.', method: 'GET', query: { key: 'post:*', limit: 20 } }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'One page, newest first.',
+        body: {
+          ok: true,
+          entries: [
+            {
+              key: 'post:2026-07-27',
+              value: { text: 'Miso soup 🍲' },
+              visibility: 'app',
+              updatedAt: '2026-07-27T00:00:00.000Z',
+              createdAt: '2026-07-27T00:00:00.000Z',
+              author: { id: '64f000000000000000000002', username: 'ada-lovelace', avatarUrl: null }
+            }
+          ],
+          nextCursor: 'eyJ1IjoxNzAwMDAwMDAwMDAwLCJzIjoi…'
+        }
+      },
+      { status: 403, description: 'Token lacks the scope.', body: { ok: false, error: 'This token was not granted the app-data.shared scope' } }
     ]
   }),
   endpoint({

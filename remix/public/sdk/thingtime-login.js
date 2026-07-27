@@ -218,14 +218,45 @@
           return payload.entries || [];
         });
       },
-      /** Insert-or-update one key (value = any JSON up to 32KB). */
-      set: function (key, value) {
+      /**
+       * Insert-or-update one key (value = any JSON up to 32KB).
+       * opts.visibility: 'private' (default) or 'app' — 'app' lets other
+       * users of YOUR app read the entry via shared() (never other apps,
+       * never the public web). Needs the 'app-data.shared' scope on the
+       * grant. Omit opts to leave an existing entry's audience unchanged.
+       */
+      set: function (key, value, opts) {
+        opts = opts || {};
+        var body = { key: key, value: value };
+        if (opts.visibility !== undefined) body.visibility = opts.visibility;
+        if (opts.acl !== undefined) body.acl = opts.acl;
         return call('/api/v1/app-data', {
           method: 'POST',
-          body: JSON.stringify({ key: key, value: value })
+          body: JSON.stringify(body)
         }).then(function (payload) {
           return payload.entry;
         });
+      },
+      /**
+       * The app-wide shared pool ('app-data.shared' scope): entries every
+       * user of this app opted into sharing, newest first, with a cursor.
+       * params: { key? ('post:*' matches a prefix), prefix?, limit?, cursor? }
+       * Resolves { entries: [{ key, value, updatedAt, createdAt, author }],
+       * nextCursor } — author is { id, username, displayName?, avatarUrl? },
+       * honouring what THAT author granted.
+       */
+      shared: function (params) {
+        params = params || {};
+        var query = [];
+        if (params.key) query.push('key=' + encodeURIComponent(params.key));
+        if (params.prefix) query.push('prefix=' + encodeURIComponent(params.prefix));
+        if (params.limit) query.push('limit=' + encodeURIComponent(params.limit));
+        if (params.cursor) query.push('cursor=' + encodeURIComponent(params.cursor));
+        return call('/api/v1/app-data/shared' + (query.length ? '?' + query.join('&') : '')).then(
+          function (payload) {
+            return { entries: payload.entries || [], nextCursor: payload.nextCursor || null };
+          }
+        );
       },
       /** Remove one key. Resolves true when it existed. */
       remove: function (key) {
@@ -384,5 +415,5 @@
   window.Thingtime.userinfo = userinfo;
   window.Thingtime.shared = shared;
   window.Thingtime.renderButton = renderButton;
-  window.Thingtime.sdkVersion = '1.2.0';
+  window.Thingtime.sdkVersion = '1.3.0';
 })();

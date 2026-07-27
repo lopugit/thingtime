@@ -288,3 +288,26 @@ is fixed, and cite the checklist you ran in the PR description.
       blocking) swaps "Loading the SDK…" for the failure notice with the
       standalone-demo link within ~10s — the preview must never show a
       permanent loading state.
+
+## Shared app-data (`/api/v1/app-data/shared`, `api/utils/apps/appData.ts`)
+
+- [ ] POST /api/v1/app-data with `visibility: 'app'` on a token WITHOUT the
+      `app-data.shared` scope returns 403 and writes nothing; with the scope
+      the entry's acl becomes `["tt:user", "tt:app/<clientId>"]`.
+- [ ] A plain `{ key, value }` rewrite of an existing shared entry keeps it
+      shared (audience only changes when the write names one); `visibility:
+      'private'` flips the acl back to `["tt:user"]`.
+- [ ] GET /api/v1/app-data/shared returns other users' `visibility: 'app'`
+      entries for the SAME app only — never private entries, never another
+      app's entries — newest first, and `key=post:*` prefix-filters.
+- [ ] Author objects honour each AUTHOR's own grant: displayName/avatarUrl
+      appear only when that author granted the profile field.
+- [ ] Revoking a user's grant (disconnect in settings) removes their entries
+      from the shared feed on the next read while `GET /api/v1/app-data`
+      still shows the entries to the owner.
+- [ ] The consent screen lists "Shared app storage" as its own line, and a
+      grant of plain `app-data` does NOT cover `app-data.shared` (exact
+      consent — no ancestor coverage).
+- [ ] GET /api/docs returns the whole API reference as text/markdown, and
+      /api/docs-docs + every `<endpoint>-docs` route (including
+      /api/v1/app-data/shared-docs) return their JSON doc payloads.
