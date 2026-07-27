@@ -336,3 +336,11 @@ is fixed, and cite the checklist you ran in the PR description.
       — real pages stay full-size even with fresh sandbox junk on top.
 - [ ] Sandbox storage budget: the 51st key for one sandbox token 400s
       (SANDBOX_MAX_KEYS), while real grants keep the 200-key cap.
+- [ ] Sandbox spaces: tokens minted with the same `space` see each other's
+      visibility-'app' entries in /app-data/shared, each authored by its own
+      `sandbox-<username>` pretend user; PRIVATE entries stay per-token even
+      in a shared space; a different space (or no space) sees nothing; real
+      feeds still exclude all sandbox docs.
+- [ ] Space validation: space shorter than 8 chars 400s; usernames are
+      always 'sandbox-' prefixed so pooled feeds can't impersonate real
+      accounts.

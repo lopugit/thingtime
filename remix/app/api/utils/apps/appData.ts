@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { ensureIndexes, getSessionsCollection, getThingsCollection } from '../mongodb/collections';
 import { findUserById } from '../auth/users';
-import { SANDBOX_MAX_KEYS, SANDBOX_TOKEN_TTL_MS } from './sandbox';
+import { SANDBOX_MAX_KEYS, SANDBOX_TOKEN_TTL_MS, sandboxDisplayName } from './sandbox';
 import { scopeCovers, sessionScopes } from './scopes';
 import {
   ACL_APP_PREFIX,
@@ -127,7 +127,13 @@ export const setAppData = async (
   appId: string,
   rawKey: unknown,
   value: unknown,
-  audience: { visibility?: unknown; acl?: unknown; allowShared: boolean; sandbox?: boolean } = { allowShared: false }
+  audience: {
+    visibility?: unknown;
+    acl?: unknown;
+    allowShared: boolean;
+    sandbox?: boolean;
+    sandboxSpace?: string | null;
+  } = { allowShared: false }
 ): Promise<{ ok: true; entry: AppDataEntry } | Fail> => {
   const key = sanitizeAppDataKey(rawKey);
   if (!key) {
@@ -198,8 +204,14 @@ export const setAppData = async (
       createdAt: now,
       updatedAt: now,
       // sandbox writes are ephemeral: the TTL reaper deletes them with the
-      // token's lifetime, so pretend data can never accumulate
-      ...(audience.sandbox ? { sandboxExpiresAt: new Date(now.getTime() + SANDBOX_TOKEN_TTL_MS) } : {})
+      // token's lifetime, so pretend data can never accumulate. The space
+      // stamp lets same-space sandboxes pool their shared entries.
+      ...(audience.sandbox
+        ? {
+            sandboxExpiresAt: new Date(now.getTime() + SANDBOX_TOKEN_TTL_MS),
+            ...(audience.sandboxSpace ? { sandboxSpace: audience.sandboxSpace } : {})
+          }
+        : {})
     };
 
     try {
@@ -298,12 +310,46 @@ const liveSharingAuthors = async (clientId: string, userIds: string[]): Promise<
   return scopesByUser;
 };
 
+// Same-space sandbox authors: live app-sandbox sessions for these owners in
+// this clientId's pool — the sandbox mirror of liveSharingAuthors, carrying
+// each pretend user's username + scope set. A dead session (expired token)
+// drops its author from the pool, mirroring real revocation semantics.
+const liveSandboxAuthors = async (
+  clientId: string,
+  space: string,
+  userIds: string[]
+): Promise<Map<string, { scopes: string[]; username: string }>> => {
+  if (!userIds.length) return new Map();
+  const sessions = await (await getSessionsCollection())
+    .find({
+      purpose: 'app-sandbox',
+      'meta.clientId': clientId,
+      'meta.space': space,
+      userId: { $in: userIds },
+      revokedAt: null,
+      $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }]
+    })
+    .toArray();
+
+  const byUser = new Map<string, { scopes: string[]; username: string }>();
+  for (const session of sessions) {
+    const scopes = sessionScopes(session.meta);
+    if (!scopeCovers(scopes, 'app-data.shared')) continue;
+    byUser.set(String(session.userId), {
+      scopes,
+      username: typeof session.meta?.username === 'string' ? session.meta.username : 'sandbox-you'
+    });
+  }
+  return byUser;
+};
+
 export const listSharedAppData = async (
   appId: string,
   params: { key?: string | null; prefix?: string | null; limit?: number | null; cursor?: string | null },
-  // Sandbox viewers see ONLY their own namespace (two sandboxes never see
-  // each other), with the synthetic author attached — no session/user lookups.
-  viewer?: { sandbox?: { ownerId: string; author: SharedEntryAuthor } }
+  // Sandbox viewers see their own namespace — or, when minted into a space,
+  // the pool of every same-space sandbox, each entry authored by its own
+  // pretend user. Never real entries, never another space.
+  viewer?: { sandbox?: { ownerId: string; space?: string | null; author: SharedEntryAuthor } }
 ): Promise<{ ok: true; entries: SharedAppDataEntry[]; nextCursor: string | null } | Fail> => {
   const limit = Math.min(MAX_SHARED_PAGE, Math.max(1, Math.floor(params.limit ?? DEFAULT_SHARED_PAGE) || DEFAULT_SHARED_PAGE));
 
@@ -331,8 +377,13 @@ export const listSharedAppData = async (
     // Real feeds never even SCAN sandbox docs (anyone can mint a sandbox
     // token naming a real clientId and write junk under it — the author-grant
     // filter would drop those entries anyway, but a flood could still thin
-    // real pages); sandbox viewers are fenced to their own namespace.
-    ...(viewer?.sandbox ? { ownerId: viewer.sandbox.ownerId } : { sandboxExpiresAt: { $exists: false } }),
+    // real pages); sandbox viewers are fenced to their own namespace, or to
+    // their opt-in space's pool.
+    ...(viewer?.sandbox
+      ? viewer.sandbox.space
+        ? { sandboxSpace: viewer.sandbox.space }
+        : { ownerId: viewer.sandbox.ownerId }
+      : { sandboxExpiresAt: { $exists: false } }),
     ...(keyFilter ? { 'crystal.key': keyFilter } : {})
   };
 
@@ -345,6 +396,7 @@ export const listSharedAppData = async (
   const things = await getThingsCollection();
   const kept: any[] = [];
   const authorScopes = new Map<string, string[]>();
+  const sandboxUsernames = new Map<string, string>();
   let lastScanned: any = null;
   let exhausted = false;
 
@@ -376,9 +428,13 @@ export const listSharedAppData = async (
     const authorIds = [...new Set(docs.map((doc: any) => String(doc.ownerId)))].filter(
       (id) => !authorScopes.has(id)
     );
-    if (viewer?.sandbox) {
+    if (viewer?.sandbox && !viewer.sandbox.space) {
       // The sandbox owner is by definition live (the viewer's own token).
       for (const id of authorIds) authorScopes.set(id, ['app-data.shared']);
+    } else if (viewer?.sandbox && viewer.sandbox.space) {
+      const live = await liveSandboxAuthors(appId, viewer.sandbox.space, authorIds);
+      for (const id of authorIds) authorScopes.set(id, live.get(id)?.scopes || []);
+      for (const [id, info] of live) sandboxUsernames.set(id, info.username);
     } else {
       const live = await liveSharingAuthors(appId, authorIds);
       for (const id of authorIds) authorScopes.set(id, live.get(id) || []);
@@ -405,7 +461,21 @@ export const listSharedAppData = async (
   // author.
   const pageAuthors = [...new Set(page.map((doc: any) => String(doc.ownerId)))];
   const authorsById = new Map<string, SharedEntryAuthor>();
-  if (viewer?.sandbox) {
+  if (viewer?.sandbox && viewer.sandbox.space) {
+    // Pooled sandboxes: each entry authored by its own pretend user, gated by
+    // that token's scopes exactly like real authors.
+    for (const id of pageAuthors) {
+      const username = sandboxUsernames.get(id);
+      if (!username) continue;
+      const scopes = authorScopes.get(id) || [];
+      authorsById.set(id, {
+        id,
+        username,
+        ...(scopeCovers(scopes, 'profile.displayName') ? { displayName: sandboxDisplayName(username) } : {}),
+        ...(scopeCovers(scopes, 'profile.avatar') ? { avatarUrl: null } : {})
+      });
+    }
+  } else if (viewer?.sandbox) {
     authorsById.set(viewer.sandbox.ownerId, viewer.sandbox.author);
   } else {
     const users = await Promise.all(pageAuthors.map((id) => findUserById(id)));

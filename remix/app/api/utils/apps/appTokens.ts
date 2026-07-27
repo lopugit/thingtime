@@ -88,6 +88,9 @@ export type AppTokenContext = {
   // under it is TTL-reaped. Routes that touch real per-user state must branch
   // on this.
   sandbox?: boolean;
+  // the opt-in pool this sandbox token was minted into (null = isolated):
+  // same-space tokens share their 'app'-visibility entries as pretend users
+  sandboxSpace?: string | null;
 };
 
 // Resolve an app-scoped Bearer token, or null. Bearer-only on purpose: app
@@ -116,13 +119,18 @@ export const resolveAppToken = async (request: Request): Promise<AppTokenContext
 
   if (session.purpose === 'app-sandbox') {
     return {
-      user: sandboxPublicUser(String(session.userId), session.createdAt),
+      user: sandboxPublicUser(
+        String(session.userId),
+        session.createdAt,
+        typeof session.meta?.username === 'string' ? session.meta.username : undefined
+      ),
       clientId,
       origin,
       jti: claims.jti,
       scopes: sessionScopes(session.meta),
       sharedThings: [],
-      sandbox: true
+      sandbox: true,
+      sandboxSpace: typeof session.meta?.space === 'string' ? session.meta.space : null
     };
   }
 
