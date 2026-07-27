@@ -191,6 +191,10 @@ export const AuthorizePage = () => {
   const optionalScopeParam = (params.get('optional_scope') || '').slice(0, 1024);
   const extrasAllowed = params.get('extra') !== '0';
   const sandbox = params.get('sandbox') === '1';
+  // opt-in sandbox pooling (see /api/v1/oauth/sandbox): passed through to the
+  // mint verbatim — the server validates
+  const sandboxSpace = (params.get('sandbox_space') || '').slice(0, 64);
+  const sandboxUsername = (params.get('sandbox_username') || '').slice(0, 32);
 
   const [catalog, setCatalog] = React.useState<ScopeDescriptor[]>([]);
   const [defaultScopes, setDefaultScopes] = React.useState<string[]>([]);
@@ -422,7 +426,9 @@ export const AuthorizePage = () => {
         body: JSON.stringify({
           clientId: app.clientId,
           origin: verifiedOrigin,
-          scopes: selection
+          scopes: selection,
+          ...(sandboxSpace ? { space: sandboxSpace } : {}),
+          ...(sandboxUsername ? { username: sandboxUsername } : {})
         })
       });
       const real = !!(minted?.ok && minted.token);

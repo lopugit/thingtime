@@ -1978,15 +1978,22 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/oauth/sandbox',
     summary: 'Mint a real, working sandbox token for ANY clientId — no registration, no account, no browser.',
     detail:
-      'POST { clientId?, origin?, scope?, scopes? } (all optional; anonymous, per-IP rate-limited). ' +
+      'POST { clientId?, origin?, scope?, scopes?, space?, username? } (all optional; anonymous, ' +
+      'per-IP rate-limited). ' +
       'Returns the same handoff shape as /oauth/authorize plus sandbox: true — a signed Bearer token ' +
       'that WORKS for one hour against /api/v1/app-data (read/write/delete, including visibility ' +
-      "'app'), /api/v1/app-data/shared, and /api/v1/oauth/userinfo. It resolves to the synthetic " +
-      "'sandbox-you' user, every byte written under it is namespaced to that one token and TTL-reaped " +
-      'within the hour, the shared pool shows only that token\'s own entries (two sandboxes can never ' +
-      'see each other), and the token can never act as an account credential. This is the headless ' +
-      'counterpart of the consent popup\'s ?sandbox=1 mode: integration code written against it works ' +
-      'unchanged when you register a real app and switch to Thingtime.login().',
+      "'app'), /api/v1/app-data/shared, and /api/v1/oauth/userinfo. It resolves to a synthetic " +
+      "pretend user (username 'sandbox-<name>', default sandbox-you), every byte written under it is " +
+      'namespaced to that one token and TTL-reaped within the hour, and the token can never act as an ' +
+      'account credential. By default two sandboxes are fully isolated; to rehearse the MULTI-USER ' +
+      'shared feed, mint several tokens with the same `space` (an 8-64 char pool secret you choose — ' +
+      'use a uuid) and distinct `username`s: same-space tokens see each other\'s visibility-\'app\' ' +
+      'entries via /app-data/shared, each entry authored by its own pretend user gated by that ' +
+      "token's scopes — private entries stay per-token even inside a space. This is the headless " +
+      'counterpart of the consent popup\'s ?sandbox=1 mode (which accepts sandbox_space / ' +
+      'sandbox_username URL params, or SDK options sandboxSpace / sandboxUsername): integration code ' +
+      'written against it works unchanged when you register a real app and switch to ' +
+      'Thingtime.login().',
     auth: { mode: 'none', description: 'Anonymous — the whole point is testing before you have anything.' },
     methods: ['POST'],
     steps: [
@@ -2001,6 +2008,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'A sandbox token for an app that does not exist yet.',
         method: 'POST',
         body: { clientId: 'macrobiotica-dev', origin: 'http://localhost:5599', scope: 'profile.username app-data app-data.shared' }
+      },
+      {
+        name: 'Mint into a pool',
+        description: 'Two mints with the same space = two pretend users sharing one feed.',
+        method: 'POST',
+        body: {
+          clientId: 'macrobiotica-dev',
+          scope: 'profile.username app-data app-data.shared',
+          space: 'f6b2c1e8-demo-pool-2a1f0c9d8e7f',
+          username: 'ada'
+        }
       }
     ],
     responseExamples: [

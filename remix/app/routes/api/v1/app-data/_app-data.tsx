@@ -69,7 +69,8 @@ export const action = async ({ request }: { request: Request }) => {
     visibility: body?.visibility,
     acl: body?.acl,
     allowShared: scopeCovers(ctx.scopes, 'app-data.shared'),
-    sandbox: ctx.sandbox
+    sandbox: ctx.sandbox,
+    sandboxSpace: ctx.sandboxSpace
   });
 
   if (result.ok === false) {

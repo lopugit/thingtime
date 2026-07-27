@@ -65,6 +65,10 @@
    *                              // token really works (app-data + userinfo, 1h, pretend account,
    *                              // auto-deleted data) — or mint one headlessly via
    *                              // POST /api/v1/oauth/sandbox
+   *   sandboxSpace?: string,     // opt-in pool secret (8-64 chars, use a uuid): sandbox logins
+   *                              // sharing a space see each other's 'app'-visibility entries —
+   *                              // rehearse the multi-user shared feed pre-registration
+   *   sandboxUsername?: string,  // pretend-author name in pooled feeds ('sandbox-' prefixed)
    *   baseUrl?: string
    * }} options
    *   Scope paths are hierarchical — 'profile' covers every profile.* leaf;
@@ -101,7 +105,13 @@
         (scope ? '&scope=' + encodeURIComponent(scope) : '') +
         (optionalScope ? '&optional_scope=' + encodeURIComponent(optionalScope) : '') +
         (options.allowExtra === false ? '&extra=0' : '') +
-        (options.sandbox ? '&sandbox=1' : '');
+        (options.sandbox ? '&sandbox=1' : '') +
+        (options.sandbox && options.sandboxSpace
+          ? '&sandbox_space=' + encodeURIComponent(options.sandboxSpace)
+          : '') +
+        (options.sandbox && options.sandboxUsername
+          ? '&sandbox_username=' + encodeURIComponent(options.sandboxUsername)
+          : '');
 
       var left = Math.max(0, Math.round((window.screen.width - POPUP_WIDTH) / 2));
       var top = Math.max(0, Math.round((window.screen.height - POPUP_HEIGHT) / 2));

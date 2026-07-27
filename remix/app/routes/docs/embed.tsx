@@ -435,6 +435,14 @@ export default function DocsEmbed() {
           the consent-shape lookup for any clientId. Code written against the sandbox works unchanged
           once you register the real app.
         </Text>
+        <Text>
+          Testing the <strong>multi-user shared feed</strong>? Mint several sandbox tokens with the
+          same <code>space</code> (a pool secret you choose — use a uuid) and distinct{' '}
+          <code>username</code>s: same-space sandboxes see each other&apos;s shared entries as
+          separate pretend users (<code>sandbox-ada</code>, <code>sandbox-grace</code>, …), while
+          private entries and other spaces stay isolated. In the popup, pass{' '}
+          <code>sandboxSpace</code> / <code>sandboxUsername</code> to <code>Thingtime.login()</code>.
+        </Text>
       </Stack>
 
       <Stack spacing={3}>
