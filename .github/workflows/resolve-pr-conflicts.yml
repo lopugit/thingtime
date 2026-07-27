@@ -82,12 +82,21 @@
 
 name: Resolve PR conflicts (AI)
 
-run-name: "Resolve PR conflicts under ${{ github.event.client_payload.branch || inputs.branch || github.ref_name }}"
+run-name: "Resolve PR conflicts under ${{ github.event.client_payload.branch || inputs.branch || github.event.pull_request.base.ref || github.ref_name }}"
 
 on:
   push:
     branches:
       - "**"
+  # A PR branched off a STALE base can be born conflicting, and no push to the
+  # base follows it — so without this it would sit unresolved until the next
+  # unrelated base push. `pull_request` is on the action's supported-event list,
+  # so these runs resolve directly (no handoff hop).
+  # Deliberately NOT `synchronize`: that fires on every push to a PR head,
+  # including this workflow's own resolution pushes, which is churn we don't
+  # need — a base push already covers the after-the-fact cases.
+  pull_request:
+    types: [opened, reopened]
   workflow_dispatch:
     inputs:
       branch:
@@ -105,7 +114,9 @@ on:
 # One run per base branch; a newer push supersedes an in-flight resolution
 # (the push is atomic, so cancelling mid-run never half-publishes anything).
 concurrency:
-  group: resolve-conflicts-${{ github.event.client_payload.branch || inputs.branch || github.ref_name }}
+  # PR-scoped runs get their own group so opening a PR never cancels an
+  # in-flight base sweep (and vice versa); everything else groups by base branch.
+  group: resolve-conflicts-${{ github.event.pull_request.number && format('pr{0}', github.event.pull_request.number) || github.event.client_payload.branch || inputs.branch || github.ref_name }}
   cancel-in-progress: true
 
 permissions:
@@ -129,13 +140,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          TARGET: ${{ github.event.client_payload.branch || inputs.branch || github.ref_name }}
+          TARGET: ${{ github.event.client_payload.branch || inputs.branch || github.event.pull_request.base.ref || github.ref_name }}
+          # Set only on pull_request events: narrows the scan to the triggering
+          # PR instead of every PR sharing its base (github.ref_name is
+          # "<n>/merge" on these events, which is why TARGET reads base.ref).
+          ONLY_PR: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
 
           query() {
             gh pr list --repo "$REPO" --base "$TARGET" --state open \
-              --json number,headRefName,isCrossRepository,isDraft,mergeable \
+              --json number,headRefName,baseRefName,isCrossRepository,isDraft,mergeable \
               --limit 100
           }
 
@@ -158,7 +173,15 @@ jobs:
           still_unknown="$(jq -r '[.[] | select(.mergeable == "UNKNOWN") | .number] | join(", ")' <<<"$prs")"
           [ -n "$still_unknown" ] && echo "::warning::PR(s) #$still_unknown still UNKNOWN after polling; they will be re-checked on the next push."
 
-          conflicting="$(jq -c '[.[] | select(.isCrossRepository | not) | select(.mergeable == "CONFLICTING") | {number: .number, head: .headRefName}]' <<<"$prs")"
+          # On a pull_request event, resolve ONLY the triggering PR — the other
+          # PRs sharing this base are not this event's business and are already
+          # covered by base pushes.
+          # `base` comes from the API record of the PR itself, so the resolve job
+          # never re-derives it from event context. That matters on pull_request
+          # events, where github.ref_name is "<N>/merge" — which would both break
+          # the merge AND, if a collaborator created a branch literally named
+          # "<N>/merge", silently merge an attacker-chosen branch into the PR.
+          conflicting="$(jq -c --arg only "${ONLY_PR:-}" '[.[] | select(.isCrossRepository | not) | select(.mergeable == "CONFLICTING") | select($only == "" or (.number|tostring) == $only) | {number: .number, head: .headRefName, base: .baseRefName}]' <<<"$prs")"
           echo "prs=$conflicting" >> "$GITHUB_OUTPUT"
           echo "any=$(jq 'length > 0' <<<"$conflicting")" >> "$GITHUB_OUTPUT"
 
@@ -208,7 +231,9 @@ jobs:
         pr: ${{ fromJSON(needs.detect.outputs.prs) }}
     env:
       REPO: ${{ github.repository }}
-      BASE_REF: ${{ github.event.client_payload.branch || inputs.branch || github.ref_name }}
+      # From the PR's own API record (see the scan step) — never re-derived from
+      # event context, which is wrong on pull_request events.
+      BASE_REF: ${{ matrix.pr.base }}
       HEAD_REF: ${{ matrix.pr.head }}
       PR_NUMBER: ${{ matrix.pr.number }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -347,7 +372,7 @@ jobs:
             pushes what you leave in the working tree. Do not attempt to run git or
             any command; just edit the conflicted files in place.
 
-            Situation: base branch "${{ github.event.client_payload.branch || inputs.branch || github.ref_name }}"
+            Situation: base branch "${{ matrix.pr.base }}"
             was merged into "${{ matrix.pr.head }}" (the head of PR #${{ matrix.pr.number }}),
             and the merge stopped on conflicts. Conflicted files currently contain
             zdiff3 conflict markers:
