@@ -46,8 +46,10 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // unauthenticated DB read, so bound it per IP like the other public reads
   'apps.public': { limit: 60, windowMs: 60_000, enabled: true },
   // anonymous sandbox-token mint (/api/v1/oauth/sandbox) — each call writes a
-  // short-lived session doc, so bound it per IP well below the TTL reaper
-  'oauth.sandbox': { limit: 20, windowMs: 60_000, enabled: true },
+  // short-lived session doc and unlocks a (small, TTL-reaped) storage
+  // namespace, so the per-IP budget is deliberately tight: worst-case junk
+  // per IP ≈ limit/min × 60 × SANDBOX_MAX_KEYS × 32KB, all gone within 1h
+  'oauth.sandbox': { limit: 10, windowMs: 60_000, enabled: true },
   // app-token READ endpoints (oauth/userinfo, oauth/shared, app-data GET) —
   // token-gated, keyed per (user, app); a backstop against a compromised or
   // abusive integration hammering the resolution + read path

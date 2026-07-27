@@ -22,6 +22,12 @@ import type { PublicUser } from '../auth/users';
 
 export const SANDBOX_TOKEN_TTL_MS = 1000 * 60 * 60;
 
+// Sandbox tokens get a deliberately smaller storage budget than real grants
+// (real: MAX_APP_DATA_KEYS_PER_APP_USER): the mint is anonymous, so the
+// worst-case standing junk per IP is (mint rate × keys × value cap) and every
+// factor should be tight. 50 keys is plenty to exercise pagination.
+export const SANDBOX_MAX_KEYS = 50;
+
 export const SANDBOX_OWNER_PREFIX = 'sandbox:';
 
 export const isSandboxOwnerId = (id: unknown): boolean =>
