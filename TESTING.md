@@ -288,3 +288,51 @@ is fixed, and cite the checklist you ran in the PR description.
       blocking) swaps "Loading the SDK…" for the failure notice with the
       standalone-demo link within ~10s — the preview must never show a
       permanent loading state.
+
+## Shared app-data (`/api/v1/app-data/shared`, `api/utils/apps/appData.ts`)
+
+- [ ] POST /api/v1/app-data with `visibility: 'app'` on a token WITHOUT the
+      `app-data.shared` scope returns 403 and writes nothing; with the scope
+      the entry's acl becomes `["tt:user", "tt:app/<clientId>"]`.
+- [ ] A plain `{ key, value }` rewrite of an existing shared entry keeps it
+      shared (audience only changes when the write names one); `visibility:
+      'private'` flips the acl back to `["tt:user"]`.
+- [ ] GET /api/v1/app-data/shared returns other users' `visibility: 'app'`
+      entries for the SAME app only — never private entries, never another
+      app's entries — newest first, and `key=post:*` prefix-filters.
+- [ ] Author objects honour each AUTHOR's own grant: displayName/avatarUrl
+      appear only when that author granted the profile field.
+- [ ] Revoking a user's grant (disconnect in settings) removes their entries
+      from the shared feed on the next read while `GET /api/v1/app-data`
+      still shows the entries to the owner.
+- [ ] The consent screen lists "Shared app storage" as its own line, and a
+      grant of plain `app-data` does NOT cover `app-data.shared` (exact
+      consent — no ancestor coverage).
+- [ ] GET /api/docs returns the whole API reference as text/markdown, and
+      /api/docs-docs + every `<endpoint>-docs` route (including
+      /api/v1/app-data/shared-docs) return their JSON doc payloads.
+
+## Sandbox tokens (`/api/v1/oauth/sandbox`, `api/utils/apps/sandbox.ts`)
+
+- [ ] POST /api/v1/oauth/sandbox (no auth, any clientId) returns a Bearer
+      token that works against /app-data set/get/list/delete, the shared
+      pool, and /oauth/userinfo — resolving to the synthetic `sandbox-you`
+      user, never a real account.
+- [ ] Sandbox app-data docs carry `sandboxExpiresAt` (TTL-reaped) and are
+      namespaced per token: a second sandbox token sees NONE of the first's
+      entries (private or shared).
+- [ ] A sandbox token can never act as an account credential:
+      /api/v1/auth/me (and any cookie/session path) rejects it.
+- [ ] GET /api/v1/apps/public?sandbox=1 returns a mock app (flagged
+      `sandbox: true`) for an unregistered clientId instead of 404; without
+      sandbox=1 the 404/403 behaviour is unchanged.
+- [ ] The consent popup's sandbox approve hands back a REAL minted token
+      (falls back to the inert `tt-sandbox-token` only if the mint call
+      fails), and scope gating on the handoff user object still matches the
+      selection.
+- [ ] Feed-pollution fence: a sandbox token minted with a REAL app's
+      clientId can write shared entries, but that real app's
+      /app-data/shared feed never scans them (`sandboxExpiresAt` excluded)
+      — real pages stay full-size even with fresh sandbox junk on top.
+- [ ] Sandbox storage budget: the 51st key for one sandbox token 400s
+      (SANDBOX_MAX_KEYS), while real grants keep the 200-key cap.

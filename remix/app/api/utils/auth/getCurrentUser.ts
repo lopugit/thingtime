@@ -33,8 +33,10 @@ export const resolveSessionUser = async (jti: string, expectedUserId: string): P
   if (String(session.userId) !== expectedUserId) return null;
   // App-scoped tokens (third-party "Login with Thingtime" grants) are never
   // full account credentials: they only work through the app-token path
-  // (apps/appTokens.ts), which checks purpose === 'app' itself.
-  if (session.purpose === 'app') return null;
+  // (apps/appTokens.ts), which checks the purpose itself. Sandbox tokens
+  // couldn't resolve anyway (their userId is no real user), but reject them
+  // explicitly all the same.
+  if (session.purpose === 'app' || session.purpose === 'app-sandbox') return null;
 
   const user = await findUserById(expectedUserId);
   if (!user) return null;
