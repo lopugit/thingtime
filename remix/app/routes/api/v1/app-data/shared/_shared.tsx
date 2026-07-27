@@ -39,12 +39,14 @@ export const loader = async ({ request }: { request: Request }) => {
       limit: rawLimit === null ? null : Number(rawLimit),
       cursor: url.searchParams.get('cursor')
     },
-    // Sandbox tokens read their own namespace only, authored by the synthetic
-    // sandbox user shaped by the token's scopes — same wire shape end to end.
+    // Sandbox tokens read their own namespace — or their opt-in space's pool
+    // — authored by pretend users shaped by each token's scopes; same wire
+    // shape end to end.
     ctx.sandbox
       ? {
           sandbox: {
             ownerId: ctx.user.id,
+            space: ctx.sandboxSpace,
             author: {
               id: ctx.user.id,
               username: ctx.user.username,

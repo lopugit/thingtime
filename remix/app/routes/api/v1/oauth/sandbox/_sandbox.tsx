@@ -2,7 +2,12 @@ import { json } from '~/api/http';
 
 import { normalizeAppOrigin } from '~/api/utils/apps/apps';
 import { appCorsHeaders, appDataPreflight, readJsonBodyWithCors } from '~/api/utils/apps/cors';
-import { mintSandboxToken, sandboxPublicUser } from '~/api/utils/apps/sandbox';
+import {
+  mintSandboxToken,
+  sandboxPublicUser,
+  sanitizeSandboxSpace,
+  sanitizeSandboxUsername
+} from '~/api/utils/apps/sandbox';
 import { parseScopeParam, sanitizeGrantedScopes, scopeCovers } from '~/api/utils/apps/scopes';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 
@@ -13,6 +18,12 @@ import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit
 //              Origin header, else a sandbox placeholder)
 //   scope    — space-delimited scope paths, exactly like /oauth/authorize
 //   scopes   — or an explicit array (the "granted" selection)
+//   space    — opt-in pool secret (8-64 chars; use a uuid): tokens minted
+//              into the same space share their 'app'-visibility entries as
+//              distinct pretend users — the way to rehearse the multi-user
+//              /app-data/shared feed. Omit for a fully isolated sandbox.
+//   username — pretend-author name for pooled feeds (always 'sandbox-'
+//              prefixed; default sandbox-you)
 // The token works against /api/v1/app-data*, /oauth/userinfo and
 // /app-data/shared for ONE HOUR, resolves to the synthetic sandbox user, and
 // everything written under it is namespaced per token and TTL-reaped. Nothing
@@ -54,11 +65,15 @@ export const action = async ({ request }: { request: Request }) => {
   if (granted.ok === false) return json({ ok: false, error: granted.error }, { status: 400, headers: cors });
   const scopes = body?.scopes === undefined || body?.scopes === null ? requested.scopes : granted.scopes;
 
-  const grant = await mintSandboxToken(clientId, origin, scopes);
+  const space = sanitizeSandboxSpace(body?.space);
+  if (space && typeof space === 'object') return json({ ok: false, error: space.error }, { status: 400, headers: cors });
+  const username = sanitizeSandboxUsername(body?.username);
+
+  const grant = await mintSandboxToken(clientId, origin, scopes, { space, username });
 
   // Mirror /oauth/authorize's handoff shape (+ sandbox: true) so integration
   // code written against the sandbox works unchanged against the real flow.
-  const user = sandboxPublicUser('sandbox', new Date());
+  const user = sandboxPublicUser('sandbox', new Date(), username);
   const has = (path: string) => scopeCovers(scopes, path);
   return json(
     {
@@ -68,6 +83,7 @@ export const action = async ({ request }: { request: Request }) => {
       tokenType: grant.tokenType,
       expiresAt: grant.expiresAt.toISOString(),
       scopes,
+      space,
       sharedThings: 0,
       user: {
         id: user.id,
