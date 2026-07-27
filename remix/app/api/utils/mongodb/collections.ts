@@ -329,6 +329,10 @@ export const ensureIndexes = async () => {
           { 'crystal.appId': 1, acl: 1, updatedAt: -1, shareId: -1 },
           { partialFilterExpression: { 'crystal.appId': { $exists: true } } }
         ),
+        // Sandbox app-data is ephemeral: only docs written under a sandbox
+        // token carry sandboxExpiresAt (TTL skips docs without the field), so
+        // pretend data reaps itself with the token's lifetime.
+        col('things').createIndex({ sandboxExpiresAt: 1 }, { expireAfterSeconds: 0 }),
         col('feedAlgorithms').createIndex({ shareId: 1 }, { unique: true }),
         col('feedAlgorithms').createIndex({ ownerId: 1 }),
         // global app settings singletons (rate-limit config lives here)

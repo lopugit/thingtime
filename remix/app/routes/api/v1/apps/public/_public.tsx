@@ -31,18 +31,33 @@ export const loader = async ({ request }: { request: Request }) => {
   const optional = parseScopeParam(url.searchParams.get('optional_scope'), [], false);
   if (optional.ok === false) return json({ ok: false, error: optional.error }, { status: 400 });
 
+  // Optional entries the required set already covers are noise — and worse, a
+  // toggle for a scope a required ancestor already grants would be a lie
+  // (unticking it wouldn't withhold anything). Drop by COVERAGE, not exact id.
+  const requiredIds = required.scopes;
+  const optionalIds = optional.scopes.filter((id) => !scopeCovers(requiredIds, id));
+
+  // sandbox=1: answer for ANY clientId — a mock app payload, clearly flagged,
+  // so integrators (and their AIs) can render/validate the consent shape
+  // before the app exists. No lookup, no allowlist; pair it with
+  // POST /api/v1/oauth/sandbox for a working pretend token.
+  if (url.searchParams.get('sandbox') === '1') {
+    return json({
+      ok: true,
+      sandbox: true,
+      app: { clientId, name: clientId.startsWith('ttapp_') ? 'Your App' : clientId },
+      origin,
+      requiredScopes: describeScopes(requiredIds),
+      optionalScopes: describeScopes(optionalIds)
+    });
+  }
+
   const app = await findAppByClientId(clientId);
   if (!app) return json({ ok: false, error: 'App not found' }, { status: 404 });
 
   if (!appAllowsOrigin(app, origin)) {
     return json({ ok: false, error: 'This origin is not on the app’s allowlist' }, { status: 403 });
   }
-
-  // Optional entries the required set already covers are noise — and worse, a
-  // toggle for a scope a required ancestor already grants would be a lie
-  // (unticking it wouldn't withhold anything). Drop by COVERAGE, not exact id.
-  const requiredIds = required.scopes;
-  const optionalIds = optional.scopes.filter((id) => !scopeCovers(requiredIds, id));
 
   return json({
     ok: true,

@@ -421,7 +421,19 @@ export default function DocsEmbed() {
           <code>Thingtime.login({'{ clientId, scopes, optionalScopes }'})</code> from a click handler —
           it returns a Promise of the same session object. (It must run in a user gesture or the popup
           will be blocked.) While building, add <code>sandbox: true</code> — the popup runs the full
-          consent UI with a pretend token and nothing is really shared.
+          consent UI for <em>any</em> clientId (registered or not) and hands back a <strong>real
+          working sandbox token</strong>: it drives <code>/app-data*</code>, the shared pool, and{' '}
+          <code>userinfo</code> for an hour against a pretend account whose data is namespaced to that
+          one token and auto-deleted. Nothing real is ever touched.
+        </Text>
+        <Text>
+          No browser at all (scripts, AIs, CI)? Mint the same token headlessly —{' '}
+          <code>
+            POST /api/v1/oauth/sandbox {'{ clientId, origin, scope: "profile.username app-data" }'}
+          </code>{' '}
+          — anonymous and registration-free, and <code>GET /api/v1/apps/public?sandbox=1</code> answers
+          the consent-shape lookup for any clientId. Code written against the sandbox works unchanged
+          once you register the real app.
         </Text>
       </Stack>
 

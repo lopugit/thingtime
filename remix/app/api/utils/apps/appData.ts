@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { ensureIndexes, getSessionsCollection, getThingsCollection } from '../mongodb/collections';
 import { findUserById } from '../auth/users';
+import { SANDBOX_TOKEN_TTL_MS } from './sandbox';
 import { scopeCovers, sessionScopes } from './scopes';
 import {
   ACL_APP_PREFIX,
@@ -126,7 +127,7 @@ export const setAppData = async (
   appId: string,
   rawKey: unknown,
   value: unknown,
-  audience: { visibility?: unknown; acl?: unknown; allowShared: boolean } = { allowShared: false }
+  audience: { visibility?: unknown; acl?: unknown; allowShared: boolean; sandbox?: boolean } = { allowShared: false }
 ): Promise<{ ok: true; entry: AppDataEntry } | Fail> => {
   const key = sanitizeAppDataKey(rawKey);
   if (!key) {
@@ -193,7 +194,10 @@ export const setAppData = async (
       targetId: null,
       tags: [],
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
+      // sandbox writes are ephemeral: the TTL reaper deletes them with the
+      // token's lifetime, so pretend data can never accumulate
+      ...(audience.sandbox ? { sandboxExpiresAt: new Date(now.getTime() + SANDBOX_TOKEN_TTL_MS) } : {})
     };
 
     try {
@@ -294,7 +298,10 @@ const liveSharingAuthors = async (clientId: string, userIds: string[]): Promise<
 
 export const listSharedAppData = async (
   appId: string,
-  params: { key?: string | null; prefix?: string | null; limit?: number | null; cursor?: string | null }
+  params: { key?: string | null; prefix?: string | null; limit?: number | null; cursor?: string | null },
+  // Sandbox viewers see ONLY their own namespace (two sandboxes never see
+  // each other), with the synthetic author attached — no session/user lookups.
+  viewer?: { sandbox?: { ownerId: string; author: SharedEntryAuthor } }
 ): Promise<{ ok: true; entries: SharedAppDataEntry[]; nextCursor: string | null } | Fail> => {
   const limit = Math.min(MAX_SHARED_PAGE, Math.max(1, Math.floor(params.limit ?? DEFAULT_SHARED_PAGE) || DEFAULT_SHARED_PAGE));
 
@@ -319,6 +326,7 @@ export const listSharedAppData = async (
     thingtime: 'app-data',
     'crystal.appId': appId,
     acl: shared,
+    ...(viewer?.sandbox ? { ownerId: viewer.sandbox.ownerId } : {}),
     ...(keyFilter ? { 'crystal.key': keyFilter } : {})
   };
 
@@ -362,8 +370,13 @@ export const listSharedAppData = async (
     const authorIds = [...new Set(docs.map((doc: any) => String(doc.ownerId)))].filter(
       (id) => !authorScopes.has(id)
     );
-    const live = await liveSharingAuthors(appId, authorIds);
-    for (const id of authorIds) authorScopes.set(id, live.get(id) || []);
+    if (viewer?.sandbox) {
+      // The sandbox owner is by definition live (the viewer's own token).
+      for (const id of authorIds) authorScopes.set(id, ['app-data.shared']);
+    } else {
+      const live = await liveSharingAuthors(appId, authorIds);
+      for (const id of authorIds) authorScopes.set(id, live.get(id) || []);
+    }
 
     for (const doc of docs) {
       lastScanned = doc;
@@ -382,20 +395,26 @@ export const listSharedAppData = async (
   const hasMore = kept.length > limit || !exhausted;
 
   // One user fetch per distinct author on the page, shaped per their grant.
+  // Sandbox pages skip the lookup — every entry is the viewer's own synthetic
+  // author.
   const pageAuthors = [...new Set(page.map((doc: any) => String(doc.ownerId)))];
-  const users = await Promise.all(pageAuthors.map((id) => findUserById(id)));
   const authorsById = new Map<string, SharedEntryAuthor>();
-  pageAuthors.forEach((id, index) => {
-    const user = users[index];
-    if (!user) return;
-    const scopes = authorScopes.get(id) || [];
-    authorsById.set(id, {
-      id: String(user._id),
-      username: user.username,
-      ...(scopeCovers(scopes, 'profile.displayName') ? { displayName: user.displayName ?? null } : {}),
-      ...(scopeCovers(scopes, 'profile.avatar') ? { avatarUrl: user.avatarUrl ?? null } : {})
+  if (viewer?.sandbox) {
+    authorsById.set(viewer.sandbox.ownerId, viewer.sandbox.author);
+  } else {
+    const users = await Promise.all(pageAuthors.map((id) => findUserById(id)));
+    pageAuthors.forEach((id, index) => {
+      const user = users[index];
+      if (!user) return;
+      const scopes = authorScopes.get(id) || [];
+      authorsById.set(id, {
+        id: String(user._id),
+        username: user.username,
+        ...(scopeCovers(scopes, 'profile.displayName') ? { displayName: user.displayName ?? null } : {}),
+        ...(scopeCovers(scopes, 'profile.avatar') ? { avatarUrl: user.avatarUrl ?? null } : {})
+      });
     });
-  });
+  }
 
   const entries: SharedAppDataEntry[] = [];
   for (const doc of page) {

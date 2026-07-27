@@ -1871,7 +1871,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'selector — only when the app exists AND the origin is on its allowlist, so the popup can refuse ' +
       'unregistered embedders before any login UI renders. Scope paths are hierarchical dot paths from ' +
       '/api/v1/oauth/scopes (unknown names 400; empty scope → profile + app-data). 404 for unknown ' +
-      'apps, 403 for origins not on the allowlist.',
+      'apps, 403 for origins not on the allowlist. EXCEPTION: add sandbox=1 and the lookup answers for ' +
+      'ANY clientId with a mock app payload (flagged sandbox: true, no allowlist check) so integrators ' +
+      'can build the consent flow before registering — pair with POST /api/v1/oauth/sandbox for a ' +
+      'working pretend token.',
     auth: { mode: 'none', description: 'Anonymous — returns only the app name + scope descriptors.' },
     methods: ['GET'],
     steps: ['GET with clientId, the embedding page origin, and the requested scope set.', 'Render the consent screen from the returned name + scope descriptors.'],
@@ -1967,6 +1970,55 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       { status: 403, description: 'Origin not allowlisted.', body: { ok: false, error: 'This origin is not on the app’s allowlist' } }
     ],
     notes: ['Revocable from both sides: the developer deletes the app (/api/v1/apps/delete), or the user disconnects it (/api/v1/oauth/grants/revoke) — the token dies before its exp like every Thingtime JWT.']
+  }),
+  endpoint({
+    id: 'oauth-sandbox',
+    group: 'embed',
+    title: 'Sandbox token (build before registering)',
+    endpoint: '/api/v1/oauth/sandbox',
+    summary: 'Mint a real, working sandbox token for ANY clientId — no registration, no account, no browser.',
+    detail:
+      'POST { clientId?, origin?, scope?, scopes? } (all optional; anonymous, per-IP rate-limited). ' +
+      'Returns the same handoff shape as /oauth/authorize plus sandbox: true — a signed Bearer token ' +
+      'that WORKS for one hour against /api/v1/app-data (read/write/delete, including visibility ' +
+      "'app'), /api/v1/app-data/shared, and /api/v1/oauth/userinfo. It resolves to the synthetic " +
+      "'sandbox-you' user, every byte written under it is namespaced to that one token and TTL-reaped " +
+      'within the hour, the shared pool shows only that token\'s own entries (two sandboxes can never ' +
+      'see each other), and the token can never act as an account credential. This is the headless ' +
+      'counterpart of the consent popup\'s ?sandbox=1 mode: integration code written against it works ' +
+      'unchanged when you register a real app and switch to Thingtime.login().',
+    auth: { mode: 'none', description: 'Anonymous — the whole point is testing before you have anything.' },
+    methods: ['POST'],
+    steps: [
+      'POST with the clientId + scopes you PLAN to use (e.g. scope: "profile.username app-data app-data.shared").',
+      'Use the returned Bearer token against /app-data*, /app-data/shared, and /oauth/userinfo exactly like a real grant.',
+      'Data and token evaporate within an hour — mint another whenever you need one.',
+      'When ready: register the app (POST /api/v1/apps) and swap in Thingtime.login() — no other code changes.'
+    ],
+    requestExamples: [
+      {
+        name: 'Mint',
+        description: 'A sandbox token for an app that does not exist yet.',
+        method: 'POST',
+        body: { clientId: 'macrobiotica-dev', origin: 'http://localhost:5599', scope: 'profile.username app-data app-data.shared' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'A working pretend session.',
+        body: {
+          ok: true,
+          sandbox: true,
+          token: 'eyJhbGciOi…',
+          tokenType: 'Bearer',
+          expiresAt: '2026-07-27T09:00:00.000Z',
+          scopes: ['profile.username', 'app-data', 'app-data.shared'],
+          sharedThings: 0,
+          user: { id: 'sandbox', username: 'sandbox-you' }
+        }
+      }
+    ]
   }),
   endpoint({
     id: 'oauth-scopes',
