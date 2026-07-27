@@ -330,3 +330,9 @@ is fixed, and cite the checklist you ran in the PR description.
       (falls back to the inert `tt-sandbox-token` only if the mint call
       fails), and scope gating on the handoff user object still matches the
       selection.
+- [ ] Feed-pollution fence: a sandbox token minted with a REAL app's
+      clientId can write shared entries, but that real app's
+      /app-data/shared feed never scans them (`sandboxExpiresAt` excluded)
+      — real pages stay full-size even with fresh sandbox junk on top.
+- [ ] Sandbox storage budget: the 51st key for one sandbox token 400s
+      (SANDBOX_MAX_KEYS), while real grants keep the 200-key cap.

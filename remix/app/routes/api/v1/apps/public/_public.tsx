@@ -42,10 +42,11 @@ export const loader = async ({ request }: { request: Request }) => {
   // before the app exists. No lookup, no allowlist; pair it with
   // POST /api/v1/oauth/sandbox for a working pretend token.
   if (url.searchParams.get('sandbox') === '1') {
+    const mockId = clientId.slice(0, 128); // don't reflect unbounded input
     return json({
       ok: true,
       sandbox: true,
-      app: { clientId, name: clientId.startsWith('ttapp_') ? 'Your App' : clientId },
+      app: { clientId: mockId, name: mockId.startsWith('ttapp_') ? 'Your App' : mockId },
       origin,
       requiredScopes: describeScopes(requiredIds),
       optionalScopes: describeScopes(optionalIds)

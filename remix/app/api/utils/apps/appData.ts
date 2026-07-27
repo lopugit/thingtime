@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { ensureIndexes, getSessionsCollection, getThingsCollection } from '../mongodb/collections';
 import { findUserById } from '../auth/users';
-import { SANDBOX_TOKEN_TTL_MS } from './sandbox';
+import { SANDBOX_MAX_KEYS, SANDBOX_TOKEN_TTL_MS } from './sandbox';
 import { scopeCovers, sessionScopes } from './scopes';
 import {
   ACL_APP_PREFIX,
@@ -179,9 +179,11 @@ export const setAppData = async (
     if (updated) return { ok: true, entry: toEntry(updated) };
 
     // New key: soft product cap on keys per (user, app), then insert.
+    // Sandbox namespaces get a tighter budget — the mint is anonymous.
+    const maxKeys = audience.sandbox ? SANDBOX_MAX_KEYS : MAX_APP_DATA_KEYS_PER_APP_USER;
     const count = await things.countDocuments({ thingtime: 'app-data', ownerId, 'crystal.appId': appId });
-    if (count >= MAX_APP_DATA_KEYS_PER_APP_USER) {
-      return fail(400, `An app can store at most ${MAX_APP_DATA_KEYS_PER_APP_USER} keys per user`);
+    if (count >= maxKeys) {
+      return fail(400, `An app can store at most ${maxKeys} keys per user${audience.sandbox ? ' in the sandbox' : ''}`);
     }
 
     const doc = {
@@ -326,7 +328,11 @@ export const listSharedAppData = async (
     thingtime: 'app-data',
     'crystal.appId': appId,
     acl: shared,
-    ...(viewer?.sandbox ? { ownerId: viewer.sandbox.ownerId } : {}),
+    // Real feeds never even SCAN sandbox docs (anyone can mint a sandbox
+    // token naming a real clientId and write junk under it — the author-grant
+    // filter would drop those entries anyway, but a flood could still thin
+    // real pages); sandbox viewers are fenced to their own namespace.
+    ...(viewer?.sandbox ? { ownerId: viewer.sandbox.ownerId } : { sandboxExpiresAt: { $exists: false } }),
     ...(keyFilter ? { 'crystal.key': keyFilter } : {})
   };
 
