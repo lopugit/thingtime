@@ -61,7 +61,10 @@
    *   scopes?: string[],         // REQUIRED permission paths (the user can't untick these — only cancel)
    *   optionalScopes?: string[], // nice-to-have paths the user can untick
    *   allowExtra?: boolean,      // default true: the user may volunteer MORE data than you asked for
-   *   sandbox?: boolean,         // demo mode: full consent UI, fake token, nothing really shared
+   *   sandbox?: boolean,         // build mode: full consent UI for ANY clientId; the returned
+   *                              // token really works (app-data + userinfo, 1h, pretend account,
+   *                              // auto-deleted data) — or mint one headlessly via
+   *                              // POST /api/v1/oauth/sandbox
    *   baseUrl?: string
    * }} options
    *   Scope paths are hierarchical — 'profile' covers every profile.* leaf;
@@ -318,7 +321,7 @@
    *   scopes?: string[],            // required permissions (see login())
    *   optionalScopes?: string[],    // nice-to-have permissions
    *   allowExtra?: boolean,         // let the user volunteer more (default true)
-   *   sandbox?: boolean,            // demo mode — fake token, nothing shared
+   *   sandbox?: boolean,            // build mode — working pretend token, nothing real shared
    *   theme?: 'light'|'dark'|'rainbow',
    *   size?: 'sm'|'md'|'lg',
    *   text?: string,

@@ -68,7 +68,8 @@ export const action = async ({ request }: { request: Request }) => {
   const result = await setAppData(ctx.user.id, ctx.clientId, body?.key, body?.value, {
     visibility: body?.visibility,
     acl: body?.acl,
-    allowShared: scopeCovers(ctx.scopes, 'app-data.shared')
+    allowShared: scopeCovers(ctx.scopes, 'app-data.shared'),
+    sandbox: ctx.sandbox
   });
 
   if (result.ok === false) {

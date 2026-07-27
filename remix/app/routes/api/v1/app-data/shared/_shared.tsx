@@ -3,6 +3,7 @@ import { json } from '~/api/http';
 import { listSharedAppData } from '~/api/utils/apps/appData';
 import { resolveAppRequest } from '~/api/utils/apps/appRequest';
 import { appCorsHeaders, appDataPreflight } from '~/api/utils/apps/cors';
+import { scopeCovers } from '~/api/utils/apps/scopes';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 
 // GET /api/v1/app-data/shared?key=&prefix=&limit=&cursor= — the app-scoped
@@ -30,12 +31,30 @@ export const loader = async ({ request }: { request: Request }) => {
 
   const url = new URL(request.url);
   const rawLimit = url.searchParams.get('limit');
-  const result = await listSharedAppData(ctx.clientId, {
-    key: url.searchParams.get('key'),
-    prefix: url.searchParams.get('prefix'),
-    limit: rawLimit === null ? null : Number(rawLimit),
-    cursor: url.searchParams.get('cursor')
-  });
+  const result = await listSharedAppData(
+    ctx.clientId,
+    {
+      key: url.searchParams.get('key'),
+      prefix: url.searchParams.get('prefix'),
+      limit: rawLimit === null ? null : Number(rawLimit),
+      cursor: url.searchParams.get('cursor')
+    },
+    // Sandbox tokens read their own namespace only, authored by the synthetic
+    // sandbox user shaped by the token's scopes — same wire shape end to end.
+    ctx.sandbox
+      ? {
+          sandbox: {
+            ownerId: ctx.user.id,
+            author: {
+              id: ctx.user.id,
+              username: ctx.user.username,
+              ...(scopeCovers(ctx.scopes, 'profile.displayName') ? { displayName: ctx.user.displayName } : {}),
+              ...(scopeCovers(ctx.scopes, 'profile.avatar') ? { avatarUrl: ctx.user.avatarUrl } : {})
+            }
+          }
+        }
+      : undefined
+  );
 
   if (result.ok === false) {
     return json({ ok: false, error: result.error }, { status: result.status, headers: cors });

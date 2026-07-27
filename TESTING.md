@@ -311,3 +311,22 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] GET /api/docs returns the whole API reference as text/markdown, and
       /api/docs-docs + every `<endpoint>-docs` route (including
       /api/v1/app-data/shared-docs) return their JSON doc payloads.
+
+## Sandbox tokens (`/api/v1/oauth/sandbox`, `api/utils/apps/sandbox.ts`)
+
+- [ ] POST /api/v1/oauth/sandbox (no auth, any clientId) returns a Bearer
+      token that works against /app-data set/get/list/delete, the shared
+      pool, and /oauth/userinfo — resolving to the synthetic `sandbox-you`
+      user, never a real account.
+- [ ] Sandbox app-data docs carry `sandboxExpiresAt` (TTL-reaped) and are
+      namespaced per token: a second sandbox token sees NONE of the first's
+      entries (private or shared).
+- [ ] A sandbox token can never act as an account credential:
+      /api/v1/auth/me (and any cookie/session path) rejects it.
+- [ ] GET /api/v1/apps/public?sandbox=1 returns a mock app (flagged
+      `sandbox: true`) for an unregistered clientId instead of 404; without
+      sandbox=1 the 404/403 behaviour is unchanged.
+- [ ] The consent popup's sandbox approve hands back a REAL minted token
+      (falls back to the inert `tt-sandbox-token` only if the mint call
+      fails), and scope gating on the handoff user object still matches the
+      selection.
