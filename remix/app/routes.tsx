@@ -35,6 +35,7 @@ import DocsSchemas from './routes/docs/schemas';
 import SearchRoute from './routes/search';
 import StatusPage from './routes/status';
 import ThingtimeUrl from './routes/$';
+import ThingsRoute from './routes/things';
 import TestsPage from './routes/tests';
 import Themes from './routes/themes';
 import VercelPage from './routes/vercel';
@@ -155,6 +156,9 @@ export const router = createBrowserRouter([
       { path: 'settings', element: <SettingsRoute /> },
       { path: 'tests', element: <TestsPage /> },
       { path: 'themes', element: <Themes /> },
+      // the unified Things browser claims EXACTLY /things; deeper /things/*
+      // paths still reach the ThingtimeUrl tree viewer via the catch-all
+      { path: 'things', element: <ThingsRoute /> },
       { path: 'welcome', element: <Welcome />, loader: requireUser('/register') },
       { path: '*', element: <ThingtimeUrl /> }
     ]

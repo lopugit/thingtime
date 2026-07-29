@@ -87,7 +87,9 @@ export default function App() {
               ? `${baseTitle} - Profile`
               : pathname === '/settings'
                 ? `${baseTitle} - Settings`
-                : baseTitle;
+                : pathname === '/things'
+                  ? `${baseTitle} - Things`
+                  : baseTitle;
 
       document.title = routeTitle;
     }

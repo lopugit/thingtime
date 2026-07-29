@@ -245,6 +245,9 @@ export const ensureIndexes = async () => {
         col('things').createIndex({ kind: 1, visibility: 1, createdAt: -1, shareId: 1 }),
         col('things').createIndex({ kind: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
         col('things').createIndex({ thingtime: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
+        // /things folder browsing: one owner's direct children of one folder,
+        // newest first — fully index-provided including the page sort
+        col('things').createIndex({ ownerId: 1, folderId: 1, createdAt: -1, shareId: 1 }),
         col('things').createIndex({ targetId: 1, thingtime: 1, createdAt: 1, shareId: 1 }),
         // schema-usage counting (schemas/browse decorate): data things are
         // grouped by crystal.schemaId (stamped) with a crystal.schema name

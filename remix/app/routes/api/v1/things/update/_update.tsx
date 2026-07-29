@@ -20,7 +20,9 @@ export const action = async ({ request }: { request: Request }) => {
     extended: body?.extended,
     acl: body?.acl,
     visibility: body?.visibility,
-    tags: body?.tags
+    tags: body?.tags,
+    // folderId only when present — undefined means "leave it filed where it is"
+    ...(body && typeof body === 'object' && 'folderId' in body ? { folderId: body.folderId } : {})
   });
 
   if (result.ok === false) {

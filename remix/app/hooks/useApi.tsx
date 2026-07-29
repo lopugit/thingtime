@@ -164,6 +164,7 @@ export function useApi() {
             `/api/v1/things${toQuery({
               target: args?.target,
               thingtime: args?.thingtime,
+              folder: args?.folder,
               cursor: args?.cursor,
               limit: args?.limit
             })}`
@@ -173,8 +174,26 @@ export function useApi() {
       update: useCallback(
         async (args) =>
           asyncFetcher.submit(
-            { id: args?.id, crystal: args?.crystal, acl: args?.acl, visibility: args?.visibility, tags: args?.tags },
+            {
+              id: args?.id,
+              crystal: args?.crystal,
+              acl: args?.acl,
+              visibility: args?.visibility,
+              tags: args?.tags,
+              // move support — only send folderId when the caller provides it
+              // (undefined must stay "leave it where it is", null = root)
+              ...(args && 'folderId' in args ? { folderId: args.folderId } : {})
+            },
             { action: '/api/v1/things', method: 'PATCH' }
+          ),
+        [asyncFetcher]
+      ),
+      // multi-select move/copy/delete — see /docs/api things-bulk
+      bulk: useCallback(
+        async (args) =>
+          asyncFetcher.submit(
+            { op: args?.op, ids: args?.ids, folderId: args?.folderId ?? null },
+            { action: '/api/v1/things/bulk' }
           ),
         [asyncFetcher]
       ),
@@ -197,10 +216,10 @@ export function useApi() {
       reactionsRecent: useCallback(async () => getJson('/api/v1/things/reactions-recent'), []),
       create: useCallback(
         async (args) => {
-          const { type, text, images, listing, thing, thingtime, crystal, targetId, acl, visibility, tags } = args;
+          const { type, text, images, listing, thing, thingtime, crystal, targetId, folderId, acl, visibility, tags } = args;
           // unified shape when thingtime is given, legacy post shape otherwise
           const payload = Array.isArray(thingtime)
-            ? { thingtime, crystal, targetId, acl, visibility, tags }
+            ? { thingtime, crystal, targetId, folderId, acl, visibility, tags }
             : { type, text, images, listing, thing, acl, visibility, tags };
           return asyncFetcher.submit(payload, { action: '/api/v1/things' });
         },
