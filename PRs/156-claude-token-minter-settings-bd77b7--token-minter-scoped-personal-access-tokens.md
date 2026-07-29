@@ -58,6 +58,30 @@ permissions selector per token.
   the tokens group.
 - TESTING.md gained a "Token minter — personal access tokens" checklist.
 
+## Round 2 — per-token sandbox (onlyCreatedThings) + select/unselect-all
+
+- Requested distinction: "broad CRUD" vs "can CRUD, but only things made
+  with that token". Modeled ORTHOGONALLY to scopes: scopes = WHAT verbs,
+  `onlyCreatedThings` = ON WHICH things.
+- Every PAT-created thing is stamped `createdByTokenId` (all tokens, not
+  just sandboxed — free provenance). Sandboxed mutations check the stamp at
+  the existing target/doc load sites in things.ts (`patSandboxBlocks`
+  helper on the Viewer, which now carries `pat: { tokenId,
+  onlyCreatedThings }` via `viewerOf(user, pat)`).
+- Guard map: createThing target-attach (covers comment/react/save/share
+  ADDS incl. the generic POST path), toggleReaction + toggleSave early
+  guards (their REMOVE paths bypass createThing), sharePost, updateThing
+  (covers PUT-replace via upsertThing delegation), deleteThing (stamp in
+  the atomic filter + informative 403 on the failure path). Share
+  root-swap rule: re-sharing a token-created share of a foreign root
+  blocks (the new share would attach to the foreign root).
+- Reads deliberately NOT sandboxed (scan-my-things stays useful); the
+  sandbox 403 comes after auth so it consumes a use (only missing-scope
+  403s are free) — both documented.
+- UI: Select all ✅ / Unselect all 🧹 buttons, "Only its own things 🧸"
+  switch, 🧸 list badge. Verified 31/31 new sandbox e2e + original 42/42
+  re-run + browser both viewports.
+
 ## Debug notes
 
 - Browser pane had the known scroll-render/hit-test quirk in this worktree —
