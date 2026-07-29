@@ -490,8 +490,32 @@ type DocsDrawerContentProps = {
 
 function DocsDrawerContent({ closeTestId, onClose, pathname, showClose = false }: DocsDrawerContentProps) {
   const [apiOpen, setApiOpen] = React.useState(isApiPath(pathname));
-  const [searchQuery, setSearchQuery] = React.useState('');
+  // The search query lives in the URL (?q=) so refresh persists it, searches
+  // are deep-linkable, and both drawer instances (desktop + mobile) share one
+  // state. replace:true keeps typing out of the history stack.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const searchQuery = searchParams.get('q') || '';
   const searching = searchQuery.trim().length > 0;
+
+  const setSearchQuery = React.useCallback(
+    (next: string) => {
+      setSearchParams(
+        (params) => {
+          const merged = new URLSearchParams(params);
+
+          if (next) {
+            merged.set('q', next);
+          } else {
+            merged.delete('q');
+          }
+
+          return merged;
+        },
+        { replace: true }
+      );
+    },
+    [setSearchParams]
+  );
 
   React.useEffect(() => {
     if (isApiPath(pathname)) {
@@ -638,6 +662,39 @@ export default function DocsLayout() {
     [desktopDrawerOpen, openDesktopDrawer]
   );
 
+  // The desktop drawer renders full height with NO internal scrollbar: it only
+  // sticks while its content fits under the top nav; taller content (search
+  // results, expanded endpoint lists) flows with the page scroll instead.
+  const drawerContentRef = React.useRef<HTMLDivElement | null>(null);
+  const [drawerFitsViewport, setDrawerFitsViewport] = React.useState(true);
+
+  React.useEffect(() => {
+    const node = drawerContentRef.current;
+
+    if (!desktopDrawerOpen || !node) return;
+
+    const measure = () => {
+      setDrawerFitsViewport(node.offsetHeight <= window.innerHeight - 112);
+    };
+
+    measure();
+
+    // ResizeObserver alone is not enough — some embedded/background renderers
+    // suppress its callbacks, so the MutationObserver re-measures on every
+    // content change (search results, expanded endpoint lists) too.
+    const resizeObserver = new ResizeObserver(measure);
+    resizeObserver.observe(node);
+    const mutationObserver = new MutationObserver(measure);
+    mutationObserver.observe(node, { childList: true, subtree: true });
+    window.addEventListener('resize', measure);
+
+    return () => {
+      resizeObserver.disconnect();
+      mutationObserver.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [desktopDrawerOpen]);
+
   React.useEffect(() => {
     setMobileDrawerOpen(false);
 
@@ -705,7 +762,12 @@ export default function DocsLayout() {
             pr={6}
             w={`${drawerWidth}px`}
           >
-            <Box maxH="calc(100vh - 112px)" overflowY="auto" position="sticky" pr={2} top="96px">
+            <Box
+              position={drawerFitsViewport ? 'sticky' : 'relative'}
+              pr={2}
+              ref={drawerContentRef}
+              top={drawerFitsViewport ? '96px' : undefined}
+            >
               <Flex justify="flex-end" mb={3}>
                 <IconButton
                   aria-label="Collapse docs navigation"

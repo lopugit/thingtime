@@ -7,6 +7,18 @@ import { docsSearchAreaColors, searchDocsIndex, tokenizeDocsQuery } from './docs
 
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+// Carries the live ?q= into a result's destination so the results panel
+// survives the navigation and the landed URL stays deep-linkable.
+const withSearchQueryParam = (to: string, query: string) => {
+  const [pathAndSearch, hash] = to.split('#');
+  const [path, search] = pathAndSearch.split('?');
+  const params = new URLSearchParams(search || '');
+
+  params.set('q', query);
+
+  return `${path}?${params.toString()}${hash ? `#${hash}` : ''}`;
+};
+
 // Wraps every query-term hit in a <mark> so results show WHY they matched.
 const highlightTerms = (text: string, terms: string[]) => {
   if (terms.length === 0 || !text) {
@@ -70,7 +82,7 @@ export function DocsSearch({ onNavigate, query, setQuery }: DocsSearchProps) {
 
       if (result) {
         event.preventDefault();
-        navigate(result.doc.to);
+        navigate(withSearchQueryParam(result.doc.to, query));
         onNavigate?.();
       }
     } else if (event.key === 'Escape') {
@@ -161,7 +173,7 @@ export function DocsSearch({ onNavigate, query, setQuery }: DocsSearchProps) {
                   onMouseEnter={() => setActiveIndex(index)}
                   px={3}
                   py={2}
-                  to={result.doc.to}
+                  to={withSearchQueryParam(result.doc.to, query)}
                   transition="background 140ms ease, border-color 140ms ease"
                 >
                   <Flex align="center" gap={2} minW={0}>

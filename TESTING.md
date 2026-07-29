@@ -303,6 +303,14 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] ArrowUp/Down move the active row, Enter opens it (query-param entries
       like design mockups/components select the exact entry), and on mobile
       tapping a result closes the drawer.
+- [ ] The query lives in the URL (?q=) with replace-style updates: typing
+      never stacks history entries, refresh restores the search, /docs?q=acl
+      deep-links it, result clicks carry ?q= along (so the landed URL is
+      shareable with its search context), and × strips it.
+- [ ] The desktop drawer never shows an internal scrollbar: content renders
+      full height, sticks under the top nav only while it fits the viewport,
+      and taller content (search results, expanded endpoint lists) flows with
+      the page scroll — the bottom of the menu stays reachable.
 
 ## Shared app-data (`/api/v1/app-data/shared`, `api/utils/apps/appData.ts`)
 
