@@ -24,6 +24,7 @@ type CliOptions = {
   skipMutating: boolean;
   bail: boolean;
   json: boolean;
+  list: boolean;
 };
 
 const parseArgs = (argv: string[]): CliOptions => {
@@ -32,7 +33,8 @@ const parseArgs = (argv: string[]): CliOptions => {
     groups: [],
     skipMutating: false,
     bail: false,
-    json: false
+    json: false,
+    list: false
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -43,6 +45,7 @@ const parseArgs = (argv: string[]): CliOptions => {
     else if (arg === '--skip-mutating') options.skipMutating = true;
     else if (arg === '--bail') options.bail = true;
     else if (arg === '--json') options.json = true;
+    else if (arg === '--list') options.list = true;
     else if (arg === '--help' || arg === '-h') {
       console.log(`run-api-tests: headless runner for the /tests API suite
 
@@ -50,7 +53,8 @@ const parseArgs = (argv: string[]): CliOptions => {
   --group <name>     run only this group (repeatable / comma-separated). Known: ${apiTestGroups.join(', ')}
   --skip-mutating    skip tests marked mutates (safe against a shared DB)
   --bail             stop at the first failure
-  --json             print a JSON summary instead of the text report`);
+  --json             print a JSON summary instead of the text report
+  --list             print the selected tests without running them`);
       process.exit(0);
     } else {
       console.error(`Unknown argument: ${arg} (try --help)`);
@@ -118,6 +122,14 @@ const main = async () => {
       (options.groups.length === 0 || options.groups.includes(test.group)) &&
       (!options.skipMutating || !test.mutates)
   );
+
+  if (options.list) {
+    for (const test of selected) {
+      console.log(`${test.group.padEnd(11)} ${test.id.padEnd(42)} ${test.method.padEnd(6)} ${test.path}`);
+    }
+    console.log(`\n${selected.length}/${apiTests.length} tests selected`);
+    process.exit(0);
+  }
 
   const fetchImpl = createCookieJarFetch();
   const context: ApiTestContext = {
