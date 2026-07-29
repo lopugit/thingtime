@@ -72,7 +72,10 @@ Child aggregation (reactions/comments) under the app lens filters children by
 CORS/preflight: every opened route's `action` gains `appDataPreflight`,
 413s ride `readJsonBodyWithCors`, origin binding + echoed-origin CORS as in
 `resolveAppRequest`. Rate identity for app actors is `user:<id>:app:<clientId>`
-with new `things.*.app` buckets — never the user's own `user:<id>` buckets.
+against the EXISTING bucket names (reads → `oauth.read`/`things.search`,
+things writes → `things.write`/`things.react`/`things.comment`,
+update/delete sub-routes → `appData.write`) — the per-(user, app) identity
+alone separates the windows, so an app never rides the user's own buckets.
 
 ## Storage: bytes, not counts
 

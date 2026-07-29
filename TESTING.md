@@ -311,6 +311,42 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] GET /api/docs returns the whole API reference as text/markdown, and
       /api/docs-docs + every `<endpoint>-docs` route (including
       /api/v1/app-data/shared-docs) return their JSON doc payloads.
+- [ ] App-token things CRUD stays inside the namespace: POST/PUT/PATCH/DELETE
+      /api/v1/things (and /things/search, /things/update, /things/delete)
+      with an app token only ever touch docs carrying the app's root `appId`
+      stamp; reads, updates, and deletes aimed at a first-party thing's id
+      (or another app's doc) all 404.
+- [ ] App writes are acl-clamped: an acl beyond `tt:user` / `tt:app/<own
+      clientId>` (tt:all, other apps, other users, exclusions) 400s; an
+      insert that omits visibility/acl lands PRIVATE (never the generic
+      route's public default); `save`/`share` thingtimes 403 as first-party
+      surfaces; protected kinds stay refused.
+- [ ] Byte budget replaces key counts: keys keep writing past 200 until the
+      (user, app) budget (50MB real) is spent; the over-budget write 507s and
+      writes nothing; GET /api/v1/app-data/usage arithmetic matches (a write
+      raises usedBytes by its serialized size, an update charges only the
+      delta, a delete refunds it).
+- [ ] KV listing grammar: GET /api/v1/app-data with key=post:* or prefix=
+      filters, limit=/cursor= page, and nextCursor walks the whole set; KV
+      entries also appear via GET /api/v1/things?thingtime=app-data with the
+      same token (one namespace).
+- [ ] Cross-user comment/reaction via the inherit chain: with
+      app-data.shared, user B's app token can comment/react on user A's
+      app-audience doc; the child is auto-stamped into the namespace and its
+      visibility resolves through tt:inherit to the shared ancestor; without
+      the scope (or after A revokes) the target 404s.
+- [ ] Revoking the author's grant removes their shared entries from EVERY
+      app read on the next request — the KV shared feed and the app-token
+      things reads alike — while the docs stay owned and browsable
+      first-party.
+- [ ] Session browse: GET /api/v1/apps/data-summary lists the namespace
+      (appName null after the app is deleted, data still counted);
+      GET /api/v1/things?appId=<clientId> narrows the own-things list to one
+      namespace; POST /api/v1/apps/data/delete-all wipes the namespace +
+      cascaded children and zeroes usage (works with no live grant);
+      GET /api/v1/apps/data/shared?appId= mirrors the app's own view
+      (sharedRead reflects the grant) and 403s with the plain no-live-grant
+      explanation after disconnect.
 
 ## Sandbox tokens (`/api/v1/oauth/sandbox`, `api/utils/apps/sandbox.ts`)
 
@@ -334,8 +370,19 @@ is fixed, and cite the checklist you ran in the PR description.
       clientId can write shared entries, but that real app's
       /app-data/shared feed never scans them (`sandboxExpiresAt` excluded)
       — real pages stay full-size even with fresh sandbox junk on top.
-- [ ] Sandbox storage budget: the 51st key for one sandbox token 400s
-      (SANDBOX_MAX_KEYS), while real grants keep the 200-key cap.
+- [ ] Sandbox storage budget: writes 507 once the sandbox namespace's 5MB
+      byte budget is spent (no key-count cap remains); deleting entries
+      refunds bytes and unblocks; real grants get the 50MB budget.
+- [ ] Global sandbox byte brake: the `sandbox.storage.global` rule (limit is
+      MEGABYTES per window, default 512MB/hour, fail-closed) burns on every
+      sandbox write app-wide and 507s all sandbox writes once spent; a
+      write refused by the per-namespace budget refunds its global charge;
+      an unavailable ledger 503s instead of waving writes through.
+- [ ] Sandbox tokens exercise the full things surface identically (CRUD,
+      search, react, comment); every doc written through one carries
+      `sandboxExpiresAt` (+ `sandboxSpace` in a space) whatever its kind,
+      real app-token reads never see sandbox docs, and the TTL reap removes
+      them with the token.
 - [ ] Sandbox spaces: tokens minted with the same `space` see each other's
       visibility-'app' entries in /app-data/shared, each authored by its own
       `sandbox-<username>` pretend user; PRIVATE entries stay per-token even

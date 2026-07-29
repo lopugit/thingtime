@@ -165,7 +165,9 @@ export function useApi() {
               target: args?.target,
               thingtime: args?.thingtime,
               cursor: args?.cursor,
-              limit: args?.limit
+              limit: args?.limit,
+              // session-auth data browser: narrow own-things to ONE app's namespace
+              appId: args?.appId
             })}`
           ),
         []
@@ -234,6 +236,34 @@ export function useApi() {
       ),
       remove: useCallback(
         async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/things', method: 'DELETE' }),
+        [asyncFetcher]
+      )
+    },
+    // "Login with Thingtime" grants — the user's connected apps
+    oauth: {
+      grants: useCallback(async () => getJson('/api/v1/oauth/grants'), []),
+      revokeGrant: useCallback(
+        async (args) => asyncFetcher.submit({ clientId: args?.clientId }, { action: '/api/v1/oauth/grants/revoke' }),
+        [asyncFetcher]
+      )
+    },
+    // first-party browsing of app namespaces (what has each app stored for me)
+    apps: {
+      dataSummary: useCallback(async () => getJson('/api/v1/apps/data-summary'), []),
+      dataShared: useCallback(
+        async (args) =>
+          getJson(
+            `/api/v1/apps/data/shared${toQuery({
+              appId: args?.appId,
+              thingtime: args?.thingtime,
+              cursor: args?.cursor,
+              limit: args?.limit
+            })}`
+          ),
+        []
+      ),
+      dataDeleteAll: useCallback(
+        async (args) => asyncFetcher.submit({ appId: args?.appId }, { action: '/api/v1/apps/data/delete-all' }),
         [asyncFetcher]
       )
     },

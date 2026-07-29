@@ -101,6 +101,21 @@ How (see `api/utils/things/things.ts`):
 - Legacy embedded data folds in on read and migrates to children on first write.
 - Deleting a parent cascades: delete its children by `parentId`.
 
+### App namespaces ("Login with Thingtime")
+
+Things written through an app-scoped token carry a server-stamped scalar root
+`appId` — the NAMESPACE marker. It is deliberately not the acl (users can
+hand-write `tt:app/<x>` acl entries, so acl membership would be spoofable);
+`acl` stays what it always was — the AUDIENCE: `tt:user` private, plus
+`tt:app/<clientId>` for that app's user base. Every app-token read and write is
+fenced to the namespace (`api/utils/apps/namespace.ts`), and storage is bounded
+by per-(user, app) BYTE budgets — root `sizeBytes` charged against a
+fail-closed ledger (50MB default, 5MB per sandbox namespace) — never doc
+counts. The end user owns every namespace doc and can browse
+(`GET /api/v1/things?appId=`, `/api/v1/apps/data-summary`) and delete
+(`POST /api/v1/apps/data/delete-all`) everything an app stores. Full model in
+`claude-todo/16-full-power-app-namespaces.md`.
+
 ## 4. One MongoDB connection source
 
 The connection string comes from exactly one place:

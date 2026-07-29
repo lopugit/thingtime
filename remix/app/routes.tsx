@@ -6,6 +6,7 @@ import {
 
 import App from './root';
 import type { RootLoaderData } from './root-data.server';
+import AppsRoute from './routes/apps';
 import Authorize from './routes/authorize';
 import Branding from './routes/branding/_index';
 import BrandingOld from './routes/branding_old';
@@ -100,6 +101,9 @@ export const router = createBrowserRouter([
       // "Login with Thingtime" popup (embed SDK) — no guest/user guard: it
       // handles both states itself (login form → consent screen).
       { path: 'authorize', element: <Authorize /> },
+      // browse everything each connected app stores for you — no guard: it
+      // renders its own signed-out quiet state, like /settings
+      { path: 'apps', element: <AppsRoute /> },
       { path: 'branding', element: <Branding /> },
       { path: 'branding_old', element: <BrandingOld /> },
       { path: 'crypto', element: <CryptoPage /> },

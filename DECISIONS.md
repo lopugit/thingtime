@@ -63,4 +63,33 @@ These patterns show up again and again — default to them when unsure:
 - **Unverified login:** allowed — `emailVerified` is just flagged; gate
   sensitive actions later. Prioritises smooth onboarding over hard gating.
 
+**App platform (full-power app namespaces — `claude-todo/16`, 2026-07-29)**
+- **Namespace = server-stamped scalar root `appId`, NOT the acl.** Users can
+  already hand-write `tt:app/<x>` acl entries through the site API
+  (`sanitizeAcl` accepts them), so an acl-derived namespace is spoofable INTO
+  an app's view — a confused deputy. Private app-data carries no app acl entry
+  anyway, so acl-contains was never the membership predicate. And `acl` is
+  multikey: a scalar `appId` can share a compound index with other fields
+  where two multikey paths can't. The acl keeps its PR #150 meaning untouched:
+  it is the AUDIENCE among the app's users; the namespace is `appId`.
+- **Byte budgets replace doc counts.** The 200-key / 50-key caps bounded the
+  wrong resource (an entry count says nothing about bytes). Per-(user, app)
+  budgets ride a service-quota-pattern counter thing — guarded conditional
+  `findOneAndUpdate` admission, race-safe, FAIL-CLOSED (an unavailable ledger
+  refuses the write; storage is a standing resource, unlike a rate window) —
+  updates charge deltas, deletes refund, drift repair is one `$sum` sweep.
+- **Consent surface deliberately unchanged.** `app-data` already covers
+  namespace CRUD — richer querying just moves filtering server-side over bytes
+  the app could already read, so no new scope is invented for the things
+  surface; `app-data.shared` stays the EXACT cross-user gate (never implied by
+  an ancestor). A future `app-data.public` would be its own consent line.
+- **App responses never use the PublicPost aggregation.** That projection
+  batch-embeds comments/reactions across ALL viewers (scope-blind children) —
+  fine first-party, a leak under an app lens. Apps get generic thing
+  projections and read children relationally inside the namespace; authors are
+  shaped by each author's own grant (the /oauth/userinfo model everywhere).
+- **Feed/social surfaces stay closed to apps** (`feed`, `things/user`, `save`,
+  `share`, `reactions-recent`, `quota`): they expose the user's social graph,
+  which no app-data grant covers. An app "feed" is a namespace search.
+
 _Add new entries as decisions are made. Keep the "why" — that's the valuable part._

@@ -6,6 +6,7 @@ import { AlgorithmManager } from './AlgorithmManager';
 import { RainbowButton, SettingRow, SettingsSection } from './SettingsSection';
 import { AccountSwitcher } from '~/components/Account/AccountSwitcher';
 import { AdminPanel } from '~/components/Admin/AdminPanel';
+import { ConnectedAppsSection } from '~/components/Apps/ConnectedAppsSection';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { DRAWER_TOP_LEVEL_DEFAULT_LIMIT, useDrawer } from '~/components/Nav/Drawer/useDrawer';
 import { ColorControl } from '~/components/ThemeSettings/controls';
@@ -405,6 +406,9 @@ export const SettingsPage = () => {
             </Flex>
           </SettingsSection>
         )}
+
+        {/* connected apps — grants + everything each app stores */}
+        {user && <ConnectedAppsSection userId={user.id} />}
 
         {/* admin (admins only) */}
         {user?.isAdmin && (

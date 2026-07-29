@@ -1928,9 +1928,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'owned by the user, max 100). Mints a revocable app-scoped session (purpose "app", 30 days, ' +
       'meta { scopes, sharedThings }) and returns its Bearer token, the granted scopes, and a user ' +
       'object shaped by the grant (id + username always; displayName/avatarUrl only when granted). ' +
-      'App tokens are rejected by every normal endpoint: they only work on /api/v1/app-data*, ' +
-      '/api/v1/oauth/userinfo, and /api/v1/oauth/shared, so a leaked token can\'t touch the rest of ' +
-      'the account or mint further tokens.',
+      'Blast radius of a leaked token: it reaches the embed surface (/api/v1/app-data*, ' +
+      '/api/v1/oauth/userinfo, /api/v1/oauth/shared) and the full things API (/api/v1/things plus ' +
+      'its search/update/delete/react/comment sub-routes) — but every things read and write is ' +
+      'fenced to the app\'s own namespace (the server-stamped root appId), so it can never touch ' +
+      'the user\'s feed or social surfaces, their non-app things, or another app\'s data, and it ' +
+      'cannot mint further tokens. It stays origin-bound (browser calls must come from the granted ' +
+      'origin) and revocable — the token dies instantly when the user disconnects the app.',
     auth: { mode: 'session', description: 'The end user\'s Thingtime session cookie (popup is same-origin).' },
     methods: ['POST'],
     steps: [
@@ -1982,7 +1986,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'per-IP rate-limited). ' +
       'Returns the same handoff shape as /oauth/authorize plus sandbox: true — a signed Bearer token ' +
       'that WORKS for one hour against /api/v1/app-data (read/write/delete, including visibility ' +
-      "'app'), /api/v1/app-data/shared, and /api/v1/oauth/userinfo. It resolves to a synthetic " +
+      "'app'), /api/v1/app-data/shared, /api/v1/app-data/usage, /api/v1/oauth/userinfo, and the " +
+      'full things API (/api/v1/things CRUD plus /things/search, /things/update, /things/delete, ' +
+      '/things/react, /things/comment) — namespace-fenced exactly like a real app token, ' +
+      'byte-budgeted at 5MB per sandbox namespace, and subject to an app-wide sandbox byte brake ' +
+      '(default 512MB/hour across ALL sandboxes). It resolves to a synthetic ' +
       "pretend user (username 'sandbox-<name>', default sandbox-you), every byte written under it is " +
       'namespaced to that one token and TTL-reaped within the hour, and the token can never act as an ' +
       'account credential. By default two sandboxes are fully isolated; to rehearse the MULTI-USER ' +
@@ -1998,7 +2006,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     methods: ['POST'],
     steps: [
       'POST with the clientId + scopes you PLAN to use (e.g. scope: "profile.username app-data app-data.shared").',
-      'Use the returned Bearer token against /app-data*, /app-data/shared, and /oauth/userinfo exactly like a real grant.',
+      'Use the returned Bearer token against /app-data*, /oauth/userinfo, and the whole things API (/api/v1/things, /things/search, /things/update, /things/delete, /things/react, /things/comment) exactly like a real grant — every call fenced to the token\'s own namespace.',
       'Data and token evaporate within an hour — mint another whenever you need one.',
       'When ready: register the app (POST /api/v1/apps) and swap in Thingtime.login() — no other code changes.'
     ],
@@ -2156,6 +2164,133 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [{ status: 200, description: 'Revoked.', body: { ok: true, revoked: 1 } }]
   }),
   endpoint({
+    id: 'apps-data-summary',
+    group: 'embed',
+    title: 'App storage summary (your data)',
+    endpoint: '/api/v1/apps/data-summary',
+    summary: 'What every app has stored in YOUR account — entry counts, bytes used, budgets.',
+    detail:
+      'GET with your own session. One row per app namespace holding data for you, enumerated from ' +
+      'the things themselves — never from grants — so an app you disconnected (or one its developer ' +
+      'deleted) still shows up and its data stays deletable: appId, appName (null when the app was ' +
+      'deleted), entryCount, usedBytes, budgetBytes, lastUpdatedAt. Browse a namespace\'s entries via ' +
+      'GET /api/v1/things?appId=<clientId>, see the app\'s own view via /api/v1/apps/data/shared, and ' +
+      'wipe a namespace via POST /api/v1/apps/data/delete-all.',
+    auth: { mode: 'session-or-bearer', description: 'Your own Thingtime session. App-scoped tokens are rejected.' },
+    methods: ['GET'],
+    steps: [
+      'GET to see every app namespace holding data for you, most recently active first.',
+      'appName null means the app was deleted — the data is yours and remains browsable/deletable.',
+      'Follow up with GET /api/v1/things?appId=<clientId> to read the entries, or POST /api/v1/apps/data/delete-all to remove them.'
+    ],
+    requestExamples: [{ name: 'Summarize', description: 'Every app namespace in your account.', method: 'GET' }],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Two namespaces — one app since deleted.',
+        body: {
+          ok: true,
+          apps: [
+            {
+              appId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f',
+              appName: 'Rainbow Notes',
+              entryCount: 42,
+              usedBytes: 183204,
+              budgetBytes: 52428800,
+              lastUpdatedAt: '2026-07-28T00:00:00.000Z'
+            },
+            {
+              appId: 'ttapp_9e5b2a1f-0c9d-8e7f-4f6b-2c1e8f2a4c3d',
+              appName: null,
+              entryCount: 3,
+              usedBytes: 1024,
+              budgetBytes: 52428800,
+              lastUpdatedAt: '2026-06-01T00:00:00.000Z'
+            }
+          ]
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'apps-data-delete-all',
+    group: 'embed',
+    title: 'Delete an app\'s data (all of it)',
+    endpoint: '/api/v1/apps/data/delete-all',
+    summary: 'Delete EVERYTHING one app stored for you — namespace docs, cascading children, ledger.',
+    detail:
+      'POST { appId } with your own session. Removes every thing in that app\'s namespace you own ' +
+      'plus the comments/reactions cascading under them, refunds every affected storage ledger, and ' +
+      'zeroes yours. You own every namespace doc, so this needs no live grant — it works on orphaned ' +
+      'data (disconnected or deleted apps) too. Returns deleted: the number of docs removed, ' +
+      'cascades included.',
+    auth: { mode: 'session-or-bearer', description: 'Your own Thingtime session. App-scoped tokens are rejected.' },
+    methods: ['POST'],
+    steps: [
+      'Find the appId via /api/v1/apps/data-summary.',
+      'POST it here; deleted reports how many docs (entries + cascaded children) were removed.',
+      'Handle 400 for a missing appId.'
+    ],
+    requestExamples: [
+      { name: 'Wipe a namespace', description: 'Remove everything one app stored for you.', method: 'POST', body: { appId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f' } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Namespace wiped.', body: { ok: true, deleted: 45 } },
+      { status: 400, description: 'No appId.', body: { ok: false, error: 'appId is required' } }
+    ]
+  }),
+  endpoint({
+    id: 'apps-data-shared',
+    group: 'embed',
+    title: 'App shared slice (your lens)',
+    endpoint: '/api/v1/apps/data/shared',
+    summary: 'See an app\'s data exactly as the app would show it to YOU — same read path, same fences.',
+    detail:
+      'GET ?appId=<clientId> (optional thingtime=, target=, cursor=, limit=) with your own session. ' +
+      'Builds a lens from your OWN live grant for that app and runs it through the SAME read path ' +
+      'app tokens use, so "what would I see in this app" can never drift from what the app sees: ' +
+      'your entries, plus — when your grant covers app-data.shared — other users\' app-audience ' +
+      'entries, author-liveness gated. 403 with a plain explanation when you hold no live grant ' +
+      '(your own data stays browsable via /api/v1/things?appId= — ownership never expires). The ' +
+      'response carries sharedRead and the grant\'s scopes so UIs can explain the quiet state.',
+    auth: { mode: 'session-or-bearer', description: 'Your own Thingtime session. App-scoped tokens are rejected.' },
+    methods: ['GET'],
+    steps: [
+      'Find the appId via /api/v1/apps/data-summary or /api/v1/oauth/grants.',
+      'GET with appId; page with nextCursor like any things listing.',
+      'sharedRead false means your grant does not cover app-data.shared — you see only your own entries, exactly as the app would show you.',
+      'Handle 403 (no live grant) by pointing at /api/v1/things?appId= for the raw browse instead.'
+    ],
+    requestExamples: [
+      { name: 'The app\'s view', description: 'What this app would show you.', method: 'GET', query: { appId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', limit: 20 } }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'The lens — your entries plus the shared slice your grant covers.',
+        body: {
+          ok: true,
+          things: [
+            {
+              id: 'thing_123',
+              thingtime: ['data'],
+              crystal: { text: 'Miso soup 🍲' },
+              visibility: 'app'
+            }
+          ],
+          nextCursor: null,
+          sharedRead: true,
+          scopes: ['profile.username', 'app-data', 'app-data.shared']
+        }
+      },
+      {
+        status: 403,
+        description: 'No live grant (revoked or expired).',
+        body: { ok: false, error: 'No live grant for this app — sign in to it with Thingtime first (your data stays either way)', sharedRead: false }
+      }
+    ]
+  }),
+  endpoint({
     id: 'oauth-userinfo',
     group: 'embed',
     title: 'Userinfo (SSO identity)',
@@ -2201,15 +2336,23 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     summary: 'Key/value storage an embedded app keeps in its user\'s Thingtime account.',
     detail:
       'Authenticated by an app-scoped Bearer token from /api/v1/oauth/authorize. GET ?key=… returns one ' +
-      'entry ({ entry: null } when unset); GET without key lists every entry for this (user, app). ' +
+      'entry ({ entry: null } when unset); GET without key lists this (user, app)\'s entries — ' +
+      'key=post:* or prefix= filters by prefix, limit= (1-200, default 200) and cursor= page, and the ' +
+      'listing returns nextCursor (the same grammar as /app-data/shared). ' +
       'POST { key, value, visibility?, acl? } inserts or updates one entry — keys are [A-Za-z0-9._:-] up to 128 chars ' +
       '(first char must be a letter or digit), values ' +
-      'any JSON up to 32KB, at most 200 keys per user per app. Entries are things owned by the END USER, ' +
+      'any JSON up to 32KB. There is NO key-count cap: storage is bounded by a per-(user, app) byte ' +
+      'budget instead (50MB by default, 5MB per sandbox namespace) — every write charges its ' +
+      'serialized size, updates charge only the delta, deletes refund, and an over-budget write ' +
+      'fails with 507 (read GET /api/v1/app-data/usage to pace yourself). Entries are things owned by the END USER, ' +
       'and their audience IS the acl array: ["tt:user"] (private, the default) or ' +
       '["tt:user", "tt:app/<clientId>"] (readable by other users of this one app via /api/v1/app-data/shared). ' +
       "visibility: 'private' | 'app' is accepted sugar for those two acls and derived back on the wire; " +
       'marking an entry \'app\' requires the app-data.shared scope, and a write that omits visibility/acl ' +
       "never changes an existing entry's audience. Users can always see and delete what an app stored. " +
+      'Every entry carries the namespace stamps (root appId + sizeBytes), so KV entries and things ' +
+      'written through the app-token things routes are ONE namespace — the same entries appear via ' +
+      'GET /api/v1/things?thingtime=app-data with this token. ' +
       'CORS: browser calls must ' +
       'come from the token\'s own bound origin. Requires the app-data scope — 403 when the user declined ' +
       'it on the consent screen.',
@@ -2218,11 +2361,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: [
       'Take the token from Thingtime.login(…) in the SDK.',
       'GET to read (with ?key for one entry), POST { key, value } to write.',
-      'Values round-trip as JSON; delete keys via /api/v1/app-data/delete.'
+      'List with key=<prefix>* or prefix= and page with limit/cursor until nextCursor is null.',
+      'Values round-trip as JSON; delete keys via /api/v1/app-data/delete. Watch the byte budget via /api/v1/app-data/usage — a 507 means the namespace is full (delete entries or store less).'
     ],
     requestExamples: [
       { name: 'Read one', description: 'One key.', method: 'GET', query: { key: 'preferences' } },
-      { name: 'List all', description: 'Everything this app stored for this user.', method: 'GET' },
+      { name: 'List all', description: 'Everything this app stored for this user (paged).', method: 'GET' },
+      { name: 'List a prefix', description: 'Only post:* keys, 50 at a time.', method: 'GET', query: { key: 'post:*', limit: 50 } },
       { name: 'Write', description: 'Upsert a key.', method: 'POST', body: { key: 'preferences', value: { theme: 'rainbow' } } },
       {
         name: 'Write shared',
@@ -2234,7 +2379,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [
       { status: 200, description: 'Entry written.', body: { ok: true, entry: { key: 'preferences', value: { theme: 'rainbow' }, visibility: 'private', acl: ['tt:user'], updatedAt: '2026-07-12T00:00:00.000Z' } } },
       { status: 401, description: 'Missing/expired/revoked token.', body: { ok: false, error: 'Unauthorized' } },
-      { status: 403, description: 'Browser origin ≠ token origin.', body: { ok: false, error: 'Origin does not match this token' } }
+      { status: 403, description: 'Browser origin ≠ token origin.', body: { ok: false, error: 'Origin does not match this token' } },
+      { status: 507, description: 'The write would exceed the namespace byte budget.', body: { ok: false, error: "This would exceed the app's 50MB storage budget for this user (52428712 of 52428800 bytes used — delete entries or store less)" } }
     ]
   }),
   endpoint({
@@ -2308,6 +2454,32 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'app-data-usage',
+    group: 'embed',
+    title: 'App data (storage usage)',
+    endpoint: '/api/v1/app-data/usage',
+    summary: 'This (user, app) namespace\'s storage ledger — bytes used against the byte budget.',
+    detail:
+      'GET with the app-scoped Bearer token. Storage is byte-budgeted, never entry-counted: every ' +
+      'write through this app — KV entries and generic things alike — charges its serialized size ' +
+      '(the root sizeBytes stamp) against one per-(user, app) budget: 50MB by default, 5MB per ' +
+      'sandbox namespace. Updates charge only the delta and deletes refund, so usedBytes tracks ' +
+      'what is actually stored. Over-budget writes fail with 507; poll this to pace the app ' +
+      'instead of discovering the ceiling. Same CORS + origin binding as /api/v1/app-data.',
+    auth: { mode: 'bearer', description: 'App-scoped Bearer token with the app-data scope.' },
+    methods: ['GET'],
+    steps: [
+      'GET with the token from Thingtime.login(…).',
+      'Compare usedBytes to budgetBytes before large writes; a 507 on any write means the budget is spent.',
+      'Deleting entries (or shrinking values) refunds bytes immediately.'
+    ],
+    requestExamples: [{ name: 'Read usage', description: 'Bytes used and the budget.', method: 'GET' }],
+    responseExamples: [
+      { status: 200, description: 'The ledger.', body: { ok: true, usedBytes: 183204, budgetBytes: 52428800 } },
+      { status: 401, description: 'Missing/expired/revoked token.', body: { ok: false, error: 'Unauthorized' } }
+    ]
+  }),
+  endpoint({
     id: 'things',
     group: 'things',
     title: 'Things (full CRUD)',
@@ -2318,7 +2490,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     auth: {
       mode: 'session-or-bearer',
       description:
-        'Mutations require an auth cookie or Authorization: Bearer token. GET works logged out for tt:all things; attached things inherit their target audience.'
+        'Mutations require an auth cookie or Authorization: Bearer token. GET works logged out for tt:all things; attached things inherit their target audience. ' +
+        'App-scoped Bearer tokens ("Login with Thingtime", app-data scope) get every verb too, fenced to the app\'s own namespace: reads conjoin the server-stamped root appId (plus the audience acl, tt:inherit chain resolution, and author-liveness for cross-user docs — anything outside the namespace 404s), writes are stamped (root appId + sizeBytes), charged against the namespace byte budget, and acl-clamped to tt:user (the default — app inserts are private, never the public default) or tt:app/<clientId> (needs the app-data.shared scope). save/share things and protected kinds are refused; app responses carry the generic thing projection (never the post aggregation) with visibility \'private\' | \'app\' | \'inherit\' and the acl filtered to the app\'s own entries.'
     },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     steps: [
@@ -2327,7 +2500,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Omit thingtime entirely to create a schema-less thing: { crystal: { any: "shape" } } defaults to thingtime ["data"].',
       'Optionally add extended: any JSON up to 512KB, stored untouched and returned as-is — replace-on-write, null clears it. It is not structured-searchable (/search field conditions can’t target it), though its string content is indexed by the wildcard text index like any field.',
       'Attached kinds (comment, reaction) require targetId and carry acl ["tt:inherit"]; shares carry thingtime ["post","share"].',
-      'GET ?id= reads one thing; GET ?target=&thingtime=comment lists a visible thing’s comments; GET ?thingtime=&cursor=&limit= lists your own things.',
+      'GET ?id= reads one thing; GET ?target=&thingtime=comment lists a visible thing’s comments; GET ?thingtime=&cursor=&limit= lists your own things. Session callers may add appId=<clientId> to the own-things list to browse ONE app\'s namespace (see /api/v1/apps/data-summary).',
       'PUT { id, thingtime, crystal, acl? } creates the thing at that id (201) or replaces the owned thing’s crystal whole (200); PATCH { id, crystal?, extended?, acl?, tags? } merges crystal fields (extended still replaces whole).',
       'DELETE ?id= (or body { id }) removes an owned thing; attached comments/reactions go with it, shares survive with an original-unavailable placeholder.',
       'Handle 401 unauthenticated, 400 invalid payload or acl, 404 missing target/thing, and 413 oversized payload.'
@@ -2512,7 +2685,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'acl entries: tt:all, tt:user (owner), tt:userFriends, tt:userFamily, tt:user/<username>, each optionally "-" prefixed; the most specific matching entry decides and owners always view. Circles resolve to the owner only until a relationship graph exists.',
       'Every doc stores the root schemaVersion it was written at; admins migrate older docs via /api/v1/admin/migrations.',
       'Browse every schema kind at /schemas or GET /api/v1/schemas.',
-      'The comment/react/share/update/delete sub-routes remain as sugar over this endpoint.'
+      'The comment/react/share/update/delete sub-routes remain as sugar over this endpoint.',
+      'App-token behaviour in one line: same verbs, own namespace only — a thing without the app\'s root appId stamp 404s for reads, writes, and deletes alike. Apps read children (comments/reactions) relationally via GET ?target=… inside the namespace; child counts never mix in first-party or other-app children.'
     ]
   }),
   endpoint({
@@ -2670,7 +2844,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     auth: {
       mode: 'optional',
       description:
-        'Works logged out (tt:all things only, throttled per IP). Authenticated searches also see your own things.'
+        'Works logged out (tt:all things only, throttled per IP). Authenticated searches also see your own things. ' +
+        'App-scoped Bearer tokens get the full grammar (conditions, sorts, cursors, engagement windows) with results fenced server-side to the app\'s own appId namespace — own entries, plus the app-audience slice when the token holds app-data.shared. appId and acl are never client-searchable fields; the namespace conjunction is injected server-side and inexpressible from the grammar.'
     },
     methods: ['GET', 'POST'],
     steps: [
@@ -2792,7 +2967,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Simple comments are standalone things (thingtime ["comment"]) pointing at their target via targetId and inheriting its visibility — this route is sugar over the unified thing path. Comments share the post schema: sending post fields (type, images, listing, thing, tags) creates a RICH comment, a full ["post","comment"] thing validated by the post crystal rules, so comments can carry photos, marketplace listings, and thingtime things. Comments are reactable and commentable like any post, and every comment has its own /post/:id permalink. The id may be a post or another comment (replies). Visibility is re-checked before writing so private or circle-limited posts cannot be commented on by unauthorized viewers.',
     auth: {
       mode: 'session-or-bearer',
-      description: 'Requires an auth cookie or Authorization: Bearer token.'
+      description:
+        'Requires an auth cookie or Authorization: Bearer token. App-scoped tokens comment only on things inside their own appId namespace (including other users\' app-audience docs when the token holds app-data.shared); the comment is auto-stamped into the namespace, charged against the byte budget, and the returned commentCount is namespace-fenced.'
     },
     methods: ['POST'],
     steps: [
@@ -2846,7 +3022,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Only the owning user may delete a thing. Deleting a thing also deletes the comment and reaction things attached to it; share things pointing at it survive and render an original-unavailable placeholder.',
     auth: {
       mode: 'session-or-bearer',
-      description: 'Requires an auth cookie or Authorization: Bearer token.'
+      description:
+        'Requires an auth cookie or Authorization: Bearer token. App-scoped tokens delete only inside their own appId namespace — the namespace stamp rides the delete filter itself, so anything else 404s — and the freed bytes (cascaded children included) refund the storage ledger.'
     },
     methods: ['POST'],
     steps: [
@@ -2916,7 +3093,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'emoji may be a single emoji or a multi-emoji group typed/pasted as one token (e.g. "🤣🤣🙌💀💦"). Toggling a token you already have removes it, a new one is added — you can hold several at once. Adding a token also records it in your recent reactions; posting null is a no-op. Reactions are standalone things (thingtime ["reaction"], crystal.emoji = the token) pointing at their target via targetId — this route is toggle sugar over the unified thing path. Reaction counts are returned for immediate card updates.',
     auth: {
       mode: 'session-or-bearer',
-      description: 'Requires an auth cookie or Authorization: Bearer token.'
+      description:
+        'Requires an auth cookie or Authorization: Bearer token. App-scoped tokens react only to things inside their own appId namespace; counts come back namespace-fenced and the user\'s personal recent-reactions list is never touched.'
     },
     methods: ['POST'],
     steps: [
@@ -3068,7 +3246,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Sugar over PATCH /api/v1/things: crystal patches merge over the existing crystal and are re-validated against the thing schemas in its thingtime array; acl (or a legacy visibility name) retargets the audience. Updating a pre-unification post upgrades it to the v2 doc shape in place. Attached things (comments, reactions) keep their inherited audience.',
     auth: {
       mode: 'session-or-bearer',
-      description: 'Requires an auth cookie or Authorization: Bearer token.'
+      description:
+        'Requires an auth cookie or Authorization: Bearer token. App-scoped tokens update only inside their own appId namespace: the acl clamp applies like every app write and size deltas are charged against the byte budget.'
     },
     methods: ['POST'],
     steps: [
