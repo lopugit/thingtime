@@ -3,7 +3,8 @@ import React from 'react';
 import { Box, Checkbox, Flex, Grid, IconButton, Menu, MenuButton, MenuDivider, MenuItem, MenuList, Portal, Text } from '@chakra-ui/react';
 import { ChevronRight, MoreHorizontal } from 'lucide-react';
 
-import { RenderThing } from '~/components/Kinds';
+import { ChakraThingRenderer, HtmlThingRenderer, RenderThing, isChakraThingNode } from '~/components/Kinds';
+import type { ChakraThingNode, HtmlThingNode } from '~/components/Kinds';
 import { CARD_STYLES } from '~/theme/card';
 
 import {
@@ -11,6 +12,7 @@ import {
   ThingsThing,
   VISIBILITY_META,
   formatWhen,
+  interpolateRenderTree,
   isFolder,
   primaryKindOf,
   thingDisplayName,
@@ -27,19 +29,39 @@ const previewSourceOf = (thing: ThingsThing): unknown => {
   return crystal;
 };
 
+// The page looks a data thing's schema render template up per thing (fetched +
+// cached there); views just pass it through to the preview box.
+export type SchemaRenderLookup = (thing: ThingsThing) => Record<string, unknown> | null;
+
 // Bounded, non-interactive live render of a thing. pointerEvents none keeps
 // clicks selecting the tile (a link inside a preview must never hijack
 // selection), and the height clamp keeps arbitrary things from bloating rows.
+// A data thing whose schema ships a render template draws through THAT
+// template with its own crystal values interpolated ({field} tokens) — always
+// via the sanitising allowlist renderers, same as /schemas cards.
 const ThingPreviewBox = ({
   thing,
   maxHeight,
-  fallback
+  fallback,
+  schemaRender
 }: {
   thing: ThingsThing;
   maxHeight: string;
   fallback: React.ReactNode;
+  schemaRender?: Record<string, unknown> | null;
 }) => {
   if (isFolder(thing)) return <>{fallback}</>;
+  let body: React.ReactNode;
+  if (schemaRender) {
+    const node = interpolateRenderTree(schemaRender, thing.crystal || {});
+    body = isChakraThingNode(node) ? (
+      <ChakraThingRenderer node={node as ChakraThingNode} />
+    ) : (
+      <HtmlThingRenderer node={node as HtmlThingNode} />
+    );
+  } else {
+    body = <RenderThing context={{ size: 'compact' }} fallback={fallback} thing={previewSourceOf(thing)} />;
+  }
   return (
     <Box
       maxHeight={maxHeight}
@@ -52,7 +74,7 @@ const ThingPreviewBox = ({
       }}
       width="100%"
     >
-      <RenderThing context={{ size: 'compact' }} fallback={fallback} thing={previewSourceOf(thing)} />
+      {body}
     </Box>
   );
 };
@@ -80,12 +102,52 @@ export type ThingsItemHandlers = {
   onItemOpen: (thing: ThingsThing) => void;
   onItemToggle: (thing: ThingsThing) => void;
   onItemAction: (thing: ThingsThing, action: ThingsItemAction) => void;
+  // right-click → the Thing Context Menu at the pointer (page-owned)
+  onItemContextMenu: (thing: ThingsThing, event: React.MouseEvent) => void;
+  // HTML5 drag-and-drop: dragging a selected thing drags the whole selection;
+  // folders (and the tree/breadcrumbs) are drop targets. null = the root,
+  // undefined dropTargetId = nothing hovered.
+  onItemDragStart: (thing: ThingsThing, event: React.DragEvent) => void;
+  onItemDragEnd: () => void;
+  dropTargetId: string | null | undefined;
+  onFolderDragOver: (folderId: string | null, event: React.DragEvent) => void;
+  onFolderDragLeave: (folderId: string | null) => void;
+  onFolderDrop: (folderId: string | null, event: React.DragEvent) => void;
 };
 
 const canRename = (thing: ThingsThing) => {
   const kind = primaryKindOf(thing);
   return kind === 'folder' || kind === 'data' || kind === 'schema';
 };
+
+// Prop bags every view spreads on its item rows/tiles: drag source on every
+// thing, drop target + highlight on folders. Desktop only — mobile keeps
+// tap-to-open and cut/paste.
+const dragSourceProps = (thing: ThingsThing, handlers: ThingsItemHandlers) =>
+  handlers.isMobile
+    ? {}
+    : {
+        draggable: true,
+        onDragStart: (event: React.DragEvent) => handlers.onItemDragStart(thing, event),
+        onDragEnd: () => handlers.onItemDragEnd()
+      };
+
+const dropTargetProps = (thing: ThingsThing, handlers: ThingsItemHandlers) =>
+  !isFolder(thing) || handlers.isMobile
+    ? {}
+    : {
+        onDragOver: (event: React.DragEvent) => handlers.onFolderDragOver(thing.id, event),
+        onDragLeave: () => handlers.onFolderDragLeave(thing.id),
+        onDrop: (event: React.DragEvent) => handlers.onFolderDrop(thing.id, event)
+      };
+
+const dropHighlight = (thing: ThingsThing, handlers: ThingsItemHandlers) =>
+  handlers.dropTargetId === thing.id
+    ? {
+        boxShadow: 'inset 0 0 0 2px var(--tt-accent, #f472b6)',
+        background: 'var(--tt-accent-soft, rgba(244, 114, 182, 0.14))'
+      }
+    : {};
 
 const ItemMenu = ({ thing, handlers }: { thing: ThingsThing; handlers: ThingsItemHandlers }) => (
   <Menu isLazy placement="bottom-end">
@@ -107,7 +169,7 @@ const ItemMenu = ({ thing, handlers }: { thing: ThingsThing; handlers: ThingsIte
         <MenuItem onClick={() => handlers.onItemAction(thing, 'move')}>📁 Move to…</MenuItem>
         <MenuItem onClick={() => handlers.onItemAction(thing, 'share')}>🌐 Share…</MenuItem>
         <MenuDivider />
-        {!isFolder(thing) && <MenuItem onClick={() => handlers.onItemAction(thing, 'copy')}>📋 Copy</MenuItem>}
+        <MenuItem onClick={() => handlers.onItemAction(thing, 'copy')}>📋 Copy</MenuItem>
         <MenuItem onClick={() => handlers.onItemAction(thing, 'cut')}>✂️ Cut</MenuItem>
         <MenuItem onClick={() => handlers.onItemAction(thing, 'copyLink')}>🔗 Copy link</MenuItem>
         <MenuDivider />
@@ -154,11 +216,13 @@ const VisibilityChip = ({ thing }: { thing: ThingsThing }) => {
 export const ThingsGridView = ({
   items,
   handlers,
-  displayMode
+  displayMode,
+  schemaRenderFor
 }: {
   items: ThingsThing[];
   handlers: ThingsItemHandlers;
   displayMode: ThingsDisplayMode;
+  schemaRenderFor?: SchemaRenderLookup;
 }) => (
   <Grid
     gap={3}
@@ -176,12 +240,16 @@ export const ThingsGridView = ({
           key={thing.id}
           {...CARD_STYLES}
           {...selectionStyles(selected)}
+          {...dragSourceProps(thing, handlers)}
+          {...dropTargetProps(thing, handlers)}
+          {...dropHighlight(thing, handlers)}
           alignItems="center"
           cursor="pointer"
           data-thing-id={thing.id}
           direction="column"
           gap={1}
           onClick={(event) => handlers.onItemClick(thing, event)}
+          onContextMenu={(event) => handlers.onItemContextMenu(thing, event)}
           onDoubleClick={() => handlers.onItemOpen(thing)}
           opacity={handlers.cutIds.has(thing.id) ? 0.45 : 1}
           padding={3}
@@ -207,7 +275,12 @@ export const ThingsGridView = ({
           </Box>
           {displayMode === 'preview' ? (
             <Box marginTop={4} width="100%">
-              <ThingPreviewBox fallback={iconBlock} maxHeight="150px" thing={thing} />
+              <ThingPreviewBox
+                fallback={iconBlock}
+                maxHeight="150px"
+                schemaRender={schemaRenderFor?.(thing) || null}
+                thing={thing}
+              />
             </Box>
           ) : (
             iconBlock
@@ -235,13 +308,15 @@ export const ThingsListView = ({
   handlers,
   onToggleAll,
   allSelected,
-  displayMode
+  displayMode,
+  schemaRenderFor
 }: {
   items: ThingsThing[];
   handlers: ThingsItemHandlers;
   onToggleAll: () => void;
   allSelected: boolean;
   displayMode: ThingsDisplayMode;
+  schemaRenderFor?: SchemaRenderLookup;
 }) => (
   <Box {...CARD_STYLES} overflow="hidden">
     <Flex
@@ -283,11 +358,15 @@ export const ThingsListView = ({
         <Flex
           key={thing.id}
           background={selected ? 'var(--tt-accent-soft, rgba(244, 114, 182, 0.08))' : 'transparent'}
+          {...dragSourceProps(thing, handlers)}
+          {...dropTargetProps(thing, handlers)}
+          {...dropHighlight(thing, handlers)}
           borderBottom="1px solid var(--tt-border, #ececef)"
           cursor="pointer"
           data-thing-id={thing.id}
           direction="column"
           onClick={(event) => handlers.onItemClick(thing, event)}
+          onContextMenu={(event) => handlers.onItemContextMenu(thing, event)}
           onDoubleClick={() => handlers.onItemOpen(thing)}
           opacity={handlers.cutIds.has(thing.id) ? 0.45 : 1}
           paddingX={3}
@@ -335,7 +414,12 @@ export const ThingsListView = ({
         </Flex>
         {displayMode === 'preview' && !isFolder(thing) && (
           <Box marginLeft="44px" marginTop={2}>
-            <ThingPreviewBox fallback={null} maxHeight="120px" thing={thing} />
+            <ThingPreviewBox
+              fallback={null}
+              maxHeight="120px"
+              schemaRender={schemaRenderFor?.(thing) || null}
+              thing={thing}
+            />
           </Box>
         )}
         </Flex>
@@ -354,7 +438,8 @@ export const ThingsColumnsView = ({
   activeFolderAt,
   onOpenFolderAt,
   handlers,
-  displayMode
+  displayMode,
+  schemaRenderFor
 }: {
   // folder ids by depth; index 0 is always null (the root)
   path: (string | null)[];
@@ -363,6 +448,7 @@ export const ThingsColumnsView = ({
   onOpenFolderAt: (depth: number, folderId: string) => void;
   handlers: ThingsItemHandlers;
   displayMode: ThingsDisplayMode;
+  schemaRenderFor?: SchemaRenderLookup;
 }) => (
   <Flex
     {...CARD_STYLES}
@@ -401,6 +487,9 @@ export const ThingsColumnsView = ({
                       ? 'var(--tt-accent-soft, rgba(244, 114, 182, 0.08))'
                       : 'transparent'
                 }
+                {...dragSourceProps(thing, handlers)}
+                {...dropTargetProps(thing, handlers)}
+                {...dropHighlight(thing, handlers)}
                 cursor="pointer"
                 data-thing-id={thing.id}
                 direction="column"
@@ -411,6 +500,7 @@ export const ThingsColumnsView = ({
                     handlers.onItemClick(thing, event);
                   }
                 }}
+                onContextMenu={(event) => handlers.onItemContextMenu(thing, event)}
                 onDoubleClick={() => handlers.onItemOpen(thing)}
                 opacity={handlers.cutIds.has(thing.id) ? 0.45 : 1}
                 paddingX={3}
@@ -427,7 +517,12 @@ export const ThingsColumnsView = ({
                 </Flex>
                 {displayMode === 'preview' && !folder && (
                   <Box marginLeft="24px" marginTop={1}>
-                    <ThingPreviewBox fallback={null} maxHeight="90px" thing={thing} />
+                    <ThingPreviewBox
+                      fallback={null}
+                      maxHeight="90px"
+                      schemaRender={schemaRenderFor?.(thing) || null}
+                      thing={thing}
+                    />
                   </Box>
                 )}
               </Flex>

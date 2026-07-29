@@ -319,11 +319,18 @@ export function useApi() {
           ),
         [asyncFetcher]
       ),
-      // multi-select move/copy/delete — see /docs/api things-bulk
+      // multi-select move/copy/delete/share — see /docs/api things-bulk
       bulk: useCallback(
         async (args) =>
           asyncFetcher.submit(
-            { op: args?.op, ids: args?.ids, folderId: args?.folderId ?? null },
+            {
+              op: args?.op,
+              ids: args?.ids,
+              folderId: args?.folderId ?? null,
+              // share op only — omitted entirely for move/copy/delete
+              ...(args && 'acl' in args ? { acl: args.acl } : {}),
+              ...(args?.recursive ? { recursive: true } : {})
+            },
             { action: '/api/v1/things/bulk' }
           ),
         [asyncFetcher]

@@ -3434,29 +3434,79 @@ export const upsertThing = async (
 };
 
 // ---------------------------------------------------------------------------
-// Bulk operations for /things multi-select: move / copy / delete up to
+// Bulk operations for /things multi-select: move / copy / delete / share up to
 // MAX_BULK_IDS things in one request. Each item goes through the SAME
 // single-item path the app uses everywhere else (updateThing / createThing /
 // deleteThing) — bulk is a loop, never a second code path, so every ownership,
 // protected-kind, folder, cycle, and validation rule holds identically
-// (DECISIONS.md: test == live == direct API).
+// (DECISIONS.md: test == live == direct API). Folder copies and recursive
+// shares walk the subtree through those same per-item paths, bounded by
+// MAX_FOLDER_TREE_THINGS so a runaway tree fails loudly instead of half-applying.
 
 export const MAX_BULK_IDS = 100;
-const BULK_OPS = ['move', 'copy', 'delete'] as const;
+const BULK_OPS = ['move', 'copy', 'delete', 'share'] as const;
 export type BulkOp = (typeof BULK_OPS)[number];
 
 export type BulkThingsInput = {
   op?: unknown;
   ids?: unknown;
   folderId?: unknown; // move/copy destination (null/omitted = root)
+  acl?: unknown; // share: the audience to apply
+  visibility?: unknown; // share: legacy circle alias, mapped onto acl
+  recursive?: unknown; // share: folders also apply the acl to everything inside
 };
 
-export type BulkItemResult = { id: string; ok: boolean; error?: string; newId?: string };
+export type BulkItemResult = {
+  id: string;
+  ok: boolean;
+  error?: string;
+  newId?: string;
+  // recursive folder ops: how many descendants were copied / acl-updated and
+  // how many were skipped (uncopyable kinds, inherit-locked audiences)
+  copied?: number;
+  applied?: number;
+  skipped?: number;
+};
 
 // Kinds that can't be duplicated: attached children live under their target
-// (a copy would dangle), and folder copies would need a recursive tree walk —
-// move the folder instead.
-const UNCOPYABLE = ['comment', 'reaction', 'save', 'share', 'folder'];
+// (a copy would dangle). Folders CAN be copied — the whole subtree is walked
+// through the same per-item create path, skipping these kinds inside.
+const UNCOPYABLE = ['comment', 'reaction', 'save', 'share'];
+
+// Recursive folder op bound (copy / recursive share): the subtree walk fails
+// loudly past this many things instead of silently truncating.
+export const MAX_FOLDER_TREE_THINGS = 500;
+
+// Breadth-first subtree collection for recursive folder ops. Parents come
+// before their children (copy needs the new parent id first), cycle-safe via
+// the visited set, and honest about overflow: `truncated` means the caller
+// must refuse the op, never half-apply it.
+const collectFolderTree = async (
+  ownerId: string,
+  rootFolderId: string
+): Promise<{ docs: ThingDoc[]; truncated: boolean }> => {
+  const things = await getThingsCollection();
+  const docs: ThingDoc[] = [];
+  const visitedFolders = new Set<string>([rootFolderId]);
+  let frontier = [rootFolderId];
+  for (let depth = 0; frontier.length && depth < MAX_FOLDER_DEPTH; depth += 1) {
+    const children = (await things
+      .find({ ownerId, folderId: { $in: frontier } } as any)
+      .limit(MAX_FOLDER_TREE_THINGS + 1)
+      .toArray()) as any as ThingDoc[];
+    const nextFrontier: string[] = [];
+    for (const child of children) {
+      if (docs.length >= MAX_FOLDER_TREE_THINGS) return { docs, truncated: true };
+      docs.push(child);
+      if (thingtimeOf(child).includes('folder') && !visitedFolders.has(child.shareId)) {
+        visitedFolders.add(child.shareId);
+        nextFrontier.push(child.shareId);
+      }
+    }
+    frontier = nextFrontier;
+  }
+  return { docs, truncated: frontier.length > 0 };
+};
 
 export const bulkThings = async (
   viewerInput: string | Viewer,
@@ -3485,6 +3535,41 @@ export const bulkThings = async (
     if (isFail(assignment)) return assignment;
     folderId = assignment.folderId;
   }
+  // share audience validated the same way (updateThing revalidates per item —
+  // this just makes an empty/garbage acl fail the whole batch loudly)
+  const recursive = input.recursive === true;
+  if (op === 'share') {
+    if (input.acl === undefined && input.visibility === undefined) {
+      return fail(400, 'share needs an acl (or a legacy visibility circle)');
+    }
+    const parsed = resolveInputAcl({ acl: input.acl, visibility: input.visibility });
+    if (isFail(parsed)) return parsed;
+    if (!parsed) return fail(400, 'share needs an acl (or a legacy visibility circle)');
+  }
+  const sharePatch = { acl: input.acl, visibility: input.visibility } as UpdateThingInput;
+
+  // copy one doc through the real create path (validation, acl defaults,
+  // provenance re-checks, storage accounting all apply). `nameHint` adds the
+  // Drive-style "Copy of" prefix (top-level copies only — inner names keep).
+  const copyOne = async (doc: ThingDoc, destination: string | null, nameHint: boolean) => {
+    const thingtime = thingtimeOf(doc);
+    const crystal: Record<string, any> = { ...crystalOf(doc) };
+    if (nameHint && (thingtime.includes('data') || thingtime.includes('folder')) && typeof crystal.name === 'string' && crystal.name.trim()) {
+      crystal.name = `Copy of ${crystal.name}`.slice(0, 120);
+    }
+    return createThing(
+      viewer.id,
+      {
+        thingtime,
+        crystal,
+        extended: doc.extended ?? undefined,
+        acl: aclOf(doc),
+        tags: doc.tags || [],
+        folderId: destination
+      },
+      viewer
+    );
+  };
 
   const things = await getThingsCollection();
   const results: BulkItemResult[] = [];
@@ -3499,38 +3584,93 @@ export const bulkThings = async (
       results.push(result.ok ? { id, ok: true } : { id, ok: false, error: result.error });
       continue;
     }
-    // copy — mint a NEW thing through the real create path (validation, acl
-    // defaults, provenance re-checks, storage accounting all apply)
+
+    // copy/share both need the doc (kind checks, folder recursion)
     const doc = (await things.findOne({ shareId: id, ownerId: viewer.id } as any)) as any as ThingDoc | null;
     if (!doc || (!isV2(doc) && !isPostThing(doc))) {
       results.push({ id, ok: false, error: 'Thing not found' });
       continue;
     }
     const thingtime = thingtimeOf(doc);
+    const isFolderDoc = thingtime.includes('folder');
+
+    if (op === 'share') {
+      const result = await updateThing(viewer, id, sharePatch);
+      if (!result.ok) {
+        results.push({ id, ok: false, error: result.error });
+        continue;
+      }
+      if (!recursive || !isFolderDoc) {
+        results.push({ id, ok: true });
+        continue;
+      }
+      // recursive folder share: the same acl flows to everything inside via
+      // the same updateThing path. Inherit-locked things (attached comments/
+      // shares) refuse audience changes — counted as skipped, never silently
+      // changed. Oversized trees refuse before touching anything below.
+      const tree = await collectFolderTree(viewer.id, doc.shareId);
+      if (tree.truncated) {
+        results.push({ id, ok: true, applied: 0, skipped: 0, error: `Folder audience applied, but it holds more than ${MAX_FOLDER_TREE_THINGS} things — share the subfolders directly` });
+        continue;
+      }
+      let applied = 0;
+      let skipped = 0;
+      let firstError: string | undefined;
+      for (const child of tree.docs) {
+        const childResult = await updateThing(viewer, child.shareId, sharePatch);
+        if (childResult.ok) applied += 1;
+        else {
+          skipped += 1;
+          if (!firstError) firstError = childResult.error;
+        }
+      }
+      results.push({ id, ok: true, applied, skipped, ...(skipped && firstError ? { error: firstError } : {}) });
+      continue;
+    }
+
+    // copy — mint NEW things through the real create path. Folders copy their
+    // whole subtree (bounded), skipping uncopyable kinds with honest counts.
     const blocked = UNCOPYABLE.find((kind) => thingtime.includes(kind));
     if (blocked) {
       results.push({ id, ok: false, error: `${blocked} things can’t be copied` });
       continue;
     }
-    const crystal: Record<string, any> = { ...crystalOf(doc) };
-    // free-form data things get the Drive-style name hint; typed crystals keep
-    // their exact (schema-bounded) fields
-    if (thingtime.includes('data') && typeof crystal.name === 'string' && crystal.name.trim()) {
-      crystal.name = `Copy of ${crystal.name}`.slice(0, 200);
+    if (!isFolderDoc) {
+      const created = await copyOne(doc, folderId, thingtime.includes('data'));
+      results.push(created.ok ? { id, ok: true, newId: created.doc.shareId } : { id, ok: false, error: created.error });
+      continue;
     }
-    const created = await createThing(
-      viewer.id,
-      {
-        thingtime,
-        crystal,
-        extended: doc.extended ?? undefined,
-        acl: aclOf(doc),
-        tags: doc.tags || [],
-        folderId
-      },
-      viewer
-    );
-    results.push(created.ok ? { id, ok: true, newId: created.doc.shareId } : { id, ok: false, error: created.error });
+    const tree = await collectFolderTree(viewer.id, doc.shareId);
+    if (tree.truncated) {
+      results.push({ id, ok: false, error: `Folders with more than ${MAX_FOLDER_TREE_THINGS} things inside can’t be copied in one go` });
+      continue;
+    }
+    const rootCopy = await copyOne(doc, folderId, true);
+    if (!rootCopy.ok) {
+      results.push({ id, ok: false, error: rootCopy.error });
+      continue;
+    }
+    // old folder id → its copy's id; children whose parent copy failed are
+    // skipped (never re-rooted somewhere surprising)
+    const idMap = new Map<string, string>([[doc.shareId, rootCopy.doc.shareId]]);
+    let copied = 0;
+    let skipped = 0;
+    for (const child of tree.docs) {
+      const childKinds = thingtimeOf(child);
+      const parentNewId = child.folderId ? idMap.get(child.folderId) : undefined;
+      if (!parentNewId || childKinds.some((kind) => UNCOPYABLE.includes(kind)) || (!isV2(child) && !isPostThing(child))) {
+        skipped += 1;
+        continue;
+      }
+      const childCopy = await copyOne(child, parentNewId, false);
+      if (childCopy.ok) {
+        copied += 1;
+        if (childKinds.includes('folder')) idMap.set(child.shareId, childCopy.doc.shareId);
+      } else {
+        skipped += 1;
+      }
+    }
+    results.push({ id, ok: true, newId: rootCopy.doc.shareId, copied, skipped });
   }
 
   const succeeded = results.filter((entry) => entry.ok).length;

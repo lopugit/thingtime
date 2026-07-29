@@ -5249,19 +5249,20 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   endpoint({
     id: 'things-bulk',
     group: 'things',
-    title: 'Bulk move / copy / delete',
+    title: 'Bulk move / copy / delete / share',
     endpoint: '/api/v1/things/bulk',
-    summary: 'Multi-select operations for /things: move, copy, or delete up to 100 owned things in one request.',
+    summary: 'Multi-select operations for /things: move, copy, delete, or share up to 100 owned things in one request.',
     detail:
-      'Each id runs through the exact single-item path the dedicated endpoints use (updateThing, createThing, deleteThing), so every ownership, protected-kind, folder, and validation rule applies identically — bulk is a loop, never a second code path. move rewrites each thing’s folderId (folderId null or omitted = the /things root; the destination must be one of YOUR folder things). copy mints brand-new things through the real create path (fresh shareId, storage accounting, acl preserved) — comment/reaction/save/share/folder things can’t be copied. delete cascades like the single delete (attached comments/reactions/saves go with each thing; deleting a folder re-parents its contents to the folder’s parent instead of deleting them). Results are per-item: one bad id never fails the batch.',
+      'Each id runs through the exact single-item path the dedicated endpoints use (updateThing, createThing, deleteThing), so every ownership, protected-kind, folder, and validation rule applies identically — bulk is a loop, never a second code path. move rewrites each thing’s folderId (folderId null or omitted = the /things root; the destination must be one of YOUR folder things). copy mints brand-new things through the real create path (fresh shareId, storage accounting, acl preserved) — comment/reaction/save/share things can’t be copied; copying a FOLDER copies its whole subtree (bounded at 500 things), skipping uncopyable kinds with per-item copied/skipped counts. delete cascades like the single delete (attached comments/reactions/saves go with each thing; deleting a folder re-parents its contents to the folder’s parent instead of deleting them). share applies an acl (or legacy visibility circle) to each thing; with recursive true, folders also apply it to everything inside (same 500-thing bound) — inherit-locked things are counted as skipped, never silently changed. Results are per-item: one bad id never fails the batch.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
     },
     methods: ['POST'],
     steps: [
-      'POST op (move, copy, or delete), ids (1–100 shareIds you own), and folderId for move/copy destinations.',
-      'Read the per-item results list — each entry carries ok plus error (failures) or newId (copies).',
+      'POST op (move, copy, delete, or share), ids (1–100 shareIds you own), and folderId for move/copy destinations.',
+      'share additionally takes acl (or legacy visibility) and optional recursive: true to flow a folder’s audience to everything inside.',
+      'Read the per-item results list — each entry carries ok plus error (failures), newId (copies), and copied/applied/skipped counts for recursive folder ops.',
       'succeeded and failed counts summarise the batch.',
       'Handle 401 unauthenticated, 400 malformed batches, and 404 for an unknown destination folder.'
     ],
@@ -5271,6 +5272,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'File two things inside an owned folder thing.',
         method: 'POST',
         body: { op: 'move', ids: ['thing_1', 'thing_2'], folderId: 'folder_abc' }
+      },
+      {
+        name: 'Copy a folder (recursive)',
+        description: 'Duplicate a folder and everything inside it at the root.',
+        method: 'POST',
+        body: { op: 'copy', ids: ['folder_abc'] }
+      },
+      {
+        name: 'Share a folder and its contents',
+        description: 'Make a folder and everything inside it friends-visible.',
+        method: 'POST',
+        body: { op: 'share', ids: ['folder_abc'], acl: ['-tt:all', 'tt:userFriends', 'tt:user'], recursive: true }
       },
       {
         name: 'Bulk delete',
@@ -5292,6 +5305,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           ],
           succeeded: 1,
           failed: 1
+        }
+      },
+      {
+        status: 200,
+        description: 'Recursive folder copy (copied/skipped count the subtree).',
+        body: {
+          ok: true,
+          op: 'copy',
+          results: [{ id: 'folder_abc', ok: true, newId: 'thing_xyz', copied: 12, skipped: 1 }],
+          succeeded: 1,
+          failed: 0
         }
       }
     ],

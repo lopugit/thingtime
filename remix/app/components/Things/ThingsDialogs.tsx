@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Box,
   Button,
+  Checkbox,
   Flex,
   Input,
   Modal,
@@ -238,7 +239,8 @@ export const MoveDialog = ({
 // ---------------------------------------------------------------------------
 // Share — audience circle + per-person grants + copy link. Applies the same
 // audience to every selected thing (attached things that inherit their
-// target's audience are skipped with an honest per-item error).
+// target's audience are skipped with an honest per-item error). Folders can
+// opt into flowing the audience to everything inside (recursive bulk share).
 
 export const ShareDialog = ({
   things,
@@ -247,7 +249,7 @@ export const ShareDialog = ({
 }: {
   things: ThingsThing[];
   onClose: () => void;
-  onApply: (acl: string[]) => Promise<boolean>;
+  onApply: (acl: string[], recursive: boolean) => Promise<boolean>;
 }) => {
   const api = useApi();
   const lopu = useLopu();
@@ -255,10 +257,12 @@ export const ShareDialog = ({
   apiRef.current = api;
 
   const single = things.length === 1 ? things[0] : null;
+  const folderCount = things.filter(isFolder).length;
   const [circle, setCircle] = useState('private');
   const [people, setPeople] = useState<string[]>([]);
   const [personQuery, setPersonQuery] = useState('');
   const [personResults, setPersonResults] = useState<{ username: string; displayName: string | null }[]>([]);
+  const [recursive, setRecursive] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -269,6 +273,7 @@ export const ShareDialog = ({
     setPeople(single ? personGrantsOf(first.acl) : []);
     setPersonQuery('');
     setPersonResults([]);
+    setRecursive(false);
     setBusy(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [things.map((thing) => thing.id).join(',')]);
@@ -300,7 +305,7 @@ export const ShareDialog = ({
   const submit = async () => {
     if (busy) return;
     setBusy(true);
-    const ok = await onApply(composeAcl(circle, people));
+    const ok = await onApply(composeAcl(circle, people), recursive && folderCount > 0);
     setBusy(false);
     if (ok) onClose();
   };
@@ -405,6 +410,24 @@ export const ShareDialog = ({
                 )}
               </Flex>
             </Box>
+            {folderCount > 0 && (
+              <Box>
+                <Checkbox
+                  colorScheme="pink"
+                  isChecked={recursive}
+                  onChange={(event) => setRecursive(event.target.checked)}
+                  size="sm"
+                >
+                  <Text fontSize="13px">
+                    📂 Also apply to everything inside {folderCount === 1 ? 'the folder' : `the ${folderCount} folders`}
+                  </Text>
+                </Checkbox>
+                <Text color="var(--tt-faint, #b6b6c0)" fontSize="11px" marginLeft="24px">
+                  Every thing in the {folderCount === 1 ? 'folder' : 'folders'} (subfolders included) takes this audience.
+                  Attached things that inherit their target’s audience are skipped.
+                </Text>
+              </Box>
+            )}
             {inheritLocked.length > 0 && (
               <Text color="var(--tt-muted, #9a9aa6)" fontSize="12px">
                 ⚠️ {inheritLocked.length === 1 ? '1 selected thing inherits' : `${inheritLocked.length} selected things inherit`}{' '}
