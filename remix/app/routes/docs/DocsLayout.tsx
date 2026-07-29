@@ -544,7 +544,20 @@ function DocsDrawerContent({ closeTestId, onClose, pathname, showClose = false }
 
       <DocsSearch onNavigate={onClose} query={searchQuery} setQuery={setSearchQuery} />
 
-      <Stack display={searching ? 'none' : undefined} spacing={1}>
+      <Stack spacing={1}>
+        {searching ? (
+          <Text
+            color="var(--tt-muted, #9a9aa6)"
+            fontFamily="mono"
+            fontSize="11px"
+            fontWeight="600"
+            letterSpacing="0.14em"
+            mb={1}
+            textTransform="uppercase"
+          >
+            Menu
+          </Text>
+        ) : null}
         {docsNav.map((item) => {
           const active = isActivePath(pathname, item.to);
           const isApiItem = item.to === '/docs/api';
@@ -605,9 +618,9 @@ function DocsDrawerContent({ closeTestId, onClose, pathname, showClose = false }
         })}
       </Stack>
 
-      {!searching && isDesignPath(pathname) ? <DrawerDesignEntryList onNavigate={onClose} /> : null}
-      {!searching && isDesignSystemPath(pathname) ? <DrawerDesignSystemList onNavigate={onClose} /> : null}
-      {!searching && isConceptsPath(pathname) ? <DrawerConceptList onNavigate={onClose} /> : null}
+      {isDesignPath(pathname) ? <DrawerDesignEntryList onNavigate={onClose} /> : null}
+      {isDesignSystemPath(pathname) ? <DrawerDesignSystemList onNavigate={onClose} /> : null}
+      {isConceptsPath(pathname) ? <DrawerConceptList onNavigate={onClose} /> : null}
     </Stack>
   );
 }
