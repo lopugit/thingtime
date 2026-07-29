@@ -237,6 +237,23 @@ export function useApi() {
         [asyncFetcher]
       )
     },
+    tokens: {
+      // personal access tokens (Settings → Token minter) — the mint response
+      // carries the token string exactly once
+      list: useCallback(async () => getJson('/api/v1/tokens'), []),
+      mint: useCallback(
+        async (args) =>
+          asyncFetcher.submit(
+            { name: args?.name, scopes: args?.scopes, expiresInMs: args?.expiresInMs ?? null, maxUses: args?.maxUses ?? null },
+            { action: '/api/v1/tokens' }
+          ),
+        [asyncFetcher]
+      ),
+      revoke: useCallback(
+        async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/tokens/revoke' }),
+        [asyncFetcher]
+      )
+    },
     algorithms: {
       list: useCallback(async () => getJson('/api/v1/algorithms'), []),
       create: useCallback(

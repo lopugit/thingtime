@@ -1,6 +1,6 @@
 import { json, readJsonBody } from '~/api/http';
 
-import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
+import { resolveThingsActor } from '~/api/utils/auth/patTokens';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import { addComment } from '~/api/utils/things/things';
 
@@ -10,7 +10,11 @@ import { addComment } from '~/api/utils/things/things';
 // crystal rules apply and the response comment carries the post vocabulary).
 // Rate-limited per user (admin-configurable, see the admin panel).
 export const action = async ({ request }: { request: Request }) => {
-  const user = await getCurrentUser(request);
+  const auth = await resolveThingsActor(request, 'things.comment');
+  if (auth.ok === false) {
+    return json({ ok: false, error: auth.error }, { status: auth.status });
+  }
+  const user = auth.actor.user;
   if (!user) {
     return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
   }

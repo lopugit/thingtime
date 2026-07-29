@@ -1,13 +1,17 @@
 import { json, readJsonBody } from '~/api/http';
 
-import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
+import { resolveThingsActor } from '~/api/utils/auth/patTokens';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import { sharePost } from '~/api/utils/things/things';
 
 // POST /api/v1/things/share — { id, text?, visibility? } — repost a public
 // post (or one of your own) as a new share post.
 export const action = async ({ request }: { request: Request }) => {
-  const user = await getCurrentUser(request);
+  const auth = await resolveThingsActor(request, 'things.share');
+  if (auth.ok === false) {
+    return json({ ok: false, error: auth.error }, { status: auth.status });
+  }
+  const user = auth.actor.user;
   if (!user) {
     return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
   }

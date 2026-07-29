@@ -1,6 +1,6 @@
 import { json, readJsonBody } from '~/api/http';
 
-import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
+import { resolveThingsActor } from '~/api/utils/auth/patTokens';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import { toggleSave } from '~/api/utils/things/things';
 
@@ -9,7 +9,11 @@ import { toggleSave } from '~/api/utils/things/things';
 // (thingtime ['save'], acl ['tt:user']) so a library is personal by
 // construction. Rate-limited per user (admin-configurable).
 export const action = async ({ request }: { request: Request }) => {
-  const user = await getCurrentUser(request);
+  const auth = await resolveThingsActor(request, 'things.save');
+  if (auth.ok === false) {
+    return json({ ok: false, error: auth.error }, { status: auth.status });
+  }
+  const user = auth.actor.user;
   if (!user) {
     return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
   }

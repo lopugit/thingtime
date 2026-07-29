@@ -344,3 +344,37 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] Space validation: space shorter than 8 chars 400s; usernames are
       always 'sandbox-' prefixed so pooled feeds can't impersonate real
       accounts.
+
+## Token minter — personal access tokens (`remix/app/components/Settings/TokenMinter.tsx`, `api/utils/auth/patTokens.ts`)
+
+- [ ] Settings → Token minter (auth only): mint with default "Full things
+      access" — the returned token appears ONCE in the reveal card (token +
+      curl example + copy buttons); after reload the reveal is gone and the
+      token is unrecoverable, but the row lists in "Your tokens" (painted
+      instantly from the `tt-pat-tokens-<userId>` local cache, server
+      reconciles behind).
+- [ ] Permissions selector: with Full things access on, unticking one leaf
+      (e.g. Delete) converts the selection to "every leaf except that one"
+      and the hint lists exactly the granted scopes; minting with zero
+      scopes is blocked with a toast.
+- [ ] Expiry dials stay in sync: preset chips (1h…1y, Never ∞), the
+      log-scale slider (1ms → 10y, far right = never), and the value+unit
+      inputs all drive the same expiresInMs; the human date preview updates.
+- [ ] Uses dials: Unlimited / 1 / 10 / 1000 / custom; a use-limited token
+      consumes exactly one use per authenticated call — the (maxUses+1)-th
+      call 401s "no uses remaining", and a 403 (missing scope) consumes
+      NOTHING. Two racing final calls can never both spend the last use
+      (atomic usesRemaining > 0 decrement).
+- [ ] A PAT works ONLY where wired: things CRUD/search/feed/user/save/
+      comment/react/share by scope (PUT upsert needs create+update), plus
+      free introspection at /api/v1/tokens/self. It must 401 on
+      /api/v1/tokens (list/mint), /tokens/revoke, /auth/me, themes,
+      algorithms, oauth — and be rejected when smuggled via the auth
+      COOKIE (Bearer-only).
+- [ ] Sub-second expiry is real: a 1500ms token works immediately and 401s
+      after 2s (session expiresAt is the authoritative ms check; the JWT
+      exp is ceiled to seconds).
+- [ ] Revoke (session-only) kills the token immediately, is idempotent,
+      flips the row optimistically (reverts on failure), and gives a
+      never-expiring token a reap date so the TTL index eventually clears
+      it. Expired tokens vanish from the list once Mongo's TTL sweep runs.

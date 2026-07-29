@@ -1,6 +1,6 @@
 import { json, readJsonBody } from '~/api/http';
 
-import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
+import { resolveThingsActor } from '~/api/utils/auth/patTokens';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import { searchThings, type SearchQuery } from '~/api/utils/things/search';
 import { viewerOf } from '~/api/utils/things/things';
@@ -37,7 +37,11 @@ const respond = async (request: Request, user: { id: string; username: string } 
 // GET /api/v1/things/search?q=&thingtime=&tags=&sort=&cursor=&limit= — the
 // simple shareable-URL form: ranked text search plus csv filters.
 export const loader = async ({ request }: { request: Request }) => {
-  const user = await getCurrentUser(request);
+  const auth = await resolveThingsActor(request, 'things.read');
+  if (auth.ok === false) {
+    return json({ ok: false, error: auth.error }, { status: auth.status });
+  }
+  const user = auth.actor.user;
   const params = new URL(request.url).searchParams;
   return respond(request, user, {
     q: params.get('q') || undefined,
@@ -65,7 +69,11 @@ export const action = async ({ request }: { request: Request }) => {
   if (request.method.toUpperCase() !== 'POST') {
     return json({ ok: false, error: 'Method not allowed' }, { status: 405, headers: { Allow: 'GET, POST' } });
   }
-  const user = await getCurrentUser(request);
+  const auth = await resolveThingsActor(request, 'things.read');
+  if (auth.ok === false) {
+    return json({ ok: false, error: auth.error }, { status: auth.status });
+  }
+  const user = auth.actor.user;
   const body = await readJsonBody(request, MAX_BODY_BYTES);
   return respond(request, user, {
     q: body?.q,

@@ -1,6 +1,6 @@
 import { json } from '~/api/http';
 
-import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
+import { resolveThingsActor } from '~/api/utils/auth/patTokens';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import {
   createPost,
@@ -29,6 +29,25 @@ const rateLimitKeyFor = (body: any, accountKind: string): string => {
   return accountKind === 'service' ? 'things.write.service' : 'things.write';
 };
 
+// The PAT scope each mutation needs (auth/patTokens.ts). Mirrors
+// rateLimitKeyFor's body routing: a POST whose thingtime says it's a reaction
+// or comment needs that specific permission, not blanket create. PUT is an
+// upsert — it can create OR replace, so it needs both. Full sessions skip
+// scope checks entirely (resolveThingsActor returns pat: null).
+const patScopeFor = (method: string, body: any): string | string[] => {
+  if (method === 'POST') {
+    if (Array.isArray(body?.thingtime)) {
+      if (body.thingtime.includes('reaction')) return 'things.react';
+      if (body.thingtime.includes('comment')) return 'things.comment';
+    }
+    return 'things.create';
+  }
+  if (method === 'PUT') return ['things.create', 'things.update'];
+  if (method === 'PATCH') return 'things.update';
+  if (method === 'DELETE') return 'things.delete';
+  return 'things.read';
+};
+
 // Crystal payloads are small (text + image URLs + listing), but every thing
 // also carries the schema-free `extended` sidecar (up to EXTENDED_MAX_BYTES =
 // 512KB, enforced by sanitizeExtended) — the body cap leaves headroom for both.
@@ -46,7 +65,11 @@ const csv = (value: string | null): string[] =>
 // things attached to a viewable thing (its comments/reactions).
 // GET /api/v1/things?thingtime=&cursor=&limit= — list your own things.
 export const loader = async ({ request }: { request: Request }) => {
-  const user = await getCurrentUser(request);
+  const auth = await resolveThingsActor(request, 'things.read');
+  if (auth.ok === false) {
+    return json({ ok: false, error: auth.error }, { status: auth.status });
+  }
+  const user = auth.actor.user;
   const viewer = viewerOf(user);
   const params = new URL(request.url).searchParams;
 
@@ -85,19 +108,26 @@ export const loader = async ({ request }: { request: Request }) => {
 //   extended replaces whole (null clears it).
 // - DELETE /api/v1/things?id= (or body { id }) — delete an owned thing.
 export const action = async ({ request }: { request: Request }) => {
-  const user = await getCurrentUser(request);
-  if (!user) {
-    return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
-  }
-  const viewer = viewerOf(user);
-
   const contentLength = Number(request.headers.get('content-length') || 0);
   if (contentLength > MAX_BODY_BYTES) {
     return json({ ok: false, error: 'Post payload too large' }, { status: 413 });
   }
 
+  // Body before auth: the PAT scope a mutation needs depends on what the body
+  // says it is (a POST carrying thingtime ['reaction'] is a react, not a
+  // create), and a missing scope must 403 BEFORE a use is consumed.
   const method = request.method.toUpperCase();
   const body = await request.json().catch(() => ({}));
+
+  const auth = await resolveThingsActor(request, patScopeFor(method, body));
+  if (auth.ok === false) {
+    return json({ ok: false, error: auth.error }, { status: auth.status });
+  }
+  const user = auth.actor.user;
+  if (!user) {
+    return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
+  }
+  const viewer = viewerOf(user);
 
   // Every mutating verb is throttled — the generic endpoint must not be a way
   // around the per-op limits main added to the react/comment sub-routes. No

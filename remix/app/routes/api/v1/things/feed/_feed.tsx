@@ -1,6 +1,6 @@
 import { json } from '~/api/http';
 
-import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
+import { resolveThingsActor } from '~/api/utils/auth/patTokens';
 import { getOwnedAlgorithmWeights } from '~/api/utils/algorithms/algorithms';
 import { getFeed, type PostType, type PostVisibility } from '~/api/utils/things/things';
 
@@ -20,7 +20,11 @@ const isoDate = (value: string | null): Date | null => {
 // The public feed. Works logged out (public posts only). With `algorithm`
 // omitted the viewer's active algorithm applies; 'latest' forces chronological.
 export const loader = async ({ request }: { request: Request }) => {
-  const user = await getCurrentUser(request);
+  const auth = await resolveThingsActor(request, 'things.read');
+  if (auth.ok === false) {
+    return json({ ok: false, error: auth.error }, { status: auth.status });
+  }
+  const user = auth.actor.user;
   const url = new URL(request.url);
   const params = url.searchParams;
 
