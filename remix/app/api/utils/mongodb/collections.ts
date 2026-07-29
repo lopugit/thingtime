@@ -126,6 +126,14 @@ export const getAuthOtpsCollection = async () => getCollection('authOtps');
 // process. The unique indexes are the real source of truth that
 // usernames/emails/tokens can't be duplicated (the app-level findUser checks are
 // racy on their own).
+//
+// WHO CALLS THIS: the boot-time warmup (server/plugins/mongo-warmup) fires it
+// in the background on every fresh instance, and the true bootstrap paths
+// (registerUser, admin migrations) still await it so a brand-new database
+// converges before its first unique-constrained insert. Hot request paths
+// deliberately do NOT call it — indexes only need creating once per database,
+// and re-confirming ~55 of them inside user requests was the dominant
+// cold-start cost (see PR: cold-start index battery).
 let indexesEnsured: Promise<void> | null = null;
 
 // createIndex with different options than an existing same-key index throws

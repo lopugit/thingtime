@@ -1,4 +1,4 @@
-import { ensureIndexes, getRostersCollection } from '../mongodb/collections';
+import { getRostersCollection } from '../mongodb/collections';
 
 import { clearAccountsCookie, parseAccountsCookie, serializeAccountsCookie } from './accountsCookie';
 import { authCookie, clearAuthCookie, serializeAuthCookie } from './authCookie';
@@ -224,11 +224,8 @@ export const persistRoster = async (
     if (expectedVersion) return { cookies: [], conflict: true };
   }
 
-  // Memoised no-op after the first call; guarantees the rosters unique + TTL
-  // indexes exist even in a process that only ever serves logins (register is
-  // otherwise the only caller of ensureIndexes).
-  await ensureIndexes();
-
+  // Rosters' unique + TTL indexes are guaranteed by the boot-time warmup
+  // (server/plugins/mongo-warmup) — no per-request ensure needed here.
   const created: RosterDoc = {
     rosterId: crypto.randomUUID(),
     type: 'tt.roster',
