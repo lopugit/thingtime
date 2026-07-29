@@ -1605,9 +1605,46 @@ const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
 // Target-attached things resolve visibility through their inherit chain (see
 // aclChainCore for the cycle-safe walk — legitimate deep comment chains must
 // never be cut off, only cycles and broken/missing targets fail closed).
-export const canViewInherited = async (doc: ThingDoc, viewer: Viewer): Promise<boolean> => {
-  const terminal = await resolveInheritChain(doc, (d) => aclOf(d).includes(ACL_INHERIT), findThing);
+// `findByShareId` is injectable so page-sized callers can share a batched
+// lookup; the default stays the plain per-hop findOne.
+export const canViewInherited = async (
+  doc: ThingDoc,
+  viewer: Viewer,
+  findByShareId: (shareId: string) => Promise<ThingDoc | null> = findThing
+): Promise<boolean> => {
+  const terminal = await resolveInheritChain(doc, (d) => aclOf(d).includes(ACL_INHERIT), findByShareId);
   return !!terminal && canView(terminal, viewer);
+};
+
+// Coalescing, memoised shareId lookup for one request: every lookup issued in
+// the same microtask tick collapses into a single $in query, and results
+// (including misses) cache for the request's lifetime. A listing page checking
+// N attached things therefore costs one round trip per chain LEVEL instead of
+// one per doc×hop — the per-doc walks were fine locally but timed the /things
+// function out in production, where each Mongo round trip crosses regions
+// (~200ms Vercel iad1 ↔ Atlas Sydney).
+const batchedThingLookup = (): ((shareId: string) => Promise<ThingDoc | null>) => {
+  const cache = new Map<string, Promise<ThingDoc | null>>();
+  let pending: { ids: Set<string>; promise: Promise<Map<string, ThingDoc>> } | null = null;
+  return (shareId: string) => {
+    const hit = cache.get(shareId);
+    if (hit) return hit;
+    if (!pending) {
+      const batch = { ids: new Set<string>() } as { ids: Set<string>; promise: Promise<Map<string, ThingDoc>> };
+      batch.promise = Promise.resolve().then(async () => {
+        // the microtask runs after every same-tick caller has added its id
+        pending = null;
+        const things = await getThingsCollection();
+        const docs = (await things.find({ shareId: { $in: [...batch.ids] } } as any).toArray()) as any as ThingDoc[];
+        return new Map(docs.map((doc) => [doc.shareId, doc]));
+      });
+      pending = batch;
+    }
+    pending.ids.add(shareId);
+    const result = pending.promise.then((map) => map.get(shareId) || null);
+    cache.set(shareId, result);
+    return result;
+  };
 };
 
 // Coarse DB-level audience match per requested circle, covering both eras.
@@ -2111,6 +2148,13 @@ export const listThings = async (
       $or: [{ thingtime: { $exists: true } }, { kind: 'post' }]
     };
     const folder = typeof query.folder === 'string' ? query.folder.trim() : '';
+    if (folder) {
+      // Folder browse: mechanical children (reactions, saves) are unfileable —
+      // they'd otherwise flood the root level (no folderId reads as root) with
+      // rows the browser hides anyway, wasting whole pages and one inherit
+      // walk each. Excluded server-side so folder pages carry real content.
+      match.thingtime = { $nin: [...PROTECTED_THINGTIME, ...FOLDER_UNFILEABLE] };
+    }
     if (folder === 'root') {
       // v1 docs and pre-folder v2 docs have no folderId at all — both read as root
       match.folderId = { $in: [null] };
@@ -2150,10 +2194,11 @@ export const listThings = async (
   if (app) {
     visible = await appVisiblePage(app, page);
   } else {
-    visible = [];
-    for (const doc of page) {
-      if (await canViewInherited(doc, viewer)) visible.push(doc);
-    }
+    // The checks run concurrently over one shared batched lookup, so a page of
+    // attached things costs one round trip per chain level, not one per doc.
+    const lookup = batchedThingLookup();
+    const verdicts = await Promise.all(page.map((doc) => canViewInherited(doc, viewer, lookup)));
+    visible = page.filter((_, index) => verdicts[index]);
   }
   const projected = await toPublicThings(visible, viewer);
   if (app) await appShapeProjections(app, visible, projected);
