@@ -21,6 +21,7 @@ import { apiEndpointDocs, type ApiEndpointDoc } from '~/docs/apiDocs';
 import { designEntries, designKindColors, getDesignEntryBySlug } from './designEntries';
 import { designSystemEntries, designSystemStatusColors, getDesignSystemEntryBySlug } from './design-system/entries';
 import { conceptEntries, conceptStatusColors, getConceptEntryBySlug } from './concepts/entries';
+import { DocsSearch } from './DocsSearch';
 
 const docsNav = [
   {
@@ -489,6 +490,8 @@ type DocsDrawerContentProps = {
 
 function DocsDrawerContent({ closeTestId, onClose, pathname, showClose = false }: DocsDrawerContentProps) {
   const [apiOpen, setApiOpen] = React.useState(isApiPath(pathname));
+  const [searchQuery, setSearchQuery] = React.useState('');
+  const searching = searchQuery.trim().length > 0;
 
   React.useEffect(() => {
     if (isApiPath(pathname)) {
@@ -539,7 +542,9 @@ function DocsDrawerContent({ closeTestId, onClose, pathname, showClose = false }
         ) : null}
       </Flex>
 
-      <Stack spacing={1}>
+      <DocsSearch onNavigate={onClose} query={searchQuery} setQuery={setSearchQuery} />
+
+      <Stack display={searching ? 'none' : undefined} spacing={1}>
         {docsNav.map((item) => {
           const active = isActivePath(pathname, item.to);
           const isApiItem = item.to === '/docs/api';
@@ -600,15 +605,15 @@ function DocsDrawerContent({ closeTestId, onClose, pathname, showClose = false }
         })}
       </Stack>
 
-      {isDesignPath(pathname) ? <DrawerDesignEntryList onNavigate={onClose} /> : null}
-      {isDesignSystemPath(pathname) ? <DrawerDesignSystemList onNavigate={onClose} /> : null}
-      {isConceptsPath(pathname) ? <DrawerConceptList onNavigate={onClose} /> : null}
+      {!searching && isDesignPath(pathname) ? <DrawerDesignEntryList onNavigate={onClose} /> : null}
+      {!searching && isDesignSystemPath(pathname) ? <DrawerDesignSystemList onNavigate={onClose} /> : null}
+      {!searching && isConceptsPath(pathname) ? <DrawerConceptList onNavigate={onClose} /> : null}
     </Stack>
   );
 }
 
 export default function DocsLayout() {
-  const { pathname } = useLocation();
+  const { hash, pathname } = useLocation();
   const designRoute = isDesignPath(pathname);
   const [drawerWidth, setDrawerWidth] = React.useState(DEFAULT_DRAWER_WIDTH);
   const [desktopDrawerOpen, setDesktopDrawerOpen] = React.useState(true);
@@ -622,8 +627,13 @@ export default function DocsLayout() {
 
   React.useEffect(() => {
     setMobileDrawerOpen(false);
-    window.scrollTo({ left: 0, top: 0 });
-  }, [pathname]);
+
+    // Anchored navigations (docs search deep links) scroll to their target
+    // via useDocsAnchorScroll / SchemasPage instead of the page top.
+    if (!hash) {
+      window.scrollTo({ left: 0, top: 0 });
+    }
+  }, [hash, pathname]);
 
   const startDrawerResize = React.useCallback(
     (event: React.PointerEvent<HTMLButtonElement>) => {

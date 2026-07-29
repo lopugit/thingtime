@@ -289,6 +289,21 @@ is fixed, and cite the checklist you ran in the PR description.
       standalone-demo link within ~10s — the preview must never show a
       permanent loading state.
 
+## Docs search (`remix/app/routes/docs/DocsSearch.tsx`, `docsSearchIndex.ts`)
+
+- [ ] Searching "acl" in the /docs drawer ranks the Thing schema (its `acl`
+      field section) first; results highlight the matched terms and show an
+      area badge + mono meta path; the nav list hides while a query is
+      active and returns on clear (× button or Escape).
+- [ ] Anchored results deep-link AND scroll on client-side navigation:
+      "scopes" → Enter lands on /docs/embed#permissions-scopes with the
+      heading at the sticky-header offset, not the page top (DocsLayout's
+      scroll-to-top must skip hash navigations); schema results scroll to
+      their /docs/schemas#schema-<id> card.
+- [ ] ArrowUp/Down move the active row, Enter opens it (query-param entries
+      like design mockups/components select the exact entry), and on mobile
+      tapping a result closes the drawer.
+
 ## Shared app-data (`/api/v1/app-data/shared`, `api/utils/apps/appData.ts`)
 
 - [ ] POST /api/v1/app-data with `visibility: 'app'` on a token WITHOUT the
