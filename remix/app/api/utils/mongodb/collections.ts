@@ -333,6 +333,20 @@ export const ensureIndexes = async () => {
         // token carry sandboxExpiresAt (TTL skips docs without the field), so
         // pretend data reaps itself with the token's lifetime.
         col('things').createIndex({ sandboxExpiresAt: 1 }, { expireAfterSeconds: 0 }),
+        // Full-power app namespaces: every thing written through an app token
+        // carries a server-stamped scalar root appId (the namespace marker —
+        // never inferred from acl, which users can hand-write). Own-namespace
+        // reads page by (appId, ownerId); shared-slice reads by (appId, acl).
+        // appId is scalar, so each compound has at most one multikey field
+        // (acl) and both are legal; partials keep non-app things out.
+        col('things').createIndex(
+          { appId: 1, ownerId: 1, updatedAt: -1, shareId: -1 },
+          { partialFilterExpression: { appId: { $exists: true } } }
+        ),
+        col('things').createIndex(
+          { appId: 1, acl: 1, updatedAt: -1, shareId: -1 },
+          { partialFilterExpression: { appId: { $exists: true } } }
+        ),
         col('feedAlgorithms').createIndex({ shareId: 1 }, { unique: true }),
         col('feedAlgorithms').createIndex({ ownerId: 1 }),
         // global app settings singletons (rate-limit config lives here)

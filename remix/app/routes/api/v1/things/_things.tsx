@@ -1,8 +1,10 @@
 import { json } from '~/api/http';
 
-import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
+import { actorCors, actorUser, resolveActor } from '~/api/utils/auth/resolveActor';
+import { appDataPreflight } from '~/api/utils/apps/cors';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import {
+  appShapeProjections,
   createPost,
   createThing,
   deleteThing,
@@ -44,32 +46,64 @@ const csv = (value: string | null): string[] =>
 // for post things).
 // GET /api/v1/things?target=<shareId>&thingtime=comment&cursor=&limit= — list
 // things attached to a viewable thing (its comments/reactions).
-// GET /api/v1/things?thingtime=&cursor=&limit= — list your own things.
+// GET /api/v1/things?thingtime=&cursor=&limit= — list your own things
+// (session auth may add appId=<clientId> to browse ONE app's namespace).
+//
+// App-scoped tokens ("Login with Thingtime") work here too: every read is
+// fenced to the app's own namespace (root appId stamp + audience acl +
+// author-liveness — apps/namespace.ts), so an app sees its slice of the
+// user's Thingtime and nothing else.
 export const loader = async ({ request }: { request: Request }) => {
-  const user = await getCurrentUser(request);
+  const actor = await resolveActor(request);
+  if (actor instanceof Response) return actor;
+  const user = actorUser(actor);
   const viewer = viewerOf(user);
+  const app = actor.kind === 'app' ? actor.scope : null;
+  const cors = actorCors(actor);
+
+  if (actor.kind === 'app') {
+    // per-(user, app) buckets — an app never rides the user's own windows
+    const limit = await enforceRateLimit(request, 'oauth.read', actor.rateIdentity);
+    if (!limit.allowed) {
+      const init = rateLimitedResponseInit(limit);
+      return json(
+        { ok: false, error: 'Reading too fast — take a breather 🌸' },
+        { ...init, headers: { ...init.headers, ...cors } }
+      );
+    }
+  }
+
   const params = new URL(request.url).searchParams;
 
   const id = (params.get('id') || '').trim();
   if (id) {
-    const result = await getThing(viewer, id);
+    const result = await getThing(viewer, id, app);
     if (result.ok === false) {
-      return json({ ok: false, error: result.error }, { status: result.status });
+      return json({ ok: false, error: result.error }, { status: result.status, headers: cors });
     }
     // comments project as posts too; parent/root carry their thread context
-    return json({ ok: true, thing: result.thing, post: result.post, parent: result.parent, root: result.root });
+    // (post/parent/root are first-party projections — null under the app lens)
+    return json(
+      { ok: true, thing: result.thing, post: result.post, parent: result.parent, root: result.root },
+      { headers: cors }
+    );
   }
 
-  const result = await listThings(viewer, {
-    thingtime: csv(params.get('thingtime')),
-    targetId: (params.get('target') || '').trim() || null,
-    cursor: params.get('cursor'),
-    limit: Number(params.get('limit')) || undefined
-  });
+  const result = await listThings(
+    viewer,
+    {
+      thingtime: csv(params.get('thingtime')),
+      targetId: (params.get('target') || '').trim() || null,
+      cursor: params.get('cursor'),
+      limit: Number(params.get('limit')) || undefined,
+      appId: actor.kind === 'user' ? (params.get('appId') || '').trim() || null : null
+    },
+    app
+  );
   if (result.ok === false) {
-    return json({ ok: false, error: result.error }, { status: result.status });
+    return json({ ok: false, error: result.error }, { status: result.status, headers: cors });
   }
-  return json({ ok: true, things: result.things, nextCursor: result.nextCursor });
+  return json({ ok: true, things: result.things, nextCursor: result.nextCursor }, { headers: cors });
 };
 
 // One endpoint, full CRUD (the GET loader above is the R):
@@ -84,16 +118,30 @@ export const loader = async ({ request }: { request: Request }) => {
 //   visibility?, tags? } — crystal fields merge over the existing crystal;
 //   extended replaces whole (null clears it).
 // - DELETE /api/v1/things?id= (or body { id }) — delete an owned thing.
+//
+// App tokens get the same verbs inside their namespace: writes are stamped
+// (root appId + sizeBytes), acl-clamped (private by default, app-audience only
+// with the author's app-data.shared grant), byte-budgeted, and deletes carry
+// the namespace stamp in the filter itself.
 export const action = async ({ request }: { request: Request }) => {
-  const user = await getCurrentUser(request);
-  if (!user) {
+  // cross-origin SDK calls preflight (Authorization header) — the catch-all
+  // routes OPTIONS here
+  const preflight = appDataPreflight(request, 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+  if (preflight) return preflight;
+
+  const actor = await resolveActor(request);
+  if (actor instanceof Response) return actor;
+  if (actor.kind === 'anonymous') {
     return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
   }
+  const user = actorUser(actor)!;
   const viewer = viewerOf(user);
+  const app = actor.kind === 'app' ? actor.scope : null;
+  const cors = actorCors(actor);
 
   const contentLength = Number(request.headers.get('content-length') || 0);
   if (contentLength > MAX_BODY_BYTES) {
-    return json({ ok: false, error: 'Post payload too large' }, { status: 413 });
+    return json({ ok: false, error: 'Post payload too large' }, { status: 413, headers: cors });
   }
 
   const method = request.method.toUpperCase();
@@ -103,11 +151,17 @@ export const action = async ({ request }: { request: Request }) => {
   // around the per-op limits main added to the react/comment sub-routes. No
   // one is exempt (service-account provisioning is unauthenticated, so
   // accountKind confers no trust); service accounts just get a higher ceiling.
-  const limit = await enforceRateLimit(request, rateLimitKeyFor(body, user.accountKind), `user:${user.id}`);
+  // App actors consume their own per-(user, app) windows.
+  const limit = await enforceRateLimit(
+    request,
+    rateLimitKeyFor(body, user.accountKind),
+    actor.kind === 'app' ? actor.rateIdentity : `user:${user.id}`
+  );
   if (!limit.allowed) {
+    const init = rateLimitedResponseInit(limit);
     return json(
       { ok: false, error: 'You’re doing that too fast — take a breather 🌸' },
-      rateLimitedResponseInit(limit)
+      { ...init, headers: { ...init.headers, ...cors } }
     );
   }
 
@@ -119,10 +173,23 @@ export const action = async ({ request }: { request: Request }) => {
     // right error for a malformed thingtime/crystal instead of the request
     // silently falling through to the legacy post path.
     const isUnified = body && typeof body === 'object' && ('thingtime' in body || 'crystal' in body);
+    if (app && !isUnified) {
+      // the legacy post path resolves audience through the first-party
+      // defaults — app writes must always ride the clamped unified path
+      return json(
+        { ok: false, error: 'App writes use the unified shape: { thingtime, crystal, … }' },
+        { status: 400, headers: cors }
+      );
+    }
     if (isUnified) {
-      const result = await createThing(user.id, body, viewer);
+      const result = await createThing(user.id, body, viewer, app);
       if (result.ok === false) {
-        return json({ ok: false, error: result.error }, { status: result.status });
+        return json({ ok: false, error: result.error }, { status: result.status, headers: cors });
+      }
+      if (app) {
+        const thing = (await toPublicThings([result.doc], viewer))[0];
+        await appShapeProjections(app, [result.doc], [thing]);
+        return json({ ok: true, thing }, { headers: cors });
       }
       const isPost = (result.doc.thingtime || []).includes('post');
       if (isPost) {
@@ -138,32 +205,35 @@ export const action = async ({ request }: { request: Request }) => {
   }
 
   if (method === 'PUT') {
-    const result = await upsertThing(user.id, { ...body, shareId: body?.shareId ?? body?.id }, viewer);
+    const result = await upsertThing(user.id, { ...body, shareId: body?.shareId ?? body?.id }, viewer, app);
     if (result.ok === false) {
-      return json({ ok: false, error: result.error }, { status: result.status });
+      return json({ ok: false, error: result.error }, { status: result.status, headers: cors });
     }
     return json(
       { ok: true, created: result.created, thing: result.thing, post: result.post },
-      { status: result.created ? 201 : 200 }
+      { status: result.created ? 201 : 200, headers: cors }
     );
   }
 
   if (method === 'PATCH') {
-    const result = await updateThing(viewer, body?.id, body, { replaceCrystal: false });
+    const result = await updateThing(viewer, body?.id, body, { replaceCrystal: false }, app);
     if (result.ok === false) {
-      return json({ ok: false, error: result.error }, { status: result.status });
+      return json({ ok: false, error: result.error }, { status: result.status, headers: cors });
     }
-    return json({ ok: true, thing: result.thing, post: result.post });
+    return json({ ok: true, thing: result.thing, post: result.post }, { headers: cors });
   }
 
   if (method === 'DELETE') {
     const id = (new URL(request.url).searchParams.get('id') || '').trim() || body?.id;
-    const result = await deleteThing(viewer, id);
+    const result = await deleteThing(viewer, id, app);
     if (result.ok === false) {
-      return json({ ok: false, error: result.error }, { status: result.status });
+      return json({ ok: false, error: result.error }, { status: result.status, headers: cors });
     }
-    return json({ ok: true });
+    return json({ ok: true }, { headers: cors });
   }
 
-  return json({ ok: false, error: 'Method not allowed' }, { status: 405, headers: { Allow: 'GET, POST, PUT, PATCH, DELETE' } });
+  return json(
+    { ok: false, error: 'Method not allowed' },
+    { status: 405, headers: { Allow: 'GET, POST, PUT, PATCH, DELETE', ...cors } }
+  );
 };

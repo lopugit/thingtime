@@ -27,11 +27,11 @@ import type { PublicUser } from '../auth/users';
 
 export const SANDBOX_TOKEN_TTL_MS = 1000 * 60 * 60;
 
-// Sandbox tokens get a deliberately smaller storage budget than real grants
-// (real: MAX_APP_DATA_KEYS_PER_APP_USER): the mint is anonymous, so the
-// worst-case standing junk per IP is (mint rate × keys × value cap) and every
-// factor should be tight. 50 keys is plenty to exercise pagination.
-export const SANDBOX_MAX_KEYS = 50;
+// Sandbox namespaces get a deliberately smaller storage byte budget than real
+// grants (SANDBOX_STORAGE_BYTES vs DEFAULT_APP_STORAGE_BYTES, enforced by the
+// namespace ledger in apps/namespace.ts): the mint is anonymous, so the
+// worst-case standing junk per IP is (mint rate × per-namespace budget) and
+// every factor should be tight.
 
 export const SANDBOX_OWNER_PREFIX = 'sandbox:';
 

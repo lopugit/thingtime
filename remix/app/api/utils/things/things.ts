@@ -26,6 +26,21 @@ import {
 } from '~/schemas/registry';
 import { scorePost, type AlgorithmWeights, type PostFeatures } from './feedRanking';
 import { resolveInheritChain } from './aclChainCore';
+import {
+  appAclEntry,
+  appNamespaceClauses,
+  appNamespaceStamp,
+  appThingSizeBytes,
+  chargeAppStorage,
+  filterByLiveAuthors,
+  liveSandboxAuthors,
+  liveSharingAuthors,
+  refundAppStorage,
+  sandboxDisplayName
+} from '../apps/namespace';
+import type { AppNamespaceScope } from '../apps/namespace';
+import { scopeCovers } from '../apps/scopes';
+import { resolveAppScopedAcl } from '../apps/namespace';
 
 // Everything in thingtime.things is a thing (see app/schemas/registry.ts):
 // one root Thing schema, sub-schemas applied via the `thingtime` array of
@@ -82,6 +97,13 @@ export type ThingDoc = {
   tags?: string[];
   createdAt: Date;
   updatedAt: Date;
+  // App namespace (apps/namespace.ts): things written through an app token
+  // carry the server-stamped namespace marker + serialized size (byte-budget
+  // ledger), and — for sandbox tokens — the ephemeral TTL/space stamps.
+  appId?: string;
+  sizeBytes?: number;
+  sandboxExpiresAt?: Date;
+  sandboxSpace?: string;
   // System kinds only (user/theme/feed-algorithm/waitlist — the collections
   // collapsing into things): generalized uniqueness (multikey unique sparse
   // index; elements are BinData, PII keys hashed) and private state. `secure`
@@ -180,7 +202,9 @@ export type PublicThing = {
   id: string;
   thingtime: string[];
   author: FeedAuthor | null;
-  visibility: ThingVisibility;
+  // 'app' is the app-lens derived sugar (audience = this app's users) — the
+  // same vocabulary the KV surface speaks; first-party projections never emit it
+  visibility: ThingVisibility | 'app';
   acl: string[];
   targetId: string | null;
   crystal: Record<string, any>;
@@ -402,7 +426,8 @@ const resolveDataSchemaProvenance = async (
 export const createThing = async (
   ownerId: string,
   input: CreateThingInput,
-  viewer: Viewer = null
+  viewer: Viewer = null,
+  app: AppLens = null
 ): Promise<CreateThingResult> => {
   const asOwner = viewer && viewer.id === ownerId ? viewer : { id: ownerId };
   const validated = validateThingtimeCrystal(input.thingtime, input.crystal);
@@ -416,6 +441,14 @@ export const createThing = async (
     return fail(403, `${validated.thingtime.join('+')} things are managed by their own endpoints`);
   }
 
+  // saves (the user's personal library) and shares (public social reposting)
+  // are first-party surfaces — an app acting as the user must not write into
+  // either (shares additionally require a tt:all target, which a namespace
+  // thing never is)
+  if (app && (validated.thingtime.includes('save') || validated.thingtime.includes('share'))) {
+    return fail(403, `${validated.thingtime.join('+')} things are first-party surfaces — not available to app tokens`);
+  }
+
   const provenance = await resolveDataSchemaProvenance(validated.thingtime, validated.crystal, asOwner);
   if (isFail(provenance)) return provenance;
 
@@ -425,8 +458,23 @@ export const createThing = async (
   const shareId = sanitizeShareId(input.shareId);
   if (isFail(shareId)) return shareId;
 
-  const inputAcl = resolveInputAcl(input);
-  if (isFail(inputAcl)) return inputAcl;
+  // App writes ride the ONE app-acl clamp (namespace.resolveAppScopedAcl):
+  // only 'just this user' / 'users of this app' are expressible, widening to
+  // the app audience needs the author's app-data.shared grant, and the
+  // no-audience default is PRIVATE — never the generic route's public.
+  let inputAcl: string[] | null;
+  if (app) {
+    const clamped = resolveAppScopedAcl(app.appId, input.visibility, input.acl);
+    if ('ok' in clamped) return fail(clamped.status, clamped.error);
+    if (clamped.shared && !app.sharedRead) {
+      return fail(403, 'This token was not granted the app-data.shared scope, so entries stay private');
+    }
+    inputAcl = clamped.acl ?? [ACL_OWNER];
+  } else {
+    const resolved = resolveInputAcl(input);
+    if (isFail(resolved)) return resolved;
+    inputAcl = resolved;
+  }
 
   const extended = sanitizeExtended(input.extended);
   if (isFail(extended)) return extended;
@@ -443,7 +491,10 @@ export const createThing = async (
   let targetId: string | null = null;
   let target: ThingDoc | null = null;
   if (validated.requiresTarget) {
-    target = await findViewableThing(input.targetId, asOwner);
+    // under the app lens the target must sit inside the namespace — an app
+    // can never attach things to (or probe the existence of) the user's
+    // first-party things
+    target = await findViewableThingAs(input.targetId, asOwner, app);
     if (!target) return fail(404, 'Post not found');
     if (validated.thingtime.includes('share')) {
       // viewable ≠ shareable: only tt:all things (or your own) can be shared
@@ -498,6 +549,22 @@ export const createThing = async (
   const things = await getThingsCollection();
   const now = input.createdAt instanceof Date ? input.createdAt : new Date();
 
+  // App writes charge their serialized size against the (user, app) byte
+  // budget BEFORE inserting (admission can never overshoot; a failed insert
+  // refunds), and carry the namespace stamp — the server-authoritative root
+  // appId no generic input path can forge.
+  const sizeBytes = app
+    ? appThingSizeBytes({
+        crystal: validated.crystal,
+        extended: extended.value === undefined ? null : extended.value,
+        tags: allTags
+      })
+    : null;
+  if (app && sizeBytes !== null) {
+    const charge = await chargeAppStorage(app, sizeBytes);
+    if (!charge.ok) return fail(charge.status, charge.error);
+  }
+
   const doc: ThingDoc = {
     shareId: (shareId as string | null) || randomUUID(),
     schemaVersion: THINGS_SCHEMA_VERSION,
@@ -509,11 +576,13 @@ export const createThing = async (
     targetId,
     tags: allTags,
     createdAt: now,
-    updatedAt: now
+    updatedAt: now,
+    ...(app && sizeBytes !== null ? appNamespaceStamp(app, sizeBytes) : {})
   };
   try {
     await things.insertOne(doc as any);
   } catch (err: any) {
+    if (app && sizeBytes !== null) await refundAppStorage(app, sizeBytes);
     // duplicate-key can come from more than one unique index — only a shareId
     // collision means "this thing already exists" (seeding re-runs pass fixed
     // ids; mirror the registerUser 409 convention so seeds skip idempotently).
@@ -1052,6 +1121,138 @@ const findViewableThing = async (shareId: unknown, viewer: Viewer): Promise<Thin
   return doc;
 };
 
+// ---------------------------------------------------------------------------
+// The app lens (full-power app namespaces — apps/namespace.ts owns the
+// semantics). When a things read/write is driven by an app token, an
+// AppNamespaceScope rides along and REPLACES the first-party visibility
+// model: membership is the server-stamped root appId (never inferred from
+// acl), the owner short-circuit applies only inside the namespace, cross-user
+// docs additionally need a live sharing author, and projections are shaped by
+// each author's own consent grant. First-party calls pass no lens and are
+// byte-for-byte unchanged.
+
+export type AppLens = AppNamespaceScope | null | undefined;
+
+// Namespace membership only (appId + sandbox fence) — audience judged apart,
+// because inherit-acl children derive their audience from their terminal
+// ancestor, exactly like the first-party model.
+const appMembershipOk = (app: AppNamespaceScope, doc: ThingDoc): boolean => {
+  if (!doc || doc.appId !== app.appId) return false;
+  const own = String(doc.ownerId) === app.ownerId;
+  if (app.sandbox) {
+    const pooled = !!app.sandbox.space && doc.sandboxSpace === app.sandbox.space;
+    if (!own && !pooled) return false;
+  } else if (doc.sandboxExpiresAt !== undefined && doc.sandboxExpiresAt !== null) {
+    return false; // sandbox junk written under a real clientId
+  }
+  return true;
+};
+
+// Exact namespace verdict WITHOUT the author-liveness gate: membership, then
+// audience resolved through the inherit chain (a comment on a shared app
+// thing is as visible as that thing; a chain that escapes the namespace or
+// breaks fails closed).
+const appNamespaceVerdict = async (app: AppNamespaceScope, doc: ThingDoc): Promise<boolean> => {
+  if (!appMembershipOk(app, doc)) return false;
+  let judged: ThingDoc = doc;
+  if (aclOf(doc).includes(ACL_INHERIT)) {
+    const terminal = await resolveInheritChain(doc, (d) => aclOf(d).includes(ACL_INHERIT), findThing);
+    if (!terminal || !appMembershipOk(app, terminal)) return false;
+    judged = terminal;
+  }
+  if (String(doc.ownerId) === app.ownerId && String(judged.ownerId) === app.ownerId) return true;
+  // anything cross-user (the doc or its terminal) needs the shared grant and
+  // an app-audience terminal (or a terminal the acting user owns)
+  if (!app.sharedRead) return false;
+  return String(judged.ownerId) === app.ownerId || aclOf(judged).includes(appAclEntry(app.appId));
+};
+
+// Single-doc verdict under the lens: namespace verdict, then (for another
+// user's doc) the author-liveness gate.
+const appCanViewLive = async (app: AppNamespaceScope, doc: ThingDoc): Promise<boolean> => {
+  if (!(await appNamespaceVerdict(app, doc))) return false;
+  if (String(doc.ownerId) === app.ownerId) return true;
+  return (await filterByLiveAuthors(app, [doc])).length > 0;
+};
+
+const findViewableThingAs = async (shareId: unknown, viewer: Viewer, app: AppLens): Promise<ThingDoc | null> => {
+  if (!app) return findViewableThing(shareId, viewer);
+  const doc = await findThing(shareId);
+  if (!doc || !(await appCanViewLive(app, doc))) return null;
+  return doc;
+};
+
+// Page-level verdict: exact namespace verdict per doc (inherit chains
+// resolved), then ONE batched author-liveness gate for the page.
+export const appVisiblePage = async (app: AppNamespaceScope, page: ThingDoc[]): Promise<ThingDoc[]> => {
+  const verdicts = await Promise.all(page.map((doc) => appNamespaceVerdict(app, doc)));
+  return filterByLiveAuthors(app, page.filter((_, index) => verdicts[index]));
+};
+
+// The Mongo conjunction every app-lens query carries — the coarse tier
+// (namespace.appNamespaceClauses is the single source; the exact tier is
+// appVisiblePage / appCanViewLive above).
+export const appMatchClauses = appNamespaceClauses;
+
+// Post-process projections for app consumers: every author (the acting user
+// included) is shaped by the relevant grant — id + username always,
+// displayName/avatar only when that author granted them (the exact
+// /oauth/userinfo + KV-shared-feed consent model) — and the raw acl narrows
+// to the entries the app may know about (its own audience entry, the owner
+// marker, inherit), so an app can never enumerate which OTHER apps its user
+// runs.
+export const appShapeProjections = async (
+  app: AppNamespaceScope,
+  docs: ThingDoc[],
+  items: Array<{ author: FeedAuthor | null; acl?: string[]; visibility?: string }>
+): Promise<void> => {
+  const crossIds = [...new Set(docs.map((doc) => String(doc.ownerId)).filter((id) => id !== app.ownerId))];
+  let scopesById = new Map<string, string[]>();
+  const sandboxNames = new Map<string, string>();
+  if (crossIds.length) {
+    if (app.sandbox) {
+      if (app.sandbox.space) {
+        const live = await liveSandboxAuthors(app.appId, app.sandbox.space, crossIds);
+        for (const [id, info] of live) {
+          scopesById.set(id, info.scopes);
+          sandboxNames.set(id, info.username);
+        }
+      }
+    } else {
+      scopesById = await liveSharingAuthors(app.appId, crossIds);
+    }
+  }
+
+  const ownEntry = appAclEntry(app.appId);
+  docs.forEach((doc, index) => {
+    const item = items[index];
+    if (!item) return;
+    const ownerId = String(doc.ownerId);
+    const self = ownerId === app.ownerId;
+    const scopes = self ? app.scopes : scopesById.get(ownerId) || [];
+    const username = self ? app.username : (sandboxNames.get(ownerId) ?? item.author?.username);
+    item.author = username
+      ? {
+          id: ownerId,
+          username,
+          displayName: scopeCovers(scopes, 'profile.displayName')
+            ? (sandboxNames.has(ownerId) || (self && app.sandbox) ? sandboxDisplayName(username) : (item.author?.displayName ?? null))
+            : null,
+          avatarUrl: scopeCovers(scopes, 'profile.avatar') ? (item.author?.avatarUrl ?? null) : null
+        }
+      : null;
+    if (Array.isArray(item.acl)) {
+      // the wire visibility matches the KV surface's derived sugar: 'app'
+      // when the acl carries this app's audience entry, else 'private'
+      // ('inherit' passes through for attached things)
+      if (item.visibility !== 'inherit') {
+        item.visibility = item.acl.includes(ownEntry) ? 'app' : 'private';
+      }
+      item.acl = item.acl.filter((entry) => entry === ACL_OWNER || entry === ACL_INHERIT || entry === ownEntry);
+    }
+  });
+};
+
 const countCommentsOf = async (target: ThingDoc): Promise<number> => {
   const things = await getThingsCollection();
   const [standalone, legacyRelational] = await Promise.all([
@@ -1261,14 +1462,25 @@ export const listUserPosts = async (
 // (each null when deleted or not visible to the viewer).
 export const getThing = async (
   viewerInput: string | Viewer,
-  shareId: unknown
+  shareId: unknown,
+  app: AppLens = null
 ): Promise<
   Fail | { ok: true; thing: PublicThing; post: PublicPost | null; parent: PublicPost | null; root: PublicPost | null }
 > => {
   const viewer = asViewer(viewerInput);
-  const doc = await findViewableThing(shareId, viewer);
+  const doc = await findViewableThingAs(shareId, viewer, app);
   if (!doc) return fail(404, 'Thing not found');
   const thing = (await toPublicThings([doc], viewer))[0];
+
+  // App consumers get the generic thing shape only: the PublicPost projection
+  // batch-embeds comments/reactions across ALL viewers (scope-blind), so it
+  // must never ride an app response — apps read children relationally via
+  // GET /api/v1/things?target=… inside their namespace instead.
+  if (app) {
+    await appShapeProjections(app, [doc], [thing]);
+    return { ok: true, thing, post: null, parent: null, root: null };
+  }
+
   const isComment = thingtimeOf(doc).includes('comment');
   const post = isPostThing(doc) || isComment ? (await toPublicPosts([doc], viewer))[0] : null;
 
@@ -1312,15 +1524,20 @@ export type ListThingsQuery = {
   targetId?: string | null;
   cursor?: string | null;
   limit?: number;
+  // First-party browsing of ONE app's namespace (the in-Thingtime "what has
+  // this app stored for me" surface): own-things mode narrowed to root appId.
+  appId?: string | null;
 };
 
 // Unified list. Two modes:
 // - targetId set: things attached to a viewable target (comments/reactions of
 //   a post) — inherit visibility from the target.
 // - no targetId: the viewer's OWN things (any schema), newest first.
+// Under the app lens both modes are namespace-conjoined and liveness-gated.
 export const listThings = async (
   viewerInput: string | Viewer,
-  query: ListThingsQuery
+  query: ListThingsQuery,
+  app: AppLens = null
 ): Promise<Fail | { ok: true; things: PublicThing[]; nextCursor: string | null }> => {
   const viewer = asViewer(viewerInput);
   const limit = Math.min(Math.max(1, query.limit || DEFAULT_FEED_LIMIT), MAX_FEED_LIMIT);
@@ -1328,9 +1545,13 @@ export const listThings = async (
 
   let match: Record<string, any>;
   if (query.targetId) {
-    const target = await findViewableThing(query.targetId, viewer);
+    const target = await findViewableThingAs(query.targetId, viewer, app);
     if (!target) return fail(404, 'Thing not found');
-    match = { targetId: target.shareId };
+    // under the app lens, children are namespace things too — the owner's
+    // first-party comments on an app thing (no appId) never surface here
+    match = app ? withMatch({ targetId: target.shareId }, ...appMatchClauses(app)) : { targetId: target.shareId };
+  } else if (app) {
+    match = withMatch({}, ...appMatchClauses(app));
   } else {
     if (!viewer?.id) return fail(401, 'Unauthorized');
     // your OWN things, but not your account/theme/algorithm/waitlist things —
@@ -1341,6 +1562,10 @@ export const listThings = async (
       thingtime: { $nin: [...PROTECTED_THINGTIME] },
       $or: [{ thingtime: { $exists: true } }, { kind: 'post' }]
     };
+    // narrow to one app's namespace (session-auth data browser)
+    if (typeof query.appId === 'string' && query.appId.trim()) {
+      match = withMatch(match, { appId: query.appId.trim() });
+    }
   }
   if (thingtime.length) {
     match = withMatch(match, thingtimeInClause(thingtime));
@@ -1364,11 +1589,18 @@ export const listThings = async (
   // thing attached to a target can carry its OWN acl (e.g. a private share:
   // thingtime ['post','share'], targetId=original) — those must be judged on
   // their own acl, never disclosed just because their target is viewable.
-  const visible: ThingDoc[] = [];
-  for (const doc of page) {
-    if (await canViewInherited(doc, viewer)) visible.push(doc);
+  let visible: ThingDoc[];
+  if (app) {
+    visible = await appVisiblePage(app, page);
+  } else {
+    visible = [];
+    for (const doc of page) {
+      if (await canViewInherited(doc, viewer)) visible.push(doc);
+    }
   }
-  return { ok: true, things: await toPublicThings(visible, viewer), nextCursor };
+  const projected = await toPublicThings(visible, viewer);
+  if (app) await appShapeProjections(app, visible, projected);
+  return { ok: true, things: projected, nextCursor };
 };
 
 // Copy a target's LEGACY embedded reactions/comments into standalone v2 things
@@ -1474,7 +1706,8 @@ const migrateThingInteractions = async (doc: ThingDoc): Promise<void> => {
 export const toggleReaction = async (
   viewerInput: string | Viewer,
   shareId: unknown,
-  emoji: unknown
+  emoji: unknown,
+  app: AppLens = null
 ): Promise<
   | Fail
   | {
@@ -1493,7 +1726,7 @@ export const toggleReaction = async (
   if (emoji !== null && token === null) {
     return fail(400, 'Unsupported reaction');
   }
-  const target = await findViewableThing(shareId, viewer);
+  const target = await findViewableThingAs(shareId, viewer, app);
   if (!target) return fail(404, 'Post not found');
 
   await ensureIndexes(); // the reaction unique index must exist before insert
@@ -1502,7 +1735,8 @@ export const toggleReaction = async (
 
   if (token) {
     // first write claims any legacy embedded residue into standalone things
-    await migrateThingInteractions(target);
+    // (namespace targets are always v2 — nothing to claim under the app lens)
+    if (!app) await migrateThingInteractions(target);
 
     // toggling is an insert/delete of ONE (viewer, token) thing — checked
     // across both the v2 shape and the interim kind:'reaction' era
@@ -1518,20 +1752,56 @@ export const toggleReaction = async (
     if (existingV2 || existingKind) {
       const ids = [existingV2?._id, existingKind?._id].filter(Boolean);
       await things.deleteMany({ _id: { $in: ids } } as any);
+      await refundDeletedNamespaceDocs([existingV2, existingKind].filter(Boolean) as ThingDoc[]);
     } else {
       // createThing enforces the per-user + per-post reaction caps (single
-      // source of truth, so the generic POST path is bounded the same way)
+      // source of truth, so the generic POST path is bounded the same way);
+      // under the app lens it also stamps the namespace + charges the budget
       const created = await createThing(
         viewerId,
         { thingtime: ['reaction'], crystal: { emoji: token }, targetId: target.shareId },
-        viewer
+        viewer,
+        app
       );
       // 409 = the unique (target, owner, token) index raced another add of the
       // same token — that reaction already exists, which is what we wanted
       if (isFail(created) && created.status !== 409) return created;
-      recentReactions = await pushUserRecentReaction(viewerId, token);
+      // the personal emoji-picker MRU is first-party state — an app reacting
+      // on the user's behalf must not rewrite their recents
+      if (!app) recentReactions = await pushUserRecentReaction(viewerId, token);
     }
     await things.updateOne({ shareId: target.shareId } as any, { $set: { updatedAt: new Date() } });
+  }
+
+  if (app) {
+    // Namespace-fenced counts: only this app's reaction things (the owner's
+    // first-party reactions on the same doc never leak into app responses),
+    // liveness-gated like every cross-user app read.
+    const reactionDocs = (await things
+      .find(withMatch({ targetId: target.shareId, thingtime: 'reaction' }, ...appMatchClauses(app)) as any)
+      .project({
+        shareId: 1,
+        targetId: 1, // the inherit-chain walk needs the link (fails closed without it)
+        'crystal.emoji': 1,
+        ownerId: 1,
+        appId: 1,
+        acl: 1,
+        sandboxExpiresAt: 1,
+        sandboxSpace: 1
+      })
+      .toArray()) as any as ThingDoc[];
+    const live = await appVisiblePage(app, reactionDocs);
+    const reactionCounts: Record<string, number> = {};
+    const viewerReactions: string[] = [];
+    for (const doc of live) {
+      const reactionToken = String(doc.crystal?.emoji || '');
+      if (!reactionToken) continue;
+      reactionCounts[reactionToken] = (reactionCounts[reactionToken] || 0) + 1;
+      if (String(doc.ownerId) === viewerId && !viewerReactions.includes(reactionToken)) {
+        viewerReactions.push(reactionToken);
+      }
+    }
+    return { ok: true, reactionCounts, viewerReactions };
   }
 
   // recompute merged state for this target
@@ -1600,16 +1870,18 @@ export type AddCommentInput =
 export const addComment = async (
   viewerInput: string | Viewer,
   shareId: unknown,
-  input: AddCommentInput
+  input: AddCommentInput,
+  app: AppLens = null
 ): Promise<Fail | { ok: true; comment: PublicComment; commentCount: number }> => {
   const viewer = asViewer(viewerInput);
   if (!viewer?.id) return fail(401, 'Unauthorized');
   const viewerId = viewer.id;
-  const target = await findViewableThing(shareId, viewer);
+  const target = await findViewableThingAs(shareId, viewer, app);
   if (!target) return fail(404, 'Post not found');
 
   // first write claims any legacy embedded residue into standalone things
-  await migrateThingInteractions(target);
+  // (namespace targets are always v2 — nothing to claim under the app lens)
+  if (!app) await migrateThingInteractions(target);
 
   const body = typeof input === 'string' ? { text: input } : input && typeof input === 'object' ? input : {};
   // comments share the post schema — post fields upgrade the comment to a
@@ -1631,34 +1903,47 @@ export const addComment = async (
           crystal: { text: body.text },
           targetId: target.shareId
         },
-    viewer
+    viewer,
+    app
   );
   if (isFail(created)) return created;
 
   const doc = created.doc;
   const crystal = crystalOf(doc);
   const profiles = await resolveProfiles([viewerId]);
+  const comment: PublicComment = {
+    id: doc.shareId,
+    thingtime: thingtimeOf(doc),
+    author: profiles.get(viewerId) || null,
+    type: (crystal.type as PostType) || 'text',
+    text: String(crystal.text || ''),
+    images: (crystal.images as string[]) || [],
+    listing: (crystal.listing as MarketplaceListing) || null,
+    thing:
+      crystal.thing && typeof crystal.thing === 'object' && !Array.isArray(crystal.thing)
+        ? (crystal.thing as Record<string, any>)
+        : null,
+    tags: doc.tags || [],
+    reactionCounts: {},
+    viewerReactions: [],
+    commentCount: 0,
+    targetId: target.shareId,
+    createdAt: new Date(doc.createdAt).toISOString()
+  };
+
+  if (app) {
+    // self-author shaped by the acting grant; count fenced to the namespace
+    await appShapeProjections(app, [doc], [comment]);
+    const things = await getThingsCollection();
+    const commentCount = await things.countDocuments(
+      withMatch({ targetId: target.shareId, thingtime: 'comment' }, ...appMatchClauses(app)) as any
+    );
+    return { ok: true, comment, commentCount };
+  }
+
   return {
     ok: true,
-    comment: {
-      id: doc.shareId,
-      thingtime: thingtimeOf(doc),
-      author: profiles.get(viewerId) || null,
-      type: (crystal.type as PostType) || 'text',
-      text: String(crystal.text || ''),
-      images: (crystal.images as string[]) || [],
-      listing: (crystal.listing as MarketplaceListing) || null,
-      thing:
-        crystal.thing && typeof crystal.thing === 'object' && !Array.isArray(crystal.thing)
-          ? (crystal.thing as Record<string, any>)
-          : null,
-      tags: doc.tags || [],
-      reactionCounts: {},
-      viewerReactions: [],
-      commentCount: 0,
-      targetId: target.shareId,
-      createdAt: new Date(doc.createdAt).toISOString()
-    },
+    comment,
     commentCount: (await countCommentsOf(target)) // includes the new comment
   };
 };
@@ -1698,29 +1983,62 @@ export const sharePost = async (
   return { ok: true, post: (await toPublicPosts([created.doc], viewer))[0] };
 };
 
-export const deleteThing = async (viewerInput: string | Viewer, shareId: unknown): Promise<Fail | { ok: true }> => {
+// Ledger upkeep for ANY deletion path (app tokens, the owner's first-party
+// delete, the browse UI's delete-all): every removed doc that carries the
+// namespace stamp refunds its bytes to its own (owner, app) ledger — grouped
+// so a cascade over many authors decrements each author's ledger once.
+export const refundDeletedNamespaceDocs = async (docs: ThingDoc[]): Promise<void> => {
+  const totals = new Map<string, { ownerId: string; appId: string; bytes: number }>();
+  for (const doc of docs) {
+    if (!doc?.appId) continue;
+    const bytes = typeof doc.sizeBytes === 'number' ? doc.sizeBytes : appThingSizeBytes(doc);
+    if (!(bytes > 0)) continue;
+    const key = `${doc.ownerId}\0${doc.appId}`;
+    const entry = totals.get(key) || { ownerId: String(doc.ownerId), appId: doc.appId, bytes: 0 };
+    entry.bytes += bytes;
+    totals.set(key, entry);
+  }
+  for (const { ownerId, appId, bytes } of totals.values()) {
+    await refundAppStorage({ appId, ownerId, sharedRead: false, scopes: [], username: '', sandbox: null }, bytes);
+  }
+};
+
+export const deleteThing = async (
+  viewerInput: string | Viewer,
+  shareId: unknown,
+  app: AppLens = null
+): Promise<Fail | { ok: true }> => {
   const viewer = asViewer(viewerInput);
   if (!viewer?.id) return fail(401, 'Unauthorized');
   if (typeof shareId !== 'string' || !shareId.trim()) return fail(400, 'Thing id is required');
   const things = await getThingsCollection();
   // system kinds (a user's own account thing!) are never deletable through the
   // generic DELETE — $nin on the multikey array excludes them atomically. Their
-  // dedicated endpoints (themes, algorithms) own deletion.
+  // dedicated endpoints (themes, algorithms) own deletion. Under the app lens
+  // the filter additionally carries the namespace stamp, so an app can only
+  // ever delete what it stored.
   const deleted = (await things.findOneAndDelete({
     shareId: shareId.trim(),
     ownerId: viewer.id,
-    thingtime: { $nin: [...PROTECTED_THINGTIME] }
+    thingtime: { $nin: [...PROTECTED_THINGTIME] },
+    ...(app ? { appId: app.appId } : {})
   } as any)) as any as ThingDoc | null;
   if (!deleted) return fail(404, 'Thing not found');
   // comments/reactions/saves attached to the deleted thing go with it (v2
   // things AND interim kind docs); share things survive so they can render
   // their 'original unavailable' placeholder
-  await things.deleteMany({
+  const cascadeFilter = {
     $or: [
       { targetId: deleted.shareId, thingtime: { $in: ['comment', 'reaction', 'save'] } },
       { parentId: deleted.shareId, kind: { $in: ['comment', 'reaction'] } }
     ]
-  } as any);
+  };
+  const cascade = (await things
+    .find(cascadeFilter as any)
+    .project({ ownerId: 1, appId: 1, sizeBytes: 1, crystal: 1, extended: 1, tags: 1 })
+    .toArray()) as any as ThingDoc[];
+  await things.deleteMany(cascadeFilter as any);
+  await refundDeletedNamespaceDocs([deleted, ...cascade]);
   return { ok: true };
 };
 
@@ -1742,7 +2060,8 @@ export const updateThing = async (
   viewerInput: string | Viewer,
   shareId: unknown,
   input: UpdateThingInput,
-  options: { replaceCrystal?: boolean } = {}
+  options: { replaceCrystal?: boolean } = {},
+  app: AppLens = null
 ): Promise<Fail | { ok: true; thing: PublicThing; post: PublicPost | null }> => {
   const viewer = asViewer(viewerInput);
   if (!viewer?.id) return fail(401, 'Unauthorized');
@@ -1750,6 +2069,9 @@ export const updateThing = async (
   const things = await getThingsCollection();
   const doc = (await things.findOne({ shareId: shareId.trim(), ownerId: viewer.id } as any)) as any as ThingDoc | null;
   if (!doc || (!isV2(doc) && !isPostThing(doc))) return fail(404, 'Thing not found');
+  // app writes stay inside the namespace: a thing the acting user owns but
+  // that this app didn't store is a plain 404 (no existence oracle)
+  if (app && doc.appId !== app.appId) return fail(404, 'Thing not found');
 
   const thingtime = thingtimeOf(doc);
   // system kinds mutate only through their dedicated utils (profile update,
@@ -1808,9 +2130,20 @@ export const updateThing = async (
   let acl = aclOf(doc);
   if (input.acl !== undefined || input.visibility !== undefined) {
     if (acl.includes(ACL_INHERIT)) return fail(400, 'Attached things inherit their target audience');
-    const nextAcl = resolveInputAcl(input);
-    if (isFail(nextAcl)) return nextAcl;
-    if (nextAcl) acl = nextAcl;
+    if (app) {
+      // same clamp as create: only this user / this app's audience, and
+      // widening needs the author's app-data.shared grant
+      const clamped = resolveAppScopedAcl(app.appId, input.visibility, input.acl);
+      if ('ok' in clamped) return fail(clamped.status, clamped.error);
+      if (clamped.shared && !app.sharedRead) {
+        return fail(403, 'This token was not granted the app-data.shared scope, so entries stay private');
+      }
+      if (clamped.acl) acl = clamped.acl;
+    } else {
+      const nextAcl = resolveInputAcl(input);
+      if (isFail(nextAcl)) return nextAcl;
+      if (nextAcl) acl = nextAcl;
+    }
   }
 
   // extended replaces as a whole value only when provided (undefined leaves it
@@ -1819,6 +2152,24 @@ export const updateThing = async (
   const extended = sanitizeExtended(input.extended);
   if (isFail(extended)) return extended;
   const hasExtendedChange = input.extended !== undefined;
+
+  // App updates charge the size DELTA against the namespace budget before
+  // writing (mirrors setAppData: over-budget refuses, shrink refunds after).
+  let sizeDelta = 0;
+  let newSize: number | null = null;
+  if (app) {
+    newSize = appThingSizeBytes({
+      crystal: validated.crystal,
+      extended: hasExtendedChange ? extended.value : (doc.extended ?? null),
+      tags
+    });
+    const oldSize = typeof doc.sizeBytes === 'number' ? doc.sizeBytes : appThingSizeBytes(doc);
+    sizeDelta = newSize - oldSize;
+    if (sizeDelta > 0) {
+      const charge = await chargeAppStorage(app, sizeDelta);
+      if (!charge.ok) return fail(charge.status, charge.error);
+    }
+  }
 
   const now = new Date();
   const set: Record<string, any> = {
@@ -1829,7 +2180,8 @@ export const updateThing = async (
     targetId: targetIdOf(doc),
     tags,
     acl,
-    updatedAt: now
+    updatedAt: now,
+    ...(app && newSize !== null ? { appId: app.appId, sizeBytes: newSize } : {})
   };
   // upgrading a v1 post in place — clear the legacy crystal-at-root fields the
   // v2 shape replaces (embedded comments/reactions stay for the migration)
@@ -1843,7 +2195,13 @@ export const updateThing = async (
     shareCount: '',
     visibility: ''
   };
-  await things.updateOne({ shareId: doc.shareId } as any, { $set: set, $unset: unset } as any);
+  try {
+    await things.updateOne({ shareId: doc.shareId } as any, { $set: set, $unset: unset } as any);
+  } catch (err) {
+    if (app && sizeDelta > 0) await refundAppStorage(app, sizeDelta);
+    throw err;
+  }
+  if (app && sizeDelta < 0) await refundAppStorage(app, -sizeDelta);
 
   const updated = { ...doc, ...set } as ThingDoc;
   delete (updated as any).kind;
@@ -1856,6 +2214,10 @@ export const updateThing = async (
   delete (updated as any).visibility;
 
   const thing = (await toPublicThings([updated], viewer))[0];
+  if (app) {
+    await appShapeProjections(app, [updated], [thing]);
+    return { ok: true, thing, post: null };
+  }
   const post = isPostThing(updated) ? (await toPublicPosts([updated], viewer))[0] : null;
   return { ok: true, thing, post };
 };
@@ -1865,7 +2227,8 @@ export const updateThing = async (
 export const upsertThing = async (
   ownerId: string,
   input: CreateThingInput,
-  viewer: Viewer = null
+  viewer: Viewer = null,
+  app: AppLens = null
 ): Promise<Fail | { ok: true; created: boolean; thing: PublicThing; post: PublicPost | null }> => {
   const shareId = sanitizeShareId(input.shareId);
   if (isFail(shareId)) return shareId;
@@ -1873,15 +2236,22 @@ export const upsertThing = async (
 
   const existing = await findThing(shareId);
   if (!existing) {
-    const created = await createThing(ownerId, { ...input, shareId }, viewer);
+    const created = await createThing(ownerId, { ...input, shareId }, viewer, app);
     if (isFail(created)) return created;
     const projectViewer = viewer && viewer.id === ownerId ? viewer : { id: ownerId };
     const thing = (await toPublicThings([created.doc], projectViewer))[0];
+    if (app) {
+      await appShapeProjections(app, [created.doc], [thing]);
+      return { ok: true, created: true, thing, post: null };
+    }
     const post = isPostThing(created.doc) ? (await toPublicPosts([created.doc], projectViewer))[0] : null;
     return { ok: true, created: true, thing, post };
   }
 
   if (existing.ownerId !== ownerId) return fail(404, 'Thing not found');
+  // same 404 as the ownership miss — a PUT against a thing outside this
+  // app's namespace must not read differently than "no such thing"
+  if (app && existing.appId !== app.appId) return fail(404, 'Thing not found');
   // A thing's schemas are immutable, but an omitted/empty thingtime is the
   // schema-less default (['data']) — treat those as "no change requested" so
   // re-PUTting a data thing without repeating thingtime isn't a false conflict.
@@ -1896,7 +2266,7 @@ export const upsertThing = async (
       return fail(400, 'A thing’s thingtime schemas can’t be changed');
     }
   }
-  const updated = await updateThing(viewer || ownerId, shareId, input as UpdateThingInput, { replaceCrystal: true });
+  const updated = await updateThing(viewer || ownerId, shareId, input as UpdateThingInput, { replaceCrystal: true }, app);
   if (isFail(updated)) return updated;
   return { ok: true, created: false, thing: updated.thing, post: updated.post };
 };

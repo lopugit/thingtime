@@ -87,7 +87,11 @@ export type ThingVisibility = (typeof THING_VISIBILITIES)[number];
 //   tt:app/<clientId>   users of ONE embedded app, via that app's tokens —
 //                       the audience app-data sharing uses. Never matches a
 //                       Thingtime-site viewer (aclEntryMatches returns false);
-//                       only the app-data shared read path resolves it.
+//                       only app-token read paths resolve it (apps/namespace).
+//                       NOTE: this entry is the AUDIENCE among an app's users,
+//                       never the app-namespace membership marker — that is
+//                       the server-stamped root `appId` field (unforgeable
+//                       through the generic routes; acl entries are not).
 //   tt:inherit          attached things (comments, reactions) — as visible as
 //                       their target
 //
@@ -214,7 +218,13 @@ export const MAX_APP_ORIGINS = 20;
 export const MAX_APPS_PER_USER = 20;
 export const MAX_APP_DATA_KEY_CHARS = 128;
 export const MAX_APP_DATA_VALUE_BYTES = 32 * 1024;
-export const MAX_APP_DATA_KEYS_PER_APP_USER = 200;
+// App storage is byte-budgeted, not doc-counted: each (user, app) namespace
+// holds unlimited things bounded by a standing byte budget (a service-quota
+// style counter thing, fail-closed, admin-tunable via settings). sizeBytes is
+// stamped on every app-written doc so updates charge deltas and deletes
+// refund. Sandbox namespaces get a tighter budget and die with their token.
+export const DEFAULT_APP_STORAGE_BYTES = 50 * 1024 * 1024;
+export const SANDBOX_STORAGE_BYTES = 5 * 1024 * 1024;
 // Live app sessions one user can hold for one app: re-approvals mint fresh
 // sessions, so without a cap a re-running embed accumulates grants without
 // bound. Newest N survive — multi-device keeps working up to the cap.
@@ -814,8 +824,9 @@ const appDataSchema: ThingtimeSchema = {
   detail:
     'Written only through /api/v1/app-data with an app-scoped Bearer token (no generic-route ' +
     'sanitizer on purpose), one thing per (user, app, key) — relational, atomic, and bounded per ' +
-    `FUNDAMENTALS.md §3: values cap at ${MAX_APP_DATA_VALUE_BYTES / 1024}KB of JSON and each app can hold ` +
-    `${MAX_APP_DATA_KEYS_PER_APP_USER} keys per user. Owned by the END USER (acl ["tt:user"]), not the app ` +
+    `FUNDAMENTALS.md §3: values cap at ${MAX_APP_DATA_VALUE_BYTES / 1024}KB of JSON and the (user, app) ` +
+    `namespace shares a ${DEFAULT_APP_STORAGE_BYTES / (1024 * 1024)}MB storage byte budget (unlimited entry ` +
+    'count). Owned by the END USER (acl ["tt:user"]), not the app ' +
     'developer, so users can see and delete what an app has stored for them.',
   fields: [
     { name: 'appId', type: 'id', required: true, description: 'The clientId of the app this entry belongs to.' },
