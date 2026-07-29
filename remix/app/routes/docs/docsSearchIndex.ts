@@ -4,12 +4,14 @@ import { thingtimeSchemas } from '~/schemas/registry';
 import { designEntries } from './designEntries';
 import { designSystemEntries } from './design-system/entries';
 import { conceptEntries } from './concepts/entries';
+import { embedGuideSections } from './embedSections';
 
 // The /docs drawer search index. Everything registry-backed (API endpoints,
 // schemas, mockups, components, concepts) is derived from the live registries,
-// so those stay in sync automatically. The two handwritten pages (Overview and
-// the embed guide) carry a static digest of their on-page copy below — update
-// it when that page's sections change.
+// so those stay in sync automatically — including the embed guide's section
+// spine, shared with the page via embedSections.ts. Only the handwritten
+// Overview page carries a static digest of its on-page copy below — update it
+// when that page's sections change.
 
 export type DocsSearchArea = 'Page' | 'Guide' | 'API' | 'Schema' | 'Mockup' | 'Component' | 'Concept';
 
@@ -47,71 +49,6 @@ export const docsSearchAreaColors: Record<DocsSearchArea, { bg: string; color: s
 };
 
 // --- Handwritten page digests ----------------------------------------------
-
-// Section ids must match the heading ids rendered by routes/docs/embed.tsx.
-const embedSections = [
-  {
-    id: 'register-your-app',
-    title: '1 · Register your app',
-    content:
-      'Register an app with a name and the exact https origins your site runs on; the server mints ' +
-      'your public clientId. The login popup only hands tokens to origins on the allowlist. Manage ' +
-      'apps with GET /api/v1/apps, /api/v1/apps/update, and /api/v1/apps/delete — deleting an app ' +
-      'revokes every token it minted.'
-  },
-  {
-    id: 'drop-in-the-button',
-    title: '2 · Drop in the button',
-    content:
-      'Load the SDK script and render the styled login button, or call Thingtime.login({ clientId, ' +
-      'scopes, optionalScopes }) from a click handler. While building, sandbox: true runs the full ' +
-      'consent UI for any clientId and hands back a real working sandbox token against a pretend ' +
-      'account. Headless (scripts, AIs, CI): POST /api/v1/oauth/sandbox mints the same token ' +
-      'anonymously. Sandbox spaces: mint several tokens with the same space and distinct usernames ' +
-      'to rehearse the multi-user shared feed.'
-  },
-  {
-    id: 'live-preview',
-    title: 'Live preview',
-    content:
-      'The quick-start snippet rendered for real — pick a theme and size, click the button to open ' +
-      'the sandbox login popup and walk the whole consent flow.'
-  },
-  {
-    id: 'permissions-scopes',
-    title: '3 · Permissions (scopes)',
-    content:
-      'Scopes are hierarchical dot paths over the user data: profile.username, profile.displayName, ' +
-      'profile.avatar, profile.bio, profile.banner, profile, email, app-data, app-data.shared, ' +
-      'things. Required scopes are a floor the user cannot untick; optionalScopes they decide on; ' +
-      'unless allowExtra: false the user can volunteer more. Live catalog: GET /api/v1/oauth/scopes.'
-  },
-  {
-    id: 'use-the-token',
-    title: '4 · Use the token',
-    content:
-      'Identity SSO: resolve who the token belongs to via /api/v1/oauth/userinfo, from your site JS ' +
-      'or your server. Shared things: read the things the user hand-picked via /oauth/shared, ' +
-      'read-only. App storage: keep per-user data (settings, saves, progress) in /api/v1/app-data — ' +
-      'your app can only ever see its own keys.'
-  },
-  {
-    id: 'security-model',
-    title: 'Security model',
-    content:
-      'App tokens are revocable Thingtime sessions scoped to your app — rejected by every normal ' +
-      'endpoint. The popup hands the token via postMessage locked to your registered origin; browser ' +
-      'calls are CORS-bound. Grants are revocable from both sides: /api/v1/apps/delete or ' +
-      '/api/v1/oauth/grants/revoke. The token is a bearer credential — treat it like a secret.'
-  },
-  {
-    id: 'try-it',
-    title: 'Try it',
-    content:
-      'A live playground ships at /sdk/demo.html — sandbox mode out of the box; register an app ' +
-      'with that origin and paste your real ttapp_ clientId to run the same loop live.'
-  }
-];
 
 // Section ids must match the card ids rendered by routes/docs/index.tsx.
 const overviewSections = [
@@ -194,7 +131,7 @@ const buildDocs = (): DocsSearchDoc[] => {
       title: 'Login with Thingtime',
       meta: '/docs/embed',
       description: 'Embed SDK + SSO guide — add one button and Thingtime becomes the identity provider.',
-      sectionTitles: embedSections.map((section) => section.title),
+      sectionTitles: embedGuideSections.map((section) => section.title),
       content:
         'Your platform gets a revocable, permission-scoped token to recognise the user, read the ' +
         'profile they chose to share, and store your app data in their Thingtime account. OAuth SSO ' +
@@ -247,7 +184,7 @@ const buildDocs = (): DocsSearchDoc[] => {
     }
   );
 
-  for (const section of embedSections) {
+  for (const section of embedGuideSections) {
     docs.push({
       id: `embed-${section.id}`,
       area: 'Guide',
@@ -255,7 +192,7 @@ const buildDocs = (): DocsSearchDoc[] => {
       meta: `/docs/embed#${section.id}`,
       description: 'Login with Thingtime — embed SDK + SSO guide.',
       sectionTitles: [],
-      content: section.content,
+      content: section.blurb,
       to: `/docs/embed#${section.id}`
     });
   }
