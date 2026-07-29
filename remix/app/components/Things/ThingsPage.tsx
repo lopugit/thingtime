@@ -1,12 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Box, Button, Flex, Input, Menu, MenuButton, MenuItem, MenuList, Portal, Text } from '@chakra-ui/react';
-import { Columns3, Eye, LayoutGrid, Plus, Rows3, Search as SearchIcon, Tag, X } from 'lucide-react';
+import { ArrowUpDown, Columns3, Eye, LayoutGrid, Layers, Plus, Rows3, Search as SearchIcon, Tag, X } from 'lucide-react';
 import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router';
 
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useIsMobileViewport } from '~/components/Nav/Drawer/useDrawer';
 import { Rainbow } from '~/components/Rainbow/Rainbow';
+import { ThingContextMenu } from '~/components/Thingtime/ContextMenu/ThingContextMenu';
+import type { ThingContextMenuAction } from '~/components/Thingtime/ContextMenu/ThingContextMenu';
+import { useThingContextMenu } from '~/components/Thingtime/ContextMenu/useThingContextMenu';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
@@ -15,18 +18,25 @@ import { RAINBOW_TEXT } from '~/theme/rainbow';
 import { FolderTree } from './FolderTree';
 import { DeleteConfirmDialog, MoveDialog, NewFolderDialog, PreviewModal, RenameDialog, ShareDialog } from './ThingsDialogs';
 import { ThingsColumnsView, ThingsGridView, ThingsItemAction, ThingsItemHandlers, ThingsListView } from './ThingsViews';
+import { buildThingsBackgroundMenu, buildThingsItemMenu } from './thingsMenuModel';
 import {
+  THINGS_GROUP_OPTIONS,
   THINGS_KIND_FILTERS,
+  THINGS_SORT_OPTIONS,
   ThingsCache,
   ThingsClipboard,
   ThingsDisplayMode,
+  ThingsGroupBy,
   ThingsKindFilter,
+  ThingsSort,
   ThingsThing,
   ThingsView,
   folderKeyOf,
+  groupThings,
   isFolder,
   primaryKindOf,
-  sortForBrowse,
+  schemaIdOf,
+  sortThings,
   thingDisplayName,
   thingLink,
   thingsCacheKey
@@ -35,6 +45,11 @@ import {
 const PAGE_SIZE = 50;
 // listing noise: reaction/save things are mechanical children, not content
 const HIDDEN_KINDS = new Set(['reaction', 'save']);
+// custom sort/group loads the whole folder (honest ordering needs the full
+// set) — bounded so a giant folder can't fetch forever
+const MAX_ARRANGE_THINGS = 1000;
+// schema render templates cached for Previews (bounded localCache footprint)
+const MAX_CACHED_SCHEMA_RENDERS = 40;
 
 const pillProps = (active: boolean) =>
   ({
@@ -90,6 +105,8 @@ export const ThingsPage = () => {
 
   const [view, setView] = useState<ThingsView>(cached?.view || 'grid');
   const [displayMode, setDisplayMode] = useState<ThingsDisplayMode>(cached?.displayMode || 'name');
+  const [sort, setSort] = useState<ThingsSort>(cached?.sort || 'newest');
+  const [groupBy, setGroupBy] = useState<ThingsGroupBy>(cached?.groupBy || 'none');
   const [kindFilter, setKindFilter] = useState<ThingsKindFilter>('all');
   const [folderPages, setFolderPages] = useState<Record<string, ThingsThing[]>>(cached?.folders || {});
   const [cursors, setCursors] = useState<Record<string, string | null>>({});
@@ -103,6 +120,23 @@ export const ThingsPage = () => {
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const anchorRef = useRef<string | null>(null);
   const [clipboard, setClipboard] = useState<ThingsClipboard>(null);
+
+  // drag-and-drop: the ids in flight + the folder currently hovered as a drop
+  // target (null = the root row/breadcrumb, undefined = nothing hovered)
+  const draggingIdsRef = useRef<string[]>([]);
+  const [dropTarget, setDropTarget] = useState<string | null | undefined>(undefined);
+
+  // schema shareId → its render template (null = fetched, none) for Previews
+  const [schemaRenders, setSchemaRenders] = useState<NonNullable<ThingsCache['schemaRenders']>>(
+    cached?.schemaRenders || {}
+  );
+  const schemaFetchRef = useRef<Set<string>>(new Set());
+
+  // right-click menus (the design-system Thing Context Menu, 'context'
+  // presentation) — one instance for items, one for the background
+  const itemMenu = useThingContextMenu();
+  const backgroundMenu = useThingContextMenu();
+  const [menuThing, setMenuThing] = useState<ThingsThing | null>(null);
 
   const [newFolderOpen, setNewFolderOpen] = useState(false);
   const [renameThing, setRenameThing] = useState<ThingsThing | null>(null);
@@ -280,8 +314,60 @@ export const ThingsPage = () => {
     if (!user) return;
     const folders: Record<string, ThingsThing[]> = {};
     for (const [key, things] of Object.entries(folderPages)) folders[key] = things.slice(0, PAGE_SIZE);
-    writeLocalCache(cacheKey, { view, displayMode, folders, folderMeta } satisfies ThingsCache);
-  }, [user?.id, cacheKey, view, displayMode, folderPages, folderMeta]); // eslint-disable-line react-hooks/exhaustive-deps
+    const cachedRenders = Object.fromEntries(Object.entries(schemaRenders).slice(0, MAX_CACHED_SCHEMA_RENDERS));
+    writeLocalCache(
+      cacheKey,
+      { view, displayMode, sort, groupBy, folders, folderMeta, schemaRenders: cachedRenders } satisfies ThingsCache
+    );
+  }, [user?.id, cacheKey, view, displayMode, sort, groupBy, folderPages, folderMeta, schemaRenders]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // custom sort/group orders the WHOLE folder, so keep pulling pages until the
+  // cursor runs dry (bounded) — the default newest order pages lazily as before
+  const arranged = sort !== 'newest' || groupBy !== 'none';
+  useEffect(() => {
+    if (!arranged || !user || searchMode) return;
+    const cursor = cursors[currentKey];
+    if (!cursor || loadingKeys.has(currentKey)) return;
+    if ((folderPages[currentKey] || []).length >= MAX_ARRANGE_THINGS) return;
+    fetchFolder(folderId, cursor);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [arranged, user?.id, currentKey, cursors, loadingKeys, folderId]);
+
+  // Previews: fetch the render template of every referenced community schema
+  // once (data things stamp crystal.schemaId server-side). Missing/none caches
+  // as null so a schema without a template is never re-fetched.
+  useEffect(() => {
+    if (displayMode !== 'preview' || !user) return;
+    const everything = [...Object.values(folderPages).flat(), ...(searchResults || [])];
+    for (const thing of everything) {
+      const schemaId = schemaIdOf(thing);
+      if (!schemaId || schemaRenders[schemaId] !== undefined || schemaFetchRef.current.has(schemaId)) continue;
+      schemaFetchRef.current.add(schemaId);
+      apiRef.current.v1.things
+        .get({ id: schemaId })
+        .then((resp: any) => {
+          const schemaThing = resp?.thing;
+          const render =
+            schemaThing?.thingtime?.includes?.('schema') &&
+            schemaThing?.crystal?.render &&
+            typeof schemaThing.crystal.render === 'object' &&
+            !Array.isArray(schemaThing.crystal.render)
+              ? (schemaThing.crystal.render as Record<string, unknown>)
+              : null;
+          setSchemaRenders((prev) => ({ ...prev, [schemaId]: render }));
+        })
+        .catch(() => setSchemaRenders((prev) => ({ ...prev, [schemaId]: null })));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayMode, folderPages, searchResults, user?.id]);
+
+  const schemaRenderFor = useCallback(
+    (thing: ThingsThing): Record<string, unknown> | null => {
+      const schemaId = schemaIdOf(thing);
+      return schemaId ? schemaRenders[schemaId] || null : null;
+    },
+    [schemaRenders]
+  );
 
   // ------------------------------------------------------------------ derived
 
@@ -289,9 +375,12 @@ export const ThingsPage = () => {
     (targetFolderId: string | null): ThingsThing[] | undefined => {
       const page = folderPages[folderKeyOf(targetFolderId)];
       if (!page) return undefined;
-      return sortForBrowse(page.filter((thing) => !HIDDEN_KINDS.has(primaryKindOf(thing))));
+      return sortThings(
+        page.filter((thing) => !HIDDEN_KINDS.has(primaryKindOf(thing))),
+        sort
+      );
     },
-    [folderPages]
+    [folderPages, sort]
   );
 
   const browseItems = useMemo(() => {
@@ -491,17 +580,37 @@ export const ThingsPage = () => {
     [folderPages]
   );
 
-  const pasteClipboard = useCallback(async () => {
-    if (!clipboard?.ids.length) return;
-    const { mode, ids } = clipboard;
-    const sources = sourceKeysOf(ids);
-    const result = await runBulk(mode === 'cut' ? 'move' : 'copy', ids, folderId);
-    if (!result.ok) return;
-    summarize(mode === 'cut' ? 'Moved' : 'Pasted', result.succeeded, result.failures);
-    if (mode === 'cut') setClipboard(null);
-    setSelection(new Set());
-    refreshAfterMutation(sources);
-  }, [clipboard, folderId, refreshAfterMutation, runBulk, sourceKeysOf, summarize]);
+  const pasteClipboardTo = useCallback(
+    async (destination: string | null) => {
+      if (!clipboard?.ids.length) return;
+      const { mode, ids } = clipboard;
+      const sources = sourceKeysOf(ids);
+      const result = await runBulk(mode === 'cut' ? 'move' : 'copy', ids, destination);
+      if (!result.ok) return;
+      summarize(mode === 'cut' ? 'Moved' : 'Pasted', result.succeeded, result.failures);
+      if (mode === 'cut') setClipboard(null);
+      setSelection(new Set());
+      refreshAfterMutation([...sources, destination]);
+    },
+    [clipboard, refreshAfterMutation, runBulk, sourceKeysOf, summarize]
+  );
+
+  const pasteClipboard = useCallback(() => pasteClipboardTo(folderId), [folderId, pasteClipboardTo]);
+
+  // one move path for the Move dialog, drag-and-drop, and cut-paste-into
+  const moveIdsTo = useCallback(
+    async (ids: string[], destination: string | null) => {
+      if (!ids.length) return false;
+      const sources = sourceKeysOf(ids);
+      const result = await runBulk('move', ids, destination);
+      if (!result.ok) return false;
+      summarize('Moved', result.succeeded, result.failures);
+      setSelection(new Set());
+      refreshAfterMutation([...sources, destination]);
+      return true;
+    },
+    [refreshAfterMutation, runBulk, sourceKeysOf, summarize]
+  );
 
   const deleteConfirmed = useCallback(async () => {
     const ids = deleteThings.map((thing) => thing.id);
@@ -524,35 +633,50 @@ export const ThingsPage = () => {
   const moveConfirmed = useCallback(
     async (destination: string | null) => {
       const ids = selectedThings.length ? selectedThings.map((thing) => thing.id) : previewThing ? [previewThing.id] : [];
-      if (!ids.length) return false;
-      const sources = sourceKeysOf(ids);
-      const result = await runBulk('move', ids, destination);
-      if (!result.ok) return false;
-      summarize('Moved', result.succeeded, result.failures);
-      setSelection(new Set());
-      refreshAfterMutation([...sources, destination]);
-      return true;
+      return moveIdsTo(ids, destination);
     },
-    [previewThing, refreshAfterMutation, runBulk, selectedThings, sourceKeysOf, summarize]
+    [moveIdsTo, previewThing, selectedThings]
   );
 
+  // audience changes ride the bulk share op (per-item server results; folders
+  // optionally flow the acl to everything inside)
   const shareApplied = useCallback(
-    async (acl: string[]) => {
+    async (acl: string[], recursive: boolean) => {
       const targets = shareThings;
       if (!targets.length) return false;
-      let succeeded = 0;
-      const failures: { error?: string }[] = [];
-      for (const thing of targets) {
-        try {
-          await apiRef.current.v1.things.update({ id: thing.id, acl });
-          succeeded += 1;
-        } catch (err: any) {
-          failures.push({ error: err?.error });
+      try {
+        const resp = await apiRef.current.v1.things.bulk({
+          op: 'share',
+          ids: targets.map((thing) => thing.id),
+          acl,
+          recursive
+        });
+        const results: any[] = resp?.results || [];
+        const failures = results.filter((entry) => !entry.ok);
+        const inside = results.reduce((sum, entry) => sum + (entry.applied || 0), 0);
+        const skippedInside = results.reduce((sum, entry) => sum + (entry.skipped || 0), 0);
+        summarize('Updated audience for', resp?.succeeded || 0, failures);
+        if (recursive && (inside || skippedInside)) {
+          lopuRef.current({
+            title: `Audience flowed to ${inside} thing${inside === 1 ? '' : 's'} inside 📂`,
+            description: skippedInside
+              ? `${skippedInside} skipped (attached things keep inheriting their target’s audience).`
+              : undefined,
+            status: 'info',
+            duration: 6000
+          });
         }
+        // recursive shares touch the folders' own listings too, not just the
+        // folders' parents — refresh both (already-fetched keys only)
+        refreshAfterMutation([
+          ...sourceKeysOf(targets.map((thing) => thing.id)),
+          ...(recursive ? targets.filter(isFolder).map((thing) => thing.id) : [])
+        ]);
+        return failures.length === 0;
+      } catch (err: any) {
+        lopuRef.current({ title: 'That didn’t work 😔', description: err?.error || undefined, status: 'error' });
+        return false;
       }
-      summarize('Updated audience for', succeeded, failures);
-      refreshAfterMutation(sourceKeysOf(targets.map((thing) => thing.id)));
-      return failures.length === 0;
     },
     [refreshAfterMutation, shareThings, sourceKeysOf, summarize]
   );
@@ -639,7 +763,8 @@ export const ThingsPage = () => {
           setShareThings(group);
           break;
         case 'copy':
-          copyToClipboard('copy', group.filter((entry) => !isFolder(entry)).map((entry) => entry.id));
+          // folders copy their whole subtree server-side (bounded, honest)
+          copyToClipboard('copy', group.map((entry) => entry.id));
           break;
         case 'cut':
           copyToClipboard('cut', group.map((entry) => entry.id));
@@ -655,11 +780,201 @@ export const ThingsPage = () => {
     [copyLink, copyToClipboard, openThing, selectedThings, selection]
   );
 
+  // ------------------------------------------------------------------ drag & drop
+
+  const onItemDragStart = useCallback(
+    (thing: ThingsThing, event: React.DragEvent) => {
+      const ids = selection.has(thing.id) && selection.size > 1 ? [...selection] : [thing.id];
+      if (!selection.has(thing.id)) {
+        setSelection(new Set([thing.id]));
+        anchorRef.current = thing.id;
+      }
+      draggingIdsRef.current = ids;
+      event.dataTransfer.effectAllowed = 'move';
+      // some browsers need data set for the drag to start at all
+      event.dataTransfer.setData('text/plain', `${ids.length} thing${ids.length === 1 ? '' : 's'}`);
+    },
+    [selection]
+  );
+
+  const onItemDragEnd = useCallback(() => {
+    draggingIdsRef.current = [];
+    setDropTarget(undefined);
+  }, []);
+
+  const onFolderDragOver = useCallback((target: string | null, event: React.DragEvent) => {
+    if (!draggingIdsRef.current.length) return;
+    // a folder can't be dropped into itself (the server also cycle-checks
+    // deeper descendants — this just keeps the obvious case from highlighting)
+    if (target && draggingIdsRef.current.includes(target)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    setDropTarget((prev) => (prev === target ? prev : target));
+  }, []);
+
+  const onFolderDragLeave = useCallback((target: string | null) => {
+    setDropTarget((prev) => (prev === target ? undefined : prev));
+  }, []);
+
+  const onFolderDrop = useCallback(
+    (target: string | null, event: React.DragEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const ids = draggingIdsRef.current.filter((id) => id !== target);
+      draggingIdsRef.current = [];
+      setDropTarget(undefined);
+      if (!ids.length) return;
+      moveIdsTo(ids, target);
+    },
+    [moveIdsTo]
+  );
+
+  // ------------------------------------------------------------------ context menus
+
+  // right-click a thing: select it (Finder semantics) and open the item menu
+  // at the pointer. Text selections keep the browser menu (copy).
+  const onItemContextMenu = useCallback(
+    (thing: ThingsThing, event: React.MouseEvent) => {
+      const domSelection = window.getSelection?.();
+      if (domSelection && !domSelection.isCollapsed && domSelection.toString().length > 0) return;
+      backgroundMenu.closeMenu();
+      if (!selection.has(thing.id)) {
+        setSelection(new Set([thing.id]));
+        anchorRef.current = thing.id;
+      }
+      setMenuThing(thing);
+      itemMenu.openAtPointer(event);
+    },
+    [backgroundMenu.closeMenu, itemMenu.openAtPointer, selection] // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
+  // right-click the browse canvas (not an item): create/paste/arrange/select
+  const onBackgroundContextMenu = useCallback(
+    (event: React.MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest?.('input, textarea, [contenteditable="true"], [contenteditable=""]')) return;
+      const domSelection = window.getSelection?.();
+      if (domSelection && !domSelection.isCollapsed && domSelection.toString().length > 0) return;
+      itemMenu.closeMenu();
+      setMenuThing(null);
+      backgroundMenu.openAtPointer(event);
+    },
+    [backgroundMenu.openAtPointer, itemMenu.closeMenu] // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
+  const menuActCount = menuThing && selection.has(menuThing.id) && selection.size > 1 ? selection.size : 1;
+
+  const itemMenuModel = useMemo(
+    () =>
+      menuThing
+        ? buildThingsItemMenu({ thing: menuThing, actCount: menuActCount, clipboardCount: clipboard?.ids.length || 0 })
+        : { sections: [] },
+    [menuThing, menuActCount, clipboard?.ids.length]
+  );
+
+  const onItemMenuAction = useCallback(
+    ({ action }: ThingContextMenuAction) => {
+      if (!menuThing) return;
+      switch (action.command) {
+        case 'open':
+          openThing(menuThing);
+          break;
+        case 'copy-link':
+          copyLink(menuThing);
+          break;
+        case 'rename':
+          onItemAction(menuThing, 'rename');
+          break;
+        case 'move':
+          onItemAction(menuThing, 'move');
+          break;
+        case 'share':
+          onItemAction(menuThing, 'share');
+          break;
+        case 'copy':
+          onItemAction(menuThing, 'copy');
+          break;
+        case 'cut':
+          onItemAction(menuThing, 'cut');
+          break;
+        case 'paste-into':
+          pasteClipboardTo(menuThing.id);
+          break;
+        case 'delete':
+          onItemAction(menuThing, 'delete');
+          break;
+      }
+    },
+    [copyLink, menuThing, onItemAction, openThing, pasteClipboardTo]
+  );
+
+  const backgroundMenuModel = useMemo(
+    () =>
+      buildThingsBackgroundMenu({
+        clipboardCount: clipboard?.ids.length || 0,
+        itemCount: displayItems.length,
+        sort,
+        groupBy,
+        view,
+        displayMode
+      }),
+    [clipboard?.ids.length, displayItems.length, sort, groupBy, view, displayMode]
+  );
+
+  const onBackgroundMenuAction = useCallback(
+    ({ action }: ThingContextMenuAction) => {
+      const payload = (action.payload || {}) as {
+        sort?: ThingsSort;
+        groupBy?: ThingsGroupBy;
+        view?: ThingsView;
+        displayMode?: ThingsDisplayMode;
+      };
+      switch (action.command) {
+        case 'new-folder':
+          setNewFolderOpen(true);
+          break;
+        case 'paste':
+          pasteClipboard();
+          break;
+        case 'select-all':
+          selectAll();
+          break;
+        case 'set-sort':
+          if (payload.sort) setSort(payload.sort);
+          break;
+        case 'set-group':
+          if (payload.groupBy) setGroupBy(payload.groupBy);
+          break;
+        case 'set-view':
+          if (payload.view) setView(payload.view);
+          break;
+        case 'set-display':
+          if (payload.displayMode) setDisplayMode(payload.displayMode);
+          break;
+      }
+    },
+    [pasteClipboard, selectAll]
+  );
+
+  // context menus close on any outside press (their surfaces portal to <body>,
+  // so this checks the class, not the React tree)
+  useEffect(() => {
+    if (!itemMenu.open && !backgroundMenu.open) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest?.('.thing-context-menu')) return;
+      itemMenu.closeMenu();
+      backgroundMenu.closeMenu();
+    };
+    window.addEventListener('pointerdown', onPointerDown);
+    return () => window.removeEventListener('pointerdown', onPointerDown);
+  }, [itemMenu.open, backgroundMenu.open, itemMenu.closeMenu, backgroundMenu.closeMenu]);
+
   // ------------------------------------------------------------------ keyboard
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (dialogOpen) return;
+      if (dialogOpen || itemMenu.open || backgroundMenu.open) return;
       const target = event.target as HTMLElement | null;
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
       const meta = event.metaKey || event.ctrlKey;
@@ -667,7 +982,7 @@ export const ThingsPage = () => {
         event.preventDefault();
         selectAll();
       } else if (meta && event.key.toLowerCase() === 'c' && selection.size) {
-        copyToClipboard('copy', selectedThings.filter((thing) => !isFolder(thing)).map((thing) => thing.id));
+        copyToClipboard('copy', [...selection]);
       } else if (meta && event.key.toLowerCase() === 'x' && selection.size) {
         copyToClipboard('cut', [...selection]);
       } else if (meta && event.key.toLowerCase() === 'v' && clipboard?.ids.length) {
@@ -681,7 +996,7 @@ export const ThingsPage = () => {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [clipboard, copyToClipboard, dialogOpen, pasteClipboard, selectAll, selectedThings, selection]);
+  }, [backgroundMenu.open, clipboard, copyToClipboard, dialogOpen, itemMenu.open, pasteClipboard, selectAll, selectedThings, selection]);
 
   // ------------------------------------------------------------------ render
 
@@ -718,12 +1033,34 @@ export const ThingsPage = () => {
     onItemClick: clickSelect,
     onItemOpen: openThing,
     onItemToggle: toggleSelect,
-    onItemAction
+    onItemAction,
+    onItemContextMenu,
+    onItemDragStart,
+    onItemDragEnd,
+    dropTargetId: dropTarget,
+    onFolderDragOver,
+    onFolderDragLeave,
+    onFolderDrop
   };
+
+  const treeDnd = { dropTargetId: dropTarget, onDragOver: onFolderDragOver, onDragLeave: onFolderDragLeave, onDrop: onFolderDrop };
+
+  // drop-target props for the breadcrumb row (null = root)
+  const crumbDropProps = (target: string | null) => ({
+    onDragOver: (event: React.DragEvent) => onFolderDragOver(target, event),
+    onDragLeave: () => onFolderDragLeave(target),
+    onDrop: (event: React.DragEvent) => onFolderDrop(target, event),
+    ...(dropTarget === target
+      ? { background: 'var(--tt-accent-soft, rgba(244, 114, 182, 0.14))', borderRadius: '6px', boxShadow: 'inset 0 0 0 2px var(--tt-accent, #f472b6)' }
+      : {})
+  });
 
   const loading = loadingKeys.has(currentKey) && !folderPages[currentKey];
   const allSelected = displayItems.length > 0 && displayItems.every((thing) => selection.has(thing.id));
   const moveDisabledIds = new Set(selectedThings.filter(isFolder).map((thing) => thing.id));
+  // group-by renders one titled section per kind (grid/list; columns is
+  // already hierarchical)
+  const groupedSections = groupBy === 'kind' && view !== 'columns' ? groupThings(displayItems, groupBy) : null;
 
   return (
     <Flex
@@ -873,6 +1210,44 @@ export const ThingsPage = () => {
               Previews
             </Button>
             <Box width={2} />
+            <Text {...monoLabel}>arrange</Text>
+            <Menu placement="bottom-start">
+              <MenuButton as={Button} {...pillProps(sort !== 'newest')} leftIcon={<ArrowUpDown size={13} />}>
+                {THINGS_SORT_OPTIONS.find((option) => option.id === sort)?.label || 'Sort'}
+              </MenuButton>
+              <Portal>
+                <MenuList fontSize="13px" zIndex={10250}>
+                  {THINGS_SORT_OPTIONS.map((option) => (
+                    <MenuItem
+                      key={option.id}
+                      fontWeight={sort === option.id ? 600 : 400}
+                      onClick={() => setSort(option.id)}
+                    >
+                      {option.icon} {option.label}
+                    </MenuItem>
+                  ))}
+                </MenuList>
+              </Portal>
+            </Menu>
+            <Menu placement="bottom-start">
+              <MenuButton as={Button} {...pillProps(groupBy !== 'none')} leftIcon={<Layers size={13} />}>
+                {groupBy === 'none' ? 'Group' : THINGS_GROUP_OPTIONS.find((option) => option.id === groupBy)?.label}
+              </MenuButton>
+              <Portal>
+                <MenuList fontSize="13px" zIndex={10250}>
+                  {THINGS_GROUP_OPTIONS.map((option) => (
+                    <MenuItem
+                      key={option.id}
+                      fontWeight={groupBy === option.id ? 600 : 400}
+                      onClick={() => setGroupBy(option.id)}
+                    >
+                      {option.icon} {option.label}
+                    </MenuItem>
+                  ))}
+                </MenuList>
+              </Portal>
+            </Menu>
+            <Box width={2} />
             <Text {...monoLabel}>kind</Text>
             {THINGS_KIND_FILTERS.map((entry) => (
               <Button key={entry.id} {...pillProps(kindFilter === entry.id)} onClick={() => setKindFilter(entry.id)}>
@@ -893,14 +1268,16 @@ export const ThingsPage = () => {
           </Flex>
         )}
 
-        {/* breadcrumbs */}
+        {/* breadcrumbs — every crumb is also a drag-and-drop move target */}
         {!searchMode && (
           <Flex alignItems="center" color="var(--tt-muted, #9a9aa6)" fontSize="13px" gap={1} wrap="wrap">
             <Box
               as="button"
               fontWeight={folderId ? 400 : 600}
               onClick={() => navigateToFolder(null)}
+              paddingX={1}
               type="button"
+              {...crumbDropProps(null)}
             >
               🏠 All things
             </Box>
@@ -911,7 +1288,9 @@ export const ThingsPage = () => {
                   as="button"
                   fontWeight={index === breadcrumbs.length - 1 ? 600 : 400}
                   onClick={() => navigateToFolder(crumb.id)}
+                  paddingX={1}
                   type="button"
+                  {...crumbDropProps(crumb.id)}
                 >
                   {crumb.icon || '📁'} {crumb.name}
                 </Box>
@@ -931,6 +1310,7 @@ export const ThingsPage = () => {
             <Box flexShrink={0} paddingTop={1} width="220px">
               <FolderTree
                 currentFolderId={folderId}
+                dnd={treeDnd}
                 ensureLoaded={ensureLoaded}
                 itemsFor={itemsFor}
                 onPick={navigateToFolder}
@@ -938,22 +1318,62 @@ export const ThingsPage = () => {
             </Box>
           )}
 
-          <Box flex={1} minWidth={0}>
+          <Box flex={1} minHeight="45vh" minWidth={0} onContextMenu={onBackgroundContextMenu}>
             {loading && (
               <Text color="var(--tt-faint, #b6b6c0)" fontSize="13px" paddingY={6} textAlign="center">
                 Loading your things… 🌀
               </Text>
             )}
-            {!loading && view === 'grid' && <ThingsGridView displayMode={displayMode} handlers={itemHandlers} items={displayItems} />}
-            {!loading && view === 'list' && (
-              <ThingsListView
-                allSelected={allSelected}
-                displayMode={displayMode}
-                handlers={itemHandlers}
-                items={displayItems}
-                onToggleAll={selectAll}
-              />
-            )}
+            {!loading && view === 'grid' &&
+              (groupedSections ? (
+                groupedSections.map((section) => (
+                  <Box key={section.key} marginBottom={4}>
+                    <Text {...monoLabel} marginBottom={2}>
+                      {section.icon} {section.label} · {section.items.length}
+                    </Text>
+                    <ThingsGridView
+                      displayMode={displayMode}
+                      handlers={itemHandlers}
+                      items={section.items}
+                      schemaRenderFor={schemaRenderFor}
+                    />
+                  </Box>
+                ))
+              ) : (
+                <ThingsGridView
+                  displayMode={displayMode}
+                  handlers={itemHandlers}
+                  items={displayItems}
+                  schemaRenderFor={schemaRenderFor}
+                />
+              ))}
+            {!loading && view === 'list' &&
+              (groupedSections ? (
+                groupedSections.map((section) => (
+                  <Box key={section.key} marginBottom={4}>
+                    <Text {...monoLabel} marginBottom={2}>
+                      {section.icon} {section.label} · {section.items.length}
+                    </Text>
+                    <ThingsListView
+                      allSelected={allSelected}
+                      displayMode={displayMode}
+                      handlers={itemHandlers}
+                      items={section.items}
+                      onToggleAll={selectAll}
+                      schemaRenderFor={schemaRenderFor}
+                    />
+                  </Box>
+                ))
+              ) : (
+                <ThingsListView
+                  allSelected={allSelected}
+                  displayMode={displayMode}
+                  handlers={itemHandlers}
+                  items={displayItems}
+                  onToggleAll={selectAll}
+                  schemaRenderFor={schemaRenderFor}
+                />
+              ))}
             {!loading && view === 'columns' && !searchMode && (
               <ThingsColumnsView
                 activeFolderAt={(depth) => columnsPath[depth + 1] ?? null}
@@ -962,10 +1382,16 @@ export const ThingsPage = () => {
                 itemsFor={itemsFor}
                 onOpenFolderAt={(_depth, id) => navigateToFolder(id)}
                 path={columnsPath}
+                schemaRenderFor={schemaRenderFor}
               />
             )}
             {!loading && view === 'columns' && searchMode && (
-              <ThingsGridView displayMode={displayMode} handlers={itemHandlers} items={displayItems} />
+              <ThingsGridView
+                displayMode={displayMode}
+                handlers={itemHandlers}
+                items={displayItems}
+                schemaRenderFor={schemaRenderFor}
+              />
             )}
 
             {!loading && !displayItems.length && !searching && (
@@ -1015,6 +1441,27 @@ export const ThingsPage = () => {
         }}
         onClose={closePreview}
         thing={previewThing}
+      />
+
+      {/* right-click menus — the design-system Thing Context Menu surface */}
+      <ThingContextMenu
+        {...itemMenu.menuProps}
+        meta={
+          menuThing
+            ? { path: thingDisplayName(menuThing), type: menuActCount > 1 ? `${menuActCount} selected` : primaryKindOf(menuThing) }
+            : undefined
+        }
+        model={itemMenuModel}
+        onAction={onItemMenuAction}
+      />
+      <ThingContextMenu
+        {...backgroundMenu.menuProps}
+        meta={{
+          path: folderId ? breadcrumbs[breadcrumbs.length - 1]?.name || 'Folder' : 'All things',
+          type: `${displayItems.length} thing${displayItems.length === 1 ? '' : 's'}`
+        }}
+        model={backgroundMenuModel}
+        onAction={onBackgroundMenuAction}
       />
     </Flex>
   );
