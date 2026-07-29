@@ -1,7 +1,11 @@
 # 09 — Security hardening (unauth endpoints, auth rate limiting, persisted-state eval)
 
-**Status:** 🔴 Not started · raised 2026-07-08 by a multi-agent review, each
-finding adversarially verified against the source.
+**Status:** 🟢 Mostly done (2026-07-21) · raised 2026-07-08 by a multi-agent
+review, each finding adversarially verified against the source. A (unauth
+endpoints) and B (auth rate limiting + body caps) shipped to main earlier. C
+persist-eval removal + CSP shipped on `claude/todo10-eval-csp-s3`; the CSP keeps
+`'unsafe-eval'` because smarts + Commander evaluate user-typed JS by design —
+dropping it is blocked on migrating them off `eval`. D shipped in PR #94.
 
 This groups the security findings from the 2026-07-08 review. They share a theme
 the owner already cares about (DECISIONS.md #5 "security-conscious by reflex":
@@ -121,8 +125,13 @@ revive only tagged values.
 - [ ] Login / register / resend-verification return 429 past a per-IP (and
       per-username, for login) threshold, reusing the existing quota util.
 - [ ] Register/login enforce a body-size cap; `meta` is whitelisted/bounded.
-- [ ] Function values are no longer revived via `eval`; a CSP without
-      `unsafe-eval` is in place and the app still hydrates.
-- [ ] The `Date.parse` reviver no longer coerces plain strings (verified by a
-      round-trip test: seed `"Post 1"`, save, reload, assert it is still a string).
+- [x] Function values are no longer revived via `eval` (inert warn stubs;
+      functions also no longer persist). A build-injected CSP meta tag is in
+      place (script-src 'self' + inline-script hashes, no 'unsafe-inline' for
+      scripts) and the app still hydrates — but it retains `'unsafe-eval'`
+      because smarts/Commander eval user-typed JS by design; dropping it needs
+      that migration first.
+- [x] The `Date.parse` reviver no longer coerces plain strings (PR #94;
+      verified by exactly that round-trip, in node against real flatted and
+      live in the browser through the app's own load→autosave cycle).
 - [ ] Regression coverage added to `remix/app/tests/api/apiTests.ts`.

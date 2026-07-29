@@ -110,9 +110,17 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
    Dates in the replacer (mirror the existing `ttype:'function'` scheme:
    `{ttype:'date', iso}`) and revive only tagged values.
 
-10. **🔒 SECURITY: persisted-state `eval` = arbitrary code execution on load; add a CSP.**
+10. **✅ FIXED (CSP keeps `unsafe-eval` for now) — 🔒 SECURITY: persisted-state `eval` = arbitrary code execution on load; add a CSP.**
 
-    Same provider revives `{ttype:'function'}` values by `eval(value.code)`
+    Fixed on `claude/todo10-eval-csp-s3`: persisted `{ttype:'function'}` values
+    are never eval'd (inert warn stubs) and functions no longer persist at all.
+    A build-injected CSP meta tag ships with `script-src 'self'` + sha256 hashes
+    for the shell's two inline scripts (no `unsafe-inline` for scripts), blocking
+    injected inline/remote scripts. `'unsafe-eval'` remains because smarts and
+    the Commander evaluate user-typed JS by design — dropping it is a separate
+    migration. No `frame-ancestors` on purpose (embedding is a feature).
+
+    Original report: Same provider revives `{ttype:'function'}` values by `eval(value.code)`
     (L39) plus a scoped `eval` (L53); the replacer serialises every function this
     way (L71–87) and the whole tree persists to IndexedDB every change (L435–438),
     revived on every load. With no CSP anywhere in the repo (`unsafe-eval`
