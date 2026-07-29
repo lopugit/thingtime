@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import { getSessionsCollection, getThingsCollection } from '../mongodb/collections';
+import { consumeByteBudget, refundByteBudget } from '../rateLimit/byteBudget';
 import { scopeCovers, sessionScopes } from './scopes';
 import { SANDBOX_TOKEN_TTL_MS, sandboxDisplayName } from './sandbox';
 import type { AppTokenContext } from './appTokens';
@@ -332,6 +333,22 @@ export const chargeAppStorage = async (scope: AppNamespaceScope, deltaBytes: num
       return { ok: true, usedBytes: refunded?.crystal?.usedBytes ?? 0, budgetBytes };
     }
 
+    // Sandbox writes additionally burn the app-wide windowed byte brake
+    // (TODO 15 §1): global first, refunded if the namespace then refuses, and
+    // never refunded on deletes — the window measures write burn, not
+    // standing storage.
+    if (scope.sandbox) {
+      const globalWindow = await consumeByteBudget('sandbox.storage.global', deltaBytes);
+      if (!globalWindow.allowed) {
+        return fail(
+          globalWindow.unavailable ? 503 : 507,
+          globalWindow.unavailable
+            ? 'Storage accounting is unavailable — try again'
+            : 'The sandbox is very busy right now — try again soon'
+        );
+      }
+    }
+
     await ensureStorageCounter(scope);
     const admitted = await things.findOneAndUpdate(
       { ...storageMatch(scope), 'crystal.usedBytes': { $lte: budgetBytes - deltaBytes } },
@@ -339,6 +356,7 @@ export const chargeAppStorage = async (scope: AppNamespaceScope, deltaBytes: num
       { returnDocument: 'after' }
     );
     if (!admitted) {
+      if (scope.sandbox) await refundByteBudget('sandbox.storage.global', deltaBytes);
       const used = await getAppStorageUsage(scope);
       return fail(
         507,
@@ -365,4 +383,16 @@ export const getAppStorageUsage = async (
   const things = await getThingsCollection();
   const doc = await things.findOne(storageMatch(scope), { projection: { 'crystal.usedBytes': 1 } });
   return { usedBytes: doc?.crystal?.usedBytes ?? 0, budgetBytes: appStorageBudgetBytes(scope) };
+};
+
+// Drift repair: set a (user, app) ledger to an absolute value — the backfill
+// migration and reconcile sweeps write the $sum of the namespace's sizeBytes
+// through this, never by hand-editing counter docs.
+export const setAppStorageUsed = async (ownerId: string, appId: string, usedBytes: number): Promise<void> => {
+  const scope: AppNamespaceScope = { appId, ownerId, sharedRead: false, scopes: [], username: '', sandbox: null };
+  await ensureStorageCounter(scope);
+  const things = await getThingsCollection();
+  await things.updateOne(storageMatch(scope), {
+    $set: { 'crystal.usedBytes': Math.max(0, Math.floor(usedBytes)), updatedAt: new Date() }
+  });
 };

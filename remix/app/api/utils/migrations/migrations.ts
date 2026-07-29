@@ -8,6 +8,7 @@ import {
   physicalCollectionName
 } from '../mongodb/collectionNames';
 import { safeErrorText } from '../errors/safeError';
+import { appThingSizeBytes, setAppStorageUsed } from '../apps/namespace';
 import { reactionShareId } from '../things/things';
 import { buildUserSecure, packRecentReactions, toBin, userEmailKey, userUsernameKey } from '../auth/users';
 import { waitlistEmailKey } from '../waitlist/waitlist';
@@ -1031,6 +1032,79 @@ const legacyResidue = async (): Promise<LegacyResidueRow[]> => {
   );
 };
 
+// ---------------------------------------------------------------------------
+// Full-power app namespaces (claude-todo/16): pre-namespace app-data things
+// carry only crystal.appId. Stamp the scalar root appId (the namespace
+// marker every app-lens query keys on) + sizeBytes (the storage ledger's
+// unit), then reconcile each (user, app) ledger to the $sum of its
+// namespace — absolute writes, so re-running is always safe. Sandbox docs
+// get stamped too but never enter a standing ledger (they TTL away).
+
+const appNamespaceBackfillFilter = {
+  thingtime: 'app-data',
+  'crystal.appId': { $exists: true },
+  $or: [{ appId: { $exists: false } }, { sizeBytes: { $exists: false } }]
+};
+
+const backfillAppNamespaceFields: Migration = {
+  id: 'backfill-app-namespace-fields',
+  collection: 'things',
+  fromVersion: THINGS_VERSION,
+  toVersion: THINGS_VERSION,
+  title: 'Backfill app namespace stamps (appId + sizeBytes) and storage ledgers',
+  description:
+    'Stamps the scalar root appId and serialized sizeBytes onto pre-namespace app-data things ' +
+    '(crystal.appId only), then reconciles every (user, app) storage ledger to the sum of its ' +
+    'namespace. Idempotent: stamps are recomputed deterministically and ledgers are set absolutely.',
+  pending: async () => {
+    return (await getCollection('things')).countDocuments(appNamespaceBackfillFilter);
+  },
+  run: async ({ dryRun }) => {
+    const things = await getCollection('things');
+    const matched = await things.countDocuments(appNamespaceBackfillFilter);
+    const notes: string[] = [];
+    if (dryRun) return { dryRun, matched, migrated: 0, created: 0, skipped: 0, notes };
+
+    let migrated = 0;
+    // batch the stamp pass — each doc's sizeBytes depends on its own payload
+    while (true) {
+      const batch = await things
+        .find(appNamespaceBackfillFilter)
+        .project({ shareId: 1, crystal: 1, extended: 1, tags: 1 })
+        .limit(THINGS_BATCH)
+        .toArray();
+      if (!batch.length) break;
+      for (const doc of batch) {
+        await things.updateOne(
+          { shareId: doc.shareId },
+          { $set: { appId: doc.crystal?.appId, sizeBytes: appThingSizeBytes(doc as any) } }
+        );
+        migrated += 1;
+      }
+      if (batch.length < THINGS_BATCH) break;
+    }
+
+    // ledger reconcile: absolute sums over every non-sandbox namespace doc
+    const sums = await things
+      .aggregate([
+        { $match: { appId: { $exists: true }, sandboxExpiresAt: { $exists: false }, sizeBytes: { $type: 'number' } } },
+        { $group: { _id: { ownerId: '$ownerId', appId: '$appId' }, bytes: { $sum: '$sizeBytes' } } }
+      ])
+      .toArray();
+    let ledgers = 0;
+    for (const entry of sums) {
+      const ownerId = String(entry._id?.ownerId || '');
+      const appId = String(entry._id?.appId || '');
+      if (!ownerId || !appId) continue;
+      await setAppStorageUsed(ownerId, appId, entry.bytes || 0);
+      ledgers += 1;
+    }
+    notes.push(`${ledgers} storage ledger(s) reconciled to their namespace sums`);
+
+    return { dryRun, matched, migrated, created: ledgers, skipped: 0, notes };
+  }
+};
+
 const mergeLegacyCollections: Migration = {
   id: 'merge-legacy-collections',
   collection: 'all',
@@ -1209,6 +1283,7 @@ export const migrations: Migration[] = [
     'lopuMusingRateLimits',
     'Stamps schemaVersion on both rate-limit shapes (musing sliding windows and waitlist counters).'
   ),
+  backfillAppNamespaceFields,
   mergeLegacyCollections,
   dropStaleCollectionGenerations
 ];
