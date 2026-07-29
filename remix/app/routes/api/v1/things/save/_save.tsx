@@ -2,7 +2,7 @@ import { json, readJsonBody } from '~/api/http';
 
 import { resolveThingsActor } from '~/api/utils/auth/patTokens';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
-import { toggleSave } from '~/api/utils/things/things';
+import { toggleSave, viewerOf } from '~/api/utils/things/things';
 
 // POST /api/v1/things/save — { id } — toggle the caller's private library save
 // of a thing ("add to my library"). Saves are relational child things
@@ -24,7 +24,7 @@ export const action = async ({ request }: { request: Request }) => {
   }
 
   const body = await readJsonBody(request, 64 * 1024);
-  const result = await toggleSave({ id: user.id, username: user.username }, body?.id);
+  const result = await toggleSave(viewerOf(user, auth.actor.pat), body?.id);
 
   if (result.ok === false) {
     return json({ ok: false, error: result.error }, { status: result.status });

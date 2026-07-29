@@ -127,7 +127,9 @@ export const action = async ({ request }: { request: Request }) => {
   if (!user) {
     return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
   }
-  const viewer = viewerOf(user);
+  // pat context rides the viewer: creates stamp createdByTokenId, and a
+  // sandboxed token's writes stay inside its own creations (things.ts)
+  const viewer = viewerOf(user, auth.actor.pat);
 
   // Every mutating verb is throttled — the generic endpoint must not be a way
   // around the per-op limits main added to the react/comment sub-routes. No

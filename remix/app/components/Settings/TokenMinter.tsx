@@ -9,6 +9,7 @@ import {
   SliderFilledTrack,
   SliderThumb,
   SliderTrack,
+  Switch,
   Text,
   Textarea
 } from '@chakra-ui/react';
@@ -43,6 +44,7 @@ type PatTokenRow = {
   id: string;
   name: string;
   scopes: string[];
+  onlyCreatedThings?: boolean;
   createdAt: string;
   expiresAt: string | null;
   maxUses: number | null;
@@ -158,6 +160,7 @@ export const TokenMinter = (props: { userId: string }) => {
   // --- mint form state -----------------------------------------------------
   const [name, setName] = React.useState('');
   const [selectedScopes, setSelectedScopes] = React.useState<string[]>(['things']);
+  const [onlyCreatedThings, setOnlyCreatedThings] = React.useState(false);
   const [expiresInMs, setExpiresInMs] = React.useState<number | null>(30 * 24 * 60 * 60 * 1000);
   const [customValue, setCustomValue] = React.useState('30');
   const [customUnit, setCustomUnit] = React.useState('d');
@@ -266,7 +269,8 @@ export const TokenMinter = (props: { userId: string }) => {
         name: name.trim() || undefined,
         scopes,
         expiresInMs,
-        maxUses
+        maxUses,
+        onlyCreatedThings
       });
       setMinted({ token: resp.token, example: resp.example, docs: resp.docs });
       if (resp.tokenInfo) saveTokens((prev) => [resp.tokenInfo, ...prev.filter((t) => t.id !== resp.tokenInfo.id)]);
@@ -326,7 +330,17 @@ export const TokenMinter = (props: { userId: string }) => {
       </Flex>
 
       <Flex flexDirection="column" rowGap={2}>
-        <FieldLabel>Permissions 🔐</FieldLabel>
+        <Flex alignItems="center">
+          <FieldLabel>Permissions 🔐</FieldLabel>
+          <Flex marginLeft="auto" columnGap={1}>
+            <Button size="xs" variant="ghost" onClick={() => setSelectedScopes(['things'])}>
+              Select all ✅
+            </Button>
+            <Button size="xs" variant="ghost" onClick={() => setSelectedScopes([])}>
+              Unselect all 🧹
+            </Button>
+          </Flex>
+        </Flex>
         <Flex columnGap={1} rowGap={1} flexWrap="wrap">
           {PAT_SCOPE_CATALOG.map((scope) => (
             <Button
@@ -348,6 +362,23 @@ export const TokenMinter = (props: { userId: string }) => {
               ? `This token can: ${summarizeScopes(selectedScopes)}`
               : 'Pick at least one permission.'}
         </Text>
+
+        {/* sandbox: WHAT the token may do is the chips above; WHICH things it
+            may do it to is this switch */}
+        <Flex alignItems="center" columnGap={4} paddingTop={1}>
+          <Box minWidth={0}>
+            <Text fontSize="sm" color="var(--tt-ink, #16161a)">
+              Only its own things 🧸
+            </Text>
+            <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)" whiteSpace="normal">
+              Everything it creates is stamped as its own — updating, deleting, commenting, reacting, saving and
+              sharing then only work on those stamped things. Reading still follows the Read permission.
+            </Text>
+          </Box>
+          <Box marginLeft="auto" flexShrink={0}>
+            <Switch isChecked={onlyCreatedThings} onChange={(e) => setOnlyCreatedThings(e.target.checked)}></Switch>
+          </Box>
+        </Flex>
       </Flex>
 
       <Flex flexDirection="column" rowGap={2}>
@@ -548,6 +579,7 @@ export const TokenMinter = (props: { userId: string }) => {
                   </Flex>
                   <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)" whiteSpace="normal">
                     {summarizeScopes(token.scopes)}
+                    {token.onlyCreatedThings ? ' · 🧸 its own things only' : ''}
                   </Text>
                   <Text fontSize="11px" color="var(--tt-muted, #9a9aa6)" whiteSpace="normal">
                     {meta.join(' · ')}

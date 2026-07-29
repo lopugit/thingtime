@@ -378,3 +378,16 @@ is fixed, and cite the checklist you ran in the PR description.
       flips the row optimistically (reverts on failure), and gives a
       never-expiring token a reap date so the TTL index eventually clears
       it. Expired tokens vanish from the list once Mongo's TTL sweep runs.
+- [ ] Permissions selector "Select all ✅ / Unselect all 🧹" buttons: all →
+      the single Full-access chip state; none → zero chips + mint blocked.
+- [ ] Sandbox ("Only its own things 🧸", onlyCreatedThings): a sandboxed
+      token's creations are stamped createdByTokenId; it CAN patch/PUT-
+      replace/delete/comment/react/save/share its own creations, and gets
+      403 "sandboxed to its own creations" on session-created or other-token
+      things (this 403 comes from the target check AFTER auth, so it DOES
+      consume a use — only missing-scope 403s are free) — including reaction/save REMOVAL on foreign things and
+      re-sharing a token-created share of a foreign root (shares attach to
+      the root). Delete stays one atomic filter op on success and returns
+      the sandbox 403 (not a phantom 404) when the thing exists but isn't
+      stamped. Non-sandboxed tokens and full sessions are unaffected; the
+      list row shows "🧸 its own things only".

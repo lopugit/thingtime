@@ -244,7 +244,13 @@ export function useApi() {
       mint: useCallback(
         async (args) =>
           asyncFetcher.submit(
-            { name: args?.name, scopes: args?.scopes, expiresInMs: args?.expiresInMs ?? null, maxUses: args?.maxUses ?? null },
+            {
+              name: args?.name,
+              scopes: args?.scopes,
+              expiresInMs: args?.expiresInMs ?? null,
+              maxUses: args?.maxUses ?? null,
+              onlyCreatedThings: args?.onlyCreatedThings === true
+            },
             { action: '/api/v1/tokens' }
           ),
         [asyncFetcher]

@@ -2,7 +2,7 @@ import { json } from '~/api/http';
 import { readJsonBody } from '~/api/http';
 
 import { resolveThingsActor } from '~/api/utils/auth/patTokens';
-import { updateThing } from '~/api/utils/things/things';
+import { updateThing, viewerOf } from '~/api/utils/things/things';
 
 // POST /api/v1/things/update — { id, crystal?, extended?, visibility?, tags? }
 // — update your own thing. Crystal patches merge over the existing crystal and
@@ -19,7 +19,7 @@ export const action = async ({ request }: { request: Request }) => {
   }
 
   const body: any = await readJsonBody(request, 768 * 1024);
-  const result = await updateThing({ id: user.id, username: user.username }, body?.id, {
+  const result = await updateThing(viewerOf(user, auth.actor.pat), body?.id, {
     crystal: body?.crystal,
     extended: body?.extended,
     acl: body?.acl,

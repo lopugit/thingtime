@@ -2,7 +2,7 @@ import { json, readJsonBody } from '~/api/http';
 
 import { resolveThingsActor } from '~/api/utils/auth/patTokens';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
-import { toggleReaction } from '~/api/utils/things/things';
+import { toggleReaction, viewerOf } from '~/api/utils/things/things';
 
 // POST /api/v1/things/react — { id, emoji } — toggle the caller's reaction on a
 // post. `emoji` may be any single emoji or a multi-emoji group (one token);
@@ -25,7 +25,7 @@ export const action = async ({ request }: { request: Request }) => {
   }
 
   const body = await readJsonBody(request, 64 * 1024);
-  const result = await toggleReaction({ id: user.id, username: user.username }, body.id, body.emoji ?? null);
+  const result = await toggleReaction(viewerOf(user, auth.actor.pat), body.id, body.emoji ?? null);
 
   if (result.ok === false) {
     return json({ ok: false, error: result.error }, { status: result.status });

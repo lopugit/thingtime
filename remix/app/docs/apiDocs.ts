@@ -3146,7 +3146,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/tokens',
     summary: 'Mint and list scoped API tokens — hand one to an AI or script so it can work your things.',
     detail:
-      'Personal access tokens (minted in Settings → Token minter, or here) are scoped, revocable Bearer credentials for the things API — made to hand to an AI agent or script so it can push new things, update things, and scan your things without your password. GET lists your tokens plus the scope catalog; POST mints one: { name?, scopes: string[], expiresInMs?: number|null, maxUses?: number|null }. Scopes are dot paths with ancestor coverage — "things" covers every "things.*" leaf (read, create, update, delete, comment, react, save, share); upserts (PUT /api/v1/things) need BOTH things.create and things.update. Lifetime is two independent dials: expiresInMs from 1 (one millisecond) to null (never expires), and maxUses from 1 to null (unlimited) — each successfully authenticated request consumes one use; a missing-scope 403 consumes nothing. The token string is returned ONCE and never shown again (only the revocable session record is kept). Tokens work ONLY on the things routes plus /api/v1/tokens/self — they cannot manage tokens, change auth settings, or reach any other surface.',
+      'Personal access tokens (minted in Settings → Token minter, or here) are scoped, revocable Bearer credentials for the things API — made to hand to an AI agent or script so it can push new things, update things, and scan your things without your password. GET lists your tokens plus the scope catalog; POST mints one: { name?, scopes: string[], expiresInMs?: number|null, maxUses?: number|null, onlyCreatedThings?: boolean }. Scopes are dot paths with ancestor coverage — "things" covers every "things.*" leaf (read, create, update, delete, comment, react, save, share); upserts (PUT /api/v1/things) need BOTH things.create and things.update. Lifetime is two independent dials: expiresInMs from 1 (one millisecond) to null (never expires), and maxUses from 1 to null (unlimited) — each successfully authenticated request consumes one use; a missing-scope 403 consumes nothing. onlyCreatedThings: true sandboxes the token to its own creations — every thing it creates is stamped with the token id, and its updates, deletes, comments, reactions, saves and shares then only work on things carrying its stamp (403 anywhere else; reads still follow things.read). The token string is returned ONCE and never shown again (only the revocable session record is kept). Tokens work ONLY on the things routes plus /api/v1/tokens/self — they cannot manage tokens, change auth settings, or reach any other surface.',
     auth: {
       mode: 'session',
       description: 'Full session (cookie or service-account Bearer) required — a personal access token can never mint or list tokens.'
@@ -3172,6 +3172,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'Can create exactly one thing, never expires.',
         method: 'POST',
         body: { name: 'One-shot webhook', scopes: ['things.create'], expiresInMs: null, maxUses: 1 }
+      },
+      {
+        name: 'Mint a sandboxed agent',
+        description: 'Full verbs, but only over things this token itself creates.',
+        method: 'POST',
+        body: { name: 'Sandboxed agent', scopes: ['things'], expiresInMs: 604800000, onlyCreatedThings: true }
       }
     ],
     responseExamples: [
@@ -3200,6 +3206,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     notes: [
       'Scope catalog: things, things.read, things.create, things.update, things.delete, things.comment, things.react, things.save, things.share.',
       'Expiry is enforced at millisecond precision server-side; the sessions TTL index reaps expired tokens, so they eventually disappear from the list.',
+      'onlyCreatedThings sandbox: scopes say WHAT verbs, the sandbox says ON WHICH things — only ones stamped as created by this token. Existing things (and other tokens’ creations) are untouchable; re-sharing a token-created share of a foreign post blocks too (shares attach to the root).',
       'At most 200 tokens per user — revoke old ones to make room.'
     ]
   }),

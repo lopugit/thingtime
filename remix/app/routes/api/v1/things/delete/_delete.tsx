@@ -1,7 +1,7 @@
 import { json, readJsonBody } from '~/api/http';
 
 import { resolveThingsActor } from '~/api/utils/auth/patTokens';
-import { deletePost } from '~/api/utils/things/things';
+import { deletePost, viewerOf } from '~/api/utils/things/things';
 
 // POST /api/v1/things/delete — { id } — delete one of the caller's own posts.
 export const action = async ({ request }: { request: Request }) => {
@@ -15,7 +15,7 @@ export const action = async ({ request }: { request: Request }) => {
   }
 
   const body = await readJsonBody(request, 64 * 1024);
-  const result = await deletePost({ id: user.id, username: user.username }, body.id);
+  const result = await deletePost(viewerOf(user, auth.actor.pat), body.id);
 
   if (result.ok === false) {
     return json({ ok: false, error: result.error }, { status: result.status });

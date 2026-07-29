@@ -50,7 +50,8 @@ export const action = async ({ request }: { request: Request }) => {
     name: body?.name,
     scopes: body?.scopes,
     expiresInMs: body?.expiresInMs,
-    maxUses: body?.maxUses
+    maxUses: body?.maxUses,
+    onlyCreatedThings: body?.onlyCreatedThings
   });
   if (result.ok === false) {
     return json({ ok: false, error: result.error }, { status: result.status });

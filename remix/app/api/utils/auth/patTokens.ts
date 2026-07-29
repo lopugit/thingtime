@@ -47,6 +47,9 @@ export type PublicPatToken = {
   id: string; // the session jti — what list/revoke exchange
   name: string;
   scopes: string[];
+  // sandbox: permissions apply only to things this token itself created
+  // (things.ts stamps createdByTokenId on every PAT-created thing)
+  onlyCreatedThings: boolean;
   createdAt: string;
   expiresAt: string | null;
   maxUses: number | null;
@@ -77,6 +80,7 @@ export const toPublicPatToken = (session: SessionDoc): PublicPatToken => {
     id: session.jti,
     name: typeof meta.name === 'string' && meta.name ? meta.name : 'API token',
     scopes: patSessionScopes(meta),
+    onlyCreatedThings: meta.onlyCreatedThings === true,
     createdAt: new Date(session.createdAt).toISOString(),
     expiresAt: expiresAt ? expiresAt.toISOString() : null,
     maxUses,
@@ -92,6 +96,7 @@ export type MintPatInput = {
   scopes?: unknown;
   expiresInMs?: unknown;
   maxUses?: unknown;
+  onlyCreatedThings?: unknown;
 };
 
 export type MintPatResult =
@@ -155,6 +160,7 @@ export const mintPatToken = async (userId: string, input: MintPatInput): Promise
       scopes,
       maxUses,
       usesRemaining: maxUses,
+      onlyCreatedThings: input.onlyCreatedThings === true,
       createdVia: 'token-minter'
     }
   });
@@ -227,6 +233,9 @@ export type PatContext = {
   jti: string;
   name: string;
   scopes: string[];
+  // sandbox: this token's permissions apply only to things it created —
+  // things.ts viewerOf(user, pat) turns this into stamp checks
+  onlyCreatedThings: boolean;
   expiresAt: Date | null;
   maxUses: number | null;
   // remaining AFTER this request's consumption
@@ -295,6 +304,7 @@ export const resolveThingsActor = async (
           jti: session.jti,
           name: typeof session.meta?.name === 'string' ? session.meta.name : 'API token',
           scopes,
+          onlyCreatedThings: session.meta?.onlyCreatedThings === true,
           expiresAt: session.expiresAt ? new Date(session.expiresAt) : null,
           maxUses,
           usesRemaining: maxUses === null ? null : Math.max(0, (before ?? 0) - 1)

@@ -80,6 +80,11 @@ export type ThingDoc = {
   visibility?: ThingVisibility; // v1 residue (mapped onto acl at read time)
   targetId?: string | null;
   tags?: string[];
+  // Provenance stamp: the personal-access-token session (jti) that created
+  // this thing, when it was created through a PAT (auth/patTokens.ts). Never
+  // projected publicly. Sandboxed tokens (onlyCreatedThings) may only aim
+  // mutations/engagement at things carrying their own stamp.
+  createdByTokenId?: string;
   createdAt: Date;
   updatedAt: Date;
   // System kinds only (user/theme/feed-algorithm/waitlist — the collections
@@ -193,7 +198,14 @@ export type PublicThing = {
 // Who is looking. Routes pass { id, username } from the authed PublicUser;
 // internal callers may only have an id (username-specific acl exclusions
 // simply can't match then). Plain string ids are accepted for compat.
-export type Viewer = { id: string; username?: string | null } | null;
+// When the actor is a personal access token, `pat` rides along: tokenId
+// stamps everything the token creates (createdByTokenId), and
+// onlyCreatedThings sandboxes its mutations to those stamped things.
+export type Viewer = {
+  id: string;
+  username?: string | null;
+  pat?: { tokenId: string; onlyCreatedThings: boolean } | null;
+} | null;
 export const asViewer = (value: string | Viewer | null | undefined): Viewer =>
   typeof value === 'string' ? { id: value } : value || null;
 
@@ -245,9 +257,33 @@ export const isFail = (value: unknown): value is Fail =>
   !!value && typeof value === 'object' && !Array.isArray(value) && (value as any).ok === false;
 
 // Route-layer adapter: the authed user (or null) → the Viewer acl evaluation
-// expects. Shared so every route passes the same shape.
-export const viewerOf = (user: { id: string; username: string } | null): Viewer =>
-  user ? { id: user.id, username: user.username } : null;
+// expects. Shared so every route passes the same shape. Routes resolving via
+// resolveThingsActor pass the pat context so creates stamp provenance and
+// sandboxed tokens stay inside their own creations.
+export const viewerOf = (
+  user: { id: string; username: string } | null,
+  pat?: { jti: string; onlyCreatedThings?: boolean } | null
+): Viewer =>
+  user
+    ? {
+        id: user.id,
+        username: user.username,
+        ...(pat ? { pat: { tokenId: pat.jti, onlyCreatedThings: pat.onlyCreatedThings === true } } : {})
+      }
+    : null;
+
+// Token sandbox (auth/patTokens.ts onlyCreatedThings): the stamp a sandboxed
+// viewer is confined to, or null for session actors / unsandboxed tokens.
+export const patSandboxOf = (viewer: Viewer): string | null =>
+  viewer?.pat?.onlyCreatedThings ? viewer.pat.tokenId : null;
+
+const patSandboxBlocks = (viewer: Viewer, doc: ThingDoc): boolean => {
+  const tokenId = patSandboxOf(viewer);
+  return !!tokenId && doc.createdByTokenId !== tokenId;
+};
+
+const patSandboxFail = (): Fail =>
+  fail(403, 'This token is sandboxed to its own creations — it can only touch things it created 🧸');
 
 // ---------------------------------------------------------------------------
 // Era helpers — one place that knows how to read both doc generations.
@@ -458,6 +494,11 @@ export const createThing = async (
         if (root) target = root;
       }
     }
+    // Sandboxed tokens may only ATTACH to their own creations (comment/react/
+    // save/share on a foreign thing is engagement outside the sandbox). For
+    // shares this applies to the final root — re-sharing a token-created share
+    // of someone else's post would attach to that foreign root, so it blocks.
+    if (patSandboxBlocks(viewer, target)) return patSandboxFail();
     targetId = target.shareId;
   } else if (input.targetId !== undefined && input.targetId !== null) {
     return fail(400, `thingtime ${validated.thingtime.join('+')} does not take a targetId`);
@@ -508,6 +549,9 @@ export const createThing = async (
     acl,
     targetId,
     tags: allTags,
+    // every PAT-created thing carries its token's stamp (sandboxed or not) —
+    // free provenance, and what onlyCreatedThings sandboxes confine to
+    ...(viewer?.pat ? { createdByTokenId: viewer.pat.tokenId } : {}),
     createdAt: now,
     updatedAt: now
   };
@@ -1495,6 +1539,8 @@ export const toggleReaction = async (
   }
   const target = await findViewableThing(shareId, viewer);
   if (!target) return fail(404, 'Post not found');
+  // guard the REMOVE path too — createThing only covers the add
+  if (patSandboxBlocks(viewer, target)) return patSandboxFail();
 
   await ensureIndexes(); // the reaction unique index must exist before insert
   const things = await getThingsCollection();
@@ -1558,6 +1604,8 @@ export const toggleSave = async (
   if (!viewer?.id) return fail(401, 'Unauthorized');
   const target = await findViewableThing(shareId, viewer);
   if (!target) return fail(404, 'Thing not found');
+  // guard the UNSAVE path too — createThing only covers the save
+  if (patSandboxBlocks(viewer, target)) return patSandboxFail();
 
   const things = await getThingsCollection();
   const existing = await things
@@ -1607,6 +1655,9 @@ export const addComment = async (
   const viewerId = viewer.id;
   const target = await findViewableThing(shareId, viewer);
   if (!target) return fail(404, 'Post not found');
+  // fail before the residue migration + count queries (createThing would
+  // catch it anyway — this is the earlier, cheaper exit)
+  if (patSandboxBlocks(viewer, target)) return patSandboxFail();
 
   // first write claims any legacy embedded residue into standalone things
   await migrateThingInteractions(target);
@@ -1673,6 +1724,7 @@ export const sharePost = async (
   const viewerId = viewer.id;
   const original = await findViewableThing(shareId, viewer);
   if (!original || !isPostThing(original)) return fail(404, 'Post not found');
+  if (patSandboxBlocks(viewer, original)) return patSandboxFail();
   if (original.ownerId !== viewerId && !aclOf(original).includes(ACL_ALL)) {
     return fail(403, 'Only public posts can be shared');
   }
@@ -1705,13 +1757,24 @@ export const deleteThing = async (viewerInput: string | Viewer, shareId: unknown
   const things = await getThingsCollection();
   // system kinds (a user's own account thing!) are never deletable through the
   // generic DELETE — $nin on the multikey array excludes them atomically. Their
-  // dedicated endpoints (themes, algorithms) own deletion.
+  // dedicated endpoints (themes, algorithms) own deletion. Sandboxed tokens add
+  // their stamp to the same atomic filter — no check-then-delete race.
+  const sandboxTokenId = patSandboxOf(viewer);
   const deleted = (await things.findOneAndDelete({
     shareId: shareId.trim(),
     ownerId: viewer.id,
-    thingtime: { $nin: [...PROTECTED_THINGTIME] }
+    thingtime: { $nin: [...PROTECTED_THINGTIME] },
+    ...(sandboxTokenId ? { createdByTokenId: sandboxTokenId } : {})
   } as any)) as any as ThingDoc | null;
-  if (!deleted) return fail(404, 'Thing not found');
+  if (!deleted) {
+    // distinguish "not yours to touch" from "gone" so a sandboxed AI gets an
+    // actionable error instead of a phantom 404 (failure path only — the
+    // success path stays a single atomic op)
+    if (sandboxTokenId && (await things.findOne({ shareId: shareId.trim(), ownerId: viewer.id } as any))) {
+      return patSandboxFail();
+    }
+    return fail(404, 'Thing not found');
+  }
   // comments/reactions/saves attached to the deleted thing go with it (v2
   // things AND interim kind docs); share things survive so they can render
   // their 'original unavailable' placeholder
@@ -1750,6 +1813,7 @@ export const updateThing = async (
   const things = await getThingsCollection();
   const doc = (await things.findOne({ shareId: shareId.trim(), ownerId: viewer.id } as any)) as any as ThingDoc | null;
   if (!doc || (!isV2(doc) && !isPostThing(doc))) return fail(404, 'Thing not found');
+  if (patSandboxBlocks(viewer, doc)) return patSandboxFail();
 
   const thingtime = thingtimeOf(doc);
   // system kinds mutate only through their dedicated utils (profile update,
