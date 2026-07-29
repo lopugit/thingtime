@@ -372,3 +372,27 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] Space validation: space shorter than 8 chars 400s; usernames are
       always 'sandbox-' prefixed so pooled feeds can't impersonate real
       accounts.
+
+## Rate limiting & index-ensure reliability (`api/utils/rateLimit/enforce.ts`, `api/utils/mongodb/collections.ts`)
+
+- [ ] Healthy path: burst a rate-limited endpoint past its limit (e.g.
+      `things.search`, 120/min → 121 requests) → 429 with `Retry-After`,
+      and NO `[rate-limit]`/`[mongodb]` error lines in the logs.
+- [ ] Limiter outage is AUDIBLE, never silent: break the index battery
+      (drop `things_v2`'s `ownerId_1_crystal.appId_1_crystal.key_1` unique
+      index, insert two docs sharing `(ownerId, crystal.appId, crystal.key)`),
+      start a FRESH API process, hit a limited endpoint → the response still
+      succeeds (fail-open) AND the logs show one
+      `[mongodb] ensureIndexes failed building things.<index> — retrying in 60s`
+      line naming the broken index, plus a
+      `[rate-limit] enforcement unavailable for <rule> — failing open` line per
+      request. Regression class: a bare `catch {}` fail-open invisibly disabled
+      ALL rate limiting (2026-07 perf audit).
+- [ ] Failure is cached with a cooldown, not retried per request: further
+      requests inside the same 60s window return instantly and add NO new
+      `[mongodb]` lines (the old reset-to-null re-ran the whole ~60-command
+      createIndex battery against the DB on every request — a retry storm on
+      top of the fail-open).
+- [ ] Self-heals after cleanup: delete the dup docs, wait out the 60s
+      cooldown, hit the endpoint again → no new error lines, the unique index
+      is rebuilt (`getIndexes()` shows it), and limits enforce again.
