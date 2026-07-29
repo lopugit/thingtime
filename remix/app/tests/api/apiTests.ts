@@ -1329,6 +1329,68 @@ export const apiTests: ApiTestDefinition[] = [
     expect: expectJson([200, 429], (body) => body?.ok === true || typeof body?.error === 'string', 'Waitlist join succeeded (or was rate-limited with an error shape).')
   },
   {
+    id: 'apps-sandbox-mint',
+    name: 'Sandbox token mint',
+    description:
+      'POST /api/v1/oauth/sandbox mints a real revocable token for any clientId — the credential that exercises the full app-namespace surface pre-registration.',
+    group: 'apps',
+    method: 'POST',
+    path: '/api/v1/oauth/sandbox',
+    mutates: true,
+    body: { clientId: 'ttapp_api_tests', scope: 'profile app-data' },
+    expect: expectJson(
+      [200, 429],
+      (body) =>
+        (body?.ok === true && body?.sandbox === true && typeof body?.token === 'string' && Array.isArray(body?.scopes)) ||
+        typeof body?.error === 'string',
+      'Sandbox mint returned a Bearer token + scopes (or was rate-limited with an error shape).'
+    )
+  },
+  {
+    id: 'apps-app-data-needs-token',
+    name: 'App storage requires an app token',
+    description: 'GET /api/v1/app-data rejects sessions and anonymous callers — the embed surface is app-Bearer-only.',
+    group: 'apps',
+    method: 'GET',
+    path: '/api/v1/app-data',
+    expect: expectJson([401], (body) => body?.ok === false, 'App-data without an app token is 401.')
+  },
+  {
+    id: 'apps-usage-needs-token',
+    name: 'Storage usage requires an app token',
+    description: 'GET /api/v1/app-data/usage (the byte-budget ledger) is app-Bearer-only like the rest of the embed surface.',
+    group: 'apps',
+    method: 'GET',
+    path: '/api/v1/app-data/usage',
+    expect: expectJson([401], (body) => body?.ok === false, 'Usage without an app token is 401.')
+  },
+  {
+    id: 'apps-data-summary-guarded',
+    name: 'App data summary requires a session',
+    description: 'GET /api/v1/apps/data-summary is the first-party browse surface — anonymous callers get 401, sessions get the per-app roster.',
+    group: 'apps',
+    method: 'GET',
+    path: '/api/v1/apps/data-summary',
+    expect: expectJson(
+      [200, 401, 429],
+      (body) => (body?.ok === true && Array.isArray(body?.apps)) || (body?.ok === false && typeof body?.error === 'string'),
+      'Summary returned the apps roster (session) or a guarded error shape (anonymous).'
+    )
+  },
+  {
+    id: 'apps-data-shared-needs-app-id',
+    name: 'App-view lens validates appId',
+    description: 'GET /api/v1/apps/data/shared without appId is a 400 for sessions (401 anonymous) — never an unfiltered read.',
+    group: 'apps',
+    method: 'GET',
+    path: '/api/v1/apps/data/shared',
+    expect: expectJson(
+      [400, 401, 429],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'The lens refused to read without an appId (or without a session).'
+    )
+  },
+  {
     id: 'docs-markdown-bundle',
     name: 'API docs Markdown bundle',
     description: 'GET /api/docs returns one text/markdown document covering the whole endpoint catalog.',
