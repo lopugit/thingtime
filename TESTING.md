@@ -307,6 +307,11 @@ is fixed, and cite the checklist you ran in the PR description.
       never stacks history entries, refresh restores the search, /docs?q=acl
       deep-links it, result clicks carry ?q= along (so the landed URL is
       shareable with its search context), and × strips it.
+- [ ] Typing is instant and never drops keys: the input is locally
+      controlled and the URL syncs on a ~200ms debounce — fast typing on
+      /docs/api (the heaviest page) must not lag, and the ?q= write lands
+      once after the pause (the static drawer lists are memoized so
+      keystrokes don't re-render the 78-endpoint menu).
 - [ ] The desktop drawer never shows an internal scrollbar: content renders
       full height, sticks under the top nav only while it fits the viewport,
       and taller content (search results, expanded endpoint lists) flows with

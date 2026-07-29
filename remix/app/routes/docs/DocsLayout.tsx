@@ -123,7 +123,7 @@ type DrawerDesignEntryListProps = {
   onNavigate?: () => void;
 };
 
-function DrawerDesignEntryList({ onNavigate }: DrawerDesignEntryListProps) {
+const DrawerDesignEntryList = React.memo(function DrawerDesignEntryList({ onNavigate }: DrawerDesignEntryListProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [query, setQuery] = React.useState('');
   const selectedEntry =
@@ -244,13 +244,13 @@ function DrawerDesignEntryList({ onNavigate }: DrawerDesignEntryListProps) {
       </Stack>
     </Stack>
   );
-}
+});
 
 type DrawerApiEndpointListProps = {
   onNavigate?: () => void;
 };
 
-function DrawerApiEndpointList({ onNavigate }: DrawerApiEndpointListProps) {
+const DrawerApiEndpointList = React.memo(function DrawerApiEndpointList({ onNavigate }: DrawerApiEndpointListProps) {
   const location = useLocation();
   const activeHash = location.hash.replace(/^#/, '');
   const activePathname = location.pathname;
@@ -315,13 +315,13 @@ function DrawerApiEndpointList({ onNavigate }: DrawerApiEndpointListProps) {
       ))}
     </Stack>
   );
-}
+});
 
 type DrawerDesignSystemListProps = {
   onNavigate?: () => void;
 };
 
-function DrawerDesignSystemList({ onNavigate }: DrawerDesignSystemListProps) {
+const DrawerDesignSystemList = React.memo(function DrawerDesignSystemList({ onNavigate }: DrawerDesignSystemListProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedEntry =
     getDesignSystemEntryBySlug(searchParams.get('component')) || designSystemEntries[0];
@@ -397,13 +397,13 @@ function DrawerDesignSystemList({ onNavigate }: DrawerDesignSystemListProps) {
       </Stack>
     </Stack>
   );
-}
+});
 
 type DrawerConceptListProps = {
   onNavigate?: () => void;
 };
 
-function DrawerConceptList({ onNavigate }: DrawerConceptListProps) {
+const DrawerConceptList = React.memo(function DrawerConceptList({ onNavigate }: DrawerConceptListProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedEntry =
     getConceptEntryBySlug(searchParams.get('concept')) || conceptEntries[0];
@@ -479,7 +479,7 @@ function DrawerConceptList({ onNavigate }: DrawerConceptListProps) {
       </Stack>
     </Stack>
   );
-}
+});
 
 type DocsDrawerContentProps = {
   closeTestId?: string;
@@ -492,30 +492,64 @@ function DocsDrawerContent({ closeTestId, onClose, pathname, showClose = false }
   const [apiOpen, setApiOpen] = React.useState(isApiPath(pathname));
   // The search query lives in the URL (?q=) so refresh persists it, searches
   // are deep-linkable, and both drawer instances (desktop + mobile) share one
-  // state. replace:true keeps typing out of the history stack.
+  // state. The INPUT is locally controlled though — driving it straight off
+  // the URL made every keystroke a router navigation (whole docs page
+  // re-renders + transition-wrapped value round-trip = dropped keys), so the
+  // URL syncs on a short debounce instead. replace:true keeps typing out of
+  // the history stack.
   const [searchParams, setSearchParams] = useSearchParams();
-  const searchQuery = searchParams.get('q') || '';
+  const urlSearchQuery = searchParams.get('q') || '';
+  const [searchQuery, setSearchQueryState] = React.useState(urlSearchQuery);
+  const pendingUrlQueryRef = React.useRef<string | null>(null);
+  const urlSyncTimerRef = React.useRef<ReturnType<typeof window.setTimeout>>();
   const searching = searchQuery.trim().length > 0;
 
   const setSearchQuery = React.useCallback(
     (next: string) => {
-      setSearchParams(
-        (params) => {
-          const merged = new URLSearchParams(params);
+      setSearchQueryState(next);
+      pendingUrlQueryRef.current = next;
 
-          if (next) {
-            merged.set('q', next);
-          } else {
-            merged.delete('q');
-          }
+      window.clearTimeout(urlSyncTimerRef.current);
+      urlSyncTimerRef.current = window.setTimeout(() => {
+        setSearchParams(
+          (params) => {
+            const merged = new URLSearchParams(params);
 
-          return merged;
-        },
-        { replace: true }
-      );
+            if (next) {
+              merged.set('q', next);
+            } else {
+              merged.delete('q');
+            }
+
+            return merged;
+          },
+          { replace: true }
+        );
+      }, 200);
     },
     [setSearchParams]
   );
+
+  // Adopt external ?q= changes (deep links, back/forward, the other drawer
+  // instance) unless our own debounced write is still in flight.
+  React.useEffect(() => {
+    if (pendingUrlQueryRef.current === null) {
+      setSearchQueryState(urlSearchQuery);
+    } else if (urlSearchQuery === pendingUrlQueryRef.current) {
+      pendingUrlQueryRef.current = null;
+    }
+  }, [urlSearchQuery]);
+
+  // A navigation's destination already carries the right ?q= (result links)
+  // or none (menu links) — drop any pending write and adopt the landed URL.
+  React.useEffect(() => {
+    window.clearTimeout(urlSyncTimerRef.current);
+    pendingUrlQueryRef.current = null;
+    setSearchQueryState(searchParams.get('q') || '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
+
+  React.useEffect(() => () => window.clearTimeout(urlSyncTimerRef.current), []);
 
   React.useEffect(() => {
     if (isApiPath(pathname)) {
