@@ -117,6 +117,10 @@ export type ThingDoc = {
   acl?: string[]; // v2 — tt: grants/exclusions (see schemas/registry.ts)
   visibility?: ThingVisibility; // v1 residue (mapped onto acl at read time)
   targetId?: string | null;
+  // Drive-style organization (v2 only): shareId of a folder thing the SAME
+  // owner holds, or null/absent for the root of /things. Containment lives on
+  // the child (FUNDAMENTALS §3), so folders never grow with their contents.
+  folderId?: string | null;
   tags?: string[];
   // Token grants: tt:token/<id> entries naming the personal-access-token
   // sessions (auth/patTokens.ts) whose sandboxed mutations may touch this
@@ -247,6 +251,7 @@ export type PublicThing = {
   visibility: ThingVisibility | 'app';
   acl: string[];
   targetId: string | null;
+  folderId: string | null;
   crystal: Record<string, any>;
   extended: unknown | null;
   tags: string[];
@@ -604,6 +609,9 @@ const targetIdOf = (doc: ThingDoc): string | null => {
   return doc.shareOfId || null;
 };
 
+// folder containment (v2 only — v1 predates folders and reads as root)
+const folderIdOf = (doc: ThingDoc): string | null => (isV2(doc) ? doc.folderId || null : null);
+
 // Query fragment matching post things across both eras. v2 posts carry
 // thingtime:['post',...]; v1 posts carry kind:'post' (migration unsets kind).
 // Rich comments are ["post","comment"] things — posts by schema, but they live
@@ -683,6 +691,71 @@ export const sanitizeShareId = (value: unknown): string | null | Fail => {
 };
 
 // ---------------------------------------------------------------------------
+// Folders (see folderSchema in schemas/registry.ts): containment is a folderId
+// pointer on the child. These helpers are the ONE place folder assignment is
+// validated — createThing, updateThing, and the bulk ops all resolve through
+// them, so a folder pointer can never reference another user's folder, a
+// non-folder thing, or (for folder moves) its own descendant.
+
+// Mechanical children (reactions, saves) live under their target and never
+// surface as content — filing them is meaningless. Comments/shares/posts are
+// authored content and CAN be filed: folderId is pure owner-side organization,
+// orthogonal to targetId attachment and inherit visibility.
+const FOLDER_UNFILEABLE = ['reaction', 'save'];
+// Ancestor-walk bound. Legitimate folder trees are shallow; the walk fails
+// closed at the cap so a corrupt chain can never loop the server.
+const MAX_FOLDER_DEPTH = 64;
+
+// Validates a raw folderId input for a thing of the given schemas. Returns the
+// resolved folder shareId, null for root, or a Fail. Ownership is strict: the
+// folder must belong to the same owner (organization is personal).
+const resolveFolderAssignment = async (
+  ownerId: string,
+  rawFolderId: unknown,
+  thingtime: string[]
+): Promise<{ ok: true; folderId: string | null } | Fail> => {
+  if (rawFolderId === undefined || rawFolderId === null || rawFolderId === '') {
+    return { ok: true, folderId: null };
+  }
+  if (typeof rawFolderId !== 'string' || !rawFolderId.trim()) {
+    return fail(400, 'folderId must be a folder thing id (or null for the root)');
+  }
+  if (thingtime.some((id) => FOLDER_UNFILEABLE.includes(id))) {
+    return fail(400, `${thingtime.join('+')} things live under their target and cannot be filed in folders`);
+  }
+  const things = await getThingsCollection();
+  const folder = (await things.findOne({
+    shareId: rawFolderId.trim(),
+    ownerId,
+    thingtime: 'folder'
+  } as any)) as any as ThingDoc | null;
+  if (!folder) return fail(404, 'Folder not found');
+  return { ok: true, folderId: folder.shareId };
+};
+
+// True when `needleId` appears in the ancestor chain starting AT folderId
+// (inclusive). Used to refuse moving a folder into itself/its descendants.
+// Cycle-safe (visited set) and depth-capped; anything suspicious reads as
+// "contains" so the move fails closed.
+const folderAncestryContains = async (ownerId: string, folderId: string, needleId: string): Promise<boolean> => {
+  const things = await getThingsCollection();
+  const visited = new Set<string>();
+  let current: string | null = folderId;
+  for (let hop = 0; current && hop < MAX_FOLDER_DEPTH; hop += 1) {
+    if (current === needleId) return true;
+    if (visited.has(current)) return true; // existing cycle — fail closed
+    visited.add(current);
+    const doc = (await things.findOne(
+      { shareId: current, ownerId, thingtime: 'folder' } as any,
+      { projection: { folderId: 1 } } as any
+    )) as any as ThingDoc | null;
+    if (!doc) return false; // chain ends at root (or a since-deleted parent)
+    current = doc.folderId || null;
+  }
+  return current !== null; // depth cap hit with chain unresolved — fail closed
+};
+
+// ---------------------------------------------------------------------------
 // Unified creation — the one path every thing kind goes through.
 
 export type CreateThingInput = {
@@ -692,6 +765,7 @@ export type CreateThingInput = {
   acl?: unknown;
   visibility?: unknown; // legacy alias, mapped onto acl
   targetId?: unknown;
+  folderId?: unknown; // shareId of an owned folder thing (null/omitted = root)
   tags?: unknown;
   // tt:token/<id> grants to seed on the new thing (the creating token's own
   // entry is added automatically when a PAT creates)
@@ -851,9 +925,16 @@ export const createThing = async (
     acl = [ACL_INHERIT];
   } else if (validated.requiresTarget && !validated.thingtime.includes('post')) {
     acl = [ACL_INHERIT];
+  } else if (validated.thingtime.includes('folder')) {
+    // organization structure is personal — folders default private, unlike
+    // the public default for standalone content things
+    acl = inputAcl || [ACL_OWNER];
   } else {
     acl = inputAcl || [ACL_ALL];
   }
+
+  const folderAssignment = await resolveFolderAssignment(ownerId, input.folderId, validated.thingtime);
+  if (isFail(folderAssignment)) return folderAssignment;
 
   if (validated.thingtime.includes('comment') && target) {
     const commentCount = await countCommentsOf(target);
@@ -891,6 +972,7 @@ export const createThing = async (
     ownerId,
     acl,
     targetId,
+    folderId: folderAssignment.folderId,
     tags: allTags,
     // every PAT-created thing carries its creator's grant (sandboxed or not —
     // free provenance) plus any entries the caller seeded; a sandboxed
@@ -1492,6 +1574,7 @@ export const toPublicThings = async (docs: ThingDoc[], viewerInput: string | Vie
       visibility: visibilityFromAcl(aclOf(doc)),
       acl: aclOf(doc),
       targetId: targetIdOf(doc),
+      folderId: folderIdOf(doc),
       crystal: crystalOf(doc),
       extended: doc.extended ?? null,
       tags: doc.tags || [],
@@ -1981,6 +2064,9 @@ export const getThing = async (
 export type ListThingsQuery = {
   thingtime?: string[];
   targetId?: string | null;
+  // folder browse (own-things mode only): 'root' = things not filed anywhere,
+  // a folder shareId = that folder's direct children, absent = everything
+  folder?: string | null;
   cursor?: string | null;
   limit?: number;
   // First-party browsing of ONE app's namespace (the in-Thingtime "what has
@@ -2004,6 +2090,7 @@ export const listThings = async (
 
   let match: Record<string, any>;
   if (query.targetId) {
+    if (query.folder) return fail(400, 'folder filtering applies to your own things, not a target listing');
     const target = await findViewableThingAs(query.targetId, viewer, app);
     if (!target) return fail(404, 'Thing not found');
     // under the app lens, children are namespace things too — the owner's
@@ -2023,6 +2110,15 @@ export const listThings = async (
       thingtime: { $nin: [...PROTECTED_THINGTIME, ...MESSENGER_THINGTIME] },
       $or: [{ thingtime: { $exists: true } }, { kind: 'post' }]
     };
+    const folder = typeof query.folder === 'string' ? query.folder.trim() : '';
+    if (folder === 'root') {
+      // v1 docs and pre-folder v2 docs have no folderId at all — both read as root
+      match.folderId = { $in: [null] };
+    } else if (folder) {
+      const assignment = await resolveFolderAssignment(viewer.id, folder, []);
+      if (isFail(assignment)) return assignment;
+      match.folderId = assignment.folderId;
+    }
     // narrow to one app's namespace (session-auth data browser)
     if (typeof query.appId === 'string' && query.appId.trim()) {
       match = withMatch(match, { appId: query.appId.trim() });
@@ -2974,6 +3070,15 @@ export const deleteThing = async (viewerInput: string | Viewer, shareId: unknown
 			if (rootResult.state === 'blocked') continue;
 			if (rootResult.state === 'deleted') {
 				await refundDeletedNamespaceDocs([rootResult.doc]);
+				// deleting a folder never deletes what's inside it — contents (and
+				// subfolders) re-parent to the deleted folder's own parent, so the
+				// worst a folder delete can do to your things is flatten them one level
+				if (thingtimeOf(rootResult.doc).includes('folder')) {
+					await things.updateMany(
+						{ ownerId: viewer.id, folderId: rootResult.doc.shareId } as any,
+						{ $set: { folderId: rootResult.doc.folderId || null, updatedAt: new Date() } } as any
+					);
+				}
   return { ok: true };
 			}
 
@@ -2999,6 +3104,7 @@ export type UpdateThingInput = {
   extended?: unknown;
   acl?: unknown;
   visibility?: unknown; // legacy alias, mapped onto acl
+  folderId?: unknown; // move: an owned folder's shareId, or null for the root
   tags?: unknown;
   // tt:token/<id> grants — replaced whole when provided (null clears)
   tokenAcl?: unknown;
@@ -3120,6 +3226,24 @@ export const updateThing = async (
   if (isFail(extended)) return extended;
   const hasExtendedChange = input.extended !== undefined;
 
+  // Move: folderId only when provided (undefined leaves the thing where it is,
+  // null files it back at the root). Moving a folder additionally refuses any
+  // destination inside its own subtree — re-parenting must never mint a cycle.
+  const hasFolderChange = input.folderId !== undefined;
+  let nextFolderId = folderIdOf(doc);
+  if (hasFolderChange) {
+    const assignment = await resolveFolderAssignment(viewer.id, input.folderId, thingtime);
+    if (isFail(assignment)) return assignment;
+    if (
+      assignment.folderId &&
+      thingtime.includes('folder') &&
+      (await folderAncestryContains(viewer.id, assignment.folderId, doc.shareId))
+    ) {
+      return fail(400, 'A folder cannot be moved into itself or its own subfolders');
+    }
+    nextFolderId = assignment.folderId;
+  }
+
   // token grants replace whole too (merging grant lists is ambiguous; null
   // clears). The sandbox guard above already ran, so a sandboxed token can
   // only re-grant on things it holds a grant on — and it may lock itself out
@@ -3173,6 +3297,7 @@ export const updateThing = async (
     ...(hasExtendedChange ? { extended: extended.value } : {}),
     ...(nextTokenAcl !== undefined ? { tokenAcl: nextTokenAcl } : {}),
     targetId: targetIdOf(doc),
+    ...(hasFolderChange ? { folderId: nextFolderId } : {}),
     tags,
     acl,
     updatedAt: now,
@@ -3306,6 +3431,110 @@ export const upsertThing = async (
   const updated = await updateThing(viewer || ownerId, shareId, input as UpdateThingInput, { replaceCrystal: true }, app);
   if (isFail(updated)) return updated;
   return { ok: true, created: false, thing: updated.thing, post: updated.post };
+};
+
+// ---------------------------------------------------------------------------
+// Bulk operations for /things multi-select: move / copy / delete up to
+// MAX_BULK_IDS things in one request. Each item goes through the SAME
+// single-item path the app uses everywhere else (updateThing / createThing /
+// deleteThing) — bulk is a loop, never a second code path, so every ownership,
+// protected-kind, folder, cycle, and validation rule holds identically
+// (DECISIONS.md: test == live == direct API).
+
+export const MAX_BULK_IDS = 100;
+const BULK_OPS = ['move', 'copy', 'delete'] as const;
+export type BulkOp = (typeof BULK_OPS)[number];
+
+export type BulkThingsInput = {
+  op?: unknown;
+  ids?: unknown;
+  folderId?: unknown; // move/copy destination (null/omitted = root)
+};
+
+export type BulkItemResult = { id: string; ok: boolean; error?: string; newId?: string };
+
+// Kinds that can't be duplicated: attached children live under their target
+// (a copy would dangle), and folder copies would need a recursive tree walk —
+// move the folder instead.
+const UNCOPYABLE = ['comment', 'reaction', 'save', 'share', 'folder'];
+
+export const bulkThings = async (
+  viewerInput: string | Viewer,
+  input: BulkThingsInput
+): Promise<Fail | { ok: true; op: BulkOp; results: BulkItemResult[]; succeeded: number; failed: number }> => {
+  const viewer = asViewer(viewerInput);
+  if (!viewer?.id) return fail(401, 'Unauthorized');
+
+  const op = typeof input.op === 'string' ? (input.op as BulkOp) : null;
+  if (!op || !BULK_OPS.includes(op)) return fail(400, 'op must be move, copy, or delete');
+
+  if (!Array.isArray(input.ids) || !input.ids.length) return fail(400, 'ids must be a non-empty list of thing ids');
+  const ids: string[] = [];
+  for (const entry of input.ids) {
+    if (typeof entry !== 'string' || !entry.trim()) return fail(400, 'ids must be a non-empty list of thing ids');
+    const id = entry.trim();
+    if (!ids.includes(id)) ids.push(id);
+  }
+  if (ids.length > MAX_BULK_IDS) return fail(400, `At most ${MAX_BULK_IDS} things per bulk request`);
+
+  // move/copy destination validated once up front so a bad folder fails the
+  // whole request loudly instead of 100 identical per-item errors
+  let folderId: string | null = null;
+  if (op === 'move' || op === 'copy') {
+    const assignment = await resolveFolderAssignment(viewer.id, input.folderId, []);
+    if (isFail(assignment)) return assignment;
+    folderId = assignment.folderId;
+  }
+
+  const things = await getThingsCollection();
+  const results: BulkItemResult[] = [];
+  for (const id of ids) {
+    if (op === 'delete') {
+      const result = await deleteThing(viewer, id);
+      results.push(result.ok ? { id, ok: true } : { id, ok: false, error: result.error });
+      continue;
+    }
+    if (op === 'move') {
+      const result = await updateThing(viewer, id, { folderId });
+      results.push(result.ok ? { id, ok: true } : { id, ok: false, error: result.error });
+      continue;
+    }
+    // copy — mint a NEW thing through the real create path (validation, acl
+    // defaults, provenance re-checks, storage accounting all apply)
+    const doc = (await things.findOne({ shareId: id, ownerId: viewer.id } as any)) as any as ThingDoc | null;
+    if (!doc || (!isV2(doc) && !isPostThing(doc))) {
+      results.push({ id, ok: false, error: 'Thing not found' });
+      continue;
+    }
+    const thingtime = thingtimeOf(doc);
+    const blocked = UNCOPYABLE.find((kind) => thingtime.includes(kind));
+    if (blocked) {
+      results.push({ id, ok: false, error: `${blocked} things can’t be copied` });
+      continue;
+    }
+    const crystal: Record<string, any> = { ...crystalOf(doc) };
+    // free-form data things get the Drive-style name hint; typed crystals keep
+    // their exact (schema-bounded) fields
+    if (thingtime.includes('data') && typeof crystal.name === 'string' && crystal.name.trim()) {
+      crystal.name = `Copy of ${crystal.name}`.slice(0, 200);
+    }
+    const created = await createThing(
+      viewer.id,
+      {
+        thingtime,
+        crystal,
+        extended: doc.extended ?? undefined,
+        acl: aclOf(doc),
+        tags: doc.tags || [],
+        folderId
+      },
+      viewer
+    );
+    results.push(created.ok ? { id, ok: true, newId: created.doc.shareId } : { id, ok: false, error: created.error });
+  }
+
+  const succeeded = results.filter((entry) => entry.ok).length;
+  return { ok: true, op, results, succeeded, failed: results.length - succeeded };
 };
 
 // Public post count for a profile header — kept here so no route touches the

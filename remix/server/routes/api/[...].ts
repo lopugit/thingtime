@@ -116,6 +116,7 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/themes/delete': () => import('../../../app/routes/api/v1/themes/delete/_delete'),
   'v1/themes/shared': () => import('../../../app/routes/api/v1/themes/shared/_shared'),
   'v1/things': () => import('../../../app/routes/api/v1/things/_things'),
+  'v1/things/bulk': () => import('../../../app/routes/api/v1/things/bulk/_bulk'),
   'v1/tiers': () => import('../../../app/routes/api/v1/tiers/_tiers'),
   'v1/tokens': () => import('../../../app/routes/api/v1/tokens/_tokens'),
   'v1/tokens/revoke': () => import('../../../app/routes/api/v1/tokens/revoke/_revoke'),

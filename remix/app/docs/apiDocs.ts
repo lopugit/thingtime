@@ -5247,6 +5247,60 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'things-bulk',
+    group: 'things',
+    title: 'Bulk move / copy / delete',
+    endpoint: '/api/v1/things/bulk',
+    summary: 'Multi-select operations for /things: move, copy, or delete up to 100 owned things in one request.',
+    detail:
+      'Each id runs through the exact single-item path the dedicated endpoints use (updateThing, createThing, deleteThing), so every ownership, protected-kind, folder, and validation rule applies identically — bulk is a loop, never a second code path. move rewrites each thing’s folderId (folderId null or omitted = the /things root; the destination must be one of YOUR folder things). copy mints brand-new things through the real create path (fresh shareId, storage accounting, acl preserved) — comment/reaction/save/share/folder things can’t be copied. delete cascades like the single delete (attached comments/reactions/saves go with each thing; deleting a folder re-parents its contents to the folder’s parent instead of deleting them). Results are per-item: one bad id never fails the batch.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST op (move, copy, or delete), ids (1–100 shareIds you own), and folderId for move/copy destinations.',
+      'Read the per-item results list — each entry carries ok plus error (failures) or newId (copies).',
+      'succeeded and failed counts summarise the batch.',
+      'Handle 401 unauthenticated, 400 malformed batches, and 404 for an unknown destination folder.'
+    ],
+    requestExamples: [
+      {
+        name: 'Move things into a folder',
+        description: 'File two things inside an owned folder thing.',
+        method: 'POST',
+        body: { op: 'move', ids: ['thing_1', 'thing_2'], folderId: 'folder_abc' }
+      },
+      {
+        name: 'Bulk delete',
+        description: 'Delete a selection of owned things.',
+        method: 'POST',
+        body: { op: 'delete', ids: ['thing_1', 'thing_2'] }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Batch processed (per-item results).',
+        body: {
+          ok: true,
+          op: 'move',
+          results: [
+            { id: 'thing_1', ok: true },
+            { id: 'thing_2', ok: false, error: 'Thing not found' }
+          ],
+          succeeded: 1,
+          failed: 1
+        }
+      }
+    ],
+    notes: [
+      'Throttled on the things.write rate limit (things.write.service for service accounts) — one token per batch.',
+      'Folders organise /things: create one via POST /api/v1/things with thingtime ["folder"] and crystal { name, icon?, description? }; move a single thing with PATCH /api/v1/things { id, folderId }.'
+    ]
+  }),
+  endpoint({
     id: 'things-feed',
     group: 'things',
     title: 'Feed page',
