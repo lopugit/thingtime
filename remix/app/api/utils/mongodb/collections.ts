@@ -12,7 +12,19 @@ const getClientCached = async () => {
   if (!clientPromise) {
     clientPromise = (async () => {
       const { MongoClient } = await getMongoDb();
-      const client = new MongoClient(getMongoUri(), {});
+      // Serverless-tuned options. Driver defaults are maxPoolSize 100 and a
+      // 30s serverSelection timeout — on Atlas M0 (hard ~500-connection cap)
+      // a burst of instances each opening tens of connections (the boot-time
+      // index ensure is a ~55-command Promise.all) risks the cap, and an
+      // unreachable cluster would stall every request 30s instead of failing
+      // fast. appName makes this app attributable in Atlas metrics.
+      const client = new MongoClient(getMongoUri(), {
+        maxPoolSize: 10,
+        serverSelectionTimeoutMS: 5000,
+        connectTimeoutMS: 5000,
+        socketTimeoutMS: 30000,
+        appName: 'thingtime-api'
+      });
       await client.connect();
       return client;
     })().catch((err) => {
