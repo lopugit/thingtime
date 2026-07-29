@@ -1344,6 +1344,24 @@ export const apiTests: ApiTestDefinition[] = [
     body: { email: 'tt-api-test-waitlist@example.invalid' },
     expect: expectJson([200, 429], (body) => body?.ok === true || typeof body?.error === 'string', 'Waitlist join succeeded (or was rate-limited with an error shape).')
   },
+  {
+    id: 'docs-markdown-bundle',
+    name: 'API docs Markdown bundle',
+    description: 'GET /api/docs returns one text/markdown document covering the whole endpoint catalog.',
+    group: 'docs',
+    method: 'GET',
+    path: '/api/docs',
+    expect: ({ response, textBody }) => {
+      const markdown = (response.headers.get('Content-Type') || '').includes('text/markdown');
+      const hasTitle = textBody.includes('# Thingtime API reference');
+      // spot-check that catalog entries actually rendered
+      const hasEndpoints = textBody.includes('/api/v1/app-data/shared') && textBody.includes('/api/v1/things');
+      return {
+        pass: response.status === 200 && markdown && hasTitle && hasEndpoints,
+        details: `status ${response.status}, markdown content-type ${markdown}, title ${hasTitle}, endpoints ${hasEndpoints}`
+      };
+    }
+  },
   ...apiDocsSmokeTests
 ];
 

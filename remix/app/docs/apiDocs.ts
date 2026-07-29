@@ -55,6 +55,26 @@ const endpoint = (doc: Omit<ApiEndpointDoc, 'docsEndpoint'>): ApiEndpointDoc => 
 
 export const apiEndpointDocs: ApiEndpointDoc[] = [
   endpoint({
+    id: 'docs',
+    group: 'docs',
+    title: 'All API docs as Markdown',
+    endpoint: '/api/docs',
+    summary: 'Every Thingtime API endpoint documented in one Markdown file — made for AIs and humans alike.',
+    detail:
+      'GET returns text/markdown covering every endpoint in this catalog: methods, auth, summary, detail, ' +
+      'steps, request/response examples, and a curl call each. If you are an AI (or a person) discovering ' +
+      'the API by scanning /api* routes, fetch this once and you have the whole reference. Per-endpoint ' +
+      'JSON versions also exist at <endpoint>-docs (e.g. /api/v1/things-docs), and the human-readable ' +
+      'browser docs live at /docs/api. Anonymous, no auth.',
+    auth: { mode: 'none', description: 'Public — documentation data.' },
+    methods: ['GET'],
+    steps: ['GET /api/docs and read the Markdown.'],
+    requestExamples: [{ name: 'Fetch the reference', description: 'The whole API as one Markdown document.', method: 'GET' }],
+    responseExamples: [
+      { status: 200, description: 'Markdown document.', headers: { 'Content-Type': 'text/markdown; charset=utf-8' } }
+    ]
+  }),
+  endpoint({
     id: 'admin-rate-limits',
     group: 'admin',
     title: 'Rate-limit config',
@@ -1851,7 +1871,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'selector — only when the app exists AND the origin is on its allowlist, so the popup can refuse ' +
       'unregistered embedders before any login UI renders. Scope paths are hierarchical dot paths from ' +
       '/api/v1/oauth/scopes (unknown names 400; empty scope → profile + app-data). 404 for unknown ' +
-      'apps, 403 for origins not on the allowlist.',
+      'apps, 403 for origins not on the allowlist. EXCEPTION: add sandbox=1 and the lookup answers for ' +
+      'ANY clientId with a mock app payload (flagged sandbox: true, no allowlist check) so integrators ' +
+      'can build the consent flow before registering — pair with POST /api/v1/oauth/sandbox for a ' +
+      'working pretend token.',
     auth: { mode: 'none', description: 'Anonymous — returns only the app name + scope descriptors.' },
     methods: ['GET'],
     steps: ['GET with clientId, the embedding page origin, and the requested scope set.', 'Render the consent screen from the returned name + scope descriptors.'],
@@ -1947,6 +1970,73 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       { status: 403, description: 'Origin not allowlisted.', body: { ok: false, error: 'This origin is not on the app’s allowlist' } }
     ],
     notes: ['Revocable from both sides: the developer deletes the app (/api/v1/apps/delete), or the user disconnects it (/api/v1/oauth/grants/revoke) — the token dies before its exp like every Thingtime JWT.']
+  }),
+  endpoint({
+    id: 'oauth-sandbox',
+    group: 'embed',
+    title: 'Sandbox token (build before registering)',
+    endpoint: '/api/v1/oauth/sandbox',
+    summary: 'Mint a real, working sandbox token for ANY clientId — no registration, no account, no browser.',
+    detail:
+      'POST { clientId?, origin?, scope?, scopes?, space?, username? } (all optional; anonymous, ' +
+      'per-IP rate-limited). ' +
+      'Returns the same handoff shape as /oauth/authorize plus sandbox: true — a signed Bearer token ' +
+      'that WORKS for one hour against /api/v1/app-data (read/write/delete, including visibility ' +
+      "'app'), /api/v1/app-data/shared, and /api/v1/oauth/userinfo. It resolves to a synthetic " +
+      "pretend user (username 'sandbox-<name>', default sandbox-you), every byte written under it is " +
+      'namespaced to that one token and TTL-reaped within the hour, and the token can never act as an ' +
+      'account credential. By default two sandboxes are fully isolated; to rehearse the MULTI-USER ' +
+      'shared feed, mint several tokens with the same `space` (an 8-64 char pool secret you choose — ' +
+      'use a uuid) and distinct `username`s: same-space tokens see each other\'s visibility-\'app\' ' +
+      'entries via /app-data/shared, each entry authored by its own pretend user gated by that ' +
+      "token's scopes — private entries stay per-token even inside a space. This is the headless " +
+      'counterpart of the consent popup\'s ?sandbox=1 mode (which accepts sandbox_space / ' +
+      'sandbox_username URL params, or SDK options sandboxSpace / sandboxUsername): integration code ' +
+      'written against it works unchanged when you register a real app and switch to ' +
+      'Thingtime.login().',
+    auth: { mode: 'none', description: 'Anonymous — the whole point is testing before you have anything.' },
+    methods: ['POST'],
+    steps: [
+      'POST with the clientId + scopes you PLAN to use (e.g. scope: "profile.username app-data app-data.shared").',
+      'Use the returned Bearer token against /app-data*, /app-data/shared, and /oauth/userinfo exactly like a real grant.',
+      'Data and token evaporate within an hour — mint another whenever you need one.',
+      'When ready: register the app (POST /api/v1/apps) and swap in Thingtime.login() — no other code changes.'
+    ],
+    requestExamples: [
+      {
+        name: 'Mint',
+        description: 'A sandbox token for an app that does not exist yet.',
+        method: 'POST',
+        body: { clientId: 'macrobiotica-dev', origin: 'http://localhost:5599', scope: 'profile.username app-data app-data.shared' }
+      },
+      {
+        name: 'Mint into a pool',
+        description: 'Two mints with the same space = two pretend users sharing one feed.',
+        method: 'POST',
+        body: {
+          clientId: 'macrobiotica-dev',
+          scope: 'profile.username app-data app-data.shared',
+          space: 'f6b2c1e8-demo-pool-2a1f0c9d8e7f',
+          username: 'ada'
+        }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'A working pretend session.',
+        body: {
+          ok: true,
+          sandbox: true,
+          token: 'eyJhbGciOi…',
+          tokenType: 'Bearer',
+          expiresAt: '2026-07-27T09:00:00.000Z',
+          scopes: ['profile.username', 'app-data', 'app-data.shared'],
+          sharedThings: 0,
+          user: { id: 'sandbox', username: 'sandbox-you' }
+        }
+      }
+    ]
   }),
   endpoint({
     id: 'oauth-scopes',
@@ -2112,10 +2202,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     detail:
       'Authenticated by an app-scoped Bearer token from /api/v1/oauth/authorize. GET ?key=… returns one ' +
       'entry ({ entry: null } when unset); GET without key lists every entry for this (user, app). ' +
-      'POST { key, value } inserts or updates one entry — keys are [A-Za-z0-9._:-] up to 128 chars ' +
+      'POST { key, value, visibility?, acl? } inserts or updates one entry — keys are [A-Za-z0-9._:-] up to 128 chars ' +
       '(first char must be a letter or digit), values ' +
-      'any JSON up to 32KB, at most 200 keys per user per app. Entries are things owned by the END USER ' +
-      '(acl ["tt:user"]), so users can always see and delete what an app stored. CORS: browser calls must ' +
+      'any JSON up to 32KB, at most 200 keys per user per app. Entries are things owned by the END USER, ' +
+      'and their audience IS the acl array: ["tt:user"] (private, the default) or ' +
+      '["tt:user", "tt:app/<clientId>"] (readable by other users of this one app via /api/v1/app-data/shared). ' +
+      "visibility: 'private' | 'app' is accepted sugar for those two acls and derived back on the wire; " +
+      'marking an entry \'app\' requires the app-data.shared scope, and a write that omits visibility/acl ' +
+      "never changes an existing entry's audience. Users can always see and delete what an app stored. " +
+      'CORS: browser calls must ' +
       'come from the token\'s own bound origin. Requires the app-data scope — 403 when the user declined ' +
       'it on the consent screen.',
     auth: { mode: 'bearer', description: 'App-scoped Bearer token with the app-data scope — cookies never authenticate this route.' },
@@ -2128,10 +2223,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     requestExamples: [
       { name: 'Read one', description: 'One key.', method: 'GET', query: { key: 'preferences' } },
       { name: 'List all', description: 'Everything this app stored for this user.', method: 'GET' },
-      { name: 'Write', description: 'Upsert a key.', method: 'POST', body: { key: 'preferences', value: { theme: 'rainbow' } } }
+      { name: 'Write', description: 'Upsert a key.', method: 'POST', body: { key: 'preferences', value: { theme: 'rainbow' } } },
+      {
+        name: 'Write shared',
+        description: "Upsert a key other users of this app may read (needs the app-data.shared scope).",
+        method: 'POST',
+        body: { key: 'post:2026-07-27', value: { text: 'Miso soup 🍲' }, visibility: 'app' }
+      }
     ],
     responseExamples: [
-      { status: 200, description: 'Entry written.', body: { ok: true, entry: { key: 'preferences', value: { theme: 'rainbow' }, updatedAt: '2026-07-12T00:00:00.000Z' } } },
+      { status: 200, description: 'Entry written.', body: { ok: true, entry: { key: 'preferences', value: { theme: 'rainbow' }, visibility: 'private', acl: ['tt:user'], updatedAt: '2026-07-12T00:00:00.000Z' } } },
       { status: 401, description: 'Missing/expired/revoked token.', body: { ok: false, error: 'Unauthorized' } },
       { status: 403, description: 'Browser origin ≠ token origin.', body: { ok: false, error: 'Origin does not match this token' } }
     ]
@@ -2153,6 +2254,57 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ],
     responseExamples: [
       { status: 200, description: 'Removed (or already absent).', body: { ok: true, deleted: true } }
+    ]
+  }),
+  endpoint({
+    id: 'app-data-shared',
+    group: 'embed',
+    title: 'App data (shared pool)',
+    endpoint: '/api/v1/app-data/shared',
+    summary: "Read the entries every user of this app opted into sharing — the app-scoped social read.",
+    detail:
+      'GET ?key=&prefix=&limit=&cursor= returns entries from ALL users of the calling app whose acl carries ' +
+      'tt:app/<clientId> (written via POST /api/v1/app-data with visibility \'app\'), newest first with a ' +
+      'cursor — never entries from other apps, never private entries. key= matches exactly, key=post:* or ' +
+      "prefix= matches a prefix; limit clamps to 1–50 (default 20). Requires the app-data.shared scope on " +
+      "the calling token, and each entry's author must still hold a live grant covering that scope — a user " +
+      'who disconnects the app (or whose grant expires) drops out of this feed instantly while keeping ' +
+      "their data. Each entry's author is shaped by that AUTHOR's own grant, exactly like /oauth/userinfo: " +
+      'id + username always, displayName/avatarUrl only when that author granted profile.displayName / ' +
+      'profile.avatar. Same CORS + origin binding as /api/v1/app-data. Note the scope is EXACT consent: ' +
+      "granting app-data does NOT imply app-data.shared — apps must request it and users see its own line " +
+      'on the consent screen.',
+    auth: { mode: 'bearer', description: 'App-scoped Bearer token with the app-data.shared scope.' },
+    methods: ['GET'],
+    steps: [
+      "Request the app-data.shared scope in Thingtime.login({ scopes: [...] }).",
+      "Write shared entries with POST /api/v1/app-data { key, value, visibility: 'app' }.",
+      'GET this route (e.g. ?key=post:*) and page with nextCursor until it returns null.',
+      'Render authors from each entry\'s author object — fields mirror what each author consented to.'
+    ],
+    requestExamples: [
+      { name: 'App feed', description: 'Newest shared post entries.', method: 'GET', query: { key: 'post:*', limit: 20 } }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'One page, newest first.',
+        body: {
+          ok: true,
+          entries: [
+            {
+              key: 'post:2026-07-27',
+              value: { text: 'Miso soup 🍲' },
+              visibility: 'app',
+              updatedAt: '2026-07-27T00:00:00.000Z',
+              createdAt: '2026-07-27T00:00:00.000Z',
+              author: { id: '64f000000000000000000002', username: 'ada-lovelace', avatarUrl: null }
+            }
+          ],
+          nextCursor: 'eyJ1IjoxNzAwMDAwMDAwMDAwLCJzIjoi…'
+        }
+      },
+      { status: 403, description: 'Token lacks the scope.', body: { ok: false, error: 'This token was not granted the app-data.shared scope' } }
     ]
   }),
   endpoint({

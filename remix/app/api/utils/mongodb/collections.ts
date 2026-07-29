@@ -321,6 +321,18 @@ export const ensureIndexes = async () => {
             partialFilterExpression: { 'crystal.appId': { $exists: true }, 'crystal.key': { $exists: true } }
           }
         ),
+        // The app-scoped shared read (/app-data/shared): entries whose acl
+        // carries tt:app/<clientId>, newest first. acl is the only multikey
+        // field here (appId/updatedAt/shareId are scalars), so the compound is
+        // legal; partial keeps every non-app-data thing out.
+        col('things').createIndex(
+          { 'crystal.appId': 1, acl: 1, updatedAt: -1, shareId: -1 },
+          { partialFilterExpression: { 'crystal.appId': { $exists: true } } }
+        ),
+        // Sandbox app-data is ephemeral: only docs written under a sandbox
+        // token carry sandboxExpiresAt (TTL skips docs without the field), so
+        // pretend data reaps itself with the token's lifetime.
+        col('things').createIndex({ sandboxExpiresAt: 1 }, { expireAfterSeconds: 0 }),
         col('feedAlgorithms').createIndex({ shareId: 1 }, { unique: true }),
         col('feedAlgorithms').createIndex({ ownerId: 1 }),
         // global app settings singletons (rate-limit config lives here)
