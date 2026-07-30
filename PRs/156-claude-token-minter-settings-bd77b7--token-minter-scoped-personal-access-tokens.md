@@ -82,6 +82,37 @@ permissions selector per token.
   switch, 🧸 list badge. Verified 31/31 new sandbox e2e + original 42/42
   re-run + browser both viewports.
 
+## Round 3 — tt:token/<id> grant lists (layered token permissions)
+
+- Owner request: replace the single-value createdByTokenId with a tt:-style
+  system so multiple tokens can overlap. Implemented as `tokenAcl: string[]`
+  on thing docs with entries `tt:token/<token id>` (slash grammar like
+  tt:user/… and tt:app/…, per house style — the colon form 400s).
+- Semantics: creator auto-granted on create; owner or any credential that
+  can update the thing replaces the list whole (create-seed, PATCH/PUT,
+  null clears, max 32, strict regex). Sandboxed mutations require the
+  token's entry on the target. acl (view audience) and tokenAcl (credential
+  write grants) stay separate axes; tokenAcl is owner-only in projections
+  (toPublicThings now actually uses its viewer param for this).
+- Back-compat: tokenAclOf() reads legacy createdByTokenId as an implicit
+  entry (round-2 docs, incl. any prod-preview writes); a tokenAcl
+  replacement $unsets the legacy field so removed grants can't resurrect.
+  deleteThing keeps one atomic op ($or over both forms).
+- Delegation/self-lockout are deliberate: a granted sandboxed token can
+  re-grant peers on its things and can drop its own entry (chmod-style);
+  the session always recovers.
+- Merge note: the conflict-resolver Action had merged main (#155/#157/
+  #159/#161) into the branch twice; local round-3 was committed on the
+  stale tip → non-fast-forward. Resolved by merging origin/<branch> back
+  in (one TESTING.md conflict: kept the round-3 token-minter checklist AND
+  main's new rate-limiting section), regenerating graphify-out with the
+  merge per repo rule, re-running all suites on the merged tree, then
+  pushing. Edge-cached anon feed/search (`anon=1`) compose cleanly with
+  resolveThingsActor — anon path skips actor resolution entirely.
+- Verified: 32/32 grants suite + 31/31 sandbox + 42/42 original on the
+  MERGED tree + browser desktop/375 mobile (Grant 🆔 button, clipboard
+  fallback shows the value in the toast when writeText is blocked).
+
 ## Debug notes
 
 - Browser pane had the known scroll-render/hit-test quirk in this worktree —
