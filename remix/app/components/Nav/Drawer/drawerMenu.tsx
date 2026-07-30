@@ -106,7 +106,7 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		children: [
 			{ id: 'dev-tests', label: 'API tests', icon: '✅', to: '/tests' },
 			{ id: 'dev-crypto', label: 'Crypto', icon: '🔒', to: '/crypto' },
-			{ id: 'dev-edge', label: 'Edge', icon: '🌍', to: '/edge' },
+			{ id: 'dev-migrations', label: 'Migrations', icon: '🛠️', to: '/migrations' }
 		]
 	},
 	{
