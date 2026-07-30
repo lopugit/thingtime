@@ -97,7 +97,14 @@ export const enforceRateLimit = async (
   const who = identity || `ip:${getRequestIp(request)}`;
   try {
     return await consume(hash(`${name}:${who}`), rule.limit, rule.windowMs);
-  } catch {
+  } catch (err: any) {
+    // Fail-open is deliberate, but NEVER silent: a swallowed error here turns
+    // every rule into a no-op with zero signal (seen live: a duplicate-doc
+    // ensureIndexes failure disabled all rate limiting in dev, invisibly).
+    console.error(
+      `[rate-limit] enforcement unavailable for ${name} — failing ${options.failClosed ? 'closed' : 'open'}:`,
+      err?.message || err
+    );
     if (options.failClosed) {
       return { allowed: false, limit: rule.limit, remaining: 0, resetAt: now, unavailable: true };
     }
