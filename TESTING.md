@@ -382,19 +382,20 @@ is fixed, and cite the checklist you ran in the PR description.
       (drop `things_v2`'s `ownerId_1_crystal.appId_1_crystal.key_1` unique
       index, insert two docs sharing `(ownerId, crystal.appId, crystal.key)`),
       start a FRESH API process → the boot-time warmup run logs one
-      `[mongodb] ensureIndexes failed building things.<index> — retrying in 60s`
-      line naming the broken index. The cold-start PR moved the battery off
-      the request path, so ordinary API traffic neither retries it nor logs;
-      the awaited callers (`registerUser`, admin migrations) surface the
-      cached failure fast instead of re-running the battery.
-- [ ] Failure is cached with a cooldown, not retried per caller: register
-      attempts inside the same 60s window add NO new `[mongodb]` lines and run
-      no fresh ~60-command createIndex battery (the old reset-to-null re-ran
-      it per caller — a retry storm on top of the fail-open).
-- [ ] Self-heals after cleanup: delete the dup docs, then restart the dev
-      process — or wait out the 60s cooldown and hit an ensureIndexes caller
-      (register a user / run an admin migration) → no new error lines, the
-      unique index is rebuilt (`getIndexes()` shows it).
+      line beginning `[mongodb] ensureIndexes failed building things.<index>`
+      and saying the next bootstrap call will retry. The cold-start PR moved
+      the battery off the request path, so ordinary API traffic neither retries
+      it nor logs; only the awaited bootstrap callers (`registerUser`, admin
+      migrations) can trigger another attempt.
+- [ ] In-flight work is shared, but failures are retryable immediately: while
+      one ensureIndexes battery is running, concurrent bootstrap callers await
+      that same promise; after it fails, the next explicit bootstrap caller
+      starts one fresh attempt instead of inheriting a rejected promise for a
+      fixed cooldown.
+- [ ] Self-heals after cleanup: delete the duplicate docs, then hit an awaited
+      ensureIndexes caller (register a user / run an admin migration) or restart
+      the process → the unique index is rebuilt immediately (`getIndexes()`
+      shows it) and no stale cooldown blocks the recovered database.
 - [ ] Limiter outage is AUDIBLE, never silent: with the limiter's own DB ops
       failing (e.g. Mongo down/unreachable), a limited endpoint logs
       `[rate-limit] enforcement unavailable for <rule> — failing open` per

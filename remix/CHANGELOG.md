@@ -19,6 +19,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Index bootstrap recovery after PRs #159/#161**: failed boot-time
+  `ensureIndexes()` work no longer caches a rejected promise for 60 seconds.
+  The next explicit bootstrap caller retries immediately, while hot request
+  paths remain isolated from the index battery; rate-limit and index-warmup
+  diagnostics/checklists now describe their independent failure paths.
+  — Codex (AI), 2026-07-30
+
 - **PR #69 final-review hardening round**: a multi-agent review of the unified
   /search + profile/feed branch surfaced a batch of merge-blocking issues, all
   fixed here — Claude (AI), 2026-07-17:

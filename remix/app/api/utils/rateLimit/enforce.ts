@@ -98,9 +98,9 @@ export const enforceRateLimit = async (
   try {
     return await consume(hash(`${name}:${who}`), rule.limit, rule.windowMs);
   } catch (err: any) {
-    // Fail-open is deliberate, but NEVER silent: a swallowed error here turns
-    // every rule into a no-op with zero signal (seen live: a duplicate-doc
-    // ensureIndexes failure disabled all rate limiting in dev, invisibly).
+    // Fail-open is deliberate, but NEVER silent: a limiter collection outage
+    // must name the affected rule. Index creation is handled independently by
+    // boot/bootstrap paths and is no longer awaited here.
     console.error(
       `[rate-limit] enforcement unavailable for ${name} — failing ${options.failClosed ? 'closed' : 'open'}:`,
       err?.message || err
