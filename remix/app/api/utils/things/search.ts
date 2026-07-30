@@ -1,5 +1,5 @@
 import { escapeRegex, findUserByUsername } from '../auth/users';
-import { ensureIndexes, getThingsCollection } from '../mongodb/collections';
+import { getThingsCollection } from '../mongodb/collections';
 import {
   KEY_SEGMENT_PATTERN,
   MAX_TEXT_CHARS,
@@ -507,7 +507,6 @@ export const searchThings = async (viewerInput: string | Viewer, query: SearchQu
   const textClause = q ? { $text: { $search: q } } : null;
   const match = textClause ? withMatch(textClause, visibility, ...clauses) : baseMatch;
 
-  await ensureIndexes();
   const things = await getThingsCollection();
 
   // -- engagement-window mode ------------------------------------------------

@@ -16,13 +16,23 @@ const isoDate = (value: string | null): Date | null => {
   return Number.isFinite(date.getTime()) ? date : null;
 };
 
-// GET /api/v1/things/feed?types=&circles=&from=&to=&algorithm=<id|latest>&cursor=&limit=
+// One minute fresh + five minutes serve-stale-while-revalidating: anon feed
+// traffic is absorbed by the nearest Vercel edge PoP instead of a function.
+const ANON_CACHE_CONTROL = 'public, s-maxage=60, stale-while-revalidate=300';
+
+// GET /api/v1/things/feed?types=&circles=&from=&to=&algorithm=<id|latest>&cursor=&limit=&anon=1
 // The public feed. Works logged out (public posts only). With `algorithm`
 // omitted the viewer's active algorithm applies; 'latest' forces chronological.
+// `anon=1` requests the logged-out view regardless of cookies — the response
+// then depends only on the URL, so it is safe to cache on Vercel's edge (which
+// keys by URL, not Cookie). Clients send it only when no viewer is present;
+// authed requests never share these URLs, so a cached anon body can never be
+// served to a logged-in viewer.
 export const loader = async ({ request }: { request: Request }) => {
-  const user = await getCurrentUser(request);
   const url = new URL(request.url);
   const params = url.searchParams;
+  const anonCacheable = params.get('anon') === '1';
+  const user = anonCacheable ? null : await getCurrentUser(request);
 
   const algorithmParam = (params.get('algorithm') || '').trim();
   let weights = null;
@@ -49,5 +59,14 @@ export const loader = async ({ request }: { request: Request }) => {
   if (result.ok === false) {
     return json({ ok: false, error: result.error }, { status: result.status });
   }
-  return json({ ok: true, posts: result.posts, nextCursor: result.nextCursor, ranked: result.ranked });
+  return json(
+    { ok: true, posts: result.posts, nextCursor: result.nextCursor, ranked: result.ranked },
+    {
+      headers: anonCacheable
+        ? { 'Cache-Control': ANON_CACHE_CONTROL }
+        : user
+          ? { 'Cache-Control': 'private, no-store' }
+          : {}
+    }
+  );
 };

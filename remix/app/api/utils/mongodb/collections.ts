@@ -12,7 +12,19 @@ const getClientCached = async () => {
   if (!clientPromise) {
     clientPromise = (async () => {
       const { MongoClient } = await getMongoDb();
-      const client = new MongoClient(getMongoUri(), {});
+      // Serverless-tuned options. Driver defaults are maxPoolSize 100 and a
+      // 30s serverSelection timeout — on Atlas M0 (hard ~500-connection cap)
+      // a burst of instances each opening tens of connections (the boot-time
+      // index ensure is a ~55-command Promise.all) risks the cap, and an
+      // unreachable cluster would stall every request 30s instead of failing
+      // fast. appName makes this app attributable in Atlas metrics.
+      const client = new MongoClient(getMongoUri(), {
+        maxPoolSize: 10,
+        serverSelectionTimeoutMS: 5000,
+        connectTimeoutMS: 5000,
+        socketTimeoutMS: 30000,
+        appName: 'thingtime-api'
+      });
       await client.connect();
       return client;
     })().catch((err) => {
@@ -126,7 +138,23 @@ export const getAuthOtpsCollection = async () => getCollection('authOtps');
 // process. The unique indexes are the real source of truth that
 // usernames/emails/tokens can't be duplicated (the app-level findUser checks are
 // racy on their own).
+//
+// WHO CALLS THIS: the boot-time warmup (server/plugins/mongo-warmup) fires it
+// in the background on every fresh instance, and the true bootstrap paths
+// (registerUser, admin migrations) still await it so a brand-new database
+// converges before its first unique-constrained insert. Hot request paths
+// deliberately do NOT call it — indexes only need creating once per database,
+// and re-confirming ~55 of them inside user requests was the dominant
+// cold-start cost (see PR: cold-start index battery).
 let indexesEnsured: Promise<void> | null = null;
+
+// A failed run is cached too, with a cooldown before the next attempt: resetting
+// to null on failure meant EVERY subsequent request re-ran the whole ~60-command
+// createIndex battery against the DB (and failed again) — a per-request retry
+// storm stacked on top of the rate-limiter fail-open. Until the cooldown elapses
+// callers get the cached rejection instantly, with zero DB work.
+const INDEXES_RETRY_COOLDOWN_MS = 60_000;
+let indexesRetryAt = 0; // epoch ms of the next allowed attempt after a failure
 
 // createIndex with different options than an existing same-key index throws
 // IndexOptionsConflict (85) / IndexKeySpecsConflict (86). For indexes whose
@@ -167,11 +195,34 @@ const createIndexReplacing = async (
 };
 
 export const ensureIndexes = async () => {
+  if (indexesEnsured && indexesRetryAt && Date.now() >= indexesRetryAt) {
+    // cooldown elapsed on a cached failure — allow one fresh attempt
+    indexesEnsured = null;
+  }
   if (!indexesEnsured) {
+    indexesRetryAt = 0;
     indexesEnsured = (async () => {
       const db = await getThingtimeDb();
-      // indexes land on the current-generation physical collections
-      const col = (logical: string) => db.collection(physicalCollectionName(logical));
+      // indexes land on the current-generation physical collections; createIndex
+      // failures are tagged with `<logical>.<index name>` because Promise.all
+      // surfaces only the first rejection and driver messages don't always name
+      // the index being built
+      const col = (logical: string) => {
+        const collection = db.collection(physicalCollectionName(logical));
+        return {
+          dropIndex: (name: string) => collection.dropIndex(name),
+          createIndex: async (keys: Record<string, any>, options?: Record<string, any>) => {
+            try {
+              return await collection.createIndex(keys, options);
+            } catch (err: any) {
+              const name =
+                options?.name || Object.entries(keys).map(([field, dir]) => `${field}_${dir}`).join('_');
+              if (err && typeof err === 'object') err.indexBeingBuilt = `${logical}.${name}`;
+              throw err;
+            }
+          }
+        };
+      };
       await Promise.all([
         col('users').createIndex({ username: 1 }, { unique: true }),
         col('users').createIndex({ email: 1 }, { unique: true }),
@@ -321,6 +372,18 @@ export const ensureIndexes = async () => {
             partialFilterExpression: { 'crystal.appId': { $exists: true }, 'crystal.key': { $exists: true } }
           }
         ),
+        // The app-scoped shared read (/app-data/shared): entries whose acl
+        // carries tt:app/<clientId>, newest first. acl is the only multikey
+        // field here (appId/updatedAt/shareId are scalars), so the compound is
+        // legal; partial keeps every non-app-data thing out.
+        col('things').createIndex(
+          { 'crystal.appId': 1, acl: 1, updatedAt: -1, shareId: -1 },
+          { partialFilterExpression: { 'crystal.appId': { $exists: true } } }
+        ),
+        // Sandbox app-data is ephemeral: only docs written under a sandbox
+        // token carry sandboxExpiresAt (TTL skips docs without the field), so
+        // pretend data reaps itself with the token's lifetime.
+        col('things').createIndex({ sandboxExpiresAt: 1 }, { expireAfterSeconds: 0 }),
         col('feedAlgorithms').createIndex({ shareId: 1 }, { unique: true }),
         col('feedAlgorithms').createIndex({ ownerId: 1 }),
         // global app settings singletons (rate-limit config lives here)
@@ -329,9 +392,16 @@ export const ensureIndexes = async () => {
         col('rateLimits').createIndex({ key: 1 }, { unique: true }),
         col('rateLimits').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
       ]);
-    })().catch((err) => {
-      // don't cache a failed run — let the next call retry
-      indexesEnsured = null;
+    })().catch((err: any) => {
+      // Cache the failure with a cooldown (instead of resetting to null, which
+      // re-ran the full battery on every request while the DB was unhappy) and
+      // name the index that broke — the fix is almost always data cleanup on
+      // one collection, so the name is the actionable part.
+      indexesRetryAt = Date.now() + INDEXES_RETRY_COOLDOWN_MS;
+      console.error(
+        `[mongodb] ensureIndexes failed${err?.indexBeingBuilt ? ` building ${err.indexBeingBuilt}` : ''} — retrying in ${Math.round(INDEXES_RETRY_COOLDOWN_MS / 1000)}s:`,
+        err?.message || err
+      );
       throw err;
     });
   }
