@@ -310,6 +310,38 @@ is fixed, and cite the checklist you ran in the PR description.
       standalone-demo link within ~10s — the preview must never show a
       permanent loading state.
 
+## MongoDB data endpoint (`/mongodb-status`, `remix/app/components/MongoDB/MongoEndpointConfig.tsx`)
+
+- [ ] Logged OUT: paste a reachable `mongodb://` URL → "Use for this session"
+      flips the page to the Custom endpoint badge, the footer indicator reads
+      "MongoDB (custom)", and the feed/search read from that DB. "Use" on the
+      Thingtime row returns everything to default.
+- [ ] An unreachable URL is rejected at activation (422 toast, e.g.
+      `MongoServerSelectionError (ECONNREFUSED)`) and the previous endpoint
+      stays active — a bad URL must never brick the session's data calls.
+- [ ] A non-mongodb scheme (`http://…`), whitespace, or a >2048-char URL is
+      rejected with a clear validation message.
+- [ ] Logged IN: "Save to my endpoints" persists the endpoint (survives
+      logout/login and other browsers); the raw URL/credentials NEVER appear
+      in any API response, page, or error — only host + db name.
+- [ ] While a custom endpoint is active: login/logout, profile, themes,
+      account switcher and saved-endpoint management still work (identity is
+      home-pinned); posts created land in the CUSTOM db; admin routes
+      (migrations especially) still operate on the home DB.
+- [ ] Removing the saved endpoint the session currently uses also clears the
+      override (page falls back to Thingtime default without a reload).
+- [ ] The `tt_mongo` cookie is httpOnly + session-scoped: closing the browser
+      drops the override; document.cookie can't read it.
+- [ ] LOCAL DEV footer parity: with an override active, the footer indicator
+      reads "MongoDB (custom)" on the local stack too. Regression class: the
+      vite /api proxy's changeOrigin hid the web origin from nitro, so
+      resolveStatusTarget classified "Current Tab" as REMOTE and health routes
+      re-fetched themselves WITHOUT cookies (session state invisible). The
+      proxy must forward x-forwarded-host/-proto (vite.config.ts) — verify
+      /api/v1/health/mongodb?targetOrigin=<web origin> returns custom:true
+      with the cookie, while a real remote target (e.g. thingtime.com) still
+      server-side fetches.
+
 ## Docs search (`remix/app/routes/docs/DocsSearch.tsx`, `docsSearchIndex.ts`)
 
 - [ ] Searching "acl" in the /docs drawer ranks the Thing schema (its `acl`
