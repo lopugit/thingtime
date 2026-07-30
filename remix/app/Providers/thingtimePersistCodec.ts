@@ -17,16 +17,52 @@
 import { parse as parseAux, stringify as stringifyAux } from 'flatted';
 
 // A full ISO-8601 timestamp with a time component: what Date.toISOString()
-// emits and what `flatted` stores for a Date (Date.toJSON runs before the
-// replacer, so Dates are already ISO strings by the time we serialize). Human
-// values like "Post 1", "1", "2024", "March 2024", "5 April", or even a bare
-// "2024-03-15" deliberately do NOT match, so they can never be revived.
+// emits. Human values like "Post 1", "1", "2024", "March 2024", "5 April", or
+// even a bare "2024-03-15" deliberately do NOT match. Used only for (a)
+// escaping user strings that would be ambiguous and (b) reviving LEGACY
+// pre-tagging persists (which stored Dates as bare ISO strings).
 export const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/;
 
-export const reviver = (key: string, value: any): any => {
-	// Revive ONLY strict ISO-8601 timestamps. Anything looser corrupts ordinary
-	// user strings (see file header).
-	if (typeof value === 'string' && ISO_TIMESTAMP.test(value)) {
+// NOTE: must be a `function` (not an arrow) — the parser calls the reviver
+// with the holder object as `this`, and the inner string of a tag wrapper must
+// NOT hit the legacy bare-ISO fallback below (it runs for the inner keys
+// before the wrapper itself is revived).
+export const reviver = function (this: any, key: string, value: any): any {
+	// Canonical persisted form for real Dates (mirrors the ttype:'function'
+	// tagging scheme — see the replacer).
+	if (value?.ttype === 'date') {
+		// `iso` may already be a Date if the holder guard below was bypassed by
+		// a serializer that doesn't pass the holder as `this` — accept both.
+		if (value.iso instanceof Date) {
+			return value.iso;
+		}
+		if (typeof value.iso === 'string') {
+			const revived = new Date(value.iso);
+			if (!isNaN(revived.getTime())) {
+				return revived;
+			}
+		}
+		return typeof value?.iso === 'string' ? value.iso : undefined;
+	}
+
+	// A user STRING that merely looks like a timestamp was escaped by the
+	// replacer so it can never be confused with a real Date — unwrap it.
+	if (value?.ttype === 'iso-string') {
+		if (typeof value.s === 'string') {
+			return value.s;
+		}
+		return value.s instanceof Date ? value.s.toISOString() : undefined;
+	}
+
+	// The inner string of a tag wrapper is handled by the wrapper branches
+	// above when the WRAPPER is revived — reviving it here first would hand
+	// those branches a Date where they expect the original string.
+	const insideOwnTag = (this?.ttype === 'date' && key === 'iso') || (this?.ttype === 'iso-string' && key === 's');
+
+	// Legacy fallback: pre-tagging persists stored real Dates as bare strict
+	// ISO strings. New persists never produce these (real Dates are tagged,
+	// ISO-lookalike user strings are escaped), so this only migrates old data.
+	if (typeof value === 'string' && !insideOwnTag && ISO_TIMESTAMP.test(value)) {
 		const revived = new Date(value);
 		if (!isNaN(revived.getTime())) {
 			return revived;
@@ -43,12 +79,28 @@ export const reviver = (key: string, value: any): any => {
 	return value;
 };
 
-export const replacer = (key: string, value: any): any => {
-	// Dates serialize to their ISO string (Date.toJSON already did this before
-	// we get here; kept explicit for clarity). The reviver only re-hydrates
-	// strict ISO-8601 timestamps, never plain strings.
-	if (value instanceof Date) {
-		return value.toISOString();
+// NOTE: must be a `function` (not an arrow) — JSON/flatted call the replacer
+// with the holder object as `this`, and Date.toJSON converts real Dates to ISO
+// strings BEFORE the replacer sees `value`, so the original Date is only
+// reachable via `this[key]`.
+export const replacer = function (this: any, key: string, value: any): any {
+	const original = this?.[key];
+
+	// Real Dates persist tagged, so revival never has to guess from a string
+	// shape (the corruption class behind TODO 9).
+	if (original instanceof Date && !isNaN(original.getTime())) {
+		return { ttype: 'date', iso: original.toISOString() };
+	}
+
+	// The inner string of a wrapper THIS replacer just emitted must pass
+	// through untouched, or the escape rule below would re-wrap its own output
+	// forever (the serializer walks the returned wrapper's properties too).
+	const insideOwnTag = (this?.ttype === 'date' && key === 'iso') || (this?.ttype === 'iso-string' && key === 's');
+
+	// A plain user string that happens to look like a timestamp is escaped so
+	// the legacy bare-ISO fallback in the reviver can never capture it.
+	if (typeof value === 'string' && !insideOwnTag && ISO_TIMESTAMP.test(value)) {
+		return { ttype: 'iso-string', s: value };
 	}
 
 	// Functions never persist (and are never revived — see the reviver above).

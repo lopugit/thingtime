@@ -288,3 +288,24 @@ is fixed, and cite the checklist you ran in the PR description.
       blocking) swaps "Loading the SDK…" for the failure notice with the
       standalone-demo link within ~10s — the preview must never show a
       permanent loading state.
+
+## Auth endpoint rate limiting (`remix/app/routes/api/v1/auth/register/_register.tsx`)
+
+- [ ] `POST /api/v1/auth/register` returns 429 past the `auth.register` window
+      (default 10 / 10 min per IP), checked BEFORE the body is read, so a burst
+      of empty-body signups (each 400) still trips the cap. Verify per-IP
+      isolation with distinct `X-Forwarded-For` values — one IP's cap must not
+      throttle another.
+- [ ] Register rejects an oversize body with 413 (`readJsonBody` 16 KiB cap)
+      before any bcrypt/DB work; a normal signup from a fresh IP still returns
+      200 and a session cookie.
+
+## Persisted-state codec (`remix/app/Providers/thingtimePersistCodec.ts`)
+
+- [ ] `npm run test:persist` passes (tagged Dates, escaped ISO-lookalike user
+      strings, legacy bare-ISO migration, no function persistence/revival).
+- [ ] Live: type a post whose text is a full ISO timestamp (e.g.
+      `2026-01-01T00:00:00.000Z`), reload twice — the text must stay a string
+      (older builds turned it into a Date and rewrote it permanently).
+- [ ] Live: app hydrates under the CSP with no `unsafe-eval`; theme pre-paint
+      and `[LC]`/env title prefix still work from `/tt-boot.js`.

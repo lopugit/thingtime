@@ -44,11 +44,41 @@ test('a real Date revives as a Date and preserves its instant', () => {
 	assert.equal(out.createdAt.getTime(), now.getTime());
 });
 
-test('full ISO-8601 timestamp strings revive to Dates; offsets accepted', () => {
+test('LEGACY bare ISO-8601 timestamp strings still revive to Dates; offsets accepted', () => {
+	// pre-tagging persists stored real Dates as bare ISO strings — the reviver
+	// keeps migrating them (new persists tag Dates and escape lookalike strings)
 	assert.ok(reviver('k', '2024-03-15T10:00:00.000Z') instanceof Date);
 	assert.ok(reviver('k', '2024-03-15T10:00:00+10:00') instanceof Date);
 	assert.equal(typeof reviver('k', '2024-03-15'), 'string');
 	assert.equal(typeof reviver('k', 'not a date'), 'string');
+});
+
+test('a USER string that looks like a full ISO timestamp survives round-trips as a string', () => {
+	// the corruption class TODO 9 is about: with tagging + escaping, even a
+	// perfect ISO-lookalike user string can no longer be confused with a Date
+	const input = { pasted: '2026-07-21T03:46:23.955Z' };
+	const once = roundtrip(input);
+	assert.equal(typeof once.pasted, 'string', 'should still be a string after one cycle');
+	assert.equal(once.pasted, input.pasted);
+	const twice = roundtrip(once);
+	assert.equal(typeof twice.pasted, 'string', 'should still be a string after two cycles');
+	assert.equal(twice.pasted, input.pasted);
+});
+
+test('a Date and an identical-looking user string coexist and each keep their type', () => {
+	const instant = '2024-03-15T10:00:00.000Z';
+	const out = roundtrip({ real: new Date(instant), fake: instant });
+	assert.ok(out.real instanceof Date);
+	assert.equal(out.real.toISOString(), instant);
+	assert.equal(typeof out.fake, 'string');
+	assert.equal(out.fake, instant);
+});
+
+test('tagged {ttype:date} payloads revive; malformed tags degrade without throwing', () => {
+	assert.ok(reviver('k', { ttype: 'date', iso: '2024-03-15T10:00:00.000Z' }) instanceof Date);
+	assert.equal(reviver('k', { ttype: 'date', iso: 'garbage' }), 'garbage');
+	assert.equal(reviver('k', { ttype: 'date' }), undefined);
+	assert.equal(reviver('k', { ttype: 'iso-string', s: '2024-03-15T10:00:00.000Z' }), '2024-03-15T10:00:00.000Z');
 });
 
 test('functions never persist and never revive (no eval on storage)', () => {
