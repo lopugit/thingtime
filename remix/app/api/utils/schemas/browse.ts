@@ -1,4 +1,4 @@
-import { ensureIndexes, getThingsCollection } from '../mongodb/collections';
+import { getThingsCollection } from '../mongodb/collections';
 import {
   asViewer,
   canViewInherited,
@@ -187,7 +187,6 @@ const browsePopular = async (
   const offset = Math.min(Math.max(0, Number(cursor) || 0), POPULAR_MAX_OFFSET);
   const match = withMatch({ thingtime: 'schema' }, visibility);
 
-  await ensureIndexes();
   const collection = await getThingsCollection();
 
   // Rank in two indexed passes instead of a per-schema $lookup (which ran a
@@ -255,7 +254,6 @@ const browseLibrary = async (
   limit: number
 ): Promise<Fail | { things: PublicThing[]; nextCursor: string | null }> => {
   if (!viewer?.id) return fail(401, 'Sign in to see your library');
-  await ensureIndexes();
   const collection = await getThingsCollection();
 
   const cursorDoc = parseChronoCursor(typeof cursor === 'string' ? cursor : undefined);
@@ -293,7 +291,6 @@ const browseMine = async (
   limit: number
 ): Promise<Fail | { things: PublicThing[]; nextCursor: string | null; total: number | null }> => {
   if (!viewer?.id) return fail(401, 'Sign in to see your schemas');
-  await ensureIndexes();
   const collection = await getThingsCollection();
 
   const cursorDoc = parseChronoCursor(typeof cursor === 'string' ? cursor : undefined);

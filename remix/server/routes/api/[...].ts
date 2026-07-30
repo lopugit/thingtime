@@ -1,6 +1,5 @@
 import { defineHandler } from 'nitro/h3';
 
-import { createApiDocPayload, getApiDocByPath } from '../../../app/docs/apiDocs';
 import { proxyApiRequestToFallback, shouldProxyApiToFallback } from '../../utils/apiFallback';
 
 type RouteModule = {
@@ -21,6 +20,7 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/algorithms/update': () => import('../../../app/routes/api/v1/algorithms/update/_update'),
   'v1/app-data': () => import('../../../app/routes/api/v1/app-data/_app-data'),
   'v1/app-data/delete': () => import('../../../app/routes/api/v1/app-data/delete/_delete'),
+  'v1/app-data/shared': () => import('../../../app/routes/api/v1/app-data/shared/_shared'),
   'v1/apps': () => import('../../../app/routes/api/v1/apps/_apps'),
   'v1/apps/delete': () => import('../../../app/routes/api/v1/apps/delete/_delete'),
   'v1/apps/public': () => import('../../../app/routes/api/v1/apps/public/_public'),
@@ -56,6 +56,7 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/oauth/authorize': () => import('../../../app/routes/api/v1/oauth/authorize/_authorize'),
   'v1/oauth/grants': () => import('../../../app/routes/api/v1/oauth/grants/_grants'),
   'v1/oauth/grants/revoke': () => import('../../../app/routes/api/v1/oauth/grants/revoke/_revoke'),
+  'v1/oauth/sandbox': () => import('../../../app/routes/api/v1/oauth/sandbox/_sandbox'),
   'v1/oauth/scopes': () => import('../../../app/routes/api/v1/oauth/scopes/_scopes'),
   'v1/oauth/shared': () => import('../../../app/routes/api/v1/oauth/shared/_shared'),
   'v1/oauth/userinfo': () => import('../../../app/routes/api/v1/oauth/userinfo/_userinfo'),
@@ -149,6 +150,9 @@ export default defineHandler(async (event) => {
       });
     }
 
+    // lazy: apiDocs is ~150KB of doc-string literals — parsing it belongs to
+    // the rare -docs request, not to every instance's cold start
+    const { createApiDocPayload, getApiDocByPath } = await import('../../../app/docs/apiDocs');
     const doc = getApiDocByPath(path);
     if (!doc) {
       return jsonResponse({ ok: false, error: 'API docs not found' }, { status: 404 });

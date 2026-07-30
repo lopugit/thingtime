@@ -11,7 +11,7 @@ export type SessionDoc = {
   expiresAt: Date | null;
   revokedAt: Date | null;
   type: 'tt.session';
-  purpose?: 'browser' | 'service' | 'app';
+  purpose?: 'browser' | 'service' | 'app' | 'app-sandbox';
   meta?: Record<string, any>;
 };
 
