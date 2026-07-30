@@ -3,7 +3,6 @@ import { createHash, randomUUID } from 'node:crypto';
 // waitlist is a PROTECTED system kind: waitlist things stay on the home
 // deployment DB even while a data-plane endpoint override is active.
 import {
-  ensureIndexes,
   getHomeThingsCollection as getThingsCollection,
   getLopuMusingRateLimitsCollection,
   getWaitlistCollection
@@ -89,8 +88,6 @@ export const joinWaitlist = async (request: Request, input: { email?: unknown })
   if (!(await consumeJoinQuota(request))) {
     return { ok: false, status: 429, error: 'Too many signups from this connection — try again soon 🌈' };
   }
-
-  await ensureIndexes();
 
   // dual-era dedupe: emails that joined before the things era live in the
   // legacy waitlist collection (indexed { email: 1 } lookup) — never mint a

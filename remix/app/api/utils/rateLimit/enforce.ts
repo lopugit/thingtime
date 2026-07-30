@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import { ensureIndexes, getRateLimitsCollection } from '../mongodb/collections';
+import { getRateLimitsCollection } from '../mongodb/collections';
 import { getRateLimitConfig } from './config';
 
 // General per-endpoint rate limiter, config-driven (config.ts). Atomic
@@ -96,7 +96,6 @@ export const enforceRateLimit = async (
   }
   const who = identity || `ip:${getRequestIp(request)}`;
   try {
-    await ensureIndexes();
     return await consume(hash(`${name}:${who}`), rule.limit, rule.windowMs);
   } catch (err: any) {
     // Fail-open is deliberate, but NEVER silent: a swallowed error here turns

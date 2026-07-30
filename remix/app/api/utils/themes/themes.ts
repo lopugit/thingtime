@@ -4,7 +4,7 @@ import { ObjectId } from 'mongodb';
 import { resolveTheme, THINGTIME_THEME, TtTheme } from '../../../theme/tokens';
 // theme is a PROTECTED system kind: theme things stay on the home deployment
 // DB even while a data-plane endpoint override is active (see endpoint.ts).
-import { ensureIndexes, getHomeThingsCollection as getThingsCollection, getThemesCollection } from '../mongodb/collections';
+import { getHomeThingsCollection as getThingsCollection, getThemesCollection } from '../mongodb/collections';
 import { ACL_ALL, ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 import { clearUserActiveTheme } from '../auth/users';
 
@@ -109,7 +109,6 @@ export const saveTheme = async (ownerId: string, input: SaveThemeInput): Promise
   const explicitVisibility =
     input.visibility === 'public' ? 'public' : input.visibility === 'private' ? 'private' : null;
 
-  await ensureIndexes();
   const things = await getThingsCollection();
   const themes = await getThemesCollection();
   const now = new Date();

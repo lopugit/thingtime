@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 // Embed apps are auth-plane ("Login with Thingtime" clientId → allowlist
 // lookups): app things stay on the home deployment DB even while a data-plane
 // endpoint override is active, so an override can never answer origin checks.
-import { ensureIndexes, getHomeThingsCollection as getThingsCollection, getSessionsCollection } from '../mongodb/collections';
+import { getHomeThingsCollection as getThingsCollection, getSessionsCollection } from '../mongodb/collections';
 import {
   ACL_OWNER,
   COLLECTION_SCHEMA_VERSIONS,
@@ -130,7 +130,6 @@ export const createApp = async (
   const origins = sanitizeAppOrigins(input.origins);
   if (!Array.isArray(origins)) return origins;
 
-  await ensureIndexes();
   const things = await getThingsCollection();
 
   // Soft product cap (like the app-data key cap): racing registrations can
