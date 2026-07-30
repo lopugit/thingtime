@@ -292,7 +292,14 @@ export const TokenMinter = (props: { userId: string }) => {
       await navigator.clipboard.writeText(value);
       lopu({ title: `${what} copied 📋`, status: 'success', duration: 3000 });
     } catch {
-      lopu({ title: 'Copy failed — select it manually', status: 'error' });
+      // clipboard can be blocked (permissions/unfocused tab) — short values
+      // like grant entries surface in the toast so there's something to select
+      lopu({
+        title: 'Copy failed — select it manually',
+        description: value.length <= 200 ? value : undefined,
+        status: 'error',
+        duration: 10000
+      });
     }
   };
 
@@ -371,8 +378,9 @@ export const TokenMinter = (props: { userId: string }) => {
               Only its own things 🧸
             </Text>
             <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)" whiteSpace="normal">
-              Everything it creates is stamped as its own — updating, deleting, commenting, reacting, saving and
-              sharing then only work on those stamped things. Reading still follows the Read permission.
+              Everything it creates carries its own tt:token grant — updating, deleting, commenting, reacting,
+              saving and sharing then only work on things granted to it. Layer tokens onto a thing by editing its
+              tokenAcl list (copy a token’s grant entry below). Reading still follows the Read permission.
             </Text>
           </Box>
           <Box marginLeft="auto" flexShrink={0}>
@@ -585,7 +593,15 @@ export const TokenMinter = (props: { userId: string }) => {
                     {meta.join(' · ')}
                   </Text>
                 </Box>
-                <Box marginLeft="auto" flexShrink={0}>
+                <Flex marginLeft="auto" flexShrink={0} columnGap={1}>
+                  <Button
+                    size="xs"
+                    variant="ghost"
+                    title={`Copy this token’s grant entry — add it to a thing’s tokenAcl to let this token work that thing: tt:token/${token.id}`}
+                    onClick={() => handleCopy(`tt:token/${token.id}`, 'Grant entry')}
+                  >
+                    Grant 🆔
+                  </Button>
                   {token.status !== 'revoked' && (
                     <Button
                       size="xs"
@@ -596,7 +612,7 @@ export const TokenMinter = (props: { userId: string }) => {
                       Revoke 🔒
                     </Button>
                   )}
-                </Box>
+                </Flex>
               </Flex>
             );
           })}

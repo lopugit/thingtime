@@ -24,7 +24,8 @@ export const action = async ({ request }: { request: Request }) => {
     extended: body?.extended,
     acl: body?.acl,
     visibility: body?.visibility,
-    tags: body?.tags
+    tags: body?.tags,
+    tokenAcl: body?.tokenAcl
   });
 
   if (result.ok === false) {

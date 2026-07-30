@@ -173,7 +173,14 @@ export function useApi() {
       update: useCallback(
         async (args) =>
           asyncFetcher.submit(
-            { id: args?.id, crystal: args?.crystal, acl: args?.acl, visibility: args?.visibility, tags: args?.tags },
+            {
+              id: args?.id,
+              crystal: args?.crystal,
+              acl: args?.acl,
+              visibility: args?.visibility,
+              tags: args?.tags,
+              tokenAcl: args?.tokenAcl
+            },
             { action: '/api/v1/things', method: 'PATCH' }
           ),
         [asyncFetcher]
@@ -188,7 +195,8 @@ export function useApi() {
               acl: args?.acl,
               visibility: args?.visibility,
               targetId: args?.targetId,
-              tags: args?.tags
+              tags: args?.tags,
+              tokenAcl: args?.tokenAcl
             },
             { action: '/api/v1/things', method: 'PUT' }
           ),
@@ -197,10 +205,10 @@ export function useApi() {
       reactionsRecent: useCallback(async () => getJson('/api/v1/things/reactions-recent'), []),
       create: useCallback(
         async (args) => {
-          const { type, text, images, listing, thing, thingtime, crystal, targetId, acl, visibility, tags } = args;
+          const { type, text, images, listing, thing, thingtime, crystal, targetId, acl, visibility, tags, tokenAcl } = args;
           // unified shape when thingtime is given, legacy post shape otherwise
           const payload = Array.isArray(thingtime)
-            ? { thingtime, crystal, targetId, acl, visibility, tags }
+            ? { thingtime, crystal, targetId, acl, visibility, tags, tokenAcl }
             : { type, text, images, listing, thing, acl, visibility, tags };
           return asyncFetcher.submit(payload, { action: '/api/v1/things' });
         },

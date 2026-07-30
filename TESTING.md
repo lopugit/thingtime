@@ -380,14 +380,31 @@ is fixed, and cite the checklist you ran in the PR description.
       it. Expired tokens vanish from the list once Mongo's TTL sweep runs.
 - [ ] Permissions selector "Select all ✅ / Unselect all 🧹" buttons: all →
       the single Full-access chip state; none → zero chips + mint blocked.
-- [ ] Sandbox ("Only its own things 🧸", onlyCreatedThings): a sandboxed
-      token's creations are stamped createdByTokenId; it CAN patch/PUT-
-      replace/delete/comment/react/save/share its own creations, and gets
-      403 "sandboxed to its own creations" on session-created or other-token
-      things (this 403 comes from the target check AFTER auth, so it DOES
-      consume a use — only missing-scope 403s are free) — including reaction/save REMOVAL on foreign things and
-      re-sharing a token-created share of a foreign root (shares attach to
-      the root). Delete stays one atomic filter op on success and returns
-      the sandbox 403 (not a phantom 404) when the thing exists but isn't
-      stamped. Non-sandboxed tokens and full sessions are unaffected; the
-      list row shows "🧸 its own things only".
+- [ ] Sandbox ("Only its own things 🧸", onlyCreatedThings) — the tt:token
+      grant system: every PAT-created thing carries the creator's
+      tt:token/<id> entry in tokenAcl; a sandboxed token CAN patch/PUT-
+      replace/delete/comment/react/save/share things carrying its entry and
+      gets 403 "sandboxed … tt:token grant" on everything else (the 403 is a
+      post-auth target check, so it DOES consume a use — only missing-scope
+      403s are free) — including reaction/save REMOVAL on ungranted things
+      and re-sharing a token-created share of a foreign root. Delete stays
+      one atomic filter op on success (tokenAcl OR legacy createdByTokenId)
+      and returns the sandbox 403, not a phantom 404, when the thing exists
+      but carries no grant.
+- [ ] Grant layering: owner PATCHes a thing's tokenAcl to [A, B] → BOTH
+      sandboxed tokens mutate it; removing A's entry cuts A off immediately
+      while B keeps working; owner can CREATE a thing pre-granted to a
+      token that never touched it; a sandboxed token can re-grant (add
+      peers to) things it holds a grant on, and can lock itself out by
+      dropping its own entry (session always recovers it). tokenAcl
+      replaces WHOLE (null clears), max 32 entries, entries must match
+      tt:token/<id> (400 otherwise), and a tokenAcl replacement also clears
+      the legacy createdByTokenId stamp so removed grants can't resurrect
+      through the back-compat read.
+- [ ] tokenAcl is owner-only in projections: the owner (and their tokens)
+      see it on GET /things?id=; anonymous viewers and other users never
+      receive the field. Legacy round-2 docs (createdByTokenId, no
+      tokenAcl) still honor their creator via the read shim.
+- [ ] Non-sandboxed tokens and full sessions ignore tokenAcl entirely; the
+      settings list row shows "🧸 its own things only" + a "Grant 🆔"
+      copy button (copies tt:token/<id>).
