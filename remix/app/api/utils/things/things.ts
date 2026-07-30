@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Binary, ObjectId } from 'mongodb';
 
-import { ensureIndexes, getThingsCollection, getUsersCollection } from '../mongodb/collections';
+import { getThingsCollection, getUsersCollection } from '../mongodb/collections';
 import { findUserByUsername, pushUserRecentReaction } from '../auth/users';
 import { sanitizeReactionToken } from '~/utils/reactionTokens';
 import {
@@ -545,7 +545,6 @@ export const createThing = async (
     if (capped) return capped;
   }
 
-  await ensureIndexes();
   const things = await getThingsCollection();
   const now = input.createdAt instanceof Date ? input.createdAt : new Date();
 
@@ -1729,7 +1728,9 @@ export const toggleReaction = async (
   const target = await findViewableThingAs(shareId, viewer, app);
   if (!target) return fail(404, 'Post not found');
 
-  await ensureIndexes(); // the reaction unique index must exist before insert
+  // the reaction unique index exists before any insert: it is created at
+  // instance boot (server/plugins/mongo-warmup) and awaited during register,
+  // which every authed viewer's database has necessarily already run
   const things = await getThingsCollection();
   let recentReactions: string[] | undefined;
 

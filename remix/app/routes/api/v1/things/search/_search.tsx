@@ -10,7 +10,11 @@ import { viewerOf } from '~/api/utils/things/things';
 // Search bodies are small JSON condition trees.
 const MAX_BODY_BYTES = 32 * 1024;
 
-const respond = async (request: Request, actor: Actor, query: SearchQuery) => {
+// Matches the feed's anon edge-cache policy: one minute fresh, five minutes
+// serve-stale-while-revalidating at the nearest Vercel PoP.
+const ANON_CACHE_CONTROL = 'public, s-maxage=60, stale-while-revalidate=300';
+
+const respond = async (request: Request, actor: Actor, query: SearchQuery, anonCacheable = false) => {
   const user = actorUser(actor);
   const app = actor.kind === 'app' ? actor.scope : null;
   const cors = actorCors(actor);
@@ -49,33 +53,45 @@ const respond = async (request: Request, actor: Actor, query: SearchQuery) => {
       totalCapped: result.totalCapped,
       ranked: result.ranked
     },
-    { headers: cors }
+    anonCacheable ? { headers: { ...cors, 'Cache-Control': ANON_CACHE_CONTROL } } : { headers: cors }
   );
 };
 
-// GET /api/v1/things/search?q=&thingtime=&tags=&sort=&cursor=&limit= — the
-// simple shareable-URL form: ranked text search plus csv filters.
+// GET /api/v1/things/search?q=&thingtime=&tags=&sort=&cursor=&limit=&anon=1 — the
+// simple shareable-URL form: ranked text search plus csv filters. `anon=1`
+// forces the logged-out view regardless of cookies so the response depends
+// only on the URL and can be cached at Vercel's edge (see feed loader for the
+// full safety argument). Clients send it only when no viewer is present.
 export const loader = async ({ request }: { request: Request }) => {
-  const actor = await resolveActor(request);
-  if (actor instanceof Response) return actor;
   const params = new URL(request.url).searchParams;
-  return respond(request, actor, {
-    q: params.get('q') || undefined,
-    thingtime: params.get('thingtime') || undefined,
-    tags: params.get('tags') || undefined,
-    from: params.get('from') || undefined,
-    to: params.get('to') || undefined,
-    sort: params.get('sort') || undefined,
-    cursor: params.get('cursor'),
-    limit: Number(params.get('limit')) || undefined,
-    types: params.get('types') || undefined,
-    circles: params.get('circles') || undefined,
-    author: params.get('author') || undefined,
-    minTextChars: params.get('minTextChars') || undefined,
-    maxTextChars: params.get('maxTextChars') || undefined,
-    minReactions: params.get('minReactions') || undefined,
-    minComments: params.get('minComments') || undefined
-  });
+  // anon=1 forces the logged-out view regardless of cookies/tokens, so the
+  // response depends only on the URL and can be edge-cached; otherwise resolve
+  // the acting credential (cookie session, first-party Bearer, or app token).
+  const anonCacheable = params.get('anon') === '1';
+  const actor: Actor | Response = anonCacheable ? { kind: 'anonymous' } : await resolveActor(request);
+  if (actor instanceof Response) return actor;
+  return respond(
+    request,
+    actor,
+    {
+      q: params.get('q') || undefined,
+      thingtime: params.get('thingtime') || undefined,
+      tags: params.get('tags') || undefined,
+      from: params.get('from') || undefined,
+      to: params.get('to') || undefined,
+      sort: params.get('sort') || undefined,
+      cursor: params.get('cursor'),
+      limit: Number(params.get('limit')) || undefined,
+      types: params.get('types') || undefined,
+      circles: params.get('circles') || undefined,
+      author: params.get('author') || undefined,
+      minTextChars: params.get('minTextChars') || undefined,
+      maxTextChars: params.get('maxTextChars') || undefined,
+      minReactions: params.get('minReactions') || undefined,
+      minComments: params.get('minComments') || undefined
+    },
+    anonCacheable
+  );
 };
 
 // POST /api/v1/things/search — the full structured form: { q?, mode?,
