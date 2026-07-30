@@ -10,3 +10,4 @@ the github-actions bot actor.
 Entries:
 - baseline entry
 - entry added by the PR branch (round 2)
+- entry added by the base branch (round 2)
