@@ -423,3 +423,35 @@ is fixed, and cite the checklist you ran in the PR description.
       error), `failClosed` routes return the 429 unavailable shape. Regression
       class: a bare `catch {}` fail-open invisibly disabled ALL rate limiting
       (2026-07 perf audit).
+
+## Password hasher (`/crypto` Password Hasher panel, `api/utils/crypto/passwordHasher.server.ts`)
+
+- [ ] `/crypto` → Password Hasher: enter a username + password → the panel
+      shows a VERIFIED badge, `bcrypt cost 10`, the `$2b$10$…` hash, and a
+      mongosh snippet templated with that username. A supplied password is
+      NEVER echoed back in the response; only a generated one is.
+- [ ] "Generate a strong one" + a length (12–64) returns a password shown
+      exactly once ("save it now") whose hash verifies against it — check
+      independently with `bcrypt.compare` if in doubt.
+- [ ] The hash is self-verified server-side before return (`verified: true`);
+      a password under 6 chars still hashes but is flagged (register's
+      minimum), because an existing account may predate any policy.
+- [ ] END-TO-END (the point of the tool): register a throwaway user via the
+      real API, hash a NEW password, run the returned snippet VERBATIM in
+      mongosh, then log in — the new password works and the old one is
+      rejected. The snippet must report `things: matched 1, modified 1`.
+- [ ] Blob integrity: after the snippet runs, the user's `secure` BinData
+      blob still holds email / accountKind / emailVerified / meta, and
+      `secureVersion` incremented by 1 (matching the app's CAS write). A
+      plain `$set: { passwordHash }` on a things-era user writes a field
+      NOTHING reads — the snippet must unpack → edit → repack instead.
+- [ ] Snippet handles both stores and a miss: an unknown username reports
+      "No user named …" AND lists the usernames that do exist, instead of
+      silently modifying 0 docs.
+- [ ] Collection names in the snippet come from `physicalCollectionName()`
+      (currently `things_v2` / `users_v2`) — never hardcoded, so a version
+      bump can't hand out a snippet that edits a frozen generation.
+- [ ] Rate limited per IP (`crypto.hashPassword`, 20/min): bcrypt is the CPU
+      cost, so a burst past the limit 429s with the hashing message. The
+      intent stays ANONYMOUS on purpose — being locked out is the reason to
+      reach for it — and never reads or writes the database.
