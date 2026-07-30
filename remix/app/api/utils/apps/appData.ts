@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { ensureIndexes, getSessionsCollection, getThingsCollection } from '../mongodb/collections';
+import { getSessionsCollection, getThingsCollection } from '../mongodb/collections';
 import { findUserById } from '../auth/users';
 import { SANDBOX_MAX_KEYS, SANDBOX_TOKEN_TTL_MS, sandboxDisplayName } from './sandbox';
 import { scopeCovers, sessionScopes } from './scopes';
@@ -159,7 +159,6 @@ export const setAppData = async (
     return fail(400, `value must be JSON up to ${MAX_APP_DATA_VALUE_BYTES / 1024}KB`);
   }
 
-  await ensureIndexes();
   const things = await getThingsCollection();
   const filter = { thingtime: 'app-data', ownerId, 'crystal.appId': appId, 'crystal.key': key };
 

@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import { ObjectId } from 'mongodb';
 
 import {
-  ensureIndexes,
   getFeedAlgorithmsCollection,
   getThingsCollection,
   getUsersCollection
@@ -245,7 +244,6 @@ export const createAlgorithm = async (
   const name = typeof input.name === 'string' ? input.name.trim().slice(0, MAX_NAME_CHARS) : '';
   if (!name) return fail(400, 'Algorithm name is required');
 
-  await ensureIndexes();
   const things = await getThingsCollection();
   const algorithms = await getFeedAlgorithmsCollection();
   // the per-user cap spans both eras, or it would silently double mid-migration
