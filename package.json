@@ -11,6 +11,7 @@
     "web-pms-stop": "node remix/scripts/dev-pm2.cjs stop",
     "web-ports": "node remix/scripts/worktree-ports.cjs",
     "web-ports:all": "node remix/scripts/dev-pm2.cjs list",
+    "worktree-setup": "node remix/scripts/ensure-dependencies.js",
     "build-web": "npm run build --prefix remix",
     "electron": "pnpm --dir electron dev",
     "build-electron": "pnpm --dir electron build",
