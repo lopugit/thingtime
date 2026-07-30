@@ -64,18 +64,34 @@ export const action = async ({ request }: { request: Request }) => {
     return json({ ok: false, error: 'Method not allowed' }, { status: 405 });
   }
 
-  const user = await getCurrentUser(request);
-  const rate = await enforceRateLimit(request, 'mongodb.endpoint', user ? `user:${user.id}` : null);
-  if (!rate.allowed) {
-    return json({ ok: false, error: 'Too many endpoint changes — try again shortly' }, rateLimitedResponseInit(rate));
-  }
-
   const body = request.method === 'DELETE' ? {} : await readJsonBody(request, MAX_BODY_BYTES);
 
+  // Reset is exempt from the rate limit ON PURPOSE: it probes nothing (no
+  // outbound connect), and bailing back to the home DB must always work —
+  // even when the limiter is unavailable or the caller has burned their window.
   if (request.method === 'DELETE' || body?.reset === true) {
     return json(
       { ok: true, endpoint: toActiveEndpoint(null), defaultHost: getDefaultHost() },
       { headers: { 'Set-Cookie': await clearMongoEndpointCookie() } }
+    );
+  }
+
+  const user = await getCurrentUser(request);
+  // failClosed: activation makes the SERVER probe a caller-supplied host:port
+  // (an outbound connect vector) — if the limiter can't answer, refuse rather
+  // than probe unbounded. Same posture as mongodb.populate.
+  const rate = await enforceRateLimit(request, 'mongodb.endpoint', user ? `user:${user.id}` : null, {
+    failClosed: true
+  });
+  if (!rate.allowed) {
+    return json(
+      {
+        ok: false,
+        error: rate.unavailable
+          ? 'Endpoint activation is temporarily unavailable — try again shortly'
+          : 'Too many endpoint changes — try again shortly'
+      },
+      rateLimitedResponseInit(rate)
     );
   }
 

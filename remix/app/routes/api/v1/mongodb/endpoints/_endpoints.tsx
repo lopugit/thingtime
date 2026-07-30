@@ -63,9 +63,19 @@ export const action = async ({ request }: { request: Request }) => {
     return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
   }
 
-  const rate = await enforceRateLimit(request, 'mongodb.endpoints', `user:${user.id}`);
+  // failClosed: saving probes the supplied URL (an outbound connect vector) —
+  // if the limiter can't answer, refuse rather than probe unbounded.
+  const rate = await enforceRateLimit(request, 'mongodb.endpoints', `user:${user.id}`, { failClosed: true });
   if (!rate.allowed) {
-    return json({ ok: false, error: 'Too many endpoint changes — try again shortly' }, rateLimitedResponseInit(rate));
+    return json(
+      {
+        ok: false,
+        error: rate.unavailable
+          ? 'Endpoint changes are temporarily unavailable — try again shortly'
+          : 'Too many endpoint changes — try again shortly'
+      },
+      rateLimitedResponseInit(rate)
+    );
   }
 
   const body = await readJsonBody(request, MAX_BODY_BYTES);

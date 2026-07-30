@@ -413,8 +413,9 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
 // per URI per process. Fire-and-forget by design: the first requests against a
 // fresh override DB must not block on (potentially slow, e.g. the wildcard
 // text index over a large foreign collection) index builds — reads simply run
-// unindexed until the builds land. A failed run clears the memo so a later
-// request retries.
+// unindexed until the builds land, EXCEPT text-mode search: $text errors (it
+// does not degrade) until the text index finishes building, then heals on its
+// own. A failed run clears the memo so a later request retries.
 const customIndexesEnsured = new Map<string, Promise<void>>();
 const ensureCustomDataIndexes = (uri: string, db: any) => {
   if (customIndexesEnsured.has(uri)) return;

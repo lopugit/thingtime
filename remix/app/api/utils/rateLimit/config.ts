@@ -39,6 +39,8 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // is a rare interactive action; 5-minute windows leave humans unthrottled.
   // mongodb.endpoint: activate/reset the session override (anon keys by IP).
   // mongodb.endpoints: saved-list writes (authed; save also probes).
+  // Both enforced fail-closed at their routes (reset stays exempt — it probes
+  // nothing and bailing back to the home DB must always work).
   'mongodb.endpoint': { limit: 20, windowMs: 300_000, enabled: true },
   'mongodb.endpoints': { limit: 30, windowMs: 300_000, enabled: true },
   // service accounts do legitimate bulk writes (e.g. chunked snapshot sync), so
