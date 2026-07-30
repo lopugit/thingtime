@@ -1,6 +1,6 @@
 # Vercel Deployments
 
-Last updated: 2026-07-02
+Last updated: 2026-07-29
 
 ## Project
 
@@ -8,6 +8,15 @@ Last updated: 2026-07-02
 - Project name: `thingtime`
 - Project id: `prj_ZAX9FhGC2alHMXMwTHX96ql3EQ8v`
 - GitHub repository: `lopugit/thingtime`
+- Function region: `syd1` (Sydney), pinned via `remix/vercel.json` `"regions"` —
+  colocated with the Atlas cluster (also Sydney) so per-request Mongo round
+  trips stay single-digit ms instead of ~209ms from the old default `iad1`.
+  Verify on any deployment: the `x-vercel-id` response header should read
+  `syd1::syd1::…` and `GET /api/v1/health/mongodb` should report `pingMs` < 10.
+- Anonymous feed/search GETs sent with `anon=1` return
+  `Cache-Control: public, s-maxage=60, stale-while-revalidate=300` and are
+  served from the nearest edge PoP (`x-vercel-cache: HIT`); authed requests
+  never use `anon=1` URLs, so they can never hit those cache entries.
 
 ## Production
 
