@@ -12,7 +12,19 @@ const getClientCached = async () => {
   if (!clientPromise) {
     clientPromise = (async () => {
       const { MongoClient } = await getMongoDb();
-      const client = new MongoClient(getMongoUri(), {});
+      // Serverless-tuned options. Driver defaults are maxPoolSize 100 and a
+      // 30s serverSelection timeout — on Atlas M0 (hard ~500-connection cap)
+      // a burst of instances each opening tens of connections (the boot-time
+      // index ensure is a ~55-command Promise.all) risks the cap, and an
+      // unreachable cluster would stall every request 30s instead of failing
+      // fast. appName makes this app attributable in Atlas metrics.
+      const client = new MongoClient(getMongoUri(), {
+        maxPoolSize: 10,
+        serverSelectionTimeoutMS: 5000,
+        connectTimeoutMS: 5000,
+        socketTimeoutMS: 30000,
+        appName: 'thingtime-api'
+      });
       await client.connect();
       return client;
     })().catch((err) => {
@@ -126,6 +138,14 @@ export const getAuthOtpsCollection = async () => getCollection('authOtps');
 // process. The unique indexes are the real source of truth that
 // usernames/emails/tokens can't be duplicated (the app-level findUser checks are
 // racy on their own).
+//
+// WHO CALLS THIS: the boot-time warmup (server/plugins/mongo-warmup) fires it
+// in the background on every fresh instance, and the true bootstrap paths
+// (registerUser, admin migrations) still await it so a brand-new database
+// converges before its first unique-constrained insert. Hot request paths
+// deliberately do NOT call it — indexes only need creating once per database,
+// and re-confirming ~55 of them inside user requests was the dominant
+// cold-start cost (see PR: cold-start index battery).
 let indexesEnsured: Promise<void> | null = null;
 
 // createIndex with different options than an existing same-key index throws
@@ -321,6 +341,18 @@ export const ensureIndexes = async () => {
             partialFilterExpression: { 'crystal.appId': { $exists: true }, 'crystal.key': { $exists: true } }
           }
         ),
+        // The app-scoped shared read (/app-data/shared): entries whose acl
+        // carries tt:app/<clientId>, newest first. acl is the only multikey
+        // field here (appId/updatedAt/shareId are scalars), so the compound is
+        // legal; partial keeps every non-app-data thing out.
+        col('things').createIndex(
+          { 'crystal.appId': 1, acl: 1, updatedAt: -1, shareId: -1 },
+          { partialFilterExpression: { 'crystal.appId': { $exists: true } } }
+        ),
+        // Sandbox app-data is ephemeral: only docs written under a sandbox
+        // token carry sandboxExpiresAt (TTL skips docs without the field), so
+        // pretend data reaps itself with the token's lifetime.
+        col('things').createIndex({ sandboxExpiresAt: 1 }, { expireAfterSeconds: 0 }),
         col('feedAlgorithms').createIndex({ shareId: 1 }, { unique: true }),
         col('feedAlgorithms').createIndex({ ownerId: 1 }),
         // global app settings singletons (rate-limit config lives here)

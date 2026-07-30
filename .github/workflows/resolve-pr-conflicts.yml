@@ -5,7 +5,14 @@
 # resolver may exist or they race each other's pushes.
 #
 # When any branch is pushed, every open PR (drafts included) that TARGETS that
-# branch is checked for merge conflicts. Conflicting same-repo PRs get the base
+# branch is checked for merge conflicts.
+#
+# TRIGGER SHAPE (load-bearing): claude-code-action@v1 rejects the `push` event
+# ("Unsupported event type: push"), so a push-triggered run can only DETECT and
+# then hand off — the `handoff` job fires a repository_dispatch, and that run
+# (a supported event) performs the resolution. Do not move the resolve job back
+# onto `push`; the AI step fails there every time, after the merge has already
+# been computed. Conflicting same-repo PRs get the base
 # branch merged into their head, with Claude resolving the conflicted files,
 # and the merge commit pushed back to the PR branch.
 #
@@ -75,12 +82,21 @@
 
 name: Resolve PR conflicts (AI)
 
-run-name: "Resolve PR conflicts under ${{ github.event.client_payload.branch || inputs.branch || github.ref_name }}"
+run-name: "Resolve PR conflicts under ${{ github.event.client_payload.branch || inputs.branch || github.event.pull_request.base.ref || github.ref_name }}"
 
 on:
   push:
     branches:
       - "**"
+  # A PR branched off a STALE base can be born conflicting, and no push to the
+  # base follows it — so without this it would sit unresolved until the next
+  # unrelated base push. `pull_request` is on the action's supported-event list,
+  # so these runs resolve directly (no handoff hop).
+  # Deliberately NOT `synchronize`: that fires on every push to a PR head,
+  # including this workflow's own resolution pushes, which is churn we don't
+  # need — a base push already covers the after-the-fact cases.
+  pull_request:
+    types: [opened, reopened]
   workflow_dispatch:
     inputs:
       branch:
@@ -98,7 +114,20 @@ on:
 # One run per base branch; a newer push supersedes an in-flight resolution
 # (the push is atomic, so cancelling mid-run never half-publishes anything).
 concurrency:
-  group: resolve-conflicts-${{ github.event.client_payload.branch || inputs.branch || github.ref_name }}
+  # Three distinct namespaces, because they must NOT cancel each other:
+  #   detect-<branch>  a push run (detect + handoff only)
+  #   pr<N>            a pull_request run, scoped to that PR
+  #   base-<branch>    an actual resolution sweep (dispatch / workflow_dispatch)
+  # Critically, a push run and the dispatch it spawns previously shared a group,
+  # so the child cancelled its own parent mid-handoff — observed as
+  # "handoff: cancelled". It happened to work only because the dispatch API call
+  # had already returned; had cancellation landed first the handoff would have
+  # been lost with no error, i.e. a silent, timing-dependent no-op.
+  group: >-
+    ${{ github.event_name == 'push'
+        && format('resolve-detect-{0}', github.ref_name)
+        || (github.event.pull_request.number && format('resolve-pr{0}', github.event.pull_request.number))
+        || format('resolve-base-{0}', github.event.client_payload.branch || inputs.branch || github.ref_name) }}
   cancel-in-progress: true
 
 permissions:
@@ -122,13 +151,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          TARGET: ${{ github.event.client_payload.branch || inputs.branch || github.ref_name }}
+          TARGET: ${{ github.event.client_payload.branch || inputs.branch || github.event.pull_request.base.ref || github.ref_name }}
+          # Set only on pull_request events: narrows the scan to the triggering
+          # PR instead of every PR sharing its base (github.ref_name is
+          # "<n>/merge" on these events, which is why TARGET reads base.ref).
+          ONLY_PR: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
 
           query() {
             gh pr list --repo "$REPO" --base "$TARGET" --state open \
-              --json number,headRefName,isCrossRepository,isDraft,mergeable \
+              --json number,headRefName,baseRefName,isCrossRepository,isDraft,mergeable \
               --limit 100
           }
 
@@ -151,14 +184,53 @@ jobs:
           still_unknown="$(jq -r '[.[] | select(.mergeable == "UNKNOWN") | .number] | join(", ")' <<<"$prs")"
           [ -n "$still_unknown" ] && echo "::warning::PR(s) #$still_unknown still UNKNOWN after polling; they will be re-checked on the next push."
 
-          conflicting="$(jq -c '[.[] | select(.isCrossRepository | not) | select(.mergeable == "CONFLICTING") | {number: .number, head: .headRefName}]' <<<"$prs")"
+          # On a pull_request event, resolve ONLY the triggering PR — the other
+          # PRs sharing this base are not this event's business and are already
+          # covered by base pushes.
+          # `base` comes from the API record of the PR itself, so the resolve job
+          # never re-derives it from event context. That matters on pull_request
+          # events, where github.ref_name is "<N>/merge" — which would both break
+          # the merge AND, if a collaborator created a branch literally named
+          # "<N>/merge", silently merge an attacker-chosen branch into the PR.
+          conflicting="$(jq -c --arg only "${ONLY_PR:-}" '[.[] | select(.isCrossRepository | not) | select(.mergeable == "CONFLICTING") | select($only == "" or (.number|tostring) == $only) | {number: .number, head: .headRefName, base: .baseRefName}]' <<<"$prs")"
           echo "prs=$conflicting" >> "$GITHUB_OUTPUT"
           echo "any=$(jq 'length > 0' <<<"$conflicting")" >> "$GITHUB_OUTPUT"
+
+  # anthropics/claude-code-action@v1 REJECTS the `push` event outright
+  # ("Unsupported event type: push"). Its supported set is issues,
+  # issue_comment, pull_request, pull_request_review,
+  # pull_request_review_comment, workflow_dispatch, repository_dispatch,
+  # schedule, workflow_run. So a push-triggered run cannot resolve anything
+  # itself — it detects the work and hands off to repository_dispatch, which
+  # IS supported and re-enters this same workflow to do the real work.
+  handoff:
+    name: Hand off to a dispatch run (push cannot run the AI step)
+    needs: detect
+    if: github.event_name == 'push' && needs.detect.outputs.any == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Dispatch a resolvable run for this base branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TARGET: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          echo "Conflicting PRs target $TARGET; re-entering via repository_dispatch."
+          gh api "repos/$REPO/dispatches" \
+            -f event_type=resolve-conflicts-cascade \
+            -f "client_payload[branch]=$TARGET" \
+            -f "client_payload[depth]=0"
 
   resolve:
     name: "Resolve PR #${{ matrix.pr.number }}"
     needs: detect
-    if: needs.detect.outputs.any == 'true'
+    # Never on `push` — the AI step would fail with "Unsupported event type".
+    # The handoff job above converts a push into a repository_dispatch run.
+    if: needs.detect.outputs.any == 'true' && github.event_name != 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -170,7 +242,9 @@ jobs:
         pr: ${{ fromJSON(needs.detect.outputs.prs) }}
     env:
       REPO: ${{ github.repository }}
-      BASE_REF: ${{ github.event.client_payload.branch || inputs.branch || github.ref_name }}
+      # From the PR's own API record (see the scan step) — never re-derived from
+      # event context, which is wrong on pull_request events.
+      BASE_REF: ${{ matrix.pr.base }}
       HEAD_REF: ${{ matrix.pr.head }}
       PR_NUMBER: ${{ matrix.pr.number }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -302,6 +376,13 @@ jobs:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ github.token }}
+          # The handoff fires repository_dispatch with GITHUB_TOKEN, so those
+          # runs are attributed to github-actions[bot]. The action refuses
+          # non-human actors by default ("Workflow initiated by non-human
+          # actor: github-actions (type: Bot)"), which silently broke the whole
+          # push -> handoff -> dispatch -> resolve chain: only runs a human
+          # dispatched ever reached the model. Allow exactly this bot, not '*'.
+          allowed_bots: "github-actions"
           prompt: |
             You are resolving git merge conflicts inside a GitHub Actions runner by
             EDITING FILES ONLY. You have NO shell and NO git access — that is
@@ -309,7 +390,7 @@ jobs:
             pushes what you leave in the working tree. Do not attempt to run git or
             any command; just edit the conflicted files in place.
 
-            Situation: base branch "${{ github.event.client_payload.branch || inputs.branch || github.ref_name }}"
+            Situation: base branch "${{ matrix.pr.base }}"
             was merged into "${{ matrix.pr.head }}" (the head of PR #${{ matrix.pr.number }}),
             and the merge stopped on conflicts. Conflicted files currently contain
             zdiff3 conflict markers:
