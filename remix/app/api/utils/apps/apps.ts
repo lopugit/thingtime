@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { ensureIndexes, getSessionsCollection, getThingsCollection } from '../mongodb/collections';
+import { getSessionsCollection, getThingsCollection } from '../mongodb/collections';
 import {
   ACL_OWNER,
   COLLECTION_SCHEMA_VERSIONS,
@@ -134,7 +134,6 @@ export const createApp = async (
   const origins = sanitizeAppOrigins(input.origins);
   if (!Array.isArray(origins)) return origins;
 
-  await ensureIndexes();
   const things = await getThingsCollection();
 
   // Soft product cap (like the app-data key cap): racing registrations can

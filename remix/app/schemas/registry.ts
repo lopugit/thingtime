@@ -84,6 +84,10 @@ export type ThingVisibility = (typeof THING_VISIBILITIES)[number];
 //   tt:userFriends      the owner's friends circle
 //   tt:userFamily       the owner's family circle
 //   tt:user/<username>  one specific user (grant or exclude)
+//   tt:app/<clientId>   users of ONE embedded app, via that app's tokens —
+//                       the audience app-data sharing uses. Never matches a
+//                       Thingtime-site viewer (aclEntryMatches returns false);
+//                       only the app-data shared read path resolves it.
 //   tt:inherit          attached things (comments, reactions) — as visible as
 //                       their target
 //
@@ -103,6 +107,7 @@ export const ACL_FRIENDS = 'tt:userFriends';
 export const ACL_FAMILY = 'tt:userFamily';
 export const ACL_INHERIT = 'tt:inherit';
 export const ACL_USER_PREFIX = 'tt:user/';
+export const ACL_APP_PREFIX = 'tt:app/';
 
 const ACL_ENTRY_PATTERN = /^-?tt:[A-Za-z0-9][A-Za-z0-9._/-]*$/;
 const MAX_ACL_ENTRIES = 16;

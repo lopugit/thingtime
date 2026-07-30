@@ -63,7 +63,14 @@
    *   scopes?: string[],         // REQUIRED permission paths (the user can't untick these — only cancel)
    *   optionalScopes?: string[], // nice-to-have paths the user can untick
    *   allowExtra?: boolean,      // default true: the user may volunteer MORE data than you asked for
-   *   sandbox?: boolean,         // demo mode: full consent UI, fake token, nothing really shared
+   *   sandbox?: boolean,         // build mode: full consent UI for ANY clientId; the returned
+   *                              // token really works (app-data + userinfo, 1h, pretend account,
+   *                              // auto-deleted data) — or mint one headlessly via
+   *                              // POST /api/v1/oauth/sandbox
+   *   sandboxSpace?: string,     // opt-in pool secret (8-64 chars, use a uuid): sandbox logins
+   *                              // sharing a space see each other's 'app'-visibility entries —
+   *                              // rehearse the multi-user shared feed pre-registration
+   *   sandboxUsername?: string,  // pretend-author name in pooled feeds ('sandbox-' prefixed)
    *   baseUrl?: string
    * }} options
    *   Scope paths are hierarchical — 'profile' covers every profile.* leaf;
@@ -100,7 +107,13 @@
         (scope ? '&scope=' + encodeURIComponent(scope) : '') +
         (optionalScope ? '&optional_scope=' + encodeURIComponent(optionalScope) : '') +
         (options.allowExtra === false ? '&extra=0' : '') +
-        (options.sandbox ? '&sandbox=1' : '');
+        (options.sandbox ? '&sandbox=1' : '') +
+        (options.sandbox && options.sandboxSpace
+          ? '&sandbox_space=' + encodeURIComponent(options.sandboxSpace)
+          : '') +
+        (options.sandbox && options.sandboxUsername
+          ? '&sandbox_username=' + encodeURIComponent(options.sandboxUsername)
+          : '');
 
       var left = Math.max(0, Math.round((window.screen.width - POPUP_WIDTH) / 2));
       var top = Math.max(0, Math.round((window.screen.height - POPUP_HEIGHT) / 2));
@@ -220,14 +233,45 @@
           return payload.entries || [];
         });
       },
-      /** Insert-or-update one key (value = any JSON up to 32KB). */
-      set: function (key, value) {
+      /**
+       * Insert-or-update one key (value = any JSON up to 32KB).
+       * opts.visibility: 'private' (default) or 'app' — 'app' lets other
+       * users of YOUR app read the entry via shared() (never other apps,
+       * never the public web). Needs the 'app-data.shared' scope on the
+       * grant. Omit opts to leave an existing entry's audience unchanged.
+       */
+      set: function (key, value, opts) {
+        opts = opts || {};
+        var body = { key: key, value: value };
+        if (opts.visibility !== undefined) body.visibility = opts.visibility;
+        if (opts.acl !== undefined) body.acl = opts.acl;
         return call('/api/v1/app-data', {
           method: 'POST',
-          body: JSON.stringify({ key: key, value: value })
+          body: JSON.stringify(body)
         }).then(function (payload) {
           return payload.entry;
         });
+      },
+      /**
+       * The app-wide shared pool ('app-data.shared' scope): entries every
+       * user of this app opted into sharing, newest first, with a cursor.
+       * params: { key? ('post:*' matches a prefix), prefix?, limit?, cursor? }
+       * Resolves { entries: [{ key, value, updatedAt, createdAt, author }],
+       * nextCursor } — author is { id, username, displayName?, avatarUrl? },
+       * honouring what THAT author granted.
+       */
+      shared: function (params) {
+        params = params || {};
+        var query = [];
+        if (params.key) query.push('key=' + encodeURIComponent(params.key));
+        if (params.prefix) query.push('prefix=' + encodeURIComponent(params.prefix));
+        if (params.limit) query.push('limit=' + encodeURIComponent(params.limit));
+        if (params.cursor) query.push('cursor=' + encodeURIComponent(params.cursor));
+        return call('/api/v1/app-data/shared' + (query.length ? '?' + query.join('&') : '')).then(
+          function (payload) {
+            return { entries: payload.entries || [], nextCursor: payload.nextCursor || null };
+          }
+        );
       },
       /** Remove one key. Resolves true when it existed. */
       remove: function (key) {
@@ -289,7 +333,7 @@
    *   scopes?: string[],            // required permissions (see login())
    *   optionalScopes?: string[],    // nice-to-have permissions
    *   allowExtra?: boolean,         // let the user volunteer more (default true)
-   *   sandbox?: boolean,            // demo mode — fake token, nothing shared
+   *   sandbox?: boolean,            // build mode — working pretend token, nothing real shared
    *   theme?: 'light'|'dark'|'rainbow',
    *   size?: 'sm'|'md'|'lg',
    *   text?: string,
@@ -386,5 +430,5 @@
   window.Thingtime.userinfo = userinfo;
   window.Thingtime.shared = shared;
   window.Thingtime.renderButton = renderButton;
-  window.Thingtime.sdkVersion = '1.2.0';
+  window.Thingtime.sdkVersion = '1.3.0';
 })();

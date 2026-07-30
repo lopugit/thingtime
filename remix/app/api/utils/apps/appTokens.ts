@@ -4,6 +4,7 @@ import { findUserById, toPublicUser } from '../auth/users';
 import type { PublicUser } from '../auth/users';
 import { getSessionsCollection } from '../mongodb/collections';
 import { findAppByClientId } from './apps';
+import { sandboxPublicUser } from './sandbox';
 import { sessionScopes } from './scopes';
 import type { AppScopeId } from './scopes';
 import { MAX_APP_SESSIONS_PER_APP_USER } from '~/schemas/registry';
@@ -82,6 +83,14 @@ export type AppTokenContext = {
   jti: string;
   scopes: AppScopeId[];
   sharedThings: string[];
+  // true for sandbox tokens (purpose 'app-sandbox', apps/sandbox.ts): the
+  // user is synthetic, the clientId may be unregistered, and app-data written
+  // under it is TTL-reaped. Routes that touch real per-user state must branch
+  // on this.
+  sandbox?: boolean;
+  // the opt-in pool this sandbox token was minted into (null = isolated):
+  // same-space tokens share their 'app'-visibility entries as pretend users
+  sandboxSpace?: string | null;
 };
 
 // Resolve an app-scoped Bearer token, or null. Bearer-only on purpose: app
@@ -90,6 +99,9 @@ export type AppTokenContext = {
 // app: the app must still exist. Origins are default-open (apps.ts), so the
 // registered list is never re-checked here — the binding that matters is the
 // token's own meta.origin, which the embed routes compare to request Origin.
+// Sandbox tokens (purpose 'app-sandbox') resolve too — to a synthetic user,
+// with no app-registration requirement — so integrators can exercise the
+// whole surface pre-registration.
 export const resolveAppToken = async (request: Request): Promise<AppTokenContext | null> => {
   const header = request.headers.get('Authorization');
   if (!header?.startsWith('Bearer ')) return null;
@@ -100,12 +112,29 @@ export const resolveAppToken = async (request: Request): Promise<AppTokenContext
   if (!claims) return null;
 
   const session = await getLiveSession(claims.jti);
-  if (!session || session.purpose !== 'app') return null;
+  if (!session || (session.purpose !== 'app' && session.purpose !== 'app-sandbox')) return null;
   if (String(session.userId) !== claims.sub) return null;
 
   const clientId = session.meta?.clientId;
   const origin = session.meta?.origin;
   if (typeof clientId !== 'string' || typeof origin !== 'string') return null;
+
+  if (session.purpose === 'app-sandbox') {
+    return {
+      user: sandboxPublicUser(
+        String(session.userId),
+        session.createdAt,
+        typeof session.meta?.username === 'string' ? session.meta.username : undefined
+      ),
+      clientId,
+      origin,
+      jti: claims.jti,
+      scopes: sessionScopes(session.meta),
+      sharedThings: [],
+      sandbox: true,
+      sandboxSpace: typeof session.meta?.space === 'string' ? session.meta.space : null
+    };
+  }
 
   const app = await findAppByClientId(clientId);
   if (!app) return null;

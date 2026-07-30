@@ -308,3 +308,87 @@ is fixed, and cite the checklist you ran in the PR description.
       blocking) swaps "Loading the SDK…" for the failure notice with the
       standalone-demo link within ~10s — the preview must never show a
       permanent loading state.
+
+## Docs search (`remix/app/routes/docs/DocsSearch.tsx`, `docsSearchIndex.ts`)
+
+- [ ] Searching "acl" in the /docs drawer ranks the Thing schema (its `acl`
+      field section) first; results highlight the matched terms and show an
+      area badge + mono meta path; the nav list hides while a query is
+      active and returns on clear (× button or Escape).
+- [ ] Anchored results deep-link AND scroll on client-side navigation:
+      "scopes" → Enter lands on /docs/embed#permissions-scopes with the
+      heading at the sticky-header offset, not the page top (DocsLayout's
+      scroll-to-top must skip hash navigations); schema results scroll to
+      their /docs/schemas#schema-<id> card.
+- [ ] ArrowUp/Down move the active row, Enter opens it (query-param entries
+      like design mockups/components select the exact entry), and on mobile
+      tapping a result closes the drawer.
+- [ ] The query lives in the URL (?q=) with replace-style updates: typing
+      never stacks history entries, refresh restores the search, /docs?q=acl
+      deep-links it, result clicks carry ?q= along (so the landed URL is
+      shareable with its search context), and × strips it.
+- [ ] Typing is instant and never drops keys: the input is locally
+      controlled and the URL syncs on a ~200ms debounce — fast typing on
+      /docs/api (the heaviest page) must not lag, and the ?q= write lands
+      once after the pause (the static drawer lists are memoized so
+      keystrokes don't re-render the 78-endpoint menu).
+- [ ] The desktop drawer never shows an internal scrollbar: content renders
+      full height, sticks under the top nav only while it fits the viewport,
+      and taller content (search results, expanded endpoint lists) flows with
+      the page scroll — the bottom of the menu stays reachable.
+
+## Shared app-data (`/api/v1/app-data/shared`, `api/utils/apps/appData.ts`)
+
+- [ ] POST /api/v1/app-data with `visibility: 'app'` on a token WITHOUT the
+      `app-data.shared` scope returns 403 and writes nothing; with the scope
+      the entry's acl becomes `["tt:user", "tt:app/<clientId>"]`.
+- [ ] A plain `{ key, value }` rewrite of an existing shared entry keeps it
+      shared (audience only changes when the write names one); `visibility:
+      'private'` flips the acl back to `["tt:user"]`.
+- [ ] GET /api/v1/app-data/shared returns other users' `visibility: 'app'`
+      entries for the SAME app only — never private entries, never another
+      app's entries — newest first, and `key=post:*` prefix-filters.
+- [ ] Author objects honour each AUTHOR's own grant: displayName/avatarUrl
+      appear only when that author granted the profile field.
+- [ ] Revoking a user's grant (disconnect in settings) removes their entries
+      from the shared feed on the next read while `GET /api/v1/app-data`
+      still shows the entries to the owner.
+- [ ] The consent screen lists "Shared app storage" as its own line, and a
+      grant of plain `app-data` does NOT cover `app-data.shared` (exact
+      consent — no ancestor coverage).
+- [ ] GET /api/docs returns the whole API reference as text/markdown, and
+      /api/docs-docs + every `<endpoint>-docs` route (including
+      /api/v1/app-data/shared-docs) return their JSON doc payloads.
+
+## Sandbox tokens (`/api/v1/oauth/sandbox`, `api/utils/apps/sandbox.ts`)
+
+- [ ] POST /api/v1/oauth/sandbox (no auth, any clientId) returns a Bearer
+      token that works against /app-data set/get/list/delete, the shared
+      pool, and /oauth/userinfo — resolving to the synthetic `sandbox-you`
+      user, never a real account.
+- [ ] Sandbox app-data docs carry `sandboxExpiresAt` (TTL-reaped) and are
+      namespaced per token: a second sandbox token sees NONE of the first's
+      entries (private or shared).
+- [ ] A sandbox token can never act as an account credential:
+      /api/v1/auth/me (and any cookie/session path) rejects it.
+- [ ] GET /api/v1/apps/public?sandbox=1 returns a mock app (flagged
+      `sandbox: true`) for an unregistered clientId instead of 404; without
+      sandbox=1 the 404/403 behaviour is unchanged.
+- [ ] The consent popup's sandbox approve hands back a REAL minted token
+      (falls back to the inert `tt-sandbox-token` only if the mint call
+      fails), and scope gating on the handoff user object still matches the
+      selection.
+- [ ] Feed-pollution fence: a sandbox token minted with a REAL app's
+      clientId can write shared entries, but that real app's
+      /app-data/shared feed never scans them (`sandboxExpiresAt` excluded)
+      — real pages stay full-size even with fresh sandbox junk on top.
+- [ ] Sandbox storage budget: the 51st key for one sandbox token 400s
+      (SANDBOX_MAX_KEYS), while real grants keep the 200-key cap.
+- [ ] Sandbox spaces: tokens minted with the same `space` see each other's
+      visibility-'app' entries in /app-data/shared, each authored by its own
+      `sandbox-<username>` pretend user; PRIVATE entries stay per-token even
+      in a shared space; a different space (or no space) sees nothing; real
+      feeds still exclude all sandbox docs.
+- [ ] Space validation: space shorter than 8 chars 400s; usernames are
+      always 'sandbox-' prefixed so pooled feeds can't impersonate real
+      accounts.

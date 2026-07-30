@@ -18,6 +18,19 @@ import {
 import { Link as RouterLink } from 'react-router';
 
 import { CodeWindow, WindowTrafficLights } from './docsCode';
+import { embedGuideSection, type EmbedGuideSection } from './embedSections';
+import { useDocsAnchorScroll } from './useDocsAnchorScroll';
+
+// Section headings render from the shared spine (embedSections.ts) so anchors,
+// titles, and the docs search index stay in lockstep; the bodies below each
+// heading stay hand-crafted.
+function GuideHeading({ section }: { section: EmbedGuideSection }) {
+  return (
+    <Heading id={section.id} scrollMarginTop="112px" size="md">
+      {section.title}
+    </Heading>
+  );
+}
 
 // /docs/embed — the "Login with Thingtime" integration guide for platforms:
 // SDK quick start, themed button config, permission scopes, token usage
@@ -70,8 +83,19 @@ const SHARED_THINGS_CODE = `Thingtime.shared(session.token).then(function (thing
 const APP_STORAGE_CODE = `var data = Thingtime.data(session.token);
 data.set('preferences', { theme: 'rainbow' });   // any JSON ≤ 32KB, ≤ 200 keys/user
 data.get('preferences').then(function (value) { … });
-data.list();                                     // [{ key, value, updatedAt }, …]
-data.remove('preferences');`;
+data.list();                                     // [{ key, value, visibility, updatedAt }, …]
+data.remove('preferences');
+
+// SHARED entries ('app-data.shared' scope): visible to other users of YOUR
+// app — never other apps, never the public web. Opt-in per entry on write:
+data.set('post:2026-07-27', { text: 'Miso soup 🍲' }, { visibility: 'app' });
+data.shared({ key: 'post:*', limit: 20 }).then(function (page) {
+  // page.entries → [{ key, value, updatedAt, createdAt, author }, …] newest
+  //   first; author = { id, username, displayName?, avatarUrl? } — shaped by
+  //   what THAT author granted, like /oauth/userinfo
+  // page.nextCursor → pass back as { cursor } until null
+});
+// Revoking the grant pulls a user's shared entries from the feed instantly.`;
 
 const SCOPE_ROWS = [
   {
@@ -98,6 +122,11 @@ const SCOPE_ROWS = [
     id: 'app-data',
     shares: 'Read/write the app’s OWN key/value data for this user',
     notes: '/api/v1/app-data* returns 403 without it.'
+  },
+  {
+    id: 'app-data.shared',
+    shares: 'Entries the app marks shared become readable by OTHER users of the same app',
+    notes: 'EXACT consent — app-data does NOT imply it; request it explicitly. Opt-in per entry on write.'
   },
   {
     id: 'things',
@@ -331,6 +360,9 @@ function LoginButtonPreview() {
 }
 
 export default function DocsEmbed() {
+  // docs search deep-links sections here (/docs/embed#permissions-scopes …)
+  useDocsAnchorScroll();
+
   return (
     <Stack spacing={8} maxW="860px" minW={0}>
       <Box borderBottom="1px solid" borderColor="var(--tt-border, #ececef)" pb={6}>
@@ -369,7 +401,7 @@ export default function DocsEmbed() {
       </Box>
 
       <Stack spacing={3}>
-        <Heading size="md">1 · Register your app</Heading>
+        <GuideHeading section={embedGuideSection.registerYourApp} />
         <Text>
           While logged in to Thingtime, register an app with a name and the exact origins your site runs
           on. The server mints your public <code>clientId</code>. Origins must be bare https origins
@@ -391,7 +423,7 @@ export default function DocsEmbed() {
       </Stack>
 
       <Stack spacing={3}>
-        <Heading size="md">2 · Drop in the button</Heading>
+        <GuideHeading section={embedGuideSection.dropInTheButton} />
         <Text>
           Load the SDK from Thingtime and render the styled button. Clicking it opens the Thingtime
           login popup (or new tab on mobile browsers that force it); the user logs in or registers,
@@ -405,12 +437,32 @@ export default function DocsEmbed() {
           <code>Thingtime.login({'{ clientId, scopes, optionalScopes }'})</code> from a click handler —
           it returns a Promise of the same session object. (It must run in a user gesture or the popup
           will be blocked.) While building, add <code>sandbox: true</code> — the popup runs the full
-          consent UI with a pretend token and nothing is really shared.
+          consent UI for <em>any</em> clientId (registered or not) and hands back a <strong>real
+          working sandbox token</strong>: it drives <code>/app-data*</code>, the shared pool, and{' '}
+          <code>userinfo</code> for an hour against a pretend account whose data is namespaced to that
+          one token and auto-deleted. Nothing real is ever touched.
+        </Text>
+        <Text>
+          No browser at all (scripts, AIs, CI)? Mint the same token headlessly —{' '}
+          <code>
+            POST /api/v1/oauth/sandbox {'{ clientId, origin, scope: "profile.username app-data" }'}
+          </code>{' '}
+          — anonymous and registration-free, and <code>GET /api/v1/apps/public?sandbox=1</code> answers
+          the consent-shape lookup for any clientId. Code written against the sandbox works unchanged
+          once you register the real app.
+        </Text>
+        <Text>
+          Testing the <strong>multi-user shared feed</strong>? Mint several sandbox tokens with the
+          same <code>space</code> (a pool secret you choose — use a uuid) and distinct{' '}
+          <code>username</code>s: same-space sandboxes see each other&apos;s shared entries as
+          separate pretend users (<code>sandbox-ada</code>, <code>sandbox-grace</code>, …), while
+          private entries and other spaces stay isolated. In the popup, pass{' '}
+          <code>sandboxSpace</code> / <code>sandboxUsername</code> to <code>Thingtime.login()</code>.
         </Text>
       </Stack>
 
       <Stack spacing={3}>
-        <Heading size="md">Live preview</Heading>
+        <GuideHeading section={embedGuideSection.livePreview} />
         <Text>
           The snippet above, rendered for real — pick a theme and size, then click the button to open
           the sandbox login popup and walk the whole consent flow.
@@ -419,7 +471,7 @@ export default function DocsEmbed() {
       </Stack>
 
       <Stack spacing={3}>
-        <Heading size="md">3 · Permissions (scopes)</Heading>
+        <GuideHeading section={embedGuideSection.permissionsScopes} />
         <Text>
           Scopes are <strong>hierarchical dot paths</strong> over the user’s data — ask for exactly
           the granularity you need (<code>profile.avatar</code>, not the whole profile). You declare a{' '}
@@ -456,7 +508,7 @@ export default function DocsEmbed() {
       </Stack>
 
       <Stack spacing={3}>
-        <Heading size="md">4 · Use the token</Heading>
+        <GuideHeading section={embedGuideSection.useTheToken} />
         <Text>
           <strong>Identity (SSO):</strong> resolve who the token belongs to — call it any time to sync
           the account on your side. Works from your site’s JS (CORS is bound to your origin) or your
@@ -482,7 +534,7 @@ export default function DocsEmbed() {
       </Stack>
 
       <Stack spacing={3}>
-        <Heading size="md">Security model</Heading>
+        <GuideHeading section={embedGuideSection.securityModel} />
         <Stack spacing={2} fontSize="sm" color="var(--tt-muted, #9a9aa6)">
           <Text>
             🔑 App tokens are revocable Thingtime sessions scoped to your app — they are rejected by
@@ -509,7 +561,7 @@ export default function DocsEmbed() {
       </Stack>
 
       <Stack spacing={3} pb={8}>
-        <Heading size="md">Try it</Heading>
+        <GuideHeading section={embedGuideSection.tryIt} />
         <Text>
           A live playground ships at{' '}
           <ChakraLink href="/sdk/demo.html" color="var(--tt-docs-accent-ink, #0f5132)" isExternal>
