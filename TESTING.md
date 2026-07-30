@@ -311,6 +311,15 @@ is fixed, and cite the checklist you ran in the PR description.
       override (page falls back to Thingtime default without a reload).
 - [ ] The `tt_mongo` cookie is httpOnly + session-scoped: closing the browser
       drops the override; document.cookie can't read it.
+- [ ] LOCAL DEV footer parity: with an override active, the footer indicator
+      reads "MongoDB (custom)" on the local stack too. Regression class: the
+      vite /api proxy's changeOrigin hid the web origin from nitro, so
+      resolveStatusTarget classified "Current Tab" as REMOTE and health routes
+      re-fetched themselves WITHOUT cookies (session state invisible). The
+      proxy must forward x-forwarded-host/-proto (vite.config.ts) — verify
+      /api/v1/health/mongodb?targetOrigin=<web origin> returns custom:true
+      with the cookie, while a real remote target (e.g. thingtime.com) still
+      server-side fetches.
 
 ## Docs search (`remix/app/routes/docs/DocsSearch.tsx`, `docsSearchIndex.ts`)
 
