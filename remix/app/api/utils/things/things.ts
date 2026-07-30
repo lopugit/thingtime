@@ -95,6 +95,16 @@ export type ThingDoc = {
   visibility?: ThingVisibility; // v1 residue (mapped onto acl at read time)
   targetId?: string | null;
   tags?: string[];
+  // Token grants: tt:token/<id> entries naming the personal-access-token
+  // sessions (auth/patTokens.ts) whose sandboxed mutations may touch this
+  // thing. The creating token is auto-granted; the owner (or any credential
+  // that can update the thing) layers more tokens on by replacing the list.
+  // Separate from `acl` on purpose — acl is the VIEW audience, this is the
+  // per-credential WRITE surface — and projected to the owner only.
+  tokenAcl?: string[];
+  // Legacy single-value form of the same grant (round-2 stamp) — read as an
+  // implicit tt:token/<id> entry by tokenAclOf; never written anymore.
+  createdByTokenId?: string;
   createdAt: Date;
   updatedAt: Date;
   // App namespace (apps/namespace.ts): things written through an app token
@@ -210,6 +220,9 @@ export type PublicThing = {
   crystal: Record<string, any>;
   extended: unknown | null;
   tags: string[];
+  // owner-only: the thing's tt:token/<id> grant list (absent for other
+  // viewers and when empty)
+  tokenAcl?: string[];
   createdAt: string;
   updatedAt: string;
 };
@@ -217,7 +230,14 @@ export type PublicThing = {
 // Who is looking. Routes pass { id, username } from the authed PublicUser;
 // internal callers may only have an id (username-specific acl exclusions
 // simply can't match then). Plain string ids are accepted for compat.
-export type Viewer = { id: string; username?: string | null } | null;
+// When the actor is a personal access token, `pat` rides along: tokenId
+// stamps everything the token creates (createdByTokenId), and
+// onlyCreatedThings sandboxes its mutations to those stamped things.
+export type Viewer = {
+  id: string;
+  username?: string | null;
+  pat?: { tokenId: string; onlyCreatedThings: boolean } | null;
+} | null;
 export const asViewer = (value: string | Viewer | null | undefined): Viewer =>
   typeof value === 'string' ? { id: value } : value || null;
 
@@ -269,9 +289,87 @@ export const isFail = (value: unknown): value is Fail =>
   !!value && typeof value === 'object' && !Array.isArray(value) && (value as any).ok === false;
 
 // Route-layer adapter: the authed user (or null) → the Viewer acl evaluation
-// expects. Shared so every route passes the same shape.
-export const viewerOf = (user: { id: string; username: string } | null): Viewer =>
-  user ? { id: user.id, username: user.username } : null;
+// expects. Shared so every route passes the same shape. Routes resolving via
+// resolveThingsActor pass the pat context so creates stamp provenance and
+// sandboxed tokens stay inside their own creations.
+export const viewerOf = (
+  user: { id: string; username: string } | null,
+  pat?: { jti: string; onlyCreatedThings?: boolean } | null
+): Viewer =>
+  user
+    ? {
+        id: user.id,
+        username: user.username,
+        ...(pat ? { pat: { tokenId: pat.jti, onlyCreatedThings: pat.onlyCreatedThings === true } } : {})
+      }
+    : null;
+
+// ---------------------------------------------------------------------------
+// Token grants — the tt:token/<id> system. Every thing a PAT creates carries
+// its creator's entry in `tokenAcl`; the owner (or any credential that can
+// update the thing) layers more tokens on by replacing that list, so several
+// sandboxed tokens can overlap on shared things. A sandboxed token
+// (auth/patTokens.ts onlyCreatedThings) may only aim mutations/engagement at
+// things carrying ITS entry. Session actors and unsandboxed tokens ignore
+// tokenAcl entirely — and it never affects visibility (that stays acl's job).
+
+export const TOKEN_ACL_PREFIX = 'tt:token/';
+const MAX_TOKEN_ACL_ENTRIES = 32;
+// jtis are UUIDs today; the entry grammar accepts a generous id charset so a
+// future id format never needs a data migration
+const TOKEN_ACL_ENTRY_RE = /^tt:token\/[A-Za-z0-9_-]{1,64}$/;
+
+export const tokenAclEntryFor = (tokenId: string): string => `${TOKEN_ACL_PREFIX}${tokenId}`;
+
+// A doc's token grants. Legacy round-2 docs carried the single-value
+// createdByTokenId stamp — read it as an implicit entry so things stamped
+// before the tt:token/ list keep honoring their creator (writes only ever
+// produce tokenAcl now).
+export const tokenAclOf = (doc: ThingDoc): string[] => {
+  const entries = Array.isArray(doc.tokenAcl)
+    ? doc.tokenAcl.filter((entry): entry is string => typeof entry === 'string')
+    : [];
+  if (doc.createdByTokenId && !entries.includes(tokenAclEntryFor(doc.createdByTokenId))) {
+    return [...entries, tokenAclEntryFor(doc.createdByTokenId)];
+  }
+  return entries;
+};
+
+// undefined → no change requested; null → clear; otherwise a strict list of
+// tt:token/<id> entries (deduped, bounded). Unknown token ids are allowed —
+// an entry for a revoked/dead token is simply inert, and validating existence
+// per write would cost a sessions query for no security gain.
+const sanitizeTokenAcl = (value: unknown): Fail | string[] | undefined => {
+  if (value === undefined) return undefined;
+  const list = value === null ? [] : value;
+  if (!Array.isArray(list)) {
+    return fail(400, 'tokenAcl must be a list of tt:token/<token id> entries');
+  }
+  const out: string[] = [];
+  for (const entry of list) {
+    if (typeof entry !== 'string' || !TOKEN_ACL_ENTRY_RE.test(entry)) {
+      return fail(400, `tokenAcl entries look like tt:token/<token id> — got ${String(entry).slice(0, 80)}`);
+    }
+    if (!out.includes(entry)) out.push(entry);
+  }
+  if (out.length > MAX_TOKEN_ACL_ENTRIES) {
+    return fail(400, `tokenAcl holds at most ${MAX_TOKEN_ACL_ENTRIES} entries`);
+  }
+  return out;
+};
+
+// Token sandbox: the token id a sandboxed viewer is confined to, or null for
+// session actors / unsandboxed tokens.
+export const patSandboxOf = (viewer: Viewer): string | null =>
+  viewer?.pat?.onlyCreatedThings ? viewer.pat.tokenId : null;
+
+const patSandboxBlocks = (viewer: Viewer, doc: ThingDoc): boolean => {
+  const tokenId = patSandboxOf(viewer);
+  return !!tokenId && !tokenAclOf(doc).includes(tokenAclEntryFor(tokenId));
+};
+
+const patSandboxFail = (): Fail =>
+  fail(403, 'This token is sandboxed — it can only touch things carrying its tt:token grant 🧸');
 
 // ---------------------------------------------------------------------------
 // Era helpers — one place that knows how to read both doc generations.
@@ -374,6 +472,9 @@ export type CreateThingInput = {
   visibility?: unknown; // legacy alias, mapped onto acl
   targetId?: unknown;
   tags?: unknown;
+  // tt:token/<id> grants to seed on the new thing (the creating token's own
+  // entry is added automatically when a PAT creates)
+  tokenAcl?: unknown;
   // seeding/migration pass fixed ids + timestamps for idempotency
   shareId?: unknown;
   createdAt?: Date;
@@ -479,6 +580,9 @@ export const createThing = async (
   const extended = sanitizeExtended(input.extended);
   if (isFail(extended)) return extended;
 
+  const requestedTokenAcl = sanitizeTokenAcl(input.tokenAcl);
+  if (isFail(requestedTokenAcl)) return requestedTokenAcl;
+
   // marketplace listings fold their category into tags so filters find them —
   // post crystals only (a free-form data crystal can carry any `listing`
   // value, which must never leak unsanitized into the multikey tags index)
@@ -509,6 +613,11 @@ export const createThing = async (
         if (root) target = root;
       }
     }
+    // Sandboxed tokens may only ATTACH to their own creations (comment/react/
+    // save/share on a foreign thing is engagement outside the sandbox). For
+    // shares this applies to the final root — re-sharing a token-created share
+    // of someone else's post would attach to that foreign root, so it blocks.
+    if (patSandboxBlocks(viewer, target)) return patSandboxFail();
     targetId = target.shareId;
   } else if (input.targetId !== undefined && input.targetId !== null) {
     return fail(400, `thingtime ${validated.thingtime.join('+')} does not take a targetId`);
@@ -548,6 +657,11 @@ export const createThing = async (
   const things = await getThingsCollection();
   const now = input.createdAt instanceof Date ? input.createdAt : new Date();
 
+  const tokenAclDoc = [
+    ...(viewer?.pat ? [tokenAclEntryFor(viewer.pat.tokenId)] : []),
+    ...(requestedTokenAcl || [])
+  ].filter((entry, index, all) => all.indexOf(entry) === index);
+
   // App writes charge their serialized size against the (user, app) byte
   // budget BEFORE inserting (admission can never overshoot; a failed insert
   // refunds), and carry the namespace stamp — the server-authoritative root
@@ -574,6 +688,10 @@ export const createThing = async (
     acl,
     targetId,
     tags: allTags,
+    // every PAT-created thing carries its creator's grant (sandboxed or not —
+    // free provenance) plus any entries the caller seeded; a sandboxed
+    // creator listing peers here is delegation at birth
+    ...(tokenAclDoc.length ? { tokenAcl: tokenAclDoc } : {}),
     createdAt: now,
     updatedAt: now,
     ...(app && sizeBytes !== null ? appNamespaceStamp(app, sizeBytes) : {})
@@ -1026,22 +1144,29 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
   return docs.map((doc) => project(doc, true));
 };
 
-export const toPublicThings = async (docs: ThingDoc[], _viewer: string | Viewer): Promise<PublicThing[]> => {
+export const toPublicThings = async (docs: ThingDoc[], viewerInput: string | Viewer): Promise<PublicThing[]> => {
   if (!docs.length) return [];
+  const viewer = asViewer(viewerInput);
   const profiles = await resolveProfiles(docs.map((doc) => doc.ownerId));
-  return docs.map((doc) => ({
-    id: doc.shareId,
-    thingtime: thingtimeOf(doc),
-    author: profiles.get(doc.ownerId) || null,
-    visibility: visibilityFromAcl(aclOf(doc)),
-    acl: aclOf(doc),
-    targetId: targetIdOf(doc),
-    crystal: crystalOf(doc),
-    extended: doc.extended ?? null,
-    tags: doc.tags || [],
-    createdAt: new Date(doc.createdAt).toISOString(),
-    updatedAt: new Date(doc.updatedAt).toISOString()
-  }));
+  return docs.map((doc) => {
+    // token grants are owner-facing management data, not audience — only the
+    // owner's own credentials (session or their tokens) see them
+    const tokenAcl = viewer?.id && viewer.id === doc.ownerId ? tokenAclOf(doc) : [];
+    return {
+      id: doc.shareId,
+      thingtime: thingtimeOf(doc),
+      author: profiles.get(doc.ownerId) || null,
+      visibility: visibilityFromAcl(aclOf(doc)),
+      acl: aclOf(doc),
+      targetId: targetIdOf(doc),
+      crystal: crystalOf(doc),
+      extended: doc.extended ?? null,
+      tags: doc.tags || [],
+      ...(tokenAcl.length ? { tokenAcl } : {}),
+      createdAt: new Date(doc.createdAt).toISOString(),
+      updatedAt: new Date(doc.updatedAt).toISOString()
+    };
+  });
 };
 
 // ---------------------------------------------------------------------------
@@ -1727,6 +1852,8 @@ export const toggleReaction = async (
   }
   const target = await findViewableThingAs(shareId, viewer, app);
   if (!target) return fail(404, 'Post not found');
+  // guard the REMOVE path too — createThing only covers the add
+  if (patSandboxBlocks(viewer, target)) return patSandboxFail();
 
   // the reaction unique index exists before any insert: it is created at
   // instance boot (server/plugins/mongo-warmup) and awaited during register,
@@ -1829,6 +1956,8 @@ export const toggleSave = async (
   if (!viewer?.id) return fail(401, 'Unauthorized');
   const target = await findViewableThing(shareId, viewer);
   if (!target) return fail(404, 'Thing not found');
+  // guard the UNSAVE path too — createThing only covers the save
+  if (patSandboxBlocks(viewer, target)) return patSandboxFail();
 
   const things = await getThingsCollection();
   const existing = await things
@@ -1879,6 +2008,9 @@ export const addComment = async (
   const viewerId = viewer.id;
   const target = await findViewableThingAs(shareId, viewer, app);
   if (!target) return fail(404, 'Post not found');
+  // fail before the residue migration + count queries (createThing would
+  // catch it anyway — this is the earlier, cheaper exit)
+  if (patSandboxBlocks(viewer, target)) return patSandboxFail();
 
   // first write claims any legacy embedded residue into standalone things
   // (namespace targets are always v2 — nothing to claim under the app lens)
@@ -1959,6 +2091,7 @@ export const sharePost = async (
   const viewerId = viewer.id;
   const original = await findViewableThing(shareId, viewer);
   if (!original || !isPostThing(original)) return fail(404, 'Post not found');
+  if (patSandboxBlocks(viewer, original)) return patSandboxFail();
   if (original.ownerId !== viewerId && !aclOf(original).includes(ACL_ALL)) {
     return fail(403, 'Only public posts can be shared');
   }
@@ -2017,14 +2150,27 @@ export const deleteThing = async (
   // generic DELETE — $nin on the multikey array excludes them atomically. Their
   // dedicated endpoints (themes, algorithms) own deletion. Under the app lens
   // the filter additionally carries the namespace stamp, so an app can only
-  // ever delete what it stored.
+  // ever delete what it stored; sandboxed tokens add their grant stamp to the
+  // same atomic filter — no check-then-delete race either way.
+  const sandboxTokenId = patSandboxOf(viewer);
   const deleted = (await things.findOneAndDelete({
     shareId: shareId.trim(),
     ownerId: viewer.id,
     thingtime: { $nin: [...PROTECTED_THINGTIME] },
-    ...(app ? { appId: app.appId } : {})
+    ...(app ? { appId: app.appId } : {}),
+    ...(sandboxTokenId
+      ? { $or: [{ tokenAcl: tokenAclEntryFor(sandboxTokenId) }, { createdByTokenId: sandboxTokenId }] }
+      : {})
   } as any)) as any as ThingDoc | null;
-  if (!deleted) return fail(404, 'Thing not found');
+  if (!deleted) {
+    // distinguish "not yours to touch" from "gone" so a sandboxed AI gets an
+    // actionable error instead of a phantom 404 (failure path only — the
+    // success path stays a single atomic op)
+    if (sandboxTokenId && (await things.findOne({ shareId: shareId.trim(), ownerId: viewer.id } as any))) {
+      return patSandboxFail();
+    }
+    return fail(404, 'Thing not found');
+  }
   // comments/reactions/saves attached to the deleted thing go with it (v2
   // things AND interim kind docs); share things survive so they can render
   // their 'original unavailable' placeholder
@@ -2051,6 +2197,8 @@ export type UpdateThingInput = {
   acl?: unknown;
   visibility?: unknown; // legacy alias, mapped onto acl
   tags?: unknown;
+  // tt:token/<id> grants — replaced whole when provided (null clears)
+  tokenAcl?: unknown;
 };
 
 // Own-thing update. PATCH semantics by default: crystal patches merge over the
@@ -2073,6 +2221,7 @@ export const updateThing = async (
   // app writes stay inside the namespace: a thing the acting user owns but
   // that this app didn't store is a plain 404 (no existence oracle)
   if (app && doc.appId !== app.appId) return fail(404, 'Thing not found');
+  if (patSandboxBlocks(viewer, doc)) return patSandboxFail();
 
   const thingtime = thingtimeOf(doc);
   // system kinds mutate only through their dedicated utils (profile update,
@@ -2154,6 +2303,13 @@ export const updateThing = async (
   if (isFail(extended)) return extended;
   const hasExtendedChange = input.extended !== undefined;
 
+  // token grants replace whole too (merging grant lists is ambiguous; null
+  // clears). The sandbox guard above already ran, so a sandboxed token can
+  // only re-grant on things it holds a grant on — and it may lock itself out
+  // by dropping its own entry, like chmod.
+  const nextTokenAcl = sanitizeTokenAcl(input.tokenAcl);
+  if (isFail(nextTokenAcl)) return nextTokenAcl;
+
   // App updates charge the size DELTA against the namespace budget before
   // writing (mirrors setAppData: over-budget refuses, shrink refunds after).
   let sizeDelta = 0;
@@ -2178,6 +2334,7 @@ export const updateThing = async (
     thingtime,
     crystal: validated.crystal,
     ...(hasExtendedChange ? { extended: extended.value } : {}),
+    ...(nextTokenAcl !== undefined ? { tokenAcl: nextTokenAcl } : {}),
     targetId: targetIdOf(doc),
     tags,
     acl,
@@ -2185,7 +2342,9 @@ export const updateThing = async (
     ...(app && newSize !== null ? { appId: app.appId, sizeBytes: newSize } : {})
   };
   // upgrading a v1 post in place — clear the legacy crystal-at-root fields the
-  // v2 shape replaces (embedded comments/reactions stay for the migration)
+  // v2 shape replaces (embedded comments/reactions stay for the migration).
+  // A tokenAcl replacement also clears the legacy round-2 stamp, so a removed
+  // grant can't resurrect through the tokenAclOf back-compat read.
   const unset: Record<string, any> = {
     kind: '',
     type: '',
@@ -2194,7 +2353,8 @@ export const updateThing = async (
     listing: '',
     shareOfId: '',
     shareCount: '',
-    visibility: ''
+    visibility: '',
+    ...(nextTokenAcl !== undefined ? { createdByTokenId: '' } : {})
   };
   try {
     await things.updateOne({ shareId: doc.shareId } as any, { $set: set, $unset: unset } as any);
@@ -2213,6 +2373,7 @@ export const updateThing = async (
   delete (updated as any).shareOfId;
   delete (updated as any).shareCount;
   delete (updated as any).visibility;
+  if (nextTokenAcl !== undefined) delete (updated as any).createdByTokenId;
 
   const thing = (await toPublicThings([updated], viewer))[0];
   if (app) {

@@ -1,7 +1,7 @@
 import { json } from '~/api/http';
 
-import { actorCors, actorUser, resolveActor } from '~/api/utils/auth/resolveActor';
-import { appDataPreflight } from '~/api/utils/apps/cors';
+import { actorCors, actorPat, actorUser, resolveActor } from '~/api/utils/auth/resolveActor';
+import { appCorsHeaders, appDataPreflight } from '~/api/utils/apps/cors';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import {
   appShapeProjections,
@@ -31,6 +31,25 @@ const rateLimitKeyFor = (body: any, accountKind: string): string => {
   return accountKind === 'service' ? 'things.write.service' : 'things.write';
 };
 
+// The PAT scope each mutation needs (auth/patTokens.ts). Mirrors
+// rateLimitKeyFor's body routing: a POST whose thingtime says it's a reaction
+// or comment needs that specific permission, not blanket create. PUT is an
+// upsert — it can create OR replace, so it needs both. Full sessions skip
+// scope checks entirely (resolveThingsActor returns pat: null).
+const patScopeFor = (method: string, body: any): string | string[] => {
+  if (method === 'POST') {
+    if (Array.isArray(body?.thingtime)) {
+      if (body.thingtime.includes('reaction')) return 'things.react';
+      if (body.thingtime.includes('comment')) return 'things.comment';
+    }
+    return 'things.create';
+  }
+  if (method === 'PUT') return ['things.create', 'things.update'];
+  if (method === 'PATCH') return 'things.update';
+  if (method === 'DELETE') return 'things.delete';
+  return 'things.read';
+};
+
 // Crystal payloads are small (text + image URLs + listing), but every thing
 // also carries the schema-free `extended` sidecar (up to EXTENDED_MAX_BYTES =
 // 512KB, enforced by sanitizeExtended) — the body cap leaves headroom for both.
@@ -54,7 +73,7 @@ const csv = (value: string | null): string[] =>
 // author-liveness — apps/namespace.ts), so an app sees its slice of the
 // user's Thingtime and nothing else.
 export const loader = async ({ request }: { request: Request }) => {
-  const actor = await resolveActor(request);
+  const actor = await resolveActor(request, { thingsScope: 'things.read' });
   if (actor instanceof Response) return actor;
   const user = actorUser(actor);
   const viewer = viewerOf(user);
@@ -96,7 +115,7 @@ export const loader = async ({ request }: { request: Request }) => {
       targetId: (params.get('target') || '').trim() || null,
       cursor: params.get('cursor'),
       limit: Number(params.get('limit')) || undefined,
-      appId: actor.kind === 'user' ? (params.get('appId') || '').trim() || null : null
+      appId: actor.kind === 'user' || actor.kind === 'pat' ? (params.get('appId') || '').trim() || null : null
     },
     app
   );
@@ -129,23 +148,33 @@ export const action = async ({ request }: { request: Request }) => {
   const preflight = appDataPreflight(request, 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
   if (preflight) return preflight;
 
-  const actor = await resolveActor(request);
+  // The 413 fires before any actor resolution (an oversized payload must not
+  // consume a PAT use), so its CORS headers come straight from the Origin.
+  const contentLength = Number(request.headers.get('content-length') || 0);
+  if (contentLength > MAX_BODY_BYTES) {
+    return json(
+      { ok: false, error: 'Post payload too large' },
+      { status: 413, headers: appCorsHeaders(request.headers.get('Origin')) }
+    );
+  }
+
+  // Body before auth: the PAT scope a mutation needs depends on what the body
+  // says it is (a POST carrying thingtime ['reaction'] is a react, not a
+  // create), and a missing scope must 403 BEFORE a use is consumed.
+  const method = request.method.toUpperCase();
+  const body = await request.json().catch(() => ({}));
+
+  const actor = await resolveActor(request, { thingsScope: patScopeFor(method, body) });
   if (actor instanceof Response) return actor;
   if (actor.kind === 'anonymous') {
     return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
   }
   const user = actorUser(actor)!;
-  const viewer = viewerOf(user);
+  // pat context rides the viewer: creates stamp the token's tt:token grant,
+  // and a sandboxed token's writes stay inside its granted things (things.ts)
+  const viewer = viewerOf(user, actorPat(actor));
   const app = actor.kind === 'app' ? actor.scope : null;
   const cors = actorCors(actor);
-
-  const contentLength = Number(request.headers.get('content-length') || 0);
-  if (contentLength > MAX_BODY_BYTES) {
-    return json({ ok: false, error: 'Post payload too large' }, { status: 413, headers: cors });
-  }
-
-  const method = request.method.toUpperCase();
-  const body = await request.json().catch(() => ({}));
 
   // Every mutating verb is throttled — the generic endpoint must not be a way
   // around the per-op limits main added to the react/comment sub-routes. No

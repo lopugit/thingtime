@@ -1,6 +1,6 @@
 import { json } from '~/api/http';
 
-import { actorCors, actorUser, resolveActor } from '~/api/utils/auth/resolveActor';
+import { actorCors, actorPat, actorUser, resolveActor } from '~/api/utils/auth/resolveActor';
 import { appDataPreflight, readJsonBodyWithCors } from '~/api/utils/apps/cors';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import { deletePost, viewerOf } from '~/api/utils/things/things';
@@ -12,7 +12,7 @@ export const action = async ({ request }: { request: Request }) => {
   const preflight = appDataPreflight(request);
   if (preflight) return preflight;
 
-  const actor = await resolveActor(request);
+  const actor = await resolveActor(request, { thingsScope: 'things.delete' });
   if (actor instanceof Response) return actor;
   if (actor.kind === 'anonymous') {
     return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
@@ -33,7 +33,7 @@ export const action = async ({ request }: { request: Request }) => {
   }
 
   const body = await readJsonBodyWithCors(request, 64 * 1024, cors);
-  const result = await deletePost(viewerOf(user), body.id, app);
+  const result = await deletePost(viewerOf(user, actorPat(actor)), body.id, app);
 
   if (result.ok === false) {
     return json({ ok: false, error: result.error }, { status: result.status, headers: cors });

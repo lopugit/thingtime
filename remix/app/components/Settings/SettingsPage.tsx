@@ -3,6 +3,7 @@ import { Box, Button, Flex, Image, Input, Switch, Text, Textarea } from '@chakra
 import { useNavigate } from 'react-router';
 
 import { AlgorithmManager } from './AlgorithmManager';
+import { TokenMinter } from './TokenMinter';
 import { RainbowButton, SettingRow, SettingsSection } from './SettingsSection';
 import { AccountSwitcher } from '~/components/Account/AccountSwitcher';
 import { AdminPanel } from '~/components/Admin/AdminPanel';
@@ -409,6 +410,16 @@ export const SettingsPage = () => {
 
         {/* connected apps — grants + everything each app stores */}
         {user && <ConnectedAppsSection userId={user.id} />}
+
+        {/* token minter (auth only) — scoped API tokens for AIs & scripts */}
+        {user && (
+          <SettingsSection
+            eyebrow="Token minter 🪙"
+            description="Mint scoped API tokens to hand to an AI, agent, or script — it can push new things, update things, and scan your things, without your password. Expire them by time (1ms to never) or by number of uses, optionally sandbox one to only the things it creates, and revoke anytime."
+          >
+            <TokenMinter key={user.id} userId={user.id} />
+          </SettingsSection>
+        )}
 
         {/* admin (admins only) */}
         {user?.isAdmin && (

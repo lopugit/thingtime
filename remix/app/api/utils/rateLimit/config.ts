@@ -76,7 +76,15 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   'auth.resendVerification': { limit: 5, windowMs: 15 * 60_000, enabled: true },
   // login attempts (password step and OTP step share the endpoint): bounds
   // credential stuffing and OTP-email sends beyond the per-challenge attempt cap
-  'auth.login': { limit: 30, windowMs: 60_000, enabled: true }
+  'auth.login': { limit: 30, windowMs: 60_000, enabled: true },
+  // personal-access-token minting (POST /api/v1/tokens) — session-authed, but
+  // each mint writes a session doc, so bound accumulation beyond the per-user
+  // token cap
+  'tokens.mint': { limit: 30, windowMs: 3_600_000, enabled: true },
+  // PAT listing aggregates the user's pat sessions — bounded like oauth.grants
+  'tokens.read': { limit: 60, windowMs: 60_000, enabled: true },
+  // PAT revocation — cheap owner-bound update, still bounded
+  'tokens.revoke': { limit: 60, windowMs: 60_000, enabled: true }
 };
 
 export const RATE_LIMIT_ENDPOINTS = Object.keys(RATE_LIMIT_DEFAULTS);

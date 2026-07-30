@@ -185,7 +185,14 @@ export function useApi() {
       update: useCallback(
         async (args) =>
           asyncFetcher.submit(
-            { id: args?.id, crystal: args?.crystal, acl: args?.acl, visibility: args?.visibility, tags: args?.tags },
+            {
+              id: args?.id,
+              crystal: args?.crystal,
+              acl: args?.acl,
+              visibility: args?.visibility,
+              tags: args?.tags,
+              tokenAcl: args?.tokenAcl
+            },
             { action: '/api/v1/things', method: 'PATCH' }
           ),
         [asyncFetcher]
@@ -200,7 +207,8 @@ export function useApi() {
               acl: args?.acl,
               visibility: args?.visibility,
               targetId: args?.targetId,
-              tags: args?.tags
+              tags: args?.tags,
+              tokenAcl: args?.tokenAcl
             },
             { action: '/api/v1/things', method: 'PUT' }
           ),
@@ -209,10 +217,10 @@ export function useApi() {
       reactionsRecent: useCallback(async () => getJson('/api/v1/things/reactions-recent'), []),
       create: useCallback(
         async (args) => {
-          const { type, text, images, listing, thing, thingtime, crystal, targetId, acl, visibility, tags } = args;
+          const { type, text, images, listing, thing, thingtime, crystal, targetId, acl, visibility, tags, tokenAcl } = args;
           // unified shape when thingtime is given, legacy post shape otherwise
           const payload = Array.isArray(thingtime)
-            ? { thingtime, crystal, targetId, acl, visibility, tags }
+            ? { thingtime, crystal, targetId, acl, visibility, tags, tokenAcl }
             : { type, text, images, listing, thing, acl, visibility, tags };
           return asyncFetcher.submit(payload, { action: '/api/v1/things' });
         },
@@ -274,6 +282,29 @@ export function useApi() {
       ),
       dataDeleteAll: useCallback(
         async (args) => asyncFetcher.submit({ appId: args?.appId }, { action: '/api/v1/apps/data/delete-all' }),
+        [asyncFetcher]
+      )
+    },
+    tokens: {
+      // personal access tokens (Settings → Token minter) — the mint response
+      // carries the token string exactly once
+      list: useCallback(async () => getJson('/api/v1/tokens'), []),
+      mint: useCallback(
+        async (args) =>
+          asyncFetcher.submit(
+            {
+              name: args?.name,
+              scopes: args?.scopes,
+              expiresInMs: args?.expiresInMs ?? null,
+              maxUses: args?.maxUses ?? null,
+              onlyCreatedThings: args?.onlyCreatedThings === true
+            },
+            { action: '/api/v1/tokens' }
+          ),
+        [asyncFetcher]
+      ),
+      revoke: useCallback(
+        async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/tokens/revoke' }),
         [asyncFetcher]
       )
     },

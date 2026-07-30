@@ -1,6 +1,8 @@
 import { json } from '~/api/http';
 
 import { getCurrentUser } from './getCurrentUser';
+import { resolveThingsActor as resolvePatOrSessionActor } from './patTokens';
+import type { PatContext } from './patTokens';
 import type { PublicUser } from './users';
 import { resolveAppToken } from '../apps/appTokens';
 import type { AppTokenContext } from '../apps/appTokens';
@@ -17,6 +19,13 @@ import { scopeCovers } from '../apps/scopes';
 //
 //   user       first-party session — httpOnly cookie or the user's own Bearer
 //              JWT. Full first-party behaviour, byte-for-byte unchanged.
+//   pat        a personal access token from the Settings token minter
+//              (purpose 'pat', Bearer-only): acts AS the user but only where
+//              its scopes allow — resolving it here consumed one use. The pat
+//              context must ride into viewerOf(user, pat) so sandboxed tokens
+//              (onlyCreatedThings) hit their tt:token grant checks in
+//              things.ts. Only resolved when opts.thingsScope is passed — on
+//              every other surface a PAT stays default-denied.
 //   app        an app-scoped token ("Login with Thingtime", purpose 'app' or
 //              'app-sandbox'): Bearer-only, origin-bound, scope-checked, and
 //              carrying the namespace scope every query/write MUST thread
@@ -27,6 +36,7 @@ import { scopeCovers } from '../apps/scopes';
 
 export type Actor =
   | { kind: 'user'; user: PublicUser }
+  | { kind: 'pat'; user: PublicUser; pat: PatContext }
   | {
       kind: 'app';
       ctx: AppTokenContext;
@@ -36,16 +46,25 @@ export type Actor =
     }
   | { kind: 'anonymous' };
 
-export const actorUser = (actor: Actor): PublicUser | null => (actor.kind === 'anonymous' ? null : actor.kind === 'user' ? actor.user : actor.ctx.user);
+export const actorUser = (actor: Actor): PublicUser | null =>
+  actor.kind === 'anonymous' ? null : actor.kind === 'app' ? actor.ctx.user : actor.user;
 
 export const actorCors = (actor: Actor): Record<string, string> => (actor.kind === 'app' ? actor.cors : {});
+
+// The pat context (or null) for threading into viewerOf — a helper so call
+// sites can't accidentally hand a pat-less viewer to the util layer and skip
+// the sandbox/grant checks.
+export const actorPat = (actor: Actor): PatContext | null => (actor.kind === 'pat' ? actor.pat : null);
 
 // Resolve the acting credential, or a ready CORS-carrying error Response.
 // The app path requires the app-data scope by default — the namespace
 // capability the user consented to; pass requiredAppScope to demand another.
+// Things-family routes pass thingsScope (the PAT permission the request
+// needs): that opts the route into resolving personal access tokens too —
+// missing-scope 403s and exhausted-use 401s come back as ready Responses.
 export const resolveActor = async (
   request: Request,
-  opts: { requiredAppScope?: string } = {}
+  opts: { requiredAppScope?: string; thingsScope?: string | string[] } = {}
 ): Promise<Actor | Response> => {
   // App tokens are Bearer-only (never a cookie), so this probe is free for
   // cookie sessions; a user's own Bearer JWT fails the purpose check inside
@@ -77,6 +96,22 @@ export const resolveActor = async (
       cors,
       rateIdentity: `user:${ctx.user.id}:app:${ctx.clientId}`
     };
+  }
+
+  // Things-family routes resolve PATs through the scope-checking,
+  // use-consuming path (patTokens.ts) — full sessions come back pat-less and
+  // unknown/expired credentials degrade to anonymous, exactly like
+  // getCurrentUser. PAT-specific failures (missing scope, no uses left)
+  // become ready error Responses.
+  if (opts.thingsScope !== undefined) {
+    const resolved = await resolvePatOrSessionActor(request, opts.thingsScope);
+    if (resolved.ok === false) {
+      return json({ ok: false, error: resolved.error }, { status: resolved.status });
+    }
+    const { user, pat } = resolved.actor;
+    if (user && pat) return { kind: 'pat', user, pat };
+    if (user) return { kind: 'user', user };
+    return { kind: 'anonymous' };
   }
 
   const user = await getCurrentUser(request);

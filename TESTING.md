@@ -419,3 +419,97 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] Space validation: space shorter than 8 chars 400s; usernames are
       always 'sandbox-' prefixed so pooled feeds can't impersonate real
       accounts.
+
+## Token minter — personal access tokens (`remix/app/components/Settings/TokenMinter.tsx`, `api/utils/auth/patTokens.ts`)
+
+- [ ] Settings → Token minter (auth only): mint with default "Full things
+      access" — the returned token appears ONCE in the reveal card (token +
+      curl example + copy buttons); after reload the reveal is gone and the
+      token is unrecoverable, but the row lists in "Your tokens" (painted
+      instantly from the `tt-pat-tokens-<userId>` local cache, server
+      reconciles behind).
+- [ ] Permissions selector: with Full things access on, unticking one leaf
+      (e.g. Delete) converts the selection to "every leaf except that one"
+      and the hint lists exactly the granted scopes; minting with zero
+      scopes is blocked with a toast.
+- [ ] Expiry dials stay in sync: preset chips (1h…1y, Never ∞), the
+      log-scale slider (1ms → 10y, far right = never), and the value+unit
+      inputs all drive the same expiresInMs; the human date preview updates.
+- [ ] Uses dials: Unlimited / 1 / 10 / 1000 / custom; a use-limited token
+      consumes exactly one use per authenticated call — the (maxUses+1)-th
+      call 401s "no uses remaining", and a 403 (missing scope) consumes
+      NOTHING. Two racing final calls can never both spend the last use
+      (atomic usesRemaining > 0 decrement).
+- [ ] A PAT works ONLY where wired: things CRUD/search/feed/user/save/
+      comment/react/share by scope (PUT upsert needs create+update), plus
+      free introspection at /api/v1/tokens/self. It must 401 on
+      /api/v1/tokens (list/mint), /tokens/revoke, /auth/me, themes,
+      algorithms, oauth — and be rejected when smuggled via the auth
+      COOKIE (Bearer-only).
+- [ ] Sub-second expiry is real: a 1500ms token works immediately and 401s
+      after 2s (session expiresAt is the authoritative ms check; the JWT
+      exp is ceiled to seconds).
+- [ ] Revoke (session-only) kills the token immediately, is idempotent,
+      flips the row optimistically (reverts on failure), and gives a
+      never-expiring token a reap date so the TTL index eventually clears
+      it. Expired tokens vanish from the list once Mongo's TTL sweep runs.
+- [ ] Permissions selector "Select all ✅ / Unselect all 🧹" buttons: all →
+      the single Full-access chip state; none → zero chips + mint blocked.
+- [ ] Sandbox ("Only its own things 🧸", onlyCreatedThings) — the tt:token
+      grant system: every PAT-created thing carries the creator's
+      tt:token/<id> entry in tokenAcl; a sandboxed token CAN patch/PUT-
+      replace/delete/comment/react/save/share things carrying its entry and
+      gets 403 "sandboxed … tt:token grant" on everything else (the 403 is a
+      post-auth target check, so it DOES consume a use — only missing-scope
+      403s are free) — including reaction/save REMOVAL on ungranted things
+      and re-sharing a token-created share of a foreign root. Delete stays
+      one atomic filter op on success (tokenAcl OR legacy createdByTokenId)
+      and returns the sandbox 403, not a phantom 404, when the thing exists
+      but carries no grant.
+- [ ] Grant layering: owner PATCHes a thing's tokenAcl to [A, B] → BOTH
+      sandboxed tokens mutate it; removing A's entry cuts A off immediately
+      while B keeps working; owner can CREATE a thing pre-granted to a
+      token that never touched it; a sandboxed token can re-grant (add
+      peers to) things it holds a grant on, and can lock itself out by
+      dropping its own entry (session always recovers it). tokenAcl
+      replaces WHOLE (null clears), max 32 entries, entries must match
+      tt:token/<id> (400 otherwise), and a tokenAcl replacement also clears
+      the legacy createdByTokenId stamp so removed grants can't resurrect
+      through the back-compat read.
+- [ ] tokenAcl is owner-only in projections: the owner (and their tokens)
+      see it on GET /things?id=; anonymous viewers and other users never
+      receive the field. Legacy round-2 docs (createdByTokenId, no
+      tokenAcl) still honor their creator via the read shim.
+- [ ] Non-sandboxed tokens and full sessions ignore tokenAcl entirely; the
+      settings list row shows "🧸 its own things only" + a "Grant 🆔"
+      copy button (copies tt:token/<id>).
+
+## Rate limiting & index-ensure reliability (`api/utils/rateLimit/enforce.ts`, `api/utils/mongodb/collections.ts`)
+
+- [ ] Healthy path: burst a rate-limited endpoint past its limit (e.g.
+      `things.search`, 120/min → 121 requests) → 429 with `Retry-After`,
+      and NO `[rate-limit]`/`[mongodb]` error lines in the logs.
+- [ ] Index-ensure failure is AUDIBLE, never silent: break the index battery
+      (drop `things_v2`'s `ownerId_1_crystal.appId_1_crystal.key_1` unique
+      index, insert two docs sharing `(ownerId, crystal.appId, crystal.key)`),
+      start a FRESH API process → the boot-time warmup run logs one
+      `[mongodb] ensureIndexes failed building things.<index> — retrying in 60s`
+      line naming the broken index. The cold-start PR moved the battery off
+      the request path, so ordinary API traffic neither retries it nor logs;
+      the awaited callers (`registerUser`, admin migrations) surface the
+      cached failure fast instead of re-running the battery.
+- [ ] Failure is cached with a cooldown, not retried per caller: register
+      attempts inside the same 60s window add NO new `[mongodb]` lines and run
+      no fresh ~60-command createIndex battery (the old reset-to-null re-ran
+      it per caller — a retry storm on top of the fail-open).
+- [ ] Self-heals after cleanup: delete the dup docs, then restart the dev
+      process — or wait out the 60s cooldown and hit an ensureIndexes caller
+      (register a user / run an admin migration) → no new error lines, the
+      unique index is rebuilt (`getIndexes()` shows it).
+- [ ] Limiter outage is AUDIBLE, never silent: with the limiter's own DB ops
+      failing (e.g. Mongo down/unreachable), a limited endpoint logs
+      `[rate-limit] enforcement unavailable for <rule> — failing open` per
+      request; ordinary actions fail open (the route then surfaces its own DB
+      error), `failClosed` routes return the 429 unavailable shape. Regression
+      class: a bare `catch {}` fail-open invisibly disabled ALL rate limiting
+      (2026-07 perf audit).

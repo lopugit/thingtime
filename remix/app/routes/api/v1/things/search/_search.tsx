@@ -68,7 +68,13 @@ export const loader = async ({ request }: { request: Request }) => {
   // response depends only on the URL and can be edge-cached; otherwise resolve
   // the acting credential (cookie session, first-party Bearer, or app token).
   const anonCacheable = params.get('anon') === '1';
-  const actor: Actor | Response = anonCacheable ? { kind: 'anonymous' } : await resolveActor(request);
+  // Non-anon calls resolve the acting credential: cookie session, first-party
+  // Bearer, app token, or a scoped PAT (things.read) — unknown/stale
+  // credentials degrade to anonymous; PAT-specific failures (missing scope,
+  // exhausted uses) come back as explicit errors.
+  const actor: Actor | Response = anonCacheable
+    ? { kind: 'anonymous' }
+    : await resolveActor(request, { thingsScope: 'things.read' });
   if (actor instanceof Response) return actor;
   return respond(
     request,
@@ -105,7 +111,7 @@ export const action = async ({ request }: { request: Request }) => {
   if (request.method.toUpperCase() !== 'POST') {
     return json({ ok: false, error: 'Method not allowed' }, { status: 405, headers: { Allow: 'GET, POST' } });
   }
-  const actor = await resolveActor(request);
+  const actor = await resolveActor(request, { thingsScope: 'things.read' });
   if (actor instanceof Response) return actor;
   const body = await readJsonBodyWithCors(request, MAX_BODY_BYTES, actorCors(actor));
   return respond(request, actor, {

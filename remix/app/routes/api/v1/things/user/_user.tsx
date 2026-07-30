@@ -1,12 +1,16 @@
 import { json } from '~/api/http';
 
-import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
+import { resolveThingsActor } from '~/api/utils/auth/patTokens';
 import { listUserPosts } from '~/api/utils/things/things';
 
 // GET /api/v1/things/user?username=&cursor=&limit= — a user's posts, filtered
 // to what the viewer may see (owners see all their circles, others see public).
 export const loader = async ({ request }: { request: Request }) => {
-  const user = await getCurrentUser(request);
+  const auth = await resolveThingsActor(request, 'things.read');
+  if (auth.ok === false) {
+    return json({ ok: false, error: auth.error }, { status: auth.status });
+  }
+  const user = auth.actor.user;
   const params = new URL(request.url).searchParams;
 
   const result = await listUserPosts(
