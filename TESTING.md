@@ -6,6 +6,18 @@ see `AGENTS.md`). Each list is the distilled regression history of that area:
 every line exists because it broke once. Add a line whenever a new bug class
 is fixed, and cite the checklist you ran in the PR description.
 
+## Worktree dependency bootstrap (`remix/scripts/ensure-dependencies.js`)
+
+- [ ] In a fresh linked worktree with no copied `node_modules`, run
+      `npm run worktree-setup`: every direct Remix dependency is linked and
+      `npm --prefix remix run ensure-deps -- --check` passes.
+- [ ] With the pnpm virtual store present but top-level `eslint` and `vite`
+      links removed, run `npm run worktree-setup`: both links are restored
+      without copying dependency files from another checkout.
+- [ ] Run `npm run worktree-setup` again: it exits successfully without
+      reinstalling, then `corepack pnpm --dir remix run lint:files --
+      scripts/ensure-dependencies.js scripts/dev.mjs` starts ESLint normally.
+
 ## Composer — Thingtime tab (`remix/app/components/Feed/PostComposer.tsx`)
 
 - [ ] Open the feed composer → Thingtime tab: the editor shows exactly ONE

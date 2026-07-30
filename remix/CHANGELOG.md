@@ -19,6 +19,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Fresh worktrees now bootstrap complete pnpm dependency links**: Codex
+  worktree carryover no longer copies large, partial `node_modules` symlink
+  trees that can leave ESLint/Vite wrappers without their packages. A shared
+  dependency check now repairs links from pnpm's store and runs automatically
+  before Remix dev, build, and lint commands. — Codex (AI), 2026-07-30
+
 - **PR #69 final-review hardening round**: a multi-agent review of the unified
   /search + profile/feed branch surfaced a batch of merge-blocking issues, all
   fixed here — Claude (AI), 2026-07-17:

@@ -44,18 +44,23 @@
     pm2-start time).
 
   If a derived port is already taken, Vite fails fast (strictPort) — set the
-  TT_* overrides. If a worktree stack crash-loops with missing packages (e.g.
-  `Cannot find package 'rolldown'`), the copied `remix/node_modules` is
-  incomplete — run `corepack pnpm --dir remix install` and restart. If that
-  plain install finishes in under a second reporting done but the package is
-  still missing, the copied store's links are stale while pnpm thinks state is
-  current — rerun with `corepack pnpm --dir remix install --force`.
+  TT_* overrides. Fresh worktrees deliberately do not copy dependency trees:
+  pnpm's symlink graph is not portable between checkouts. Run
+  `npm run worktree-setup` to bootstrap or repair Remix dependencies from the
+  shared pnpm store. The canonical dev/build/lint entry points run the same
+  check automatically and retry one forced relink if pnpm's links stay stale.
   When preview/testing tooling needs to own the dev-server process (it usually
   cannot attach to the PM2-managed port), run a second foreground stack beside
   PM2 on a free trio: `TT_WEB_PORT=<web> TT_HMR_PORT=<hmr> TT_API_PORT=<api>
   npm --prefix remix run dev`. Keep any tooling config that hardcodes worktree
   ports (for example `.claude/launch.json`) untracked.
-- Codex-managed worktrees use the root `.worktreeinclude` to copy ignored local setup into new managed worktrees. Keep tracked files out of `.worktreeinclude`, but preserve intentional ignored carryover paths for env files, dependency installs, and local generated state needed for validation. The current dependency directories alone are roughly 1.5 GB when present, and generated-output patterns can make managed worktrees larger.
+- Codex-managed worktrees use the root `.worktreeinclude` to copy ignored local
+  setup into new managed worktrees. Keep tracked files and every
+  `node_modules/` directory out of `.worktreeinclude`: copied pnpm symlink
+  trees can be incomplete and were roughly 1.5 GB. Preserve intentional env
+  files and local generated state needed for validation; rebuild Remix
+  dependencies with `npm run worktree-setup` and install other workspace
+  dependencies through their normal package-manager command when needed.
 - When cloning or checking out branches under `.test-branches/`, copy the
   parent checkout's local env files into the clone before running install,
   dev, build, or smoke checks. Preserve matching paths for root `.env*` files

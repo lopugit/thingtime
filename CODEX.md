@@ -38,8 +38,11 @@ This file records workspace-specific setup fixes discovered while working in the
 - Preferred targeted lint command for Remix changes:
 
   ```sh
-  pnpm --dir remix exec eslint <changed remix files>
+  corepack pnpm --dir remix run lint:files -- <changed remix files>
   ```
+
+  This path also repairs missing pnpm links in fresh or copied worktrees before
+  ESLint starts.
 
 ## TypeScript checks
 

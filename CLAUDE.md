@@ -46,11 +46,13 @@
   port trio with the same `TT_*` overrides and keep tooling-specific launch
   config untracked.
 - Codex-managed worktrees use the root `.worktreeinclude` to copy ignored local
-  setup into new managed worktrees. Keep tracked files out of `.worktreeinclude`,
-  but preserve intentional ignored carryover paths for env files, dependency
-  installs, and local generated state needed for validation. The current
-  dependency directories alone are roughly 1.5 GB when present, and
-  generated-output patterns can make managed worktrees larger.
+  setup into new managed worktrees. Keep tracked files and every
+  `node_modules/` directory out of `.worktreeinclude`: copied pnpm symlink
+  trees can be incomplete and were roughly 1.5 GB. Preserve intentional env
+  files and local generated state needed for validation; rebuild Remix
+  dependencies with `npm run worktree-setup` and install other workspace
+  dependencies normally when needed. The canonical Remix dev/build/lint entry
+  points run the same dependency check automatically.
 - Before finishing a PR, run the manual checklists in `TESTING.md` for every
   area the PR touches, and add a line there whenever a new bug class is fixed
   (rule mirrored in `AGENTS.md`).
