@@ -163,7 +163,24 @@ export default defineConfig({
         target: apiProxyTarget,
         changeOrigin: true,
         configure(proxy) {
-          if (!shouldUseProductionApiProxy) return;
+          if (!shouldUseProductionApiProxy) {
+            // changeOrigin rewrites Host to the nitro API port, hiding the
+            // origin the browser is actually on. Forward the real host the way
+            // Vercel's edge does (x-forwarded-*): statusTarget's
+            // getRequestOrigin() honours these, which keeps "Current Tab"
+            // health checks classified LOCAL — answered in the request's own
+            // cookie/session context (the footer's "MongoDB (custom)"
+            // indicator depends on this) instead of re-fetched cookielessly.
+            // An upstream proxy's x-forwarded-* (e.g. Tailscale funnel) wins.
+            proxy.on('proxyReq', (proxyReq, req) => {
+              const host = req.headers.host;
+              if (!host || proxyReq.getHeader('x-forwarded-host')) return;
+              proxyReq.setHeader('x-forwarded-host', host);
+              const proto = String(req.headers['x-forwarded-proto'] || '').split(',')[0]?.trim();
+              proxyReq.setHeader('x-forwarded-proto', proto || 'http');
+            });
+            return;
+          }
 
           proxy.on('proxyReq', (proxyReq) => {
             proxyReq.setHeader('x-thingtime-api-fallback', 'vite-dev');

@@ -514,6 +514,32 @@ export const apiTests: ApiTestDefinition[] = [
     expect: expectJson([400], (body) => body?.ok === false && Boolean(body?.error), 'Unknown crypto action rejected.')
   },
   {
+    id: 'teapot-418',
+    name: 'Teapot declines to brew',
+    description: 'The hidden RFC 2324 endpoint answers 418 with a brew-time haiku, and its -docs twin is real.',
+    group: 'health',
+    method: 'GET',
+    path: '/api/v1/teapot',
+    expect: expectJson(
+      [418],
+      (body) => body?.ok === false && typeof body?.haiku === 'string' && /🫖/.test(body.haiku),
+      'The teapot returned 418 with a haiku.'
+    )
+  },
+  {
+    id: 'unknown-endpoint-lopu-404',
+    name: 'Unknown endpoints speak Lopu',
+    description: 'A missing API path returns the standard {ok:false, error} envelope in Lopu voice, not a bare text 404.',
+    group: 'health',
+    method: 'GET',
+    path: '/api/v1/definitely-not-a-real-endpoint',
+    expect: expectJson(
+      [404],
+      (body) => body?.ok === false && typeof body?.error === 'string' && body.error.includes('Lopu'),
+      'The 404 envelope is JSON and Lopu-voiced.'
+    )
+  },
+  {
     id: 'health-frontend',
     name: 'Frontend health',
     description: 'Frontend health checks the app shell.',
