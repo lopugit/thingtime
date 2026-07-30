@@ -2,7 +2,7 @@
   "AGENTS.md": {
     "mtime": 1785412389.152778,
     "ast_hash": "56c9e8c4a4302114f861cb6eff0340ec",
-    "semantic_hash": ""
+    "semantic_hash": "56c9e8c4a4302114f861cb6eff0340ec"
   },
   ".claude/settings.json": {
     "mtime": 1785412389.149542,
@@ -1522,7 +1522,7 @@
   "CLAUDE.md": {
     "mtime": 1785412389.1542115,
     "ast_hash": "982ddab997b99ad04366b7c643143c1d",
-    "semantic_hash": ""
+    "semantic_hash": "982ddab997b99ad04366b7c643143c1d"
   },
   "CODEX.md": {
     "mtime": 1785412389.1542988,
@@ -1537,17 +1537,17 @@
   "FUNDAMENTALS.md": {
     "mtime": 1785412389.154627,
     "ast_hash": "82fa5bf66ed6433a094dd7df2573dc6e",
-    "semantic_hash": ""
+    "semantic_hash": "82fa5bf66ed6433a094dd7df2573dc6e"
   },
   "README.md": {
     "mtime": 1785412389.1583526,
     "ast_hash": "985cde2d57a222a4e5d87a8daa5ce34b",
-    "semantic_hash": ""
+    "semantic_hash": "985cde2d57a222a4e5d87a8daa5ce34b"
   },
   "VERCEL_DEPLOYMENTS.md": {
     "mtime": 1785412389.1625283,
     "ast_hash": "f1e86ddf3be593832c51891324010ca4",
-    "semantic_hash": ""
+    "semantic_hash": "f1e86ddf3be593832c51891324010ca4"
   },
   "docs/Use Cases/car.md": {
     "mtime": 1785412389.164438,
@@ -1722,7 +1722,7 @@
   "iOS/AGENTS.md": {
     "mtime": 1785412389.3256845,
     "ast_hash": "3a0ec1e896de674b924ab4e7b59a50da",
-    "semantic_hash": ""
+    "semantic_hash": "3a0ec1e896de674b924ab4e7b59a50da"
   },
   "iOS/CLAUDE.md": {
     "mtime": 1785412389.3261266,
@@ -1737,12 +1737,12 @@
   "iOS/fastlane/README.md": {
     "mtime": 1785412389.3329713,
     "ast_hash": "e9065834cd91a8cb309ba920944ff112",
-    "semantic_hash": ""
+    "semantic_hash": "e9065834cd91a8cb309ba920944ff112"
   },
   "iOS/project.yml": {
     "mtime": 1785412389.3335323,
     "ast_hash": "4518549f51dc3c8041ef37ae4e1fcc0f",
-    "semantic_hash": ""
+    "semantic_hash": "4518549f51dc3c8041ef37ae4e1fcc0f"
   },
   "raycast/CHANGELOG.md": {
     "mtime": 1785412389.344388,
@@ -1767,7 +1767,7 @@
   "remix/CHANGELOG.md": {
     "mtime": 1785413571.2416592,
     "ast_hash": "ac7d69b94c5b28b0ff9d9873087bc65c",
-    "semantic_hash": ""
+    "semantic_hash": "ac7d69b94c5b28b0ff9d9873087bc65c"
   },
   "remix/README.md": {
     "mtime": 1785412389.4237976,
@@ -1777,12 +1777,12 @@
   "remix/index.html": {
     "mtime": 1785412389.5999055,
     "ast_hash": "5ed164a41ecb7daad74c3c890218948f",
-    "semantic_hash": ""
+    "semantic_hash": "5ed164a41ecb7daad74c3c890218948f"
   },
   "remix/pnpm-workspace.yaml": {
     "mtime": 1785412389.603997,
     "ast_hash": "4df9c87eae3419a950c1f120b8bec539",
-    "semantic_hash": ""
+    "semantic_hash": "4df9c87eae3419a950c1f120b8bec539"
   },
   "remix/public/favicon_import.html": {
     "mtime": 1785412389.6229126,
@@ -1792,7 +1792,7 @@
   "iOS/Thingtime/Resources/Assets.xcassets/AppIcon.appiconset/icon-1024.png": {
     "mtime": 1785412389.3299503,
     "ast_hash": "954fa066283c6b60bee3a97ea406dcbd",
-    "semantic_hash": ""
+    "semantic_hash": "954fa066283c6b60bee3a97ea406dcbd"
   },
   "raycast/assets/command-icon.png": {
     "mtime": 1785412389.3451421,
@@ -2427,32 +2427,32 @@
   "remix/public/android-icon-144x144.png": {
     "mtime": 1785412389.6048107,
     "ast_hash": "60530fa99681b1de4398167446af8830",
-    "semantic_hash": ""
+    "semantic_hash": "60530fa99681b1de4398167446af8830"
   },
   "remix/public/android-icon-192x192.png": {
     "mtime": 1785412389.605147,
     "ast_hash": "5597b7e33da799fc9c3557ccf5c26968",
-    "semantic_hash": ""
+    "semantic_hash": "5597b7e33da799fc9c3557ccf5c26968"
   },
   "remix/public/android-icon-36x36.png": {
     "mtime": 1785412389.605441,
     "ast_hash": "8fccd32e6ba6c83fe112ae5e47907d99",
-    "semantic_hash": ""
+    "semantic_hash": "8fccd32e6ba6c83fe112ae5e47907d99"
   },
   "remix/public/android-icon-48x48.png": {
     "mtime": 1785412389.6058037,
     "ast_hash": "a8312beefb7a171fbf451129f53bd03c",
-    "semantic_hash": ""
+    "semantic_hash": "a8312beefb7a171fbf451129f53bd03c"
   },
   "remix/public/android-icon-72x72.png": {
     "mtime": 1785412389.6061532,
     "ast_hash": "8aad85ca71312e2b95fe57fb998bd369",
-    "semantic_hash": ""
+    "semantic_hash": "8aad85ca71312e2b95fe57fb998bd369"
   },
   "remix/public/android-icon-96x96.png": {
     "mtime": 1785412389.6064012,
     "ast_hash": "d5a5095ed62b33388273808e0c9c2601",
-    "semantic_hash": ""
+    "semantic_hash": "d5a5095ed62b33388273808e0c9c2601"
   },
   "remix/public/anti-displacement.svg": {
     "mtime": 1785412389.6064816,
@@ -2462,57 +2462,57 @@
   "remix/public/apple-icon-114x114.png": {
     "mtime": 1785412389.6067505,
     "ast_hash": "8a7ff812fe618f939766ea1282302d52",
-    "semantic_hash": ""
+    "semantic_hash": "8a7ff812fe618f939766ea1282302d52"
   },
   "remix/public/apple-icon-120x120.png": {
     "mtime": 1785412389.6070192,
     "ast_hash": "d95897e81e3ea20ff5c745adf45b7717",
-    "semantic_hash": ""
+    "semantic_hash": "d95897e81e3ea20ff5c745adf45b7717"
   },
   "remix/public/apple-icon-144x144.png": {
     "mtime": 1785412389.6071422,
     "ast_hash": "60530fa99681b1de4398167446af8830",
-    "semantic_hash": ""
+    "semantic_hash": "60530fa99681b1de4398167446af8830"
   },
   "remix/public/apple-icon-152x152.png": {
     "mtime": 1785412389.6073844,
     "ast_hash": "fa122cb35e5cc0f93bd89964799688a0",
-    "semantic_hash": ""
+    "semantic_hash": "fa122cb35e5cc0f93bd89964799688a0"
   },
   "remix/public/apple-icon-180x180.png": {
     "mtime": 1785412389.6076522,
     "ast_hash": "6e14eddb468de0d5aec93a59b45aa688",
-    "semantic_hash": ""
+    "semantic_hash": "6e14eddb468de0d5aec93a59b45aa688"
   },
   "remix/public/apple-icon-57x57.png": {
     "mtime": 1785412389.6080236,
     "ast_hash": "4d3f70a2bed684a4d7939a67f9742d03",
-    "semantic_hash": ""
+    "semantic_hash": "4d3f70a2bed684a4d7939a67f9742d03"
   },
   "remix/public/apple-icon-60x60.png": {
     "mtime": 1785412389.6082547,
     "ast_hash": "44b1d9d3edaa73d190eafd8f3c4b415f",
-    "semantic_hash": ""
+    "semantic_hash": "44b1d9d3edaa73d190eafd8f3c4b415f"
   },
   "remix/public/apple-icon-72x72.png": {
     "mtime": 1785412389.608348,
     "ast_hash": "8aad85ca71312e2b95fe57fb998bd369",
-    "semantic_hash": ""
+    "semantic_hash": "8aad85ca71312e2b95fe57fb998bd369"
   },
   "remix/public/apple-icon-76x76.png": {
     "mtime": 1785412389.6085892,
     "ast_hash": "f55b58aaee8083d8fc60d833d9a5212b",
-    "semantic_hash": ""
+    "semantic_hash": "f55b58aaee8083d8fc60d833d9a5212b"
   },
   "remix/public/apple-icon-precomposed.png": {
     "mtime": 1785412389.608704,
     "ast_hash": "5597b7e33da799fc9c3557ccf5c26968",
-    "semantic_hash": ""
+    "semantic_hash": "5597b7e33da799fc9c3557ccf5c26968"
   },
   "remix/public/apple-icon.png": {
     "mtime": 1785412389.6088002,
     "ast_hash": "5597b7e33da799fc9c3557ccf5c26968",
-    "semantic_hash": ""
+    "semantic_hash": "5597b7e33da799fc9c3557ccf5c26968"
   },
   "remix/public/branding/thingtime-horizontal.svg": {
     "mtime": 1785412389.6089387,
@@ -2542,17 +2542,17 @@
   "remix/public/favicon-16x16.png": {
     "mtime": 1785412389.6215801,
     "ast_hash": "42eca76e510e034fb9654531191dd75e",
-    "semantic_hash": ""
+    "semantic_hash": "42eca76e510e034fb9654531191dd75e"
   },
   "remix/public/favicon-32x32.png": {
     "mtime": 1785412389.6218905,
     "ast_hash": "31dd2e879afa14b4c94c925c4026c628",
-    "semantic_hash": ""
+    "semantic_hash": "31dd2e879afa14b4c94c925c4026c628"
   },
   "remix/public/favicon-96x96.png": {
     "mtime": 1785412389.6220093,
     "ast_hash": "d5a5095ed62b33388273808e0c9c2601",
-    "semantic_hash": ""
+    "semantic_hash": "d5a5095ed62b33388273808e0c9c2601"
   },
   "remix/public/favicon-pink.png": {
     "mtime": 1785412389.622317,
@@ -2577,47 +2577,47 @@
   "remix/public/ms-icon-144x144.png": {
     "mtime": 1785412389.6300554,
     "ast_hash": "60530fa99681b1de4398167446af8830",
-    "semantic_hash": ""
+    "semantic_hash": "60530fa99681b1de4398167446af8830"
   },
   "remix/public/ms-icon-150x150.png": {
     "mtime": 1785412389.63068,
     "ast_hash": "28c25fa130ddc9a40b3411189d17f98b",
-    "semantic_hash": ""
+    "semantic_hash": "28c25fa130ddc9a40b3411189d17f98b"
   },
   "remix/public/ms-icon-310x310.png": {
     "mtime": 1785412389.6332657,
     "ast_hash": "f10bb874da3266848f11ad163abaca9f",
-    "semantic_hash": ""
+    "semantic_hash": "f10bb874da3266848f11ad163abaca9f"
   },
   "remix/public/ms-icon-70x70.png": {
     "mtime": 1785412389.633521,
     "ast_hash": "82aa3c705bc2e0e170e658e0487951c3",
-    "semantic_hash": ""
+    "semantic_hash": "82aa3c705bc2e0e170e658e0487951c3"
   },
   "resources/favicon/favicon_io (2)/android-chrome-192x192.png": {
     "mtime": 1785412389.6402185,
     "ast_hash": "f6aacaf99e67399b33c91551a5a6428f",
-    "semantic_hash": ""
+    "semantic_hash": "f6aacaf99e67399b33c91551a5a6428f"
   },
   "resources/favicon/favicon_io (2)/android-chrome-512x512.png": {
     "mtime": 1785412389.6405675,
     "ast_hash": "fadf331c97b4d75224385a653d5db518",
-    "semantic_hash": ""
+    "semantic_hash": "fadf331c97b4d75224385a653d5db518"
   },
   "resources/favicon/favicon_io (2)/apple-touch-icon.png": {
     "mtime": 1785412389.640808,
     "ast_hash": "6ed7fee0cd7425bceb969170e456cc45",
-    "semantic_hash": ""
+    "semantic_hash": "6ed7fee0cd7425bceb969170e456cc45"
   },
   "resources/favicon/favicon_io (2)/favicon-16x16.png": {
     "mtime": 1785412389.6410465,
     "ast_hash": "d1f7c4e3524b501e888a750aedd9a61f",
-    "semantic_hash": ""
+    "semantic_hash": "d1f7c4e3524b501e888a750aedd9a61f"
   },
   "resources/favicon/favicon_io (2)/favicon-32x32.png": {
     "mtime": 1785412389.6412992,
     "ast_hash": "fd0a1e79dba22250f8259e87aa77d0b4",
-    "semantic_hash": ""
+    "semantic_hash": "fd0a1e79dba22250f8259e87aa77d0b4"
   },
   "resources/svg/qrcode-forqrcode-com.svg": {
     "mtime": 1785412389.6417358,
@@ -4137,52 +4137,52 @@
   "PRs/63-claude-search-page-mongodb-query-154eb4--search-page-query-builder-ranked-text-search-by-schema.md": {
     "mtime": 1785412389.1568933,
     "ast_hash": "d89c3db10f7967d735e0e16cd99bd92b",
-    "semantic_hash": ""
+    "semantic_hash": "d89c3db10f7967d735e0e16cd99bd92b"
   },
   "PRs/65-claude-everything-is-a-thing-collections--users-themes-algorithms-waitlist-schemas-as-things.md": {
     "mtime": 1785412389.157174,
     "ast_hash": "f68aa835126b03f721b4040b1bebd5cc",
-    "semantic_hash": ""
+    "semantic_hash": "f68aa835126b03f721b4040b1bebd5cc"
   },
   "PRs/66-claude-extended-props-email-auth--extended-props-schemaless-crystals-email-reset-2fa.md": {
     "mtime": 1785412389.157276,
     "ast_hash": "58b7b92d6c9cb8bdd321856d8a73201b",
-    "semantic_hash": ""
+    "semantic_hash": "58b7b92d6c9cb8bdd321856d8a73201b"
   },
   "PRs/67-claude-profile-feed-advanced-filters-5878aa--profile-composer-thingtime-posts-advanced-filters.md": {
     "mtime": 1785412389.157657,
     "ast_hash": "b90178521f056d96b321324c83b6fcb0",
-    "semantic_hash": ""
+    "semantic_hash": "b90178521f056d96b321324c83b6fcb0"
   },
   "PRs/69-claude-unified-search-profile-feed-fe779a--unified-search-platform-profile-composer-advanced-filters.md": {
     "mtime": 1785412389.1580648,
     "ast_hash": "4448455299ef6c14ff048aeb3a9d70cb",
-    "semantic_hash": ""
+    "semantic_hash": "4448455299ef6c14ff048aeb3a9d70cb"
   },
   "SCHEMA-FEATURE-HANDOFF.md": {
     "mtime": 1785412389.1587267,
     "ast_hash": "110fbc1db42eab955a07544551553674",
-    "semantic_hash": ""
+    "semantic_hash": "110fbc1db42eab955a07544551553674"
   },
   "SCHEMA-PLATFORM-HANDOVER.md": {
     "mtime": 1785412389.159026,
     "ast_hash": "eed2474a5feb3e9ab2f043531ceae388",
-    "semantic_hash": ""
+    "semantic_hash": "eed2474a5feb3e9ab2f043531ceae388"
   },
   "TESTING.md": {
     "mtime": 1785413624.992672,
     "ast_hash": "0606142949f4f1e48af8c7ebdf871cd0",
-    "semantic_hash": ""
+    "semantic_hash": "0606142949f4f1e48af8c7ebdf871cd0"
   },
   "claude-todo/12-everything-is-a-thing-collections.md": {
     "mtime": 1785412389.162678,
     "ast_hash": "7fa10973fa365e2e0e4f7c530c0708c1",
-    "semantic_hash": ""
+    "semantic_hash": "7fa10973fa365e2e0e4f7c530c0708c1"
   },
   "remix/public/sdk/demo.html": {
     "mtime": 1785412389.6341798,
     "ast_hash": "32114f6124720a4e35d5dc90b8461ef9",
-    "semantic_hash": ""
+    "semantic_hash": "32114f6124720a4e35d5dc90b8461ef9"
   },
   "remix/app/api/utils/errors/safeError.ts": {
     "mtime": 1785412389.4377258,
@@ -4257,17 +4257,17 @@
   ".github/workflows/resolve-pr-conflicts.yml": {
     "mtime": 1785413490.9161644,
     "ast_hash": "3f4ffe17277eb7b54697e78fd9f8d1f9",
-    "semantic_hash": ""
+    "semantic_hash": "3f4ffe17277eb7b54697e78fd9f8d1f9"
   },
   "iOS/Thingtime/Resources/AppIcon.icon/Assets/canopy.svg": {
     "mtime": 1785412389.3275876,
     "ast_hash": "02068c3f701b1bea9fc1ecbe1c00e55b",
-    "semantic_hash": ""
+    "semantic_hash": "02068c3f701b1bea9fc1ecbe1c00e55b"
   },
   "iOS/Thingtime/Resources/AppIcon.icon/Assets/trunk.svg": {
     "mtime": 1785412389.3282485,
     "ast_hash": "55e69b541ba6d89575458f77c474d112",
-    "semantic_hash": ""
+    "semantic_hash": "55e69b541ba6d89575458f77c474d112"
   },
   "remix/api/index.js": {
     "mtime": 1785412407.113868,
@@ -4372,6 +4372,6 @@
   "TODO/claude-todo/15-anti-abuse-storage-hardening.md": {
     "mtime": 1785412389.1616242,
     "ast_hash": "f081f5292619ce2e0f699c8ac2b86c2e",
-    "semantic_hash": ""
+    "semantic_hash": "f081f5292619ce2e0f699c8ac2b86c2e"
   }
 }
