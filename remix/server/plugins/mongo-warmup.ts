@@ -6,15 +6,14 @@ import { ensureIndexes } from '../../app/api/utils/mongodb/collections';
 // ensure the moment a fresh instance boots, instead of awaiting them inside
 // the first user's request (the old inline `await ensureIndexes()` on hot
 // paths cost every new serverless instance a ~55-command createIndex battery
-// mid-request). ensureIndexes memoises per process, so request paths that
-// race this warmup simply await the same promise-in-flight via their own
-// collection getters; index CREATION is otherwise guaranteed by the awaited
-// bootstrap calls that remain in registerUser and the admin migrations.
+// mid-request). ensureIndexes shares in-flight/successful work per process;
+// hot request paths do not await it, while the true bootstrap calls that remain
+// in registerUser and the admin migrations await it before constrained writes.
 //
 // Fire-and-forget by design: an env-less deployment (api-fallback proxy mode,
 // where getMongoUri throws synchronously) or a transient Atlas outage must
-// not take the instance down — request paths surface real errors themselves
-// the moment they touch the db.
+// not take the instance down. A failed run logs its broken index and clears its
+// memoized promise so the next awaited bootstrap call can retry immediately.
 export default definePlugin(() => {
   try {
     void ensureIndexes().catch(() => {});

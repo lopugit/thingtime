@@ -3,6 +3,20 @@
 // credits are exhausted. These are Lopu's voice: warm, a touch magical, short,
 // at most one emoji. Rotated by time in musing.ts (no RNG — CodeQL-friendly).
 
+// 🔮 The make-a-wish slots (claude-todo/10): at 11:11 and midnight the musing
+// endpoint swaps in these instead of the rotation. Keyed off the SAME
+// visitor-timezone string the musing prompt uses (formatLocalTime's en-US
+// "h:mm AM/PM" shape), so seeded calls and real visitors hit the same slots —
+// deterministic, zero RNG, zero UI work.
+const WISH_MUSING = "It's 11:11 — close your eyes and make a wish. 🌠 (Lopu already made one for you.)";
+const MIDNIGHT_MUSING = 'Midnight exactly — a brand-new day, still unwritten. Wish well. 🌠';
+
+export const wishSlotMusing = (localTime: string): string | null => {
+	if (localTime === '11:11 AM' || localTime === '11:11 PM') return WISH_MUSING;
+	if (localTime === '12:00 AM') return MIDNIGHT_MUSING;
+	return null;
+};
+
 export const FALLBACK_MUSINGS: string[] = [
   'Tiny things become big things. Keep tending the little ones. ✨',
   'The best ideas, like unicorns, show up when you stop chasing them. 🦄',
