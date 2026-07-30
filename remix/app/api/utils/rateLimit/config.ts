@@ -74,7 +74,11 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // request — a resource-amplification + mailbox-spam vector if unbounded, and
   // the only auth endpoint that was still unthrottled. Anonymous, keyed by IP;
   // generous enough for legit retries (and shared NAT), admin-tunable.
-  'auth.register': { limit: 10, windowMs: 10 * 60_000, enabled: true }
+  'auth.register': { limit: 10, windowMs: 10 * 60_000, enabled: true },
+  // /crypto password hasher: anonymous and pure (no DB), but bcrypt burns
+  // ~100ms of CPU per call by design, so the budget is tight per IP — the
+  // compute is the abuse surface, not the hash it returns
+  'crypto.hashPassword': { limit: 20, windowMs: 60_000, enabled: true }
 };
 
 export const RATE_LIMIT_ENDPOINTS = Object.keys(RATE_LIMIT_DEFAULTS);
