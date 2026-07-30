@@ -367,6 +367,10 @@ export const SearchPage = () => {
   const requestSeqRef = React.useRef(0);
   const apiRef = React.useRef(api);
   apiRef.current = api;
+  // always-current viewer id so the search body can flag logged-out queries as
+  // edge-cacheable (`anon=1` → GET form) without stale-closure risk
+  const viewerIdRef = React.useRef(user?.id ?? null);
+  viewerIdRef.current = user?.id ?? null;
   const lopuRef = React.useRef(lopu);
   lopuRef.current = lopu;
 
@@ -413,7 +417,8 @@ export const SearchPage = () => {
         thingtime: current.kind || undefined,
         sort: effectiveSort,
         cursor: cursor || undefined,
-        limit: PAGE_SIZE
+        limit: PAGE_SIZE,
+        anon: viewerIdRef.current ? undefined : 1
       };
 
       try {

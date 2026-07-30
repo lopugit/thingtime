@@ -151,9 +151,19 @@ export function useApi() {
     things: {
       feed: useCallback(async (args) => getJson(`/api/v1/things/feed${toQuery(args)}`), []),
       // structured search — POST carries the condition tree (read-only despite
-      // the verb); see /docs/api things-search
+      // the verb); see /docs/api things-search. Anonymous simple searches
+      // (anon flag set, no condition tree) go over the GET form instead so
+      // Vercel's edge can cache the logged-out view (`anon=1` responses depend
+      // only on the URL). `mode` is meaningless without conditions, so the GET
+      // URL drops it to keep cache keys stable.
       search: useCallback(
-        async (args) => asyncFetcher.submit(args || {}, { action: '/api/v1/things/search' }),
+        async (args) => {
+          const { conditions, mode, ...rest } = args || {};
+          if (rest.anon && !conditions) {
+            return getJson(`/api/v1/things/search${toQuery(rest)}`);
+          }
+          return asyncFetcher.submit(args || {}, { action: '/api/v1/things/search' });
+        },
         [asyncFetcher]
       ),
       userPosts: useCallback(async (args) => getJson(`/api/v1/things/user${toQuery(args)}`), []),

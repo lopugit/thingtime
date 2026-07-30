@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 
-import { ensureIndexes, getThingsCollection } from '../mongodb/collections';
+import { getThingsCollection } from '../mongodb/collections';
 import {
   assertServiceQuotaChildId,
   parseServiceQuotaCount,
@@ -120,7 +120,6 @@ const initializeQuotaThing = async (
   policy: ServiceQuotaPolicy,
   now: number
 ): Promise<void> => {
-  await ensureIndexes();
   const things = await getThingsCollection();
   const at = new Date(now);
   const doc: QuotaThingDoc = {
@@ -284,7 +283,6 @@ export const getServiceQuotaStatus = async (
 ): Promise<ServiceQuotaStatus> =>
   withStoreErrors(async () => {
     const key = parseServiceQuotaKey(rawKey);
-    await ensureIndexes();
     const things = await getThingsCollection();
     const doc = await things.findOneAndUpdate(quotaMatch(ownerId, key), normalizePipeline(now), {
       returnDocument: 'after'
@@ -377,7 +375,6 @@ const permitQuota = async (
   const key = parseServiceQuotaKey(input.key);
   const reservationId = parseServiceQuotaId('reservationId', input.reservationId);
   const permitId = assertServiceQuotaChildId('permitId', reservationId, input.permitId);
-  await ensureIndexes();
   const things = await getThingsCollection();
   const permitIds = { $ifNull: ['$crystal.permitIds', []] };
   const releasedIds = { $ifNull: ['$crystal.releasedIds', []] };
@@ -450,7 +447,6 @@ const releaseQuota = async (
   const key = parseServiceQuotaKey(input.key);
   const reservationId = parseServiceQuotaId('reservationId', input.reservationId);
   const releaseId = assertServiceQuotaChildId('releaseId', reservationId, input.releaseId);
-  await ensureIndexes();
   const things = await getThingsCollection();
   const reservation = reservationExpression(reservationId);
   const permitIds = { $ifNull: ['$crystal.permitIds', []] };
@@ -569,7 +565,6 @@ const resetQuota = async (
   now: number
 ): Promise<ServiceQuotaMutationResult> => {
   const key = parseServiceQuotaKey(input.key);
-  await ensureIndexes();
   const things = await getThingsCollection();
   const doc = await things.findOneAndUpdate(
     quotaMatch(ownerId, key),

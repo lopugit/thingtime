@@ -1,6 +1,5 @@
 import { defineHandler } from 'nitro/h3';
 
-import { createApiDocPayload, getApiDocByPath } from '../../../app/docs/apiDocs';
 import { proxyApiRequestToFallback, shouldProxyApiToFallback } from '../../utils/apiFallback';
 
 type RouteModule = {
@@ -153,6 +152,9 @@ export default defineHandler(async (event) => {
       });
     }
 
+    // lazy: apiDocs is ~150KB of doc-string literals — parsing it belongs to
+    // the rare -docs request, not to every instance's cold start
+    const { createApiDocPayload, getApiDocByPath } = await import('../../../app/docs/apiDocs');
     const doc = getApiDocByPath(path);
     if (!doc) {
       return jsonResponse({ ok: false, error: 'API docs not found' }, { status: 404 });

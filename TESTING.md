@@ -289,6 +289,34 @@ is fixed, and cite the checklist you ran in the PR description.
       standalone-demo link within ~10s — the preview must never show a
       permanent loading state.
 
+## Docs search (`remix/app/routes/docs/DocsSearch.tsx`, `docsSearchIndex.ts`)
+
+- [ ] Searching "acl" in the /docs drawer ranks the Thing schema (its `acl`
+      field section) first; results highlight the matched terms and show an
+      area badge + mono meta path; the nav list hides while a query is
+      active and returns on clear (× button or Escape).
+- [ ] Anchored results deep-link AND scroll on client-side navigation:
+      "scopes" → Enter lands on /docs/embed#permissions-scopes with the
+      heading at the sticky-header offset, not the page top (DocsLayout's
+      scroll-to-top must skip hash navigations); schema results scroll to
+      their /docs/schemas#schema-<id> card.
+- [ ] ArrowUp/Down move the active row, Enter opens it (query-param entries
+      like design mockups/components select the exact entry), and on mobile
+      tapping a result closes the drawer.
+- [ ] The query lives in the URL (?q=) with replace-style updates: typing
+      never stacks history entries, refresh restores the search, /docs?q=acl
+      deep-links it, result clicks carry ?q= along (so the landed URL is
+      shareable with its search context), and × strips it.
+- [ ] Typing is instant and never drops keys: the input is locally
+      controlled and the URL syncs on a ~200ms debounce — fast typing on
+      /docs/api (the heaviest page) must not lag, and the ?q= write lands
+      once after the pause (the static drawer lists are memoized so
+      keystrokes don't re-render the 78-endpoint menu).
+- [ ] The desktop drawer never shows an internal scrollbar: content renders
+      full height, sticks under the top nav only while it fits the viewport,
+      and taller content (search results, expanded endpoint lists) flows with
+      the page scroll — the bottom of the menu stays reachable.
+
 ## Shared app-data (`/api/v1/app-data/shared`, `api/utils/apps/appData.ts`)
 
 - [ ] POST /api/v1/app-data with `visibility: 'app'` on a token WITHOUT the
@@ -408,3 +436,33 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] Non-sandboxed tokens and full sessions ignore tokenAcl entirely; the
       settings list row shows "🧸 its own things only" + a "Grant 🆔"
       copy button (copies tt:token/<id>).
+
+## Rate limiting & index-ensure reliability (`api/utils/rateLimit/enforce.ts`, `api/utils/mongodb/collections.ts`)
+
+- [ ] Healthy path: burst a rate-limited endpoint past its limit (e.g.
+      `things.search`, 120/min → 121 requests) → 429 with `Retry-After`,
+      and NO `[rate-limit]`/`[mongodb]` error lines in the logs.
+- [ ] Index-ensure failure is AUDIBLE, never silent: break the index battery
+      (drop `things_v2`'s `ownerId_1_crystal.appId_1_crystal.key_1` unique
+      index, insert two docs sharing `(ownerId, crystal.appId, crystal.key)`),
+      start a FRESH API process → the boot-time warmup run logs one
+      `[mongodb] ensureIndexes failed building things.<index> — retrying in 60s`
+      line naming the broken index. The cold-start PR moved the battery off
+      the request path, so ordinary API traffic neither retries it nor logs;
+      the awaited callers (`registerUser`, admin migrations) surface the
+      cached failure fast instead of re-running the battery.
+- [ ] Failure is cached with a cooldown, not retried per caller: register
+      attempts inside the same 60s window add NO new `[mongodb]` lines and run
+      no fresh ~60-command createIndex battery (the old reset-to-null re-ran
+      it per caller — a retry storm on top of the fail-open).
+- [ ] Self-heals after cleanup: delete the dup docs, then restart the dev
+      process — or wait out the 60s cooldown and hit an ensureIndexes caller
+      (register a user / run an admin migration) → no new error lines, the
+      unique index is rebuilt (`getIndexes()` shows it).
+- [ ] Limiter outage is AUDIBLE, never silent: with the limiter's own DB ops
+      failing (e.g. Mongo down/unreachable), a limited endpoint logs
+      `[rate-limit] enforcement unavailable for <rule> — failing open` per
+      request; ordinary actions fail open (the route then surfaces its own DB
+      error), `failClosed` routes return the 429 unavailable shape. Regression
+      class: a bare `catch {}` fail-open invisibly disabled ALL rate limiting
+      (2026-07 perf audit).

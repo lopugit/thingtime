@@ -114,9 +114,20 @@ on:
 # One run per base branch; a newer push supersedes an in-flight resolution
 # (the push is atomic, so cancelling mid-run never half-publishes anything).
 concurrency:
-  # PR-scoped runs get their own group so opening a PR never cancels an
-  # in-flight base sweep (and vice versa); everything else groups by base branch.
-  group: resolve-conflicts-${{ github.event.pull_request.number && format('pr{0}', github.event.pull_request.number) || github.event.client_payload.branch || inputs.branch || github.ref_name }}
+  # Three distinct namespaces, because they must NOT cancel each other:
+  #   detect-<branch>  a push run (detect + handoff only)
+  #   pr<N>            a pull_request run, scoped to that PR
+  #   base-<branch>    an actual resolution sweep (dispatch / workflow_dispatch)
+  # Critically, a push run and the dispatch it spawns previously shared a group,
+  # so the child cancelled its own parent mid-handoff — observed as
+  # "handoff: cancelled". It happened to work only because the dispatch API call
+  # had already returned; had cancellation landed first the handoff would have
+  # been lost with no error, i.e. a silent, timing-dependent no-op.
+  group: >-
+    ${{ github.event_name == 'push'
+        && format('resolve-detect-{0}', github.ref_name)
+        || (github.event.pull_request.number && format('resolve-pr{0}', github.event.pull_request.number))
+        || format('resolve-base-{0}', github.event.client_payload.branch || inputs.branch || github.ref_name) }}
   cancel-in-progress: true
 
 permissions:
@@ -365,6 +376,13 @@ jobs:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ github.token }}
+          # The handoff fires repository_dispatch with GITHUB_TOKEN, so those
+          # runs are attributed to github-actions[bot]. The action refuses
+          # non-human actors by default ("Workflow initiated by non-human
+          # actor: github-actions (type: Bot)"), which silently broke the whole
+          # push -> handoff -> dispatch -> resolve chain: only runs a human
+          # dispatched ever reached the model. Allow exactly this bot, not '*'.
+          allowed_bots: "github-actions"
           prompt: |
             You are resolving git merge conflicts inside a GitHub Actions runner by
             EDITING FILES ONLY. You have NO shell and NO git access — that is
