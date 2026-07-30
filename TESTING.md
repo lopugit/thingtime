@@ -843,6 +843,12 @@ re-checks the whole management plane end-to-end:
 - [ ] Healthy path: burst a rate-limited endpoint past its limit (e.g.
       `things.search`, 120/min → 121 requests) → 429 with `Retry-After`,
       and NO `[rate-limit]`/`[mongodb]` error lines in the logs.
+- [ ] Public sign-up is throttled: burst POST /api/v1/auth/register past
+      `auth.register` (default 10 per 15 min per IP) → 429 with `Retry-After`;
+      earlier attempts in the window still work (validation 400s/409s count
+      against the window too). Blocked attempts return before the awaited
+      `ensureIndexes` bootstrap, so hammering register can't re-run the index
+      battery while the DB is broken.
 - [ ] Index-ensure failure is AUDIBLE, never silent: break the index battery
       (drop `things_v2`'s `ownerId_1_crystal.appId_1_crystal.key_1` unique
       index, insert two docs sharing `(ownerId, crystal.appId, crystal.key)`),
