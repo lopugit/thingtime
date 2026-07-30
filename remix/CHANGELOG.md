@@ -80,6 +80,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- **Repository AI guidance now has one canonical source**: unique rules from
+  the former root `AGENTS.md`, `CLAUDE.md`, and `CODEX.md` now live in
+  `AI_ALL.md`; the standard Codex and Claude filenames are relative symlinks to
+  it so every checkout and tool reads the same policy. — Codex (AI), 2026-07-30
+
 - **Feed things render natively** (`ThingView`): thingtime posts mount the real
   Thingtime component — right-click context menu, collapse, and view⇄edit
   toggling — over a sandboxed store, defaulting to view mode. Things resolving a

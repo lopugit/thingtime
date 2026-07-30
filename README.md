@@ -8,6 +8,13 @@ With Thingtime, you can create and share any abstract data structure you want, o
 
 At Thingtime, we believe that data and knowledge should be open, accessible, and empowering. We are building Thingtime to make this vision a reality. Join us and start exploring the limitless possibilities of data!
 
+## AI agent instructions
+
+Repository-wide AI guidance lives in the single canonical `AI_ALL.md`.
+`AGENTS.md` and `CLAUDE.md` are relative symlinks to that file so Codex,
+Claude, and other compatible tools read the same instructions. Update
+`AI_ALL.md` only; keep both symlinks intact.
+
 # 💹 Donate on Indiegogo to save humanity 🩷
 
 ### You can get Merch 🌈 + other benefits 🦄💯

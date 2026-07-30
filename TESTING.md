@@ -2,9 +2,18 @@
 
 Run the checklist for every area a PR touches, in a live browser against the
 local dev stack (`npm run web-pms`, worktree stacks get their own port trio —
-see `AGENTS.md`). Each list is the distilled regression history of that area:
+see `AI_ALL.md`). Each list is the distilled regression history of that area:
 every line exists because it broke once. Add a line whenever a new bug class
 is fixed, and cite the checklist you ran in the PR description.
+
+## Canonical AI instruction links (`AI_ALL.md`)
+
+- [ ] Root `AGENTS.md` and `CLAUDE.md` are relative symlinks whose target is
+      exactly `AI_ALL.md`.
+- [ ] `cmp -s AI_ALL.md AGENTS.md` and `cmp -s AI_ALL.md CLAUDE.md` both pass,
+      and root `CODEX.md` is absent.
+- [ ] In a fresh Git checkout, `git ls-files -s AGENTS.md CLAUDE.md` reports
+      mode `120000` for both links and both still resolve to `AI_ALL.md`.
 
 ## Worktree dependency bootstrap (`remix/scripts/ensure-dependencies.js`)
 
