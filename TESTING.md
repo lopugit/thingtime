@@ -483,6 +483,15 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] Non-sandboxed tokens and full sessions ignore tokenAcl entirely; the
       settings list row shows "🧸 its own things only" + a "Grant 🆔"
       copy button (copies tt:token/<id>).
+- [ ] PAT × app-token coexistence on the shared things routes (one resolver,
+      three credential kinds): a PAT ignores Origin (no app binding), the
+      OPTIONS preflight for app SDKs still serves with Authorization allowed,
+      a PAT with things.read can browse `GET /things?appId=` (first-party
+      read), a PAT 401s on the app-token-only app-data surface, an app token
+      401s on /api/v1/tokens, and the oversized-payload 413 fires BEFORE
+      actor resolution so it never consumes a PAT use. One command re-checks
+      all of this: `node scripts/verify-pat-tokens.mjs <nitro base url>`
+      (companion to `scripts/verify-app-namespaces.mjs`).
 
 ## Rate limiting & index-ensure reliability (`api/utils/rateLimit/enforce.ts`, `api/utils/mongodb/collections.ts`)
 
