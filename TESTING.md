@@ -419,3 +419,33 @@ is fixed, and cite the checklist you ran in the PR description.
       the sandbox 403 (not a phantom 404) when the thing exists but isn't
       stamped. Non-sandboxed tokens and full sessions are unaffected; the
       list row shows "🧸 its own things only".
+
+## Rate limiting & index-ensure reliability (`api/utils/rateLimit/enforce.ts`, `api/utils/mongodb/collections.ts`)
+
+- [ ] Healthy path: burst a rate-limited endpoint past its limit (e.g.
+      `things.search`, 120/min → 121 requests) → 429 with `Retry-After`,
+      and NO `[rate-limit]`/`[mongodb]` error lines in the logs.
+- [ ] Index-ensure failure is AUDIBLE, never silent: break the index battery
+      (drop `things_v2`'s `ownerId_1_crystal.appId_1_crystal.key_1` unique
+      index, insert two docs sharing `(ownerId, crystal.appId, crystal.key)`),
+      start a FRESH API process → the boot-time warmup run logs one
+      `[mongodb] ensureIndexes failed building things.<index> — retrying in 60s`
+      line naming the broken index. The cold-start PR moved the battery off
+      the request path, so ordinary API traffic neither retries it nor logs;
+      the awaited callers (`registerUser`, admin migrations) surface the
+      cached failure fast instead of re-running the battery.
+- [ ] Failure is cached with a cooldown, not retried per caller: register
+      attempts inside the same 60s window add NO new `[mongodb]` lines and run
+      no fresh ~60-command createIndex battery (the old reset-to-null re-ran
+      it per caller — a retry storm on top of the fail-open).
+- [ ] Self-heals after cleanup: delete the dup docs, then restart the dev
+      process — or wait out the 60s cooldown and hit an ensureIndexes caller
+      (register a user / run an admin migration) → no new error lines, the
+      unique index is rebuilt (`getIndexes()` shows it).
+- [ ] Limiter outage is AUDIBLE, never silent: with the limiter's own DB ops
+      failing (e.g. Mongo down/unreachable), a limited endpoint logs
+      `[rate-limit] enforcement unavailable for <rule> — failing open` per
+      request; ordinary actions fail open (the route then surfaces its own DB
+      error), `failClosed` routes return the 429 unavailable shape. Regression
+      class: a bare `catch {}` fail-open invisibly disabled ALL rate limiting
+      (2026-07 perf audit).

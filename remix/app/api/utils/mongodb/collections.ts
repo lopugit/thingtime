@@ -148,6 +148,14 @@ export const getAuthOtpsCollection = async () => getCollection('authOtps');
 // cold-start cost (see PR: cold-start index battery).
 let indexesEnsured: Promise<void> | null = null;
 
+// A failed run is cached too, with a cooldown before the next attempt: resetting
+// to null on failure meant EVERY subsequent request re-ran the whole ~60-command
+// createIndex battery against the DB (and failed again) — a per-request retry
+// storm stacked on top of the rate-limiter fail-open. Until the cooldown elapses
+// callers get the cached rejection instantly, with zero DB work.
+const INDEXES_RETRY_COOLDOWN_MS = 60_000;
+let indexesRetryAt = 0; // epoch ms of the next allowed attempt after a failure
+
 // createIndex with different options than an existing same-key index throws
 // IndexOptionsConflict (85) / IndexKeySpecsConflict (86). For indexes whose
 // options evolve (partial filters, text weights/overrides), drop the old
@@ -187,11 +195,34 @@ const createIndexReplacing = async (
 };
 
 export const ensureIndexes = async () => {
+  if (indexesEnsured && indexesRetryAt && Date.now() >= indexesRetryAt) {
+    // cooldown elapsed on a cached failure — allow one fresh attempt
+    indexesEnsured = null;
+  }
   if (!indexesEnsured) {
+    indexesRetryAt = 0;
     indexesEnsured = (async () => {
       const db = await getThingtimeDb();
-      // indexes land on the current-generation physical collections
-      const col = (logical: string) => db.collection(physicalCollectionName(logical));
+      // indexes land on the current-generation physical collections; createIndex
+      // failures are tagged with `<logical>.<index name>` because Promise.all
+      // surfaces only the first rejection and driver messages don't always name
+      // the index being built
+      const col = (logical: string) => {
+        const collection = db.collection(physicalCollectionName(logical));
+        return {
+          dropIndex: (name: string) => collection.dropIndex(name),
+          createIndex: async (keys: Record<string, any>, options?: Record<string, any>) => {
+            try {
+              return await collection.createIndex(keys, options);
+            } catch (err: any) {
+              const name =
+                options?.name || Object.entries(keys).map(([field, dir]) => `${field}_${dir}`).join('_');
+              if (err && typeof err === 'object') err.indexBeingBuilt = `${logical}.${name}`;
+              throw err;
+            }
+          }
+        };
+      };
       await Promise.all([
         col('users').createIndex({ username: 1 }, { unique: true }),
         col('users').createIndex({ email: 1 }, { unique: true }),
@@ -361,9 +392,16 @@ export const ensureIndexes = async () => {
         col('rateLimits').createIndex({ key: 1 }, { unique: true }),
         col('rateLimits').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
       ]);
-    })().catch((err) => {
-      // don't cache a failed run — let the next call retry
-      indexesEnsured = null;
+    })().catch((err: any) => {
+      // Cache the failure with a cooldown (instead of resetting to null, which
+      // re-ran the full battery on every request while the DB was unhappy) and
+      // name the index that broke — the fix is almost always data cleanup on
+      // one collection, so the name is the actionable part.
+      indexesRetryAt = Date.now() + INDEXES_RETRY_COOLDOWN_MS;
+      console.error(
+        `[mongodb] ensureIndexes failed${err?.indexBeingBuilt ? ` building ${err.indexBeingBuilt}` : ''} — retrying in ${Math.round(INDEXES_RETRY_COOLDOWN_MS / 1000)}s:`,
+        err?.message || err
+      );
       throw err;
     });
   }
