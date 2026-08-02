@@ -10,8 +10,11 @@ import {
   Input,
   Menu,
   MenuButton,
+  MenuDivider,
   MenuItem,
+  MenuItemOption,
   MenuList,
+  MenuOptionGroup,
   Popover,
   PopoverAnchor,
   PopoverContent,
@@ -1098,6 +1101,76 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     }
   };
 
+  // Owner edit: the card body swaps to a textarea (media/original stay put
+  // below it). Saving is optimistic — the new text paints immediately and the
+  // editor closes; a failed write restores the old text and reopens the
+  // editor with the draft.
+  const [editing, setEditing] = React.useState(false);
+  const [editText, setEditText] = React.useState('');
+
+  const handleEditStart = () => {
+    setEditText(post.text);
+    setEditing(true);
+  };
+
+  // text is the whole body of a plain text post — only media-bearing types
+  // (and share captions) may save it away to empty
+  const canSaveEdit =
+    !!editText.trim() || post.isShare || post.type === 'image' || post.type === 'marketplace' || post.type === 'thingtime';
+
+  const handleEditSave = async () => {
+    const text = editText.trim();
+    const prevText = post.text;
+    if (text === prevText) {
+      setEditing(false);
+      return;
+    }
+    setEditing(false);
+    onChanged?.((prev) => ({ ...prev, text }));
+    try {
+      await api.v1.things.update({ id: post.id, crystal: { text } });
+      lopu({ title: 'Post updated ✏️', status: 'success', duration: 4000 });
+    } catch (err: any) {
+      onChanged?.((prev) => ({ ...prev, text: prevText }));
+      setEditText(text); // give the draft back
+      setEditing(true);
+      lopu({ title: err?.error || 'Could not save that edit 😞', status: 'error' });
+    }
+  };
+
+  // Change privacy from the post menu. Optimistic: the circle badge flips
+  // immediately; the server response reconciles the derived acl, and a
+  // failure flips it back.
+  const handleVisibilityChange = async (next: PostVisibility) => {
+    if (next === post.visibility) return;
+    const prevVisibility = post.visibility;
+    const prevAcl = post.acl;
+    onChanged?.((prev) => ({ ...prev, visibility: next }));
+    try {
+      const resp = await api.v1.things.update({ id: post.id, visibility: next });
+      if (resp?.post) {
+        onChanged?.((prev) => ({ ...prev, visibility: resp.post.visibility, acl: resp.post.acl }));
+      }
+      const meta = CIRCLE_META[next];
+      lopu({ title: `Privacy set to ${meta.label} ${meta.emoji}`, status: 'success', duration: 4000 });
+    } catch (err: any) {
+      onChanged?.((prev) => ({ ...prev, visibility: prevVisibility, acl: prevAcl }));
+      lopu({ title: err?.error || 'Could not change privacy 😞', status: 'error' });
+    }
+  };
+
+  // menu copy-link: always the clipboard (the share icon owns the native sheet)
+  const handleCopyLink = async () => {
+    const url = `${window.location.origin}/post/${post.id}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      lopu({ title: 'Link copied 🔗', status: 'success', duration: 4000 });
+    } catch {
+      // clipboard unavailable (http origin) — hand the link over anyway
+      lopu({ title: `Copy this link: ${url}`, status: 'info', duration: 10000 });
+    }
+  };
+
   // Toggle one reaction token (single emoji or a multi-emoji group). Optimistic:
   // we repaint the card immediately, then reconcile with the server's counts
   // and revert on failure — no spinner, no wait (optimistic-rendering rule).
@@ -1375,7 +1448,27 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
                 color={MUTED}
                 borderRadius="8px"
               />
-              <MenuList minWidth="160px" borderRadius={RADIUS_MD} zIndex={10}>
+              <MenuList minWidth="190px" borderRadius={RADIUS_MD} zIndex={10}>
+                <MenuItem fontSize="sm" onClick={handleEditStart}>
+                  Edit ✏️
+                </MenuItem>
+                <MenuItem fontSize="sm" onClick={handleCopyLink}>
+                  Copy link 🔗
+                </MenuItem>
+                <MenuDivider />
+                <MenuOptionGroup
+                  title="Privacy"
+                  type="radio"
+                  value={post.visibility}
+                  onChange={(value) => handleVisibilityChange(value as PostVisibility)}
+                >
+                  {(Object.keys(CIRCLE_META) as PostVisibility[]).map((key) => (
+                    <MenuItemOption key={key} value={key} fontSize="sm">
+                      {CIRCLE_META[key].emoji} {CIRCLE_META[key].label}
+                    </MenuItemOption>
+                  ))}
+                </MenuOptionGroup>
+                <MenuDivider />
                 <MenuItem fontSize="sm" color="var(--tt-danger, #e5484d)" onClick={handleDelete}>
                   Delete 🗑️
                 </MenuItem>
@@ -1384,8 +1477,54 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
           )}
         </Flex>
 
-        {/* body — shares render caption + nested original */}
-        {post.isShare ? (
+        {/* body — shares render caption + nested original; the owner's edit
+        mode mounts the FULL composer (type tabs, photos, listing, thing,
+        tags, circle) pre-filled from the post. Shares edit their caption
+        only — the shared original is the body. */}
+        {editing && !post.isShare ? (
+          <PostComposer
+            editPost={post}
+            onPosted={(updated) => {
+              onChanged?.(updated);
+              setEditing(false);
+            }}
+            onClose={() => setEditing(false)}
+          />
+        ) : editing ? (
+          <Flex flexDirection="column" rowGap={3}>
+            <Textarea
+              size="sm"
+              rows={3}
+              resize="vertical"
+              borderRadius="var(--tt-radius-sm, 9px)"
+              placeholder="Say something… ✨"
+              autoFocus
+              value={editText}
+              onChange={(event) => setEditText(event.target.value)}
+            />
+            <Flex alignItems="center" columnGap={2}>
+              <Button
+                size="xs"
+                color="white"
+                fontFamily="heading"
+                fontWeight={600}
+                background={RAINBOW}
+                backgroundSize="calc(100px + 200%)"
+                sx={{ animation: 'var(--tt-rainbow-anim, moving-rainbow 5s linear infinite)' }}
+                _hover={{ opacity: 0.9 }}
+                borderRadius={RADIUS_MD}
+                isDisabled={!canSaveEdit}
+                onClick={handleEditSave}
+              >
+                Save ✨
+              </Button>
+              <Button size="xs" variant="ghost" borderRadius={RADIUS_MD} onClick={() => setEditing(false)}>
+                Cancel
+              </Button>
+            </Flex>
+            {post.shareOf && <SharedPostCard post={post.shareOf} />}
+          </Flex>
+        ) : post.isShare ? (
           <Flex flexDirection="column" rowGap={3}>
             {post.text && (
               <Text fontSize="md" color={TEXT} whiteSpace="normal">

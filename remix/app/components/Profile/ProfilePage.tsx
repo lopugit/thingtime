@@ -555,6 +555,16 @@ export const ProfilePage = (props: ProfilePageProps) => {
             <Button
               size="sm"
               variant="outline"
+              onClick={() => navigate('/settings')}
+              borderColor="var(--tt-border, #ececef)"
+              _hover={{ bg: 'var(--tt-surface-alt, #f5f5f7)' }}
+              borderRadius="var(--tt-radius-md, 12px)"
+            >
+              All settings ⚙️
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
               onClick={handleLogout}
               borderColor="var(--tt-border, #ececef)"
               _hover={{ bg: 'var(--tt-surface-alt, #f5f5f7)' }}

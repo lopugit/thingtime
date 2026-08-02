@@ -87,14 +87,18 @@ const TEXTAREA_PLACEHOLDERS: Record<PostType, string> = {
 
 export type PostComposerProps = {
   // in comment mode this receives the created comment (post-shaped — comments
-  // share the post schema)
+  // share the post schema); in edit mode it receives the UPDATED post
   onPosted: (post: PublicPost) => void;
   // compose a COMMENT on this thing instead of a top-level post — starts
   // expanded, hides the circle picker (comments inherit the thread root's
   // audience) and posts through api.v1.things.comment
   parentId?: string;
-  // called when the comment composer's close button is pressed
+  // called when the comment/edit composer's close button is pressed
   onClose?: () => void;
+  // EDIT an existing post: starts expanded and pre-filled from this post
+  // (type tabs, photos, listing, thing, tags, circle all editable — the same
+  // suite as a new post) and saves through api.v1.things.update
+  editPost?: PublicPost;
 };
 
 const Eyebrow = ({ children }: { children: React.ReactNode }) => (
@@ -111,33 +115,34 @@ const Eyebrow = ({ children }: { children: React.ReactNode }) => (
 );
 
 export const PostComposer = (props: PostComposerProps) => {
-  const { onPosted, parentId, onClose } = props;
+  const { onPosted, parentId, onClose, editPost } = props;
 
   const isComment = !!parentId;
+  const isEdit = !!editPost;
 
   const api = useApi();
   const lopu = useLopu();
   const { getThingtime, setThingtime, loading: thingtimeLoading, events } = useThingtime();
 
-  const [expanded, setExpanded] = React.useState(isComment);
-  const [type, setType] = React.useState<PostType>('text');
-  const [text, setText] = React.useState('');
-  const [images, setImages] = React.useState<string[]>([]);
-  const [title, setTitle] = React.useState('');
-  const [price, setPrice] = React.useState('');
-  const [currency, setCurrency] = React.useState('AUD');
-  const [category, setCategory] = React.useState<MarketplaceCategory>('other');
-  const [condition, setCondition] = React.useState('');
-  const [listingLocation, setListingLocation] = React.useState('');
-  const [tagsInput, setTagsInput] = React.useState('');
-  const [visibility, setVisibility] = React.useState<PostVisibility>('public');
+  const [expanded, setExpanded] = React.useState(isComment || isEdit);
+  const [type, setType] = React.useState<PostType>(editPost?.type || 'text');
+  const [text, setText] = React.useState(editPost?.text || '');
+  const [images, setImages] = React.useState<string[]>(editPost?.images || []);
+  const [title, setTitle] = React.useState(editPost?.listing?.title || '');
+  const [price, setPrice] = React.useState(editPost?.listing ? String(editPost.listing.price) : '');
+  const [currency, setCurrency] = React.useState(editPost?.listing?.currency || 'AUD');
+  const [category, setCategory] = React.useState<MarketplaceCategory>(editPost?.listing?.category || 'other');
+  const [condition, setCondition] = React.useState(editPost?.listing?.condition || '');
+  const [listingLocation, setListingLocation] = React.useState(editPost?.listing?.location || '');
+  const [tagsInput, setTagsInput] = React.useState(editPost?.tags?.join(', ') || '');
+  const [visibility, setVisibility] = React.useState<PostVisibility>(editPost?.visibility || 'public');
   const [posting, setPosting] = React.useState(false);
 
   // thingtime-tab extras: toggleable photos/marketplace field groups, the
   // in-post editor's draggable height, and its imperative API (the pop-out
   // button duplicates the window into one of the editor's own floating frames)
-  const [thingPhotos, setThingPhotos] = React.useState(false);
-  const [thingListing, setThingListing] = React.useState(false);
+  const [thingPhotos, setThingPhotos] = React.useState(isEdit && editPost?.type === 'thingtime' && !!editPost.images?.length);
+  const [thingListing, setThingListing] = React.useState(isEdit && editPost?.type === 'thingtime' && !!editPost.listing);
   // the thing edits in a bottom-sheet modal (nested comment composers can't
   // host a full editor inline, and mobile needs the room)
   const [thingModalOpen, setThingModalOpen] = React.useState(false);
@@ -149,6 +154,10 @@ export const PostComposer = (props: PostComposerProps) => {
   // bumping the session remounts the block editor with a clean document
   // (while mounted, the editor owns the text)
   const [composerSession, setComposerSession] = React.useState(0);
+
+  // edit mode: the thing to seed the draft branch with, captured at mount so
+  // the seed effect's deps stay constant
+  const editSeedRef = React.useRef(editPost?.thing || null);
 
   const parsedTags = Array.from(
     new Set(
@@ -203,8 +212,12 @@ export const PostComposer = (props: PostComposerProps) => {
     }
     // seed the session BRANCH only — the draft value itself starts undefined,
     // so the editor opens on a truly blank "Imagine.." slate instead of an
-    // empty object rendering as {} chrome
-    setThingtime(DRAFT_TMP_KEY, { ...preserved, [draftSessionId]: {} });
+    // empty object rendering as {} chrome. Editing an existing thingtime post
+    // seeds the draft with the post's thing as of mount (editSeedRef).
+    setThingtime(DRAFT_TMP_KEY, {
+      ...preserved,
+      [draftSessionId]: editSeedRef.current ? { [DRAFT_ROOT_KEY]: editSeedRef.current } : {}
+    });
   }, [type, expanded, thingtimeLoading, getThingtime, setThingtime, draftSessionId]);
 
   // which optional field groups are in play (marketplace always has both;
@@ -287,15 +300,38 @@ export const PostComposer = (props: PostComposerProps) => {
         };
       }
 
-      const resp = isComment
-        ? await api.v1.things.comment({ id: parentId, ...payload })
-        : await api.v1.things.create(payload);
-      lopu({ title: isComment ? 'Commented 💬' : 'Posted ✨', status: 'success', duration: 6000 });
+      let resp: any;
+      if (isEdit) {
+        // full-crystal replace: the server sanitizer rebuilds { type, text,
+        // images, listing, thing } per type, so switching type clears the
+        // fields that no longer apply
+        resp = await api.v1.things.update({
+          id: editPost!.id,
+          crystal: {
+            type,
+            text: text.trim(),
+            images: showPhotos ? validImages : [],
+            listing: payload.listing ?? null,
+            thing: type === 'thingtime' ? draftThing : null
+          },
+          tags: parsedTags,
+          visibility
+        });
+      } else {
+        resp = isComment
+          ? await api.v1.things.comment({ id: parentId, ...payload })
+          : await api.v1.things.create(payload);
+      }
+      lopu({
+        title: isEdit ? 'Post updated ✏️' : isComment ? 'Commented 💬' : 'Posted ✨',
+        status: 'success',
+        duration: 6000
+      });
       // the posted thing draft is spent — next thingtime tab starts fresh
       // (reset the whole session branch so the draft value is undefined again,
       // not an empty {} that would render as an object)
       if (type === 'thingtime') setThingtime(`${DRAFT_TMP_KEY}.${draftSessionId}`, {});
-      reset();
+      if (!isEdit) reset();
       onPosted(isComment ? resp.comment : resp.post);
     } catch (err: any) {
       lopu({ title: err?.error || 'Post did not go through 😞', status: 'error' });
@@ -366,7 +402,7 @@ export const PostComposer = (props: PostComposerProps) => {
           color={MUTED}
           marginLeft="auto"
           borderRadius="8px"
-          onClick={() => (isComment ? onClose?.() : setExpanded(false))}
+          onClick={() => (isComment || isEdit ? onClose?.() : setExpanded(false))}
         />
       </Flex>
 
@@ -690,7 +726,7 @@ export const PostComposer = (props: PostComposerProps) => {
           isLoading={posting}
           onClick={handlePost}
         >
-          {isComment ? 'Comment 💬' : 'Post ✨'}
+          {isEdit ? 'Save ✨' : isComment ? 'Comment 💬' : 'Post ✨'}
         </Button>
       </Flex>
     </Flex>

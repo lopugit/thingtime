@@ -296,12 +296,31 @@ export const DrawerContent = (props: DrawerContentProps) => {
 		dismissAfterNavigate();
 	}, [navigate, dismissAfterNavigate]);
 
-	const onAvatarClick = React.useCallback(() => {
+	const openSettingsModal = React.useCallback(() => {
 		setAccountModalOpen(true);
 		if (variant === 'popup') {
 			onNavigate?.();
 		}
 	}, [setAccountModalOpen, variant, onNavigate]);
+
+	// avatar + name go to the profile page; logged out there is no profile, so
+	// the row opens the settings modal (it hosts the account switcher / log in)
+	const onAccountRowClick = React.useCallback(() => {
+		if (user) {
+			navigate('/profile');
+			dismissAfterNavigate();
+			return;
+		}
+		openSettingsModal();
+	}, [user, navigate, dismissAfterNavigate, openSettingsModal]);
+
+	const onSettingsClick = React.useCallback(
+		(event: React.MouseEvent) => {
+			event.stopPropagation();
+			openSettingsModal();
+		},
+		[openSettingsModal]
+	);
 
 	const isActivePath = React.useCallback(
 		(to?: string) => {
@@ -540,7 +559,8 @@ export const DrawerContent = (props: DrawerContentProps) => {
 				{selectedTopItem?.id === 'things' && <EditorDrawerSection onNavigate={dismissAfterNavigate} />}
 			</Box>
 
-			{/* sticky account footer */}
+			{/* sticky account footer: avatar + name open the profile page, the
+			gear keeps opening the settings modal */}
 			<Flex
 				className="drawerAccountFooter"
 				alignItems="center"
@@ -554,7 +574,8 @@ export const DrawerContent = (props: DrawerContentProps) => {
 				_hover={{ background: 'var(--tt-surface-hover, #ececee)' }}
 				transition="background 0.15s ease"
 				cursor="pointer"
-				onClick={onAvatarClick}
+				title={user ? 'Your profile' : 'Log in'}
+				onClick={onAccountRowClick}
 			>
 				<UserAvatarCircle></UserAvatarCircle>
 				{!isMobile && (
@@ -562,9 +583,23 @@ export const DrawerContent = (props: DrawerContentProps) => {
 						{user ? user.displayName || user.username : 'Log in'}
 					</Text>
 				)}
-				<Box marginLeft="auto" opacity={0.4} display="inline-flex">
+				<Center
+					as="button"
+					type="button"
+					marginLeft="auto"
+					width="26px"
+					height="26px"
+					borderRadius="var(--tt-radius-sm, 9px)"
+					opacity={0.4}
+					_hover={{ opacity: 1, background: 'var(--tt-surface-alt, #f5f5f7)' }}
+					transition="background 0.15s ease, opacity 0.15s ease"
+					cursor="pointer"
+					aria-label="Settings"
+					title="Settings"
+					onClick={onSettingsClick}
+				>
 					<Icon name="gear" size="11px"></Icon>
-				</Box>
+				</Center>
 			</Flex>
 		</Flex>
 	);

@@ -204,6 +204,19 @@ is fixed, and cite the checklist you ran in the PR description.
       OUTWARD only: native share sheet where available, otherwise copy-link
       with the Lopu toast — logged-out users can still share, while react /
       repost nudge them to log in.
+- [ ] The owner's ⋯ menu is Edit ✏️ / Copy link 🔗 / a Privacy radio group
+      (current circle checked) / Delete 🗑️ — not Delete alone. Copy link
+      always copies to the clipboard (never the native share sheet); a
+      privacy pick updates the header circle badge optimistically and
+      persists (server acl follows, e.g. friends → `-tt:all`,
+      `tt:userFriends`, `tt:user`).
+- [ ] Edit ✏️ mounts the FULL composer suite inside the card, pre-filled
+      from the post: type tabs (text/photos/marketplace/thingtime), text,
+      image rows, listing fields, thingtime draft seeded with the post's
+      existing thing, tags, and the post's CURRENT circle. Save persists
+      text + circle and swaps the card to the server copy; the close X
+      cancels without changes. Shares edit their caption only (the nested
+      original stays visible below the textarea).
 
 ## Drawer navigation & settings (`remix/app/components/Nav/Drawer/`)
 
@@ -219,6 +232,18 @@ is fixed, and cite the checklist you ran in the PR description.
       show the user's avatar IMAGE when one is set — the rainbow initial
       circle is only the no-avatar fallback (regression: UserAvatarCircle
       ignored avatarUrl entirely).
+- [ ] The drawer account footer splits: clicking the avatar/name row goes to
+      /profile (drawer dismisses on both viewports) while the gear button
+      opens the settings modal (desktop centred modal, mobile bottom sheet)
+      WITHOUT navigating. Logged out, the row reads "Log in" and opens the
+      settings modal (account switcher hosts log-in) instead of navigating.
+
+## Profile page (`remix/app/components/Profile/ProfilePage.tsx`)
+
+- [ ] The self-profile action row is Edit profile ✏️ / All settings ⚙️ /
+      Log out 🗝️ (+ Resend verification when unverified): All settings
+      navigates to /settings, and the buttons wrap cleanly on mobile with no
+      overflow.
 
 ## AI merge-conflict resolver (`.github/workflows/resolve-pr-conflicts.yml`)
 
