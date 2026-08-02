@@ -1,6 +1,6 @@
 # Followers/friends + notifications + post views + multi-emoji fix
 
-Branch: `claude/followers-friends-notifications-views-4fcfcf` · PR: (pending — rename this file with the PR number once opened)
+Branch: `claude/followers-friends-notifications-views-4fcfcf` · PR: [#172](https://github.com/lopugit/thingtime/pull/172)
 
 Loop task state file. Each /loop firing: read this, continue the first unchecked item, keep it current.
 
