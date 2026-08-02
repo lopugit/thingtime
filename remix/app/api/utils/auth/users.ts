@@ -611,6 +611,50 @@ export const setUserTwoFactorEmailEnabled = async (userId: string, enabled: bool
   return res.matchedCount > 0;
 };
 
+// Notification prefs (meta.notificationPrefs: { [type]: boolean }) — absent
+// key = enabled (defaults ON). Dual-era accessors mirroring the 2FA flag
+// above; cold-written, so the secure blob is the right home (never crystal —
+// string-free booleans, but the blob keeps ALL private account state in one
+// place). Merged as a patch so two devices flipping different switches don't
+// clobber each other.
+export const getUserNotificationPrefs = async (userId: string): Promise<Record<string, boolean>> => {
+  const things = await getThingsCollection();
+  const thing = await things.findOne(
+    { shareId: String(userId), thingtime: 'user' } as any,
+    { projection: { secure: 1 } }
+  );
+  if (thing) {
+    const prefs = unpackSecure((thing as any).secure).meta?.notificationPrefs;
+    return prefs && typeof prefs === 'object' ? { ...prefs } : {};
+  }
+  if (!ObjectId.isValid(userId)) return {};
+  const doc = await (await getUsersCollection()).findOne(
+    { _id: new ObjectId(userId) },
+    { projection: { 'meta.notificationPrefs': 1 } }
+  );
+  const prefs = doc?.meta?.notificationPrefs;
+  return prefs && typeof prefs === 'object' ? { ...prefs } : {};
+};
+
+// Returns whether a store matched the user. Contended writes throw — a false
+// success would leave a switch the user flipped silently unapplied.
+export const setUserNotificationPrefs = async (
+  userId: string,
+  patch: Record<string, boolean>
+): Promise<boolean> => {
+  const result = await mutateUserThingSecure(userId, (s) => {
+    const current = s.meta!.notificationPrefs;
+    s.meta!.notificationPrefs = { ...(current && typeof current === 'object' ? current : {}), ...patch };
+  });
+  if (result === 'mutated') return true;
+  if (result === 'contended') throw new SecureWriteContendedError(userId);
+  if (!ObjectId.isValid(userId)) return false;
+  const sets: Record<string, any> = { updatedAt: new Date() };
+  for (const [key, value] of Object.entries(patch)) sets[`meta.notificationPrefs.${key}`] = value;
+  const res = await (await getUsersCollection()).updateOne({ _id: new ObjectId(userId) }, { $set: sets });
+  return res.matchedCount > 0;
+};
+
 // ── Saved MongoDB endpoints (thin-frontend mode — see mongodb/endpoint.ts) ──
 // A user's saved data-plane endpoints live INSIDE the secure blob
 // (meta.mongoEndpoints): connection URLs embed credentials, and the blob is

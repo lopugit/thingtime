@@ -437,6 +437,48 @@ export function useApi() {
         [asyncFetcher]
       )
     },
+    social: {
+      // counts + viewer relationship state for a profile ({ username | userId })
+      relationships: useCallback(async (args) => getJson(`/api/v1/users/relationships${toQuery(args)}`), []),
+      // paged lists: { username | userId, type: followers|following|friends|requests, limit, before }
+      connections: useCallback(async (args) => getJson(`/api/v1/users/connections${toQuery(args)}`), []),
+      // toggle (or explicitly set with follow: boolean) a one-way follow
+      follow: useCallback(
+        async (args) =>
+          asyncFetcher.submit(
+            { userId: args?.userId, username: args?.username, follow: args?.follow },
+            { action: '/api/v1/users/follow' }
+          ),
+        [asyncFetcher]
+      ),
+      // friendship state machine: intent request|cancel|accept|decline|unfriend
+      friend: useCallback(
+        async (args) =>
+          asyncFetcher.submit(
+            { userId: args?.userId, username: args?.username, intent: args?.intent },
+            { action: '/api/v1/users/friend' }
+          ),
+        [asyncFetcher]
+      )
+    },
+    notifications: {
+      list: useCallback(async (args?: Record<string, unknown>) => getJson(`/api/v1/notifications${toQuery(args)}`), []),
+      markRead: useCallback(
+        async (args) =>
+          asyncFetcher.submit(
+            args?.all ? { all: true } : { ids: args?.ids },
+            { action: '/api/v1/notifications/read' }
+          ),
+        [asyncFetcher]
+      ),
+      settings: {
+        get: useCallback(async () => getJson('/api/v1/notifications/settings'), []),
+        set: useCallback(
+          async (args) => asyncFetcher.submit({ prefs: args?.prefs }, { action: '/api/v1/notifications/settings' }),
+          [asyncFetcher]
+        )
+      }
+    },
     profile: {
       get: useCallback(async (args) => getJson(`/api/v1/users/profile${toQuery(args)}`), []),
       // public people search (the /search People rail)

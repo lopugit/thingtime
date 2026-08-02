@@ -5,6 +5,7 @@ import { ArrowLeft } from 'lucide-react';
 
 import { useApi } from '~/hooks/useApi';
 import { PostCard } from '~/components/Feed/PostCard';
+import { useViewTracking } from '~/components/Feed/useViewTracking';
 import { mergeReactionOverlay } from '~/components/Feed/reactionOverlay';
 import { RAINBOW_TEXT } from '~/theme/rainbow';
 import type { PostChange, PublicPost } from '~/components/Feed/feedTypes';
@@ -29,6 +30,8 @@ export const PostPage = () => {
   const [data, setData] = React.useState<ThingResponse | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
+  // permalink pages count as views too (feed/profile wire this via PostList)
+  const { observeView } = useViewTracking();
 
   React.useEffect(() => {
     let cancelled = false;
@@ -174,7 +177,11 @@ export const PostPage = () => {
           </Flex>
         )}
 
-        {!loading && post && <PostCard post={post} onChanged={handleChanged} defaultCommentsOpen />}
+        {!loading && post && (
+          <Box ref={(element: HTMLDivElement | null) => observeView(element, post.id)}>
+            <PostCard post={post} onChanged={handleChanged} defaultCommentsOpen />
+          </Box>
+        )}
       </Flex>
     </Flex>
   );

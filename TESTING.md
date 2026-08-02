@@ -922,3 +922,76 @@ re-checks the whole management plane end-to-end:
       cost, so a burst past the limit 429s with the hashing message. The
       intent stays ANONYMOUS on purpose — being locked out is the reason to
       reach for it — and never reads or writes the database.
+
+## Social graph — follows + friends (`api/utils/users/social.ts`, `/api/v1/users/{follow,friend,relationships,connections}`)
+
+- [ ] Follow is ONE-WAY and instant: user B POSTs `/users/follow { username: A }`
+      → `{ following: true, followerCount }`; A's profile shows the count and B
+      sees "Following ✓" immediately (optimistic, reverts on failure). Repeat
+      with `follow: true` is idempotent; `follow: false` (or toggle) unfollows.
+- [ ] Friendship needs APPROVAL: B `intent: request` → `pending-outgoing`; A's
+      own profile shows the "Friend requests 🤝" inbox with Accept/Decline; A
+      accepts → both sides read `friendState: friends` and friend counts bump.
+      Requesting someone who already requested YOU accepts instead of duping
+      (one doc per pair — `crystal.friendKey`, unique index).
+- [ ] Self-actions rejected: following or friending yourself 400s.
+- [ ] `tt:userFriends` acl is REAL now: a friends-visibility post is readable
+      by an accepted friend (permalink AND feed AND the owner's profile as
+      seen by the friend), 404s for strangers/anonymous, and stops resolving
+      the moment either side unfriends.
+- [ ] Relationship reads are public: `/users/relationships?username=` returns
+      counts logged out (`viewer: null`); logged in it adds following /
+      followedBy / friendState, and `incomingRequests` on your own profile.
+      `/users/connections` lists followers/following/friends publicly;
+      `type=requests` is your-own-account-only (403 otherwise).
+- [ ] Forged edges impossible: `follow`/`friend`/`notification` are PROTECTED
+      kinds — generic `POST /api/v1/things` refuses them (a forged accepted
+      `friend` doc would fake acl visibility).
+
+## Notifications (`api/utils/notifications/notifications.ts`, `/api/v1/notifications*`, nav bell)
+
+- [ ] Emission: new follower, friend request, friend accepted, comment on your
+      post, reply to your comment, reaction (preview = the token), repost, and
+      capped fan-out (≤200 newest connections) of new posts to followers
+      (`post-from-followed`) and friends (`post-from-friend`). Own actions
+      never notify yourself; a failed emit never fails the triggering action.
+- [ ] Fan-out respects the post's audience: public posts notify followers +
+      friends, friends-only posts notify friends only, private posts fan out
+      to nobody.
+- [ ] The bell 🔔 (auth only) shows the unread badge (seeded from localCache —
+      no flash), reconciles on mount/focus/slow poll, opens a popover of the
+      latest 20 (unread rows tinted, actor avatar + type emoji, preview,
+      time-ago), zeroes the badge on open (mark-all-read), and click-through
+      goes to `/post/<id>` or the actor's profile. Works within a 375px
+      viewport with no overflow.
+- [ ] Settings → Notifications: one switch per type (defaults ON), optimistic
+      flip + revert on failure, per-user localCache seed, merge-patch POST
+      (unknown types 400). Disabling a type hides even ALREADY-WRITTEN
+      notifications of that type from the list and unread count (read-time
+      filtering), and single-recipient emits skip writing it entirely.
+- [ ] Mobile nav overlap regression: the centered commander pill must NOT
+      cover the bell / username (they sit above it via `.nav-right-section`
+      z-index, and the pill reserves 148px on the right). Regression class:
+      nav-right controls rendered under the absolutely-positioned commander
+      host and were untappable on mobile (2026-08).
+
+## Post views (`api/utils/things/views.ts`, `/api/v1/things/views`, `useViewTracking`)
+
+- [ ] Public stats on every post payload: `viewCount` (unique viewer
+      identities) + `viewStats { impressions, avgDwellMs }`; the card's action
+      row shows 👁 + compact count with the full stats in the tooltip, for
+      everyone (logged out included).
+- [ ] Counting is honest: a card must be ≥50% visible for ≥1s to count; one
+      event per post per pageview; batches flush every 10s and on page hide
+      via sendBeacon. Dwell (time on screen), max visible ratio, and viewport
+      position (0..1) ride along.
+- [ ] Manipulation resistance (all server-side, client untrusted): one
+      postViews doc per (postId, viewerKey) — replays bump impressions only,
+      never uniques; owner self-views dropped entirely; anonymous identities
+      dedup on salted sha256(ip|UA) with NO raw IP at rest; UA-less requests
+      dropped; dwell clamped (≤120s/event); batch ≤50; unknown or
+      not-viewable posts dropped (a view write only lands where a read would
+      succeed); rate limited `things.views` per user-or-IP; headless
+      (`navigator.webdriver`) browsers skip client-side too.
+- [ ] Views are tracked on every post surface: feed, profiles (both wired via
+      PostList) and the `/post/:id` permalink page.
