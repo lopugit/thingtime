@@ -72,12 +72,15 @@ These patterns show up again and again — default to them when unsure:
   multikey: a scalar `appId` can share a compound index with other fields
   where two multikey paths can't. The acl keeps its PR #150 meaning untouched:
   it is the AUDIENCE among the app's users; the namespace is `appId`.
-- **Byte budgets replace doc counts.** The 200-key / 50-key caps bounded the
-  wrong resource (an entry count says nothing about bytes). Per-(user, app)
-  budgets ride a service-quota-pattern counter thing — guarded conditional
-  `findOneAndUpdate` admission, race-safe, FAIL-CLOSED (an unavailable ledger
-  refuses the write; storage is a standing resource, unlike a rate window) —
-  updates charge deltas, deletes refund, drift repair is one `$sum` sweep.
+- **Byte allowances replace doc counts, at both scopes.** The 200-key / 50-key
+  caps bounded the wrong resource (an entry count says nothing about bytes).
+  Every registered app Thing owns a server-controlled aggregate allowance and
+  usage counter; each (user, app) also rides a service-quota-pattern counter
+  Thing. A write reserves aggregate then user with guarded conditional
+  `findOneAndUpdate` admission, race-safe and FAIL-CLOSED; user refusal
+  compensates aggregate. Updates charge deltas, deletes refund both, and crash
+  ambiguity can only over-count until the `$sum` reconcile pass. App developer
+  update routes never accept allowance fields.
 - **Consent surface deliberately unchanged.** `app-data` already covers
   namespace CRUD — richer querying just moves filtering server-side over bytes
   the app could already read, so no new scope is invented for the things

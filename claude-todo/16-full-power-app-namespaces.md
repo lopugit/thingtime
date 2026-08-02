@@ -81,29 +81,35 @@ alone separates the windows, so an app never rides the user's own buckets.
 
 - `MAX_APP_DATA_KEYS_PER_APP_USER` (200) and `SANDBOX_MAX_KEYS` (50) are
   **deleted**. Unlimited docs.
-- Per-(user, app) standing budget: counter thing (deterministic shareId,
-  `service-quota`-style conditional-pipeline `findOneAndUpdate` guarding
-  `usedBytes + delta ≤ budgetBytes`), **fail-closed**. Defaults:
-  `DEFAULT_APP_STORAGE_BYTES = 50 MiB` real, `SANDBOX_STORAGE_BYTES = 5 MiB`
-  per sandbox namespace (counter doc carries `sandboxExpiresAt` so it reaps
-  with its namespace). Admin-tunable via the settings/rate-limits panel.
+- Two standing allowances for registered apps: 5 GiB aggregate across every
+  user (stored atomically on the app Thing), and 50 MiB per (user, app) on a
+  deterministic counter Thing. A write reserves aggregate then user with
+  guarded `findOneAndUpdate`; user refusal compensates aggregate. Both are
+  server-owned and fail-closed, and `/apps/update` cannot raise them.
+  Sandboxes instead get `SANDBOX_STORAGE_BYTES = 5 MiB` per namespace (counter
+  doc carries `sandboxExpiresAt` so it reaps with its namespace) plus the
+  global windowed brake.
 - `sizeBytes` = `Buffer.byteLength(JSON.stringify({crystal, extended, tags}))`
   stamped at write; updates charge the delta (before-doc read), deletes and
   cascades decrement; drift repair = one `$sum: '$sizeBytes'` sweep.
-- KV per-value 32 KB cap stays on the KV endpoint (compat); generic app
+- KV per-value 32 KiB cap stays on the KV endpoint (compat); generic app
   writes are bounded by the per-kind crystal rails + 512 KB `extended` + the
   768 KB body cap + the budget.
 - Global sandbox byte window (`sandbox.storage.global`, rate-limiter-style,
   admin-tunable) lands with this — TODO 15 §1's first step.
-- `GET /api/v1/app-data/usage` → `{ usedBytes, budgetBytes }` (app token).
+- `GET /api/v1/app-data/usage` returns explicit `userStorage` + `appStorage`
+  used/allowance/remaining values; `{ usedBytes, budgetBytes }` remain aliases
+  for the user ledger (app token).
 
 ## KV compat + warm-ups
 
 - `/api/v1/app-data*` endpoints unchanged for existing integrators
   (macrobiotica), except: private list gains `prefix`/`key=*`/`limit`/`cursor`
   (same grammar as shared), and writes dual-stamp root `appId` + `sizeBytes`.
-- Admin migration `backfill-app-namespace-fields`: root `appId` + `sizeBytes`
-  onto existing app-data things from `crystal.appId`; seeds counter docs.
+- Admin migrations: `backfill-app-namespace-fields` stamps root `appId` +
+  `sizeBytes` onto existing app-data things from `crystal.appId`;
+  `backfill-app-storage-allowances` reconciles user ledgers while writes are
+  fenced, then initializes each app aggregate last.
 - New indexes (via `ensureIndexes`, versioned-collection layer):
   `{ appId: 1, ownerId: 1, updatedAt: -1, shareId: -1 }` and
   `{ appId: 1, acl: 1, updatedAt: -1, shareId: -1 }`, both partial

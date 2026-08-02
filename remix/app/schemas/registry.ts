@@ -218,12 +218,14 @@ export const MAX_APP_ORIGINS = 20;
 export const MAX_APPS_PER_USER = 20;
 export const MAX_APP_DATA_KEY_CHARS = 128;
 export const MAX_APP_DATA_VALUE_BYTES = 32 * 1024;
-// App storage is byte-budgeted, not doc-counted: each (user, app) namespace
-// holds unlimited things bounded by a standing byte budget (a service-quota
-// style counter thing, fail-closed, admin-tunable via settings). sizeBytes is
-// stamped on every app-written doc so updates charge deltas and deletes
-// refund. Sandbox namespaces get a tighter budget and die with their token.
-export const DEFAULT_APP_STORAGE_BYTES = 50 * 1024 * 1024;
+// App storage is byte-budgeted, not doc-counted. Every registered app has a
+// standing aggregate allowance across all of its users, and each (user, app)
+// namespace has its own allowance inside that ceiling. Both are persisted on
+// the server-owned app Thing; sizeBytes deltas charge race-safe ledgers and
+// deletes refund them. Sandbox namespaces get a tighter ephemeral allowance
+// plus their existing app-wide windowed brake.
+export const DEFAULT_APP_STORAGE_ALLOWANCE_BYTES = 5 * 1024 * 1024 * 1024;
+export const DEFAULT_APP_USER_STORAGE_ALLOWANCE_BYTES = 50 * 1024 * 1024;
 export const SANDBOX_STORAGE_BYTES = 5 * 1024 * 1024;
 // Live app sessions one user can hold for one app: re-approvals mint fresh
 // sessions, so without a cap a re-running embed accumulates grants without
@@ -795,7 +797,7 @@ const rateLimitSchema: ThingtimeSchema = {
 
 const appSchema: ThingtimeSchema = {
   id: 'app',
-  version: 1,
+  version: 2,
   kind: 'crystal',
   collection: null,
   title: 'App',
@@ -804,14 +806,26 @@ const appSchema: ThingtimeSchema = {
     'Created only through /api/v1/apps (no generic-route sanitizer on purpose — the server mints ' +
     'the clientId and validates the origin allowlist, so neither can be forged through /api/v1/things). ' +
     'The clientId identifies the app to the embed SDK; origins is the exact list of web origins ' +
-    'allowed to open the authorize popup and receive tokens. Deleting the app revokes every ' +
-    'app-scoped session minted for it.',
+    'allowed to open the authorize popup and receive tokens. Server-owned storageAllowanceBytes, ' +
+    'storageUsedBytes, and userStorageAllowanceBytes enforce the aggregate app-data ceiling and ' +
+    'the allowance inside it for each app user. Deleting the app revokes every app-scoped session ' +
+    'minted for it.',
   fields: [
     { name: 'clientId', type: 'id', required: true, description: 'Server-minted public app id (ttapp_<uuid>) used by the embed SDK.' },
     { name: 'name', type: 'string', required: true, max: MAX_APP_NAME_CHARS, description: `App name shown on the consent screen, max ${MAX_APP_NAME_CHARS} chars.` },
-    { name: 'origins', type: 'string[]', required: true, max: MAX_APP_ORIGINS, description: `Allowed web origins (https, or http for localhost dev), max ${MAX_APP_ORIGINS}.` }
+    { name: 'origins', type: 'string[]', required: true, max: MAX_APP_ORIGINS, description: `Allowed web origins (https, or http for localhost dev), max ${MAX_APP_ORIGINS}.` },
+    { name: 'storageAllowanceBytes', type: 'number', required: true, description: 'Server-owned aggregate app-data allowance across every user of this app, in bytes.' },
+    { name: 'storageUsedBytes', type: 'number', required: true, description: 'Bytes currently charged across every non-sandbox namespace owned by this app.' },
+    { name: 'userStorageAllowanceBytes', type: 'number', required: true, description: 'Server-owned app-data allowance for each individual user of this app, in bytes.' }
   ],
-  example: { clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', name: 'Rainbow Notes', origins: ['https://rainbownotes.example'] }
+  example: {
+    clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f',
+    name: 'Rainbow Notes',
+    origins: ['https://rainbownotes.example'],
+    storageAllowanceBytes: DEFAULT_APP_STORAGE_ALLOWANCE_BYTES,
+    storageUsedBytes: 0,
+    userStorageAllowanceBytes: DEFAULT_APP_USER_STORAGE_ALLOWANCE_BYTES
+  }
 };
 
 const appDataSchema: ThingtimeSchema = {
@@ -824,14 +838,15 @@ const appDataSchema: ThingtimeSchema = {
   detail:
     'Written only through /api/v1/app-data with an app-scoped Bearer token (no generic-route ' +
     'sanitizer on purpose), one thing per (user, app, key) — relational, atomic, and bounded per ' +
-    `FUNDAMENTALS.md §3: values cap at ${MAX_APP_DATA_VALUE_BYTES / 1024}KB of JSON and the (user, app) ` +
-    `namespace shares a ${DEFAULT_APP_STORAGE_BYTES / (1024 * 1024)}MB storage byte budget (unlimited entry ` +
+    `FUNDAMENTALS.md §3: values cap at ${MAX_APP_DATA_VALUE_BYTES / 1024} KiB of JSON and the (user, app) ` +
+    `namespace shares a ${DEFAULT_APP_USER_STORAGE_ALLOWANCE_BYTES / (1024 * 1024)} MiB storage allowance inside the app's ` +
+    `${DEFAULT_APP_STORAGE_ALLOWANCE_BYTES / (1024 * 1024 * 1024)} GiB aggregate allowance (unlimited entry ` +
     'count). Owned by the END USER (acl ["tt:user"]), not the app ' +
     'developer, so users can see and delete what an app has stored for them.',
   fields: [
     { name: 'appId', type: 'id', required: true, description: 'The clientId of the app this entry belongs to.' },
     { name: 'key', type: 'string', required: true, max: MAX_APP_DATA_KEY_CHARS, description: `Entry key ([A-Za-z0-9._:-], first char alphanumeric, max ${MAX_APP_DATA_KEY_CHARS} chars).` },
-    { name: 'value', type: 'record', required: true, description: `Arbitrary JSON value, max ${MAX_APP_DATA_VALUE_BYTES / 1024}KB serialized.` }
+    { name: 'value', type: 'record', required: true, description: `Arbitrary JSON value, max ${MAX_APP_DATA_VALUE_BYTES / 1024} KiB serialized.` }
   ],
   example: { appId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', key: 'preferences', value: { theme: 'rainbow' } }
 };

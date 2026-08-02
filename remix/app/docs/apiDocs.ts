@@ -1778,7 +1778,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       '(via the embed SDK at /sdk/thingtime-login.js). POST { name, origins } registers one: the server ' +
       'mints the clientId (ttapp_<uuid>) and validates origins — bare https origins like ' +
       'https://example.com, with http allowed only for localhost dev. Only those exact origins can open ' +
-      'the authorize popup and receive tokens. GET lists your registered apps.',
+      'the authorize popup and receive tokens. Each app receives a server-owned 5 GiB aggregate app-data ' +
+      'allowance and a 50 MiB allowance for each app user; GET lists the live usage, remaining aggregate ' +
+      'bytes, and both allowances. These fields cannot be raised through the developer update route.',
     auth: { mode: 'session-or-bearer', description: 'Your own Thingtime session (cookie or full-account Bearer). App-scoped tokens are rejected.' },
     methods: ['GET', 'POST'],
     steps: [
@@ -1801,7 +1803,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'App registered.',
         body: {
           ok: true,
-          app: { clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', name: 'Rainbow Notes', origins: ['https://rainbownotes.example'] }
+          app: {
+            clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f',
+            name: 'Rainbow Notes',
+            origins: ['https://rainbownotes.example'],
+            storageAllowanceBytes: 5368709120,
+            storageUsedBytes: 0,
+            storageRemainingBytes: 5368709120,
+            userStorageAllowanceBytes: 52428800,
+            storageAccountingReady: true
+          }
         }
       },
       { status: 400, description: 'Bad origin.', body: { ok: false, error: 'Origins must be bare https origins like https://example.com (http is allowed for localhost only)' } }
@@ -1817,7 +1828,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     detail:
       'POST { clientId, name?, origins? }. Origins are re-validated like registration. Removing an origin ' +
       'takes effect on the next request from any token bound to it — the app-token resolver re-checks the ' +
-      'allowlist every time.',
+      'allowlist every time. Storage allowance and usage fields are server-owned and ignored here, so an ' +
+      'app developer cannot raise either quota.',
     auth: { mode: 'session-or-bearer', description: 'Your own Thingtime session (cookie or full-account Bearer); you can only update apps you own.' },
     methods: ['POST'],
     steps: [
@@ -1833,7 +1845,23 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       }
     ],
     responseExamples: [
-      { status: 200, description: 'Updated.', body: { ok: true, app: { clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', name: 'Rainbow Notes', origins: ['https://new.example'] } } },
+      {
+        status: 200,
+        description: 'Updated; server-owned quota fields are returned unchanged.',
+        body: {
+          ok: true,
+          app: {
+            clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f',
+            name: 'Rainbow Notes',
+            origins: ['https://new.example'],
+            storageAllowanceBytes: 5368709120,
+            storageUsedBytes: 183204,
+            storageRemainingBytes: 5368525916,
+            userStorageAllowanceBytes: 52428800,
+            storageAccountingReady: true
+          }
+        }
+      },
       { status: 404, description: 'Not yours / unknown.', body: { ok: false, error: 'App not found' } }
     ]
   }),
@@ -1989,7 +2017,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       "'app'), /api/v1/app-data/shared, /api/v1/app-data/usage, /api/v1/oauth/userinfo, and the " +
       'full things API (/api/v1/things CRUD plus /things/search, /things/update, /things/delete, ' +
       '/things/react, /things/comment) — namespace-fenced exactly like a real app token, ' +
-      'byte-budgeted at 5MB per sandbox namespace, and subject to an app-wide sandbox byte brake ' +
+      'byte-budgeted at 5 MiB per sandbox namespace, and subject to an app-wide sandbox byte brake ' +
       '(default 512MB/hour across ALL sandboxes). It resolves to a synthetic ' +
       "pretend user (username 'sandbox-<name>', default sandbox-you), every byte written under it is " +
       'namespaced to that one token and TTL-reaped within the hour, and the token can never act as an ' +
@@ -2341,8 +2369,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'listing returns nextCursor (the same grammar as /app-data/shared). ' +
       'POST { key, value, visibility?, acl? } inserts or updates one entry — keys are [A-Za-z0-9._:-] up to 128 chars ' +
       '(first char must be a letter or digit), values ' +
-      'any JSON up to 32KB. There is NO key-count cap: storage is bounded by a per-(user, app) byte ' +
-      'budget instead (50MB by default, 5MB per sandbox namespace) — every write charges its ' +
+      'any JSON up to 32 KiB. There is NO key-count cap: registered-app storage is bounded by BOTH a ' +
+      '50 MiB allowance per (user, app) and a 5 GiB aggregate allowance across every user of the app ' +
+      '(sandbox namespaces get 5 MiB plus the separate global burn window) — every write charges its ' +
       'serialized size, updates charge only the delta, deletes refund, and an over-budget write ' +
       'fails with 507 (read GET /api/v1/app-data/usage to pace yourself). Entries are things owned by the END USER, ' +
       'and their audience IS the acl array: ["tt:user"] (private, the default) or ' +
@@ -2380,7 +2409,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       { status: 200, description: 'Entry written.', body: { ok: true, entry: { key: 'preferences', value: { theme: 'rainbow' }, visibility: 'private', acl: ['tt:user'], updatedAt: '2026-07-12T00:00:00.000Z' } } },
       { status: 401, description: 'Missing/expired/revoked token.', body: { ok: false, error: 'Unauthorized' } },
       { status: 403, description: 'Browser origin ≠ token origin.', body: { ok: false, error: 'Origin does not match this token' } },
-      { status: 507, description: 'The write would exceed the namespace byte budget.', body: { ok: false, error: "This would exceed the app's 50MB storage budget for this user (52428712 of 52428800 bytes used — delete entries or store less)" } }
+      { status: 507, description: 'The write would exceed this app user\'s allowance.', body: { ok: false, error: "This would exceed the app's storage allowance for this user (52428712 of 52428800 bytes used — delete entries or store less)" } },
+      { status: 507, description: 'The write would exceed the whole app allowance.', body: { ok: false, error: "This would exceed the app's aggregate storage allowance (5368709000 of 5368709120 bytes used across all users)" } }
     ]
   }),
   endpoint({
@@ -2458,24 +2488,39 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'embed',
     title: 'App data (storage usage)',
     endpoint: '/api/v1/app-data/usage',
-    summary: 'This (user, app) namespace\'s storage ledger — bytes used against the byte budget.',
+    summary: 'Both storage ledgers: this app user and the whole registered app.',
     detail:
       'GET with the app-scoped Bearer token. Storage is byte-budgeted, never entry-counted: every ' +
       'write through this app — KV entries and generic things alike — charges its serialized size ' +
-      '(the root sizeBytes stamp) against one per-(user, app) budget: 50MB by default, 5MB per ' +
-      'sandbox namespace. Updates charge only the delta and deletes refund, so usedBytes tracks ' +
-      'what is actually stored. Over-budget writes fail with 507; poll this to pace the app ' +
+      '(the root sizeBytes stamp) against both the 50 MiB per-app-user allowance and the registered ' +
+      'app\'s 5 GiB aggregate allowance. Updates charge only the delta and deletes refund, so both ' +
+      'ledgers track what is actually stored. Legacy usedBytes/budgetBytes remain aliases for the ' +
+      'current user ledger; userStorage and appStorage add explicit used, allowance, and remaining ' +
+      'bytes. Sandboxes return appStorage: null because their aggregate protection is windowed. ' +
+      'Over-allowance writes fail with 507; poll this to pace the app ' +
       'instead of discovering the ceiling. Same CORS + origin binding as /api/v1/app-data.',
     auth: { mode: 'bearer', description: 'App-scoped Bearer token with the app-data scope.' },
     methods: ['GET'],
     steps: [
       'GET with the token from Thingtime.login(…).',
-      'Compare usedBytes to budgetBytes before large writes; a 507 on any write means the budget is spent.',
+      'Compare both userStorage.remainingBytes and appStorage.remainingBytes before large writes; a 507 identifies which allowance is spent.',
       'Deleting entries (or shrinking values) refunds bytes immediately.'
     ],
     requestExamples: [{ name: 'Read usage', description: 'Bytes used and the budget.', method: 'GET' }],
     responseExamples: [
-      { status: 200, description: 'The ledger.', body: { ok: true, usedBytes: 183204, budgetBytes: 52428800 } },
+      {
+        status: 200,
+        description: 'Both registered-app ledgers (with backward-compatible user aliases).',
+        body: {
+          ok: true,
+          usedBytes: 183204,
+          budgetBytes: 52428800,
+          remainingBytes: 52245596,
+          userStorage: { usedBytes: 183204, allowanceBytes: 52428800, remainingBytes: 52245596 },
+          appStorage: { usedBytes: 12345678, allowanceBytes: 5368709120, remainingBytes: 5356363442 },
+          storageAccountingReady: true
+        }
+      },
       { status: 401, description: 'Missing/expired/revoked token.', body: { ok: false, error: 'Unauthorized' } }
     ]
   }),
@@ -2491,7 +2536,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       mode: 'session-or-bearer',
       description:
         'Mutations require an auth cookie or Authorization: Bearer token — a full session or a scoped personal access token (see /api/v1/tokens; scopes gate each verb, e.g. things.create for POST, things.update for PATCH, both for PUT). GET works logged out for tt:all things; attached things inherit their target audience. ' +
-        'App-scoped Bearer tokens ("Login with Thingtime", app-data scope) get every verb too, fenced to the app\'s own namespace: reads conjoin the server-stamped root appId (plus the audience acl, tt:inherit chain resolution, and author-liveness for cross-user docs — anything outside the namespace 404s), writes are stamped (root appId + sizeBytes), charged against the namespace byte budget, and acl-clamped to tt:user (the default — app inserts are private, never the public default) or tt:app/<clientId> (needs the app-data.shared scope). save/share things and protected kinds are refused; app responses carry the generic thing projection (never the post aggregation) with visibility \'private\' | \'app\' | \'inherit\' and the acl filtered to the app\'s own entries.'
+        'App-scoped Bearer tokens ("Login with Thingtime", app-data scope) get every verb too, fenced to the app\'s own namespace: reads conjoin the server-stamped root appId (plus the audience acl, tt:inherit chain resolution, and author-liveness for cross-user docs — anything outside the namespace 404s), writes are stamped (root appId + sizeBytes), charged against both the whole-app and per-app-user allowances, and acl-clamped to tt:user (the default — app inserts are private, never the public default) or tt:app/<clientId> (needs the app-data.shared scope). save/share things and protected kinds are refused; app responses carry the generic thing projection (never the post aggregation) with visibility \'private\' | \'app\' | \'inherit\' and the acl filtered to the app\'s own entries.'
     },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     steps: [

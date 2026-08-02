@@ -109,10 +109,14 @@ hand-write `tt:app/<x>` acl entries, so acl membership would be spoofable);
 `acl` stays what it always was — the AUDIENCE: `tt:user` private, plus
 `tt:app/<clientId>` for that app's user base. Every app-token read and write is
 fenced to the namespace (`api/utils/apps/namespace.ts`), and storage is bounded
-by per-(user, app) BYTE budgets — root `sizeBytes` charged against a
-fail-closed ledger (50MB default, 5MB per sandbox namespace) — never doc
-counts. The end user owns every namespace doc and can browse
-(`GET /api/v1/things?appId=`, `/api/v1/apps/data-summary`) and delete
+by TWO standing BYTE allowances — a server-owned 5 GiB aggregate on the app
+Thing and 50 MiB per (user, app), with root `sizeBytes` charged against both
+fail-closed ledgers — never doc counts. The app aggregate reserves first; a
+user-ledger refusal compensates it, and a crash can only leave conservative
+over-counting for the reconcile migration to repair. Sandboxes instead get a
+5 MiB ephemeral namespace plus the global windowed brake. The end user owns
+every namespace doc and can browse (`GET /api/v1/things?appId=`,
+`/api/v1/apps/data-summary`) and delete
 (`POST /api/v1/apps/data/delete-all`) everything an app stores. Full model in
 `claude-todo/16-full-power-app-namespaces.md`.
 

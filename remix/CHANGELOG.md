@@ -74,6 +74,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- **App-data now has real allowances at both scopes**: every registered app
+  stores a server-owned 5 GiB aggregate allowance/usage counter plus a 50 MiB
+  per-app-user allowance. Namespace writes reserve both guarded ledgers,
+  deletes refund both, `/api/v1/app-data/usage` reports used/allowance/remaining
+  for each, and `/api/v1/apps` exposes the developer's aggregate status without
+  allowing `/apps/update` to raise it. The idempotent
+  `backfill-app-storage-allowances` migration write-fences legacy apps,
+  reconciles user ledgers, and initializes aggregate usage last. — Codex (AI),
+  2026-08-02
+
 - **Feed things render natively** (`ThingView`): thingtime posts mount the real
   Thingtime component — right-click context menu, collapse, and view⇄edit
   toggling — over a sandboxed store, defaulting to view mode. Things resolving a

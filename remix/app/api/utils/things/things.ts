@@ -675,7 +675,7 @@ export const createThing = async (
     : null;
   if (app && sizeBytes !== null) {
     const charge = await chargeAppStorage(app, sizeBytes);
-    if (!charge.ok) return fail(charge.status, charge.error);
+    if (charge.ok === false) return fail(charge.status, charge.error);
   }
 
   const doc: ThingDoc = {
@@ -699,13 +699,16 @@ export const createThing = async (
   try {
     await things.insertOne(doc as any);
   } catch (err: any) {
-    if (app && sizeBytes !== null) await refundAppStorage(app, sizeBytes);
     // duplicate-key can come from more than one unique index — only a shareId
     // collision means "this thing already exists" (seeding re-runs pass fixed
     // ids; mirror the registerUser 409 convention so seeds skip idempotently).
     // The reaction (target, owner, token) index races surface as 409 too so
     // toggleReaction keeps treating them as already-reacted.
     if (err?.code === 11000) {
+      // A duplicate-key rejection proves the insert did not land. Unknown
+      // Mongo errors are ambiguous, so they deliberately keep the reservation
+      // rather than risk refunding bytes for a document that was committed.
+      if (app && sizeBytes !== null) await refundAppStorage(app, sizeBytes);
       const keys = Object.keys(err?.keyPattern || {});
       if (!keys.length || keys.includes('shareId')) return fail(409, 'Post already exists');
       if (keys.includes('crystal.emoji')) return fail(409, 'Post already exists');
@@ -1878,9 +1881,10 @@ export const toggleReaction = async (
       things.findOne({ kind: 'reaction', parentId: target.shareId, ownerId: viewerId, token } as any)
     ]);
     if (existingV2 || existingKind) {
-      const ids = [existingV2?._id, existingKind?._id].filter(Boolean);
-      await things.deleteMany({ _id: { $in: ids } } as any);
-      await refundDeletedNamespaceDocs([existingV2, existingKind].filter(Boolean) as ThingDoc[]);
+      const removed = await deleteThingsAtomically(
+        [existingV2, existingKind].filter(Boolean) as ThingDoc[]
+      );
+      await refundDeletedNamespaceDocs(removed);
     } else {
       // createThing enforces the per-user + per-post reaction caps (single
       // source of truth, so the generic POST path is bounded the same way);
@@ -2120,21 +2124,66 @@ export const sharePost = async (
 // Ledger upkeep for ANY deletion path (app tokens, the owner's first-party
 // delete, the browse UI's delete-all): every removed doc that carries the
 // namespace stamp refunds its bytes to its own (owner, app) ledger — grouped
-// so a cascade over many authors decrements each author's ledger once.
+// so a cascade over many authors decrements each author's ledger once. Sandbox
+// docs keep their ephemeral scope here and never touch a registered app's
+// aggregate allowance.
 export const refundDeletedNamespaceDocs = async (docs: ThingDoc[]): Promise<void> => {
-  const totals = new Map<string, { ownerId: string; appId: string; bytes: number }>();
+  const totals = new Map<
+    string,
+    { ownerId: string; appId: string; bytes: number; sandbox: { space: string | null } | null }
+  >();
   for (const doc of docs) {
     if (!doc?.appId) continue;
     const bytes = typeof doc.sizeBytes === 'number' ? doc.sizeBytes : appThingSizeBytes(doc);
     if (!(bytes > 0)) continue;
-    const key = `${doc.ownerId}\0${doc.appId}`;
-    const entry = totals.get(key) || { ownerId: String(doc.ownerId), appId: doc.appId, bytes: 0 };
+    const sandbox = doc.sandboxExpiresAt
+      ? { space: typeof doc.sandboxSpace === 'string' ? doc.sandboxSpace : null }
+      : null;
+    const scopeKey = sandbox ? `sandbox:${sandbox.space ?? ''}` : 'registered';
+    const key = `${doc.ownerId}\0${doc.appId}\0${scopeKey}`;
+    const entry = totals.get(key) || { ownerId: String(doc.ownerId), appId: doc.appId, bytes: 0, sandbox };
     entry.bytes += bytes;
     totals.set(key, entry);
   }
-  for (const { ownerId, appId, bytes } of totals.values()) {
-    await refundAppStorage({ appId, ownerId, sharedRead: false, scopes: [], username: '', sandbox: null }, bytes);
+  for (const { ownerId, appId, bytes, sandbox } of totals.values()) {
+    await refundAppStorage({ appId, ownerId, sharedRead: false, scopes: [], username: '', sandbox }, bytes);
   }
+};
+
+// Delete known candidates one document at a time and return only the exact
+// documents this caller atomically removed. That makes quota refunds safe
+// against concurrent updates and competing delete paths: findOneAndDelete
+// returns the current size stamp, and only one deleter can receive each doc.
+// Bounded parallelism keeps large cascades/delete-all operations practical.
+export const deleteThingsAtomically = async (docs: ThingDoc[]): Promise<ThingDoc[]> => {
+  const things = await getThingsCollection();
+  const candidates = [
+    ...new Map(
+      docs
+        .map((doc) => {
+          const mongoId = (doc as any)?._id;
+          const key = mongoId ? `id:${String(mongoId)}` : doc?.shareId ? `share:${doc.shareId}` : '';
+          return key ? [key, doc] as const : null;
+        })
+        .filter((entry): entry is readonly [string, ThingDoc] => entry !== null)
+    ).values()
+  ];
+  const deleted: ThingDoc[] = [];
+  const concurrency = 25;
+
+  for (let offset = 0; offset < candidates.length; offset += concurrency) {
+    const batch = await Promise.all(
+      candidates.slice(offset, offset + concurrency).map(async (doc) => {
+        const mongoId = (doc as any)._id;
+        return (await things.findOneAndDelete(
+          (mongoId ? { _id: mongoId } : { shareId: doc.shareId }) as any
+        )) as any as ThingDoc | null;
+      })
+    );
+    deleted.push(...batch.filter((doc): doc is ThingDoc => doc !== null));
+  }
+
+  return deleted;
 };
 
 export const deleteThing = async (
@@ -2182,10 +2231,19 @@ export const deleteThing = async (
   };
   const cascade = (await things
     .find(cascadeFilter as any)
-    .project({ ownerId: 1, appId: 1, sizeBytes: 1, crystal: 1, extended: 1, tags: 1 })
+    .project({
+      ownerId: 1,
+      appId: 1,
+      sizeBytes: 1,
+      crystal: 1,
+      extended: 1,
+      tags: 1,
+      sandboxExpiresAt: 1,
+      sandboxSpace: 1
+    })
     .toArray()) as any as ThingDoc[];
-  await things.deleteMany(cascadeFilter as any);
-  await refundDeletedNamespaceDocs([deleted, ...cascade]);
+  const deletedCascade = await deleteThingsAtomically(cascade);
+  await refundDeletedNamespaceDocs([deleted, ...deletedCascade]);
   return { ok: true };
 };
 
@@ -2222,6 +2280,24 @@ export const updateThing = async (
   // that this app didn't store is a plain 404 (no existence oracle)
   if (app && doc.appId !== app.appId) return fail(404, 'Thing not found');
   if (patSandboxBlocks(viewer, doc)) return patSandboxFail();
+
+  // Namespace things remain quota-accounted even when their end-user owner
+  // edits them through the first-party things API instead of through an app
+  // token. Root appId is server-authored, so synthesizing this storage-only
+  // scope cannot let a caller enter another namespace; it simply prevents a
+  // first-party update from growing app data without reserving either ledger.
+  const storageScope: AppNamespaceScope | null = app ?? (doc.appId
+    ? {
+        appId: doc.appId,
+        ownerId: doc.ownerId,
+        sharedRead: false,
+        scopes: [],
+        username: '',
+        sandbox: doc.sandboxExpiresAt
+          ? { space: typeof doc.sandboxSpace === 'string' ? doc.sandboxSpace : null }
+          : null
+      }
+    : null);
 
   const thingtime = thingtimeOf(doc);
   // system kinds mutate only through their dedicated utils (profile update,
@@ -2314,7 +2390,7 @@ export const updateThing = async (
   // writing (mirrors setAppData: over-budget refuses, shrink refunds after).
   let sizeDelta = 0;
   let newSize: number | null = null;
-  if (app) {
+  if (storageScope) {
     newSize = appThingSizeBytes({
       crystal: validated.crystal,
       extended: hasExtendedChange ? extended.value : (doc.extended ?? null),
@@ -2323,8 +2399,8 @@ export const updateThing = async (
     const oldSize = typeof doc.sizeBytes === 'number' ? doc.sizeBytes : appThingSizeBytes(doc);
     sizeDelta = newSize - oldSize;
     if (sizeDelta > 0) {
-      const charge = await chargeAppStorage(app, sizeDelta);
-      if (!charge.ok) return fail(charge.status, charge.error);
+      const charge = await chargeAppStorage(storageScope, sizeDelta);
+      if (charge.ok === false) return fail(charge.status, charge.error);
     }
   }
 
@@ -2339,7 +2415,7 @@ export const updateThing = async (
     tags,
     acl,
     updatedAt: now,
-    ...(app && newSize !== null ? { appId: app.appId, sizeBytes: newSize } : {})
+    ...(storageScope && newSize !== null ? { appId: storageScope.appId, sizeBytes: newSize } : {})
   };
   // upgrading a v1 post in place — clear the legacy crystal-at-root fields the
   // v2 shape replaces (embedded comments/reactions stay for the migration).
@@ -2356,13 +2432,30 @@ export const updateThing = async (
     visibility: '',
     ...(nextTokenAcl !== undefined ? { createdByTokenId: '' } : {})
   };
+  const expectedSize = storageScope
+    ? Object.prototype.hasOwnProperty.call(doc, 'sizeBytes')
+      ? { sizeBytes: doc.sizeBytes }
+      : { sizeBytes: { $exists: false } }
+    : {};
+  let writeResult;
   try {
-    await things.updateOne({ shareId: doc.shareId } as any, { $set: set, $unset: unset } as any);
+    writeResult = await things.updateOne(
+      { shareId: doc.shareId, ...expectedSize } as any,
+      { $set: set, $unset: unset } as any
+    );
   } catch (err) {
-    if (app && sizeDelta > 0) await refundAppStorage(app, sizeDelta);
+    // An unknown result may have committed. Keep a positive reservation so a
+    // stored growth can never become unaccounted; a reconcile pass can reclaim
+    // conservative over-counting if the update did not land.
     throw err;
   }
-  if (app && sizeDelta < 0) await refundAppStorage(app, -sizeDelta);
+  if (storageScope && writeResult.matchedCount === 0) {
+    // A size-changing writer or delete won the compare-and-swap, proving this
+    // update did not land. Its reservation is therefore safe to compensate.
+    if (sizeDelta > 0) await refundAppStorage(storageScope, sizeDelta);
+    return fail(409, 'Thing changed while it was being updated — try again');
+  }
+  if (storageScope && sizeDelta < 0) await refundAppStorage(storageScope, -sizeDelta);
 
   const updated = { ...doc, ...set } as ThingDoc;
   delete (updated as any).kind;

@@ -59,6 +59,7 @@ export const embedGuideSection = {
       'Identity SSO: resolve who the token belongs to via /api/v1/oauth/userinfo, from your site JS ' +
       'or your server. Shared things: read the things the user hand-picked via /oauth/shared, ' +
       'read-only. App storage: keep per-user data (settings, saves, progress) in /api/v1/app-data — ' +
+      '5 GiB across the registered app, 50 MiB per app user, with both ledgers in /api/v1/app-data/usage — ' +
       'your app can only ever see its own keys.'
   },
   securityModel: {

@@ -349,11 +349,26 @@ is fixed, and cite the checklist you ran in the PR description.
       insert that omits visibility/acl lands PRIVATE (never the generic
       route's public default); `save`/`share` thingtimes 403 as first-party
       surfaces; protected kinds stay refused.
-- [ ] Byte budget replaces key counts: keys keep writing past 200 until the
-      (user, app) budget (50MB real) is spent; the over-budget write 507s and
-      writes nothing; GET /api/v1/app-data/usage arithmetic matches (a write
-      raises usedBytes by its serialized size, an update charges only the
-      delta, a delete refunds it).
+- [ ] Byte allowances replace key counts: keys keep writing past 200 until
+      either the server-owned 50 MiB (user, app) allowance or the registered
+      app's 5 GiB aggregate allowance is spent. The corresponding over-limit
+      write 507s and writes nothing; concurrent users never overshoot either
+      guarded counter. GET /api/v1/app-data/usage returns userStorage and
+      appStorage with exact used/allowance/remaining arithmetic while keeping
+      usedBytes/budgetBytes as user-ledger aliases. A write raises both by its
+      serialized size, an update charges only the delta, and a delete refunds
+      both.
+- [ ] App allowance ownership + migration: POST /api/v1/apps stores
+      storageAllowanceBytes=5 GiB, storageUsedBytes=0, and
+      userStorageAllowanceBytes=50 MiB; /apps/update cannot change them. A legacy
+      app fails writes closed until backfill-app-storage-allowances reconciles
+      per-user sums and initializes aggregate last; two migration runners
+      cannot overwrite a now-live aggregate.
+- [ ] Run `node scripts/verify-app-storage.mjs <local base URL>` against a
+      disposable local database: all 20 registered-app ledger checks pass for
+      two users writing to one app, including same-key CAS races and
+      first-party owner updates/deletes. The script refuses non-local URLs so
+      it cannot seed verification accounts into production by accident.
 - [ ] KV listing grammar: GET /api/v1/app-data with key=post:* or prefix=
       filters, limit=/cursor= page, and nextCursor walks the whole set; KV
       entries also appear via GET /api/v1/things?thingtime=app-data with the
@@ -398,9 +413,13 @@ is fixed, and cite the checklist you ran in the PR description.
       clientId can write shared entries, but that real app's
       /app-data/shared feed never scans them (`sandboxExpiresAt` excluded)
       — real pages stay full-size even with fresh sandbox junk on top.
-- [ ] Sandbox storage budget: writes 507 once the sandbox namespace's 5MB
+- [ ] Sandbox storage budget: writes 507 once the sandbox namespace's 5 MiB
       byte budget is spent (no key-count cap remains); deleting entries
-      refunds bytes and unblocks; real grants get the 50MB budget.
+      refunds bytes and unblocks; real grants get the 50 MiB budget.
+- [ ] Explicit sandbox KV/things deletes refund only the ephemeral sandbox
+      ledger. Even when a sandbox uses a real clientId, its delete never
+      decrements that registered app's standing aggregate or a real user's
+      ledger.
 - [ ] Global sandbox byte brake: the `sandbox.storage.global` rule (limit is
       MEGABYTES per window, default 512MB/hour, fail-closed) burns on every
       sandbox write app-wide and 507s all sandbox writes once spent; a

@@ -1,19 +1,23 @@
 import { randomUUID } from 'node:crypto';
 
 import { getSessionsCollection, getThingsCollection } from '../mongodb/collections';
+import { remainingStorageBytes, storageUsage, storedByteCount } from './appStorageCore';
 import {
   ACL_OWNER,
   COLLECTION_SCHEMA_VERSIONS,
+  DEFAULT_APP_STORAGE_ALLOWANCE_BYTES,
+  DEFAULT_APP_USER_STORAGE_ALLOWANCE_BYTES,
   MAX_APPS_PER_USER,
   MAX_APP_NAME_CHARS,
   MAX_APP_ORIGINS
 } from '~/schemas/registry';
 
 // Embed apps for "Login with Thingtime" (FUNDAMENTALS.md: everything is a
-// thing) — a registered app is a `things` doc with thingtime ['app'] and
-// crystal { clientId, name, origins }, owned by the developer user. Apps are
-// created ONLY here (the schema has no generic-route sanitizer), the server
-// mints the clientId, and a partial unique index keeps clientId one-of-a-kind.
+// thing) — a registered app is a `things` doc with thingtime ['app'] and a
+// crystal containing its identity/origins plus server-owned storage allowance
+// + usage fields, owned by the developer user. Apps are created ONLY here (the
+// schema has no generic-route sanitizer), the server mints the clientId, and a
+// partial unique index keeps clientId one-of-a-kind.
 
 type Fail = { ok: false; status: number; error: string };
 const fail = (status: number, error: string): Fail => ({ ok: false, status, error });
@@ -22,8 +26,20 @@ export type PublicApp = {
   clientId: string;
   name: string;
   origins: string[];
+  storageAllowanceBytes: number;
+  storageUsedBytes: number;
+  storageRemainingBytes: number;
+  userStorageAllowanceBytes: number;
+  storageAccountingReady: boolean;
   createdAt: Date;
   updatedAt: Date;
+};
+
+export type AppStoragePolicy = {
+  storageAllowanceBytes: number;
+  storageUsedBytes: number;
+  userStorageAllowanceBytes: number;
+  ready: boolean;
 };
 
 // The shape shown to ANONYMOUS callers (the authorize popup before login):
@@ -87,13 +103,49 @@ export const sanitizeAppOrigins = (value: unknown): string[] | Fail => {
   return origins;
 };
 
-const toPublicApp = (doc: any): PublicApp => ({
-  clientId: doc.crystal?.clientId,
-  name: doc.crystal?.name,
-  origins: Array.isArray(doc.crystal?.origins) ? doc.crystal.origins : [],
-  createdAt: doc.createdAt,
-  updatedAt: doc.updatedAt
-});
+export const appStoragePolicyOf = (doc: any): AppStoragePolicy => {
+  const crystal = doc?.crystal;
+  const ready =
+    Number.isSafeInteger(crystal?.storageAllowanceBytes) &&
+    Number(crystal.storageAllowanceBytes) >= 0 &&
+    Number.isSafeInteger(crystal?.storageUsedBytes) &&
+    Number(crystal.storageUsedBytes) >= 0 &&
+    Number.isSafeInteger(crystal?.userStorageAllowanceBytes) &&
+    Number(crystal.userStorageAllowanceBytes) >= 0;
+  return {
+    storageAllowanceBytes: storedByteCount(
+      crystal?.storageAllowanceBytes,
+      DEFAULT_APP_STORAGE_ALLOWANCE_BYTES
+    ),
+    storageUsedBytes: storedByteCount(crystal?.storageUsedBytes, 0),
+    userStorageAllowanceBytes: storedByteCount(
+      crystal?.userStorageAllowanceBytes,
+      DEFAULT_APP_USER_STORAGE_ALLOWANCE_BYTES
+    ),
+    ready
+  };
+};
+
+const toPublicApp = (doc: any): PublicApp => {
+  const policy = appStoragePolicyOf(doc);
+  const appUsage = storageUsage(
+    policy.storageUsedBytes,
+    policy.storageAllowanceBytes,
+    DEFAULT_APP_STORAGE_ALLOWANCE_BYTES
+  );
+  return {
+    clientId: doc.crystal?.clientId,
+    name: doc.crystal?.name,
+    origins: Array.isArray(doc.crystal?.origins) ? doc.crystal.origins : [],
+    storageAllowanceBytes: appUsage.allowanceBytes,
+    storageUsedBytes: appUsage.usedBytes,
+    storageRemainingBytes: remainingStorageBytes(appUsage),
+    userStorageAllowanceBytes: policy.userStorageAllowanceBytes,
+    storageAccountingReady: policy.ready,
+    createdAt: doc.createdAt,
+    updatedAt: doc.updatedAt
+  };
+};
 
 export const findAppByClientId = async (clientId: string) => {
   if (typeof clientId !== 'string' || !clientId.trim()) return null;
@@ -142,7 +194,14 @@ export const createApp = async (
     shareId: randomUUID(),
     schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
     thingtime: ['app'],
-    crystal: { clientId: `ttapp_${randomUUID()}`, name, origins },
+    crystal: {
+      clientId: `ttapp_${randomUUID()}`,
+      name,
+      origins,
+      storageAllowanceBytes: DEFAULT_APP_STORAGE_ALLOWANCE_BYTES,
+      storageUsedBytes: 0,
+      userStorageAllowanceBytes: DEFAULT_APP_USER_STORAGE_ALLOWANCE_BYTES
+    },
     ownerId,
     acl: [ACL_OWNER],
     targetId: null,

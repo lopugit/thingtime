@@ -27,7 +27,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   data: [], // '*' is a record; 'schema' is a reserved top-level name
   schema: ['name', 'description', 'forkOf'], // fields + render: records → dropped
   save: [], // marker schema
-  app: ['clientId', 'name', 'origins'],
+  app: ['clientId', 'name', 'origins', 'storageAllowanceBytes', 'storageUsedBytes', 'userStorageAllowanceBytes'],
   'app-data': ['appId', 'key'], // value: record → dropped
   user: ['username', 'ttid', 'displayName', 'bio', 'avatarUrl', 'bannerUrl'],
   theme: ['name'], // theme: record → dropped
