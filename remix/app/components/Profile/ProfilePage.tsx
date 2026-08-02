@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router';
 import { SlidersHorizontal } from 'lucide-react';
 
 import { EditProfileModal } from './EditProfileModal';
+import { RelationshipControls } from './RelationshipControls';
 import {
   AdvancedFilters,
   advancedSearchBody,
@@ -536,6 +537,10 @@ export const ProfilePage = (props: ProfilePageProps) => {
           </Text>
         )}
 
+        {/* follower/following/friend counts + follow/friend actions (and the
+        pending friend-request inbox on your own profile) */}
+        <RelationshipControls username={profile.username} isSelf={isSelf} />
+
         {isSelf && user ? (
           <Flex mt={4} columnGap={2} rowGap={2} flexWrap="wrap">
             <Button
@@ -576,11 +581,7 @@ export const ProfilePage = (props: ProfilePageProps) => {
               </Button>
             )}
           </Flex>
-        ) : (
-          <Text mt={4} fontSize="sm" color="var(--tt-muted, #9a9aa6)">
-            Say hi in the feed 👋
-          </Text>
-        )}
+        ) : null}
       </Box>
 
       <Box mt={8}>

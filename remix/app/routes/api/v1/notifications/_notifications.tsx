@@ -1,0 +1,36 @@
+import { json } from '~/api/http';
+
+import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
+import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
+import { listNotifications } from '~/api/utils/notifications/notifications';
+
+// GET /api/v1/notifications?limit=&before= — the caller's notifications,
+// newest first, filtered by their notification prefs (a disabled type is
+// hidden even if it was written before the pref flip), plus the unread count
+// for the bell badge. Cursor pagination via `before` (createdAt ISO).
+export const loader = async ({ request }: { request: Request }) => {
+  const user = await getCurrentUser(request);
+  if (!user) {
+    return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const limit = await enforceRateLimit(request, 'notifications.list', `user:${user.id}`);
+  if (!limit.allowed) {
+    return json(
+      { ok: false, error: 'You’re checking very enthusiastically — take a breather 🌸' },
+      rateLimitedResponseInit(limit)
+    );
+  }
+
+  const params = new URL(request.url).searchParams;
+  const result = await listNotifications(user.id, {
+    limit: params.get('limit') || undefined,
+    before: params.get('before') || undefined
+  });
+  return json({
+    ok: true,
+    notifications: result.notifications,
+    unreadCount: result.unreadCount,
+    nextBefore: result.nextBefore
+  });
+};

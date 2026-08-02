@@ -3,6 +3,7 @@ import { Box, Button, Flex, Image, Input, Switch, Text, Textarea } from '@chakra
 import { useNavigate } from 'react-router';
 
 import { AlgorithmManager } from './AlgorithmManager';
+import { NotificationSettingsSection } from './NotificationSettings';
 import { RainbowButton, SettingRow, SettingsSection } from './SettingsSection';
 import { AccountSwitcher } from '~/components/Account/AccountSwitcher';
 import { AdminPanel } from '~/components/Admin/AdminPanel';
@@ -405,6 +406,9 @@ export const SettingsPage = () => {
             </Flex>
           </SettingsSection>
         )}
+
+        {/* notifications (auth only) — per-type switches for the bell */}
+        {user && <NotificationSettingsSection user={user} />}
 
         {/* admin (admins only) */}
         {user?.isAdmin && (

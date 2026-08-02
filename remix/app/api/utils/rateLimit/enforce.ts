@@ -19,7 +19,9 @@ export type RateLimitOutcome = {
 
 const firstHeaderIp = (value: string | null) => value?.split(',')[0]?.trim() || '';
 
-const getRequestIp = (request: Request): string => {
+// Exported: the canonical request-IP reader (views.ts keys anonymous view
+// dedup off it too — do not add more per-module copies).
+export const getRequestIp = (request: Request): string => {
   const h = request.headers;
   return (
     firstHeaderIp(h.get('x-vercel-forwarded-for')) ||

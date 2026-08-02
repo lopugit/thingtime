@@ -24,7 +24,7 @@ import {
 } from '@chakra-ui/react';
 import { keyframes } from '@emotion/react';
 import { Link } from 'react-router';
-import { ArrowLeft, Heart, Maximize2, MessageCircle, MoreHorizontal, Plus, Repeat2, Send, Share } from 'lucide-react';
+import { ArrowLeft, Eye, Heart, Maximize2, MessageCircle, MoreHorizontal, Plus, Repeat2, Send, Share } from 'lucide-react';
 
 import { useApi } from '~/hooks/useApi';
 import { useCommentDraft } from '~/hooks/useCommentDraft';
@@ -34,7 +34,7 @@ import { useLopu } from '~/components/Lopu/useLopu';
 import { ThingView } from '~/components/Thingtime/ThingView';
 import { EmojiPicker } from '~/components/Emoji/EmojiPicker';
 import { useRecentReactions } from '~/components/Emoji/useRecentReactions';
-import { sanitizeReactionToken, splitEmojis } from '~/utils/reactionTokens';
+import { sanitizeReactionToken } from '~/utils/reactionTokens';
 import { RAINBOW } from '~/theme/rainbow';
 import { PostComposer } from './PostComposer';
 import { ReactionControl } from './ReactionControl';
@@ -90,10 +90,11 @@ const reconcileReactionToken = (
 // Compact everyone's-reactions summary for the merged react button: EVERY
 // token the viewer reacted with (your full set always shows), then the
 // crowd's top remaining tokens by count, capped at maxOthers. FB/X-style —
-// the button IS the counts, so one lead glyph per token keeps it tight
-// however wild the custom tokens get.
-// Joined with a zero-width space so adjacent leads can't shape into one glyph
-// (two lone regional indicators would otherwise merge into a flag).
+// the button IS the counts. Each token renders in FULL — a multi-emoji token
+// like 🤣🤣🙌 is ONE reaction and must read as one (truncating to a lead
+// glyph made multi-emoji reactions look like single-emoji ones).
+// Joined with a zero-width space so adjacent tokens can't shape into one
+// glyph (two lone regional indicators would otherwise merge into a flag).
 const reactionDisplayEmojis = (
   entries: Array<[string, number]>,
   viewerSet: Set<string>,
@@ -103,7 +104,7 @@ const reactionDisplayEmojis = (
     ...entries.filter(([token]) => viewerSet.has(token)),
     ...entries.filter(([token]) => !viewerSet.has(token)).slice(0, maxOthers),
   ]
-    .map(([token]) => splitEmojis(token)[0] || token)
+    .map(([token]) => token)
     .join('​');
 
 // The typed post renderer for the feed / profile columns. Renders text,
@@ -166,6 +167,20 @@ export type PostCardProps = {
 
 const authorName = (author: FeedAuthor | null) =>
   author?.displayName || author?.username || 'Anonymous 👻';
+
+// 1234 → "1.2k" — view counts stay one glyph-cluster wide however popular a
+// post gets (the other counters stay raw; they cap out far lower)
+const formatCompactCount = (count: number): string => {
+  if (count < 1000) return String(count);
+  if (count < 1_000_000) return `${(count / 1000).toFixed(count < 10_000 ? 1 : 0).replace(/\.0$/, '')}k`;
+  return `${(count / 1_000_000).toFixed(1).replace(/\.0$/, '')}m`;
+};
+
+const formatDwell = (ms: number): string => {
+  if (ms < 1000) return `${Math.round(ms / 100) / 10}s`;
+  if (ms < 60_000) return `${Math.round(ms / 1000)}s`;
+  return `${Math.round(ms / 60_000)}m ${Math.round((ms % 60_000) / 1000)}s`;
+};
 
 // Every post/comment timestamp is a permalink to its /post/:id page, the way
 // timestamps work on every major platform.
@@ -1562,6 +1577,34 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
 
           {/* outward share: native sheet / copy link */}
           <ActionIcon icon={<Share size={18} strokeWidth={2.2} />} label="Share" onClick={handleShareLink} />
+
+          {/* public view stats (X-style, right edge): count = unique viewers;
+          the tooltip carries impressions + average time on screen */}
+          <Tooltip
+            label={`${post.viewCount || 0} unique ${(post.viewCount || 0) === 1 ? 'viewer' : 'viewers'} · ${
+              post.viewStats?.impressions || 0
+            } impressions · avg ${formatDwell(post.viewStats?.avgDwellMs || 0)} on screen`}
+            fontSize="xs"
+            borderRadius="8px"
+            hasArrow
+          >
+            <Flex
+              alignItems="center"
+              columnGap={1.5}
+              paddingX={2}
+              height="32px"
+              marginLeft="auto"
+              borderRadius="999px"
+              fontSize="sm"
+              fontWeight={600}
+              color={MUTED}
+              cursor="default"
+              aria-label={`${post.viewCount || 0} views`}
+            >
+              <Eye size={18} strokeWidth={2.2} />
+              <Text as="span">{formatCompactCount(post.viewCount || 0)}</Text>
+            </Flex>
+          </Tooltip>
         </Flex>
 
         {/* comments — the post's conversation, or a FOCUSED thread panel:
