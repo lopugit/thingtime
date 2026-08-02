@@ -146,6 +146,310 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'admin-users-overview',
+    group: 'admin',
+    title: 'Admin users overview',
+    endpoint: '/api/v1/admin/users/overview',
+    summary: 'The /admin Users tab: users with subscription tier, quotas, storage usage, and app/token counts (admin only).',
+    detail:
+      'Enriches the admin user search with everything the management dashboard shows per user: subscription ' +
+      '(tier, admin overrides, effective quotas, metered flag), storage (allowance, used, and the live sum of ' +
+      'their app-namespace byte ledgers), and counts (registered apps, co-managed apps, owned accounts, PATs, ' +
+      'connected apps with a live grant). ?q= searches by username/email; without it the first page of users returns.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['GET'],
+    steps: [
+      'GET with credentials (optionally ?q=<username or email>).',
+      'Each row carries subscription.effective — the quotas actually enforced for that user.',
+      'Change a tier or overrides via POST /api/v1/admin/subscriptions.',
+      'Non-admins receive 403; anonymous callers 401.'
+    ],
+    requestExamples: [
+      { name: 'First page', description: 'Overview rows for the first users.', method: 'GET' },
+      { name: 'Search', description: 'Overview rows matching a query.', method: 'GET', query: { q: 'nik' } }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Overview rows.',
+        body: {
+          ok: true,
+          users: [
+            {
+              id: '64f000000000000000000002',
+              username: 'nik',
+              isAdmin: false,
+              accountKind: 'user',
+              storageAllowanceBytes: null,
+              storageUsedBytes: 0,
+              appNamespaceBytes: 1048576,
+              subscription: { tier: 'free', isDefault: true, overrides: null, effective: { appStorageBytes: 52428800, maxApps: 20, maxPats: 200, userStorageBytes: 524288000 } },
+              counts: { apps: 2, linkedApps: 1, ownedAccounts: 0, pats: 3, connectedApps: 4 }
+            }
+          ]
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'admin-apps',
+    group: 'admin',
+    title: 'Admin apps overview',
+    endpoint: '/api/v1/admin/apps',
+    summary: 'Every registered app with owner, managers, user count, storage usage, tier, and suspension state (admin only).',
+    detail:
+      'The /admin Apps tab: all apps across all users (newest first, ?q= filters by name/clientId). Each row ' +
+      'carries the registering owner, any co-managers assigned via account-links, the count of distinct users ' +
+      'holding a live grant, the summed (user, app) namespace storage, the app-level subscription (isDefault ' +
+      'true = budgets fall through to each end user\'s tier), and revokedAt when suspended.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['GET'],
+    steps: [
+      'GET with credentials (optionally ?q=<name or clientId>).',
+      'Suspend or restore an app via POST /api/v1/admin/apps/revoke.',
+      'Assign co-managers via POST /api/v1/admin/links with linkKind "app".',
+      'Non-admins receive 403; anonymous callers 401.'
+    ],
+    requestExamples: [
+      { name: 'All apps', description: 'Newest apps first.', method: 'GET' },
+      { name: 'Search', description: 'Filter by name or clientId.', method: 'GET', query: { q: 'rainbow' } }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'App rows.',
+        body: {
+          ok: true,
+          apps: [
+            {
+              clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f',
+              name: 'Rainbow Notes',
+              origins: ['https://rainbownotes.example'],
+              revokedAt: null,
+              owner: { id: '64f000000000000000000002', username: 'nik' },
+              managers: [{ id: '64f000000000000000000003', username: 'lopu' }],
+              userCount: 12,
+              usedBytes: 3145728,
+              subscription: { tier: 'free', isDefault: true }
+            }
+          ]
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'admin-apps-revoke',
+    group: 'admin',
+    title: 'Suspend / restore an app',
+    endpoint: '/api/v1/admin/apps/revoke',
+    summary: 'Revoke an app\'s access platform-wide, or restore it (admin only).',
+    detail:
+      'POST { clientId, revoked: true } stamps crystal.revokedAt on the app, sweeps every live app session, ' +
+      'and the token choke point (resolveAppToken) refuses anything the sweep missed — the consent screen and ' +
+      '/oauth/authorize also refuse while suspended. { revoked: false } lifts the suspension; swept sessions ' +
+      'are NOT resurrected (users simply re-authorize). This is the platform-level kill switch; end users ' +
+      'revoke their own grants via /api/v1/oauth/grants/revoke.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['POST'],
+    steps: [
+      'POST { clientId, revoked: true } to suspend (tokens die immediately).',
+      'POST { clientId, revoked: false } to restore.',
+      'Non-admins receive 403; anonymous callers 401.'
+    ],
+    requestExamples: [
+      {
+        name: 'Suspend',
+        description: 'Kill every token the app holds.',
+        method: 'POST',
+        body: { clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', revoked: true }
+      },
+      {
+        name: 'Restore',
+        description: 'Lift the suspension.',
+        method: 'POST',
+        body: { clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', revoked: false }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Updated app.',
+        body: { ok: true, app: { clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', name: 'Rainbow Notes', revokedAt: '2026-08-02T00:00:00.000Z' } }
+      },
+      { status: 404, description: 'Unknown clientId.', body: { ok: false, error: 'App not found' } }
+    ]
+  }),
+  endpoint({
+    id: 'admin-subscriptions',
+    group: 'admin',
+    title: 'Subscription tiers & quota overrides',
+    endpoint: '/api/v1/admin/subscriptions',
+    summary: 'Assign a subscription tier (free/plus/pro/payg) or custom quota overrides to a user or app (admin only).',
+    detail:
+      'The tier system behind every quota: tiers supply default quotas (app storage bytes, user storage bytes, ' +
+      'max apps, max PATs); payg is the metered tier with no hard caps (usage is measured and billed, never ' +
+      'blocked); per-field admin overrides win over the tier (explicit null = unlimited for that field). ' +
+      'GET without params returns the catalog; with ?subjectType=user|app&subjectId= it also returns that ' +
+      'subject\'s assignment (isDefault true = implicit free). POST { subjectType, subjectId, tier, overrides?, ' +
+      'note? } assigns; POST { subjectType, subjectId, clear: true } resets to default. Enforcement reads the ' +
+      'merged "effective" quotas within ~15s.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET to load the tier catalog (and one subject\'s assignment with ?subjectType&subjectId).',
+      'POST { subjectType, subjectId, tier } to assign a tier.',
+      'Add overrides: { appStorageBytes: 104857600 } for a custom cap, or null for unlimited.',
+      'POST { subjectType, subjectId, clear: true } to reset to the implicit free default.',
+      'Non-admins receive 403; anonymous callers 401.'
+    ],
+    requestExamples: [
+      { name: 'Catalog', description: 'All tiers with their default quotas.', method: 'GET' },
+      {
+        name: 'Look up a user',
+        description: 'One subject\'s assignment.',
+        method: 'GET',
+        query: { subjectType: 'user', subjectId: '64f000000000000000000002' }
+      },
+      {
+        name: 'Assign pro + override',
+        description: 'Pro tier with a custom 2GB app-storage override.',
+        method: 'POST',
+        body: { subjectType: 'user', subjectId: '64f000000000000000000002', tier: 'pro', overrides: { appStorageBytes: 2147483648 }, note: 'Beta partner' }
+      },
+      {
+        name: 'Reset',
+        description: 'Back to implicit free.',
+        method: 'POST',
+        body: { subjectType: 'user', subjectId: '64f000000000000000000002', clear: true }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Assignment + catalog.',
+        body: {
+          ok: true,
+          subscription: {
+            subjectType: 'user',
+            subjectId: '64f000000000000000000002',
+            tier: 'pro',
+            metered: false,
+            overrides: { appStorageBytes: 2147483648 },
+            effective: { appStorageBytes: 2147483648, userStorageBytes: 21474836480, maxApps: 100, maxPats: 1000 },
+            isDefault: false
+          }
+        }
+      },
+      { status: 400, description: 'Unknown tier.', body: { ok: false, error: 'Unknown tier: gold — see the catalog at /api/v1/admin/subscriptions-docs' } }
+    ]
+  }),
+  endpoint({
+    id: 'admin-links',
+    group: 'admin',
+    title: 'Account & app ownership links',
+    endpoint: '/api/v1/admin/links',
+    summary: 'Assign accounts and apps to owner accounts, many-to-many (admin only).',
+    detail:
+      'Ownership links let one login manage many identities: linkKind "account" gives a user owner access to ' +
+      'another (usually service) account — it appears under "Owned accounts" in their switcher and can be ' +
+      'assumed without credentials; linkKind "app" makes them a co-manager of a registered app (it appears in ' +
+      'their /apps and update/delete accept them). Both directions are many-to-many: any number of owners per ' +
+      'target, any number of targets per owner. GET lists by ?userId= or ?targetId= (+optional &linkKind=); ' +
+      'POST { action: "add"|"remove", linkKind, userId, targetId } assigns or unassigns.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET ?userId=<id> for the links a user holds, or ?targetId=<id|clientId> for a target\'s owners.',
+      'POST { action: "add", linkKind: "account", userId, targetId } to hand a user an account.',
+      'POST { action: "add", linkKind: "app", userId, targetId: "<clientId>" } to add an app co-manager.',
+      'POST { action: "remove", ... } to unassign.',
+      'Non-admins receive 403; anonymous callers 401.'
+    ],
+    requestExamples: [
+      { name: 'Links a user holds', description: 'Everything assigned to one user.', method: 'GET', query: { userId: '64f000000000000000000002' } },
+      {
+        name: 'Assign a service account',
+        description: 'nik can now sign into the bot account.',
+        method: 'POST',
+        body: { action: 'add', linkKind: 'account', userId: '64f000000000000000000002', targetId: '64f000000000000000000009' }
+      },
+      {
+        name: 'Unassign an app',
+        description: 'Remove a co-manager.',
+        method: 'POST',
+        body: { action: 'remove', linkKind: 'app', userId: '64f000000000000000000002', targetId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Decorated links.',
+        body: {
+          ok: true,
+          links: [
+            { linkKind: 'account', userId: '64f000000000000000000002', targetId: '64f000000000000000000009', role: 'owner', username: 'nik', targetUsername: 'nik-bot' }
+          ]
+        }
+      },
+      { status: 404, description: 'Unknown target.', body: { ok: false, error: 'Target account not found' } }
+    ]
+  }),
+  endpoint({
+    id: 'auth-accounts-owned',
+    group: 'auth',
+    title: 'Owned accounts',
+    endpoint: '/api/v1/auth/accounts/owned',
+    summary: 'The accounts you own via admin-assigned links — each can be signed into without credentials.',
+    detail:
+      'Lists the accounts (usually service accounts) an admin has assigned to you with an "account" ownership ' +
+      'link. The account switcher shows these under "Owned accounts"; POST /api/v1/auth/accounts/assume signs ' +
+      'into one. Unlike /api/v1/auth/accounts (this browser\'s roster), this list follows your links — it is ' +
+      'the same on every device.',
+    auth: { mode: 'session', description: 'Requires a signed-in session.' },
+    methods: ['GET'],
+    steps: [
+      'GET with credentials.',
+      'Render the returned accounts in the switcher\'s "Owned accounts" section.',
+      'POST /api/v1/auth/accounts/assume { accountId } to sign into one.'
+    ],
+    requestExamples: [{ name: 'List owned accounts', description: 'Accounts assigned to you.', method: 'GET' }],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Owned accounts.',
+        body: { ok: true, accounts: [{ id: '64f000000000000000000009', username: 'nik-bot', displayName: 'Nik Bot', accountKind: 'service' }] }
+      },
+      { status: 401, description: 'Not signed in.', body: { ok: false, error: 'Unauthorized' } }
+    ]
+  }),
+  endpoint({
+    id: 'auth-accounts-assume',
+    group: 'auth',
+    title: 'Assume an owned account',
+    endpoint: '/api/v1/auth/accounts/assume',
+    summary: 'Sign into an account you own (via an admin-assigned link) without its credentials.',
+    detail:
+      'POST { accountId } — if you hold an "account" ownership link to it, a fresh browser session is minted ' +
+      'for the target, folded into this browser\'s roster (the switcher lists it immediately), and made the ' +
+      'active account. The authorization is the server-side link, never the roster cookie, so the roster\'s ' +
+      'anti-fixation ownership gate stays intact. Each browser gets its own session — assuming the same ' +
+      'account elsewhere never signs this one out.',
+    auth: { mode: 'session', description: 'Requires a signed-in session holding the ownership link.' },
+    methods: ['POST'],
+    steps: [
+      'GET /api/v1/auth/accounts/owned to find assumable accounts.',
+      'POST { accountId } — the response sets tt_auth + tt_accounts cookies.',
+      'The assumed account is now active; switch back via /api/v1/auth/accounts/switch.'
+    ],
+    requestExamples: [
+      { name: 'Assume', description: 'Sign into an owned service account.', method: 'POST', body: { accountId: '64f000000000000000000009' } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Now active.', body: { ok: true, user: { id: '64f000000000000000000009', username: 'nik-bot' } } },
+      { status: 403, description: 'No ownership link.', body: { ok: false, error: 'You are not an owner of that account' } }
+    ]
+  }),
+  endpoint({
     id: 'admin-set-admin',
     group: 'admin',
     title: 'Promote / demote admin',

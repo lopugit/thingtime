@@ -2,16 +2,11 @@ import { createHash } from 'node:crypto';
 
 import { getSessionsCollection, getThingsCollection } from '../mongodb/collections';
 import { consumeByteBudget, refundByteBudget } from '../rateLimit/byteBudget';
+import { resolveAppStorageBudget } from '../subscriptions/subscriptions';
 import { scopeCovers, sessionScopes } from './scopes';
 import { SANDBOX_TOKEN_TTL_MS, sandboxDisplayName } from './sandbox';
 import type { AppTokenContext } from './appTokens';
-import {
-  ACL_APP_PREFIX,
-  ACL_OWNER,
-  COLLECTION_SCHEMA_VERSIONS,
-  DEFAULT_APP_STORAGE_BYTES,
-  SANDBOX_STORAGE_BYTES
-} from '~/schemas/registry';
+import { ACL_APP_PREFIX, ACL_OWNER, COLLECTION_SCHEMA_VERSIONS, SANDBOX_STORAGE_BYTES } from '~/schemas/registry';
 
 // The app-namespace layer — ONE implementation of every rule that makes an
 // app token's slice of the things collection (FUNDAMENTALS.md §1 style:
@@ -276,8 +271,12 @@ const storageMatch = (scope: AppNamespaceScope) => ({
   'crystal.quotaKind': APP_STORAGE_KIND
 });
 
-export const appStorageBudgetBytes = (scope: AppNamespaceScope): number =>
-  scope.sandbox ? SANDBOX_STORAGE_BYTES : DEFAULT_APP_STORAGE_BYTES;
+// Budget resolution is subscription-aware (subscriptions/tierCatalog.ts):
+// sandbox namespaces keep their fixed brake, everything else resolves app
+// assignment → end-user tier → free default. `null` = unlimited (payg /
+// admin override) — charge sites skip the cap for null.
+export const appStorageBudgetBytes = async (scope: AppNamespaceScope): Promise<number | null> =>
+  scope.sandbox ? SANDBOX_STORAGE_BYTES : resolveAppStorageBudget(scope.appId, scope.ownerId);
 
 const ensureStorageCounter = async (scope: AppNamespaceScope): Promise<void> => {
   const things = await getThingsCollection();
@@ -306,13 +305,13 @@ const ensureStorageCounter = async (scope: AppNamespaceScope): Promise<void> => 
   }
 };
 
-export type StorageCharge = { ok: true; usedBytes: number; budgetBytes: number } | Fail;
+export type StorageCharge = { ok: true; usedBytes: number; budgetBytes: number | null } | Fail;
 
 // Admit `deltaBytes` of new storage into the namespace, atomically. Negative
 // deltas refund (floored at zero) and always succeed.
 export const chargeAppStorage = async (scope: AppNamespaceScope, deltaBytes: number): Promise<StorageCharge> => {
-  const budgetBytes = appStorageBudgetBytes(scope);
   try {
+    const budgetBytes = await appStorageBudgetBytes(scope);
     const things = await getThingsCollection();
 
     if (deltaBytes <= 0) {
@@ -350,13 +349,18 @@ export const chargeAppStorage = async (scope: AppNamespaceScope, deltaBytes: num
     }
 
     await ensureStorageCounter(scope);
+    // null budget = unlimited (payg tier / admin override): charge unguarded
+    // so usage still meters, but nothing refuses the write.
     const admitted = await things.findOneAndUpdate(
-      { ...storageMatch(scope), 'crystal.usedBytes': { $lte: budgetBytes - deltaBytes } },
+      budgetBytes === null
+        ? storageMatch(scope)
+        : { ...storageMatch(scope), 'crystal.usedBytes': { $lte: budgetBytes - deltaBytes } },
       { $inc: { 'crystal.usedBytes': deltaBytes }, $set: { updatedAt: new Date() } },
       { returnDocument: 'after' }
     );
     if (!admitted) {
       if (scope.sandbox) await refundByteBudget('sandbox.storage.global', deltaBytes);
+      if (budgetBytes === null) return fail(503, 'Storage accounting is unavailable — try again');
       const used = await getAppStorageUsage(scope);
       return fail(
         507,
@@ -379,10 +383,10 @@ export const refundAppStorage = async (scope: AppNamespaceScope, bytes: number):
 
 export const getAppStorageUsage = async (
   scope: AppNamespaceScope
-): Promise<{ usedBytes: number; budgetBytes: number }> => {
+): Promise<{ usedBytes: number; budgetBytes: number | null }> => {
   const things = await getThingsCollection();
   const doc = await things.findOne(storageMatch(scope), { projection: { 'crystal.usedBytes': 1 } });
-  return { usedBytes: doc?.crystal?.usedBytes ?? 0, budgetBytes: appStorageBudgetBytes(scope) };
+  return { usedBytes: doc?.crystal?.usedBytes ?? 0, budgetBytes: await appStorageBudgetBytes(scope) };
 };
 
 // Drift repair: set a (user, app) ledger to an absolute value — the backfill

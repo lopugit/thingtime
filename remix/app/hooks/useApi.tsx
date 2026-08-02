@@ -116,6 +116,15 @@ export function useApi() {
             return ret;
           },
           [asyncFetcher]
+        ),
+        owned: useCallback(async () => getJson('/api/v1/auth/accounts/owned'), []),
+        assume: useCallback(
+          async (args: { accountId: string }) => {
+            const ret = asyncFetcher.submit({ accountId: args?.accountId }, { action: '/api/v1/auth/accounts/assume' });
+            ret.then(refreshRootData).catch(() => {});
+            return ret;
+          },
+          [asyncFetcher]
         )
       }
     },
@@ -137,6 +146,39 @@ export function useApi() {
             { migration: args?.migration, dryRun: args?.dryRun, confirm: args?.confirm },
             { action: '/api/v1/admin/migrations/run' }
           ),
+        [asyncFetcher]
+      ),
+      usersOverview: useCallback(async (args?: { q?: string }) => getJson(`/api/v1/admin/users/overview${toQuery(args)}`), []),
+      apps: useCallback(async (args?: { q?: string }) => getJson(`/api/v1/admin/apps${toQuery(args)}`), []),
+      revokeApp: useCallback(
+        async (args: { clientId: string; revoked: boolean }) =>
+          asyncFetcher.submit({ clientId: args?.clientId, revoked: args?.revoked }, { action: '/api/v1/admin/apps/revoke' }),
+        [asyncFetcher]
+      ),
+      subscription: useCallback(
+        async (args: { subjectType: 'user' | 'app'; subjectId: string }) =>
+          getJson(`/api/v1/admin/subscriptions${toQuery(args)}`),
+        []
+      ),
+      setSubscription: useCallback(
+        async (args: {
+          subjectType: 'user' | 'app';
+          subjectId: string;
+          tier?: string;
+          overrides?: Record<string, number | null> | null;
+          note?: string;
+          clear?: boolean;
+        }) => asyncFetcher.submit(args, { action: '/api/v1/admin/subscriptions' }),
+        [asyncFetcher]
+      ),
+      links: useCallback(
+        async (args: { userId?: string; targetId?: string; linkKind?: 'account' | 'app' }) =>
+          getJson(`/api/v1/admin/links${toQuery(args)}`),
+        []
+      ),
+      setLink: useCallback(
+        async (args: { action: 'add' | 'remove'; linkKind: 'account' | 'app'; userId: string; targetId: string }) =>
+          asyncFetcher.submit(args, { action: '/api/v1/admin/links' }),
         [asyncFetcher]
       )
     },

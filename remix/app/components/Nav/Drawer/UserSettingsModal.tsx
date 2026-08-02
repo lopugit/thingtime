@@ -676,7 +676,7 @@ export const UserSettingsModal = () => {
 						Which menu items close the drawer when clicked (desktop and mobile)
 					</Text>
 					<Flex flexDirection="column" paddingTop={2}>
-						{filterDrawerItemsByAuth(drawerMenuItems, !!user).map((top) => (
+						{filterDrawerItemsByAuth(drawerMenuItems, !!user, !!user?.isAdmin).map((top) => (
 							<React.Fragment key={top.id}>
 								<Flex alignItems="center" columnGap={4} paddingY={1}>
 									<Text fontSize="sm">
@@ -689,7 +689,7 @@ export const UserSettingsModal = () => {
 										onChange={(event) => setCloseOnClickFor(top.id, event.target.checked)}
 									></Switch>
 								</Flex>
-								{filterDrawerItemsByAuth(top.children || [], !!user).map((child) => (
+								{filterDrawerItemsByAuth(top.children || [], !!user, !!user?.isAdmin).map((child) => (
 									<Flex key={child.id} alignItems="center" columnGap={4} paddingY={0.5} paddingLeft={4}>
 										<Text fontSize="xs" opacity={0.8}>
 											{child.icon} {child.label}

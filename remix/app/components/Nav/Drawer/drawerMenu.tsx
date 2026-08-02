@@ -17,6 +17,7 @@ export interface DrawerSubItem {
 	// visibility filters against the current user
 	authOnly?: boolean;
 	guestOnly?: boolean;
+	adminOnly?: boolean;
 }
 
 export interface DrawerTopItem {
@@ -84,6 +85,7 @@ export const drawerMenuItems: DrawerTopItem[] = [
 			{ id: 'account-apps', label: 'App data', icon: '📦', to: '/apps', authOnly: true },
 			{ id: 'account-welcome', label: 'Welcome', icon: '✨', to: '/welcome', authOnly: true },
 			{ id: 'account-themes', label: 'Themes', icon: '🎨', to: '/themes' },
+			{ id: 'account-admin', label: 'Admin', icon: '🛠️', to: '/admin', adminOnly: true },
 			{ id: 'account-login', label: 'Log in', icon: '🗝️', to: '/login', guestOnly: true },
 			{ id: 'account-register', label: 'Register', icon: '➕', to: '/register', guestOnly: true }
 		]
@@ -146,12 +148,19 @@ export const applyDrawerOrdering = (defaultIds: string[], saved?: string[]): str
 	return [...known, ...missing];
 };
 
-export const filterDrawerItemsByAuth = <T extends { authOnly?: boolean; guestOnly?: boolean }>(items: T[], loggedIn: boolean): T[] => {
+export const filterDrawerItemsByAuth = <T extends { authOnly?: boolean; guestOnly?: boolean; adminOnly?: boolean }>(
+	items: T[],
+	loggedIn: boolean,
+	isAdmin = false
+): T[] => {
 	return items.filter((item) => {
 		if (item.authOnly && !loggedIn) {
 			return false;
 		}
 		if (item.guestOnly && loggedIn) {
+			return false;
+		}
+		if (item.adminOnly && !isAdmin) {
 			return false;
 		}
 		return true;

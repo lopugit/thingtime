@@ -18,7 +18,7 @@ export type AppDataSummary = {
   appName: string | null; // null = app deleted/unregistered — data persists
   entryCount: number;
   usedBytes: number;
-  budgetBytes: number;
+  budgetBytes: number | null;
   lastUpdatedAt: string | null;
 };
 
@@ -54,7 +54,7 @@ export const listAppDataSummaries = async (userId: string): Promise<AppDataSumma
       appName: typeof app?.crystal?.name === 'string' ? app.crystal.name : null,
       entryCount: group.entryCount || 0,
       usedBytes: group.usedBytes || 0,
-      budgetBytes: appStorageBudgetBytes({
+      budgetBytes: await appStorageBudgetBytes({
         appId,
         ownerId: userId,
         sharedRead: false,

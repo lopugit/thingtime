@@ -52,7 +52,7 @@ edge cases live in `api/utils/migrations/migrations.ts`.
 
 | Collection | Holds |
 | ---------- | ----- |
-| `things`   | ALL Thingtime data. System kinds: `user` (public profile in `crystal`, all private state as a single BinData `secure` blob, uniqueness via BinData `uniqueKeys`), `theme`, `feed-algorithm`, `waitlist`, `schema`; content kinds: `post`, `comment`, `reaction`, `share`, `data`. Every thing also carries a schema-free `extended` property for arbitrary unvalidated JSON (≤512KB, replace-on-write, never structured-searchable) |
+| `things`   | ALL Thingtime data. System kinds: `user` (public profile in `crystal`, all private state as a single BinData `secure` blob, uniqueness via BinData `uniqueKeys`), `theme`, `feed-algorithm`, `waitlist`, `schema`; content kinds: `post`, `comment`, `reaction`, `share`, `data`; admin-plane kinds: `subscription` (tier/quota assignment per user or app — `api/utils/subscriptions/`), `account-link` (ownership links: owned accounts + app co-managers, many-to-many — `api/utils/accounts/accountLinks.ts`). Every thing also carries a schema-free `extended` property for arbitrary unvalidated JSON (≤512KB, replace-on-write, never structured-searchable) |
 | `sessions` | server-side sessions / JWT records (revocation; `userId` = the user thing's `shareId`) |
 | `rosters`  | account-switcher rosters (TTL-reaped) |
 | `emailVerifications` | pending email-verification tokens |
@@ -64,11 +64,14 @@ edge cases live in `api/utils/migrations/migrations.ts`.
 | `users` / `themes` / `feedAlgorithms` / `waitlist` | LEGACY — new records are always written as things; a legacy doc is only ever *updated in place* (dual-era fallback) until the admin migrations (`/api/v1/admin/migrations`) convert it into a thing and delete it. No NEW records land here. |
 
 System-kind rules (never bypass):
-- **Protected** kinds — `user`, `theme`, `feed-algorithm`, `waitlist` — are
-  refused by the generic `/api/v1/things` CRUD; only their dedicated utils
-  write them (register, profile, themes, algorithms, waitlist). The `schema`
-  kind is NOT protected: anyone may publish a schema thing (the builtins are
-  seeded system-owned ones, user schemas are community-published).
+- **Protected** kinds — `user`, `theme`, `feed-algorithm`, `waitlist`,
+  `subscription`, `account-link` — are refused by the generic `/api/v1/things`
+  CRUD; only their dedicated utils write them (register, profile, themes,
+  algorithms, waitlist, and the admin-gated subscription/link endpoints —
+  self-assigning a tier or an ownership link would be privilege escalation).
+  The `schema` kind is NOT protected: anyone may publish a schema thing (the
+  builtins are seeded system-owned ones, user schemas are
+  community-published).
 - Private state lives under root `secure` as a single **BinData blob** (the
   search wildcard text index tokenizes string *fields* only, so a binary blob
   is entirely unsearchable — no field inside it can ever leak via `q=<value>`),

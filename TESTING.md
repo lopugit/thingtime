@@ -493,6 +493,47 @@ is fixed, and cite the checklist you ran in the PR description.
       all of this: `node scripts/verify-pat-tokens.mjs <nitro base url>`
       (companion to `scripts/verify-app-namespaces.mjs`).
 
+## Admin dashboard, subscription tiers & ownership links (`/admin`, `api/utils/subscriptions/`, `api/utils/accounts/accountLinks.ts`)
+
+Dev bootstrap: register a throwaway user via `POST /api/v1/auth/register`, then
+restart the dev stack with `ADMIN_USERNAMES=<that username>` (registering a
+name already on the allowlist is refused, so register FIRST). One command
+re-checks the whole management plane end-to-end:
+`TT_VERIFY_ADMIN_USER=<user> TT_VERIFY_ADMIN_PASS=<pass> node scripts/verify-admin-subscriptions.mjs <nitro base url>`.
+
+- [ ] `/admin` renders the 🔐 gate card for anonymous/non-admin visitors and
+      the dashboard (Users / Apps / System tabs) for admins; the drawer's
+      Account section shows the 🛠️ Admin item only for admins.
+- [ ] Users tab: search works; each row shows tier badge (+ `custom` badge
+      when overrides exist), storage used/allowance, app-namespace bytes, and
+      app/PAT/connected counts.
+- [ ] Subscription editor: assigning a tier + per-field override (number in
+      MB for byte fields, or Unlimited) persists and the row updates on save;
+      Reset to default returns the subject to implicit free.
+- [ ] Tier quotas actually enforce: with `maxApps: 1` override the second
+      `POST /api/v1/apps` is refused 400; a `null` override (or payg) lifts
+      the cap; the app-storage budget resolves app assignment → end-user tier
+      → free default, and `null` meters without blocking.
+- [ ] `subscription` and `account-link` kinds are PROTECTED: generic
+      `POST /api/v1/things` refuses them (self-assigned tiers/links would be
+      privilege escalation).
+- [ ] Apps tab: every app across all users with owner, co-managers, live-grant
+      user count, storage rollup, and status. Suspend uses an inline
+      Confirm/Cancel, flips the row to SUSPENDED + Restore, and: existing app
+      tokens die immediately (401), the consent screen and /oauth/authorize
+      refuse 403, restore allows re-authorization but does NOT resurrect swept
+      sessions.
+- [ ] Ownership links (many-to-many both ways): admin assigns an account link
+      → target appears under the owner's "Owned accounts" in the switcher
+      (`GET /api/v1/auth/accounts/owned`), "Sign in →" assumes it without
+      credentials (fresh per-browser session folded into the roster; other
+      browsers/owners are never signed out), non-linked users get 403. App
+      links put the app in the co-manager's `/apps` list and update/delete
+      accept them; removing the link removes access (404).
+- [ ] Mobile (375px): the admin tables scroll inside their own container —
+      the page body itself never scrolls horizontally; modals fit with no
+      clipped controls.
+
 ## Rate limiting & index-ensure reliability (`api/utils/rateLimit/enforce.ts`, `api/utils/mongodb/collections.ts`)
 
 - [ ] Healthy path: burst a rate-limited endpoint past its limit (e.g.

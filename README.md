@@ -192,6 +192,20 @@ Env-allowlisted usernames are a permanent override (they can't be demoted from
 the UI, so there's always a way back in) and are reserved at registration so
 nobody can squat an admin username before you register it.
 
+Admins get the `/admin` dashboard (also under the drawer's Account section):
+Users and Apps management with subscription tiers (free/plus/pro/payg — payg is
+metered with no hard caps), per-field quota overrides (`null` = unlimited),
+platform-level app suspension, and many-to-many ownership links (assign
+accounts to an owner so one login can switch into its service accounts without
+credentials, and assign apps to co-managers). The live verification suite needs
+an env-admin's credentials (placeholders — use your own throwaway admin):
+
+```sh
+TT_VERIFY_ADMIN_USER="your-admin-username" \
+TT_VERIFY_ADMIN_PASS="your-admin-password" \
+node remix/scripts/verify-admin-subscriptions.mjs http://127.0.0.1:10000
+```
+
 ## Auth and Lopu AI
 
 JWT-backed browser sessions prefer ES256 asymmetric signing so other platforms

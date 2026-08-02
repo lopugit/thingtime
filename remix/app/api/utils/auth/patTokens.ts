@@ -7,6 +7,7 @@ import type { SessionDoc } from './sessions';
 import { findUserById, toPublicUser } from './users';
 import type { PublicUser } from './users';
 import { getSessionsCollection } from '../mongodb/collections';
+import { getSubscription } from '../subscriptions/subscriptions';
 
 // Personal access tokens — the Settings "Token minter". A PAT is a scoped,
 // revocable credential a user hands to an AI, agent, or script so it can push
@@ -141,13 +142,18 @@ export const mintPatToken = async (userId: string, input: MintPatInput): Promise
   }
 
   const sessions = await getSessionsCollection();
-  const existing = await sessions.countDocuments({ userId, purpose: 'pat' });
-  if (existing >= MAX_PAT_TOKENS_PER_USER) {
-    return {
-      ok: false,
-      status: 409,
-      error: `You already have ${MAX_PAT_TOKENS_PER_USER} tokens — revoke some before minting more`
-    };
+  // The cap is the user's subscription tier (null = unlimited, e.g. payg);
+  // free mirrors MAX_PAT_TOKENS_PER_USER.
+  const maxPats = (await getSubscription('user', userId)).effective.maxPats;
+  if (maxPats !== null) {
+    const existing = await sessions.countDocuments({ userId, purpose: 'pat' });
+    if (existing >= maxPats) {
+      return {
+        ok: false,
+        status: 409,
+        error: `You already have ${maxPats} tokens — revoke some before minting more`
+      };
+    }
   }
 
   const now = Date.now();
@@ -176,12 +182,16 @@ export const mintPatToken = async (userId: string, input: MintPatInput): Promise
   return { ok: true, token, tokenType: 'Bearer', tokenInfo: toPublicPatToken(session) };
 };
 
+// List bound: higher tiers can hold more than the free cap (pro = 1000,
+// payg = unbounded), so the read window is a display bound, not the mint cap.
+const PAT_LIST_MAX = 2000;
+
 export const listPatTokens = async (userId: string): Promise<PublicPatToken[]> => {
   const sessions = await getSessionsCollection();
   const docs = await sessions
     .find({ userId, purpose: 'pat' })
     .sort({ createdAt: -1 })
-    .limit(MAX_PAT_TOKENS_PER_USER)
+    .limit(PAT_LIST_MAX)
     .toArray();
   return docs.map((doc: any) => toPublicPatToken(doc));
 };

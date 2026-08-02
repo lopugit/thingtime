@@ -1,13 +1,9 @@
 import { randomUUID } from 'node:crypto';
 
+import { listLinkedAppClientIds, userCanManageApp } from '../accounts/accountLinks';
 import { getSessionsCollection, getThingsCollection } from '../mongodb/collections';
-import {
-  ACL_OWNER,
-  COLLECTION_SCHEMA_VERSIONS,
-  MAX_APPS_PER_USER,
-  MAX_APP_NAME_CHARS,
-  MAX_APP_ORIGINS
-} from '~/schemas/registry';
+import { getSubscription } from '../subscriptions/subscriptions';
+import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS, MAX_APP_NAME_CHARS, MAX_APP_ORIGINS } from '~/schemas/registry';
 
 // Embed apps for "Login with Thingtime" (FUNDAMENTALS.md: everything is a
 // thing) — a registered app is a `things` doc with thingtime ['app'] and
@@ -24,6 +20,9 @@ export type PublicApp = {
   origins: string[];
   createdAt: Date;
   updatedAt: Date;
+  // Set while an admin has suspended the app: every token is refused at the
+  // resolveAppToken choke point and the consent screen won't render.
+  revokedAt: Date | null;
 };
 
 // The shape shown to ANONYMOUS callers (the authorize popup before login):
@@ -92,8 +91,14 @@ const toPublicApp = (doc: any): PublicApp => ({
   name: doc.crystal?.name,
   origins: Array.isArray(doc.crystal?.origins) ? doc.crystal.origins : [],
   createdAt: doc.createdAt,
-  updatedAt: doc.updatedAt
+  updatedAt: doc.updatedAt,
+  revokedAt: doc.crystal?.revokedAt instanceof Date ? doc.crystal.revokedAt : null
 });
+
+// Admin suspension state. Lives in crystal (like every app field) and is
+// checked at the resolveAppToken choke point, so setting it kills every live
+// token without needing the session sweep to have landed first.
+export const appIsRevoked = (appDoc: any): boolean => !!appDoc?.crystal?.revokedAt;
 
 export const findAppByClientId = async (clientId: string) => {
   if (typeof clientId !== 'string' || !clientId.trim()) return null;
@@ -131,10 +136,14 @@ export const createApp = async (
 
   // Soft product cap (like the app-data key cap): racing registrations can
   // momentarily exceed it, which is harmless — listApps returns everything,
-  // so nothing becomes invisible or undeletable.
-  const count = await things.countDocuments({ thingtime: 'app', ownerId });
-  if (count >= MAX_APPS_PER_USER) {
-    return fail(400, `You can register at most ${MAX_APPS_PER_USER} apps`);
+  // so nothing becomes invisible or undeletable. The cap is the owner's
+  // subscription tier (null = unlimited, e.g. payg).
+  const maxApps = (await getSubscription('user', ownerId)).effective.maxApps;
+  if (maxApps !== null) {
+    const count = await things.countDocuments({ thingtime: 'app', ownerId });
+    if (count >= maxApps) {
+      return fail(400, `You can register at most ${maxApps} apps on your current tier`);
+    }
   }
 
   const now = new Date();
@@ -156,10 +165,19 @@ export const createApp = async (
 };
 
 // No .limit(): if racing registrations ever exceed the soft cap, the overflow
-// apps must still show up here so the owner can see and delete them.
+// apps must still show up here so the owner can see and delete them. The list
+// is the union of apps the user registered and apps assigned to them via
+// 'app' account-links (many-to-many co-management).
 export const listApps = async (ownerId: string): Promise<PublicApp[]> => {
   const things = await getThingsCollection();
-  const docs = await things.find({ thingtime: 'app', ownerId }).sort({ createdAt: 1 }).toArray();
+  const linked = await listLinkedAppClientIds(ownerId);
+  const docs = await things
+    .find({
+      thingtime: 'app',
+      $or: [{ ownerId }, ...(linked.length ? [{ 'crystal.clientId': { $in: linked } }] : [])]
+    })
+    .sort({ createdAt: 1 })
+    .toArray();
   return docs.map(toPublicApp);
 };
 
@@ -184,9 +202,14 @@ export const updateApp = async (
     set['crystal.origins'] = origins;
   }
 
+  // Managers = the registering owner or any 'app' account-link holder; both
+  // resolve through the same check so a linked co-owner has the full surface.
+  const app = await findAppByClientId(clientId);
+  if (!app || !(await userCanManageApp(ownerId, app))) return fail(404, 'App not found');
+
   const things = await getThingsCollection();
   const updated = await things.findOneAndUpdate(
-    { thingtime: 'app', 'crystal.clientId': clientId.trim(), ownerId },
+    { thingtime: 'app', 'crystal.clientId': clientId.trim() },
     { $set: set },
     { returnDocument: 'after' }
   );
@@ -202,8 +225,11 @@ export const deleteApp = async (ownerId: string, clientId: unknown): Promise<{ o
   if (typeof clientId !== 'string' || !clientId.trim()) return fail(400, 'clientId is required');
   const id = clientId.trim();
 
+  const app = await findAppByClientId(id);
+  if (!app || !(await userCanManageApp(ownerId, app))) return fail(404, 'App not found');
+
   const things = await getThingsCollection();
-  const deleted = await things.deleteOne({ thingtime: 'app', 'crystal.clientId': id, ownerId });
+  const deleted = await things.deleteOne({ thingtime: 'app', 'crystal.clientId': id });
   if (!deleted.deletedCount) return fail(404, 'App not found');
 
   await (await getSessionsCollection()).updateMany(
@@ -218,3 +244,35 @@ export const toEmbedApp = (appDoc: any): EmbedApp => ({
   clientId: appDoc.crystal?.clientId,
   name: appDoc.crystal?.name
 });
+
+// Admin-plane suspend/restore (callers gate with requireAdmin). Revoking also
+// sweeps the app's live sessions (same sweep as deleteApp) so holders lose
+// access even before the choke-point check lands; restoring never resurrects
+// swept sessions — users re-authorize, which is the point of a suspension.
+export const setAppRevoked = async (
+  clientId: unknown,
+  revoked: boolean,
+  adminId: string
+): Promise<{ ok: true; app: PublicApp } | Fail> => {
+  if (typeof clientId !== 'string' || !clientId.trim()) return fail(400, 'clientId is required');
+  const id = clientId.trim();
+
+  const things = await getThingsCollection();
+  const updated = await things.findOneAndUpdate(
+    { thingtime: 'app', 'crystal.clientId': id },
+    revoked
+      ? { $set: { 'crystal.revokedAt': new Date(), 'crystal.revokedBy': adminId, updatedAt: new Date() } }
+      : { $unset: { 'crystal.revokedAt': '', 'crystal.revokedBy': '' }, $set: { updatedAt: new Date() } },
+    { returnDocument: 'after' }
+  );
+  if (!updated) return fail(404, 'App not found');
+
+  if (revoked) {
+    await (await getSessionsCollection()).updateMany(
+      { purpose: 'app', 'meta.clientId': id, revokedAt: null },
+      { $set: { revokedAt: new Date() } }
+    );
+  }
+
+  return { ok: true, app: toPublicApp(updated) };
+};

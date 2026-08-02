@@ -646,6 +646,54 @@ const saveThingSchema: ThingtimeSchema = {
   example: {}
 };
 
+const subscriptionSchema: ThingtimeSchema = {
+  id: 'subscription',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Subscription',
+  summary: 'A tier/quota assignment for a user or app (admin-managed; PROTECTED from generic CRUD).',
+  detail:
+    'One per subject, written only through the admin-gated /api/v1/admin/subscriptions (self-assigning a ' +
+    'tier through /api/v1/things would be privilege escalation, so the kind is protected). The tier ' +
+    '(free/plus/pro/payg) supplies default quotas; per-field admin overrides win, with null meaning ' +
+    'unlimited. payg is the metered tier: no hard caps, usage is measured by the byte ledgers and billed. ' +
+    'Enforcement (app storage budgets, app/PAT mint caps) resolves through the merged "effective" quotas.',
+  fields: [
+    { name: 'quotaKind', type: 'string', required: true, values: ['subscription'], description: 'Bookkeeping marker (like the app-storage ledger).' },
+    { name: 'subjectType', type: 'enum', required: true, values: ['user', 'app'], description: 'What the assignment applies to.' },
+    { name: 'subjectId', type: 'id', required: true, description: 'User id, or app clientId.' },
+    { name: 'tier', type: 'enum', required: true, values: ['free', 'plus', 'pro', 'payg'], description: 'The assigned tier.' },
+    { name: 'overrides', type: 'record', required: false, description: 'Per-field quota overrides (appStorageBytes, userStorageBytes, maxApps, maxPats; null = unlimited).' },
+    { name: 'note', type: 'string', required: false, max: 500, description: 'Admin note (why this assignment exists).' },
+    { name: 'updatedBy', type: 'id', required: false, description: 'The admin who last changed it.' }
+  ],
+  example: { quotaKind: 'subscription', subjectType: 'user', subjectId: '664f1c2a9d3e5b0012345678', tier: 'pro', overrides: { appStorageBytes: 2147483648 }, note: 'Beta partner' }
+};
+
+const accountLinkSchema: ThingtimeSchema = {
+  id: 'account-link',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Account link',
+  summary: 'An ownership link: a user manages another account or co-manages an app (admin-assigned; PROTECTED).',
+  detail:
+    'Written only through the admin-gated /api/v1/admin/links — many-to-many by construction (any number of ' +
+    'owners per target, any number of targets per owner). linkKind "account" puts the target under the ' +
+    'user\'s "Owned accounts" (assumable without credentials via /api/v1/auth/accounts/assume); linkKind ' +
+    '"app" adds them as a co-manager of a registered app (it appears in their /apps, and update/delete ' +
+    'accept them). The doc\'s ownerId is the managing user, so their links surface first-party.',
+  fields: [
+    { name: 'linkKind', type: 'enum', required: true, values: ['account', 'app'], description: 'Owned account, or co-managed app.' },
+    { name: 'userId', type: 'id', required: true, description: 'The managing (owner) user.' },
+    { name: 'targetId', type: 'id', required: true, description: 'Owned account\'s user id, or the app\'s clientId.' },
+    { name: 'role', type: 'string', required: true, values: ['owner'], description: 'Link role (owner today).' },
+    { name: 'createdBy', type: 'id', required: true, description: 'The admin who assigned it.' }
+  ],
+  example: { linkKind: 'account', userId: '664f1c2a9d3e5b0012345678', targetId: '664f1c2a9d3e5b0087654321', role: 'owner', createdBy: '664f1c2a9d3e5b0000000001' }
+};
+
 const sessionSchema: ThingtimeSchema = {
   id: 'session',
   version: COLLECTION_SCHEMA_VERSIONS.sessions,
@@ -658,7 +706,7 @@ const sessionSchema: ThingtimeSchema = {
     { name: 'jti', type: 'id', required: true, description: 'Unique token id carried in the JWT.' },
     { name: 'userId', type: 'id', required: true, description: 'The session owner.' },
     { name: 'type', type: 'string', required: true, values: ['tt.session'], description: 'Doc type tag.' },
-    { name: 'purpose', type: 'enum', required: false, values: ['browser', 'service'], description: 'Browser cookie session or service Bearer token.' },
+    { name: 'purpose', type: 'enum', required: false, values: ['browser', 'service', 'app', 'app-sandbox', 'pat'], description: 'Browser cookie session, service Bearer token, app-scoped grant, sandbox grant, or personal access token.' },
     { name: 'expiresAt', type: 'date', required: false, description: 'Expiry (null = non-expiring service token).' },
     { name: 'revokedAt', type: 'date', required: false, description: 'Set when revoked — token stops working immediately.' },
     { name: 'meta', type: 'record', required: false, description: 'Session metadata.' },
@@ -848,7 +896,10 @@ const appDataSchema: ThingtimeSchema = {
 // uniqueness rides the root `uniqueKeys` array (multikey unique sparse index;
 // BinData elements, PII keys hashed).
 
-export const PROTECTED_THINGTIME = ['user', 'theme', 'feed-algorithm', 'waitlist'] as const;
+// `subscription` and `account-link` are admin-plane kinds (tier/quota
+// assignments and account-ownership links) — self-assigning either through
+// the generic CRUD would be privilege escalation, so they are protected too.
+export const PROTECTED_THINGTIME = ['user', 'theme', 'feed-algorithm', 'waitlist', 'subscription', 'account-link'] as const;
 export const isProtectedThingtime = (ids: string[]): boolean =>
   ids.some((id) => (PROTECTED_THINGTIME as readonly string[]).includes(id));
 
@@ -955,6 +1006,9 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   saveThingSchema,
   appSchema,
   appDataSchema,
+  // admin-plane kinds (PROTECTED: written only through admin endpoints)
+  subscriptionSchema,
+  accountLinkSchema,
   // system kinds (collections collapsing into things — dual-era)
   userThingSchema,
   themeThingSchema,
