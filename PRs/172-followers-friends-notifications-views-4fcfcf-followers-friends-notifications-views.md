@@ -50,8 +50,8 @@ Loop task state file. Each /loop firing: read this, continue the first unchecked
 - [x] UI: useViewTracking (1s qualify @50%, dwell/ratio/pos, 10s flush + beacon, webdriver skip) wired in PostList (feed+profile) + PostPage
 - [x] apiTests additions (7) + TESTING.md sections (3) + remix/CHANGELOG.md entry
 - [x] Live browser verification (see log)
-- [ ] Commit, push, PR open, verify checks
-- [ ] (later loops) Vercel preview check; consider connections list modals on profile counts; consider /notifications full page + drawer entry
+- [x] Commit, push, PR open, verify checks (PR #172; Vercel preview green)
+- [x] Vercel preview verified (see log). Optional future ideas: consider connections list modals on profile counts; consider /notifications full page + drawer entry
 
 ## Verification log
 
@@ -59,3 +59,9 @@ Loop task state file. Each /loop firing: read this, continue the first unchecked
   - curl end-to-end (users viewsa78512/viewsb78512/viewsc78512): register → post → follow (count 1, new-follower notif) → 2nd post (post-from-followed fan-out w/ preview) → friend request (pending-outgoing; recipient incomingRequests=1; requests list) → accept (friends; friend-accepted notif) → relationships viewer state → connections lists → friends-only post readable by friend (permalink + FEED + after-unfriend 404; anon 404) → views (unique dedup on replay, anon UA counted, UA-less dropped, self-view dropped; viewCount 2 / impressions 3 / avgDwell 3600ms public) → reaction pref off suppresses reaction notif → multi-emoji react stored whole → comment notif → mark-all-read (3→0) → unfollow/unfriend clean.
   - Browser UI (desktop 1280 + mobile 375): full multi-emoji token on react button; 👁 counts on cards (live client tracking confirmed — browsing alone minted real views); bell badge 1→popover→0 with correct items/copy/previews; profile counts + Follow→Following ✓ (optimistic, POST 200) + Add friend→Requested ⏳ + inbox Accept (2 friends); Settings Notifications section (Reactions switch reflected server OFF state, UI flip persisted server-side); /tests battery 249 passed / 1 failed (the anonymous-current-user test — browser was logged in; environmental).
   - Visual: settings/profile/feed/popover clean at desktop + 375px, no overflow/overlap. FIXED a real mobile defect: bell + username sat under the commander search pill (untappable) — nav-right z-index + pill reservation. Ghost-transparent popover in one screenshot = hidden-pane rAF freeze (tool artifact, opacity completed to 1).
+
+- 2026-08-03, Vercel preview (https://thingtime-git-claude-followers-friends-44ca70-lopugits-projects.vercel.app):
+  all 8 new -docs routes 200 (Nitro route table registration proven in the production build); anon
+  relationships 404 json; anon views POST accepted (unknown ids dropped, counted 0); notifications 401
+  anon; anon feed payload carries viewCount + viewStats. PR #172 checks: Vercel SUCCESS, CodeQL/actions
+  green, GitGuardian pass, mergeable. Loop task complete — cron job deleted.
