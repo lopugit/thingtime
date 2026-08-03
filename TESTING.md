@@ -964,11 +964,36 @@ re-checks the whole management plane end-to-end:
       time-ago), zeroes the badge on open (mark-all-read), and click-through
       goes to `/post/<id>` or the actor's profile. Works within a 375px
       viewport with no overflow.
-- [ ] Settings → Notifications: one switch per type (defaults ON), optimistic
-      flip + revert on failure, per-user localCache seed, merge-patch POST
-      (unknown types 400). Disabling a type hides even ALREADY-WRITTEN
-      notifications of that type from the list and unread count (read-time
-      filtering), and single-recipient emits skip writing it entirely.
+- [ ] Settings → Notifications: a per-type × per-channel matrix — Push and
+      Email switches per row plus a master switch per channel (top row).
+      Defaults ON except email for `post-from-followed`/`post-from-friend`
+      (opt-in) — and `weekly-summary` is email-only (push cell shows —).
+      Optimistic flip + revert on failure, per-user localCache seed
+      (`tt-notif-prefs-v2-*`), merge-patch POST in the channel shape
+      (`{ prefs: { push/email/masters } }`) with the flat legacy body still
+      patching push; unknown keys 400. Disabling a push type hides even
+      ALREADY-WRITTEN notifications of that type (read-time filtering) and
+      single-recipient emits skip writing it; push master OFF empties the bell
+      entirely. Master OFF dims + disables that channel's column. No overflow
+      or column misalignment at 375px.
+- [ ] Notification emails (SES `notification` stream): each single-recipient
+      emit also emails the recipient when their email master + per-type switch
+      are on AND their address is verified — check the `email_messages` outbox
+      row (`templateKey notification.<type>`, `metadata.notificationType`,
+      manage + unsubscribe links in both html and text). Fan-out post emails
+      only reach explicit opt-ins. Throttle: >10 notification emails to one
+      recipient within an hour are silently skipped (digest excluded). A
+      failed/slow send never fails or delays the triggering action.
+- [ ] One-click unsubscribe: the footer link (`/api/v1/notifications/email/
+      unsubscribe?uid&token`) flips ONLY the email master off, renders the
+      confirmation page (mobile viewport included), is idempotent, and rejects
+      a tampered token with the 400 page. Bell/push switches are untouched;
+      re-enabling from Settings works.
+- [ ] Weekly summary digest: admin `GET …/weekly-summary?dryRun=1` previews
+      counts without sending; a real run emails only opted-in verified users
+      with ≥1 nonzero stat, records `notification.weekly_summary` outbox rows,
+      and a second run within 6 days skips everyone (`alreadySent`). Anonymous
+      and non-admin callers get 401/403 (CRON_SECRET bearer also accepted).
 - [ ] Mobile nav overlap regression: the centered commander pill must NOT
       cover the bell / username (they sit above it via `.nav-right-section`
       z-index, and the pill reserves 148px on the right). Regression class:

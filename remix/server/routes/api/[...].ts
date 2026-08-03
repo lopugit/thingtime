@@ -69,6 +69,10 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/mongodb/status': () => import('../../../app/routes/api/v1/mongodb/status/_status'),
   'v1/mongodb/status-data': () => import('../../../app/routes/api/v1/mongodb/status-data/_status-data'),
   'v1/notifications': () => import('../../../app/routes/api/v1/notifications/_notifications'),
+  'v1/notifications/email/unsubscribe': () =>
+    import('../../../app/routes/api/v1/notifications/email/unsubscribe/_unsubscribe'),
+  'v1/notifications/email/weekly-summary': () =>
+    import('../../../app/routes/api/v1/notifications/email/weekly-summary/_weekly-summary'),
   'v1/notifications/read': () => import('../../../app/routes/api/v1/notifications/read/_read'),
   'v1/notifications/settings': () => import('../../../app/routes/api/v1/notifications/settings/_settings'),
   'v1/oauth/authorize': () => import('../../../app/routes/api/v1/oauth/authorize/_authorize'),

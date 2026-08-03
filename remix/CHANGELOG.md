@@ -96,6 +96,25 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   30-check local-only live suite. This supersedes the earlier app→end-user-tier
   fallback from the stacked admin-manager change. — Codex (AI), 2026-08-05
 
+- **Per-channel notification toggles + SES notification emails**: Settings →
+  Notifications is now a per-type × per-channel switch matrix — Push (the
+  bell/in-app channel, stored as the original flat pref keys so existing prefs
+  keep working) and Email (new nested `email`/`masters` keys in the same
+  secure-blob pref object), each with a master switch. Activity notifications
+  (friend requests/accepts, new followers, comments, replies, reactions,
+  shares; posts-from-followed/friends email opt-in) now also send SES emails on
+  the new `notification` email stream — fire-and-forget from the same emits,
+  verified addresses only, ≤10/recipient/hour throttle, manage +
+  one-click-unsubscribe links in every footer (HMAC-tokened
+  `GET /api/v1/notifications/email/unsubscribe`). A weekly summary digest
+  (email-only type, Vercel cron `remix/vercel.json` →
+  `GET /api/v1/notifications/email/weekly-summary` with `CRON_SECRET` bearer or
+  admin session, six-day idempotency lookback, dry-run mode) recaps followers,
+  requests, comments, replies, reactions, shares, post views and posts. New
+  env: `THINGTIME_EMAIL_NOTIFICATIONS_FROM`, `THINGTIME_EMAIL_UNSUB_SECRET`
+  (optional), `CRON_SECRET`, `APP_URL` (email links) — see README “Notification
+  emails”. — Claude (AI), 2026-08-03
+
 - **Followers + friends, notifications, and public post view stats**: one-way
   follows and approval-based friendships (`follow`/`friend` protected things,
   `/api/v1/users/{follow,friend,relationships,connections}`) with the

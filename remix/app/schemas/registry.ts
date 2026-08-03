@@ -1054,6 +1054,54 @@ export const NOTIFICATION_TYPES = [
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
+// Email-channel notification switches. Every bell type can also send an email,
+// plus email-only types (weekly-summary) that never mint a bell notification.
+export const EMAIL_ONLY_NOTIFICATION_TYPES = ['weekly-summary'] as const;
+export const EMAIL_NOTIFICATION_TYPES = [...NOTIFICATION_TYPES, ...EMAIL_ONLY_NOTIFICATION_TYPES] as const;
+export type EmailNotificationType = (typeof EMAIL_NOTIFICATION_TYPES)[number];
+
+// High-volume types whose EMAIL channel defaults OFF (the bell stays ON): a
+// busy follow graph would otherwise turn every post into an email.
+export const EMAIL_DEFAULT_OFF_TYPES: readonly string[] = ['post-from-followed', 'post-from-friend'];
+
+export type NotificationChannelMasters = { push: boolean; email: boolean };
+export type NormalizedNotificationPrefs = {
+  push: Record<string, boolean>;
+  email: Record<string, boolean>;
+  masters: NotificationChannelMasters;
+};
+
+// Stored shape (meta.notificationPrefs): the flat { [type]: boolean } keys are
+// the push/in-app channel — unchanged from the original shape, so prefs saved
+// before channels existed keep working with zero migration — plus nested
+// email: { [type]: boolean } and masters: { push, email }. Absent = ON,
+// except EMAIL_DEFAULT_OFF_TYPES whose email channel is opt-in. Shared by the
+// server (write/read gating) and the settings UI (defaults) so both sides
+// agree on what absent keys mean. Also accepts an already-normalized matrix
+// (nested push object) so the wire shape round-trips: normalize(normalize(x))
+// === normalize(x), which lets the client cache the GET response as-is.
+export const normalizeNotificationPrefs = (
+  stored: Record<string, any> | null | undefined
+): NormalizedNotificationPrefs => {
+  const source = stored && typeof stored === 'object' ? stored : {};
+  const emailStored = source.email && typeof source.email === 'object' ? source.email : {};
+  const mastersStored = source.masters && typeof source.masters === 'object' ? source.masters : {};
+  const pushStored = source.push && typeof source.push === 'object' ? source.push : source;
+  const push: Record<string, boolean> = {};
+  for (const type of NOTIFICATION_TYPES) push[type] = pushStored[type] !== false;
+  const email: Record<string, boolean> = {};
+  for (const type of EMAIL_NOTIFICATION_TYPES) {
+    email[type] = EMAIL_DEFAULT_OFF_TYPES.includes(type)
+      ? emailStored[type] === true
+      : emailStored[type] !== false;
+  }
+  return {
+    push,
+    email,
+    masters: { push: mastersStored.push !== false, email: mastersStored.email !== false }
+  };
+};
+
 const notificationThingSchema: ThingtimeSchema = {
   id: 'notification',
   version: 1,

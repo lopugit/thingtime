@@ -4714,50 +4714,165 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'notifications',
     title: 'Notification settings',
     endpoint: '/api/v1/notifications/settings',
-    summary: 'Read or merge-patch your per-type notification switches (defaults ON).',
+    summary: 'Read or merge-patch your notification switches — per type, per channel (push + email), plus channel masters.',
     detail:
-      'Types: friend-request, friend-accepted, new-follower, post-from-followed, post-from-friend, ' +
-      'comment, reply, reaction, share, groups (reserved for the future groups feature). GET always ' +
-      'returns every known type. POST merges only the keys you send; unknown types 400. A disabled ' +
-      'type is hidden from your list and unread count immediately — and single-recipient emits skip ' +
-      'writing it at all.',
+      'Two channels: push (the bell/in-app channel) and email (SES-backed notification emails), each ' +
+      'with a master switch and per-type switches. Types: friend-request, friend-accepted, ' +
+      'new-follower, post-from-followed, post-from-friend, comment, reply, reaction, share, groups ' +
+      '(reserved), plus the email-only weekly-summary digest. Defaults ON, except email for the two ' +
+      'high-volume post types (post-from-followed / post-from-friend), which are opt-in. GET always ' +
+      'returns the full matrix. POST merges only the keys you send — the new channel shape ' +
+      '{ prefs: { push?, email?, masters? } } or the original flat { prefs: { <type>: boolean } } ' +
+      '(which patches the push channel); unknown keys 400. A disabled push type is hidden from your ' +
+      'list and unread count immediately; a disabled email type stops future emails. Emails only go ' +
+      'to verified addresses and are capped per recipient per hour; every one carries a manage link ' +
+      'and a one-click unsubscribe link.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
     },
     methods: ['GET', 'POST'],
     steps: [
-      'GET returns { prefs } with every type as a boolean.',
-      'POST { prefs: { <type>: boolean, … } } merges just those switches.',
+      'GET returns { prefs: { push, email, masters } } with every switch as a boolean.',
+      'POST { prefs: { email: { <type>: boolean } } } (or push / masters) merges just those switches.',
+      'The flat legacy body { prefs: { <type>: boolean } } still works and patches push.',
       'Flip switches optimistically; revert on failure.',
-      'Handle 400 unknown type / non-boolean, 401 unauthenticated, 429 rate-limited.'
+      'Handle 400 unknown key / non-boolean, 401 unauthenticated, 429 rate-limited.'
     ],
     requestExamples: [
       {
-        name: 'Disable follower pings',
-        description: 'Stop new-follower notifications only.',
+        name: 'Disable follower emails',
+        description: 'Stop new-follower emails only — the bell keeps working.',
         method: 'POST',
-        body: { prefs: { 'new-follower': false } }
+        body: { prefs: { email: { 'new-follower': false } } }
+      },
+      {
+        name: 'Mute all emails',
+        description: 'Flip the email master off without touching per-type switches.',
+        method: 'POST',
+        body: { prefs: { masters: { email: false } } }
       }
     ],
     responseExamples: [
       {
         status: 200,
-        description: 'The full merged switch set.',
+        description: 'The full merged switch matrix.',
         body: {
           ok: true,
           prefs: {
-            'friend-request': true,
-            'friend-accepted': true,
-            'new-follower': false,
-            'post-from-followed': true,
-            'post-from-friend': true,
-            comment: true,
-            reply: true,
-            reaction: true,
-            share: true,
-            groups: true
+            push: {
+              'friend-request': true,
+              'friend-accepted': true,
+              'new-follower': true,
+              'post-from-followed': true,
+              'post-from-friend': true,
+              comment: true,
+              reply: true,
+              reaction: true,
+              share: true,
+              groups: true
+            },
+            email: {
+              'friend-request': true,
+              'friend-accepted': true,
+              'new-follower': false,
+              'post-from-followed': false,
+              'post-from-friend': false,
+              comment: true,
+              reply: true,
+              reaction: true,
+              share: true,
+              groups: true,
+              'weekly-summary': true
+            },
+            masters: { push: true, email: true }
           }
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'notifications-email-unsubscribe',
+    group: 'notifications',
+    title: 'Email one-click unsubscribe',
+    endpoint: '/api/v1/notifications/email/unsubscribe',
+    summary: 'The one-click link in notification email footers — flips the email master switch off.',
+    detail:
+      'GET with ?uid=<userId>&token=<hmac> (both come pre-built in every notification email footer; ' +
+      'the token is an HMAC over the user id, so a link can only ever mute its own recipient). No ' +
+      'session needed — email clients don’t carry cookies. Responds with a small HTML confirmation ' +
+      'page, is idempotent, and the switch can be flipped back on any time in Settings → ' +
+      'Notifications. Invalid or missing tokens get a 400 page; requests are IP rate-limited.',
+    auth: {
+      mode: 'none',
+      description: 'Authenticated by the HMAC token in the link, not by session.'
+    },
+    methods: ['GET'],
+    steps: [
+      'Click the “Unsubscribe from all” link in any notification email.',
+      'The email master switch flips off; per-type switches are untouched.',
+      'Re-enable any time from Settings → Notifications.'
+    ],
+    requestExamples: [
+      {
+        name: 'One-click unsubscribe',
+        description: 'As clicked from an email footer.',
+        method: 'GET',
+        query: { uid: '664f…', token: '3f2a…' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'HTML confirmation page (text/html, not JSON).',
+        body: { note: 'Returns an HTML page: “You’re unsubscribed 💌”.' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'notifications-email-weekly-summary',
+    group: 'notifications',
+    title: 'Weekly summary digest run',
+    endpoint: '/api/v1/notifications/email/weekly-summary',
+    summary: 'Kick off the weekly email digest — cron (CRON_SECRET bearer) or admin only.',
+    detail:
+      'Sends every opted-in, email-verified user a recap of the last seven days around their things ' +
+      '(new followers, friend requests, comments, replies, reactions, shares, post views, posts). ' +
+      'Users with zero activity are skipped, and a six-day per-recipient lookback makes the run ' +
+      'idempotent — a retried cron or a manual admin run never double-sends. The Vercel cron ' +
+      '(remix/vercel.json) calls GET with Authorization: Bearer <CRON_SECRET>; signed-in admins can ' +
+      'also run it, and POST { dryRun: true } (or GET ?dryRun=1) previews counts without sending.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Admin session, or the CRON_SECRET bearer token Vercel cron attaches.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'Configure CRON_SECRET in Vercel so the scheduled cron authenticates.',
+      'GET ?dryRun=1 as an admin to preview who would get a digest.',
+      'POST {} (admin) to run manually; the lookback prevents double-sends.',
+      'Handle 401 unauthenticated / 403 non-admin.'
+    ],
+    requestExamples: [
+      {
+        name: 'Dry run',
+        description: 'Preview counts without sending anything.',
+        method: 'POST',
+        body: { dryRun: true }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Run summary.',
+        body: {
+          ok: true,
+          considered: 42,
+          eligible: 17,
+          sent: 9,
+          skipped: { alreadySent: 5, noActivity: 3, failed: 0 },
+          truncated: false,
+          dryRun: false
         }
       }
     ]

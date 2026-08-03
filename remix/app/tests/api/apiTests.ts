@@ -983,7 +983,8 @@ export const apiTests: ApiTestDefinition[] = [
   {
     id: 'notifications-settings-shape',
     name: 'Notification settings shape',
-    description: 'GET /notifications/settings returns every known type as a boolean (or 401 anonymous).',
+    description:
+      'GET /notifications/settings returns the per-channel matrix — push + email per type plus channel masters (or 401 anonymous).',
     group: 'notifications',
     method: 'GET',
     path: '/api/v1/notifications/settings',
@@ -992,8 +993,41 @@ export const apiTests: ApiTestDefinition[] = [
       (body) =>
         body?.ok === false
           ? typeof body?.error === 'string'
-          : body?.prefs && typeof body.prefs['new-follower'] === 'boolean' && typeof body.prefs['friend-request'] === 'boolean',
-      'Notification settings returned the full switch set (or 401 anonymous).'
+          : body?.prefs &&
+            typeof body.prefs.push?.['new-follower'] === 'boolean' &&
+            typeof body.prefs.push?.['friend-request'] === 'boolean' &&
+            typeof body.prefs.email?.['weekly-summary'] === 'boolean' &&
+            body.prefs.email?.['post-from-followed'] !== undefined &&
+            typeof body.prefs.masters?.push === 'boolean' &&
+            typeof body.prefs.masters?.email === 'boolean',
+      'Notification settings returned the full channel matrix (or 401 anonymous).'
+    )
+  },
+  {
+    id: 'notifications-email-unsubscribe-bad-token',
+    name: 'Email unsubscribe rejects bad links',
+    description:
+      'GET /notifications/email/unsubscribe with a bogus uid+token pair is refused (400 page) instead of flipping anything.',
+    group: 'notifications',
+    method: 'GET',
+    path: '/api/v1/notifications/email/unsubscribe?uid=nobody&token=bogus',
+    expect: expectStatus([400, 429], 'Unsubscribe refused the invalid token (or was rate limited).')
+  },
+  {
+    id: 'notifications-weekly-summary-auth-required',
+    name: 'Weekly summary run is gated',
+    description:
+      'GET /notifications/email/weekly-summary?dryRun=1 — anonymous/non-admin callers are refused; an admin gets a dry-run preview (dryRun keeps a /tests run from sending real digests).',
+    group: 'notifications',
+    method: 'GET',
+    path: '/api/v1/notifications/email/weekly-summary?dryRun=1',
+    expect: expectJson(
+      [200, 401, 403],
+      (body) =>
+        body?.ok === false
+          ? typeof body?.error === 'string'
+          : typeof body?.sent === 'number' && body?.dryRun === true,
+      'Weekly summary run was gated (or dry-ran for an admin without sending).'
     )
   },
   {

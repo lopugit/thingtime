@@ -607,6 +607,10 @@ export const ensureIndexes = async () => {
         col('email_messages').createIndex({ createdAt: -1 }),
         col('email_messages').createIndex({ to: 1 }),
         col('email_messages').createIndex({ stream: 1, status: 1, createdAt: -1 }),
+        // notification-email hourly throttle (stream+to+createdAt) and the
+        // weekly-digest idempotency lookback (templateKey+createdAt+to)
+        col('email_messages').createIndex({ stream: 1, to: 1, createdAt: -1 }),
+        col('email_messages').createIndex({ templateKey: 1, createdAt: -1 }),
         col('email_messages').createIndex({ providerMessageId: 1 }, { sparse: true }),
         col('email_events').createIndex({ emailMessageId: 1 }),
         col('email_events').createIndex({ providerMessageId: 1 }),
