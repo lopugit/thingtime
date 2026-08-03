@@ -55,3 +55,31 @@ export const sanitizeReactionToken = (raw: unknown): string | null => {
 };
 
 export const isValidReactionToken = (raw: unknown): boolean => sanitizeReactionToken(raw) !== null;
+
+// Custom-emoji reaction tokens are a PARALLEL namespace used only by the
+// messenger (`custom:<emoji thing shareId>`); the plain post/comment react path
+// keeps rejecting them, so uploaded emojis can never leak into feed reactions
+// or a user's unicode recents. The shareId charset (uuid / ObjectId-shaped) is
+// Mongo-key-safe by construction; the shape checks below keep hostile input
+// (dots, `$`, whitespace, silly lengths) out just like sanitizeReactionToken.
+export const CUSTOM_REACTION_PREFIX = 'custom:';
+const CUSTOM_REACTION_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{5,63}$/;
+
+export const isCustomReactionToken = (raw: unknown): boolean =>
+  typeof raw === 'string' && raw.startsWith(CUSTOM_REACTION_PREFIX);
+
+export const customReactionEmojiId = (token: string): string | null => {
+  if (!token.startsWith(CUSTOM_REACTION_PREFIX)) return null;
+  const id = token.slice(CUSTOM_REACTION_PREFIX.length);
+  return CUSTOM_REACTION_ID.test(id) ? id : null;
+};
+
+// Messenger token sanitizer: a plain emoji token OR a well-formed custom token.
+export const sanitizeChatReactionToken = (raw: unknown): string | null => {
+  if (typeof raw !== 'string') return null;
+  const token = raw.trim();
+  if (isCustomReactionToken(token)) {
+    return customReactionEmojiId(token) ? token : null;
+  }
+  return sanitizeReactionToken(token);
+};
