@@ -13,6 +13,8 @@
 //
 // baseUrl defaults to TT_VERIFY_BASE or this worktree's nitro port.
 
+import { randomBytes } from 'node:crypto';
+
 const BASE = process.argv[2] || process.env.TT_VERIFY_BASE || 'http://127.0.0.1:19332';
 
 let passed = 0;
@@ -46,7 +48,9 @@ const api = async (path, { cookie, method = 'GET', body, headers = {} } = {}) =>
   return { status: response.status, body: json };
 };
 
-const suffix = `${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;
+// crypto-random suffix: these are throwaway fixture accounts, but the ids
+// should still be unguessable (and CodeQL rightly dislikes Math.random here)
+const suffix = `${Date.now().toString(36)}${randomBytes(4).toString('hex')}`;
 
 const register = async (name) => {
   const username = `${name}${suffix}`;
