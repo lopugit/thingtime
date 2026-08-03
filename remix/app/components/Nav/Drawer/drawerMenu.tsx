@@ -85,7 +85,6 @@ export const drawerMenuItems: DrawerTopItem[] = [
 			{ id: 'account-apps', label: 'App data', icon: '📦', to: '/apps', authOnly: true },
 			{ id: 'account-welcome', label: 'Welcome', icon: '✨', to: '/welcome', authOnly: true },
 			{ id: 'account-themes', label: 'Themes', icon: '🎨', to: '/themes' },
-			{ id: 'account-admin', label: 'Admin', icon: '🛠️', to: '/admin', adminOnly: true },
 			{ id: 'account-login', label: 'Log in', icon: '🗝️', to: '/login', guestOnly: true },
 			{ id: 'account-register', label: 'Register', icon: '➕', to: '/register', guestOnly: true }
 		]
@@ -107,6 +106,7 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		icon: '💻',
 		to: '/tests',
 		children: [
+			{ id: 'dev-admin', label: 'Admin', icon: '🛠️', to: '/admin', adminOnly: true },
 			{ id: 'dev-tests', label: 'API tests', icon: '✅', to: '/tests' },
 			{ id: 'dev-crypto', label: 'Crypto', icon: '🔒', to: '/crypto' },
 			{ id: 'dev-edge', label: 'Edge', icon: '🌍', to: '/edge' },
@@ -134,6 +134,26 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		]
 	}
 ];
+
+// Top-level hubs whose click KEEPS the drawer open by default, so their
+// submenu stays browsable (they're all multi-destination sections). An
+// explicit per-item "close after click" setting always wins over this
+// default, in either direction.
+export const DRAWER_KEEP_OPEN_DEFAULT_IDS: string[] = ['dev', 'status', 'branding', 'docs'];
+
+// The one resolver for "does clicking this item close the drawer?" — shared
+// by the click handlers (useDrawer.closesOnClick) and the settings toggles so
+// the checkboxes always show the behavior that will actually happen.
+export const drawerItemClosesOnClick = (
+	closeOnClick: Record<string, boolean> | undefined,
+	itemId: string
+): boolean => {
+	const saved = closeOnClick?.[itemId];
+	if (typeof saved === 'boolean') {
+		return saved;
+	}
+	return !DRAWER_KEEP_OPEN_DEFAULT_IDS.includes(itemId);
+};
 
 // Order ids by the user's saved ordering; unknown/new ids keep their default
 // position appended after the known ones, removed ids are dropped.
