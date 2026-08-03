@@ -12,6 +12,7 @@ import {
   ACL_OWNER,
   COLLECTION_SCHEMA_VERSIONS,
   MAX_TEXT_CHARS,
+  MESSENGER_THINGTIME,
   POST_TYPES as REGISTRY_POST_TYPES,
   PROTECTED_THINGTIME,
   REACTION_EMOJIS,
@@ -587,7 +588,7 @@ const toFeedAuthor = (doc: any): FeedAuthor => ({
   avatarUrl: typeof doc.avatarUrl === 'string' ? doc.avatarUrl : null
 });
 
-const resolveProfiles = async (userIds: string[]): Promise<Map<string, FeedAuthor>> => {
+export const resolveProfiles = async (userIds: string[]): Promise<Map<string, FeedAuthor>> => {
   const wanted = [...new Set(userIds)].filter((id) => typeof id === 'string' && id.trim());
   if (!wanted.length) return new Map();
   const profiles = new Map<string, FeedAuthor>();
@@ -1336,10 +1337,12 @@ export const listThings = async (
     if (!viewer?.id) return fail(401, 'Unauthorized');
     // your OWN things, but not your account/theme/algorithm/waitlist things —
     // those are managed by their dedicated endpoints and would otherwise show
-    // up as inert, non-editable entries (edit/delete 403) in the data browser
+    // up as inert, non-editable entries (edit/delete 403) in the data browser.
+    // Messenger plumbing (chats, memberships, messages…) stays out for the
+    // same reason — /messages is its browser.
     match = {
       ownerId: viewer.id,
-      thingtime: { $nin: [...PROTECTED_THINGTIME] },
+      thingtime: { $nin: [...PROTECTED_THINGTIME, ...MESSENGER_THINGTIME] },
       $or: [{ thingtime: { $exists: true } }, { kind: 'post' }]
     };
   }
@@ -1708,11 +1711,14 @@ export const deleteThing = async (viewerInput: string | Viewer, shareId: unknown
   const things = await getThingsCollection();
   // system kinds (a user's own account thing!) are never deletable through the
   // generic DELETE — $nin on the multikey array excludes them atomically. Their
-  // dedicated endpoints (themes, algorithms) own deletion.
+  // dedicated endpoints (themes, algorithms) own deletion. Messenger kinds are
+  // excluded too: a chat/community doc is one doc standing in for every
+  // MEMBER's data, so owner-may-delete does not apply — their family owns the
+  // whole lifecycle (leave, decline, soft delete, emoji retire).
   const deleted = (await things.findOneAndDelete({
     shareId: shareId.trim(),
     ownerId: viewer.id,
-    thingtime: { $nin: [...PROTECTED_THINGTIME] }
+    thingtime: { $nin: [...PROTECTED_THINGTIME, ...MESSENGER_THINGTIME] }
   } as any)) as any as ThingDoc | null;
   if (!deleted) return fail(404, 'Thing not found');
   // comments/reactions/saves attached to the deleted thing go with it (v2

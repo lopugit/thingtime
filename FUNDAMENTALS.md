@@ -52,7 +52,7 @@ edge cases live in `api/utils/migrations/migrations.ts`.
 
 | Collection | Holds |
 | ---------- | ----- |
-| `things`   | ALL Thingtime data. System kinds: `user` (public profile in `crystal`, all private state as a single BinData `secure` blob, uniqueness via BinData `uniqueKeys`), `theme`, `feed-algorithm`, `waitlist`, `schema`; content kinds: `post`, `comment`, `reaction`, `share`, `data`. Every thing also carries a schema-free `extended` property for arbitrary unvalidated JSON (≤512KB, replace-on-write, never structured-searchable) |
+| `things`   | ALL Thingtime data. System kinds: `user` (public profile in `crystal`, all private state as a single BinData `secure` blob, uniqueness via BinData `uniqueKeys`), `theme`, `feed-algorithm`, `waitlist`, `schema`; content kinds: `post`, `comment`, `reaction`, `share`, `data`; messenger kinds (dedicated endpoints only, membership-gated, invisible to generic reads: see `api/utils/messenger/`): `chat`, `chat-member`, `chat-message`, `chat-section`, `community`, `community-member`, `community-invite`, `custom-emoji`, `follow`. Every thing also carries a schema-free `extended` property for arbitrary unvalidated JSON (≤512KB, replace-on-write, never structured-searchable) |
 | `sessions` | server-side sessions / JWT records (revocation; `userId` = the user thing's `shareId`) |
 | `rosters`  | account-switcher rosters (TTL-reaped) |
 | `emailVerifications` | pending email-verification tokens |

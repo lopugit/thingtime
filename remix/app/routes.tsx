@@ -19,6 +19,7 @@ import DocsDesignSystem from './routes/docs/design-system/index';
 import DocsIndex from './routes/docs/index';
 import MigrationsRoute from './routes/migrations';
 import Feed from './routes/feed';
+import Messages from './routes/messages';
 import Index from './routes/_index';
 import Login from './routes/login';
 import SettingsRoute from './routes/settings';
@@ -119,6 +120,7 @@ export const router = createBrowserRouter([
         ]
       },
       { path: 'feed', element: <Feed /> },
+      { path: 'messages', element: <Messages />, loader: requireUser('/login') },
       { path: 'login', element: <Login />, loader: requireGuest('/profile') },
       // admin database-migrations console (Dev drawer → Migrations) — moved
       // out of /docs/schemas into its own page
