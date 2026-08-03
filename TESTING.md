@@ -1194,3 +1194,55 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       kind 403s ("managed by their own endpoints"); chats/messages are 404
       through `GET /api/v1/things?id=` for non-owners; `POST
       /api/v1/things/react` cannot reach another member's chat message.
+
+## Linked deployments (Settings → Linked deployments, `api/utils/deployments/*`, `/api/v1/deployment-links*`)
+
+- [ ] Two isolated stacks for testing: second mongod (`mongod --port 27018
+      --dbpath <tmp> --fork ...`) + second dev stack (`TT_WEB_PORT=11120
+      TT_HMR_PORT=11121 TT_API_PORT=11122
+      MONGODB_CONNECTION_STRING=mongodb://localhost:27018/ npm run dev`).
+      `/api/v1/health/mongodb` on each stack must report its OWN host.
+- [ ] Link via password: Settings → Linked deployments → Link a deployment →
+      URL + remote username/password → row appears with the remote @username
+      and a success toast. With email-2FA enabled on the remote account, the
+      form asks for the emailed code first (`requiresOtp` branch).
+- [ ] Token upgrade at link time: a password link against a deployment that
+      HAS this feature stores a non-expiring link token (`tokenExpiresAt:
+      null` in GET /api/v1/deployment-links); the login-derived 30-day
+      session is revoked after the swap. Against an OLDER deployment the
+      30-day token is kept and `tokenExpiresAt` shows its expiry.
+- [ ] Link via token: Create a link token 🔑 on deployment B (shown exactly
+      once), paste into deployment A's "Paste a token" form → link works
+      without a password crossing between deployments.
+- [ ] Sync now (two-way): things move BOTH ways keyed by shareId; a comment
+      never lands before its post (dependency ordering); schemas land before
+      data things citing them. Immediately re-running sync reports planned 0
+      / everything unchanged — copied things must never ping-pong (content
+      equality beats updatedAt).
+- [ ] Conflict: edit the SAME thing on both sides → two-way keeps the newest
+      edit on both, `conflictsResolved` increments. Push/pull modes only ever
+      move data in their one direction.
+- [ ] Profile path: displayName/bio/avatar/banner sync; two-way prefers the
+      non-empty side (a fresh local account pulls the remote profile instead
+      of blanking it).
+- [ ] Path rules: `things/<kind>: off` suppresses exactly that kind (preview
+      shows planned 0 for its pending changes); first matching rule wins,
+      then `things`, then the link mode. Invalid paths (`nonsense path!`)
+      are rejected with the profile/things/things/<kind> hint.
+- [ ] Collisions + skew are AUDIBLE: a shareId owned by a DIFFERENT account
+      on the destination reports "belongs to a different account — skipped";
+      a kind unknown to the destination registry reports its schema error.
+      Sync continues past per-thing errors; 401/429 from the remote abort
+      with `remaining` > 0 and re-running continues.
+- [ ] Guards: base URL must be https (http only for localhost), an origin
+      only (no path/query/credentials); redirects are refused. Link/unlink/
+      token-mint ride `deployments.link` (10/5min) and sync rides
+      `deployments.sync` (6/5min), both fail-closed — hammering Sync now
+      429s with the breather toast.
+- [ ] Secrecy: remote tokens live only in the user thing's `secure` blob
+      (meta.deploymentLinks) — GET /api/v1/deployment-links never returns a
+      token field, and unlinking best-effort revokes the remote session.
+- [ ] Optimistic UI: the section paints its last-known roster from
+      `tt-deployment-links-<userId>` localCache instantly; mode taps apply
+      optimistically and revert on failure; sync summary line updates after
+      each run. Mobile (375px): rows wrap, no horizontal scroll.
