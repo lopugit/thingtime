@@ -17,6 +17,20 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Added
+
+- **CI conflict-resolver graphify refresh now does LLM semantic extraction**:
+  after an auto-resolved merge, `resolve-pr-conflicts.yml` runs
+  `graphify extract` + `cluster-only` with whichever Claude credential the
+  repo has (`ANTHROPIC_API_KEY` → claude API backend, else
+  `CLAUDE_CODE_OAUTH_TOKEN` → claude-cli backend, sonnet), so content new to
+  the merge is semantically indexed in CI instead of waiting for a local run.
+  Unchanged content is served from the tracked content-addressed semantic
+  cache (new CI-paid blobs are committed back), and the step falls back to
+  the old AST-only `graphify update` when no credential exists or extraction
+  fails. Staged refresh outputs get the same best-effort secret scan as
+  resolved files. — Claude (AI), 2026-08-03
+
 ### Fixed
 
 - **Fresh worktrees now bootstrap complete pnpm dependency links**: Codex
