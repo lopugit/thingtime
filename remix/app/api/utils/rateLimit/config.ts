@@ -38,6 +38,9 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   'notifications.list': { limit: 120, windowMs: 60_000, enabled: true },
   'notifications.read': { limit: 60, windowMs: 60_000, enabled: true },
   'notifications.settings': { limit: 30, windowMs: 60_000, enabled: true },
+  // one-click email unsubscribe — anonymous (keys by IP), tokens are HMACs so
+  // this is hygiene against link-scanner hammering, not a security boundary
+  'notifications.emailUnsubscribe': { limit: 20, windowMs: 60_000, enabled: true },
   // post view telemetry (POST /api/v1/things/views) — anonymous-capable
   // batched beacons; one flush covers a whole scroll session, so this window
   // is generous for humans and a wall for replay scripts (anon keys by IP)
