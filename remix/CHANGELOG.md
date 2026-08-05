@@ -33,6 +33,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Born-conflicting PRs now actually trigger the conflict resolver**: GitHub
+  creates no `pull_request` workflow run for a PR that opens CONFLICTING (no
+  merge ref exists), so the resolver's `pull_request: [opened, reopened]`
+  trigger was a silent no-op for exactly the case it was added for (verified
+  empirically on a canary PR). Replaced with `pull_request_target` routed
+  through the existing detect→handoff→dispatch hop — API-only in the target
+  context, no PR code checkout, resolve job excluded for that event.
+  — Claude (AI), 2026-08-03
+
 - **Fresh worktrees now bootstrap complete pnpm dependency links**: Codex
   worktree carryover no longer copies large, partial `node_modules` symlink
   trees that can leave ESLint/Vite wrappers without their packages. A shared
