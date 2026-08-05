@@ -91,7 +91,9 @@
 # (graphify-out/cache/semantic/), so only content genuinely new to the merge
 # reaches the LLM — a typical conflict merge costs a handful of calls, often
 # zero. `extract --no-cluster` must NEVER be used here: it writes only the
-# newly-extracted nodes (verified: it reduces a 24k-node graph to 1 node).
+# newly-extracted nodes (verified: it reduces a 24k-node graph to 1 node),
+# and as a mechanical backstop for that whole failure class, a semantic
+# result whose node count halved is refused before staging.
 # With no credential, or when extraction fails, the step falls back to the
 # old AST-only `graphify update`. Handing this step a credential exposes it
 # to the pinned graphifyy package and the claude CLI (no NEW principals —
@@ -717,12 +719,33 @@ jobs:
           # pathological doc can't eat the step timeout. NEVER add
           # --no-cluster to the extract: it writes ONLY the newly-extracted
           # nodes and destroys the rest of the graph.
+
+          # Mechanical guard for that whole failure class: refuse a semantic
+          # result whose node count halved. `graphify update` has a built-in
+          # fewer-nodes guard, `graphify extract` does not — without this, a
+          # collapsed graph would be committed to the PR branch. A legitimate
+          # >50% shrink (mass code deletion) lands on the AST fallback, whose
+          # own guard then decides; resolve that rare case locally with
+          # `graphify update --force`.
+          graph_not_collapsed() {
+            old_n="$(git show HEAD:graphify-out/graph.json 2>/dev/null | jq '.nodes | length' 2>/dev/null || echo 0)"
+            new_n="$(jq '.nodes | length' graphify-out/graph.json 2>/dev/null || echo 0)"
+            case "$old_n" in ''|*[!0-9]*) old_n=0 ;; esac
+            case "$new_n" in ''|*[!0-9]*) new_n=0 ;; esac
+            if [ "$old_n" -gt 0 ] && [ "$new_n" -lt $(( old_n / 2 )) ]; then
+              echo "::warning::Semantic refresh shrank the graph ($old_n -> $new_n nodes) — refusing it."
+              return 1
+            fi
+            return 0
+          }
+
           semantic="none"
           if [ -n "$backend" ]; then
             conc=4
             if [ "$backend" = "claude-cli" ]; then conc=1; fi
             if graphify extract . --backend "$backend" --max-concurrency "$conc" --api-timeout 240 \
-               && graphify cluster-only . --no-viz --no-label; then
+               && graphify cluster-only . --no-viz --no-label \
+               && graph_not_collapsed; then
               semantic="$backend"
             else
               semantic="failed"
