@@ -19,8 +19,6 @@ if (!BASE || !/^https?:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?\/?$/i.test(BASE))
 }
 
 const ORIGIN = 'http://localhost:4545';
-const APP_ALLOWANCE = 5 * 1024 * 1024 * 1024;
-const PLUS_APP_ALLOWANCE = 25 * 1024 * 1024 * 1024;
 const USER_ALLOWANCE = 50 * 1024 * 1024;
 const MANAGED_DEFAULT_ALLOWANCE = 64 * 1024 * 1024;
 const MANAGED_USER_ALLOWANCE = 80 * 1024 * 1024;
@@ -110,12 +108,52 @@ const authorize = async (cookie, clientId) => {
 };
 
 const usage = (token) => api('/api/v1/app-data/usage', { token, origin: ORIGIN });
-const setEntry = (token, key, value) =>
-  api('/api/v1/app-data', { token, origin: ORIGIN, method: 'POST', body: { key, value } });
-const deleteEntry = (token, key) =>
-  api('/api/v1/app-data/delete', { token, origin: ORIGIN, method: 'POST', body: { key } });
+const setEntry = (token, key, value) => api('/api/v1/app-data', { token, origin: ORIGIN, method: 'POST', body: { key, value } });
+const deleteEntry = (token, key) => api('/api/v1/app-data/delete', { token, origin: ORIGIN, method: 'POST', body: { key } });
 
 console.log(`Verifying registered-app storage against ${BASE}\n`);
+
+const tierCatalog = await api('/api/v1/tiers');
+const liveTiers = Array.isArray(tierCatalog.body?.tiers) ? tierCatalog.body.tiers : [];
+check(
+  'public tier cards expose only live, immutable catalog revisions',
+  tierCatalog.status === 200 &&
+    tierCatalog.body?.ok === true &&
+    liveTiers.length >= 4 &&
+    new Set(liveTiers.map((tier) => tier.versionId)).size === liveTiers.length &&
+    liveTiers.every(
+      (tier) =>
+        typeof tier?.id === 'string' &&
+        typeof tier?.versionId === 'string' &&
+        Number.isSafeInteger(tier?.version) &&
+        tier.version > 0 &&
+        tier.status === 'live' &&
+        tier.prices &&
+        tier.discounts &&
+        tier.inclusions?.kind === 'rich-text' &&
+        Array.isArray(tier.inclusions.blocks) &&
+        tier.quotas &&
+        typeof tier.quotas === 'object'
+    )
+);
+
+const freeTier = liveTiers.find((tier) => tier.id === 'free') ?? null;
+const plusTier = liveTiers.find((tier) => tier.id === 'plus') ?? null;
+check('storage verifier resolves current Free and Plus revisions by stable id', !!freeTier && !!plusTier);
+if (!freeTier || !plusTier) {
+  throw new Error('The storage verifier requires live free and plus tier revisions.');
+}
+
+const APP_ALLOWANCE = freeTier.quotas?.appStorageBytes;
+const PLUS_APP_ALLOWANCE = plusTier.quotas?.appStorageBytes;
+if (
+  !Number.isSafeInteger(APP_ALLOWANCE) ||
+  APP_ALLOWANCE < USER_ALLOWANCE ||
+  !Number.isSafeInteger(PLUS_APP_ALLOWANCE) ||
+  PLUS_APP_ALLOWANCE < MANAGED_SINGLE_USER_ALLOWANCE
+) {
+  throw new Error('The storage verifier requires finite Free and Plus app-storage quotas large enough for its ledger fixtures.');
+}
 
 const developer = await register('developer');
 const secondUser = await register('member');
@@ -128,7 +166,10 @@ const created = await api('/api/v1/apps', {
 const app = created.body?.app;
 const clientId = app?.clientId;
 
-check('registered app exposes the 5 GiB app allowance', app?.storageAllowanceBytes === APP_ALLOWANCE);
+check(
+  'registered app snapshots the current live Free allowance',
+  app?.subscriptionTier === freeTier.id && app?.storageAllowanceBytes === APP_ALLOWANCE
+);
 check('registered app exposes the 50 MiB per-user allowance', app?.userStorageAllowanceBytes === USER_ALLOWANCE);
 check('new app aggregate starts at zero and ready', app?.storageUsedBytes === 0 && app?.storageAccountingReady === true);
 
@@ -162,23 +203,46 @@ const initialManagement = await api(managementPath, { cookie: developer.cookie }
 check(
   'app owner can open storage management for both known app users',
   initialManagement.status === 200 &&
-    initialManagement.body?.storage?.subscription?.tier === 'free' &&
+    initialManagement.body?.storage?.subscription?.tier === freeTier.id &&
+    initialManagement.body?.storage?.subscription?.tierVersionId === freeTier.versionId &&
     initialManagement.body?.storage?.users?.some((row) => row.userId === developer.id) &&
     initialManagement.body?.storage?.users?.some((row) => row.userId === secondUser.id)
+);
+const managementTiers = Array.isArray(initialManagement.body?.storage?.tiers) ? initialManagement.body.storage.tiers : [];
+check(
+  'storage management exposes every public live revision as selectable',
+  managementTiers.every((tier) => tier.status === 'live' && tier.selectable === true) &&
+    managementTiers
+      .map((tier) => tier.versionId)
+      .sort()
+      .join('\0') ===
+      liveTiers
+        .map((tier) => tier.versionId)
+        .sort()
+        .join('\0')
 );
 
 const nonManagerView = await api(managementPath, { cookie: secondUser.cookie });
 check('an app user who is not a manager cannot inspect app-wide storage', nonManagerView.status === 404);
 
+const mismatchedTierVersion = await api('/api/v1/apps/storage', {
+  cookie: developer.cookie,
+  method: 'POST',
+  body: { action: 'set-tier', clientId, tier: plusTier.id, tierVersionId: freeTier.versionId }
+});
+check('owner tier change rejects a revision belonging to another tier', mismatchedTierVersion.status === 400);
+
 const upgraded = await api('/api/v1/apps/storage', {
   cookie: developer.cookie,
   method: 'POST',
-  body: { action: 'set-tier', clientId, tier: 'plus' }
+  body: { action: 'set-tier', clientId, tier: plusTier.id, tierVersionId: plusTier.versionId }
 });
 check(
-  'app owner upgrades the aggregate plan to Plus atomically',
+  'app owner selects the exact live Plus revision atomically',
   upgraded.status === 200 &&
-    upgraded.body?.storage?.subscription?.tier === 'plus' &&
+    upgraded.body?.storage?.subscription?.tier === plusTier.id &&
+    upgraded.body?.storage?.subscription?.tierVersionId === plusTier.versionId &&
+    upgraded.body?.storage?.subscription?.tierVersion === plusTier.version &&
     upgraded.body?.storage?.storageAllowanceBytes === PLUS_APP_ALLOWANCE
 );
 
@@ -208,7 +272,8 @@ check(
   'multi-select assigns a custom sub-tier to both app users',
   bulkUpdated.status === 200 &&
     bulkUpdated.body?.updated === 2 &&
-    bulkUpdated.body?.storage?.users?.filter((row) => [developer.id, secondUser.id].includes(row.userId))
+    bulkUpdated.body?.storage?.users
+      ?.filter((row) => [developer.id, secondUser.id].includes(row.userId))
       .every((row) => row.storageAllowanceSource === 'custom' && row.storageAllowanceBytes === MANAGED_USER_ALLOWANCE)
 );
 
@@ -262,7 +327,8 @@ const usersReset = await api('/api/v1/apps/storage', {
 check(
   'multi-select reset returns both users to the app default',
   usersReset.status === 200 &&
-    usersReset.body?.storage?.users?.filter((row) => [developer.id, secondUser.id].includes(row.userId))
+    usersReset.body?.storage?.users
+      ?.filter((row) => [developer.id, secondUser.id].includes(row.userId))
       .every((row) => row.storageAllowanceSource === 'app-default' && row.storageAllowanceBytes === MANAGED_DEFAULT_ALLOWANCE)
 );
 
@@ -274,12 +340,13 @@ await api('/api/v1/apps/storage', {
 const planReset = await api('/api/v1/apps/storage', {
   cookie: developer.cookie,
   method: 'POST',
-  body: { action: 'set-tier', clientId, tier: 'free' }
+  body: { action: 'set-tier', clientId, tier: freeTier.id, tierVersionId: freeTier.versionId }
 });
 check(
   'owner can return the app to Free without disturbing its user-ledger usage',
   planReset.status === 200 &&
-    planReset.body?.storage?.subscription?.tier === 'free' &&
+    planReset.body?.storage?.subscription?.tier === freeTier.id &&
+    planReset.body?.storage?.subscription?.tierVersionId === freeTier.versionId &&
     planReset.body?.storage?.storageAllowanceBytes === APP_ALLOWANCE &&
     planReset.body?.storage?.defaultUserStorageAllowanceBytes === USER_ALLOWANCE
 );
@@ -317,17 +384,14 @@ const afterSecondForMember = await usage(memberToken);
 const secondBytes = afterSecondForMember.body?.userStorage?.usedBytes;
 check(
   'whole-app usage is the sum while the second user keeps a separate ledger',
-  Number.isSafeInteger(secondBytes) &&
-    secondBytes > 0 &&
-    afterSecondForMember.body?.appStorage?.usedBytes === firstBytes + secondBytes
+  Number.isSafeInteger(secondBytes) && secondBytes > 0 && afterSecondForMember.body?.appStorage?.usedBytes === firstBytes + secondBytes
 );
 
 const listedApps = await api('/api/v1/apps', { cookie: developer.cookie });
 const listedApp = listedApps.body?.apps?.find((candidate) => candidate.clientId === clientId);
 check(
   'app owner list exposes current aggregate usage and remaining bytes',
-  listedApp?.storageUsedBytes === firstBytes + secondBytes &&
-    listedApp?.storageRemainingBytes === APP_ALLOWANCE - firstBytes - secondBytes
+  listedApp?.storageUsedBytes === firstBytes + secondBytes && listedApp?.storageRemainingBytes === APP_ALLOWANCE - firstBytes - secondBytes
 );
 
 const deleteFirst = await deleteEntry(developerToken, 'first');
@@ -340,17 +404,14 @@ check(
 );
 check(
   'remaining-byte fields agree with the persisted ledgers',
-  afterDelete.body?.userStorage?.remainingBytes === USER_ALLOWANCE &&
-    afterDelete.body?.appStorage?.remainingBytes === APP_ALLOWANCE - secondBytes
+  afterDelete.body?.userStorage?.remainingBytes === USER_ALLOWANCE && afterDelete.body?.appStorage?.remainingBytes === APP_ALLOWANCE - secondBytes
 );
 
 const racingValues = [
   { winner: 'large', payload: 'x'.repeat(8192) },
   { winner: 'small', payload: 'y' }
 ];
-const racingWrites = await Promise.all(
-  racingValues.map((value) => setEntry(developerToken, 'same-key-race', value))
-);
+const racingWrites = await Promise.all(racingValues.map((value) => setEntry(developerToken, 'same-key-race', value)));
 check(
   'concurrent writes to one new key both resolve without leaking a reservation',
   racingWrites.every((result) => result.status === 200 && result.body?.ok === true)
@@ -389,8 +450,7 @@ await deleteEntry(developerToken, 'same-key-race');
 const afterRaceDelete = await usage(developerToken);
 check(
   'deleting the raced key returns both ledgers to their exact baselines',
-  afterRaceDelete.body?.userStorage?.usedBytes === 0 &&
-    afterRaceDelete.body?.appStorage?.usedBytes === secondBytes
+  afterRaceDelete.body?.userStorage?.usedBytes === 0 && afterRaceDelete.body?.appStorage?.usedBytes === secondBytes
 );
 
 const genericCreated = await api('/api/v1/things', {
@@ -400,10 +460,7 @@ const genericCreated = await api('/api/v1/things', {
   body: { thingtime: ['data'], crystal: { note: 'seed' } }
 });
 const genericThingId = genericCreated.body?.thing?.id;
-check(
-  'an app-token generic Thing write is charged to both ledgers',
-  genericCreated.status === 200 && typeof genericThingId === 'string'
-);
+check('an app-token generic Thing write is charged to both ledgers', genericCreated.status === 200 && typeof genericThingId === 'string');
 
 const genericBeforeOwnerEdit = await usage(developerToken);
 const ownerEdited = await api('/api/v1/things', {
@@ -416,8 +473,7 @@ check(
   'first-party owner growth remains charged to the app and app-user allowances',
   ownerEdited.status === 200 &&
     genericAfterOwnerEdit.body?.userStorage?.usedBytes > genericBeforeOwnerEdit.body?.userStorage?.usedBytes &&
-    genericAfterOwnerEdit.body?.appStorage?.usedBytes - secondBytes ===
-      genericAfterOwnerEdit.body?.userStorage?.usedBytes
+    genericAfterOwnerEdit.body?.appStorage?.usedBytes - secondBytes === genericAfterOwnerEdit.body?.userStorage?.usedBytes
 );
 
 const ownerDeleted = await api(`/api/v1/things?id=${encodeURIComponent(genericThingId)}`, {
@@ -427,9 +483,7 @@ const ownerDeleted = await api(`/api/v1/things?id=${encodeURIComponent(genericTh
 const afterOwnerDelete = await usage(developerToken);
 check(
   'first-party owner delete atomically refunds both ledgers',
-  ownerDeleted.status === 200 &&
-    afterOwnerDelete.body?.userStorage?.usedBytes === 0 &&
-    afterOwnerDelete.body?.appStorage?.usedBytes === secondBytes
+  ownerDeleted.status === 200 && afterOwnerDelete.body?.userStorage?.usedBytes === 0 && afterOwnerDelete.body?.appStorage?.usedBytes === secondBytes
 );
 
 console.log(`\n${passed} passed, ${failures.length} failed`);

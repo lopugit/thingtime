@@ -96,7 +96,7 @@ is fixed, and cite the checklist you ran in the PR description.
       `props:{position:'fixed',inset:0,zIndex:99999,…}` renders as a data
       tree, NOT a viewport overlay; image/audio/cover URLs with unsafe schemes
       fall back to the emoji placeholder. Verify via DOM: no `a[href^=
-      "javascript:"]`, no fixed/absolute high-z overlay from post content.
+    "javascript:"]`, no fixed/absolute high-z overlay from post content.
 - [ ] Editing a feed thing (context menu → Toggle Edit Mode) and pressing
       Cmd/Ctrl+Z does NOT undo the viewer's own persisted tree — the keydown
       is contained to the sandbox (native field undo still works).
@@ -324,7 +324,7 @@ is fixed, and cite the checklist you ran in the PR description.
       the entry's acl becomes `["tt:user", "tt:app/<clientId>"]`.
 - [ ] A plain `{ key, value }` rewrite of an existing shared entry keeps it
       shared (audience only changes when the write names one); `visibility:
-      'private'` flips the acl back to `["tt:user"]`.
+    'private'` flips the acl back to `["tt:user"]`.
 - [ ] GET /api/v1/app-data/shared returns other users' `visibility: 'app'`
       entries for the SAME app only — never private entries, never another
       app's entries — newest first, and `key=post:*` prefix-filters.
@@ -345,7 +345,7 @@ is fixed, and cite the checklist you ran in the PR description.
       stamp; reads, updates, and deletes aimed at a first-party thing's id
       (or another app's doc) all 404.
 - [ ] App writes are acl-clamped: an acl beyond `tt:user` / `tt:app/<own
-      clientId>` (tt:all, other apps, other users, exclusions) 400s; an
+    clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       insert that omits visibility/acl lands PRIVATE (never the generic
       route's public default); `save`/`share` thingtimes 403 as first-party
       surfaces; protected kinds stay refused.
@@ -372,7 +372,7 @@ is fixed, and cite the checklist you ran in the PR description.
       authorization, same-key CAS races, and first-party owner updates/deletes.
       The script refuses non-local URLs so it cannot seed verification accounts
       into production by accident.
-- [ ] KV listing grammar: GET /api/v1/app-data with key=post:* or prefix=
+- [ ] KV listing grammar: GET /api/v1/app-data with key=post:\* or prefix=
       filters, limit=/cursor= page, and nextCursor walks the whole set; KV
       entries also appear via GET /api/v1/things?thingtime=app-data with the
       same token (one namespace).
@@ -524,21 +524,48 @@ re-checks the whole management plane end-to-end:
 `TT_VERIFY_ADMIN_USER=<user> TT_VERIFY_ADMIN_PASS=<pass> node scripts/verify-admin-subscriptions.mjs <nitro base url>`.
 
 - [ ] `/admin` renders the 🔐 gate card for anonymous/non-admin visitors and
-      the dashboard (Users / Apps / System tabs) for admins; the drawer's
+      the dashboard (Users / Apps / Tiers / System tabs) for admins; the drawer's
       Account section shows the 🛠️ Admin item only for admins.
 - [ ] Users tab: search works; each row shows tier badge (+ `custom` badge
       when overrides exist), storage used/allowance, app-namespace bytes, and
       app/PAT/connected counts.
-- [ ] Subscription editor: assigning a tier + per-field override (number in
-      MB for byte fields, or Unlimited) persists and the row updates on save;
-      Reset to default returns the subject to implicit free.
+- [ ] Subscription editor: assigning a live tier's exact `tierVersionId` +
+      per-field override (number in MB for byte fields, or Unlimited) persists
+      and the row updates on save; Reset to default pins the current live
+      default revision. If the current revision was archived, its card remains
+      visible as current/non-selectable and note/override-only edits preserve
+      that exact historical revision.
+- [ ] Tiers tab lifecycle: create a new draft, edit its name/tagline/banner,
+      currency, all four renewal prices, quota defaults, and Editor.js
+      inclusions; reload and confirm every field persists. The draft appears
+      only in Draft / not live and never in public `GET /api/v1/tiers`.
+- [ ] Pricing discounts: each daily→weekly/monthly/yearly,
+      weekly→monthly/yearly, and monthly→yearly percentage is computed from
+      annualized prices. Enter a custom saved percentage, confirm it overrides
+      just that comparison, then clear it and confirm the computed value
+      returns. Check a zero-decimal currency (JPY) and a three-decimal currency
+      (KWD) render their minor-unit prices correctly.
+- [ ] Publish requires confirmation, makes the immutable revision live/public,
+      and hides the mutable editor. Create a new draft version, publish it, and
+      confirm the former live revision moves to Archived while an existing
+      user's pinned `tierVersionId`, title, and quota snapshot stay unchanged.
+- [ ] Archive requires confirmation and never deletes history. The default
+      Free revision cannot be archived without publishing its replacement;
+      draft and archived revisions are rejected for new assignments. A tier
+      already holding a draft disables duplicate draft creation.
+- [ ] Tier cards render the optional banner (with graceful broken-image
+      fallback), tagline, four prices, savings, quotas, and rich inclusions.
+      Desktop and 375px layouts have no clipping/overlap; open each lifecycle
+      confirmation and the Editor.js content editor while testing.
 - [ ] Tier quotas actually enforce: with `maxApps: 1` override the second
       `POST /api/v1/apps` is refused 400; a `null` override (or payg) lifts
       the cap. App subjects accept only `appStorageBytes`; tier/override and the
       runtime aggregate move atomically on the app Thing, `null` meters without
       blocking, and administrator-custom app plans lock owner tier changes.
-- [ ] `subscription` and `account-link` kinds are PROTECTED: generic
-      `POST /api/v1/things` refuses them (self-assigned tiers/links would be
+- [ ] `subscription-tier`, `subscription`, and `account-link` kinds are
+      PROTECTED: generic `POST /api/v1/things` refuses them, and generic
+      creation also rejects the deterministic `subscription-*` shareId
+      namespace (published tiers, self-assigned plans, or links would be
       privilege escalation).
 - [ ] Apps tab: every app across all users with owner, co-managers, live-grant
       user count, storage rollup, and status. Suspend uses an inline
@@ -563,16 +590,19 @@ re-checks the whole management plane end-to-end:
       app; an administrator-linked co-manager sees the linked app; ordinary app
       users and removed co-managers get the same 404-shaped denial as an unknown
       app and cannot inspect aggregate usage or the user roster.
-- [ ] Switching Free → Plus → Pro → PAYG updates the whole-app allowance to
-      5/25/100 GiB/null while preserving exact usage. A downgrade below current
-      usage 409s atomically. An administrator-custom plan shows `custom` and
-      disables self-service tier buttons until the admin resets it.
+- [ ] Selecting any current live card sends its stable tier id plus exact
+      `tierVersionId`, updates the whole-app allowance while preserving exact
+      usage, and rejects a downgrade below current usage atomically. The
+      bootstrapped Free → Plus → Pro → PAYG path yields 5/25/100 GiB/null. An
+      administrator-custom plan shows `custom` and disables self-service tier
+      buttons until the admin resets it; an archived current revision remains
+      visible but cannot be newly selected.
 - [ ] Default cap starts at 50 MiB, accepts 0 and finite MiB values no larger
       than the current aggregate, and is re-checked atomically against a racing
       plan change. Existing users without overrides immediately inherit it.
 - [ ] Select one user or many (up to all 200 shown) and apply a custom cap;
       each protected `app-storage` ledger records its own override, `Use app
-      default` unsets it, and runtime usage reports the effective cap. A custom
+    default` unsets it, and runtime usage reports the effective cap. A custom
       value above the aggregate is refused; a later aggregate downgrade clamps
       enforcement even if a historical override was larger.
 - [ ] The roster includes users with current or past grants/ledgers, but a
@@ -580,7 +610,8 @@ re-checks the whole management plane end-to-end:
       `profile.username`. App-user IDs/usernames are never written to the
       browser localStorage cache, and a failed manager re-authorization clears
       the cached storage view.
-- [ ] Desktop and 375px mobile: switch apps; choose a plan; edit the default;
+- [ ] Desktop and 375px mobile: switch apps; inspect banner/price/savings/rich
+      inclusions on tier cards; choose a plan; edit the default;
       search, select-all, single-select, bulk apply/reset; horizontally scroll
       the user table; and scroll the full page top-to-bottom. No page-level
       horizontal overflow, clipping, sticky overlap, or console errors.

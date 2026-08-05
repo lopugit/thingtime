@@ -3,12 +3,8 @@ import { json, readJsonBody } from '~/api/http';
 import { findAppByClientId } from '~/api/utils/apps/apps';
 import { requireAdmin } from '~/api/utils/auth/requireAdmin';
 import { findUserById } from '~/api/utils/auth/users';
-import {
-  clearSubscription,
-  getSubscription,
-  setSubscription
-} from '~/api/utils/subscriptions/subscriptions';
-import { SUBSCRIPTION_TIER_CATALOG } from '~/api/utils/subscriptions/tierCatalog';
+import { clearSubscription, getSubscription, setSubscription } from '~/api/utils/subscriptions/subscriptions';
+import { getSubscriptionTierVersion, listLiveSubscriptionTiers } from '~/api/utils/subscriptions/tierCatalogStore';
 
 const parseSubject = (
   subjectType: unknown,
@@ -46,13 +42,16 @@ export const loader = async ({ request }: { request: Request }) => {
 
   const url = new URL(request.url);
   const subject = parseSubject(url.searchParams.get('subjectType'), url.searchParams.get('subjectId'));
+  const catalog = await listLiveSubscriptionTiers();
   if (subject.ok === false) {
     // No subject → just the catalog (the editor's tier picker).
-    return json({ ok: true, catalog: SUBSCRIPTION_TIER_CATALOG });
+    return json({ ok: true, catalog });
   }
 
   const subscription = await getSubscription(subject.subjectType, subject.subjectId);
-  return json({ ok: true, subscription, catalog: SUBSCRIPTION_TIER_CATALOG });
+  const assigned = await getSubscriptionTierVersion(subscription.tierVersionId);
+  const visibleCatalog = assigned && !catalog.some((tier) => tier.versionId === assigned.versionId) ? [...catalog, assigned] : catalog;
+  return json({ ok: true, subscription, catalog: visibleCatalog });
 };
 
 // POST /api/v1/admin/subscriptions — assign a tier (+ optional per-field
@@ -79,6 +78,7 @@ export const action = async ({ request }: { request: Request }) => {
     subjectId: subject.subjectId,
     ownerId: owner.ownerId,
     tier: body?.tier,
+    tierVersionId: body?.tierVersionId,
     overrides: body?.overrides,
     note: body?.note,
     updatedBy: gate.user.id

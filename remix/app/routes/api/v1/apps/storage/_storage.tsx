@@ -35,7 +35,7 @@ export const action = async ({ request }: { request: Request }) => {
   const body = await readJsonBody(request, 64 * 1024);
   let result;
   if (body?.action === 'set-tier') {
-    result = await setManagedAppStorageTier(user.id, body?.clientId, body?.tier);
+    result = await setManagedAppStorageTier(user.id, body?.clientId, body?.tier, body?.tierVersionId);
   } else if (body?.action === 'set-default-user-cap') {
     result = await setManagedAppDefaultUserAllowance(user.id, body?.clientId, body?.allowanceBytes);
   } else if (body?.action === 'set-user-cap') {

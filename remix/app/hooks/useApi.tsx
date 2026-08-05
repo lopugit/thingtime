@@ -49,10 +49,7 @@ export function useApi() {
       register: useCallback(
         async (args) => {
           const { username, password, email, displayName } = args;
-          const ret = asyncFetcher.submit(
-            { username, password, email, displayName },
-            { action: '/api/v1/auth/register' }
-          );
+          const ret = asyncFetcher.submit({ username, password, email, displayName }, { action: '/api/v1/auth/register' });
           ret.then(refreshRootData).catch(() => {});
           return ret;
         },
@@ -69,25 +66,15 @@ export function useApi() {
       ),
       passwordReset: {
         // neutral response by design — never confirms the account exists
-        request: useCallback(
-          async (args) => asyncFetcher.submit({ email: args?.email }, { action: '/api/v1/auth/password-reset' }),
-          [asyncFetcher]
-        ),
+        request: useCallback(async (args) => asyncFetcher.submit({ email: args?.email }, { action: '/api/v1/auth/password-reset' }), [asyncFetcher]),
         confirm: useCallback(
-          async (args) =>
-            asyncFetcher.submit(
-              { token: args?.token, password: args?.password },
-              { action: '/api/v1/auth/password-reset/confirm' }
-            ),
+          async (args) => asyncFetcher.submit({ token: args?.token, password: args?.password }, { action: '/api/v1/auth/password-reset/confirm' }),
           [asyncFetcher]
         )
       },
       twoFactor: {
         get: useCallback(async () => getJson('/api/v1/auth/two-factor'), []),
-        set: useCallback(
-          async (args) => asyncFetcher.submit({ enabled: !!args?.enabled }, { action: '/api/v1/auth/two-factor' }),
-          [asyncFetcher]
-        )
+        set: useCallback(async (args) => asyncFetcher.submit({ enabled: !!args?.enabled }, { action: '/api/v1/auth/two-factor' }), [asyncFetcher])
       },
       logout: useCallback(
         async (args?: { all?: boolean }) => {
@@ -130,10 +117,7 @@ export function useApi() {
     },
     admin: {
       rateLimits: useCallback(async () => getJson('/api/v1/admin/rate-limits'), []),
-      setRateLimits: useCallback(
-        async (endpoints) => asyncFetcher.submit({ endpoints }, { action: '/api/v1/admin/rate-limits' }),
-        [asyncFetcher]
-      ),
+      setRateLimits: useCallback(async (endpoints) => asyncFetcher.submit({ endpoints }, { action: '/api/v1/admin/rate-limits' }), [asyncFetcher]),
       users: useCallback(async (args) => getJson(`/api/v1/admin/users${toQuery(args)}`), []),
       setAdmin: useCallback(
         async (args) => asyncFetcher.submit({ userId: args?.userId, admin: args?.admin }, { action: '/api/v1/admin/set-admin' }),
@@ -156,8 +140,7 @@ export function useApi() {
         [asyncFetcher]
       ),
       subscription: useCallback(
-        async (args: { subjectType: 'user' | 'app'; subjectId: string }) =>
-          getJson(`/api/v1/admin/subscriptions${toQuery(args)}`),
+        async (args: { subjectType: 'user' | 'app'; subjectId: string }) => getJson(`/api/v1/admin/subscriptions${toQuery(args)}`),
         []
       ),
       setSubscription: useCallback(
@@ -165,15 +148,24 @@ export function useApi() {
           subjectType: 'user' | 'app';
           subjectId: string;
           tier?: string;
+          tierVersionId?: string;
           overrides?: Record<string, number | null> | null;
           note?: string;
           clear?: boolean;
         }) => asyncFetcher.submit(args, { action: '/api/v1/admin/subscriptions' }),
         [asyncFetcher]
       ),
+      tiers: useCallback(async () => getJson('/api/v1/admin/tiers'), []),
+      setTier: useCallback(
+        async (args: {
+          action: 'create' | 'update-draft' | 'create-version' | 'publish' | 'archive';
+          versionId?: string;
+          tier?: Record<string, unknown>;
+        }) => asyncFetcher.submit(args, { action: '/api/v1/admin/tiers' }),
+        [asyncFetcher]
+      ),
       links: useCallback(
-        async (args: { userId?: string; targetId?: string; linkKind?: 'account' | 'app' }) =>
-          getJson(`/api/v1/admin/links${toQuery(args)}`),
+        async (args: { userId?: string; targetId?: string; linkKind?: 'account' | 'app' }) => getJson(`/api/v1/admin/links${toQuery(args)}`),
         []
       ),
       setLink: useCallback(
@@ -273,10 +265,7 @@ export function useApi() {
         [asyncFetcher]
       ),
       // toggle a private "add to my library" save on any visible thing
-      save: useCallback(
-        async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/things/save' }),
-        [asyncFetcher]
-      ),
+      save: useCallback(async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/things/save' }), [asyncFetcher]),
       comment: useCallback(
         // simple text comments send { id, text }; rich comments add
         // type/images/listing/thing/tags — comments share the post schema
@@ -288,16 +277,10 @@ export function useApi() {
       ),
       share: useCallback(
         async (args) =>
-          asyncFetcher.submit(
-            { id: args?.id, text: args?.text, acl: args?.acl, visibility: args?.visibility },
-            { action: '/api/v1/things/share' }
-          ),
+          asyncFetcher.submit({ id: args?.id, text: args?.text, acl: args?.acl, visibility: args?.visibility }, { action: '/api/v1/things/share' }),
         [asyncFetcher]
       ),
-      remove: useCallback(
-        async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/things', method: 'DELETE' }),
-        [asyncFetcher]
-      )
+      remove: useCallback(async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/things', method: 'DELETE' }), [asyncFetcher])
     },
     // "Login with Thingtime" grants — the user's connected apps
     oauth: {
@@ -310,15 +293,13 @@ export function useApi() {
     // first-party browsing of app namespaces (what has each app stored for me)
     apps: {
       list: useCallback(async () => getJson('/api/v1/apps'), []),
-      storage: useCallback(
-        async (args: { clientId: string }) => getJson(`/api/v1/apps/storage${toQuery({ clientId: args?.clientId })}`),
-        []
-      ),
+      storage: useCallback(async (args: { clientId: string }) => getJson(`/api/v1/apps/storage${toQuery({ clientId: args?.clientId })}`), []),
       setStorage: useCallback(
         async (args: {
           clientId: string;
           action: 'set-tier' | 'set-default-user-cap' | 'set-user-cap';
           tier?: string;
+          tierVersionId?: string;
           allowanceBytes?: number | null;
           userIds?: string[];
         }) => asyncFetcher.submit(args, { action: '/api/v1/apps/storage' }),
@@ -360,10 +341,7 @@ export function useApi() {
           ),
         [asyncFetcher]
       ),
-      revoke: useCallback(
-        async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/tokens/revoke' }),
-        [asyncFetcher]
-      )
+      revoke: useCallback(async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/tokens/revoke' }), [asyncFetcher])
     },
     algorithms: {
       list: useCallback(async () => getJson('/api/v1/algorithms'), []),
@@ -375,8 +353,7 @@ export function useApi() {
         [asyncFetcher]
       ),
       update: useCallback(
-        async (args) =>
-          asyncFetcher.submit({ id: args?.id, name: args?.name, emoji: args?.emoji }, { action: '/api/v1/algorithms/update' }),
+        async (args) => asyncFetcher.submit({ id: args?.id, name: args?.name, emoji: args?.emoji }, { action: '/api/v1/algorithms/update' }),
         [asyncFetcher]
       ),
       remove: useCallback(
@@ -391,21 +368,14 @@ export function useApi() {
       ),
       setActive: useCallback(
         async (args) => {
-          const ret = asyncFetcher.submit(
-            { algorithmId: args?.algorithmId ?? null },
-            { action: '/api/v1/algorithms/active' }
-          );
+          const ret = asyncFetcher.submit({ algorithmId: args?.algorithmId ?? null }, { action: '/api/v1/algorithms/active' });
           ret.then(refreshRootData).catch(() => {});
           return ret;
         },
         [asyncFetcher]
       ),
       track: useCallback(
-        async (args) =>
-          asyncFetcher.submit(
-            { algorithmId: args?.algorithmId, events: args?.events },
-            { action: '/api/v1/algorithms/track' }
-          ),
+        async (args) => asyncFetcher.submit({ algorithmId: args?.algorithmId, events: args?.events }, { action: '/api/v1/algorithms/track' }),
         [asyncFetcher]
       )
     },
@@ -416,10 +386,7 @@ export function useApi() {
       update: useCallback(
         async (args) => {
           const { displayName, bio, avatarUrl, bannerUrl } = args;
-          const ret = asyncFetcher.submit(
-            { displayName, bio, avatarUrl, bannerUrl },
-            { action: '/api/v1/users/profile' }
-          );
+          const ret = asyncFetcher.submit({ displayName, bio, avatarUrl, bannerUrl }, { action: '/api/v1/users/profile' });
           ret.then(refreshRootData).catch(() => {});
           return ret;
         },
@@ -428,10 +395,7 @@ export function useApi() {
     },
     themes: {
       list: useCallback(async () => getJson('/api/v1/themes'), []),
-      getShared: useCallback(
-        async (args) => getJson(`/api/v1/themes/shared?id=${encodeURIComponent(args?.id || '')}`),
-        []
-      ),
+      getShared: useCallback(async (args) => getJson(`/api/v1/themes/shared?id=${encodeURIComponent(args?.id || '')}`), []),
       save: useCallback(
         async (args) => {
           const { id, name, theme, visibility } = args;
@@ -439,16 +403,10 @@ export function useApi() {
         },
         [asyncFetcher]
       ),
-      remove: useCallback(
-        async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/themes/delete' }),
-        [asyncFetcher]
-      ),
+      remove: useCallback(async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/themes/delete' }), [asyncFetcher]),
       setActive: useCallback(
         async (args) => {
-          const ret = asyncFetcher.submit(
-            { themeId: args?.themeId ?? null },
-            { action: '/api/v1/themes/active' }
-          );
+          const ret = asyncFetcher.submit({ themeId: args?.themeId ?? null }, { action: '/api/v1/themes/active' });
           ret.then(refreshRootData).catch(() => {});
           return ret;
         },
@@ -462,10 +420,7 @@ export function useApi() {
       browse: useCallback(async (args) => getJson(`/api/v1/schemas/browse${toQuery(args)}`), [])
     },
     waitlist: {
-      join: useCallback(
-        async (args) => asyncFetcher.submit({ email: args?.email }, { action: '/api/v1/waitlist' }),
-        [asyncFetcher]
-      )
+      join: useCallback(async (args) => asyncFetcher.submit({ email: args?.email }, { action: '/api/v1/waitlist' }), [asyncFetcher])
     }
   };
 

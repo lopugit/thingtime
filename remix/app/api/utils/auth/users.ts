@@ -2,13 +2,7 @@ import { createHash } from 'node:crypto';
 import { Binary, ObjectId } from 'mongodb';
 
 import { getThingsCollection, getUsersCollection } from '../mongodb/collections';
-import {
-  ACL_ALL,
-  COLLECTION_SCHEMA_VERSIONS,
-  MAX_BIO_CHARS,
-  MAX_DISPLAY_NAME_CHARS,
-  MAX_PROFILE_URL_CHARS
-} from '~/schemas/registry';
+import { ACL_ALL, COLLECTION_SCHEMA_VERSIONS, MAX_BIO_CHARS, MAX_DISPLAY_NAME_CHARS, MAX_PROFILE_URL_CHARS } from '~/schemas/registry';
 import { isAdminDoc, isEnvAdmin } from './admin';
 
 // Users are THINGS now (thingtime ["user"], see claude-todo/12): public
@@ -90,14 +84,11 @@ export const toPublicUser = (user: any): PublicUser => ({
   emailVerified: !!user.emailVerified,
   createdAt: new Date(user.createdAt).toISOString(),
   accountKind: user.accountKind === 'service' ? 'service' : 'user',
-  emailVerificationRequiredBy: user.emailVerificationRequiredBy
-    ? new Date(user.emailVerificationRequiredBy).toISOString()
-    : null,
+  emailVerificationRequiredBy: user.emailVerificationRequiredBy ? new Date(user.emailVerificationRequiredBy).toISOString() : null,
   storageAllowanceBytes: typeof user.storageAllowanceBytes === 'number' ? user.storageAllowanceBytes : null,
   storageUsedBytes: typeof user.storageUsedBytes === 'number' ? user.storageUsedBytes : null,
   activeThemeId: typeof user.meta?.activeThemeId === 'string' ? user.meta.activeThemeId : null,
-  activeFeedAlgorithmId:
-    typeof user.meta?.activeFeedAlgorithmId === 'string' ? user.meta.activeFeedAlgorithmId : null,
+  activeFeedAlgorithmId: typeof user.meta?.activeFeedAlgorithmId === 'string' ? user.meta.activeFeedAlgorithmId : null,
   isAdmin: isAdminDoc(user)
 });
 
@@ -176,8 +167,7 @@ export const unpackSecure = (value: any): SecurePayload => {
 // each emoji token wrapped in binary so the $** text index can't tokenize it.
 // These convert between that on-disk shape and the string[] the picker uses.
 export const packRecentReactions = (tokens: string[]): Binary[] => tokens.map(toBin);
-const unpackRecentReactions = (value: any): string[] =>
-  Array.isArray(value) ? value.map(fromBin).filter((t) => t !== '') : [];
+const unpackRecentReactions = (value: any): string[] => (Array.isArray(value) ? value.map(fromBin).filter((t) => t !== '') : []);
 
 // uniqueKeys are BinData too — plain-string keys would tokenize into the text
 // index and make user things enumerable via q=email/q=username, and the email
@@ -185,8 +175,7 @@ const unpackRecentReactions = (value: any): string[] =>
 // an address. The multikey unique index and exact-match lookups work the same
 // on binary values.
 export const userUsernameKey = (username: string) => toBin(`username:${username.trim().toLowerCase()}`);
-export const userEmailKey = (email: string) =>
-  toBin(`email:${createHash('sha256').update(email.trim().toLowerCase()).digest('hex')}`);
+export const userEmailKey = (email: string) => toBin(`email:${createHash('sha256').update(email.trim().toLowerCase()).digest('hex')}`);
 
 // thing → legacy UserDoc view. _id is the thing's shareId (a hex string —
 // String(user._id) everywhere keeps working; new ids are minted ObjectId-shaped
@@ -206,9 +195,7 @@ const userThingToDoc = (thing: any): any => {
     passwordHash: secure.passwordHash || '',
     emailVerified: !!secure.emailVerified,
     accountKind: secure.accountKind === 'service' ? 'service' : 'user',
-    emailVerificationRequiredBy: secure.emailVerificationRequiredBy
-      ? new Date(secure.emailVerificationRequiredBy)
-      : null,
+    emailVerificationRequiredBy: secure.emailVerificationRequiredBy ? new Date(secure.emailVerificationRequiredBy) : null,
     storageAllowanceBytes: secure.storageAllowanceBytes,
     storageUsedBytes: secure.storageUsedBytes,
     meta: { ...(secure.meta || {}), admin: !!thing.secureAdmin },
@@ -223,10 +210,10 @@ const userThingToDoc = (thing: any): any => {
 // `recentReactions` are returned separately — they live as ROOT fields
 // (secureAdmin boolean, secureRecentReactions BinData array), never in the blob.
 export const buildUserSecure = (
-  doc: Pick<
-    UserDoc,
-    'email' | 'passwordHash' | 'emailVerified' | 'accountKind' | 'emailVerificationRequiredBy' | 'meta'
-  > & { storageAllowanceBytes?: number; storageUsedBytes?: number }
+  doc: Pick<UserDoc, 'email' | 'passwordHash' | 'emailVerified' | 'accountKind' | 'emailVerificationRequiredBy' | 'meta'> & {
+    storageAllowanceBytes?: number;
+    storageUsedBytes?: number;
+  }
 ): { secure: Binary; admin: boolean; recentReactions: string[] } => {
   const meta = { ...(doc.meta || {}) };
   const admin = meta.admin === true;
@@ -243,9 +230,7 @@ export const buildUserSecure = (
     passwordHash: doc.passwordHash,
     emailVerified: !!doc.emailVerified,
     accountKind: doc.accountKind === 'service' ? 'service' : 'user',
-    emailVerificationRequiredBy: doc.emailVerificationRequiredBy
-      ? new Date(doc.emailVerificationRequiredBy).toISOString()
-      : null,
+    emailVerificationRequiredBy: doc.emailVerificationRequiredBy ? new Date(doc.emailVerificationRequiredBy).toISOString() : null,
     meta
   };
   if (doc.storageAllowanceBytes !== undefined) payload.storageAllowanceBytes = doc.storageAllowanceBytes;
@@ -253,8 +238,7 @@ export const buildUserSecure = (
   return { secure: packSecure(payload), admin, recentReactions };
 };
 
-const findUserThing = async (filter: Record<string, unknown>) =>
-  (await getThingsCollection()).findOne({ thingtime: 'user', ...filter } as any);
+const findUserThing = async (filter: Record<string, unknown>) => (await getThingsCollection()).findOne({ thingtime: 'user', ...filter } as any);
 
 // User resolution runs on every authenticated request (getCurrentUser), so the
 // two stores are probed CONCURRENTLY (thing wins) rather than serially — until
@@ -283,9 +267,7 @@ export const findUserByEmail = async (email: string) => {
 export const findUserById = async (id: string) => {
   const [thing, legacy] = await Promise.all([
     findUserThing({ shareId: String(id) }),
-    ObjectId.isValid(id)
-      ? getUsersCollection().then((c) => c.findOne({ _id: new ObjectId(id) }))
-      : Promise.resolve(null)
+    ObjectId.isValid(id) ? getUsersCollection().then((c) => c.findOne({ _id: new ObjectId(id) })) : Promise.resolve(null)
   ]);
   if (thing) return userThingToDoc(thing);
   return legacy;
@@ -295,7 +277,19 @@ export const findUserById = async (id: string) => {
 // String(user._id) / ObjectId.isValid assumption in the auth web holds for
 // both eras; users own themselves (ownerId = shareId) and the crystal profile
 // is public (acl tt:all) like the profile endpoint always was.
-export const insertUser = async (doc: UserDoc & { schemaVersion?: number }) => {
+export const insertUser = async (
+  doc: UserDoc & { schemaVersion?: number },
+  options: {
+    initialSubscription?: {
+      tierId: string;
+      versionId: string;
+      version: number;
+      title: string;
+      metered: boolean;
+      quotas: Record<string, number | null>;
+    };
+  } = {}
+) => {
   const shareId = new ObjectId().toHexString();
   const now = doc.createdAt instanceof Date ? doc.createdAt : new Date();
   const { secure, admin, recentReactions } = buildUserSecure(doc);
@@ -319,6 +313,11 @@ export const insertUser = async (doc: UserDoc & { schemaVersion?: number }) => {
     uniqueKeys: [userUsernameKey(doc.username), userEmailKey(doc.email)],
     secure,
     secureVersion: 0, // optimistic-concurrency token for blob mutations
+    // Durable signup fallback: if the relational subscription insert is ever
+    // interrupted, quota reads still recover the exact revision that was live
+    // when this account was created. Unknown root fields are not projected by
+    // the public profile adapters.
+    ...(options.initialSubscription ? { initialSubscription: { ...options.initialSubscription } } : {}),
     // sparse boolean, queryable by listAdmins (booleans aren't text-indexed)
     ...(admin ? { secureAdmin: true } : {}),
     // reaction MRU as a BinData array (text-index-invisible, atomically mutable);
@@ -364,10 +363,7 @@ const updateUserStore = async (userId: string, thingUpdate: any, legacyUpdate: a
 // exceed realistic burst width
 const SECURE_CAS_ATTEMPTS = 20;
 type SecureMutateResult = 'mutated' | 'missing' | 'contended';
-const mutateUserThingSecure = async (
-  userId: string,
-  mutate: (secure: SecurePayload) => void
-): Promise<SecureMutateResult> => {
+const mutateUserThingSecure = async (userId: string, mutate: (secure: SecurePayload) => void): Promise<SecureMutateResult> => {
   const things = await getThingsCollection();
   const base = { shareId: String(userId), thingtime: 'user' } as any;
   for (let attempt = 0; attempt < SECURE_CAS_ATTEMPTS; attempt++) {
@@ -402,14 +398,13 @@ class SecureWriteContendedError extends Error {
 }
 
 export const markEmailVerified = async (userId: string) => {
-  const result = await mutateUserThingSecure(userId, (s) => { s.emailVerified = true; });
+  const result = await mutateUserThingSecure(userId, (s) => {
+    s.emailVerified = true;
+  });
   if (result === 'mutated') return;
   if (result === 'contended') throw new SecureWriteContendedError(userId);
   if (!ObjectId.isValid(userId)) return;
-  await (await getUsersCollection()).updateOne(
-    { _id: new ObjectId(userId) },
-    { $set: { emailVerified: true, updatedAt: new Date() } }
-  );
+  await (await getUsersCollection()).updateOne({ _id: new ObjectId(userId) }, { $set: { emailVerified: true, updatedAt: new Date() } });
 };
 
 // Rotate the user's password hash. Returns whether a store actually accepted
@@ -417,17 +412,16 @@ export const markEmailVerified = async (userId: string) => {
 // miss here would log the user out everywhere while the OLD password keeps
 // working (a failed rotation the user believes succeeded).
 export const setUserPasswordHash = async (userId: string, passwordHash: string): Promise<boolean> => {
-  const result = await mutateUserThingSecure(userId, (s) => { s.passwordHash = passwordHash; });
+  const result = await mutateUserThingSecure(userId, (s) => {
+    s.passwordHash = passwordHash;
+  });
   if (result === 'mutated') return true;
   // Contended: the rotation never landed. Throw rather than return — the reset
   // route has already burned the token, so a false success would leave the user
   // locked out with the OLD password still working.
   if (result === 'contended') throw new SecureWriteContendedError(userId);
   if (!ObjectId.isValid(userId)) return false;
-  const res = await (await getUsersCollection()).updateOne(
-    { _id: new ObjectId(userId) },
-    { $set: { passwordHash, updatedAt: new Date() } }
-  );
+  const res = await (await getUsersCollection()).updateOne({ _id: new ObjectId(userId) }, { $set: { passwordHash, updatedAt: new Date() } });
   return res.matchedCount > 0;
 };
 
@@ -436,45 +430,41 @@ export const setUserPasswordHash = async (userId: string, passwordHash: string):
 // (thing-era users keep it inside the secure blob). Projected reads only.
 export const getUserTwoFactorEmailEnabled = async (userId: string): Promise<boolean> => {
   const things = await getThingsCollection();
-  const thing = await things.findOne(
-    { shareId: String(userId), thingtime: 'user' } as any,
-    { projection: { secure: 1 } }
-  );
+  const thing = await things.findOne({ shareId: String(userId), thingtime: 'user' } as any, { projection: { secure: 1 } });
   if (thing) return !!unpackSecure((thing as any).secure).meta?.twoFactorEmailEnabled;
   if (!ObjectId.isValid(userId)) return false;
-  const doc = await (await getUsersCollection()).findOne(
-    { _id: new ObjectId(userId) },
-    { projection: { 'meta.twoFactorEmailEnabled': 1 } }
-  );
+  const doc = await (await getUsersCollection()).findOne({ _id: new ObjectId(userId) }, { projection: { 'meta.twoFactorEmailEnabled': 1 } });
   return !!doc?.meta?.twoFactorEmailEnabled;
 };
 
 // Returns whether a store matched the user — enabling 2FA must never report
 // success without the flag actually landing (login would then skip the OTP).
 export const setUserTwoFactorEmailEnabled = async (userId: string, enabled: boolean): Promise<boolean> => {
-  const result = await mutateUserThingSecure(userId, (s) => { s.meta!.twoFactorEmailEnabled = enabled; });
+  const result = await mutateUserThingSecure(userId, (s) => {
+    s.meta!.twoFactorEmailEnabled = enabled;
+  });
   if (result === 'mutated') return true;
   // Contended: the flag never landed. Throw rather than report success — a false
   // "enabled" would make login skip the OTP step the user thinks they turned on.
   if (result === 'contended') throw new SecureWriteContendedError(userId);
   if (!ObjectId.isValid(userId)) return false;
-  const res = await (await getUsersCollection()).updateOne(
-    { _id: new ObjectId(userId) },
-    { $set: { 'meta.twoFactorEmailEnabled': enabled, updatedAt: new Date() } }
-  );
+  const res = await (
+    await getUsersCollection()
+  ).updateOne({ _id: new ObjectId(userId) }, { $set: { 'meta.twoFactorEmailEnabled': enabled, updatedAt: new Date() } });
   return res.matchedCount > 0;
 };
 
 // Set (or clear, with null) the user's active theme shareId in meta.
 export const setUserActiveTheme = async (userId: string, themeShareId: string | null) => {
-  const result = await mutateUserThingSecure(userId, (s) => { s.meta!.activeThemeId = themeShareId; });
+  const result = await mutateUserThingSecure(userId, (s) => {
+    s.meta!.activeThemeId = themeShareId;
+  });
   if (result === 'mutated') return;
   if (result === 'contended') throw new SecureWriteContendedError(userId);
   if (!ObjectId.isValid(userId)) return;
-  await (await getUsersCollection()).updateOne(
-    { _id: new ObjectId(userId) },
-    { $set: { 'meta.activeThemeId': themeShareId, updatedAt: new Date() } }
-  );
+  await (
+    await getUsersCollection()
+  ).updateOne({ _id: new ObjectId(userId) }, { $set: { 'meta.activeThemeId': themeShareId, updatedAt: new Date() } });
 };
 
 // Clear the user's active theme pointer ONLY if it still points at the given
@@ -488,22 +478,22 @@ export const clearUserActiveTheme = async (userId: string, themeShareId: string)
   if (cleared === 'mutated') return;
   if (cleared === 'contended') throw new SecureWriteContendedError(userId);
   if (!ObjectId.isValid(userId)) return;
-  await (await getUsersCollection()).updateOne(
-    { _id: new ObjectId(userId), 'meta.activeThemeId': themeShareId },
-    { $set: { 'meta.activeThemeId': null, updatedAt: new Date() } }
-  );
+  await (
+    await getUsersCollection()
+  ).updateOne({ _id: new ObjectId(userId), 'meta.activeThemeId': themeShareId }, { $set: { 'meta.activeThemeId': null, updatedAt: new Date() } });
 };
 
 // Set (or clear, with null) the user's active feed algorithm shareId in meta.
 export const setUserActiveFeedAlgorithm = async (userId: string, algorithmShareId: string | null) => {
-  const result = await mutateUserThingSecure(userId, (s) => { s.meta!.activeFeedAlgorithmId = algorithmShareId; });
+  const result = await mutateUserThingSecure(userId, (s) => {
+    s.meta!.activeFeedAlgorithmId = algorithmShareId;
+  });
   if (result === 'mutated') return;
   if (result === 'contended') throw new SecureWriteContendedError(userId);
   if (!ObjectId.isValid(userId)) return;
-  await (await getUsersCollection()).updateOne(
-    { _id: new ObjectId(userId) },
-    { $set: { 'meta.activeFeedAlgorithmId': algorithmShareId, updatedAt: new Date() } }
-  );
+  await (
+    await getUsersCollection()
+  ).updateOne({ _id: new ObjectId(userId) }, { $set: { 'meta.activeFeedAlgorithmId': algorithmShareId, updatedAt: new Date() } });
 };
 
 // Clear the active feed-algorithm pointer only if it still points at the given
@@ -516,7 +506,9 @@ export const clearUserActiveFeedAlgorithm = async (userId: string, algorithmShar
   if (cleared === 'mutated') return;
   if (cleared === 'contended') throw new SecureWriteContendedError(userId);
   if (!ObjectId.isValid(userId)) return;
-  await (await getUsersCollection()).updateOne(
+  await (
+    await getUsersCollection()
+  ).updateOne(
     { _id: new ObjectId(userId), 'meta.activeFeedAlgorithmId': algorithmShareId },
     { $set: { 'meta.activeFeedAlgorithmId': null, updatedAt: new Date() } }
   );
@@ -566,15 +558,12 @@ export const pushUserRecentReaction = async (userId: string, token: string): Pro
   const users = await getUsersCollection();
   const _id = new ObjectId(userId);
   await users.updateOne({ _id }, { $pull: { 'meta.recentReactions': token } } as any);
-  await users.updateOne(
-    { _id },
-    {
-      $push: {
-        'meta.recentReactions': { $each: [token], $position: 0, $slice: MAX_RECENT_REACTIONS }
-      },
-      $set: { updatedAt: new Date() }
-    } as any
-  );
+  await users.updateOne({ _id }, {
+    $push: {
+      'meta.recentReactions': { $each: [token], $position: 0, $slice: MAX_RECENT_REACTIONS }
+    },
+    $set: { updatedAt: new Date() }
+  } as any);
   const doc = await users.findOne({ _id }, { projection: { 'meta.recentReactions': 1 } });
   return Array.isArray(doc?.meta?.recentReactions) ? (doc!.meta.recentReactions as string[]) : [];
 };
@@ -583,10 +572,7 @@ export const pushUserRecentReaction = async (userId: string, token: string): Pro
 // Projected reads only — never drag credentials or 64KB avatar crystals over.
 export const getUserRecentReactions = async (userId: string): Promise<string[]> => {
   const things = await getThingsCollection();
-  const thing = await things.findOne(
-    { shareId: String(userId), thingtime: 'user' } as any,
-    { projection: { secureRecentReactions: 1, secure: 1 } }
-  );
+  const thing = await things.findOne({ shareId: String(userId), thingtime: 'user' } as any, { projection: { secureRecentReactions: 1, secure: 1 } });
   if (thing) {
     const list = unpackRecentReactions((thing as any).secureRecentReactions);
     if (list.length) return list;
@@ -598,10 +584,7 @@ export const getUserRecentReactions = async (userId: string): Promise<string[]> 
     return Array.isArray(legacyInBlob) ? (legacyInBlob as string[]) : [];
   }
   if (!ObjectId.isValid(userId)) return [];
-  const doc = await (await getUsersCollection()).findOne(
-    { _id: new ObjectId(userId) },
-    { projection: { 'meta.recentReactions': 1 } }
-  );
+  const doc = await (await getUsersCollection()).findOne({ _id: new ObjectId(userId) }, { projection: { 'meta.recentReactions': 1 } });
   return Array.isArray(doc?.meta?.recentReactions) ? (doc!.meta.recentReactions as string[]) : [];
 };
 
@@ -646,18 +629,10 @@ export const setUserAdmin = async (userId: string, admin: boolean): Promise<Admi
   const now = new Date();
   const [thingRes, legacyRes] = await Promise.all([
     getThingsCollection().then((c) =>
-      c.updateOne(
-        { shareId: String(userId), thingtime: 'user' } as any,
-        { $set: { secureAdmin: admin === true, updatedAt: now } }
-      )
+      c.updateOne({ shareId: String(userId), thingtime: 'user' } as any, { $set: { secureAdmin: admin === true, updatedAt: now } })
     ),
     ObjectId.isValid(userId)
-      ? getUsersCollection().then((c) =>
-          c.updateOne(
-            { _id: new ObjectId(userId) },
-            { $set: { 'meta.admin': admin === true, updatedAt: now } }
-          )
-        )
+      ? getUsersCollection().then((c) => c.updateOne({ _id: new ObjectId(userId) }, { $set: { 'meta.admin': admin === true, updatedAt: now } }))
       : Promise.resolve({ matchedCount: 0 } as { matchedCount: number })
   ]);
   if (!thingRes.matchedCount && !legacyRes.matchedCount) return null;
@@ -692,9 +667,7 @@ export const searchUsersForAdmin = async (query: string, limit = 20): Promise<Ad
   const things = await getThingsCollection();
   const users = await getUsersCollection();
 
-  const thingFilter = q
-    ? { thingtime: 'user', $or: [{ 'crystal.username': pattern }, { 'crystal.displayName': pattern }] }
-    : { thingtime: 'user' };
+  const thingFilter = q ? { thingtime: 'user', $or: [{ 'crystal.username': pattern }, { 'crystal.displayName': pattern }] } : { thingtime: 'user' };
   // project just what toAdminRow needs (secure blob for email, secureAdmin) —
   // never the 64KB avatar/banner crystals — and run both stores concurrently
   const [thingRaw, exact, legacyDocs] = await Promise.all([
@@ -745,10 +718,7 @@ export const searchUsersPublic = async (query: string, limit = 8): Promise<Publi
       .toArray()
   ]);
 
-  return mergeUserDocs(thingRaw.map(userThingToDoc), legacyDocs)
-    .sort(byUsername)
-    .slice(0, capped)
-    .map(toPublicProfile);
+  return mergeUserDocs(thingRaw.map(userThingToDoc), legacyDocs).sort(byUsername).slice(0, capped).map(toPublicProfile);
 };
 
 // Current DB-flagged admins (env admins are surfaced separately in the config).
@@ -792,9 +762,7 @@ export type UpdateProfileInput = {
   bannerUrl?: unknown;
 };
 
-type UpdateProfileResult =
-  | { ok: false; status: number; error: string }
-  | { ok: true; user: PublicUser };
+type UpdateProfileResult = { ok: false; status: number; error: string } | { ok: true; user: PublicUser };
 
 // Update the caller's own profile fields. Whitelist-only: username/email/
 // password never pass through here (they need uniqueness + auth flows).

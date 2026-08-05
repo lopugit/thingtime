@@ -23,7 +23,8 @@ import {
 
 import { AdminPanel } from '~/components/Admin/AdminPanel';
 import { LinkManagerModal } from '~/components/Admin/LinkManagerModal';
-import { SubscriptionEditorModal, tierLabel } from '~/components/Admin/SubscriptionEditorModal';
+import { SubscriptionEditorModal } from '~/components/Admin/SubscriptionEditorModal';
+import { TierManager } from '~/components/Admin/TierManager';
 import { formatBytes } from '~/components/Apps/ConnectedAppsSection';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useApi } from '~/hooks/useApi';
@@ -48,6 +49,8 @@ type UserRow = {
   appNamespaceBytes: number;
   subscription: {
     tier: string;
+    tierName?: string;
+    tierVersion?: number;
     metered: boolean;
     isDefault: boolean;
     overrides: Record<string, number | null> | null;
@@ -69,13 +72,13 @@ type AppRow = {
   subscription: UserRow['subscription'];
 };
 
-const bytesOrInfinity = (value: number | null | undefined): string =>
-  value === null || value === undefined ? '∞' : formatBytes(value);
+const bytesOrInfinity = (value: number | null | undefined): string => (value === null || value === undefined ? '∞' : formatBytes(value));
 
 const TierBadge = ({ subscription }: { subscription: UserRow['subscription'] }) => (
   <Flex gap={1} align="center" wrap="wrap">
     <Badge colorScheme={subscription.tier === 'payg' ? 'orange' : subscription.isDefault ? 'gray' : 'purple'} fontSize="0.65em">
-      {tierLabel(subscription.tier)}
+      {subscription.tierName || subscription.tier}
+      {subscription.tierVersion ? ` · v${subscription.tierVersion}` : ''}
     </Badge>
     {subscription.overrides && (
       <Badge colorScheme="pink" fontSize="0.6em" title="Admin quota overrides are active">
@@ -102,7 +105,8 @@ const useSearchedRows = <T,>(fetcher: (q: string) => Promise<T[] | null>, deps: 
     setLoading(rows === null);
     const timer = setTimeout(
       () => {
-        fetcherRef.current(query.trim())
+        fetcherRef
+          .current(query.trim())
           .then((next) => {
             if (!cancelled && next) setRows(next);
           })
@@ -193,7 +197,12 @@ const UsersTab = () => {
                   </Td>
                   <Td isNumeric fontSize="xs">
                     {row.counts.apps}
-                    {row.counts.linkedApps > 0 && <Text as="span" opacity={0.55}> +{row.counts.linkedApps}</Text>}
+                    {row.counts.linkedApps > 0 && (
+                      <Text as="span" opacity={0.55}>
+                        {' '}
+                        +{row.counts.linkedApps}
+                      </Text>
+                    )}
                   </Td>
                   <Td isNumeric fontSize="xs">
                     {row.counts.pats}
@@ -286,14 +295,7 @@ const AppsTab = () => {
 
   return (
     <Box>
-      <Input
-        size="sm"
-        maxW="360px"
-        placeholder="Search apps by name or clientId…"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        mb={3}
-      />
+      <Input size="sm" maxW="360px" placeholder="Search apps by name or clientId…" value={query} onChange={(e) => setQuery(e.target.value)} mb={3} />
       {loading && !rows ? (
         <Flex justify="center" py={10}>
           <Spinner />
@@ -326,7 +328,10 @@ const AppsTab = () => {
                   <Td fontSize="xs">
                     @{row.owner.username ?? row.owner.id}
                     {row.managers.length > 0 && (
-                      <Text as="span" opacity={0.55}> +{row.managers.length}</Text>
+                      <Text as="span" opacity={0.55}>
+                        {' '}
+                        +{row.managers.length}
+                      </Text>
                     )}
                   </Td>
                   <Td isNumeric fontSize="xs">
@@ -359,13 +364,7 @@ const AppsTab = () => {
                     </Button>
                     {confirmRevoke === row.clientId ? (
                       <>
-                        <Button
-                          size="xs"
-                          colorScheme="red"
-                          mr={1}
-                          isLoading={busyClientId === row.clientId}
-                          onClick={() => toggleRevoked(row)}
-                        >
+                        <Button size="xs" colorScheme="red" mr={1} isLoading={busyClientId === row.clientId} onClick={() => toggleRevoked(row)}>
                           Confirm
                         </Button>
                         <Button size="xs" variant="ghost" onClick={() => setConfirmRevoke(null)}>
@@ -430,12 +429,7 @@ export const AdminDashboard = () => {
   // never a redirect, so the URL is shareable between admins.
   if (!user?.isAdmin) {
     return (
-      <Flex
-        justify="center"
-        px={4}
-        py={16}
-        paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px) + 32px)"
-      >
+      <Flex justify="center" px={4} py={16} paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px) + 32px)">
         <Box {...CARD_STYLES} maxW="420px" width="100%" p={6} textAlign="center">
           <Heading size="md" mb={2}>
             🔐 Admin access required
@@ -450,7 +444,7 @@ export const AdminDashboard = () => {
 
   return (
     <Box
-      maxW="1080px"
+      maxW="1280px"
       mx="auto"
       px={{ base: 3, md: 6 }}
       py={6}
@@ -467,6 +461,7 @@ export const AdminDashboard = () => {
         <TabList flexWrap="wrap">
           <Tab>Users</Tab>
           <Tab>Apps</Tab>
+          <Tab>Tiers</Tab>
           <Tab>System</Tab>
         </TabList>
         <TabPanels>
@@ -475,6 +470,9 @@ export const AdminDashboard = () => {
           </TabPanel>
           <TabPanel px={0}>
             <AppsTab />
+          </TabPanel>
+          <TabPanel px={0}>
+            <TierManager />
           </TabPanel>
           <TabPanel px={0}>
             <AdminPanel />

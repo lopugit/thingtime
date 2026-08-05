@@ -20,7 +20,7 @@ import {
 import {
   QUOTA_OVERRIDE_FIELDS,
   SUBSCRIPTION_TIER_CATALOG,
-  type SubscriptionTierId,
+  type SubscriptionTierDescriptor,
   type TierQuotas
 } from '~/api/utils/subscriptions/tierCatalog';
 import { formatBytes } from '~/components/Apps/ConnectedAppsSection';
@@ -52,8 +52,8 @@ const emptyOverrides = (): OverrideState => ({
   maxPats: { mode: 'inherit', value: '' }
 });
 
-export const tierLabel = (id: string): string => {
-  const tier = SUBSCRIPTION_TIER_CATALOG.find((entry) => entry.id === id);
+export const tierLabel = (id: string, catalog = SUBSCRIPTION_TIER_CATALOG): string => {
+  const tier = catalog.find((entry) => entry.id === id);
   return tier ? `${tier.emoji} ${tier.title}` : id;
 };
 
@@ -75,8 +75,12 @@ export const SubscriptionEditorModal = ({
   const api = useApi();
   const lopu = useLopu();
   const [loading, setLoading] = React.useState(true);
+  const [loadError, setLoadError] = React.useState<string | null>(null);
+  const [reloadKey, setReloadKey] = React.useState(0);
   const [saving, setSaving] = React.useState(false);
-  const [tier, setTier] = React.useState<SubscriptionTierId>('free');
+  const [tier, setTier] = React.useState('free');
+  const [tierVersionId, setTierVersionId] = React.useState(SUBSCRIPTION_TIER_CATALOG[0].versionId);
+  const [catalog, setCatalog] = React.useState<SubscriptionTierDescriptor[]>(SUBSCRIPTION_TIER_CATALOG);
   const [isDefault, setIsDefault] = React.useState(true);
   const [note, setNote] = React.useState('');
   const [overrides, setOverrides] = React.useState<OverrideState>(emptyOverrides);
@@ -88,12 +92,21 @@ export const SubscriptionEditorModal = ({
     if (!isOpen) return;
     let cancelled = false;
     setLoading(true);
+    setLoadError(null);
     apiRef.current.v1.admin
       .subscription({ subjectType, subjectId })
       .then((resp: any) => {
-        if (cancelled || !resp?.ok) return;
+        if (cancelled) return;
+        if (!resp?.ok) throw new Error(resp?.error || 'Could not load this subscription');
         const sub = resp.subscription;
+        const nextCatalog = Array.isArray(resp.catalog) && resp.catalog.length ? resp.catalog : SUBSCRIPTION_TIER_CATALOG;
+        setCatalog(nextCatalog);
         setTier(sub?.tier ?? 'free');
+        setTierVersionId(
+          sub?.tierVersionId ??
+            nextCatalog.find((entry: SubscriptionTierDescriptor) => entry.id === (sub?.tier ?? 'free'))?.versionId ??
+            nextCatalog[0].versionId
+        );
         setIsDefault(sub?.isDefault !== false);
         setNote(sub?.note ?? '');
         const next = emptyOverrides();
@@ -111,18 +124,24 @@ export const SubscriptionEditorModal = ({
         }
         setOverrides(next);
       })
-      .catch(() => {})
+      .catch((error: any) => {
+        if (!cancelled) setLoadError(error?.error || error?.message || 'Could not load this subscription');
+      })
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
     };
-  }, [isOpen, subjectType, subjectId]);
+  }, [isOpen, subjectType, subjectId, reloadKey]);
 
-  const selectedTier = SUBSCRIPTION_TIER_CATALOG.find((entry) => entry.id === tier) ?? SUBSCRIPTION_TIER_CATALOG[0];
-  const visibleFields: Array<keyof TierQuotas> =
-    subjectType === 'app' ? ['appStorageBytes'] : ['userStorageBytes', 'maxApps', 'maxPats'];
+  const selectedTier =
+    catalog.find((entry) => entry.versionId === tierVersionId) ??
+    catalog.find((entry) => entry.id === tier) ??
+    catalog[0] ??
+    SUBSCRIPTION_TIER_CATALOG[0];
+  const visibleFields: Array<keyof TierQuotas> = subjectType === 'app' ? ['appStorageBytes'] : ['userStorageBytes', 'maxApps', 'maxPats'];
 
   const save = async () => {
+    if (loadError) return;
     const payload: Record<string, number | null> = {};
     for (const field of visibleFields) {
       const state = overrides[field];
@@ -142,6 +161,7 @@ export const SubscriptionEditorModal = ({
         subjectType,
         subjectId,
         tier,
+        tierVersionId,
         overrides: Object.keys(payload).length ? payload : null,
         note: note.trim() || undefined
       });
@@ -195,15 +215,35 @@ export const SubscriptionEditorModal = ({
             <Flex justify="center" py={8}>
               <Spinner />
             </Flex>
+          ) : loadError ? (
+            <Box borderWidth="1px" borderRadius="md" p={4} textAlign="center">
+              <Text fontSize="sm" mb={3}>
+                {loadError}
+              </Text>
+              <Button size="sm" variant="outline" onClick={() => setReloadKey((value) => value + 1)}>
+                Retry
+              </Button>
+            </Box>
           ) : (
             <>
               <Text fontSize="xs" fontWeight={600} textTransform="uppercase" letterSpacing="0.08em" opacity={0.45} mb={2}>
                 Tier
               </Text>
-              <Select value={tier} onChange={(e) => setTier(e.target.value as SubscriptionTierId)} size="sm" mb={1}>
-                {SUBSCRIPTION_TIER_CATALOG.map((entry) => (
-                  <option key={entry.id} value={entry.id}>
-                    {entry.emoji} {entry.title}
+              <Select
+                value={tierVersionId}
+                onChange={(e) => {
+                  const next = catalog.find((entry) => entry.versionId === e.target.value);
+                  if (!next) return;
+                  setTier(next.id);
+                  setTierVersionId(next.versionId);
+                }}
+                size="sm"
+                mb={1}
+              >
+                {catalog.map((entry) => (
+                  <option key={entry.versionId} value={entry.versionId} disabled={entry.status !== 'live' && entry.versionId !== tierVersionId}>
+                    {entry.emoji} {entry.title} · v{entry.version}
+                    {entry.status !== 'live' ? ` (${entry.status})` : ''}
                   </option>
                 ))}
               </Select>
@@ -211,6 +251,12 @@ export const SubscriptionEditorModal = ({
                 {selectedTier.description}
                 {selectedTier.metered && ' Usage is metered — no quota field blocks writes.'}
               </Text>
+              {selectedTier.status === 'archived' ? (
+                <Text fontSize="xs" color="orange.500" mb={4}>
+                  This subject remains pinned to a historical revision. Saving keeps that revision and only updates the note or overrides; choose a
+                  live tier to migrate them.
+                </Text>
+              ) : null}
 
               <Text fontSize="xs" fontWeight={600} textTransform="uppercase" letterSpacing="0.08em" opacity={0.45} mb={2}>
                 Custom overrides
@@ -232,9 +278,7 @@ export const SubscriptionEditorModal = ({
                       size="xs"
                       width="110px"
                       value={state.mode}
-                      onChange={(e) =>
-                        setOverrides((prev) => ({ ...prev, [field]: { ...prev[field], mode: e.target.value as OverrideMode } }))
-                      }
+                      onChange={(e) => setOverrides((prev) => ({ ...prev, [field]: { ...prev[field], mode: e.target.value as OverrideMode } }))}
                     >
                       <option value="inherit">Tier default</option>
                       <option value="custom">Custom</option>
@@ -248,9 +292,7 @@ export const SubscriptionEditorModal = ({
                         min={0}
                         placeholder={meta.unit === 'bytes' ? 'MB' : 'count'}
                         value={state.value}
-                        onChange={(e) =>
-                          setOverrides((prev) => ({ ...prev, [field]: { ...prev[field], value: e.target.value } }))
-                        }
+                        onChange={(e) => setOverrides((prev) => ({ ...prev, [field]: { ...prev[field], value: e.target.value } }))}
                       />
                     )}
                     {state.mode === 'custom' && meta.unit === 'bytes' && (
@@ -265,17 +307,12 @@ export const SubscriptionEditorModal = ({
               <Text fontSize="xs" fontWeight={600} textTransform="uppercase" letterSpacing="0.08em" opacity={0.45} mt={4} mb={2}>
                 Note
               </Text>
-              <Input
-                size="sm"
-                placeholder="Why this assignment exists (optional)"
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-              />
+              <Input size="sm" placeholder="Why this assignment exists (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
             </>
           )}
         </ModalBody>
         <ModalFooter gap={2} flexWrap="wrap">
-          {!isDefault && (
+          {!isDefault && !loadError && (
             <Button size="sm" variant="ghost" onClick={reset} isDisabled={saving} mr="auto">
               Reset to default
             </Button>
@@ -283,7 +320,7 @@ export const SubscriptionEditorModal = ({
           <Button size="sm" variant="outline" onClick={onClose} isDisabled={saving}>
             Cancel
           </Button>
-          <Button size="sm" colorScheme="purple" onClick={save} isLoading={saving} isDisabled={loading}>
+          <Button size="sm" colorScheme="purple" onClick={save} isLoading={saving} isDisabled={loading || !!loadError}>
             Save
           </Button>
         </ModalFooter>

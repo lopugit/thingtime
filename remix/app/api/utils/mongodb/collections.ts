@@ -55,9 +55,7 @@ export const getAdoptionIssues = () => [...adoptionIssues];
 // migration folds the residue forward instead. Rename failures are recorded,
 // never thrown — a degraded adoption must not take the whole API down.
 const adoptVersionedCollections = async (db: any) => {
-  const names = new Set<string>(
-    (await db.listCollections({}, { nameOnly: true }).toArray()).map((entry: any) => entry.name)
-  );
+  const names = new Set<string>((await db.listCollections({}, { nameOnly: true }).toArray()).map((entry: any) => entry.name));
   const issues: string[] = [];
   for (const logical of COLLECTIONS) {
     const physical = physicalCollectionName(logical);
@@ -216,7 +214,10 @@ export const ensureIndexes = async () => {
               return await collection.createIndex(keys, options);
             } catch (err: any) {
               const name =
-                options?.name || Object.entries(keys).map(([field, dir]) => `${field}_${dir}`).join('_');
+                options?.name ||
+                Object.entries(keys)
+                  .map(([field, dir]) => `${field}_${dir}`)
+                  .join('_');
               if (err && typeof err === 'object') err.indexBeingBuilt = `${logical}.${name}`;
               throw err;
             }
@@ -236,10 +237,7 @@ export const ensureIndexes = async () => {
         // deleteApp revokes app sessions by clientId ACROSS users — without
         // this the sweep scans the whole sessions collection. Partial so the
         // (much larger) browser/service session population stays out.
-        col('sessions').createIndex(
-          { 'meta.clientId': 1 },
-          { partialFilterExpression: { purpose: 'app' } }
-        ),
+        col('sessions').createIndex({ 'meta.clientId': 1 }, { partialFilterExpression: { purpose: 'app' } }),
         // account-switcher rosters: one doc per browser, entries reference
         // sessions by jti; TTL reaps rosters abandoned past their rolling expiry
         col('rosters').createIndex({ rosterId: 1 }, { unique: true }),
@@ -289,10 +287,7 @@ export const ensureIndexes = async () => {
         col('things').createIndex({ thingtime: 1, 'crystal.username': 1 }),
         // admin roster: a partial index over just the (rare) admin user things,
         // so listAdmins is a few-entry scan, not a full-user-base fetch+filter
-        col('things').createIndex(
-          { secureAdmin: 1 },
-          { partialFilterExpression: { secureAdmin: true } }
-        ),
+        col('things').createIndex({ secureAdmin: 1 }, { partialFilterExpression: { secureAdmin: true } }),
         col('things').createIndex({ kind: 1, visibility: 1, createdAt: -1, shareId: 1 }),
         col('things').createIndex({ kind: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
         col('things').createIndex({ thingtime: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
@@ -346,22 +341,46 @@ export const ensureIndexes = async () => {
         // pre-unification relational model): aggregation + dedup indexes stay
         // until the things migration converts those docs to thingtime things.
         col('things').createIndex({ kind: 1, parentId: 1, createdAt: 1 }),
-        col('things').createIndex(
-          { parentId: 1, ownerId: 1, token: 1 },
-          { unique: true, partialFilterExpression: { kind: 'reaction' } }
-        ),
-        col('things').createIndex(
-          { commentId: 1 },
-          { unique: true, partialFilterExpression: { kind: 'comment' } }
-        ),
+        col('things').createIndex({ parentId: 1, ownerId: 1, token: 1 }, { unique: true, partialFilterExpression: { kind: 'reaction' } }),
+        col('things').createIndex({ commentId: 1 }, { unique: true, partialFilterExpression: { kind: 'comment' } }),
         // Embed apps ("Login with Thingtime", api/utils/apps): one thing per
         // clientId, ever — a second doc claiming an existing clientId (however
         // created) could answer origin lookups with a different allowlist, so
         // uniqueness is structural. Only app things carry crystal.clientId;
         // app-data things reference the app as crystal.appId instead.
+        col('things').createIndex({ 'crystal.clientId': 1 }, { unique: true, partialFilterExpression: { 'crystal.clientId': { $exists: true } } }),
+        // Immutable subscription-tier revisions: one (tierId, version) ever,
+        // at most one live revision per stable tier id, plus the status/order
+        // scan used by the admin Live / Draft / Archived sections.
         col('things').createIndex(
-          { 'crystal.clientId': 1 },
-          { unique: true, partialFilterExpression: { 'crystal.clientId': { $exists: true } } }
+          { 'crystal.quotaKind': 1, 'crystal.tierId': 1, 'crystal.version': 1 },
+          {
+            unique: true,
+            partialFilterExpression: {
+              thingtime: 'subscription-tier',
+              'crystal.quotaKind': 'subscription-tier'
+            }
+          }
+        ),
+        col('things').createIndex(
+          { 'crystal.tierId': 1, 'crystal.status': 1 },
+          {
+            unique: true,
+            partialFilterExpression: {
+              thingtime: 'subscription-tier',
+              'crystal.quotaKind': 'subscription-tier',
+              'crystal.status': 'live'
+            }
+          }
+        ),
+        col('things').createIndex(
+          { 'crystal.quotaKind': 1, 'crystal.status': 1, 'crystal.sortOrder': 1, updatedAt: -1 },
+          {
+            partialFilterExpression: {
+              thingtime: 'subscription-tier',
+              'crystal.quotaKind': 'subscription-tier'
+            }
+          }
         ),
         // App data: one thing per (user, app, key) — set() stays an idempotent
         // insert-or-update under races, and the index serves list-by-(user, app).
@@ -405,14 +424,8 @@ export const ensureIndexes = async () => {
         // reads page by (appId, ownerId); shared-slice reads by (appId, acl).
         // appId is scalar, so each compound has at most one multikey field
         // (acl) and both are legal; partials keep non-app things out.
-        col('things').createIndex(
-          { appId: 1, ownerId: 1, updatedAt: -1, shareId: -1 },
-          { partialFilterExpression: { appId: { $exists: true } } }
-        ),
-        col('things').createIndex(
-          { appId: 1, acl: 1, updatedAt: -1, shareId: -1 },
-          { partialFilterExpression: { appId: { $exists: true } } }
-        ),
+        col('things').createIndex({ appId: 1, ownerId: 1, updatedAt: -1, shareId: -1 }, { partialFilterExpression: { appId: { $exists: true } } }),
+        col('things').createIndex({ appId: 1, acl: 1, updatedAt: -1, shareId: -1 }, { partialFilterExpression: { appId: { $exists: true } } }),
         col('feedAlgorithms').createIndex({ shareId: 1 }, { unique: true }),
         col('feedAlgorithms').createIndex({ ownerId: 1 }),
         // global app settings singletons (rate-limit config lives here)
@@ -428,7 +441,9 @@ export const ensureIndexes = async () => {
       // one collection, so the name is the actionable part.
       indexesRetryAt = Date.now() + INDEXES_RETRY_COOLDOWN_MS;
       console.error(
-        `[mongodb] ensureIndexes failed${err?.indexBeingBuilt ? ` building ${err.indexBeingBuilt}` : ''} — retrying in ${Math.round(INDEXES_RETRY_COOLDOWN_MS / 1000)}s:`,
+        `[mongodb] ensureIndexes failed${err?.indexBeingBuilt ? ` building ${err.indexBeingBuilt}` : ''} — retrying in ${Math.round(
+          INDEXES_RETRY_COOLDOWN_MS / 1000
+        )}s:`,
         err?.message || err
       );
       throw err;

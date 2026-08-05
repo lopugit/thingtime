@@ -108,43 +108,154 @@ const owner = await registerSession('owner'); // the human who owns things
 const target = await registerSession('bot'); // the account that will be owned
 const bystander = await registerSession('bystander');
 
+let freeTier = null;
+let plusTier = null;
+let proTier = null;
+
 // ---------------------------------------------------------------------------
 console.log('A. Subscription tiers + overrides');
 {
+  const publicCatalog = await api('/api/v1/tiers');
+  const publicTiers = Array.isArray(publicCatalog.body?.tiers) ? publicCatalog.body.tiers : [];
+  check(
+    'public catalog exposes only live, immutable tier-card revisions',
+    publicCatalog.status === 200 &&
+      publicCatalog.body?.ok === true &&
+      publicTiers.length >= 4 &&
+      new Set(publicTiers.map((tier) => tier.versionId)).size === publicTiers.length &&
+      publicTiers.every(
+        (tier) =>
+          typeof tier?.id === 'string' &&
+          typeof tier?.versionId === 'string' &&
+          Number.isSafeInteger(tier?.version) &&
+          tier.version > 0 &&
+          tier.status === 'live' &&
+          tier.prices &&
+          tier.discounts &&
+          tier.inclusions?.kind === 'rich-text' &&
+          Array.isArray(tier.inclusions.blocks) &&
+          tier.quotas &&
+          typeof tier.quotas === 'object'
+      )
+  );
+
+  const tierVersions = await api('/api/v1/admin/tiers', { cookie: adminCookie });
+  const allTierVersions = Array.isArray(tierVersions.body?.tiers) ? tierVersions.body.tiers : [];
+  const liveTierVersions = Array.isArray(tierVersions.body?.live) ? tierVersions.body.live : [];
+  const draftTierVersions = Array.isArray(tierVersions.body?.drafts) ? tierVersions.body.drafts : [];
+  const archivedTierVersions = Array.isArray(tierVersions.body?.archived) ? tierVersions.body.archived : [];
+  check(
+    'admin tier catalog separates live, draft, and archived immutable revisions',
+    tierVersions.status === 200 &&
+      tierVersions.body?.ok === true &&
+      allTierVersions.length === liveTierVersions.length + draftTierVersions.length + archivedTierVersions.length &&
+      liveTierVersions.every((tier) => tier.status === 'live') &&
+      draftTierVersions.every((tier) => tier.status === 'draft') &&
+      archivedTierVersions.every((tier) => tier.status === 'archived') &&
+      new Set(allTierVersions.map((tier) => tier.versionId)).size === allTierVersions.length
+  );
+
   const catalog = await api('/api/v1/admin/subscriptions', { cookie: adminCookie });
-  check('catalog lists 4 tiers', catalog.body?.ok === true && catalog.body?.catalog?.length === 4);
+  const pickerTiers = Array.isArray(catalog.body?.catalog) ? catalog.body.catalog : [];
+  check(
+    'subscription picker matches the dynamic public live catalog',
+    catalog.body?.ok === true &&
+      pickerTiers
+        .map((tier) => tier.versionId)
+        .sort()
+        .join('\0') ===
+        publicTiers
+          .map((tier) => tier.versionId)
+          .sort()
+          .join('\0')
+  );
+
+  freeTier = publicTiers.find((tier) => tier.id === 'free') ?? null;
+  plusTier = publicTiers.find((tier) => tier.id === 'plus') ?? null;
+  proTier = publicTiers.find((tier) => tier.id === 'pro') ?? null;
+  const paygTier = publicTiers.find((tier) => tier.id === 'payg') ?? null;
+  check('core tiers remain addressable by stable id', !!freeTier && !!plusTier && !!proTier && !!paygTier);
+  if (!freeTier || !plusTier || !proTier || !paygTier) {
+    throw new Error('The verifier requires live free, plus, pro, and payg tier revisions.');
+  }
+
+  const tierCatalogDenied = await api('/api/v1/admin/tiers', { cookie: owner.cookie });
+  check('non-admin cannot inspect tier version history', tierCatalogDenied.status === 403);
+
+  const tierMutationDenied = await api('/api/v1/admin/tiers', {
+    cookie: owner.cookie,
+    method: 'POST',
+    body: { action: 'archive', versionId: `missing-tier-version-${suffix}` }
+  });
+  check('non-admin cannot mutate tier lifecycle', tierMutationDenied.status === 403);
 
   const denied = await api('/api/v1/admin/subscriptions', {
     cookie: owner.cookie,
     method: 'POST',
-    body: { subjectType: 'user', subjectId: owner.id, tier: 'pro' }
+    body: { subjectType: 'user', subjectId: owner.id, tier: proTier.id, tierVersionId: proTier.versionId }
   });
   check('non-admin cannot assign tiers', denied.status === 403);
 
   const badTier = await api('/api/v1/admin/subscriptions', {
     cookie: adminCookie,
     method: 'POST',
-    body: { subjectType: 'user', subjectId: owner.id, tier: 'gold' }
+    body: {
+      subjectType: 'user',
+      subjectId: owner.id,
+      tier: `missing-tier-${suffix}`,
+      tierVersionId: `missing-tier-version-${suffix}`
+    }
   });
   check('unknown tier is 400', badTier.status === 400);
+
+  const mismatchedTierVersion = await api('/api/v1/admin/subscriptions', {
+    cookie: adminCookie,
+    method: 'POST',
+    body: { subjectType: 'user', subjectId: owner.id, tier: proTier.id, tierVersionId: plusTier.versionId }
+  });
+  check('tier assignment rejects a revision belonging to another tier', mismatchedTierVersion.status === 400);
 
   const assign = await api('/api/v1/admin/subscriptions', {
     cookie: adminCookie,
     method: 'POST',
-    body: { subjectType: 'user', subjectId: owner.id, tier: 'pro', overrides: { maxApps: 1 }, note: 'verify suite' }
+    body: {
+      subjectType: 'user',
+      subjectId: owner.id,
+      tier: proTier.id,
+      tierVersionId: proTier.versionId,
+      overrides: { maxApps: 1 },
+      note: 'verify suite'
+    }
   });
   check(
-    'assign pro + maxApps override',
-    assign.body?.ok === true && assign.body?.subscription?.tier === 'pro' && assign.body?.subscription?.effective?.maxApps === 1
+    'assign exact live Pro revision + maxApps override',
+    assign.body?.ok === true &&
+      assign.body?.subscription?.tier === proTier.id &&
+      assign.body?.subscription?.tierVersionId === proTier.versionId &&
+      assign.body?.subscription?.tierVersion === proTier.version &&
+      assign.body?.subscription?.effective?.maxApps === 1
   );
 
   const read = await api(`/api/v1/admin/subscriptions?subjectType=user&subjectId=${owner.id}`, { cookie: adminCookie });
-  check('read-back is not default and keeps the note', read.body?.subscription?.isDefault === false && read.body?.subscription?.note === 'verify suite');
+  check(
+    'read-back keeps the exact tier revision and note',
+    read.body?.subscription?.isDefault === false &&
+      read.body?.subscription?.tierVersionId === proTier.versionId &&
+      read.body?.subscription?.note === 'verify suite'
+  );
 
   const spoof = await api('/api/v1/things', {
     cookie: owner.cookie,
     method: 'POST',
-    body: { thingtime: ['subscription'], crystal: { tier: 'pro', subjectType: 'user', subjectId: owner.id } }
+    body: {
+      thingtime: ['subscription'],
+      crystal: {
+        tier: proTier.id,
+        tierVersionId: proTier.versionId,
+        subjectType: 'user',
+        subjectId: owner.id
+      }
+    }
   });
   check('subscription kind is protected from generic CRUD', spoof.status >= 400, `status ${spoof.status}`);
 }
@@ -164,7 +275,7 @@ let appA = null;
     first.body?.ok === true &&
       !!appA?.clientId &&
       appA?.subscriptionTier === 'free' &&
-      appA?.storageAllowanceBytes === 5 * GB
+      appA?.storageAllowanceBytes === freeTier.quotas.appStorageBytes
   );
 
   const second = await api('/api/v1/apps', {
@@ -177,7 +288,13 @@ let appA = null;
   await api('/api/v1/admin/subscriptions', {
     cookie: adminCookie,
     method: 'POST',
-    body: { subjectType: 'user', subjectId: owner.id, tier: 'pro', overrides: { maxApps: null } }
+    body: {
+      subjectType: 'user',
+      subjectId: owner.id,
+      tier: proTier.id,
+      tierVersionId: proTier.versionId,
+      overrides: { maxApps: null }
+    }
   });
   const third = await api('/api/v1/apps', {
     cookie: owner.cookie,
@@ -192,7 +309,8 @@ let appA = null;
     body: {
       subjectType: 'app',
       subjectId: appA.clientId,
-      tier: 'plus',
+      tier: plusTier.id,
+      tierVersionId: plusTier.versionId,
       overrides: { appStorageBytes: 6 * GB },
       note: 'verify custom app plan'
     }
@@ -200,14 +318,15 @@ let appA = null;
   check(
     'admin app subscription updates the same aggregate allowance atomically',
     customAppPlan.body?.ok === true &&
-      customAppPlan.body?.subscription?.tier === 'plus' &&
+      customAppPlan.body?.subscription?.tier === plusTier.id &&
+      customAppPlan.body?.subscription?.tierVersionId === plusTier.versionId &&
       customAppPlan.body?.subscription?.effective?.appStorageBytes === 6 * GB
   );
 
   const ownerBlockedByCustomPlan = await api('/api/v1/apps/storage', {
     cookie: owner.cookie,
     method: 'POST',
-    body: { action: 'set-tier', clientId: appA.clientId, tier: 'pro' }
+    body: { action: 'set-tier', clientId: appA.clientId, tier: proTier.id, tierVersionId: proTier.versionId }
   });
   check('custom admin app plan locks owner self-service tier changes', ownerBlockedByCustomPlan.status === 409);
 
@@ -219,8 +338,9 @@ let appA = null;
   check(
     'admin reset returns the app aggregate to Free without a second ledger',
     resetAppPlan.body?.ok === true &&
-      resetAppPlan.body?.subscription?.tier === 'free' &&
-      resetAppPlan.body?.subscription?.effective?.appStorageBytes === 5 * GB
+      resetAppPlan.body?.subscription?.tier === freeTier.id &&
+      resetAppPlan.body?.subscription?.tierVersionId === freeTier.versionId &&
+      resetAppPlan.body?.subscription?.effective?.appStorageBytes === freeTier.quotas.appStorageBytes
   );
 }
 
@@ -295,10 +415,7 @@ console.log('D. Ownership links: assume + app co-management');
   check('admin links the account', link.body?.ok === true);
 
   const owned = await api('/api/v1/auth/accounts/owned', { cookie: owner.cookie });
-  check(
-    'owned list shows the linked account',
-    owned.body?.ok === true && owned.body?.accounts?.some((account) => account.id === target.id)
-  );
+  check('owned list shows the linked account', owned.body?.ok === true && owned.body?.accounts?.some((account) => account.id === target.id));
 
   const assume = await api('/api/v1/auth/accounts/assume', {
     cookie: owner.cookie,
@@ -328,7 +445,10 @@ console.log('D. Ownership links: assume + app co-management');
     body: { action: 'add', linkKind: 'app', userId: bystander.id, targetId: appA.clientId }
   });
   const after = await api('/api/v1/apps', { cookie: bystander.cookie });
-  check('linked app appears in the co-manager list', (after.body?.apps ?? []).some((a) => a.clientId === appA.clientId));
+  check(
+    'linked app appears in the co-manager list',
+    (after.body?.apps ?? []).some((a) => a.clientId === appA.clientId)
+  );
 
   const coManagerStorage = await api(`/api/v1/apps/storage?clientId=${encodeURIComponent(appA.clientId)}`, {
     cookie: bystander.cookie

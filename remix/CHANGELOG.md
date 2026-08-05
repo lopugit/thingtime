@@ -19,6 +19,21 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Versioned subscription-tier admin + customer cards**: `/admin` now has a
+  Tiers workspace with separate Live, Draft / not live, and Archived sections.
+  Admins can create tiers and immutable revisions; edit names, taglines,
+  banners, four renewal prices, six annualized computed-or-custom savings,
+  Editor.js inclusions, metering, and quota defaults; then publish/archive with
+  confirmation while preserving every historical revision. The public
+  `/api/v1/tiers`, admin `/api/v1/admin/tiers`, subscription editor, and app
+  storage manager all use exact tier version ids. Each revision freezes its
+  pricing/discounts, and assignments freeze the tier name, version, metering,
+  and quota snapshot so later catalog changes cannot move existing customers.
+  Includes standalone-Mongo-safe
+  publish recovery, protected `subscription-*` ids, default-tier safeguards,
+  dynamic customer cards, schemas/indexes/docs/tests, and legacy v1 pinning. —
+  Codex (AI), 2026-08-05
+
 - **App-owner storage subscriptions + app-user sub-tiers**: `/apps/manage`
   lets a registering owner or linked co-manager inspect measured whole-app
   usage, switch the aggregate plan (Free 5 GiB, Plus 25 GiB, Pro 100 GiB,
@@ -54,6 +69,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - **PR #69 final-review hardening round**: a multi-agent review of the unified
   /search + profile/feed branch surfaced a batch of merge-blocking issues, all
   fixed here — Claude (AI), 2026-07-17:
+
   - **Advanced filters no longer 400 + wipe results on numeric values**: the
     query builder's default `contains` operator coerced `4`/`true`/`null` to
     real types, which the server rejects for text-only operators, clearing the

@@ -2,17 +2,11 @@ import { userCanManageApp } from '../accounts/accountLinks';
 import { findUserById, toPublicUser } from '../auth/users';
 import { getSessionsCollection, getThingsCollection } from '../mongodb/collections';
 import { getSubscription, setSubscription } from '../subscriptions/subscriptions';
-import {
-  QUOTA_OVERRIDE_BOUNDS,
-  SUBSCRIPTION_TIER_CATALOG,
-  type SubscriptionTierId
-} from '../subscriptions/tierCatalog';
+import { QUOTA_OVERRIDE_BOUNDS, type SubscriptionTierDescriptor } from '../subscriptions/tierCatalog';
+import { getSubscriptionTierVersion, listLiveSubscriptionTiers } from '../subscriptions/tierCatalogStore';
 import { appStoragePolicyOf, findAppByClientId } from './apps';
 import { effectiveAppUserAllowance, remainingStorageBytes, storedByteCount } from './appStorageCore';
-import {
-  APP_STORAGE_KIND,
-  setAppUserStorageAllowance
-} from './namespace';
+import { APP_STORAGE_KIND, setAppUserStorageAllowance } from './namespace';
 import { scopeCovers, sessionScopes } from './scopes';
 
 // App-owner storage management. This is deliberately separate from /admin:
@@ -69,14 +63,7 @@ export type ManagedAppStorage = {
   storageAccountingReady: boolean;
   users: ManagedAppStorageUser[];
   usersTruncated: boolean;
-  tiers: Array<{
-    id: SubscriptionTierId;
-    title: string;
-    description: string;
-    emoji: string;
-    metered: boolean;
-    storageAllowanceBytes: number | null;
-  }>;
+  tiers: Array<SubscriptionTierDescriptor & { storageAllowanceBytes: number | null; selectable: boolean }>;
 };
 
 const loadUsernames = async (userIds: string[]): Promise<Map<string, string>> => {
@@ -93,10 +80,7 @@ const loadUsernames = async (userIds: string[]): Promise<Map<string, string>> =>
   return names;
 };
 
-export const getManagedAppStorage = async (
-  managerId: string,
-  clientId: unknown
-): Promise<{ ok: true; storage: ManagedAppStorage } | Fail> => {
+export const getManagedAppStorage = async (managerId: string, clientId: unknown): Promise<{ ok: true; storage: ManagedAppStorage } | Fail> => {
   const managed = await resolveManagedApp(managerId, clientId);
   if (managed.ok === false) return managed;
 
@@ -105,7 +89,7 @@ export const getManagedAppStorage = async (
   const sessions = await getSessionsCollection();
   const now = new Date();
 
-  const [subscription, counters, sessionUsers] = await Promise.all([
+  const [subscription, counters, sessionUsers, liveTiers] = await Promise.all([
     getSubscription('app', id),
     things
       .find(
@@ -133,10 +117,7 @@ export const getManagedAppStorage = async (
               $max: {
                 $cond: [
                   {
-                    $and: [
-                      { $eq: ['$revokedAt', null] },
-                      { $or: [{ $eq: ['$expiresAt', null] }, { $gt: ['$expiresAt', now] }] }
-                    ]
+                    $and: [{ $eq: ['$revokedAt', null] }, { $or: [{ $eq: ['$expiresAt', null] }, { $gt: ['$expiresAt', now] }] }]
                   },
                   1,
                   0
@@ -148,8 +129,17 @@ export const getManagedAppStorage = async (
         { $sort: { lastSeenAt: -1 } },
         { $limit: MAX_LISTED_APP_USERS + 1 }
       ])
-      .toArray()
+      .toArray(),
+    listLiveSubscriptionTiers()
   ]);
+
+  // An app may still be pinned to an archived revision. Keep that exact card
+  // visible as "current" without making archived revisions newly selectable.
+  const assignedTier = await getSubscriptionTierVersion(subscription.tierVersionId);
+  const visibleTiers = [...liveTiers];
+  if (assignedTier && !visibleTiers.some((tier) => tier.versionId === assignedTier.versionId)) {
+    visibleTiers.push(assignedTier);
+  }
 
   const byUser = new Map<
     string,
@@ -222,18 +212,13 @@ export const getManagedAppStorage = async (
 
   const policy = appStoragePolicyOf(app);
   const users: ManagedAppStorageUser[] = selected.map((row) => {
-    const allowanceBytes = effectiveAppUserAllowance(
-      policy.userStorageAllowanceBytes,
-      row.overrideBytes,
-      policy.storageAllowanceBytes
-    );
+    const allowanceBytes = effectiveAppUserAllowance(policy.userStorageAllowanceBytes, row.overrideBytes, policy.storageAllowanceBytes);
     return {
       userId: row.userId,
       username: usernames.get(row.userId) ?? null,
       usedBytes: row.usedBytes,
       storageAllowanceBytes: allowanceBytes,
-      storageRemainingBytes:
-        remainingStorageBytes({ usedBytes: row.usedBytes, allowanceBytes }) ?? 0,
+      storageRemainingBytes: remainingStorageBytes({ usedBytes: row.usedBytes, allowanceBytes }) ?? 0,
       storageAllowanceOverrideBytes: row.overrideBytes,
       storageAllowanceSource: row.overrideBytes === null ? 'app-default' : 'custom',
       activeGrant: row.activeGrant,
@@ -258,14 +243,13 @@ export const getManagedAppStorage = async (
       storageAccountingReady: policy.ready,
       users,
       usersTruncated,
-      tiers: SUBSCRIPTION_TIER_CATALOG.map((tier) => ({
-        id: tier.id,
-        title: tier.title,
-        description: tier.description,
-        emoji: tier.emoji,
-        metered: tier.metered,
-        storageAllowanceBytes: tier.quotas.appStorageBytes
-      }))
+      tiers: visibleTiers
+        .sort((a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title) || b.version - a.version)
+        .map((tier) => ({
+          ...tier,
+          storageAllowanceBytes: tier.quotas.appStorageBytes,
+          selectable: tier.status === 'live'
+        }))
     }
   };
 };
@@ -273,7 +257,8 @@ export const getManagedAppStorage = async (
 export const setManagedAppStorageTier = async (
   managerId: string,
   clientId: unknown,
-  tier: unknown
+  tier: unknown,
+  tierVersionId?: unknown
 ): Promise<{ ok: true } | Fail> => {
   const managed = await resolveManagedApp(managerId, clientId);
   if (managed.ok === false) return managed;
@@ -286,6 +271,7 @@ export const setManagedAppStorageTier = async (
     subjectId: managed.clientId,
     ownerId: String(managed.app.ownerId),
     tier,
+    tierVersionId,
     overrides: null,
     updatedBy: managerId
   });
@@ -307,7 +293,9 @@ export const setManagedAppDefaultUserAllowance = async (
   if (policy.storageAllowanceBytes !== null && allowanceBytes > policy.storageAllowanceBytes) {
     return fail(400, 'The default app-user allowance cannot exceed the app’s total storage allowance');
   }
-  const updated = await (await getThingsCollection()).updateOne(
+  const updated = await (
+    await getThingsCollection()
+  ).updateOne(
     {
       thingtime: 'app',
       'crystal.clientId': managed.clientId,
@@ -315,19 +303,14 @@ export const setManagedAppDefaultUserAllowance = async (
       // plan downgrade must not leave a newly-saved default above the app's
       // total, even though runtime admission would still clamp it safely.
       $expr: {
-        $or: [
-          { $eq: ['$crystal.storageAllowanceBytes', null] },
-          { $gte: ['$crystal.storageAllowanceBytes', allowanceBytes] }
-        ]
+        $or: [{ $eq: ['$crystal.storageAllowanceBytes', null] }, { $gte: ['$crystal.storageAllowanceBytes', allowanceBytes] }]
       }
     },
     {
       $set: { 'crystal.userStorageAllowanceBytes': allowanceBytes, updatedAt: new Date() }
     }
   );
-  return updated.matchedCount
-    ? { ok: true }
-    : fail(409, 'The app storage plan changed — refresh and choose a cap within its current total');
+  return updated.matchedCount ? { ok: true } : fail(409, 'The app storage plan changed — refresh and choose a cap within its current total');
 };
 
 export const setManagedAppUserAllowances = async (
@@ -337,9 +320,7 @@ export const setManagedAppUserAllowances = async (
   allowanceInput: unknown
 ): Promise<{ ok: true; updated: number } | Fail> => {
   if (!Array.isArray(userIdsInput)) return fail(400, 'userIds must be a list');
-  const userIds = [
-    ...new Set(userIdsInput.map((value) => (typeof value === 'string' ? value.trim() : '')).filter(Boolean))
-  ];
+  const userIds = [...new Set(userIdsInput.map((value) => (typeof value === 'string' ? value.trim() : '')).filter(Boolean))];
   if (!userIds.length) return fail(400, 'Select at least one app user');
   if (userIds.length > MAX_BULK_APP_USERS) {
     return fail(400, `At most ${MAX_BULK_APP_USERS} app users can be changed at once`);
@@ -352,21 +333,21 @@ export const setManagedAppUserAllowances = async (
   const managed = await resolveManagedApp(managerId, clientId);
   if (managed.ok === false) return managed;
   const policy = appStoragePolicyOf(managed.app);
-  if (
-    allowanceBytes !== null &&
-    policy.storageAllowanceBytes !== null &&
-    allowanceBytes > policy.storageAllowanceBytes
-  ) {
+  if (allowanceBytes !== null && policy.storageAllowanceBytes !== null && allowanceBytes > policy.storageAllowanceBytes) {
     return fail(400, 'An app-user allowance cannot exceed the app’s total storage allowance');
   }
 
   const [counterUsers, sessionUsers] = await Promise.all([
-    (await getThingsCollection()).distinct('ownerId', {
+    (
+      await getThingsCollection()
+    ).distinct('ownerId', {
       'crystal.quotaKind': APP_STORAGE_KIND,
       'crystal.appId': managed.clientId,
       ownerId: { $in: userIds }
     }),
-    (await getSessionsCollection()).distinct('userId', {
+    (
+      await getSessionsCollection()
+    ).distinct('userId', {
       purpose: 'app',
       'meta.clientId': managed.clientId,
       userId: { $in: userIds }
@@ -379,9 +360,7 @@ export const setManagedAppUserAllowances = async (
   let updated = 0;
   for (let offset = 0; offset < userIds.length; offset += 10) {
     const results = await Promise.all(
-      userIds
-        .slice(offset, offset + 10)
-        .map((userId) => setAppUserStorageAllowance(userId, managed.clientId, allowanceBytes))
+      userIds.slice(offset, offset + 10).map((userId) => setAppUserStorageAllowance(userId, managed.clientId, allowanceBytes))
     );
     updated += results.length;
   }

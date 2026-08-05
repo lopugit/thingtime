@@ -20,11 +20,13 @@ import {
 } from '@chakra-ui/react';
 import { useNavigate, useSearchParams } from 'react-router';
 
+import type { SubscriptionTierDescriptor } from '~/api/utils/subscriptions/tierCatalog';
 import { formatBytes } from './ConnectedAppsSection';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { clearLocalCache, readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { TierCard } from '~/components/Subscriptions/TierCard';
 import { CARD_STYLES } from '~/theme/card';
 
 const MB = 1024 * 1024;
@@ -59,6 +61,9 @@ type ManagedStorage = {
   name: string;
   subscription: {
     tier: string;
+    tierVersionId?: string;
+    tierVersion?: number;
+    tierName?: string;
     metered: boolean;
     overrides: Record<string, number | null> | null;
     effective: { appStorageBytes: number | null };
@@ -70,14 +75,12 @@ type ManagedStorage = {
   storageAccountingReady: boolean;
   users: ManagedUser[];
   usersTruncated: boolean;
-  tiers: Array<{
-    id: string;
-    title: string;
-    description: string;
-    emoji: string;
-    metered: boolean;
-    storageAllowanceBytes: number | null;
-  }>;
+  tiers: Array<
+    SubscriptionTierDescriptor & {
+      selectable: boolean;
+      storageAllowanceBytes: number | null;
+    }
+  >;
 };
 
 // The optimistic cache keeps the non-sensitive app totals/controls, but never
@@ -97,8 +100,7 @@ const readStorageCache = (key: string | null): ManagedStorage | null => {
 
 const allowanceLabel = (bytes: number | null) => (bytes === null ? 'Unlimited · metered' : formatBytes(bytes));
 
-const userLabel = (row: ManagedUser) =>
-  row.username ? `@${row.username}` : `User ${row.userId.slice(0, 8)}…${row.userId.slice(-4)}`;
+const userLabel = (row: ManagedUser) => (row.username ? `@${row.username}` : `User ${row.userId.slice(0, 8)}…${row.userId.slice(-4)}`);
 
 export const AppStorageManagerPage = () => {
   const api = useApi();
@@ -108,15 +110,14 @@ export const AppStorageManagerPage = () => {
   const [params, setParams] = useSearchParams();
   const selectedId = (params.get('app') || '').trim();
   const appsCacheKey = user ? `tt-managed-apps-${user.id}` : null;
-  const [apps, setApps] = React.useState<ManagedApp[]>(() =>
-    appsCacheKey ? (readLocalCache<ManagedApp[]>(appsCacheKey) ?? []) : []
-  );
+  const [apps, setApps] = React.useState<ManagedApp[]>(() => (appsCacheKey ? readLocalCache<ManagedApp[]>(appsCacheKey) ?? [] : []));
   const [appsLoaded, setAppsLoaded] = React.useState(false);
   const storageCacheKey = user && selectedId ? `tt-app-storage-manager-${user.id}-${selectedId}` : null;
   const [storage, setStorage] = React.useState<ManagedStorage | null>(() => readStorageCache(storageCacheKey));
   const [storageLoading, setStorageLoading] = React.useState(false);
   const [storageError, setStorageError] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
+  const [savingPlanVersionId, setSavingPlanVersionId] = React.useState<string | null>(null);
   const [defaultMb, setDefaultMb] = React.useState('50');
   const [userMb, setUserMb] = React.useState('');
   const [selectedUsers, setSelectedUsers] = React.useState<Set<string>>(new Set());
@@ -217,9 +218,14 @@ export const AppStorageManagerPage = () => {
     }
   };
 
-  const changeTier = async (tier: string) => {
-    if (!storage || tier === storage.subscription.tier) return;
-    await mutate({ clientId: storage.clientId, action: 'set-tier', tier }, 'App storage plan updated');
+  const changeTier = async (tier: ManagedStorage['tiers'][number]) => {
+    if (!storage || tier.versionId === storage.subscription.tierVersionId) return;
+    setSavingPlanVersionId(tier.versionId);
+    try {
+      await mutate({ clientId: storage.clientId, action: 'set-tier', tier: tier.id, tierVersionId: tier.versionId }, 'App storage plan updated');
+    } finally {
+      setSavingPlanVersionId(null);
+    }
   };
 
   const parseMb = (value: string): number | null => {
@@ -236,10 +242,7 @@ export const AppStorageManagerPage = () => {
       lopu({ title: 'Enter a valid default allowance in MiB', status: 'error' });
       return;
     }
-    await mutate(
-      { clientId: storage.clientId, action: 'set-default-user-cap', allowanceBytes },
-      'Default app-user storage updated'
-    );
+    await mutate({ clientId: storage.clientId, action: 'set-default-user-cap', allowanceBytes }, 'Default app-user storage updated');
   };
 
   const saveSelectedUsers = async (reset = false) => {
@@ -273,19 +276,17 @@ export const AppStorageManagerPage = () => {
 
   if (!user) {
     return (
-      <Flex
-        {...pageShell}
-        justify="center"
-        px={4}
-        pt="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px) + 48px)"
-        pb={12}
-      >
+      <Flex {...pageShell} justify="center" px={4} pt="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px) + 48px)" pb={12}>
         <Box {...CARD_STYLES} maxW="420px" width="100%" p={6} textAlign="center">
-          <Heading size="md" mb={2}>Manage your apps 🧩</Heading>
+          <Heading size="md" mb={2}>
+            Manage your apps 🧩
+          </Heading>
           <Text fontSize="sm" opacity={0.7} mb={4}>
             Sign in with the Thingtime account that owns or co-manages the app.
           </Text>
-          <Button size="sm" onClick={() => navigate('/login')}>Log in 🗝️</Button>
+          <Button size="sm" onClick={() => navigate('/login')}>
+            Log in 🗝️
+          </Button>
         </Box>
       </Flex>
     );
@@ -294,9 +295,7 @@ export const AppStorageManagerPage = () => {
   const selectedApp = apps.find((app) => app.clientId === selectedId) ?? null;
   const normalizedQuery = query.trim().toLowerCase();
   const visibleUsers = (storage?.users || []).filter((row) =>
-    !normalizedQuery
-      ? true
-      : row.userId.toLowerCase().includes(normalizedQuery) || row.username?.toLowerCase().includes(normalizedQuery)
+    !normalizedQuery ? true : row.userId.toLowerCase().includes(normalizedQuery) || row.username?.toLowerCase().includes(normalizedQuery)
   );
   const allVisibleSelected = visibleUsers.length > 0 && visibleUsers.every((row) => selectedUsers.has(row.userId));
   const usagePercent =
@@ -305,12 +304,7 @@ export const AppStorageManagerPage = () => {
       : 0;
 
   return (
-    <Box
-      {...pageShell}
-      px={{ base: 3, md: 5 }}
-      pt="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px) + 24px)"
-      pb={14}
-    >
+    <Box {...pageShell} px={{ base: 3, md: 5 }} pt="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px) + 24px)" pb={14}>
       <Box maxW="1120px" mx="auto">
         <Flex align="flex-start" justify="space-between" gap={3} mb={5} wrap="wrap">
           <Box>
@@ -350,7 +344,9 @@ export const AppStorageManagerPage = () => {
                 onClick={() => setParams({ app: app.clientId })}
               >
                 <Box minW={0}>
-                  <Text fontSize="sm" fontWeight={700} noOfLines={1}>{app.name}</Text>
+                  <Text fontSize="sm" fontWeight={700} noOfLines={1}>
+                    {app.name}
+                  </Text>
                   <Text fontSize="xs" opacity={0.65} noOfLines={1}>
                     {formatBytes(app.storageUsedBytes)} · {app.subscriptionTier}
                   </Text>
@@ -366,13 +362,19 @@ export const AppStorageManagerPage = () => {
               </Box>
             )}
             {selectedApp && !storage && storageLoading && (
-              <Flex {...CARD_STYLES} justify="center" py={14}><Spinner /></Flex>
+              <Flex {...CARD_STYLES} justify="center" py={14}>
+                <Spinner />
+              </Flex>
             )}
             {selectedApp && !storage && !storageLoading && storageError && (
               <Box {...CARD_STYLES} p={6} textAlign="center">
                 <Text fontWeight={700}>Storage manager unavailable</Text>
-                <Text fontSize="sm" opacity={0.65} mt={1}>{storageError}</Text>
-                <Button size="sm" variant="outline" mt={4} onClick={refreshStorage}>Try again</Button>
+                <Text fontSize="sm" opacity={0.65} mt={1}>
+                  {storageError}
+                </Text>
+                <Button size="sm" variant="outline" mt={4} onClick={refreshStorage}>
+                  Try again
+                </Button>
               </Box>
             )}
             {storage && (
@@ -387,51 +389,51 @@ export const AppStorageManagerPage = () => {
                   </Flex>
                   <SimpleGrid columns={{ base: 1, sm: 3 }} spacing={4} mb={4}>
                     <Box>
-                      <Text fontSize="xs" opacity={0.55}>Whole app used</Text>
+                      <Text fontSize="xs" opacity={0.55}>
+                        Whole app used
+                      </Text>
                       <Text fontWeight={700}>{formatBytes(storage.storageUsedBytes)}</Text>
                     </Box>
                     <Box>
-                      <Text fontSize="xs" opacity={0.55}>Plan allowance</Text>
+                      <Text fontSize="xs" opacity={0.55}>
+                        Plan allowance
+                      </Text>
                       <Text fontWeight={700}>{allowanceLabel(storage.storageAllowanceBytes)}</Text>
                     </Box>
                     <Box>
-                      <Text fontSize="xs" opacity={0.55}>Remaining</Text>
+                      <Text fontSize="xs" opacity={0.55}>
+                        Remaining
+                      </Text>
                       <Text fontWeight={700}>{allowanceLabel(storage.storageRemainingBytes)}</Text>
                     </Box>
                   </SimpleGrid>
-                  {storage.storageAllowanceBytes !== null && (
-                    <Progress value={usagePercent} size="sm" colorScheme="purple" borderRadius="full" />
-                  )}
+                  {storage.storageAllowanceBytes !== null && <Progress value={usagePercent} size="sm" colorScheme="purple" borderRadius="full" />}
                 </Box>
 
                 <Box {...CARD_STYLES} p={{ base: 4, md: 5 }}>
-                  <Heading size="sm" mb={1}>Storage plan</Heading>
+                  <Heading size="sm" mb={1}>
+                    Storage plan
+                  </Heading>
                   <Text fontSize="sm" opacity={0.65} mb={4}>
                     Upgrading raises the one aggregate ceiling shared by every user of this app.
                   </Text>
-                  <SimpleGrid columns={{ base: 1, sm: 2, xl: 4 }} spacing={3}>
+                  <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} alignItems="stretch">
                     {storage.tiers.map((tier) => {
-                      const current = tier.id === storage.subscription.tier;
+                      const current = storage.subscription.tierVersionId
+                        ? tier.versionId === storage.subscription.tierVersionId
+                        : tier.id === storage.subscription.tier;
                       return (
-                        <Box key={tier.id} borderWidth="1px" borderRadius="md" p={3} borderColor={current ? 'purple.400' : undefined}>
-                          <Flex align="center" gap={2} mb={1}>
-                            <Text fontWeight={700}>{tier.emoji} {tier.title}</Text>
-                            {current && <Badge ml="auto" colorScheme="purple">current</Badge>}
-                          </Flex>
-                          <Text fontSize="sm" fontWeight={600}>{allowanceLabel(tier.storageAllowanceBytes)}</Text>
-                          <Text fontSize="xs" opacity={0.6} minH="3.2em" mt={1}>{tier.description}</Text>
-                          <Button
-                            size="xs"
-                            width="100%"
-                            mt={3}
-                            variant={current ? 'outline' : 'solid'}
-                            colorScheme="purple"
-                            isDisabled={current || saving || !!storage.subscription.overrides}
-                            onClick={() => changeTier(tier.id)}
-                          >
-                            {current ? 'Current plan' : 'Choose plan'}
-                          </Button>
-                        </Box>
+                        <TierCard
+                          key={tier.versionId}
+                          tier={tier}
+                          current={current}
+                          showStatus={tier.status !== 'live'}
+                          allowanceLabel={allowanceLabel(tier.storageAllowanceBytes)}
+                          actionLabel={current ? 'Current plan' : tier.selectable ? 'Choose plan' : 'Not available'}
+                          actionDisabled={current || saving || !!storage.subscription.overrides || !tier.selectable}
+                          actionLoading={savingPlanVersionId === tier.versionId}
+                          onAction={() => changeTier(tier)}
+                        />
                       );
                     })}
                   </SimpleGrid>
@@ -443,7 +445,9 @@ export const AppStorageManagerPage = () => {
                 </Box>
 
                 <Box {...CARD_STYLES} p={{ base: 4, md: 5 }}>
-                  <Heading size="sm" mb={1}>Default user cap</Heading>
+                  <Heading size="sm" mb={1}>
+                    Default user cap
+                  </Heading>
                   <Text fontSize="sm" opacity={0.65} mb={3}>
                     Every app user starts here. You can set any finite value up to the app’s total allowance.
                   </Text>
@@ -458,7 +462,9 @@ export const AppStorageManagerPage = () => {
                       maxW="180px"
                       aria-label="Default user storage allowance in MiB"
                     />
-                    <Text fontSize="sm" opacity={0.65}>MiB per app user</Text>
+                    <Text fontSize="sm" opacity={0.65}>
+                      MiB per app user
+                    </Text>
                     <Button size="sm" colorScheme="purple" ml={{ base: 0, sm: 'auto' }} isLoading={saving} onClick={saveDefault}>
                       Save default
                     </Button>
@@ -484,7 +490,9 @@ export const AppStorageManagerPage = () => {
 
                   {selectedUsers.size > 0 && (
                     <Flex bg="purple.50" _dark={{ bg: 'whiteAlpha.100' }} borderRadius="md" p={3} mb={3} gap={2} align="center" wrap="wrap">
-                      <Text fontSize="sm" fontWeight={700}>{selectedUsers.size} selected</Text>
+                      <Text fontSize="sm" fontWeight={700}>
+                        {selectedUsers.size} selected
+                      </Text>
                       <Input
                         size="xs"
                         type="number"
@@ -497,7 +505,9 @@ export const AppStorageManagerPage = () => {
                         ml={{ base: 0, sm: 'auto' }}
                         aria-label="Selected users storage allowance in MiB"
                       />
-                      <Text fontSize="xs" opacity={0.65}>MiB each</Text>
+                      <Text fontSize="xs" opacity={0.65}>
+                        MiB each
+                      </Text>
                       <Button size="xs" colorScheme="purple" isLoading={saving} onClick={() => saveSelectedUsers(false)}>
                         Apply custom cap
                       </Button>
@@ -574,24 +584,40 @@ export const AppStorageManagerPage = () => {
                               </Flex>
                             </Td>
                             <Td>
-                              <Text fontSize="sm" fontWeight={600}>{userLabel(row)}</Text>
-                              <Text fontSize="xs" opacity={0.45} fontFamily="mono">{row.userId}</Text>
+                              <Text fontSize="sm" fontWeight={600}>
+                                {userLabel(row)}
+                              </Text>
+                              <Text fontSize="xs" opacity={0.45} fontFamily="mono">
+                                {row.userId}
+                              </Text>
                             </Td>
-                            <Td isNumeric fontSize="sm">{formatBytes(row.usedBytes)}</Td>
-                            <Td isNumeric fontSize="sm">{formatBytes(row.storageAllowanceBytes)}</Td>
+                            <Td isNumeric fontSize="sm">
+                              {formatBytes(row.usedBytes)}
+                            </Td>
+                            <Td isNumeric fontSize="sm">
+                              {formatBytes(row.storageAllowanceBytes)}
+                            </Td>
                             <Td>
                               <Badge colorScheme={row.storageAllowanceSource === 'custom' ? 'purple' : undefined}>
                                 {row.storageAllowanceSource === 'custom' ? 'custom' : 'default'}
                               </Badge>
                             </Td>
-                            <Td><Badge colorScheme={row.activeGrant ? 'green' : undefined}>{row.activeGrant ? 'active' : 'past'}</Badge></Td>
+                            <Td>
+                              <Badge colorScheme={row.activeGrant ? 'green' : undefined}>{row.activeGrant ? 'active' : 'past'}</Badge>
+                            </Td>
                             <Td fontSize="xs" whiteSpace="nowrap">
                               {row.lastSeenAt ? new Date(row.lastSeenAt).toLocaleDateString() : '—'}
                             </Td>
                           </Tr>
                         ))}
                         {!visibleUsers.length && (
-                          <Tr><Td colSpan={7}><Text fontSize="sm" opacity={0.6} py={3}>No app users match.</Text></Td></Tr>
+                          <Tr>
+                            <Td colSpan={7}>
+                              <Text fontSize="sm" opacity={0.6} py={3}>
+                                No app users match.
+                              </Text>
+                            </Td>
+                          </Tr>
                         )}
                       </Tbody>
                     </Table>
