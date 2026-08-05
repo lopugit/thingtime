@@ -7,6 +7,7 @@ import {
 import App from './root';
 import type { RootLoaderData } from './root-data.server';
 import AppsRoute from './routes/apps';
+import AppsManageRoute from './routes/apps-manage';
 import Authorize from './routes/authorize';
 import Branding from './routes/branding/_index';
 import BrandingOld from './routes/branding_old';
@@ -108,6 +109,7 @@ export const router = createBrowserRouter([
       // browse everything each connected app stores for you — no guard: it
       // renders its own signed-out quiet state, like /settings
       { path: 'apps', element: <AppsRoute /> },
+      { path: 'apps/manage', element: <AppsManageRoute /> },
       { path: 'branding', element: <Branding /> },
       { path: 'branding_old', element: <BrandingOld /> },
       { path: 'crypto', element: <CryptoPage /> },

@@ -3,9 +3,11 @@ import { randomUUID } from 'node:crypto';
 import { listLinkedAppClientIds, userCanManageApp } from '../accounts/accountLinks';
 import { getSessionsCollection, getThingsCollection } from '../mongodb/collections';
 import { getSubscription } from '../subscriptions/subscriptions';
-import { remainingStorageBytes, storageUsage, storedByteCount } from './appStorageCore';
+import { DEFAULT_SUBSCRIPTION_TIER, subscriptionTierById, type SubscriptionTierId } from '../subscriptions/tierCatalog';
+import { remainingStorageBytes, storageUsage, storedByteAllowance, storedByteCount } from './appStorageCore';
 import {
   ACL_OWNER,
+  APP_STORAGE_ACCOUNTING_VERSION,
   COLLECTION_SCHEMA_VERSIONS,
   DEFAULT_APP_STORAGE_ALLOWANCE_BYTES,
   DEFAULT_APP_USER_STORAGE_ALLOWANCE_BYTES,
@@ -28,11 +30,14 @@ export type PublicApp = {
   clientId: string;
   name: string;
   origins: string[];
-  storageAllowanceBytes: number;
+  storageAllowanceBytes: number | null;
   storageUsedBytes: number;
-  storageRemainingBytes: number;
+  storageRemainingBytes: number | null;
   userStorageAllowanceBytes: number;
   storageAccountingReady: boolean;
+  subscriptionTier: SubscriptionTierId;
+  subscriptionMetered: boolean;
+  subscriptionCustom: boolean;
   createdAt: Date;
   updatedAt: Date;
   // Set while an admin has suspended the app: every token is refused at the
@@ -41,9 +46,11 @@ export type PublicApp = {
 };
 
 export type AppStoragePolicy = {
-  storageAllowanceBytes: number;
+  storageAllowanceBytes: number | null;
   storageUsedBytes: number;
   userStorageAllowanceBytes: number;
+  subscriptionTier: SubscriptionTierId;
+  subscriptionCustom: boolean;
   ready: boolean;
 };
 
@@ -110,15 +117,24 @@ export const sanitizeAppOrigins = (value: unknown): string[] | Fail => {
 
 export const appStoragePolicyOf = (doc: any): AppStoragePolicy => {
   const crystal = doc?.crystal;
+  const hasAllowance = !!crystal && Object.prototype.hasOwnProperty.call(crystal, 'storageAllowanceBytes');
+  const allowanceValid =
+    hasAllowance &&
+    (crystal.storageAllowanceBytes === null ||
+      (Number.isSafeInteger(crystal.storageAllowanceBytes) && Number(crystal.storageAllowanceBytes) >= 0));
+  const subscriptionTier: SubscriptionTierId =
+    crystal?.subscriptionTier && subscriptionTierById(crystal.subscriptionTier).id === crystal.subscriptionTier
+      ? crystal.subscriptionTier
+      : DEFAULT_SUBSCRIPTION_TIER;
   const ready =
-    Number.isSafeInteger(crystal?.storageAllowanceBytes) &&
-    Number(crystal.storageAllowanceBytes) >= 0 &&
+    allowanceValid &&
     Number.isSafeInteger(crystal?.storageUsedBytes) &&
     Number(crystal.storageUsedBytes) >= 0 &&
     Number.isSafeInteger(crystal?.userStorageAllowanceBytes) &&
-    Number(crystal.userStorageAllowanceBytes) >= 0;
+    Number(crystal.userStorageAllowanceBytes) >= 0 &&
+    crystal?.storageAccountingVersion === APP_STORAGE_ACCOUNTING_VERSION;
   return {
-    storageAllowanceBytes: storedByteCount(
+    storageAllowanceBytes: storedByteAllowance(
       crystal?.storageAllowanceBytes,
       DEFAULT_APP_STORAGE_ALLOWANCE_BYTES
     ),
@@ -127,6 +143,8 @@ export const appStoragePolicyOf = (doc: any): AppStoragePolicy => {
       crystal?.userStorageAllowanceBytes,
       DEFAULT_APP_USER_STORAGE_ALLOWANCE_BYTES
     ),
+    subscriptionTier,
+    subscriptionCustom: !!crystal && Object.prototype.hasOwnProperty.call(crystal, 'storageAllowanceOverrideBytes'),
     ready
   };
 };
@@ -147,6 +165,9 @@ const toPublicApp = (doc: any): PublicApp => {
     storageRemainingBytes: remainingStorageBytes(appUsage),
     userStorageAllowanceBytes: policy.userStorageAllowanceBytes,
     storageAccountingReady: policy.ready,
+    subscriptionTier: policy.subscriptionTier,
+    subscriptionMetered: subscriptionTierById(policy.subscriptionTier).metered,
+    subscriptionCustom: policy.subscriptionCustom,
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
     revokedAt: doc.crystal?.revokedAt instanceof Date ? doc.crystal.revokedAt : null
@@ -213,9 +234,11 @@ export const createApp = async (
       clientId: `ttapp_${randomUUID()}`,
       name,
       origins,
+      subscriptionTier: DEFAULT_SUBSCRIPTION_TIER,
       storageAllowanceBytes: DEFAULT_APP_STORAGE_ALLOWANCE_BYTES,
       storageUsedBytes: 0,
-      userStorageAllowanceBytes: DEFAULT_APP_USER_STORAGE_ALLOWANCE_BYTES
+      userStorageAllowanceBytes: DEFAULT_APP_USER_STORAGE_ALLOWANCE_BYTES,
+      storageAccountingVersion: APP_STORAGE_ACCOUNTING_VERSION
     },
     ownerId,
     acl: [ACL_OWNER],

@@ -2,7 +2,14 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 // @ts-ignore Node 24 executes TypeScript directly and requires the extension.
-import { admitAppAndUserStorage, remainingStorageBytes, storageUsage, storedByteCount } from './appStorageCore.ts';
+import {
+  admitAppAndUserStorage,
+  effectiveAppUserAllowance,
+  remainingStorageBytes,
+  storageUsage,
+  storedByteAllowance,
+  storedByteCount
+} from './appStorageCore.ts';
 
 test('stored quota fields keep zero, reject invalid values, and clamp remaining bytes', () => {
   assert.equal(storedByteCount(0, 50), 0);
@@ -10,9 +17,19 @@ test('stored quota fields keep zero, reject invalid values, and clamp remaining 
   assert.equal(storedByteCount(-1, 50), 50);
   assert.equal(storedByteCount(1.5, 50), 50);
   assert.equal(storedByteCount('42', 50), 50);
+  assert.equal(storedByteAllowance(null, 50), null);
+  assert.equal(storedByteAllowance(42, null), 42);
   assert.deepEqual(storageUsage(75, 100, 999), { usedBytes: 75, allowanceBytes: 100 });
   assert.equal(remainingStorageBytes({ usedBytes: 75, allowanceBytes: 100 }), 25);
   assert.equal(remainingStorageBytes({ usedBytes: 125, allowanceBytes: 100 }), 0);
+  assert.equal(remainingStorageBytes({ usedBytes: 125, allowanceBytes: null }), null);
+});
+
+test('app-user overrides inherit the default and can never exceed the app ceiling', () => {
+  assert.equal(effectiveAppUserAllowance(50, undefined, 500), 50);
+  assert.equal(effectiveAppUserAllowance(50, 200, 500), 200);
+  assert.equal(effectiveAppUserAllowance(50, 900, 500), 500);
+  assert.equal(effectiveAppUserAllowance(50, 900, null), 900);
 });
 
 test('whole-app exhaustion never touches the app-user ledger', async () => {

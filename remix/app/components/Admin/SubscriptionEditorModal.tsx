@@ -34,7 +34,7 @@ import { useApi } from '~/hooks/useApi';
 // clears the assignment entirely.
 
 const FIELD_LABELS: Record<keyof TierQuotas, { label: string; unit: 'bytes' | 'count' }> = {
-  appStorageBytes: { label: 'App storage per user+app', unit: 'bytes' },
+  appStorageBytes: { label: 'Whole-app storage', unit: 'bytes' },
   userStorageBytes: { label: 'User storage allowance', unit: 'bytes' },
   maxApps: { label: 'Max registered apps', unit: 'count' },
   maxPats: { label: 'Max personal access tokens', unit: 'count' }
@@ -119,10 +119,12 @@ export const SubscriptionEditorModal = ({
   }, [isOpen, subjectType, subjectId]);
 
   const selectedTier = SUBSCRIPTION_TIER_CATALOG.find((entry) => entry.id === tier) ?? SUBSCRIPTION_TIER_CATALOG[0];
+  const visibleFields: Array<keyof TierQuotas> =
+    subjectType === 'app' ? ['appStorageBytes'] : ['userStorageBytes', 'maxApps', 'maxPats'];
 
   const save = async () => {
     const payload: Record<string, number | null> = {};
-    for (const field of QUOTA_OVERRIDE_FIELDS) {
+    for (const field of visibleFields) {
       const state = overrides[field];
       if (state.mode === 'unlimited') payload[field] = null;
       else if (state.mode === 'custom') {
@@ -213,7 +215,7 @@ export const SubscriptionEditorModal = ({
               <Text fontSize="xs" fontWeight={600} textTransform="uppercase" letterSpacing="0.08em" opacity={0.45} mb={2}>
                 Custom overrides
               </Text>
-              {QUOTA_OVERRIDE_FIELDS.map((field) => {
+              {visibleFields.map((field) => {
                 const meta = FIELD_LABELS[field];
                 const state = overrides[field];
                 const tierValue = selectedTier.quotas[field];

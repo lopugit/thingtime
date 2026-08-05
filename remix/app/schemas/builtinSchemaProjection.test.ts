@@ -27,8 +27,21 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   data: [], // '*' is a record; 'schema' is a reserved top-level name
   schema: ['name', 'description', 'forkOf'], // fields + render: records → dropped
   save: [], // marker schema
-  app: ['clientId', 'name', 'origins', 'storageAllowanceBytes', 'storageUsedBytes', 'userStorageAllowanceBytes'],
+  app: [
+    'clientId',
+    'name',
+    'origins',
+    'subscriptionTier',
+    'storageAllowanceBytes',
+    'storageAllowanceOverrideBytes',
+    'storageUsedBytes',
+    'userStorageAllowanceBytes',
+    'storageAccountingVersion'
+  ],
   'app-data': ['appId', 'key'], // value: record → dropped
+  subscription: ['quotaKind', 'subjectType', 'subjectId', 'tier', 'note', 'updatedBy'], // overrides: record → dropped
+  'app-storage': ['quotaKind', 'appId', 'usedBytes', 'storageAllowanceBytes'],
+  'account-link': ['linkKind', 'userId', 'targetId', 'role', 'createdBy'],
   user: ['username', 'ttid', 'displayName', 'bio', 'avatarUrl', 'bannerUrl'],
   theme: ['name'], // theme: record → dropped
   'feed-algorithm': ['name', 'emoji', 'parentId', 'eventCount', 'lastTrainedAt'], // weights: record → dropped

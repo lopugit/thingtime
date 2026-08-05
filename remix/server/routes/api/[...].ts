@@ -33,6 +33,7 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/apps/data/shared': () => import('../../../app/routes/api/v1/apps/data/shared/_shared'),
   'v1/apps/delete': () => import('../../../app/routes/api/v1/apps/delete/_delete'),
   'v1/apps/public': () => import('../../../app/routes/api/v1/apps/public/_public'),
+  'v1/apps/storage': () => import('../../../app/routes/api/v1/apps/storage/_storage'),
   'v1/apps/update': () => import('../../../app/routes/api/v1/apps/update/_update'),
   'v1/auth/accounts': () => import('../../../app/routes/api/v1/auth/accounts/_accounts'),
   'v1/auth/accounts/assume': () => import('../../../app/routes/api/v1/auth/accounts/assume/_assume'),

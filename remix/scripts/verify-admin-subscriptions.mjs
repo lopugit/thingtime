@@ -69,6 +69,7 @@ const authCookieFrom = (headers) => {
 };
 
 const suffix = `${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;
+const GB = 1024 * 1024 * 1024;
 
 const registerSession = async (name) => {
   const username = `admv-${name}-${suffix}`;
@@ -158,7 +159,13 @@ let appA = null;
     body: { name: 'Verify App A', origins: ['http://localhost:5599'] }
   });
   appA = first.body?.app ?? null;
-  check('first app registers under maxApps=1', first.body?.ok === true && !!appA?.clientId);
+  check(
+    'first app registers under maxApps=1 with its own Free aggregate plan',
+    first.body?.ok === true &&
+      !!appA?.clientId &&
+      appA?.subscriptionTier === 'free' &&
+      appA?.storageAllowanceBytes === 5 * GB
+  );
 
   const second = await api('/api/v1/apps', {
     cookie: owner.cookie,
@@ -178,6 +185,43 @@ let appA = null;
     body: { name: 'Verify App C', origins: ['http://localhost:5599'] }
   });
   check('null override = unlimited apps', third.body?.ok === true);
+
+  const customAppPlan = await api('/api/v1/admin/subscriptions', {
+    cookie: adminCookie,
+    method: 'POST',
+    body: {
+      subjectType: 'app',
+      subjectId: appA.clientId,
+      tier: 'plus',
+      overrides: { appStorageBytes: 6 * GB },
+      note: 'verify custom app plan'
+    }
+  });
+  check(
+    'admin app subscription updates the same aggregate allowance atomically',
+    customAppPlan.body?.ok === true &&
+      customAppPlan.body?.subscription?.tier === 'plus' &&
+      customAppPlan.body?.subscription?.effective?.appStorageBytes === 6 * GB
+  );
+
+  const ownerBlockedByCustomPlan = await api('/api/v1/apps/storage', {
+    cookie: owner.cookie,
+    method: 'POST',
+    body: { action: 'set-tier', clientId: appA.clientId, tier: 'pro' }
+  });
+  check('custom admin app plan locks owner self-service tier changes', ownerBlockedByCustomPlan.status === 409);
+
+  const resetAppPlan = await api('/api/v1/admin/subscriptions', {
+    cookie: adminCookie,
+    method: 'POST',
+    body: { subjectType: 'app', subjectId: appA.clientId, clear: true }
+  });
+  check(
+    'admin reset returns the app aggregate to Free without a second ledger',
+    resetAppPlan.body?.ok === true &&
+      resetAppPlan.body?.subscription?.tier === 'free' &&
+      resetAppPlan.body?.subscription?.effective?.appStorageBytes === 5 * GB
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -286,6 +330,21 @@ console.log('D. Ownership links: assume + app co-management');
   const after = await api('/api/v1/apps', { cookie: bystander.cookie });
   check('linked app appears in the co-manager list', (after.body?.apps ?? []).some((a) => a.clientId === appA.clientId));
 
+  const coManagerStorage = await api(`/api/v1/apps/storage?clientId=${encodeURIComponent(appA.clientId)}`, {
+    cookie: bystander.cookie
+  });
+  check('linked co-manager can inspect the app storage policy', coManagerStorage.body?.ok === true);
+
+  const coManagerUpdatesDefault = await api('/api/v1/apps/storage', {
+    cookie: bystander.cookie,
+    method: 'POST',
+    body: { action: 'set-default-user-cap', clientId: appA.clientId, allowanceBytes: 72 * 1024 * 1024 }
+  });
+  check(
+    'linked co-manager can update the default app-user cap',
+    coManagerUpdatesDefault.body?.storage?.defaultUserStorageAllowanceBytes === 72 * 1024 * 1024
+  );
+
   const rename = await api('/api/v1/apps/update', {
     cookie: bystander.cookie,
     method: 'POST',
@@ -304,6 +363,11 @@ console.log('D. Ownership links: assume + app co-management');
     body: { clientId: appA.clientId, name: 'nope' }
   });
   check('removing the link removes access', gone.status === 404);
+
+  const storageGone = await api(`/api/v1/apps/storage?clientId=${encodeURIComponent(appA.clientId)}`, {
+    cookie: bystander.cookie
+  });
+  check('removing the link also removes storage-management access', storageGone.status === 404);
 }
 
 // ---------------------------------------------------------------------------

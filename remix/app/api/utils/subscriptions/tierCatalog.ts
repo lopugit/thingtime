@@ -8,8 +8,9 @@ import { DEFAULT_APP_STORAGE_ALLOWANCE_BYTES, MAX_APPS_PER_USER } from '../../..
 //
 // The model:
 //   • A SUBJECT (a user, or an app by clientId) has at most one subscription
-//     assignment (a protected `subscription` thing — see
-//     api/utils/subscriptions/subscriptions.ts). No assignment means `free`.
+//     assignment. User assignments are protected `subscription` Things; app
+//     assignments live on the app Thing beside aggregate usage. No assignment
+//     means `free`.
 //   • A TIER supplies the default quota numbers. `payg` is the metered tier:
 //     no hard caps (every quota is null = unbounded), usage is measured by the
 //     existing byte ledgers and billed instead of blocked.

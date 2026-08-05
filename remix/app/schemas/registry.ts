@@ -220,12 +220,14 @@ export const MAX_APP_DATA_KEY_CHARS = 128;
 export const MAX_APP_DATA_VALUE_BYTES = 32 * 1024;
 // App storage is byte-budgeted, not doc-counted. Every registered app has a
 // standing aggregate allowance across all of its users, and each (user, app)
-// namespace has its own allowance inside that ceiling. Both are persisted on
-// the server-owned app Thing; sizeBytes deltas charge race-safe ledgers and
-// deletes refund them. Sandbox namespaces get a tighter ephemeral allowance
-// plus their existing app-wide windowed brake.
+// namespace has its own allowance inside that ceiling. The aggregate is on
+// the app Thing; per-user usage/overrides are protected relational ledgers.
+// sizeBytes deltas charge both race-safe counters and deletes refund them.
+// Sandbox namespaces get a tighter ephemeral allowance plus their existing
+// app-wide windowed brake.
 export const DEFAULT_APP_STORAGE_ALLOWANCE_BYTES = 5 * 1024 * 1024 * 1024;
 export const DEFAULT_APP_USER_STORAGE_ALLOWANCE_BYTES = 50 * 1024 * 1024;
+export const APP_STORAGE_ACCOUNTING_VERSION = 1;
 export const SANDBOX_STORAGE_BYTES = 5 * 1024 * 1024;
 // Live app sessions one user can hold for one app: re-approvals mint fresh
 // sessions, so without a cap a re-running embed accumulates grants without
@@ -654,23 +656,46 @@ const subscriptionSchema: ThingtimeSchema = {
   kind: 'crystal',
   collection: null,
   title: 'Subscription',
-  summary: 'A tier/quota assignment for a user or app (admin-managed; PROTECTED from generic CRUD).',
+  summary: 'A tier/quota assignment (admin-managed; PROTECTED from generic CRUD).',
   detail:
-    'One per subject, written only through the admin-gated /api/v1/admin/subscriptions (self-assigning a ' +
-    'tier through /api/v1/things would be privilege escalation, so the kind is protected). The tier ' +
+    'One protected Thing per user subject, written only through the admin-gated /api/v1/admin/subscriptions ' +
+    '(self-assigning a tier through /api/v1/things would be privilege escalation). App subscriptions use ' +
+    'the same API shape but live atomically on the app Thing beside its aggregate storage counter. The tier ' +
     '(free/plus/pro/payg) supplies default quotas; per-field admin overrides win, with null meaning ' +
     'unlimited. payg is the metered tier: no hard caps, usage is measured by the byte ledgers and billed. ' +
     'Enforcement (app storage budgets, app/PAT mint caps) resolves through the merged "effective" quotas.',
   fields: [
     { name: 'quotaKind', type: 'string', required: true, values: ['subscription'], description: 'Bookkeeping marker (like the app-storage ledger).' },
-    { name: 'subjectType', type: 'enum', required: true, values: ['user', 'app'], description: 'What the assignment applies to.' },
-    { name: 'subjectId', type: 'id', required: true, description: 'User id, or app clientId.' },
+    { name: 'subjectType', type: 'enum', required: true, values: ['user'], description: 'Stored subscription Things apply to users; app plans live on app Things.' },
+    { name: 'subjectId', type: 'id', required: true, description: 'User id.' },
     { name: 'tier', type: 'enum', required: true, values: ['free', 'plus', 'pro', 'payg'], description: 'The assigned tier.' },
-    { name: 'overrides', type: 'record', required: false, description: 'Per-field quota overrides (appStorageBytes, userStorageBytes, maxApps, maxPats; null = unlimited).' },
+    { name: 'overrides', type: 'record', required: false, description: 'Per-field user quota overrides (userStorageBytes, maxApps, maxPats; null = unlimited).' },
     { name: 'note', type: 'string', required: false, max: 500, description: 'Admin note (why this assignment exists).' },
     { name: 'updatedBy', type: 'id', required: false, description: 'The admin who last changed it.' }
   ],
-  example: { quotaKind: 'subscription', subjectType: 'user', subjectId: '664f1c2a9d3e5b0012345678', tier: 'pro', overrides: { appStorageBytes: 2147483648 }, note: 'Beta partner' }
+  example: { quotaKind: 'subscription', subjectType: 'user', subjectId: '664f1c2a9d3e5b0012345678', tier: 'pro', overrides: { userStorageBytes: 21474836480 }, note: 'Beta partner' }
+};
+
+const appStorageLedgerSchema: ThingtimeSchema = {
+  id: 'app-storage',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'App-user storage ledger',
+  summary: 'Protected byte accounting and an optional sub-tier for one (app, user) namespace.',
+  detail:
+    'One deterministic relational Thing per app user. The ledger meters usedBytes and optionally stores ' +
+    'a manager-assigned storageAllowanceBytes override; no override inherits the app default. It is a ' +
+    'PROTECTED system kind, so the end user can browse/delete their app data without editing or deleting ' +
+    'the quota counter itself. The app aggregate still wins if many user caps add up beyond the app plan.',
+  createdVia: 'App authorization/storage writes and /api/v1/apps/storage',
+  fields: [
+    { name: 'quotaKind', type: 'string', required: true, description: 'Bookkeeping marker: app-storage.' },
+    { name: 'appId', type: 'id', required: true, description: 'Registered app clientId.' },
+    { name: 'usedBytes', type: 'number', required: true, min: 0, description: 'Bytes currently used by this app user.' },
+    { name: 'storageAllowanceBytes', type: 'number', required: false, min: 0, description: 'Optional app-manager override; absent inherits the app default.' }
+  ],
+  example: { quotaKind: 'app-storage', appId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', usedBytes: 1048576, storageAllowanceBytes: 209715200 }
 };
 
 const accountLinkSchema: ThingtimeSchema = {
@@ -845,7 +870,7 @@ const rateLimitSchema: ThingtimeSchema = {
 
 const appSchema: ThingtimeSchema = {
   id: 'app',
-  version: 2,
+  version: 3,
   kind: 'crystal',
   collection: null,
   title: 'App',
@@ -854,25 +879,31 @@ const appSchema: ThingtimeSchema = {
     'Created only through /api/v1/apps (no generic-route sanitizer on purpose — the server mints ' +
     'the clientId and validates the origin allowlist, so neither can be forged through /api/v1/things). ' +
     'The clientId identifies the app to the embed SDK; origins is the exact list of web origins ' +
-    'allowed to open the authorize popup and receive tokens. Server-owned storageAllowanceBytes, ' +
-    'storageUsedBytes, and userStorageAllowanceBytes enforce the aggregate app-data ceiling and ' +
-    'the allowance inside it for each app user. Deleting the app revokes every app-scoped session ' +
+    'allowed to open the authorize popup and receive tokens. The subscription tier and optional admin ' +
+    'override determine storageAllowanceBytes; storageUsedBytes is the atomic aggregate ledger. The app ' +
+    'owner controls userStorageAllowanceBytes as the default app-user cap, while protected relational ' +
+    'app-storage Things hold individual overrides. Deleting the app revokes every app-scoped session ' +
     'minted for it.',
   fields: [
     { name: 'clientId', type: 'id', required: true, description: 'Server-minted public app id (ttapp_<uuid>) used by the embed SDK.' },
     { name: 'name', type: 'string', required: true, max: MAX_APP_NAME_CHARS, description: `App name shown on the consent screen, max ${MAX_APP_NAME_CHARS} chars.` },
     { name: 'origins', type: 'string[]', required: true, max: MAX_APP_ORIGINS, description: `Allowed web origins (https, or http for localhost dev), max ${MAX_APP_ORIGINS}.` },
-    { name: 'storageAllowanceBytes', type: 'number', required: true, description: 'Server-owned aggregate app-data allowance across every user of this app, in bytes.' },
+    { name: 'subscriptionTier', type: 'enum', required: true, values: ['free', 'plus', 'pro', 'payg'], description: 'App storage plan; payg uses a null runtime ceiling and meters all bytes.' },
+    { name: 'storageAllowanceBytes', type: 'number', required: true, description: 'Server-owned aggregate app-data allowance across every user of this app, in bytes; null is metered/unlimited.' },
+    { name: 'storageAllowanceOverrideBytes', type: 'number', required: false, description: 'Optional administrator plan override; null means metered/unlimited.' },
     { name: 'storageUsedBytes', type: 'number', required: true, description: 'Bytes currently charged across every non-sandbox namespace owned by this app.' },
-    { name: 'userStorageAllowanceBytes', type: 'number', required: true, description: 'Server-owned app-data allowance for each individual user of this app, in bytes.' }
+    { name: 'userStorageAllowanceBytes', type: 'number', required: true, description: 'App-owner-managed default allowance for each individual app user, in bytes.' },
+    { name: 'storageAccountingVersion', type: 'number', required: true, description: 'Enables fail-closed quota writes after reconciliation.' }
   ],
   example: {
     clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f',
     name: 'Rainbow Notes',
     origins: ['https://rainbownotes.example'],
+    subscriptionTier: 'free',
     storageAllowanceBytes: DEFAULT_APP_STORAGE_ALLOWANCE_BYTES,
     storageUsedBytes: 0,
-    userStorageAllowanceBytes: DEFAULT_APP_USER_STORAGE_ALLOWANCE_BYTES
+    userStorageAllowanceBytes: DEFAULT_APP_USER_STORAGE_ALLOWANCE_BYTES,
+    storageAccountingVersion: APP_STORAGE_ACCOUNTING_VERSION
   }
 };
 
@@ -887,8 +918,8 @@ const appDataSchema: ThingtimeSchema = {
     'Written only through /api/v1/app-data with an app-scoped Bearer token (no generic-route ' +
     'sanitizer on purpose), one thing per (user, app, key) — relational, atomic, and bounded per ' +
     `FUNDAMENTALS.md §3: values cap at ${MAX_APP_DATA_VALUE_BYTES / 1024} KiB of JSON and the (user, app) ` +
-    `namespace shares a ${DEFAULT_APP_USER_STORAGE_ALLOWANCE_BYTES / (1024 * 1024)} MiB storage allowance inside the app's ` +
-    `${DEFAULT_APP_STORAGE_ALLOWANCE_BYTES / (1024 * 1024 * 1024)} GiB aggregate allowance (unlimited entry ` +
+    `namespace starts with a ${DEFAULT_APP_USER_STORAGE_ALLOWANCE_BYTES / (1024 * 1024)} MiB app-managed storage allowance inside the app's ` +
+    `${DEFAULT_APP_STORAGE_ALLOWANCE_BYTES / (1024 * 1024 * 1024)} GiB free-tier aggregate allowance (unlimited entry ` +
     'count). Owned by the END USER (acl ["tt:user"]), not the app ' +
     'developer, so users can see and delete what an app has stored for them.',
   fields: [
@@ -911,10 +942,18 @@ const appDataSchema: ThingtimeSchema = {
 // uniqueness rides the root `uniqueKeys` array (multikey unique sparse index;
 // BinData elements, PII keys hashed).
 
-// `subscription` and `account-link` are admin-plane kinds (tier/quota
-// assignments and account-ownership links) — self-assigning either through
-// the generic CRUD would be privilege escalation, so they are protected too.
-export const PROTECTED_THINGTIME = ['user', 'theme', 'feed-algorithm', 'waitlist', 'subscription', 'account-link'] as const;
+// `subscription`, `account-link`, and `app-storage` are control-plane kinds
+// (tier assignments, ownership links, and byte ledgers). Editing any through
+// generic CRUD would be privilege escalation or quota bypass.
+export const PROTECTED_THINGTIME = [
+  'user',
+  'theme',
+  'feed-algorithm',
+  'waitlist',
+  'subscription',
+  'account-link',
+  'app-storage'
+] as const;
 export const isProtectedThingtime = (ids: string[]): boolean =>
   ids.some((id) => (PROTECTED_THINGTIME as readonly string[]).includes(id));
 
@@ -1024,6 +1063,7 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   // admin-plane kinds (PROTECTED: written only through admin endpoints)
   subscriptionSchema,
   accountLinkSchema,
+  appStorageLedgerSchema,
   // system kinds (collections collapsing into things — dual-era)
   userThingSchema,
   themeThingSchema,

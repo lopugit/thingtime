@@ -309,6 +309,21 @@ export function useApi() {
     },
     // first-party browsing of app namespaces (what has each app stored for me)
     apps: {
+      list: useCallback(async () => getJson('/api/v1/apps'), []),
+      storage: useCallback(
+        async (args: { clientId: string }) => getJson(`/api/v1/apps/storage${toQuery({ clientId: args?.clientId })}`),
+        []
+      ),
+      setStorage: useCallback(
+        async (args: {
+          clientId: string;
+          action: 'set-tier' | 'set-default-user-cap' | 'set-user-cap';
+          tier?: string;
+          allowanceBytes?: number | null;
+          userIds?: string[];
+        }) => asyncFetcher.submit(args, { action: '/api/v1/apps/storage' }),
+        [asyncFetcher]
+      ),
       dataSummary: useCallback(async () => getJson('/api/v1/apps/data-summary'), []),
       dataShared: useCallback(
         async (args) =>

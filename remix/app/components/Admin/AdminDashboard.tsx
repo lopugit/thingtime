@@ -334,16 +334,10 @@ const AppsTab = () => {
                   </Td>
                   <Td isNumeric fontSize="xs" whiteSpace="nowrap">
                     {formatBytes(row.usedBytes)}
-                    {!row.subscription.isDefault && ` / ${bytesOrInfinity(row.subscription.effective.appStorageBytes)}`}
+                    {` / ${bytesOrInfinity(row.subscription.effective.appStorageBytes)}`}
                   </Td>
                   <Td>
-                    {row.subscription.isDefault ? (
-                      <Text fontSize="xs" opacity={0.55}>
-                        user tier
-                      </Text>
-                    ) : (
-                      <TierBadge subscription={row.subscription} />
-                    )}
+                    <TierBadge subscription={row.subscription} />
                   </Td>
                   <Td>
                     {row.revokedAt ? (

@@ -81,6 +81,16 @@ These patterns show up again and again — default to them when unsure:
   compensates aggregate. Updates charge deltas, deletes refund both, and crash
   ambiguity can only over-count until the `$sum` reconcile pass. App developer
   update routes never accept allowance fields.
+- **App plans and app-user sub-tiers have different homes.** The app's tier,
+  optional administrator override, aggregate allowance, and aggregate usage
+  live together on the app Thing, so a plan update and the hot admission
+  ledger are one atomic document. Owners and linked co-managers change the
+  tier/default through `/api/v1/apps/storage`; administrator-custom plans lock
+  self-service tier changes. The default user cap starts at 50 MiB. Individual
+  overrides live on protected relational `app-storage` Things rather than an
+  unbounded map on the app, can be assigned in bulk, and are effective only up
+  to the current whole-app ceiling. The normal `/apps/update` route still never
+  accepts quota fields.
 - **Consent surface deliberately unchanged.** `app-data` already covers
   namespace CRUD — richer querying just moves filtering server-side over bytes
   the app could already read, so no new scope is invented for the things

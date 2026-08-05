@@ -197,8 +197,23 @@ Users and Apps management with subscription tiers (free/plus/pro/payg — payg i
 metered with no hard caps), per-field quota overrides (`null` = unlimited),
 platform-level app suspension, and many-to-many ownership links (assign
 accounts to an owner so one login can switch into its service accounts without
-credentials, and assign apps to co-managers). The live verification suite needs
-an env-admin's credentials (placeholders — use your own throwaway admin):
+credentials, and assign apps to co-managers).
+
+App owners and linked co-managers use `/apps/manage` to see the app's measured
+aggregate usage, move its whole-app plan between Free (5 GiB), Plus (25 GiB),
+Pro (100 GiB), and metered PAYG, change the inherited per-app-user cap (50 MiB
+by default), and assign or reset custom caps for one or many app users. The app
+Thing is the aggregate ledger; protected relational `app-storage` Things hold
+per-user usage and optional sub-tiers, so neither generic app editing nor an end
+user can rewrite the accounting rows.
+
+The live verification suites need a disposable local database. The app-storage
+suite is deliberately local-URL-only; the admin suite needs an env-admin's
+credentials (placeholders — use your own throwaway admin):
+
+```sh
+node remix/scripts/verify-app-storage.mjs http://127.0.0.1:10000
+```
 
 ```sh
 TT_VERIFY_ADMIN_USER="your-admin-username" \

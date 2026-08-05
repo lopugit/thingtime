@@ -69,7 +69,8 @@ export const action = async ({ request }: { request: Request }) => {
   if (owner.ok === false) return json({ ok: false, error: owner.error }, { status: owner.status });
 
   if (body?.clear === true) {
-    await clearSubscription(subject.subjectType, subject.subjectId);
+    const cleared = await clearSubscription(subject.subjectType, subject.subjectId, gate.user.id);
+    if (cleared.ok === false) return json({ ok: false, error: cleared.error }, { status: cleared.status });
     return json({ ok: true, subscription: await getSubscription(subject.subjectType, subject.subjectId) });
   }
 

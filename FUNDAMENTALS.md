@@ -52,7 +52,7 @@ edge cases live in `api/utils/migrations/migrations.ts`.
 
 | Collection | Holds |
 | ---------- | ----- |
-| `things`   | ALL Thingtime data. System kinds: `user` (public profile in `crystal`, all private state as a single BinData `secure` blob, uniqueness via BinData `uniqueKeys`), `theme`, `feed-algorithm`, `waitlist`, `schema`; content kinds: `post`, `comment`, `reaction`, `share`, `data`; admin-plane kinds: `subscription` (tier/quota assignment per user or app — `api/utils/subscriptions/`), `account-link` (ownership links: owned accounts + app co-managers, many-to-many — `api/utils/accounts/accountLinks.ts`). Every thing also carries a schema-free `extended` property for arbitrary unvalidated JSON (≤512KB, replace-on-write, never structured-searchable) |
+| `things`   | ALL Thingtime data. System kinds: `user` (public profile in `crystal`, all private state as a single BinData `secure` blob, uniqueness via BinData `uniqueKeys`), `theme`, `feed-algorithm`, `waitlist`, `schema`; content kinds: `post`, `comment`, `reaction`, `share`, `data`; control-plane kinds: `subscription` (tier/quota assignment per user — app plans live atomically on app Things), `app-storage` (protected per-app-user usage + optional sub-tier), `account-link` (owned accounts + app co-managers, many-to-many). Every thing also carries a schema-free `extended` property for arbitrary unvalidated JSON (≤512KB, replace-on-write, never structured-searchable) |
 | `sessions` | server-side sessions / JWT records (revocation; `userId` = the user thing's `shareId`) |
 | `rosters`  | account-switcher rosters (TTL-reaped) |
 | `emailVerifications` | pending email-verification tokens |
@@ -65,7 +65,7 @@ edge cases live in `api/utils/migrations/migrations.ts`.
 
 System-kind rules (never bypass):
 - **Protected** kinds — `user`, `theme`, `feed-algorithm`, `waitlist`,
-  `subscription`, `account-link` — are refused by the generic `/api/v1/things`
+  `subscription`, `app-storage`, `account-link` — are refused by the generic `/api/v1/things`
   CRUD; only their dedicated utils write them (register, profile, themes,
   algorithms, waitlist, and the admin-gated subscription/link endpoints —
   self-assigning a tier or an ownership link would be privilege escalation).
@@ -112,12 +112,16 @@ hand-write `tt:app/<x>` acl entries, so acl membership would be spoofable);
 `acl` stays what it always was — the AUDIENCE: `tt:user` private, plus
 `tt:app/<clientId>` for that app's user base. Every app-token read and write is
 fenced to the namespace (`api/utils/apps/namespace.ts`), and storage is bounded
-by TWO standing BYTE allowances — a server-owned 5 GiB aggregate on the app
-Thing and 50 MiB per (user, app), with root `sizeBytes` charged against both
-fail-closed ledgers — never doc counts. The app aggregate reserves first; a
-user-ledger refusal compensates it, and a crash can only leave conservative
-over-counting for the reconcile migration to repair. Sandboxes instead get a
-5 MiB ephemeral namespace plus the global windowed brake. The end user owns
+by TWO standing BYTE allowances — the app Thing's aggregate subscription
+ceiling (Free 5 GiB, Plus 25 GiB, Pro 100 GiB, PAYG metered/unbounded) and one
+effective per-(user, app) ceiling (the app-owner default, 50 MiB initially,
+optionally replaced by a relational `app-storage` sub-tier and always clamped
+to the aggregate). Root `sizeBytes` is charged against both fail-closed ledgers
+— never doc counts. The app aggregate reserves first; a user-ledger refusal
+compensates it, and a crash can only leave conservative over-counting for the
+reconcile migration to repair. Plan + aggregate counter are one app document,
+so entitlement and admission cannot drift. Sandboxes instead get a 5 MiB
+ephemeral namespace plus the global windowed brake. The end user owns
 every namespace doc and can browse (`GET /api/v1/things?appId=`,
 `/api/v1/apps/data-summary`) and delete
 (`POST /api/v1/apps/data/delete-all`) everything an app stores. Full model in

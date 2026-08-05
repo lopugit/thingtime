@@ -81,11 +81,16 @@ alone separates the windows, so an app never rides the user's own buckets.
 
 - `MAX_APP_DATA_KEYS_PER_APP_USER` (200) and `SANDBOX_MAX_KEYS` (50) are
   **deleted**. Unlimited docs.
-- Two standing allowances for registered apps: 5 GiB aggregate across every
-  user (stored atomically on the app Thing), and 50 MiB per (user, app) on a
-  deterministic counter Thing. A write reserves aggregate then user with
+- Two standing allowances for registered apps: a tiered aggregate across every
+  user (Free 5 GiB, Plus 25 GiB, Pro 100 GiB, PAYG metered/unbounded, stored
+  atomically with usage on the app Thing), and an app-owner default of 50 MiB
+  per (user, app) on a deterministic protected counter Thing. Owners and
+  linked co-managers can change the app tier/default at `/apps/manage` and set
+  one or many relational per-user overrides; every effective override is
+  clamped to the whole-app ceiling. A write reserves aggregate then user with
   guarded `findOneAndUpdate`; user refusal compensates aggregate. Both are
-  server-owned and fail-closed, and `/apps/update` cannot raise them.
+  fail-closed, and the generic `/apps/update` identity/origin route cannot
+  rewrite them.
   Sandboxes instead get `SANDBOX_STORAGE_BYTES = 5 MiB` per namespace (counter
   doc carries `sandboxExpiresAt` so it reaps with its namespace) plus the
   global windowed brake.
@@ -113,7 +118,9 @@ alone separates the windows, so an app never rides the user's own buckets.
 - New indexes (via `ensureIndexes`, versioned-collection layer):
   `{ appId: 1, ownerId: 1, updatedAt: -1, shareId: -1 }` and
   `{ appId: 1, acl: 1, updatedAt: -1, shareId: -1 }`, both partial
-  `appId $exists` (scalar appId ⇒ one multikey field max ⇒ legal).
+  `appId $exists` (scalar appId ⇒ one multikey field max ⇒ legal), plus the
+  partial `(crystal.quotaKind, crystal.appId, updatedAt, ownerId)` manager
+  index for protected per-user ledgers.
 
 ## User browsing (in Thingtime)
 

@@ -66,7 +66,7 @@ export const listAdminUsersOverview = async (query: string, limit = 20): Promise
       .toArray(),
     things
       .aggregate([
-        { $match: { thingtime: 'data', 'crystal.quotaKind': 'app-storage', ownerId: { $in: ids } } },
+        { $match: { 'crystal.quotaKind': 'app-storage', ownerId: { $in: ids } } },
         { $group: { _id: '$ownerId', bytes: { $sum: { $ifNull: ['$crystal.usedBytes', 0] } } } }
       ])
       .toArray()
@@ -153,7 +153,7 @@ export const listAdminAppsOverview = async (query: string, limit = 100): Promise
       .toArray(),
     things
       .aggregate([
-        { $match: { thingtime: 'data', 'crystal.quotaKind': 'app-storage', 'crystal.appId': { $in: clientIds } } },
+        { $match: { 'crystal.quotaKind': 'app-storage', 'crystal.appId': { $in: clientIds } } },
         { $group: { _id: '$crystal.appId', bytes: { $sum: { $ifNull: ['$crystal.usedBytes', 0] } } } }
       ])
       .toArray(),

@@ -54,17 +54,14 @@ export const listAppDataSummaries = async (userId: string): Promise<AppDataSumma
       appName: typeof app?.crystal?.name === 'string' ? app.crystal.name : null,
       entryCount: group.entryCount || 0,
       usedBytes: group.usedBytes || 0,
-      budgetBytes: appStorageBudgetBytes(
-        {
-          appId,
-          ownerId: userId,
-          sharedRead: false,
-          scopes: [],
-          username: '',
-          sandbox: null
-        },
-        app
-      ),
+      budgetBytes: await appStorageBudgetBytes({
+        appId,
+        ownerId: userId,
+        sharedRead: false,
+        scopes: [],
+        username: '',
+        sandbox: null
+      }),
       lastUpdatedAt: group.lastUpdatedAt ? new Date(group.lastUpdatedAt).toISOString() : null
     });
   }

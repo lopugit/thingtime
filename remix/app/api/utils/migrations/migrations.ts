@@ -17,6 +17,7 @@ import {
   ACL_ALL,
   ACL_INHERIT,
   ACL_OWNER,
+  APP_STORAGE_ACCOUNTING_VERSION,
   COLLECTION_SCHEMA_VERSIONS,
   LEGACY_SCHEMA_VERSION,
   aclFromVisibility,
@@ -1109,18 +1110,14 @@ const backfillAppNamespaceFields: Migration = {
 // ---------------------------------------------------------------------------
 // Registered-app storage allowances. PR 16's namespace ledger was per user;
 // this follow-up makes the app's real aggregate ceiling explicit too. Legacy
-// apps stay fail-closed because positive writes require all three numeric app
-// fields. For each app we stamp any pre-namespace KV residue, reconcile its
-// user ledgers, then initialize the aggregate LAST. That order is the writer
-// fence: no new-code write can race an absolute baseline into an undercount.
+// apps stay fail-closed because positive writes require the accounting-version
+// marker plus the policy fields. For each app we stamp pre-namespace residue,
+// reconcile/protect user ledgers, then initialize the aggregate LAST. That is
+// the writer fence: no new-code write can race a baseline into an undercount.
 
 const appStorageAllowanceBackfillFilter = {
   thingtime: 'app',
-  $or: [
-    { 'crystal.storageAllowanceBytes': { $not: { $type: 'number' } } },
-    { 'crystal.storageUsedBytes': { $not: { $type: 'number' } } },
-    { 'crystal.userStorageAllowanceBytes': { $not: { $type: 'number' } } }
-  ]
+  'crystal.storageAccountingVersion': { $ne: APP_STORAGE_ACCOUNTING_VERSION }
 };
 
 const backfillAppStorageAllowances: Migration = {
@@ -1130,9 +1127,10 @@ const backfillAppStorageAllowances: Migration = {
   toVersion: THINGS_VERSION,
   title: 'Initialize whole-app and per-app-user storage allowances',
   description:
-    'Initializes each legacy app with its server-owned aggregate storage allowance, aggregate usage, ' +
-    'and per-user allowance. Reconciles every user ledger before enabling app writes, then installs ' +
-    'the app aggregate last so concurrent new-code writes cannot be overwritten by the baseline.',
+    'Initializes each legacy app with the free storage plan, aggregate usage, and 50 MiB default user ' +
+    'allowance. Reconciles every user ledger and converts it to the protected app-storage kind before ' +
+    'enabling writes, then installs the app aggregate/version marker last so concurrent new-code writes ' +
+    'cannot be overwritten by the baseline.',
   pending: async () => {
     return (await getCollection('things')).countDocuments(appStorageAllowanceBackfillFilter);
   },
@@ -1211,7 +1209,6 @@ const backfillAppStorageAllowances: Migration = {
       // row for them. Reconcile those existing counters explicitly to zero.
       const existingLedgers = await things
         .find({
-          thingtime: 'data',
           'crystal.quotaKind': 'app-storage',
           'crystal.appId': appId,
           sandboxExpiresAt: { $exists: false }

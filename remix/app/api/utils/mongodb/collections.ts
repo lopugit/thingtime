@@ -372,6 +372,14 @@ export const ensureIndexes = async () => {
             partialFilterExpression: { 'crystal.appId': { $exists: true }, 'crystal.key': { $exists: true } }
           }
         ),
+        // Protected per-(app, user) storage ledgers. App-owner management and
+        // the admin directory enumerate one app's users newest-first; keeping
+        // quotaKind first excludes ordinary app-data without a second
+        // multikey field or an unbounded collection scan.
+        col('things').createIndex(
+          { 'crystal.quotaKind': 1, 'crystal.appId': 1, updatedAt: -1, ownerId: 1 },
+          { partialFilterExpression: { 'crystal.quotaKind': 'app-storage' } }
+        ),
         // The app-scoped shared read (/app-data/shared): entries whose acl
         // carries tt:app/<clientId>, newest first. acl is the only multikey
         // field here (appId/updatedAt/shareId are scalars), so the compound is

@@ -19,20 +19,33 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **App-owner storage subscriptions + app-user sub-tiers**: `/apps/manage`
+  lets a registering owner or linked co-manager inspect measured whole-app
+  usage, switch the aggregate plan (Free 5 GiB, Plus 25 GiB, Pro 100 GiB,
+  metered PAYG), change the inherited per-user cap (50 MiB by default), and
+  assign/reset one or up to 200 selected app users to custom caps. App tier +
+  aggregate allowance/usage now live atomically on the app Thing; protected
+  relational `app-storage` Things hold user usage and optional overrides, with
+  guarded writes enforcing both ceilings and clamping every user cap to the
+  whole-app total. Includes owner/co-manager API, privacy-gated usernames,
+  responsive manager UI, schema/index/migration updates, API/embed docs, and a
+  30-check local-only live suite. This supersedes the earlier app→end-user-tier
+  fallback from the stacked admin-manager change. — Codex (AI), 2026-08-05
+
 - **/admin dashboard + subscription tiers + ownership links** (stacked on the
   PAT × app-namespace tree): admin-gated `/admin` page (Users / Apps / System
   tabs) managing every user and app — subscription tiers (free/plus/pro/payg;
   payg = metered, no hard caps) with per-field admin overrides (`null` =
-  unlimited), quota enforcement wired through the tiers (app-storage byte
-  budget resolves app assignment → end-user tier → free default; app + PAT
-  mint caps), platform-level app suspension (`crystal.revokedAt` checked at
+  unlimited), quota enforcement wired through the tiers (whole-app storage,
+  app registration, and PAT mint caps), platform-level app suspension
+  (`crystal.revokedAt` checked at
   the `resolveAppToken` choke point + live-session sweep), and many-to-many
   ownership links (`account-link` things): owned accounts appear in the
   switcher's "Owned accounts" and are assumable without credentials
   (`POST /api/v1/auth/accounts/assume`), app links grant co-management. New
   protected kinds `subscription` + `account-link`; 7 new documented endpoints;
   guard smoke tests; `test:subscriptions` unit suite; live suite
-  `scripts/verify-admin-subscriptions.mjs` (32 checks, needs
+  `scripts/verify-admin-subscriptions.mjs` (38 checks, needs
   `TT_VERIFY_ADMIN_USER`/`TT_VERIFY_ADMIN_PASS` of an env-admin). See the
   detailed PR note in `PRs/`. — Claude (AI), 2026-08-02
 

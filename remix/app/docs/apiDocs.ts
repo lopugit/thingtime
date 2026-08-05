@@ -2082,9 +2082,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       '(via the embed SDK at /sdk/thingtime-login.js). POST { name, origins } registers one: the server ' +
       'mints the clientId (ttapp_<uuid>) and validates origins — bare https origins like ' +
       'https://example.com, with http allowed only for localhost dev. Only those exact origins can open ' +
-      'the authorize popup and receive tokens. Each app receives a server-owned 5 GiB aggregate app-data ' +
-      'allowance and a 50 MiB allowance for each app user; GET lists the live usage, remaining aggregate ' +
-      'bytes, and both allowances. These fields cannot be raised through the developer update route.',
+      'the authorize popup and receive tokens. Each app starts on a 5 GiB aggregate free plan and a 50 MiB ' +
+      'default cap for each app user; GET lists live usage, remaining aggregate bytes, and both allowances. ' +
+      'Owners and linked co-managers change plans/defaults/user sub-tiers through /api/v1/apps/storage.',
     auth: { mode: 'session-or-bearer', description: 'Your own Thingtime session (cookie or full-account Bearer). App-scoped tokens are rejected.' },
     methods: ['GET', 'POST'],
     steps: [
@@ -2115,13 +2115,77 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
             storageUsedBytes: 0,
             storageRemainingBytes: 5368709120,
             userStorageAllowanceBytes: 52428800,
-            storageAccountingReady: true
+            storageAccountingReady: true,
+            subscriptionTier: 'free',
+            subscriptionMetered: false,
+            subscriptionCustom: false
           }
         }
       },
       { status: 400, description: 'Bad origin.', body: { ok: false, error: 'Origins must be bare https origins like https://example.com (http is allowed for localhost only)' } }
     ],
     notes: ['Apps are things (thingtime ["app"]) owned by you; the clientId is public, but tokens only ever reach allowlisted origins.']
+  }),
+  endpoint({
+    id: 'apps-storage',
+    group: 'embed',
+    title: 'Manage app storage',
+    endpoint: '/api/v1/apps/storage',
+    summary: 'Manage a registered app’s aggregate plan, default app-user cap, and individual/bulk user sub-tiers.',
+    detail:
+      'GET ?clientId= returns the app’s aggregate byte usage/allowance, tier catalog, 50 MiB-by-default ' +
+      'app-user policy, and up to 200 recent app users with effective usage/caps. POST set-tier changes the ' +
+      'whole-app ceiling (Free 5 GiB, Plus 25 GiB, Pro 100 GiB, PAYG metered/unlimited); ' +
+      'set-default-user-cap changes the inherited cap; set-user-cap assigns or clears one relational override ' +
+      'for up to 200 selected users. Every per-user value is bounded by the whole-app allowance, and the ' +
+      'aggregate ledger still wins when the sum of user caps is larger than the plan.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'The registering owner or an app co-manager linked by an administrator. App-scoped tokens are rejected.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET with clientId to render the app manager and user storage table.',
+      'POST { clientId, action: "set-tier", tier } to change the aggregate storage plan.',
+      'POST { clientId, action: "set-default-user-cap", allowanceBytes } to change the inherited user cap.',
+      'POST { clientId, action: "set-user-cap", userIds, allowanceBytes } for individual/bulk sub-tiers; null clears to the default.'
+    ],
+    requestExamples: [
+      {
+        name: 'Upgrade the whole app',
+        description: 'Move the app to the 25 GiB Plus aggregate tier.',
+        method: 'POST',
+        body: { clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', action: 'set-tier', tier: 'plus' }
+      },
+      {
+        name: 'Raise selected users',
+        description: 'Give two app users a 200 MiB sub-tier.',
+        method: 'POST',
+        body: {
+          clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f',
+          action: 'set-user-cap',
+          userIds: ['664f1c2a9d3e5b0012345678', '664f1c2a9d3e5b0087654321'],
+          allowanceBytes: 209715200
+        }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Updated plan and app-user policy.',
+        body: {
+          ok: true,
+          storage: {
+            clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f',
+            storageAllowanceBytes: 26843545600,
+            storageUsedBytes: 1048576,
+            defaultUserStorageAllowanceBytes: 52428800,
+            users: []
+          }
+        }
+      },
+      { status: 404, description: 'Unknown or not managed by this account.', body: { ok: false, error: 'App not found' } }
+    ]
   }),
   endpoint({
     id: 'apps-update',
@@ -2133,7 +2197,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'POST { clientId, name?, origins? }. Origins are re-validated like registration. Removing an origin ' +
       'takes effect on the next request from any token bound to it — the app-token resolver re-checks the ' +
       'allowlist every time. Storage allowance and usage fields are server-owned and ignored here, so an ' +
-      'app developer cannot raise either quota.',
+      'app developer cannot raise either quota through this identity/origin route. Use /api/v1/apps/storage ' +
+      'for authorized plan and app-user policy changes.',
     auth: { mode: 'session-or-bearer', description: 'Your own Thingtime session (cookie or full-account Bearer); you can only update apps you own.' },
     methods: ['POST'],
     steps: [

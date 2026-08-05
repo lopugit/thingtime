@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 // Live, public-API-only verification for registered-app storage accounting.
 // Creates one app and two users against the supplied disposable environment,
-// then proves the app aggregate and each per-user ledger reserve/refund
-// together. Never point this at production: the verifier intentionally
-// creates accounts, an app, grants, and app-data entries.
+// proves owner plan/default/single/bulk sub-tier management, then proves the
+// app aggregate and each per-user ledger reserve/refund together. Never point
+// this at production: the verifier intentionally creates accounts, an app,
+// grants, and app-data entries.
 //
 //   node scripts/verify-app-storage.mjs http://127.0.0.1:18280
 
@@ -19,7 +20,11 @@ if (!BASE || !/^https?:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?\/?$/i.test(BASE))
 
 const ORIGIN = 'http://localhost:4545';
 const APP_ALLOWANCE = 5 * 1024 * 1024 * 1024;
+const PLUS_APP_ALLOWANCE = 25 * 1024 * 1024 * 1024;
 const USER_ALLOWANCE = 50 * 1024 * 1024;
+const MANAGED_DEFAULT_ALLOWANCE = 64 * 1024 * 1024;
+const MANAGED_USER_ALLOWANCE = 80 * 1024 * 1024;
+const MANAGED_SINGLE_USER_ALLOWANCE = 96 * 1024 * 1024;
 const suffix = `${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;
 
 let passed = 0;
@@ -75,7 +80,12 @@ const register = async (label) => {
     throw new Error(`Could not register ${label}: HTTP ${response.status}`);
   }
 
-  return { cookie, username };
+  const me = await api('/api/v1/auth/me', { cookie });
+  if (me.status !== 200 || typeof me.body?.user?.id !== 'string') {
+    throw new Error(`Could not resolve ${label}'s user id: HTTP ${me.status}`);
+  }
+
+  return { cookie, username, id: me.body.user.id };
 };
 
 const authorize = async (cookie, clientId) => {
@@ -146,6 +156,133 @@ check(
 
 const developerToken = await authorize(developer.cookie, clientId);
 const memberToken = await authorize(secondUser.cookie, clientId);
+
+const managementPath = `/api/v1/apps/storage?clientId=${encodeURIComponent(clientId)}`;
+const initialManagement = await api(managementPath, { cookie: developer.cookie });
+check(
+  'app owner can open storage management for both known app users',
+  initialManagement.status === 200 &&
+    initialManagement.body?.storage?.subscription?.tier === 'free' &&
+    initialManagement.body?.storage?.users?.some((row) => row.userId === developer.id) &&
+    initialManagement.body?.storage?.users?.some((row) => row.userId === secondUser.id)
+);
+
+const nonManagerView = await api(managementPath, { cookie: secondUser.cookie });
+check('an app user who is not a manager cannot inspect app-wide storage', nonManagerView.status === 404);
+
+const upgraded = await api('/api/v1/apps/storage', {
+  cookie: developer.cookie,
+  method: 'POST',
+  body: { action: 'set-tier', clientId, tier: 'plus' }
+});
+check(
+  'app owner upgrades the aggregate plan to Plus atomically',
+  upgraded.status === 200 &&
+    upgraded.body?.storage?.subscription?.tier === 'plus' &&
+    upgraded.body?.storage?.storageAllowanceBytes === PLUS_APP_ALLOWANCE
+);
+
+const defaultUpdated = await api('/api/v1/apps/storage', {
+  cookie: developer.cookie,
+  method: 'POST',
+  body: { action: 'set-default-user-cap', clientId, allowanceBytes: MANAGED_DEFAULT_ALLOWANCE }
+});
+check(
+  'app owner changes the default app-user cap',
+  defaultUpdated.status === 200 &&
+    defaultUpdated.body?.storage?.defaultUserStorageAllowanceBytes === MANAGED_DEFAULT_ALLOWANCE &&
+    defaultUpdated.body?.storage?.users?.every((row) => row.storageAllowanceBytes === MANAGED_DEFAULT_ALLOWANCE)
+);
+
+const bulkUpdated = await api('/api/v1/apps/storage', {
+  cookie: developer.cookie,
+  method: 'POST',
+  body: {
+    action: 'set-user-cap',
+    clientId,
+    userIds: [developer.id, secondUser.id],
+    allowanceBytes: MANAGED_USER_ALLOWANCE
+  }
+});
+check(
+  'multi-select assigns a custom sub-tier to both app users',
+  bulkUpdated.status === 200 &&
+    bulkUpdated.body?.updated === 2 &&
+    bulkUpdated.body?.storage?.users?.filter((row) => [developer.id, secondUser.id].includes(row.userId))
+      .every((row) => row.storageAllowanceSource === 'custom' && row.storageAllowanceBytes === MANAGED_USER_ALLOWANCE)
+);
+
+const oneUpdated = await api('/api/v1/apps/storage', {
+  cookie: developer.cookie,
+  method: 'POST',
+  body: {
+    action: 'set-user-cap',
+    clientId,
+    userIds: [secondUser.id],
+    allowanceBytes: MANAGED_SINGLE_USER_ALLOWANCE
+  }
+});
+const individuallyManaged = oneUpdated.body?.storage?.users?.find((row) => row.userId === secondUser.id);
+check(
+  'an individual app user can be moved to a different sub-tier',
+  oneUpdated.status === 200 &&
+    individuallyManaged?.storageAllowanceSource === 'custom' &&
+    individuallyManaged?.storageAllowanceBytes === MANAGED_SINGLE_USER_ALLOWANCE
+);
+
+const badDefault = await api('/api/v1/apps/storage', {
+  cookie: developer.cookie,
+  method: 'POST',
+  body: { action: 'set-default-user-cap', clientId, allowanceBytes: PLUS_APP_ALLOWANCE + 1 }
+});
+check('default user cap cannot exceed the whole-app plan', badDefault.status === 400);
+
+const badIndividual = await api('/api/v1/apps/storage', {
+  cookie: developer.cookie,
+  method: 'POST',
+  body: {
+    action: 'set-user-cap',
+    clientId,
+    userIds: [secondUser.id],
+    allowanceBytes: PLUS_APP_ALLOWANCE + 1
+  }
+});
+check('individual sub-tier cannot exceed the whole-app plan', badIndividual.status === 400);
+
+const usersReset = await api('/api/v1/apps/storage', {
+  cookie: developer.cookie,
+  method: 'POST',
+  body: {
+    action: 'set-user-cap',
+    clientId,
+    userIds: [developer.id, secondUser.id],
+    allowanceBytes: null
+  }
+});
+check(
+  'multi-select reset returns both users to the app default',
+  usersReset.status === 200 &&
+    usersReset.body?.storage?.users?.filter((row) => [developer.id, secondUser.id].includes(row.userId))
+      .every((row) => row.storageAllowanceSource === 'app-default' && row.storageAllowanceBytes === MANAGED_DEFAULT_ALLOWANCE)
+);
+
+await api('/api/v1/apps/storage', {
+  cookie: developer.cookie,
+  method: 'POST',
+  body: { action: 'set-default-user-cap', clientId, allowanceBytes: USER_ALLOWANCE }
+});
+const planReset = await api('/api/v1/apps/storage', {
+  cookie: developer.cookie,
+  method: 'POST',
+  body: { action: 'set-tier', clientId, tier: 'free' }
+});
+check(
+  'owner can return the app to Free without disturbing its user-ledger usage',
+  planReset.status === 200 &&
+    planReset.body?.storage?.subscription?.tier === 'free' &&
+    planReset.body?.storage?.storageAllowanceBytes === APP_ALLOWANCE &&
+    planReset.body?.storage?.defaultUserStorageAllowanceBytes === USER_ALLOWANCE
+);
 
 const initial = await usage(developerToken);
 check(

@@ -350,25 +350,28 @@ is fixed, and cite the checklist you ran in the PR description.
       route's public default); `save`/`share` thingtimes 403 as first-party
       surfaces; protected kinds stay refused.
 - [ ] Byte allowances replace key counts: keys keep writing past 200 until
-      either the server-owned 50 MiB (user, app) allowance or the registered
-      app's 5 GiB aggregate allowance is spent. The corresponding over-limit
+      either the effective (user, app) allowance (50 MiB app default, or its
+      custom sub-tier) or the app's aggregate plan (5 GiB Free by default) is
+      spent. The corresponding over-limit
       write 507s and writes nothing; concurrent users never overshoot either
       guarded counter. GET /api/v1/app-data/usage returns userStorage and
       appStorage with exact used/allowance/remaining arithmetic while keeping
       usedBytes/budgetBytes as user-ledger aliases. A write raises both by its
       serialized size, an update charges only the delta, and a delete refunds
       both.
-- [ ] App allowance ownership + migration: POST /api/v1/apps stores
-      storageAllowanceBytes=5 GiB, storageUsedBytes=0, and
-      userStorageAllowanceBytes=50 MiB; /apps/update cannot change them. A legacy
-      app fails writes closed until backfill-app-storage-allowances reconciles
+- [ ] App allowance ownership + migration: POST /api/v1/apps stores the Free
+      tier, storageAllowanceBytes=5 GiB, storageUsedBytes=0, and the 50 MiB
+      default user cap; /apps/update cannot change them. Tier + runtime
+      aggregate allowance live on that same app Thing. A legacy app fails
+      writes closed until backfill-app-storage-allowances reconciles
       per-user sums and initializes aggregate last; two migration runners
       cannot overwrite a now-live aggregate.
 - [ ] Run `node scripts/verify-app-storage.mjs <local base URL>` against a
-      disposable local database: all 20 registered-app ledger checks pass for
-      two users writing to one app, including same-key CAS races and
-      first-party owner updates/deletes. The script refuses non-local URLs so
-      it cannot seed verification accounts into production by accident.
+      disposable local database: all 30 app-manager + registered-ledger checks
+      pass for two users, including owner plan/default/single/bulk/reset flows,
+      authorization, same-key CAS races, and first-party owner updates/deletes.
+      The script refuses non-local URLs so it cannot seed verification accounts
+      into production by accident.
 - [ ] KV listing grammar: GET /api/v1/app-data with key=post:* or prefix=
       filters, limit=/cursor= page, and nextCursor walks the whole set; KV
       entries also appear via GET /api/v1/things?thingtime=app-data with the
@@ -531,8 +534,9 @@ re-checks the whole management plane end-to-end:
       Reset to default returns the subject to implicit free.
 - [ ] Tier quotas actually enforce: with `maxApps: 1` override the second
       `POST /api/v1/apps` is refused 400; a `null` override (or payg) lifts
-      the cap; the app-storage budget resolves app assignment → end-user tier
-      → free default, and `null` meters without blocking.
+      the cap. App subjects accept only `appStorageBytes`; tier/override and the
+      runtime aggregate move atomically on the app Thing, `null` meters without
+      blocking, and administrator-custom app plans lock owner tier changes.
 - [ ] `subscription` and `account-link` kinds are PROTECTED: generic
       `POST /api/v1/things` refuses them (self-assigned tiers/links would be
       privilege escalation).
@@ -552,6 +556,34 @@ re-checks the whole management plane end-to-end:
 - [ ] Mobile (375px): the admin tables scroll inside their own container —
       the page body itself never scrolls horizontally; modals fit with no
       clipped controls.
+
+## App-owner storage manager (`/apps/manage`, `api/utils/apps/appStorageManagement.ts`)
+
+- [ ] Logged-out visitors get the sign-in card. An owner sees every registered
+      app; an administrator-linked co-manager sees the linked app; ordinary app
+      users and removed co-managers get the same 404-shaped denial as an unknown
+      app and cannot inspect aggregate usage or the user roster.
+- [ ] Switching Free → Plus → Pro → PAYG updates the whole-app allowance to
+      5/25/100 GiB/null while preserving exact usage. A downgrade below current
+      usage 409s atomically. An administrator-custom plan shows `custom` and
+      disables self-service tier buttons until the admin resets it.
+- [ ] Default cap starts at 50 MiB, accepts 0 and finite MiB values no larger
+      than the current aggregate, and is re-checked atomically against a racing
+      plan change. Existing users without overrides immediately inherit it.
+- [ ] Select one user or many (up to all 200 shown) and apply a custom cap;
+      each protected `app-storage` ledger records its own override, `Use app
+      default` unsets it, and runtime usage reports the effective cap. A custom
+      value above the aggregate is refused; a later aggregate downgrade clamps
+      enforcement even if a historical override was larger.
+- [ ] The roster includes users with current or past grants/ledgers, but a
+      username appears only while a live unexpired grant covers
+      `profile.username`. App-user IDs/usernames are never written to the
+      browser localStorage cache, and a failed manager re-authorization clears
+      the cached storage view.
+- [ ] Desktop and 375px mobile: switch apps; choose a plan; edit the default;
+      search, select-all, single-select, bulk apply/reset; horizontally scroll
+      the user table; and scroll the full page top-to-bottom. No page-level
+      horizontal overflow, clipping, sticky overlap, or console errors.
 
 ## Rate limiting & index-ensure reliability (`api/utils/rateLimit/enforce.ts`, `api/utils/mongodb/collections.ts`)
 

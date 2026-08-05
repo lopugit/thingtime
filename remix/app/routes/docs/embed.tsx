@@ -526,9 +526,13 @@ export default function DocsEmbed() {
         </CodeWindow>
         <Text>
           <strong>App storage:</strong> keep your per-user data (settings, saves, progress…) in the
-          user’s Thingtime account — your app can only ever see its own namespace. Registered apps get
-          5 GiB across all users, with 50 MiB available to each app user; read both live ledgers via{' '}
-          <code>/api/v1/app-data/usage</code>.
+          user’s Thingtime account — your app can only ever see its own namespace. Free starts at 5 GiB
+          across all users and 50 MiB per app user. Owners and co-managers can upgrade the aggregate
+          plan, change the default user cap, and assign individual user sub-tiers in{' '}
+          <ChakraLink href="/apps/manage" color="var(--tt-docs-accent-ink, #0f5132)">
+            the app manager
+          </ChakraLink>
+          ; read both live ledgers via <code>/api/v1/app-data/usage</code>.
         </Text>
         <CodeWindow language="javascript" title="app-storage.js">
           {APP_STORAGE_CODE}
