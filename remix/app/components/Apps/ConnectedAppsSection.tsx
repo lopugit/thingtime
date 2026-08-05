@@ -26,7 +26,7 @@ export type AppDataRow = {
   appName: string | null;
   entryCount: number;
   usedBytes: number;
-  budgetBytes: number;
+  budgetBytes: number | null;
   lastUpdatedAt: string | null;
 };
 
@@ -130,7 +130,7 @@ export const ConnectedAppsSection = ({ userId }: { userId: string }) => {
               }
               hint={
                 data
-                  ? `${data.entryCount} ${data.entryCount === 1 ? 'entry' : 'entries'} · ${formatBytes(data.usedBytes)} of ${formatBytes(data.budgetBytes)}`
+                  ? `${data.entryCount} ${data.entryCount === 1 ? 'entry' : 'entries'} · ${formatBytes(data.usedBytes)} of ${data.budgetBytes === null ? 'unlimited' : formatBytes(data.budgetBytes)}`
                   : grant
                     ? `Signed in · ${grant.scopes.join(', ')}`
                     : clientId

@@ -18,7 +18,7 @@ export type AppDataSummary = {
   appName: string | null; // null = app deleted/unregistered — data persists
   entryCount: number;
   usedBytes: number;
-  budgetBytes: number;
+  budgetBytes: number | null;
   lastUpdatedAt: string | null;
 };
 

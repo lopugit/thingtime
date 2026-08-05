@@ -289,7 +289,7 @@ export const AppsDataPage = () => {
               </Flex>
               <Text fontSize="xs" opacity={0.65}>
                 {app.entryCount} {app.entryCount === 1 ? 'entry' : 'entries'} · {formatBytes(app.usedBytes)} of{' '}
-                {formatBytes(app.budgetBytes)}
+                {app.budgetBytes === null ? 'unlimited' : formatBytes(app.budgetBytes)}
               </Text>
             </Box>
           ))}

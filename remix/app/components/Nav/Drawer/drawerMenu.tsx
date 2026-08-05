@@ -17,6 +17,7 @@ export interface DrawerSubItem {
 	// visibility filters against the current user
 	authOnly?: boolean;
 	guestOnly?: boolean;
+	adminOnly?: boolean;
 }
 
 export interface DrawerTopItem {
@@ -105,6 +106,7 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		icon: '💻',
 		to: '/tests',
 		children: [
+			{ id: 'dev-admin', label: 'Admin', icon: '🛠️', to: '/admin', adminOnly: true },
 			{ id: 'dev-tests', label: 'API tests', icon: '✅', to: '/tests' },
 			{ id: 'dev-crypto', label: 'Crypto', icon: '🔒', to: '/crypto' },
 			{ id: 'dev-edge', label: 'Edge', icon: '🌍', to: '/edge' },
@@ -133,6 +135,26 @@ export const drawerMenuItems: DrawerTopItem[] = [
 	}
 ];
 
+// Top-level hubs whose click KEEPS the drawer open by default, so their
+// submenu stays browsable (they're all multi-destination sections). An
+// explicit per-item "close after click" setting always wins over this
+// default, in either direction.
+export const DRAWER_KEEP_OPEN_DEFAULT_IDS: string[] = ['dev', 'status', 'branding', 'docs'];
+
+// The one resolver for "does clicking this item close the drawer?" — shared
+// by the click handlers (useDrawer.closesOnClick) and the settings toggles so
+// the checkboxes always show the behavior that will actually happen.
+export const drawerItemClosesOnClick = (
+	closeOnClick: Record<string, boolean> | undefined,
+	itemId: string
+): boolean => {
+	const saved = closeOnClick?.[itemId];
+	if (typeof saved === 'boolean') {
+		return saved;
+	}
+	return !DRAWER_KEEP_OPEN_DEFAULT_IDS.includes(itemId);
+};
+
 // Order ids by the user's saved ordering; unknown/new ids keep their default
 // position appended after the known ones, removed ids are dropped.
 export const applyDrawerOrdering = (defaultIds: string[], saved?: string[]): string[] => {
@@ -146,12 +168,19 @@ export const applyDrawerOrdering = (defaultIds: string[], saved?: string[]): str
 	return [...known, ...missing];
 };
 
-export const filterDrawerItemsByAuth = <T extends { authOnly?: boolean; guestOnly?: boolean }>(items: T[], loggedIn: boolean): T[] => {
+export const filterDrawerItemsByAuth = <T extends { authOnly?: boolean; guestOnly?: boolean; adminOnly?: boolean }>(
+	items: T[],
+	loggedIn: boolean,
+	isAdmin = false
+): T[] => {
 	return items.filter((item) => {
 		if (item.authOnly && !loggedIn) {
 			return false;
 		}
 		if (item.guestOnly && loggedIn) {
+			return false;
+		}
+		if (item.adminOnly && !isAdmin) {
 			return false;
 		}
 		return true;

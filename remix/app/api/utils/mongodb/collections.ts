@@ -380,6 +380,13 @@ export const ensureIndexes = async () => {
           { 'crystal.appId': 1, acl: 1, updatedAt: -1, shareId: -1 },
           { partialFilterExpression: { 'crystal.appId': { $exists: true } } }
         ),
+        // Account-ownership links (accounts/accountLinks.ts): "who is linked
+        // to this target" — the admin owners view and app co-manager checks.
+        // Links a USER holds ride the (thingtime, ownerId) prefix instead.
+        col('things').createIndex(
+          { 'crystal.targetId': 1, 'crystal.linkKind': 1 },
+          { partialFilterExpression: { 'crystal.targetId': { $exists: true } } }
+        ),
         // Sandbox app-data is ephemeral: only docs written under a sandbox
         // token carry sandboxExpiresAt (TTL skips docs without the field), so
         // pretend data reaps itself with the token's lifetime.

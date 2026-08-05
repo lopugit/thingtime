@@ -885,6 +885,101 @@ export const apiTests: ApiTestDefinition[] = [
     )
   },
   {
+    id: 'admin-users-overview-guarded',
+    name: 'Users overview is admin-only',
+    description: 'The /admin Users tab data requires an admin session.',
+    group: 'admin',
+    method: 'GET',
+    path: '/api/v1/admin/users/overview',
+    expect: expectJson(
+      [401, 403],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Non-admin users overview was rejected.'
+    )
+  },
+  {
+    id: 'admin-apps-guarded',
+    name: 'Apps overview is admin-only',
+    description: 'The cross-user apps overview requires an admin session.',
+    group: 'admin',
+    method: 'GET',
+    path: '/api/v1/admin/apps',
+    expect: expectJson(
+      [401, 403],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Non-admin apps overview was rejected.'
+    )
+  },
+  {
+    id: 'admin-apps-revoke-guarded',
+    name: 'App suspension is admin-only',
+    description: 'Suspending an app requires an admin session.',
+    group: 'admin',
+    method: 'POST',
+    path: '/api/v1/admin/apps/revoke',
+    body: { clientId: 'ttapp_00000000-0000-0000-0000-000000000000', revoked: true },
+    expect: expectJson(
+      [401, 403],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Non-admin suspension attempt was rejected.'
+    )
+  },
+  {
+    id: 'admin-subscriptions-guarded',
+    name: 'Subscriptions are admin-only',
+    description: 'Assigning tiers/overrides requires an admin session.',
+    group: 'admin',
+    method: 'POST',
+    path: '/api/v1/admin/subscriptions',
+    body: { subjectType: 'user', subjectId: '000000000000000000000000', tier: 'pro' },
+    expect: expectJson(
+      [401, 403],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Non-admin tier assignment was rejected.'
+    )
+  },
+  {
+    id: 'admin-links-guarded',
+    name: 'Ownership links are admin-only',
+    description: 'Assigning account/app ownership links requires an admin session.',
+    group: 'admin',
+    method: 'POST',
+    path: '/api/v1/admin/links',
+    body: { action: 'add', linkKind: 'account', userId: '000000000000000000000000', targetId: '000000000000000000000001' },
+    expect: expectJson(
+      [401, 403],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Non-admin link assignment was rejected.'
+    )
+  },
+  {
+    id: 'auth-accounts-owned-guarded',
+    name: 'Owned accounts need a session',
+    description: 'Listing owned accounts anonymously is rejected.',
+    group: 'auth',
+    method: 'GET',
+    path: '/api/v1/auth/accounts/owned',
+    expect: expectJson(
+      [401],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Anonymous owned-accounts read was rejected.'
+    )
+  },
+  {
+    id: 'auth-accounts-assume-guarded',
+    name: 'Assume needs a session + link',
+    description: 'Assuming an account anonymously is rejected.',
+    group: 'auth',
+    method: 'POST',
+    path: '/api/v1/auth/accounts/assume',
+    body: { accountId: '000000000000000000000000' },
+    expect: expectJson(
+      [401],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Anonymous assume attempt was rejected.'
+    )
+  },
+  {
     id: 'things-comment-guarded',
     name: 'Comments are guarded',
     description: 'Commenting without a session (or on an unknown post) is rejected with an error shape.',
