@@ -1,14 +1,30 @@
 import { findAppsByClientIds } from '../apps/apps';
-import { escapeRegex, findUserById, searchUsersForAdmin, toPublicUser, type AdminUserRow } from '../auth/users';
+import {
+  escapeRegex,
+  findUsersByIds,
+  searchUsersForAdminOverviewPage,
+  toPublicUser,
+  type AdminUserRow
+} from '../auth/users';
 import { getSessionsCollection, getThingsCollection } from '../mongodb/collections';
 import { getSubscriptions, type SubscriptionInfo } from '../subscriptions/subscriptions';
+import {
+  InvalidAdminSnapshotCursorError,
+  adminSnapshotAfterFilter,
+  adminSnapshotCursorKey,
+  createLiveSessionClause,
+  decodeAdminSnapshotCursor,
+  encodeAdminSnapshotCursor,
+  normalizeAdminSnapshotLimit,
+  normalizeAdminSnapshotQuery,
+  requireAdminSnapshotCursorKey,
+  type AdminSnapshotCursorKey
+} from './adminSnapshot';
 
 // The admin directory — everything the /admin dashboard's Users and Apps tabs
 // render. Read-only rollups: each list is one search plus a handful of $in
 // aggregates over the ids on the page (never per-row queries against the
 // whole collection). Admin-only surface; callers gate with requireAdmin.
-
-const liveSessionClause = { revokedAt: null, $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }] };
 
 export type AdminUserOverviewRow = AdminUserRow & {
   accountKind: 'user' | 'service';
@@ -28,16 +44,33 @@ export type AdminUserOverviewRow = AdminUserRow & {
   };
 };
 
-export const listAdminUsersOverview = async (query: string, limit = 20): Promise<AdminUserOverviewRow[]> => {
-  const rows = await searchUsersForAdmin(query, limit);
+export type AdminUserOverviewSnapshot = {
+  users: AdminUserOverviewRow[];
+  limit: number;
+  totalCapped: boolean;
+  nextCursor: string | null;
+};
+
+export const listAdminUsersOverview = async (
+  query: string,
+  limit = 20,
+  cursor?: string | null
+): Promise<AdminUserOverviewSnapshot> => {
+  const capped = normalizeAdminSnapshotLimit(limit, 20);
+  const page = await searchUsersForAdminOverviewPage(query, capped, cursor);
+  const rows = page.rows;
+  const nextCursor = page.nextCursor;
+  const totalCapped = nextCursor !== null;
   const ids = rows.map((row) => row.id);
-  if (!ids.length) return [];
+  if (!ids.length) {
+    return { users: [], limit: capped, totalCapped, nextCursor: page.nextCursor };
+  }
 
   const things = await getThingsCollection();
   const sessions = await getSessionsCollection();
 
   const [fullUsers, subs, appCounts, linkCounts, patCounts, grantPairs, nsBytes] = await Promise.all([
-    Promise.all(ids.map((id) => findUserById(id))),
+    findUsersByIds(ids),
     getSubscriptions('user', ids),
     things
       .aggregate([
@@ -59,7 +92,7 @@ export const listAdminUsersOverview = async (query: string, limit = 20): Promise
       .toArray(),
     sessions
       .aggregate([
-        { $match: { userId: { $in: ids }, purpose: 'app', ...liveSessionClause } },
+        { $match: { userId: { $in: ids }, purpose: 'app', ...createLiveSessionClause() } },
         { $group: { _id: { userId: '$userId', clientId: '$meta.clientId' } } },
         { $group: { _id: '$_id.userId', n: { $sum: 1 } } }
       ])
@@ -92,25 +125,30 @@ export const listAdminUsersOverview = async (query: string, limit = 20): Promise
     })
   );
 
-  return rows.map((row) => {
-    const pub = publicUsers.get(row.id);
-    return {
-      ...row,
-      accountKind: pub?.accountKind === 'service' ? 'service' : 'user',
-      createdAt: pub?.createdAt ?? null,
-      storageAllowanceBytes: typeof pub?.storageAllowanceBytes === 'number' ? pub.storageAllowanceBytes : null,
-      storageUsedBytes: typeof pub?.storageUsedBytes === 'number' ? pub.storageUsedBytes : 0,
-      appNamespaceBytes: (ns.get(row.id) as any)?.bytes ?? 0,
-      subscription: subs.get(row.id)!,
-      counts: {
-        apps: (apps.get(row.id) as any)?.n ?? 0,
-        linkedApps: links.get(row.id)?.app ?? 0,
-        ownedAccounts: links.get(row.id)?.account ?? 0,
-        pats: (pats.get(row.id) as any)?.n ?? 0,
-        connectedApps: (grants.get(row.id) as any)?.n ?? 0
-      }
-    };
-  });
+  return {
+    users: rows.map((row) => {
+      const pub = publicUsers.get(row.id);
+      return {
+        ...row,
+        accountKind: pub?.accountKind === 'service' ? 'service' : 'user',
+        createdAt: pub?.createdAt ?? row.createdAt,
+        storageAllowanceBytes: typeof pub?.storageAllowanceBytes === 'number' ? pub.storageAllowanceBytes : null,
+        storageUsedBytes: typeof pub?.storageUsedBytes === 'number' ? pub.storageUsedBytes : 0,
+        appNamespaceBytes: (ns.get(row.id) as any)?.bytes ?? 0,
+        subscription: subs.get(row.id)!,
+        counts: {
+          apps: (apps.get(row.id) as any)?.n ?? 0,
+          linkedApps: links.get(row.id)?.app ?? 0,
+          ownedAccounts: links.get(row.id)?.account ?? 0,
+          pats: (pats.get(row.id) as any)?.n ?? 0,
+          connectedApps: (grants.get(row.id) as any)?.n ?? 0
+        }
+      };
+    }),
+    limit: capped,
+    totalCapped,
+    nextCursor
+  };
 };
 
 export type AdminAppOverviewRow = {
@@ -128,25 +166,68 @@ export type AdminAppOverviewRow = {
   subscription: SubscriptionInfo;
 };
 
-export const listAdminAppsOverview = async (query: string, limit = 100): Promise<AdminAppOverviewRow[]> => {
-  const q = (query || '').trim();
-  const capped = Math.min(200, Math.max(1, limit));
+export type AdminAppOverviewSnapshot = {
+  apps: AdminAppOverviewRow[];
+  limit: number;
+  totalCapped: boolean;
+  nextCursor: string | null;
+};
+
+type AdminAppsCursor = {
+  v: 1;
+  kind: 'apps';
+  q: string;
+  key: AdminSnapshotCursorKey;
+};
+
+const readAdminAppsCursor = (cursor: unknown, q: string): AdminAppsCursor | null => {
+  const decoded = decodeAdminSnapshotCursor(cursor);
+  if (!decoded) return null;
+  if (decoded.v !== 1 || decoded.kind !== 'apps' || decoded.q !== q) throw new InvalidAdminSnapshotCursorError();
+  return { v: 1, kind: 'apps', q, key: requireAdminSnapshotCursorKey(decoded.key) };
+};
+
+export const listAdminAppsOverview = async (
+  query: string,
+  limit = 100,
+  cursor?: string | null
+): Promise<AdminAppOverviewSnapshot> => {
+  const q = normalizeAdminSnapshotQuery(query);
+  const capped = normalizeAdminSnapshotLimit(limit, 100);
+  const continuation = readAdminAppsCursor(cursor, q);
   const things = await getThingsCollection();
   const sessions = await getSessionsCollection();
 
   const pattern = { $regex: escapeRegex(q), $options: 'i' };
-  const filter = q
+  const baseFilter = q
     ? { thingtime: 'app', $or: [{ 'crystal.name': pattern }, { 'crystal.clientId': pattern }] }
     : { thingtime: 'app' };
-  const docs = await things.find(filter as any).sort({ createdAt: -1 }).limit(capped).toArray();
+  const filter = continuation
+    ? { $and: [baseFilter, adminSnapshotAfterFilter(continuation.key, 'shareId')] }
+    : baseFilter;
+  const found = await things
+    .find(filter as any)
+    .sort({ createdAt: -1, shareId: 1 })
+    .limit(capped + 1)
+    .toArray();
+  const totalCapped = found.length > capped;
+  const docs = found.slice(0, capped);
+  const nextCursor = totalCapped
+    ? encodeAdminSnapshotCursor({
+        v: 1,
+        kind: 'apps',
+        q,
+        key: adminSnapshotCursorKey(docs[docs.length - 1] as any)
+      })
+    : null;
   const clientIds = docs.map((doc: any) => String(doc.crystal?.clientId ?? '')).filter(Boolean);
-  if (!clientIds.length) return [];
+  if (!clientIds.length) return { apps: [], limit: capped, totalCapped, nextCursor };
 
   const [subs, userCounts, byteSums, linkDocs] = await Promise.all([
     getSubscriptions('app', clientIds),
     sessions
       .aggregate([
-        { $match: { purpose: 'app', 'meta.clientId': { $in: clientIds }, ...liveSessionClause } },
+        { $match: { purpose: 'app', 'meta.clientId': { $in: clientIds }, ...createLiveSessionClause() } },
         { $group: { _id: { clientId: '$meta.clientId', userId: '$userId' } } },
         { $group: { _id: '$_id.clientId', n: { $sum: 1 } } }
       ])
@@ -172,34 +253,39 @@ export const listAdminAppsOverview = async (query: string, limit = 100): Promise
     managersByApp.set(target, list);
   }
 
-  // Usernames for owners + managers: one lookup per distinct id (bounded by
-  // the page size, admin-only).
+  // Usernames for owners + managers: one query per user store for the bounded
+  // distinct id set, never one two-store lookup per person.
   const personIds = [
     ...new Set([...docs.map((doc: any) => String(doc.ownerId)), ...[...managersByApp.values()].flat()])
   ].filter(Boolean);
   const people = new Map(
-    (await Promise.all(personIds.map((id) => findUserById(id)))).filter(Boolean).map((doc: any) => {
+    (await findUsersByIds(personIds)).map((doc: any) => {
       const pub = toPublicUser(doc);
       return [pub.id, pub.username] as const;
     })
   );
 
-  return docs.map((doc: any) => {
-    const clientId = String(doc.crystal?.clientId ?? '');
-    const ownerId = String(doc.ownerId ?? '');
-    return {
-      clientId,
-      name: String(doc.crystal?.name ?? ''),
-      origins: Array.isArray(doc.crystal?.origins) ? doc.crystal.origins : [],
-      createdAt: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : null,
-      revokedAt: doc.crystal?.revokedAt instanceof Date ? doc.crystal.revokedAt.toISOString() : null,
-      owner: { id: ownerId, username: people.get(ownerId) ?? null },
-      managers: (managersByApp.get(clientId) ?? []).map((id) => ({ id, username: people.get(id) ?? null })),
-      userCount: users.get(clientId) ?? 0,
-      usedBytes: bytes.get(clientId) ?? 0,
-      subscription: subs.get(clientId)!
-    };
-  });
+  return {
+    apps: docs.map((doc: any) => {
+      const clientId = String(doc.crystal?.clientId ?? '');
+      const ownerId = String(doc.ownerId ?? '');
+      return {
+        clientId,
+        name: String(doc.crystal?.name ?? ''),
+        origins: Array.isArray(doc.crystal?.origins) ? doc.crystal.origins : [],
+        createdAt: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : null,
+        revokedAt: doc.crystal?.revokedAt instanceof Date ? doc.crystal.revokedAt.toISOString() : null,
+        owner: { id: ownerId, username: people.get(ownerId) ?? null },
+        managers: (managersByApp.get(clientId) ?? []).map((id) => ({ id, username: people.get(id) ?? null })),
+        userCount: users.get(clientId) ?? 0,
+        usedBytes: bytes.get(clientId) ?? 0,
+        subscription: subs.get(clientId)!
+      };
+    }),
+    limit: capped,
+    totalCapped,
+    nextCursor
+  };
 };
 
 // Ensure a set of clientIds exist (input validation for admin link writes).

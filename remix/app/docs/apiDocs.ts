@@ -118,7 +118,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/admin/users',
     summary: 'List current admins and search users to promote/demote (admin only).',
     detail:
-      'Returns the current DB-flagged admins; with ?q=<query> also returns matching users (by username/email) so an admin can promote or demote them. Env-allowlist admins are marked envAdmin and cannot be demoted from the UI.',
+      'Returns a newest-first bounded snapshot of current DB-flagged admins; limit and totalCapped describe that snapshot. With ?q=<query> it also returns matching users (by username/email) so an admin can promote or demote them. Env-allowlist admins are marked envAdmin and cannot be demoted from the UI.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['GET'],
     steps: [
@@ -138,6 +138,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         body: {
           ok: true,
           admins: [{ id: '64f000000000000000000001', username: 'lopu', isAdmin: true, envAdmin: true }],
+          limit: 200,
+          totalCapped: false,
           results: [{ id: '64f000000000000000000002', username: 'nik', isAdmin: false, envAdmin: false }]
         }
       }
@@ -153,18 +155,21 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Enriches the admin user search with everything the management dashboard shows per user: subscription ' +
       '(tier, admin overrides, effective quotas, metered flag), storage (allowance, used, and the live sum of ' +
       'their app-namespace byte ledgers), and counts (registered apps, co-managed apps, owned accounts, PATs, ' +
-      'connected apps with a live grant). ?q= searches by username/email; without it the first page of users returns.',
+      'connected apps with a live grant). ?q= searches by username/email; limit selects a bounded 1–200 row ' +
+      'keyset page (default 20). When nextCursor is non-null, pass it back unchanged with the same q to continue. ' +
+      'totalCapped remains an alias for whether another page exists.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['GET'],
     steps: [
-      'GET with credentials (optionally ?q=<username or email>).',
+      'GET with credentials (optionally ?q=<username or email>&limit=<1-200>&cursor=<nextCursor>).',
       'Each row carries subscription.effective — the quotas actually enforced for that user.',
       'Change a tier or overrides via POST /api/v1/admin/subscriptions.',
       'Non-admins receive 403; anonymous callers 401.'
     ],
     requestExamples: [
-      { name: 'First page', description: 'Overview rows for the first users.', method: 'GET' },
-      { name: 'Search', description: 'Overview rows matching a query.', method: 'GET', query: { q: 'nik' } }
+      { name: 'Admin snapshot', description: 'Up to 200 newest overview rows.', method: 'GET', query: { limit: 200 } },
+      { name: 'Search', description: 'Overview rows matching a query.', method: 'GET', query: { q: 'nik' } },
+      { name: 'Continue', description: 'Continue the same stable keyset scan.', method: 'GET', query: { limit: 200, cursor: '<nextCursor>' } }
     ],
     responseExamples: [
       {
@@ -176,6 +181,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
             {
               id: '64f000000000000000000002',
               username: 'nik',
+              createdAt: '2026-08-05T00:00:00.000Z',
               isAdmin: false,
               accountKind: 'user',
               storageAllowanceBytes: null,
@@ -189,7 +195,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
               },
               counts: { apps: 2, linkedApps: 1, ownedAccounts: 0, pats: 3, connectedApps: 4 }
             }
-          ]
+          ],
+          limit: 200,
+          totalCapped: false,
+          nextCursor: null
         }
       }
     ]
@@ -204,18 +213,21 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'The /admin Apps tab: all apps across all users (newest first, ?q= filters by name/clientId). Each row ' +
       'carries the registering owner, any co-managers assigned via account-links, the count of distinct users ' +
       'holding a live grant, the summed (user, app) namespace storage, the app-level subscription (isDefault ' +
-      "true = budgets fall through to each end user's tier), and revokedAt when suspended.",
+      "true = budgets fall through to each end user's tier), and revokedAt when suspended. limit selects a " +
+      'bounded 1–200 row keyset page (default 100). Pass a non-null nextCursor back unchanged with the same q; ' +
+      'totalCapped remains an alias for whether another page exists.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['GET'],
     steps: [
-      'GET with credentials (optionally ?q=<name or clientId>).',
+      'GET with credentials (optionally ?q=<name or clientId>&limit=<1-200>&cursor=<nextCursor>).',
       'Suspend or restore an app via POST /api/v1/admin/apps/revoke.',
       'Assign co-managers via POST /api/v1/admin/links with linkKind "app".',
       'Non-admins receive 403; anonymous callers 401.'
     ],
     requestExamples: [
-      { name: 'All apps', description: 'Newest apps first.', method: 'GET' },
-      { name: 'Search', description: 'Filter by name or clientId.', method: 'GET', query: { q: 'rainbow' } }
+      { name: 'Admin snapshot', description: 'Up to 200 newest apps.', method: 'GET', query: { limit: 200 } },
+      { name: 'Search', description: 'Filter by name or clientId.', method: 'GET', query: { q: 'rainbow' } },
+      { name: 'Continue', description: 'Continue the same stable keyset scan.', method: 'GET', query: { limit: 200, cursor: '<nextCursor>' } }
     ],
     responseExamples: [
       {
@@ -228,6 +240,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
               clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f',
               name: 'Rainbow Notes',
               origins: ['https://rainbownotes.example'],
+              createdAt: '2026-08-05T00:00:00.000Z',
               revokedAt: null,
               owner: { id: '64f000000000000000000002', username: 'nik' },
               managers: [{ id: '64f000000000000000000003', username: 'lopu' }],
@@ -235,7 +248,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
               usedBytes: 3145728,
               subscription: { tier: 'free', isDefault: true }
             }
-          ]
+          ],
+          limit: 200,
+          totalCapped: false,
+          nextCursor: null
         }
       }
     ]
@@ -371,7 +387,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     detail:
       'GET returns every protected subscription-tier Thing grouped into live, drafts, and archived. New tiers ' +
       'start as draft v1. Only drafts can be edited; create-version clones a live or archived revision into the ' +
-      'next draft; publish atomically promotes it and archives the previous live revision. Prices are integer ' +
+      'next draft. Publish uses a per-tier lease and durable recovery journal to archive the previous live ' +
+      'revision and promote the draft; readers keep the prior revision available during that cross-document ' +
+      'handoff. Prices are integer ' +
       'minor units for daily/weekly/monthly/yearly renewal options. The six percentage-saved comparisons are ' +
       'saved from the annualized formula unless a custom override is supplied. Inclusions are bounded Editor.js ' +
       'blocks rendered on the customer card. Archiving never deletes history, and the live default tier can only ' +
@@ -422,8 +440,22 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         body: {
           ok: true,
           tier: { id: 'studio-a1b2c3d4', versionId: 'subscription-tier-studio-a1b2c3d4-v1', version: 1, status: 'draft', title: 'Studio' },
-          live: [],
-          drafts: [],
+          tiers: [
+            { id: 'free', versionId: 'subscription-tier-free-v1', version: 1, status: 'live', title: 'Free' },
+            { id: 'plus', versionId: 'subscription-tier-plus-v1', version: 1, status: 'live', title: 'Plus' },
+            { id: 'pro', versionId: 'subscription-tier-pro-v1', version: 1, status: 'live', title: 'Pro' },
+            { id: 'payg', versionId: 'subscription-tier-payg-v1', version: 1, status: 'live', title: 'Pay as you go' },
+            { id: 'studio-a1b2c3d4', versionId: 'subscription-tier-studio-a1b2c3d4-v1', version: 1, status: 'draft', title: 'Studio' }
+          ],
+          live: [
+            { id: 'free', versionId: 'subscription-tier-free-v1', version: 1, status: 'live', title: 'Free' },
+            { id: 'plus', versionId: 'subscription-tier-plus-v1', version: 1, status: 'live', title: 'Plus' },
+            { id: 'pro', versionId: 'subscription-tier-pro-v1', version: 1, status: 'live', title: 'Pro' },
+            { id: 'payg', versionId: 'subscription-tier-payg-v1', version: 1, status: 'live', title: 'Pay as you go' }
+          ],
+          drafts: [
+            { id: 'studio-a1b2c3d4', versionId: 'subscription-tier-studio-a1b2c3d4-v1', version: 1, status: 'draft', title: 'Studio' }
+          ],
           archived: []
         }
       },

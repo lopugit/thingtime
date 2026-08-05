@@ -19,6 +19,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Typed queries across every admin workspace**: Users, Apps, Tiers, rate
+  limits, and the administrator roster now share an all-field free-text,
+  filter, and deterministic-sort interface. It handles nested/list fields,
+  created-day ranges, tiers and immutable versions, quotas/usage/counts,
+  lifecycle state, pricing/discounts/inclusion text, and booleans. User/app
+  APIs use private, no-store 200-row keyset pages, and the UI drains the full
+  directory before applying computed/nested filters instead of silently
+  filtering only the newest page. User/app rows now expose created time, while
+  hidden rate-limit edits remain intact. — Codex (AI),
+  2026-08-05
+
 - **Versioned subscription-tier admin + customer cards**: `/admin` now has a
   Tiers workspace with separate Live, Draft / not live, and Archived sections.
   Admins can create tiers and immutable revisions; edit names, taglines,

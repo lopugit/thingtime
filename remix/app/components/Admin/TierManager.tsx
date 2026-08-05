@@ -53,6 +53,9 @@ import { useLopu } from '~/components/Lopu/useLopu';
 import { TierCard } from '~/components/Subscriptions/TierCard';
 import { useApi } from '~/hooks/useApi';
 
+import { AdminRowQueryControls, useAdminRowQuery } from './AdminRowQueryControls';
+import type { AdminRowField } from './adminRowQuery';
+
 const MB = 1024 * 1024;
 
 const PRICE_LABELS: Record<TierPricePeriod, string> = {
@@ -68,6 +71,86 @@ const QUOTA_LABELS: Record<keyof TierQuotas, { label: string; unit: 'MiB' | 'ite
   maxApps: { label: 'Max registered apps', unit: 'items' },
   maxPats: { label: 'Max access tokens', unit: 'items' }
 };
+
+const tierInclusionText = (value: unknown): string => {
+  if (value === null || value === undefined) return '';
+  if (Array.isArray(value)) return value.map(tierInclusionText).filter(Boolean).join(' ');
+  if (typeof value === 'object') {
+    return Object.values(value as Record<string, unknown>).map(tierInclusionText).filter(Boolean).join(' ');
+  }
+  return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean' ? String(value) : '';
+};
+
+const TIER_QUERY_FIELDS: readonly AdminRowField<SubscriptionTierDescriptor>[] = [
+  { id: 'id', label: 'Tier ID', kind: 'string' },
+  { id: 'versionId', label: 'Version ID', kind: 'string' },
+  { id: 'version', label: 'Version', kind: 'number' },
+  {
+    id: 'status',
+    label: 'Status',
+    kind: 'enum',
+    options: [
+      { value: 'live', label: 'Live' },
+      { value: 'draft', label: 'Draft' },
+      { value: 'archived', label: 'Archived' }
+    ]
+  },
+  { id: 'title', label: 'Name', kind: 'string' },
+  { id: 'tagline', label: 'Tagline', kind: 'string' },
+  { id: 'description', label: 'Description', kind: 'string' },
+  { id: 'emoji', label: 'Emoji', kind: 'string' },
+  { id: 'bannerImageUrl', label: 'Banner image URL', kind: 'string' },
+  { id: 'sortOrder', label: 'Sort order', kind: 'number' },
+  { id: 'metered', label: 'Metered', kind: 'boolean' },
+  { id: 'currency', label: 'Currency', kind: 'string' },
+  {
+    id: 'prices.daily',
+    label: 'Daily price',
+    kind: 'number',
+    getValue: (tier) => tier.prices.daily === null ? null : tier.prices.daily / currencyMinorUnitFactor(tier.currency)
+  },
+  {
+    id: 'prices.weekly',
+    label: 'Weekly price',
+    kind: 'number',
+    getValue: (tier) => tier.prices.weekly === null ? null : tier.prices.weekly / currencyMinorUnitFactor(tier.currency)
+  },
+  {
+    id: 'prices.monthly',
+    label: 'Monthly price',
+    kind: 'number',
+    getValue: (tier) => tier.prices.monthly === null ? null : tier.prices.monthly / currencyMinorUnitFactor(tier.currency)
+  },
+  {
+    id: 'prices.yearly',
+    label: 'Yearly price',
+    kind: 'number',
+    getValue: (tier) => tier.prices.yearly === null ? null : tier.prices.yearly / currencyMinorUnitFactor(tier.currency)
+  },
+  { id: 'discounts.weeklyFromDaily', label: 'Weekly saving vs daily', kind: 'number' },
+  { id: 'discounts.monthlyFromDaily', label: 'Monthly saving vs daily', kind: 'number' },
+  { id: 'discounts.monthlyFromWeekly', label: 'Monthly saving vs weekly', kind: 'number' },
+  { id: 'discounts.yearlyFromDaily', label: 'Yearly saving vs daily', kind: 'number' },
+  { id: 'discounts.yearlyFromWeekly', label: 'Yearly saving vs weekly', kind: 'number' },
+  { id: 'discounts.yearlyFromMonthly', label: 'Yearly saving vs monthly', kind: 'number' },
+  { id: 'discountOverrides.weeklyFromDaily', label: 'Custom weekly saving vs daily', kind: 'number' },
+  { id: 'discountOverrides.monthlyFromDaily', label: 'Custom monthly saving vs daily', kind: 'number' },
+  { id: 'discountOverrides.monthlyFromWeekly', label: 'Custom monthly saving vs weekly', kind: 'number' },
+  { id: 'discountOverrides.yearlyFromDaily', label: 'Custom yearly saving vs daily', kind: 'number' },
+  { id: 'discountOverrides.yearlyFromWeekly', label: 'Custom yearly saving vs weekly', kind: 'number' },
+  { id: 'discountOverrides.yearlyFromMonthly', label: 'Custom yearly saving vs monthly', kind: 'number' },
+  { id: 'inclusions', label: 'Inclusions text', kind: 'string', getValue: (tier) => tierInclusionText(tier.inclusions.blocks) },
+  { id: 'quotas.appStorageBytes', label: 'Whole-app storage bytes', kind: 'number' },
+  { id: 'quotas.userStorageBytes', label: 'User storage bytes', kind: 'number' },
+  { id: 'quotas.maxApps', label: 'Max registered apps', kind: 'number' },
+  { id: 'quotas.maxPats', label: 'Max access tokens', kind: 'number' },
+  { id: 'createdAt', label: 'Created time', kind: 'date' },
+  { id: 'updatedAt', label: 'Updated time', kind: 'date' },
+  { id: 'publishedAt', label: 'Published time', kind: 'date' },
+  { id: 'archivedAt', label: 'Archived time', kind: 'date' }
+];
+
+const tierQueryRowId = (tier: SubscriptionTierDescriptor) => tier.versionId;
 
 type DiscountInput = Record<TierDiscountKey, { mode: 'computed' | 'custom'; value: string }>;
 type QuotaInput = Record<keyof TierQuotas, { unlimited: boolean; value: string }>;
@@ -679,6 +762,13 @@ export const TierManager = () => {
   const apiRef = React.useRef(api);
   apiRef.current = api;
 
+  const tierQuery = useAdminRowQuery({
+    rows: tiers ?? [],
+    fields: TIER_QUERY_FIELDS,
+    getRowId: tierQueryRowId,
+    initialSort: { field: 'sortOrder', direction: 'asc' }
+  });
+
   const accept = React.useCallback((response: any) => {
     if (Array.isArray(response?.tiers)) setTiers(response.tiers);
   }, []);
@@ -742,10 +832,10 @@ export const TierManager = () => {
     );
   }
 
-  const live = tiers.filter((tier) => tier.status === 'live');
-  const drafts = tiers.filter((tier) => tier.status === 'draft');
-  const archived = tiers.filter((tier) => tier.status === 'archived');
-  const draftTierIds = new Set(drafts.map((tier) => tier.id));
+  const live = tierQuery.rows.filter((tier) => tier.status === 'live');
+  const drafts = tierQuery.rows.filter((tier) => tier.status === 'draft');
+  const archived = tierQuery.rows.filter((tier) => tier.status === 'archived');
+  const draftTierIds = new Set(tiers.filter((tier) => tier.status === 'draft').map((tier) => tier.id));
 
   return (
     <Flex direction="column" gap={7}>
@@ -760,6 +850,16 @@ export const TierManager = () => {
           Add new tier
         </Button>
       </Flex>
+
+      <AdminRowQueryControls
+        ariaLabel="Query tier catalog"
+        fields={TIER_QUERY_FIELDS}
+        onChange={tierQuery.setQuery}
+        resultCount={tierQuery.rows.length}
+        searchPlaceholder="Search every tier field…"
+        totalCount={tiers.length}
+        value={tierQuery.query}
+      />
 
       <CatalogSection
         title="Live tiers"

@@ -526,9 +526,32 @@ re-checks the whole management plane end-to-end:
 - [ ] `/admin` renders the 🔐 gate card for anonymous/non-admin visitors and
       the dashboard (Users / Apps / Tiers / System tabs) for admins; the drawer's
       Account section shows the 🛠️ Admin item only for admins.
-- [ ] Users tab: search works; each row shows tier badge (+ `custom` badge
-      when overrides exist), storage used/allowance, app-namespace bytes, and
-      app/PAT/connected counts.
+- [ ] Users tab: free-text query searches every safe projected field; typed
+      filters cover created-day ranges, tier id/name/version, booleans, quotas,
+      storage, and every count; multiple filters combine with AND and sorting
+      is deterministic. Each row shows created time, tier badge (+ `custom`
+      badge when overrides exist), storage used/allowance, app-namespace bytes,
+      and app/PAT/connected counts. With more than 400 mixed Things/legacy
+      users, confirm the UI drains every 200-row cursor page without gaps or
+      duplicates and a field/tier match found only on page 3 is still returned.
+      Confirm numeric `is any of` / `is none of` filters accept comma-separated
+      values. Exact-email matches and all backing stores stay globally newest
+      first across page boundaries.
+      If a continuation request fails, the last complete snapshot stays visible;
+      a cold failure shows an error with an in-place Retry action instead of an
+      authoritative empty table.
+- [ ] Apps tab query covers identity, origins, created/suspended time, status,
+      owners/managers, users, storage, and every subscription field. A no-match
+      query keeps the controls visible; Clear filters restores the rows; tier
+      or link changes refresh rows without clearing the active query. Seed more
+      than 200 apps and confirm a manager/tier match beyond page 1 is queryable.
+- [ ] Tiers tab query covers every descriptor field: lifecycle/version,
+      identity text, display price amounts, computed/custom discounts,
+      Editor.js inclusion text, quotas, and all timestamps. Filtered cards stay
+      in Live / Draft / Archived groups with correct per-group empty states.
+- [ ] System has independent queries for rate-limit rules and current admins.
+      Filtering rate limits never discards hidden unsaved edits, and the
+      separate Promote a user lookup keeps its existing username/email flow.
 - [ ] Subscription editor: assigning a live tier's exact `tierVersionId` +
       per-field override (number in MB for byte fields, or Unlimited) persists
       and the row updates on save; Reset to default pins the current live

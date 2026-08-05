@@ -8,8 +8,8 @@ const refreshRootData = () => {
 
 // GET helper mirroring useAsyncFetcher semantics: parses JSON and throws the
 // parsed payload on !ok so callers catch { ok: false, error } shapes.
-const getJson = async (url: string) => {
-  const response = await fetch(url, { credentials: 'include' });
+const getJson = async (url: string, options?: { signal?: AbortSignal }) => {
+  const response = await fetch(url, { credentials: 'include', signal: options?.signal });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw data;
   return data;
@@ -132,8 +132,16 @@ export function useApi() {
           ),
         [asyncFetcher]
       ),
-      usersOverview: useCallback(async (args?: { q?: string }) => getJson(`/api/v1/admin/users/overview${toQuery(args)}`), []),
-      apps: useCallback(async (args?: { q?: string }) => getJson(`/api/v1/admin/apps${toQuery(args)}`), []),
+      usersOverview: useCallback(
+        async (args?: { q?: string; limit?: number; cursor?: string }, options?: { signal?: AbortSignal }) =>
+          getJson(`/api/v1/admin/users/overview${toQuery(args)}`, options),
+        []
+      ),
+      apps: useCallback(
+        async (args?: { q?: string; limit?: number; cursor?: string }, options?: { signal?: AbortSignal }) =>
+          getJson(`/api/v1/admin/apps${toQuery(args)}`, options),
+        []
+      ),
       revokeApp: useCallback(
         async (args: { clientId: string; revoked: boolean }) =>
           asyncFetcher.submit({ clientId: args?.clientId, revoked: args?.revoked }, { action: '/api/v1/admin/apps/revoke' }),

@@ -1,6 +1,22 @@
 import { createHash } from 'node:crypto';
 import { Binary, ObjectId } from 'mongodb';
 
+import {
+  ADMIN_SNAPSHOT_LOOKAHEAD_LIMIT,
+  ADMIN_SNAPSHOT_MAX_LIMIT,
+  InvalidAdminSnapshotCursorError,
+  adminSnapshotAfterFilter,
+  adminSnapshotCursorKey,
+  adminSnapshotExcludingIdFilter,
+  consumeAdminSnapshotNewest,
+  decodeAdminSnapshotCursor,
+  encodeAdminSnapshotCursor,
+  mergeAdminSnapshotNewest,
+  normalizeAdminSnapshotLimit,
+  normalizeAdminSnapshotQuery,
+  requireAdminSnapshotCursorKey,
+  type AdminSnapshotCursorKey
+} from '../admin/adminSnapshot';
 import { getThingsCollection, getUsersCollection } from '../mongodb/collections';
 import { ACL_ALL, COLLECTION_SCHEMA_VERSIONS, MAX_BIO_CHARS, MAX_DISPLAY_NAME_CHARS, MAX_PROFILE_URL_CHARS } from '~/schemas/registry';
 import { isAdminDoc, isEnvAdmin } from './admin';
@@ -271,6 +287,36 @@ export const findUserById = async (id: string) => {
   ]);
   if (thing) return userThingToDoc(thing);
   return legacy;
+};
+
+// Batch form for bounded admin directories. Preserve caller order and the
+// same Things-first migration precedence as findUserById, while replacing up
+// to hundreds of two-store point reads with one query per physical store.
+export const findUsersByIds = async (ids: readonly string[]) => {
+  const uniqueIds = [...new Set(ids.map((id) => String(id)).filter(Boolean))];
+  if (!uniqueIds.length) return [];
+
+  const legacyIds = uniqueIds.filter(ObjectId.isValid).map((id) => new ObjectId(id));
+  const [thingRows, legacyRows] = await Promise.all([
+    getThingsCollection().then((collection) =>
+      collection.find({ thingtime: 'user', shareId: { $in: uniqueIds } } as any).toArray()
+    ),
+    legacyIds.length
+      ? getUsersCollection().then((collection) => collection.find({ _id: { $in: legacyIds } } as any).toArray())
+      : Promise.resolve([])
+  ]);
+
+  const legacyById = new Map(legacyRows.map((row: any) => [String(row._id), row]));
+  const thingsById = new Map(
+    thingRows.map((row: any) => {
+      const user = userThingToDoc(row);
+      return [String(user._id), user] as const;
+    })
+  );
+
+  return uniqueIds
+    .map((id) => thingsById.get(id) ?? legacyById.get(id))
+    .filter((row): row is NonNullable<typeof row> => !!row);
 };
 
 // New accounts are user things. The id is minted ObjectId-shaped so every
@@ -596,6 +642,7 @@ export type AdminUserRow = {
   username: string;
   displayName: string | null;
   email: string;
+  createdAt: string | null;
   isAdmin: boolean;
   envAdmin: boolean; // admin via ADMIN_USERNAMES — can't be demoted from the UI
 };
@@ -605,11 +652,17 @@ export type AdminUserRow = {
 // regex-injection / ReDoS fix must never patch only one copy).
 export const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+const adminCreatedAt = (value: unknown): string | null => {
+  const date = value instanceof Date ? value : value ? new Date(value as any) : null;
+  return date && !Number.isNaN(date.getTime()) ? date.toISOString() : null;
+};
+
 const toAdminRow = (doc: any): AdminUserRow => ({
   id: String(doc._id),
   username: doc.username,
   displayName: doc.displayName ?? null,
   email: doc.email,
+  createdAt: adminCreatedAt(doc.createdAt),
   isAdmin: isAdminDoc(doc),
   envAdmin: isEnvAdmin(doc.username)
 });
@@ -660,9 +713,9 @@ const byUsername = (a: any, b: any) => String(a.username).localeCompare(String(b
 // Search users by username/email for the admin panel's promote flow. Things-era
 // emails are hashed (never regex-matchable by design) — a full email query
 // still finds them via the exact uniqueKeys lookup.
-export const searchUsersForAdmin = async (query: string, limit = 20): Promise<AdminUserRow[]> => {
+const searchUsersForAdminCapped = async (query: string, limit: number, hardCap: number): Promise<AdminUserRow[]> => {
   const q = (query || '').trim();
-  const capped = Math.min(50, Math.max(1, limit));
+  const capped = Math.min(hardCap, Math.max(1, Math.floor(Number(limit) || 0)));
   const pattern = { $regex: escapeRegex(q), $options: 'i' };
   const things = await getThingsCollection();
   const users = await getUsersCollection();
@@ -673,13 +726,13 @@ export const searchUsersForAdmin = async (query: string, limit = 20): Promise<Ad
   const [thingRaw, exact, legacyDocs] = await Promise.all([
     things
       .find(thingFilter as any)
-      .project({ shareId: 1, 'crystal.username': 1, 'crystal.displayName': 1, secure: 1, secureAdmin: 1 })
+      .project({ shareId: 1, 'crystal.username': 1, 'crystal.displayName': 1, secure: 1, secureAdmin: 1, createdAt: 1 })
       .limit(capped)
       .toArray(),
     q.includes('@') ? things.findOne({ uniqueKeys: userEmailKey(q) } as any) : Promise.resolve(null),
     users
       .find((q ? { $or: [{ username: pattern }, { email: pattern }] } : {}) as any)
-      .project({ username: 1, displayName: 1, email: 1, meta: 1 })
+      .project({ username: 1, displayName: 1, email: 1, meta: 1, createdAt: 1 })
       .limit(capped)
       .toArray()
   ]);
@@ -687,6 +740,235 @@ export const searchUsersForAdmin = async (query: string, limit = 20): Promise<Ad
   const thingDocs = thingRaw.map(userThingToDoc);
   if (exact) thingDocs.unshift(userThingToDoc(exact));
   return mergeUserDocs(thingDocs, legacyDocs).sort(byUsername).slice(0, capped).map(toAdminRow);
+};
+
+// Promotion/user-management lookups stay deliberately small. The overview
+// endpoint opts into its own larger one-row-lookahead cap so it can return an
+// honest bounded snapshot without changing this existing search contract.
+export const searchUsersForAdmin = async (query: string, limit = 20): Promise<AdminUserRow[]> =>
+  searchUsersForAdminCapped(query, limit, 50);
+
+type AdminUserSourceCursor = {
+  done: boolean;
+  key: AdminSnapshotCursorKey | null;
+};
+
+type AdminUsersCursor = {
+  v: 1;
+  kind: 'users';
+  q: string;
+  exactDone: boolean;
+  exactId: string | null;
+  things: AdminUserSourceCursor;
+  legacy: AdminUserSourceCursor;
+};
+
+export type AdminUserOverviewPage = {
+  rows: AdminUserRow[];
+  nextCursor: string | null;
+};
+
+const readAdminUserSourceCursor = (value: unknown, legacy = false): AdminUserSourceCursor => {
+  if (!value || typeof value !== 'object') throw new InvalidAdminSnapshotCursorError();
+  const source = value as Record<string, unknown>;
+  if (typeof source.done !== 'boolean') throw new InvalidAdminSnapshotCursorError();
+  const key = source.key === null ? null : requireAdminSnapshotCursorKey(source.key);
+  if (legacy && key && !ObjectId.isValid(key.id)) throw new InvalidAdminSnapshotCursorError();
+  return { done: source.done, key };
+};
+
+const readAdminUsersCursor = (cursor: unknown, q: string): AdminUsersCursor => {
+  const decoded = decodeAdminSnapshotCursor(cursor);
+  if (!decoded) {
+    return {
+      v: 1,
+      kind: 'users',
+      q,
+      exactDone: !q.includes('@'),
+      exactId: null,
+      things: { done: false, key: null },
+      legacy: { done: false, key: null }
+    };
+  }
+  if (
+    decoded.v !== 1 ||
+    decoded.kind !== 'users' ||
+    decoded.q !== q ||
+    typeof decoded.exactDone !== 'boolean'
+  ) {
+    throw new InvalidAdminSnapshotCursorError();
+  }
+  const exactId = decoded.exactId === undefined || decoded.exactId === null
+    ? null
+    : typeof decoded.exactId === 'string' && decoded.exactId
+      ? decoded.exactId
+      : null;
+  if (decoded.exactId !== undefined && decoded.exactId !== null && exactId === null) {
+    throw new InvalidAdminSnapshotCursorError();
+  }
+  return {
+    v: 1,
+    kind: 'users',
+    q,
+    exactDone: decoded.exactDone,
+    exactId,
+    things: readAdminUserSourceCursor(decoded.things),
+    legacy: readAdminUserSourceCursor(decoded.legacy, true)
+  };
+};
+
+const advanceAdminUserSource = (
+  current: AdminUserSourceCursor,
+  page: any[],
+  consumed: number,
+  hasMore: boolean
+): AdminUserSourceCursor => {
+  if (current.done) return current;
+  const boundedConsumed = Math.min(page.length, Math.max(0, Math.floor(consumed)));
+  return {
+    done: boundedConsumed === page.length && !hasMore,
+    key: boundedConsumed ? adminSnapshotCursorKey(page[boundedConsumed - 1]) : current.key
+  };
+};
+
+// Composite cursor pagination scans Things-era and legacy users independently.
+// Legacy candidates are batch-probed against Things before exposure, so a
+// migrated user's canonical Things record wins even when its older timestamp
+// places it on a later source page. The admin UI drains every page before
+// presenting the new snapshot, then applies its computed/nested filters once.
+export const searchUsersForAdminOverviewPage = async (
+  query: string,
+  limit = 20,
+  cursor?: string | null
+): Promise<AdminUserOverviewPage> => {
+  const q = normalizeAdminSnapshotQuery(query);
+  const capped = normalizeAdminSnapshotLimit(limit, 20);
+  const state = readAdminUsersCursor(cursor, q);
+  const pattern = { $regex: escapeRegex(q), $options: 'i' };
+  const things = await getThingsCollection();
+  const users = await getUsersCollection();
+
+  const thingAdminProjection = {
+    shareId: 1,
+    'crystal.username': 1,
+    'crystal.displayName': 1,
+    secure: 1,
+    secureAdmin: 1,
+    createdAt: 1
+  };
+
+  // A hashed exact-email hit is a third, one-record pagination source. Keep its
+  // id in the opaque cursor until it is consumed so an older exact match can
+  // remain pending behind newer directory rows. The id also excludes it from
+  // the ordinary Things regex scan on every continuation page.
+  let exactId = state.exactId;
+  let exactRaw: any = null;
+  if (q.includes('@')) {
+    if (exactId) {
+      if (!state.exactDone) {
+        exactRaw = await things.findOne(
+          { thingtime: 'user', shareId: exactId } as any,
+          { projection: thingAdminProjection }
+        );
+      }
+    } else {
+      const resolved = await things.findOne(
+        { thingtime: 'user', uniqueKeys: userEmailKey(q) } as any,
+        { projection: thingAdminProjection }
+      );
+      exactId = resolved?.shareId ? String(resolved.shareId) : null;
+      if (!state.exactDone) exactRaw = resolved;
+    }
+  }
+  const exactPending = !state.exactDone && !!exactId && !!exactRaw;
+
+  const thingsActive = !state.things.done;
+  const legacyActive = !state.legacy.done;
+  // Each source needs a full output-sized window. Splitting the limit between
+  // stores lets older legacy rows leak into page 1 while newer Things rows sit
+  // unseen on page 2. A one-row lookahead tells the merge when it must stop and
+  // continue rather than compare against an unknown source head.
+  const thingsLimit = thingsActive ? capped : 0;
+  const legacyLimit = legacyActive ? capped : 0;
+
+  const thingSearchBase = q
+    ? { thingtime: 'user', $or: [{ 'crystal.username': pattern }, { 'crystal.displayName': pattern }] }
+    : { thingtime: 'user' };
+  const thingBase = adminSnapshotExcludingIdFilter(thingSearchBase, 'shareId', exactId);
+  const legacyBase = q ? { $or: [{ username: pattern }, { email: pattern }] } : {};
+  const thingFilter = state.things.key
+    ? { $and: [thingBase, adminSnapshotAfterFilter(state.things.key, 'shareId')] }
+    : thingBase;
+  const legacyFilter = state.legacy.key
+    ? {
+        $and: [
+          legacyBase,
+          adminSnapshotAfterFilter(state.legacy.key, '_id', new ObjectId(state.legacy.key.id))
+        ]
+      }
+    : legacyBase;
+
+  const [thingFound, legacyFound] = await Promise.all([
+    thingsLimit > 0
+      ? things
+          .find(thingFilter as any)
+          .project(thingAdminProjection)
+          .sort({ createdAt: -1, shareId: 1 })
+          .limit(thingsLimit + 1)
+          .toArray()
+      : Promise.resolve([]),
+    legacyLimit > 0
+      ? users
+          .find(legacyFilter as any)
+          .project({ username: 1, displayName: 1, email: 1, meta: 1, createdAt: 1 })
+          .sort({ createdAt: -1, _id: 1 })
+          .limit(legacyLimit + 1)
+          .toArray()
+      : Promise.resolve([])
+  ]);
+
+  const thingHasMore = thingsActive && thingFound.length > thingsLimit;
+  const legacyHasMore = legacyActive && legacyFound.length > legacyLimit;
+  const thingPage = thingFound.slice(0, thingsLimit);
+  const legacyPage = legacyFound.slice(0, legacyLimit);
+
+  // A migration can leave a legacy twin. Drop it at its legacy position; its
+  // Things record will appear at the canonical Things cursor position.
+  const legacyIds = legacyPage.map((doc: any) => String(doc._id));
+  const thingTwins = legacyIds.length
+    ? await things
+        .find({ thingtime: 'user', shareId: { $in: legacyIds } } as any)
+        .project({ shareId: 1 })
+        .toArray()
+    : [];
+  const canonicalThingIds = new Set(thingTwins.map((doc: any) => String(doc.shareId)));
+
+  const exactDocs = exactPending ? [userThingToDoc(exactRaw)] : [];
+  const thingDocs = thingPage.map(userThingToDoc);
+  const page = consumeAdminSnapshotNewest(
+    [
+      { records: exactDocs, hasMore: false },
+      { records: thingDocs, hasMore: thingHasMore },
+      { records: legacyPage, hasMore: legacyHasMore }
+    ],
+    capped,
+    (doc, sourceIndex) => sourceIndex !== 2 || !canonicalThingIds.has(String(doc._id))
+  );
+  const rows = page.records.map(toAdminRow);
+  const nextState: AdminUsersCursor = {
+    v: 1,
+    kind: 'users',
+    q,
+    exactDone: state.exactDone || !exactPending || page.consumed[0] > 0,
+    exactId,
+    things: advanceAdminUserSource(state.things, thingPage, page.consumed[1], thingHasMore),
+    legacy: advanceAdminUserSource(state.legacy, legacyPage, page.consumed[2], legacyHasMore)
+  };
+  const hasNext = !nextState.exactDone || !nextState.things.done || !nextState.legacy.done;
+  return {
+    rows,
+    nextCursor: hasNext ? encodeAdminSnapshotCursor(nextState as unknown as Record<string, unknown>) : null
+  };
 };
 
 // Public people search for /search — matches username or display name
@@ -721,23 +1003,39 @@ export const searchUsersPublic = async (query: string, limit = 8): Promise<Publi
   return mergeUserDocs(thingRaw.map(userThingToDoc), legacyDocs).sort(byUsername).slice(0, capped).map(toPublicProfile);
 };
 
+export type AdminListSnapshot = {
+  admins: AdminUserRow[];
+  limit: number;
+  totalCapped: boolean;
+};
+
 // Current DB-flagged admins (env admins are surfaced separately in the config).
-export const listAdmins = async (): Promise<AdminUserRow[]> => {
+// Keep the response bounded like the richer overview and expose lookahead
+// metadata so the UI never silently presents a partial roster as complete.
+export const listAdmins = async (): Promise<AdminListSnapshot> => {
+  const limit = ADMIN_SNAPSHOT_MAX_LIMIT;
   const things = await getThingsCollection();
   const users = await getUsersCollection();
   const [thingRaw, legacyDocs] = await Promise.all([
     things
       .find({ thingtime: 'user', secureAdmin: true } as any)
-      .project({ shareId: 1, 'crystal.username': 1, 'crystal.displayName': 1, secure: 1, secureAdmin: 1 })
-      .limit(200)
+      .project({ shareId: 1, 'crystal.username': 1, 'crystal.displayName': 1, secure: 1, secureAdmin: 1, createdAt: 1 })
+      .sort({ createdAt: -1, shareId: 1 })
+      .limit(ADMIN_SNAPSHOT_LOOKAHEAD_LIMIT)
       .toArray(),
     users
       .find({ 'meta.admin': true } as any)
-      .project({ username: 1, displayName: 1, email: 1, meta: 1 })
-      .limit(200)
+      .project({ username: 1, displayName: 1, email: 1, meta: 1, createdAt: 1 })
+      .sort({ createdAt: -1, _id: 1 })
+      .limit(ADMIN_SNAPSHOT_LOOKAHEAD_LIMIT)
       .toArray()
   ]);
-  return mergeUserDocs(thingRaw.map(userThingToDoc), legacyDocs).slice(0, 200).map(toAdminRow);
+  const merged = mergeAdminSnapshotNewest(thingRaw.map(userThingToDoc), legacyDocs, ADMIN_SNAPSHOT_LOOKAHEAD_LIMIT);
+  return {
+    admins: merged.slice(0, limit).map(toAdminRow),
+    limit,
+    totalCapped: merged.length > limit
+  };
 };
 
 // Profile bounds are the schema's (registry.ts) — one source of truth shared by

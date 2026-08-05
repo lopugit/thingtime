@@ -46,6 +46,25 @@ tier switching. The generic `/apps/update` route still ignores all quota fields.
   than Mongo transactions, preserving availability and revision uniqueness on
   the documented standalone local Mongo configuration.
 
+## Admin all-field querying
+
+- Users, Apps, Tiers, rate-limit rules, and current administrators now share a
+  typed free-text/filter/sort surface. Explicit safe field registries cover
+  nested and list values without exposing arbitrary Mongo paths.
+- Created-day ranges, tier ids/names/immutable versions, lifecycle/status,
+  booleans, prices, computed/custom discounts, Editor.js inclusion text,
+  quotas, byte usage, and rollup counts are directly queryable. Multiple
+  conditions combine with AND and every sort has a stable row-id tiebreaker.
+- User and app APIs accept `limit=1..200` plus opaque keyset cursors and return
+  `nextCursor` (`totalCapped` remains a compatibility alias). The UI drains all
+  pages into a deduplicated snapshot before applying computed/nested filters,
+  so records beyond row 200 remain queryable. User hydration is batch-based
+  across the Things and legacy stores, with Things-era migration twins winning.
+  Responses remain admin-gated and private/no-store.
+- Query state survives tab switches and refresh-after-mutation. Filtering a
+  rate-limit row only hides it; its unsaved edited value remains in the source
+  configuration. The separate Promote a user lookup is unchanged.
+
 ## Atomic quota model
 
 - Positive namespace writes reserve whole-app bytes first, then app-user bytes
@@ -105,6 +124,17 @@ billing provider and webhook reconciliation remains a separate integration.
   were not rerun for this tier-editor extension.
 - ✅ Production build and Vercel-output verification, including the Vite shell,
   filesystem route, SPA fallback, and `/authorize` frame-deny checks.
+- ✅ 24/24 focused admin-query tests cover typed/nested filters, numeric lists,
+  local calendar dates, deterministic sorting, private response headers,
+  globally newest cross-store paging, exact-id de-duplication, cursor validation
+  and tie boundaries, Thing `shareId` cursor identity, malformed-response and
+  cancellation handling, and complete multi-page client loading with
+  duplicate/repeated-cursor protection.
+- ✅ Signed-in desktop and 375px browser traversal of every admin query surface:
+  Users, Apps, Tiers, rate-limit rules, and administrator roster. Free text,
+  enum/boolean filters, state retention across tabs, empty states, complete
+  128-user/15-app snapshots, dynamic panels, and top-to-bottom layout all pass
+  without horizontal overflow or app-origin errors.
 - ✅ Desktop and 375px browser traversal of `/admin` Tiers: all lifecycle
   sections, add/edit modal, all six computed-or-custom savings, Editor.js
   inclusions, archive confirmation, full-page and full-modal scrolling, and

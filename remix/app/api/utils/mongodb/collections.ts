@@ -227,6 +227,16 @@ export const ensureIndexes = async () => {
       await Promise.all([
         col('users').createIndex({ username: 1 }, { unique: true }),
         col('users').createIndex({ email: 1 }, { unique: true }),
+        // Admin directory snapshots merge this legacy store with user Things
+        // newest-first; the id suffix makes equal timestamps deterministic.
+        col('users').createIndex({ createdAt: -1, _id: 1 }),
+        // The current-admin roster filters legacy users by the stored flag and
+        // then takes the same deterministic newest-first window. Keep this
+        // rare subset partial so the sort never scans the whole legacy store.
+        col('users').createIndex(
+          { 'meta.admin': 1, createdAt: -1, _id: 1 },
+          { partialFilterExpression: { 'meta.admin': true } }
+        ),
         col('sessions').createIndex({ jti: 1 }, { unique: true }),
         col('sessions').createIndex({ userId: 1 }),
         // TTL: reap sessions once expiresAt passes. getLiveSession already
@@ -290,6 +300,9 @@ export const ensureIndexes = async () => {
         col('things').createIndex({ secureAdmin: 1 }, { partialFilterExpression: { secureAdmin: true } }),
         col('things').createIndex({ kind: 1, visibility: 1, createdAt: -1, shareId: 1 }),
         col('things').createIndex({ kind: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
+        // Admin user/app snapshots filter by thingtime without ownerId, then
+        // take a small newest-first window with a stable shareId tiebreaker.
+        col('things').createIndex({ thingtime: 1, createdAt: -1, shareId: 1 }),
         col('things').createIndex({ thingtime: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
         col('things').createIndex({ targetId: 1, thingtime: 1, createdAt: 1, shareId: 1 }),
         // schema-usage counting (schemas/browse decorate): data things are
@@ -397,6 +410,13 @@ export const ensureIndexes = async () => {
         // multikey field or an unbounded collection scan.
         col('things').createIndex(
           { 'crystal.quotaKind': 1, 'crystal.appId': 1, updatedAt: -1, ownerId: 1 },
+          { partialFilterExpression: { 'crystal.quotaKind': 'app-storage' } }
+        ),
+        // Admin user snapshots sum every app-storage ledger held by each user.
+        // ownerId must immediately follow quotaKind: the appId/updatedAt index
+        // above cannot seek its owner suffix without those fields constrained.
+        col('things').createIndex(
+          { 'crystal.quotaKind': 1, ownerId: 1 },
           { partialFilterExpression: { 'crystal.quotaKind': 'app-storage' } }
         ),
         // The app-scoped shared read (/app-data/shared): entries whose acl
