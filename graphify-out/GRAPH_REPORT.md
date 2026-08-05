@@ -3491,3 +3491,4 @@ _Questions this graph is uniquely positioned to answer:_
   _`error()` has 21 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 21 inferred relationships involving `error()` (e.g. with `act()` and `commitBeforeMutationEffects_complete()`) actually correct?**
   _`error()` has 21 INFERRED edges - model-reasoned connections that need verification._
+<!-- resolver canary marker: BASE side -->
