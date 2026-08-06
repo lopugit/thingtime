@@ -33,6 +33,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **PRs that make themselves conflicted now get rescanned**: a push to a PR's
+  head branch can create a conflict (the resolver deliberately ignores
+  `synchronize` to avoid self-loops), and with no follow-up push to the base,
+  the PR sat unresolved indefinitely — observed on the resolver's own PR #173.
+  Every branch push already spawns a detect run; it now also scans the open PR
+  *from* the pushed branch, and the handoff dispatches under each conflicting
+  PR's base branch instead of the pushed ref. Self-terminating: the resolver's
+  own resolution push finds its PR mergeable and no-ops.
+  — Claude (AI), 2026-08-06
+
 - **Born-conflicting PRs now actually trigger the conflict resolver**: GitHub
   creates no `pull_request` workflow run for a PR that opens CONFLICTING (no
   merge ref exists), so the resolver's `pull_request: [opened, reopened]`

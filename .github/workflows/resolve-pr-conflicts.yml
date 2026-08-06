@@ -5,7 +5,9 @@
 # resolver may exist or they race each other's pushes.
 #
 # When any branch is pushed, every open PR (drafts included) that TARGETS that
-# branch is checked for merge conflicts.
+# branch — and the open PR FROM it, whose conflict may have been created by
+# that very head push during a quiet stretch on the base — is checked for
+# merge conflicts.
 #
 # TRIGGER SHAPE (load-bearing): claude-code-action@v1 rejects the `push` event
 # ("Unsupported event type: push"), so a push-triggered run can only DETECT and
@@ -125,8 +127,10 @@ on:
   # for this event, and resolution happens in the repository_dispatch
   # re-entry, the same hop every push takes.
   # Deliberately NOT `synchronize`: that fires on every push to a PR head,
-  # including this workflow's own resolution pushes, which is churn we don't
-  # need — a base push already covers the after-the-fact cases.
+  # including this workflow's own resolution pushes. Head pushes are covered
+  # by the plain `push` trigger instead — its detect run also scans the PR
+  # FROM the pushed branch (see the scan step), which catches conflicts a
+  # head push itself creates, without adding a per-PR target-context event.
   pull_request_target:
     types: [opened, reopened]
   workflow_dispatch:
@@ -167,7 +171,7 @@ permissions:
 
 jobs:
   detect:
-    name: Find conflicting PRs based on this branch
+    name: Find conflicting PRs for this branch
     # Branch deletions also fire `push`; there is nothing to scan then.
     if: github.event_name != 'push' || github.event.deleted == false
     runs-on: ubuntu-latest
@@ -178,7 +182,7 @@ jobs:
       prs: ${{ steps.scan.outputs.prs }}
       any: ${{ steps.scan.outputs.any }}
     steps:
-      - name: Scan open PRs targeting this branch
+      - name: Scan open PRs targeting (and from) this branch
         id: scan
         env:
           GH_TOKEN: ${{ github.token }}
@@ -189,13 +193,28 @@ jobs:
           # base.ref from the PR record rather than event ref context, which
           # stays correct regardless of which ref the event ran from.
           ONLY_PR: ${{ github.event.pull_request.number }}
+          # Push runs only: also scan the open PR FROM the pushed branch. A
+          # head push can CREATE a conflict (`synchronize` is deliberately
+          # not a trigger, and the next base push may be days away — observed
+          # on PR #173, which made itself conflicted and sat unresolved).
+          # Costs nothing: this run exists for every push anyway. Cannot
+          # loop: the resolver's own resolution push makes its PR mergeable,
+          # so that push's detect run finds nothing to do.
+          SCAN_HEAD: ${{ github.event_name == 'push' }}
         run: |
           set -euo pipefail
 
           query() {
-            gh pr list --repo "$REPO" --base "$TARGET" --state open \
-              --json number,headRefName,baseRefName,isCrossRepository,isDraft,mergeable \
-              --limit 100
+            {
+              gh pr list --repo "$REPO" --base "$TARGET" --state open \
+                --json number,headRefName,baseRefName,isCrossRepository,isDraft,mergeable \
+                --limit 100
+              if [ "$SCAN_HEAD" = "true" ]; then
+                gh pr list --repo "$REPO" --head "$TARGET" --state open \
+                  --json number,headRefName,baseRefName,isCrossRepository,isDraft,mergeable \
+                  --limit 100
+              fi
+            } | jq -s 'add | unique_by(.number)'
           }
 
           # GitHub computes mergeability lazily after a base push; poll until
@@ -246,20 +265,25 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Dispatch a resolvable run for this base branch
+      - name: Dispatch a resolvable run per conflicted base branch
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          # On pull_request_target, the PR record's base ref; on push, the
-          # pushed branch.
-          TARGET: ${{ github.event.pull_request.base.ref || github.ref_name }}
+          # Bases come from the conflicting PRs' own records, NOT the event
+          # ref: a push run may have found the PR *from* the pushed branch
+          # (head-push-created conflict), whose resolution sweep must run
+          # under that PR's BASE branch. For PRs found by the base scan the
+          # derived base equals the event ref anyway.
+          PRS: ${{ needs.detect.outputs.prs }}
         run: |
           set -euo pipefail
-          echo "Conflicting PRs target $TARGET; re-entering via repository_dispatch."
-          gh api "repos/$REPO/dispatches" \
-            -f event_type=resolve-conflicts-cascade \
-            -f "client_payload[branch]=$TARGET" \
-            -f "client_payload[depth]=0"
+          jq -r '[.[].base] | unique | .[]' <<<"$PRS" | while IFS= read -r base; do
+            echo "Conflicting PR(s) under $base; re-entering via repository_dispatch."
+            gh api "repos/$REPO/dispatches" \
+              -f event_type=resolve-conflicts-cascade \
+              -f "client_payload[branch]=$base" \
+              -f "client_payload[depth]=0"
+          done
 
   resolve:
     name: "Resolve PR #${{ matrix.pr.number }}"
