@@ -1,7 +1,10 @@
 import { createHash } from 'node:crypto';
 import { Binary, ObjectId } from 'mongodb';
 
-import { getThingsCollection, getUsersCollection } from '../mongodb/collections';
+// Identity is control-plane: user things ALWAYS live on the home deployment
+// DB, regardless of any active data-plane endpoint override (see endpoint.ts) —
+// aliased so every things access in this file is home-pinned.
+import { getHomeThingsCollection as getThingsCollection, getUsersCollection } from '../mongodb/collections';
 import {
   ACL_ALL,
   COLLECTION_SCHEMA_VERSIONS,
@@ -463,6 +466,114 @@ export const setUserTwoFactorEmailEnabled = async (userId: string, enabled: bool
     { $set: { 'meta.twoFactorEmailEnabled': enabled, updatedAt: new Date() } }
   );
   return res.matchedCount > 0;
+};
+
+// ── Saved MongoDB endpoints (thin-frontend mode — see mongodb/endpoint.ts) ──
+// A user's saved data-plane endpoints live INSIDE the secure blob
+// (meta.mongoEndpoints): connection URLs embed credentials, and the blob is
+// the one place a user thing keeps unsearchable private state. Dual-era
+// accessors mirror the 2FA flag above. Full URLs never leave the API utils —
+// routes project them to host/db summaries before responding.
+export type SavedMongoEndpoint = { id: string; name: string; url: string; createdAt: string };
+
+export const MAX_SAVED_MONGO_ENDPOINTS = 20;
+
+const normalizeSavedMongoEndpoints = (value: any): SavedMongoEndpoint[] =>
+  Array.isArray(value)
+    ? value
+        .filter((entry) => entry && typeof entry.id === 'string' && typeof entry.url === 'string')
+        .map((entry) => ({
+          id: entry.id,
+          name: typeof entry.name === 'string' ? entry.name : '',
+          url: entry.url,
+          createdAt: typeof entry.createdAt === 'string' ? entry.createdAt : ''
+        }))
+    : [];
+
+export const getUserMongoEndpoints = async (userId: string): Promise<SavedMongoEndpoint[]> => {
+  const things = await getThingsCollection();
+  const thing = await things.findOne(
+    { shareId: String(userId), thingtime: 'user' } as any,
+    { projection: { secure: 1 } }
+  );
+  if (thing) return normalizeSavedMongoEndpoints(unpackSecure((thing as any).secure).meta?.mongoEndpoints);
+  if (!ObjectId.isValid(userId)) return [];
+  const doc = await (await getUsersCollection()).findOne(
+    { _id: new ObjectId(userId) },
+    { projection: { 'meta.mongoEndpoints': 1 } }
+  );
+  return normalizeSavedMongoEndpoints(doc?.meta?.mongoEndpoints);
+};
+
+// Append a saved endpoint. The cap + duplicate-URL checks run INSIDE the CAS
+// round so a racing add can't slip past either; a check failure still counts
+// as 'mutated' (the blob was rewritten unchanged) and reports via `failure`.
+export const addUserMongoEndpoint = async (
+  userId: string,
+  input: { name: string; url: string }
+): Promise<{ ok: true; endpoint: SavedMongoEndpoint } | { ok: false; error: string }> => {
+  const endpoint: SavedMongoEndpoint = {
+    id: new ObjectId().toHexString(),
+    name: input.name,
+    url: input.url,
+    createdAt: new Date().toISOString()
+  };
+
+  let failure: string | null = null;
+  const apply = (list: SavedMongoEndpoint[]): SavedMongoEndpoint[] | null => {
+    failure = null;
+    if (list.length >= MAX_SAVED_MONGO_ENDPOINTS) {
+      failure = `You can save at most ${MAX_SAVED_MONGO_ENDPOINTS} MongoDB endpoints`;
+      return null;
+    }
+    if (list.some((entry) => entry.url === endpoint.url)) {
+      failure = 'That MongoDB endpoint is already saved';
+      return null;
+    }
+    return [...list, endpoint];
+  };
+
+  const result = await mutateUserThingSecure(userId, (secure) => {
+    const next = apply(normalizeSavedMongoEndpoints(secure.meta?.mongoEndpoints));
+    if (next) secure.meta!.mongoEndpoints = next;
+  });
+  if (result === 'mutated') return failure ? { ok: false, error: failure } : { ok: true, endpoint };
+  if (result === 'contended') throw new SecureWriteContendedError(userId);
+  if (!ObjectId.isValid(userId)) return { ok: false, error: 'User not found' };
+  const users = await getUsersCollection();
+  const doc = await users.findOne({ _id: new ObjectId(userId) }, { projection: { 'meta.mongoEndpoints': 1 } });
+  if (!doc) return { ok: false, error: 'User not found' };
+  const next = apply(normalizeSavedMongoEndpoints(doc.meta?.mongoEndpoints));
+  if (!next) return { ok: false, error: failure || 'Could not save MongoDB endpoint' };
+  await users.updateOne(
+    { _id: new ObjectId(userId) },
+    { $set: { 'meta.mongoEndpoints': next, updatedAt: new Date() } }
+  );
+  return { ok: true, endpoint };
+};
+
+// Remove a saved endpoint by id. Returns whether an entry was actually removed.
+export const removeUserMongoEndpoint = async (userId: string, endpointId: string): Promise<boolean> => {
+  let removed = false;
+  const result = await mutateUserThingSecure(userId, (secure) => {
+    const list = normalizeSavedMongoEndpoints(secure.meta?.mongoEndpoints);
+    const next = list.filter((entry) => entry.id !== endpointId);
+    removed = next.length !== list.length;
+    secure.meta!.mongoEndpoints = next;
+  });
+  if (result === 'mutated') return removed;
+  if (result === 'contended') throw new SecureWriteContendedError(userId);
+  if (!ObjectId.isValid(userId)) return false;
+  const users = await getUsersCollection();
+  const doc = await users.findOne({ _id: new ObjectId(userId) }, { projection: { 'meta.mongoEndpoints': 1 } });
+  const list = normalizeSavedMongoEndpoints(doc?.meta?.mongoEndpoints);
+  const next = list.filter((entry) => entry.id !== endpointId);
+  if (next.length === list.length) return false;
+  await users.updateOne(
+    { _id: new ObjectId(userId) },
+    { $set: { 'meta.mongoEndpoints': next, updatedAt: new Date() } }
+  );
+  return true;
 };
 
 // Set (or clear, with null) the user's active theme shareId in meta.

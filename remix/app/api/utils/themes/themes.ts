@@ -2,7 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { ObjectId } from 'mongodb';
 
 import { resolveTheme, THINGTIME_THEME, TtTheme } from '../../../theme/tokens';
-import { getThemesCollection, getThingsCollection } from '../mongodb/collections';
+// theme is a PROTECTED system kind: theme things stay on the home deployment
+// DB even while a data-plane endpoint override is active (see endpoint.ts).
+import { getHomeThingsCollection as getThingsCollection, getThemesCollection } from '../mongodb/collections';
 import { ACL_ALL, ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 import { clearUserActiveTheme } from '../auth/users';
 

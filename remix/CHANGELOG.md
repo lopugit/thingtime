@@ -42,6 +42,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   context, no PR code checkout, resolve job excluded for that event.
   — Claude (AI), 2026-08-03
 
+- **Index bootstrap recovery after PRs #159/#161**: failed boot-time
+  `ensureIndexes()` work no longer caches a rejected promise for 60 seconds.
+  The next explicit bootstrap caller retries immediately, while hot request
+  paths remain isolated from the index battery; rate-limit and index-warmup
+  diagnostics/checklists now describe their independent failure paths.
+  — Codex (AI), 2026-07-30
 - **Fresh worktrees now bootstrap complete pnpm dependency links**: Codex
   worktree carryover no longer copies large, partial `node_modules` symlink
   trees that can leave ESLint/Vite wrappers without their packages. A shared
