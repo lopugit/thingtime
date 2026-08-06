@@ -1,5 +1,6 @@
 import { defineHandler } from 'nitro/h3';
 
+import { getRequestMongoEndpoint, runWithMongoEndpoint } from '../../../app/api/utils/mongodb/endpoint';
 import { proxyApiRequestToFallback, shouldProxyApiToFallback } from '../../utils/apiFallback';
 
 type RouteModule = {
@@ -47,6 +48,8 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/health/vercel': () => import('../../../app/routes/api/v1/health/vercel/_vercel'),
   'v1/login': () => import('../../../app/routes/api/v1/login/_login'),
   'v1/lopu/musing': () => import('../../../app/routes/api/v1/lopu/musing/_musing'),
+  'v1/mongodb/endpoint': () => import('../../../app/routes/api/v1/mongodb/endpoint/_endpoint'),
+  'v1/mongodb/endpoints': () => import('../../../app/routes/api/v1/mongodb/endpoints/_endpoints'),
   'v1/mongodb/get-connection': () => import('../../../app/routes/api/v1/mongodb/get-connection/_get-connection'),
   'v1/mongodb/populate': () => import('../../../app/routes/api/v1/mongodb/populate/_populate'),
   'v1/mongodb/raw-results': () => import('../../../app/routes/api/v1/mongodb/raw-results/_raw-results'),
@@ -61,6 +64,7 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/oauth/userinfo': () => import('../../../app/routes/api/v1/oauth/userinfo/_userinfo'),
   'v1/schemas': () => import('../../../app/routes/api/v1/schemas/_schemas'),
   'v1/schemas/browse': () => import('../../../app/routes/api/v1/schemas/browse/_browse'),
+  'v1/teapot': () => import('../../../app/routes/api/v1/teapot/_teapot'),
   'v1/template': () => import('../../../app/routes/api/v1/template/_template'),
   'v1/themes': () => import('../../../app/routes/api/v1/themes/_themes'),
   'v1/themes/active': () => import('../../../app/routes/api/v1/themes/active/_active'),
@@ -149,6 +153,20 @@ export default defineHandler(async (event) => {
       });
     }
 
+    // 🔮 the teapot's -docs twin is real but unlisted (claude-todo/10):
+    // it never appears in /docs/api, yet the self-describing convention holds
+    if (path === 'v1/teapot-docs') {
+      return jsonResponse({
+        ok: true,
+        endpoint: '/api/v1/teapot',
+        methods: ['GET', 'POST'],
+        summary: 'Politely declines to brew coffee.',
+        detail:
+          'RFC 2324 lives here. Every documented endpoint serves JSON docs at -docs — including the ones you were never told about. Congratulations on your curiosity. 🫖',
+        responses: [{ status: 418, description: 'Short and stout, with a brew-time haiku.' }]
+      });
+    }
+
     // lazy: apiDocs is ~150KB of doc-string literals — parsing it belongs to
     // the rare -docs request, not to every instance's cold start
     const { createApiDocPayload, getApiDocByPath } = await import('../../../app/docs/apiDocs');
@@ -167,7 +185,9 @@ export default defineHandler(async (event) => {
   const loadModule = routeModules[path];
 
   if (!loadModule) {
-    return new Response('Not found', { status: 404 });
+    // 🔮 even the 404 speaks Lopu (claude-todo/10) — same {ok, error} envelope
+    // as every other API response instead of a bare text body
+    return jsonResponse({ ok: false, error: 'Lopu looked everywhere and found no such endpoint 🤷‍♂️' }, { status: 404 });
   }
 
   const route = await loadModule();
@@ -185,8 +205,17 @@ export default defineHandler(async (event) => {
     });
   }
 
+  // Establish the request's MongoDB endpoint context (the `tt_mongo` session
+  // cookie / `x-tt-mongo-url` header — see api/utils/mongodb/endpoint.ts) so
+  // the data plane below the handler resolves the session's active endpoint.
+  // Admin routes are exempt: migrations and other admin writes must always
+  // operate on the home deployment, never on an override DB.
+  const mongoEndpoint = path.startsWith('v1/admin/') ? null : await getRequestMongoEndpoint(event.req);
+
   try {
-    return normalizeResponse(await handler({ request: event.req }));
+    return await runWithMongoEndpoint(mongoEndpoint, async () =>
+      normalizeResponse(await handler({ request: event.req }))
+    );
   } catch (err) {
     if (err instanceof Response) {
       return err;

@@ -17,7 +17,7 @@ import {
   Textarea,
   useClipboard
 } from '@chakra-ui/react';
-import { Copy, FileCheck2, KeyRound, Link2, RefreshCw, ShieldCheck } from 'lucide-react';
+import { Copy, FileCheck2, KeyRound, Link2, Lock, RefreshCw, ShieldCheck } from 'lucide-react';
 import React, { useCallback, useState } from 'react';
 
 type CryptoStandard = 'ES256' | 'ES384' | 'RS256' | 'EdDSA';
@@ -180,6 +180,14 @@ export default function CryptoPage() {
   const [loadingJwt, setLoadingJwt] = useState(false);
   const [jwtError, setJwtError] = useState('');
 
+  const [hashUsername, setHashUsername] = useState('');
+  const [hashPasswordInput, setHashPasswordInput] = useState('');
+  const [hashGenerate, setHashGenerate] = useState(false);
+  const [hashLength, setHashLength] = useState('24');
+  const [hashResult, setHashResult] = useState<any>(null);
+  const [loadingHash, setLoadingHash] = useState(false);
+  const [hashError, setHashError] = useState('');
+
   const [signatureStandard, setSignatureStandard] = useState<CryptoStandard>('ES256');
   const [message, setMessage] = useState('');
   const [messageEncoding, setMessageEncoding] = useState<TextEncoding>('utf8');
@@ -250,6 +258,26 @@ export default function CryptoPage() {
     }
   }, [jwtIssuer, jwtKeyEncoding, jwtPrivateKey, jwtPublicKey, jwtSecret, jwtToken]);
 
+  const hashPassword = useCallback(async () => {
+    setLoadingHash(true);
+    setHashError('');
+    try {
+      setHashResult(
+        await postCrypto({
+          intent: 'hash-password',
+          password: hashGenerate ? undefined : hashPasswordInput,
+          generate: hashGenerate,
+          length: hashGenerate ? hashLength : undefined,
+          username: hashUsername
+        })
+      );
+    } catch (err) {
+      setHashError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoadingHash(false);
+    }
+  }, [hashGenerate, hashLength, hashPasswordInput, hashUsername]);
+
   const verifySignature = useCallback(async () => {
     setLoadingSignature(true);
     setSignatureError('');
@@ -288,6 +316,107 @@ export default function CryptoPage() {
         </Flex>
 
         <Grid templateColumns={{ base: '1fr', xl: '1fr 1fr' }} gap={5} alignItems="start" w="100%">
+          <ToolPanel title="Password Hasher" icon={Lock} badge="bcrypt">
+            <Stack spacing={4}>
+              <Text fontSize="xs" color="var(--tt-muted, #718096)">
+                Turns a password into the exact hash Thingtime stores, and hands you a mongosh snippet that writes it
+                into a user — the manual way back in when you own the database but forgot the password. Nothing is
+                written here: the hash is computed and returned, you run the update yourself.
+              </Text>
+              <Grid templateColumns={{ base: '1fr', md: '1fr 1fr' }} gap={3}>
+                <FormControl>
+                  <FormLabel fontSize="sm">Username (for the snippet)</FormLabel>
+                  <Input
+                    value={hashUsername}
+                    onChange={(event) => setHashUsername(event.target.value)}
+                    placeholder="lopu"
+                    fontFamily="mono"
+                    fontSize="sm"
+                  />
+                </FormControl>
+                <FormControl>
+                  <FormLabel fontSize="sm">Password</FormLabel>
+                  <Input
+                    type="text"
+                    value={hashGenerate ? '' : hashPasswordInput}
+                    onChange={(event) => setHashPasswordInput(event.target.value)}
+                    isDisabled={hashGenerate}
+                    placeholder={hashGenerate ? 'generated for you' : 'the new password'}
+                    fontFamily="mono"
+                    fontSize="sm"
+                  />
+                </FormControl>
+              </Grid>
+              <Flex gap={2} wrap="wrap" alignItems="center">
+                <Button
+                  size="sm"
+                  variant={hashGenerate ? 'solid' : 'outline'}
+                  colorScheme={hashGenerate ? 'teal' : 'gray'}
+                  leftIcon={<Icon as={RefreshCw} boxSize={3.5} />}
+                  onClick={() => setHashGenerate((value) => !value)}
+                >
+                  Generate a strong one
+                </Button>
+                {hashGenerate ? (
+                  <FormControl maxW="120px">
+                    <Select value={hashLength} onChange={(event) => setHashLength(event.target.value)} size="sm">
+                      {['12', '16', '24', '32', '48', '64'].map((value) => (
+                        <option key={value} value={value}>
+                          {value} chars
+                        </option>
+                      ))}
+                    </Select>
+                  </FormControl>
+                ) : null}
+              </Flex>
+              <Button
+                leftIcon={<Icon as={Lock} boxSize={4} />}
+                onClick={hashPassword}
+                isLoading={loadingHash}
+                width="fit-content"
+              >
+                Hash password
+              </Button>
+              {hashError ? (
+                <Alert status="error" borderRadius="md">
+                  <AlertIcon />
+                  {hashError}
+                </Alert>
+              ) : null}
+              {hashResult ? (
+                <Stack spacing={3}>
+                  <Flex gap={2} wrap="wrap" alignItems="center">
+                    <Badge colorScheme={hashResult.verified ? 'green' : 'red'}>
+                      {hashResult.verified ? 'verified' : 'NOT verified'}
+                    </Badge>
+                    <Badge colorScheme="teal">
+                      {hashResult.algorithm} cost {hashResult.cost}
+                    </Badge>
+                    {hashResult.meetsRegisterPolicy ? null : <Badge colorScheme="orange">under 6 chars</Badge>}
+                  </Flex>
+                  {hashResult.password ? (
+                    <FormControl>
+                      <Flex alignItems="center" justifyContent="space-between" gap={3} mb={2}>
+                        <FormLabel mb={0} fontSize="sm">
+                          Generated password — save it now
+                        </FormLabel>
+                        <CopyButton value={hashResult.password} />
+                      </Flex>
+                      <Input value={hashResult.password} readOnly fontFamily="mono" fontSize="sm" />
+                    </FormControl>
+                  ) : null}
+                  <OutputTextarea label="Password hash" value={hashResult.hash} minH="60px" />
+                  <OutputTextarea label="mongosh snippet — paste and run" value={hashResult.mongosh} minH="220px" />
+                  {(hashResult.notes || []).map((note: string) => (
+                    <Text key={note} fontSize="xs" color="var(--tt-muted, #718096)">
+                      • {note}
+                    </Text>
+                  ))}
+                </Stack>
+              ) : null}
+            </Stack>
+          </ToolPanel>
+
           <ToolPanel title="Key Generator" icon={KeyRound} badge={standard === 'ES256' ? 'Thingtime auth' : undefined}>
             <Stack spacing={4}>
               <Flex gap={2} wrap="wrap">

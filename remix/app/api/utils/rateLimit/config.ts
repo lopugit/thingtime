@@ -32,6 +32,17 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // showcase posts/schemas) — bound it tightly so repeated runs can't hammer
   // the DB or burn serverless compute. Enforced fail-closed at the route.
   'mongodb.populate': { limit: 3, windowMs: 60_000, enabled: true },
+  // Data-endpoint override actions (thin-frontend mode). Each activation/save
+  // makes the SERVER probe (TCP connect + ping, ≤2.5s) whatever host:port the
+  // caller supplied — unbounded, that's an anonymous outbound port-scan /
+  // connection-hammer vector, so both windows stay tight. Switching endpoints
+  // is a rare interactive action; 5-minute windows leave humans unthrottled.
+  // mongodb.endpoint: activate/reset the session override (anon keys by IP).
+  // mongodb.endpoints: saved-list writes (authed; save also probes).
+  // Both enforced fail-closed at their routes (reset stays exempt — it probes
+  // nothing and bailing back to the home DB must always work).
+  'mongodb.endpoint': { limit: 20, windowMs: 300_000, enabled: true },
+  'mongodb.endpoints': { limit: 30, windowMs: 300_000, enabled: true },
   // service accounts do legitimate bulk writes (e.g. chunked snapshot sync), so
   // they get a higher ceiling — but a BOUNDED one, never an exemption: anyone
   // can provision a service account, so accountKind confers no trust
@@ -69,7 +80,11 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   'auth.resendVerification': { limit: 5, windowMs: 15 * 60_000, enabled: true },
   // login attempts (password step and OTP step share the endpoint): bounds
   // credential stuffing and OTP-email sends beyond the per-challenge attempt cap
-  'auth.login': { limit: 30, windowMs: 60_000, enabled: true }
+  'auth.login': { limit: 30, windowMs: 60_000, enabled: true },
+  // /crypto password hasher: anonymous and pure (no DB), but bcrypt burns
+  // ~100ms of CPU per call by design, so the budget is tight per IP — the
+  // compute is the abuse surface, not the hash it returns
+  'crypto.hashPassword': { limit: 20, windowMs: 60_000, enabled: true }
 };
 
 export const RATE_LIMIT_ENDPOINTS = Object.keys(RATE_LIMIT_DEFAULTS);

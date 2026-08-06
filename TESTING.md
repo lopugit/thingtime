@@ -310,6 +310,38 @@ is fixed, and cite the checklist you ran in the PR description.
       standalone-demo link within ~10s — the preview must never show a
       permanent loading state.
 
+## MongoDB data endpoint (`/mongodb-status`, `remix/app/components/MongoDB/MongoEndpointConfig.tsx`)
+
+- [ ] Logged OUT: paste a reachable `mongodb://` URL → "Use for this session"
+      flips the page to the Custom endpoint badge, the footer indicator reads
+      "MongoDB (custom)", and the feed/search read from that DB. "Use" on the
+      Thingtime row returns everything to default.
+- [ ] An unreachable URL is rejected at activation (422 toast, e.g.
+      `MongoServerSelectionError (ECONNREFUSED)`) and the previous endpoint
+      stays active — a bad URL must never brick the session's data calls.
+- [ ] A non-mongodb scheme (`http://…`), whitespace, or a >2048-char URL is
+      rejected with a clear validation message.
+- [ ] Logged IN: "Save to my endpoints" persists the endpoint (survives
+      logout/login and other browsers); the raw URL/credentials NEVER appear
+      in any API response, page, or error — only host + db name.
+- [ ] While a custom endpoint is active: login/logout, profile, themes,
+      account switcher and saved-endpoint management still work (identity is
+      home-pinned); posts created land in the CUSTOM db; admin routes
+      (migrations especially) still operate on the home DB.
+- [ ] Removing the saved endpoint the session currently uses also clears the
+      override (page falls back to Thingtime default without a reload).
+- [ ] The `tt_mongo` cookie is httpOnly + session-scoped: closing the browser
+      drops the override; document.cookie can't read it.
+- [ ] LOCAL DEV footer parity: with an override active, the footer indicator
+      reads "MongoDB (custom)" on the local stack too. Regression class: the
+      vite /api proxy's changeOrigin hid the web origin from nitro, so
+      resolveStatusTarget classified "Current Tab" as REMOTE and health routes
+      re-fetched themselves WITHOUT cookies (session state invisible). The
+      proxy must forward x-forwarded-host/-proto (vite.config.ts) — verify
+      /api/v1/health/mongodb?targetOrigin=<web origin> returns custom:true
+      with the cookie, while a real remote target (e.g. thingtime.com) still
+      server-side fetches.
+
 ## Docs search (`remix/app/routes/docs/DocsSearch.tsx`, `docsSearchIndex.ts`)
 
 - [ ] Searching "acl" in the /docs drawer ranks the Thing schema (its `acl`
@@ -403,19 +435,20 @@ is fixed, and cite the checklist you ran in the PR description.
       (drop `things_v2`'s `ownerId_1_crystal.appId_1_crystal.key_1` unique
       index, insert two docs sharing `(ownerId, crystal.appId, crystal.key)`),
       start a FRESH API process → the boot-time warmup run logs one
-      `[mongodb] ensureIndexes failed building things.<index> — retrying in 60s`
-      line naming the broken index. The cold-start PR moved the battery off
-      the request path, so ordinary API traffic neither retries it nor logs;
-      the awaited callers (`registerUser`, admin migrations) surface the
-      cached failure fast instead of re-running the battery.
-- [ ] Failure is cached with a cooldown, not retried per caller: register
-      attempts inside the same 60s window add NO new `[mongodb]` lines and run
-      no fresh ~60-command createIndex battery (the old reset-to-null re-ran
-      it per caller — a retry storm on top of the fail-open).
-- [ ] Self-heals after cleanup: delete the dup docs, then restart the dev
-      process — or wait out the 60s cooldown and hit an ensureIndexes caller
-      (register a user / run an admin migration) → no new error lines, the
-      unique index is rebuilt (`getIndexes()` shows it).
+      line beginning `[mongodb] ensureIndexes failed building things.<index>`
+      and saying the next bootstrap call will retry. The cold-start PR moved
+      the battery off the request path, so ordinary API traffic neither retries
+      it nor logs; only the awaited bootstrap callers (`registerUser`, admin
+      migrations) can trigger another attempt.
+- [ ] In-flight work is shared, but failures are retryable immediately: while
+      one ensureIndexes battery is running, concurrent bootstrap callers await
+      that same promise; after it fails, the next explicit bootstrap caller
+      starts one fresh attempt instead of inheriting a rejected promise for a
+      fixed cooldown.
+- [ ] Self-heals after cleanup: delete the duplicate docs, then hit an awaited
+      ensureIndexes caller (register a user / run an admin migration) or restart
+      the process → the unique index is rebuilt immediately (`getIndexes()`
+      shows it) and no stale cooldown blocks the recovered database.
 - [ ] Limiter outage is AUDIBLE, never silent: with the limiter's own DB ops
       failing (e.g. Mongo down/unreachable), a limited endpoint logs
       `[rate-limit] enforcement unavailable for <rule> — failing open` per
@@ -423,3 +456,35 @@ is fixed, and cite the checklist you ran in the PR description.
       error), `failClosed` routes return the 429 unavailable shape. Regression
       class: a bare `catch {}` fail-open invisibly disabled ALL rate limiting
       (2026-07 perf audit).
+
+## Password hasher (`/crypto` Password Hasher panel, `api/utils/crypto/passwordHasher.server.ts`)
+
+- [ ] `/crypto` → Password Hasher: enter a username + password → the panel
+      shows a VERIFIED badge, `bcrypt cost 10`, the `$2b$10$…` hash, and a
+      mongosh snippet templated with that username. A supplied password is
+      NEVER echoed back in the response; only a generated one is.
+- [ ] "Generate a strong one" + a length (12–64) returns a password shown
+      exactly once ("save it now") whose hash verifies against it — check
+      independently with `bcrypt.compare` if in doubt.
+- [ ] The hash is self-verified server-side before return (`verified: true`);
+      a password under 6 chars still hashes but is flagged (register's
+      minimum), because an existing account may predate any policy.
+- [ ] END-TO-END (the point of the tool): register a throwaway user via the
+      real API, hash a NEW password, run the returned snippet VERBATIM in
+      mongosh, then log in — the new password works and the old one is
+      rejected. The snippet must report `things: matched 1, modified 1`.
+- [ ] Blob integrity: after the snippet runs, the user's `secure` BinData
+      blob still holds email / accountKind / emailVerified / meta, and
+      `secureVersion` incremented by 1 (matching the app's CAS write). A
+      plain `$set: { passwordHash }` on a things-era user writes a field
+      NOTHING reads — the snippet must unpack → edit → repack instead.
+- [ ] Snippet handles both stores and a miss: an unknown username reports
+      "No user named …" AND lists the usernames that do exist, instead of
+      silently modifying 0 docs.
+- [ ] Collection names in the snippet come from `physicalCollectionName()`
+      (currently `things_v2` / `users_v2`) — never hardcoded, so a version
+      bump can't hand out a snippet that edits a frozen generation.
+- [ ] Rate limited per IP (`crypto.hashPassword`, 20/min): bcrypt is the CPU
+      cost, so a burst past the limit 429s with the hashing message. The
+      intent stays ANONYMOUS on purpose — being locked out is the reason to
+      reach for it — and never reads or writes the database.
