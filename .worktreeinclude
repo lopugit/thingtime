@@ -1,6 +1,6 @@
 # Copy ignored local setup into Codex-managed worktrees.
-# Keep tracked files out. These patterns intentionally carry over local setup,
-# dependency installs, and selected generated workspace state for faster checks.
+# Keep tracked files out. These patterns intentionally carry over local setup
+# and selected generated workspace state for faster checks.
 
 # Environment files
 .env
@@ -28,16 +28,10 @@ iOS/.env.test
 iOS/.env.staging
 iOS/.env.production
 
-# Dependency installs for faster ready-to-run worktrees
-node_modules/
-app/node_modules/
-next/node_modules/
-app-next/node_modules/
-api/node_modules/
-api/src/node_modules/
-remix/node_modules/
-raycast/node_modules/
-lopu/node_modules/
+# Dependency trees are deliberately not copied. pnpm's node_modules layout is a
+# graph of symlinks, and copying only part of it creates wrappers that point at
+# packages that are not present in the new worktree. The Remix dev/build/lint
+# entry points self-heal with `npm run worktree-setup` from the repository root.
 
 # Local runtime and build state that can unblock branch validation
 .cache/
@@ -70,7 +64,6 @@ remix/server/assets/*
 ds-bundle/
 .design-sync/.cache/
 .design-sync/learnings/
-.design-sync/node_modules/
 
 # Local branch/worktree scratch space
 .test-branches/*
