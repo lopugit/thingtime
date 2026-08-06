@@ -267,7 +267,7 @@ can keep using the name for text search).
   `corepack pnpm@10.12.1`, never bare pnpm — it downgrades the lockfile and
   breaks the Vercel build.
 
-**Codebase rules (from CLAUDE.md / AGENTS.md / FUNDAMENTALS.md):**
+**Codebase rules (from AI_ALL.md / FUNDAMENTALS.md):**
 - **API route triple-registration:** every `/api/v1/...` endpoint needs (1) the
   route file exporting `loader`/`action`, (2) a key in
   `remix/server/routes/api/[...].ts` `routeModules`, **and (3) an
@@ -308,7 +308,7 @@ can keep using the name for text search).
 1. `cd` into this worktree; `export PATH="/Users/lopu/.nvm/versions/node/v24.18.0/bin:$PATH"`.
 2. `npm run web-pms` (from repo root) → dev on `http://127.0.0.1:19140`.
    (`npm run web-ports` if you need to confirm the trio.)
-3. Read this doc + `CLAUDE.md`/`AGENTS.md`/`FUNDAMENTALS.md`. Run
+3. Read this doc + `AI_ALL.md`/`FUNDAMENTALS.md`. Run
    `graphify query "schemas browse SchemasBrowsePage SchemaBuilder search rail"`
    to orient.
 4. Work **§4 fixes** top-down. After each cluster, verify live in the browser

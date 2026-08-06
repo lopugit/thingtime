@@ -55,6 +55,26 @@ const endpoint = (doc: Omit<ApiEndpointDoc, 'docsEndpoint'>): ApiEndpointDoc => 
 
 export const apiEndpointDocs: ApiEndpointDoc[] = [
   endpoint({
+    id: 'docs',
+    group: 'docs',
+    title: 'All API docs as Markdown',
+    endpoint: '/api/docs',
+    summary: 'Every Thingtime API endpoint documented in one Markdown file — made for AIs and humans alike.',
+    detail:
+      'GET returns text/markdown covering every endpoint in this catalog: methods, auth, summary, detail, ' +
+      'steps, request/response examples, and a curl call each. If you are an AI (or a person) discovering ' +
+      'the API by scanning /api* routes, fetch this once and you have the whole reference. Per-endpoint ' +
+      'JSON versions also exist at <endpoint>-docs (e.g. /api/v1/things-docs), and the human-readable ' +
+      'browser docs live at /docs/api. Anonymous, no auth.',
+    auth: { mode: 'none', description: 'Public — documentation data.' },
+    methods: ['GET'],
+    steps: ['GET /api/docs and read the Markdown.'],
+    requestExamples: [{ name: 'Fetch the reference', description: 'The whole API as one Markdown document.', method: 'GET' }],
+    responseExamples: [
+      { status: 200, description: 'Markdown document.', headers: { 'Content-Type': 'text/markdown; charset=utf-8' } }
+    ]
+  }),
+  endpoint({
     id: 'admin-rate-limits',
     group: 'admin',
     title: 'Rate-limit config',
@@ -790,19 +810,23 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'crypto',
     title: 'Crypto tools',
     endpoint: '/api/v1/crypto',
-    summary: 'Lists crypto standards and runs key generation, JWT verification, signature verification, and key matching helpers.',
+    summary:
+      'Lists crypto standards and runs key generation, JWT verification, signature verification, key matching, and password hashing helpers.',
     detail:
-      'Use this route for Thingtime-compatible ES256 key workflows and diagnostics. POST bodies are intent-driven.',
+      'Use this route for Thingtime-compatible ES256 key workflows and diagnostics. POST bodies are intent-driven. intent: hash-password additionally turns a password into the exact bcrypt hash Thingtime stores (cost 10, the auth/passwords.ts settings) and returns a paste-ready mongosh snippet that writes it into a user — the manual recovery path for a database you own when the emailed reset flow is not an option. It is a PURE computation: no database is read or written, no account is looked up, and nothing about who exists is revealed. Because bcrypt is deliberately CPU-heavy, this intent is rate-limited per IP (crypto.hashPassword).',
     auth: {
       mode: 'none',
-      description: 'Public helper endpoint. Do not post private production secrets from untrusted clients.'
+      description:
+        'Public helper endpoint. Do not post private production secrets from untrusted clients. hash-password is deliberately anonymous (being locked out is the reason to use it) and never touches the database — writing the hash is a manual step you run against your own db.'
     },
     methods: ['GET', 'POST'],
     steps: [
       'GET the route to list supported standards and Thingtime auth compatibility.',
       'POST intent: generate-key-pair to create an ES256 key pair for development or integration setup.',
       'POST intent: verify-jwt, verify-signature, or match-key-pair with the required material for diagnostics.',
-      'Handle 400 responses for unsupported intents or invalid crypto input.'
+      'POST intent: hash-password with { password } (or { generate: true, length }) plus an optional username to template the snippet; the response hash is re-verified against its own input before it is returned.',
+      'Run the returned mongosh snippet against your database: things-era users keep passwordHash INSIDE the secure BinData blob, so it unpacks, edits, repacks and bumps secureVersion — a plain $set of passwordHash would write a field nothing reads.',
+      'Handle 400 responses for unsupported intents or invalid crypto input, and 429 when the hashing budget is exhausted.'
     ],
     requestExamples: [
       {
@@ -815,6 +839,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'Generate a development key pair.',
         method: 'POST',
         body: { intent: 'generate-key-pair', standard: 'ES256' }
+      },
+      {
+        name: 'Hash a password',
+        description: 'Hash a chosen password and template the rotate snippet for a user.',
+        method: 'POST',
+        body: { intent: 'hash-password', password: 'correct-horse-battery', username: 'ada-lovelace' }
+      },
+      {
+        name: 'Generate + hash',
+        description: 'Have a strong password generated, hashed, and echoed back once.',
+        method: 'POST',
+        body: { intent: 'hash-password', generate: true, length: 32, username: 'ada-lovelace' }
       }
     ],
     responseExamples: [
@@ -824,10 +860,38 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         body: { ok: true, standards: [{ value: 'ES256', label: 'ECDSA P-256 + SHA-256', thingtimeAuthCompatible: true }] }
       },
       {
+        status: 200,
+        description: 'Hashed password. `password` is echoed ONLY when the endpoint generated it.',
+        body: {
+          ok: true,
+          result: {
+            algorithm: 'bcrypt',
+            cost: 10,
+            hash: '$2b$10$…',
+            verified: true,
+            password: null,
+            generated: false,
+            meetsRegisterPolicy: true,
+            collections: { things: 'things_v2', users: 'users_v2' },
+            mongosh: '// Thingtime — set a user’s password hash by hand …'
+          }
+        }
+      },
+      {
         status: 400,
-        description: 'Unknown intent.',
+        description: 'Unknown intent, or hash-password called with no password and generate unset.',
         body: { ok: false, error: 'Unknown crypto action.' }
+      },
+      {
+        status: 429,
+        description: 'Hashing budget exhausted (bcrypt is CPU-heavy).',
+        body: { ok: false, error: 'Hashing is CPU-heavy — take a breather 🌸' }
       }
+    ],
+    notes: [
+      'The hash is self-verified before return: a value that would not authenticate can never be handed out.',
+      'A manual rotation does NOT revoke existing sessions — clear them separately if that matters.',
+      'Passwords are never logged or persisted by this endpoint; a supplied password is not echoed back.'
     ]
   }),
   endpoint({
@@ -1138,6 +1202,122 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           { type: 'delta', text: 'Lopu is thinking...' },
           { type: 'done' }
         ]
+      }
+    ]
+  }),
+  endpoint({
+    id: 'mongodb-endpoint',
+    group: 'mongodb',
+    title: 'MongoDB data endpoint',
+    endpoint: '/api/v1/mongodb/endpoint',
+    summary: 'Read or change the MongoDB endpoint the data plane uses for this browser session.',
+    detail:
+      'Thin-frontend mode: the session can point the open data plane (things, feed, search, comments, reactions, schemas, app-data) at any reachable MongoDB. Identity, auth and the protected system kinds always stay on the home Thingtime DB. The override is an httpOnly session cookie (tt_mongo) — or send an x-tt-mongo-url header per request from API clients. Activation probes the endpoint (connect + ping) before accepting it. Responses never include the URL itself, only the credentials-stripped host and db name.',
+    auth: {
+      mode: 'optional',
+      description:
+        'Works logged out for { url } and { reset }. Selecting a saved endpoint ({ savedId }) requires a signed-in session.'
+    },
+    methods: ['GET', 'POST', 'DELETE'],
+    steps: [
+      'GET to read the active endpoint: { endpoint: { custom, host, dbName, savedId }, defaultHost }.',
+      'POST { url } with a mongodb:// or mongodb+srv:// URL to activate it for this browser session.',
+      'POST { savedId } (signed in) to activate one of your saved endpoints.',
+      'POST { reset: true } or send DELETE to return to the Thingtime default.',
+      'A failed probe returns 422 with a safe error — the previous endpoint stays active.'
+    ],
+    requestExamples: [
+      {
+        name: 'Read active endpoint',
+        description: 'Which MongoDB the data plane currently uses.',
+        method: 'GET'
+      },
+      {
+        name: 'Activate a custom endpoint',
+        description: 'Point the data plane at a custom MongoDB for this session.',
+        method: 'POST',
+        body: { url: 'mongodb://localhost:27017/mydb' }
+      },
+      {
+        name: 'Back to default',
+        description: 'Clear the override.',
+        method: 'POST',
+        body: { reset: true }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Custom endpoint active.',
+        body: {
+          ok: true,
+          endpoint: { custom: true, host: 'localhost:27017', dbName: 'mydb', savedId: null },
+          defaultHost: 'cluster0.mongodb.net'
+        }
+      },
+      {
+        status: 422,
+        description: 'Endpoint unreachable — nothing changed.',
+        body: { ok: false, error: 'MongoServerSelectionError (ECONNREFUSED)' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'mongodb-endpoints',
+    group: 'mongodb',
+    title: 'Saved MongoDB endpoints',
+    endpoint: '/api/v1/mongodb/endpoints',
+    summary: 'Manage the signed-in user’s saved data-plane MongoDB endpoints.',
+    detail:
+      'Saved endpoints persist in the user’s private secure state on the home DB, with the Thingtime default always available. Saved URLs may embed credentials, so responses only ever return the sanitized host and db name. Activate a saved endpoint via POST /api/v1/mongodb/endpoint with { savedId }.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Session cookie or Bearer token. Endpoints belong to the signed-in account.'
+    },
+    methods: ['GET', 'POST', 'DELETE'],
+    steps: [
+      'GET to list saved endpoints; the one active for this session carries active: true.',
+      'POST { name?, url } to save an endpoint (probed first; duplicates and >20 entries are rejected).',
+      'DELETE { id } to remove one — if it is the session’s active endpoint the override is cleared too.',
+      'Activate with POST /api/v1/mongodb/endpoint { savedId }.'
+    ],
+    requestExamples: [
+      {
+        name: 'List saved endpoints',
+        description: 'All endpoints saved to this account.',
+        method: 'GET'
+      },
+      {
+        name: 'Save an endpoint',
+        description: 'Persist a custom MongoDB endpoint.',
+        method: 'POST',
+        body: { name: 'Homelab', url: 'mongodb://user:pass@localhost:27017/mydb' }
+      },
+      {
+        name: 'Remove an endpoint',
+        description: 'Delete a saved endpoint by id.',
+        method: 'DELETE',
+        body: { id: '665f0c2ab1d2c300a1b2c3d4' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Saved endpoints.',
+        body: {
+          ok: true,
+          endpoints: [
+            {
+              id: '665f0c2ab1d2c300a1b2c3d4',
+              name: 'Homelab',
+              host: 'localhost:27017',
+              dbName: 'mydb',
+              createdAt: '2026-07-19T00:00:00.000Z',
+              active: true
+            }
+          ],
+          activeSavedId: '665f0c2ab1d2c300a1b2c3d4'
+        }
       }
     ]
   }),
@@ -1851,7 +2031,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'selector — only when the app exists AND the origin is on its allowlist, so the popup can refuse ' +
       'unregistered embedders before any login UI renders. Scope paths are hierarchical dot paths from ' +
       '/api/v1/oauth/scopes (unknown names 400; empty scope → profile + app-data). 404 for unknown ' +
-      'apps, 403 for origins not on the allowlist.',
+      'apps, 403 for origins not on the allowlist. EXCEPTION: add sandbox=1 and the lookup answers for ' +
+      'ANY clientId with a mock app payload (flagged sandbox: true, no allowlist check) so integrators ' +
+      'can build the consent flow before registering — pair with POST /api/v1/oauth/sandbox for a ' +
+      'working pretend token.',
     auth: { mode: 'none', description: 'Anonymous — returns only the app name + scope descriptors.' },
     methods: ['GET'],
     steps: ['GET with clientId, the embedding page origin, and the requested scope set.', 'Render the consent screen from the returned name + scope descriptors.'],
@@ -1947,6 +2130,73 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       { status: 403, description: 'Origin not allowlisted.', body: { ok: false, error: 'This origin is not on the app’s allowlist' } }
     ],
     notes: ['Revocable from both sides: the developer deletes the app (/api/v1/apps/delete), or the user disconnects it (/api/v1/oauth/grants/revoke) — the token dies before its exp like every Thingtime JWT.']
+  }),
+  endpoint({
+    id: 'oauth-sandbox',
+    group: 'embed',
+    title: 'Sandbox token (build before registering)',
+    endpoint: '/api/v1/oauth/sandbox',
+    summary: 'Mint a real, working sandbox token for ANY clientId — no registration, no account, no browser.',
+    detail:
+      'POST { clientId?, origin?, scope?, scopes?, space?, username? } (all optional; anonymous, ' +
+      'per-IP rate-limited). ' +
+      'Returns the same handoff shape as /oauth/authorize plus sandbox: true — a signed Bearer token ' +
+      'that WORKS for one hour against /api/v1/app-data (read/write/delete, including visibility ' +
+      "'app'), /api/v1/app-data/shared, and /api/v1/oauth/userinfo. It resolves to a synthetic " +
+      "pretend user (username 'sandbox-<name>', default sandbox-you), every byte written under it is " +
+      'namespaced to that one token and TTL-reaped within the hour, and the token can never act as an ' +
+      'account credential. By default two sandboxes are fully isolated; to rehearse the MULTI-USER ' +
+      'shared feed, mint several tokens with the same `space` (an 8-64 char pool secret you choose — ' +
+      'use a uuid) and distinct `username`s: same-space tokens see each other\'s visibility-\'app\' ' +
+      'entries via /app-data/shared, each entry authored by its own pretend user gated by that ' +
+      "token's scopes — private entries stay per-token even inside a space. This is the headless " +
+      'counterpart of the consent popup\'s ?sandbox=1 mode (which accepts sandbox_space / ' +
+      'sandbox_username URL params, or SDK options sandboxSpace / sandboxUsername): integration code ' +
+      'written against it works unchanged when you register a real app and switch to ' +
+      'Thingtime.login().',
+    auth: { mode: 'none', description: 'Anonymous — the whole point is testing before you have anything.' },
+    methods: ['POST'],
+    steps: [
+      'POST with the clientId + scopes you PLAN to use (e.g. scope: "profile.username app-data app-data.shared").',
+      'Use the returned Bearer token against /app-data*, /app-data/shared, and /oauth/userinfo exactly like a real grant.',
+      'Data and token evaporate within an hour — mint another whenever you need one.',
+      'When ready: register the app (POST /api/v1/apps) and swap in Thingtime.login() — no other code changes.'
+    ],
+    requestExamples: [
+      {
+        name: 'Mint',
+        description: 'A sandbox token for an app that does not exist yet.',
+        method: 'POST',
+        body: { clientId: 'macrobiotica-dev', origin: 'http://localhost:5599', scope: 'profile.username app-data app-data.shared' }
+      },
+      {
+        name: 'Mint into a pool',
+        description: 'Two mints with the same space = two pretend users sharing one feed.',
+        method: 'POST',
+        body: {
+          clientId: 'macrobiotica-dev',
+          scope: 'profile.username app-data app-data.shared',
+          space: 'f6b2c1e8-demo-pool-2a1f0c9d8e7f',
+          username: 'ada'
+        }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'A working pretend session.',
+        body: {
+          ok: true,
+          sandbox: true,
+          token: 'eyJhbGciOi…',
+          tokenType: 'Bearer',
+          expiresAt: '2026-07-27T09:00:00.000Z',
+          scopes: ['profile.username', 'app-data', 'app-data.shared'],
+          sharedThings: 0,
+          user: { id: 'sandbox', username: 'sandbox-you' }
+        }
+      }
+    ]
   }),
   endpoint({
     id: 'oauth-scopes',
@@ -2112,10 +2362,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     detail:
       'Authenticated by an app-scoped Bearer token from /api/v1/oauth/authorize. GET ?key=… returns one ' +
       'entry ({ entry: null } when unset); GET without key lists every entry for this (user, app). ' +
-      'POST { key, value } inserts or updates one entry — keys are [A-Za-z0-9._:-] up to 128 chars ' +
+      'POST { key, value, visibility?, acl? } inserts or updates one entry — keys are [A-Za-z0-9._:-] up to 128 chars ' +
       '(first char must be a letter or digit), values ' +
-      'any JSON up to 32KB, at most 200 keys per user per app. Entries are things owned by the END USER ' +
-      '(acl ["tt:user"]), so users can always see and delete what an app stored. CORS: browser calls must ' +
+      'any JSON up to 32KB, at most 200 keys per user per app. Entries are things owned by the END USER, ' +
+      'and their audience IS the acl array: ["tt:user"] (private, the default) or ' +
+      '["tt:user", "tt:app/<clientId>"] (readable by other users of this one app via /api/v1/app-data/shared). ' +
+      "visibility: 'private' | 'app' is accepted sugar for those two acls and derived back on the wire; " +
+      'marking an entry \'app\' requires the app-data.shared scope, and a write that omits visibility/acl ' +
+      "never changes an existing entry's audience. Users can always see and delete what an app stored. " +
+      'CORS: browser calls must ' +
       'come from the token\'s own bound origin. Requires the app-data scope — 403 when the user declined ' +
       'it on the consent screen.',
     auth: { mode: 'bearer', description: 'App-scoped Bearer token with the app-data scope — cookies never authenticate this route.' },
@@ -2128,10 +2383,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     requestExamples: [
       { name: 'Read one', description: 'One key.', method: 'GET', query: { key: 'preferences' } },
       { name: 'List all', description: 'Everything this app stored for this user.', method: 'GET' },
-      { name: 'Write', description: 'Upsert a key.', method: 'POST', body: { key: 'preferences', value: { theme: 'rainbow' } } }
+      { name: 'Write', description: 'Upsert a key.', method: 'POST', body: { key: 'preferences', value: { theme: 'rainbow' } } },
+      {
+        name: 'Write shared',
+        description: "Upsert a key other users of this app may read (needs the app-data.shared scope).",
+        method: 'POST',
+        body: { key: 'post:2026-07-27', value: { text: 'Miso soup 🍲' }, visibility: 'app' }
+      }
     ],
     responseExamples: [
-      { status: 200, description: 'Entry written.', body: { ok: true, entry: { key: 'preferences', value: { theme: 'rainbow' }, updatedAt: '2026-07-12T00:00:00.000Z' } } },
+      { status: 200, description: 'Entry written.', body: { ok: true, entry: { key: 'preferences', value: { theme: 'rainbow' }, visibility: 'private', acl: ['tt:user'], updatedAt: '2026-07-12T00:00:00.000Z' } } },
       { status: 401, description: 'Missing/expired/revoked token.', body: { ok: false, error: 'Unauthorized' } },
       { status: 403, description: 'Browser origin ≠ token origin.', body: { ok: false, error: 'Origin does not match this token' } }
     ]
@@ -2153,6 +2414,57 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ],
     responseExamples: [
       { status: 200, description: 'Removed (or already absent).', body: { ok: true, deleted: true } }
+    ]
+  }),
+  endpoint({
+    id: 'app-data-shared',
+    group: 'embed',
+    title: 'App data (shared pool)',
+    endpoint: '/api/v1/app-data/shared',
+    summary: "Read the entries every user of this app opted into sharing — the app-scoped social read.",
+    detail:
+      'GET ?key=&prefix=&limit=&cursor= returns entries from ALL users of the calling app whose acl carries ' +
+      'tt:app/<clientId> (written via POST /api/v1/app-data with visibility \'app\'), newest first with a ' +
+      'cursor — never entries from other apps, never private entries. key= matches exactly, key=post:* or ' +
+      "prefix= matches a prefix; limit clamps to 1–50 (default 20). Requires the app-data.shared scope on " +
+      "the calling token, and each entry's author must still hold a live grant covering that scope — a user " +
+      'who disconnects the app (or whose grant expires) drops out of this feed instantly while keeping ' +
+      "their data. Each entry's author is shaped by that AUTHOR's own grant, exactly like /oauth/userinfo: " +
+      'id + username always, displayName/avatarUrl only when that author granted profile.displayName / ' +
+      'profile.avatar. Same CORS + origin binding as /api/v1/app-data. Note the scope is EXACT consent: ' +
+      "granting app-data does NOT imply app-data.shared — apps must request it and users see its own line " +
+      'on the consent screen.',
+    auth: { mode: 'bearer', description: 'App-scoped Bearer token with the app-data.shared scope.' },
+    methods: ['GET'],
+    steps: [
+      "Request the app-data.shared scope in Thingtime.login({ scopes: [...] }).",
+      "Write shared entries with POST /api/v1/app-data { key, value, visibility: 'app' }.",
+      'GET this route (e.g. ?key=post:*) and page with nextCursor until it returns null.',
+      'Render authors from each entry\'s author object — fields mirror what each author consented to.'
+    ],
+    requestExamples: [
+      { name: 'App feed', description: 'Newest shared post entries.', method: 'GET', query: { key: 'post:*', limit: 20 } }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'One page, newest first.',
+        body: {
+          ok: true,
+          entries: [
+            {
+              key: 'post:2026-07-27',
+              value: { text: 'Miso soup 🍲' },
+              visibility: 'app',
+              updatedAt: '2026-07-27T00:00:00.000Z',
+              createdAt: '2026-07-27T00:00:00.000Z',
+              author: { id: '64f000000000000000000002', username: 'ada-lovelace', avatarUrl: null }
+            }
+          ],
+          nextCursor: 'eyJ1IjoxNzAwMDAwMDAwMDAwLCJzIjoi…'
+        }
+      },
+      { status: 403, description: 'Token lacks the scope.', body: { ok: false, error: 'This token was not granted the app-data.shared scope' } }
     ]
   }),
   endpoint({

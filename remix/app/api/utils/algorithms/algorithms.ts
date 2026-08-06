@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { ObjectId } from 'mongodb';
 
+// feed-algorithm is a PROTECTED system kind: algorithm things stay on the home
+// deployment DB even while a data-plane endpoint override is active.
 import {
-  ensureIndexes,
   getFeedAlgorithmsCollection,
-  getThingsCollection,
+  getHomeThingsCollection as getThingsCollection,
   getUsersCollection
 } from '../mongodb/collections';
 import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
@@ -245,7 +246,6 @@ export const createAlgorithm = async (
   const name = typeof input.name === 'string' ? input.name.trim().slice(0, MAX_NAME_CHARS) : '';
   if (!name) return fail(400, 'Algorithm name is required');
 
-  await ensureIndexes();
   const things = await getThingsCollection();
   const algorithms = await getFeedAlgorithmsCollection();
   // the per-user cap spans both eras, or it would silently double mid-migration

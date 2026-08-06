@@ -5,13 +5,27 @@
 # resolver may exist or they race each other's pushes.
 #
 # When any branch is pushed, every open PR (drafts included) that TARGETS that
-# branch is checked for merge conflicts. Conflicting same-repo PRs get the base
+# branch — and the open PR FROM it, whose conflict may have been created by
+# that very head push during a quiet stretch on the base — is checked for
+# merge conflicts.
+#
+# TRIGGER SHAPE (load-bearing): claude-code-action@v1 rejects the `push` event
+# ("Unsupported event type: push"), so a push-triggered run can only DETECT and
+# then hand off — the `handoff` job fires a repository_dispatch, and that run
+# (a supported event) performs the resolution. Do not move the resolve job back
+# onto `push`; the AI step fails there every time, after the merge has already
+# been computed. pull_request_target runs take the same handoff hop — the
+# action rejects that event too, and PR code must never run in target
+# context anyway. Conflicting same-repo PRs get the base
 # branch merged into their head, with Claude resolving the conflicted files,
 # and the merge commit pushed back to the PR branch.
 #
 # Secrets:
 # - ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN (one required): powers the
-#   resolution agent (OAuth token via `/install-github-app` in the claude CLI).
+#   resolution agent (OAuth token via `/install-github-app` in the claude CLI),
+#   and, when present, LLM semantic extraction in the post-merge graphify
+#   refresh (ANTHROPIC_API_KEY selects graphify's claude API backend;
+#   CLAUDE_CODE_OAUTH_TOKEN its claude-cli backend).
 # - CONFLICT_RESOLVER_PAT (optional): a PAT with repo + workflow scope. Without
 #   it, pushes use GITHUB_TOKEN, which GitHub rejects whenever the merge brings
 #   ANY change under .github/workflows/ (workflow runs are then skipped early,
@@ -66,21 +80,59 @@
 # a mixed base+head union (the poisoned-pair state CLAUDE.md forbids). Instead,
 # when BOTH sides touched graphify-out since the merge base, the whole
 # directory is deterministically reset to the base side before anything else.
-# AFTER the resolution is verified and committed, `graphify update` is re-run
-# in CI (AST/text-only — no LLM, no API key) on a pristine tree and committed
-# separately, so the pushed graph reflects the merged code. That ordering is
-# required: the verify step asserts the staged graphify-out subtree still
-# equals the base side, so refreshing earlier would fail its own check.
-# Semantic extraction is not available in CI; the PR comment says so.
+# AFTER the resolution is verified and committed, the graph is refreshed on a
+# pristine reset tree and committed separately, so the pushed graph reflects
+# the merged code. That ordering is required: the verify step asserts the
+# staged graphify-out subtree still equals the base side, so refreshing
+# earlier would fail its own check.
+#
+# The refresh includes LLM SEMANTIC extraction when a Claude credential
+# exists: `graphify extract` + `graphify cluster-only` with whichever backend
+# the repo's secret supports (ANTHROPIC_API_KEY → claude API backend;
+# CLAUDE_CODE_OAUTH_TOKEN → claude-cli backend, the same credential the
+# resolver itself runs on). extract is manifest-incremental, and unchanged
+# content is served from the tracked content-addressed semantic cache
+# (graphify-out/cache/semantic/), so only content genuinely new to the merge
+# reaches the LLM — a typical conflict merge costs a handful of calls, often
+# zero. `extract --no-cluster` must NEVER be used here: it writes only the
+# newly-extracted nodes (verified: it reduces a 24k-node graph to 1 node),
+# and as a mechanical backstop for that whole failure class, a semantic
+# result whose node count halved is refused before staging.
+# With no credential, or when extraction fails, the step falls back to the
+# old AST-only `graphify update`. Handing this step a credential exposes it
+# to the pinned graphifyy package and the claude CLI (no NEW principals —
+# the resolve step already runs on the same secret); in exchange, the staged
+# refresh outputs get the same best-effort secret scan as resolved files
+# before committing, and the step still runs only after verification, on a
+# tree the model never influenced.
 
 name: Resolve PR conflicts (AI)
 
-run-name: "Resolve PR conflicts under ${{ github.event.client_payload.branch || inputs.branch || github.ref_name }}"
+run-name: "Resolve PR conflicts under ${{ github.event.client_payload.branch || inputs.branch || github.event.pull_request.base.ref || github.ref_name }}"
 
 on:
   push:
     branches:
       - "**"
+  # A PR branched off a STALE base can be born conflicting, and no push to the
+  # base follows it — so without this it would sit unresolved until the next
+  # unrelated base push. This MUST be pull_request_target, not pull_request:
+  # GitHub creates NO pull_request run for a PR that opens CONFLICTING (there
+  # is no merge ref to build one from — verified empirically on canary PR
+  # #176, where zero runs appeared while mergeable PRs did get runs), so a
+  # plain pull_request trigger is a no-op for exactly the case it exists to
+  # catch. pull_request_target fires from the base-branch context regardless
+  # of mergeability. SECURITY: target-context runs never check out or execute
+  # PR code here — the detect job is API-only, the resolve job is excluded
+  # for this event, and resolution happens in the repository_dispatch
+  # re-entry, the same hop every push takes.
+  # Deliberately NOT `synchronize`: that fires on every push to a PR head,
+  # including this workflow's own resolution pushes. Head pushes are covered
+  # by the plain `push` trigger instead — its detect run also scans the PR
+  # FROM the pushed branch (see the scan step), which catches conflicts a
+  # head push itself creates, without adding a per-PR target-context event.
+  pull_request_target:
+    types: [opened, reopened]
   workflow_dispatch:
     inputs:
       branch:
@@ -98,7 +150,20 @@ on:
 # One run per base branch; a newer push supersedes an in-flight resolution
 # (the push is atomic, so cancelling mid-run never half-publishes anything).
 concurrency:
-  group: resolve-conflicts-${{ github.event.client_payload.branch || inputs.branch || github.ref_name }}
+  # Three distinct namespaces, because they must NOT cancel each other:
+  #   detect-<branch>  a push run (detect + handoff only)
+  #   pr<N>            a pull_request_target run (detect + handoff), per PR
+  #   base-<branch>    an actual resolution sweep (dispatch / workflow_dispatch)
+  # Critically, a push run and the dispatch it spawns previously shared a group,
+  # so the child cancelled its own parent mid-handoff — observed as
+  # "handoff: cancelled". It happened to work only because the dispatch API call
+  # had already returned; had cancellation landed first the handoff would have
+  # been lost with no error, i.e. a silent, timing-dependent no-op.
+  group: >-
+    ${{ github.event_name == 'push'
+        && format('resolve-detect-{0}', github.ref_name)
+        || (github.event.pull_request.number && format('resolve-pr{0}', github.event.pull_request.number))
+        || format('resolve-base-{0}', github.event.client_payload.branch || inputs.branch || github.ref_name) }}
   cancel-in-progress: true
 
 permissions:
@@ -106,7 +171,7 @@ permissions:
 
 jobs:
   detect:
-    name: Find conflicting PRs based on this branch
+    name: Find conflicting PRs for this branch
     # Branch deletions also fire `push`; there is nothing to scan then.
     if: github.event_name != 'push' || github.event.deleted == false
     runs-on: ubuntu-latest
@@ -117,19 +182,39 @@ jobs:
       prs: ${{ steps.scan.outputs.prs }}
       any: ${{ steps.scan.outputs.any }}
     steps:
-      - name: Scan open PRs targeting this branch
+      - name: Scan open PRs targeting (and from) this branch
         id: scan
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          TARGET: ${{ github.event.client_payload.branch || inputs.branch || github.ref_name }}
+          TARGET: ${{ github.event.client_payload.branch || inputs.branch || github.event.pull_request.base.ref || github.ref_name }}
+          # Set only on pull_request_target events: narrows the scan to the
+          # triggering PR instead of every PR sharing its base. TARGET reads
+          # base.ref from the PR record rather than event ref context, which
+          # stays correct regardless of which ref the event ran from.
+          ONLY_PR: ${{ github.event.pull_request.number }}
+          # Push runs only: also scan the open PR FROM the pushed branch. A
+          # head push can CREATE a conflict (`synchronize` is deliberately
+          # not a trigger, and the next base push may be days away — observed
+          # on PR #173, which made itself conflicted and sat unresolved).
+          # Costs nothing: this run exists for every push anyway. Cannot
+          # loop: the resolver's own resolution push makes its PR mergeable,
+          # so that push's detect run finds nothing to do.
+          SCAN_HEAD: ${{ github.event_name == 'push' }}
         run: |
           set -euo pipefail
 
           query() {
-            gh pr list --repo "$REPO" --base "$TARGET" --state open \
-              --json number,headRefName,isCrossRepository,isDraft,mergeable \
-              --limit 100
+            {
+              gh pr list --repo "$REPO" --base "$TARGET" --state open \
+                --json number,headRefName,baseRefName,isCrossRepository,isDraft,mergeable \
+                --limit 100
+              if [ "$SCAN_HEAD" = "true" ]; then
+                gh pr list --repo "$REPO" --head "$TARGET" --state open \
+                  --json number,headRefName,baseRefName,isCrossRepository,isDraft,mergeable \
+                  --limit 100
+              fi
+            } | jq -s 'add | unique_by(.number)'
           }
 
           # GitHub computes mergeability lazily after a base push; poll until
@@ -151,14 +236,66 @@ jobs:
           still_unknown="$(jq -r '[.[] | select(.mergeable == "UNKNOWN") | .number] | join(", ")' <<<"$prs")"
           [ -n "$still_unknown" ] && echo "::warning::PR(s) #$still_unknown still UNKNOWN after polling; they will be re-checked on the next push."
 
-          conflicting="$(jq -c '[.[] | select(.isCrossRepository | not) | select(.mergeable == "CONFLICTING") | {number: .number, head: .headRefName}]' <<<"$prs")"
+          # On a pull_request_target event, scan ONLY the triggering PR — the
+          # other PRs sharing this base are not this event's business and are
+          # already covered by base pushes.
+          # `base` comes from the API record of the PR itself, so the resolve
+          # job never re-derives it from event context — deriving branch names
+          # from event refs is how "<N>/merge"-style ref spoofing and wrong-ref
+          # merges happen; the PR record is the single source of truth.
+          conflicting="$(jq -c --arg only "${ONLY_PR:-}" '[.[] | select(.isCrossRepository | not) | select(.mergeable == "CONFLICTING") | select($only == "" or (.number|tostring) == $only) | {number: .number, head: .headRefName, base: .baseRefName}]' <<<"$prs")"
           echo "prs=$conflicting" >> "$GITHUB_OUTPUT"
           echo "any=$(jq 'length > 0' <<<"$conflicting")" >> "$GITHUB_OUTPUT"
+
+  # anthropics/claude-code-action@v1 REJECTS the `push` event outright
+  # ("Unsupported event type: push"). Its supported set is issues,
+  # issue_comment, pull_request, pull_request_review,
+  # pull_request_review_comment, workflow_dispatch, repository_dispatch,
+  # schedule, workflow_run. So a push-triggered run cannot resolve anything
+  # itself — it detects the work and hands off to repository_dispatch, which
+  # IS supported and re-enters this same workflow to do the real work.
+  handoff:
+    name: Hand off to a dispatch run (push/PR-target cannot run the AI step)
+    needs: detect
+    if: >-
+      (github.event_name == 'push' || github.event_name == 'pull_request_target')
+      && needs.detect.outputs.any == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Dispatch a resolvable run per conflicted base branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          # Bases come from the conflicting PRs' own records, NOT the event
+          # ref: a push run may have found the PR *from* the pushed branch
+          # (head-push-created conflict), whose resolution sweep must run
+          # under that PR's BASE branch. For PRs found by the base scan the
+          # derived base equals the event ref anyway.
+          PRS: ${{ needs.detect.outputs.prs }}
+        run: |
+          set -euo pipefail
+          jq -r '[.[].base] | unique | .[]' <<<"$PRS" | while IFS= read -r base; do
+            echo "Conflicting PR(s) under $base; re-entering via repository_dispatch."
+            gh api "repos/$REPO/dispatches" \
+              -f event_type=resolve-conflicts-cascade \
+              -f "client_payload[branch]=$base" \
+              -f "client_payload[depth]=0"
+          done
 
   resolve:
     name: "Resolve PR #${{ matrix.pr.number }}"
     needs: detect
-    if: needs.detect.outputs.any == 'true'
+    # Never on `push` or `pull_request_target` — the AI step rejects both
+    # ("Unsupported event type"), and resolution must not run in the target
+    # context regardless. The handoff job converts both into a
+    # repository_dispatch run.
+    if: >-
+      needs.detect.outputs.any == 'true'
+      && github.event_name != 'push'
+      && github.event_name != 'pull_request_target'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -170,7 +307,9 @@ jobs:
         pr: ${{ fromJSON(needs.detect.outputs.prs) }}
     env:
       REPO: ${{ github.repository }}
-      BASE_REF: ${{ github.event.client_payload.branch || inputs.branch || github.ref_name }}
+      # From the PR's own API record (see the scan step) — never re-derived from
+      # event context, which is wrong on pull_request events.
+      BASE_REF: ${{ matrix.pr.base }}
       HEAD_REF: ${{ matrix.pr.head }}
       PR_NUMBER: ${{ matrix.pr.number }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -302,6 +441,13 @@ jobs:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ github.token }}
+          # The handoff fires repository_dispatch with GITHUB_TOKEN, so those
+          # runs are attributed to github-actions[bot]. The action refuses
+          # non-human actors by default ("Workflow initiated by non-human
+          # actor: github-actions (type: Bot)"), which silently broke the whole
+          # push -> handoff -> dispatch -> resolve chain: only runs a human
+          # dispatched ever reached the model. Allow exactly this bot, not '*'.
+          allowed_bots: "github-actions"
           prompt: |
             You are resolving git merge conflicts inside a GitHub Actions runner by
             EDITING FILES ONLY. You have NO shell and NO git access — that is
@@ -309,7 +455,7 @@ jobs:
             pushes what you leave in the working tree. Do not attempt to run git or
             any command; just edit the conflicted files in place.
 
-            Situation: base branch "${{ github.event.client_payload.branch || inputs.branch || github.ref_name }}"
+            Situation: base branch "${{ matrix.pr.base }}"
             was merged into "${{ matrix.pr.head }}" (the head of PR #${{ matrix.pr.number }}),
             and the merge stopped on conflicts. Conflicted files currently contain
             zdiff3 conflict markers:
@@ -535,14 +681,14 @@ jobs:
       # make that check fail by design). The tree is reset to the commit first,
       # so a stray model edit left unstaged can never end up indexed here, and
       # the model has no influence over this step at all.
-      - name: Refresh graphify outputs (AST-only, no API key)
+      - name: Refresh graphify outputs (LLM semantic when a credential exists)
         id: graphify
         if: steps.merge.outputs.graphify_reset == 'true'
         # This refresh is a nicety, never worth losing a verified resolution:
         # any failure here must not skip the push step below, which is what
         # actually publishes the merge commit.
         continue-on-error: true
-        timeout-minutes: 10
+        timeout-minutes: 25
         env:
           # Pinned: the AST cache is version-namespaced and untracked, so CI
           # always re-extracts. An unpinned upgrade whose output format drifted
@@ -550,8 +696,22 @@ jobs:
           # guarantee a graphify-out conflict on the NEXT merge — i.e. the step
           # would manufacture the condition it exists to resolve.
           GRAPHIFY_VERSION: "0.9.4"
+          # Semantic-extraction credentials (either may be absent; see the
+          # header). Same secrets the resolve step runs on, so no NEW
+          # principals see them beyond the pinned graphifyy package and the
+          # claude CLI it shells out to.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # graphify's claude-cli backend defaults to the CLI's default model
+          # (Opus) — structured-JSON extraction doesn't need it; sonnet is the
+          # right cost/quality point.
+          GRAPHIFY_CLAUDE_CLI_MODEL: sonnet
         run: |
           set -euo pipefail
+          # An empty env var and an unset one look the same to `[ -n ]` but
+          # not necessarily to child processes (the claude CLI); normalize.
+          [ -n "${ANTHROPIC_API_KEY:-}" ] || unset ANTHROPIC_API_KEY
+          [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] || unset CLAUDE_CODE_OAUTH_TOKEN
 
           # Index exactly what was committed, and nothing the model left behind.
           # -x is REQUIRED: without it, ignored paths survive, and the model can
@@ -574,23 +734,100 @@ jobs:
           fi
           export PATH="$HOME/.local/bin:$PATH"
 
-          # AST/text-only extraction: no LLM, no API key.
-          if ! graphify update .; then
-            echo "::warning::\`graphify update\` failed in CI — keeping the base branch's graph as-is."
-            echo "refreshed=failed" >> "$GITHUB_OUTPUT"
-            git reset -q --hard HEAD
-            exit 0
+          # Pick a semantic backend from whichever Claude credential exists.
+          backend=""
+          if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
+            backend="claude"
+          elif [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
+            # graphify's claude-cli backend shells out to `claude -p`, which
+            # authenticates from CLAUDE_CODE_OAUTH_TOKEN — the same mechanism
+            # claude-code-action uses. The resolve step may have left the CLI
+            # installed already; install it if not.
+            if command -v claude >/dev/null 2>&1; then
+              backend="claude-cli"
+            elif npm install -g @anthropic-ai/claude-code >/dev/null 2>&1 \
+                 && command -v claude >/dev/null 2>&1; then
+              backend="claude-cli"
+            else
+              echo "::warning::claude CLI unavailable and could not be installed — semantic extraction skipped (AST-only refresh)."
+            fi
+          fi
+
+          # Semantic path: `extract` is manifest-incremental (only files the
+          # merge changed are re-extracted; unchanged docs are served from the
+          # tracked cache — zero LLM calls when nothing semantic changed), then
+          # `cluster-only` regenerates GRAPH_REPORT.md. --no-label matches the
+          # repo's current placeholder community names without spending LLM
+          # calls on naming; --api-timeout bounds each request so one
+          # pathological doc can't eat the step timeout. NEVER add
+          # --no-cluster to the extract: it writes ONLY the newly-extracted
+          # nodes and destroys the rest of the graph.
+
+          # Mechanical guard for that whole failure class: refuse a semantic
+          # result whose node count halved. `graphify update` has a built-in
+          # fewer-nodes guard, `graphify extract` does not — without this, a
+          # collapsed graph would be committed to the PR branch. A legitimate
+          # >50% shrink (mass code deletion) lands on the AST fallback, whose
+          # own guard then decides; resolve that rare case locally with
+          # `graphify update --force`.
+          graph_not_collapsed() {
+            old_n="$(git show HEAD:graphify-out/graph.json 2>/dev/null | jq '.nodes | length' 2>/dev/null || echo 0)"
+            new_n="$(jq '.nodes | length' graphify-out/graph.json 2>/dev/null || echo 0)"
+            case "$old_n" in ''|*[!0-9]*) old_n=0 ;; esac
+            case "$new_n" in ''|*[!0-9]*) new_n=0 ;; esac
+            if [ "$old_n" -gt 0 ] && [ "$new_n" -lt $(( old_n / 2 )) ]; then
+              echo "::warning::Semantic refresh shrank the graph ($old_n -> $new_n nodes) — refusing it."
+              return 1
+            fi
+            return 0
+          }
+
+          semantic="none"
+          if [ -n "$backend" ]; then
+            conc=4
+            if [ "$backend" = "claude-cli" ]; then conc=1; fi
+            if graphify extract . --backend "$backend" --max-concurrency "$conc" --api-timeout 240 \
+               && graphify cluster-only . --no-viz --no-label \
+               && graph_not_collapsed; then
+              semantic="$backend"
+            else
+              semantic="failed"
+              echo "::warning::Semantic \`graphify extract\` via $backend failed — falling back to the AST-only refresh."
+              # The failed run may have half-written outputs (including a
+              # dated backup dir); restore the committed state before the
+              # fallback so it starts from the same tree the extract did.
+              git checkout -q HEAD -- graphify-out/ 2>/dev/null || true
+              git clean -qffdx -- graphify-out/
+            fi
+          fi
+          echo "semantic=$semantic" >> "$GITHUB_OUTPUT"
+
+          # AST/text-only fallback (and the no-credential path): no LLM.
+          if [ "$semantic" = "none" ] || [ "$semantic" = "failed" ]; then
+            if ! graphify update .; then
+              echo "::warning::\`graphify update\` failed in CI — keeping the base branch's graph as-is."
+              echo "refreshed=failed" >> "$GITHUB_OUTPUT"
+              git reset -q --hard HEAD
+              exit 0
+            fi
           fi
 
           # Stage ONLY the portable outputs the repo tracks — never the whole
           # subtree, which would sweep in graphify's leftovers (.graph.tmp.json,
-          # needs_update) and the untracked derived viz.
+          # needs_update, dated backup dirs) and the untracked derived viz.
           for f in graph.json GRAPH_REPORT.md manifest.json cost.json; do
             p="graphify-out/$f"
             if [ -e "$p" ] || git ls-files --error-unmatch -- "$p" >/dev/null 2>&1; then
               git add -A -- "$p"
             fi
           done
+          # The content-addressed semantic cache is tracked by repo policy:
+          # blobs paid for in CI must be committed so no local run ever
+          # re-pays the same extraction.
+          if [ -d graphify-out/cache/semantic ] \
+             || [ -n "$(git ls-files -- 'graphify-out/cache/semantic/')" ]; then
+            git add -A -- graphify-out/cache/semantic/
+          fi
 
           # Anything changed outside graphify-out/ means the CLI touched source.
           if [ -n "$(git status --porcelain --untracked-files=no -- . ':(exclude)graphify-out/')" ]; then
@@ -600,13 +837,50 @@ jobs:
             exit 0
           fi
 
+          # Same best-effort secret scan the verify step runs on resolved
+          # files, here for the refresh commit: this step holds live
+          # credentials and commits LLM-influenced output (a prompt-injected
+          # doc could steer extraction), so staged content must never carry
+          # them. Best-effort backstop, not a boundary (see header).
+          keyfile="$RUNNER_TEMP/graphify-needles.txt"
+          : > "$keyfile"
+          for secret in "${ANTHROPIC_API_KEY:-}" "${CLAUDE_CODE_OAUTH_TOKEN:-}"; do
+            [ -n "$secret" ] || continue
+            printf '%s\n' "$secret" >> "$keyfile"
+            printf '%s' "$secret" | base64 -w0 >> "$keyfile"
+            printf '\n' >> "$keyfile"
+          done
+          if [ -s "$keyfile" ]; then
+            git diff --cached --name-only > "$RUNNER_TEMP/graphify-staged.txt"
+            blob="$RUNNER_TEMP/graphify-staged-blob"
+            while IFS= read -r path; do
+              [ -n "$path" ] || continue
+              git show ":$path" > "$blob" 2>/dev/null || true
+              if grep -qFf "$keyfile" "$blob"; then
+                echo "::error::Staged $path contains secret material — dropping the graphify refresh."
+                rm -f "$blob" "$keyfile"
+                git reset -q --hard HEAD
+                echo "refreshed=failed" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+            done < "$RUNNER_TEMP/graphify-staged.txt"
+            rm -f "$blob"
+          fi
+          rm -f "$keyfile"
+
           if git diff --cached --quiet; then
             echo "Graph already current; nothing to refresh."
             echo "refreshed=nochange" >> "$GITHUB_OUTPUT"
           else
+            case "$semantic" in
+              claude|claude-cli)
+                detail="\`graphify extract\` with LLM semantic extraction (graphify $GRAPHIFY_VERSION, $semantic backend); unchanged content served from the tracked semantic cache." ;;
+              *)
+                detail="AST/text-only \`graphify update\` (graphify $GRAPHIFY_VERSION, no semantic extraction); run graphify locally with an LLM backend if semantic data is needed." ;;
+            esac
             git commit -q \
               -m "chore: refresh graphify outputs after conflict merge" \
-              -m "AST/text-only \`graphify update\` (graphify $GRAPHIFY_VERSION, no semantic extraction); run graphify locally with an LLM backend if semantic data is needed." \
+              -m "$detail" \
               -m "Refreshed by the resolve-pr-conflicts workflow: $RUN_URL"
             echo "refreshed=true" >> "$GITHUB_OUTPUT"
           fi
@@ -632,6 +906,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GRAPHIFY_RESET: ${{ steps.merge.outputs.graphify_reset }}
           GRAPHIFY_REFRESHED: ${{ steps.graphify.outputs.refreshed }}
+          GRAPHIFY_SEMANTIC: ${{ steps.graphify.outputs.semantic }}
         run: |
           set -euo pipefail
           body="$RUNNER_TEMP/comment.md"
@@ -651,9 +926,17 @@ jobs:
               echo
               echo "> graphify-out/ was reset wholesale to the \`$BASE_REF\` side (repo rule: one side, never mixed — the graph merge driver is unavailable in CI)."
               case "$GRAPHIFY_REFRESHED" in
-                true)     echo "> Then re-ran \`graphify update\` (AST/text-only) on the merged code and committed the result. Semantic extraction still needs a local run with an LLM backend." ;;
-                nochange) echo "> Re-ran \`graphify update\` (AST/text-only); the graph was already current." ;;
-                *)        echo "> ⚠️ The in-CI \`graphify update\` did not run successfully, so the graph is the base branch's — please run \`graphify update .\` locally." ;;
+                true)
+                  case "$GRAPHIFY_SEMANTIC" in
+                    claude|claude-cli)
+                      echo "> Then re-ran graphify on the merged code WITH LLM semantic extraction (\`graphify extract\`, $GRAPHIFY_SEMANTIC backend) and committed the result — content new to this merge is semantically indexed; unchanged content came from the tracked cache." ;;
+                    failed)
+                      echo "> Then re-ran \`graphify update\` (AST/text-only — the semantic extraction attempt failed this run; see the workflow log) and committed the result. Run graphify locally with an LLM backend if fresh semantic data is needed." ;;
+                    *)
+                      echo "> Then re-ran \`graphify update\` (AST/text-only — no Claude credential available to the refresh step for semantic extraction) and committed the result." ;;
+                  esac ;;
+                nochange) echo "> Re-ran the graphify refresh; the graph was already current." ;;
+                *)        echo "> ⚠️ The in-CI graphify refresh did not run successfully, so the graph is the base branch's — please run \`graphify update .\` locally." ;;
               esac
             fi
             if [ "$HAS_WORKFLOW_PUSH" != "true" ]; then
