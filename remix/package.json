@@ -87,6 +87,7 @@
     "react-visibility-sensor": "^5.1.1",
     "rxjs": "^7.8.1",
     "sshpk": "^1.18.0",
+    "tldts": "^7.4.10",
     "tinygradient": "^1.1.5",
     "unicode-emoji-json": "^0.9.0",
     "uuid": "^9.0.0"

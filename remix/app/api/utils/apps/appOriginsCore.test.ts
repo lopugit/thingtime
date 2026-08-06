@@ -38,17 +38,37 @@ test('wildcard entries: structural guardrails', () => {
   assert.equal(normalizeAppOriginEntry('https://app-*.example.com/path'), null); // bare origins only
 });
 
-test('wildcard entries: bare * is refused on shared hosting suffixes', () => {
+test('wildcard entries: multi-tenant suffixes (PSL private domains) need a trailing anchor', () => {
+  // No anchor at all → refused (would allowlist every site on the platform).
   assert.equal(normalizeAppOriginEntry('https://*.vercel.app'), null);
   assert.equal(normalizeAppOriginEntry('https://*.netlify.app'), null);
   assert.equal(normalizeAppOriginEntry('https://*.github.io'), null);
-  // …but an anchored star on the same suffix is allowed (document: anchor both sides)
+  // Prefix-only anchor → refused: any stranger can create 'myapp-evil…'.
+  assert.equal(normalizeAppOriginEntry('https://myapp-*.vercel.app'), null);
+  assert.equal(normalizeAppOriginEntry('https://myapp-*.pages.dev'), null);
+  // A trailing anchor (the platform-appended team/site slug) is required…
+  assert.equal(normalizeAppOriginEntry('https://*-myteam.vercel.app'), 'https://*-myteam.vercel.app');
+  // …and anchoring both sides stays the documented best practice.
   assert.equal(
     normalizeAppOriginEntry('https://myapp-*-myteam.vercel.app'),
     'https://myapp-*-myteam.vercel.app'
   );
-  // and bare * stays fine on a domain you own outright
+});
+
+test('wildcard entries: public eTLDs never take a wildcard', () => {
+  assert.equal(normalizeAppOriginEntry('https://*.co.uk'), null);
+  assert.equal(normalizeAppOriginEntry('https://starsalign-*.co.uk'), null); // anyone can buy starsalign-evil.co.uk
+  assert.equal(normalizeAppOriginEntry('https://myapp-*.com.au'), null);
+});
+
+test('wildcard entries: domains the developer owns allow any shape', () => {
   assert.equal(normalizeAppOriginEntry('https://*.thingtime.com'), 'https://*.thingtime.com');
+  // A registrable domain UNDER a private suffix is owned by one tenant, so
+  // subdomain wildcards beneath it are fine too.
+  assert.equal(
+    normalizeAppOriginEntry('https://*.starsalign-previews.vercel.app'),
+    'https://*.starsalign-previews.vercel.app'
+  );
 });
 
 test('matching: vercel previews match, strangers do not', () => {
@@ -93,4 +113,9 @@ test('matching: malformed inputs are refused outright', () => {
   assert.equal(originAllowedBy(['https://*.example.com'], 'https://x.example.com/path-kept'), false);
   assert.equal(originAllowedBy('https://*.example.com' as unknown as string[], 'https://x.example.com'), false);
   assert.equal(originAllowedBy([42, null, 'https://x.example.com'] as unknown as string[], 'https://x.example.com'), true);
+});
+
+test('matching: entries with more than one star never match (legacy/tampered data)', () => {
+  assert.equal(originAllowedBy(['https://a-*-b-*.example.com'], 'https://a-x-b-y.example.com'), false);
+  assert.equal(originAllowedBy(['https://**.example.com'], 'https://x.example.com'), false);
 });
