@@ -81,11 +81,14 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // login attempts (password step and OTP step share the endpoint): bounds
   // credential stuffing and OTP-email sends beyond the per-challenge attempt cap
   'auth.login': { limit: 30, windowMs: 60_000, enabled: true },
-  // signups create a user + bcrypt hash + verification email/outbox row per
-  // request — a resource-amplification + mailbox-spam vector if unbounded, and
-  // the only auth endpoint that was still unthrottled. Anonymous, keyed by IP;
-  // generous enough for legit retries (and shared NAT), admin-tunable.
-  'auth.register': { limit: 10, windowMs: 10 * 60_000, enabled: true },
+  // public sign-up: anonymous bcrypt + user-doc writes per request (a
+  // resource-amplification vector) and every success emails the supplied
+  // address (mail-bomb + enumeration surface like the other auth mailers);
+  // it's also an awaited ensureIndexes bootstrap caller, so throttling keeps
+  // retries from re-running the index battery. The only auth endpoint that was
+  // still unthrottled. Anonymous, keyed by IP; roomy enough for a human
+  // fumbling taken usernames (and shared NAT), tight for account farming.
+  'auth.register': { limit: 10, windowMs: 15 * 60_000, enabled: true },
   // /crypto password hasher: anonymous and pure (no DB), but bcrypt burns
   // ~100ms of CPU per call by design, so the budget is tight per IP — the
   // compute is the abuse surface, not the hash it returns
