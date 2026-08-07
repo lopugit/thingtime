@@ -1532,7 +1532,7 @@
   "README.md": {
     "mtime": 1786112599.4321785,
     "ast_hash": "45944dbe60393c3d37be080e7c3efd2a",
-    "semantic_hash": ""
+    "semantic_hash": "45944dbe60393c3d37be080e7c3efd2a"
   },
   "VERCEL_DEPLOYMENTS.md": {
     "mtime": 1786083163.4465318,
@@ -4162,7 +4162,7 @@
   "TESTING.md": {
     "mtime": 1786112537.2040215,
     "ast_hash": "3d687b46a80c00571848801482c7138d",
-    "semantic_hash": ""
+    "semantic_hash": "3d687b46a80c00571848801482c7138d"
   },
   "claude-todo/12-everything-is-a-thing-collections.md": {
     "mtime": 1786083163.4469461,
@@ -4247,7 +4247,7 @@
   ".github/workflows/resolve-pr-conflicts.yml": {
     "mtime": 1786112697.3441997,
     "ast_hash": "18415eaf1572e947690c6a26487f96a1",
-    "semantic_hash": ""
+    "semantic_hash": "18415eaf1572e947690c6a26487f96a1"
   },
   "iOS/Thingtime/Resources/AppIcon.icon/Assets/canopy.svg": {
     "mtime": 1786083163.9964554,
@@ -4492,7 +4492,7 @@
   "PRs/178-codex-use-fable-5-max-conflict-resolver--configurable-pr-conflict-resolver-model-waterfall.md": {
     "mtime": 1786108701.9572756,
     "ast_hash": "6117e90feea5757a87d41ccd451c7579",
-    "semantic_hash": ""
+    "semantic_hash": "6117e90feea5757a87d41ccd451c7579"
   },
   ".github/scripts/rebase-stack/prepare-round.sh": {
     "mtime": 1786112284.5986392,
@@ -4507,11 +4507,11 @@
   ".github/actions/rebase-conflict-round/action.yml": {
     "mtime": 1786112330.3461294,
     "ast_hash": "1f4285e4dccc0a349dcdc928fd3c8120",
-    "semantic_hash": ""
+    "semantic_hash": "1f4285e4dccc0a349dcdc928fd3c8120"
   },
   ".github/workflows/rebase-pr-stacks.yml": {
     "mtime": 1786112662.0535603,
     "ast_hash": "14f19d3cc4293cc4fc9cf6cb3e078a13",
-    "semantic_hash": ""
+    "semantic_hash": "14f19d3cc4293cc4fc9cf6cb3e078a13"
   }
 }

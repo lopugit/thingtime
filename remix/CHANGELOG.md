@@ -33,8 +33,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   root-to-leaf ordering, orphaned run locks recover after 90 minutes, and web
   rewrites explicitly dispatch Web CI for the new SHA. The existing merge
   resolver now routes stack members deterministically, pins its runner actions,
-  and avoids checkout's spurious `/dev/null` Git-config annotation. — Codex
-  (AI), 2026-08-07
+  and avoids checkout's spurious `/dev/null` Git-config annotation. See the
+  [PR #183 implementation notes](../PRs/183-codex-ai-rebase-stack-resolver--add-automatic-ai-rebase-support-for-pr-stacks.md).
+  — Codex (AI), 2026-08-07
 
 - **CI conflict-resolver graphify refresh now does LLM semantic extraction**:
   after an auto-resolved merge, `resolve-pr-conflicts.yml` runs
