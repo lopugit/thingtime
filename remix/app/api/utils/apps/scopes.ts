@@ -22,6 +22,12 @@ export type AppScopeDescriptor = {
   // baseline scopes can't be deselected on the consent screen — the login
   // identity itself ('profile.username') is meaningless to withhold.
   baseline?: boolean;
+  // exact scopes are privacy-EXPANDING leaves: an ancestor grant never covers
+  // them ('app-data' does not imply 'app-data.shared') — the user must grant
+  // the literal path, so widening who can see data always shows its own
+  // consent line. The tree rule ("a path covers every descendant") holds for
+  // everything else.
+  exact?: boolean;
 };
 
 // The catalog — ordered as the consent screen lists them. Extending the
@@ -78,6 +84,14 @@ export const APP_SCOPE_CATALOG: AppScopeDescriptor[] = [
     kind: 'capability'
   },
   {
+    id: 'app-data.shared',
+    title: 'Shared app storage',
+    description:
+      'Other people using this app can see entries the app marks as shared — you opt in per entry; never other apps, never the public web.',
+    kind: 'capability',
+    exact: true
+  },
+  {
     id: 'things',
     title: 'Things you choose',
     description: 'Read-only access to specific things you hand-pick from your Thingtime — just those, nothing else.',
@@ -106,10 +120,14 @@ export const isKnownScope = (value: unknown): value is string =>
 const coversPath = (scope: string, path: string): boolean =>
   scope === path || path.startsWith(`${scope}.`);
 
+const EXACT_APP_SCOPES = new Set(APP_SCOPE_CATALOG.filter((s) => s.exact).map((s) => s.id));
+
 // Does a granted set cover a path? Baseline scopes are always covered —
-// every grant carries the login identity.
+// every grant carries the login identity. Exact scopes (privacy-expanding
+// leaves) need the literal path in the grant — no ancestor coverage.
 export const scopeCovers = (granted: string[], path: string): boolean => {
   if (BASELINE_APP_SCOPES.includes(path)) return true;
+  if (EXACT_APP_SCOPES.has(path)) return granted.includes(path);
   return granted.some((scope) => coversPath(scope, path));
 };
 

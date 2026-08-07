@@ -27,6 +27,9 @@ type ScopeDescriptor = {
   description: string;
   kind: 'namespace' | 'field' | 'capability' | 'picker';
   baseline?: boolean;
+  // privacy-expanding leaves an ancestor grant never covers (server rule) —
+  // e.g. 'app-data' does not imply 'app-data.shared'
+  exact?: boolean;
 };
 type PickerThing = { id: string; label: string; detail: string };
 
@@ -44,6 +47,7 @@ const SCOPE_EMOJI: Record<string, string> = {
   'profile.banner': '🎨',
   email: '💌',
   'app-data': '📦',
+  'app-data.shared': '🤝',
   things: '🗂️'
 };
 
@@ -71,9 +75,13 @@ const fetchJson = async (url: string, init: RequestInit = {}) => {
   }
 };
 
-// Client-side mirror of the server's ancestor-covers rule.
-const coversPath = (scope: string, path: string) => scope === path || path.startsWith(`${scope}.`);
-const anyCovers = (scopes: string[], path: string) => scopes.some((s) => coversPath(s, path));
+// Client-side mirror of the server's ancestor-covers rule. Exact scopes
+// (catalog exact: true) are only covered by their literal path — pass the
+// catalog's exact-id set wherever the distinction matters.
+const coversPath = (scope: string, path: string, exactIds?: Set<string>) =>
+  exactIds?.has(path) ? scope === path : scope === path || path.startsWith(`${scope}.`);
+const anyCovers = (scopes: string[], path: string, exactIds?: Set<string>) =>
+  scopes.some((s) => coversPath(s, path, exactIds));
 
 const parseScopeList = (raw: string, catalog: ScopeDescriptor[]): string[] => {
   const known = new Set(catalog.map((s) => s.id));
@@ -183,6 +191,10 @@ export const AuthorizePage = () => {
   const optionalScopeParam = (params.get('optional_scope') || '').slice(0, 1024);
   const extrasAllowed = params.get('extra') !== '0';
   const sandbox = params.get('sandbox') === '1';
+  // opt-in sandbox pooling (see /api/v1/oauth/sandbox): passed through to the
+  // mint verbatim — the server validates
+  const sandboxSpace = (params.get('sandbox_space') || '').slice(0, 64);
+  const sandboxUsername = (params.get('sandbox_username') || '').slice(0, 32);
 
   const [catalog, setCatalog] = React.useState<ScopeDescriptor[]>([]);
   const [defaultScopes, setDefaultScopes] = React.useState<string[]>([]);
@@ -269,10 +281,11 @@ export const AuthorizePage = () => {
       setVerifiedOrigin(null);
     }
 
+    const exact = new Set(catalog.filter((s) => s.exact).map((s) => s.id));
     const baseline = catalog.filter((s) => s.baseline).map((s) => s.id);
     const requestedRequired = scopeParam ? parseScopeList(scopeParam, catalog) : [...defaultScopes];
-    const requiredIds = [...baseline.filter((b) => !anyCovers(requestedRequired, b)), ...requestedRequired];
-    const optionalIds = parseScopeList(optionalScopeParam, catalog).filter((id) => !anyCovers(requiredIds, id));
+    const requiredIds = [...baseline.filter((b) => !anyCovers(requestedRequired, b, exact)), ...requestedRequired];
+    const optionalIds = parseScopeList(optionalScopeParam, catalog).filter((id) => !anyCovers(requiredIds, id, exact));
 
     const byId = new Map(catalog.map((s) => [s.id, s]));
     setRequiredScopes(requiredIds.map((id) => byId.get(id)).filter(Boolean) as ScopeDescriptor[]);
@@ -291,6 +304,7 @@ export const AuthorizePage = () => {
 
   const requiredIds = React.useMemo(() => requiredScopes.map((s) => s.id), [requiredScopes]);
   const optionalIds = React.useMemo(() => optionalScopes.map((s) => s.id), [optionalScopes]);
+  const exactIds = React.useMemo(() => new Set(catalog.filter((s) => s.exact).map((s) => s.id)), [catalog]);
 
   // The grant the user is currently composing.
   const selection = React.useMemo(
@@ -311,10 +325,10 @@ export const AuthorizePage = () => {
         (scope) =>
           scope.kind !== 'namespace' &&
           !scope.baseline &&
-          !anyCovers(requiredIds, scope.id) &&
-          !anyCovers(optionalIds, scope.id)
+          !anyCovers(requiredIds, scope.id, exactIds) &&
+          !anyCovers(optionalIds, scope.id, exactIds)
       ),
-    [catalog, requiredIds, optionalIds]
+    [catalog, requiredIds, optionalIds, exactIds]
   );
 
   const thingsActive = React.useMemo(() => anyCovers(selection, 'things'), [selection]);
@@ -399,19 +413,36 @@ export const AuthorizePage = () => {
     setIssueError(null);
 
     if (sandbox) {
-      // Mirror the server's scope gating: even a pretend handoff only carries
-      // the fields the selection covers — never the raw /auth/me object.
+      // Mint a REAL sandbox token (POST /oauth/sandbox — anonymous, 1h,
+      // synthetic user, TTL-reaped data) so the pretend session actually
+      // works against /app-data* and /oauth/userinfo. If the mint fails the
+      // demo still completes with the legacy inert token — the popup never
+      // strands on a network hiccup. Either way the handoff mirrors the
+      // server's scope gating: only fields the selection covers, never the
+      // raw /auth/me object.
+      const minted = await fetchJson('/api/v1/oauth/sandbox', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientId: app.clientId,
+          origin: verifiedOrigin,
+          scopes: selection,
+          ...(sandboxSpace ? { space: sandboxSpace } : {}),
+          ...(sandboxUsername ? { username: sandboxUsername } : {})
+        })
+      });
+      const real = !!(minted?.ok && minted.token);
       postToOpener({
         type: 'thingtime:login',
         ok: true,
         sandbox: true,
-        token: 'tt-sandbox-token',
+        token: real ? minted.token : 'tt-sandbox-token',
         tokenType: 'Bearer',
-        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30).toISOString(),
-        scopes: selection,
+        expiresAt: real ? minted.expiresAt : new Date(Date.now() + 1000 * 60 * 60).toISOString(),
+        scopes: real && Array.isArray(minted.scopes) ? minted.scopes : selection,
         sharedThings: thingsActive ? pickedIds.length : 0,
         user: {
-          id: activeUser.id,
+          id: real && minted.user?.id ? minted.user.id : activeUser.id,
           username: activeUser.username,
           ...(anyCovers(selection, 'profile.displayName') ? { displayName: activeUser.displayName ?? null } : {}),
           ...(anyCovers(selection, 'profile.avatar') ? { avatarUrl: activeUser.avatarUrl ?? null } : {})

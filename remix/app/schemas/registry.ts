@@ -84,6 +84,10 @@ export type ThingVisibility = (typeof THING_VISIBILITIES)[number];
 //   tt:userFriends      the owner's friends circle
 //   tt:userFamily       the owner's family circle
 //   tt:user/<username>  one specific user (grant or exclude)
+//   tt:app/<clientId>   users of ONE embedded app, via that app's tokens —
+//                       the audience app-data sharing uses. Never matches a
+//                       Thingtime-site viewer (aclEntryMatches returns false);
+//                       only the app-data shared read path resolves it.
 //   tt:inherit          attached things (comments, reactions) — as visible as
 //                       their target
 //
@@ -103,6 +107,7 @@ export const ACL_FRIENDS = 'tt:userFriends';
 export const ACL_FAMILY = 'tt:userFamily';
 export const ACL_INHERIT = 'tt:inherit';
 export const ACL_USER_PREFIX = 'tt:user/';
+export const ACL_APP_PREFIX = 'tt:app/';
 
 const ACL_ENTRY_PATTERN = /^-?tt:[A-Za-z0-9][A-Za-z0-9._/-]*$/;
 const MAX_ACL_ENTRIES = 16;
@@ -794,7 +799,7 @@ const appSchema: ThingtimeSchema = {
   fields: [
     { name: 'clientId', type: 'id', required: true, description: 'Server-minted public app id (ttapp_<uuid>) used by the embed SDK.' },
     { name: 'name', type: 'string', required: true, max: MAX_APP_NAME_CHARS, description: `App name shown on the consent screen, max ${MAX_APP_NAME_CHARS} chars.` },
-    { name: 'origins', type: 'string[]', required: true, max: MAX_APP_ORIGINS, description: `Allowed web origins (https, or http for localhost dev), max ${MAX_APP_ORIGINS}.` }
+    { name: 'origins', type: 'string[]', required: true, max: MAX_APP_ORIGINS, description: `Allowed web origins (https, or http for localhost dev), max ${MAX_APP_ORIGINS}. One * wildcard is allowed in the leftmost host label for preview deploys (e.g. https://myapp-*-myteam.vercel.app); it never crosses a dot. Per the Public Suffix List: on multi-tenant hosts (vercel.app, netlify.app, …) the star label must END with your platform-appended slug, and public suffixes (co.uk, …) take no wildcard at all.` }
   ],
   example: { clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', name: 'Rainbow Notes', origins: ['https://rainbownotes.example'] }
 };

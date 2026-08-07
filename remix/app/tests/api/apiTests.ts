@@ -281,12 +281,17 @@ export const apiTests: ApiTestDefinition[] = [
   {
     id: 'auth-password-reset-confirm-invalid',
     name: 'Password reset confirm rejects bad tokens',
-    description: 'Unknown/expired reset tokens are rejected with a 400 error shape.',
+    description:
+      'Unknown/expired reset tokens are rejected with a 400 error shape (or 429 when the per-IP window is exhausted).',
     group: 'auth',
     method: 'POST',
     path: '/api/v1/auth/password-reset/confirm',
     body: { token: 'not-a-real-reset-token', password: 'valid-length-password' },
-    expect: expectJson([400], (body) => body?.ok === false && typeof body?.error === 'string', 'Invalid reset token rejected with an error shape.')
+    expect: expectJson(
+      [400, 429],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Invalid reset token rejected with an error shape.'
+    )
   },
   {
     id: 'auth-two-factor-state-guarded',
@@ -324,12 +329,17 @@ export const apiTests: ApiTestDefinition[] = [
   {
     id: 'auth-resend-verification-empty',
     name: 'Resend verification empty body',
-    description: 'The resend route returns ok for empty input so account existence cannot be probed.',
+    description:
+      'The resend route returns ok for empty input so account existence cannot be probed (or 429 when the per-IP window is exhausted).',
     group: 'auth',
     method: 'POST',
     path: '/api/v1/auth/resend-verification',
     body: {},
-    expect: expectJson([200], (body) => body?.ok === true, 'Resend verification returned ok.')
+    expect: expectJson(
+      [200, 429],
+      (body, response) => (response.status === 429 ? body?.ok === false : body?.ok === true),
+      'Resend verification returned ok (or the per-IP window was exhausted).'
+    )
   },
   {
     id: 'auth-verify-email-missing',
@@ -488,6 +498,32 @@ export const apiTests: ApiTestDefinition[] = [
     expect: expectJson([400], (body) => body?.ok === false && Boolean(body?.error), 'Unknown crypto action rejected.')
   },
   {
+    id: 'teapot-418',
+    name: 'Teapot declines to brew',
+    description: 'The hidden RFC 2324 endpoint answers 418 with a brew-time haiku, and its -docs twin is real.',
+    group: 'health',
+    method: 'GET',
+    path: '/api/v1/teapot',
+    expect: expectJson(
+      [418],
+      (body) => body?.ok === false && typeof body?.haiku === 'string' && /🫖/.test(body.haiku),
+      'The teapot returned 418 with a haiku.'
+    )
+  },
+  {
+    id: 'unknown-endpoint-lopu-404',
+    name: 'Unknown endpoints speak Lopu',
+    description: 'A missing API path returns the standard {ok:false, error} envelope in Lopu voice, not a bare text 404.',
+    group: 'health',
+    method: 'GET',
+    path: '/api/v1/definitely-not-a-real-endpoint',
+    expect: expectJson(
+      [404],
+      (body) => body?.ok === false && typeof body?.error === 'string' && body.error.includes('Lopu'),
+      'The 404 envelope is JSON and Lopu-voiced.'
+    )
+  },
+  {
     id: 'health-frontend',
     name: 'Frontend health',
     description: 'Frontend health checks the app shell.',
@@ -610,7 +646,9 @@ export const apiTests: ApiTestDefinition[] = [
     mutates: true,
     body: {},
     timeoutMs: 30000,
-    expect: expectStatus([200, 500], 'MongoDB populate route responded.')
+    // 200/500 as admin; 401 anonymous; 403 when the suite's earlier auth tests
+    // left an ordinary (non-admin) session cookie — all are correct behavior
+    expect: expectStatus([200, 401, 403, 500], 'MongoDB populate ran (admin) or was rejected (non-admin).')
   },
   {
     id: 'template-action',
@@ -735,10 +773,12 @@ export const apiTests: ApiTestDefinition[] = [
     group: 'things',
     method: 'GET',
     path: '/api/v1/things/quota?key=api-test',
+    // 401 anonymous, 403 when an ordinary session cookie from earlier auth
+    // tests is present — either way, no service credentials → no quota access
     expect: expectJson(
-      [401],
-      (body) => body?.ok === false && body?.code === 'UNAUTHORIZED',
-      'Anonymous quota read was rejected.'
+      [401, 403],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Quota read without service credentials was rejected.'
     )
   },
   {
@@ -756,9 +796,9 @@ export const apiTests: ApiTestDefinition[] = [
       policy: { dailyLimit: 1, rollingLimit: 1, rollingWindowMs: 1_000 }
     },
     expect: expectJson(
-      [401],
-      (body) => body?.ok === false && body?.code === 'UNAUTHORIZED',
-      'Anonymous quota write was rejected before initialization.'
+      [401, 403],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Quota write without service credentials was rejected before initialization.'
     )
   },
   {
@@ -984,10 +1024,12 @@ export const apiTests: ApiTestDefinition[] = [
     path: '/api/v1/things',
     mutates: true,
     body: { id: 'api-test-upsert-001', thingtime: ['post'], crystal: { type: 'text', text: 'API test upsert 🧪' }, acl: ['tt:user'] },
+    // 404: a session cookie from earlier auth tests is present but this id
+    // doesn't exist / isn't owned by that throwaway user — still a guarded no
     expect: expectJson(
-      [200, 201, 401],
+      [200, 201, 401, 404],
       (body) => (body?.ok === true && typeof body?.created === 'boolean') || (body?.ok === false && typeof body?.error === 'string'),
-      'Unified PUT either upserted (session) or was rejected (anonymous).'
+      'Unified PUT either upserted (session) or was rejected with an error shape.'
     )
   },
   {
@@ -1166,7 +1208,7 @@ export const apiTests: ApiTestDefinition[] = [
     method: 'GET',
     path: '/api/v1/admin/migrations',
     expect: expectJson(
-      [200, 401],
+      [200, 401, 403],
       (body) => (body?.ok === true && Array.isArray(body?.collections)) || (body?.ok === false && typeof body?.error === 'string'),
       'Migration status either returned the census (admin) or was rejected (non-admin).'
     )
@@ -1181,7 +1223,7 @@ export const apiTests: ApiTestDefinition[] = [
     mutates: true,
     body: { migration: 'things-v1-to-v2', dryRun: true },
     expect: expectJson(
-      [200, 401],
+      [200, 401, 403],
       (body) => (body?.ok === true && body?.report?.dryRun === true) || (body?.ok === false && typeof body?.error === 'string'),
       'Dry-run either reported (admin) or was rejected (non-admin).'
     )
@@ -1327,6 +1369,24 @@ export const apiTests: ApiTestDefinition[] = [
     mutates: true,
     body: { email: 'tt-api-test-waitlist@example.invalid' },
     expect: expectJson([200, 429], (body) => body?.ok === true || typeof body?.error === 'string', 'Waitlist join succeeded (or was rate-limited with an error shape).')
+  },
+  {
+    id: 'docs-markdown-bundle',
+    name: 'API docs Markdown bundle',
+    description: 'GET /api/docs returns one text/markdown document covering the whole endpoint catalog.',
+    group: 'docs',
+    method: 'GET',
+    path: '/api/docs',
+    expect: ({ response, textBody }) => {
+      const markdown = (response.headers.get('Content-Type') || '').includes('text/markdown');
+      const hasTitle = textBody.includes('# Thingtime API reference');
+      // spot-check that catalog entries actually rendered
+      const hasEndpoints = textBody.includes('/api/v1/app-data/shared') && textBody.includes('/api/v1/things');
+      return {
+        pass: response.status === 200 && markdown && hasTitle && hasEndpoints,
+        details: `status ${response.status}, markdown content-type ${markdown}, title ${hasTitle}, endpoints ${hasEndpoints}`
+      };
+    }
   },
   ...apiDocsSmokeTests
 ];

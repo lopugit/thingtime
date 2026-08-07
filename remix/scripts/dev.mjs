@@ -5,6 +5,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
+const { ensureDependencies } = require('./ensure-dependencies.js');
 const { resolveDevContext } = require('./worktree-ports.cjs');
 
 // pnpm 11 exports its own settings into the environment as npm_config_* vars
@@ -59,24 +60,6 @@ const loadLocalEnv = () => {
   }
 };
 
-// Fresh worktrees start without node_modules — bootstrap them so `npm run
-// dev` just works instead of dying with `sh: vite: command not found`.
-// CI=true keeps pnpm non-interactive: its modules-purge confirmation aborts
-// with ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY when there is no TTY
-// (PM2, agent shells, fresh worktree bootstraps).
-const ensureDeps = () => {
-  if (existsSync('node_modules/vite/package.json')) return;
-  console.log('[dev] dependencies missing — running pnpm install --prefer-offline…');
-  const installed = spawnSync('pnpm', ['install', '--prefer-offline'], {
-    stdio: 'inherit',
-    env: { ...process.env, CI: 'true' }
-  });
-  if (installed.status !== 0) {
-    console.error('[dev] pnpm install failed — install dependencies manually, then re-run dev.');
-    process.exit(installed.status || 1);
-  }
-};
-
 // The pre-dev steps run here (not as `npm run` siblings in the dev script) so
 // they execute AFTER the dependency bootstrap and with the scrubbed env.
 const runStep = (command, args) => {
@@ -86,7 +69,7 @@ const runStep = (command, args) => {
   }
 };
 
-ensureDeps();
+ensureDependencies();
 runStep(process.execPath, ['scripts/ensure-bcrypt-binding.js']);
 runStep('bash', ['scripts/pre-dev.sh']);
 
