@@ -158,9 +158,24 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     bundles. `ThingtimeURL.tsx` (L23–55) and `CommanderV2` (L337, per-keypress)
     also log on every render. Dev-gate or remove.
 
-15. **🛠️ DX ratchet: add typecheck, a headless test runner, and CI.**
+15. **🟡 MOSTLY DONE — 🛠️ DX ratchet: add typecheck, a headless test runner, and CI.**
 
-    `remix/package.json` has no `typecheck`/`test` script; `tsconfig` disables
+    Shipped on `claude/dx-test-runner-ci` (PR #121, consolidating the parallel
+    PRs #119/#123/#126): a headless CLI runner
+    (`remix/scripts/run-api-tests.mts`, `npm run test:api`) that reuses the
+    canonical `apiTests.ts` + `apiTestRunner.ts` the interactive `/tests` page
+    uses; a `test:unit` aggregate whose `node --test` suites load through tsx
+    (fixing the previously-broken `~/`-alias suites and covering the
+    scriptless `collectionNames.test.ts`); `typecheck` plus a
+    `typecheck:ratchet` that fails only when the tsc error count grows past
+    `scripts/typecheck-baseline.json`; and `.github/workflows/web-ci.yml`
+    (build + ratchet + unit tests, and the full API suite against a real
+    Vite + Nitro + Mongo stack). **Still open:** progressively enabling tsc
+    strictness to burn the baseline down (start with `noImplicitAny`, fixing
+    the untyped `args` in `useApi.tsx`), and finishing the Commander V1→V2
+    migration (blocked on PR #130; `ThingtimeTypes` was unified in PR #153).
+
+    Original report: `remix/package.json` has no `typecheck`/`test` script; `tsconfig` disables
     `strict`/`noImplicitAny`/`strictNullChecks`; no CI (`.github/` absent). The
     58+ API tests in `remix/app/tests/api/apiTests.ts` run only via the
     interactive `/tests` page, though `apiTestRunner.ts` is plain fetch and
