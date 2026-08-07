@@ -77,6 +77,18 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Index bootstrap recovery after PRs #159/#161**: failed boot-time
+  `ensureIndexes()` work no longer caches a rejected promise for 60 seconds.
+  The next explicit bootstrap caller retries immediately, while hot request
+  paths remain isolated from the index battery; rate-limit and index-warmup
+  diagnostics/checklists now describe their independent failure paths.
+  — Codex (AI), 2026-07-30
+- **Fresh worktrees now bootstrap complete pnpm dependency links**: Codex
+  worktree carryover no longer copies large, partial `node_modules` symlink
+  trees that can leave ESLint/Vite wrappers without their packages. A shared
+  dependency check now repairs links from pnpm's store and runs automatically
+  before Remix dev, build, and lint commands. — Codex (AI), 2026-07-30
+
 - **PR #69 final-review hardening round**: a multi-agent review of the unified
   /search + profile/feed branch surfaced a batch of merge-blocking issues, all
   fixed here — Claude (AI), 2026-07-17:
@@ -157,6 +169,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   `backfill-app-storage-allowances` migration write-fences legacy apps,
   reconciles user ledgers, and initializes aggregate usage last. — Codex (AI),
   2026-08-02
+- **Repository AI guidance now has one canonical source**: unique rules from
+  the former root `AGENTS.md`, `CLAUDE.md`, and `CODEX.md` now live in
+  `AI_ALL.md`; the standard Codex and Claude filenames are relative symlinks to
+  it so every checkout and tool reads the same policy. — Codex (AI), 2026-07-30
 
 - **Feed things render natively** (`ThingView`): thingtime posts mount the real
   Thingtime component — right-click context menu, collapse, and view⇄edit

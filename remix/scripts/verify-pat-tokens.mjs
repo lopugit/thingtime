@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { randomBytes } from 'node:crypto';
 // Live verification of personal access tokens (Settings → Token minter) on
 // the merged PAT × app-namespace tree — real API only, no mocks, no direct DB
 // access (FUNDAMENTALS §2). Covers the scope catalog, use accounting, the
@@ -55,7 +56,7 @@ const api = async (path, { token, cookie, method = 'GET', body, origin, headers 
   return { status: response.status, body: json, headers: response.headers };
 };
 
-const suffix = `${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;
+const suffix = `${Date.now().toString(36)}${randomBytes(8).toString('hex')}`;
 
 // Register through the real registration path and keep the session cookie —
 // the same credential the Settings UI mints with.

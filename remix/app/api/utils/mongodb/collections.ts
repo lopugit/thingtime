@@ -175,13 +175,11 @@ export const getAuthOtpsCollection = async () => getCollection('authOtps');
 // cold-start cost (see PR: cold-start index battery).
 let indexesEnsured: Promise<void> | null = null;
 
-// A failed run is cached too, with a cooldown before the next attempt: resetting
-// to null on failure meant EVERY subsequent request re-ran the whole ~60-command
-// createIndex battery against the DB (and failed again) — a per-request retry
-// storm stacked on top of the rate-limiter fail-open. Until the cooldown elapses
-// callers get the cached rejection instantly, with zero DB work.
-const INDEXES_RETRY_COOLDOWN_MS = 60_000;
-let indexesRetryAt = 0; // epoch ms of the next allowed attempt after a failure
+// Only in-flight and successful runs stay memoised. A failed boot warmup must
+// not poison awaited bootstrap work for a fixed cooldown: the next explicit
+// caller (registration or an admin migration) retries immediately. Hot request
+// paths no longer call ensureIndexes, so clearing a failed run cannot recreate
+// the old all-request retry storm.
 
 // createIndex with different options than an existing same-key index throws
 // IndexOptionsConflict (85) / IndexKeySpecsConflict (86). For indexes whose
@@ -222,12 +220,7 @@ const createIndexReplacing = async (
 };
 
 export const ensureIndexes = async () => {
-  if (indexesEnsured && indexesRetryAt && Date.now() >= indexesRetryAt) {
-    // cooldown elapsed on a cached failure — allow one fresh attempt
-    indexesEnsured = null;
-  }
   if (!indexesEnsured) {
-    indexesRetryAt = 0;
     indexesEnsured = (async () => {
       const db = await getThingtimeDb();
       // indexes land on the current-generation physical collections; createIndex
@@ -485,15 +478,12 @@ export const ensureIndexes = async () => {
         col('rateLimits').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
       ]);
     })().catch((err: any) => {
-      // Cache the failure with a cooldown (instead of resetting to null, which
-      // re-ran the full battery on every request while the DB was unhappy) and
-      // name the index that broke — the fix is almost always data cleanup on
-      // one collection, so the name is the actionable part.
-      indexesRetryAt = Date.now() + INDEXES_RETRY_COOLDOWN_MS;
+      // Name the broken index, then clear the failed promise so the next
+      // explicit bootstrap caller can retry as soon as the database/data is
+      // healthy. Ordinary API traffic never calls ensureIndexes.
+      indexesEnsured = null;
       console.error(
-        `[mongodb] ensureIndexes failed${err?.indexBeingBuilt ? ` building ${err.indexBeingBuilt}` : ''} — retrying in ${Math.round(
-          INDEXES_RETRY_COOLDOWN_MS / 1000
-        )}s:`,
+        `[mongodb] ensureIndexes failed${err?.indexBeingBuilt ? ` building ${err.indexBeingBuilt}` : ''} — next bootstrap call will retry:`,
         err?.message || err
       );
       throw err;
