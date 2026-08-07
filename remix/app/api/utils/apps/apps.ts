@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto';
 
-import { getSessionsCollection, getThingsCollection } from '../mongodb/collections';
+// Embed apps are auth-plane ("Login with Thingtime" clientId → allowlist
+// lookups): app things stay on the home deployment DB even while a data-plane
+// endpoint override is active, so an override can never answer origin checks.
+import { getHomeThingsCollection as getThingsCollection, getSessionsCollection } from '../mongodb/collections';
 import {
   ACL_OWNER,
   COLLECTION_SCHEMA_VERSIONS,
@@ -14,6 +17,10 @@ import {
 // crystal { clientId, name, origins }, owned by the developer user. Apps are
 // created ONLY here (the schema has no generic-route sanitizer), the server
 // mints the clientId, and a partial unique index keeps clientId one-of-a-kind.
+// Origin normalization + wildcard matching live in appOriginsCore.ts.
+import { normalizeAppOrigin, normalizeAppOriginEntry, originAllowedBy } from './appOriginsCore';
+
+export { normalizeAppOrigin };
 
 type Fail = { ok: false; status: number; error: string };
 const fail = (status: number, error: string): Fail => ({ ok: false, status, error });
@@ -34,30 +41,6 @@ export type EmbedApp = {
   name: string;
 };
 
-const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
-
-// Normalize a web origin: http(s), no path/query/hash/credentials, lowercased.
-// Plain http is allowed only for localhost so dev sites can test the embed —
-// production embeds must be https or tokens would travel in cleartext.
-export const normalizeAppOrigin = (value: unknown): string | null => {
-  if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  if (!trimmed || trimmed.length > 2048) return null;
-
-  let url: URL;
-  try {
-    url = new URL(trimmed.toLowerCase());
-  } catch {
-    return null;
-  }
-
-  if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
-  if (url.protocol === 'http:' && !LOCAL_HOSTNAMES.has(url.hostname)) return null;
-  if (url.pathname !== '/' || url.search || url.hash || url.username || url.password) return null;
-
-  return url.origin;
-};
-
 export const sanitizeAppName = (value: unknown): string | null => {
   if (typeof value !== 'string') return null;
   const name = value.trim().replace(/\s+/g, ' ');
@@ -75,11 +58,13 @@ export const sanitizeAppOrigins = (value: unknown): string[] | Fail => {
 
   const origins: string[] = [];
   for (const entry of value) {
-    const normalized = normalizeAppOrigin(entry);
+    const normalized = normalizeAppOriginEntry(entry);
     if (!normalized) {
       return fail(
         400,
-        'Origins must be bare https origins like https://example.com (http is allowed for localhost only)'
+        'Origins must be bare https origins like https://example.com (http is allowed for localhost only). ' +
+          'One * wildcard is allowed in the leftmost host label for preview deploys, e.g. ' +
+          'https://myapp-*-myteam.vercel.app — anchor both sides of the * on shared hosts.'
       );
     }
     if (!origins.includes(normalized)) origins.push(normalized);
@@ -110,12 +95,8 @@ export const findAppsByClientIds = async (clientIds: string[]) => {
   return things.find({ thingtime: 'app', 'crystal.clientId': { $in: ids } }).toArray();
 };
 
-export const appAllowsOrigin = (appDoc: any, origin: string): boolean => {
-  const normalized = normalizeAppOrigin(origin);
-  if (!normalized) return false;
-  const origins = appDoc?.crystal?.origins;
-  return Array.isArray(origins) && origins.includes(normalized);
-};
+export const appAllowsOrigin = (appDoc: any, origin: string): boolean =>
+  originAllowedBy(appDoc?.crystal?.origins, origin);
 
 export const createApp = async (
   ownerId: string,

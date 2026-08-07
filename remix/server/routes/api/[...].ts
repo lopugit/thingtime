@@ -1,5 +1,6 @@
 import { defineHandler } from 'nitro/h3';
 
+import { getRequestMongoEndpoint, runWithMongoEndpoint } from '../../../app/api/utils/mongodb/endpoint';
 import { proxyApiRequestToFallback, shouldProxyApiToFallback } from '../../utils/apiFallback';
 
 type RouteModule = {
@@ -47,6 +48,8 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/health/vercel': () => import('../../../app/routes/api/v1/health/vercel/_vercel'),
   'v1/login': () => import('../../../app/routes/api/v1/login/_login'),
   'v1/lopu/musing': () => import('../../../app/routes/api/v1/lopu/musing/_musing'),
+  'v1/mongodb/endpoint': () => import('../../../app/routes/api/v1/mongodb/endpoint/_endpoint'),
+  'v1/mongodb/endpoints': () => import('../../../app/routes/api/v1/mongodb/endpoints/_endpoints'),
   'v1/mongodb/get-connection': () => import('../../../app/routes/api/v1/mongodb/get-connection/_get-connection'),
   'v1/mongodb/populate': () => import('../../../app/routes/api/v1/mongodb/populate/_populate'),
   'v1/mongodb/raw-results': () => import('../../../app/routes/api/v1/mongodb/raw-results/_raw-results'),
@@ -61,6 +64,10 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/oauth/userinfo': () => import('../../../app/routes/api/v1/oauth/userinfo/_userinfo'),
   'v1/schemas': () => import('../../../app/routes/api/v1/schemas/_schemas'),
   'v1/schemas/browse': () => import('../../../app/routes/api/v1/schemas/browse/_browse'),
+  'v1/settings/pr-conflict-auto-resolver-model-waterfall': () =>
+    import(
+      '../../../app/routes/api/v1/settings/pr-conflict-auto-resolver-model-waterfall/_pr-conflict-auto-resolver-model-waterfall'
+    ),
   'v1/teapot': () => import('../../../app/routes/api/v1/teapot/_teapot'),
   'v1/template': () => import('../../../app/routes/api/v1/template/_template'),
   'v1/themes': () => import('../../../app/routes/api/v1/themes/_themes'),
@@ -205,8 +212,17 @@ export default defineHandler(async (event) => {
     });
   }
 
+  // Establish the request's MongoDB endpoint context (the `tt_mongo` session
+  // cookie / `x-tt-mongo-url` header — see api/utils/mongodb/endpoint.ts) so
+  // the data plane below the handler resolves the session's active endpoint.
+  // Admin routes are exempt: migrations and other admin writes must always
+  // operate on the home deployment, never on an override DB.
+  const mongoEndpoint = path.startsWith('v1/admin/') ? null : await getRequestMongoEndpoint(event.req);
+
   try {
-    return normalizeResponse(await handler({ request: event.req }));
+    return await runWithMongoEndpoint(mongoEndpoint, async () =>
+      normalizeResponse(await handler({ request: event.req }))
+    );
   } catch (err) {
     if (err instanceof Response) {
       return err;

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Binary, ObjectId } from 'mongodb';
 
-import { getThingsCollection, getUsersCollection } from '../mongodb/collections';
+import { getHomeThingsCollection, getThingsCollection, getUsersCollection } from '../mongodb/collections';
 import { findUserByUsername, pushUserRecentReaction } from '../auth/users';
 import { sanitizeReactionToken } from '~/utils/reactionTokens';
 import {
@@ -710,8 +710,10 @@ const resolveProfiles = async (userIds: string[]): Promise<Map<string, FeedAutho
   if (!wanted.length) return new Map();
   const profiles = new Map<string, FeedAuthor>();
 
-  // things-era users first (shareId = the id every ownerId reference carries)
-  const things = await getThingsCollection();
+  // things-era users first (shareId = the id every ownerId reference carries).
+  // HOME collection: identity lives on the home deployment, so author cards
+  // keep resolving while a custom data-plane endpoint override is active.
+  const things = await getHomeThingsCollection();
   const userThings = await things
     .find({ thingtime: 'user', shareId: { $in: wanted } } as any)
     .project({ shareId: 1, 'crystal.username': 1, 'crystal.displayName': 1, 'crystal.avatarUrl': 1 })
