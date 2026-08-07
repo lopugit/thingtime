@@ -2,9 +2,30 @@
 
 Run the checklist for every area a PR touches, in a live browser against the
 local dev stack (`npm run web-pms`, worktree stacks get their own port trio —
-see `AGENTS.md`). Each list is the distilled regression history of that area:
+see `AI_ALL.md`). Each list is the distilled regression history of that area:
 every line exists because it broke once. Add a line whenever a new bug class
 is fixed, and cite the checklist you ran in the PR description.
+
+## Canonical AI instruction links (`AI_ALL.md`)
+
+- [ ] Root `AGENTS.md` and `CLAUDE.md` are relative symlinks whose target is
+      exactly `AI_ALL.md`.
+- [ ] `cmp -s AI_ALL.md AGENTS.md` and `cmp -s AI_ALL.md CLAUDE.md` both pass,
+      and root `CODEX.md` is absent.
+- [ ] In a fresh Git checkout, `git ls-files -s AGENTS.md CLAUDE.md` reports
+      mode `120000` for both links and both still resolve to `AI_ALL.md`.
+
+## Worktree dependency bootstrap (`remix/scripts/ensure-dependencies.js`)
+
+- [ ] In a fresh linked worktree with no copied `node_modules`, run
+      `npm run worktree-setup`: every direct Remix dependency is linked and
+      `npm --prefix remix run ensure-deps -- --check` passes.
+- [ ] With the pnpm virtual store present but top-level `eslint` and `vite`
+      links removed, run `npm run worktree-setup`: both links are restored
+      without copying dependency files from another checkout.
+- [ ] Run `npm run worktree-setup` again: it exits successfully without
+      reinstalling, then `corepack pnpm --dir remix run lint:files --
+      scripts/ensure-dependencies.js scripts/dev.mjs` starts ESLint normally.
 
 ## Composer — Thingtime tab (`remix/app/components/Feed/PostComposer.tsx`)
 
@@ -288,3 +309,204 @@ is fixed, and cite the checklist you ran in the PR description.
       blocking) swaps "Loading the SDK…" for the failure notice with the
       standalone-demo link within ~10s — the preview must never show a
       permanent loading state.
+
+## MongoDB data endpoint (`/mongodb-status`, `remix/app/components/MongoDB/MongoEndpointConfig.tsx`)
+
+- [ ] Logged OUT: paste a reachable `mongodb://` URL → "Use for this session"
+      flips the page to the Custom endpoint badge, the footer indicator reads
+      "MongoDB (custom)", and the feed/search read from that DB. "Use" on the
+      Thingtime row returns everything to default.
+- [ ] An unreachable URL is rejected at activation (422 toast, e.g.
+      `MongoServerSelectionError (ECONNREFUSED)`) and the previous endpoint
+      stays active — a bad URL must never brick the session's data calls.
+- [ ] A non-mongodb scheme (`http://…`), whitespace, or a >2048-char URL is
+      rejected with a clear validation message.
+- [ ] Logged IN: "Save to my endpoints" persists the endpoint (survives
+      logout/login and other browsers); the raw URL/credentials NEVER appear
+      in any API response, page, or error — only host + db name.
+- [ ] While a custom endpoint is active: login/logout, profile, themes,
+      account switcher and saved-endpoint management still work (identity is
+      home-pinned); posts created land in the CUSTOM db; admin routes
+      (migrations especially) still operate on the home DB.
+- [ ] Removing the saved endpoint the session currently uses also clears the
+      override (page falls back to Thingtime default without a reload).
+- [ ] The `tt_mongo` cookie is httpOnly + session-scoped: closing the browser
+      drops the override; document.cookie can't read it.
+- [ ] Secret inputs: the connection URL and every "Individual fields" input
+      (user/password/host/port/database) render as type=password, hidden by
+      default, each with its own 👁 show/hide toggle that reveals ONLY that
+      field (autoComplete=new-password keeps password managers out).
+      Placeholders stay readable — values never render on a shared screen
+      until deliberately revealed.
+- [ ] Fields mode composes the URL live through the same activate/save
+      buttons: user/password/database URI-encode (e.g. "p@ss:word" →
+      p%40ss%3Aword), mongodb+srv:// disables + clears the port, switching
+      modes round-trips (a pasted URL parses into the fields, the fields
+      compose back byte-identical), and all inputs clear after a successful
+      activate/save.
+- [ ] No secret persistence: values live only in component state and the
+      POST body — the tt-mongo-endpoint localCache entry (and all of
+      localStorage) carries only host/db summaries, never a mongodb:// URL,
+      credentials, or field values.
+- [ ] LOCAL DEV footer parity: with an override active, the footer indicator
+      reads "MongoDB (custom)" on the local stack too. Regression class: the
+      vite /api proxy's changeOrigin hid the web origin from nitro, so
+      resolveStatusTarget classified "Current Tab" as REMOTE and health routes
+      re-fetched themselves WITHOUT cookies (session state invisible). The
+      proxy must forward x-forwarded-host/-proto (vite.config.ts) — verify
+      /api/v1/health/mongodb?targetOrigin=<web origin> returns custom:true
+      with the cookie, while a real remote target (e.g. thingtime.com) still
+      server-side fetches.
+
+## Docs search (`remix/app/routes/docs/DocsSearch.tsx`, `docsSearchIndex.ts`)
+
+- [ ] Searching "acl" in the /docs drawer ranks the Thing schema (its `acl`
+      field section) first; results highlight the matched terms and show an
+      area badge + mono meta path; the nav list hides while a query is
+      active and returns on clear (× button or Escape).
+- [ ] Anchored results deep-link AND scroll on client-side navigation:
+      "scopes" → Enter lands on /docs/embed#permissions-scopes with the
+      heading at the sticky-header offset, not the page top (DocsLayout's
+      scroll-to-top must skip hash navigations); schema results scroll to
+      their /docs/schemas#schema-<id> card.
+- [ ] ArrowUp/Down move the active row, Enter opens it (query-param entries
+      like design mockups/components select the exact entry), and on mobile
+      tapping a result closes the drawer.
+- [ ] The query lives in the URL (?q=) with replace-style updates: typing
+      never stacks history entries, refresh restores the search, /docs?q=acl
+      deep-links it, result clicks carry ?q= along (so the landed URL is
+      shareable with its search context), and × strips it.
+- [ ] Typing is instant and never drops keys: the input is locally
+      controlled and the URL syncs on a ~200ms debounce — fast typing on
+      /docs/api (the heaviest page) must not lag, and the ?q= write lands
+      once after the pause (the static drawer lists are memoized so
+      keystrokes don't re-render the 78-endpoint menu).
+- [ ] The desktop drawer never shows an internal scrollbar: content renders
+      full height, sticks under the top nav only while it fits the viewport,
+      and taller content (search results, expanded endpoint lists) flows with
+      the page scroll — the bottom of the menu stays reachable.
+
+## Shared app-data (`/api/v1/app-data/shared`, `api/utils/apps/appData.ts`)
+
+- [ ] POST /api/v1/app-data with `visibility: 'app'` on a token WITHOUT the
+      `app-data.shared` scope returns 403 and writes nothing; with the scope
+      the entry's acl becomes `["tt:user", "tt:app/<clientId>"]`.
+- [ ] A plain `{ key, value }` rewrite of an existing shared entry keeps it
+      shared (audience only changes when the write names one); `visibility:
+      'private'` flips the acl back to `["tt:user"]`.
+- [ ] GET /api/v1/app-data/shared returns other users' `visibility: 'app'`
+      entries for the SAME app only — never private entries, never another
+      app's entries — newest first, and `key=post:*` prefix-filters.
+- [ ] Author objects honour each AUTHOR's own grant: displayName/avatarUrl
+      appear only when that author granted the profile field.
+- [ ] Revoking a user's grant (disconnect in settings) removes their entries
+      from the shared feed on the next read while `GET /api/v1/app-data`
+      still shows the entries to the owner.
+- [ ] The consent screen lists "Shared app storage" as its own line, and a
+      grant of plain `app-data` does NOT cover `app-data.shared` (exact
+      consent — no ancestor coverage).
+- [ ] GET /api/docs returns the whole API reference as text/markdown, and
+      /api/docs-docs + every `<endpoint>-docs` route (including
+      /api/v1/app-data/shared-docs) return their JSON doc payloads.
+
+## Sandbox tokens (`/api/v1/oauth/sandbox`, `api/utils/apps/sandbox.ts`)
+
+- [ ] POST /api/v1/oauth/sandbox (no auth, any clientId) returns a Bearer
+      token that works against /app-data set/get/list/delete, the shared
+      pool, and /oauth/userinfo — resolving to the synthetic `sandbox-you`
+      user, never a real account.
+- [ ] Sandbox app-data docs carry `sandboxExpiresAt` (TTL-reaped) and are
+      namespaced per token: a second sandbox token sees NONE of the first's
+      entries (private or shared).
+- [ ] A sandbox token can never act as an account credential:
+      /api/v1/auth/me (and any cookie/session path) rejects it.
+- [ ] GET /api/v1/apps/public?sandbox=1 returns a mock app (flagged
+      `sandbox: true`) for an unregistered clientId instead of 404; without
+      sandbox=1 the 404/403 behaviour is unchanged.
+- [ ] The consent popup's sandbox approve hands back a REAL minted token
+      (falls back to the inert `tt-sandbox-token` only if the mint call
+      fails), and scope gating on the handoff user object still matches the
+      selection.
+- [ ] Feed-pollution fence: a sandbox token minted with a REAL app's
+      clientId can write shared entries, but that real app's
+      /app-data/shared feed never scans them (`sandboxExpiresAt` excluded)
+      — real pages stay full-size even with fresh sandbox junk on top.
+- [ ] Sandbox storage budget: the 51st key for one sandbox token 400s
+      (SANDBOX_MAX_KEYS), while real grants keep the 200-key cap.
+- [ ] Sandbox spaces: tokens minted with the same `space` see each other's
+      visibility-'app' entries in /app-data/shared, each authored by its own
+      `sandbox-<username>` pretend user; PRIVATE entries stay per-token even
+      in a shared space; a different space (or no space) sees nothing; real
+      feeds still exclude all sandbox docs.
+- [ ] Space validation: space shorter than 8 chars 400s; usernames are
+      always 'sandbox-' prefixed so pooled feeds can't impersonate real
+      accounts.
+
+## Rate limiting & index-ensure reliability (`api/utils/rateLimit/enforce.ts`, `api/utils/mongodb/collections.ts`)
+
+- [ ] Healthy path: burst a rate-limited endpoint past its limit (e.g.
+      `things.search`, 120/min → 121 requests) → 429 with `Retry-After`,
+      and NO `[rate-limit]`/`[mongodb]` error lines in the logs.
+- [ ] Public sign-up is throttled: burst POST /api/v1/auth/register past
+      `auth.register` (default 10 per 15 min per IP) → 429 with `Retry-After`;
+      earlier attempts in the window still work (validation 400s/409s count
+      against the window too). Blocked attempts return before the awaited
+      `ensureIndexes` bootstrap, so hammering register can't re-run the index
+      battery while the DB is broken.
+- [ ] Index-ensure failure is AUDIBLE, never silent: break the index battery
+      (drop `things_v2`'s `ownerId_1_crystal.appId_1_crystal.key_1` unique
+      index, insert two docs sharing `(ownerId, crystal.appId, crystal.key)`),
+      start a FRESH API process → the boot-time warmup run logs one
+      line beginning `[mongodb] ensureIndexes failed building things.<index>`
+      and saying the next bootstrap call will retry. The cold-start PR moved
+      the battery off the request path, so ordinary API traffic neither retries
+      it nor logs; only the awaited bootstrap callers (`registerUser`, admin
+      migrations) can trigger another attempt.
+- [ ] In-flight work is shared, but failures are retryable immediately: while
+      one ensureIndexes battery is running, concurrent bootstrap callers await
+      that same promise; after it fails, the next explicit bootstrap caller
+      starts one fresh attempt instead of inheriting a rejected promise for a
+      fixed cooldown.
+- [ ] Self-heals after cleanup: delete the duplicate docs, then hit an awaited
+      ensureIndexes caller (register a user / run an admin migration) or restart
+      the process → the unique index is rebuilt immediately (`getIndexes()`
+      shows it) and no stale cooldown blocks the recovered database.
+- [ ] Limiter outage is AUDIBLE, never silent: with the limiter's own DB ops
+      failing (e.g. Mongo down/unreachable), a limited endpoint logs
+      `[rate-limit] enforcement unavailable for <rule> — failing open` per
+      request; ordinary actions fail open (the route then surfaces its own DB
+      error), `failClosed` routes return the 429 unavailable shape. Regression
+      class: a bare `catch {}` fail-open invisibly disabled ALL rate limiting
+      (2026-07 perf audit).
+
+## Password hasher (`/crypto` Password Hasher panel, `api/utils/crypto/passwordHasher.server.ts`)
+
+- [ ] `/crypto` → Password Hasher: enter a username + password → the panel
+      shows a VERIFIED badge, `bcrypt cost 10`, the `$2b$10$…` hash, and a
+      mongosh snippet templated with that username. A supplied password is
+      NEVER echoed back in the response; only a generated one is.
+- [ ] "Generate a strong one" + a length (12–64) returns a password shown
+      exactly once ("save it now") whose hash verifies against it — check
+      independently with `bcrypt.compare` if in doubt.
+- [ ] The hash is self-verified server-side before return (`verified: true`);
+      a password under 6 chars still hashes but is flagged (register's
+      minimum), because an existing account may predate any policy.
+- [ ] END-TO-END (the point of the tool): register a throwaway user via the
+      real API, hash a NEW password, run the returned snippet VERBATIM in
+      mongosh, then log in — the new password works and the old one is
+      rejected. The snippet must report `things: matched 1, modified 1`.
+- [ ] Blob integrity: after the snippet runs, the user's `secure` BinData
+      blob still holds email / accountKind / emailVerified / meta, and
+      `secureVersion` incremented by 1 (matching the app's CAS write). A
+      plain `$set: { passwordHash }` on a things-era user writes a field
+      NOTHING reads — the snippet must unpack → edit → repack instead.
+- [ ] Snippet handles both stores and a miss: an unknown username reports
+      "No user named …" AND lists the usernames that do exist, instead of
+      silently modifying 0 docs.
+- [ ] Collection names in the snippet come from `physicalCollectionName()`
+      (currently `things_v2` / `users_v2`) — never hardcoded, so a version
+      bump can't hand out a snippet that edits a frozen generation.
+- [ ] Rate limited per IP (`crypto.hashPassword`, 20/min): bcrypt is the CPU
+      cost, so a burst past the limit 429s with the hashing message. The
+      intent stays ANONYMOUS on purpose — being locked out is the reason to
+      reach for it — and never reads or writes the database.

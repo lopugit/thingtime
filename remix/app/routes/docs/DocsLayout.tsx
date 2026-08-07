@@ -21,6 +21,7 @@ import { apiEndpointDocs, type ApiEndpointDoc } from '~/docs/apiDocs';
 import { designEntries, designKindColors, getDesignEntryBySlug } from './designEntries';
 import { designSystemEntries, designSystemStatusColors, getDesignSystemEntryBySlug } from './design-system/entries';
 import { conceptEntries, conceptStatusColors, getConceptEntryBySlug } from './concepts/entries';
+import { DocsSearch } from './DocsSearch';
 
 const docsNav = [
   {
@@ -122,7 +123,7 @@ type DrawerDesignEntryListProps = {
   onNavigate?: () => void;
 };
 
-function DrawerDesignEntryList({ onNavigate }: DrawerDesignEntryListProps) {
+const DrawerDesignEntryList = React.memo(function DrawerDesignEntryList({ onNavigate }: DrawerDesignEntryListProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [query, setQuery] = React.useState('');
   const selectedEntry =
@@ -243,13 +244,13 @@ function DrawerDesignEntryList({ onNavigate }: DrawerDesignEntryListProps) {
       </Stack>
     </Stack>
   );
-}
+});
 
 type DrawerApiEndpointListProps = {
   onNavigate?: () => void;
 };
 
-function DrawerApiEndpointList({ onNavigate }: DrawerApiEndpointListProps) {
+const DrawerApiEndpointList = React.memo(function DrawerApiEndpointList({ onNavigate }: DrawerApiEndpointListProps) {
   const location = useLocation();
   const activeHash = location.hash.replace(/^#/, '');
   const activePathname = location.pathname;
@@ -314,13 +315,13 @@ function DrawerApiEndpointList({ onNavigate }: DrawerApiEndpointListProps) {
       ))}
     </Stack>
   );
-}
+});
 
 type DrawerDesignSystemListProps = {
   onNavigate?: () => void;
 };
 
-function DrawerDesignSystemList({ onNavigate }: DrawerDesignSystemListProps) {
+const DrawerDesignSystemList = React.memo(function DrawerDesignSystemList({ onNavigate }: DrawerDesignSystemListProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedEntry =
     getDesignSystemEntryBySlug(searchParams.get('component')) || designSystemEntries[0];
@@ -396,13 +397,13 @@ function DrawerDesignSystemList({ onNavigate }: DrawerDesignSystemListProps) {
       </Stack>
     </Stack>
   );
-}
+});
 
 type DrawerConceptListProps = {
   onNavigate?: () => void;
 };
 
-function DrawerConceptList({ onNavigate }: DrawerConceptListProps) {
+const DrawerConceptList = React.memo(function DrawerConceptList({ onNavigate }: DrawerConceptListProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedEntry =
     getConceptEntryBySlug(searchParams.get('concept')) || conceptEntries[0];
@@ -478,7 +479,7 @@ function DrawerConceptList({ onNavigate }: DrawerConceptListProps) {
       </Stack>
     </Stack>
   );
-}
+});
 
 type DocsDrawerContentProps = {
   closeTestId?: string;
@@ -489,6 +490,66 @@ type DocsDrawerContentProps = {
 
 function DocsDrawerContent({ closeTestId, onClose, pathname, showClose = false }: DocsDrawerContentProps) {
   const [apiOpen, setApiOpen] = React.useState(isApiPath(pathname));
+  // The search query lives in the URL (?q=) so refresh persists it, searches
+  // are deep-linkable, and both drawer instances (desktop + mobile) share one
+  // state. The INPUT is locally controlled though — driving it straight off
+  // the URL made every keystroke a router navigation (whole docs page
+  // re-renders + transition-wrapped value round-trip = dropped keys), so the
+  // URL syncs on a short debounce instead. replace:true keeps typing out of
+  // the history stack.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlSearchQuery = searchParams.get('q') || '';
+  const [searchQuery, setSearchQueryState] = React.useState(urlSearchQuery);
+  const pendingUrlQueryRef = React.useRef<string | null>(null);
+  const urlSyncTimerRef = React.useRef<ReturnType<typeof window.setTimeout>>();
+  const searching = searchQuery.trim().length > 0;
+
+  const setSearchQuery = React.useCallback(
+    (next: string) => {
+      setSearchQueryState(next);
+      pendingUrlQueryRef.current = next;
+
+      window.clearTimeout(urlSyncTimerRef.current);
+      urlSyncTimerRef.current = window.setTimeout(() => {
+        setSearchParams(
+          (params) => {
+            const merged = new URLSearchParams(params);
+
+            if (next) {
+              merged.set('q', next);
+            } else {
+              merged.delete('q');
+            }
+
+            return merged;
+          },
+          { replace: true }
+        );
+      }, 200);
+    },
+    [setSearchParams]
+  );
+
+  // Adopt external ?q= changes (deep links, back/forward, the other drawer
+  // instance) unless our own debounced write is still in flight.
+  React.useEffect(() => {
+    if (pendingUrlQueryRef.current === null) {
+      setSearchQueryState(urlSearchQuery);
+    } else if (urlSearchQuery === pendingUrlQueryRef.current) {
+      pendingUrlQueryRef.current = null;
+    }
+  }, [urlSearchQuery]);
+
+  // A navigation's destination already carries the right ?q= (result links)
+  // or none (menu links) — drop any pending write and adopt the landed URL.
+  React.useEffect(() => {
+    window.clearTimeout(urlSyncTimerRef.current);
+    pendingUrlQueryRef.current = null;
+    setSearchQueryState(searchParams.get('q') || '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
+
+  React.useEffect(() => () => window.clearTimeout(urlSyncTimerRef.current), []);
 
   React.useEffect(() => {
     if (isApiPath(pathname)) {
@@ -539,7 +600,22 @@ function DocsDrawerContent({ closeTestId, onClose, pathname, showClose = false }
         ) : null}
       </Flex>
 
+      <DocsSearch onNavigate={onClose} query={searchQuery} setQuery={setSearchQuery} />
+
       <Stack spacing={1}>
+        {searching ? (
+          <Text
+            color="var(--tt-muted, #9a9aa6)"
+            fontFamily="mono"
+            fontSize="11px"
+            fontWeight="600"
+            letterSpacing="0.14em"
+            mb={1}
+            textTransform="uppercase"
+          >
+            Menu
+          </Text>
+        ) : null}
         {docsNav.map((item) => {
           const active = isActivePath(pathname, item.to);
           const isApiItem = item.to === '/docs/api';
@@ -608,7 +684,7 @@ function DocsDrawerContent({ closeTestId, onClose, pathname, showClose = false }
 }
 
 export default function DocsLayout() {
-  const { pathname } = useLocation();
+  const { hash, pathname } = useLocation();
   const designRoute = isDesignPath(pathname);
   const [drawerWidth, setDrawerWidth] = React.useState(DEFAULT_DRAWER_WIDTH);
   const [desktopDrawerOpen, setDesktopDrawerOpen] = React.useState(true);
@@ -620,10 +696,48 @@ export default function DocsLayout() {
     [desktopDrawerOpen, openDesktopDrawer]
   );
 
+  // The desktop drawer renders full height with NO internal scrollbar: it only
+  // sticks while its content fits under the top nav; taller content (search
+  // results, expanded endpoint lists) flows with the page scroll instead.
+  const drawerContentRef = React.useRef<HTMLDivElement | null>(null);
+  const [drawerFitsViewport, setDrawerFitsViewport] = React.useState(true);
+
+  React.useEffect(() => {
+    const node = drawerContentRef.current;
+
+    if (!desktopDrawerOpen || !node) return;
+
+    const measure = () => {
+      setDrawerFitsViewport(node.offsetHeight <= window.innerHeight - 112);
+    };
+
+    measure();
+
+    // ResizeObserver alone is not enough — some embedded/background renderers
+    // suppress its callbacks, so the MutationObserver re-measures on every
+    // content change (search results, expanded endpoint lists) too.
+    const resizeObserver = new ResizeObserver(measure);
+    resizeObserver.observe(node);
+    const mutationObserver = new MutationObserver(measure);
+    mutationObserver.observe(node, { childList: true, subtree: true });
+    window.addEventListener('resize', measure);
+
+    return () => {
+      resizeObserver.disconnect();
+      mutationObserver.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [desktopDrawerOpen]);
+
   React.useEffect(() => {
     setMobileDrawerOpen(false);
-    window.scrollTo({ left: 0, top: 0 });
-  }, [pathname]);
+
+    // Anchored navigations (docs search deep links) scroll to their target
+    // via useDocsAnchorScroll / SchemasPage instead of the page top.
+    if (!hash) {
+      window.scrollTo({ left: 0, top: 0 });
+    }
+  }, [hash, pathname]);
 
   const startDrawerResize = React.useCallback(
     (event: React.PointerEvent<HTMLButtonElement>) => {
@@ -682,7 +796,12 @@ export default function DocsLayout() {
             pr={6}
             w={`${drawerWidth}px`}
           >
-            <Box maxH="calc(100vh - 112px)" overflowY="auto" position="sticky" pr={2} top="96px">
+            <Box
+              position={drawerFitsViewport ? 'sticky' : 'relative'}
+              pr={2}
+              ref={drawerContentRef}
+              top={drawerFitsViewport ? '96px' : undefined}
+            >
               <Flex justify="flex-end" mb={3}>
                 <IconButton
                   aria-label="Collapse docs navigation"

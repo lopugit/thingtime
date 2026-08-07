@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import { ensureIndexes, getRateLimitsCollection } from '../mongodb/collections';
+import { getRateLimitsCollection } from '../mongodb/collections';
 import { getRateLimitConfig } from './config';
 
 // General per-endpoint rate limiter, config-driven (config.ts). Atomic
@@ -96,9 +96,15 @@ export const enforceRateLimit = async (
   }
   const who = identity || `ip:${getRequestIp(request)}`;
   try {
-    await ensureIndexes();
     return await consume(hash(`${name}:${who}`), rule.limit, rule.windowMs);
-  } catch {
+  } catch (err: any) {
+    // Fail-open is deliberate, but NEVER silent: a limiter collection outage
+    // must name the affected rule. Index creation is handled independently by
+    // boot/bootstrap paths and is no longer awaited here.
+    console.error(
+      `[rate-limit] enforcement unavailable for ${name} — failing ${options.failClosed ? 'closed' : 'open'}:`,
+      err?.message || err
+    );
     if (options.failClosed) {
       return { allowed: false, limit: rule.limit, remaining: 0, resetAt: now, unavailable: true };
     }

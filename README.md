@@ -8,6 +8,13 @@ With Thingtime, you can create and share any abstract data structure you want, o
 
 At Thingtime, we believe that data and knowledge should be open, accessible, and empowering. We are building Thingtime to make this vision a reality. Join us and start exploring the limitless possibilities of data!
 
+## AI agent instructions
+
+Repository-wide AI guidance lives in the single canonical `AI_ALL.md`.
+`AGENTS.md` and `CLAUDE.md` are relative symlinks to that file so Codex,
+Claude, and other compatible tools read the same instructions. Update
+`AI_ALL.md` only; keep both symlinks intact.
+
 # 💹 Donate on Indiegogo to save humanity 🩷
 
 ### You can get Merch 🌈 + other benefits 🦄💯
@@ -53,6 +60,18 @@ cd remix
 corepack pnpm install
 corepack pnpm run dev
 ```
+
+For a fresh clone or linked worktree, the equivalent repository-root bootstrap
+is:
+
+```sh
+npm run worktree-setup
+```
+
+The Remix `dev`, `build`, and lint entry points run the same dependency check
+automatically. It validates every direct dependency link and uses pnpm's shared
+store to repair missing or stale links, so `node_modules` never needs to be
+copied from another checkout.
 
 From the repository root, `npm run web-pms` starts or restarts the PM2-managed
 dev app `tt-nitro-react-router-9999`. The older `npm run remix-pms` command is

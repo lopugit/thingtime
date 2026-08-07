@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Binary, ObjectId } from 'mongodb';
 
-import { ensureIndexes, getThingsCollection, getUsersCollection } from '../mongodb/collections';
+import { getHomeThingsCollection, getThingsCollection, getUsersCollection } from '../mongodb/collections';
 import { findUserByUsername, pushUserRecentReaction } from '../auth/users';
 import { sanitizeReactionToken } from '~/utils/reactionTokens';
 import {
@@ -494,7 +494,6 @@ export const createThing = async (
     if (capped) return capped;
   }
 
-  await ensureIndexes();
   const things = await getThingsCollection();
   const now = input.createdAt instanceof Date ? input.createdAt : new Date();
 
@@ -593,8 +592,10 @@ const resolveProfiles = async (userIds: string[]): Promise<Map<string, FeedAutho
   if (!wanted.length) return new Map();
   const profiles = new Map<string, FeedAuthor>();
 
-  // things-era users first (shareId = the id every ownerId reference carries)
-  const things = await getThingsCollection();
+  // things-era users first (shareId = the id every ownerId reference carries).
+  // HOME collection: identity lives on the home deployment, so author cards
+  // keep resolving while a custom data-plane endpoint override is active.
+  const things = await getHomeThingsCollection();
   const userThings = await things
     .find({ thingtime: 'user', shareId: { $in: wanted } } as any)
     .project({ shareId: 1, 'crystal.username': 1, 'crystal.displayName': 1, 'crystal.avatarUrl': 1 })
@@ -1496,7 +1497,9 @@ export const toggleReaction = async (
   const target = await findViewableThing(shareId, viewer);
   if (!target) return fail(404, 'Post not found');
 
-  await ensureIndexes(); // the reaction unique index must exist before insert
+  // the reaction unique index exists before any insert: it is created at
+  // instance boot (server/plugins/mongo-warmup) and awaited during register,
+  // which every authed viewer's database has necessarily already run
   const things = await getThingsCollection();
   let recentReactions: string[] | undefined;
 

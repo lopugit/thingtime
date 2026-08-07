@@ -63,6 +63,10 @@ export const FeedPage = () => {
   apiRef.current = api;
   const lopuRef = React.useRef(lopu);
   lopuRef.current = lopu;
+  // always-current viewer id so load() can flag logged-out fetches as
+  // edge-cacheable (`anon=1`) without joining the callback's dep list
+  const viewerIdRef = React.useRef(user?.id ?? null);
+  viewerIdRef.current = user?.id ?? null;
 
   const load = React.useCallback(
     async (options: { reset?: boolean; cursor?: string | null } = {}) => {
@@ -109,7 +113,8 @@ export const FeedPage = () => {
           to: filters.to,
           algorithm: algorithmId ?? 'latest',
           cursor: reset ? undefined : cursor || undefined,
-          limit: PAGE_SIZE
+          limit: PAGE_SIZE,
+          anon: viewerIdRef.current ? undefined : 1
         });
         if (seq !== requestSeqRef.current) return;
 
