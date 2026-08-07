@@ -119,7 +119,23 @@ export function useApi() {
         )
       }
     },
+    settings: {
+      // Public so the GitHub conflict resolver can read the same ordered model
+      // waterfall as the admin UI without inheriting an admin browser session.
+      prConflictResolverModelWaterfall: useCallback(
+        async () => getJson('/api/v1/settings/pr-conflict-auto-resolver-model-waterfall'),
+        []
+      )
+    },
     admin: {
+      setPrConflictResolverModelWaterfall: useCallback(
+        async (waterfall) =>
+          asyncFetcher.submit(
+            { waterfall },
+            { action: '/api/v1/settings/pr-conflict-auto-resolver-model-waterfall' }
+          ),
+        [asyncFetcher]
+      ),
       rateLimits: useCallback(async () => getJson('/api/v1/admin/rate-limits'), []),
       setRateLimits: useCallback(
         async (endpoints) => asyncFetcher.submit({ endpoints }, { action: '/api/v1/admin/rate-limits' }),

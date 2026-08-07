@@ -179,6 +179,58 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'settings-pr-conflict-auto-resolver-model-waterfall',
+    group: 'settings',
+    title: 'PR conflict resolver model waterfall',
+    endpoint: '/api/v1/settings/pr-conflict-auto-resolver-model-waterfall',
+    summary: 'Read or administratively reorder the model fallback chain used by the PR conflict resolver.',
+    detail:
+      'GET publicly returns the ordered, non-secret model ids plus the closed model catalog. POST replaces the order for administrators only. The list must contain 1 to 3 unique known model ids and include default as the hard fallback. Missing or corrupt stored settings resolve safely to ["default"].',
+    auth: {
+      mode: 'optional',
+      description: 'GET is public. POST requires an authenticated administrator session.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET to read the current waterfall and closed model catalog.',
+      'Administrators POST { waterfall: [modelId, ...] } to replace the priority order.',
+      'Use only default, claude-fable-5, and claude-opus-5; ids must be unique.',
+      'Always include default so the resolver has a final provider-selected fallback.'
+    ],
+    requestExamples: [
+      {
+        name: 'Read the resolver waterfall',
+        description: 'Load the public model preference chain.',
+        method: 'GET'
+      },
+      {
+        name: 'Prefer Opus, then Fable, then default',
+        description: 'Replace the waterfall as an administrator.',
+        method: 'POST',
+        body: { waterfall: ['claude-opus-5', 'claude-fable-5', 'default'] }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Current public resolver settings.',
+        body: {
+          ok: true,
+          key: 'Thingtime.PRConflictAutoResolverModelWaterfall',
+          waterfall: ['default'],
+          models: [
+            { id: 'default', label: 'Default model', effort: 'max' },
+            { id: 'claude-fable-5', label: 'Claude Fable 5', effort: 'max' },
+            { id: 'claude-opus-5', label: 'Claude Opus 5', effort: 'max' }
+          ]
+        }
+      },
+      { status: 400, description: 'Invalid waterfall.', body: { ok: false, error: 'waterfall must include default as a hard fallback' } },
+      { status: 403, description: 'POST caller is not an admin.', body: { ok: false, error: 'Admins only' } }
+    ],
+    notes: ['Responses set Cache-Control: no-store. Storage audit fields are never exposed by this endpoint.']
+  }),
+  endpoint({
     id: 'root-data',
     group: 'root',
     title: 'Root data',

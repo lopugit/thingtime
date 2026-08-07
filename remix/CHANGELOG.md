@@ -119,10 +119,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
-- **PR conflict resolution now runs on Claude Fable 5 at max effort**:
-  `resolve-pr-conflicts.yml` pins the resolution agent to
-  `claude-fable-5` with `--effort max`, replacing Opus 4.8 while leaving the
-  separate graphify semantic-refresh model unchanged. — Codex (AI), 2026-08-07
+- **PR conflict-resolution models are now an admin-managed waterfall**:
+  the resolver hard-defaults to Claude Code's `default` model, then reads the
+  public `Thingtime.PRConflictAutoResolverModelWaterfall` setting and applies
+  its strictly allowlisted order through Claude Code's native model fallback
+  chain at max effort. Admins can add, remove, and drag Fable 5, Opus 5, and
+  the required default fallback in Settings; anonymous callers can read the
+  public projection, while every write is re-authorized server-side. Invalid,
+  empty, or unavailable remote config fails safely back to `default`.
+  — Codex (AI), 2026-08-07
 
 - **Repository AI guidance now has one canonical source**: unique rules from
   the former root `AGENTS.md`, `CLAUDE.md`, and `CODEX.md` now live in
