@@ -111,6 +111,21 @@ No alternate env vars, no fallbacks. Every helper resolves through it.
 For **local dev**: set `MONGODB_CONNECTION_STRING=mongodb://localhost:27017/thingtime`
 (no placeholder → `MONGO_PASS` unused).
 
+**Data-endpoint override (thin-frontend mode):** a browser session — logged in
+or not — may point the open DATA PLANE at a custom MongoDB via
+`/api/v1/mongodb/endpoint` (httpOnly `tt_mongo` session cookie; API clients
+send `x-tt-mongo-url` per request). The API dispatcher establishes a
+request-scoped context (`mongodb/endpoint.ts`, AsyncLocalStorage) and
+`collections.ts` splits resolution: `getThingsCollection()` (posts, comments,
+reactions, shares, data, schemas, app-data) follows the active endpoint, while
+identity/auth and every control-plane collection (users, sessions, rosters,
+the protected kinds user/theme/feed-algorithm/waitlist via
+`getHomeThingsCollection()`, email/token satellites, settings, rate limits)
+ALWAYS resolve the home deployment DB. Admin routes always run home. Logged-in
+users can persist saved endpoints (inside their `secure` blob — URLs embed
+credentials); raw endpoint URLs never reach a client — responses carry the
+sanitised host + db name only, and activation probes the endpoint first.
+
 ## 5. Auth = httpOnly cookie + revocable JWT + Mongo session
 
 One auth model used everywhere (see `claude-todo/03-auth-login-register.md`):

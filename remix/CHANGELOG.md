@@ -17,7 +17,47 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Added
+
+- **Stable Vercel domain for the `develop` branch**: the Thingtime project now
+  assigns `dev.thingtime.com` to `develop` as a branch-specific Preview
+  domain, matching the existing staging pattern while preserving the
+  branch-scoped Preview secrets already used by develop deployments. The
+  deployment runbook now records the required Cloudflare DNS-only CNAME and
+  ownership-verification flow. — Codex (AI), 2026-08-07
+
+- **CI conflict-resolver graphify refresh now does LLM semantic extraction**:
+  after an auto-resolved merge, `resolve-pr-conflicts.yml` runs
+  `graphify extract` + `cluster-only` with whichever Claude credential the
+  repo has (`ANTHROPIC_API_KEY` → claude API backend, else
+  `CLAUDE_CODE_OAUTH_TOKEN` → claude-cli backend, sonnet), so content new to
+  the merge is semantically indexed in CI instead of waiting for a local run.
+  Unchanged content is served from the tracked content-addressed semantic
+  cache (new CI-paid blobs are committed back), and the step falls back to
+  the old AST-only `graphify update` when no credential exists or extraction
+  fails. Staged refresh outputs get the same best-effort secret scan as
+  resolved files. — Claude (AI), 2026-08-03
+
 ### Fixed
+
+- **PRs that make themselves conflicted now get rescanned**: a push to a PR's
+  head branch can create a conflict (the resolver deliberately ignores
+  `synchronize` to avoid self-loops), and with no follow-up push to the base,
+  the PR sat unresolved indefinitely — observed on the resolver's own PR #173.
+  Every branch push already spawns a detect run; it now also scans the open PR
+  *from* the pushed branch, and the handoff dispatches under each conflicting
+  PR's base branch instead of the pushed ref. Self-terminating: the resolver's
+  own resolution push finds its PR mergeable and no-ops.
+  — Claude (AI), 2026-08-06
+
+- **Born-conflicting PRs now actually trigger the conflict resolver**: GitHub
+  creates no `pull_request` workflow run for a PR that opens CONFLICTING (no
+  merge ref exists), so the resolver's `pull_request: [opened, reopened]`
+  trigger was a silent no-op for exactly the case it was added for (verified
+  empirically on a canary PR). Replaced with `pull_request_target` routed
+  through the existing detect→handoff→dispatch hop — API-only in the target
+  context, no PR code checkout, resolve job excluded for that event.
+  — Claude (AI), 2026-08-03
 
 - **Index bootstrap recovery after PRs #159/#161**: failed boot-time
   `ensureIndexes()` work no longer caches a rejected promise for 60 seconds.
@@ -117,6 +157,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   — Claude (AI), 2026-07-12
 
 ### Added
+
+- **Public sign-up rate limit (`auth.register`)**: POST /api/v1/auth/register is
+  now throttled per IP (default 10 per 15 minutes, admin-tunable like every
+  rule) before any work runs. Registration was the one unauthenticated mutating
+  auth route with no limiter — each attempt burns a bcrypt hash, a success
+  emails an arbitrary address, and since PR #162 a broken-index state re-runs
+  the ensureIndexes battery per attempt; blocked requests now 429 before
+  reaching any of that. — Claude (AI), 2026-07-30
 
 - **Atomic service-account quotas**: `GET|POST /api/v1/things/quota` stores one
   private deterministic `data` Thing per service owner + key and atomically

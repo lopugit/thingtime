@@ -310,6 +310,54 @@ is fixed, and cite the checklist you ran in the PR description.
       standalone-demo link within ~10s — the preview must never show a
       permanent loading state.
 
+## MongoDB data endpoint (`/mongodb-status`, `remix/app/components/MongoDB/MongoEndpointConfig.tsx`)
+
+- [ ] Logged OUT: paste a reachable `mongodb://` URL → "Use for this session"
+      flips the page to the Custom endpoint badge, the footer indicator reads
+      "MongoDB (custom)", and the feed/search read from that DB. "Use" on the
+      Thingtime row returns everything to default.
+- [ ] An unreachable URL is rejected at activation (422 toast, e.g.
+      `MongoServerSelectionError (ECONNREFUSED)`) and the previous endpoint
+      stays active — a bad URL must never brick the session's data calls.
+- [ ] A non-mongodb scheme (`http://…`), whitespace, or a >2048-char URL is
+      rejected with a clear validation message.
+- [ ] Logged IN: "Save to my endpoints" persists the endpoint (survives
+      logout/login and other browsers); the raw URL/credentials NEVER appear
+      in any API response, page, or error — only host + db name.
+- [ ] While a custom endpoint is active: login/logout, profile, themes,
+      account switcher and saved-endpoint management still work (identity is
+      home-pinned); posts created land in the CUSTOM db; admin routes
+      (migrations especially) still operate on the home DB.
+- [ ] Removing the saved endpoint the session currently uses also clears the
+      override (page falls back to Thingtime default without a reload).
+- [ ] The `tt_mongo` cookie is httpOnly + session-scoped: closing the browser
+      drops the override; document.cookie can't read it.
+- [ ] Secret inputs: the connection URL and every "Individual fields" input
+      (user/password/host/port/database) render as type=password, hidden by
+      default, each with its own 👁 show/hide toggle that reveals ONLY that
+      field (autoComplete=new-password keeps password managers out).
+      Placeholders stay readable — values never render on a shared screen
+      until deliberately revealed.
+- [ ] Fields mode composes the URL live through the same activate/save
+      buttons: user/password/database URI-encode (e.g. "p@ss:word" →
+      p%40ss%3Aword), mongodb+srv:// disables + clears the port, switching
+      modes round-trips (a pasted URL parses into the fields, the fields
+      compose back byte-identical), and all inputs clear after a successful
+      activate/save.
+- [ ] No secret persistence: values live only in component state and the
+      POST body — the tt-mongo-endpoint localCache entry (and all of
+      localStorage) carries only host/db summaries, never a mongodb:// URL,
+      credentials, or field values.
+- [ ] LOCAL DEV footer parity: with an override active, the footer indicator
+      reads "MongoDB (custom)" on the local stack too. Regression class: the
+      vite /api proxy's changeOrigin hid the web origin from nitro, so
+      resolveStatusTarget classified "Current Tab" as REMOTE and health routes
+      re-fetched themselves WITHOUT cookies (session state invisible). The
+      proxy must forward x-forwarded-host/-proto (vite.config.ts) — verify
+      /api/v1/health/mongodb?targetOrigin=<web origin> returns custom:true
+      with the cookie, while a real remote target (e.g. thingtime.com) still
+      server-side fetches.
+
 ## Docs search (`remix/app/routes/docs/DocsSearch.tsx`, `docsSearchIndex.ts`)
 
 - [ ] Searching "acl" in the /docs drawer ranks the Thing schema (its `acl`
@@ -399,6 +447,12 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] Healthy path: burst a rate-limited endpoint past its limit (e.g.
       `things.search`, 120/min → 121 requests) → 429 with `Retry-After`,
       and NO `[rate-limit]`/`[mongodb]` error lines in the logs.
+- [ ] Public sign-up is throttled: burst POST /api/v1/auth/register past
+      `auth.register` (default 10 per 15 min per IP) → 429 with `Retry-After`;
+      earlier attempts in the window still work (validation 400s/409s count
+      against the window too). Blocked attempts return before the awaited
+      `ensureIndexes` bootstrap, so hammering register can't re-run the index
+      battery while the DB is broken.
 - [ ] Index-ensure failure is AUDIBLE, never silent: break the index battery
       (drop `things_v2`'s `ownerId_1_crystal.appId_1_crystal.key_1` unique
       index, insert two docs sharing `(ownerId, crystal.appId, crystal.key)`),
