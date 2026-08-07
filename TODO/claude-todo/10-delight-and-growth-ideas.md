@@ -67,12 +67,11 @@ systems. Reusable whimsy exports (from the review):
 
 ## ✨ Features (growth / stickiness)
 
-- **Post permalinks + copy-link share** *(M)*. Posts live only inside the feed
-  column — nothing is linkable, so nothing spreads. Add `/post/:id` rendering the
-  existing `PostCard` read-only, a `Copy link 🔗` in the share popover
-  (`PostCard.tsx` L260–348), and a `things/get` endpoint. Guests hitting the link
-  get the existing "Log in to react 🗝️" funnel. *(new route + endpoint via
-  `apiDocs.ts` + `[...].ts`.)*
+- ✅ **Post permalinks + copy-link share** *(M — shipped via PR #141)*. Posts
+  have URLs: `/post/:id` renders any post or comment through the existing
+  `PostCard` (`remix/app/routes/post.tsx`), and `Copy link 🔗` lives in
+  PostCard's share popover with a clipboard-unavailable fallback. Guests get
+  the existing "Log in to react 🗝️" funnel.
 - **Shareable algorithms — "try my feed brain 🧠"** *(M)*. Algorithms are already
   named, emoji'd, branchable docs with a `branchFrom` API. Add "Share algorithm" →
   `/feed?algorithm=<shareId>`; a visitor gets a Lopu prompt to branch a copy and
