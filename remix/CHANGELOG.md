@@ -19,6 +19,23 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **AI rebase-stack conflict resolution**: a separate **Rebase PR stacks
+  (AI)** workflow detects same-repo stacked PRs that can merge but cannot
+  rebase, then replays them root-to-leaf with bounded, file-only Claude
+  conflict rounds and trusted Git verification. Push/open/reopen triggers plus
+  a scheduled backstop feed the trusted dispatch path, while manual dispatch
+  can target a specific root PR. Claude sees only regular conflict-file copies
+  in a repo-less scratch directory; the real checkout, Git state, exact trusted
+  action, and credentials remain outside its workspace. Exact force-with-lease
+  prevents concurrent work from being overwritten; fork, default, and protected
+  branches are refused; `no-ai-rebase` opts out; and failures add
+  `ai-rebase-paused` instead of retrying forever. Parent barriers preserve
+  root-to-leaf ordering, orphaned run locks recover after 90 minutes, and web
+  rewrites explicitly dispatch Web CI for the new SHA. The existing merge
+  resolver now routes stack members deterministically, pins its runner actions,
+  and avoids checkout's spurious `/dev/null` Git-config annotation. — Codex
+  (AI), 2026-08-07
+
 - **CI conflict-resolver graphify refresh now does LLM semantic extraction**:
   after an auto-resolved merge, `resolve-pr-conflicts.yml` runs
   `graphify extract` + `cluster-only` with whichever Claude credential the

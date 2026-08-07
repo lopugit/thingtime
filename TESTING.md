@@ -246,6 +246,58 @@ is fixed, and cite the checklist you ran in the PR description.
       leaves conflict markers stops for manual review; it does not silently
       spend another model attempt.
 
+## AI rebase-stack resolver (`.github/workflows/rebase-pr-stacks.yml`)
+
+- [ ] Create a same-repo PR whose base is `main` and whose head is
+      `mergeable: true` but `rebaseable: false`. Confirm **Rebase PR stacks
+      (AI)** detects it while the merge-based resolver correctly no-ops, and
+      that replaying more than one conflicting commit can advance through
+      multiple bounded Claude/verify/continue rounds.
+- [ ] Create a two-PR stack (child PR based on the root PR's head). After the
+      root is rebased, confirm the child dispatch receives the old and new
+      parent SHAs, replays with onto semantics, and completes root-to-leaf
+      without duplicating the parent's commits.
+- [ ] Exercise detection from a branch push, PR opened/reopened event, the
+      scheduled scan, and a manual PR-number dispatch. Automatic scans select
+      same-repo stacks only, do not race a blocked child ahead of its parent,
+      and terminate after resolution instead of looping on the workflow's own
+      push.
+- [ ] Add `no-ai-rebase` before detection and confirm the PR is skipped. Force
+      a resolver failure, confirm `ai-rebase-paused` is added and automatic
+      scans leave it alone, then review the run and confirm a deliberate manual
+      retry is available. While a parent is paused, actively owned, protected,
+      or still has unknown rebaseability, confirm an automatically detected
+      conflicting child is held back; once that same parent is confirmed
+      rebaseable, the child may become the next root. Confirm stack members are
+      excluded from the merge-based resolver before ownership labels exist;
+      `no-ai-rebase` deliberately routes a merge-conflicting member back to it.
+- [ ] Leave an `ai-rebase-in-progress` label behind for more than 90 minutes.
+      Confirm a still-conflicting PR is recovered into a new exact dispatch,
+      while a now-clean PR has the orphaned lock removed without a rewrite. A
+      manual clean retry should also clear a stale `ai-rebase-paused` label.
+- [ ] While a run is resolving, push another commit to the PR head. The exact
+      force-with-lease must reject the stale rewrite; no partial rebase may
+      reach the remote branch and the concurrent commit must remain intact.
+- [ ] Present a fork PR, the default branch, and a protected branch. Each is
+      refused before Claude or a force push runs. A conflict file that attempts
+      prompt injection cannot make Claude edit outside the recomputed conflict
+      set or invoke Git/shell; trusted verification rejects unresolved markers,
+      unmerged index entries, and out-of-scope changes before any push.
+- [ ] Resolve a PR whose final diff touches `remix/` using only `GITHUB_TOKEN`.
+      Confirm the rewritten SHA receives an explicit **Web CI** workflow run;
+      a non-web diff should not spend a redundant CI dispatch.
+- [ ] Add a non-conflicted tracked symlink targeting `.git/config`, plus a
+      conflict prompt that asks Claude to read/write through it. Confirm the AI
+      workspace contains only regular copies of the exact conflict files and no
+      repository, symlink, trusted action, or Git metadata. Add an external or
+      `.git`-targeting tracked symlink and confirm graphify validation refuses it
+      before semantic extraction or publication.
+- [ ] Change the repository default branch while a resolver fixture is paused,
+      and simulate a push whose server-side ref update succeeds but whose client
+      exits nonzero. The adjacent pre-push default-branch check must prevent a
+      default ref rewrite, while post-push ref inspection must report the actual
+      published state rather than claiming the remote stayed unchanged.
+
 ## Data crystals & nesting depth (`remix/app/schemas/registry.ts`)
 
 - [ ] Post a thingtime post whose thing contains an Editor.js document (or

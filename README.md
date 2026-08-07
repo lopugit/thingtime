@@ -27,6 +27,68 @@ https://www.gofundme.com/f/thingtime
 
 ### Force Push ? 👉👈
 
+Thingtime has two deliberately separate conflict workflows:
+
+- **Resolve PR conflicts (AI)** merges a PR's base branch into its head branch.
+- **Rebase PR stacks (AI)** rebases the PR head and, when the PR is part of a
+  stack, continues from the stack root toward its leaves.
+
+The detectors are intentionally disjoint: same-repository stack members are
+routed to the rebase workflow before either workflow adds an ownership label.
+Adding `no-ai-rebase` opts that PR back into the merge-based resolver instead.
+
+The rebase workflow covers the case GitHub reports as `mergeable: true` but
+`rebaseable: false`: a plain merge needs no help, yet replaying the branch's
+commits onto its base stops at a conflict. It automatically scans same-repo
+stacks after branch pushes and PR `opened`/`reopened` events, with a scheduled
+scan as a backstop because GitHub emits no dedicated event when its **Rebase
+stack** button fails. A detected stack is rebased root-to-leaf, so each child
+is replayed onto the rewritten parent rather than onto the parent's old SHA.
+
+To run it directly, open **Actions → Rebase PR stacks (AI) → Run workflow** on
+the default branch, enter the root PR number, and leave cascading enabled when
+the PR has children. Manual dispatch is also the recovery path after reviewing
+a paused run.
+
+This workflow rewrites PR history, so its force push has stricter boundaries:
+
+- It operates only on branches in this repository. Fork PRs, the repository's
+  default branch, and protected branches are refused.
+- Claude receives only regular copies of the exact files stopped in conflict,
+  inside a repo-less scratch directory. It never sees the real checkout, Git
+  metadata, action implementation, or push credentials, and it has only
+  read/edit/write file tools—no shell, Git, search, or network tools. Code
+  loaded from the exact trusted default-branch commit
+  independently validates the scratch files, conflict set, index, and completed
+  rebase before any push.
+- Nothing is pushed until the complete rebase succeeds. The final update uses
+  an exact `--force-with-lease` against the head SHA inspected at the start, so
+  a concurrent human or bot push makes the run fail instead of being erased.
+- Add `no-ai-rebase` to opt a PR out of automatic rebasing. A failed automatic
+  run adds `ai-rebase-paused`, preventing a retry loop while the failure is
+  reviewed; remove it before automatic retry, or use a deliberate manual run.
+  An orphaned `ai-rebase-in-progress` lock is recovered after 90 minutes, while
+  paused, active, or not-yet-computed parents—and protected or opted-out
+  parents that still need a rewrite—keep stacked children from running ahead.
+- A rewrite authenticated by `GITHUB_TOKEN` explicitly dispatches **Web CI**
+  against the new branch SHA when the final PR diff touches `remix/` or its CI
+  workflow, because token-authored pushes do not create ordinary Actions runs.
+
+For a fork of Thingtime, enable **Settings → Actions → General → Workflow
+permissions → Read and write permissions**, then add one of these repository
+Actions secrets:
+
+- `ANTHROPIC_API_KEY`, or
+- `CLAUDE_CODE_OAUTH_TOKEN` (created by the Claude CLI GitHub App setup).
+
+`CONFLICT_RESOLVER_PAT` is optional. Add it only if the resolver must rewrite a
+branch whose rebase changes files under `.github/workflows/`; the token needs
+repository contents access plus permission to update workflows. Keep all
+tokens in Actions secrets, scope them to the fork, and never put them in an
+environment file or commit. Automatic runs still skip PRs originating from
+another repository; the contributor's fork must run its own trusted workflow
+if it wants equivalent automation.
+
 # Setup for Forks
 
 Thingtime can run with mostly public configuration, but a few integrations need

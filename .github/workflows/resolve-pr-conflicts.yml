@@ -207,11 +207,11 @@ jobs:
           query() {
             {
               gh pr list --repo "$REPO" --base "$TARGET" --state open \
-                --json number,headRefName,baseRefName,isCrossRepository,isDraft,mergeable \
+                --json number,headRefName,baseRefName,isCrossRepository,isDraft,mergeable,labels \
                 --limit 100
               if [ "$SCAN_HEAD" = "true" ]; then
                 gh pr list --repo "$REPO" --head "$TARGET" --state open \
-                  --json number,headRefName,baseRefName,isCrossRepository,isDraft,mergeable \
+                  --json number,headRefName,baseRefName,isCrossRepository,isDraft,mergeable,labels \
                   --limit 100
               fi
             } | jq -s 'add | unique_by(.number)'
@@ -231,8 +231,34 @@ jobs:
           echo "Open PRs based on $TARGET:"
           jq -r '.[] | "  #\(.number) \(.headRefName) draft=\(.isDraft) mergeable=\(.mergeable) fork=\(.isCrossRepository)"' <<<"$prs"
 
+          # Resolver ownership must not depend on which detector wins a race.
+          # Build the full open same-repo PR graph so stack members go to the
+          # rebase workflow before either workflow has had time to add labels.
+          all_open="$(
+            gh pr list --repo "$REPO" --state open \
+              --json number,headRefName,baseRefName,isCrossRepository,labels \
+              --limit 1000
+          )"
+
           skipped="$(jq -r '[.[] | select(.isCrossRepository) | select(.mergeable == "CONFLICTING") | .number] | join(", ")' <<<"$prs")"
           [ -n "$skipped" ] && echo "::warning::Skipping conflicting fork PR(s) #$skipped — cannot push to fork branches."
+          rebase_owned="$(jq -r '[.[] | select(.mergeable == "CONFLICTING") | select([.labels[].name] | any(. == "ai-rebase-in-progress" or . == "ai-rebase-paused")) | .number] | join(", ")' <<<"$prs")"
+          [ -n "$rebase_owned" ] && echo "::notice::Skipping PR(s) #$rebase_owned — the AI rebase-stack workflow owns or paused them."
+          stacked_owned="$(jq -r --argjson all "$all_open" '
+            [.[] as $pr
+              | $pr
+              | select(.isCrossRepository | not)
+              | select(.mergeable == "CONFLICTING")
+              | select([.labels[].name] | index("no-ai-rebase") == null)
+              | select(any($all[];
+                  .number != $pr.number
+                  and (.isCrossRepository | not)
+                  and (.headRefName == $pr.baseRefName
+                       or .baseRefName == $pr.headRefName)))
+              | .number]
+            | join(", ")
+          ' <<<"$prs")"
+          [ -n "$stacked_owned" ] && echo "::notice::Skipping stacked PR(s) #$stacked_owned — the AI rebase-stack workflow owns stack history."
           still_unknown="$(jq -r '[.[] | select(.mergeable == "UNKNOWN") | .number] | join(", ")' <<<"$prs")"
           [ -n "$still_unknown" ] && echo "::warning::PR(s) #$still_unknown still UNKNOWN after polling; they will be re-checked on the next push."
 
@@ -243,7 +269,30 @@ jobs:
           # job never re-derives it from event context — deriving branch names
           # from event refs is how "<N>/merge"-style ref spoofing and wrong-ref
           # merges happen; the PR record is the single source of truth.
-          conflicting="$(jq -c --arg only "${ONLY_PR:-}" '[.[] | select(.isCrossRepository | not) | select(.mergeable == "CONFLICTING") | select($only == "" or (.number|tostring) == $only) | {number: .number, head: .headRefName, base: .baseRefName}]' <<<"$prs")"
+          # Stack membership makes initial ownership disjoint before labels
+          # exist. The labels remain the second boundary during a live cascade.
+          # `no-ai-rebase` opts only out of history rewriting, so a stack member
+          # carrying it may still use this merge-based resolver.
+          conflicting="$(jq -c \
+            --arg only "${ONLY_PR:-}" \
+            --argjson all "$all_open" '
+            [.[] as $pr
+              | $pr
+              | select(.isCrossRepository | not)
+              | select(.mergeable == "CONFLICTING")
+              | select([.labels[].name]
+                  | all(. != "ai-rebase-in-progress"
+                        and . != "ai-rebase-paused"))
+              | select(
+                  ([.labels[].name] | index("no-ai-rebase") != null)
+                  or (any($all[];
+                      .number != $pr.number
+                      and (.isCrossRepository | not)
+                      and (.headRefName == $pr.baseRefName
+                           or .baseRefName == $pr.headRefName)) | not))
+              | select($only == "" or (.number | tostring) == $only)
+              | {number: .number, head: .headRefName, base: .baseRefName}]
+          ' <<<"$prs")"
           echo "prs=$conflicting" >> "$GITHUB_OUTPUT"
           echo "any=$(jq 'length > 0' <<<"$conflicting")" >> "$GITHUB_OUTPUT"
 
@@ -442,7 +491,7 @@ jobs:
       GIT_CONFIG_SYSTEM: /dev/null
     steps:
       - name: Check out PR head
-        uses: actions/checkout@v4
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ matrix.pr.head }}
           # fetch-depth 0 brings all branches, so origin/$BASE_REF is already
@@ -451,6 +500,11 @@ jobs:
           # Keep the token out of .git/config: the model has Read access to
           # the workspace, and the push step supplies its own auth.
           persist-credentials: false
+          # This job intentionally points GIT_CONFIG_GLOBAL at /dev/null.
+          # Avoid checkout's otherwise harmless global safe.directory write,
+          # which produced the misleading "could not lock /dev/null" error
+          # annotation even though conflict resolution succeeded.
+          set-safe-directory: false
 
       - name: Merge base into head
         id: merge
@@ -545,7 +599,7 @@ jobs:
 
       - name: Resolve conflicts with Claude
         if: steps.merge.outputs.conflicted == 'true'
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79 # v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
