@@ -20,6 +20,7 @@ import {
 import { getThingsCollection, getUsersCollection } from '../mongodb/collections';
 import { ACL_ALL, COLLECTION_SCHEMA_VERSIONS, MAX_BIO_CHARS, MAX_DISPLAY_NAME_CHARS, MAX_PROFILE_URL_CHARS } from '~/schemas/registry';
 import { isAdminDoc, isEnvAdmin } from './admin';
+import { getSubscription, type SubscriptionInfo } from '../subscriptions/subscriptions';
 
 // Users are THINGS now (thingtime ["user"], see claude-todo/12): public
 // profile in crystal, credentials/private state under the root `secure` field
@@ -48,8 +49,6 @@ export type UserDoc = {
   updatedAt: Date;
   accountKind?: 'user' | 'service';
   emailVerificationRequiredBy?: Date | null;
-  storageAllowanceBytes?: number;
-  storageUsedBytes?: number;
   meta: Record<string, any>;
 };
 
@@ -69,6 +68,17 @@ export type PublicUser = {
   emailVerificationRequiredBy: string | null;
   storageAllowanceBytes: number | null;
   storageUsedBytes: number | null;
+	storageRemainingBytes: number | null;
+	storageAccountingReady: boolean;
+	storage: {
+		usedBytes: number | null;
+		allowanceBytes: number | null;
+		remainingBytes: number | null;
+		overageBytes: number | null;
+		status: 'ready' | 'reconciling' | 'unavailable';
+		accountingVersion: number | null;
+		reconciledAt: string | null;
+	};
   activeThemeId: string | null;
   activeFeedAlgorithmId: string | null;
   // true when meta.admin OR the ADMIN_USERNAMES env allowlist — the client uses
@@ -88,7 +98,20 @@ export type PublicProfile = {
   createdAt: string;
 };
 
-export const toPublicUser = (user: any): PublicUser => ({
+export const toPublicUser = (user: any, subscription?: SubscriptionInfo | null): PublicUser => {
+	const source = subscription?.subjectType === 'user' ? subscription.storage : null;
+	const status = source?.status ?? ('unavailable' as const);
+	const displayable = status === 'ready' || status === 'reconciling';
+	const storage = {
+		usedBytes: displayable ? (source?.usedBytes ?? null) : null,
+		allowanceBytes: source?.allowanceBytes ?? null,
+		remainingBytes: displayable ? (source?.remainingBytes ?? null) : null,
+		overageBytes: displayable ? (source?.overageBytes ?? null) : null,
+		status,
+		accountingVersion: source?.accountingVersion ?? null,
+		reconciledAt: source?.reconciledAt ? source.reconciledAt.toISOString() : null
+	};
+	return {
   id: String(user._id),
   ttid: user.ttid,
   username: user.username,
@@ -101,12 +124,23 @@ export const toPublicUser = (user: any): PublicUser => ({
   createdAt: new Date(user.createdAt).toISOString(),
   accountKind: user.accountKind === 'service' ? 'service' : 'user',
   emailVerificationRequiredBy: user.emailVerificationRequiredBy ? new Date(user.emailVerificationRequiredBy).toISOString() : null,
-  storageAllowanceBytes: typeof user.storageAllowanceBytes === 'number' ? user.storageAllowanceBytes : null,
-  storageUsedBytes: typeof user.storageUsedBytes === 'number' ? user.storageUsedBytes : null,
+		// Compatibility aliases now derive from the canonical nested projection.
+		// The old secure-blob fields are deliberately never read here.
+		storageAllowanceBytes: storage.allowanceBytes,
+		storageUsedBytes: storage.status === 'ready' ? storage.usedBytes : null,
+		storageRemainingBytes: storage.status === 'ready' ? storage.remainingBytes : null,
+		storageAccountingReady: storage.status === 'ready',
+		storage,
   activeThemeId: typeof user.meta?.activeThemeId === 'string' ? user.meta.activeThemeId : null,
   activeFeedAlgorithmId: typeof user.meta?.activeFeedAlgorithmId === 'string' ? user.meta.activeFeedAlgorithmId : null,
   isAdmin: isAdminDoc(user)
-});
+	};
+};
+
+export const toPublicUserWithStorage = async (user: any): Promise<PublicUser> => {
+	const userId = String(user._id);
+	return toPublicUser(user, await getSubscription('user', userId));
+};
 
 export const toPublicProfile = (user: any): PublicProfile => ({
   id: String(user._id),
@@ -161,6 +195,10 @@ type SecurePayload = {
   emailVerified?: boolean;
   accountKind?: 'user' | 'service';
   emailVerificationRequiredBy?: string | null; // ISO in the blob
+	// Migration-only residue. Normal user adapters never expose these fields;
+	// the whole-account storage migration reads them through one explicit
+	// helper, preserves a valid allowance in the subscription, then removes
+	// both with the secureVersion CAS writer.
   storageAllowanceBytes?: number;
   storageUsedBytes?: number;
   // never carries `admin` (root boolean) or `recentReactions` (root BinData
@@ -177,6 +215,12 @@ export const unpackSecure = (value: any): SecurePayload => {
   } catch {
     return {};
   }
+};
+
+export const stripLegacyStorageFromSecurePayload = <T extends Record<string, any>>(payload: T): T => {
+	delete payload.storageAllowanceBytes;
+	delete payload.storageUsedBytes;
+	return payload;
 };
 
 // The reaction MRU (secureRecentReactions) is a BSON array of BinData tokens —
@@ -212,8 +256,6 @@ const userThingToDoc = (thing: any): any => {
     emailVerified: !!secure.emailVerified,
     accountKind: secure.accountKind === 'service' ? 'service' : 'user',
     emailVerificationRequiredBy: secure.emailVerificationRequiredBy ? new Date(secure.emailVerificationRequiredBy) : null,
-    storageAllowanceBytes: secure.storageAllowanceBytes,
-    storageUsedBytes: secure.storageUsedBytes,
     meta: { ...(secure.meta || {}), admin: !!thing.secureAdmin },
     schemaVersion: thing.schemaVersion,
     createdAt: thing.createdAt,
@@ -298,12 +340,8 @@ export const findUsersByIds = async (ids: readonly string[]) => {
 
   const legacyIds = uniqueIds.filter(ObjectId.isValid).map((id) => new ObjectId(id));
   const [thingRows, legacyRows] = await Promise.all([
-    getThingsCollection().then((collection) =>
-      collection.find({ thingtime: 'user', shareId: { $in: uniqueIds } } as any).toArray()
-    ),
-    legacyIds.length
-      ? getUsersCollection().then((collection) => collection.find({ _id: { $in: legacyIds } } as any).toArray())
-      : Promise.resolve([])
+		getThingsCollection().then((collection) => collection.find({ thingtime: 'user', shareId: { $in: uniqueIds } } as any).toArray()),
+		legacyIds.length ? getUsersCollection().then((collection) => collection.find({ _id: { $in: legacyIds } } as any).toArray()) : Promise.resolve([])
   ]);
 
   const legacyById = new Map(legacyRows.map((row: any) => [String(row._id), row]));
@@ -314,9 +352,55 @@ export const findUsersByIds = async (ids: readonly string[]) => {
     })
   );
 
-  return uniqueIds
-    .map((id) => thingsById.get(id) ?? legacyById.get(id))
-    .filter((row): row is NonNullable<typeof row> => !!row);
+	return uniqueIds.map((id) => thingsById.get(id) ?? legacyById.get(id)).filter((row): row is NonNullable<typeof row> => !!row);
+};
+
+export type LegacyUserStorageFields = {
+	storageAllowanceBytes?: unknown;
+	storageUsedBytes?: unknown;
+};
+
+// Deliberately migration-only: stale secure-blob counters must not leak back
+// into the normal UserDoc interchange shape and become a second display or
+// enforcement source. Things-era rows win over their dual-era fallback just
+// like every other user resolver.
+export const findLegacyUserStorageFieldsByIds = async (ids: readonly string[]): Promise<Map<string, LegacyUserStorageFields>> => {
+	const uniqueIds = [...new Set(ids.map((id) => String(id)).filter(Boolean))];
+	const legacyIds = uniqueIds.filter(ObjectId.isValid).map((id) => new ObjectId(id));
+	const [thingRows, legacyRows] = await Promise.all([
+		uniqueIds.length
+			? getThingsCollection().then((collection) =>
+					collection
+						.find({ thingtime: 'user', shareId: { $in: uniqueIds } } as any)
+						.project({ shareId: 1, secure: 1 })
+						.toArray()
+				)
+			: Promise.resolve([]),
+		legacyIds.length
+			? getUsersCollection().then((collection) =>
+					collection
+						.find({ _id: { $in: legacyIds } } as any)
+						.project({ storageAllowanceBytes: 1, storageUsedBytes: 1 })
+						.toArray()
+				)
+			: Promise.resolve([])
+	]);
+
+	const fields = new Map<string, LegacyUserStorageFields>();
+	for (const row of legacyRows as any[]) {
+		fields.set(String(row._id), {
+			...(Object.prototype.hasOwnProperty.call(row, 'storageAllowanceBytes') ? { storageAllowanceBytes: row.storageAllowanceBytes } : {}),
+			...(Object.prototype.hasOwnProperty.call(row, 'storageUsedBytes') ? { storageUsedBytes: row.storageUsedBytes } : {})
+		});
+	}
+	for (const row of thingRows as any[]) {
+		const secure = unpackSecure(row.secure);
+		fields.set(String(row.shareId), {
+			...(Object.prototype.hasOwnProperty.call(secure, 'storageAllowanceBytes') ? { storageAllowanceBytes: secure.storageAllowanceBytes } : {}),
+			...(Object.prototype.hasOwnProperty.call(secure, 'storageUsedBytes') ? { storageUsedBytes: secure.storageUsedBytes } : {})
+		});
+	}
+	return fields;
 };
 
 // New accounts are user things. The id is minted ObjectId-shaped so every
@@ -334,6 +418,7 @@ export const insertUser = async (
       metered: boolean;
       quotas: Record<string, number | null>;
     };
+		session?: any;
   } = {}
 ) => {
   const shareId = new ObjectId().toHexString();
@@ -372,7 +457,7 @@ export const insertUser = async (
     createdAt: now,
     updatedAt: now
   };
-  await (await getThingsCollection()).insertOne(thing as any);
+	await (await getThingsCollection()).insertOne(thing as any, options.session ? { session: options.session } : undefined);
   return userThingToDoc(thing);
 };
 
@@ -431,6 +516,29 @@ const mutateUserThingSecure = async (userId: string, mutate: (secure: SecurePayl
     if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 3 * attempt + Math.floor(Math.random() * 5)));
   }
   return 'contended';
+};
+
+// Finalize the storage-field handoff after the canonical subscription
+// override has been persisted. This uses the same CAS retry as every secure
+// mutation, so a racing password/profile write cannot resurrect or lose
+// fields. The legacy collection fallback is retained only for recovery from a
+// partially-completed users-to-things migration.
+export const removeLegacyUserStorageFields = async (userId: string): Promise<void> => {
+	const result = await mutateUserThingSecure(userId, (secure) => {
+		stripLegacyStorageFromSecurePayload(secure);
+	});
+	if (result === 'mutated') return;
+	if (result === 'contended') throw new SecureWriteContendedError(userId);
+	if (!ObjectId.isValid(userId)) return;
+	await (
+		await getUsersCollection()
+	).updateOne(
+		{ _id: new ObjectId(userId) },
+		{
+			$unset: { storageAllowanceBytes: '', storageUsedBytes: '' },
+			$set: { updatedAt: new Date() }
+		}
+	);
 };
 
 // Thrown by the secure-blob setters when a things-era write loses every CAS
@@ -745,8 +853,7 @@ const searchUsersForAdminCapped = async (query: string, limit: number, hardCap: 
 // Promotion/user-management lookups stay deliberately small. The overview
 // endpoint opts into its own larger one-row-lookahead cap so it can return an
 // honest bounded snapshot without changing this existing search contract.
-export const searchUsersForAdmin = async (query: string, limit = 20): Promise<AdminUserRow[]> =>
-  searchUsersForAdminCapped(query, limit, 50);
+export const searchUsersForAdmin = async (query: string, limit = 20): Promise<AdminUserRow[]> => searchUsersForAdminCapped(query, limit, 50);
 
 type AdminUserSourceCursor = {
   done: boolean;
@@ -790,15 +897,11 @@ const readAdminUsersCursor = (cursor: unknown, q: string): AdminUsersCursor => {
       legacy: { done: false, key: null }
     };
   }
-  if (
-    decoded.v !== 1 ||
-    decoded.kind !== 'users' ||
-    decoded.q !== q ||
-    typeof decoded.exactDone !== 'boolean'
-  ) {
+	if (decoded.v !== 1 || decoded.kind !== 'users' || decoded.q !== q || typeof decoded.exactDone !== 'boolean') {
     throw new InvalidAdminSnapshotCursorError();
   }
-  const exactId = decoded.exactId === undefined || decoded.exactId === null
+	const exactId =
+		decoded.exactId === undefined || decoded.exactId === null
     ? null
     : typeof decoded.exactId === 'string' && decoded.exactId
       ? decoded.exactId
@@ -817,12 +920,7 @@ const readAdminUsersCursor = (cursor: unknown, q: string): AdminUsersCursor => {
   };
 };
 
-const advanceAdminUserSource = (
-  current: AdminUserSourceCursor,
-  page: any[],
-  consumed: number,
-  hasMore: boolean
-): AdminUserSourceCursor => {
+const advanceAdminUserSource = (current: AdminUserSourceCursor, page: any[], consumed: number, hasMore: boolean): AdminUserSourceCursor => {
   if (current.done) return current;
   const boundedConsumed = Math.min(page.length, Math.max(0, Math.floor(consumed)));
   return {
@@ -836,11 +934,7 @@ const advanceAdminUserSource = (
 // migrated user's canonical Things record wins even when its older timestamp
 // places it on a later source page. The admin UI drains every page before
 // presenting the new snapshot, then applies its computed/nested filters once.
-export const searchUsersForAdminOverviewPage = async (
-  query: string,
-  limit = 20,
-  cursor?: string | null
-): Promise<AdminUserOverviewPage> => {
+export const searchUsersForAdminOverviewPage = async (query: string, limit = 20, cursor?: string | null): Promise<AdminUserOverviewPage> => {
   const q = normalizeAdminSnapshotQuery(query);
   const capped = normalizeAdminSnapshotLimit(limit, 20);
   const state = readAdminUsersCursor(cursor, q);
@@ -866,16 +960,10 @@ export const searchUsersForAdminOverviewPage = async (
   if (q.includes('@')) {
     if (exactId) {
       if (!state.exactDone) {
-        exactRaw = await things.findOne(
-          { thingtime: 'user', shareId: exactId } as any,
-          { projection: thingAdminProjection }
-        );
+				exactRaw = await things.findOne({ thingtime: 'user', shareId: exactId } as any, { projection: thingAdminProjection });
       }
     } else {
-      const resolved = await things.findOne(
-        { thingtime: 'user', uniqueKeys: userEmailKey(q) } as any,
-        { projection: thingAdminProjection }
-      );
+			const resolved = await things.findOne({ thingtime: 'user', uniqueKeys: userEmailKey(q) } as any, { projection: thingAdminProjection });
       exactId = resolved?.shareId ? String(resolved.shareId) : null;
       if (!state.exactDone) exactRaw = resolved;
     }
@@ -896,15 +984,10 @@ export const searchUsersForAdminOverviewPage = async (
     : { thingtime: 'user' };
   const thingBase = adminSnapshotExcludingIdFilter(thingSearchBase, 'shareId', exactId);
   const legacyBase = q ? { $or: [{ username: pattern }, { email: pattern }] } : {};
-  const thingFilter = state.things.key
-    ? { $and: [thingBase, adminSnapshotAfterFilter(state.things.key, 'shareId')] }
-    : thingBase;
+	const thingFilter = state.things.key ? { $and: [thingBase, adminSnapshotAfterFilter(state.things.key, 'shareId')] } : thingBase;
   const legacyFilter = state.legacy.key
     ? {
-        $and: [
-          legacyBase,
-          adminSnapshotAfterFilter(state.legacy.key, '_id', new ObjectId(state.legacy.key.id))
-        ]
+				$and: [legacyBase, adminSnapshotAfterFilter(state.legacy.key, '_id', new ObjectId(state.legacy.key.id))]
       }
     : legacyBase;
 
@@ -1120,5 +1203,5 @@ export const updateUserProfile = async (userId: string, input: UpdateProfileInpu
   if (!updated) {
     return { ok: false, status: 404, error: 'User not found' };
   }
-  return { ok: true, user: toPublicUser(updated) };
+	return { ok: true, user: await toPublicUserWithStorage(updated) };
 };

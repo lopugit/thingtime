@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
 
 import { listLinkedAppClientIds, userCanManageApp } from '../accounts/accountLinks';
-import { getSessionsCollection, getThingsCollection } from '../mongodb/collections';
+import { getSessionsCollection, getThingsCollection, withMongoTransaction } from '../mongodb/collections';
 import { getSubscription } from '../subscriptions/subscriptions';
 import { DEFAULT_SUBSCRIPTION_TIER, subscriptionTierById, type SubscriptionTierId } from '../subscriptions/tierCatalog';
 import { getLiveSubscriptionTier, tierAssignmentSnapshot } from '../subscriptions/tierCatalogStore';
 import { remainingStorageBytes, storageUsage, storedByteAllowance, storedByteCount } from './appStorageCore';
+import { deleteAppLifecycleInSession } from './appLifecycleCore';
 import {
   ACL_OWNER,
   APP_STORAGE_ACCOUNTING_VERSION,
@@ -32,7 +33,7 @@ export type PublicApp = {
   name: string;
   origins: string[];
   storageAllowanceBytes: number | null;
-  storageUsedBytes: number;
+	storageUsedBytes: number | null;
   storageRemainingBytes: number | null;
   userStorageAllowanceBytes: number;
   storageAccountingReady: boolean;
@@ -127,7 +128,11 @@ export const appStoragePolicyOf = (doc: any): AppStoragePolicy => {
     Number(crystal.storageUsedBytes) >= 0 &&
     Number.isSafeInteger(crystal?.userStorageAllowanceBytes) &&
     Number(crystal.userStorageAllowanceBytes) >= 0 &&
-    crystal?.storageAccountingVersion === APP_STORAGE_ACCOUNTING_VERSION;
+		crystal?.storageAccountingVersion === APP_STORAGE_ACCOUNTING_VERSION &&
+		// Read projections are deliberately stricter than the temporary
+		// admission compatibility path: a missing/old/malformed status must never
+		// be presented to people as an exact, ready counter.
+		crystal?.storageLedgerStatus === 'ready';
   return {
     storageAllowanceBytes: storedByteAllowance(crystal?.storageAllowanceBytes, DEFAULT_APP_STORAGE_ALLOWANCE_BYTES),
     storageUsedBytes: storedByteCount(crystal?.storageUsedBytes, 0),
@@ -146,8 +151,8 @@ const toPublicApp = (doc: any): PublicApp => {
     name: doc.crystal?.name,
     origins: Array.isArray(doc.crystal?.origins) ? doc.crystal.origins : [],
     storageAllowanceBytes: appUsage.allowanceBytes,
-    storageUsedBytes: appUsage.usedBytes,
-    storageRemainingBytes: remainingStorageBytes(appUsage),
+		storageUsedBytes: policy.ready ? appUsage.usedBytes : null,
+		storageRemainingBytes: policy.ready ? remainingStorageBytes(appUsage) : null,
     userStorageAllowanceBytes: policy.userStorageAllowanceBytes,
     storageAccountingReady: policy.ready,
     subscriptionTier: policy.subscriptionTier,
@@ -230,7 +235,10 @@ export const createApp = async (ownerId: string, input: { name?: unknown; origin
       storageAllowanceBytes: defaultSnapshot.quotas.appStorageBytes,
       storageUsedBytes: 0,
       userStorageAllowanceBytes: DEFAULT_APP_USER_STORAGE_ALLOWANCE_BYTES,
-      storageAccountingVersion: APP_STORAGE_ACCOUNTING_VERSION
+			storageAccountingVersion: APP_STORAGE_ACCOUNTING_VERSION,
+			storageLedgerStatus: 'ready',
+			storageReconciledAt: now,
+			storageUpdatedAt: now
     },
     ownerId,
     acl: [ACL_OWNER],
@@ -298,22 +306,30 @@ export const updateApp = async (
   return { ok: true, app: toPublicApp(updated) };
 };
 
-// Deleting an app revokes every app-scoped session minted for it, so tokens
-// held by embedding sites die immediately. End users' app-data things are
-// KEPT — that data belongs to the users, not the app developer.
+// Deleting an app revokes every app-scoped session minted for it in the same
+// Mongo transaction, so neither half can commit by itself. End users'
+// namespace Things and app-storage counters are KEPT — that data belongs to
+// the users, not the app developer. Missing is success so DELETE retries are
+// idempotent and also finish the session sweep for a historical partial delete.
 export const deleteApp = async (ownerId: string, clientId: unknown): Promise<{ ok: true } | Fail> => {
   if (typeof clientId !== 'string' || !clientId.trim()) return fail(400, 'clientId is required');
   const id = clientId.trim();
-
-  const app = await findAppByClientId(id);
-  if (!app || !(await userCanManageApp(ownerId, app))) return fail(404, 'App not found');
-
   const things = await getThingsCollection();
-  const deleted = await things.deleteOne({ thingtime: 'app', 'crystal.clientId': id });
-  if (!deleted.deletedCount) return fail(404, 'App not found');
+	const sessions = await getSessionsCollection();
+	const revokedAt = new Date();
+	const result = await withMongoTransaction((session) =>
+		deleteAppLifecycleInSession({
+			things,
+			sessions,
+			ownerId,
+			clientId: id,
+			revokedAt,
+			session,
+			canManage: userCanManageApp
+		})
+	);
 
-  await (await getSessionsCollection()).updateMany({ purpose: 'app', 'meta.clientId': id, revokedAt: null }, { $set: { revokedAt: new Date() } });
-
+	if (!result.ok) return fail(404, 'App not found');
   return { ok: true };
 };
 

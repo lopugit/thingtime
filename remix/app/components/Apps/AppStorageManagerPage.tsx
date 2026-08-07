@@ -21,7 +21,7 @@ import {
 import { useNavigate, useSearchParams } from 'react-router';
 
 import type { SubscriptionTierDescriptor } from '~/api/utils/subscriptions/tierCatalog';
-import { formatBytes } from './ConnectedAppsSection';
+import { formatBytesExact } from './ConnectedAppsSection';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { clearLocalCache, readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
@@ -35,7 +35,7 @@ type ManagedApp = {
   clientId: string;
   name: string;
   storageAllowanceBytes: number | null;
-  storageUsedBytes: number;
+	storageUsedBytes: number | null;
   storageRemainingBytes: number | null;
   userStorageAllowanceBytes: number;
   storageAccountingReady: boolean;
@@ -47,11 +47,14 @@ type ManagedApp = {
 type ManagedUser = {
   userId: string;
   username: string | null;
-  usedBytes: number;
+	usedBytes: number | null;
   storageAllowanceBytes: number;
-  storageRemainingBytes: number;
+	storageRemainingBytes: number | null;
   storageAllowanceOverrideBytes: number | null;
   storageAllowanceSource: 'app-default' | 'custom';
+	storageAccountingStatus: 'ready' | 'reconciling' | 'unavailable';
+	storageAccountingVersion: number | null;
+	storageReconciledAt: string | null;
   activeGrant: boolean;
   lastSeenAt: string | null;
 };
@@ -69,7 +72,7 @@ type ManagedStorage = {
     effective: { appStorageBytes: number | null };
   };
   storageAllowanceBytes: number | null;
-  storageUsedBytes: number;
+	storageUsedBytes: number | null;
   storageRemainingBytes: number | null;
   defaultUserStorageAllowanceBytes: number;
   storageAccountingReady: boolean;
@@ -98,9 +101,16 @@ const readStorageCache = (key: string | null): ManagedStorage | null => {
   return cached ? cacheSafeStorage(cached) : null;
 };
 
-const allowanceLabel = (bytes: number | null) => (bytes === null ? 'Unlimited · metered' : formatBytes(bytes));
+const allowanceLabel = (bytes: number | null) => (bytes === null ? 'Unlimited · metered' : formatBytesExact(bytes));
 
 const userLabel = (row: ManagedUser) => (row.username ? `@${row.username}` : `User ${row.userId.slice(0, 8)}…${row.userId.slice(-4)}`);
+
+const provisionalUsageLabel = (usedBytes: number | null, status: ManagedUser['storageAccountingStatus']) =>
+	usedBytes === null || status === 'unavailable'
+		? 'Unavailable'
+		: status === 'ready'
+			? formatBytesExact(usedBytes)
+			: `Recalculating · ${formatBytesExact(usedBytes)} last known`;
 
 export const AppStorageManagerPage = () => {
   const api = useApi();
@@ -110,7 +120,7 @@ export const AppStorageManagerPage = () => {
   const [params, setParams] = useSearchParams();
   const selectedId = (params.get('app') || '').trim();
   const appsCacheKey = user ? `tt-managed-apps-${user.id}` : null;
-  const [apps, setApps] = React.useState<ManagedApp[]>(() => (appsCacheKey ? readLocalCache<ManagedApp[]>(appsCacheKey) ?? [] : []));
+	const [apps, setApps] = React.useState<ManagedApp[]>(() => (appsCacheKey ? (readLocalCache<ManagedApp[]>(appsCacheKey) ?? []) : []));
   const [appsLoaded, setAppsLoaded] = React.useState(false);
   const storageCacheKey = user && selectedId ? `tt-app-storage-manager-${user.id}-${selectedId}` : null;
   const [storage, setStorage] = React.useState<ManagedStorage | null>(() => readStorageCache(storageCacheKey));
@@ -299,7 +309,7 @@ export const AppStorageManagerPage = () => {
   );
   const allVisibleSelected = visibleUsers.length > 0 && visibleUsers.every((row) => selectedUsers.has(row.userId));
   const usagePercent =
-    storage?.storageAllowanceBytes && storage.storageAllowanceBytes > 0
+		storage?.storageAccountingReady && storage.storageUsedBytes !== null && storage.storageAllowanceBytes && storage.storageAllowanceBytes > 0
       ? Math.min(100, (storage.storageUsedBytes / storage.storageAllowanceBytes) * 100)
       : 0;
 
@@ -348,7 +358,8 @@ export const AppStorageManagerPage = () => {
                     {app.name}
                   </Text>
                   <Text fontSize="xs" opacity={0.65} noOfLines={1}>
-                    {formatBytes(app.storageUsedBytes)} · {app.subscriptionTier}
+										{app.storageAccountingReady && app.storageUsedBytes !== null ? formatBytesExact(app.storageUsedBytes) : 'Storage updating'} ·{' '}
+										{app.subscriptionTier}
                   </Text>
                 </Box>
               </Button>
@@ -392,7 +403,11 @@ export const AppStorageManagerPage = () => {
                       <Text fontSize="xs" opacity={0.55}>
                         Whole app used
                       </Text>
-                      <Text fontWeight={700}>{formatBytes(storage.storageUsedBytes)}</Text>
+											<Text fontWeight={700}>
+												{storage.storageAccountingReady && storage.storageUsedBytes !== null
+													? formatBytesExact(storage.storageUsedBytes)
+													: 'Recalculating…'}
+											</Text>
                     </Box>
                     <Box>
                       <Text fontSize="xs" opacity={0.55}>
@@ -404,10 +419,14 @@ export const AppStorageManagerPage = () => {
                       <Text fontSize="xs" opacity={0.55}>
                         Remaining
                       </Text>
-                      <Text fontWeight={700}>{allowanceLabel(storage.storageRemainingBytes)}</Text>
+											<Text fontWeight={700}>
+												{storage.storageAccountingReady ? allowanceLabel(storage.storageRemainingBytes) : 'Recalculating…'}
+											</Text>
                     </Box>
                   </SimpleGrid>
-                  {storage.storageAllowanceBytes !== null && <Progress value={usagePercent} size="sm" colorScheme="purple" borderRadius="full" />}
+									{storage.storageAccountingReady && storage.storageAllowanceBytes !== null && (
+										<Progress value={usagePercent} size="sm" colorScheme="purple" borderRadius="full" />
+									)}
                 </Box>
 
                 <Box {...CARD_STYLES} p={{ base: 4, md: 5 }}>
@@ -592,10 +611,15 @@ export const AppStorageManagerPage = () => {
                               </Text>
                             </Td>
                             <Td isNumeric fontSize="sm">
-                              {formatBytes(row.usedBytes)}
+															<Text
+																as="span"
+																title={row.storageAccountingStatus === 'ready' ? 'Exact byte total' : 'This byte total is not authoritative yet'}
+															>
+																{provisionalUsageLabel(row.usedBytes, row.storageAccountingStatus)}
+															</Text>
                             </Td>
                             <Td isNumeric fontSize="sm">
-                              {formatBytes(row.storageAllowanceBytes)}
+															{formatBytesExact(row.storageAllowanceBytes)}
                             </Td>
                             <Td>
                               <Badge colorScheme={row.storageAllowanceSource === 'custom' ? 'purple' : undefined}>

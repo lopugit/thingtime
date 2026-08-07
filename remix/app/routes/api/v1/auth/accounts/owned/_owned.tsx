@@ -2,7 +2,7 @@ import { json } from '~/api/http';
 
 import { listAccountLinksForUser } from '~/api/utils/accounts/accountLinks';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
-import { findUserById, toPublicUser } from '~/api/utils/auth/users';
+import { findUserById } from '~/api/utils/auth/users';
 
 // GET /api/v1/auth/accounts/owned — the accounts the current user OWNS via
 // 'account' account-links (admin-assigned). The switcher renders these under
@@ -15,15 +15,12 @@ export const loader = async ({ request }: { request: Request }) => {
   const links = await listAccountLinksForUser(user.id, 'account');
   const docs = await Promise.all(links.map((link) => findUserById(link.targetId)));
 
-  const accounts = docs
-    .filter(Boolean)
-    .map((doc: any) => toPublicUser(doc))
-    .map((pub) => ({
-      id: pub.id,
-      username: pub.username,
-      displayName: pub.displayName,
-      avatarUrl: pub.avatarUrl,
-      accountKind: pub.accountKind === 'service' ? 'service' : 'user'
+	const accounts = docs.filter(Boolean).map((doc: any) => ({
+		id: String(doc._id),
+		username: doc.username,
+		displayName: typeof doc.displayName === 'string' ? doc.displayName : null,
+		avatarUrl: typeof doc.avatarUrl === 'string' ? doc.avatarUrl : null,
+		accountKind: doc.accountKind === 'service' ? ('service' as const) : ('user' as const)
     }));
 
   return json({ ok: true, accounts });

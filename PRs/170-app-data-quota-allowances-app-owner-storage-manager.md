@@ -7,13 +7,15 @@
 
 ## Outcome
 
-App-data is admitted against two measured byte ledgers, and the admin app
-manager now has an owner-facing counterpart at `/apps/manage`:
+All customer data now uses one canonical logical-byte measurement, with
+transactionally maintained ledgers for each quota scope. The admin app manager
+has an owner-facing counterpart at `/apps/manage`:
 
-| Control      | Source of truth                                                                                                                                                       | Default / tiers                                                                                               |
-| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| Whole app    | The app Thing: stable tier id + exact immutable tier revision/snapshot, optional admin override, aggregate allowance, and aggregate used bytes in one atomic document | Any live catalog revision; bootstrapped Free 5 GiB, Plus 25 GiB, Pro 100 GiB, PAYG null/unlimited but metered |
-| One app user | One deterministic protected `app-storage` Thing for `(app, user)`: used bytes + optional manager override                                                             | App default 50 MiB; custom finite sub-tier; always clamped to the whole-app ceiling                           |
+| Control       | Source of truth                                                                                                                                                       | Default / tiers                                                                                                 |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Whole account | One deterministic protected user `subscription` Thing: exact tier snapshot/override plus the authoritative account usage ledger                                       | The assigned immutable tier revision's `userStorageBytes`; explicit admin override; null/unlimited when metered |
+| Whole app     | The app Thing: stable tier id + exact immutable tier revision/snapshot, optional admin override, aggregate allowance, and aggregate used bytes in one atomic document | Any live catalog revision; bootstrapped Free 5 GiB, Plus 25 GiB, Pro 100 GiB, PAYG null/unlimited but metered   |
+| One app user  | One deterministic protected `app-storage` Thing for `(app, user)`: used bytes + optional manager override                                                             | App default 50 MiB; custom finite sub-tier; always clamped to the whole-app ceiling                             |
 
 The registering owner and administrator-linked co-managers can switch the app
 tier, edit the inherited user cap, and assign/reset one or many user overrides.
@@ -67,12 +69,23 @@ tier switching. The generic `/apps/update` route still ignores all quota fields.
 
 ## Atomic quota model
 
-- Positive namespace writes reserve whole-app bytes first, then app-user bytes
-  with guarded Mongo updates. A user refusal/error compensates the app
-  reservation exactly once; an unavailable ledger fails closed.
+- The exact billable size is the UTF-8 byte length of
+  `JSON.stringify({ crystal, extended, tags })` after normalization. That
+  logical customer-content measure is shared by every writer and excludes
+  unstable physical BSON, compression, index, replication, and platform
+  envelope overhead.
+- Every supported first-party and registered-app content writer changes its
+  document and the protected account ledger in one Mongo transaction. App
+  writes also change the whole-app and app-user ledgers by that same delta;
+  the overlapping scope counters enforce sub-limits and do not double-count
+  the account total.
 - Updates charge only the serialized-size delta. Deletes and first-party owner
-  edits refund/charge both ledgers. Same-key compare-and-swap races reconcile to
-  the winning persisted size.
+  edits refund/charge the applicable ledgers. Same-key compare-and-swap races
+  reconcile to the winning persisted size.
+- A used counter is readable/enforceable only when its complete protected
+  envelope and source stamps validate. Growth fails closed while a ledger is
+  `initializing`, `needs-reconcile`, or malformed; deletes stay available and
+  fence uncertain scopes for exact reconciliation instead of estimating.
 - A plan cannot be set below current aggregate usage. A default or individual
   user cap cannot be set above the current aggregate, and default updates
   re-check that relationship inside the atomic write. Runtime admission still
@@ -82,6 +95,43 @@ tier switching. The generic `/apps/update` route still ignores all quota fields.
   `data` counters are adopted into the protected `app-storage` kind.
 - A partial `(quotaKind, appId, updatedAt, ownerId)` index supports app-manager
   and admin app-user rollups without scanning ordinary app data.
+
+## Unified projections and migration
+
+- The protected user subscription ledger is the sole account-usage display
+  and enforcement source. Root-loader, settings, admin, owned-account, and
+  service-account projections consume its canonical nested `storage` object.
+  The old flat user fields survive only as aliases derived from that object;
+  they are never read as independent totals.
+- Storage UI distinguishes `ready`, `reconciling`, and `unavailable`, includes
+  exact integer byte counts alongside friendly units, and never turns unknown
+  usage into `0`.
+- The global idempotent migration obtains a durable lease, fences account/app/
+  app-user ledgers, converges all source-changing prerequisites, stamps every
+  billable source with compare-and-swap writes, exact-sums each scope, and only
+  then publishes `ready`. Old usage values are deliberately ignored because
+  they were never maintained; a valid explicit legacy allowance is preserved
+  as a real subscription override before the old fields are removed.
+- Protected exact envelopes prevent generic Things or forged lookalikes from
+  becoming a ledger. Registered apps cannot mutate split ledgers through the
+  old non-transactional quota helper, and deleting an app control record keeps
+  historical namespace data/counters available for owner repair.
+
+## Operational boundaries
+
+- High-cardinality app reconciliation currently repairs all app users in one
+  transaction. It is exact and fail-closed, but exceptionally large apps may
+  need a future batched/fenced background reconciler to stay inside Mongo
+  transaction pressure limits.
+- Admin account totals and app-data subtotals come from separate concurrent
+  reads, so a busy account may momentarily show adjacent committed snapshots.
+  This is display-only; admission and mutation remain atomic.
+- Full-source legacy compare-and-swap is safe for normal bounded Things. A
+  malformed historical row close to Mongo's BSON command ceiling needs manual
+  cleanup before migration.
+- A timeout during the whole-corpus migration leaves ledgers fenced, never
+  partially trusted. Operators rerun the idempotent maintenance migration to
+  completion before storage growth is admitted again.
 
 ## Owner/co-manager surface
 
@@ -116,6 +166,19 @@ billing provider and webhook reconciliation remains a separate integration.
 
 ## Verification
 
+- ✅ 100/100 current focused assertions pass: 41 exact-byte/storage-identity/
+  migration/app-lifecycle/UI-projection regressions plus the 6 ACL, 6 app
+  storage, 11 service-quota, 12 tier-catalog, and 24 schema suites. A separate
+  adversarial review found no remaining P0/P1 correctness or security issue.
+- ✅ Full `npm run build` passes: client, server, Nitro/Vercel packaging, Vite
+  shell, filesystem route, SPA fallback, and `/authorize` frame-deny output.
+- ✅ Fresh signed-in desktop (1440px) and mobile (390px) browser QA covers
+  Users/Apps/Tiers query controls, horizontally reachable tables, canonical
+  unavailable/reconciling storage states, exact allowance-byte tooltips, all
+  six computed/custom pricing comparisons, the full tier editor and sticky
+  actions, Settings account storage, and `/apps/manage`. Top-to-bottom and
+  modal scrolling have no page-level horizontal overflow or browser errors;
+  only the repository's pre-existing `HydrateFallback` warning remains.
 - ✅ 40/40 focused catalog, schema, and app-storage tests: 12 subscription
   catalog tests, 22 schema-projection tests, and 6 atomic app-storage tests.
 - ✅ Both live verification scripts pass Node syntax checks and now derive

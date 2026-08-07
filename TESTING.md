@@ -96,7 +96,7 @@ is fixed, and cite the checklist you ran in the PR description.
       `props:{position:'fixed',inset:0,zIndex:99999,…}` renders as a data
       tree, NOT a viewport overlay; image/audio/cover URLs with unsafe schemes
       fall back to the emoji placeholder. Verify via DOM: no `a[href^=
-    "javascript:"]`, no fixed/absolute high-z overlay from post content.
+  "javascript:"]`, no fixed/absolute high-z overlay from post content.
 - [ ] Editing a feed thing (context menu → Toggle Edit Mode) and pressing
       Cmd/Ctrl+Z does NOT undo the viewer's own persisted tree — the keydown
       is contained to the sandbox (native field undo still works).
@@ -324,7 +324,7 @@ is fixed, and cite the checklist you ran in the PR description.
       the entry's acl becomes `["tt:user", "tt:app/<clientId>"]`.
 - [ ] A plain `{ key, value }` rewrite of an existing shared entry keeps it
       shared (audience only changes when the write names one); `visibility:
-    'private'` flips the acl back to `["tt:user"]`.
+  'private'` flips the acl back to `["tt:user"]`.
 - [ ] GET /api/v1/app-data/shared returns other users' `visibility: 'app'`
       entries for the SAME app only — never private entries, never another
       app's entries — newest first, and `key=post:*` prefix-filters.
@@ -345,7 +345,7 @@ is fixed, and cite the checklist you ran in the PR description.
       stamp; reads, updates, and deletes aimed at a first-party thing's id
       (or another app's doc) all 404.
 - [ ] App writes are acl-clamped: an acl beyond `tt:user` / `tt:app/<own
-    clientId>` (tt:all, other apps, other users, exclusions) 400s; an
+  clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       insert that omits visibility/acl lands PRIVATE (never the generic
       route's public default); `save`/`share` thingtimes 403 as first-party
       surfaces; protected kinds stay refused.
@@ -366,6 +366,23 @@ is fixed, and cite the checklist you ran in the PR description.
       writes closed until backfill-app-storage-allowances reconciles
       per-user sums and initializes aggregate last; two migration runners
       cannot overwrite a now-live aggregate.
+- [ ] Canonical account storage: create, grow, shrink, and delete first-party
+      Things, comments/reactions, themes, algorithms, and registered app data.
+      Each mutation changes the protected subscription ledger by exactly the
+      UTF-8 byte delta of `JSON.stringify({ crystal, extended, tags })` in the
+      same transaction. App data changes the account, whole-app, and app-user
+      counters by the same delta while appearing only once in the account
+      total. Stale/malformed stamps and ledgers fail growth closed; deletes
+      fence for repair instead of guessing. Settings/admin/app surfaces show
+      the same canonical value and exact bytes, with `reconciling` or
+      `unavailable` never rendered as zero. Rerun the interrupted global
+      migration and confirm it converges without double charging.
+- [ ] Registered app lifecycle stays on its dedicated surface: generic
+      /api/v1/things POST/PUT/PATCH/DELETE cannot create, replace, edit, or
+      remove an `app` control Thing. /api/v1/apps/delete atomically removes
+      exactly that control row and revokes all live app sessions; retrying an
+      already-completed delete succeeds, while users' namespace data and
+      protected app-storage counters remain browseable/reconcilable.
 - [ ] Run `node scripts/verify-app-storage.mjs <local base URL>` against a
       disposable local database: all 30 app-manager + registered-ledger checks
       pass for two users, including owner plan/default/single/bulk/reset flows,
@@ -625,7 +642,7 @@ re-checks the whole management plane end-to-end:
       plan change. Existing users without overrides immediately inherit it.
 - [ ] Select one user or many (up to all 200 shown) and apply a custom cap;
       each protected `app-storage` ledger records its own override, `Use app
-    default` unsets it, and runtime usage reports the effective cap. A custom
+  default` unsets it, and runtime usage reports the effective cap. A custom
       value above the aggregate is refused; a later aggregate downgrade clamps
       enforcement even if a historical override was larger.
 - [ ] The roster includes users with current or past grants/ledgers, but a

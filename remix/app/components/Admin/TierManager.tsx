@@ -67,7 +67,7 @@ const PRICE_LABELS: Record<TierPricePeriod, string> = {
 
 const QUOTA_LABELS: Record<keyof TierQuotas, { label: string; unit: 'MiB' | 'items' }> = {
   appStorageBytes: { label: 'Whole-app storage', unit: 'MiB' },
-  userStorageBytes: { label: 'User storage', unit: 'MiB' },
+	userStorageBytes: { label: 'Whole-account storage', unit: 'MiB' },
   maxApps: { label: 'Max registered apps', unit: 'items' },
   maxPats: { label: 'Max access tokens', unit: 'items' }
 };
@@ -76,7 +76,10 @@ const tierInclusionText = (value: unknown): string => {
   if (value === null || value === undefined) return '';
   if (Array.isArray(value)) return value.map(tierInclusionText).filter(Boolean).join(' ');
   if (typeof value === 'object') {
-    return Object.values(value as Record<string, unknown>).map(tierInclusionText).filter(Boolean).join(' ');
+		return Object.values(value as Record<string, unknown>)
+			.map(tierInclusionText)
+			.filter(Boolean)
+			.join(' ');
   }
   return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean' ? String(value) : '';
 };
@@ -107,25 +110,25 @@ const TIER_QUERY_FIELDS: readonly AdminRowField<SubscriptionTierDescriptor>[] = 
     id: 'prices.daily',
     label: 'Daily price',
     kind: 'number',
-    getValue: (tier) => tier.prices.daily === null ? null : tier.prices.daily / currencyMinorUnitFactor(tier.currency)
+		getValue: (tier) => (tier.prices.daily === null ? null : tier.prices.daily / currencyMinorUnitFactor(tier.currency))
   },
   {
     id: 'prices.weekly',
     label: 'Weekly price',
     kind: 'number',
-    getValue: (tier) => tier.prices.weekly === null ? null : tier.prices.weekly / currencyMinorUnitFactor(tier.currency)
+		getValue: (tier) => (tier.prices.weekly === null ? null : tier.prices.weekly / currencyMinorUnitFactor(tier.currency))
   },
   {
     id: 'prices.monthly',
     label: 'Monthly price',
     kind: 'number',
-    getValue: (tier) => tier.prices.monthly === null ? null : tier.prices.monthly / currencyMinorUnitFactor(tier.currency)
+		getValue: (tier) => (tier.prices.monthly === null ? null : tier.prices.monthly / currencyMinorUnitFactor(tier.currency))
   },
   {
     id: 'prices.yearly',
     label: 'Yearly price',
     kind: 'number',
-    getValue: (tier) => tier.prices.yearly === null ? null : tier.prices.yearly / currencyMinorUnitFactor(tier.currency)
+		getValue: (tier) => (tier.prices.yearly === null ? null : tier.prices.yearly / currencyMinorUnitFactor(tier.currency))
   },
   { id: 'discounts.weeklyFromDaily', label: 'Weekly saving vs daily', kind: 'number' },
   { id: 'discounts.monthlyFromDaily', label: 'Monthly saving vs daily', kind: 'number' },

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 // @ts-ignore Node 24 executes TypeScript directly and requires the extension.
-import { projectBuiltinSchemaCrystal, thingtimeSchemas, validateThingtimeCrystal } from './registry.ts';
+import { isProtectedThingtime, PROTECTED_THINGTIME, projectBuiltinSchemaCrystal, thingtimeSchemas, validateThingtimeCrystal } from './registry.ts';
 
 // The congruence alarm for builtin-schema seeding (seed-builtin-schemas in
 // api/utils/migrations/migrations.ts): every builtin crystal schema must
@@ -59,8 +59,22 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
     'publishedAt',
     'archivedAt'
   ], // pricing/inclusions/quotas: records → dropped
-  subscription: ['quotaKind', 'subjectType', 'subjectId', 'tier', 'tierVersionId', 'tierVersion', 'note', 'updatedBy'], // snapshots/overrides: records → dropped
+	subscription: [
+		'quotaKind',
+		'subjectType',
+		'subjectId',
+		'tier',
+		'tierVersionId',
+		'tierVersion',
+		'note',
+		'updatedBy',
+		'storageUsedBytes',
+		'storageAccountingVersion',
+		'storageLedgerStatus',
+		'storageReconciledAt'
+	], // snapshots/overrides: records → dropped
   'app-storage': ['quotaKind', 'appId', 'usedBytes', 'storageAllowanceBytes'],
+	'service-quota': ['quotaKind', 'quotaVersion', 'key', 'dayKey', 'dailyUsed', 'permitIds', 'releasedIds'], // policy + state records → dropped
   'account-link': ['linkKind', 'userId', 'targetId', 'role', 'createdBy'],
   user: ['username', 'ttid', 'displayName', 'bio', 'avatarUrl', 'bannerUrl'],
   theme: ['name'], // theme: record → dropped
@@ -70,6 +84,12 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
 
 test('the builtin crystal-schema set matches the pinned projection table', () => {
   assert.deepEqual(crystalSchemas.map((schema) => schema.id).sort(), Object.keys(EXPECTED_PROJECTED_FIELDS).sort());
+});
+
+test('registered app control Things are protected from generic Thing CRUD', () => {
+	assert.ok(PROTECTED_THINGTIME.includes('app'));
+	assert.equal(isProtectedThingtime(['app']), true);
+	assert.equal(isProtectedThingtime(['data', 'app']), true);
 });
 
 for (const schema of crystalSchemas) {

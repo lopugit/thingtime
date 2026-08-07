@@ -36,6 +36,35 @@ const getClientCached = async () => {
   return clientPromise;
 };
 
+// Run one logical mutation against MongoDB's transaction retry contract. The
+// driver's withTransaction helper retries TransientTransactionError callbacks
+// and UnknownTransactionCommitResult commits with the same session. Storage
+// accounting deliberately has no non-transactional fallback: allowing a
+// content write when one of its ledgers could not commit would create a silent
+// under-count. Atlas replica sets support transactions; an unsupported local
+// deployment therefore fails the write loudly instead of weakening the
+// invariant.
+export const withMongoTransaction = async <T>(work: (session: any) => Promise<T>): Promise<T> => {
+	const client = await getClientCached();
+	const session = client.startSession();
+	let result!: T;
+	try {
+		await session.withTransaction(
+			async () => {
+				result = await work(session);
+			},
+			{
+				readConcern: { level: 'snapshot' },
+				writeConcern: { w: 'majority' },
+				readPreference: 'primary'
+			}
+		);
+		return result;
+	} finally {
+		await session.endSession();
+	}
+};
+
 // Issues the last adoption pass could not resolve (rename unsupported /
 // unauthorized). Surfaced through the admin migrations census so a split
 // (legacy collection still holding data beside its versioned successor) is
@@ -233,10 +262,7 @@ export const ensureIndexes = async () => {
         // The current-admin roster filters legacy users by the stored flag and
         // then takes the same deterministic newest-first window. Keep this
         // rare subset partial so the sort never scans the whole legacy store.
-        col('users').createIndex(
-          { 'meta.admin': 1, createdAt: -1, _id: 1 },
-          { partialFilterExpression: { 'meta.admin': true } }
-        ),
+				col('users').createIndex({ 'meta.admin': 1, createdAt: -1, _id: 1 }, { partialFilterExpression: { 'meta.admin': true } }),
         col('sessions').createIndex({ jti: 1 }, { unique: true }),
         col('sessions').createIndex({ userId: 1 }),
         // TTL: reap sessions once expiresAt passes. getLiveSession already
@@ -304,6 +330,13 @@ export const ensureIndexes = async () => {
         // take a small newest-first window with a stable shareId tiebreaker.
         col('things').createIndex({ thingtime: 1, createdAt: -1, shareId: 1 }),
         col('things').createIndex({ thingtime: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
+				// Canonical account-storage reconciliation: content allocations are
+				// grouped by owner and summed from their exact versioned byte stamps.
+				// Control-plane Things never enter this partial index.
+				col('things').createIndex(
+					{ storageClass: 1, ownerId: 1, storageAccountingVersion: 1, sizeBytes: 1 },
+					{ partialFilterExpression: { storageClass: 'content' } }
+				),
         col('things').createIndex({ targetId: 1, thingtime: 1, createdAt: 1, shareId: 1 }),
         // schema-usage counting (schemas/browse decorate): data things are
         // grouped by crystal.schemaId (stamped) with a crystal.schema name
@@ -415,10 +448,7 @@ export const ensureIndexes = async () => {
         // Admin user snapshots sum every app-storage ledger held by each user.
         // ownerId must immediately follow quotaKind: the appId/updatedAt index
         // above cannot seek its owner suffix without those fields constrained.
-        col('things').createIndex(
-          { 'crystal.quotaKind': 1, ownerId: 1 },
-          { partialFilterExpression: { 'crystal.quotaKind': 'app-storage' } }
-        ),
+				col('things').createIndex({ 'crystal.quotaKind': 1, ownerId: 1 }, { partialFilterExpression: { 'crystal.quotaKind': 'app-storage' } }),
         // The app-scoped shared read (/app-data/shared): entries whose acl
         // carries tt:app/<clientId>, newest first. acl is the only multikey
         // field here (appId/updatedAt/shareId are scalars), so the compound is

@@ -1,13 +1,16 @@
 import { randomUUID } from 'node:crypto';
 
-import { getThingsCollection } from '../mongodb/collections';
+import { getThingsCollection, withMongoTransaction } from '../mongodb/collections';
 import { findUserById } from '../auth/users';
+import { StorageMutationError, USER_STORAGE_ACCOUNTING_VERSION, currentContentStorageSizeBytes } from '../storage/storageCore';
+import { applyUserStorageDelta } from '../storage/userStorage';
 import { sandboxDisplayName } from './sandbox';
 import { scopeCovers } from './scopes';
 import {
   appAclEntry,
   appNamespaceStamp,
   appThingSizeBytes,
+	applyAppStorageDeltaTransaction,
   chargeAppStorage,
   liveSandboxAuthors,
   liveSharingAuthors,
@@ -15,12 +18,7 @@ import {
   resolveAppScopedAcl
 } from './namespace';
 import type { AppNamespaceScope } from './namespace';
-import {
-  ACL_OWNER,
-  COLLECTION_SCHEMA_VERSIONS,
-  MAX_APP_DATA_KEY_CHARS,
-  MAX_APP_DATA_VALUE_BYTES
-} from '~/schemas/registry';
+import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS, MAX_APP_DATA_KEY_CHARS, MAX_APP_DATA_VALUE_BYTES } from '~/schemas/registry';
 
 // Per-(user, app) key/value storage for embedded apps — each entry is its own
 // atomic `things` doc (thingtime ['app-data'], crystal { appId, key, value }),
@@ -40,6 +38,29 @@ import {
 
 type Fail = { ok: false; status: number; error: string };
 const fail = (status: number, error: string): Fail => ({ ok: false, status, error });
+
+const storageMutationFail = (error: unknown): Fail | null => (error instanceof StorageMutationError ? fail(error.status, error.message) : null);
+
+const registeredStorageSize = (doc: any): number => {
+	const canonical = currentContentStorageSizeBytes(doc || {});
+	if (canonical === null) {
+		throw new StorageMutationError(
+			503,
+			'accounting_unavailable',
+			'This app-data entry requires the current storage migration before it can be changed'
+		);
+	}
+	return canonical;
+};
+
+// Throwing this from a transaction callback aborts all ledger reservations
+// before the outer bounded retry re-reads the winning content version.
+class AppDataWriteConflict extends Error {
+	constructor() {
+		super('App-data content changed during the write');
+		this.name = 'AppDataWriteConflict';
+	}
+}
 
 export type AppDataVisibility = 'private' | 'app';
 
@@ -63,8 +84,7 @@ export const sanitizeAppDataKey = (value: unknown): string | null => {
   return APP_DATA_KEY_RE.test(key) ? key : null;
 };
 
-const entryAcl = (doc: any): string[] =>
-  Array.isArray(doc.acl) && doc.acl.length ? doc.acl : [ACL_OWNER];
+const entryAcl = (doc: any): string[] => (Array.isArray(doc.acl) && doc.acl.length ? doc.acl : [ACL_OWNER]);
 
 const toEntry = (doc: any): AppDataEntry => {
   const acl = entryAcl(doc);
@@ -82,11 +102,7 @@ const toEntry = (doc: any): AppDataEntry => {
 // implementation + rationale in apps/namespace.ts resolveAppScopedAcl).
 export const resolveAppDataAcl = resolveAppScopedAcl;
 
-export const getAppData = async (
-  ownerId: string,
-  appId: string,
-  key: string
-): Promise<AppDataEntry | null> => {
+export const getAppData = async (ownerId: string, appId: string, key: string): Promise<AppDataEntry | null> => {
   const things = await getThingsCollection();
   const doc = await things.findOne({ thingtime: 'app-data', ownerId, 'crystal.appId': appId, 'crystal.key': key });
   return doc ? toEntry(doc) : null;
@@ -109,9 +125,7 @@ const decodeKeyCursor = (raw: string): string | null => {
 // prefix. Regex is built from an escaped literal, never raw user input. One
 // grammar for the private list and the shared feed.
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-const buildKeyFilter = (
-  params: { key?: string | null; prefix?: string | null }
-): Record<string, unknown> | null | Fail => {
+const buildKeyFilter = (params: { key?: string | null; prefix?: string | null }): Record<string, unknown> | null | Fail => {
   const rawKey = typeof params.key === 'string' ? params.key.trim() : '';
   const rawPrefix = typeof params.prefix === 'string' ? params.prefix.trim() : '';
   if (rawKey.endsWith('*')) return { $regex: `^${escapeRe(rawKey.slice(0, -1))}` };
@@ -132,7 +146,7 @@ export const listAppData = async (
   const limit = Math.min(MAX_PRIVATE_PAGE, Math.max(1, Math.floor(params.limit ?? MAX_PRIVATE_PAGE) || MAX_PRIVATE_PAGE));
 
   const keyFilter = buildKeyFilter(params);
-  if (keyFilter && 'ok' in keyFilter) return keyFilter;
+	if (keyFilter && (keyFilter as Fail).ok === false) return keyFilter as Fail;
 
   let afterKey: string | null = null;
   if (params.cursor) {
@@ -212,23 +226,28 @@ export const setAppData = async (
     sandbox: audience.sandbox ? { space: audience.sandboxSpace ?? null } : null
   };
 
-  // Byte allowances: every attempt reads the current stamped size, reserves a
-  // positive delta, then compare-and-swaps that exact size. A losing writer
-  // knows its write did not land and can safely compensate before retrying;
-  // shrinking writes refund only after an acknowledged swap. An ambiguous
-  // Mongo error deliberately keeps the reservation (conservative over-count)
-  // because refunding a write that may have landed could create free storage.
-  const newSize = appThingSizeBytes({ crystal: { appId, key, value } });
+	const createdSize = appThingSizeBytes({ crystal: { appId, key, value } });
+
+	// Sandboxes have no real account subscription ledger. Keep their existing
+	// ephemeral byte-window accounting and compensating-CAS path unchanged.
+	if (scope.sandbox) {
+		// Every attempt reads the current stamped size, reserves a positive delta,
+		// then compare-and-swaps that exact size. A losing writer knows its write
+		// did not land and can safely compensate before retrying; shrinking writes
+		// refund only after an acknowledged swap. An ambiguous Mongo error keeps
+		// the reservation because refunding a write that may have landed could
+		// create free storage.
   for (let attempt = 0; attempt < 5; attempt++) {
     const existing = await things.findOne(filter, {
       projection: { sizeBytes: 1, crystal: 1, extended: 1, tags: 1 }
     });
-    const oldSize = existing
-      ? typeof existing.sizeBytes === 'number'
-        ? existing.sizeBytes
-        : appThingSizeBytes(existing)
-      : 0;
-    const delta = newSize - oldSize;
+			const oldSize = existing ? (typeof existing.sizeBytes === 'number' ? existing.sizeBytes : appThingSizeBytes(existing)) : 0;
+			const nextSize = appThingSizeBytes({
+				crystal: { ...(existing?.crystal || {}), appId, key, value },
+				extended: existing?.extended,
+				tags: existing?.tags
+			});
+			const delta = nextSize - oldSize;
     if (delta > 0) {
       const charge = await chargeAppStorage(scope, delta);
       if (charge.ok === false) return charge;
@@ -236,11 +255,9 @@ export const setAppData = async (
 
     const now = new Date();
     if (existing) {
-      // Audience only changes when the write names one — a plain { key, value }
-      // update never silently flips a shared entry private (or vice versa).
-      // Root appId + sizeBytes ride every write, adopting pre-namespace docs on
-      // their first touch (sandbox TTL stamps are creation-only).
-      const set: Record<string, unknown> = { 'crystal.value': value, updatedAt: now, appId, sizeBytes: newSize };
+				// Audience only changes when the write names one — a plain
+				// { key, value } update never silently flips a shared entry private.
+				const set: Record<string, unknown> = { 'crystal.value': value, updatedAt: now, appId, sizeBytes: nextSize };
       if (resolved.acl) set.acl = resolved.acl;
       const expectedSize = Object.prototype.hasOwnProperty.call(existing, 'sizeBytes')
         ? { sizeBytes: existing.sizeBytes }
@@ -248,14 +265,10 @@ export const setAppData = async (
 
       let updated;
       try {
-        updated = await things.findOneAndUpdate(
-          { ...filter, _id: existing._id, ...expectedSize },
-          { $set: set },
-          { returnDocument: 'after' }
-        );
+					updated = await things.findOneAndUpdate({ ...filter, _id: existing._id, ...expectedSize }, { $set: set }, { returnDocument: 'after' });
       } catch (error) {
-        // The write result is ambiguous. Keep any positive reservation so an
-        // applied update can never exceed its ledgers; reconciliation can
+					// The write result is ambiguous. Keep any positive reservation so
+					// an applied update can never exceed its ledgers; reconciliation can
         // reclaim a reservation if Mongo did not apply it.
         throw error;
       }
@@ -281,9 +294,8 @@ export const setAppData = async (
       tags: [],
       createdAt: now,
       updatedAt: now,
-      // namespace stamp: root appId + sizeBytes, plus the ephemeral-sandbox
-      // TTL/space stamps so pretend data reaps itself with the token
-      ...appNamespaceStamp(scope, newSize)
+				// Namespace + TTL/space stamps make pretend data reap with the token.
+				...appNamespaceStamp(scope, createdSize)
     };
 
     try {
@@ -294,11 +306,100 @@ export const setAppData = async (
         // As above, an unknown insert result keeps its reservation.
         throw err;
       }
-      // A duplicate-key rejection proves our insert did not land, so this
-      // reservation can be compensated before reading the winner and retrying.
+				// A duplicate-key rejection proves our insert did not land.
       if (delta > 0) await refundAppStorage(scope, delta);
     }
   }
+
+		return fail(503, 'Storage is busy for this key — try again');
+	}
+
+	// Registered writes debit the whole-account, whole-app and app-user ledgers
+	// in the SAME transaction as the content mutation. A stale size CAS or a
+	// duplicate insert throws to abort every debit before the bounded retry.
+	for (let attempt = 0; attempt < 5; attempt++) {
+		try {
+			const entry = await withMongoTransaction(async (session) => {
+				const existing = await things.findOne(filter, {
+					projection: {
+						schemaVersion: 1,
+						thingtime: 1,
+						sizeBytes: 1,
+						storageClass: 1,
+						storageAccountingVersion: 1,
+						crystal: 1,
+						extended: 1,
+						tags: 1
+					},
+					session
+				});
+				const oldSize = existing ? registeredStorageSize(existing) : 0;
+				const nextSize = appThingSizeBytes({
+					crystal: { ...(existing?.crystal || {}), appId, key, value },
+					extended: existing?.extended,
+					tags: existing?.tags
+				});
+				const delta = nextSize - oldSize;
+
+				// One global lock order for every registered content mutation.
+				await applyUserStorageDelta(ownerId, delta, session);
+				await applyAppStorageDeltaTransaction(scope, delta, session);
+
+				const now = new Date();
+				if (existing) {
+					const set: Record<string, unknown> = {
+						'crystal.value': value,
+						updatedAt: now,
+						appId,
+						sizeBytes: nextSize,
+						storageClass: 'content',
+						storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION
+					};
+					if (resolved.acl) set.acl = resolved.acl;
+					const expectedSize = Object.prototype.hasOwnProperty.call(existing, 'sizeBytes')
+						? { sizeBytes: existing.sizeBytes }
+						: { sizeBytes: { $exists: false } };
+					const updated = await things.findOneAndUpdate(
+						{ ...filter, _id: existing._id, ...expectedSize },
+						{ $set: set },
+						{ returnDocument: 'after', session }
+					);
+					if (!updated) throw new AppDataWriteConflict();
+					return toEntry(updated);
+				}
+
+				const doc = {
+					shareId: randomUUID(),
+					schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+					thingtime: ['app-data'],
+					crystal: { appId, key, value },
+					ownerId,
+					acl: resolved.acl ?? [ACL_OWNER],
+					targetId: null,
+					tags: [],
+					createdAt: now,
+					updatedAt: now,
+					...appNamespaceStamp(scope, createdSize),
+					storageClass: 'content',
+					storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION
+				};
+
+				try {
+					await things.insertOne(doc as any, { session });
+				} catch (error: any) {
+					if (error?.code === 11000) throw new AppDataWriteConflict();
+					throw error;
+				}
+				return toEntry(doc);
+			});
+			return { ok: true, entry };
+		} catch (error) {
+			if (error instanceof AppDataWriteConflict) continue;
+			const storageFail = storageMutationFail(error);
+			if (storageFail) return storageFail;
+			throw error;
+		}
+	}
 
   return fail(503, 'Storage is busy for this key — try again');
 };
@@ -313,23 +414,66 @@ export const deleteAppData = async (
   if (!key) return fail(400, 'key is required');
 
   const things = await getThingsCollection();
-  const doc = await things.findOneAndDelete({ thingtime: 'app-data', ownerId, 'crystal.appId': appId, 'crystal.key': key });
-  if (doc) {
-    // refund the freed bytes (legacy pre-stamp docs re-measure on the way out)
-    const bytes = typeof doc.sizeBytes === 'number' ? doc.sizeBytes : appThingSizeBytes(doc);
-    await refundAppStorage(
-      {
+	const filter = { thingtime: 'app-data', ownerId, 'crystal.appId': appId, 'crystal.key': key };
+	const scope: AppNamespaceScope = {
         appId,
         ownerId,
         sharedRead: false,
         scopes: [],
         username: '',
         sandbox: sandbox.enabled ? { space: sandbox.space ?? null } : null
-      },
-      bytes
-    );
+	};
+
+	if (scope.sandbox) {
+		const doc = await things.findOneAndDelete(filter);
+		if (doc) {
+			// Keep the existing sandbox refund behavior (legacy pre-stamp docs
+			// re-measure on the way out).
+			const bytes = typeof doc.sizeBytes === 'number' ? doc.sizeBytes : appThingSizeBytes(doc);
+			await refundAppStorage(scope, bytes);
   }
   return { ok: true, deleted: !!doc };
+	}
+
+	for (let attempt = 0; attempt < 5; attempt++) {
+		try {
+			const doc = await withMongoTransaction(async (session) => {
+				const existing = await things.findOne(filter, {
+					projection: {
+						schemaVersion: 1,
+						thingtime: 1,
+						sizeBytes: 1,
+						storageClass: 1,
+						storageAccountingVersion: 1,
+						crystal: 1,
+						extended: 1,
+						tags: 1
+					},
+					session
+				});
+				if (!existing) return null;
+
+				const bytes = registeredStorageSize(existing);
+				await applyUserStorageDelta(ownerId, -bytes, session);
+				await applyAppStorageDeltaTransaction(scope, -bytes, session);
+
+				const expectedSize = Object.prototype.hasOwnProperty.call(existing, 'sizeBytes')
+					? { sizeBytes: existing.sizeBytes }
+					: { sizeBytes: { $exists: false } };
+				const deleted = await things.findOneAndDelete({ ...filter, _id: existing._id, ...expectedSize }, { session });
+				if (!deleted) throw new AppDataWriteConflict();
+				return deleted;
+			});
+			return { ok: true, deleted: !!doc };
+		} catch (error) {
+			if (error instanceof AppDataWriteConflict) continue;
+			const storageFail = storageMutationFail(error);
+			if (storageFail) return storageFail;
+			throw error;
+		}
+	}
+
+	return fail(503, 'Storage is busy for this key — try again');
 };
 
 // ---------------------------------------------------------------------------
@@ -388,7 +532,7 @@ export const listSharedAppData = async (
 
   // Same key/prefix grammar as the private list (buildKeyFilter above).
   const keyFilter = buildKeyFilter(params);
-  if (keyFilter && 'ok' in keyFilter) return keyFilter;
+	if (keyFilter && (keyFilter as Fail).ok === false) return keyFilter as Fail;
 
   const shared = appAclEntry(appId);
   const baseFilter: Record<string, unknown> = {
@@ -428,10 +572,7 @@ export const listSharedAppData = async (
   for (let pass = 0; pass < 4 && kept.length <= limit; pass++) {
     const cursorFilter = after
       ? {
-          $or: [
-            { updatedAt: { $lt: new Date(after.u) } },
-            { updatedAt: new Date(after.u), shareId: { $lt: after.s } }
-          ]
+					$or: [{ updatedAt: { $lt: new Date(after.u) } }, { updatedAt: new Date(after.u), shareId: { $lt: after.s } }]
         }
       : {};
     const batchSize = Math.max(limit + 1, 25);
@@ -446,9 +587,7 @@ export const listSharedAppData = async (
       break;
     }
 
-    const authorIds = [...new Set(docs.map((doc: any) => String(doc.ownerId)))].filter(
-      (id) => !authorScopes.has(id)
-    );
+		const authorIds: string[] = [...new Set<string>(docs.map((doc: any) => String(doc.ownerId)))].filter((id) => !authorScopes.has(id));
     if (viewer?.sandbox && !viewer.sandbox.space) {
       // The sandbox owner is by definition live (the viewer's own token).
       for (const id of authorIds) authorScopes.set(id, ['app-data.shared']);

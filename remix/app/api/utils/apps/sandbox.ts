@@ -35,8 +35,7 @@ export const SANDBOX_TOKEN_TTL_MS = 1000 * 60 * 60;
 
 export const SANDBOX_OWNER_PREFIX = 'sandbox:';
 
-export const isSandboxOwnerId = (id: unknown): boolean =>
-  typeof id === 'string' && id.startsWith(SANDBOX_OWNER_PREFIX);
+export const isSandboxOwnerId = (id: unknown): boolean => typeof id === 'string' && id.startsWith(SANDBOX_OWNER_PREFIX);
 
 // A space is a caller-chosen pool secret: 8–64 chars keeps casual collisions
 // ("test") from junking a stranger's demo feed while staying easy to mint
@@ -87,6 +86,17 @@ export const sandboxPublicUser = (ownerId: string, mintedAt: Date, username = 's
   emailVerificationRequiredBy: null,
   storageAllowanceBytes: null,
   storageUsedBytes: null,
+	storageRemainingBytes: null,
+	storageAccountingReady: false,
+	storage: {
+		usedBytes: 0,
+		allowanceBytes: null,
+		remainingBytes: null,
+		overageBytes: 0,
+		status: 'unavailable',
+		accountingVersion: null,
+		reconciledAt: null
+	},
   activeThemeId: null,
   activeFeedAlgorithmId: null,
   isAdmin: false

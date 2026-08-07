@@ -80,7 +80,6 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - **PR #69 final-review hardening round**: a multi-agent review of the unified
   /search + profile/feed branch surfaced a batch of merge-blocking issues, all
   fixed here — Claude (AI), 2026-07-17:
-
   - **Advanced filters no longer 400 + wipe results on numeric values**: the
     query builder's default `contains` operator coerced `4`/`true`/`null` to
     real types, which the server rejects for text-only operators, clearing the
@@ -132,6 +131,22 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   unrequested fallback search. — Claude (AI), 2026-07-16
 
 ### Changed
+
+- **One exact logical-byte accounting model across Thingtime**: account usage
+  now comes only from the protected subscription ledger and is enforced on
+  every supported customer-content writer in the same Mongo transaction as
+  the content. App data moves the account, whole-app, and per-app-user scope
+  counters from one canonical UTF-8 JSON measurement without double-counting
+  the account total. Legacy user usage values are ignored and removed during
+  the idempotent storage migration; explicit legacy allowances become real
+  overrides. APIs and UI now expose a canonical `storage` projection with
+  `ready`, `reconciling`, or `unavailable` status, preserve flat fields only as
+  derived compatibility aliases, show exact byte counts, and never present an
+  unavailable ledger as zero. Protected envelopes, transactional
+  reconciliation, full-source compare-and-swap migration, global lease
+  fencing, app lifecycle guards, and focused race/malformed-ledger tests close
+  the previously independent and bypassable counter paths. See PR #170's
+  detailed note in `PRs/`. — Codex (AI), 2026-08-07
 
 - **App-data now has real allowances at both scopes**: every registered app
   stores a server-owned 5 GiB aggregate allowance/usage counter plus a 50 MiB
