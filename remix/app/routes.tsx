@@ -19,7 +19,7 @@ import DocsConcepts from './routes/docs/concepts/index';
 import DocsDesign from './routes/docs/design';
 import DocsDesignSystem from './routes/docs/design-system/index';
 import DocsIndex from './routes/docs/index';
-import Edge from './routes/edge';
+import MigrationsRoute from './routes/migrations';
 import Feed from './routes/feed';
 import Index from './routes/_index';
 import Login from './routes/login';
@@ -128,9 +128,11 @@ export const router = createBrowserRouter([
           { path: 'schemas', element: <DocsSchemas /> }
         ]
       },
-      { path: 'edge', element: <Edge /> },
       { path: 'feed', element: <Feed /> },
       { path: 'login', element: <Login />, loader: requireGuest('/profile') },
+      // admin database-migrations console (Dev drawer → Migrations) — moved
+      // out of /docs/schemas into its own page
+      { path: 'migrations', element: <MigrationsRoute /> },
       {
         path: 'mongodb-status',
         element: <MongoStatusPage />,

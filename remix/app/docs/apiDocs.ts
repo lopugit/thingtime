@@ -1271,18 +1271,23 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'crypto',
     title: 'Crypto tools',
     endpoint: '/api/v1/crypto',
-    summary: 'Lists crypto standards and runs key generation, JWT verification, signature verification, and key matching helpers.',
-    detail: 'Use this route for Thingtime-compatible ES256 key workflows and diagnostics. POST bodies are intent-driven.',
+    summary:
+      'Lists crypto standards and runs key generation, JWT verification, signature verification, key matching, and password hashing helpers.',
+    detail:
+      'Use this route for Thingtime-compatible ES256 key workflows and diagnostics. POST bodies are intent-driven. intent: hash-password additionally turns a password into the exact bcrypt hash Thingtime stores (cost 10, the auth/passwords.ts settings) and returns a paste-ready mongosh snippet that writes it into a user — the manual recovery path for a database you own when the emailed reset flow is not an option. It is a PURE computation: no database is read or written, no account is looked up, and nothing about who exists is revealed. Because bcrypt is deliberately CPU-heavy, this intent is rate-limited per IP (crypto.hashPassword).',
     auth: {
       mode: 'none',
-      description: 'Public helper endpoint. Do not post private production secrets from untrusted clients.'
+      description:
+        'Public helper endpoint. Do not post private production secrets from untrusted clients. hash-password is deliberately anonymous (being locked out is the reason to use it) and never touches the database — writing the hash is a manual step you run against your own db.'
     },
     methods: ['GET', 'POST'],
     steps: [
       'GET the route to list supported standards and Thingtime auth compatibility.',
       'POST intent: generate-key-pair to create an ES256 key pair for development or integration setup.',
       'POST intent: verify-jwt, verify-signature, or match-key-pair with the required material for diagnostics.',
-      'Handle 400 responses for unsupported intents or invalid crypto input.'
+      'POST intent: hash-password with { password } (or { generate: true, length }) plus an optional username to template the snippet; the response hash is re-verified against its own input before it is returned.',
+      'Run the returned mongosh snippet against your database: things-era users keep passwordHash INSIDE the secure BinData blob, so it unpacks, edits, repacks and bumps secureVersion — a plain $set of passwordHash would write a field nothing reads.',
+      'Handle 400 responses for unsupported intents or invalid crypto input, and 429 when the hashing budget is exhausted.'
     ],
     requestExamples: [
       {
@@ -1295,6 +1300,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'Generate a development key pair.',
         method: 'POST',
         body: { intent: 'generate-key-pair', standard: 'ES256' }
+      },
+      {
+        name: 'Hash a password',
+        description: 'Hash a chosen password and template the rotate snippet for a user.',
+        method: 'POST',
+        body: { intent: 'hash-password', password: 'correct-horse-battery', username: 'ada-lovelace' }
+      },
+      {
+        name: 'Generate + hash',
+        description: 'Have a strong password generated, hashed, and echoed back once.',
+        method: 'POST',
+        body: { intent: 'hash-password', generate: true, length: 32, username: 'ada-lovelace' }
       }
     ],
     responseExamples: [
@@ -1304,10 +1321,38 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         body: { ok: true, standards: [{ value: 'ES256', label: 'ECDSA P-256 + SHA-256', thingtimeAuthCompatible: true }] }
       },
       {
+        status: 200,
+        description: 'Hashed password. `password` is echoed ONLY when the endpoint generated it.',
+        body: {
+          ok: true,
+          result: {
+            algorithm: 'bcrypt',
+            cost: 10,
+            hash: '$2b$10$…',
+            verified: true,
+            password: null,
+            generated: false,
+            meetsRegisterPolicy: true,
+            collections: { things: 'things_v2', users: 'users_v2' },
+            mongosh: '// Thingtime — set a user’s password hash by hand …'
+          }
+        }
+      },
+      {
         status: 400,
-        description: 'Unknown intent.',
+        description: 'Unknown intent, or hash-password called with no password and generate unset.',
         body: { ok: false, error: 'Unknown crypto action.' }
+      },
+      {
+        status: 429,
+        description: 'Hashing budget exhausted (bcrypt is CPU-heavy).',
+        body: { ok: false, error: 'Hashing is CPU-heavy — take a breather 🌸' }
       }
+    ],
+    notes: [
+      'The hash is self-verified before return: a value that would not authenticate can never be handed out.',
+      'A manual rotation does NOT revoke existing sessions — clear them separately if that matters.',
+      'Passwords are never logged or persisted by this endpoint; a supplied password is not echoed back.'
     ]
   }),
   endpoint({

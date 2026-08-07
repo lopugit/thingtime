@@ -2,9 +2,30 @@
 
 Run the checklist for every area a PR touches, in a live browser against the
 local dev stack (`npm run web-pms`, worktree stacks get their own port trio —
-see `AGENTS.md`). Each list is the distilled regression history of that area:
+see `AI_ALL.md`). Each list is the distilled regression history of that area:
 every line exists because it broke once. Add a line whenever a new bug class
 is fixed, and cite the checklist you ran in the PR description.
+
+## Canonical AI instruction links (`AI_ALL.md`)
+
+- [ ] Root `AGENTS.md` and `CLAUDE.md` are relative symlinks whose target is
+      exactly `AI_ALL.md`.
+- [ ] `cmp -s AI_ALL.md AGENTS.md` and `cmp -s AI_ALL.md CLAUDE.md` both pass,
+      and root `CODEX.md` is absent.
+- [ ] In a fresh Git checkout, `git ls-files -s AGENTS.md CLAUDE.md` reports
+      mode `120000` for both links and both still resolve to `AI_ALL.md`.
+
+## Worktree dependency bootstrap (`remix/scripts/ensure-dependencies.js`)
+
+- [ ] In a fresh linked worktree with no copied `node_modules`, run
+      `npm run worktree-setup`: every direct Remix dependency is linked and
+      `npm --prefix remix run ensure-deps -- --check` passes.
+- [ ] With the pnpm virtual store present but top-level `eslint` and `vite`
+      links removed, run `npm run worktree-setup`: both links are restored
+      without copying dependency files from another checkout.
+- [ ] Run `npm run worktree-setup` again: it exits successfully without
+      reinstalling, then `corepack pnpm --dir remix run lint:files --
+      scripts/ensure-dependencies.js scripts/dev.mjs` starts ESLint normally.
 
 ## Composer — Thingtime tab (`remix/app/components/Feed/PostComposer.tsx`)
 
@@ -648,19 +669,20 @@ re-checks the whole management plane end-to-end:
       (drop `things_v2`'s `ownerId_1_crystal.appId_1_crystal.key_1` unique
       index, insert two docs sharing `(ownerId, crystal.appId, crystal.key)`),
       start a FRESH API process → the boot-time warmup run logs one
-      `[mongodb] ensureIndexes failed building things.<index> — retrying in 60s`
-      line naming the broken index. The cold-start PR moved the battery off
-      the request path, so ordinary API traffic neither retries it nor logs;
-      the awaited callers (`registerUser`, admin migrations) surface the
-      cached failure fast instead of re-running the battery.
-- [ ] Failure is cached with a cooldown, not retried per caller: register
-      attempts inside the same 60s window add NO new `[mongodb]` lines and run
-      no fresh ~60-command createIndex battery (the old reset-to-null re-ran
-      it per caller — a retry storm on top of the fail-open).
-- [ ] Self-heals after cleanup: delete the dup docs, then restart the dev
-      process — or wait out the 60s cooldown and hit an ensureIndexes caller
-      (register a user / run an admin migration) → no new error lines, the
-      unique index is rebuilt (`getIndexes()` shows it).
+      line beginning `[mongodb] ensureIndexes failed building things.<index>`
+      and saying the next bootstrap call will retry. The cold-start PR moved
+      the battery off the request path, so ordinary API traffic neither retries
+      it nor logs; only the awaited bootstrap callers (`registerUser`, admin
+      migrations) can trigger another attempt.
+- [ ] In-flight work is shared, but failures are retryable immediately: while
+      one ensureIndexes battery is running, concurrent bootstrap callers await
+      that same promise; after it fails, the next explicit bootstrap caller
+      starts one fresh attempt instead of inheriting a rejected promise for a
+      fixed cooldown.
+- [ ] Self-heals after cleanup: delete the duplicate docs, then hit an awaited
+      ensureIndexes caller (register a user / run an admin migration) or restart
+      the process → the unique index is rebuilt immediately (`getIndexes()`
+      shows it) and no stale cooldown blocks the recovered database.
 - [ ] Limiter outage is AUDIBLE, never silent: with the limiter's own DB ops
       failing (e.g. Mongo down/unreachable), a limited endpoint logs
       `[rate-limit] enforcement unavailable for <rule> — failing open` per
@@ -668,3 +690,35 @@ re-checks the whole management plane end-to-end:
       error), `failClosed` routes return the 429 unavailable shape. Regression
       class: a bare `catch {}` fail-open invisibly disabled ALL rate limiting
       (2026-07 perf audit).
+
+## Password hasher (`/crypto` Password Hasher panel, `api/utils/crypto/passwordHasher.server.ts`)
+
+- [ ] `/crypto` → Password Hasher: enter a username + password → the panel
+      shows a VERIFIED badge, `bcrypt cost 10`, the `$2b$10$…` hash, and a
+      mongosh snippet templated with that username. A supplied password is
+      NEVER echoed back in the response; only a generated one is.
+- [ ] "Generate a strong one" + a length (12–64) returns a password shown
+      exactly once ("save it now") whose hash verifies against it — check
+      independently with `bcrypt.compare` if in doubt.
+- [ ] The hash is self-verified server-side before return (`verified: true`);
+      a password under 6 chars still hashes but is flagged (register's
+      minimum), because an existing account may predate any policy.
+- [ ] END-TO-END (the point of the tool): register a throwaway user via the
+      real API, hash a NEW password, run the returned snippet VERBATIM in
+      mongosh, then log in — the new password works and the old one is
+      rejected. The snippet must report `things: matched 1, modified 1`.
+- [ ] Blob integrity: after the snippet runs, the user's `secure` BinData
+      blob still holds email / accountKind / emailVerified / meta, and
+      `secureVersion` incremented by 1 (matching the app's CAS write). A
+      plain `$set: { passwordHash }` on a things-era user writes a field
+      NOTHING reads — the snippet must unpack → edit → repack instead.
+- [ ] Snippet handles both stores and a miss: an unknown username reports
+      "No user named …" AND lists the usernames that do exist, instead of
+      silently modifying 0 docs.
+- [ ] Collection names in the snippet come from `physicalCollectionName()`
+      (currently `things_v2` / `users_v2`) — never hardcoded, so a version
+      bump can't hand out a snippet that edits a frozen generation.
+- [ ] Rate limited per IP (`crypto.hashPassword`, 20/min): bcrypt is the CPU
+      cost, so a burst past the limit 429s with the hashing message. The
+      intent stays ANONYMOUS on purpose — being locked out is the reason to
+      reach for it — and never reads or writes the database.
