@@ -496,7 +496,8 @@ jobs:
             When you are done, every file you could confidently resolve should have no
             conflict markers left, and you should have touched nothing else.
           claude_args: |
-            --model claude-opus-4-8
+            --model claude-fable-5
+            --effort max
             --max-turns 80
             --allowedTools "Read,Grep,Glob,Edit,Write"
             --disallowedTools "WebFetch,WebSearch,Bash,Edit(.gitattributes),Write(.gitattributes),Edit(**/.gitattributes),Write(**/.gitattributes),Read(./.git/**),Edit(./.git/**),Write(./.git/**),Read(**/.git/**),Edit(**/.git/**),Write(**/.git/**),Read(/proc/**),Edit(/proc/**),Write(/proc/**),Read(/home/runner/work/_temp/**),Edit(/home/runner/work/_temp/**),Write(/home/runner/work/_temp/**),Read(/home/runner/.gitconfig*),Edit(/home/runner/.gitconfig*),Write(/home/runner/.gitconfig*),Edit(/home/runner/.config/git/**),Write(/home/runner/.config/git/**)"

@@ -119,6 +119,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Changed
 
+- **PR conflict resolution now runs on Claude Fable 5 at max effort**:
+  `resolve-pr-conflicts.yml` pins the resolution agent to
+  `claude-fable-5` with `--effort max`, replacing Opus 4.8 while leaving the
+  separate graphify semantic-refresh model unchanged. — Codex (AI), 2026-08-07
+
 - **Repository AI guidance now has one canonical source**: unique rules from
   the former root `AGENTS.md`, `CLAUDE.md`, and `CODEX.md` now live in
   `AI_ALL.md`; the standard Codex and Claude filenames are relative symlinks to
