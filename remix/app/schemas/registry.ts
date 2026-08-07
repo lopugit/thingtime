@@ -221,6 +221,20 @@ export const MAX_APP_DATA_VALUE_BYTES = 32 * 1024;
 export const DEFAULT_APP_STORAGE_ALLOWANCE_BYTES = 5 * 1024 * 1024 * 1024;
 export const DEFAULT_APP_USER_STORAGE_ALLOWANCE_BYTES = 50 * 1024 * 1024;
 export const APP_STORAGE_ACCOUNTING_VERSION = 1;
+// Root marker for the server-only app-user ledger envelope. Unlike the old
+// `data` shape, generic Thing sanitizers never copy this field, so a hot path
+// can distinguish canonical accounting authority from a historical/user-
+// editable occupant at the same deterministic id.
+export const APP_STORAGE_LEDGER_ENVELOPE_VERSION = 1;
+// Per-(app,user) accounting Things use deterministic ids under this namespace.
+// Generic Thing creation must reserve it so an end user cannot pre-claim a
+// future counter id (including another user's globally-unique shareId).
+export const APP_STORAGE_RESERVED_ID_PREFIX = 'app-storage-';
+export const USER_STORAGE_ACCOUNTING_VERSION = 1;
+// Root proof for the server-only user subscription/account-storage ledger.
+// Generic Thing input never copies this marker; exact identity checks also
+// reject extra root/crystal payload before any counter is rendered or mutated.
+export const USER_STORAGE_LEDGER_ENVELOPE_VERSION = 1;
 export const SANDBOX_STORAGE_BYTES = 5 * 1024 * 1024;
 // Live app sessions one user can hold for one app: re-approvals mint fresh
 // sessions, so without a cap a re-running embed accumulates grants without
@@ -336,6 +350,28 @@ const rootThingSchema: ThingtimeSchema = {
       description: 'shareId of the thing this thing is about (comment → post, reaction → post, share → root post).'
     },
     { name: 'tags', type: 'string[]', required: true, max: 12, description: 'Lowercased tags, max 12 × 40 chars.' },
+		{
+			name: 'sizeBytes',
+			type: 'number',
+			required: false,
+			system: true,
+			description: 'Exact UTF-8 JSON bytes of the billable crystal, extended, and tags payload; absent on platform control-plane Things.'
+		},
+		{
+			name: 'storageClass',
+			type: 'string',
+			required: false,
+			system: true,
+			description:
+				'Server-owned allocation class: content contributes sizeBytes to its owner account ledger; control identifies protected platform bookkeeping and never trusts user-authored crystal metadata.'
+		},
+		{
+			name: 'storageAccountingVersion',
+			type: 'number',
+			required: false,
+			system: true,
+			description: 'Version of the logical byte projection used for sizeBytes.'
+		},
     { name: 'createdAt', type: 'date', required: true, system: true, description: 'Creation time.' },
     { name: 'updatedAt', type: 'date', required: true, system: true, description: 'Last mutation time.' }
   ],
@@ -695,7 +731,7 @@ const saveThingSchema: ThingtimeSchema = {
 
 const subscriptionSchema: ThingtimeSchema = {
   id: 'subscription',
-  version: 2,
+	version: 3,
   kind: 'crystal',
   collection: null,
   title: 'Subscription',
@@ -707,7 +743,8 @@ const subscriptionSchema: ThingtimeSchema = {
     'assignment snapshots an immutable subscription-tier version id + version so a later publish/archive ' +
     'never changes the plan someone originally selected. The tier supplies default quotas; per-field admin overrides win, with null meaning ' +
     'unlimited. payg is the metered tier: no hard caps, usage is measured by the byte ledgers and billed. ' +
-    'Enforcement (app storage budgets, app/PAT mint caps) resolves through the merged "effective" quotas.',
+		'The same protected Thing is the authoritative whole-account byte ledger, keeping the userStorageBytes ' +
+		'entitlement and storageUsedBytes admission counter together in one atomic document. Enforcement (account/app storage budgets, app/PAT mint caps) resolves through the merged "effective" quotas.',
   fields: [
     { name: 'quotaKind', type: 'string', required: true, values: ['subscription'], description: 'Bookkeeping marker (like the app-storage ledger).' },
     {
@@ -729,7 +766,29 @@ const subscriptionSchema: ThingtimeSchema = {
       description: 'Per-field user quota overrides (userStorageBytes, maxApps, maxPats; null = unlimited).'
     },
     { name: 'note', type: 'string', required: false, max: 500, description: 'Admin note (why this assignment exists).' },
-    { name: 'updatedBy', type: 'id', required: false, description: 'The admin who last changed it.' }
+		{ name: 'updatedBy', type: 'id', required: false, description: 'The admin who last changed it.' },
+		{
+			name: 'storageUsedBytes',
+			type: 'number',
+			required: true,
+			min: 0,
+			description: 'Canonical whole-account logical content bytes currently used.'
+		},
+		{
+			name: 'storageAccountingVersion',
+			type: 'number',
+			required: true,
+			min: 1,
+			description: 'Version of the byte projection and ledger contract; positive writes fail closed until initialized.'
+		},
+		{
+			name: 'storageLedgerStatus',
+			type: 'enum',
+			required: true,
+			values: ['initializing', 'ready', 'needs-reconcile'],
+			description: 'Ready admits growth; other states block growth while source-document reconciliation runs.'
+		},
+		{ name: 'storageReconciledAt', type: 'date', required: false, description: 'Last exact reconciliation from content size stamps.' }
   ],
   example: {
     quotaKind: 'subscription',
@@ -739,6 +798,9 @@ const subscriptionSchema: ThingtimeSchema = {
     tierVersionId: 'subscription-tier-pro-v1',
     tierVersion: 1,
     overrides: { userStorageBytes: 21474836480 },
+		storageUsedBytes: 1048576,
+		storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION,
+		storageLedgerStatus: 'ready',
     note: 'Beta partner'
   }
 };
@@ -840,6 +902,46 @@ const appStorageLedgerSchema: ThingtimeSchema = {
     }
   ],
   example: { quotaKind: 'app-storage', appId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', usedBytes: 1048576, storageAllowanceBytes: 209715200 }
+};
+
+const serviceQuotaSchema: ThingtimeSchema = {
+	id: 'service-quota',
+	version: 1,
+	kind: 'crystal',
+	collection: null,
+	title: 'Service quota ledger',
+	summary: 'Protected rate/admission accounting for one user-owned service capability.',
+	detail:
+		'One deterministic server-owned Thing per (user, service key). Dedicated quota endpoints ' +
+		'atomically reserve, permit, release, and reset capacity. The generic Things API cannot create ' +
+		'or edit this protected kind, and the root storageClass is control so these operational counters ' +
+		'never inflate customer content usage. Legacy data-kind quota records are promoted on first use ' +
+		'and by the whole-account storage migration.',
+	createdVia: 'Dedicated service quota utilities',
+	fields: [
+		{ name: 'quotaKind', type: 'string', required: true, values: ['service-quota'], description: 'Protected bookkeeping marker.' },
+		{ name: 'quotaVersion', type: 'number', required: true, min: 1, description: 'Service quota state-machine version.' },
+		{ name: 'key', type: 'string', required: true, description: 'Server-selected capability key.' },
+		{ name: 'policy', type: 'record', required: true, description: 'Pinned daily and rolling-window limits.' },
+		{ name: 'dayKey', type: 'string', required: true, description: 'Current UTC accounting day.' },
+		{ name: 'dailyUsed', type: 'number', required: true, min: 0, description: 'Reserved capacity for the current UTC day.' },
+		{ name: 'reservations', type: 'object', required: true, description: 'Bounded idempotent reservation records.' },
+		{ name: 'permitIds', type: 'string[]', required: true, description: 'Granted rolling-window permit ids.' },
+		{ name: 'releasedIds', type: 'string[]', required: true, description: 'Released idempotency keys.' },
+		{ name: 'rollingPermits', type: 'object', required: true, description: 'Permit ids and timestamps still inside the rolling window.' }
+	],
+	example: {
+		quotaKind: 'service-quota',
+		quotaVersion: 1,
+		key: 'map-blocks',
+		policy: { dailyLimit: 1000, rollingLimit: 20, rollingWindowMs: 60000 },
+		dayKey: '2026-08-07',
+		dailyUsed: 12,
+		reservations: [],
+		permitIds: [],
+		releasedIds: [],
+		rollingPermits: []
+	}
 };
 
 const accountLinkSchema: ThingtimeSchema = {
@@ -1165,18 +1267,22 @@ const appDataSchema: ThingtimeSchema = {
 // uniqueness rides the root `uniqueKeys` array (multikey unique sparse index;
 // BinData elements, PII keys hashed).
 
-// Subscription tiers/assignments, account links, and app-storage are control-plane
-// kinds (pricing, quota assignments, ownership links, and byte ledgers). Editing any through
-// generic CRUD would be privilege escalation or quota bypass.
+// Registered apps, subscription tiers/assignments, account links, app-storage,
+// and service quotas are control-plane kinds (credentials/origin allowlists,
+// pricing, quota assignments, ownership links, and admission ledgers). Editing
+// any through generic CRUD would be privilege escalation, credential forgery,
+// or a quota bypass.
 export const PROTECTED_THINGTIME = [
   'user',
   'theme',
   'feed-algorithm',
   'waitlist',
+	'app',
   'subscription-tier',
   'subscription',
   'account-link',
-  'app-storage'
+	'app-storage',
+	'service-quota'
 ] as const;
 export const isProtectedThingtime = (ids: string[]): boolean => ids.some((id) => (PROTECTED_THINGTIME as readonly string[]).includes(id));
 
@@ -1293,6 +1399,7 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   subscriptionSchema,
   accountLinkSchema,
   appStorageLedgerSchema,
+	serviceQuotaSchema,
   // system kinds (collections collapsing into things — dual-era)
   userThingSchema,
   themeThingSchema,
@@ -1383,7 +1490,7 @@ const sanitizePostCrystal = (input: Record<string, unknown>, appliedIds: string[
         return fail(400, 'Thingtime posts need a thing — an object with at least one field 🌀');
       }
       const sanitized = sanitizeDataValue(raw, { path: 'thing', depth: 2 });
-      if (!sanitized.ok) return sanitized;
+			if (sanitized.ok === false) return sanitized;
       thing = sanitized.value as Record<string, unknown>;
     }
     if (!isShare && (!thing || !Object.keys(thing).length)) {
@@ -1553,7 +1660,7 @@ const sanitizeDataValue = (
 
 const sanitizeDataCrystal = (input: Record<string, unknown>): { ok: true; crystal: Record<string, unknown> } | Fail => {
   const sanitized = sanitizeDataValue(input);
-  if (!sanitized.ok) return sanitized;
+	if (sanitized.ok === false) return sanitized;
   return { ok: true, crystal: sanitized.value as Record<string, unknown> };
 };
 

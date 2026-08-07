@@ -2,7 +2,7 @@ import React from 'react';
 import { Badge, Box, Button, Flex, Heading, Text } from '@chakra-ui/react';
 import { useNavigate, useSearchParams } from 'react-router';
 
-import { formatBytes } from './ConnectedAppsSection';
+import { appDataStorageLabel } from './ConnectedAppsSection';
 import type { AppDataRow } from './ConnectedAppsSection';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
@@ -74,16 +74,7 @@ const EntryCard = ({
           {new Date(thing.updatedAt).toLocaleString()}
         </Text>
       </Flex>
-      <Box
-        as="pre"
-        fontSize="xs"
-        fontFamily="mono"
-        whiteSpace="pre-wrap"
-        wordBreak="break-word"
-        maxHeight="14em"
-        overflowY="auto"
-        opacity={0.85}
-      >
+			<Box as="pre" fontSize="xs" fontFamily="mono" whiteSpace="pre-wrap" wordBreak="break-word" maxHeight="14em" overflowY="auto" opacity={0.85}>
         {preview}
       </Box>
       {mine && onDelete && (
@@ -106,9 +97,7 @@ export const AppsDataPage = () => {
   const selected = (params.get('app') || '').trim() || null;
 
   const cacheKey = user ? `tt-app-data-${user.id}` : null;
-  const [apps, setApps] = React.useState<AppDataRow[]>(() =>
-    cacheKey ? (readLocalCache<AppDataRow[]>(cacheKey) ?? []) : []
-  );
+	const [apps, setApps] = React.useState<AppDataRow[]>(() => (cacheKey ? (readLocalCache<AppDataRow[]>(cacheKey) ?? []) : []));
   const [appsLoaded, setAppsLoaded] = React.useState(false);
 
   const [tab, setTab] = React.useState<'stored' | 'appview'>('stored');
@@ -149,9 +138,7 @@ export const AppsDataPage = () => {
       setAppViewError(null);
       try {
         const result =
-          mode === 'stored'
-            ? await listApi({ appId, cursor: cursor || undefined })
-            : await sharedApi({ appId, cursor: cursor || undefined });
+					mode === 'stored' ? await listApi({ appId, cursor: cursor || undefined }) : await sharedApi({ appId, cursor: cursor || undefined });
         if (result?.ok) {
           setEntries((current) => (cursor ? [...current, ...(result.things || [])] : result.things || []));
           setNextCursor(result.nextCursor || null);
@@ -248,16 +235,7 @@ export const AppsDataPage = () => {
 
   return (
     <Flex {...pageShell}>
-      <Flex
-        width="100%"
-        maxWidth="60em"
-        flexDirection={{ base: 'column', md: 'row' }}
-        gap={6}
-        alignItems="flex-start"
-        px={4}
-        py={6}
-        pb={12}
-      >
+			<Flex width="100%" maxWidth="60em" flexDirection={{ base: 'column', md: 'row' }} gap={6} alignItems="flex-start" px={4} py={6} pb={12}>
         <Box width={{ base: '100%', md: '18em' }} flexShrink={0}>
           <Heading size="md" mb={1}>
             App data 📦
@@ -288,8 +266,7 @@ export const AppsDataPage = () => {
                 {!app.appName && <Badge fontSize="0.6em">orphaned</Badge>}
               </Flex>
               <Text fontSize="xs" opacity={0.65}>
-                {app.entryCount} {app.entryCount === 1 ? 'entry' : 'entries'} · {formatBytes(app.usedBytes)} of{' '}
-                {app.budgetBytes === null ? 'unlimited' : formatBytes(app.budgetBytes)}
+								{appDataStorageLabel(app)}
               </Text>
             </Box>
           ))}
@@ -317,8 +294,8 @@ export const AppsDataPage = () => {
 
               {tab === 'appview' && (
                 <Text fontSize="xs" opacity={0.65} mb={3}>
-                  Exactly what this app can see right now, through your own grant — your entries plus anything other
-                  users of the app shared with its circle.
+									Exactly what this app can see right now, through your own grant — your entries plus anything other users of the app shared with its
+									circle.
                 </Text>
               )}
               {tab === 'appview' && appViewError && (

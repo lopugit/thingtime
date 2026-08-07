@@ -1,6 +1,6 @@
 import { signJwt, verifyJwt } from '../auth/jwt';
 import { createSession, getLiveSession } from '../auth/sessions';
-import { findUserById, toPublicUser } from '../auth/users';
+import { findUserById, toPublicUserWithStorage } from '../auth/users';
 import type { PublicUser } from '../auth/users';
 import { getSessionsCollection } from '../mongodb/collections';
 import { appAllowsOrigin, appIsRevoked, findAppByClientId } from './apps';
@@ -68,10 +68,7 @@ export const issueAppToken = async (
     .sort({ createdAt: -1 })
     .limit(MAX_APP_SESSIONS_PER_APP_USER)
     .toArray();
-  await sessions.updateMany(
-    { ...liveForApp, jti: { $nin: keep.map((doc: any) => doc.jti) } },
-    { $set: { revokedAt: new Date() } }
-  );
+	await sessions.updateMany({ ...liveForApp, jti: { $nin: keep.map((doc: any) => doc.jti) } }, { $set: { revokedAt: new Date() } });
 
   return { token, tokenType: 'Bearer', expiresAt, scopes, sharedThings };
 };
@@ -143,12 +140,10 @@ export const resolveAppToken = async (request: Request): Promise<AppTokenContext
   const user = await findUserById(claims.sub);
   if (!user) return null;
 
-  const sharedThings = Array.isArray(session.meta?.sharedThings)
-    ? session.meta.sharedThings.filter((id: unknown) => typeof id === 'string')
-    : [];
+	const sharedThings = Array.isArray(session.meta?.sharedThings) ? session.meta.sharedThings.filter((id: unknown) => typeof id === 'string') : [];
 
   return {
-    user: toPublicUser(user),
+		user: await toPublicUserWithStorage(user),
     clientId,
     origin,
     jti: claims.jti,

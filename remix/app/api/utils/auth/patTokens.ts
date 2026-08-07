@@ -4,7 +4,7 @@ import { isKnownPatScope, patScopeCovers } from './patScopes';
 import { signJwt, verifyJwt } from './jwt';
 import { createSession, getLiveSession } from './sessions';
 import type { SessionDoc } from './sessions';
-import { findUserById, toPublicUser } from './users';
+import { findUserById, toPublicUserWithStorage } from './users';
 import type { PublicUser } from './users';
 import { getSessionsCollection } from '../mongodb/collections';
 import { getSubscription } from '../subscriptions/subscriptions';
@@ -188,17 +188,11 @@ const PAT_LIST_MAX = 2000;
 
 export const listPatTokens = async (userId: string): Promise<PublicPatToken[]> => {
   const sessions = await getSessionsCollection();
-  const docs = await sessions
-    .find({ userId, purpose: 'pat' })
-    .sort({ createdAt: -1 })
-    .limit(PAT_LIST_MAX)
-    .toArray();
+	const docs = await sessions.find({ userId, purpose: 'pat' }).sort({ createdAt: -1 }).limit(PAT_LIST_MAX).toArray();
   return docs.map((doc: any) => toPublicPatToken(doc));
 };
 
-export type RevokePatResult =
-  | { ok: false; status: number; error: string }
-  | { ok: true; token: PublicPatToken };
+export type RevokePatResult = { ok: false; status: number; error: string } | { ok: true; token: PublicPatToken };
 
 // Revoke is owner-bound (userId in the filter) and idempotent. Never-expiring
 // tokens get a reap date on revoke so the TTL index eventually clears the doc
@@ -254,9 +248,7 @@ export type PatContext = {
 
 export type ThingsActor = { user: PublicUser | null; pat: PatContext | null };
 
-export type ThingsActorResult =
-  | { ok: true; actor: ThingsActor }
-  | { ok: false; status: number; error: string };
+export type ThingsActorResult = { ok: true; actor: ThingsActor } | { ok: false; status: number; error: string };
 
 // Resolve who is calling a things-family route: a full session (cookie or
 // Bearer — pat: null, no scope limits), a PAT (Bearer only — must cover the
@@ -264,10 +256,7 @@ export type ThingsActorResult =
 // credentials degrade to anonymous exactly like getCurrentUser, so browser
 // tabs with stale cookies keep their logged-out UX; PAT-specific failures the
 // caller can act on (missing scope, uses exhausted) return explicit errors.
-export const resolveThingsActor = async (
-  request: Request,
-  scope: string | string[]
-): Promise<ThingsActorResult> => {
+export const resolveThingsActor = async (request: Request, scope: string | string[]): Promise<ThingsActorResult> => {
   const anonymous: ThingsActorResult = { ok: true, actor: { user: null, pat: null } };
 
   const token = await getAuthToken(request);
@@ -309,7 +298,7 @@ export const resolveThingsActor = async (
     return {
       ok: true,
       actor: {
-        user: toPublicUser(userDoc),
+				user: await toPublicUserWithStorage(userDoc),
         pat: {
           jti: session.jti,
           name: typeof session.meta?.name === 'string' ? session.meta.name : 'API token',
@@ -326,7 +315,7 @@ export const resolveThingsActor = async (
   // Full browser/service session — the normal path, no scope limits.
   const userDoc = await findUserById(claims.sub);
   if (!userDoc || !serviceAccountAuthenticationAllowed(userDoc)) return anonymous;
-  return { ok: true, actor: { user: toPublicUser(userDoc), pat: null } };
+	return { ok: true, actor: { user: await toPublicUserWithStorage(userDoc), pat: null } };
 };
 
 export type PatIntrospection =
@@ -360,10 +349,13 @@ export const resolvePatIntrospection = async (request: Request): Promise<PatIntr
     return { ok: false, status: 401, error: 'Token is invalid, expired, or revoked' };
   }
 
-  const user = toPublicUser(userDoc);
   return {
     ok: true,
     token: toPublicPatToken(session as SessionDoc),
-    user: { id: user.id, username: user.username, displayName: user.displayName }
+		user: {
+			id: String(userDoc._id),
+			username: userDoc.username,
+			displayName: typeof userDoc.displayName === 'string' ? userDoc.displayName : null
+		}
   };
 };

@@ -35,7 +35,7 @@ import { useApi } from '~/hooks/useApi';
 
 const FIELD_LABELS: Record<keyof TierQuotas, { label: string; unit: 'bytes' | 'count' }> = {
   appStorageBytes: { label: 'Whole-app storage', unit: 'bytes' },
-  userStorageBytes: { label: 'User storage allowance', unit: 'bytes' },
+	userStorageBytes: { label: 'Whole-account storage allowance', unit: 'bytes' },
   maxApps: { label: 'Max registered apps', unit: 'count' },
   maxPats: { label: 'Max personal access tokens', unit: 'count' }
 };

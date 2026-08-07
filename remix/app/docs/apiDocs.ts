@@ -153,11 +153,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     summary: 'The /admin Users tab: users with subscription tier, quotas, storage usage, and app/token counts (admin only).',
     detail:
       'Enriches the admin user search with everything the management dashboard shows per user: subscription ' +
-      '(tier, admin overrides, effective quotas, metered flag), storage (allowance, used, and the live sum of ' +
-      'their app-namespace byte ledgers), and counts (registered apps, co-managed apps, owned accounts, PATs, ' +
+			'(tier, admin overrides, effective quotas, metered flag), canonical account storage (allowance, exact ' +
+			'logical bytes used, remaining/overage, accounting status/version/reconciliation time), and the exact ' +
+			'app-namespace subset of that same total, plus counts (registered apps, co-managed apps, owned accounts, PATs, ' +
       'connected apps with a live grant). ?q= searches by username/email; limit selects a bounded 1–200 row ' +
       'keyset page (default 20). When nextCursor is non-null, pass it back unchanged with the same q to continue. ' +
-      'totalCapped remains an alias for whether another page exists.',
+			'totalCapped remains an alias for whether another page exists. Flat used-byte aliases and appNamespaceBytes ' +
+			'are null until the canonical account ledger is ready; storage.status is the authoritative readiness signal.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['GET'],
     steps: [
@@ -184,8 +186,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
               createdAt: '2026-08-05T00:00:00.000Z',
               isAdmin: false,
               accountKind: 'user',
-              storageAllowanceBytes: null,
-              storageUsedBytes: 0,
+							storage: {
+								usedBytes: 1048576,
+								allowanceBytes: 524288000,
+								remainingBytes: 523239424,
+								overageBytes: 0,
+								status: 'ready',
+								accountingVersion: 1,
+								reconciledAt: '2026-08-05T00:00:00.000Z'
+							},
+							storageAllowanceBytes: 524288000,
+							storageUsedBytes: 1048576,
               appNamespaceBytes: 1048576,
               subscription: {
                 tier: 'free',
@@ -453,9 +464,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
             { id: 'pro', versionId: 'subscription-tier-pro-v1', version: 1, status: 'live', title: 'Pro' },
             { id: 'payg', versionId: 'subscription-tier-payg-v1', version: 1, status: 'live', title: 'Pay as you go' }
           ],
-          drafts: [
-            { id: 'studio-a1b2c3d4', versionId: 'subscription-tier-studio-a1b2c3d4-v1', version: 1, status: 'draft', title: 'Studio' }
-          ],
+					drafts: [{ id: 'studio-a1b2c3d4', versionId: 'subscription-tier-studio-a1b2c3d4-v1', version: 1, status: 'draft', title: 'Studio' }],
           archived: []
         }
       },
@@ -922,7 +931,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     methods: ['GET'],
     steps: [
       'Send a GET request with credentials or an Authorization bearer token.',
-      'Read user for account id, username, email verification, service-account shape, and storage allowance.',
+			'Read user.storage for the canonical exact account-byte usage, allowance, remaining/overage, and reconciliation status.',
+			'Treat the legacy flat used/remaining aliases as nullable compatibility fields; they are populated only when user.storage.status is ready.',
       'If user is null, prompt for login or continue in anonymous mode.',
       'Do not expect password hashes, raw session documents, or JWTs in this response.'
     ],
@@ -949,7 +959,19 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
             email: 'service@example.com',
             emailVerified: true,
             accountKind: 'service',
-            storageAllowanceBytes: 5368709120
+						storageAllowanceBytes: 5368709120,
+						storageUsedBytes: 2941120,
+						storageRemainingBytes: 5365768000,
+						storageAccountingReady: true,
+						storage: {
+							usedBytes: 2941120,
+							allowanceBytes: 5368709120,
+							remainingBytes: 5365768000,
+							overageBytes: 0,
+							status: 'ready',
+							accountingVersion: 1,
+							reconciledAt: '2026-08-07T00:00:00.000Z'
+						}
           }
         }
       }
@@ -1170,7 +1192,19 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           storageAllowanceBytes: 5368709120,
           user: {
             accountKind: 'service',
-            emailVerified: false
+						emailVerified: false,
+						storageAllowanceBytes: 5368709120,
+						storageUsedBytes: 0,
+						storageAccountingReady: true,
+						storage: {
+							usedBytes: 0,
+							allowanceBytes: 5368709120,
+							remainingBytes: 5368709120,
+							overageBytes: 0,
+							status: 'ready',
+							accountingVersion: 1,
+							reconciledAt: '2026-07-15T00:00:00.000Z'
+						}
           }
         }
       },
@@ -2372,6 +2406,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
             clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f',
             storageAllowanceBytes: 26843545600,
             storageUsedBytes: 1048576,
+						storageAccountingReady: true,
             defaultUserStorageAllowanceBytes: 52428800,
             subscription: {
               tier: 'plus',
@@ -2388,7 +2423,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
                 selectable: true
               }
             ],
-            users: []
+						users: [
+							{
+								userId: '664f1c2a9d3e5b0012345678',
+								usedBytes: 1024,
+								storageAllowanceBytes: 209715200,
+								storageAccountingStatus: 'ready',
+								storageAccountingVersion: 1,
+								storageReconciledAt: '2026-08-07T00:00:00.000Z'
+							}
+						]
           }
         }
       },
@@ -3122,7 +3166,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       "app's 5 GiB aggregate allowance. Updates charge only the delta and deletes refund, so both " +
       'ledgers track what is actually stored. Legacy usedBytes/budgetBytes remain aliases for the ' +
       'current user ledger; userStorage and appStorage add explicit used, allowance, and remaining ' +
-      'bytes. Sandboxes return appStorage: null because their aggregate protection is windowed. ' +
+			'bytes. accountStorage is the authoritative whole-Thingtime-account ledger; the same payload bytes ' +
+			'also participate in the overlapping userStorage and appStorage sub-limits, but are never added twice ' +
+			'to accountStorage. storageAccountingReady is true only when all applicable ledgers are exact and ready. ' +
+			'Sandboxes return appStorage/accountStorage null because their aggregate protection is windowed. ' +
       'Over-allowance writes fail with 507; poll this to pace the app ' +
       'instead of discovering the ceiling. Same CORS + origin binding as /api/v1/app-data.',
     auth: { mode: 'bearer', description: 'App-scoped Bearer token with the app-data scope.' },
@@ -3130,6 +3177,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: [
       'GET with the token from Thingtime.login(…).',
       'Compare both userStorage.remainingBytes and appStorage.remainingBytes before large writes; a 507 identifies which allowance is spent.',
+			'Use accountStorage.status and storageAccountingReady before presenting any value as exact.',
       'Deleting entries (or shrinking values) refunds bytes immediately.'
     ],
     requestExamples: [{ name: 'Read usage', description: 'Bytes used and the budget.', method: 'GET' }],
@@ -3144,6 +3192,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           remainingBytes: 52245596,
           userStorage: { usedBytes: 183204, allowanceBytes: 52428800, remainingBytes: 52245596 },
           appStorage: { usedBytes: 12345678, allowanceBytes: 5368709120, remainingBytes: 5356363442 },
+					accountStorage: {
+						usedBytes: 2941120,
+						allowanceBytes: 5368709120,
+						remainingBytes: 5365768000,
+						overageBytes: 0,
+						status: 'ready',
+						accountingVersion: 1,
+						reconciledAt: '2026-08-07T00:00:00.000Z'
+					},
           storageAccountingReady: true
         }
       },

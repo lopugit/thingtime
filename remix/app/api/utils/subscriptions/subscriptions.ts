@@ -1,7 +1,5 @@
-import { createHash } from 'node:crypto';
-
 import { getThingsCollection } from '../mongodb/collections';
-import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
+import { ACL_OWNER, APP_STORAGE_ACCOUNTING_VERSION, COLLECTION_SCHEMA_VERSIONS, USER_STORAGE_LEDGER_ENVELOPE_VERSION } from '~/schemas/registry';
 import {
   DEFAULT_SUBSCRIPTION_TIER,
   isKnownSubscriptionTier,
@@ -13,6 +11,13 @@ import {
   type TierQuotas
 } from './tierCatalog';
 import { getLiveSubscriptionTier, getSubscriptionTierVersion, tierAssignmentSnapshot, tierQuotasFromUnknown } from './tierCatalogStore';
+import {
+	subscriptionShareId,
+	subscriptionThingMatch,
+	userSubscriptionLedgerEnvelopeIsTrusted,
+	userSubscriptionLedgerMatch
+} from './subscriptionIdentity';
+import { USER_STORAGE_ACCOUNTING_VERSION, USER_STORAGE_STATUS, normalizedStorageUsage, type UserStorageUsage } from '../storage/storageCore';
 
 // Subscription assignments (FUNDAMENTALS.md: everything is a thing). USER
 // assignments are deterministic protected `subscription` Things; generic
@@ -27,13 +32,7 @@ export type SubscriptionSubjectType = 'user' | 'app';
 
 const SUBSCRIPTION_KIND = 'subscription';
 
-const subscriptionShareId = (subjectType: SubscriptionSubjectType, subjectId: string): string =>
-  `subscription-${createHash('sha256').update(subjectType).update('\0').update(subjectId).digest('hex').slice(0, 48)}`;
-
-const subscriptionMatch = (subjectType: SubscriptionSubjectType, subjectId: string) => ({
-  shareId: subscriptionShareId(subjectType, subjectId),
-  thingtime: SUBSCRIPTION_KIND
-});
+const subscriptionMatch = subscriptionThingMatch;
 
 const appMatch = (clientId: string) => ({
   thingtime: 'app',
@@ -41,6 +40,21 @@ const appMatch = (clientId: string) => ({
 });
 
 const hasOwn = (value: unknown, key: string): boolean => !!value && typeof value === 'object' && Object.prototype.hasOwnProperty.call(value, key);
+
+const safeStoredByteExpression = (field: string) => ({
+	$let: {
+		vars: { whole: { $convert: { input: field, to: 'long', onError: null, onNull: null } } },
+		in: {
+			$and: [
+				{ $isNumber: field },
+				{ $ne: ['$$whole', null] },
+				{ $eq: [field, '$$whole'] },
+				{ $gte: ['$$whole', 0] },
+				{ $lte: ['$$whole', Number.MAX_SAFE_INTEGER] }
+			]
+		}
+	}
+});
 
 export type SubscriptionInfo = {
   subjectType: SubscriptionSubjectType;
@@ -58,6 +72,10 @@ export type SubscriptionInfo = {
   updatedAt: Date | null;
   // tier defaults + overrides, merged — what enforcement reads
   effective: TierQuotas;
+	// Canonical live byte ledger for this subject. User account storage lives
+	// on the protected subscription Thing beside its entitlement; app aggregate
+	// storage lives on the app Thing beside the app entitlement.
+	storage: UserStorageUsage | null;
   // true = this is the explicitly pinned default assignment (or a legacy
   // subject that predates materialized assignments).
   isDefault: boolean;
@@ -133,6 +151,15 @@ const defaultSubscription = (
   updatedBy: null,
   updatedAt: null,
   effective: { ...snapshot.quotas },
+	storage:
+		subjectType === 'user'
+			? normalizedStorageUsage({
+					usedBytes: 0,
+					allowanceBytes: snapshot.quotas.userStorageBytes,
+					accountingVersion: null,
+					ledgerStatus: null
+				})
+			: null,
   isDefault: true
 });
 
@@ -141,6 +168,12 @@ const toInfo = (subjectType: SubscriptionSubjectType, subjectId: string, doc: an
   const snapshot = snapshotFromCrystal(crystal, '');
   const sanitized = sanitizeQuotaOverrides(crystal.overrides);
   const overrides = sanitized.ok ? sanitized.overrides : null;
+	const effective = resolveQuotas(snapshot.quotas, overrides);
+	const rawUserStorageAllowance = hasOwn(crystal.overrides, 'userStorageBytes')
+		? crystal.overrides.userStorageBytes
+		: crystal?.tierQuotas?.userStorageBytes;
+	const userStorageAllowanceValid =
+		rawUserStorageAllowance === null || (Number.isSafeInteger(rawUserStorageAllowance) && Number(rawUserStorageAllowance) >= 0);
   return {
     subjectType,
     subjectId,
@@ -153,7 +186,18 @@ const toInfo = (subjectType: SubscriptionSubjectType, subjectId: string, doc: an
     note: typeof crystal.note === 'string' && crystal.note ? crystal.note : null,
     updatedBy: typeof crystal.updatedBy === 'string' ? crystal.updatedBy : null,
     updatedAt: doc?.updatedAt instanceof Date ? doc.updatedAt : null,
-    effective: resolveQuotas(snapshot.quotas, overrides),
+		effective,
+		storage:
+			subjectType === 'user'
+				? normalizedStorageUsage({
+						usedBytes: crystal.storageUsedBytes,
+						allowanceBytes: effective.userStorageBytes,
+						allowanceValid: userStorageAllowanceValid,
+						accountingVersion: crystal.storageAccountingVersion,
+						ledgerStatus: crystal.storageLedgerStatus,
+						reconciledAt: crystal.storageReconciledAt
+					})
+				: null,
     isDefault: crystal.isDefaultAssignment === true
   };
 };
@@ -171,7 +215,8 @@ const toAppInfo = (subjectId: string, doc: any): SubscriptionInfo => {
   const overrides: QuotaOverrides | null = hasOverride && overrideIsValid ? { appStorageBytes: rawOverride as number | null } : null;
   const effective = resolveQuotas(snapshot.quotas, overrides);
   const actualAllowance = crystal.storageAllowanceBytes;
-  if (actualAllowance === null || (Number.isSafeInteger(actualAllowance) && Number(actualAllowance) >= 0)) {
+	const actualAllowanceValid = actualAllowance === null || (Number.isSafeInteger(actualAllowance) && Number(actualAllowance) >= 0);
+	if (actualAllowanceValid) {
     effective.appStorageBytes = actualAllowance as number | null;
   }
   return {
@@ -187,27 +232,25 @@ const toAppInfo = (subjectId: string, doc: any): SubscriptionInfo => {
     updatedBy: typeof crystal.subscriptionUpdatedBy === 'string' ? crystal.subscriptionUpdatedBy : null,
     updatedAt: doc.updatedAt instanceof Date ? doc.updatedAt : null,
     effective,
+		storage: normalizedStorageUsage({
+			usedBytes: crystal.storageUsedBytes,
+			allowanceBytes: effective.appStorageBytes,
+			allowanceValid: hasOwn(crystal, 'storageAllowanceBytes') && actualAllowanceValid,
+			expectedAccountingVersion: APP_STORAGE_ACCOUNTING_VERSION,
+			accountingVersion: crystal.storageAccountingVersion,
+			ledgerStatus: crystal.storageLedgerStatus,
+			reconciledAt: crystal.storageReconciledAt
+		}),
     isDefault: snapshot.tierId === DEFAULT_SUBSCRIPTION_TIER && !overrides
   };
 };
 
-// Enforcement sits on hot write paths (every namespace charge, every app/PAT
-// mint), so lookups ride a short cache — same 15s stance as the rate-limit
-// config. setSubscription invalidates immediately; other server instances
-// converge within the TTL.
-const CACHE_TTL_MS = 15000;
-const cache = new Map<string, { at: number; info: SubscriptionInfo }>();
-const cacheKey = (subjectType: SubscriptionSubjectType, subjectId: string) => `${subjectType}\0${subjectId}`;
-
 export const getSubscription = async (subjectType: SubscriptionSubjectType, subjectId: string): Promise<SubscriptionInfo> => {
-  const key = cacheKey(subjectType, subjectId);
-  const hit = cache.get(key);
-  if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.info;
-
   const things = await getThingsCollection();
   const doc = await things.findOne(subjectType === 'app' ? appMatch(subjectId) : subscriptionMatch(subjectType, subjectId));
+	const trustedUserDoc = subjectType === 'user' && doc && userSubscriptionLedgerEnvelopeIsTrusted(doc, subjectId) ? doc : null;
   const userSeed =
-    subjectType === 'user' && !doc
+		subjectType === 'user' && !trustedUserDoc
       ? await things.findOne({ shareId: subjectId, thingtime: 'user' }, { projection: { initialSubscription: 1 } })
       : null;
   const pinnedSignup = initialSubscriptionSnapshot(userSeed?.initialSubscription);
@@ -216,10 +259,9 @@ export const getSubscription = async (subjectType: SubscriptionSubjectType, subj
       ? doc
         ? toAppInfo(subjectId, doc)
         : defaultSubscription('app', subjectId)
-      : doc
-      ? toInfo(subjectType, subjectId, doc)
+			: trustedUserDoc
+				? toInfo(subjectType, subjectId, trustedUserDoc)
       : defaultSubscription(subjectType, subjectId, pinnedSignup ?? undefined);
-  cache.set(key, { at: Date.now(), info });
   return info;
 };
 
@@ -252,7 +294,12 @@ export const getSubscriptions = async (subjectType: SubscriptionSubjectType, sub
 
   for (const id of ids) {
     const doc = byShareId.get(subscriptionShareId(subjectType, id));
-    result.set(id, doc ? toInfo(subjectType, id, doc) : defaultSubscription(subjectType, id, seedByUserId.get(id) ?? undefined));
+		result.set(
+			id,
+			doc && userSubscriptionLedgerEnvelopeIsTrusted(doc, id)
+				? toInfo(subjectType, id, doc)
+				: defaultSubscription(subjectType, id, seedByUserId.get(id) ?? undefined)
+		);
   }
   return result;
 };
@@ -268,6 +315,12 @@ export type SetSubscriptionInput = {
   note?: unknown;
   updatedBy: string;
   isDefaultAssignment?: boolean;
+	// Internal account-creation/migration hook. Ordinary admin tier changes
+	// never invent a zero ledger for an existing account.
+	initialStorageUsedBytes?: number;
+	// Internal composition hook: account creation inserts the user and its
+	// authoritative subscription ledger in one Mongo transaction.
+	session?: any;
 };
 
 export const setSubscription = async (input: SetSubscriptionInput): Promise<{ ok: true; subscription: SubscriptionInfo } | Fail> => {
@@ -296,6 +349,7 @@ export const setSubscription = async (input: SetSubscriptionInput): Promise<{ ok
   const note = typeof input.note === 'string' && input.note.trim() ? input.note.trim().slice(0, 500) : null;
   const now = new Date();
   const things = await getThingsCollection();
+	const mongoOptions = input.session ? { session: input.session } : {};
 
   if (input.subjectType === 'app') {
     const overrides = sanitized.overrides;
@@ -304,7 +358,7 @@ export const setSubscription = async (input: SetSubscriptionInput): Promise<{ ok
       return fail(400, `App subscriptions only accept the appStorageBytes override (received ${irrelevant.join(', ')})`);
     }
     const hasAllowanceOverride = hasOwn(overrides, 'appStorageBytes');
-    const allowanceBytes = hasAllowanceOverride ? overrides!.appStorageBytes ?? null : snapshot.quotas.appStorageBytes;
+		const allowanceBytes = hasAllowanceOverride ? (overrides!.appStorageBytes ?? null) : snapshot.quotas.appStorageBytes;
     const filter: Record<string, unknown> = {
       ...appMatch(input.subjectId),
       ...(archivedExpectedVersionId
@@ -321,8 +375,10 @@ export const setSubscription = async (input: SetSubscriptionInput): Promise<{ ok
       ...(allowanceBytes === null
         ? {}
         : {
+						'crystal.storageAccountingVersion': APP_STORAGE_ACCOUNTING_VERSION,
+						'crystal.storageLedgerStatus': USER_STORAGE_STATUS.ready,
             $expr: {
-              $lte: [{ $ifNull: ['$crystal.storageUsedBytes', 0] }, allowanceBytes]
+							$and: [safeStoredByteExpression('$crystal.storageUsedBytes'), { $lte: ['$crystal.storageUsedBytes', allowanceBytes] }]
             }
           })
     };
@@ -343,11 +399,14 @@ export const setSubscription = async (input: SetSubscriptionInput): Promise<{ ok
     if (hasAllowanceOverride) set['crystal.storageAllowanceOverrideBytes'] = allowanceBytes;
     else update.$unset = { 'crystal.storageAllowanceOverrideBytes': '' };
 
-    const updated = await things.findOneAndUpdate(filter as any, update as any, { returnDocument: 'after' });
+		const updated = await things.findOneAndUpdate(filter as any, update as any, { ...mongoOptions, returnDocument: 'after' });
     if (!updated) {
       const existing = await things.findOne(appMatch(input.subjectId), {
+				...mongoOptions,
         projection: {
           'crystal.storageUsedBytes': 1,
+					'crystal.storageAccountingVersion': 1,
+					'crystal.storageLedgerStatus': 1,
           'crystal.subscriptionTier': 1,
           'crystal.subscriptionTierVersionId': 1
         }
@@ -360,9 +419,17 @@ export const setSubscription = async (input: SetSubscriptionInput): Promise<{ ok
           return fail(409, 'The subscription changed while saving; refresh and try again');
         }
       }
+			if (
+				allowanceBytes !== null &&
+				(existing.crystal?.storageAccountingVersion !== APP_STORAGE_ACCOUNTING_VERSION ||
+					existing.crystal?.storageLedgerStatus !== USER_STORAGE_STATUS.ready ||
+					!Number.isSafeInteger(existing.crystal?.storageUsedBytes) ||
+					Number(existing.crystal.storageUsedBytes) < 0)
+			) {
+				return fail(503, 'App storage accounting is unavailable; reconcile it before changing to a finite tier');
+			}
       return fail(409, `The app already uses ${Number(existing.crystal?.storageUsedBytes || 0)} bytes, above that plan's allowance`);
     }
-    cache.delete(cacheKey('app', input.subjectId));
     return { ok: true, subscription: toAppInfo(input.subjectId, updated) };
   }
 
@@ -370,13 +437,16 @@ export const setSubscription = async (input: SetSubscriptionInput): Promise<{ ok
     return fail(400, 'appStorageBytes applies to app subscriptions, not user subscriptions');
   }
 
-  const baseSubscriptionMatch = subscriptionMatch(input.subjectType, input.subjectId);
+	const occupiedSubscriptionMatch = subscriptionMatch('user', input.subjectId);
+	const baseSubscriptionMatch = userSubscriptionLedgerMatch(input.subjectId);
+	const nextAllowanceBytes = resolveQuotas(snapshot.quotas, sanitized.overrides).userStorageBytes;
   const existingAssignment = archivedExpectedVersionId
     ? await things.findOne(baseSubscriptionMatch, {
+				...mongoOptions,
         projection: { 'crystal.tierVersionId': 1, 'crystal.tier': 1 }
       })
     : null;
-  const assignmentMatch = archivedExpectedVersionId
+	const versionMatch = archivedExpectedVersionId
     ? {
         ...baseSubscriptionMatch,
         ...(existingAssignment
@@ -392,8 +462,25 @@ export const setSubscription = async (input: SetSubscriptionInput): Promise<{ ok
           : { 'crystal.tierVersionId': { $exists: false } })
       }
     : baseSubscriptionMatch;
-  const assignmentUpdate = {
-    $set: {
+	// Existing ready ledgers can only move to a finite allowance at or above
+	// their live counter. Uninitialized ledgers must reconcile before a finite
+	// tier change, so a missing counter is never treated as zero. This is
+	// deliberately a normal update filter, never an `$expr` upsert (Mongo
+	// rejects `$expr` with upsert and would break first-time finite plans).
+	const allowanceGuard =
+		nextAllowanceBytes === null
+			? null
+			: {
+					'crystal.storageAccountingVersion': USER_STORAGE_ACCOUNTING_VERSION,
+					'crystal.storageLedgerStatus': USER_STORAGE_STATUS.ready,
+					$expr: {
+						$and: [safeStoredByteExpression('$crystal.storageUsedBytes'), { $lte: ['$crystal.storageUsedBytes', nextAllowanceBytes] }]
+					}
+				};
+	const assignmentMatch = allowanceGuard ? { $and: [versionMatch, allowanceGuard] } : versionMatch;
+	const initialStorageUsedBytes =
+		Number.isSafeInteger(input.initialStorageUsedBytes) && Number(input.initialStorageUsedBytes) >= 0 ? Number(input.initialStorageUsedBytes) : null;
+	const assignmentSet = {
       'crystal.tier': snapshot.tierId,
       'crystal.tierVersionId': snapshot.versionId,
       'crystal.tierVersion': snapshot.version,
@@ -405,43 +492,98 @@ export const setSubscription = async (input: SetSubscriptionInput): Promise<{ ok
       'crystal.updatedBy': input.updatedBy,
       'crystal.isDefaultAssignment': input.isDefaultAssignment === true,
       updatedAt: now
-    },
-    $setOnInsert: {
+	};
+	const updateExisting = () => things.findOneAndUpdate(assignmentMatch as any, { $set: assignmentSet }, { ...mongoOptions, returnDocument: 'after' });
+
+	const explainConflict = async () => {
+		const current = await things.findOne(occupiedSubscriptionMatch, {
+			...mongoOptions
+		});
+		if (!current) return fail(409, 'The subscription assignment id is unavailable; contact an administrator');
+		if (!userSubscriptionLedgerEnvelopeIsTrusted(current, input.subjectId)) {
+			return fail(503, 'The account subscription ledger has an invalid protected envelope; reconcile it before changing tier');
+		}
+		if (archivedExpectedVersionId && current.crystal?.tierVersionId !== archivedExpectedVersionId) {
+			return fail(409, 'The subscription changed while saving; refresh and try again');
+		}
+		const usedBytes = current.crystal?.storageUsedBytes;
+		if (
+			nextAllowanceBytes !== null &&
+			(current.crystal?.storageAccountingVersion !== USER_STORAGE_ACCOUNTING_VERSION ||
+				current.crystal?.storageLedgerStatus !== USER_STORAGE_STATUS.ready ||
+				!Number.isSafeInteger(usedBytes) ||
+				Number(usedBytes) < 0)
+		) {
+			return fail(503, 'Account storage accounting is unavailable; reconcile it before changing to a finite tier');
+		}
+		if (nextAllowanceBytes !== null && Number.isSafeInteger(usedBytes) && Number(usedBytes) > nextAllowanceBytes) {
+			return fail(409, `The account already uses ${Number(usedBytes)} bytes, above that plan's allowance`);
+		}
+		return fail(409, 'The subscription changed while saving; refresh and try again');
+	};
+
+	let updated = await updateExisting();
+	if (updated) {
+		return { ok: true, subscription: toInfo(input.subjectType, input.subjectId, updated) };
+	}
+
+	const current = await things.findOne(occupiedSubscriptionMatch, { ...mongoOptions, projection: { _id: 1 } });
+	if (current) return explainConflict();
+	if (initialStorageUsedBytes === null) {
+		return fail(503, 'Account storage accounting must be initialized before creating this subscription assignment');
+	}
+	if (initialStorageUsedBytes !== null && nextAllowanceBytes !== null && initialStorageUsedBytes > nextAllowanceBytes) {
+		return fail(409, `The account already uses ${initialStorageUsedBytes} bytes, above that plan's allowance`);
+	}
+
+	const insertDoc: any = {
+		shareId: subscriptionShareId(input.subjectType, input.subjectId),
       schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
       thingtime: [SUBSCRIPTION_KIND],
-      'crystal.quotaKind': SUBSCRIPTION_KIND,
-      'crystal.subjectType': input.subjectType,
-      'crystal.subjectId': input.subjectId,
-      ownerId: input.ownerId,
+		crystal: {
+			quotaKind: SUBSCRIPTION_KIND,
+			subjectType: input.subjectType,
+			subjectId: input.subjectId,
+			tier: snapshot.tierId,
+			tierVersionId: snapshot.versionId,
+			tierVersion: snapshot.version,
+			tierName: snapshot.title,
+			tierMetered: snapshot.metered,
+			tierQuotas: snapshot.quotas,
+			overrides: sanitized.overrides,
+			note,
+			updatedBy: input.updatedBy,
+			isDefaultAssignment: input.isDefaultAssignment === true,
+			...(initialStorageUsedBytes !== null
+				? {
+						storageUsedBytes: initialStorageUsedBytes,
+						storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION,
+						storageLedgerStatus: USER_STORAGE_STATUS.ready,
+						storageReconciledAt: now,
+						storageUpdatedAt: now
+					}
+				: {})
+		},
+		ownerId: input.subjectId,
       acl: [ACL_OWNER],
       targetId: null,
       tags: [],
-      createdAt: now
-    }
+		storageLedgerEnvelopeVersion: USER_STORAGE_LEDGER_ENVELOPE_VERSION,
+		createdAt: now,
+		updatedAt: now
   };
-  let write;
   try {
-    write = await things.updateOne(assignmentMatch, assignmentUpdate, { upsert: true });
+		await things.insertOne(insertDoc, mongoOptions);
   } catch (err: any) {
-    if (err?.code !== 11000) throw err;
-    if (archivedExpectedVersionId) {
-      return fail(409, 'The subscription changed while saving; refresh and try again');
-    }
-    // A legitimate concurrent assignment insert can win the upsert race. Retry
-    // only against a real protected subscription Thing. A normal Thing that
-    // squatted the deterministic shareId does not match and fails closed.
-    write = await things.updateOne(baseSubscriptionMatch, assignmentUpdate, { upsert: false });
-    if (!write.matchedCount) {
-      return fail(409, 'The subscription assignment id is unavailable; contact an administrator');
-    }
+		if (err?.code !== 11000 || input.session) throw err;
+		// A concurrent first assignment may win the deterministic-id insert.
+		// Re-run the same guarded update; never fall back to an unguarded write.
+		updated = await updateExisting();
+		if (!updated) return explainConflict();
+		return { ok: true, subscription: toInfo(input.subjectType, input.subjectId, updated) };
   }
 
-  if (archivedExpectedVersionId && existingAssignment && !write?.matchedCount) {
-    return fail(409, 'The subscription changed while saving; refresh and try again');
-  }
-
-  cache.delete(cacheKey(input.subjectType, input.subjectId));
-  return { ok: true, subscription: await getSubscription(input.subjectType, input.subjectId) };
+	return { ok: true, subscription: toInfo(input.subjectType, input.subjectId, insertDoc) };
 };
 
 // Reset a subject to the current live default revision. User resets remain a

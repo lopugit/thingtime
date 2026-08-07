@@ -25,8 +25,7 @@ const fail = (status: number, error: string): Fail => ({ ok: false, status, erro
 
 export type AccountLinkKind = 'account' | 'app';
 
-export const isAccountLinkKind = (value: unknown): value is AccountLinkKind =>
-  value === 'account' || value === 'app';
+export const isAccountLinkKind = (value: unknown): value is AccountLinkKind => value === 'account' || value === 'app';
 
 export type AccountLink = {
   linkKind: AccountLinkKind;
@@ -42,14 +41,7 @@ export type AccountLink = {
 const LINK_KIND = 'account-link';
 
 const linkShareId = (linkKind: AccountLinkKind, userId: string, targetId: string): string =>
-  `account-link-${createHash('sha256')
-    .update(linkKind)
-    .update('\0')
-    .update(userId)
-    .update('\0')
-    .update(targetId)
-    .digest('hex')
-    .slice(0, 48)}`;
+	`account-link-${createHash('sha256').update(linkKind).update('\0').update(userId).update('\0').update(targetId).digest('hex').slice(0, 48)}`;
 
 const linkMatch = (linkKind: AccountLinkKind, userId: string, targetId: string) => ({
   shareId: linkShareId(linkKind, userId, targetId),
@@ -112,11 +104,7 @@ export const createAccountLink = async (input: {
   return { ok: true, link: toLink(doc) };
 };
 
-export const removeAccountLink = async (
-  linkKind: AccountLinkKind,
-  userId: string,
-  targetId: string
-): Promise<{ ok: true; removed: boolean }> => {
+export const removeAccountLink = async (linkKind: AccountLinkKind, userId: string, targetId: string): Promise<{ ok: true; removed: boolean }> => {
   const things = await getThingsCollection();
   const res = await things.deleteOne(linkMatch(linkKind, userId, targetId));
   return { ok: true, removed: res.deletedCount > 0 };
@@ -135,10 +123,7 @@ export const listAccountLinksForUser = async (userId: string, linkKind?: Account
 
 // Everyone linked to a target (admin "who owns this?" view + co-manager
 // resolution) — served by the (thingtime, crystal.targetId) index.
-export const listAccountLinksForTarget = async (
-  targetId: string,
-  linkKind?: AccountLinkKind
-): Promise<AccountLink[]> => {
+export const listAccountLinksForTarget = async (targetId: string, linkKind?: AccountLinkKind): Promise<AccountLink[]> => {
   const things = await getThingsCollection();
   const docs = await things
     .find({ thingtime: LINK_KIND, 'crystal.targetId': targetId, ...(linkKind ? { 'crystal.linkKind': linkKind } : {}) })
@@ -164,12 +149,15 @@ export const listLinkedAppClientIds = async (userId: string): Promise<string[]> 
 
 // Ownership check the apps utils use: the registering owner, or any holder of
 // an 'app' link.
-export const userCanManageApp = async (userId: string, appDoc: any): Promise<boolean> => {
+export const userCanManageApp = async (userId: string, appDoc: any, session?: any): Promise<boolean> => {
   if (!appDoc) return false;
   if (String(appDoc.ownerId) === userId) return true;
   const clientId = appDoc?.crystal?.clientId;
   if (typeof clientId !== 'string' || !clientId) return false;
   const things = await getThingsCollection();
-  const doc = await things.findOne(linkMatch('app', userId, clientId), { projection: { _id: 1 } });
+	const doc = await things.findOne(linkMatch('app', userId, clientId), {
+		projection: { _id: 1 },
+		...(session ? { session } : {})
+	});
   return !!doc;
 };

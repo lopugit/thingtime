@@ -29,6 +29,12 @@ import { SubscriptionEditorModal } from '~/components/Admin/SubscriptionEditorMo
 import { TierManager } from '~/components/Admin/TierManager';
 import { loadCompleteAdminSnapshot, type CompleteAdminSnapshot } from '~/components/Admin/adminDirectoryClient';
 import type { AdminRowField } from '~/components/Admin/adminRowQuery';
+import {
+	exactByteLabel,
+	storageProjectionTitle,
+	storageStatusPresentation,
+	type AdminStorageProjection
+} from '~/components/Admin/adminStorageProjection';
 import { formatBytes } from '~/components/Apps/ConnectedAppsSection';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useApi } from '~/hooks/useApi';
@@ -49,9 +55,10 @@ type UserRow = {
   isAdmin: boolean;
   envAdmin: boolean;
   accountKind: 'user' | 'service';
+	storage: AdminStorageProjection;
   storageAllowanceBytes: number | null;
-  storageUsedBytes: number;
-  appNamespaceBytes: number;
+	storageUsedBytes: number | null;
+	appNamespaceBytes: number | null;
   subscription: {
     tier: string;
     tierName: string;
@@ -64,6 +71,7 @@ type UserRow = {
     note: string | null;
     updatedBy: string | null;
     updatedAt: string | null;
+		storage: AdminStorageProjection | null;
   };
   counts: { apps: number; linkedApps: number; ownedAccounts: number; pats: number; connectedApps: number };
 };
@@ -77,16 +85,44 @@ type AppRow = {
   owner: { id: string; username: string | null };
   managers: Array<{ id: string; username: string | null }>;
   userCount: number;
-  usedBytes: number;
+	storage: AdminStorageProjection | null;
+	usedBytes: number | null;
   subscription: UserRow['subscription'];
 };
-
-const bytesOrInfinity = (value: number | null | undefined): string => (value === null || value === undefined ? '∞' : formatBytes(value));
 
 const formatAdminDate = (value: string | null | undefined): string => {
   if (!value) return '—';
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+};
+
+const StorageUsage = ({ storage }: { storage: AdminStorageProjection | null | undefined }) => {
+	const state = storageStatusPresentation(storage);
+	const usageCanBeTrusted = !!storage && storage.status !== 'unavailable' && storage.usedBytes !== null;
+	const allowance = !storage ? '—' : storage.allowanceBytes === null ? '∞' : formatBytes(storage.allowanceBytes);
+	const usedCompact = usageCanBeTrusted && storage ? formatBytes(storage.usedBytes!) : '—';
+	const usedExact = usageCanBeTrusted && storage ? exactByteLabel(storage.usedBytes) : 'Usage unavailable';
+	return (
+		<Box title={storageProjectionTitle(storage)}>
+			<Flex align="center" justify="flex-end" gap={1} wrap="wrap">
+				<Text as="span" whiteSpace="nowrap">
+					{usedCompact} / {allowance}
+				</Text>
+				<Badge colorScheme={state.colorScheme} fontSize="0.55em">
+					{state.label}
+				</Badge>
+				{!!storage?.overageBytes && (
+					<Badge colorScheme="red" fontSize="0.55em">
+						over {formatBytes(storage.overageBytes)}
+					</Badge>
+				)}
+			</Flex>
+			<Text fontSize="10px" opacity={0.62} whiteSpace="nowrap">
+				{usedExact}
+				{storage?.status === 'reconciling' ? ' · provisional' : ''}
+			</Text>
+		</Box>
+	);
 };
 
 const QUOTA_FIELDS = ['appStorageBytes', 'userStorageBytes', 'maxApps', 'maxPats'] as const;
@@ -153,12 +189,45 @@ const USER_QUERY_FIELDS: readonly AdminRowField<UserRow>[] = [
   { id: 'displayName', label: 'Display name', kind: 'string', sortable: true },
   { id: 'email', label: 'Email', kind: 'string', sortable: true },
   { id: 'createdAt', label: 'Created time', kind: 'date', sortable: true },
-  { id: 'accountKind', label: 'Account kind', kind: 'enum', options: [{ value: 'user', label: 'User' }, { value: 'service', label: 'Service' }], sortable: true },
+	{
+		id: 'accountKind',
+		label: 'Account kind',
+		kind: 'enum',
+		options: [
+			{ value: 'user', label: 'User' },
+			{ value: 'service', label: 'Service' }
+		],
+		sortable: true
+	},
   { id: 'isAdmin', label: 'Administrator', kind: 'boolean', sortable: true },
   { id: 'envAdmin', label: 'Environment administrator', kind: 'boolean', sortable: true },
-  { id: 'storageAllowanceBytes', label: 'Stored allowance (bytes)', kind: 'number', sortable: true },
-  { id: 'storageUsedBytes', label: 'User storage used (bytes)', kind: 'number', sortable: true },
-  { id: 'appNamespaceBytes', label: 'App data used (bytes)', kind: 'number', sortable: true },
+	{ id: 'storage.usedBytes', label: 'Account storage used (bytes)', kind: 'number', sortable: true },
+	{ id: 'storage.allowanceBytes', label: 'Account storage allowance (bytes)', kind: 'number', sortable: true },
+	{
+		id: 'storage.allowanceBytes.unlimited',
+		label: 'Account storage allowance is unlimited',
+		kind: 'boolean',
+		getValue: (row) => !!row.storage && row.storage.allowanceBytes === null,
+		sortable: true
+	},
+	{ id: 'storage.remainingBytes', label: 'Account storage remaining (bytes)', kind: 'number', sortable: true },
+	{ id: 'storage.overageBytes', label: 'Account storage overage (bytes)', kind: 'number', sortable: true },
+	{
+		id: 'storage.status',
+		label: 'Account storage accounting status',
+		kind: 'enum',
+		options: [
+			{ value: 'ready', label: 'Ready / exact' },
+			{ value: 'reconciling', label: 'Reconciling' },
+			{ value: 'unavailable', label: 'Unavailable' }
+		],
+		sortable: true
+	},
+	{ id: 'storage.accountingVersion', label: 'Account storage accounting version', kind: 'number', sortable: true },
+	{ id: 'storage.reconciledAt', label: 'Account storage reconciled time', kind: 'date', sortable: true },
+	{ id: 'storageAllowanceBytes', label: 'Storage allowance compatibility alias (bytes)', kind: 'number', sortable: true },
+	{ id: 'storageUsedBytes', label: 'Storage used compatibility alias (bytes)', kind: 'number', sortable: true },
+	{ id: 'appNamespaceBytes', label: 'App data subset of account storage (bytes)', kind: 'number', sortable: true },
   ...subscriptionQueryFields<UserRow>(),
   { id: 'counts.apps', label: 'Registered apps', kind: 'number', sortable: true },
   { id: 'counts.linkedApps', label: 'Linked apps', kind: 'number', sortable: true },
@@ -178,7 +247,10 @@ const APP_QUERY_FIELDS: readonly AdminRowField<AppRow>[] = [
     label: 'Status',
     kind: 'enum',
     getValue: (row) => (row.revokedAt ? 'suspended' : 'active'),
-    options: [{ value: 'active', label: 'Active' }, { value: 'suspended', label: 'Suspended' }],
+		options: [
+			{ value: 'active', label: 'Active' },
+			{ value: 'suspended', label: 'Suspended' }
+		],
     sortable: true
   },
   { id: 'owner.id', label: 'Owner ID', kind: 'string', sortable: true },
@@ -186,7 +258,31 @@ const APP_QUERY_FIELDS: readonly AdminRowField<AppRow>[] = [
   { id: 'managers.id', label: 'Manager ID', kind: 'string', sortable: true },
   { id: 'managers.username', label: 'Manager username', kind: 'string', sortable: true },
   { id: 'userCount', label: 'Connected users', kind: 'number', sortable: true },
-  { id: 'usedBytes', label: 'Storage used (bytes)', kind: 'number', sortable: true },
+	{ id: 'storage.usedBytes', label: 'App storage used (bytes)', kind: 'number', sortable: true },
+	{ id: 'storage.allowanceBytes', label: 'App storage allowance (bytes)', kind: 'number', sortable: true },
+	{
+		id: 'storage.allowanceBytes.unlimited',
+		label: 'App storage allowance is unlimited',
+		kind: 'boolean',
+		getValue: (row) => !!row.storage && row.storage.allowanceBytes === null,
+		sortable: true
+	},
+	{ id: 'storage.remainingBytes', label: 'App storage remaining (bytes)', kind: 'number', sortable: true },
+	{ id: 'storage.overageBytes', label: 'App storage overage (bytes)', kind: 'number', sortable: true },
+	{
+		id: 'storage.status',
+		label: 'App storage accounting status',
+		kind: 'enum',
+		options: [
+			{ value: 'ready', label: 'Ready / exact' },
+			{ value: 'reconciling', label: 'Reconciling' },
+			{ value: 'unavailable', label: 'Unavailable' }
+		],
+		sortable: true
+	},
+	{ id: 'storage.accountingVersion', label: 'App storage accounting version', kind: 'number', sortable: true },
+	{ id: 'storage.reconciledAt', label: 'App storage reconciled time', kind: 'date', sortable: true },
+	{ id: 'usedBytes', label: 'Storage used compatibility alias (bytes)', kind: 'number', sortable: true },
   ...subscriptionQueryFields<AppRow>()
 ];
 
@@ -266,11 +362,7 @@ const UsersTab = () => {
   const { rows, loading, error, refresh } = useAdminRows<UserRow>(
     (signal) =>
       loadCompleteAdminSnapshot<UserRow>(
-        (cursor, pageSignal) =>
-          apiRef.current.v1.admin.usersOverview(
-            { limit: 200, ...(cursor ? { cursor } : {}) },
-            { signal: pageSignal }
-          ),
+				(cursor, pageSignal) => apiRef.current.v1.admin.usersOverview({ limit: 200, ...(cursor ? { cursor } : {}) }, { signal: pageSignal }),
         'users',
         userRowId,
         signal
@@ -312,8 +404,8 @@ const UsersTab = () => {
                 <Th>User</Th>
                 <Th>Tier</Th>
                 <Th>Created</Th>
-                <Th isNumeric>Storage</Th>
-                <Th isNumeric>App data</Th>
+								<Th isNumeric>Account storage</Th>
+								<Th isNumeric>App data subset</Th>
                 <Th isNumeric>Apps</Th>
                 <Th isNumeric>Tokens</Th>
                 <Th isNumeric>Connected</Th>
@@ -348,10 +440,22 @@ const UsersTab = () => {
                     {formatAdminDate(row.createdAt)}
                   </Td>
                   <Td isNumeric fontSize="xs" whiteSpace="nowrap">
-                    {formatBytes(row.storageUsedBytes)} / {bytesOrInfinity(row.subscription.effective.userStorageBytes)}
+										<StorageUsage storage={row.storage} />
                   </Td>
-                  <Td isNumeric fontSize="xs" whiteSpace="nowrap">
-                    {formatBytes(row.appNamespaceBytes)}
+									<Td
+										isNumeric
+										fontSize="xs"
+										whiteSpace="nowrap"
+										title={
+											row.appNamespaceBytes === null
+												? 'App-data subset is unavailable until the account ledger is reconciled'
+												: `${exactByteLabel(row.appNamespaceBytes)} included in account storage`
+										}
+									>
+										<Text>{row.appNamespaceBytes === null ? 'Recalculating…' : formatBytes(row.appNamespaceBytes)}</Text>
+										<Text fontSize="10px" opacity={0.62}>
+											{row.appNamespaceBytes === null ? 'not authoritative yet' : exactByteLabel(row.appNamespaceBytes)}
+										</Text>
                   </Td>
                   <Td isNumeric fontSize="xs">
                     {row.counts.apps}
@@ -423,11 +527,7 @@ const AppsTab = () => {
   const { rows, loading, error, refresh } = useAdminRows<AppRow>(
     (signal) =>
       loadCompleteAdminSnapshot<AppRow>(
-        (cursor, pageSignal) =>
-          apiRef.current.v1.admin.apps(
-            { limit: 200, ...(cursor ? { cursor } : {}) },
-            { signal: pageSignal }
-          ),
+				(cursor, pageSignal) => apiRef.current.v1.admin.apps({ limit: 200, ...(cursor ? { cursor } : {}) }, { signal: pageSignal }),
         'apps',
         appRowId,
         signal
@@ -527,8 +627,7 @@ const AppsTab = () => {
                     {row.userCount}
                   </Td>
                   <Td isNumeric fontSize="xs" whiteSpace="nowrap">
-                    {formatBytes(row.usedBytes)}
-                    {` / ${bytesOrInfinity(row.subscription.effective.appStorageBytes)}`}
+										<StorageUsage storage={row.storage} />
                   </Td>
                   <Td>
                     <TierBadge subscription={row.subscription} />
