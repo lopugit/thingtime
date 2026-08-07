@@ -151,6 +151,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Public sign-up rate limit (`auth.register`)**: POST /api/v1/auth/register is
+  now throttled per IP (default 10 per 15 minutes, admin-tunable like every
+  rule) before any work runs. Registration was the one unauthenticated mutating
+  auth route with no limiter — each attempt burns a bcrypt hash, a success
+  emails an arbitrary address, and since PR #162 a broken-index state re-runs
+  the ensureIndexes battery per attempt; blocked requests now 429 before
+  reaching any of that. — Claude (AI), 2026-07-30
+
 - **Atomic service-account quotas**: `GET|POST /api/v1/things/quota` stores one
   private deterministic `data` Thing per service owner + key and atomically
   reserves daily work, grants rolling-window permits, releases unused slots,
