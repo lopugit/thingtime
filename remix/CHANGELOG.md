@@ -19,23 +19,36 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
-- **AI rebase-stack conflict resolution**: a separate **Rebase PR stacks
-  (AI)** workflow detects same-repo stacked PRs that can merge but cannot
-  rebase, then replays them root-to-leaf with bounded, file-only Claude
-  conflict rounds and trusted Git verification. Push/open/reopen triggers plus
-  a scheduled backstop feed the trusted dispatch path, while manual dispatch
-  can target a specific root PR. Claude sees only regular conflict-file copies
-  in a repo-less scratch directory; the real checkout, Git state, exact trusted
+- **AI PR and stack rebase conflict resolution**: a separate **Rebase PRs and
+  stacks (AI)** workflow evaluates every same-repository PR regardless of base
+  branch. Standalone PRs that merge cleanly but cannot rebase and stack members
+  needing a history update are rebase-owned, while standalone merge conflicts
+  remain disjointly owned by **Resolve PR conflicts (AI)**. It replays standalone heads onto
+  their bases and stacks root-to-leaf with bounded, file-only Claude conflict
+  rounds and trusted Git verification. Push/open/reopen triggers plus a
+  scheduled all-PR backstop feed the trusted dispatch path, while manual
+  dispatch can target one PR or scan the repository. The merge resolver now
+  has its own staggered all-PR backstop and exact live-ref snapshot, pre-push
+  revalidation, lease, publication classification, and `ai-merge-paused`
+  retry-loop guard. Global merge scans use true GraphQL pagination, while
+  rebase verdicts poll round-robin and stack traversal supports 64 levels.
+  Both pause labels are bound to strict bot-authored owner/ref/SHA/topology
+  snapshots; queued retries re-prove ownership before deleting a specific stale
+  hold, publication requires pauses to be absent, and post-push cleanup
+  preserves newer-snapshot holds. `ai-rebase-in-progress` is the only hard
+  mutex.
+  Claude sees only regular conflict-file copies in a
+  repo-less scratch directory; the real checkout, Git state, exact trusted
   action, and credentials remain outside its workspace. Exact force-with-lease
-  prevents concurrent work from being overwritten; fork, default, and protected
-  branches are refused; `no-ai-rebase` opts out; and failures add
+  prevents concurrent work from being overwritten; fork, default, and
+  protected branches are refused; `no-ai-rebase` opts out; and failures add
   `ai-rebase-paused` instead of retrying forever. Parent barriers preserve
   root-to-leaf ordering, orphaned run locks recover after 90 minutes, and web
   rewrites explicitly dispatch Web CI for the new SHA. The existing merge
   resolver now routes stack members deterministically, pins its runner actions,
   and avoids checkout's spurious `/dev/null` Git-config annotation. See the
   [PR #183 implementation notes](../PRs/183-codex-ai-rebase-stack-resolver--add-automatic-ai-rebase-support-for-pr-stacks.md).
-  — Codex (AI), 2026-08-07
+  — Codex (AI), 2026-08-08
 
 - **CI conflict-resolver graphify refresh now does LLM semantic extraction**:
   after an auto-resolved merge, `resolve-pr-conflicts.yml` runs

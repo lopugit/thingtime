@@ -30,27 +30,52 @@ https://www.gofundme.com/f/thingtime
 Thingtime has two deliberately separate conflict workflows:
 
 - **Resolve PR conflicts (AI)** merges a PR's base branch into its head branch.
-- **Rebase PR stacks (AI)** rebases the PR head and, when the PR is part of a
-  stack, continues from the stack root toward its leaves.
+- **Rebase PRs and stacks (AI)** rebases the PR head and, when the PR is part
+  of a stack, continues from the stack root toward its leaves.
 
-The detectors are intentionally disjoint: same-repository stack members are
-routed to the rebase workflow before either workflow adds an ownership label.
-Adding `no-ai-rebase` opts that PR back into the merge-based resolver instead.
+Both workflows cover every same-repository PR regardless of its base branch.
+The merge workflow listens to pushes on `"**"` and checks open PRs both
+targeting and originating from the pushed branch. A staggered twice-hourly
+all-PR sweep catches conflicts whose original event was missed or ran from an
+older branch without the latest workflow. Their ownership is intentionally
+disjoint: standalone merge conflicts go to the merge workflow; standalone PRs
+that merge cleanly but cannot rebase, plus stack members whose current history
+needs a merge or rebase update, go to the rebase workflow. Adding
+`no-ai-rebase` opts a merge-conflicting stack member back into the merge-based
+resolver instead.
 
 The rebase workflow covers the case GitHub reports as `mergeable: true` but
 `rebaseable: false`: a plain merge needs no help, yet replaying the branch's
 commits onto its base stops at a conflict. It automatically scans same-repo
-stacks after branch pushes and PR `opened`/`reopened` events, with a scheduled
-scan as a backstop because GitHub emits no dedicated event when its **Rebase
-stack** button fails. A detected stack is rebased root-to-leaf, so each child
-is replayed onto the rewritten parent rather than onto the parent's old SHA.
+PRs after branch pushes and PR `opened`/`reopened` events, with a scheduled
+all-PR scan as a backstop because GitHub emits no dedicated event when its
+**Rebase stack** button fails. A standalone PR is replayed onto its base; a
+detected stack is rebased root-to-leaf, so each child is replayed onto the
+rewritten parent rather than onto the parent's old SHA.
 
-To run it directly, open **Actions → Rebase PR stacks (AI) → Run workflow** on
-the default branch, enter the root PR number, and leave cascading enabled when
-the PR has children. Manual dispatch is also the recovery path after reviewing
+To run it directly, open **Actions → Rebase PRs and stacks (AI) → Run
+workflow** on the default branch, enter the PR number, and leave cascading
+enabled when the PR has children. Leaving the number blank scans all open
+same-repository PRs. Manual dispatch is also the recovery path after reviewing
 a paused run.
 
-This workflow rewrites PR history, so its force push has stricter boundaries:
+**Resolve PR conflicts (AI)** has the same manual convention: enter a base
+branch to scan only that base, or leave it blank to scan every open eligible
+PR. Broad scans are API-only detectors; they hand off one trusted
+default-branch run per conflicted base, so unrelated bases do not share one AI
+job. If a run fails while the same eligible snapshot is still live, it adds
+`ai-merge-paused` so the scheduled sweep cannot repeatedly spend AI budget.
+The hold is bound to the exact owner, refs, SHAs, and topology recorded in a
+bot-only hidden marker: a changed snapshot is eligible again automatically,
+while the same snapshot requires review and a named-base manual retry.
+
+The merge workflow also snapshots the exact live head and base SHAs, repeats
+its PR/ref/label/stack/protection checks immediately before publication, and
+uses an exact head lease. If either branch moves while Claude is working, the
+resolved merge is discarded rather than overwriting the newer work.
+
+**Rebase PRs and stacks (AI)** rewrites PR history, so its force push has
+stricter boundaries:
 
 - It operates only on branches in this repository. Fork PRs, the repository's
   default branch, and protected branches are refused.
@@ -65,8 +90,14 @@ This workflow rewrites PR history, so its force push has stricter boundaries:
   an exact `--force-with-lease` against the head SHA inspected at the start, so
   a concurrent human or bot push makes the run fail instead of being erased.
 - Add `no-ai-rebase` to opt a PR out of automatic rebasing. A failed automatic
-  run adds `ai-rebase-paused`, preventing a retry loop while the failure is
-  reviewed; remove it before automatic retry, or use a deliberate manual run.
+  run adds `ai-rebase-paused` for that exact owner/ref/SHA/topology snapshot,
+  preventing a retry loop while the failure is reviewed. A changed snapshot or
+  resolver owner invalidates the hold automatically; retry the unchanged
+  snapshot with a deliberate manual PR-number run.
+  `ai-rebase-in-progress` is the only cross-workflow mutex. Pause labels do not
+  decide ownership: a queued retry re-proves the exact refs and owner before
+  clearing its specific stale pause. Publication requires pauses to be absent,
+  and post-push cleanup preserves any fresh hold created for the new snapshot.
   An orphaned `ai-rebase-in-progress` lock is recovered after 90 minutes, while
   paused, active, or not-yet-computed parents—and protected or opted-out
   parents that still need a rewrite—keep stacked children from running ahead.

@@ -7,7 +7,8 @@
 # When any branch is pushed, every open PR (drafts included) that TARGETS that
 # branch — and the open PR FROM it, whose conflict may have been created by
 # that very head push during a quiet stretch on the base — is checked for
-# merge conflicts.
+# merge conflicts. A twice-hourly repository-wide sweep catches old conflicts
+# whose original event predated or otherwise missed the resolver.
 #
 # TRIGGER SHAPE (load-bearing): claude-code-action@v1 rejects the `push` event
 # ("Unsupported event type: push"), so a push-triggered run can only DETECT and
@@ -61,6 +62,11 @@
 # - All deterministic git steps run hook-proof (core.hooksPath=/dev/null,
 #   core.fsmonitor=false via job-level GIT_CONFIG_* env), so a planted
 #   .git/hooks script can never execute.
+# - Detection snapshots the exact live head/base refs. Checkout and merge use
+#   those immutable SHAs; immediately before publication the workflow repeats
+#   the PR, repository, ref, ownership-label, stack-topology, default/protected
+#   branch, and live-SHA checks. An exact head lease preserves any concurrent
+#   push, and a post-push live-ref query classifies ambiguous transport errors.
 # - Staged conflicted files are scanned for the raw/base64 ANTHROPIC_API_KEY
 #   before commit. This scan is BEST-EFFORT, not a boundary: a determined
 #   injection could smuggle an exotic encoding past it. The actual boundary
@@ -69,11 +75,17 @@
 #   GitGuardian's push protection. ANTHROPIC_API_KEY necessarily sits in the
 #   model's own process env; treat it as exposed to same-repo collaborators
 #   who can engineer a conflict, and scope/rotate it accordingly.
-# - Fork PRs are skipped: we can't push to them, and running the model over
-#   untrusted content with secrets in the environment is not acceptable.
+# - Fork PRs, protected heads, and the default branch are skipped: we can't
+#   safely push to them, and running the model when publication is forbidden
+#   would expose content to secrets and spend AI budget for no useful result.
 # - GITHUB_TOKEN pushes don't retrigger `push` workflows (no self-loops);
 #   stacked PRs are cascaded via repository_dispatch (always creates runs,
 #   needs only contents:write), with a depth cap as a loop guard.
+# - An unchanged, still-eligible PR is labelled ai-merge-paused after a failed
+#   run, so the global sweep cannot spend AI budget every 30 minutes forever.
+#   The pause is bound to one strict bot-authored owner/ref/SHA/topology marker;
+#   changed snapshots recover automatically, while a base-scoped manual
+#   dispatch deliberately clears and retries an unchanged hold.
 #
 # graphify-out/** is never given to the AI. The repo's merge driver for
 # graph.json is not configured in CI, so git would silently text-merge it into
@@ -108,7 +120,8 @@
 
 name: Resolve PR conflicts (AI)
 
-run-name: "Resolve PR conflicts under ${{ github.event.client_payload.branch || inputs.branch || github.event.pull_request.base.ref || github.ref_name }}"
+run-name: >-
+  Resolve PR conflicts under ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.branch == '')) && 'all open PRs' || github.event.client_payload.branch || inputs.branch || github.event.pull_request.base.ref || github.ref_name }}
 
 on:
   push:
@@ -133,11 +146,18 @@ on:
   # head push itself creates, without adding a per-PR target-context event.
   pull_request_target:
     types: [opened, reopened]
+  schedule:
+    # Event triggers already cover every branch. This global backstop catches
+    # open conflicts whose creating event was missed or predates the workflow.
+    # It is offset from the rebase-only sweep to keep API and runner bursts
+    # separate while preserving deterministic merge-vs-rebase ownership.
+    - cron: "2,32 * * * *"
   workflow_dispatch:
     inputs:
       branch:
-        description: "Base branch to scan for conflicting PRs"
-        required: true
+        description: "Base branch to scan; leave blank to scan every open PR"
+        required: false
+        default: ""
         type: string
       depth:
         description: "Internal: stacked-PR cascade depth (leave at 0)"
@@ -154,35 +174,46 @@ concurrency:
   #   detect-<branch>  a push run (detect + handoff only)
   #   pr<N>            a pull_request_target run (detect + handoff), per PR
   #   base-<branch>    an actual resolution sweep (dispatch / workflow_dispatch)
+  #   all-open         a scheduled or blank-manual repository-wide detector
   # Critically, a push run and the dispatch it spawns previously shared a group,
   # so the child cancelled its own parent mid-handoff — observed as
   # "handoff: cancelled". It happened to work only because the dispatch API call
   # had already returned; had cancellation landed first the handoff would have
   # been lost with no error, i.e. a silent, timing-dependent no-op.
   group: >-
-    ${{ github.event_name == 'push'
+    ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.branch == ''))
+        && 'resolve-all-open'
+        || github.event_name == 'push'
         && format('resolve-detect-{0}', github.ref_name)
         || (github.event.pull_request.number && format('resolve-pr{0}', github.event.pull_request.number))
         || format('resolve-base-{0}', github.event.client_payload.branch || inputs.branch || github.ref_name) }}
-  cancel-in-progress: true
+  # Detectors are disposable and may collapse into the newest scan. A real
+  # resolution run must finish or fail coherently; never cancel one halfway
+  # through a merge merely because another detector found the same base.
+  cancel-in-progress: >-
+    ${{ github.event_name == 'push'
+        || github.event_name == 'pull_request_target'
+        || github.event_name == 'schedule'
+        || (github.event_name == 'workflow_dispatch' && inputs.branch == '') }}
 
 permissions:
   contents: read
 
 jobs:
   detect:
-    name: Find conflicting PRs for this branch
+    name: Find merge-conflicting PRs
     # Branch deletions also fire `push`; there is nothing to scan then.
     if: github.event_name != 'push' || github.event.deleted == false
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
+      contents: read
       pull-requests: read
     outputs:
       prs: ${{ steps.scan.outputs.prs }}
       any: ${{ steps.scan.outputs.any }}
     steps:
-      - name: Scan open PRs targeting (and from) this branch
+      - name: Scan open PRs and assign deterministic resolver ownership
         id: scan
         env:
           GH_TOKEN: ${{ github.token }}
@@ -201,20 +232,87 @@ jobs:
           # loop: the resolver's own resolution push makes its PR mergeable,
           # so that push's detect run finds nothing to do.
           SCAN_HEAD: ${{ github.event_name == 'push' }}
+          # Scheduled sweeps and blank manual runs cover every open PR,
+          # regardless of base branch. Stack members remain excluded below so
+          # the rebase resolver can own their history without a race.
+          SCAN_ALL: >-
+            ${{ github.event_name == 'schedule'
+                || (github.event_name == 'workflow_dispatch' && inputs.branch == '') }}
+          # A named-base manual run is the deliberate recovery path for
+          # ai-merge-paused PRs. Event-driven and blank/global scans abstain.
+          MANUAL_RETRY: >-
+            ${{ github.event_name == 'workflow_dispatch' && inputs.branch != '' }}
         run: |
           set -euo pipefail
 
+          encode_ref() {
+            jq -rn --arg value "$1" '$value | @uri'
+          }
+          live_ref_sha() {
+            gh api "repos/$REPO/git/ref/heads/$(encode_ref "$1")" --jq '.object.sha'
+          }
+          decode_base64url() {
+            local value="$1"
+            value="$(tr '_-' '/+' <<<"$value" | tr -d '\n')"
+            case $((${#value} % 4)) in
+              0) ;;
+              2) value="${value}==" ;;
+              3) value="${value}=" ;;
+              *) return 1 ;;
+            esac
+            printf '%s' "$value" | base64 --decode
+          }
+
+          all_open_prs() {
+            local owner name
+            owner="${REPO%%/*}"
+            name="${REPO#*/}"
+            # GraphQL variable names must remain literal for gh to bind them.
+            # shellcheck disable=SC2016
+            gh api graphql --paginate --slurp \
+              -f owner="$owner" \
+              -f name="$name" \
+              -f query='query($owner: String!, $name: String!, $endCursor: String) {
+                repository(owner: $owner, name: $name) {
+                  pullRequests(
+                    first: 100,
+                    states: OPEN,
+                    after: $endCursor,
+                    orderBy: {field: CREATED_AT, direction: ASC}
+                  ) {
+                    nodes {
+                      number
+                      headRefName
+                      baseRefName
+                      isCrossRepository
+                      isDraft
+                      mergeable
+                      labels(first: 100) { nodes { name } }
+                    }
+                    pageInfo { hasNextPage endCursor }
+                  }
+                }
+              }' \
+              | jq -c '[.[].data.repository.pullRequests.nodes[]
+                  | {number, headRefName, baseRefName, isCrossRepository,
+                     isDraft, mergeable, labels:(.labels.nodes // [])}]'
+          }
+
           query() {
-            {
-              gh pr list --repo "$REPO" --base "$TARGET" --state open \
-                --json number,headRefName,baseRefName,isCrossRepository,isDraft,mergeable,labels \
-                --limit 100
-              if [ "$SCAN_HEAD" = "true" ]; then
-                gh pr list --repo "$REPO" --head "$TARGET" --state open \
-                  --json number,headRefName,baseRefName,isCrossRepository,isDraft,mergeable,labels \
-                  --limit 100
-              fi
-            } | jq -s 'add | unique_by(.number)'
+            local open
+            open="$(all_open_prs)"
+            if [ "$SCAN_ALL" = "true" ]; then
+              printf '%s\n' "$open"
+              return
+            fi
+            jq -c \
+              --arg target "$TARGET" \
+              --argjson scan_head "$SCAN_HEAD" '
+                [.[]
+                  | select(.baseRefName == $target
+                      or ($scan_head and .headRefName == $target))]
+                | unique_by(.number)
+              ' <<<"$open"
           }
 
           # GitHub computes mergeability lazily after a base push; poll until
@@ -228,22 +326,108 @@ jobs:
             prs="$(query)"
           done
 
-          echo "Open PRs based on $TARGET:"
+          if [ "$SCAN_ALL" = "true" ]; then
+            echo "Open PRs in repository-wide scan:"
+          else
+            echo "Open PRs based on $TARGET:"
+          fi
           jq -r '.[] | "  #\(.number) \(.headRefName) draft=\(.isDraft) mergeable=\(.mergeable) fork=\(.isCrossRepository)"' <<<"$prs"
 
           # Resolver ownership must not depend on which detector wins a race.
           # Build the full open same-repo PR graph so stack members go to the
           # rebase workflow before either workflow has had time to add labels.
-          all_open="$(
-            gh pr list --repo "$REPO" --state open \
-              --json number,headRefName,baseRefName,isCrossRepository,labels \
-              --limit 1000
-          )"
+          all_open="$(all_open_prs)"
+
+          # A pause belongs to one exact failed snapshot, recorded in a strict
+          # hidden marker in the github-actions bot's failure comment. Ref or
+          # topology changes make it stale and eligible again. Missing or
+          # malformed legacy metadata fails closed until a named manual retry.
+          recover_merge_paused='[]'
+          while IFS= read -r encoded; do
+            [ -n "$encoded" ] || continue
+            paused_pr="$(base64 --decode <<<"$encoded")"
+            number="$(jq -r '.number' <<<"$paused_pr")"
+            head="$(jq -r '.headRefName' <<<"$paused_pr")"
+            base="$(jq -r '.baseRefName' <<<"$paused_pr")"
+            if [ "$MANUAL_RETRY" = true ]; then
+              recover_merge_paused="$(jq -c --argjson n "$number" '. + [$n] | unique' \
+                <<<"$recover_merge_paused")"
+              continue
+            fi
+
+            stack_member="$(jq -r --argjson n "$number" --arg head "$head" --arg base "$base" '
+              any(.[];
+                .number != $n
+                and (.isCrossRepository | not)
+                and (.headRefName == $base or .baseRefName == $head))
+            ' <<<"$all_open")"
+            no_ai="$(jq -r '[.labels[].name] | index("no-ai-rebase") != null' <<<"$paused_pr")"
+            if [ "$stack_member" = true ] && [ "$no_ai" != true ]; then
+              # Rebase ownership now applies. That workflow clears this
+              # opposing pause after independently proving its ownership.
+              continue
+            fi
+            topology=standalone
+            [ "$stack_member" != true ] || topology=no-ai-stack
+
+            token="$(
+              gh api --paginate "repos/$REPO/issues/$number/comments?per_page=100" --slurp 2>/dev/null \
+                | jq -r '
+                    add // []
+                    | [.[]
+                        | select(.user.login == "github-actions[bot]")
+                        | .body
+                        | capture("<!-- thingtime-ai-conflict-pause:v1 (?<token>[A-Za-z0-9_-]+) -->")?
+                        | .token]
+                    | last // empty
+                  ' 2>/dev/null || true
+            )"
+            payload=''
+            if [ -n "$token" ]; then
+              decoded="$(decode_base64url "$token" 2>/dev/null || true)"
+              payload="$(jq -ce \
+                --argjson number "$number" '
+                  select(type == "object")
+                  | select(.v == 1 and .owner == "merge" and .pr == $number)
+                  | select(.head_ref | type == "string" and length > 0)
+                  | select(.base_ref | type == "string" and length > 0)
+                  | select(.head_sha | type == "string" and test("^[0-9a-f]{40}$"))
+                  | select(.base_sha | type == "string" and test("^[0-9a-f]{40}$"))
+                  | select(.topology == "standalone" or .topology == "no-ai-stack")
+                ' <<<"$decoded" 2>/dev/null || true)"
+            fi
+            if [ -z "$payload" ]; then
+              echo "::notice::#$number remains ai-merge-paused: exact bot snapshot metadata is unavailable; use a named-base manual retry."
+              continue
+            fi
+
+            live_head="$(live_ref_sha "$head" 2>/dev/null || true)"
+            live_base="$(live_ref_sha "$base" 2>/dev/null || true)"
+            if [ "$head" = "$(jq -r '.head_ref' <<<"$payload")" ] \
+               && [ "$base" = "$(jq -r '.base_ref' <<<"$payload")" ] \
+               && [ "$live_head" = "$(jq -r '.head_sha' <<<"$payload")" ] \
+               && [ "$live_base" = "$(jq -r '.base_sha' <<<"$payload")" ] \
+               && [ "$topology" = "$(jq -r '.topology' <<<"$payload")" ]; then
+              echo "::notice::#$number remains ai-merge-paused at its exact failed snapshot."
+              continue
+            fi
+            echo "#$number: ai-merge-paused snapshot is stale; routing the current state again."
+            recover_merge_paused="$(jq -c --argjson n "$number" '. + [$n] | unique' \
+              <<<"$recover_merge_paused")"
+          done < <(jq -r '
+            .[]
+            | select([.labels[].name] | index("ai-merge-paused") != null)
+            | @base64
+          ' <<<"$prs")
 
           skipped="$(jq -r '[.[] | select(.isCrossRepository) | select(.mergeable == "CONFLICTING") | .number] | join(", ")' <<<"$prs")"
           [ -n "$skipped" ] && echo "::warning::Skipping conflicting fork PR(s) #$skipped — cannot push to fork branches."
-          rebase_owned="$(jq -r '[.[] | select(.mergeable == "CONFLICTING") | select([.labels[].name] | any(. == "ai-rebase-in-progress" or . == "ai-rebase-paused")) | .number] | join(", ")' <<<"$prs")"
-          [ -n "$rebase_owned" ] && echo "::notice::Skipping PR(s) #$rebase_owned — the AI rebase-stack workflow owns or paused them."
+          rebase_active="$(jq -r '[.[] | select(.mergeable == "CONFLICTING") | select([.labels[].name] | index("ai-rebase-in-progress") != null) | .number] | join(", ")' <<<"$prs")"
+          [ -n "$rebase_active" ] && echo "::notice::Skipping PR(s) #$rebase_active — the AI PR/stack rebase workflow is actively rewriting them."
+          merge_paused="$(jq -r '[.[] | select(.mergeable == "CONFLICTING") | select([.labels[].name] | index("ai-merge-paused") != null) | .number] | join(", ")' <<<"$prs")"
+          if [ -n "$merge_paused" ] && [ "$MANUAL_RETRY" != true ]; then
+            echo "::notice::Skipping PR(s) #$merge_paused — automatic merge resolution is paused; use a named-base manual run to retry."
+          fi
           stacked_owned="$(jq -r --argjson all "$all_open" '
             [.[] as $pr
               | $pr
@@ -258,9 +442,9 @@ jobs:
               | .number]
             | join(", ")
           ' <<<"$prs")"
-          [ -n "$stacked_owned" ] && echo "::notice::Skipping stacked PR(s) #$stacked_owned — the AI rebase-stack workflow owns stack history."
+          [ -n "$stacked_owned" ] && echo "::notice::Skipping stacked PR(s) #$stacked_owned — the AI PR/stack rebase workflow owns stack history."
           still_unknown="$(jq -r '[.[] | select(.mergeable == "UNKNOWN") | .number] | join(", ")' <<<"$prs")"
-          [ -n "$still_unknown" ] && echo "::warning::PR(s) #$still_unknown still UNKNOWN after polling; they will be re-checked on the next push."
+          [ -n "$still_unknown" ] && echo "::warning::PR(s) #$still_unknown still UNKNOWN after polling; they will be re-checked by the next event or scheduled sweep."
 
           # On a pull_request_target event, scan ONLY the triggering PR — the
           # other PRs sharing this base are not this event's business and are
@@ -275,14 +459,16 @@ jobs:
           # carrying it may still use this merge-based resolver.
           conflicting="$(jq -c \
             --arg only "${ONLY_PR:-}" \
+            --argjson recover "$recover_merge_paused" \
             --argjson all "$all_open" '
             [.[] as $pr
               | $pr
               | select(.isCrossRepository | not)
               | select(.mergeable == "CONFLICTING")
               | select([.labels[].name]
-                  | all(. != "ai-rebase-in-progress"
-                        and . != "ai-rebase-paused"))
+                  | all(. != "ai-rebase-in-progress"))
+              | select(([.labels[].name] | index("ai-merge-paused") == null)
+                  or any($recover[]; . == $pr.number))
               | select(
                   ([.labels[].name] | index("no-ai-rebase") != null)
                   or (any($all[];
@@ -291,8 +477,56 @@ jobs:
                       and (.headRefName == $pr.baseRefName
                            or .baseRefName == $pr.headRefName)) | not))
               | select($only == "" or (.number | tostring) == $only)
-              | {number: .number, head: .headRefName, base: .baseRefName}]
+              | {number: .number, head: .headRefName, base: .baseRefName,
+                  recover_merge_pause: any($recover[]; . == $pr.number),
+                  recover_rebase_pause:
+                    ([.labels[].name] | index("ai-rebase-paused") != null)}]
           ' <<<"$prs")"
+
+          # Snapshot the exact live refs rather than trusting PR base/head SHA
+          # fields, which GitHub can leave stale for stacked PRs. The actual
+          # merge and the push lease both use these immutable snapshots.
+          branch_protected() {
+            gh api "repos/$REPO/branches/$(encode_ref "$1")" --jq '.protected'
+          }
+          default_ref="$(gh api "repos/$REPO" --jq '.default_branch')"
+          snapshots='[]'
+          while IFS= read -r encoded; do
+            [ -n "$encoded" ] || continue
+            candidate="$(base64 --decode <<<"$encoded")"
+            number="$(jq -r '.number' <<<"$candidate")"
+            head="$(jq -r '.head' <<<"$candidate")"
+            base="$(jq -r '.base' <<<"$candidate")"
+            if [ "$head" = "$default_ref" ]; then
+              echo "::warning::Skipping #$number: the repository default branch is never a resolver push target."
+              continue
+            fi
+            if ! protected="$(branch_protected "$head")"; then
+              echo "::warning::Skipping #$number for now: head-branch protection could not be verified."
+              continue
+            fi
+            if [ "$protected" = true ]; then
+              echo "::warning::Skipping #$number: protected head branch $head cannot be updated automatically."
+              continue
+            fi
+            if ! head_sha="$(live_ref_sha "$head")" \
+               || ! base_sha="$(live_ref_sha "$base")"; then
+              echo "::warning::Skipping #$number for now: a live branch ref could not be snapshotted."
+              continue
+            fi
+            if ! [[ "$head_sha" =~ ^[0-9a-f]{40}$ ]] \
+               || ! [[ "$base_sha" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::warning::Skipping #$number for now: a live branch ref returned an invalid SHA."
+              continue
+            fi
+            candidate="$(jq -c \
+              --arg head_sha "$head_sha" \
+              --arg base_sha "$base_sha" \
+              '. + {head_sha:$head_sha, base_sha:$base_sha}' \
+              <<<"$candidate")"
+            snapshots="$(jq -c --argjson item "$candidate" '. + [$item]' <<<"$snapshots")"
+          done < <(jq -r '.[] | @base64' <<<"$conflicting")
+          conflicting="$snapshots"
           echo "prs=$conflicting" >> "$GITHUB_OUTPUT"
           echo "any=$(jq 'length > 0' <<<"$conflicting")" >> "$GITHUB_OUTPUT"
 
@@ -302,12 +536,17 @@ jobs:
   # pull_request_review_comment, workflow_dispatch, repository_dispatch,
   # schedule, workflow_run. So a push-triggered run cannot resolve anything
   # itself — it detects the work and hands off to repository_dispatch, which
-  # IS supported and re-enters this same workflow to do the real work.
+  # IS supported and re-enters this same workflow to do the real work. Global
+  # scans use the same handoff so every actual run comes from the trusted
+  # default-branch workflow and remains grouped by the PR's real base branch.
   handoff:
-    name: Hand off to a dispatch run (push/PR-target cannot run the AI step)
+    name: Hand off to a trusted dispatch run per conflicted base
     needs: detect
     if: >-
-      (github.event_name == 'push' || github.event_name == 'pull_request_target')
+      (github.event_name == 'push'
+       || github.event_name == 'pull_request_target'
+       || github.event_name == 'schedule'
+       || (github.event_name == 'workflow_dispatch' && inputs.branch == ''))
       && needs.detect.outputs.any == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -338,11 +577,11 @@ jobs:
     name: Load the conflict-resolver model waterfall
     needs: detect
     # Fetch once for the whole resolution sweep, never once per matrix PR. The
-    # push/PR-target detect runs only hand off, so they do not need this config.
+    # API-only detector runs hand off, so they do not need this config.
     if: >-
       needs.detect.outputs.any == 'true'
-      && github.event_name != 'push'
-      && github.event_name != 'pull_request_target'
+      && (github.event_name == 'repository_dispatch'
+          || (github.event_name == 'workflow_dispatch' && inputs.branch != ''))
     runs-on: ubuntu-latest
     timeout-minutes: 2
     # This job deliberately has no checkout and no repository permissions. It
@@ -446,19 +685,19 @@ jobs:
   resolve:
     name: "Resolve PR #${{ matrix.pr.number }}"
     needs: [detect, model_config]
-    # Never on `push` or `pull_request_target` — the AI step rejects both
-    # ("Unsupported event type"), and resolution must not run in the target
-    # context regardless. The handoff job converts both into a
-    # repository_dispatch run.
+    # Run only in a trusted repository_dispatch or an explicitly base-scoped
+    # manual invocation. Every broad/event-driven scan is API-only and hands
+    # off one default-branch dispatch per conflicted base.
     if: >-
       needs.detect.outputs.any == 'true'
-      && github.event_name != 'push'
-      && github.event_name != 'pull_request_target'
+      && (github.event_name == 'repository_dispatch'
+          || (github.event_name == 'workflow_dispatch' && inputs.branch != ''))
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: write
       pull-requests: write
+      issues: write
     strategy:
       fail-fast: false
       matrix:
@@ -469,6 +708,10 @@ jobs:
       # event context, which is wrong on pull_request events.
       BASE_REF: ${{ matrix.pr.base }}
       HEAD_REF: ${{ matrix.pr.head }}
+      EXPECTED_BASE_SHA: ${{ matrix.pr.base_sha }}
+      EXPECTED_HEAD_SHA: ${{ matrix.pr.head_sha }}
+      RECOVER_MERGE_PAUSE: ${{ matrix.pr.recover_merge_pause }}
+      RECOVER_REBASE_PAUSE: ${{ matrix.pr.recover_rebase_pause }}
       PR_NUMBER: ${{ matrix.pr.number }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       # True when CONFLICT_RESOLVER_PAT exists (a boolean, never the secret
@@ -493,9 +736,9 @@ jobs:
       - name: Check out PR head
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
-          ref: ${{ matrix.pr.head }}
-          # fetch-depth 0 brings all branches, so origin/$BASE_REF is already
-          # local — no authenticated fetch needed later.
+          ref: ${{ matrix.pr.head_sha }}
+          # Fetch every branch so the exact snapshotted base commit is local;
+          # no authenticated fetch is needed later.
           fetch-depth: 0
           # Keep the token out of .git/config: the model has Read access to
           # the workspace, and the push step supplies its own auth.
@@ -505,6 +748,143 @@ jobs:
           # which produced the misleading "could not lock /dev/null" error
           # annotation even though conflict resolution succeeded.
           set-safe-directory: false
+
+      - name: Clear stale or deliberately retried ownership pauses
+        if: >-
+          env.RECOVER_MERGE_PAUSE == 'true'
+          || env.RECOVER_REBASE_PAUSE == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MANUAL_RETRY: >-
+            ${{ github.event_name == 'workflow_dispatch' && inputs.branch != '' }}
+        run: |
+          set -euo pipefail
+          encode_ref() { jq -rn --arg value "$1" '$value | @uri'; }
+          live_ref_sha() {
+            gh api "repos/$REPO/git/ref/heads/$(encode_ref "$1")" --jq '.object.sha'
+          }
+          decode_base64url() {
+            local value="$1"
+            value="$(tr '_-' '/+' <<<"$value" | tr -d '\n')"
+            case $((${#value} % 4)) in
+              0) ;;
+              2) value="${value}==" ;;
+              3) value="${value}=" ;;
+              *) return 1 ;;
+            esac
+            printf '%s' "$value" | base64 --decode
+          }
+          remove_label_verified() {
+            local label="$1"
+            gh api --method DELETE \
+              "repos/$REPO/issues/$PR_NUMBER/labels/$label" \
+              >/dev/null 2>&1 || true
+            absent="$(gh api "repos/$REPO/issues/$PR_NUMBER" \
+              --jq "[.labels[].name] | index(\"$label\") == null")"
+            [ "$absent" = true ] || {
+              echo "::error::Could not clear proven stale $label."
+              return 1
+            }
+          }
+
+          # Recovery booleans were computed by an earlier detector. Re-prove
+          # the exact ref snapshot and current merge ownership before deleting
+          # either label, so a queued run cannot erase a newly valid rebase hold.
+          pr="$(gh api "repos/$REPO/pulls/$PR_NUMBER")"
+          [ "$(jq -r '.state' <<<"$pr")" = open ] \
+            || { echo "::error::PR closed before pause recovery."; exit 1; }
+          [ "$(jq -r '.head.repo.full_name' <<<"$pr")" = "$REPO" ] \
+            && [ "$(jq -r '.base.repo.full_name' <<<"$pr")" = "$REPO" ] \
+            || { echo "::error::PR repositories changed before pause recovery."; exit 1; }
+          [ "$(jq -r '.head.ref' <<<"$pr")" = "$HEAD_REF" ] \
+            && [ "$(jq -r '.base.ref' <<<"$pr")" = "$BASE_REF" ] \
+            || { echo "::error::PR refs changed before pause recovery."; exit 1; }
+          [ "$(live_ref_sha "$HEAD_REF")" = "$EXPECTED_HEAD_SHA" ] \
+            && [ "$(live_ref_sha "$BASE_REF")" = "$EXPECTED_BASE_SHA" ] \
+            || { echo "::error::PR SHAs changed before pause recovery."; exit 1; }
+          default_ref="$(gh api "repos/$REPO" --jq '.default_branch')"
+          [ "$HEAD_REF" != "$default_ref" ] \
+            && [ "$(gh api "repos/$REPO/branches/$(encode_ref "$HEAD_REF")" --jq '.protected')" != true ] \
+            || { echo "::error::PR head is no longer an eligible write target."; exit 1; }
+
+          labels="$(jq -c '[.labels[].name]' <<<"$pr")"
+          all_open="$(gh api --paginate \
+            "repos/$REPO/pulls?state=open&per_page=100" --slurp \
+            | jq -c 'add // []')"
+          stack_member="$(jq -r \
+            --arg repo "$REPO" \
+            --argjson number "$PR_NUMBER" \
+            --arg head "$HEAD_REF" \
+            --arg base "$BASE_REF" '
+              any(.[];
+                .number != $number
+                and .head.repo.full_name == $repo
+                and .base.repo.full_name == $repo
+                and (.head.ref == $base or .base.ref == $head))
+            ' <<<"$all_open")"
+          merge_owned=false
+          topology=standalone
+          if [ "$(jq -r '.mergeable' <<<"$pr")" = false ]; then
+            if [ "$stack_member" != true ]; then
+              merge_owned=true
+            elif jq -e 'index("no-ai-rebase") != null' >/dev/null <<<"$labels"; then
+              merge_owned=true
+              topology=no-ai-stack
+            fi
+          fi
+          [ "$merge_owned" = true ] \
+            || { echo "::error::Resolver ownership changed before pause recovery."; exit 1; }
+          if jq -e 'index("ai-rebase-in-progress") != null' >/dev/null <<<"$labels"; then
+            echo "::error::The rebase ownership mutex appeared before pause recovery."
+            exit 1
+          fi
+
+          if [ "$RECOVER_MERGE_PAUSE" = true ] \
+             && jq -e 'index("ai-merge-paused") != null' >/dev/null <<<"$labels" \
+             && [ "$MANUAL_RETRY" != true ]; then
+            token="$(
+              gh api --paginate "repos/$REPO/issues/$PR_NUMBER/comments?per_page=100" --slurp \
+                | jq -r '
+                    add // []
+                    | [.[]
+                        | select(.user.login == "github-actions[bot]")
+                        | .body
+                        | capture("<!-- thingtime-ai-conflict-pause:v1 (?<token>[A-Za-z0-9_-]+) -->")?
+                        | .token]
+                    | last // empty
+                  '
+            )"
+            [ -n "$token" ] \
+              || { echo "::error::Merge pause metadata changed before recovery."; exit 1; }
+            decoded="$(decode_base64url "$token" 2>/dev/null || true)"
+            payload="$(jq -ce \
+              --argjson number "$PR_NUMBER" '
+                select(type == "object")
+                | select(.v == 1 and .owner == "merge" and .pr == $number)
+                | select(.head_ref | type == "string" and length > 0)
+                | select(.base_ref | type == "string" and length > 0)
+                | select(.head_sha | type == "string" and test("^[0-9a-f]{40}$"))
+                | select(.base_sha | type == "string" and test("^[0-9a-f]{40}$"))
+                | select(.topology == "standalone" or .topology == "no-ai-stack")
+              ' <<<"$decoded" 2>/dev/null || true)"
+            [ -n "$payload" ] \
+              || { echo "::error::Merge pause metadata changed before recovery."; exit 1; }
+            if [ "$HEAD_REF" = "$(jq -r '.head_ref' <<<"$payload")" ] \
+               && [ "$BASE_REF" = "$(jq -r '.base_ref' <<<"$payload")" ] \
+               && [ "$EXPECTED_HEAD_SHA" = "$(jq -r '.head_sha' <<<"$payload")" ] \
+               && [ "$EXPECTED_BASE_SHA" = "$(jq -r '.base_sha' <<<"$payload")" ] \
+               && [ "$topology" = "$(jq -r '.topology' <<<"$payload")" ]; then
+              echo "::error::A fresh exact-snapshot merge pause superseded this queued retry."
+              exit 1
+            fi
+          fi
+
+          if [ "$RECOVER_MERGE_PAUSE" = true ]; then
+            remove_label_verified ai-merge-paused
+          fi
+          if [ "$RECOVER_REBASE_PAUSE" = true ]; then
+            remove_label_verified ai-rebase-paused
+          fi
 
       - name: Merge base into head
         id: merge
@@ -516,13 +896,24 @@ jobs:
           # each side's intent from the file alone (it has no git access).
           git config merge.conflictStyle zdiff3
 
-          base="origin/$BASE_REF"
-          git rev-parse --verify --quiet "$base" >/dev/null
+          for sha_name in EXPECTED_HEAD_SHA EXPECTED_BASE_SHA; do
+            sha="${!sha_name}"
+            if ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::error::$sha_name must be an exact 40-character commit SHA."
+              exit 1
+            fi
+          done
+          base="$EXPECTED_BASE_SHA"
+          git rev-parse --verify --quiet "$base^{commit}" >/dev/null
           pre_merge="$(git rev-parse HEAD)"
+          [ "$pre_merge" = "$EXPECTED_HEAD_SHA" ] \
+            || { echo "::error::Checkout does not match the snapshotted PR head."; exit 1; }
           echo "$pre_merge" > "$RUNNER_TEMP/pre_merge_sha.txt"
 
           clean=true
-          git merge --no-edit "$base" || clean=false
+          git merge --no-edit \
+            -m "Merge branch '$BASE_REF' into $HEAD_REF" \
+            "$base" || clean=false
 
           # graphify-out determinism: the repo's graph.json merge driver is not
           # configured in CI, so git text-merges it — producing a mixed
@@ -1057,8 +1448,89 @@ jobs:
         env:
           PUSH_PAT: ${{ secrets.CONFLICT_RESOLVER_PAT }}
           DEFAULT_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+
+          encode_ref() {
+            jq -rn --arg value "$1" '$value | @uri'
+          }
+          live_ref_sha() {
+            gh api "repos/$REPO/git/ref/heads/$(encode_ref "$1")" --jq '.object.sha'
+          }
+
+          # Revalidate immediately beside the write. The scheduled detector
+          # deliberately widens availability, so publication must fail closed
+          # if a human, another resolver, or the PR topology changed meanwhile.
+          pr="$(gh api "repos/$REPO/pulls/$PR_NUMBER")"
+          [ "$(jq -r '.state' <<<"$pr")" = open ] \
+            || { echo "::error::PR closed while the resolver was running."; exit 1; }
+          [ "$(jq -r '.head.repo.full_name' <<<"$pr")" = "$REPO" ] \
+            || { echo "::error::PR head repository changed while resolving."; exit 1; }
+          [ "$(jq -r '.base.repo.full_name' <<<"$pr")" = "$REPO" ] \
+            || { echo "::error::PR base repository changed while resolving."; exit 1; }
+          [ "$(jq -r '.head.ref' <<<"$pr")" = "$HEAD_REF" ] \
+            || { echo "::error::PR head ref changed while resolving."; exit 1; }
+          [ "$(jq -r '.base.ref' <<<"$pr")" = "$BASE_REF" ] \
+            || { echo "::error::PR base ref changed while resolving."; exit 1; }
+
+          labels="$(jq -c '[.labels[].name]' <<<"$pr")"
+          if jq -e 'index("ai-merge-paused") != null' >/dev/null <<<"$labels"; then
+            echo "::error::ai-merge-paused was added or could not be cleared while this run was active."
+            exit 1
+          fi
+          if jq -e 'any(. == "ai-rebase-in-progress" or . == "ai-rebase-paused")' \
+               >/dev/null <<<"$labels"; then
+            echo "::error::The rebase workflow acquired or paused this PR while merge resolution was running."
+            exit 1
+          fi
+
+          # Stack ownership is structural, not timing-dependent. A newly
+          # opened parent/child makes this merge run abstain unless the PR is
+          # explicitly labelled no-ai-rebase.
+          if ! jq -e 'index("no-ai-rebase") != null' >/dev/null <<<"$labels"; then
+            all_open="$(
+              gh api --paginate "repos/$REPO/pulls?state=open&per_page=100" --slurp \
+                | jq -c 'add // []'
+            )"
+            stack_member="$(jq -r \
+              --arg repo "$REPO" \
+              --argjson number "$PR_NUMBER" \
+              --arg head "$HEAD_REF" \
+              --arg base "$BASE_REF" '
+                any(.[];
+                  .number != $number
+                  and .head.repo.full_name == $repo
+                  and .base.repo.full_name == $repo
+                  and (.head.ref == $base or .base.ref == $head))
+              ' <<<"$all_open")"
+            [ "$stack_member" != true ] \
+              || { echo "::error::PR became a stack member; rebase workflow now owns it."; exit 1; }
+          fi
+
+          [ "$(live_ref_sha "$HEAD_REF")" = "$EXPECTED_HEAD_SHA" ] \
+            || { echo "::error::Head moved immediately before push; exact lease preserved the newer work."; exit 1; }
+          [ "$(live_ref_sha "$BASE_REF")" = "$EXPECTED_BASE_SHA" ] \
+            || { echo "::error::Base moved immediately before push; rerun against the new base."; exit 1; }
+          [ "$(gh api "repos/$REPO/branches/$(encode_ref "$HEAD_REF")" --jq '.protected')" != true ] \
+            || { echo "::error::Head branch became protected while resolving."; exit 1; }
+          default_ref="$(gh api "repos/$REPO" --jq '.default_branch')"
+          [ "$HEAD_REF" != "$default_ref" ] \
+            || { echo "::error::The repository default branch is never a resolver push target."; exit 1; }
+
+          if [ -n "$(git status --porcelain --untracked-files=all)" ]; then
+            echo "::error::Local checkout is not pristine before push."
+            git status --short
+            exit 1
+          fi
+          new_head="$(git rev-parse HEAD)"
+          [ "$new_head" != "$EXPECTED_HEAD_SHA" ] \
+            || { echo "::error::Merge produced no new commit."; exit 1; }
+          git merge-base --is-ancestor "$EXPECTED_HEAD_SHA" "$new_head" \
+            || { echo "::error::Final history does not descend from the exact snapshotted head."; exit 1; }
+          git merge-base --is-ancestor "$EXPECTED_BASE_SHA" "$new_head" \
+            || { echo "::error::Final history does not contain the exact snapshotted base."; exit 1; }
+
           token="${PUSH_PAT:-$DEFAULT_TOKEN}"
           # Auth via GIT_CONFIG_* env (never argv, never .git/config), pushing
           # to the explicit canonical URL so a tampered remote can't redirect.
@@ -1066,7 +1538,60 @@ jobs:
           export GIT_CONFIG_COUNT=3
           export GIT_CONFIG_KEY_2="http.https://github.com/.extraheader"
           export GIT_CONFIG_VALUE_2="AUTHORIZATION: basic $auth"
-          git push "https://github.com/$REPO.git" "HEAD:refs/heads/$HEAD_REF"
+
+          set +e
+          git push \
+            --force-with-lease="refs/heads/$HEAD_REF:$EXPECTED_HEAD_SHA" \
+            "https://github.com/$REPO.git" \
+            "HEAD:refs/heads/$HEAD_REF"
+          transport_rc=$?
+          set -e
+
+          # A transport error can arrive after GitHub accepted the update.
+          # Query the authoritative live ref before deciding whether retrying
+          # would be safe; never infer publication from the git exit code.
+          remote_sha=''
+          for attempt in 1 2 3 4 5; do
+            remote_sha="$(live_ref_sha "$HEAD_REF" 2>/dev/null || true)"
+            [ "$remote_sha" != "$new_head" ] || break
+            [ "$attempt" -eq 5 ] || sleep 2
+          done
+          if [ "$remote_sha" = "$new_head" ]; then
+            {
+              echo "remote_state=published"
+              echo "remote_sha=$remote_sha"
+              echo "transport_rc=$transport_rc"
+            } >> "$GITHUB_OUTPUT"
+            if [ "$transport_rc" -ne 0 ]; then
+              echo "::warning::git push returned $transport_rc, but the live ref proves the exact merge commit was published."
+            fi
+            exit 0
+          fi
+          if [ "$remote_sha" = "$EXPECTED_HEAD_SHA" ]; then
+            {
+              echo "remote_state=unchanged"
+              echo "remote_sha=$remote_sha"
+              echo "transport_rc=$transport_rc"
+            } >> "$GITHUB_OUTPUT"
+            echo "::error::The live ref proves the remote branch is unchanged after push."
+            exit 1
+          fi
+          if [ -z "$remote_sha" ]; then
+            {
+              echo "remote_state=unverifiable"
+              echo "remote_sha=unavailable"
+              echo "transport_rc=$transport_rc"
+            } >> "$GITHUB_OUTPUT"
+            echo "::error::Push outcome is unverifiable because the live ref could not be queried."
+            exit 1
+          fi
+          {
+            echo "remote_state=unexpected"
+            echo "remote_sha=$remote_sha"
+            echo "transport_rc=$transport_rc"
+          } >> "$GITHUB_OUTPUT"
+          echo "::error::Ambiguous push outcome: live head is unexpected ($remote_sha)."
+          exit 1
 
       - name: Comment on PR (resolved)
         env:
@@ -1150,9 +1675,113 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PUSH_OUTCOME: ${{ steps.push.outcome }}
+          PUSH_STATE: ${{ steps.push.outputs.remote_state }}
+          MERGE_CONFLICTED: ${{ steps.merge.outputs.conflicted }}
           WF_BLOCKED: ${{ steps.merge.outputs.workflows_blocked }}
         run: |
           set -euo pipefail
+          encode_ref() { jq -rn --arg value "$1" '$value | @uri'; }
+          live_ref_sha() {
+            gh api "repos/$REPO/git/ref/heads/$(encode_ref "$1")" --jq '.object.sha'
+          }
+
+          # Pause only when the exact failed snapshot is still open, writable,
+          # and merge-owned. A head/base/topology/label/protection race should
+          # simply be rediscovered under its new state, not leave a stale hold.
+          paused=false
+          pause_marker=''
+          protected_state="$(gh api \
+            "repos/$REPO/branches/$(encode_ref "$HEAD_REF")" \
+            --jq '.protected' 2>/dev/null || true)"
+          default_ref="$(gh api "repos/$REPO" --jq '.default_branch' 2>/dev/null || true)"
+          if { [ "$MERGE_CONFLICTED" = true ] || [ "$WF_BLOCKED" = true ]; } \
+             && [ "$PUSH_STATE" != published ] \
+             && pr="$(gh api "repos/$REPO/pulls/$PR_NUMBER" 2>/dev/null)" \
+             && [ "$(jq -r '.state' <<<"$pr")" = open ] \
+             && [ "$(jq -r '.mergeable' <<<"$pr")" = false ] \
+             && [ "$(jq -r '.head.repo.full_name' <<<"$pr")" = "$REPO" ] \
+             && [ "$(jq -r '.base.repo.full_name' <<<"$pr")" = "$REPO" ] \
+             && [ "$(jq -r '.head.ref' <<<"$pr")" = "$HEAD_REF" ] \
+             && [ "$(jq -r '.base.ref' <<<"$pr")" = "$BASE_REF" ] \
+             && [ "$(live_ref_sha "$HEAD_REF" 2>/dev/null || true)" = "$EXPECTED_HEAD_SHA" ] \
+             && [ "$(live_ref_sha "$BASE_REF" 2>/dev/null || true)" = "$EXPECTED_BASE_SHA" ] \
+             && [ "$protected_state" = false ] \
+             && [ -n "$default_ref" ] \
+             && [ "$HEAD_REF" != "$default_ref" ]; then
+            labels="$(jq -c '[.labels[].name]' <<<"$pr")"
+            merge_owned=true
+            topology=standalone
+            if jq -e 'index("ai-rebase-in-progress") != null' \
+                 >/dev/null <<<"$labels"; then
+              merge_owned=false
+            else
+              all_open="$(
+                gh api --paginate "repos/$REPO/pulls?state=open&per_page=100" --slurp 2>/dev/null \
+                  | jq -c 'add // []' || true
+              )"
+              stack_member=false
+              if [ -z "$all_open" ]; then
+                merge_owned=false
+              elif jq -e \
+                --arg repo "$REPO" \
+                --argjson number "$PR_NUMBER" \
+                --arg head "$HEAD_REF" \
+                --arg base "$BASE_REF" '
+                  any(.[];
+                    .number != $number
+                    and .head.repo.full_name == $repo
+                    and .base.repo.full_name == $repo
+                    and (.head.ref == $base or .base.ref == $head))
+                ' >/dev/null <<<"$all_open"; then
+                stack_member=true
+              fi
+              if [ "$stack_member" = true ]; then
+                if jq -e 'index("no-ai-rebase") != null' >/dev/null <<<"$labels"; then
+                  topology=no-ai-stack
+                else
+                  merge_owned=false
+                fi
+              fi
+            fi
+            if [ "$merge_owned" = true ]; then
+              # Current ownership is proven and no active rebase mutex exists;
+              # remove an opposing stale pause before recording this one.
+              gh api --method DELETE \
+                "repos/$REPO/issues/$PR_NUMBER/labels/ai-rebase-paused" \
+                >/dev/null 2>&1 || true
+              rebase_pause_absent="$(gh api "repos/$REPO/issues/$PR_NUMBER" \
+                --jq '[.labels[].name] | index("ai-rebase-paused") == null' \
+                2>/dev/null || true)"
+              if [ "$rebase_pause_absent" = true ]; then
+                pause_payload="$(jq -cn \
+                --argjson pr "$PR_NUMBER" \
+                --arg head_ref "$HEAD_REF" \
+                --arg head_sha "$EXPECTED_HEAD_SHA" \
+                --arg base_ref "$BASE_REF" \
+                --arg base_sha "$EXPECTED_BASE_SHA" \
+                --arg topology "$topology" \
+                --arg run_id "${GITHUB_RUN_ID:-}" \
+                '{v:1,owner:"merge",pr:$pr,head_ref:$head_ref,head_sha:$head_sha,
+                  base_ref:$base_ref,base_sha:$base_sha,topology:$topology,run_id:$run_id}')"
+                pause_token="$(printf '%s' "$pause_payload" | base64 -w0 \
+                  | tr '+/' '-_' | tr -d '=')"
+                pause_marker="<!-- thingtime-ai-conflict-pause:v1 $pause_token -->"
+                if gh label create ai-merge-paused --repo "$REPO" --force \
+                     --color d93f0b \
+                     --description "AI merge-conflict resolution failed; manual retry required" \
+                     >/dev/null \
+                   && gh api --method POST "repos/$REPO/issues/$PR_NUMBER/labels" \
+                     --input <(jq -cn '{labels:["ai-merge-paused"]}') >/dev/null; then
+                  paused=true
+                else
+                  echo "::warning::Could not apply ai-merge-paused; the next global sweep may retry this PR."
+                fi
+              else
+                echo "::warning::Could not clear opposing ai-rebase-paused, so no merge pause was applied."
+              fi
+            fi
+          fi
+
           body="$RUNNER_TEMP/comment.md"
           {
             if [ "$PUSH_OUTCOME" = "success" ]; then
@@ -1171,5 +1800,18 @@ jobs:
                 sed 's/^/- `/; s/$/`/' "$list"
               fi
             fi
+            if [ "$paused" = true ]; then
+              echo
+              echo "Automatic retries are paused with \`ai-merge-paused\` so the scheduled sweep cannot repeat the same failed AI run forever. After review, run this action manually with base \`$BASE_REF\` to clear the hold and retry."
+              echo
+              echo "$pause_marker"
+            fi
           } > "$body"
-          gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file "$body" || true
+          if ! gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file "$body"; then
+            if [ "$paused" = true ]; then
+              gh api --method DELETE \
+                "repos/$REPO/issues/$PR_NUMBER/labels/ai-merge-paused" \
+                >/dev/null 2>&1 || true
+              echo "::warning::Pause comment failed, so ai-merge-paused was removed rather than leaving metadata-free state."
+            fi
+          fi
