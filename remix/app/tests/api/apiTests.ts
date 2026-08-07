@@ -1,11 +1,4 @@
-import {
-  expectJson,
-  expectNdjson,
-  expectRedirectedTo,
-  expectStatus,
-  type ApiTestContext,
-  type ApiTestDefinition
-} from './apiTestRunner';
+import { expectJson, expectNdjson, expectRedirectedTo, expectStatus, type ApiTestContext, type ApiTestDefinition } from './apiTestRunner';
 import { apiEndpointDocs } from '~/docs/apiDocs';
 
 // crypto-sourced randomness: these suffixes end up in registered usernames /
@@ -93,7 +86,10 @@ const isObject = (value: any) => value && typeof value === 'object' && !Array.is
 
 const decodeJwtPayload = (token: unknown) => {
   const encodedPayload = String(token || '').split('.')[1] || '';
-  const base64 = encodedPayload.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(encodedPayload.length / 4) * 4, '=');
+  const base64 = encodedPayload
+    .replace(/-/g, '+')
+    .replace(/_/g, '/')
+    .padEnd(Math.ceil(encodedPayload.length / 4) * 4, '=');
 
   try {
     return JSON.parse(atob(base64));
@@ -257,10 +253,7 @@ export const apiTests: ApiTestDefinition[] = [
     // error shape; a 401/500 must be a real rejection (ok:false + error).
     expect: expectJson(
       [401, 429, 500],
-      (body, response) =>
-        response.status === 429
-          ? typeof body?.error === 'string'
-          : body?.ok === false && typeof body?.error === 'string',
+      (body, response) => (response.status === 429 ? typeof body?.error === 'string' : body?.ok === false && typeof body?.error === 'string'),
       'Login rejects invalid credentials (ok:false + error), or is rate-limited/env-limited with an error shape.'
     )
   },
@@ -309,7 +302,11 @@ export const apiTests: ApiTestDefinition[] = [
     method: 'POST',
     path: '/api/v1/auth/two-factor',
     body: {},
-    expect: expectJson([400, 401], (body) => body?.ok === false && typeof body?.error === 'string', 'Invalid 2FA toggle rejected with an error shape.')
+    expect: expectJson(
+      [400, 401],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Invalid 2FA toggle rejected with an error shape.'
+    )
   },
   {
     id: 'auth-login-otp-invalid-challenge',
@@ -319,7 +316,11 @@ export const apiTests: ApiTestDefinition[] = [
     method: 'POST',
     path: '/api/v1/login',
     body: { challenge: 'not-a-real-challenge-id', code: '000000' },
-    expect: expectJson([401, 429], (body) => body?.ok === false && typeof body?.error === 'string', 'Unknown OTP challenge rejected with an error shape.')
+    expect: expectJson(
+      [401, 429],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Unknown OTP challenge rejected with an error shape.'
+    )
   },
   {
     id: 'auth-resend-verification-empty',
@@ -350,7 +351,11 @@ export const apiTests: ApiTestDefinition[] = [
     body: { serviceName: 'Thingtime API Test Missing Email' },
     expect: expectJson(
       [400],
-      (body) => body?.ok === false && String(body?.error || '').toLowerCase().includes('email'),
+      (body) =>
+        body?.ok === false &&
+        String(body?.error || '')
+          .toLowerCase()
+          .includes('email'),
       'Service account route requires a valid email.'
     )
   },
@@ -363,23 +368,27 @@ export const apiTests: ApiTestDefinition[] = [
     path: '/api/v1/auth/service-account',
     mutates: true,
     body: uniqueServiceAccountBody,
-    expect: expectJson([200], (body) => {
-      const payload = decodeJwtPayload(body?.accessToken);
-      const deadlineMs = Date.parse(body?.verificationRequiredBy || '');
-      const sevenDaysMs = 1000 * 60 * 60 * 24 * 7;
-      const deadlineLooksRight = Number.isFinite(deadlineMs) && deadlineMs - Date.now() <= sevenDaysMs + 60_000;
+    expect: expectJson(
+      [200],
+      (body) => {
+        const payload = decodeJwtPayload(body?.accessToken);
+        const deadlineMs = Date.parse(body?.verificationRequiredBy || '');
+        const sevenDaysMs = 1000 * 60 * 60 * 24 * 7;
+        const deadlineLooksRight = Number.isFinite(deadlineMs) && deadlineMs - Date.now() <= sevenDaysMs + 60_000;
 
-      return (
-        body?.ok === true &&
-        body?.tokenType === 'Bearer' &&
-        body?.expiresAt === null &&
-        body?.storageAllowanceBytes === 5368709120 &&
-        body?.user?.accountKind === 'service' &&
-        body?.user?.emailVerified === false &&
-        !Object.prototype.hasOwnProperty.call(payload || {}, 'exp') &&
-        deadlineLooksRight
-      );
-    }, 'Service account response has non-expiring token, seven-day verification window, and 5 GiB allowance.')
+        return (
+          body?.ok === true &&
+          body?.tokenType === 'Bearer' &&
+          body?.expiresAt === null &&
+          body?.storageAllowanceBytes === 5368709120 &&
+          body?.user?.accountKind === 'service' &&
+          body?.user?.emailVerified === false &&
+          !Object.prototype.hasOwnProperty.call(payload || {}, 'exp') &&
+          deadlineLooksRight
+        );
+      },
+      'Service account response has non-expiring token, seven-day verification window, and 5 GiB allowance.'
+    )
   },
   {
     id: 'email-config',
@@ -410,14 +419,13 @@ export const apiTests: ApiTestDefinition[] = [
     emailSend: true,
     timeoutMs: 30000,
     body: uniqueEmailRegisterBody,
-    expect: expectJson([200], (body) => {
-      return (
-        body?.ok === true &&
-        body?.user?.emailVerified === false &&
-        typeof body?.user?.email === 'string' &&
-        body.user.email.includes('@')
-      );
-    }, 'Signup created an unverified user and triggered verification email delivery.')
+    expect: expectJson(
+      [200],
+      (body) => {
+        return body?.ok === true && body?.user?.emailVerified === false && typeof body?.user?.email === 'string' && body.user.email.includes('@');
+      },
+      'Signup created an unverified user and triggered verification email delivery.'
+    )
   },
   {
     id: 'email-service-account-verification',
@@ -430,16 +438,20 @@ export const apiTests: ApiTestDefinition[] = [
     emailSend: true,
     timeoutMs: 30000,
     body: uniqueEmailServiceAccountBody,
-    expect: expectJson([200], (body) => {
-      const payload = decodeJwtPayload(body?.accessToken);
-      return (
-        body?.ok === true &&
-        body?.user?.accountKind === 'service' &&
-        body?.user?.emailVerified === false &&
-        body?.tokenType === 'Bearer' &&
-        !Object.prototype.hasOwnProperty.call(payload || {}, 'exp')
-      );
-    }, 'Service account was created and triggered verification email delivery.')
+    expect: expectJson(
+      [200],
+      (body) => {
+        const payload = decodeJwtPayload(body?.accessToken);
+        return (
+          body?.ok === true &&
+          body?.user?.accountKind === 'service' &&
+          body?.user?.emailVerified === false &&
+          body?.tokenType === 'Bearer' &&
+          !Object.prototype.hasOwnProperty.call(payload || {}, 'exp')
+        );
+      },
+      'Service account was created and triggered verification email delivery.'
+    )
   },
   {
     id: 'email-otp-helper',
@@ -685,7 +697,11 @@ export const apiTests: ApiTestDefinition[] = [
     group: 'themes',
     method: 'GET',
     path: '/api/v1/themes',
-    expect: expectJson([200, 401], (body) => body?.ok === true || (body?.ok === false && typeof body?.error === 'string'), 'Themes list returned themes for a session or a 401 error shape anonymously.')
+    expect: expectJson(
+      [200, 401],
+      (body) => body?.ok === true || (body?.ok === false && typeof body?.error === 'string'),
+      'Themes list returned themes for a session or a 401 error shape anonymously.'
+    )
   },
   {
     id: 'themes-save-guarded',
@@ -761,11 +777,7 @@ export const apiTests: ApiTestDefinition[] = [
     group: 'things',
     method: 'GET',
     path: '/api/v1/things/quota?key=api-test',
-    expect: expectJson(
-      [401],
-      (body) => body?.ok === false && body?.code === 'UNAUTHORIZED',
-      'Anonymous quota read was rejected.'
-    )
+    expect: expectJson([401], (body) => body?.ok === false && body?.code === 'UNAUTHORIZED', 'Anonymous quota read was rejected.')
   },
   {
     id: 'things-quota-write-service-guarded',
@@ -864,10 +876,36 @@ export const apiTests: ApiTestDefinition[] = [
     group: 'things',
     method: 'GET',
     path: '/api/v1/things/reactions-recent',
+    expect: expectJson([200], (body) => body?.ok === true && Array.isArray(body?.recentReactions), 'Recent reactions returned an array.')
+  },
+  {
+    id: 'tiers-public-live-catalog',
+    name: 'Public live tier catalog',
+    description: 'The tier-card catalog returns only selectable live revisions with immutable version identities and rich inclusions.',
+    group: 'apps',
+    method: 'GET',
+    path: '/api/v1/tiers',
     expect: expectJson(
       [200],
-      (body) => body?.ok === true && Array.isArray(body?.recentReactions),
-      'Recent reactions returned an array.'
+      (body) =>
+        body?.ok === true &&
+        Array.isArray(body?.tiers) &&
+        body.tiers.length > 0 &&
+        new Set(body.tiers.map((tier: any) => tier?.versionId)).size === body.tiers.length &&
+        body.tiers.every(
+          (tier: any) =>
+            typeof tier?.id === 'string' &&
+            typeof tier?.versionId === 'string' &&
+            Number.isSafeInteger(tier?.version) &&
+            tier.version > 0 &&
+            tier.status === 'live' &&
+            isObject(tier?.prices) &&
+            isObject(tier?.discounts) &&
+            tier?.inclusions?.kind === 'rich-text' &&
+            Array.isArray(tier.inclusions.blocks) &&
+            isObject(tier?.quotas)
+        ),
+      'Public catalog returned unique, live, versioned tier cards.'
     )
   },
   {
@@ -877,11 +915,7 @@ export const apiTests: ApiTestDefinition[] = [
     group: 'admin',
     method: 'GET',
     path: '/api/v1/admin/rate-limits',
-    expect: expectJson(
-      [401, 403],
-      (body) => body?.ok === false && typeof body?.error === 'string',
-      'Non-admin rate-limit read was rejected.'
-    )
+    expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'Non-admin rate-limit read was rejected.')
   },
   {
     id: 'admin-users-guarded',
@@ -890,11 +924,7 @@ export const apiTests: ApiTestDefinition[] = [
     group: 'admin',
     method: 'GET',
     path: '/api/v1/admin/users',
-    expect: expectJson(
-      [401, 403],
-      (body) => body?.ok === false && typeof body?.error === 'string',
-      'Non-admin user lookup was rejected.'
-    )
+    expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'Non-admin user lookup was rejected.')
   },
   {
     id: 'admin-set-admin-guarded',
@@ -904,11 +934,98 @@ export const apiTests: ApiTestDefinition[] = [
     method: 'POST',
     path: '/api/v1/admin/set-admin',
     body: { userId: '000000000000000000000000', admin: true },
-    expect: expectJson(
-      [401, 403],
-      (body) => body?.ok === false && typeof body?.error === 'string',
-      'Non-admin promote attempt was rejected.'
-    )
+    expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'Non-admin promote attempt was rejected.')
+  },
+  {
+    id: 'admin-users-overview-guarded',
+    name: 'Users overview is admin-only',
+    description: 'The /admin Users tab data requires an admin session.',
+    group: 'admin',
+    method: 'GET',
+    path: '/api/v1/admin/users/overview',
+    expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'Non-admin users overview was rejected.')
+  },
+  {
+    id: 'admin-apps-guarded',
+    name: 'Apps overview is admin-only',
+    description: 'The cross-user apps overview requires an admin session.',
+    group: 'admin',
+    method: 'GET',
+    path: '/api/v1/admin/apps',
+    expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'Non-admin apps overview was rejected.')
+  },
+  {
+    id: 'admin-apps-revoke-guarded',
+    name: 'App suspension is admin-only',
+    description: 'Suspending an app requires an admin session.',
+    group: 'admin',
+    method: 'POST',
+    path: '/api/v1/admin/apps/revoke',
+    body: { clientId: 'ttapp_00000000-0000-0000-0000-000000000000', revoked: true },
+    expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'Non-admin suspension attempt was rejected.')
+  },
+  {
+    id: 'admin-tiers-read-guarded',
+    name: 'Tier version history is admin-only',
+    description: 'Reading live, draft, and archived tier revisions requires an admin session.',
+    group: 'admin',
+    method: 'GET',
+    path: '/api/v1/admin/tiers',
+    expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'Non-admin tier-history read was rejected.')
+  },
+  {
+    id: 'admin-tiers-write-guarded',
+    name: 'Tier lifecycle is admin-only',
+    description: 'Tier lifecycle actions require an admin session; the fixture uses an unknown revision so it cannot archive a real tier.',
+    group: 'admin',
+    method: 'POST',
+    path: '/api/v1/admin/tiers',
+    body: { action: 'archive', versionId: 'not-a-real-tier-version' },
+    expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'Non-admin tier lifecycle attempt was rejected.')
+  },
+  {
+    id: 'admin-subscriptions-guarded',
+    name: 'Subscriptions are admin-only',
+    description: 'Assigning tiers/overrides requires an admin session.',
+    group: 'admin',
+    method: 'POST',
+    path: '/api/v1/admin/subscriptions',
+    body: {
+      subjectType: 'user',
+      subjectId: '000000000000000000000000',
+      tier: 'not-a-real-tier',
+      tierVersionId: 'not-a-real-tier-version'
+    },
+    expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'Non-admin tier assignment was rejected.')
+  },
+  {
+    id: 'admin-links-guarded',
+    name: 'Ownership links are admin-only',
+    description: 'Assigning account/app ownership links requires an admin session.',
+    group: 'admin',
+    method: 'POST',
+    path: '/api/v1/admin/links',
+    body: { action: 'add', linkKind: 'account', userId: '000000000000000000000000', targetId: '000000000000000000000001' },
+    expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'Non-admin link assignment was rejected.')
+  },
+  {
+    id: 'auth-accounts-owned-guarded',
+    name: 'Owned accounts need a session',
+    description: 'Listing owned accounts anonymously is rejected.',
+    group: 'auth',
+    method: 'GET',
+    path: '/api/v1/auth/accounts/owned',
+    expect: expectJson([401], (body) => body?.ok === false && typeof body?.error === 'string', 'Anonymous owned-accounts read was rejected.')
+  },
+  {
+    id: 'auth-accounts-assume-guarded',
+    name: 'Assume needs a session + link',
+    description: 'Assuming an account anonymously is rejected.',
+    group: 'auth',
+    method: 'POST',
+    path: '/api/v1/auth/accounts/assume',
+    body: { accountId: '000000000000000000000000' },
+    expect: expectJson([401], (body) => body?.ok === false && typeof body?.error === 'string', 'Anonymous assume attempt was rejected.')
   },
   {
     id: 'things-comment-guarded',
@@ -1023,7 +1140,11 @@ export const apiTests: ApiTestDefinition[] = [
     group: 'things',
     method: 'DELETE',
     path: '/api/v1/things?id=not-a-real-post-id',
-    expect: expectJson([401, 404], (body) => body?.ok === false && typeof body?.error === 'string', 'Unified DELETE was rejected with an error shape.')
+    expect: expectJson(
+      [401, 404],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Unified DELETE was rejected with an error shape.'
+    )
   },
   {
     id: 'things-acl-validated',
@@ -1151,11 +1272,7 @@ export const apiTests: ApiTestDefinition[] = [
     group: 'schemas',
     method: 'GET',
     path: '/api/v1/schemas/browse?sort=popular&limit=5',
-    expect: expectJson(
-      [200],
-      (body) => body?.ok === true && Array.isArray(body?.schemas),
-      'Popular browse returned a schema page.'
-    )
+    expect: expectJson([200], (body) => body?.ok === true && Array.isArray(body?.schemas), 'Popular browse returned a schema page.')
   },
   {
     id: 'schemas-browse-library-guarded',
@@ -1221,9 +1338,7 @@ export const apiTests: ApiTestDefinition[] = [
     path: '/api/v1/algorithms',
     expect: expectJson(
       [200, 401],
-      (body) =>
-        (body?.ok === true && Array.isArray(body?.algorithms)) ||
-        (body?.ok === false && typeof body?.error === 'string'),
+      (body) => (body?.ok === true && Array.isArray(body?.algorithms)) || (body?.ok === false && typeof body?.error === 'string'),
       'Algorithms list returned algorithms for a session or a 401 error shape anonymously.'
     )
   },
@@ -1235,7 +1350,11 @@ export const apiTests: ApiTestDefinition[] = [
     method: 'POST',
     path: '/api/v1/algorithms',
     body: { name: '' },
-    expect: expectJson([400, 401], (body) => body?.ok === false && typeof body?.error === 'string', 'Nameless algorithm rejected with an error shape.')
+    expect: expectJson(
+      [400, 401],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Nameless algorithm rejected with an error shape.'
+    )
   },
   {
     id: 'algorithms-active-guarded',
@@ -1270,7 +1389,11 @@ export const apiTests: ApiTestDefinition[] = [
     method: 'POST',
     path: '/api/v1/algorithms/update',
     body: { id: 'not-a-real-algorithm-id', name: 'renamed' },
-    expect: expectJson([401, 404], (body) => body?.ok === false && typeof body?.error === 'string', 'Algorithm update was rejected with an error shape.')
+    expect: expectJson(
+      [401, 404],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Algorithm update was rejected with an error shape.'
+    )
   },
   {
     id: 'algorithms-delete-guarded',
@@ -1280,7 +1403,11 @@ export const apiTests: ApiTestDefinition[] = [
     method: 'POST',
     path: '/api/v1/algorithms/delete',
     body: { id: 'not-a-real-algorithm-id' },
-    expect: expectJson([401, 404], (body) => body?.ok === false && typeof body?.error === 'string', 'Algorithm delete was rejected with an error shape.')
+    expect: expectJson(
+      [401, 404],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Algorithm delete was rejected with an error shape.'
+    )
   },
   {
     id: 'profile-get-missing-username',
@@ -1352,7 +1479,11 @@ export const apiTests: ApiTestDefinition[] = [
     path: '/api/v1/waitlist',
     mutates: true,
     body: { email: 'tt-api-test-waitlist@example.invalid' },
-    expect: expectJson([200, 429], (body) => body?.ok === true || typeof body?.error === 'string', 'Waitlist join succeeded (or was rate-limited with an error shape).')
+    expect: expectJson(
+      [200, 429],
+      (body) => body?.ok === true || typeof body?.error === 'string',
+      'Waitlist join succeeded (or was rate-limited with an error shape).'
+    )
   },
   {
     id: 'apps-sandbox-mint',

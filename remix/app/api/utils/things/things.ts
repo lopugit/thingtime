@@ -1,8 +1,19 @@
 import { randomUUID } from 'node:crypto';
 import { Binary, ObjectId } from 'mongodb';
 
-import { getThingsCollection, getUsersCollection } from '../mongodb/collections';
+import { getThingsCollection, getUsersCollection, withMongoTransaction } from '../mongodb/collections';
 import { findUserByUsername, pushUserRecentReaction } from '../auth/users';
+import {
+	StorageMutationError,
+	USER_STORAGE_ACCOUNTING_VERSION,
+	USER_STORAGE_STATUS,
+	currentContentStorageSizeBytes,
+	isBillableStorageThing,
+	storageSandboxState,
+	thingStorageSizeBytes
+} from '../storage/storageCore';
+import { applyUserStorageDelta } from '../storage/userStorage';
+import { userSubscriptionLedgerMatch } from '../subscriptions/subscriptionIdentity';
 import { sanitizeReactionToken } from '~/utils/reactionTokens';
 import {
   ACL_ALL,
@@ -10,6 +21,7 @@ import {
   ACL_FRIENDS,
   ACL_INHERIT,
   ACL_OWNER,
+	APP_STORAGE_RESERVED_ID_PREFIX,
   COLLECTION_SCHEMA_VERSIONS,
   MAX_TEXT_CHARS,
   POST_TYPES as REGISTRY_POST_TYPES,
@@ -30,7 +42,10 @@ import {
   appAclEntry,
   appNamespaceClauses,
   appNamespaceStamp,
-  appThingSizeBytes,
+	APP_STORAGE_ACCOUNTING_VERSION,
+	applyAppStorageDeltaTransaction,
+	appStorageCounterFenceMatch,
+	appStorageCounterMatch,
   chargeAppStorage,
   filterByLiveAuthors,
   liveSandboxAuthors,
@@ -112,6 +127,8 @@ export type ThingDoc = {
   // ledger), and — for sandbox tokens — the ephemeral TTL/space stamps.
   appId?: string;
   sizeBytes?: number;
+	storageClass?: 'content';
+	storageAccountingVersion?: number;
   sandboxExpiresAt?: Date;
   sandboxSpace?: string;
   // System kinds only (user/theme/feed-algorithm/waitlist — the collections
@@ -238,8 +255,7 @@ export type Viewer = {
   username?: string | null;
   pat?: { tokenId: string; onlyCreatedThings: boolean } | null;
 } | null;
-export const asViewer = (value: string | Viewer | null | undefined): Viewer =>
-  typeof value === 'string' ? { id: value } : value || null;
+export const asViewer = (value: string | Viewer | null | undefined): Viewer => (typeof value === 'string' ? { id: value } : value || null);
 
 export const POST_TYPES: PostType[] = [...REGISTRY_POST_TYPES];
 export const VISIBILITIES: PostVisibility[] = ['public', 'friends', 'family', 'private'];
@@ -253,6 +269,13 @@ const MAX_COMMENTS_PER_POST = 500;
 // most this many reaction things per post.
 const MAX_REACTION_KEYS_PER_POST = 100;
 const MAX_REACTIONS_PER_USER_PER_POST = 20;
+// Keep content + ledger delete transactions comfortably below MongoDB's
+// transaction duration/operation ceilings. Callers may hand us 500+ rows
+// (notably app-data cleanup and relationship cascades), so each bounded batch
+// commits independently and the returned union preserves candidate order.
+const STORAGE_DELETE_TRANSACTION_BATCH = 100;
+const MAX_CASCADE_DESCENDANTS = 10_000;
+const MAX_CASCADE_DRAIN_PASSES = 8;
 const RETURNED_COMMENTS = 20;
 // nested replies shipped per comment: REPLIES_PER_LEVEL per parent, and
 // SHIPPED_REPLY_LEVELS levels BELOW the direct children (direct + 1 = two
@@ -285,17 +308,176 @@ const FEATURE_PROJECTION = {
 
 export type Fail = { ok: false; status: number; error: string };
 export const fail = (status: number, error: string): Fail => ({ ok: false, status, error });
-export const isFail = (value: unknown): value is Fail =>
-  !!value && typeof value === 'object' && !Array.isArray(value) && (value as any).ok === false;
+
+const storageMutationFail = (error: unknown): Fail | null => (error instanceof StorageMutationError ? fail(error.status, error.message) : null);
+
+const storedThingSizeBytes = (doc: Pick<ThingDoc, 'sizeBytes' | 'crystal' | 'extended' | 'tags'>): number =>
+	Number.isSafeInteger(doc.sizeBytes) && Number(doc.sizeBytes) >= 0 ? Number(doc.sizeBytes) : thingStorageSizeBytes(doc);
+
+// Only this exact stamp proves the source row participated in a live ledger.
+// Recompute the canonical payload bytes rather than trusting a cached stamp:
+// an old/malformed row is migration input, never safe delta arithmetic.
+const currentContentSizeBytes = (doc: ThingDoc): number | null => currentContentStorageSizeBytes(doc);
+
+const appStorageScopeForDoc = (doc: ThingDoc): { scope: AppNamespaceScope; sandboxState: ReturnType<typeof storageSandboxState> } | null => {
+	if (typeof doc.appId !== 'string' || !doc.appId) return null;
+	const sandboxState = storageSandboxState(doc);
+	return {
+		sandboxState,
+		scope: {
+			appId: doc.appId,
+			ownerId: String(doc.ownerId),
+			sharedRead: false,
+			scopes: [],
+			username: '',
+			sandbox: sandboxState === 'sandbox' ? { space: typeof doc.sandboxSpace === 'string' ? doc.sandboxSpace : null } : null
+		}
+	};
+};
+
+export const deletionStorageFenceDecision = (doc: Pick<ThingDoc, 'appId' | 'sandboxExpiresAt'>) => {
+	const sandboxState = storageSandboxState(doc);
+	return {
+		sandboxState,
+		fenceAccount: sandboxState === 'invalid',
+		fenceAppAndUser: sandboxState === 'invalid' && typeof doc.appId === 'string' && !!doc.appId
+	};
+};
+
+// Uncertain deletes do not guess at byte deltas. They still have to write the
+// current-version ledger inside the delete transaction, even when it was
+// already initializing or fenced, so reconciliation cannot race from a stale
+// source snapshot and later certify the pre-delete total as ready.
+export const uncertainUserStorageLedgerMatch = (ownerId: string): Record<string, unknown> => ({
+	...userSubscriptionLedgerMatch(ownerId),
+	'crystal.storageAccountingVersion': USER_STORAGE_ACCOUNTING_VERSION
+});
+
+export const uncertainAppStorageLedgerMatch = (appId: string): Record<string, unknown> => ({
+	thingtime: 'app',
+	'crystal.clientId': appId,
+	'crystal.storageAccountingVersion': APP_STORAGE_ACCOUNTING_VERSION
+});
+
+export const uncertainAppUserStorageLedgerMatch = (ownerId: string, appId: string): Record<string, unknown> => ({
+	...appStorageCounterFenceMatch(ownerId, appId)
+});
+
+// Apply exact deltas for documents already known to have been removed inside
+// `session`. User ledgers are always locked first, followed by app ledgers, and
+// both groups use a deterministic key order. Keeping that order identical for
+// every batch prevents avoidable transaction deadlocks during cross-user
+// cascades. Sandbox accounting intentionally remains on its existing ephemeral
+// path and is refunded after the content transaction commits.
+const applyDeletedStorageDeltas = async (docs: ThingDoc[], session: any): Promise<void> => {
+	const userBytes = new Map<string, number>();
+	const appBytes = new Map<string, { scope: AppNamespaceScope; bytes: number }>();
+	const uncertainUsers = new Set<string>();
+	const uncertainAppOwners = new Map<string, Set<string>>();
+
+	for (const doc of docs) {
+		const accountedBytes = currentContentSizeBytes(doc);
+		const ownerId = String(doc.ownerId);
+		const deletionDecision = deletionStorageFenceDecision(doc);
+		const sandboxState = deletionDecision.sandboxState;
+		if (deletionDecision.fenceAccount) {
+			uncertainUsers.add(ownerId);
+		} else if (isBillableStorageThing(doc)) {
+			if (accountedBytes === null) uncertainUsers.add(ownerId);
+			else if (accountedBytes > 0) userBytes.set(ownerId, (userBytes.get(ownerId) ?? 0) + accountedBytes);
+		}
+
+		const scoped = appStorageScopeForDoc(doc);
+		if (scoped && scoped.sandboxState !== 'sandbox') {
+			const scope = scoped.scope;
+			if (accountedBytes === null || deletionDecision.fenceAppAndUser) {
+				const owners = uncertainAppOwners.get(scope.appId) ?? new Set<string>();
+				owners.add(scope.ownerId);
+				uncertainAppOwners.set(scope.appId, owners);
+			} else if (accountedBytes > 0) {
+				const key = `${scope.appId}\0${scope.ownerId}`;
+				const entry = appBytes.get(key) ?? { scope, bytes: 0 };
+				entry.bytes += accountedBytes;
+				appBytes.set(key, entry);
+			}
+		}
+	}
+
+	const things = await getThingsCollection();
+	const now = new Date();
+	const userOwnerIds = [...new Set([...userBytes.keys(), ...uncertainUsers])].sort();
+	for (const ownerId of userOwnerIds) {
+		const bytes = userBytes.get(ownerId) ?? 0;
+		// One uncertain row makes the whole account delta unknowable. Do not
+		// partially decrement its exact siblings first: the current total remains
+		// conservative and reconciliation will derive the complete post-delete
+		// value from source documents.
+		if (bytes > 0 && !uncertainUsers.has(ownerId)) await applyUserStorageDelta(ownerId, -bytes, session);
+		if (uncertainUsers.has(ownerId)) {
+			// Deletion must remain available as the recovery action. An uncertain
+			// legacy row is removed, but no guessed decrement is applied; fencing
+			// the live ledger makes its exact source-document reconciliation repair
+			// the now-smaller corpus before any future positive mutation.
+			await things.updateOne(
+				uncertainUserStorageLedgerMatch(ownerId),
+				{
+					$set: {
+						'crystal.storageLedgerStatus': USER_STORAGE_STATUS.needsReconcile,
+						'crystal.storageUpdatedAt': now,
+						updatedAt: now
+					}
+				},
+				{ session }
+			);
+		}
+	}
+
+	for (const key of [...appBytes.keys()].sort()) {
+		const entry = appBytes.get(key)!;
+		const uncertainOwners = uncertainAppOwners.get(entry.scope.appId);
+		if (uncertainOwners) {
+			// An uncertain row makes the shared app aggregate unknowable, so skip
+			// all partial app arithmetic. Every affected per-user counter is fenced
+			// too because its exact decrement is intentionally deferred to repair.
+			uncertainOwners.add(entry.scope.ownerId);
+			continue;
+		}
+		await applyAppStorageDeltaTransaction(entry.scope, -entry.bytes, session);
+	}
+	for (const appId of [...uncertainAppOwners.keys()].sort()) {
+		await things.updateOne(
+			uncertainAppStorageLedgerMatch(appId),
+			{
+				$set: {
+					'crystal.storageLedgerStatus': USER_STORAGE_STATUS.needsReconcile,
+					'crystal.storageUpdatedAt': now,
+					updatedAt: now
+				}
+			},
+			{ session }
+		);
+		for (const ownerId of [...uncertainAppOwners.get(appId)!].sort()) {
+			await things.updateOne(
+				uncertainAppUserStorageLedgerMatch(ownerId, appId),
+				{
+					$set: {
+						'crystal.storageLedgerStatus': USER_STORAGE_STATUS.needsReconcile,
+						'crystal.storageUpdatedAt': now,
+						updatedAt: now
+					}
+				},
+				{ session }
+			);
+		}
+	}
+};
+export const isFail = (value: unknown): value is Fail => !!value && typeof value === 'object' && !Array.isArray(value) && (value as any).ok === false;
 
 // Route-layer adapter: the authed user (or null) → the Viewer acl evaluation
 // expects. Shared so every route passes the same shape. Routes resolving via
 // resolveThingsActor pass the pat context so creates stamp provenance and
 // sandboxed tokens stay inside their own creations.
-export const viewerOf = (
-  user: { id: string; username: string } | null,
-  pat?: { jti: string; onlyCreatedThings?: boolean } | null
-): Viewer =>
+export const viewerOf = (user: { id: string; username: string } | null, pat?: { jti: string; onlyCreatedThings?: boolean } | null): Viewer =>
   user
     ? {
         id: user.id,
@@ -326,9 +508,7 @@ export const tokenAclEntryFor = (tokenId: string): string => `${TOKEN_ACL_PREFIX
 // before the tt:token/ list keep honoring their creator (writes only ever
 // produce tokenAcl now).
 export const tokenAclOf = (doc: ThingDoc): string[] => {
-  const entries = Array.isArray(doc.tokenAcl)
-    ? doc.tokenAcl.filter((entry): entry is string => typeof entry === 'string')
-    : [];
+  const entries = Array.isArray(doc.tokenAcl) ? doc.tokenAcl.filter((entry): entry is string => typeof entry === 'string') : [];
   if (doc.createdByTokenId && !entries.includes(tokenAclEntryFor(doc.createdByTokenId))) {
     return [...entries, tokenAclEntryFor(doc.createdByTokenId)];
   }
@@ -360,16 +540,14 @@ const sanitizeTokenAcl = (value: unknown): Fail | string[] | undefined => {
 
 // Token sandbox: the token id a sandboxed viewer is confined to, or null for
 // session actors / unsandboxed tokens.
-export const patSandboxOf = (viewer: Viewer): string | null =>
-  viewer?.pat?.onlyCreatedThings ? viewer.pat.tokenId : null;
+export const patSandboxOf = (viewer: Viewer): string | null => (viewer?.pat?.onlyCreatedThings ? viewer.pat.tokenId : null);
 
 const patSandboxBlocks = (viewer: Viewer, doc: ThingDoc): boolean => {
   const tokenId = patSandboxOf(viewer);
   return !!tokenId && !tokenAclOf(doc).includes(tokenAclEntryFor(tokenId));
 };
 
-const patSandboxFail = (): Fail =>
-  fail(403, 'This token is sandboxed — it can only touch things carrying its tt:token grant 🧸');
+const patSandboxFail = (): Fail => fail(403, 'This token is sandboxed — it can only touch things carrying its tt:token grant 🧸');
 
 // ---------------------------------------------------------------------------
 // Era helpers — one place that knows how to read both doc generations.
@@ -410,9 +588,7 @@ const postThingMatch = () => ({ $or: [{ thingtime: 'post' }, { kind: 'post' }] }
 // Shared by listThings and things/search so the two never disagree on which
 // legacy posts exist (the single source the era semantics live behind).
 export const thingtimeInClause = (thingtime: string[]) =>
-  thingtime.includes('post')
-    ? { $or: [{ thingtime: { $in: thingtime } }, { kind: 'post' }] }
-    : { thingtime: { $in: thingtime } };
+  thingtime.includes('post') ? { $or: [{ thingtime: { $in: thingtime } }, { kind: 'post' }] } : { thingtime: { $in: thingtime } };
 
 export const withMatch = (base: Record<string, any>, ...clauses: Record<string, any>[]) => {
   const and = [base, ...clauses].filter((clause) => Object.keys(clause).length);
@@ -439,12 +615,19 @@ export const MIGRATION_RESERVED_ID_PREFIX = 'react-';
 // Builtin-schema seed mints shareId `schema-<id>` deterministically — reserve
 // the prefix so a client can't pre-claim (and impersonate) a builtin schema.
 export const SCHEMA_RESERVED_ID_PREFIX = 'schema-';
+// Subscription tier revisions and user assignments use deterministic ids so
+// historical links stay stable. They are protected control-plane destinations
+// and cannot be pre-claimed through generic Thing creation.
+export const SUBSCRIPTION_RESERVED_ID_PREFIX = 'subscription-';
+// Service quota ledgers use quota-<owner>-<service>-<window> ids. Reserving
+// their namespace keeps generic Things from pre-claiming an enforcement row.
+export const SERVICE_QUOTA_RESERVED_ID_PREFIX = 'quota-';
 
 // Seeding passes fixed shareIds for idempotency (and Magic relies on ids
 // round-tripping), so client-supplied ids are allowed — but they must be sane
 // strings, not arbitrary JSON values (the v1 route stored anything truthy),
 // and must not squat the migration's reserved id namespace.
-const sanitizeShareId = (value: unknown): string | null | Fail => {
+export const sanitizeShareId = (value: unknown): string | null | Fail => {
   if (value === undefined || value === null) return null;
   if (typeof value !== 'string') return fail(400, 'shareId must be a string');
   const trimmed = value.trim();
@@ -452,10 +635,16 @@ const sanitizeShareId = (value: unknown): string | null | Fail => {
   if (trimmed.length > MAX_SHARE_ID_CHARS || /[$.\s]/.test(trimmed)) {
     return fail(400, 'shareId must be a short id without spaces, dots, or $');
   }
-  if (trimmed.startsWith(MIGRATION_RESERVED_ID_PREFIX) || trimmed.startsWith(SCHEMA_RESERVED_ID_PREFIX)) {
-    // 'react-' (reaction migration) and 'schema-' (builtin-schema seed) are
-    // deterministic migration destinations — a client must never squat one,
-    // or it blocks the seed/migration and impersonates a builtin schema
+  if (
+    trimmed.startsWith(MIGRATION_RESERVED_ID_PREFIX) ||
+    trimmed.startsWith(SCHEMA_RESERVED_ID_PREFIX) ||
+		trimmed.startsWith(SUBSCRIPTION_RESERVED_ID_PREFIX) ||
+		trimmed.startsWith(SERVICE_QUOTA_RESERVED_ID_PREFIX) ||
+		trimmed.startsWith(APP_STORAGE_RESERVED_ID_PREFIX)
+  ) {
+		// Deterministic migration, schema, tier-revision, subscription assignment,
+		// service-quota, and app-storage destinations must never be squatted or
+		// impersonated by generic user-created Things.
     return fail(400, 'shareId uses a reserved prefix');
   }
   return trimmed;
@@ -504,11 +693,7 @@ const resolveInputAcl = (input: { acl?: unknown; visibility?: unknown }): string
 // writer can see, and the display name is overwritten from that schema, so no
 // client can attribute its data to a schema under a mismatched schemaId/name
 // pair. Mutates `crystal` in place; a data thing with no schemaId is untouched.
-const resolveDataSchemaProvenance = async (
-  thingtime: string[],
-  crystal: Record<string, unknown>,
-  asOwner: Viewer
-): Promise<{ ok: true } | Fail> => {
+const resolveDataSchemaProvenance = async (thingtime: string[], crystal: Record<string, unknown>, asOwner: Viewer): Promise<{ ok: true } | Fail> => {
   if (!thingtime.includes('data') || crystal.schemaId === undefined) return { ok: true };
   const rawSchemaId = crystal.schemaId;
   if (typeof rawSchemaId !== 'string' || !rawSchemaId.trim()) {
@@ -586,9 +771,7 @@ export const createThing = async (
   // marketplace listings fold their category into tags so filters find them —
   // post crystals only (a free-form data crystal can carry any `listing`
   // value, which must never leak unsanitized into the multikey tags index)
-  const listing = validated.thingtime.includes('post')
-    ? (validated.crystal.listing as MarketplaceListing | null | undefined)
-    : null;
+  const listing = validated.thingtime.includes('post') ? (validated.crystal.listing as MarketplaceListing | null | undefined) : null;
   const categoryTag = listing && typeof listing.category === 'string' ? [listing.category] : [];
   const allTags = [...(tags as string[]), ...categoryTag].filter((tag, index, all) => all.indexOf(tag) === index);
 
@@ -657,26 +840,15 @@ export const createThing = async (
   const things = await getThingsCollection();
   const now = input.createdAt instanceof Date ? input.createdAt : new Date();
 
-  const tokenAclDoc = [
-    ...(viewer?.pat ? [tokenAclEntryFor(viewer.pat.tokenId)] : []),
-    ...(requestedTokenAcl || [])
-  ].filter((entry, index, all) => all.indexOf(entry) === index);
+  const tokenAclDoc = [...(viewer?.pat ? [tokenAclEntryFor(viewer.pat.tokenId)] : []), ...(requestedTokenAcl || [])].filter(
+    (entry, index, all) => all.indexOf(entry) === index
+  );
 
-  // App writes charge their serialized size against the (user, app) byte
-  // budget BEFORE inserting (admission can never overshoot; a failed insert
-  // refunds), and carry the namespace stamp — the server-authoritative root
-  // appId no generic input path can forge.
-  const sizeBytes = app
-    ? appThingSizeBytes({
+	const sizeBytes = thingStorageSizeBytes({
         crystal: validated.crystal,
         extended: extended.value === undefined ? null : extended.value,
         tags: allTags
-      })
-    : null;
-  if (app && sizeBytes !== null) {
-    const charge = await chargeAppStorage(app, sizeBytes);
-    if (!charge.ok) return fail(charge.status, charge.error);
-  }
+	});
 
   const doc: ThingDoc = {
     shareId: (shareId as string | null) || randomUUID(),
@@ -694,18 +866,64 @@ export const createThing = async (
     ...(tokenAclDoc.length ? { tokenAcl: tokenAclDoc } : {}),
     createdAt: now,
     updatedAt: now,
-    ...(app && sizeBytes !== null ? appNamespaceStamp(app, sizeBytes) : {})
-  };
+		...(app ? appNamespaceStamp(app, sizeBytes) : {})
+	};
+	const billable = isBillableStorageThing(doc);
+	if (billable) {
+		doc.storageClass = 'content';
+		doc.sizeBytes = sizeBytes;
+		doc.storageAccountingVersion = USER_STORAGE_ACCOUNTING_VERSION;
+	}
+
+	// Registered app content debits all three ledgers (whole account, whole app,
+	// app user) in the same transaction as the insert. Sandboxes keep their
+	// existing ephemeral/windowed accounting path because they have no real user
+	// subscription ledger and their data is TTL-reaped. Even sandbox ATTACHMENTS
+	// still transact the insert with their target touch so a concurrent cascade
+	// cannot commit an orphan between those two writes.
+	const registeredApp = app && !app.sandbox ? app : null;
+	if (app?.sandbox) {
+		const charge = await chargeAppStorage(app, sizeBytes);
+		if (charge.ok === false) return fail(charge.status, charge.error);
+	}
   try {
+		if (billable || registeredApp || target) {
+			await withMongoTransaction(async (session) => {
+				if (billable) await applyUserStorageDelta(ownerId, sizeBytes, session);
+				if (registeredApp) await applyAppStorageDeltaTransaction(registeredApp, sizeBytes, session);
+				await things.insertOne(doc as any, { session });
+				if (target) {
+					const touched = await things.updateOne({ shareId: target.shareId } as any, { $set: { updatedAt: now } }, { session });
+					if (touched.matchedCount === 0) {
+						throw new StorageMutationError(409, 'storage_conflict', 'The target changed while this thing was being created — try again');
+					}
+				}
+			});
+		} else {
     await things.insertOne(doc as any);
+			if (target) {
+				await things.updateOne({ shareId: target.shareId } as any, { $set: { updatedAt: now } });
+			}
+		}
   } catch (err: any) {
-    if (app && sizeBytes !== null) await refundAppStorage(app, sizeBytes);
+		const storageFail = storageMutationFail(err);
+		if (storageFail) {
+			// The target-conflict error is raised from our transaction callback, so
+			// a sandbox insert is known not to have committed and its pre-reserved
+			// ephemeral bytes can be returned exactly.
+			if (app?.sandbox) await refundAppStorage(app, sizeBytes);
+			return storageFail;
+		}
     // duplicate-key can come from more than one unique index — only a shareId
     // collision means "this thing already exists" (seeding re-runs pass fixed
     // ids; mirror the registerUser 409 convention so seeds skip idempotently).
     // The reaction (target, owner, token) index races surface as 409 too so
     // toggleReaction keeps treating them as already-reacted.
     if (err?.code === 11000) {
+      // A duplicate-key rejection proves the insert did not land. Unknown
+      // Mongo errors are ambiguous, so they deliberately keep the reservation
+      // rather than risk refunding bytes for a document that was committed.
+			if (app?.sandbox) await refundAppStorage(app, sizeBytes);
       const keys = Object.keys(err?.keyPattern || {});
       if (!keys.length || keys.includes('shareId')) return fail(409, 'Post already exists');
       if (keys.includes('crystal.emoji')) return fail(409, 'Post already exists');
@@ -714,10 +932,6 @@ export const createThing = async (
       return fail(409, 'A thing with those unique fields already exists');
     }
     throw err;
-  }
-
-  if (target) {
-    await things.updateOne({ shareId: target.shareId } as any, { $set: { updatedAt: now } });
   }
   return { ok: true, doc };
 };
@@ -740,11 +954,7 @@ export type CreatePostInput = {
 type CreateResult = Fail | { ok: true; post: PublicPost };
 
 // Legacy-shaped convenience wrapper — same unified path underneath.
-export const createPost = async (
-  ownerId: string,
-  input: CreatePostInput,
-  viewer: Viewer = null
-): Promise<CreateResult> => {
+export const createPost = async (ownerId: string, input: CreatePostInput, viewer: Viewer = null): Promise<CreateResult> => {
   const created = await createThing(
     ownerId,
     {
@@ -927,10 +1137,7 @@ const resolveRelated = async (docs: ThingDoc[]): Promise<RelatedThings> => {
                 { $group: { _id: '$targetId', count: { $sum: 1 }, docs: { $push: '$$ROOT' } } },
                 { $project: { count: 1, docs: { $slice: ['$docs', REPLIES_PER_LEVEL] } } }
               ]
-            : [
-                { $match: { targetId: { $in: levelIds }, thingtime: 'comment' } },
-                { $group: { _id: '$targetId', count: { $sum: 1 } } }
-              ]
+            : [{ $match: { targetId: { $in: levelIds }, thingtime: 'comment' } }, { $group: { _id: '$targetId', count: { $sum: 1 } } }]
         )
         .toArray() as Promise<any[]>
     ]);
@@ -997,9 +1204,7 @@ const mergedCommentsOf = (doc: ThingDoc, related: RelatedThings): CommentEntry[]
     createdAt: new Date(comment.createdAt)
   }));
   const standalone = related.commentsByTarget.get(doc.shareId) || [];
-  return [...embedded, ...standalone].sort(
-    (a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id)
-  );
+  return [...embedded, ...standalone].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id));
 };
 
 // Merge a post's v1 embedded reaction map with standalone reaction things
@@ -1035,8 +1240,7 @@ const viewerReactionsOf = (entries: ReactionEntry[], viewerId: string | null): s
   return entries.filter((entry) => entry.userId === viewerId).map((entry) => entry.emoji);
 };
 
-const liveShareCountOf = (doc: ThingDoc, related: RelatedThings): number =>
-  related.shareCountByTarget.get(doc.shareId) || 0;
+const liveShareCountOf = (doc: ThingDoc, related: RelatedThings): number => related.shareCountByTarget.get(doc.shareId) || 0;
 
 export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | Viewer): Promise<PublicPost[]> => {
   const viewer = asViewer(viewerInput);
@@ -1047,9 +1251,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
   // one level of share resolution
   const shareTargets = [...new Set(docs.map((doc) => targetIdOf(doc)).filter(Boolean))] as string[];
   const originals = shareTargets.length
-    ? ((await things
-        .find(withMatch({ shareId: { $in: shareTargets } }, postThingMatch()) as any)
-        .toArray()) as any as ThingDoc[])
+    ? ((await things.find(withMatch({ shareId: { $in: shareTargets } }, postThingMatch()) as any).toArray()) as any as ThingDoc[])
     : [];
   const originalsById = new Map(originals.map((doc) => [doc.shareId, doc]));
 
@@ -1110,8 +1312,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
     const shareTarget = targetIdOf(doc);
     // only SHARES nest their target — a comment doc projected through here
     // (its /post/:id page) must not render its parent as a pseudo-share
-    const original =
-      withShare && shareTarget && thingtimeOf(doc).includes('share') ? originalsById.get(shareTarget) : null;
+    const original = withShare && shareTarget && thingtimeOf(doc).includes('share') ? originalsById.get(shareTarget) : null;
 
     return {
       id: doc.shareId,
@@ -1123,10 +1324,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
       text: String(crystal.text || ''),
       images: (crystal.images as string[]) || [],
       listing: (crystal.listing as MarketplaceListing) || null,
-      thing:
-        crystal.thing && typeof crystal.thing === 'object' && !Array.isArray(crystal.thing)
-          ? (crystal.thing as Record<string, any>)
-          : null,
+      thing: crystal.thing && typeof crystal.thing === 'object' && !Array.isArray(crystal.thing) ? (crystal.thing as Record<string, any>) : null,
       tags: doc.tags || [],
       reactionCounts: reactionCountsOf(reactions),
       viewerReactions: viewerReactionsOf(reactions, viewerId),
@@ -1176,8 +1374,7 @@ export const toPublicThings = async (docs: ThingDoc[], viewerInput: string | Vie
 // their target. v1 residue docs still carry the visibility enum — aclOf maps
 // it so one evaluation path serves both eras.
 
-const aclOf = (doc: ThingDoc): string[] =>
-  Array.isArray(doc.acl) && doc.acl.length ? doc.acl : aclFromVisibility(doc.visibility) || [ACL_OWNER];
+const aclOf = (doc: ThingDoc): string[] => (Array.isArray(doc.acl) && doc.acl.length ? doc.acl : aclFromVisibility(doc.visibility) || [ACL_OWNER]);
 
 const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
   if (viewer?.id && doc.ownerId === viewer.id) return true;
@@ -1206,10 +1403,7 @@ const circleClause = (circle: PostVisibility) => {
     case 'private':
       // $nin on an array field means "contains none of these"
       return {
-        $or: [
-          { acl: { $exists: true, $nin: [ACL_ALL, ACL_FRIENDS, ACL_FAMILY] } },
-          { visibility: 'private' }
-        ]
+        $or: [{ acl: { $exists: true, $nin: [ACL_ALL, ACL_FRIENDS, ACL_FAMILY] } }, { visibility: 'private' }]
       };
   }
 };
@@ -1223,9 +1417,7 @@ export const visibilityQueryFor = (viewer: Viewer, circles: PostVisibility[]) =>
   if (viewer?.id) {
     // the viewer's own things, optionally narrowed to the requested circles
     clauses.push(
-      wanted.length === VISIBILITIES.length
-        ? { ownerId: viewer.id }
-        : { ownerId: viewer.id, $or: wanted.map((circle) => circleClause(circle)) }
+      wanted.length === VISIBILITIES.length ? { ownerId: viewer.id } : { ownerId: viewer.id, $or: wanted.map((circle) => circleClause(circle)) }
     );
   }
   // nothing requested that the viewer could ever see
@@ -1310,7 +1502,10 @@ const findViewableThingAs = async (shareId: unknown, viewer: Viewer, app: AppLen
 // resolved), then ONE batched author-liveness gate for the page.
 export const appVisiblePage = async (app: AppNamespaceScope, page: ThingDoc[]): Promise<ThingDoc[]> => {
   const verdicts = await Promise.all(page.map((doc) => appNamespaceVerdict(app, doc)));
-  return filterByLiveAuthors(app, page.filter((_, index) => verdicts[index]));
+  return filterByLiveAuthors(
+    app,
+    page.filter((_, index) => verdicts[index])
+  );
 };
 
 // The Mongo conjunction every app-lens query carries — the coarse tier
@@ -1354,15 +1549,17 @@ export const appShapeProjections = async (
     const ownerId = String(doc.ownerId);
     const self = ownerId === app.ownerId;
     const scopes = self ? app.scopes : scopesById.get(ownerId) || [];
-    const username = self ? app.username : (sandboxNames.get(ownerId) ?? item.author?.username);
+		const username = self ? app.username : (sandboxNames.get(ownerId) ?? item.author?.username);
     item.author = username
       ? {
           id: ownerId,
           username,
           displayName: scopeCovers(scopes, 'profile.displayName')
-            ? (sandboxNames.has(ownerId) || (self && app.sandbox) ? sandboxDisplayName(username) : (item.author?.displayName ?? null))
+            ? sandboxNames.has(ownerId) || (self && app.sandbox)
+              ? sandboxDisplayName(username)
+							: (item.author?.displayName ?? null)
             : null,
-          avatarUrl: scopeCovers(scopes, 'profile.avatar') ? (item.author?.avatarUrl ?? null) : null
+					avatarUrl: scopeCovers(scopes, 'profile.avatar') ? (item.author?.avatarUrl ?? null) : null
         }
       : null;
     if (Array.isArray(item.acl)) {
@@ -1400,10 +1597,8 @@ const enforceReactionCaps = async (targetShareId: string, ownerId: string, token
     return fail(400, `You can add at most ${MAX_REACTIONS_PER_USER_PER_POST} reactions to a post`);
   }
   const tokenAlreadyOnPost =
-    (await things.countDocuments(
-      { targetId: targetShareId, thingtime: 'reaction', 'crystal.emoji': token } as any,
-      { limit: 1 }
-    )) || (await things.countDocuments({ kind: 'reaction', parentId: targetShareId, token } as any, { limit: 1 }));
+    (await things.countDocuments({ targetId: targetShareId, thingtime: 'reaction', 'crystal.emoji': token } as any, { limit: 1 })) ||
+    (await things.countDocuments({ kind: 'reaction', parentId: targetShareId, token } as any, { limit: 1 }));
   if (!tokenAlreadyOnPost) {
     const [v2Tokens, kindTokens] = await Promise.all([
       things.distinct('crystal.emoji', { targetId: targetShareId, thingtime: 'reaction' } as any),
@@ -1449,8 +1644,7 @@ export const oldestCursorClause = (cursor: { createdAt: Date; id: string }) => (
 
 // type filter must match both eras: v2 keeps type in crystal, v1 at the root
 // (exported so /search's shortcut filters share the exact same era handling)
-export const typeClause = (types: PostType[]) =>
-  types.length ? { $or: [{ 'crystal.type': { $in: types } }, { type: { $in: types } }] } : {};
+export const typeClause = (types: PostType[]) => (types.length ? { $or: [{ 'crystal.type': { $in: types } }, { type: { $in: types } }] } : {});
 
 export const getFeed = async (
   viewerInput: string | Viewer,
@@ -1514,16 +1708,12 @@ export const getFeed = async (
     }))
     .sort(
       (a, b) =>
-        b.score - a.score ||
-        new Date(b.doc.createdAt).getTime() - new Date(a.doc.createdAt).getTime() ||
-        a.doc.shareId.localeCompare(b.doc.shareId)
+        b.score - a.score || new Date(b.doc.createdAt).getTime() - new Date(a.doc.createdAt).getTime() || a.doc.shareId.localeCompare(b.doc.shareId)
     );
 
   const pageIds = scored.slice(offset, offset + limit).map((entry) => entry.doc.shareId);
   const pageDocs = pageIds.length
-    ? ((await things
-        .find(withMatch({ shareId: { $in: pageIds } }, postMatch()) as any)
-        .toArray()) as any as ThingDoc[])
+    ? ((await things.find(withMatch({ shareId: { $in: pageIds } }, postMatch()) as any).toArray()) as any as ThingDoc[])
     : [];
   const docsById = new Map(pageDocs.map((doc) => [doc.shareId, doc]));
   const page = pageIds.map((id) => docsById.get(id)).filter(Boolean) as ThingDoc[];
@@ -1554,9 +1744,7 @@ export const listUserPosts = async (
 
   const ownerId = String(user._id);
   const own = viewer?.id === ownerId;
-  const match = own
-    ? withMatch(postMatch(), { ownerId })
-    : withMatch(postMatch(), { ownerId }, circleClause('public'));
+  const match = own ? withMatch(postMatch(), { ownerId }) : withMatch(postMatch(), { ownerId }, circleClause('public'));
 
   const things = await getThingsCollection();
   const parsed = parseChronoCursor(cursor);
@@ -1588,9 +1776,7 @@ export const getThing = async (
   viewerInput: string | Viewer,
   shareId: unknown,
   app: AppLens = null
-): Promise<
-  Fail | { ok: true; thing: PublicThing; post: PublicPost | null; parent: PublicPost | null; root: PublicPost | null }
-> => {
+): Promise<Fail | { ok: true; thing: PublicThing; post: PublicPost | null; parent: PublicPost | null; root: PublicPost | null }> => {
   const viewer = asViewer(viewerInput);
   const doc = await findViewableThingAs(shareId, viewer, app);
   if (!doc) return fail(404, 'Thing not found');
@@ -1630,10 +1816,7 @@ export const getThing = async (
       if (await canViewInherited(entry, viewer)) visibleChain.push(entry);
     }
     if (visibleChain.length) {
-      const projected = await toPublicPosts(
-        [...new Map(visibleChain.map((entry) => [entry.shareId, entry])).values()],
-        viewer
-      );
+      const projected = await toPublicPosts([...new Map(visibleChain.map((entry) => [entry.shareId, entry])).values()], viewer);
       const byId = new Map(projected.map((entry) => [entry.id, entry]));
       parent = byId.get(chain[0]?.shareId) || null;
       const last = chain[chain.length - 1];
@@ -1731,96 +1914,219 @@ export const listThings = async (
 // (once) and clear the embedded fields, so a legacy post becomes fully
 // relational on its first write. No-op for new or already-claimed posts.
 //
-// The claim is ATOMIC: findOneAndUpdate unsets the embedded fields and returns
-// the before-image, so exactly ONE concurrent writer migrates (losers see the
-// fields already gone and skip). Deterministic shareIds make the inserts
-// idempotent with the admin migration. Mutates `doc` to reflect the clear.
+// The claim AND deterministic child upserts are one transaction: exactly one
+// concurrent writer migrates, a delete conflicts on the same target write, and
+// a failed upsert automatically restores the embedded source. Deterministic
+// shareIds remain idempotent with the admin migration. Mutates `doc` only after
+// that transaction commits.
 const emojiHex = (emoji: string) => [...emoji].map((char) => char.codePointAt(0)!.toString(16)).join('');
 const safeIdPart = (value: string) => value.replace(/[^A-Za-z0-9_-]/g, '_');
 export const reactionShareId = (targetId: string, userId: string, emoji: string) =>
   `react-${safeIdPart(targetId)}-${safeIdPart(userId)}-${emojiHex(emoji)}`;
 
-const migrateThingInteractions = async (doc: ThingDoc): Promise<void> => {
-  if (!doc.reactions && !doc.comments) return;
+type LegacyReactionConversion = {
+	shareId: string;
+	ownerId: string;
+	emoji: string;
+	createdAt: Date;
+};
+
+type LegacyCommentConversion = {
+	shareId: string;
+	ownerId: string;
+	text: string;
+	createdAt: Date;
+};
+
+export type LegacyInteractionConversionPlan =
+	| {
+			ok: true;
+			ownerIds: string[];
+			reactions: LegacyReactionConversion[];
+			comments: LegacyCommentConversion[];
+	  }
+	| { ok: false; reason: string };
+
+const owns = (value: object, key: PropertyKey): boolean => Object.prototype.hasOwnProperty.call(value, key);
+const isPlainLegacyRecord = (value: unknown): value is Record<string, unknown> => {
+	if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+	const prototype = Object.getPrototypeOf(value);
+	return prototype === Object.prototype || prototype === null;
+};
+const legacyDate = (value: unknown): Date | null => {
+	if (!(value instanceof Date) && typeof value !== 'string' && typeof value !== 'number') return null;
+	const date = value instanceof Date ? new Date(value.getTime()) : new Date(value);
+	return Number.isFinite(date.getTime()) ? date : null;
+};
+const malformedLegacyInteractions = (reason: string): LegacyInteractionConversionPlan => ({ ok: false, reason });
+
+// Parse the complete embedded residue before it can be claimed. Skipping one
+// malformed array member would silently erase source data while creating only
+// a subset of its billable children, so every value and every deterministic
+// destination must be valid and collision-free or the write fails closed.
+export const validateLegacyInteractionResidue = (doc: Partial<ThingDoc> & Record<string, unknown>): LegacyInteractionConversionPlan => {
+	if (typeof doc.shareId !== 'string' || !doc.shareId.trim()) return malformedLegacyInteractions('invalid parent shareId');
+
+	const owners = new Set<string>();
+	const destinations = new Set<string>();
+	const reactions: LegacyReactionConversion[] = [];
+	const comments: LegacyCommentConversion[] = [];
+	const rawReactions = owns(doc, 'reactions') ? doc.reactions : null;
+	const rawComments = owns(doc, 'comments') ? doc.comments : null;
+
+	if (rawReactions !== null) {
+		if (!isPlainLegacyRecord(rawReactions)) return malformedLegacyInteractions('reactions must be an object');
+		const createdAt = legacyDate(doc.createdAt);
+		for (const [emoji, rawOwnerIds] of Object.entries(rawReactions)) {
+			if (sanitizeReactionToken(emoji) !== emoji) return malformedLegacyInteractions('reaction token is invalid');
+			if (!Array.isArray(rawOwnerIds)) return malformedLegacyInteractions('reaction owners must be an array');
+			if (!createdAt && rawOwnerIds.length) return malformedLegacyInteractions('reaction parent createdAt is invalid');
+			for (const rawOwnerId of rawOwnerIds) {
+				if (typeof rawOwnerId !== 'string' || !rawOwnerId.trim() || rawOwnerId.trim() !== rawOwnerId) {
+					return malformedLegacyInteractions('reaction ownerId is invalid');
+				}
+				const shareId = reactionShareId(doc.shareId, rawOwnerId, emoji);
+				if (destinations.has(shareId)) return malformedLegacyInteractions('interaction destination is duplicated');
+				destinations.add(shareId);
+				owners.add(rawOwnerId);
+				reactions.push({ shareId, ownerId: rawOwnerId, emoji, createdAt: createdAt! });
+			}
+		}
+	}
+
+	if (rawComments !== null) {
+		if (!Array.isArray(rawComments)) return malformedLegacyInteractions('comments must be an array');
+		for (const rawComment of rawComments) {
+			if (!isPlainLegacyRecord(rawComment)) return malformedLegacyInteractions('comment must be an object');
+			const sanitizedId = sanitizeShareId(rawComment.id);
+			const ownerId = rawComment.userId;
+			const createdAt = legacyDate(rawComment.createdAt);
+			if (typeof sanitizedId !== 'string' || sanitizedId !== rawComment.id) {
+				return malformedLegacyInteractions('comment shareId is invalid');
+			}
+			if (typeof ownerId !== 'string' || !ownerId.trim() || ownerId.trim() !== ownerId) {
+				return malformedLegacyInteractions('comment ownerId is invalid');
+			}
+			if (typeof rawComment.text !== 'string') return malformedLegacyInteractions('comment text is invalid');
+			if (!createdAt) return malformedLegacyInteractions('comment createdAt is invalid');
+			if (destinations.has(sanitizedId)) return malformedLegacyInteractions('interaction destination is duplicated');
+			destinations.add(sanitizedId);
+			owners.add(ownerId);
+			comments.push({ shareId: sanitizedId, ownerId, text: rawComment.text, createdAt });
+		}
+	}
+
+	return { ok: true, ownerIds: [...owners].sort(), reactions, comments };
+};
+
+class LegacyInteractionResidueError extends Error {
+	constructor() {
+		super('Legacy interactions are malformed and require admin migration or cleanup before this write can continue');
+		this.name = 'LegacyInteractionResidueError';
+	}
+}
+
+export const legacyInteractionLazyConversionIsSafe = (plan: LegacyInteractionConversionPlan): boolean =>
+	plan.ok === true && plan.ownerIds.length === 0;
+
+const migrateThingInteractions = async (doc: ThingDoc): Promise<Fail | null> => {
+	if (!owns(doc, 'reactions') && !owns(doc, 'comments')) return null;
+
+	const preflight = validateLegacyInteractionResidue(doc as ThingDoc & Record<string, unknown>);
+	if (!preflight.ok) return fail(503, new LegacyInteractionResidueError().message);
+
+	// Any non-empty lazy conversion could race the global migration between a
+	// readiness precheck and the transaction, publishing unstamped child Things
+	// after an owner's account ledger became ready. Only empty residue is safe
+	// to claim/unset here; billable children are created exclusively by the
+	// globally leased migration, which stamps and reconciles before publication.
+	if (!legacyInteractionLazyConversionIsSafe(preflight)) {
+		return fail(503, 'Legacy interactions require the storage migration to finish before this write can continue');
+	}
   const things = await getThingsCollection();
 
-  const claimed = (await things.findOneAndUpdate(
-    {
+	try {
+		await withMongoTransaction(async (session) => {
+			const claimMatch: Record<string, unknown> = {
       shareId: doc.shareId,
-      $or: [{ reactions: { $exists: true } }, { comments: { $exists: true } }]
-    } as any,
-    { $unset: { reactions: '', comments: '' } } as any,
-    { returnDocument: 'before' }
-  )) as any as ThingDoc | null;
+				createdAt: doc.createdAt,
+				reactions: owns(doc, 'reactions') ? doc.reactions : { $exists: false },
+				comments: owns(doc, 'comments') ? doc.comments : { $exists: false }
+			};
+			const claimed = (await things.findOneAndUpdate(claimMatch as any, { $unset: { reactions: '', comments: '' } } as any, {
+				session,
+				returnDocument: 'before'
+			})) as any as ThingDoc | null;
+			if (!claimed) return; // another writer already claimed this exact residue
 
-  // Reflect the clear locally regardless of who won, so response aggregation
-  // reads only standalone data (never double-folds the embedded copy).
-  delete doc.reactions;
-  delete doc.comments;
-  if (!claimed) return; // another writer already claimed this post
+			const plan = validateLegacyInteractionResidue(claimed as ThingDoc & Record<string, unknown>);
+			if (!plan.ok) throw new LegacyInteractionResidueError();
 
   const ops: any[] = [];
-  for (const [token, userIds] of Object.entries(claimed.reactions || {})) {
-    for (const ownerId of userIds || []) {
-      const shareId = reactionShareId(doc.shareId, ownerId, token);
-      ops.push({
-        updateOne: {
-          filter: { shareId },
-          update: {
-            $setOnInsert: {
-              shareId,
+			for (const reaction of plan.reactions) {
+				const expected = {
+					shareId: reaction.shareId,
               schemaVersion: THINGS_SCHEMA_VERSION,
               thingtime: ['reaction'],
-              crystal: { emoji: token },
-              ownerId,
+					crystal: { emoji: reaction.emoji },
+					ownerId: reaction.ownerId,
               acl: [ACL_INHERIT],
               targetId: doc.shareId,
               tags: [],
-              createdAt: new Date(claimed.createdAt),
-              updatedAt: new Date(claimed.createdAt)
-            }
-          },
+					createdAt: reaction.createdAt,
+					updatedAt: reaction.createdAt
+				};
+				ops.push({
+					updateOne: {
+						// Matching only shareId would silently accept a pre-existing
+						// unrelated Thing and then erase the embedded source. The full
+						// expected envelope makes a squat/mismatch hit the unique index,
+						// aborting this transaction and restoring the residue.
+						filter: expected,
+						update: { $setOnInsert: expected },
           upsert: true
         }
       });
     }
-  }
-  for (const comment of claimed.comments || []) {
-    ops.push({
-      updateOne: {
-        filter: { shareId: comment.id },
-        update: {
-          $setOnInsert: {
-            shareId: comment.id,
+			for (const comment of plan.comments) {
+				const expected = {
+					shareId: comment.shareId,
             schemaVersion: THINGS_SCHEMA_VERSION,
             thingtime: ['comment'],
             crystal: { text: comment.text },
-            ownerId: comment.userId,
+					ownerId: comment.ownerId,
             acl: [ACL_INHERIT],
             targetId: doc.shareId,
             tags: [],
-            createdAt: new Date(comment.createdAt),
-            updatedAt: new Date(comment.createdAt)
-          }
-        },
+					createdAt: comment.createdAt,
+					updatedAt: comment.createdAt
+				};
+				ops.push({
+					updateOne: {
+						filter: expected,
+						update: { $setOnInsert: expected },
         upsert: true
       }
     });
   }
-  if (ops.length) {
-    try {
-      await things.bulkWrite(ops, { ordered: false });
-    } catch (err) {
-      // The claim already committed the $unset, so the embedded copy is the
-      // only remaining source of this legacy data. Restore it so the NEXT
-      // write re-claims (upserts are idempotent) instead of losing it forever.
-      await things.updateOne(
-        { shareId: doc.shareId } as any,
-        { $set: { reactions: claimed.reactions ?? {}, comments: claimed.comments ?? [] } } as any
-      );
-      throw err;
+			if (ops.length) await things.bulkWrite(ops, { ordered: false, session });
+		});
+	} catch (error) {
+		if (error instanceof LegacyInteractionResidueError) return fail(503, error.message);
+		if (
+			(error as any)?.code === 11000 ||
+			(Array.isArray((error as any)?.writeErrors) && (error as any).writeErrors.some((entry: any) => entry?.code === 11000))
+		) {
+			return fail(503, 'A legacy interaction destination conflicts with an existing Thing and requires admin cleanup');
     }
+		throw error;
   }
+
+	// Reflect the committed clear locally regardless of who won, so response
+	// aggregation reads only standalone data (never double-folds the copy).
+	delete doc.reactions;
+	delete doc.comments;
+	return null;
 };
 
 // ---------------------------------------------------------------------------
@@ -1864,7 +2170,10 @@ export const toggleReaction = async (
   if (token) {
     // first write claims any legacy embedded residue into standalone things
     // (namespace targets are always v2 — nothing to claim under the app lens)
-    if (!app) await migrateThingInteractions(target);
+		if (!app) {
+			const migrationFail = await migrateThingInteractions(target);
+			if (migrationFail) return migrationFail;
+		}
 
     // toggling is an insert/delete of ONE (viewer, token) thing — checked
     // across both the v2 shape and the interim kind:'reaction' era
@@ -1878,19 +2187,19 @@ export const toggleReaction = async (
       things.findOne({ kind: 'reaction', parentId: target.shareId, ownerId: viewerId, token } as any)
     ]);
     if (existingV2 || existingKind) {
-      const ids = [existingV2?._id, existingKind?._id].filter(Boolean);
-      await things.deleteMany({ _id: { $in: ids } } as any);
-      await refundDeletedNamespaceDocs([existingV2, existingKind].filter(Boolean) as ThingDoc[]);
+			try {
+      const removed = await deleteThingsAtomically([existingV2, existingKind].filter(Boolean) as ThingDoc[]);
+      await refundDeletedNamespaceDocs(removed);
+			} catch (error) {
+				const storageFail = storageMutationFail(error);
+				if (storageFail) return storageFail;
+				throw error;
+			}
     } else {
       // createThing enforces the per-user + per-post reaction caps (single
       // source of truth, so the generic POST path is bounded the same way);
       // under the app lens it also stamps the namespace + charges the budget
-      const created = await createThing(
-        viewerId,
-        { thingtime: ['reaction'], crystal: { emoji: token }, targetId: target.shareId },
-        viewer,
-        app
-      );
+      const created = await createThing(viewerId, { thingtime: ['reaction'], crystal: { emoji: token }, targetId: target.shareId }, viewer, app);
       // 409 = the unique (target, owner, token) index raced another add of the
       // same token — that reaction already exists, which is what we wanted
       if (isFail(created) && created.status !== 409) return created;
@@ -1948,10 +2257,7 @@ export const toggleReaction = async (
 // Saves carry acl ['tt:user'] (createThing special-cases the save crystal),
 // so a library is personal by construction. A create/create race can mint a
 // duplicate save doc; toggle-off deletes ALL matching docs, so it self-heals.
-export const toggleSave = async (
-  viewerInput: string | Viewer,
-  shareId: unknown
-): Promise<Fail | { ok: true; saved: boolean }> => {
+export const toggleSave = async (viewerInput: string | Viewer, shareId: unknown): Promise<Fail | { ok: true; saved: boolean }> => {
   const viewer = asViewer(viewerInput);
   if (!viewer?.id) return fail(401, 'Unauthorized');
   const target = await findViewableThing(shareId, viewer);
@@ -1962,10 +2268,16 @@ export const toggleSave = async (
   const things = await getThingsCollection();
   const existing = await things
     .find({ targetId: target.shareId, thingtime: 'save', ownerId: viewer.id } as any)
-    .project({ _id: 1 })
+		.project({ _id: 1, shareId: 1 })
     .toArray();
   if (existing.length) {
-    await things.deleteMany({ _id: { $in: existing.map((doc: any) => doc._id) } } as any);
+		try {
+			await deleteThingsAtomically(existing as any as ThingDoc[]);
+		} catch (error) {
+			const storageFail = storageMutationFail(error);
+			if (storageFail) return storageFail;
+			throw error;
+		}
     return { ok: true, saved: false };
   }
   const created = await createThing(viewer.id, { thingtime: ['save'], targetId: target.shareId }, viewer);
@@ -2014,13 +2326,15 @@ export const addComment = async (
 
   // first write claims any legacy embedded residue into standalone things
   // (namespace targets are always v2 — nothing to claim under the app lens)
-  if (!app) await migrateThingInteractions(target);
+	if (!app) {
+		const migrationFail = await migrateThingInteractions(target);
+		if (migrationFail) return migrationFail;
+	}
 
   const body = typeof input === 'string' ? { text: input } : input && typeof input === 'object' ? input : {};
   // comments share the post schema — post fields upgrade the comment to a
   // ["post","comment"] thing (validated by the post crystal sanitizer)
-  const rich =
-    body.type !== undefined || body.images !== undefined || body.listing !== undefined || body.thing !== undefined;
+  const rich = body.type !== undefined || body.images !== undefined || body.listing !== undefined || body.thing !== undefined;
 
   const created = await createThing(
     viewerId,
@@ -2052,10 +2366,7 @@ export const addComment = async (
     text: String(crystal.text || ''),
     images: (crystal.images as string[]) || [],
     listing: (crystal.listing as MarketplaceListing) || null,
-    thing:
-      crystal.thing && typeof crystal.thing === 'object' && !Array.isArray(crystal.thing)
-        ? (crystal.thing as Record<string, any>)
-        : null,
+    thing: crystal.thing && typeof crystal.thing === 'object' && !Array.isArray(crystal.thing) ? (crystal.thing as Record<string, any>) : null,
     tags: doc.tags || [],
     reactionCounts: {},
     viewerReactions: [],
@@ -2068,16 +2379,14 @@ export const addComment = async (
     // self-author shaped by the acting grant; count fenced to the namespace
     await appShapeProjections(app, [doc], [comment]);
     const things = await getThingsCollection();
-    const commentCount = await things.countDocuments(
-      withMatch({ targetId: target.shareId, thingtime: 'comment' }, ...appMatchClauses(app)) as any
-    );
+    const commentCount = await things.countDocuments(withMatch({ targetId: target.shareId, thingtime: 'comment' }, ...appMatchClauses(app)) as any);
     return { ok: true, comment, commentCount };
   }
 
   return {
     ok: true,
     comment,
-    commentCount: (await countCommentsOf(target)) // includes the new comment
+    commentCount: await countCommentsOf(target) // includes the new comment
   };
 };
 
@@ -2117,31 +2426,336 @@ export const sharePost = async (
   return { ok: true, post: (await toPublicPosts([created.doc], viewer))[0] };
 };
 
-// Ledger upkeep for ANY deletion path (app tokens, the owner's first-party
-// delete, the browse UI's delete-all): every removed doc that carries the
-// namespace stamp refunds its bytes to its own (owner, app) ledger — grouped
-// so a cascade over many authors decrements each author's ledger once.
+// Registered namespace refunds now commit with content deletion inside
+// deleteThingsAtomically/deleteThing. Sandbox ledgers intentionally stay on
+// their existing ephemeral path, so callers invoke this after the content
+// transaction commits to refund only TTL-scoped data.
 export const refundDeletedNamespaceDocs = async (docs: ThingDoc[]): Promise<void> => {
-  const totals = new Map<string, { ownerId: string; appId: string; bytes: number }>();
+	const totals = new Map<string, { ownerId: string; appId: string; bytes: number; sandbox: { space: string | null } }>();
   for (const doc of docs) {
-    if (!doc?.appId) continue;
-    const bytes = typeof doc.sizeBytes === 'number' ? doc.sizeBytes : appThingSizeBytes(doc);
+		if (!doc?.appId || storageSandboxState(doc) !== 'sandbox') continue;
+		const bytes = storedThingSizeBytes(doc);
     if (!(bytes > 0)) continue;
-    const key = `${doc.ownerId}\0${doc.appId}`;
-    const entry = totals.get(key) || { ownerId: String(doc.ownerId), appId: doc.appId, bytes: 0 };
+		const sandbox = { space: typeof doc.sandboxSpace === 'string' ? doc.sandboxSpace : null };
+		const key = `${doc.ownerId}\0${doc.appId}\0${sandbox.space ?? ''}`;
+    const entry = totals.get(key) || { ownerId: String(doc.ownerId), appId: doc.appId, bytes: 0, sandbox };
     entry.bytes += bytes;
     totals.set(key, entry);
   }
-  for (const { ownerId, appId, bytes } of totals.values()) {
-    await refundAppStorage({ appId, ownerId, sharedRead: false, scopes: [], username: '', sandbox: null }, bytes);
+  for (const { ownerId, appId, bytes, sandbox } of totals.values()) {
+    await refundAppStorage({ appId, ownerId, sharedRead: false, scopes: [], username: '', sandbox }, bytes);
   }
 };
 
-export const deleteThing = async (
-  viewerInput: string | Viewer,
-  shareId: unknown,
-  app: AppLens = null
-): Promise<Fail | { ok: true }> => {
+const cascadeAttachmentFilter = (parentIds: string[]) => ({
+	$or: [
+		{
+			targetId: { $in: parentIds },
+			// A malformed multi-kind Thing must never turn a share into cascade
+			// garbage: shares intentionally survive their original disappearing.
+			thingtime: { $in: ['comment', 'reaction', 'save'], $nin: ['share'] }
+		},
+		{
+			parentId: { $in: parentIds },
+			kind: { $in: ['comment', 'reaction'] },
+			thingtime: { $nin: ['share'] }
+		}
+	]
+});
+
+const cascadeNodeKey = (doc: ThingDoc): string => ((doc as any)._id ? `id:${String((doc as any)._id)}` : `share:${String(doc.shareId || '')}`);
+
+// Interim relational comments did not consistently carry shareId. Their
+// commentId (and, defensively, stringified Mongo id) can be a child's parentId,
+// so all stable aliases participate in both traversal and race checks.
+const cascadeLinkIdsOf = (doc: ThingDoc): string[] =>
+	[doc.shareId, doc.commentId, (doc as any)._id ? String((doc as any)._id) : null].filter(
+		(value, index, all): value is string => typeof value === 'string' && !!value && all.indexOf(value) === index
+	);
+
+const cascadeParentIdsOf = (doc: ThingDoc): string[] => {
+	const parents = new Set<string>();
+	const thingtime = Array.isArray(doc.thingtime) ? doc.thingtime : [];
+	if (
+		thingtime.some((entry) => entry === 'comment' || entry === 'reaction' || entry === 'save') &&
+		!thingtime.includes('share') &&
+		typeof doc.targetId === 'string' &&
+		doc.targetId
+	) {
+		parents.add(doc.targetId);
+	}
+	if ((doc.kind === 'comment' || doc.kind === 'reaction') && !thingtime.includes('share') && typeof doc.parentId === 'string' && doc.parentId) {
+		parents.add(doc.parentId);
+	}
+	return [...parents];
+};
+
+// Discover the complete attachment closure while the root still exists. The
+// cursor fetch size, frontier width, and total node count are all bounded; the
+// seen set makes corrupt self-links/cycles terminate. Every query is sorted so
+// repeated attempts build the same candidate order from the same committed
+// graph state.
+const discoverCascadeDescendants = async (root: ThingDoc): Promise<ThingDoc[]> => {
+  const things = await getThingsCollection();
+	const seenNodes = new Set<string>([cascadeNodeKey(root)]);
+	const seenParentIds = new Set(cascadeLinkIdsOf(root));
+	const frontier = [...seenParentIds].sort();
+	const descendants: ThingDoc[] = [];
+
+	for (let offset = 0; offset < frontier.length; ) {
+		const parents = frontier.slice(offset, offset + STORAGE_DELETE_TRANSACTION_BATCH);
+		offset += parents.length;
+		const cursor = things
+			.find(cascadeAttachmentFilter(parents) as any)
+			.project({ _id: 1, shareId: 1, commentId: 1, targetId: 1, parentId: 1, thingtime: 1, kind: 1 })
+			.sort({ shareId: 1, commentId: 1, _id: 1 })
+			.batchSize(STORAGE_DELETE_TRANSACTION_BATCH);
+		for await (const raw of cursor) {
+			const doc = raw as any as ThingDoc;
+			const nodeKey = cascadeNodeKey(doc);
+			if (!nodeKey || seenNodes.has(nodeKey)) continue;
+			if (descendants.length >= MAX_CASCADE_DESCENDANTS) {
+				await cursor.close();
+				throw new StorageMutationError(
+					409,
+					'storage_invariant',
+					`Thing has more than ${MAX_CASCADE_DESCENDANTS} attached descendants — run the admin cleanup before deleting it`
+				);
+			}
+			seenNodes.add(nodeKey);
+			descendants.push(doc);
+			for (const linkId of cascadeLinkIdsOf(doc)) {
+				if (seenParentIds.has(linkId)) continue;
+				seenParentIds.add(linkId);
+				frontier.push(linkId);
+			}
+		}
+	}
+	return descendants;
+};
+
+// Build child-before-parent batches. Strongly connected components keep a
+// corrupt attachment cycle in ONE transaction; the condensation graph is a
+// DAG, so a deterministic leaf-first topological order makes every normal
+// batch independently retryable without orphaning undiscovered descendants.
+const cascadeDeletionBatches = (docs: ThingDoc[]): ThingDoc[][] => {
+	const byId = new Map(docs.map((doc) => [cascadeNodeKey(doc), doc]));
+	const ids = [...byId.keys()].sort();
+	const nodesByAlias = new Map<string, Set<string>>();
+	for (const [nodeId, doc] of byId) {
+		for (const alias of cascadeLinkIdsOf(doc)) {
+			const nodes = nodesByAlias.get(alias) ?? new Set<string>();
+			nodes.add(nodeId);
+			nodesByAlias.set(alias, nodes);
+		}
+	}
+	const children = new Map(ids.map((id) => [id, new Set<string>()]));
+	const parents = new Map(ids.map((id) => [id, new Set<string>()]));
+	for (const [childId, doc] of byId) {
+		for (const parentId of cascadeParentIdsOf(doc)) {
+			for (const parentNodeId of nodesByAlias.get(parentId) ?? []) {
+				children.get(parentNodeId)!.add(childId);
+				parents.get(childId)!.add(parentNodeId);
+			}
+		}
+	}
+
+	// Iterative Kosaraju avoids blowing the JS stack on a deliberately deep
+	// comment chain while still grouping cycles exactly.
+	const visited = new Set<string>();
+	const finishOrder: string[] = [];
+	for (const start of ids) {
+		if (visited.has(start)) continue;
+		visited.add(start);
+		const stack: Array<{ id: string; next: number; edges: string[] }> = [{ id: start, next: 0, edges: [...children.get(start)!].sort() }];
+		while (stack.length) {
+			const frame = stack[stack.length - 1]!;
+			if (frame.next < frame.edges.length) {
+				const child = frame.edges[frame.next++]!;
+				if (visited.has(child)) continue;
+				visited.add(child);
+				stack.push({ id: child, next: 0, edges: [...children.get(child)!].sort() });
+			} else {
+				finishOrder.push(frame.id);
+				stack.pop();
+			}
+		}
+	}
+
+	const componentOf = new Map<string, number>();
+	const components: string[][] = [];
+	for (let index = finishOrder.length - 1; index >= 0; index -= 1) {
+		const start = finishOrder[index]!;
+		if (componentOf.has(start)) continue;
+		const componentId = components.length;
+		const component: string[] = [];
+		const stack = [start];
+		componentOf.set(start, componentId);
+		while (stack.length) {
+			const id = stack.pop()!;
+			component.push(id);
+			for (const parent of [...parents.get(id)!].sort().reverse()) {
+				if (componentOf.has(parent)) continue;
+				componentOf.set(parent, componentId);
+				stack.push(parent);
+			}
+		}
+		component.sort();
+		if (component.length > STORAGE_DELETE_TRANSACTION_BATCH) {
+			throw new StorageMutationError(
+				409,
+				'storage_invariant',
+				`Attachment cycle contains more than ${STORAGE_DELETE_TRANSACTION_BATCH} Things — run the admin cleanup before deleting it`
+			);
+		}
+		components.push(component);
+	}
+
+	const componentChildren = components.map(() => new Set<number>());
+	const componentParents = components.map(() => new Set<number>());
+	for (const [parentId, childIds] of children) {
+		const parentComponent = componentOf.get(parentId)!;
+		for (const childId of childIds) {
+			const childComponent = componentOf.get(childId)!;
+			if (parentComponent === childComponent) continue;
+			componentChildren[parentComponent]!.add(childComponent);
+			componentParents[childComponent]!.add(parentComponent);
+		}
+	}
+
+	const remainingChildren = componentChildren.map((entries) => entries.size);
+	const componentKey = (componentId: number) => components[componentId]![0]!;
+	const ready = components
+		.map((_, componentId) => componentId)
+		.filter((componentId) => remainingChildren[componentId] === 0)
+		.sort((left, right) => componentKey(left).localeCompare(componentKey(right)));
+	const orderedComponents: number[] = [];
+	while (ready.length) {
+		const componentId = ready.shift()!;
+		orderedComponents.push(componentId);
+		for (const parentComponent of componentParents[componentId]!) {
+			remainingChildren[parentComponent] -= 1;
+			if (remainingChildren[parentComponent] === 0) {
+				ready.push(parentComponent);
+				ready.sort((left, right) => componentKey(left).localeCompare(componentKey(right)));
+			}
+		}
+	}
+
+	const batches: ThingDoc[][] = [];
+	let batch: ThingDoc[] = [];
+	for (const componentId of orderedComponents) {
+		const componentDocs = components[componentId]!.map((id) => byId.get(id)!);
+		if (batch.length && batch.length + componentDocs.length > STORAGE_DELETE_TRANSACTION_BATCH) {
+			batches.push(batch);
+			batch = [];
+		}
+		batch.push(...componentDocs);
+	}
+	if (batch.length) batches.push(batch);
+	return batches;
+};
+
+const deleteThingCandidatesInSession = async (docs: ThingDoc[], session: any): Promise<ThingDoc[]> => {
+	const things = await getThingsCollection();
+	const deleted: ThingDoc[] = [];
+	// Mongo sessions do not permit parallel operations. Sequential before-image
+	// deletes also make it unambiguous which exact version this transaction freed.
+	for (const doc of docs) {
+		const mongoId = (doc as any)._id;
+		const removed = (await things.findOneAndDelete((mongoId ? { _id: mongoId } : { shareId: doc.shareId }) as any, {
+			session
+		})) as any as ThingDoc | null;
+		if (removed) deleted.push(removed);
+	}
+	return deleted;
+};
+
+// Delete known candidates and their account/app-ledger bytes in the same
+// bounded transaction for each batch. Only exact findOneAndDelete winners are
+// charged, so competing deletes and concurrent size-changing updates can never
+// double-refund a ledger.
+export const deleteThingsAtomically = async (docs: ThingDoc[]): Promise<ThingDoc[]> => {
+  const candidates = [
+    ...new Map(
+      docs
+        .map((doc) => {
+          const mongoId = (doc as any)?._id;
+          const key = mongoId ? `id:${String(mongoId)}` : doc?.shareId ? `share:${doc.shareId}` : '';
+          return key ? ([key, doc] as const) : null;
+        })
+        .filter((entry): entry is readonly [string, ThingDoc] => entry !== null)
+    ).values()
+  ];
+	if (!candidates.length) return [];
+  const deleted: ThingDoc[] = [];
+	for (let offset = 0; offset < candidates.length; offset += STORAGE_DELETE_TRANSACTION_BATCH) {
+		const batch = candidates.slice(offset, offset + STORAGE_DELETE_TRANSACTION_BATCH);
+		const batchDeleted = await withMongoTransaction(async (session) => {
+			const winners = await deleteThingCandidatesInSession(batch, session);
+			await applyDeletedStorageDeltas(winners, session);
+			return winners;
+		});
+		deleted.push(...batchDeleted);
+	}
+	return deleted;
+};
+
+type CascadeDeleteBatchResult = { blocked: boolean; deleted: ThingDoc[] };
+
+// A batch is deleted only when every live cascade child of its members is also
+// in this same batch (children in earlier leaf-first batches are already gone).
+// If a child committed after discovery, the read returns `blocked` and the
+// caller re-walks. If it races after this snapshot, createThing's transactional
+// target touch conflicts with our parent delete, so Mongo retries one side.
+const deleteCascadeBatchAtomically = async (batch: ThingDoc[], rootMongoId: unknown): Promise<CascadeDeleteBatchResult> => {
+	const things = await getThingsCollection();
+	const parentIds = [...new Set(batch.flatMap(cascadeLinkIdsOf))].sort();
+	// The root may itself point back into a corrupt descendant cycle. It is the
+	// durable retry anchor and is deleted last, so allow that one known edge;
+	// every other live child must be in this atomic batch or block it.
+	const mongoIds = [...batch.map((doc) => (doc as any)._id), rootMongoId].filter(Boolean);
+	return withMongoTransaction(async (session) => {
+		const externalChild = await things.findOne(
+			{
+				...cascadeAttachmentFilter(parentIds),
+				...(mongoIds.length ? { _id: { $nin: mongoIds } } : {})
+			} as any,
+			{ session, projection: { _id: 1 } }
+    );
+		if (externalChild) return { blocked: true, deleted: [] };
+		const deleted = await deleteThingCandidatesInSession(batch, session);
+		await applyDeletedStorageDeltas(deleted, session);
+		return { blocked: false, deleted };
+	});
+};
+
+type RootDeleteResult = { state: 'blocked' | 'missing' } | { state: 'deleted'; doc: ThingDoc };
+
+// Root deletion is the final bounded transaction. The no-child check and root
+// before-image delete share one snapshot; target-attached creates also write
+// the root, so a concurrent attachment either becomes visible on transaction
+// retry or loses to the deletion and aborts cleanly.
+const deleteDrainedRootAtomically = async (deleteFilter: Record<string, any>): Promise<RootDeleteResult> => {
+	const things = await getThingsCollection();
+	return withMongoTransaction(async (session) => {
+		const root = (await things.findOne(deleteFilter as any, { session })) as any as ThingDoc | null;
+		if (!root) return { state: 'missing' };
+		const child = await things.findOne({ ...cascadeAttachmentFilter(cascadeLinkIdsOf(root)), _id: { $ne: (root as any)._id } } as any, {
+			session,
+			projection: { _id: 1 }
+		});
+		if (child) return { state: 'blocked' };
+		const deleted = (await things.findOneAndDelete({ _id: (root as any)._id } as any, {
+			session
+		})) as any as ThingDoc | null;
+		if (!deleted) return { state: 'missing' };
+		await applyDeletedStorageDeltas([deleted], session);
+		return { state: 'deleted', doc: deleted };
+	});
+};
+
+export const deleteThing = async (viewerInput: string | Viewer, shareId: unknown, app: AppLens = null): Promise<Fail | { ok: true }> => {
   const viewer = asViewer(viewerInput);
   if (!viewer?.id) return fail(401, 'Unauthorized');
   if (typeof shareId !== 'string' || !shareId.trim()) return fail(400, 'Thing id is required');
@@ -2153,40 +2767,72 @@ export const deleteThing = async (
   // ever delete what it stored; sandboxed tokens add their grant stamp to the
   // same atomic filter — no check-then-delete race either way.
   const sandboxTokenId = patSandboxOf(viewer);
-  const deleted = (await things.findOneAndDelete({
+	const deleteFilter = {
     shareId: shareId.trim(),
     ownerId: viewer.id,
     thingtime: { $nin: [...PROTECTED_THINGTIME] },
     ...(app ? { appId: app.appId } : {}),
-    ...(sandboxTokenId
-      ? { $or: [{ tokenAcl: tokenAclEntryFor(sandboxTokenId) }, { createdByTokenId: sandboxTokenId }] }
-      : {})
-  } as any)) as any as ThingDoc | null;
-  if (!deleted) {
-    // distinguish "not yours to touch" from "gone" so a sandboxed AI gets an
-    // actionable error instead of a phantom 404 (failure path only — the
-    // success path stays a single atomic op)
+    ...(sandboxTokenId ? { $or: [{ tokenAcl: tokenAclEntryFor(sandboxTokenId) }, { createdByTokenId: sandboxTokenId }] } : {})
+	};
+
+	const initial = (await things.findOne(deleteFilter as any)) as any as ThingDoc | null;
+	if (!initial) {
     if (sandboxTokenId && (await things.findOne({ shareId: shareId.trim(), ownerId: viewer.id } as any))) {
       return patSandboxFail();
     }
     return fail(404, 'Thing not found');
   }
-  // comments/reactions/saves attached to the deleted thing go with it (v2
-  // things AND interim kind docs); share things survive so they can render
-  // their 'original unavailable' placeholder
-  const cascadeFilter = {
-    $or: [
-      { targetId: deleted.shareId, thingtime: { $in: ['comment', 'reaction', 'save'] } },
-      { parentId: deleted.shareId, kind: { $in: ['comment', 'reaction'] } }
-    ]
-  };
-  const cascade = (await things
-    .find(cascadeFilter as any)
-    .project({ ownerId: 1, appId: 1, sizeBytes: 1, crystal: 1, extended: 1, tags: 1 })
-    .toArray()) as any as ThingDoc[];
-  await things.deleteMany(cascadeFilter as any);
-  await refundDeletedNamespaceDocs([deleted, ...cascade]);
+	// Pin the physical root identity across the multi-transaction drain. If a
+	// competing deleter wins and a caller later reuses the same public shareId,
+	// this in-flight request must never delete that replacement Thing (ABA).
+	const anchoredDeleteFilter = { ...deleteFilter, _id: (initial as any)._id };
+
+	try {
+		// Descendants commit leaf-first in deterministic <=100-row transactions;
+		// the root remains as a durable retry anchor until the closure is empty.
+		// Each batch uses exact findOneAndDelete before-images, so Mongo callback
+		// retries, competing deleters, and caller retries debit transactional
+		// account/app ledgers at most once. Sandbox refunds happen immediately
+		// after each commit; an ambiguous sandbox failure stays conservatively
+		// over-counted for its existing reconciliation path to repair.
+		for (let pass = 0; pass < MAX_CASCADE_DRAIN_PASSES; pass += 1) {
+			const anchoredRoot = (await things.findOne(anchoredDeleteFilter as any)) as any as ThingDoc | null;
+			if (!anchoredRoot) {
+				const oldRootStillExists = await things.findOne({ _id: (initial as any)._id } as any);
+				return oldRootStillExists ? fail(409, 'Thing changed while it was being deleted — try again') : { ok: true };
+			}
+			const descendants = await discoverCascadeDescendants(anchoredRoot);
+			let rewalk = false;
+			for (const batch of cascadeDeletionBatches(descendants)) {
+				const result = await deleteCascadeBatchAtomically(batch, (initial as any)._id);
+				if (result.blocked) {
+					rewalk = true;
+					break;
+				}
+				await refundDeletedNamespaceDocs(result.deleted);
+			}
+			if (rewalk) continue;
+
+			const rootResult = await deleteDrainedRootAtomically(anchoredDeleteFilter);
+			if (rootResult.state === 'blocked') continue;
+			if (rootResult.state === 'deleted') {
+				await refundDeletedNamespaceDocs([rootResult.doc]);
   return { ok: true };
+			}
+
+			// Another authorized deleter won the root before-image. Treat the desired
+			// absent state as success unless a still-live row merely stopped matching
+			// our immutable authorization fence.
+			const stillExists = await things.findOne({ _id: (initial as any)._id } as any);
+			if (!stillExists) return { ok: true };
+			return fail(409, 'Thing changed while it was being deleted — try again');
+		}
+		return fail(409, 'Thing kept receiving new attachments while it was being deleted — try again');
+	} catch (error) {
+		const storageFail = storageMutationFail(error);
+		if (storageFail) return storageFail;
+		throw error;
+	}
 };
 
 export const deletePost = deleteThing;
@@ -2222,6 +2868,28 @@ export const updateThing = async (
   // that this app didn't store is a plain 404 (no existence oracle)
   if (app && doc.appId !== app.appId) return fail(404, 'Thing not found');
   if (patSandboxBlocks(viewer, doc)) return patSandboxFail();
+	const storedSandboxState = storageSandboxState(doc);
+	if (doc.appId && storedSandboxState === 'invalid') {
+		return fail(503, 'Thing has an invalid storage namespace marker and must be reconciled before it can be updated');
+	}
+
+  // Namespace things remain quota-accounted even when their end-user owner
+  // edits them through the first-party things API instead of through an app
+  // token. Root appId is server-authored, so synthesizing this storage-only
+  // scope cannot let a caller enter another namespace; it simply prevents a
+  // first-party update from growing app data without reserving either ledger.
+  const storageScope: AppNamespaceScope | null =
+    app ??
+    (doc.appId
+      ? {
+          appId: doc.appId,
+          ownerId: doc.ownerId,
+          sharedRead: false,
+          scopes: [],
+          username: '',
+					sandbox: storedSandboxState === 'sandbox' ? { space: typeof doc.sandboxSpace === 'string' ? doc.sandboxSpace : null } : null
+        }
+      : null);
 
   const thingtime = thingtimeOf(doc);
   // system kinds mutate only through their dedicated utils (profile update,
@@ -2229,10 +2897,7 @@ export const updateThing = async (
   if (isProtectedThingtime(thingtime)) {
     return fail(403, `${thingtime.join('+')} things are managed by their own endpoints`);
   }
-  const patch =
-    input.crystal && typeof input.crystal === 'object' && !Array.isArray(input.crystal)
-      ? (input.crystal as Record<string, unknown>)
-      : {};
+  const patch = input.crystal && typeof input.crystal === 'object' && !Array.isArray(input.crystal) ? (input.crystal as Record<string, unknown>) : {};
   const nextCrystal = options.replaceCrystal ? patch : { ...crystalOf(doc), ...patch };
   const validated = validateThingtimeCrystal(thingtime, nextCrystal);
   if (isFail(validated)) return validated;
@@ -2242,18 +2907,17 @@ export const updateThing = async (
   // schemaId would lock the owner out of editing their own data thing if the
   // schema's author later hid or deleted it — an action outside the owner's
   // control. A changed/new schemaId must still prove the writer can see it.
-  const prevSchemaId = typeof (crystalOf(doc) as Record<string, unknown>)?.schemaId === 'string'
-    ? ((crystalOf(doc) as Record<string, unknown>).schemaId as string)
-    : undefined;
+  const prevSchemaId =
+    typeof (crystalOf(doc) as Record<string, unknown>)?.schemaId === 'string'
+      ? ((crystalOf(doc) as Record<string, unknown>).schemaId as string)
+      : undefined;
   if (validated.crystal.schemaId !== undefined && validated.crystal.schemaId !== prevSchemaId) {
     const provenance = await resolveDataSchemaProvenance(validated.thingtime, validated.crystal, viewer);
     if (isFail(provenance)) return provenance;
   }
 
   // post crystals only — see the identical guard in createThing
-  const patchedListing = thingtime.includes('post')
-    ? (validated.crystal.listing as MarketplaceListing | null | undefined)
-    : null;
+  const patchedListing = thingtime.includes('post') ? (validated.crystal.listing as MarketplaceListing | null | undefined) : null;
   const categoryTag = patchedListing && typeof patchedListing.category === 'string' ? [patchedListing.category] : [];
 
   let tags = doc.tags || [];
@@ -2267,13 +2931,11 @@ export const updateThing = async (
     // grows the list past the create-time fold's bound. Keyed on the category
     // actually changing (not tag membership: the new category may coincide
     // with a user tag, and the old one must STILL come out then).
-    const previousCategory = thingtime.includes('post')
-      ? ((crystalOf(doc).listing as MarketplaceListing | null | undefined)?.category ?? null)
-      : null;
+		const previousCategory = thingtime.includes('post')
+			? ((crystalOf(doc).listing as MarketplaceListing | null | undefined)?.category ?? null)
+			: null;
     if (previousCategory !== categoryTag[0]) {
-      tags = [...tags.filter((tag) => tag !== previousCategory), ...categoryTag].filter(
-        (tag, index, all) => all.indexOf(tag) === index
-      );
+      tags = [...tags.filter((tag) => tag !== previousCategory), ...categoryTag].filter((tag, index, all) => all.indexOf(tag) === index);
     }
   }
 
@@ -2310,23 +2972,39 @@ export const updateThing = async (
   const nextTokenAcl = sanitizeTokenAcl(input.tokenAcl);
   if (isFail(nextTokenAcl)) return nextTokenAcl;
 
-  // App updates charge the size DELTA against the namespace budget before
-  // writing (mirrors setAppData: over-budget refuses, shrink refunds after).
-  let sizeDelta = 0;
-  let newSize: number | null = null;
-  if (app) {
-    newSize = appThingSizeBytes({
+	const nextExtended = hasExtendedChange ? extended.value : (doc.extended ?? null);
+	const newSize = thingStorageSizeBytes({ crystal: validated.crystal, extended: nextExtended, tags });
+	const wasBillable = isBillableStorageThing(doc);
+	const nextStorageDoc: ThingDoc = {
+		...doc,
+		schemaVersion: THINGS_SCHEMA_VERSION,
+		thingtime,
       crystal: validated.crystal,
-      extended: hasExtendedChange ? extended.value : (doc.extended ?? null),
+		extended: nextExtended,
       tags
-    });
-    const oldSize = typeof doc.sizeBytes === 'number' ? doc.sizeBytes : appThingSizeBytes(doc);
-    sizeDelta = newSize - oldSize;
-    if (sizeDelta > 0) {
-      const charge = await chargeAppStorage(app, sizeDelta);
-      if (!charge.ok) return fail(charge.status, charge.error);
+	};
+	const isBillable = isBillableStorageThing(nextStorageDoc);
+	const registeredStorageScope = storageScope && !storageScope.sandbox ? storageScope : null;
+	const currentSourceBytes = currentContentSizeBytes(doc);
+	if ((wasBillable || registeredStorageScope) && currentSourceBytes === null) {
+		// Never turn an uncertain legacy baseline into a current-looking stamp by
+		// applying only new-old. Even before a ledger is published ready, racing
+		// migration activation could otherwise certify a total which omitted the
+		// old row. The idempotent storage migration is the sole baseline writer.
+		return fail(503, 'Thing requires the current storage migration before it can be updated');
+	}
+	const oldStorageBytes = currentSourceBytes ?? storedThingSizeBytes(doc);
+	const accountDelta = (isBillable ? newSize : 0) - (wasBillable ? oldStorageBytes : 0);
+	const appDelta = storageScope ? newSize - oldStorageBytes : 0;
+	const storageTracked = wasBillable || isBillable || !!storageScope;
+
+	// Sandbox namespaces retain their ephemeral/windowed pre-reservation path.
+	// Real account + registered-app deltas are applied below inside one Mongo
+	// transaction with the document CAS.
+	if (storageScope?.sandbox && appDelta > 0) {
+		const charge = await chargeAppStorage(storageScope, appDelta);
+      if (charge.ok === false) return fail(charge.status, charge.error);
     }
-  }
 
   const now = new Date();
   const set: Record<string, any> = {
@@ -2339,7 +3017,14 @@ export const updateThing = async (
     tags,
     acl,
     updatedAt: now,
-    ...(app && newSize !== null ? { appId: app.appId, sizeBytes: newSize } : {})
+		...(storageScope ? { appId: storageScope.appId } : {}),
+		...(isBillable || storageScope ? { sizeBytes: newSize } : {}),
+		...(isBillable
+			? {
+					storageClass: 'content',
+					storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION
+				}
+			: {})
   };
   // upgrading a v1 post in place — clear the legacy crystal-at-root fields the
   // v2 shape replaces (embedded comments/reactions stay for the migration).
@@ -2354,15 +3039,43 @@ export const updateThing = async (
     shareOfId: '',
     shareCount: '',
     visibility: '',
-    ...(nextTokenAcl !== undefined ? { createdByTokenId: '' } : {})
+		...(nextTokenAcl !== undefined ? { createdByTokenId: '' } : {}),
+		...(!isBillable ? { storageClass: '', storageAccountingVersion: '' } : {}),
+		...(!isBillable && !storageScope ? { sizeBytes: '' } : {})
   };
+	const expectedSize = storageTracked
+    ? Object.prototype.hasOwnProperty.call(doc, 'sizeBytes')
+      ? { sizeBytes: doc.sizeBytes }
+      : { sizeBytes: { $exists: false } }
+    : {};
+  let writeResult;
   try {
-    await things.updateOne({ shareId: doc.shareId } as any, { $set: set, $unset: unset } as any);
-  } catch (err) {
-    if (app && sizeDelta > 0) await refundAppStorage(app, sizeDelta);
-    throw err;
+		if (wasBillable || isBillable || registeredStorageScope) {
+			await withMongoTransaction(async (session) => {
+				if (accountDelta !== 0) await applyUserStorageDelta(doc.ownerId, accountDelta, session);
+				if (registeredStorageScope && appDelta !== 0) {
+					await applyAppStorageDeltaTransaction(registeredStorageScope, appDelta, session);
+				}
+				writeResult = await things.updateOne({ shareId: doc.shareId, ...expectedSize } as any, { $set: set, $unset: unset } as any, { session });
+				if (writeResult.matchedCount === 0) {
+					throw new StorageMutationError(409, 'storage_conflict', 'Thing changed while it was being updated — try again');
+				}
+			});
+		} else {
+    writeResult = await things.updateOne({ shareId: doc.shareId, ...expectedSize } as any, { $set: set, $unset: unset } as any);
   }
-  if (app && sizeDelta < 0) await refundAppStorage(app, -sizeDelta);
+	} catch (error) {
+		const storageFail = storageMutationFail(error);
+		if (storageFail) return storageFail;
+		// Sandbox accounting deliberately retains a positive reservation after an
+		// ambiguous result; its existing reconciliation path repairs over-counting.
+		throw error;
+	}
+	if (storageScope?.sandbox && writeResult.matchedCount === 0) {
+		if (appDelta > 0) await refundAppStorage(storageScope, appDelta);
+    return fail(409, 'Thing changed while it was being updated — try again');
+  }
+	if (storageScope?.sandbox && appDelta < 0) await refundAppStorage(storageScope, -appDelta);
 
   const updated = { ...doc, ...set } as ThingDoc;
   delete (updated as any).kind;
@@ -2374,6 +3087,11 @@ export const updateThing = async (
   delete (updated as any).shareCount;
   delete (updated as any).visibility;
   if (nextTokenAcl !== undefined) delete (updated as any).createdByTokenId;
+	if (!isBillable) {
+		delete updated.storageClass;
+		delete updated.storageAccountingVersion;
+		if (!storageScope) delete updated.sizeBytes;
+	}
 
   const thing = (await toPublicThings([updated], viewer))[0];
   if (app) {
@@ -2419,9 +3137,7 @@ export const upsertThing = async (
   // re-PUTting a data thing without repeating thingtime isn't a false conflict.
   // A non-array, non-empty thingtime is a real (rejected) attempt to change it.
   const thingtimeProvided =
-    input.thingtime !== undefined &&
-    input.thingtime !== null &&
-    !(Array.isArray(input.thingtime) && input.thingtime.length === 0);
+    input.thingtime !== undefined && input.thingtime !== null && !(Array.isArray(input.thingtime) && input.thingtime.length === 0);
   if (thingtimeProvided) {
     const wanted = Array.isArray(input.thingtime) ? [...input.thingtime].sort().join(',') : String(input.thingtime);
     if (wanted !== [...thingtimeOf(existing)].sort().join(',')) {
@@ -2457,10 +3173,7 @@ export const listExistingThingShareIds = async (shareIds: string[]): Promise<Set
 
 // Feature lookup used by algorithm training — only returns posts the engaging
 // user can actually see.
-export const getPostFeatures = async (
-  viewerInput: string | Viewer,
-  shareIds: string[]
-): Promise<Map<string, PostFeatures>> => {
+export const getPostFeatures = async (viewerInput: string | Viewer, shareIds: string[]): Promise<Map<string, PostFeatures>> => {
   const viewer = asViewer(viewerInput);
   const wanted = [...new Set(shareIds.filter((id) => typeof id === 'string' && id.trim()))];
   if (!wanted.length) return new Map();

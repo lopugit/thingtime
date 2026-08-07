@@ -2,7 +2,7 @@ import { getAuthToken } from './authCookie';
 import { verifyJwt } from './jwt';
 import type { JwtClaims } from './jwt';
 import { getLiveSession } from './sessions';
-import { findUserById, toPublicUser } from './users';
+import { findUserById, toPublicUserWithStorage } from './users';
 import type { PublicUser } from './users';
 
 const SERVICE_EMAIL_VERIFICATION_GRACE_MS = 1000 * 60 * 60 * 24 * 7;
@@ -48,7 +48,7 @@ export const resolveSessionUser = async (jti: string, expectedUserId: string): P
     return null;
   }
 
-  return toPublicUser(user);
+	return toPublicUserWithStorage(user);
 };
 
 // Resolve a signed JWT to its live user, or null. Verifies the signature + exp,
