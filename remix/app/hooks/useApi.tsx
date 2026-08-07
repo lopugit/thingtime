@@ -115,7 +115,23 @@ export function useApi() {
         )
       }
     },
+    settings: {
+      // Public so the GitHub conflict resolver can read the same ordered model
+      // waterfall as the admin UI without inheriting an admin browser session.
+      prConflictResolverModelWaterfall: useCallback(
+        async () => getJson('/api/v1/settings/pr-conflict-auto-resolver-model-waterfall'),
+        []
+      )
+    },
     admin: {
+      setPrConflictResolverModelWaterfall: useCallback(
+        async (waterfall) =>
+          asyncFetcher.submit(
+            { waterfall },
+            { action: '/api/v1/settings/pr-conflict-auto-resolver-model-waterfall' }
+          ),
+        [asyncFetcher]
+      ),
       rateLimits: useCallback(async () => getJson('/api/v1/admin/rate-limits'), []),
       setRateLimits: useCallback(async (endpoints) => asyncFetcher.submit({ endpoints }, { action: '/api/v1/admin/rate-limits' }), [asyncFetcher]),
       users: useCallback(async (args) => getJson(`/api/v1/admin/users${toQuery(args)}`), []),
@@ -188,7 +204,41 @@ export function useApi() {
         async (args, options?: { signal?: AbortSignal }) =>
           asyncFetcher.submit(args, { action: '/api/v1/mongodb/raw-results', signal: options?.signal }),
         [asyncFetcher]
-      )
+      ),
+      // session data-endpoint override (thin-frontend mode): which MongoDB the
+      // data plane uses for this browser session
+      endpoint: {
+        get: useCallback(async () => getJson('/api/v1/mongodb/endpoint'), []),
+        set: useCallback(
+          async (args?: { url?: string; savedId?: string; reset?: boolean }) => {
+            const body = args?.savedId ? { savedId: args.savedId } : args?.reset ? { reset: true } : { url: args?.url };
+            const ret = asyncFetcher.submit(body, { action: '/api/v1/mongodb/endpoint' });
+            // the data plane just moved — cached feeds/lists are stale, so
+            // refresh root data the same way login/logout do
+            ret.then(refreshRootData).catch(() => {});
+            return ret;
+          },
+          [asyncFetcher]
+        )
+      },
+      // the signed-in user's saved endpoints (persisted server-side)
+      endpoints: {
+        list: useCallback(async () => getJson('/api/v1/mongodb/endpoints'), []),
+        add: useCallback(
+          async (args?: { name?: string; url?: string }) =>
+            asyncFetcher.submit({ name: args?.name, url: args?.url }, { action: '/api/v1/mongodb/endpoints' }),
+          [asyncFetcher]
+        ),
+        remove: useCallback(
+          async (args?: { id?: string }) => {
+            const ret = asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/mongodb/endpoints', method: 'DELETE' });
+            // removing the session's active endpoint clears the override
+            ret.then(refreshRootData).catch(() => {});
+            return ret;
+          },
+          [asyncFetcher]
+        )
+      }
     },
     things: {
       feed: useCallback(async (args) => getJson(`/api/v1/things/feed${toQuery(args)}`), []),

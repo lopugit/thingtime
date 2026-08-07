@@ -476,7 +476,7 @@ export const SettingsPage = () => {
 
         {/* admin (admins only) */}
         {user?.isAdmin && (
-          <SettingsSection eyebrow="Admin" description="Global controls — rate limits and admin access.">
+          <SettingsSection eyebrow="Admin" description="Global controls — AI conflict resolution, rate limits, and admin access.">
             <AdminPanel />
           </SettingsSection>
         )}

@@ -22,6 +22,9 @@ export type ApiTestResultStatus = 'pass' | 'fail';
 
 export type ApiTestContext = {
   origin: string;
+  // Node runner (scripts/run-api-tests.mts) injects a cookie-jar fetch here;
+  // the browser /tests page leaves it unset and uses the page's own fetch
+  fetchImpl?: typeof globalThis.fetch;
   // sanitized /api/v1/email/config payload — lets email tests respect the SES
   // sandbox send rate (1 msg/sec) and target the configured test recipient
   email?: {
@@ -79,7 +82,8 @@ export const resolveApiTestBody = (test: ApiTestDefinition, context: ApiTestCont
   return typeof test.body === 'function' ? test.body(context) : test.body;
 };
 
-const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+// plain globals so the same runner works on the /tests page and under Node
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const getEmailSendDelayMs = (test: ApiTestDefinition, context: ApiTestContext) => {
   if (!test.emailSend || !context.email?.sesSandbox) return 0;
@@ -203,14 +207,18 @@ export const runApiTest = async (
   const startedAt = performance.now();
   const controller = new AbortController();
   const timeoutMs = test.timeoutMs ?? 12000;
-  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const delayMs = getEmailSendDelayMs(test, context);
     if (delayMs) await sleep(delayMs);
 
     const body = options.hasBodyOverride ? options.bodyOverride : resolveApiTestBody(test, context);
-    const response = await fetch(test.path, {
+    // In the browser test.path stays relative (same-origin); the Node runner
+    // provides origin + fetchImpl, so paths resolve against the target server
+    const fetchImpl = context.fetchImpl ?? fetch;
+    const url = context.origin ? new URL(test.path, context.origin).toString() : test.path;
+    const response = await fetchImpl(url, {
       method: test.method,
       credentials: 'include',
       redirect: 'follow',
@@ -252,6 +260,6 @@ export const runApiTest = async (
       preview: ''
     };
   } finally {
-    window.clearTimeout(timeout);
+    clearTimeout(timeout);
   }
 };

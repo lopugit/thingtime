@@ -21,7 +21,13 @@ export const embedGuideSection = {
     title: '1 · Register your app',
     blurb:
       'Register an app with a name and the exact https origins your site runs on; the server mints ' +
-      'your public clientId. The login popup only hands tokens to origins on the allowlist. Manage ' +
+      'your public clientId. The login popup only hands tokens to origins on the allowlist. For ' +
+      'preview deploys one * wildcard is allowed in the leftmost host label — it never crosses a ' +
+      'dot, and the Public Suffix List decides what it may touch: on multi-tenant hosts the star ' +
+      'label must end with the slug the platform appends for you, e.g. ' +
+      'https://myapp-*-myteam.vercel.app (prefix-only myapp-*.vercel.app and bare *.vercel.app are ' +
+      'refused — strangers can mint matching hostnames), and public suffixes like *.co.uk take no ' +
+      'wildcard at all. On domains you own, https://*.example.com works as usual. Manage ' +
       'apps with GET /api/v1/apps, /api/v1/apps/update, and /api/v1/apps/delete — deleting an app ' +
       'revokes every token it minted.'
   },

@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { ObjectId } from 'mongodb';
 
-import { getFeedAlgorithmsCollection, getThingsCollection, getUsersCollection, withMongoTransaction } from '../mongodb/collections';
+// feed-algorithm is a PROTECTED system kind: algorithm things stay on the home
+// deployment DB even while a data-plane endpoint override is active.
+import { getFeedAlgorithmsCollection, getHomeThingsCollection as getThingsCollection, getUsersCollection, withMongoTransaction } from '../mongodb/collections';
 import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 import { clearUserActiveFeedAlgorithm, setUserActiveFeedAlgorithm } from '../auth/users';
 import { applyEventsToWeights, emptyWeights, topInterests, type AlgorithmWeights, type EngagementEvent } from '../things/feedRanking';

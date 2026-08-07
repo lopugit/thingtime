@@ -220,6 +220,32 @@ is fixed, and cite the checklist you ran in the PR description.
       circle is only the no-avatar fallback (regression: UserAvatarCircle
       ignored avatarUrl entirely).
 
+## PR conflict resolver model waterfall (`remix/app/components/Admin/`)
+
+- [ ] Logged out, `GET /api/v1/settings/pr-conflict-auto-resolver-model-waterfall`
+      returns the public key, ordered waterfall, and curated model catalog;
+      `POST` returns 401. A signed-in non-admin `POST` returns 403, while an
+      admin can save a valid reordered waterfall.
+- [ ] Settings → Admin paints the last-known waterfall immediately, then
+      reconciles in the background. Add Fable 5 and Opus 5, drag a row by its
+      dedicated handle, use the Up/Down controls, remove a non-default row,
+      save, reload, and confirm the exact order persists. `default` stays
+      present and cannot be removed.
+- [ ] Exercise the editor at desktop and mobile widths from the top to the
+      bottom of `/settings`: model names, Max-effort badges, handles, fallback
+      copy, and save/add/remove controls never clip, overlap, or create
+      horizontal scrolling.
+- [ ] Resolver workflow config parsing accepts only `default`,
+      `claude-fable-5`, and `claude-opus-5`, preserves their public order, and
+      appends `default` defensively. An unavailable endpoint, malformed JSON,
+      duplicate/unknown model, wrong key, or empty array emits a warning and
+      selects only `--model default`; no stored value can inject another CLI
+      flag.
+- [ ] With an availability failure on the first configured model, Claude
+      Code tries the ordered native fallback chain. A completed run that still
+      leaves conflict markers stops for manual review; it does not silently
+      spend another model attempt.
+
 ## Data crystals & nesting depth (`remix/app/schemas/registry.ts`)
 
 - [ ] Post a thingtime post whose thing contains an Editor.js document (or
@@ -309,6 +335,38 @@ is fixed, and cite the checklist you ran in the PR description.
       blocking) swaps "Loading the SDK…" for the failure notice with the
       standalone-demo link within ~10s — the preview must never show a
       permanent loading state.
+
+## MongoDB data endpoint (`/mongodb-status`, `remix/app/components/MongoDB/MongoEndpointConfig.tsx`)
+
+- [ ] Logged OUT: paste a reachable `mongodb://` URL → "Use for this session"
+      flips the page to the Custom endpoint badge, the footer indicator reads
+      "MongoDB (custom)", and the feed/search read from that DB. "Use" on the
+      Thingtime row returns everything to default.
+- [ ] An unreachable URL is rejected at activation (422 toast, e.g.
+      `MongoServerSelectionError (ECONNREFUSED)`) and the previous endpoint
+      stays active — a bad URL must never brick the session's data calls.
+- [ ] A non-mongodb scheme (`http://…`), whitespace, or a >2048-char URL is
+      rejected with a clear validation message.
+- [ ] Logged IN: "Save to my endpoints" persists the endpoint (survives
+      logout/login and other browsers); the raw URL/credentials NEVER appear
+      in any API response, page, or error — only host + db name.
+- [ ] While a custom endpoint is active: login/logout, profile, themes,
+      account switcher and saved-endpoint management still work (identity is
+      home-pinned); posts created land in the CUSTOM db; admin routes
+      (migrations especially) still operate on the home DB.
+- [ ] Removing the saved endpoint the session currently uses also clears the
+      override (page falls back to Thingtime default without a reload).
+- [ ] The `tt_mongo` cookie is httpOnly + session-scoped: closing the browser
+      drops the override; document.cookie can't read it.
+- [ ] LOCAL DEV footer parity: with an override active, the footer indicator
+      reads "MongoDB (custom)" on the local stack too. Regression class: the
+      vite /api proxy's changeOrigin hid the web origin from nitro, so
+      resolveStatusTarget classified "Current Tab" as REMOTE and health routes
+      re-fetched themselves WITHOUT cookies (session state invisible). The
+      proxy must forward x-forwarded-host/-proto (vite.config.ts) — verify
+      /api/v1/health/mongodb?targetOrigin=<web origin> returns custom:true
+      with the cookie, while a real remote target (e.g. thingtime.com) still
+      server-side fetches.
 
 ## Docs search (`remix/app/routes/docs/DocsSearch.tsx`, `docsSearchIndex.ts`)
 

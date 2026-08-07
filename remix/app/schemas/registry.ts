@@ -1181,7 +1181,7 @@ const appSchema: ThingtimeSchema = {
       type: 'string[]',
       required: true,
       max: MAX_APP_ORIGINS,
-      description: `Allowed web origins (https, or http for localhost dev), max ${MAX_APP_ORIGINS}.`
+      description: `Allowed web origins (https, or http for localhost dev), max ${MAX_APP_ORIGINS}. One * wildcard is allowed in the leftmost host label for preview deploys (e.g. https://myapp-*-myteam.vercel.app); it never crosses a dot. Per the Public Suffix List: on multi-tenant hosts (vercel.app, netlify.app, …) the star label must END with your platform-appended slug, and public suffixes (co.uk, …) take no wildcard at all.`
     },
     { name: 'subscriptionTier', type: 'string', required: true, description: 'Stable app storage tier id.' },
     { name: 'subscriptionTierVersionId', type: 'id', required: true, description: 'Immutable subscription-tier revision assigned to this app.' },
