@@ -24,6 +24,7 @@ import { getHomeThingsCollection as getThingsCollection, getUsersCollection } fr
 import { ACL_ALL, COLLECTION_SCHEMA_VERSIONS, MAX_BIO_CHARS, MAX_DISPLAY_NAME_CHARS, MAX_PROFILE_URL_CHARS } from '~/schemas/registry';
 import { isAdminDoc, isEnvAdmin } from './admin';
 import { getSubscription, type SubscriptionInfo } from '../subscriptions/subscriptions';
+import { sanitizeBirthday } from './birthday';
 
 // Users are THINGS now (thingtime ["user"], see claude-todo/12): public
 // profile in crystal, credentials/private state under the root `secure` field
@@ -65,6 +66,9 @@ export type PublicUser = {
   bio: string | null;
   avatarUrl: string | null;
   bannerUrl: string | null;
+  // PRIVATE (secure-blob meta.birthday, YYYY-MM-DD): owner-facing responses and
+  // the scope-gated userinfo only — never part of PublicProfile.
+  birthday: string | null;
   emailVerified: boolean;
   createdAt: string;
   accountKind: 'user' | 'service';
@@ -123,6 +127,7 @@ export const toPublicUser = (user: any, subscription?: SubscriptionInfo | null):
   bio: typeof user.bio === 'string' ? user.bio : null,
   avatarUrl: typeof user.avatarUrl === 'string' ? user.avatarUrl : null,
   bannerUrl: typeof user.bannerUrl === 'string' ? user.bannerUrl : null,
+  birthday: typeof user.meta?.birthday === 'string' ? user.meta.birthday : null,
   emailVerified: !!user.emailVerified,
   createdAt: new Date(user.createdAt).toISOString(),
   accountKind: user.accountKind === 'service' ? 'service' : 'user',
@@ -1252,6 +1257,7 @@ export type UpdateProfileInput = {
   bio?: unknown;
   avatarUrl?: unknown;
   bannerUrl?: unknown;
+  birthday?: unknown;
 };
 
 type UpdateProfileResult = { ok: false; status: number; error: string } | { ok: true; user: PublicUser };
@@ -1299,17 +1305,48 @@ export const updateUserProfile = async (userId: string, input: UpdateProfileInpu
     set.bannerUrl = bannerUrl;
   }
 
-  if (!Object.keys(set).length) {
+  // Birthday is PRIVATE state — it lives in the secure blob (meta.birthday),
+  // never in the public crystal, so it takes the secure write path below.
+  let birthday: string | null | undefined;
+  if (input.birthday !== undefined) {
+    birthday = sanitizeBirthday(input.birthday);
+    if (birthday === undefined) {
+      return { ok: false, status: 400, error: 'Birthday must be a real YYYY-MM-DD date (1900 → today)' };
+    }
+  }
+
+  if (!Object.keys(set).length && birthday === undefined) {
     return { ok: false, status: 400, error: 'Nothing to update' };
   }
 
-  // things-era profile fields live under crystal.*
-  const thingSet: Record<string, any> = { updatedAt: new Date() };
-  for (const [key, value] of Object.entries(set)) thingSet[`crystal.${key}`] = value;
-  set.updatedAt = new Date();
+  if (birthday !== undefined) {
+    const cleared = birthday === null;
+    const result = await mutateUserThingSecure(userId, (s) => {
+      if (cleared) delete s.meta!.birthday;
+      else s.meta!.birthday = birthday;
+    });
+    if (result === 'contended') throw new SecureWriteContendedError(userId);
+    if (result === 'missing') {
+      if (!ObjectId.isValid(userId)) return { ok: false, status: 400, error: 'Invalid user id' };
+      await (await getUsersCollection()).updateOne(
+        { _id: new ObjectId(userId) },
+        cleared
+          ? { $unset: { 'meta.birthday': '' }, $set: { updatedAt: new Date() } }
+          : { $set: { 'meta.birthday': birthday, updatedAt: new Date() } }
+      );
+    }
+  }
 
-  const updatedAny = await updateUserStore(userId, { $set: thingSet }, { $set: set });
-  if (!updatedAny) return { ok: false, status: 400, error: 'Invalid user id' };
+  if (Object.keys(set).length) {
+    // things-era profile fields live under crystal.*
+    const thingSet: Record<string, any> = { updatedAt: new Date() };
+    for (const [key, value] of Object.entries(set)) thingSet[`crystal.${key}`] = value;
+    set.updatedAt = new Date();
+
+    const updatedAny = await updateUserStore(userId, { $set: thingSet }, { $set: set });
+    if (!updatedAny) return { ok: false, status: 400, error: 'Invalid user id' };
+  }
+
   const updated = await findUserById(userId);
   if (!updated) {
     return { ok: false, status: 404, error: 'User not found' };

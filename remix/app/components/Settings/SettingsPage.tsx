@@ -116,6 +116,7 @@ const ProfileSettingsForm = (props: { user: NonNullable<CurrentUser> }) => {
   const [bio, setBio] = React.useState(user.bio || '');
   const [avatarUrl, setAvatarUrl] = React.useState(user.avatarUrl || '');
   const [bannerUrl, setBannerUrl] = React.useState(user.bannerUrl || '');
+  const [birthday, setBirthday] = React.useState(user.birthday || '');
   const [saving, setSaving] = React.useState(false);
 
   const handleSave = async () => {
@@ -133,7 +134,8 @@ const ProfileSettingsForm = (props: { user: NonNullable<CurrentUser> }) => {
         displayName: displayName.trim() || null,
         bio: bio.trim() || null,
         avatarUrl: avatarUrl.trim() || null,
-        bannerUrl: bannerUrl.trim() || null
+        bannerUrl: bannerUrl.trim() || null,
+        birthday: birthday.trim() || null
       });
       lopu({ title: 'Profile saved ✨', status: 'success', duration: 4000 });
     } catch (err: any) {
@@ -211,6 +213,23 @@ const ProfileSettingsForm = (props: { user: NonNullable<CurrentUser> }) => {
             backgroundPosition="center"
           />
         )}
+      </Flex>
+
+      <Flex flexDirection="column" rowGap={1}>
+        <FieldLabel>Birthday 🎂</FieldLabel>
+        <Input
+          size="sm"
+          type="date"
+          value={birthday}
+          min="1900-01-01"
+          max={new Date().toISOString().slice(0, 10)}
+          onChange={(e) => setBirthday(e.target.value)}
+          {...inputStyles}
+        />
+        <Text fontSize="11px" color="var(--tt-muted, #9a9aa6)">
+          Private — never shown on your profile. Apps you log in to only see it if you approve the
+          birthday permission on their consent screen.
+        </Text>
       </Flex>
 
       <Box>

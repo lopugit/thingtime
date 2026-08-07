@@ -9,6 +9,8 @@ export type CurrentUser = {
   bio: string | null;
   avatarUrl: string | null;
   bannerUrl: string | null;
+  // private: own-account responses only, never the public profile
+  birthday: string | null;
   emailVerified: boolean;
   isAdmin: boolean;
   createdAt: string;

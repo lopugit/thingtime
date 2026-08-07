@@ -80,6 +80,7 @@ export const sandboxPublicUser = (ownerId: string, mintedAt: Date, username = 's
   bio: 'A pretend account — nothing here is real.',
   avatarUrl: null,
   bannerUrl: null,
+  birthday: null,
   emailVerified: false,
   createdAt: mintedAt.toISOString(),
   accountKind: 'user',

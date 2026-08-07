@@ -470,8 +470,8 @@ export function useApi() {
       search: useCallback(async (args) => getJson(`/api/v1/users/search${toQuery(args)}`), []),
       update: useCallback(
         async (args) => {
-          const { displayName, bio, avatarUrl, bannerUrl } = args;
-          const ret = asyncFetcher.submit({ displayName, bio, avatarUrl, bannerUrl }, { action: '/api/v1/users/profile' });
+          const { displayName, bio, avatarUrl, bannerUrl, birthday } = args;
+          const ret = asyncFetcher.submit({ displayName, bio, avatarUrl, bannerUrl, birthday }, { action: '/api/v1/users/profile' });
           ret.then(refreshRootData).catch(() => {});
           return ret;
         },
