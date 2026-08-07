@@ -64,6 +64,10 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/oauth/userinfo': () => import('../../../app/routes/api/v1/oauth/userinfo/_userinfo'),
   'v1/schemas': () => import('../../../app/routes/api/v1/schemas/_schemas'),
   'v1/schemas/browse': () => import('../../../app/routes/api/v1/schemas/browse/_browse'),
+  'v1/settings/pr-conflict-auto-resolver-model-waterfall': () =>
+    import(
+      '../../../app/routes/api/v1/settings/pr-conflict-auto-resolver-model-waterfall/_pr-conflict-auto-resolver-model-waterfall'
+    ),
   'v1/teapot': () => import('../../../app/routes/api/v1/teapot/_teapot'),
   'v1/template': () => import('../../../app/routes/api/v1/template/_template'),
   'v1/themes': () => import('../../../app/routes/api/v1/themes/_themes'),

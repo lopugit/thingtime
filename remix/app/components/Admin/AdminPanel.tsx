@@ -5,9 +5,12 @@ import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '~/components/Lopu/useLopu';
 
+import { PRConflictResolverModelWaterfallEditor } from './PRConflictResolverModelWaterfallEditor';
+
 // Admin-only control panel (rendered from SettingsPage when user.isAdmin).
-// Lets admins tune the global rate limits and grant/revoke admin on other
-// users. Every action re-checks admin server-side; this UI is just the surface.
+// Lets admins choose the conflict resolver model order, tune global rate
+// limits, and grant/revoke admin on other users. Every action re-checks admin
+// server-side; this UI is just the surface.
 
 type Rule = { limit: number; windowMs: number; enabled: boolean };
 type Config = Record<string, Rule>;
@@ -266,6 +269,7 @@ const AdminManager = () => {
 
 export const AdminPanel = () => (
   <Flex flexDirection="column" rowGap={5}>
+    <PRConflictResolverModelWaterfallEditor />
     <RateLimitEditor />
     <AdminManager />
   </Flex>

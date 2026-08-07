@@ -285,9 +285,118 @@ jobs:
               -f "client_payload[depth]=0"
           done
 
+  model_config:
+    name: Load the conflict-resolver model waterfall
+    needs: detect
+    # Fetch once for the whole resolution sweep, never once per matrix PR. The
+    # push/PR-target detect runs only hand off, so they do not need this config.
+    if: >-
+      needs.detect.outputs.any == 'true'
+      && github.event_name != 'push'
+      && github.event_name != 'pull_request_target'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    # This job deliberately has no checkout and no repository permissions. It
+    # reads one public, non-secret setting and turns it into a closed set of
+    # Claude CLI values; repository or PR code can never execute here.
+    permissions: {}
+    outputs:
+      model_args: ${{ steps.waterfall.outputs.model_args }}
+    steps:
+      - name: Fetch and validate the configured waterfall
+        id: waterfall
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          endpoint="https://thingtime.com/api/v1/settings/pr-conflict-auto-resolver-model-waterfall"
+          response_file="$RUNNER_TEMP/pr-conflict-model-waterfall.json"
+
+          # The resolver must remain usable when Thingtime is unavailable or a
+          # deployment predates this endpoint. Its hard fail-safe is exactly the
+          # Claude Code `default` model, with no configured fallback.
+          waterfall='["default"]'
+          source="built-in default"
+
+          if curl --fail --silent --show-error \
+            --proto '=https' \
+            --tlsv1.2 \
+            --connect-timeout 5 \
+            --max-time 12 \
+            --retry 2 \
+            --retry-delay 1 \
+            --retry-max-time 30 \
+            --max-filesize 65536 \
+            --output "$response_file" \
+            "$endpoint"; then
+            # Slurp first so a response containing multiple top-level JSON
+            # values is malformed too. Only the exact public setting key and a
+            # unique 1..3 item array from the closed model allowlist is valid.
+            if configured="$(jq -cse '
+              select(length == 1)
+              | .[0]
+              | select(type == "object")
+              | select(.ok == true)
+              | select(.key == "Thingtime.PRConflictAutoResolverModelWaterfall")
+              | .waterfall
+              | select(type == "array")
+              | select(length >= 1 and length <= 3)
+              | select(all(.[]; type == "string"))
+              | select(all(.[];
+                  . == "default"
+                  or . == "claude-fable-5"
+                  or . == "claude-opus-5"))
+              | select(length == (unique | length))
+            ' "$response_file" 2>/dev/null)"; then
+              waterfall="$configured"
+              source="Thingtime admin setting"
+              # The API normalizes this already; keep the workflow safe if an
+              # older valid deployment omitted the final default entry.
+              if ! jq -e 'index("default") != null' >/dev/null <<<"$waterfall"; then
+                waterfall="$(jq -c '. + ["default"]' <<<"$waterfall")"
+              fi
+            else
+              echo "::warning::Thingtime returned a malformed conflict-resolver model waterfall; using [default]."
+            fi
+          else
+            echo "::warning::Thingtime conflict-resolver model waterfall is unavailable; using [default]."
+          fi
+
+          # Never interpolate API strings into claude_args. Rebuild the entire
+          # ordered chain from fixed literals after validation, so even a
+          # compromised response cannot inject another CLI flag or model name.
+          mapfile -t configured_ids < <(jq -r '.[]' <<<"$waterfall")
+          models=()
+          for id in "${configured_ids[@]}"; do
+            case "$id" in
+              default) models+=("default") ;;
+              claude-fable-5) models+=("claude-fable-5") ;;
+              claude-opus-5) models+=("claude-opus-5") ;;
+              *)
+                echo "::warning::Validated waterfall mapping failed closed; using [default]."
+                models=("default")
+                source="built-in default"
+                break
+                ;;
+            esac
+          done
+
+          primary="${models[0]}"
+          model_args="--model $primary"
+          if [ "${#models[@]}" -gt 1 ]; then
+            fallbacks="$(IFS=,; echo "${models[*]:1}")"
+            model_args="$model_args --fallback-model $fallbacks"
+          fi
+
+          echo "Model waterfall source: $source"
+          echo "Claude Code model waterfall: $(IFS=,; echo "${models[*]}")"
+          echo "Fallbacks apply only to model overload, unavailability, or eligible server errors."
+          echo "A model that completes but leaves conflict markers does not mechanically trigger the next model."
+          echo "model_args=$model_args" >> "$GITHUB_OUTPUT"
+
   resolve:
     name: "Resolve PR #${{ matrix.pr.number }}"
-    needs: detect
+    needs: [detect, model_config]
     # Never on `push` or `pull_request_target` — the AI step rejects both
     # ("Unsupported event type"), and resolution must not run in the target
     # context regardless. The handoff job converts both into a
@@ -495,8 +604,12 @@ jobs:
 
             When you are done, every file you could confidently resolve should have no
             conflict markers left, and you should have touched nothing else.
+          # The first admin-ordered model is primary; the rest are Claude
+          # Code's native availability fallbacks. This does not retry a
+          # completed-but-unresolved edit with another model.
           claude_args: |
-            --model claude-opus-4-8
+            ${{ needs.model_config.outputs.model_args }}
+            --effort max
             --max-turns 80
             --allowedTools "Read,Grep,Glob,Edit,Write"
             --disallowedTools "WebFetch,WebSearch,Bash,Edit(.gitattributes),Write(.gitattributes),Edit(**/.gitattributes),Write(**/.gitattributes),Read(./.git/**),Edit(./.git/**),Write(./.git/**),Read(**/.git/**),Edit(**/.git/**),Write(**/.git/**),Read(/proc/**),Edit(/proc/**),Write(/proc/**),Read(/home/runner/work/_temp/**),Edit(/home/runner/work/_temp/**),Write(/home/runner/work/_temp/**),Read(/home/runner/.gitconfig*),Edit(/home/runner/.gitconfig*),Write(/home/runner/.gitconfig*),Edit(/home/runner/.config/git/**),Write(/home/runner/.config/git/**)"

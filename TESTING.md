@@ -220,6 +220,32 @@ is fixed, and cite the checklist you ran in the PR description.
       circle is only the no-avatar fallback (regression: UserAvatarCircle
       ignored avatarUrl entirely).
 
+## PR conflict resolver model waterfall (`remix/app/components/Admin/`)
+
+- [ ] Logged out, `GET /api/v1/settings/pr-conflict-auto-resolver-model-waterfall`
+      returns the public key, ordered waterfall, and curated model catalog;
+      `POST` returns 401. A signed-in non-admin `POST` returns 403, while an
+      admin can save a valid reordered waterfall.
+- [ ] Settings → Admin paints the last-known waterfall immediately, then
+      reconciles in the background. Add Fable 5 and Opus 5, drag a row by its
+      dedicated handle, use the Up/Down controls, remove a non-default row,
+      save, reload, and confirm the exact order persists. `default` stays
+      present and cannot be removed.
+- [ ] Exercise the editor at desktop and mobile widths from the top to the
+      bottom of `/settings`: model names, Max-effort badges, handles, fallback
+      copy, and save/add/remove controls never clip, overlap, or create
+      horizontal scrolling.
+- [ ] Resolver workflow config parsing accepts only `default`,
+      `claude-fable-5`, and `claude-opus-5`, preserves their public order, and
+      appends `default` defensively. An unavailable endpoint, malformed JSON,
+      duplicate/unknown model, wrong key, or empty array emits a warning and
+      selects only `--model default`; no stored value can inject another CLI
+      flag.
+- [ ] With an availability failure on the first configured model, Claude
+      Code tries the ordered native fallback chain. A completed run that still
+      leaves conflict markers stops for manual review; it does not silently
+      spend another model attempt.
+
 ## Data crystals & nesting depth (`remix/app/schemas/registry.ts`)
 
 - [ ] Post a thingtime post whose thing contains an Editor.js document (or
