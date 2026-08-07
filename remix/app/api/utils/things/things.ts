@@ -238,8 +238,7 @@ export type Viewer = {
   username?: string | null;
   pat?: { tokenId: string; onlyCreatedThings: boolean } | null;
 } | null;
-export const asViewer = (value: string | Viewer | null | undefined): Viewer =>
-  typeof value === 'string' ? { id: value } : value || null;
+export const asViewer = (value: string | Viewer | null | undefined): Viewer => (typeof value === 'string' ? { id: value } : value || null);
 
 export const POST_TYPES: PostType[] = [...REGISTRY_POST_TYPES];
 export const VISIBILITIES: PostVisibility[] = ['public', 'friends', 'family', 'private'];
@@ -285,17 +284,13 @@ const FEATURE_PROJECTION = {
 
 export type Fail = { ok: false; status: number; error: string };
 export const fail = (status: number, error: string): Fail => ({ ok: false, status, error });
-export const isFail = (value: unknown): value is Fail =>
-  !!value && typeof value === 'object' && !Array.isArray(value) && (value as any).ok === false;
+export const isFail = (value: unknown): value is Fail => !!value && typeof value === 'object' && !Array.isArray(value) && (value as any).ok === false;
 
 // Route-layer adapter: the authed user (or null) → the Viewer acl evaluation
 // expects. Shared so every route passes the same shape. Routes resolving via
 // resolveThingsActor pass the pat context so creates stamp provenance and
 // sandboxed tokens stay inside their own creations.
-export const viewerOf = (
-  user: { id: string; username: string } | null,
-  pat?: { jti: string; onlyCreatedThings?: boolean } | null
-): Viewer =>
+export const viewerOf = (user: { id: string; username: string } | null, pat?: { jti: string; onlyCreatedThings?: boolean } | null): Viewer =>
   user
     ? {
         id: user.id,
@@ -326,9 +321,7 @@ export const tokenAclEntryFor = (tokenId: string): string => `${TOKEN_ACL_PREFIX
 // before the tt:token/ list keep honoring their creator (writes only ever
 // produce tokenAcl now).
 export const tokenAclOf = (doc: ThingDoc): string[] => {
-  const entries = Array.isArray(doc.tokenAcl)
-    ? doc.tokenAcl.filter((entry): entry is string => typeof entry === 'string')
-    : [];
+  const entries = Array.isArray(doc.tokenAcl) ? doc.tokenAcl.filter((entry): entry is string => typeof entry === 'string') : [];
   if (doc.createdByTokenId && !entries.includes(tokenAclEntryFor(doc.createdByTokenId))) {
     return [...entries, tokenAclEntryFor(doc.createdByTokenId)];
   }
@@ -360,16 +353,14 @@ const sanitizeTokenAcl = (value: unknown): Fail | string[] | undefined => {
 
 // Token sandbox: the token id a sandboxed viewer is confined to, or null for
 // session actors / unsandboxed tokens.
-export const patSandboxOf = (viewer: Viewer): string | null =>
-  viewer?.pat?.onlyCreatedThings ? viewer.pat.tokenId : null;
+export const patSandboxOf = (viewer: Viewer): string | null => (viewer?.pat?.onlyCreatedThings ? viewer.pat.tokenId : null);
 
 const patSandboxBlocks = (viewer: Viewer, doc: ThingDoc): boolean => {
   const tokenId = patSandboxOf(viewer);
   return !!tokenId && !tokenAclOf(doc).includes(tokenAclEntryFor(tokenId));
 };
 
-const patSandboxFail = (): Fail =>
-  fail(403, 'This token is sandboxed — it can only touch things carrying its tt:token grant 🧸');
+const patSandboxFail = (): Fail => fail(403, 'This token is sandboxed — it can only touch things carrying its tt:token grant 🧸');
 
 // ---------------------------------------------------------------------------
 // Era helpers — one place that knows how to read both doc generations.
@@ -410,9 +401,7 @@ const postThingMatch = () => ({ $or: [{ thingtime: 'post' }, { kind: 'post' }] }
 // Shared by listThings and things/search so the two never disagree on which
 // legacy posts exist (the single source the era semantics live behind).
 export const thingtimeInClause = (thingtime: string[]) =>
-  thingtime.includes('post')
-    ? { $or: [{ thingtime: { $in: thingtime } }, { kind: 'post' }] }
-    : { thingtime: { $in: thingtime } };
+  thingtime.includes('post') ? { $or: [{ thingtime: { $in: thingtime } }, { kind: 'post' }] } : { thingtime: { $in: thingtime } };
 
 export const withMatch = (base: Record<string, any>, ...clauses: Record<string, any>[]) => {
   const and = [base, ...clauses].filter((clause) => Object.keys(clause).length);
@@ -439,6 +428,10 @@ export const MIGRATION_RESERVED_ID_PREFIX = 'react-';
 // Builtin-schema seed mints shareId `schema-<id>` deterministically — reserve
 // the prefix so a client can't pre-claim (and impersonate) a builtin schema.
 export const SCHEMA_RESERVED_ID_PREFIX = 'schema-';
+// Subscription tier revisions and user assignments use deterministic ids so
+// historical links stay stable. They are protected control-plane destinations
+// and cannot be pre-claimed through generic Thing creation.
+export const SUBSCRIPTION_RESERVED_ID_PREFIX = 'subscription-';
 
 // Seeding passes fixed shareIds for idempotency (and Magic relies on ids
 // round-tripping), so client-supplied ids are allowed — but they must be sane
@@ -452,10 +445,14 @@ const sanitizeShareId = (value: unknown): string | null | Fail => {
   if (trimmed.length > MAX_SHARE_ID_CHARS || /[$.\s]/.test(trimmed)) {
     return fail(400, 'shareId must be a short id without spaces, dots, or $');
   }
-  if (trimmed.startsWith(MIGRATION_RESERVED_ID_PREFIX) || trimmed.startsWith(SCHEMA_RESERVED_ID_PREFIX)) {
-    // 'react-' (reaction migration) and 'schema-' (builtin-schema seed) are
-    // deterministic migration destinations — a client must never squat one,
-    // or it blocks the seed/migration and impersonates a builtin schema
+  if (
+    trimmed.startsWith(MIGRATION_RESERVED_ID_PREFIX) ||
+    trimmed.startsWith(SCHEMA_RESERVED_ID_PREFIX) ||
+    trimmed.startsWith(SUBSCRIPTION_RESERVED_ID_PREFIX)
+  ) {
+    // Deterministic migration, schema, tier-revision, and subscription
+    // assignment destinations must never be squatted or impersonated by
+    // generic user-created Things.
     return fail(400, 'shareId uses a reserved prefix');
   }
   return trimmed;
@@ -504,11 +501,7 @@ const resolveInputAcl = (input: { acl?: unknown; visibility?: unknown }): string
 // writer can see, and the display name is overwritten from that schema, so no
 // client can attribute its data to a schema under a mismatched schemaId/name
 // pair. Mutates `crystal` in place; a data thing with no schemaId is untouched.
-const resolveDataSchemaProvenance = async (
-  thingtime: string[],
-  crystal: Record<string, unknown>,
-  asOwner: Viewer
-): Promise<{ ok: true } | Fail> => {
+const resolveDataSchemaProvenance = async (thingtime: string[], crystal: Record<string, unknown>, asOwner: Viewer): Promise<{ ok: true } | Fail> => {
   if (!thingtime.includes('data') || crystal.schemaId === undefined) return { ok: true };
   const rawSchemaId = crystal.schemaId;
   if (typeof rawSchemaId !== 'string' || !rawSchemaId.trim()) {
@@ -586,9 +579,7 @@ export const createThing = async (
   // marketplace listings fold their category into tags so filters find them —
   // post crystals only (a free-form data crystal can carry any `listing`
   // value, which must never leak unsanitized into the multikey tags index)
-  const listing = validated.thingtime.includes('post')
-    ? (validated.crystal.listing as MarketplaceListing | null | undefined)
-    : null;
+  const listing = validated.thingtime.includes('post') ? (validated.crystal.listing as MarketplaceListing | null | undefined) : null;
   const categoryTag = listing && typeof listing.category === 'string' ? [listing.category] : [];
   const allTags = [...(tags as string[]), ...categoryTag].filter((tag, index, all) => all.indexOf(tag) === index);
 
@@ -657,10 +648,9 @@ export const createThing = async (
   const things = await getThingsCollection();
   const now = input.createdAt instanceof Date ? input.createdAt : new Date();
 
-  const tokenAclDoc = [
-    ...(viewer?.pat ? [tokenAclEntryFor(viewer.pat.tokenId)] : []),
-    ...(requestedTokenAcl || [])
-  ].filter((entry, index, all) => all.indexOf(entry) === index);
+  const tokenAclDoc = [...(viewer?.pat ? [tokenAclEntryFor(viewer.pat.tokenId)] : []), ...(requestedTokenAcl || [])].filter(
+    (entry, index, all) => all.indexOf(entry) === index
+  );
 
   // App writes charge their serialized size against the (user, app) byte
   // budget BEFORE inserting (admission can never overshoot; a failed insert
@@ -675,7 +665,7 @@ export const createThing = async (
     : null;
   if (app && sizeBytes !== null) {
     const charge = await chargeAppStorage(app, sizeBytes);
-    if (!charge.ok) return fail(charge.status, charge.error);
+    if (charge.ok === false) return fail(charge.status, charge.error);
   }
 
   const doc: ThingDoc = {
@@ -699,13 +689,16 @@ export const createThing = async (
   try {
     await things.insertOne(doc as any);
   } catch (err: any) {
-    if (app && sizeBytes !== null) await refundAppStorage(app, sizeBytes);
     // duplicate-key can come from more than one unique index — only a shareId
     // collision means "this thing already exists" (seeding re-runs pass fixed
     // ids; mirror the registerUser 409 convention so seeds skip idempotently).
     // The reaction (target, owner, token) index races surface as 409 too so
     // toggleReaction keeps treating them as already-reacted.
     if (err?.code === 11000) {
+      // A duplicate-key rejection proves the insert did not land. Unknown
+      // Mongo errors are ambiguous, so they deliberately keep the reservation
+      // rather than risk refunding bytes for a document that was committed.
+      if (app && sizeBytes !== null) await refundAppStorage(app, sizeBytes);
       const keys = Object.keys(err?.keyPattern || {});
       if (!keys.length || keys.includes('shareId')) return fail(409, 'Post already exists');
       if (keys.includes('crystal.emoji')) return fail(409, 'Post already exists');
@@ -740,11 +733,7 @@ export type CreatePostInput = {
 type CreateResult = Fail | { ok: true; post: PublicPost };
 
 // Legacy-shaped convenience wrapper — same unified path underneath.
-export const createPost = async (
-  ownerId: string,
-  input: CreatePostInput,
-  viewer: Viewer = null
-): Promise<CreateResult> => {
+export const createPost = async (ownerId: string, input: CreatePostInput, viewer: Viewer = null): Promise<CreateResult> => {
   const created = await createThing(
     ownerId,
     {
@@ -927,10 +916,7 @@ const resolveRelated = async (docs: ThingDoc[]): Promise<RelatedThings> => {
                 { $group: { _id: '$targetId', count: { $sum: 1 }, docs: { $push: '$$ROOT' } } },
                 { $project: { count: 1, docs: { $slice: ['$docs', REPLIES_PER_LEVEL] } } }
               ]
-            : [
-                { $match: { targetId: { $in: levelIds }, thingtime: 'comment' } },
-                { $group: { _id: '$targetId', count: { $sum: 1 } } }
-              ]
+            : [{ $match: { targetId: { $in: levelIds }, thingtime: 'comment' } }, { $group: { _id: '$targetId', count: { $sum: 1 } } }]
         )
         .toArray() as Promise<any[]>
     ]);
@@ -997,9 +983,7 @@ const mergedCommentsOf = (doc: ThingDoc, related: RelatedThings): CommentEntry[]
     createdAt: new Date(comment.createdAt)
   }));
   const standalone = related.commentsByTarget.get(doc.shareId) || [];
-  return [...embedded, ...standalone].sort(
-    (a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id)
-  );
+  return [...embedded, ...standalone].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id));
 };
 
 // Merge a post's v1 embedded reaction map with standalone reaction things
@@ -1035,8 +1019,7 @@ const viewerReactionsOf = (entries: ReactionEntry[], viewerId: string | null): s
   return entries.filter((entry) => entry.userId === viewerId).map((entry) => entry.emoji);
 };
 
-const liveShareCountOf = (doc: ThingDoc, related: RelatedThings): number =>
-  related.shareCountByTarget.get(doc.shareId) || 0;
+const liveShareCountOf = (doc: ThingDoc, related: RelatedThings): number => related.shareCountByTarget.get(doc.shareId) || 0;
 
 export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | Viewer): Promise<PublicPost[]> => {
   const viewer = asViewer(viewerInput);
@@ -1047,9 +1030,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
   // one level of share resolution
   const shareTargets = [...new Set(docs.map((doc) => targetIdOf(doc)).filter(Boolean))] as string[];
   const originals = shareTargets.length
-    ? ((await things
-        .find(withMatch({ shareId: { $in: shareTargets } }, postThingMatch()) as any)
-        .toArray()) as any as ThingDoc[])
+    ? ((await things.find(withMatch({ shareId: { $in: shareTargets } }, postThingMatch()) as any).toArray()) as any as ThingDoc[])
     : [];
   const originalsById = new Map(originals.map((doc) => [doc.shareId, doc]));
 
@@ -1110,8 +1091,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
     const shareTarget = targetIdOf(doc);
     // only SHARES nest their target — a comment doc projected through here
     // (its /post/:id page) must not render its parent as a pseudo-share
-    const original =
-      withShare && shareTarget && thingtimeOf(doc).includes('share') ? originalsById.get(shareTarget) : null;
+    const original = withShare && shareTarget && thingtimeOf(doc).includes('share') ? originalsById.get(shareTarget) : null;
 
     return {
       id: doc.shareId,
@@ -1123,10 +1103,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
       text: String(crystal.text || ''),
       images: (crystal.images as string[]) || [],
       listing: (crystal.listing as MarketplaceListing) || null,
-      thing:
-        crystal.thing && typeof crystal.thing === 'object' && !Array.isArray(crystal.thing)
-          ? (crystal.thing as Record<string, any>)
-          : null,
+      thing: crystal.thing && typeof crystal.thing === 'object' && !Array.isArray(crystal.thing) ? (crystal.thing as Record<string, any>) : null,
       tags: doc.tags || [],
       reactionCounts: reactionCountsOf(reactions),
       viewerReactions: viewerReactionsOf(reactions, viewerId),
@@ -1176,8 +1153,7 @@ export const toPublicThings = async (docs: ThingDoc[], viewerInput: string | Vie
 // their target. v1 residue docs still carry the visibility enum — aclOf maps
 // it so one evaluation path serves both eras.
 
-const aclOf = (doc: ThingDoc): string[] =>
-  Array.isArray(doc.acl) && doc.acl.length ? doc.acl : aclFromVisibility(doc.visibility) || [ACL_OWNER];
+const aclOf = (doc: ThingDoc): string[] => (Array.isArray(doc.acl) && doc.acl.length ? doc.acl : aclFromVisibility(doc.visibility) || [ACL_OWNER]);
 
 const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
   if (viewer?.id && doc.ownerId === viewer.id) return true;
@@ -1206,10 +1182,7 @@ const circleClause = (circle: PostVisibility) => {
     case 'private':
       // $nin on an array field means "contains none of these"
       return {
-        $or: [
-          { acl: { $exists: true, $nin: [ACL_ALL, ACL_FRIENDS, ACL_FAMILY] } },
-          { visibility: 'private' }
-        ]
+        $or: [{ acl: { $exists: true, $nin: [ACL_ALL, ACL_FRIENDS, ACL_FAMILY] } }, { visibility: 'private' }]
       };
   }
 };
@@ -1223,9 +1196,7 @@ export const visibilityQueryFor = (viewer: Viewer, circles: PostVisibility[]) =>
   if (viewer?.id) {
     // the viewer's own things, optionally narrowed to the requested circles
     clauses.push(
-      wanted.length === VISIBILITIES.length
-        ? { ownerId: viewer.id }
-        : { ownerId: viewer.id, $or: wanted.map((circle) => circleClause(circle)) }
+      wanted.length === VISIBILITIES.length ? { ownerId: viewer.id } : { ownerId: viewer.id, $or: wanted.map((circle) => circleClause(circle)) }
     );
   }
   // nothing requested that the viewer could ever see
@@ -1310,7 +1281,10 @@ const findViewableThingAs = async (shareId: unknown, viewer: Viewer, app: AppLen
 // resolved), then ONE batched author-liveness gate for the page.
 export const appVisiblePage = async (app: AppNamespaceScope, page: ThingDoc[]): Promise<ThingDoc[]> => {
   const verdicts = await Promise.all(page.map((doc) => appNamespaceVerdict(app, doc)));
-  return filterByLiveAuthors(app, page.filter((_, index) => verdicts[index]));
+  return filterByLiveAuthors(
+    app,
+    page.filter((_, index) => verdicts[index])
+  );
 };
 
 // The Mongo conjunction every app-lens query carries — the coarse tier
@@ -1354,15 +1328,17 @@ export const appShapeProjections = async (
     const ownerId = String(doc.ownerId);
     const self = ownerId === app.ownerId;
     const scopes = self ? app.scopes : scopesById.get(ownerId) || [];
-    const username = self ? app.username : (sandboxNames.get(ownerId) ?? item.author?.username);
+    const username = self ? app.username : sandboxNames.get(ownerId) ?? item.author?.username;
     item.author = username
       ? {
           id: ownerId,
           username,
           displayName: scopeCovers(scopes, 'profile.displayName')
-            ? (sandboxNames.has(ownerId) || (self && app.sandbox) ? sandboxDisplayName(username) : (item.author?.displayName ?? null))
+            ? sandboxNames.has(ownerId) || (self && app.sandbox)
+              ? sandboxDisplayName(username)
+              : item.author?.displayName ?? null
             : null,
-          avatarUrl: scopeCovers(scopes, 'profile.avatar') ? (item.author?.avatarUrl ?? null) : null
+          avatarUrl: scopeCovers(scopes, 'profile.avatar') ? item.author?.avatarUrl ?? null : null
         }
       : null;
     if (Array.isArray(item.acl)) {
@@ -1400,10 +1376,8 @@ const enforceReactionCaps = async (targetShareId: string, ownerId: string, token
     return fail(400, `You can add at most ${MAX_REACTIONS_PER_USER_PER_POST} reactions to a post`);
   }
   const tokenAlreadyOnPost =
-    (await things.countDocuments(
-      { targetId: targetShareId, thingtime: 'reaction', 'crystal.emoji': token } as any,
-      { limit: 1 }
-    )) || (await things.countDocuments({ kind: 'reaction', parentId: targetShareId, token } as any, { limit: 1 }));
+    (await things.countDocuments({ targetId: targetShareId, thingtime: 'reaction', 'crystal.emoji': token } as any, { limit: 1 })) ||
+    (await things.countDocuments({ kind: 'reaction', parentId: targetShareId, token } as any, { limit: 1 }));
   if (!tokenAlreadyOnPost) {
     const [v2Tokens, kindTokens] = await Promise.all([
       things.distinct('crystal.emoji', { targetId: targetShareId, thingtime: 'reaction' } as any),
@@ -1449,8 +1423,7 @@ export const oldestCursorClause = (cursor: { createdAt: Date; id: string }) => (
 
 // type filter must match both eras: v2 keeps type in crystal, v1 at the root
 // (exported so /search's shortcut filters share the exact same era handling)
-export const typeClause = (types: PostType[]) =>
-  types.length ? { $or: [{ 'crystal.type': { $in: types } }, { type: { $in: types } }] } : {};
+export const typeClause = (types: PostType[]) => (types.length ? { $or: [{ 'crystal.type': { $in: types } }, { type: { $in: types } }] } : {});
 
 export const getFeed = async (
   viewerInput: string | Viewer,
@@ -1514,16 +1487,12 @@ export const getFeed = async (
     }))
     .sort(
       (a, b) =>
-        b.score - a.score ||
-        new Date(b.doc.createdAt).getTime() - new Date(a.doc.createdAt).getTime() ||
-        a.doc.shareId.localeCompare(b.doc.shareId)
+        b.score - a.score || new Date(b.doc.createdAt).getTime() - new Date(a.doc.createdAt).getTime() || a.doc.shareId.localeCompare(b.doc.shareId)
     );
 
   const pageIds = scored.slice(offset, offset + limit).map((entry) => entry.doc.shareId);
   const pageDocs = pageIds.length
-    ? ((await things
-        .find(withMatch({ shareId: { $in: pageIds } }, postMatch()) as any)
-        .toArray()) as any as ThingDoc[])
+    ? ((await things.find(withMatch({ shareId: { $in: pageIds } }, postMatch()) as any).toArray()) as any as ThingDoc[])
     : [];
   const docsById = new Map(pageDocs.map((doc) => [doc.shareId, doc]));
   const page = pageIds.map((id) => docsById.get(id)).filter(Boolean) as ThingDoc[];
@@ -1554,9 +1523,7 @@ export const listUserPosts = async (
 
   const ownerId = String(user._id);
   const own = viewer?.id === ownerId;
-  const match = own
-    ? withMatch(postMatch(), { ownerId })
-    : withMatch(postMatch(), { ownerId }, circleClause('public'));
+  const match = own ? withMatch(postMatch(), { ownerId }) : withMatch(postMatch(), { ownerId }, circleClause('public'));
 
   const things = await getThingsCollection();
   const parsed = parseChronoCursor(cursor);
@@ -1588,9 +1555,7 @@ export const getThing = async (
   viewerInput: string | Viewer,
   shareId: unknown,
   app: AppLens = null
-): Promise<
-  Fail | { ok: true; thing: PublicThing; post: PublicPost | null; parent: PublicPost | null; root: PublicPost | null }
-> => {
+): Promise<Fail | { ok: true; thing: PublicThing; post: PublicPost | null; parent: PublicPost | null; root: PublicPost | null }> => {
   const viewer = asViewer(viewerInput);
   const doc = await findViewableThingAs(shareId, viewer, app);
   if (!doc) return fail(404, 'Thing not found');
@@ -1630,10 +1595,7 @@ export const getThing = async (
       if (await canViewInherited(entry, viewer)) visibleChain.push(entry);
     }
     if (visibleChain.length) {
-      const projected = await toPublicPosts(
-        [...new Map(visibleChain.map((entry) => [entry.shareId, entry])).values()],
-        viewer
-      );
+      const projected = await toPublicPosts([...new Map(visibleChain.map((entry) => [entry.shareId, entry])).values()], viewer);
       const byId = new Map(projected.map((entry) => [entry.id, entry]));
       parent = byId.get(chain[0]?.shareId) || null;
       const last = chain[chain.length - 1];
@@ -1878,19 +1840,13 @@ export const toggleReaction = async (
       things.findOne({ kind: 'reaction', parentId: target.shareId, ownerId: viewerId, token } as any)
     ]);
     if (existingV2 || existingKind) {
-      const ids = [existingV2?._id, existingKind?._id].filter(Boolean);
-      await things.deleteMany({ _id: { $in: ids } } as any);
-      await refundDeletedNamespaceDocs([existingV2, existingKind].filter(Boolean) as ThingDoc[]);
+      const removed = await deleteThingsAtomically([existingV2, existingKind].filter(Boolean) as ThingDoc[]);
+      await refundDeletedNamespaceDocs(removed);
     } else {
       // createThing enforces the per-user + per-post reaction caps (single
       // source of truth, so the generic POST path is bounded the same way);
       // under the app lens it also stamps the namespace + charges the budget
-      const created = await createThing(
-        viewerId,
-        { thingtime: ['reaction'], crystal: { emoji: token }, targetId: target.shareId },
-        viewer,
-        app
-      );
+      const created = await createThing(viewerId, { thingtime: ['reaction'], crystal: { emoji: token }, targetId: target.shareId }, viewer, app);
       // 409 = the unique (target, owner, token) index raced another add of the
       // same token — that reaction already exists, which is what we wanted
       if (isFail(created) && created.status !== 409) return created;
@@ -1948,10 +1904,7 @@ export const toggleReaction = async (
 // Saves carry acl ['tt:user'] (createThing special-cases the save crystal),
 // so a library is personal by construction. A create/create race can mint a
 // duplicate save doc; toggle-off deletes ALL matching docs, so it self-heals.
-export const toggleSave = async (
-  viewerInput: string | Viewer,
-  shareId: unknown
-): Promise<Fail | { ok: true; saved: boolean }> => {
+export const toggleSave = async (viewerInput: string | Viewer, shareId: unknown): Promise<Fail | { ok: true; saved: boolean }> => {
   const viewer = asViewer(viewerInput);
   if (!viewer?.id) return fail(401, 'Unauthorized');
   const target = await findViewableThing(shareId, viewer);
@@ -2019,8 +1972,7 @@ export const addComment = async (
   const body = typeof input === 'string' ? { text: input } : input && typeof input === 'object' ? input : {};
   // comments share the post schema — post fields upgrade the comment to a
   // ["post","comment"] thing (validated by the post crystal sanitizer)
-  const rich =
-    body.type !== undefined || body.images !== undefined || body.listing !== undefined || body.thing !== undefined;
+  const rich = body.type !== undefined || body.images !== undefined || body.listing !== undefined || body.thing !== undefined;
 
   const created = await createThing(
     viewerId,
@@ -2052,10 +2004,7 @@ export const addComment = async (
     text: String(crystal.text || ''),
     images: (crystal.images as string[]) || [],
     listing: (crystal.listing as MarketplaceListing) || null,
-    thing:
-      crystal.thing && typeof crystal.thing === 'object' && !Array.isArray(crystal.thing)
-        ? (crystal.thing as Record<string, any>)
-        : null,
+    thing: crystal.thing && typeof crystal.thing === 'object' && !Array.isArray(crystal.thing) ? (crystal.thing as Record<string, any>) : null,
     tags: doc.tags || [],
     reactionCounts: {},
     viewerReactions: [],
@@ -2068,16 +2017,14 @@ export const addComment = async (
     // self-author shaped by the acting grant; count fenced to the namespace
     await appShapeProjections(app, [doc], [comment]);
     const things = await getThingsCollection();
-    const commentCount = await things.countDocuments(
-      withMatch({ targetId: target.shareId, thingtime: 'comment' }, ...appMatchClauses(app)) as any
-    );
+    const commentCount = await things.countDocuments(withMatch({ targetId: target.shareId, thingtime: 'comment' }, ...appMatchClauses(app)) as any);
     return { ok: true, comment, commentCount };
   }
 
   return {
     ok: true,
     comment,
-    commentCount: (await countCommentsOf(target)) // includes the new comment
+    commentCount: await countCommentsOf(target) // includes the new comment
   };
 };
 
@@ -2120,28 +2067,62 @@ export const sharePost = async (
 // Ledger upkeep for ANY deletion path (app tokens, the owner's first-party
 // delete, the browse UI's delete-all): every removed doc that carries the
 // namespace stamp refunds its bytes to its own (owner, app) ledger — grouped
-// so a cascade over many authors decrements each author's ledger once.
+// so a cascade over many authors decrements each author's ledger once. Sandbox
+// docs keep their ephemeral scope here and never touch a registered app's
+// aggregate allowance.
 export const refundDeletedNamespaceDocs = async (docs: ThingDoc[]): Promise<void> => {
-  const totals = new Map<string, { ownerId: string; appId: string; bytes: number }>();
+  const totals = new Map<string, { ownerId: string; appId: string; bytes: number; sandbox: { space: string | null } | null }>();
   for (const doc of docs) {
     if (!doc?.appId) continue;
     const bytes = typeof doc.sizeBytes === 'number' ? doc.sizeBytes : appThingSizeBytes(doc);
     if (!(bytes > 0)) continue;
-    const key = `${doc.ownerId}\0${doc.appId}`;
-    const entry = totals.get(key) || { ownerId: String(doc.ownerId), appId: doc.appId, bytes: 0 };
+    const sandbox = doc.sandboxExpiresAt ? { space: typeof doc.sandboxSpace === 'string' ? doc.sandboxSpace : null } : null;
+    const scopeKey = sandbox ? `sandbox:${sandbox.space ?? ''}` : 'registered';
+    const key = `${doc.ownerId}\0${doc.appId}\0${scopeKey}`;
+    const entry = totals.get(key) || { ownerId: String(doc.ownerId), appId: doc.appId, bytes: 0, sandbox };
     entry.bytes += bytes;
     totals.set(key, entry);
   }
-  for (const { ownerId, appId, bytes } of totals.values()) {
-    await refundAppStorage({ appId, ownerId, sharedRead: false, scopes: [], username: '', sandbox: null }, bytes);
+  for (const { ownerId, appId, bytes, sandbox } of totals.values()) {
+    await refundAppStorage({ appId, ownerId, sharedRead: false, scopes: [], username: '', sandbox }, bytes);
   }
 };
 
-export const deleteThing = async (
-  viewerInput: string | Viewer,
-  shareId: unknown,
-  app: AppLens = null
-): Promise<Fail | { ok: true }> => {
+// Delete known candidates one document at a time and return only the exact
+// documents this caller atomically removed. That makes quota refunds safe
+// against concurrent updates and competing delete paths: findOneAndDelete
+// returns the current size stamp, and only one deleter can receive each doc.
+// Bounded parallelism keeps large cascades/delete-all operations practical.
+export const deleteThingsAtomically = async (docs: ThingDoc[]): Promise<ThingDoc[]> => {
+  const things = await getThingsCollection();
+  const candidates = [
+    ...new Map(
+      docs
+        .map((doc) => {
+          const mongoId = (doc as any)?._id;
+          const key = mongoId ? `id:${String(mongoId)}` : doc?.shareId ? `share:${doc.shareId}` : '';
+          return key ? ([key, doc] as const) : null;
+        })
+        .filter((entry): entry is readonly [string, ThingDoc] => entry !== null)
+    ).values()
+  ];
+  const deleted: ThingDoc[] = [];
+  const concurrency = 25;
+
+  for (let offset = 0; offset < candidates.length; offset += concurrency) {
+    const batch = await Promise.all(
+      candidates.slice(offset, offset + concurrency).map(async (doc) => {
+        const mongoId = (doc as any)._id;
+        return (await things.findOneAndDelete((mongoId ? { _id: mongoId } : { shareId: doc.shareId }) as any)) as any as ThingDoc | null;
+      })
+    );
+    deleted.push(...batch.filter((doc): doc is ThingDoc => doc !== null));
+  }
+
+  return deleted;
+};
+
+export const deleteThing = async (viewerInput: string | Viewer, shareId: unknown, app: AppLens = null): Promise<Fail | { ok: true }> => {
   const viewer = asViewer(viewerInput);
   if (!viewer?.id) return fail(401, 'Unauthorized');
   if (typeof shareId !== 'string' || !shareId.trim()) return fail(400, 'Thing id is required');
@@ -2158,9 +2139,7 @@ export const deleteThing = async (
     ownerId: viewer.id,
     thingtime: { $nin: [...PROTECTED_THINGTIME] },
     ...(app ? { appId: app.appId } : {}),
-    ...(sandboxTokenId
-      ? { $or: [{ tokenAcl: tokenAclEntryFor(sandboxTokenId) }, { createdByTokenId: sandboxTokenId }] }
-      : {})
+    ...(sandboxTokenId ? { $or: [{ tokenAcl: tokenAclEntryFor(sandboxTokenId) }, { createdByTokenId: sandboxTokenId }] } : {})
   } as any)) as any as ThingDoc | null;
   if (!deleted) {
     // distinguish "not yours to touch" from "gone" so a sandboxed AI gets an
@@ -2182,10 +2161,19 @@ export const deleteThing = async (
   };
   const cascade = (await things
     .find(cascadeFilter as any)
-    .project({ ownerId: 1, appId: 1, sizeBytes: 1, crystal: 1, extended: 1, tags: 1 })
+    .project({
+      ownerId: 1,
+      appId: 1,
+      sizeBytes: 1,
+      crystal: 1,
+      extended: 1,
+      tags: 1,
+      sandboxExpiresAt: 1,
+      sandboxSpace: 1
+    })
     .toArray()) as any as ThingDoc[];
-  await things.deleteMany(cascadeFilter as any);
-  await refundDeletedNamespaceDocs([deleted, ...cascade]);
+  const deletedCascade = await deleteThingsAtomically(cascade);
+  await refundDeletedNamespaceDocs([deleted, ...deletedCascade]);
   return { ok: true };
 };
 
@@ -2223,16 +2211,31 @@ export const updateThing = async (
   if (app && doc.appId !== app.appId) return fail(404, 'Thing not found');
   if (patSandboxBlocks(viewer, doc)) return patSandboxFail();
 
+  // Namespace things remain quota-accounted even when their end-user owner
+  // edits them through the first-party things API instead of through an app
+  // token. Root appId is server-authored, so synthesizing this storage-only
+  // scope cannot let a caller enter another namespace; it simply prevents a
+  // first-party update from growing app data without reserving either ledger.
+  const storageScope: AppNamespaceScope | null =
+    app ??
+    (doc.appId
+      ? {
+          appId: doc.appId,
+          ownerId: doc.ownerId,
+          sharedRead: false,
+          scopes: [],
+          username: '',
+          sandbox: doc.sandboxExpiresAt ? { space: typeof doc.sandboxSpace === 'string' ? doc.sandboxSpace : null } : null
+        }
+      : null);
+
   const thingtime = thingtimeOf(doc);
   // system kinds mutate only through their dedicated utils (profile update,
   // themes, algorithms) — never the generic PATCH/PUT surface
   if (isProtectedThingtime(thingtime)) {
     return fail(403, `${thingtime.join('+')} things are managed by their own endpoints`);
   }
-  const patch =
-    input.crystal && typeof input.crystal === 'object' && !Array.isArray(input.crystal)
-      ? (input.crystal as Record<string, unknown>)
-      : {};
+  const patch = input.crystal && typeof input.crystal === 'object' && !Array.isArray(input.crystal) ? (input.crystal as Record<string, unknown>) : {};
   const nextCrystal = options.replaceCrystal ? patch : { ...crystalOf(doc), ...patch };
   const validated = validateThingtimeCrystal(thingtime, nextCrystal);
   if (isFail(validated)) return validated;
@@ -2242,18 +2245,17 @@ export const updateThing = async (
   // schemaId would lock the owner out of editing their own data thing if the
   // schema's author later hid or deleted it — an action outside the owner's
   // control. A changed/new schemaId must still prove the writer can see it.
-  const prevSchemaId = typeof (crystalOf(doc) as Record<string, unknown>)?.schemaId === 'string'
-    ? ((crystalOf(doc) as Record<string, unknown>).schemaId as string)
-    : undefined;
+  const prevSchemaId =
+    typeof (crystalOf(doc) as Record<string, unknown>)?.schemaId === 'string'
+      ? ((crystalOf(doc) as Record<string, unknown>).schemaId as string)
+      : undefined;
   if (validated.crystal.schemaId !== undefined && validated.crystal.schemaId !== prevSchemaId) {
     const provenance = await resolveDataSchemaProvenance(validated.thingtime, validated.crystal, viewer);
     if (isFail(provenance)) return provenance;
   }
 
   // post crystals only — see the identical guard in createThing
-  const patchedListing = thingtime.includes('post')
-    ? (validated.crystal.listing as MarketplaceListing | null | undefined)
-    : null;
+  const patchedListing = thingtime.includes('post') ? (validated.crystal.listing as MarketplaceListing | null | undefined) : null;
   const categoryTag = patchedListing && typeof patchedListing.category === 'string' ? [patchedListing.category] : [];
 
   let tags = doc.tags || [];
@@ -2267,13 +2269,9 @@ export const updateThing = async (
     // grows the list past the create-time fold's bound. Keyed on the category
     // actually changing (not tag membership: the new category may coincide
     // with a user tag, and the old one must STILL come out then).
-    const previousCategory = thingtime.includes('post')
-      ? ((crystalOf(doc).listing as MarketplaceListing | null | undefined)?.category ?? null)
-      : null;
+    const previousCategory = thingtime.includes('post') ? (crystalOf(doc).listing as MarketplaceListing | null | undefined)?.category ?? null : null;
     if (previousCategory !== categoryTag[0]) {
-      tags = [...tags.filter((tag) => tag !== previousCategory), ...categoryTag].filter(
-        (tag, index, all) => all.indexOf(tag) === index
-      );
+      tags = [...tags.filter((tag) => tag !== previousCategory), ...categoryTag].filter((tag, index, all) => all.indexOf(tag) === index);
     }
   }
 
@@ -2314,17 +2312,17 @@ export const updateThing = async (
   // writing (mirrors setAppData: over-budget refuses, shrink refunds after).
   let sizeDelta = 0;
   let newSize: number | null = null;
-  if (app) {
+  if (storageScope) {
     newSize = appThingSizeBytes({
       crystal: validated.crystal,
-      extended: hasExtendedChange ? extended.value : (doc.extended ?? null),
+      extended: hasExtendedChange ? extended.value : doc.extended ?? null,
       tags
     });
     const oldSize = typeof doc.sizeBytes === 'number' ? doc.sizeBytes : appThingSizeBytes(doc);
     sizeDelta = newSize - oldSize;
     if (sizeDelta > 0) {
-      const charge = await chargeAppStorage(app, sizeDelta);
-      if (!charge.ok) return fail(charge.status, charge.error);
+      const charge = await chargeAppStorage(storageScope, sizeDelta);
+      if (charge.ok === false) return fail(charge.status, charge.error);
     }
   }
 
@@ -2339,7 +2337,7 @@ export const updateThing = async (
     tags,
     acl,
     updatedAt: now,
-    ...(app && newSize !== null ? { appId: app.appId, sizeBytes: newSize } : {})
+    ...(storageScope && newSize !== null ? { appId: storageScope.appId, sizeBytes: newSize } : {})
   };
   // upgrading a v1 post in place — clear the legacy crystal-at-root fields the
   // v2 shape replaces (embedded comments/reactions stay for the migration).
@@ -2356,13 +2354,27 @@ export const updateThing = async (
     visibility: '',
     ...(nextTokenAcl !== undefined ? { createdByTokenId: '' } : {})
   };
+  const expectedSize = storageScope
+    ? Object.prototype.hasOwnProperty.call(doc, 'sizeBytes')
+      ? { sizeBytes: doc.sizeBytes }
+      : { sizeBytes: { $exists: false } }
+    : {};
+  let writeResult;
   try {
-    await things.updateOne({ shareId: doc.shareId } as any, { $set: set, $unset: unset } as any);
+    writeResult = await things.updateOne({ shareId: doc.shareId, ...expectedSize } as any, { $set: set, $unset: unset } as any);
   } catch (err) {
-    if (app && sizeDelta > 0) await refundAppStorage(app, sizeDelta);
+    // An unknown result may have committed. Keep a positive reservation so a
+    // stored growth can never become unaccounted; a reconcile pass can reclaim
+    // conservative over-counting if the update did not land.
     throw err;
   }
-  if (app && sizeDelta < 0) await refundAppStorage(app, -sizeDelta);
+  if (storageScope && writeResult.matchedCount === 0) {
+    // A size-changing writer or delete won the compare-and-swap, proving this
+    // update did not land. Its reservation is therefore safe to compensate.
+    if (sizeDelta > 0) await refundAppStorage(storageScope, sizeDelta);
+    return fail(409, 'Thing changed while it was being updated — try again');
+  }
+  if (storageScope && sizeDelta < 0) await refundAppStorage(storageScope, -sizeDelta);
 
   const updated = { ...doc, ...set } as ThingDoc;
   delete (updated as any).kind;
@@ -2419,9 +2431,7 @@ export const upsertThing = async (
   // re-PUTting a data thing without repeating thingtime isn't a false conflict.
   // A non-array, non-empty thingtime is a real (rejected) attempt to change it.
   const thingtimeProvided =
-    input.thingtime !== undefined &&
-    input.thingtime !== null &&
-    !(Array.isArray(input.thingtime) && input.thingtime.length === 0);
+    input.thingtime !== undefined && input.thingtime !== null && !(Array.isArray(input.thingtime) && input.thingtime.length === 0);
   if (thingtimeProvided) {
     const wanted = Array.isArray(input.thingtime) ? [...input.thingtime].sort().join(',') : String(input.thingtime);
     if (wanted !== [...thingtimeOf(existing)].sort().join(',')) {
@@ -2457,10 +2467,7 @@ export const listExistingThingShareIds = async (shareIds: string[]): Promise<Set
 
 // Feature lookup used by algorithm training — only returns posts the engaging
 // user can actually see.
-export const getPostFeatures = async (
-  viewerInput: string | Viewer,
-  shareIds: string[]
-): Promise<Map<string, PostFeatures>> => {
+export const getPostFeatures = async (viewerInput: string | Viewer, shareIds: string[]): Promise<Map<string, PostFeatures>> => {
   const viewer = asViewer(viewerInput);
   const wanted = [...new Set(shareIds.filter((id) => typeof id === 'string' && id.trim()))];
   if (!wanted.length) return new Map();

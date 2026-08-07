@@ -2,11 +2,23 @@ import { createHash } from 'node:crypto';
 
 import { getSessionsCollection, getThingsCollection } from '../mongodb/collections';
 import { consumeByteBudget, refundByteBudget } from '../rateLimit/byteBudget';
-import { resolveAppStorageBudget } from '../subscriptions/subscriptions';
+import { DEFAULT_SUBSCRIPTION_TIER, isKnownSubscriptionTier, subscriptionTierById } from '../subscriptions/tierCatalog';
+import { getLiveSubscriptionTier, getSubscriptionTierVersion, tierAssignmentSnapshot } from '../subscriptions/tierCatalogStore';
+import { appStoragePolicyOf, findAppByClientId } from './apps';
+import { admitAppAndUserStorage, effectiveAppUserAllowance, remainingStorageBytes, storageUsage } from './appStorageCore';
+import type { AppStorageReservation, FiniteStorageUsage, StorageUsage } from './appStorageCore';
 import { scopeCovers, sessionScopes } from './scopes';
 import { SANDBOX_TOKEN_TTL_MS, sandboxDisplayName } from './sandbox';
 import type { AppTokenContext } from './appTokens';
-import { ACL_APP_PREFIX, ACL_OWNER, COLLECTION_SCHEMA_VERSIONS, SANDBOX_STORAGE_BYTES } from '~/schemas/registry';
+import {
+  ACL_APP_PREFIX,
+  ACL_OWNER,
+  APP_STORAGE_ACCOUNTING_VERSION,
+  COLLECTION_SCHEMA_VERSIONS,
+  DEFAULT_APP_STORAGE_ALLOWANCE_BYTES,
+  DEFAULT_APP_USER_STORAGE_ALLOWANCE_BYTES,
+  SANDBOX_STORAGE_BYTES
+} from '~/schemas/registry';
 
 // The app-namespace layer — ONE implementation of every rule that makes an
 // app token's slice of the things collection (FUNDAMENTALS.md §1 style:
@@ -26,9 +38,9 @@ import { ACL_APP_PREFIX, ACL_OWNER, COLLECTION_SCHEMA_VERSIONS, SANDBOX_STORAGE_
 //     Apps can never express tt:all / other apps / other users / exclusions.
 //   • The END USER owns every namespace doc (ownerId = the user), sees all of
 //     it first-party (owner short-circuit), and can delete any of it.
-//   • STORAGE is byte-budgeted per (user, app): a service-quota-style counter
-//     thing admits writes with a race-safe guarded $inc, fail-closed. No doc
-//     counts anywhere.
+//   • STORAGE has two byte ceilings: the app's aggregate allowance and this
+//     (user, app) namespace's allowance. Guarded $inc admission is race-safe
+//     and fail-closed at both layers. No doc counts anywhere.
 
 type Fail = { ok: false; status: number; error: string };
 const fail = (status: number, error: string): Fail => ({ ok: false, status, error });
@@ -73,9 +85,7 @@ export const appNamespaceClauses = (scope: AppNamespaceScope): Record<string, un
   // holds app-data.shared (exact scope — never implied by app-data). Docs
   // carrying tt:inherit (comments/reactions) pass the COARSE tier — their
   // audience lives on their terminal ancestor, resolved by the exact verdict.
-  scope.sharedRead
-    ? { $or: [{ ownerId: scope.ownerId }, { acl: { $in: [appAclEntry(scope.appId), 'tt:inherit'] } }] }
-    : { ownerId: scope.ownerId }
+  scope.sharedRead ? { $or: [{ ownerId: scope.ownerId }, { acl: { $in: [appAclEntry(scope.appId), 'tt:inherit'] } }] } : { ownerId: scope.ownerId }
 ];
 
 // Exact per-doc verdict for the app lens. NOTE: deliberately no owner
@@ -131,11 +141,7 @@ export const appNamespaceStamp = (scope: AppNamespaceScope, sizeBytes: number): 
 // entry beyond its own walls. Returns acl null when the write doesn't mention
 // audience at all (update keeps the stored acl; insert defaults PRIVATE —
 // never the generic route's public default).
-export const resolveAppScopedAcl = (
-  appId: string,
-  visibility: unknown,
-  acl: unknown
-): { acl: string[] | null; shared: boolean } | Fail => {
+export const resolveAppScopedAcl = (appId: string, visibility: unknown, acl: unknown): { acl: string[] | null; shared: boolean } | Fail => {
   const shared = appAclEntry(appId);
 
   if (acl !== undefined && acl !== null) {
@@ -167,7 +173,9 @@ export const resolveAppScopedAcl = (
 
 export const liveSharingAuthors = async (clientId: string, userIds: string[]): Promise<Map<string, string[]>> => {
   if (!userIds.length) return new Map();
-  const sessions = await (await getSessionsCollection())
+  const sessions = await (
+    await getSessionsCollection()
+  )
     .find({
       purpose: 'app',
       'meta.clientId': clientId,
@@ -202,7 +210,9 @@ export const liveSandboxAuthors = async (
   userIds: string[]
 ): Promise<Map<string, { scopes: string[]; username: string }>> => {
   if (!userIds.length) return new Map();
-  const sessions = await (await getSessionsCollection())
+  const sessions = await (
+    await getSessionsCollection()
+  )
     .find({
       purpose: 'app-sandbox',
       'meta.clientId': clientId,
@@ -229,16 +239,12 @@ export const liveSandboxAuthors = async (
 // author-liveness gate. Own docs always survive; cross-user docs need a live
 // sharing author (real or same-space sandbox).
 export const filterByLiveAuthors = async (scope: AppNamespaceScope, docs: any[]): Promise<any[]> => {
-  const crossUserAuthors = [
-    ...new Set(docs.filter((doc) => String(doc.ownerId) !== scope.ownerId).map((doc) => String(doc.ownerId)))
-  ];
+  const crossUserAuthors = [...new Set(docs.filter((doc) => String(doc.ownerId) !== scope.ownerId).map((doc) => String(doc.ownerId)))];
   if (!crossUserAuthors.length) return docs;
 
   let liveIds: Set<string>;
   if (scope.sandbox) {
-    liveIds = scope.sandbox.space
-      ? new Set((await liveSandboxAuthors(scope.appId, scope.sandbox.space, crossUserAuthors)).keys())
-      : new Set(); // isolated sandbox: cross-user docs never survive
+    liveIds = scope.sandbox.space ? new Set((await liveSandboxAuthors(scope.appId, scope.sandbox.space, crossUserAuthors)).keys()) : new Set(); // isolated sandbox: cross-user docs never survive
   } else {
     liveIds = new Set((await liveSharingAuthors(scope.appId, crossUserAuthors)).keys());
   }
@@ -248,14 +254,15 @@ export const filterByLiveAuthors = async (scope: AppNamespaceScope, docs: any[])
 export { sandboxDisplayName };
 
 // ---------------------------------------------------------------------------
-// Storage budgets: bytes, not counts. One counter thing per (user, app) —
-// deterministic shareId, guarded $inc admission (the filter itself enforces
-// `used + delta ≤ budget`, so racing writes can never overshoot), pipeline
-// refunds floored at zero. FAIL-CLOSED: a store error refuses the write.
-// Drift repair is one $sum over the namespace's sizeBytes (the backfill
-// migration seeds counters the same way).
+// Storage allowances: bytes, not counts. The app Thing is the aggregate
+// ledger; one deterministic counter Thing tracks each (user, app). Positive
+// writes reserve the app first and then the user with guarded $inc admission,
+// so races cannot overshoot either allowance. User refusal compensates the
+// aggregate reservation. Refunds floor at zero. FAIL-CLOSED: a store error
+// refuses the write. Drift repair is a namespace sizeBytes sum.
 
-const APP_STORAGE_KIND = 'app-storage';
+export const APP_STORAGE_KIND = 'app-storage';
+export { APP_STORAGE_ACCOUNTING_VERSION };
 
 const storageShareId = (ownerId: string, appId: string): string =>
   `app-storage-${createHash('sha256').update(ownerId).update('\0').update(appId).digest('hex').slice(0, 48)}`;
@@ -264,30 +271,29 @@ const storageShareId = (ownerId: string, appId: string): string =>
 // the app-data (ownerId, crystal.appId, crystal.key) unique index. It carries
 // no root appId either — bookkeeping is not app content, so namespace reads
 // never see it.
-const storageMatch = (scope: AppNamespaceScope) => ({
-  shareId: storageShareId(scope.ownerId, scope.appId),
-  ownerId: scope.ownerId,
-  thingtime: 'data',
+export const appStorageCounterMatch = (ownerId: string, appId: string) => ({
+  shareId: storageShareId(ownerId, appId),
+  ownerId,
   'crystal.quotaKind': APP_STORAGE_KIND
 });
 
-// Budget resolution is subscription-aware (subscriptions/tierCatalog.ts):
-// sandbox namespaces keep their fixed brake, everything else resolves app
-// assignment → end-user tier → free default. `null` = unlimited (payg /
-// admin override) — charge sites skip the cap for null.
-export const appStorageBudgetBytes = async (scope: AppNamespaceScope): Promise<number | null> =>
-  scope.sandbox ? SANDBOX_STORAGE_BYTES : resolveAppStorageBudget(scope.appId, scope.ownerId);
+const storageMatch = (scope: AppNamespaceScope) => appStorageCounterMatch(scope.ownerId, scope.appId);
 
-const ensureStorageCounter = async (scope: AppNamespaceScope): Promise<void> => {
+export const ensureAppStorageCounter = async (scope: AppNamespaceScope): Promise<void> => {
   const things = await getThingsCollection();
   const now = new Date();
   try {
     await things.updateOne(
       storageMatch(scope),
       {
-        $setOnInsert: {
+        // Adopt #158/#170's original `data` counter into a protected system
+        // kind on first touch. Users can browse their app data, but can never
+        // edit/delete the accounting row through generic Thing CRUD.
+        $set: {
           schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
-          thingtime: ['data'],
+          thingtime: [APP_STORAGE_KIND]
+        },
+        $setOnInsert: {
           crystal: { quotaKind: APP_STORAGE_KIND, appId: scope.appId, usedBytes: 0 },
           acl: [ACL_OWNER],
           targetId: null,
@@ -305,73 +311,247 @@ const ensureStorageCounter = async (scope: AppNamespaceScope): Promise<void> => 
   }
 };
 
-export type StorageCharge = { ok: true; usedBytes: number; budgetBytes: number | null } | Fail;
+const readyAppStorageMatch = (appId: string) => ({
+  thingtime: 'app',
+  'crystal.clientId': appId,
+  'crystal.storageUsedBytes': { $gte: 0 },
+  'crystal.userStorageAllowanceBytes': { $gte: 0 },
+  'crystal.storageAccountingVersion': APP_STORAGE_ACCOUNTING_VERSION,
+  $or: [
+    { 'crystal.storageAllowanceBytes': { $gte: 0 } },
+    {
+      $and: [{ 'crystal.storageAllowanceBytes': { $exists: true } }, { 'crystal.storageAllowanceBytes': null }]
+    }
+  ]
+});
 
-// Admit `deltaBytes` of new storage into the namespace, atomically. Negative
-// deltas refund (floored at zero) and always succeed.
+const reserveRegisteredAppStorage = async (appId: string, deltaBytes: number): Promise<AppStorageReservation | null> => {
+  const things = await getThingsCollection();
+  const app = await things.findOneAndUpdate(
+    {
+      ...readyAppStorageMatch(appId),
+      $expr: {
+        $or: [
+          { $eq: ['$crystal.storageAllowanceBytes', null] },
+          { $lte: [{ $add: ['$crystal.storageUsedBytes', deltaBytes] }, '$crystal.storageAllowanceBytes'] }
+        ]
+      }
+    },
+    { $inc: { 'crystal.storageUsedBytes': deltaBytes } },
+    { returnDocument: 'after' }
+  );
+  if (!app) return null;
+  const policy = appStoragePolicyOf(app);
+  if (!policy.ready) {
+    await refundRegisteredAppStorage(appId, deltaBytes);
+    return null;
+  }
+  return {
+    usedBytes: policy.storageUsedBytes,
+    allowanceBytes: policy.storageAllowanceBytes,
+    userAllowanceBytes: policy.userStorageAllowanceBytes
+  };
+};
+
+const refundRegisteredAppStorage = async (appId: string, bytes: number): Promise<boolean> => {
+  if (!(bytes > 0)) return false;
+  const refunded = await (
+    await getThingsCollection()
+  ).findOneAndUpdate(readyAppStorageMatch(appId), [
+    {
+      $set: {
+        'crystal.storageUsedBytes': {
+          $max: [0, { $subtract: ['$crystal.storageUsedBytes', bytes] }]
+        }
+      }
+    }
+  ]);
+  return !!refunded;
+};
+
+const reserveUserStorage = async (
+  scope: AppNamespaceScope,
+  deltaBytes: number,
+  defaultAllowanceBytes: number,
+  appAllowanceBytes: number | null
+): Promise<FiniteStorageUsage | null> => {
+  await ensureAppStorageCounter(scope);
+  const configuredAllowance = { $ifNull: ['$crystal.storageAllowanceBytes', defaultAllowanceBytes] };
+  const effectiveAllowance = appAllowanceBytes === null ? configuredAllowance : { $min: [configuredAllowance, appAllowanceBytes] };
+  const admitted = await (
+    await getThingsCollection()
+  ).findOneAndUpdate(
+    {
+      ...storageMatch(scope),
+      $expr: {
+        $lte: [{ $add: [{ $ifNull: ['$crystal.usedBytes', 0] }, deltaBytes] }, effectiveAllowance]
+      }
+    },
+    {
+      $inc: { 'crystal.usedBytes': deltaBytes },
+      $set: { 'crystal.storageAccountingVersion': APP_STORAGE_ACCOUNTING_VERSION, updatedAt: new Date() }
+    },
+    { returnDocument: 'after' }
+  );
+  if (!admitted) return null;
+  const allowanceBytes = effectiveAppUserAllowance(defaultAllowanceBytes, admitted.crystal?.storageAllowanceBytes, appAllowanceBytes);
+  return storageUsage(admitted.crystal?.usedBytes ?? deltaBytes, allowanceBytes, allowanceBytes);
+};
+
+const refundUserStorage = async (scope: AppNamespaceScope, bytes: number, markLive = true): Promise<void> => {
+  if (!(bytes > 0)) return;
+  await ensureAppStorageCounter(scope);
+  await (
+    await getThingsCollection()
+  ).findOneAndUpdate(storageMatch(scope), [
+    {
+      $set: {
+        'crystal.usedBytes': {
+          $max: [0, { $subtract: [{ $ifNull: ['$crystal.usedBytes', 0] }, bytes] }]
+        },
+        ...(markLive ? { 'crystal.storageAccountingVersion': APP_STORAGE_ACCOUNTING_VERSION } : {}),
+        updatedAt: '$$NOW'
+      }
+    }
+  ]);
+};
+
+export type AppStorageUsage = {
+  // Backward-compatible names for the current app user's ledger.
+  usedBytes: number;
+  budgetBytes: number;
+  remainingBytes: number;
+  userStorage: { usedBytes: number; allowanceBytes: number; remainingBytes: number };
+  // Sandboxes have no registered standing app allowance; their aggregate
+  // protection is the separate windowed sandbox.storage.global brake.
+  appStorage: (StorageUsage & { remainingBytes: number | null }) | null;
+  storageAccountingReady: boolean;
+};
+
+function withRemaining(usage: FiniteStorageUsage): FiniteStorageUsage & { remainingBytes: number };
+function withRemaining(usage: StorageUsage): StorageUsage & { remainingBytes: number | null };
+function withRemaining(usage: StorageUsage) {
+  return {
+    ...usage,
+    remainingBytes: remainingStorageBytes(usage)
+  };
+}
+
+export const getAppStorageUsage = async (scope: AppNamespaceScope): Promise<AppStorageUsage> => {
+  const things = await getThingsCollection();
+  const [counter, app] = await Promise.all([
+    things.findOne(storageMatch(scope), {
+      projection: { 'crystal.usedBytes': 1, 'crystal.storageAllowanceBytes': 1 }
+    }),
+    scope.sandbox ? Promise.resolve(null) : findAppByClientId(scope.appId)
+  ]);
+  const policy = appStoragePolicyOf(app);
+  const userAllowanceBytes = scope.sandbox
+    ? SANDBOX_STORAGE_BYTES
+    : effectiveAppUserAllowance(policy.userStorageAllowanceBytes, counter?.crystal?.storageAllowanceBytes, policy.storageAllowanceBytes);
+  const userUsage = storageUsage(counter?.crystal?.usedBytes, userAllowanceBytes, userAllowanceBytes);
+  const userStorage = {
+    usedBytes: userUsage.usedBytes,
+    allowanceBytes: userAllowanceBytes,
+    remainingBytes: remainingStorageBytes(userUsage) ?? 0
+  };
+  const appStorage = app
+    ? withRemaining(storageUsage(policy.storageUsedBytes, policy.storageAllowanceBytes, DEFAULT_APP_STORAGE_ALLOWANCE_BYTES))
+    : null;
+  return {
+    usedBytes: userStorage.usedBytes,
+    budgetBytes: userStorage.allowanceBytes,
+    remainingBytes: userStorage.remainingBytes,
+    userStorage,
+    appStorage,
+    storageAccountingReady: scope.sandbox ? true : policy.ready
+  };
+};
+
+export const appStorageBudgetBytes = async (scope: AppNamespaceScope): Promise<number> =>
+  (await getAppStorageUsage(scope)).userStorage.allowanceBytes;
+
+export type StorageCharge = ({ ok: true } & AppStorageUsage) | Fail;
+
+// Admit `deltaBytes` against both standing allowances. Registered apps reserve
+// aggregate → user; sandboxes retain their namespace allowance + global burn
+// window and never touch a registered app's standing aggregate.
 export const chargeAppStorage = async (scope: AppNamespaceScope, deltaBytes: number): Promise<StorageCharge> => {
   try {
-    const budgetBytes = await appStorageBudgetBytes(scope);
-    const things = await getThingsCollection();
-
     if (deltaBytes <= 0) {
-      const refunded = await things.findOneAndUpdate(
-        storageMatch(scope),
-        [
-          {
-            $set: {
-              'crystal.usedBytes': {
-                $max: [0, { $add: [{ $ifNull: ['$crystal.usedBytes', 0] }, deltaBytes] }]
-              },
-              updatedAt: '$$NOW'
-            }
-          }
-        ],
-        { returnDocument: 'after' }
-      );
-      return { ok: true, usedBytes: refunded?.crystal?.usedBytes ?? 0, budgetBytes };
+      const bytes = Math.max(0, -deltaBytes);
+      // Only mark a registered user ledger live when the matching aggregate
+      // was ready and refunded too. Before the legacy-app migration enables
+      // that aggregate, an owner delete must not make the baseline ledger
+      // ineligible for reconciliation.
+      const appWasReady = scope.sandbox ? false : await refundRegisteredAppStorage(scope.appId, bytes);
+      await refundUserStorage(scope, bytes, !!scope.sandbox || appWasReady);
+      return { ok: true, ...(await getAppStorageUsage(scope)) };
     }
 
-    // Sandbox writes additionally burn the app-wide windowed byte brake
-    // (TODO 15 §1): global first, refunded if the namespace then refuses, and
-    // never refunded on deletes — the window measures write burn, not
-    // standing storage.
     if (scope.sandbox) {
+      // The global window measures write burn, so deletes do not restore it.
       const globalWindow = await consumeByteBudget('sandbox.storage.global', deltaBytes);
       if (!globalWindow.allowed) {
         return fail(
           globalWindow.unavailable ? 503 : 507,
-          globalWindow.unavailable
-            ? 'Storage accounting is unavailable — try again'
-            : 'The sandbox is very busy right now — try again soon'
+          globalWindow.unavailable ? 'Storage accounting is unavailable — try again' : 'The sandbox is very busy right now — try again soon'
         );
       }
+      const user = await reserveUserStorage(scope, deltaBytes, SANDBOX_STORAGE_BYTES, SANDBOX_STORAGE_BYTES);
+      if (!user) {
+        await refundByteBudget('sandbox.storage.global', deltaBytes);
+        const usage = await getAppStorageUsage(scope);
+        return fail(
+          507,
+          `This would exceed the sandbox's ${SANDBOX_STORAGE_BYTES / (1024 * 1024)} MiB storage allowance ` +
+            `(${usage.usedBytes} of ${usage.budgetBytes} bytes used — delete entries or store less)`
+        );
+      }
+      return { ok: true, ...(await getAppStorageUsage(scope)) };
     }
 
-    await ensureStorageCounter(scope);
-    // null budget = unlimited (payg tier / admin override): charge unguarded
-    // so usage still meters, but nothing refuses the write.
-    const admitted = await things.findOneAndUpdate(
-      budgetBytes === null
-        ? storageMatch(scope)
-        : { ...storageMatch(scope), 'crystal.usedBytes': { $lte: budgetBytes - deltaBytes } },
-      { $inc: { 'crystal.usedBytes': deltaBytes }, $set: { updatedAt: new Date() } },
-      { returnDocument: 'after' }
-    );
-    if (!admitted) {
-      if (scope.sandbox) await refundByteBudget('sandbox.storage.global', deltaBytes);
-      if (budgetBytes === null) return fail(503, 'Storage accounting is unavailable — try again');
-      const used = await getAppStorageUsage(scope);
+    const admitted = await admitAppAndUserStorage({
+      reserveApp: () => reserveRegisteredAppStorage(scope.appId, deltaBytes),
+      reserveUser: (allowanceBytes, appAllowanceBytes) => reserveUserStorage(scope, deltaBytes, allowanceBytes, appAllowanceBytes),
+      refundApp: async () => {
+        await refundRegisteredAppStorage(scope.appId, deltaBytes);
+      }
+    });
+    if (admitted.ok === true) {
+      const userStorage = withRemaining(admitted.user);
+      const appStorage = withRemaining(admitted.app);
+      return {
+        ok: true,
+        usedBytes: userStorage.usedBytes,
+        budgetBytes: userStorage.allowanceBytes,
+        remainingBytes: userStorage.remainingBytes,
+        userStorage,
+        appStorage,
+        storageAccountingReady: true
+      };
+    }
+
+    const usage = await getAppStorageUsage(scope);
+    if (!usage.appStorage) return fail(403, 'This app is no longer registered');
+    if (!usage.storageAccountingReady) {
+      return fail(503, 'App storage accounting is not initialized — run the pending storage migration');
+    }
+    if (admitted.exhausted === 'app') {
       return fail(
         507,
-        `This would exceed the app's ${Math.floor(budgetBytes / (1024 * 1024))}MB storage budget for this user ` +
-          `(${used.usedBytes} of ${budgetBytes} bytes used — delete entries or store less)`
+        `This would exceed the app's aggregate storage allowance ` +
+          `(${usage.appStorage.usedBytes} of ${usage.appStorage.allowanceBytes} bytes used across all users)`
       );
     }
-    return { ok: true, usedBytes: admitted.crystal?.usedBytes ?? deltaBytes, budgetBytes };
+    return fail(
+      507,
+      `This would exceed the app's storage allowance for this user ` +
+        `(${usage.userStorage.usedBytes} of ${usage.userStorage.allowanceBytes} bytes used — delete entries or store less)`
+    );
   } catch {
-    // fail CLOSED: storage admission guards a standing resource — an
-    // unavailable ledger refuses the write instead of waving it through
+    // Standing storage admission fails closed: an unavailable or ambiguous
+    // ledger refuses the write instead of allowing either ceiling to drift low.
     return fail(503, 'Storage accounting is unavailable — try again');
   }
 };
@@ -381,22 +561,132 @@ export const refundAppStorage = async (scope: AppNamespaceScope, bytes: number):
   await chargeAppStorage(scope, -bytes);
 };
 
-export const getAppStorageUsage = async (
-  scope: AppNamespaceScope
-): Promise<{ usedBytes: number; budgetBytes: number | null }> => {
+// App-manager primitive. `null` clears the user's custom sub-tier and returns
+// them to the app default; numeric overrides stay relational on this one
+// protected ledger instead of growing an embedded map on the app Thing.
+export const setAppUserStorageAllowance = async (ownerId: string, appId: string, allowanceBytes: number | null): Promise<AppStorageUsage> => {
+  const scope: AppNamespaceScope = {
+    appId,
+    ownerId,
+    sharedRead: false,
+    scopes: [],
+    username: '',
+    sandbox: null
+  };
+  await ensureAppStorageCounter(scope);
   const things = await getThingsCollection();
-  const doc = await things.findOne(storageMatch(scope), { projection: { 'crystal.usedBytes': 1 } });
-  return { usedBytes: doc?.crystal?.usedBytes ?? 0, budgetBytes: await appStorageBudgetBytes(scope) };
+  if (allowanceBytes === null) {
+    await things.updateOne(storageMatch(scope), {
+      $unset: { 'crystal.storageAllowanceBytes': '' },
+      $set: { updatedAt: new Date() }
+    });
+  } else {
+    await things.updateOne(storageMatch(scope), {
+      $set: {
+        'crystal.storageAllowanceBytes': Math.max(0, Math.floor(allowanceBytes)),
+        updatedAt: new Date()
+      }
+    });
+  }
+  return getAppStorageUsage(scope);
 };
 
 // Drift repair: set a (user, app) ledger to an absolute value — the backfill
 // migration and reconcile sweeps write the $sum of the namespace's sizeBytes
 // through this, never by hand-editing counter docs.
-export const setAppStorageUsed = async (ownerId: string, appId: string, usedBytes: number): Promise<void> => {
+export const setAppStorageUsed = async (
+  ownerId: string,
+  appId: string,
+  usedBytes: number,
+  options: { onlyIfNotLive?: boolean } = {}
+): Promise<boolean> => {
   const scope: AppNamespaceScope = { appId, ownerId, sharedRead: false, scopes: [], username: '', sandbox: null };
-  await ensureStorageCounter(scope);
+  await ensureAppStorageCounter(scope);
   const things = await getThingsCollection();
-  await things.updateOne(storageMatch(scope), {
-    $set: { 'crystal.usedBytes': Math.max(0, Math.floor(usedBytes)), updatedAt: new Date() }
-  });
+  const result = await things.updateOne(
+    {
+      ...storageMatch(scope),
+      ...(options.onlyIfNotLive ? { 'crystal.storageAccountingVersion': { $exists: false } } : {})
+    },
+    {
+      $set: { 'crystal.usedBytes': Math.max(0, Math.floor(usedBytes)), updatedAt: new Date() }
+    }
+  );
+  return result.matchedCount > 0;
+};
+
+// Bootstrap one legacy app exactly once. Positive writes require the version
+// marker plus the three policy fields, so they remain fail-closed while the
+// migration reconciles user ledgers; the aggregate is enabled last.
+export const initializeAppStorageAccounting = async (appId: string, usedBytes: number): Promise<boolean> => {
+  const things = await getThingsCollection();
+  const legacyApp = await things.findOne(
+    {
+      thingtime: 'app',
+      'crystal.clientId': appId,
+      'crystal.storageAccountingVersion': { $ne: APP_STORAGE_ACCOUNTING_VERSION }
+    },
+    { projection: { 'crystal.subscriptionTier': 1 } }
+  );
+  if (!legacyApp) return false;
+  const legacyTierId = legacyApp.crystal?.subscriptionTier;
+  const staticLegacyTier = isKnownSubscriptionTier(legacyTierId) ? subscriptionTierById(legacyTierId) : null;
+  const exactStaticLegacyTier = staticLegacyTier ? await getSubscriptionTierVersion(staticLegacyTier.versionId) : null;
+  const resolvedLegacyTier = exactStaticLegacyTier ?? (await getLiveSubscriptionTier(legacyTierId));
+  const liveDefault = resolvedLegacyTier ?? (await getLiveSubscriptionTier(DEFAULT_SUBSCRIPTION_TIER));
+  const defaultSnapshot = tierAssignmentSnapshot(liveDefault ?? staticLegacyTier ?? subscriptionTierById(DEFAULT_SUBSCRIPTION_TIER));
+  const initialized = await things.findOneAndUpdate(
+    {
+      thingtime: 'app',
+      'crystal.clientId': appId,
+      'crystal.storageAccountingVersion': { $ne: APP_STORAGE_ACCOUNTING_VERSION }
+    },
+    [
+      {
+        $set: {
+          'crystal.storageAllowanceBytes': {
+            $cond: [
+              {
+                $or: [
+                  { $eq: [{ $type: '$crystal.storageAllowanceBytes' }, 'null'] },
+                  {
+                    $and: [{ $isNumber: '$crystal.storageAllowanceBytes' }, { $gte: ['$crystal.storageAllowanceBytes', 0] }]
+                  }
+                ]
+              },
+              '$crystal.storageAllowanceBytes',
+              defaultSnapshot.quotas.appStorageBytes
+            ]
+          },
+          'crystal.storageUsedBytes': Math.max(0, Math.floor(usedBytes)),
+          'crystal.userStorageAllowanceBytes': {
+            $cond: [
+              { $isNumber: '$crystal.userStorageAllowanceBytes' },
+              '$crystal.userStorageAllowanceBytes',
+              DEFAULT_APP_USER_STORAGE_ALLOWANCE_BYTES
+            ]
+          },
+          'crystal.subscriptionTier': { $ifNull: ['$crystal.subscriptionTier', defaultSnapshot.tierId] },
+          'crystal.subscriptionTierVersionId': {
+            $ifNull: ['$crystal.subscriptionTierVersionId', defaultSnapshot.versionId]
+          },
+          'crystal.subscriptionTierVersion': {
+            $ifNull: ['$crystal.subscriptionTierVersion', defaultSnapshot.version]
+          },
+          'crystal.subscriptionTierName': {
+            $ifNull: ['$crystal.subscriptionTierName', defaultSnapshot.title]
+          },
+          'crystal.subscriptionTierMetered': {
+            $ifNull: ['$crystal.subscriptionTierMetered', defaultSnapshot.metered]
+          },
+          'crystal.subscriptionTierQuotas': {
+            $ifNull: ['$crystal.subscriptionTierQuotas', { $literal: defaultSnapshot.quotas }]
+          },
+          'crystal.storageAccountingVersion': APP_STORAGE_ACCOUNTING_VERSION
+        }
+      }
+    ],
+    { returnDocument: 'after' }
+  );
+  return !!initialized;
 };

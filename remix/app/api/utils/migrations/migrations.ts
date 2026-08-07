@@ -8,7 +8,7 @@ import {
   physicalCollectionName
 } from '../mongodb/collectionNames';
 import { safeErrorText } from '../errors/safeError';
-import { appThingSizeBytes, setAppStorageUsed } from '../apps/namespace';
+import { appThingSizeBytes, initializeAppStorageAccounting, setAppStorageUsed } from '../apps/namespace';
 import { reactionShareId } from '../things/things';
 import { buildUserSecure, packRecentReactions, toBin, userEmailKey, userUsernameKey } from '../auth/users';
 import { waitlistEmailKey } from '../waitlist/waitlist';
@@ -17,6 +17,7 @@ import {
   ACL_ALL,
   ACL_INHERIT,
   ACL_OWNER,
+  APP_STORAGE_ACCOUNTING_VERSION,
   COLLECTION_SCHEMA_VERSIONS,
   LEGACY_SCHEMA_VERSION,
   aclFromVisibility,
@@ -1096,12 +1097,140 @@ const backfillAppNamespaceFields: Migration = {
       const ownerId = String(entry._id?.ownerId || '');
       const appId = String(entry._id?.appId || '');
       if (!ownerId || !appId) continue;
-      await setAppStorageUsed(ownerId, appId, entry.bytes || 0);
-      ledgers += 1;
+      if (await setAppStorageUsed(ownerId, appId, entry.bytes || 0, { onlyIfNotLive: true })) {
+        ledgers += 1;
+      }
     }
     notes.push(`${ledgers} storage ledger(s) reconciled to their namespace sums`);
 
     return { dryRun, matched, migrated, created: ledgers, skipped: 0, notes };
+  }
+};
+
+// ---------------------------------------------------------------------------
+// Registered-app storage allowances. PR 16's namespace ledger was per user;
+// this follow-up makes the app's real aggregate ceiling explicit too. Legacy
+// apps stay fail-closed because positive writes require the accounting-version
+// marker plus the policy fields. For each app we stamp pre-namespace residue,
+// reconcile/protect user ledgers, then initialize the aggregate LAST. That is
+// the writer fence: no new-code write can race a baseline into an undercount.
+
+const appStorageAllowanceBackfillFilter = {
+  thingtime: 'app',
+  'crystal.storageAccountingVersion': { $ne: APP_STORAGE_ACCOUNTING_VERSION }
+};
+
+const backfillAppStorageAllowances: Migration = {
+  id: 'backfill-app-storage-allowances',
+  collection: 'things',
+  fromVersion: THINGS_VERSION,
+  toVersion: THINGS_VERSION,
+  title: 'Initialize whole-app and per-app-user storage allowances',
+  description:
+    'Initializes each legacy app with the free storage plan, aggregate usage, and 50 MiB default user ' +
+    'allowance. Reconciles every user ledger and converts it to the protected app-storage kind before ' +
+    'enabling writes, then installs the app aggregate/version marker last so concurrent new-code writes ' +
+    'cannot be overwritten by the baseline.',
+  pending: async () => {
+    return (await getCollection('things')).countDocuments(appStorageAllowanceBackfillFilter);
+  },
+  run: async ({ dryRun }) => {
+    const things = await getCollection('things');
+    const apps = await things
+      .find(appStorageAllowanceBackfillFilter)
+      .project({ 'crystal.clientId': 1 })
+      .toArray();
+    const matched = apps.length;
+    const notes: string[] = [];
+    if (dryRun) return { dryRun, matched, migrated: 0, created: 0, skipped: 0, notes };
+
+    let migrated = 0;
+    let ledgers = 0;
+    let stamped = 0;
+    let skipped = 0;
+
+    for (const app of apps) {
+      const appId = typeof app.crystal?.clientId === 'string' ? app.crystal.clientId : '';
+      if (!appId) {
+        skipped += 1;
+        continue;
+      }
+
+      // A legacy KV entry may still carry only crystal.appId. Stamp it before
+      // either sum so this migration is safe even when the older namespace
+      // migration has not been run yet.
+      while (true) {
+        const batch = await things
+          .find({
+            thingtime: 'app-data',
+            'crystal.appId': appId,
+            $or: [{ appId: { $exists: false } }, { sizeBytes: { $exists: false } }]
+          })
+          .project({ shareId: 1, crystal: 1, extended: 1, tags: 1 })
+          .limit(THINGS_BATCH)
+          .toArray();
+        if (!batch.length) break;
+        for (const doc of batch) {
+          await things.updateOne(
+            { shareId: doc.shareId },
+            { $set: { appId, sizeBytes: appThingSizeBytes(doc as any) } }
+          );
+          stamped += 1;
+        }
+        if (batch.length < THINGS_BATCH) break;
+      }
+
+      const perUser = await things
+        .aggregate([
+          {
+            $match: {
+              appId,
+              sandboxExpiresAt: { $exists: false },
+              sizeBytes: { $type: 'number' }
+            }
+          },
+          { $group: { _id: '$ownerId', bytes: { $sum: '$sizeBytes' } } }
+        ])
+        .toArray();
+      const bytesByOwner = new Map<string, number>();
+      let appUsedBytes = 0;
+      for (const entry of perUser) {
+        const ownerId = String(entry._id || '');
+        if (!ownerId) continue;
+        const usedBytes = Math.max(0, Math.floor(entry.bytes || 0));
+        bytesByOwner.set(ownerId, usedBytes);
+        const reconciled = await setAppStorageUsed(ownerId, appId, usedBytes, { onlyIfNotLive: true });
+        appUsedBytes += usedBytes;
+        if (reconciled) ledgers += 1;
+      }
+
+      // A prior ambiguous refund can leave a conservative counter even when
+      // that user has no namespace docs left, so the aggregation above has no
+      // row for them. Reconcile those existing counters explicitly to zero.
+      const existingLedgers = await things
+        .find({
+          'crystal.quotaKind': 'app-storage',
+          'crystal.appId': appId,
+          sandboxExpiresAt: { $exists: false }
+        })
+        .project({ ownerId: 1 })
+        .toArray();
+      for (const ledger of existingLedgers) {
+        const ownerId = String(ledger.ownerId || '');
+        if (!ownerId || bytesByOwner.has(ownerId)) continue;
+        if (await setAppStorageUsed(ownerId, appId, 0, { onlyIfNotLive: true })) {
+          ledgers += 1;
+        }
+      }
+
+      if (await initializeAppStorageAccounting(appId, appUsedBytes)) migrated += 1;
+      else skipped += 1; // another idempotent migration runner initialized it
+    }
+
+    notes.push(`${stamped} legacy namespace doc(s) stamped before accounting`);
+    notes.push(`${ledgers} per-app-user ledger(s) reconciled`);
+    notes.push(`${migrated} whole-app aggregate(s) initialized last`);
+    return { dryRun, matched, migrated, created: ledgers, skipped, notes };
   }
 };
 
@@ -1284,6 +1413,7 @@ export const migrations: Migration[] = [
     'Stamps schemaVersion on both rate-limit shapes (musing sliding windows and waitlist counters).'
   ),
   backfillAppNamespaceFields,
+  backfillAppStorageAllowances,
   mergeLegacyCollections,
   dropStaleCollectionGenerations
 ];

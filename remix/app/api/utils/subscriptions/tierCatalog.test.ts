@@ -6,6 +6,8 @@ import {
   QUOTA_OVERRIDE_BOUNDS,
   QUOTA_OVERRIDE_FIELDS,
   SUBSCRIPTION_TIER_CATALOG,
+  computeTierDiscounts,
+  currencyMinorUnitFactor,
   isKnownSubscriptionTier,
   resolveTierQuotas,
   sanitizeQuotaOverrides,
@@ -19,7 +21,9 @@ test('catalog: four tiers, free is the default and mirrors the legacy caps', () 
   );
   assert.equal(DEFAULT_SUBSCRIPTION_TIER, 'free');
   const free = subscriptionTierById('free');
-  assert.equal(free.quotas.appStorageBytes, 50 * 1024 * 1024);
+  assert.equal(free.quotas.appStorageBytes, 5 * 1024 * 1024 * 1024);
+  assert.equal(subscriptionTierById('plus').quotas.appStorageBytes, 25 * 1024 * 1024 * 1024);
+  assert.equal(subscriptionTierById('pro').quotas.appStorageBytes, 100 * 1024 * 1024 * 1024);
   assert.equal(free.quotas.maxApps, 20);
   assert.equal(free.quotas.maxPats, 200);
   assert.equal(free.metered, false);
@@ -83,4 +87,32 @@ test('resolveTierQuotas: no overrides returns a copy of the tier quotas', () => 
   const resolved = resolveTierQuotas('pro');
   assert.deepEqual(resolved, subscriptionTierById('pro').quotas);
   assert.notEqual(resolved, subscriptionTierById('pro').quotas);
+});
+
+test('computeTierDiscounts: resolves all six annualized renewal comparisons', () => {
+  const discounts = computeTierDiscounts({ daily: 100, weekly: 600, monthly: 2500, yearly: 24000 });
+  assert.deepEqual(discounts, {
+    weeklyFromDaily: 14.52,
+    monthlyFromDaily: 17.81,
+    monthlyFromWeekly: 3.85,
+    yearlyFromDaily: 34.25,
+    yearlyFromWeekly: 23.08,
+    yearlyFromMonthly: 20
+  });
+});
+
+test('computeTierDiscounts: custom values win while blank/zero comparisons stay unavailable', () => {
+  const discounts = computeTierDiscounts({ daily: 0, weekly: 800, monthly: 2500, yearly: null }, { monthlyFromDaily: 42.5 });
+  assert.equal(discounts.weeklyFromDaily, null);
+  assert.equal(discounts.monthlyFromDaily, 42.5);
+  assert.equal(discounts.monthlyFromWeekly, 27.88);
+  assert.equal(discounts.yearlyFromDaily, null);
+  assert.equal(discounts.yearlyFromWeekly, null);
+  assert.equal(discounts.yearlyFromMonthly, null);
+});
+
+test('currencyMinorUnitFactor follows zero-, two-, and three-decimal currencies', () => {
+  assert.equal(currencyMinorUnitFactor('JPY'), 1);
+  assert.equal(currencyMinorUnitFactor('USD'), 100);
+  assert.equal(currencyMinorUnitFactor('KWD'), 1000);
 });

@@ -28,8 +28,8 @@ import type { PublicUser } from '../auth/users';
 export const SANDBOX_TOKEN_TTL_MS = 1000 * 60 * 60;
 
 // Sandbox namespaces get a deliberately smaller storage byte budget than real
-// grants (SANDBOX_STORAGE_BYTES vs DEFAULT_APP_STORAGE_BYTES, enforced by the
-// namespace ledger in apps/namespace.ts): the mint is anonymous, so the
+// grants (SANDBOX_STORAGE_BYTES vs the real app-user allowance, enforced by
+// the namespace ledger in apps/namespace.ts): the mint is anonymous, so the
 // worst-case standing junk per IP is (mint rate × per-namespace budget) and
 // every factor should be tight.
 

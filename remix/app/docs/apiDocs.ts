@@ -70,9 +70,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     methods: ['GET'],
     steps: ['GET /api/docs and read the Markdown.'],
     requestExamples: [{ name: 'Fetch the reference', description: 'The whole API as one Markdown document.', method: 'GET' }],
-    responseExamples: [
-      { status: 200, description: 'Markdown document.', headers: { 'Content-Type': 'text/markdown; charset=utf-8' } }
-    ]
+    responseExamples: [{ status: 200, description: 'Markdown document.', headers: { 'Content-Type': 'text/markdown; charset=utf-8' } }]
   }),
   endpoint({
     id: 'admin-rate-limits',
@@ -120,7 +118,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/admin/users',
     summary: 'List current admins and search users to promote/demote (admin only).',
     detail:
-      'Returns the current DB-flagged admins; with ?q=<query> also returns matching users (by username/email) so an admin can promote or demote them. Env-allowlist admins are marked envAdmin and cannot be demoted from the UI.',
+      'Returns a newest-first bounded snapshot of current DB-flagged admins; limit and totalCapped describe that snapshot. With ?q=<query> it also returns matching users (by username/email) so an admin can promote or demote them. Env-allowlist admins are marked envAdmin and cannot be demoted from the UI.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['GET'],
     steps: [
@@ -140,6 +138,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         body: {
           ok: true,
           admins: [{ id: '64f000000000000000000001', username: 'lopu', isAdmin: true, envAdmin: true }],
+          limit: 200,
+          totalCapped: false,
           results: [{ id: '64f000000000000000000002', username: 'nik', isAdmin: false, envAdmin: false }]
         }
       }
@@ -155,18 +155,21 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Enriches the admin user search with everything the management dashboard shows per user: subscription ' +
       '(tier, admin overrides, effective quotas, metered flag), storage (allowance, used, and the live sum of ' +
       'their app-namespace byte ledgers), and counts (registered apps, co-managed apps, owned accounts, PATs, ' +
-      'connected apps with a live grant). ?q= searches by username/email; without it the first page of users returns.',
+      'connected apps with a live grant). ?q= searches by username/email; limit selects a bounded 1–200 row ' +
+      'keyset page (default 20). When nextCursor is non-null, pass it back unchanged with the same q to continue. ' +
+      'totalCapped remains an alias for whether another page exists.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['GET'],
     steps: [
-      'GET with credentials (optionally ?q=<username or email>).',
+      'GET with credentials (optionally ?q=<username or email>&limit=<1-200>&cursor=<nextCursor>).',
       'Each row carries subscription.effective — the quotas actually enforced for that user.',
       'Change a tier or overrides via POST /api/v1/admin/subscriptions.',
       'Non-admins receive 403; anonymous callers 401.'
     ],
     requestExamples: [
-      { name: 'First page', description: 'Overview rows for the first users.', method: 'GET' },
-      { name: 'Search', description: 'Overview rows matching a query.', method: 'GET', query: { q: 'nik' } }
+      { name: 'Admin snapshot', description: 'Up to 200 newest overview rows.', method: 'GET', query: { limit: 200 } },
+      { name: 'Search', description: 'Overview rows matching a query.', method: 'GET', query: { q: 'nik' } },
+      { name: 'Continue', description: 'Continue the same stable keyset scan.', method: 'GET', query: { limit: 200, cursor: '<nextCursor>' } }
     ],
     responseExamples: [
       {
@@ -178,15 +181,24 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
             {
               id: '64f000000000000000000002',
               username: 'nik',
+              createdAt: '2026-08-05T00:00:00.000Z',
               isAdmin: false,
               accountKind: 'user',
               storageAllowanceBytes: null,
               storageUsedBytes: 0,
               appNamespaceBytes: 1048576,
-              subscription: { tier: 'free', isDefault: true, overrides: null, effective: { appStorageBytes: 52428800, maxApps: 20, maxPats: 200, userStorageBytes: 524288000 } },
+              subscription: {
+                tier: 'free',
+                isDefault: true,
+                overrides: null,
+                effective: { appStorageBytes: 52428800, maxApps: 20, maxPats: 200, userStorageBytes: 524288000 }
+              },
               counts: { apps: 2, linkedApps: 1, ownedAccounts: 0, pats: 3, connectedApps: 4 }
             }
-          ]
+          ],
+          limit: 200,
+          totalCapped: false,
+          nextCursor: null
         }
       }
     ]
@@ -201,18 +213,21 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'The /admin Apps tab: all apps across all users (newest first, ?q= filters by name/clientId). Each row ' +
       'carries the registering owner, any co-managers assigned via account-links, the count of distinct users ' +
       'holding a live grant, the summed (user, app) namespace storage, the app-level subscription (isDefault ' +
-      'true = budgets fall through to each end user\'s tier), and revokedAt when suspended.',
+      "true = budgets fall through to each end user's tier), and revokedAt when suspended. limit selects a " +
+      'bounded 1–200 row keyset page (default 100). Pass a non-null nextCursor back unchanged with the same q; ' +
+      'totalCapped remains an alias for whether another page exists.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['GET'],
     steps: [
-      'GET with credentials (optionally ?q=<name or clientId>).',
+      'GET with credentials (optionally ?q=<name or clientId>&limit=<1-200>&cursor=<nextCursor>).',
       'Suspend or restore an app via POST /api/v1/admin/apps/revoke.',
       'Assign co-managers via POST /api/v1/admin/links with linkKind "app".',
       'Non-admins receive 403; anonymous callers 401.'
     ],
     requestExamples: [
-      { name: 'All apps', description: 'Newest apps first.', method: 'GET' },
-      { name: 'Search', description: 'Filter by name or clientId.', method: 'GET', query: { q: 'rainbow' } }
+      { name: 'Admin snapshot', description: 'Up to 200 newest apps.', method: 'GET', query: { limit: 200 } },
+      { name: 'Search', description: 'Filter by name or clientId.', method: 'GET', query: { q: 'rainbow' } },
+      { name: 'Continue', description: 'Continue the same stable keyset scan.', method: 'GET', query: { limit: 200, cursor: '<nextCursor>' } }
     ],
     responseExamples: [
       {
@@ -225,6 +240,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
               clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f',
               name: 'Rainbow Notes',
               origins: ['https://rainbownotes.example'],
+              createdAt: '2026-08-05T00:00:00.000Z',
               revokedAt: null,
               owner: { id: '64f000000000000000000002', username: 'nik' },
               managers: [{ id: '64f000000000000000000003', username: 'lopu' }],
@@ -232,7 +248,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
               usedBytes: 3145728,
               subscription: { tier: 'free', isDefault: true }
             }
-          ]
+          ],
+          limit: 200,
+          totalCapped: false,
+          nextCursor: null
         }
       }
     ]
@@ -242,7 +261,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'admin',
     title: 'Suspend / restore an app',
     endpoint: '/api/v1/admin/apps/revoke',
-    summary: 'Revoke an app\'s access platform-wide, or restore it (admin only).',
+    summary: "Revoke an app's access platform-wide, or restore it (admin only).",
     detail:
       'POST { clientId, revoked: true } stamps crystal.revokedAt on the app, sweeps every live app session, ' +
       'and the token choke point (resolveAppToken) refuses anything the sweep missed — the consent screen and ' +
@@ -274,7 +293,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       {
         status: 200,
         description: 'Updated app.',
-        body: { ok: true, app: { clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', name: 'Rainbow Notes', revokedAt: '2026-08-02T00:00:00.000Z' } }
+        body: {
+          ok: true,
+          app: { clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', name: 'Rainbow Notes', revokedAt: '2026-08-02T00:00:00.000Z' }
+        }
       },
       { status: 404, description: 'Unknown clientId.', body: { ok: false, error: 'App not found' } }
     ]
@@ -284,37 +306,43 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'admin',
     title: 'Subscription tiers & quota overrides',
     endpoint: '/api/v1/admin/subscriptions',
-    summary: 'Assign a subscription tier (free/plus/pro/payg) or custom quota overrides to a user or app (admin only).',
+    summary: 'Assign an exact live tier revision or custom quota overrides to a user or app (admin only).',
     detail:
-      'The tier system behind every quota: tiers supply default quotas (app storage bytes, user storage bytes, ' +
-      'max apps, max PATs); payg is the metered tier with no hard caps (usage is measured and billed, never ' +
-      'blocked); per-field admin overrides win over the tier (explicit null = unlimited for that field). ' +
-      'GET without params returns the catalog; with ?subjectType=user|app&subjectId= it also returns that ' +
-      'subject\'s assignment (isDefault true = implicit free). POST { subjectType, subjectId, tier, overrides?, ' +
-      'note? } assigns; POST { subjectType, subjectId, clear: true } resets to default. Enforcement reads the ' +
-      'merged "effective" quotas within ~15s.',
+      'Every assignment stores the stable tier id, immutable versionId/version, name, metering flag, and quota ' +
+      'snapshot. Publishing a replacement can therefore archive the old revision without changing existing ' +
+      'users or apps. Per-field admin overrides win over the snapshot (explicit null = unlimited). GET without ' +
+      "params returns live revisions; with ?subjectType=user|app&subjectId= it also returns that subject's " +
+      'assignment and its archived current revision when needed. POST { subjectType, subjectId, tier, ' +
+      'tierVersionId, overrides?, note? } assigns; clear pins the current default revision.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['GET', 'POST'],
     steps: [
-      'GET to load the tier catalog (and one subject\'s assignment with ?subjectType&subjectId).',
-      'POST { subjectType, subjectId, tier } to assign a tier.',
-      'Add overrides: { appStorageBytes: 104857600 } for a custom cap, or null for unlimited.',
-      'POST { subjectType, subjectId, clear: true } to reset to the implicit free default.',
+      "GET to load the tier catalog (and one subject's assignment with ?subjectType&subjectId).",
+      'POST { subjectType, subjectId, tier, tierVersionId } to assign an exact live revision.',
+      'Use userStorageBytes/maxApps/maxPats overrides for users or appStorageBytes for apps; null means unlimited.',
+      'POST { subjectType, subjectId, clear: true } to pin the current live default revision.',
       'Non-admins receive 403; anonymous callers 401.'
     ],
     requestExamples: [
       { name: 'Catalog', description: 'All tiers with their default quotas.', method: 'GET' },
       {
         name: 'Look up a user',
-        description: 'One subject\'s assignment.',
+        description: "One subject's assignment.",
         method: 'GET',
         query: { subjectType: 'user', subjectId: '64f000000000000000000002' }
       },
       {
         name: 'Assign pro + override',
-        description: 'Pro tier with a custom 2GB app-storage override.',
+        description: 'Pro tier v1 with a custom 2 GiB user-storage override.',
         method: 'POST',
-        body: { subjectType: 'user', subjectId: '64f000000000000000000002', tier: 'pro', overrides: { appStorageBytes: 2147483648 }, note: 'Beta partner' }
+        body: {
+          subjectType: 'user',
+          subjectId: '64f000000000000000000002',
+          tier: 'pro',
+          tierVersionId: 'subscription-tier-pro-v1',
+          overrides: { userStorageBytes: 2147483648 },
+          note: 'Beta partner'
+        }
       },
       {
         name: 'Reset',
@@ -333,14 +361,140 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
             subjectType: 'user',
             subjectId: '64f000000000000000000002',
             tier: 'pro',
+            tierVersionId: 'subscription-tier-pro-v1',
+            tierVersion: 1,
+            tierName: 'Pro',
             metered: false,
-            overrides: { appStorageBytes: 2147483648 },
-            effective: { appStorageBytes: 2147483648, userStorageBytes: 21474836480, maxApps: 100, maxPats: 1000 },
+            overrides: { userStorageBytes: 2147483648 },
+            effective: { appStorageBytes: 107374182400, userStorageBytes: 2147483648, maxApps: 100, maxPats: 1000 },
             isDefault: false
           }
         }
       },
-      { status: 400, description: 'Unknown tier.', body: { ok: false, error: 'Unknown tier: gold — see the catalog at /api/v1/admin/subscriptions-docs' } }
+      {
+        status: 400,
+        description: 'Unknown or non-live revision.',
+        body: { ok: false, error: 'Unknown or non-live tier revision: gold — refresh the catalog at /api/v1/tiers' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'admin-tiers',
+    group: 'admin',
+    title: 'Manage subscription tiers',
+    endpoint: '/api/v1/admin/tiers',
+    summary: 'Create, edit, publish, and archive versioned subscription-tier revisions (admin only).',
+    detail:
+      'GET returns every protected subscription-tier Thing grouped into live, drafts, and archived. New tiers ' +
+      'start as draft v1. Only drafts can be edited; create-version clones a live or archived revision into the ' +
+      'next draft. Publish uses a per-tier lease and durable recovery journal to archive the previous live ' +
+      'revision and promote the draft; readers keep the prior revision available during that cross-document ' +
+      'handoff. Prices are integer ' +
+      'minor units for daily/weekly/monthly/yearly renewal options. The six percentage-saved comparisons are ' +
+      'saved from the annualized formula unless a custom override is supplied. Inclusions are bounded Editor.js ' +
+      'blocks rendered on the customer card. Archiving never deletes history, and the live default tier can only ' +
+      'be replaced by publishing a new revision.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET to load the Live, Draft / not live, and Archived sections.',
+      'POST action create with tier content to create a new stable tier id and draft v1.',
+      'POST action update-draft with versionId and tier content to edit a draft.',
+      'POST action create-version with versionId to clone the next draft revision.',
+      'POST action publish or archive with versionId to change catalog visibility without deleting history.'
+    ],
+    requestExamples: [
+      { name: 'Catalog history', description: 'All tier revisions grouped by lifecycle status.', method: 'GET' },
+      {
+        name: 'Create a draft',
+        description: 'Create an editable tier with pricing, discount rules, Editor.js inclusions, and quota defaults.',
+        method: 'POST',
+        body: {
+          action: 'create',
+          tier: {
+            title: 'Studio',
+            tagline: 'For growing creative teams.',
+            emoji: '🎨',
+            bannerImageUrl: 'https://images.example/studio.jpg',
+            sortOrder: 40,
+            metered: false,
+            currency: 'USD',
+            prices: { daily: 300, weekly: 1800, monthly: 5900, yearly: 59000 },
+            discountOverrides: { yearlyFromMonthly: 20 },
+            inclusions: { kind: 'rich-text', blocks: [{ type: 'paragraph', data: { text: 'Priority support' } }] },
+            quotas: { appStorageBytes: 107374182400, userStorageBytes: 21474836480, maxApps: 100, maxPats: 1000 }
+          }
+        }
+      },
+      {
+        name: 'Publish a draft',
+        description: 'Make one immutable revision available to new assignments.',
+        method: 'POST',
+        body: { action: 'publish', versionId: 'subscription-tier-studio-a1b2c3d4-v1' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Grouped catalog and the changed tier.',
+        body: {
+          ok: true,
+          tier: { id: 'studio-a1b2c3d4', versionId: 'subscription-tier-studio-a1b2c3d4-v1', version: 1, status: 'draft', title: 'Studio' },
+          tiers: [
+            { id: 'free', versionId: 'subscription-tier-free-v1', version: 1, status: 'live', title: 'Free' },
+            { id: 'plus', versionId: 'subscription-tier-plus-v1', version: 1, status: 'live', title: 'Plus' },
+            { id: 'pro', versionId: 'subscription-tier-pro-v1', version: 1, status: 'live', title: 'Pro' },
+            { id: 'payg', versionId: 'subscription-tier-payg-v1', version: 1, status: 'live', title: 'Pay as you go' },
+            { id: 'studio-a1b2c3d4', versionId: 'subscription-tier-studio-a1b2c3d4-v1', version: 1, status: 'draft', title: 'Studio' }
+          ],
+          live: [
+            { id: 'free', versionId: 'subscription-tier-free-v1', version: 1, status: 'live', title: 'Free' },
+            { id: 'plus', versionId: 'subscription-tier-plus-v1', version: 1, status: 'live', title: 'Plus' },
+            { id: 'pro', versionId: 'subscription-tier-pro-v1', version: 1, status: 'live', title: 'Pro' },
+            { id: 'payg', versionId: 'subscription-tier-payg-v1', version: 1, status: 'live', title: 'Pay as you go' }
+          ],
+          drafts: [
+            { id: 'studio-a1b2c3d4', versionId: 'subscription-tier-studio-a1b2c3d4-v1', version: 1, status: 'draft', title: 'Studio' }
+          ],
+          archived: []
+        }
+      },
+      { status: 409, description: 'Lifecycle conflict.', body: { ok: false, error: 'Only draft tier versions can be edited' } }
+    ]
+  }),
+  endpoint({
+    id: 'tiers',
+    group: 'subscriptions',
+    title: 'Live subscription tiers',
+    endpoint: '/api/v1/tiers',
+    summary: 'List the live, selectable tier-card revisions with pricing and inclusions.',
+    detail:
+      'Public read-only catalog. Each item includes a stable id, immutable versionId/version, name, tagline, ' +
+      'optional banner image, daily/weekly/monthly/yearly minor-unit prices, six computed-or-custom discounts, ' +
+      'Editor.js inclusions, and quota defaults. Draft and archived revisions are excluded.',
+    auth: { mode: 'none', description: 'Public catalog; no credentials required.' },
+    methods: ['GET'],
+    steps: ['GET and render each returned live revision as a tier option.'],
+    requestExamples: [{ name: 'Live catalog', description: 'All tiers selectable by a new customer.', method: 'GET' }],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Live tier revisions.',
+        body: {
+          ok: true,
+          tiers: [
+            {
+              id: 'pro',
+              versionId: 'subscription-tier-pro-v2',
+              version: 2,
+              status: 'live',
+              title: 'Pro',
+              prices: { daily: 300, weekly: 1800, monthly: 5900, yearly: 59000 },
+              discounts: { yearlyFromDaily: 46.12, yearlyFromWeekly: 36.97, yearlyFromMonthly: 16.67 }
+            }
+          ]
+        }
+      }
     ]
   }),
   endpoint({
@@ -359,7 +513,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['GET', 'POST'],
     steps: [
-      'GET ?userId=<id> for the links a user holds, or ?targetId=<id|clientId> for a target\'s owners.',
+      "GET ?userId=<id> for the links a user holds, or ?targetId=<id|clientId> for a target's owners.",
       'POST { action: "add", linkKind: "account", userId, targetId } to hand a user an account.',
       'POST { action: "add", linkKind: "app", userId, targetId: "<clientId>" } to add an app co-manager.',
       'POST { action: "remove", ... } to unassign.',
@@ -387,7 +541,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         body: {
           ok: true,
           links: [
-            { linkKind: 'account', userId: '64f000000000000000000002', targetId: '64f000000000000000000009', role: 'owner', username: 'nik', targetUsername: 'nik-bot' }
+            {
+              linkKind: 'account',
+              userId: '64f000000000000000000002',
+              targetId: '64f000000000000000000009',
+              role: 'owner',
+              username: 'nik',
+              targetUsername: 'nik-bot'
+            }
           ]
         }
       },
@@ -403,7 +564,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     detail:
       'Lists the accounts (usually service accounts) an admin has assigned to you with an "account" ownership ' +
       'link. The account switcher shows these under "Owned accounts"; POST /api/v1/auth/accounts/assume signs ' +
-      'into one. Unlike /api/v1/auth/accounts (this browser\'s roster), this list follows your links — it is ' +
+      "into one. Unlike /api/v1/auth/accounts (this browser's roster), this list follows your links — it is " +
       'the same on every device.',
     auth: { mode: 'session', description: 'Requires a signed-in session.' },
     methods: ['GET'],
@@ -430,8 +591,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     summary: 'Sign into an account you own (via an admin-assigned link) without its credentials.',
     detail:
       'POST { accountId } — if you hold an "account" ownership link to it, a fresh browser session is minted ' +
-      'for the target, folded into this browser\'s roster (the switcher lists it immediately), and made the ' +
-      'active account. The authorization is the server-side link, never the roster cookie, so the roster\'s ' +
+      "for the target, folded into this browser's roster (the switcher lists it immediately), and made the " +
+      "active account. The authorization is the server-side link, never the roster cookie, so the roster's " +
       'anti-fixation ownership gate stays intact. Each browser gets its own session — assuming the same ' +
       'account elsewhere never signs this one out.',
     auth: { mode: 'session', description: 'Requires a signed-in session holding the ownership link.' },
@@ -664,8 +825,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     title: 'JWKS discovery',
     endpoint: '/api/v1/auth/jwks',
     summary: 'Returns public ES256 JWT verification keys for external token verifiers.',
-    detail:
-      'Services can call this route to discover public keys for validating Thingtime bearer tokens without sharing private signing material.',
+    detail: 'Services can call this route to discover public keys for validating Thingtime bearer tokens without sharing private signing material.',
     auth: {
       mode: 'none',
       description: 'Public discovery endpoint. No cookie or bearer token is required.'
@@ -754,8 +914,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     title: 'Current user',
     endpoint: '/api/v1/auth/me',
     summary: 'Returns the authenticated public user or null.',
-    detail:
-      'Use this route for lightweight auth checks. It supports the same httpOnly cookie and bearer token model as the rest of the API.',
+    detail: 'Use this route for lightweight auth checks. It supports the same httpOnly cookie and bearer token model as the rest of the API.',
     auth: {
       mode: 'optional',
       description: 'Cookie or Authorization: Bearer token optional. Anonymous callers receive user: null.'
@@ -877,8 +1036,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     title: 'Register user',
     endpoint: '/api/v1/auth/register',
     summary: 'Creates a user account, starts email verification, logs the browser in, and sets the auth cookie.',
-    detail:
-      'This is the live user signup path. Tests and seed flows should call this endpoint instead of writing directly to MongoDB.',
+    detail: 'This is the live user signup path. Tests and seed flows should call this endpoint instead of writing directly to MongoDB.',
     auth: {
       mode: 'none',
       description: 'Public signup endpoint.'
@@ -1075,8 +1233,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     title: 'Verify email',
     endpoint: '/api/v1/auth/verify-email',
     summary: 'Consumes an email verification token and redirects to login with a status.',
-    detail:
-      'This endpoint is designed for email links. API clients usually follow redirects or inspect the Location header.',
+    detail: 'This endpoint is designed for email links. API clients usually follow redirects or inspect the Location header.',
     auth: {
       mode: 'none',
       description: 'Public token consumption endpoint.'
@@ -1115,8 +1272,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     title: 'Crypto tools',
     endpoint: '/api/v1/crypto',
     summary: 'Lists crypto standards and runs key generation, JWT verification, signature verification, and key matching helpers.',
-    detail:
-      'Use this route for Thingtime-compatible ES256 key workflows and diagnostics. POST bodies are intent-driven.',
+    detail: 'Use this route for Thingtime-compatible ES256 key workflows and diagnostics. POST bodies are intent-driven.',
     auth: {
       mode: 'none',
       description: 'Public helper endpoint. Do not post private production secrets from untrusted clients.'
@@ -1245,8 +1401,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     title: 'Frontend health',
     endpoint: '/api/v1/health/frontend',
     summary: 'Checks whether a Thingtime frontend shell is reachable.',
-    detail:
-      'Used by environment status UI to verify local, preview, or remote frontend availability.',
+    detail: 'Used by environment status UI to verify local, preview, or remote frontend availability.',
     auth: {
       mode: 'none',
       description: 'Public health endpoint.'
@@ -1279,8 +1434,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     title: 'MongoDB health',
     endpoint: '/api/v1/health/mongodb',
     summary: 'Returns MongoDB connectivity for the current or target environment.',
-    detail:
-      'This route wraps the MongoDB status helper and can proxy remote health checks through the environment status resolver.',
+    detail: 'This route wraps the MongoDB status helper and can proxy remote health checks through the environment status resolver.',
     auth: {
       mode: 'none',
       description: 'Public health endpoint. Secrets are sanitized from responses.'
@@ -1313,8 +1467,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     title: 'Nitro health',
     endpoint: '/api/v1/health/nitro',
     summary: 'Reports Nitro API runtime readiness.',
-    detail:
-      'Use this endpoint to confirm the API server is alive and to compare local versus remote runtime status.',
+    detail: 'Use this endpoint to confirm the API server is alive and to compare local versus remote runtime status.',
     auth: {
       mode: 'none',
       description: 'Public health endpoint.'
@@ -1347,8 +1500,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     title: 'Vercel health',
     endpoint: '/api/v1/health/vercel',
     summary: 'Returns Vercel deployment status or a safe unavailable shape.',
-    detail:
-      'This endpoint powers environment status displays and avoids leaking dashboard credentials.',
+    detail: 'This endpoint powers environment status displays and avoids leaking dashboard credentials.',
     auth: {
       mode: 'none',
       description: 'Public health endpoint. It only returns status data exposed by server-side configuration.'
@@ -1381,8 +1533,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     title: 'Login',
     endpoint: '/api/v1/login',
     summary: 'Validates username/password credentials and sets the auth cookie.',
-    detail:
-      'Use this for browser login. API clients that need service integration should prefer the service-account endpoint and bearer token.',
+    detail: 'Use this for browser login. API clients that need service integration should prefer the service-account endpoint and bearer token.',
     auth: {
       mode: 'none',
       description: 'Public credential exchange endpoint.'
@@ -1457,11 +1608,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       {
         status: 200,
         description: 'NDJSON stream events.',
-        body: [
-          { type: 'meta', source: 'fallback', mode: 'weather' },
-          { type: 'delta', text: 'Lopu is thinking...' },
-          { type: 'done' }
-        ]
+        body: [{ type: 'meta', source: 'fallback', mode: 'weather' }, { type: 'delta', text: 'Lopu is thinking...' }, { type: 'done' }]
       }
     ]
   }),
@@ -1471,8 +1618,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     title: 'MongoDB connection config',
     endpoint: '/api/v1/mongodb/get-connection',
     summary: 'Returns sanitized MongoDB host information for diagnostics.',
-    detail:
-      'Use this endpoint to check which MongoDB host the runtime is configured to use without exposing credentials.',
+    detail: 'Use this endpoint to check which MongoDB host the runtime is configured to use without exposing credentials.',
     auth: {
       mode: 'none',
       description: 'Development diagnostic endpoint. Returned host is sanitized.'
@@ -1496,7 +1642,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       {
         status: 200,
         description: 'Sanitized connection host.',
-        body: { message: 'Early return triggered in API V1 MongoDB Get Connection action: successful', data: { host: 'mongodb://localhost:27017/thingtime' } }
+        body: {
+          message: 'Early return triggered in API V1 MongoDB Get Connection action: successful',
+          data: { host: 'mongodb://localhost:27017/thingtime' }
+        }
       }
     ]
   }),
@@ -1506,8 +1655,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     title: 'MongoDB populate',
     endpoint: '/api/v1/mongodb/populate',
     summary: 'Runs the MongoDB setup/populate script.',
-    detail:
-      'This is a mutating development utility. Use it carefully because it initializes or updates local Thingtime MongoDB state.',
+    detail: 'This is a mutating development utility. Use it carefully because it initializes or updates local Thingtime MongoDB state.',
     auth: {
       mode: 'none',
       description: 'Development utility endpoint. Restrict exposure by environment and network controls.'
@@ -1605,8 +1753,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     title: 'MongoDB status',
     endpoint: '/api/v1/mongodb/status',
     summary: 'Returns MongoDB connection status for UI status checks and API tests.',
-    detail:
-      'This route responds with HTTP 200 even when MongoDB is down; the body connected field carries the health state.',
+    detail: 'This route responds with HTTP 200 even when MongoDB is down; the body connected field carries the health state.',
     auth: {
       mode: 'none',
       description: 'Public health endpoint. Credentials are sanitized.'
@@ -1639,8 +1786,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     title: 'MongoDB status data',
     endpoint: '/api/v1/mongodb/status-data',
     summary: 'Resource-only JSON version of MongoDB status.',
-    detail:
-      'Use this route for plain fetch calls that should never render the in-app API tester component.',
+    detail: 'Use this route for plain fetch calls that should never render the in-app API tester component.',
     auth: {
       mode: 'none',
       description: 'Public health endpoint. Credentials are sanitized.'
@@ -1673,8 +1819,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     title: 'Template action',
     endpoint: '/api/v1/template',
     summary: 'Legacy test/template API action.',
-    detail:
-      'This route is retained as a simple API action harness and returns a predictable JSON message.',
+    detail: 'This route is retained as a simple API action harness and returns a predictable JSON message.',
     auth: {
       mode: 'none',
       description: 'Public development/test endpoint.'
@@ -1708,8 +1853,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     title: 'Themes',
     endpoint: '/api/v1/themes',
     summary: 'Lists or saves themes for the authenticated user.',
-    detail:
-      'Theme records let Thingtime users save and share visual configurations. Reads and writes require an authenticated user.',
+    detail: 'Theme records let Thingtime users save and share visual configurations. Reads and writes require an authenticated user.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -1757,8 +1901,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     title: 'Active theme',
     endpoint: '/api/v1/themes/active',
     summary: 'Sets or clears the current user active theme.',
-    detail:
-      'Use this endpoint to make a saved or shared theme follow the user across browsers and devices.',
+    detail: 'Use this endpoint to make a saved or shared theme follow the user across browsers and devices.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -1798,8 +1941,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     title: 'Delete theme',
     endpoint: '/api/v1/themes/delete',
     summary: 'Deletes a theme owned by the current user.',
-    detail:
-      'Use this route for explicit user deletion actions. It does not delete themes owned by other users.',
+    detail: 'Use this route for explicit user deletion actions. It does not delete themes owned by other users.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -1838,8 +1980,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     title: 'Shared theme',
     endpoint: '/api/v1/themes/shared',
     summary: 'Reads a shared theme by id/share id.',
-    detail:
-      'Anonymous callers can read public shared themes. Authenticated owners can also read their own private themes by id.',
+    detail: 'Anonymous callers can read public shared themes. Authenticated owners can also read their own private themes by id.',
     auth: {
       mode: 'optional',
       description: 'Anonymous public reads are allowed; auth cookie or bearer token can reveal caller-owned private themes.'
@@ -1923,8 +2064,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     title: 'Active feed algorithm',
     endpoint: '/api/v1/algorithms/active',
     summary: 'Sets or clears the current user active feed algorithm.',
-    detail:
-      'Use this endpoint when the feed algorithm picker changes. A null algorithmId returns the feed to latest-first chronological ranking.',
+    detail: 'Use this endpoint when the feed algorithm picker changes. A null algorithmId returns the feed to latest-first chronological ranking.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -1964,8 +2104,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     title: 'Delete feed algorithm',
     endpoint: '/api/v1/algorithms/delete',
     summary: 'Deletes one of the current user feed algorithms.',
-    detail:
-      'This route removes a user-owned algorithm and clears the active algorithm pointer when it pointed at the deleted algorithm.',
+    detail: 'This route removes a user-owned algorithm and clears the active algorithm pointer when it pointed at the deleted algorithm.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -2042,8 +2181,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     title: 'Update feed algorithm',
     endpoint: '/api/v1/algorithms/update',
     summary: 'Renames or restyles one of the current user feed algorithms.',
-    detail:
-      'Use this endpoint from the settings algorithm manager to update algorithm display metadata without changing its learned weights.',
+    detail: 'Use this endpoint from the settings algorithm manager to update algorithm display metadata without changing its learned weights.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -2082,7 +2220,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       '(via the embed SDK at /sdk/thingtime-login.js). POST { name, origins } registers one: the server ' +
       'mints the clientId (ttapp_<uuid>) and validates origins — bare https origins like ' +
       'https://example.com, with http allowed only for localhost dev. Only those exact origins can open ' +
-      'the authorize popup and receive tokens. GET lists your registered apps.',
+      'the authorize popup and receive tokens. Each app starts on a 5 GiB aggregate free plan and a 50 MiB ' +
+      'default cap for each app user; GET lists live usage, remaining aggregate bytes, and both allowances. ' +
+      'Owners and linked co-managers change plans/defaults/user sub-tiers through /api/v1/apps/storage.',
     auth: { mode: 'session-or-bearer', description: 'Your own Thingtime session (cookie or full-account Bearer). App-scoped tokens are rejected.' },
     methods: ['GET', 'POST'],
     steps: [
@@ -2105,12 +2245,110 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'App registered.',
         body: {
           ok: true,
-          app: { clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', name: 'Rainbow Notes', origins: ['https://rainbownotes.example'] }
+          app: {
+            clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f',
+            name: 'Rainbow Notes',
+            origins: ['https://rainbownotes.example'],
+            storageAllowanceBytes: 5368709120,
+            storageUsedBytes: 0,
+            storageRemainingBytes: 5368709120,
+            userStorageAllowanceBytes: 52428800,
+            storageAccountingReady: true,
+            subscriptionTier: 'free',
+            subscriptionMetered: false,
+            subscriptionCustom: false
+          }
         }
       },
-      { status: 400, description: 'Bad origin.', body: { ok: false, error: 'Origins must be bare https origins like https://example.com (http is allowed for localhost only)' } }
+      {
+        status: 400,
+        description: 'Bad origin.',
+        body: { ok: false, error: 'Origins must be bare https origins like https://example.com (http is allowed for localhost only)' }
+      }
     ],
     notes: ['Apps are things (thingtime ["app"]) owned by you; the clientId is public, but tokens only ever reach allowlisted origins.']
+  }),
+  endpoint({
+    id: 'apps-storage',
+    group: 'embed',
+    title: 'Manage app storage',
+    endpoint: '/api/v1/apps/storage',
+    summary: 'Manage a registered app’s aggregate plan, default app-user cap, and individual/bulk user sub-tiers.',
+    detail:
+      'GET ?clientId= returns the app’s aggregate byte usage/allowance, exact pinned subscription revision, ' +
+      'live rich tier cards (plus an archived current revision when needed), 50 MiB-by-default app-user ' +
+      'policy, and up to 200 recent app users with effective usage/caps. POST set-tier requires the selected ' +
+      'stable tier id and exact live tierVersionId; its quota snapshot changes the whole-app ceiling. ' +
+      'set-default-user-cap changes the inherited cap; set-user-cap assigns or clears one relational override ' +
+      'for up to 200 selected users. Every per-user value is bounded by the whole-app allowance, and the ' +
+      'aggregate ledger still wins when the sum of user caps is larger than the plan.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'The registering owner or an app co-manager linked by an administrator. App-scoped tokens are rejected.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET with clientId to render the app manager and user storage table.',
+      'POST { clientId, action: "set-tier", tier, tierVersionId } to select an exact live aggregate plan revision.',
+      'POST { clientId, action: "set-default-user-cap", allowanceBytes } to change the inherited user cap.',
+      'POST { clientId, action: "set-user-cap", userIds, allowanceBytes } for individual/bulk sub-tiers; null clears to the default.'
+    ],
+    requestExamples: [
+      {
+        name: 'Upgrade the whole app',
+        description: 'Move the app to the 25 GiB Plus aggregate tier.',
+        method: 'POST',
+        body: {
+          clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f',
+          action: 'set-tier',
+          tier: 'plus',
+          tierVersionId: 'subscription-tier-plus-v1'
+        }
+      },
+      {
+        name: 'Raise selected users',
+        description: 'Give two app users a 200 MiB sub-tier.',
+        method: 'POST',
+        body: {
+          clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f',
+          action: 'set-user-cap',
+          userIds: ['664f1c2a9d3e5b0012345678', '664f1c2a9d3e5b0087654321'],
+          allowanceBytes: 209715200
+        }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Updated plan and app-user policy.',
+        body: {
+          ok: true,
+          storage: {
+            clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f',
+            storageAllowanceBytes: 26843545600,
+            storageUsedBytes: 1048576,
+            defaultUserStorageAllowanceBytes: 52428800,
+            subscription: {
+              tier: 'plus',
+              tierVersionId: 'subscription-tier-plus-v1',
+              tierVersion: 1,
+              tierName: 'Plus'
+            },
+            tiers: [
+              {
+                id: 'plus',
+                versionId: 'subscription-tier-plus-v1',
+                status: 'live',
+                title: 'Plus',
+                selectable: true
+              }
+            ],
+            users: []
+          }
+        }
+      },
+      { status: 404, description: 'Unknown or not managed by this account.', body: { ok: false, error: 'App not found' } }
+    ]
   }),
   endpoint({
     id: 'apps-update',
@@ -2121,13 +2359,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     detail:
       'POST { clientId, name?, origins? }. Origins are re-validated like registration. Removing an origin ' +
       'takes effect on the next request from any token bound to it — the app-token resolver re-checks the ' +
-      'allowlist every time.',
+      'allowlist every time. Storage allowance and usage fields are server-owned and ignored here, so an ' +
+      'app developer cannot raise either quota through this identity/origin route. Use /api/v1/apps/storage ' +
+      'for authorized plan and app-user policy changes.',
     auth: { mode: 'session-or-bearer', description: 'Your own Thingtime session (cookie or full-account Bearer); you can only update apps you own.' },
     methods: ['POST'],
-    steps: [
-      'POST the clientId plus the fields to change.',
-      'Tokens bound to removed origins stop working immediately.'
-    ],
+    steps: ['POST the clientId plus the fields to change.', 'Tokens bound to removed origins stop working immediately.'],
     requestExamples: [
       {
         name: 'Change origins',
@@ -2137,7 +2374,23 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       }
     ],
     responseExamples: [
-      { status: 200, description: 'Updated.', body: { ok: true, app: { clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', name: 'Rainbow Notes', origins: ['https://new.example'] } } },
+      {
+        status: 200,
+        description: 'Updated; server-owned quota fields are returned unchanged.',
+        body: {
+          ok: true,
+          app: {
+            clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f',
+            name: 'Rainbow Notes',
+            origins: ['https://new.example'],
+            storageAllowanceBytes: 5368709120,
+            storageUsedBytes: 183204,
+            storageRemainingBytes: 5368525916,
+            userStorageAllowanceBytes: 52428800,
+            storageAccountingReady: true
+          }
+        }
+      },
       { status: 404, description: 'Not yours / unknown.', body: { ok: false, error: 'App not found' } }
     ]
   }),
@@ -2169,9 +2422,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/apps/public',
     summary: 'Anonymous lookup the authorize popup uses to validate a clientId + origin pair.',
     detail:
-      'GET ?clientId=…&origin=…&scope=…&optional_scope=…. Returns the app\'s public face (clientId + ' +
+      "GET ?clientId=…&origin=…&scope=…&optional_scope=…. Returns the app's public face (clientId + " +
       'name) plus the REQUIRED (`scope`) and OPTIONAL (`optional_scope`) permission sets as descriptor ' +
-      'entries ({ id, title, description, kind, baseline }) for the consent screen\'s permissions ' +
+      "entries ({ id, title, description, kind, baseline }) for the consent screen's permissions " +
       'selector — only when the app exists AND the origin is on its allowlist, so the popup can refuse ' +
       'unregistered embedders before any login UI renders. Scope paths are hierarchical dot paths from ' +
       '/api/v1/oauth/scopes (unknown names 400; empty scope → profile + app-data). 404 for unknown ' +
@@ -2181,7 +2434,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'working pretend token.',
     auth: { mode: 'none', description: 'Anonymous — returns only the app name + scope descriptors.' },
     methods: ['GET'],
-    steps: ['GET with clientId, the embedding page origin, and the requested scope set.', 'Render the consent screen from the returned name + scope descriptors.'],
+    steps: [
+      'GET with clientId, the embedding page origin, and the requested scope set.',
+      'Render the consent screen from the returned name + scope descriptors.'
+    ],
     requestExamples: [
       {
         name: 'Lookup',
@@ -2205,7 +2461,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           origin: 'https://rainbownotes.example',
           requiredScopes: [
             { id: 'profile.username', title: 'Username', description: 'Your @username — the login identity itself.', kind: 'field', baseline: true },
-            { id: 'app-data', title: 'App storage', description: 'Store its own data for you in your Thingtime account — only its own, nothing else.', kind: 'capability' }
+            {
+              id: 'app-data',
+              title: 'App storage',
+              description: 'Store its own data for you in your Thingtime account — only its own, nothing else.',
+              kind: 'capability'
+            }
           ],
           optionalScopes: [
             { id: 'email', title: 'Email address', description: 'The email address on your Thingtime account.', kind: 'field' },
@@ -2224,8 +2485,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     summary: 'The consent step of the "Login with Thingtime" popup — mints an app-scoped Bearer token.',
     detail:
       'POST { clientId, origin, scope?, optionalScope?, extra?, scopes?, sharedThings? } with the ' +
-      'user\'s real session cookie (the popup runs on the Thingtime origin). `scope` is the REQUIRED ' +
-      'floor the platform declared (the grant must cover all of it — the user\'s alternative is ' +
+      "user's real session cookie (the popup runs on the Thingtime origin). `scope` is the REQUIRED " +
+      "floor the platform declared (the grant must cover all of it — the user's alternative is " +
       'Cancel); `optionalScope` its nice-to-haves; `scopes` the paths the user approved, which may — ' +
       'unless extra=\'0\' — include ANY known scope the user volunteered beyond the request ("auto" ' +
       'sharing). `sharedThings` carries the shareIds hand-picked for the things scope (each must be ' +
@@ -2235,16 +2496,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Blast radius of a leaked token: it reaches the embed surface (/api/v1/app-data*, ' +
       '/api/v1/oauth/userinfo, /api/v1/oauth/shared) and the full things API (/api/v1/things plus ' +
       'its search/update/delete/react/comment sub-routes) — but every things read and write is ' +
-      'fenced to the app\'s own namespace (the server-stamped root appId), so it can never touch ' +
-      'the user\'s feed or social surfaces, their non-app things, or another app\'s data, and it ' +
+      "fenced to the app's own namespace (the server-stamped root appId), so it can never touch " +
+      "the user's feed or social surfaces, their non-app things, or another app's data, and it " +
       'cannot mint further tokens. It stays origin-bound (browser calls must come from the granted ' +
       'origin) and revocable — the token dies instantly when the user disconnects the app.',
-    auth: { mode: 'session', description: 'The end user\'s Thingtime session cookie (popup is same-origin).' },
+    auth: { mode: 'session', description: "The end user's Thingtime session cookie (popup is same-origin)." },
     methods: ['POST'],
     steps: [
       'The SDK opens /authorize?client_id=…&origin=…&state=…&scope=… in a popup.',
       'The popup validates via /api/v1/apps/public, has the user log in if needed, and shows the consent + permissions selector.',
-      'On approve it POSTs here with the user\'s selection, then hands the token to the opener via postMessage (targetOrigin = the validated origin).'
+      "On approve it POSTs here with the user's selection, then hands the token to the opener via postMessage (targetOrigin = the validated origin)."
     ],
     requestExamples: [
       {
@@ -2274,10 +2535,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           user: { id: '664f1c2a9d3e5b0012345678', username: 'lopu' }
         }
       },
-      { status: 400, description: 'Grant missed a required scope.', body: { ok: false, error: 'The app requires the app-data permission — cancel instead if you’d rather not share it' } },
+      {
+        status: 400,
+        description: 'Grant missed a required scope.',
+        body: { ok: false, error: 'The app requires the app-data permission — cancel instead if you’d rather not share it' }
+      },
       { status: 403, description: 'Origin not allowlisted.', body: { ok: false, error: 'This origin is not on the app’s allowlist' } }
     ],
-    notes: ['Revocable from both sides: the developer deletes the app (/api/v1/apps/delete), or the user disconnects it (/api/v1/oauth/grants/revoke) — the token dies before its exp like every Thingtime JWT.']
+    notes: [
+      'Revocable from both sides: the developer deletes the app (/api/v1/apps/delete), or the user disconnects it (/api/v1/oauth/grants/revoke) — the token dies before its exp like every Thingtime JWT.'
+    ]
   }),
   endpoint({
     id: 'oauth-sandbox',
@@ -2293,16 +2560,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       "'app'), /api/v1/app-data/shared, /api/v1/app-data/usage, /api/v1/oauth/userinfo, and the " +
       'full things API (/api/v1/things CRUD plus /things/search, /things/update, /things/delete, ' +
       '/things/react, /things/comment) — namespace-fenced exactly like a real app token, ' +
-      'byte-budgeted at 5MB per sandbox namespace, and subject to an app-wide sandbox byte brake ' +
+      'byte-budgeted at 5 MiB per sandbox namespace, and subject to an app-wide sandbox byte brake ' +
       '(default 512MB/hour across ALL sandboxes). It resolves to a synthetic ' +
       "pretend user (username 'sandbox-<name>', default sandbox-you), every byte written under it is " +
       'namespaced to that one token and TTL-reaped within the hour, and the token can never act as an ' +
       'account credential. By default two sandboxes are fully isolated; to rehearse the MULTI-USER ' +
       'shared feed, mint several tokens with the same `space` (an 8-64 char pool secret you choose — ' +
-      'use a uuid) and distinct `username`s: same-space tokens see each other\'s visibility-\'app\' ' +
+      "use a uuid) and distinct `username`s: same-space tokens see each other's visibility-'app' " +
       'entries via /app-data/shared, each entry authored by its own pretend user gated by that ' +
       "token's scopes — private entries stay per-token even inside a space. This is the headless " +
-      'counterpart of the consent popup\'s ?sandbox=1 mode (which accepts sandbox_space / ' +
+      "counterpart of the consent popup's ?sandbox=1 mode (which accepts sandbox_space / " +
       'sandbox_username URL params, or SDK options sandboxSpace / sandboxUsername): integration code ' +
       'written against it works unchanged when you register a real app and switch to ' +
       'Thingtime.login().',
@@ -2310,7 +2577,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     methods: ['POST'],
     steps: [
       'POST with the clientId + scopes you PLAN to use (e.g. scope: "profile.username app-data app-data.shared").',
-      'Use the returned Bearer token against /app-data*, /oauth/userinfo, and the whole things API (/api/v1/things, /things/search, /things/update, /things/delete, /things/react, /things/comment) exactly like a real grant — every call fenced to the token\'s own namespace.',
+      "Use the returned Bearer token against /app-data*, /oauth/userinfo, and the whole things API (/api/v1/things, /things/search, /things/update, /things/delete, /things/react, /things/comment) exactly like a real grant — every call fenced to the token's own namespace.",
       'Data and token evaporate within an hour — mint another whenever you need one.',
       'When ready: register the app (POST /api/v1/apps) and swap in Thingtime.login() — no other code changes.'
     ],
@@ -2396,7 +2663,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Same CORS + origin binding as /api/v1/app-data.',
     auth: { mode: 'bearer', description: 'App-scoped Bearer token with the things scope.' },
     methods: ['GET'],
-    steps: ['Request the things scope (SDK scopes/optionalScopes).', 'The user picks items on the consent screen.', 'GET here to read exactly those.'],
+    steps: [
+      'Request the things scope (SDK scopes/optionalScopes).',
+      'The user picks items on the consent screen.',
+      'GET here to read exactly those.'
+    ],
     requestExamples: [{ name: 'Read', description: 'The shared set.', method: 'GET' }],
     responseExamples: [
       {
@@ -2405,7 +2676,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         body: {
           ok: true,
           things: [
-            { shareId: '4f6b2c1e-…', thingtime: ['post'], crystal: { type: 'text', text: 'Sunset over the bay 🌅' }, tags: [], createdAt: '2026-07-10T00:00:00.000Z', updatedAt: '2026-07-10T00:00:00.000Z' }
+            {
+              shareId: '4f6b2c1e-…',
+              thingtime: ['post'],
+              crystal: { type: 'text', text: 'Sunset over the bay 🌅' },
+              tags: [],
+              createdAt: '2026-07-10T00:00:00.000Z',
+              updatedAt: '2026-07-10T00:00:00.000Z'
+            }
           ]
         }
       },
@@ -2463,7 +2741,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     methods: ['POST'],
     steps: ['Find the clientId via /api/v1/oauth/grants.', 'POST it here; revoked reports how many sessions died.'],
     requestExamples: [
-      { name: 'Disconnect', description: 'Cut an app off from your account.', method: 'POST', body: { clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f' } }
+      {
+        name: 'Disconnect',
+        description: 'Cut an app off from your account.',
+        method: 'POST',
+        body: { clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f' }
+      }
     ],
     responseExamples: [{ status: 200, description: 'Revoked.', body: { ok: true, revoked: 1 } }]
   }),
@@ -2477,8 +2760,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'GET with your own session. One row per app namespace holding data for you, enumerated from ' +
       'the things themselves — never from grants — so an app you disconnected (or one its developer ' +
       'deleted) still shows up and its data stays deletable: appId, appName (null when the app was ' +
-      'deleted), entryCount, usedBytes, budgetBytes, lastUpdatedAt. Browse a namespace\'s entries via ' +
-      'GET /api/v1/things?appId=<clientId>, see the app\'s own view via /api/v1/apps/data/shared, and ' +
+      "deleted), entryCount, usedBytes, budgetBytes, lastUpdatedAt. Browse a namespace's entries via " +
+      "GET /api/v1/things?appId=<clientId>, see the app's own view via /api/v1/apps/data/shared, and " +
       'wipe a namespace via POST /api/v1/apps/data/delete-all.',
     auth: { mode: 'session-or-bearer', description: 'Your own Thingtime session. App-scoped tokens are rejected.' },
     methods: ['GET'],
@@ -2519,11 +2802,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   endpoint({
     id: 'apps-data-delete-all',
     group: 'embed',
-    title: 'Delete an app\'s data (all of it)',
+    title: "Delete an app's data (all of it)",
     endpoint: '/api/v1/apps/data/delete-all',
     summary: 'Delete EVERYTHING one app stored for you — namespace docs, cascading children, ledger.',
     detail:
-      'POST { appId } with your own session. Removes every thing in that app\'s namespace you own ' +
+      "POST { appId } with your own session. Removes every thing in that app's namespace you own " +
       'plus the comments/reactions cascading under them, refunds every affected storage ledger, and ' +
       'zeroes yours. You own every namespace doc, so this needs no live grant — it works on orphaned ' +
       'data (disconnected or deleted apps) too. Returns deleted: the number of docs removed, ' +
@@ -2536,7 +2819,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Handle 400 for a missing appId.'
     ],
     requestExamples: [
-      { name: 'Wipe a namespace', description: 'Remove everything one app stored for you.', method: 'POST', body: { appId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f' } }
+      {
+        name: 'Wipe a namespace',
+        description: 'Remove everything one app stored for you.',
+        method: 'POST',
+        body: { appId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f' }
+      }
     ],
     responseExamples: [
       { status: 200, description: 'Namespace wiped.', body: { ok: true, deleted: 45 } },
@@ -2548,15 +2836,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'embed',
     title: 'App shared slice (your lens)',
     endpoint: '/api/v1/apps/data/shared',
-    summary: 'See an app\'s data exactly as the app would show it to YOU — same read path, same fences.',
+    summary: "See an app's data exactly as the app would show it to YOU — same read path, same fences.",
     detail:
       'GET ?appId=<clientId> (optional thingtime=, target=, cursor=, limit=) with your own session. ' +
       'Builds a lens from your OWN live grant for that app and runs it through the SAME read path ' +
       'app tokens use, so "what would I see in this app" can never drift from what the app sees: ' +
-      'your entries, plus — when your grant covers app-data.shared — other users\' app-audience ' +
+      "your entries, plus — when your grant covers app-data.shared — other users' app-audience " +
       'entries, author-liveness gated. 403 with a plain explanation when you hold no live grant ' +
       '(your own data stays browsable via /api/v1/things?appId= — ownership never expires). The ' +
-      'response carries sharedRead and the grant\'s scopes so UIs can explain the quiet state.',
+      "response carries sharedRead and the grant's scopes so UIs can explain the quiet state.",
     auth: { mode: 'session-or-bearer', description: 'Your own Thingtime session. App-scoped tokens are rejected.' },
     methods: ['GET'],
     steps: [
@@ -2566,7 +2854,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Handle 403 (no live grant) by pointing at /api/v1/things?appId= for the raw browse instead.'
     ],
     requestExamples: [
-      { name: 'The app\'s view', description: 'What this app would show you.', method: 'GET', query: { appId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', limit: 20 } }
+      {
+        name: "The app's view",
+        description: 'What this app would show you.',
+        method: 'GET',
+        query: { appId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', limit: 20 }
+      }
     ],
     responseExamples: [
       {
@@ -2637,28 +2930,29 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'embed',
     title: 'App data (read/write)',
     endpoint: '/api/v1/app-data',
-    summary: 'Key/value storage an embedded app keeps in its user\'s Thingtime account.',
+    summary: "Key/value storage an embedded app keeps in its user's Thingtime account.",
     detail:
       'Authenticated by an app-scoped Bearer token from /api/v1/oauth/authorize. GET ?key=… returns one ' +
-      'entry ({ entry: null } when unset); GET without key lists this (user, app)\'s entries — ' +
+      "entry ({ entry: null } when unset); GET without key lists this (user, app)'s entries — " +
       'key=post:* or prefix= filters by prefix, limit= (1-200, default 200) and cursor= page, and the ' +
       'listing returns nextCursor (the same grammar as /app-data/shared). ' +
       'POST { key, value, visibility?, acl? } inserts or updates one entry — keys are [A-Za-z0-9._:-] up to 128 chars ' +
       '(first char must be a letter or digit), values ' +
-      'any JSON up to 32KB. There is NO key-count cap: storage is bounded by a per-(user, app) byte ' +
-      'budget instead (50MB by default, 5MB per sandbox namespace) — every write charges its ' +
+      'any JSON up to 32 KiB. There is NO key-count cap: registered-app storage is bounded by BOTH a ' +
+      '50 MiB allowance per (user, app) and a 5 GiB aggregate allowance across every user of the app ' +
+      '(sandbox namespaces get 5 MiB plus the separate global burn window) — every write charges its ' +
       'serialized size, updates charge only the delta, deletes refund, and an over-budget write ' +
       'fails with 507 (read GET /api/v1/app-data/usage to pace yourself). Entries are things owned by the END USER, ' +
       'and their audience IS the acl array: ["tt:user"] (private, the default) or ' +
       '["tt:user", "tt:app/<clientId>"] (readable by other users of this one app via /api/v1/app-data/shared). ' +
       "visibility: 'private' | 'app' is accepted sugar for those two acls and derived back on the wire; " +
-      'marking an entry \'app\' requires the app-data.shared scope, and a write that omits visibility/acl ' +
+      "marking an entry 'app' requires the app-data.shared scope, and a write that omits visibility/acl " +
       "never changes an existing entry's audience. Users can always see and delete what an app stored. " +
       'Every entry carries the namespace stamps (root appId + sizeBytes), so KV entries and things ' +
       'written through the app-token things routes are ONE namespace — the same entries appear via ' +
       'GET /api/v1/things?thingtime=app-data with this token. ' +
       'CORS: browser calls must ' +
-      'come from the token\'s own bound origin. Requires the app-data scope — 403 when the user declined ' +
+      "come from the token's own bound origin. Requires the app-data scope — 403 when the user declined " +
       'it on the consent screen.',
     auth: { mode: 'bearer', description: 'App-scoped Bearer token with the app-data scope — cookies never authenticate this route.' },
     methods: ['GET', 'POST'],
@@ -2675,16 +2969,35 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       { name: 'Write', description: 'Upsert a key.', method: 'POST', body: { key: 'preferences', value: { theme: 'rainbow' } } },
       {
         name: 'Write shared',
-        description: "Upsert a key other users of this app may read (needs the app-data.shared scope).",
+        description: 'Upsert a key other users of this app may read (needs the app-data.shared scope).',
         method: 'POST',
         body: { key: 'post:2026-07-27', value: { text: 'Miso soup 🍲' }, visibility: 'app' }
       }
     ],
     responseExamples: [
-      { status: 200, description: 'Entry written.', body: { ok: true, entry: { key: 'preferences', value: { theme: 'rainbow' }, visibility: 'private', acl: ['tt:user'], updatedAt: '2026-07-12T00:00:00.000Z' } } },
+      {
+        status: 200,
+        description: 'Entry written.',
+        body: {
+          ok: true,
+          entry: { key: 'preferences', value: { theme: 'rainbow' }, visibility: 'private', acl: ['tt:user'], updatedAt: '2026-07-12T00:00:00.000Z' }
+        }
+      },
       { status: 401, description: 'Missing/expired/revoked token.', body: { ok: false, error: 'Unauthorized' } },
       { status: 403, description: 'Browser origin ≠ token origin.', body: { ok: false, error: 'Origin does not match this token' } },
-      { status: 507, description: 'The write would exceed the namespace byte budget.', body: { ok: false, error: "This would exceed the app's 50MB storage budget for this user (52428712 of 52428800 bytes used — delete entries or store less)" } }
+      {
+        status: 507,
+        description: "The write would exceed this app user's allowance.",
+        body: {
+          ok: false,
+          error: "This would exceed the app's storage allowance for this user (52428712 of 52428800 bytes used — delete entries or store less)"
+        }
+      },
+      {
+        status: 507,
+        description: 'The write would exceed the whole app allowance.',
+        body: { ok: false, error: "This would exceed the app's aggregate storage allowance (5368709000 of 5368709120 bytes used across all users)" }
+      }
     ]
   }),
   endpoint({
@@ -2699,42 +3012,36 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     auth: { mode: 'bearer', description: 'App-scoped Bearer token only.' },
     methods: ['POST'],
     steps: ['POST the key to remove.'],
-    requestExamples: [
-      { name: 'Delete', description: 'Remove a key.', method: 'POST', body: { key: 'preferences' } }
-    ],
-    responseExamples: [
-      { status: 200, description: 'Removed (or already absent).', body: { ok: true, deleted: true } }
-    ]
+    requestExamples: [{ name: 'Delete', description: 'Remove a key.', method: 'POST', body: { key: 'preferences' } }],
+    responseExamples: [{ status: 200, description: 'Removed (or already absent).', body: { ok: true, deleted: true } }]
   }),
   endpoint({
     id: 'app-data-shared',
     group: 'embed',
     title: 'App data (shared pool)',
     endpoint: '/api/v1/app-data/shared',
-    summary: "Read the entries every user of this app opted into sharing — the app-scoped social read.",
+    summary: 'Read the entries every user of this app opted into sharing — the app-scoped social read.',
     detail:
       'GET ?key=&prefix=&limit=&cursor= returns entries from ALL users of the calling app whose acl carries ' +
-      'tt:app/<clientId> (written via POST /api/v1/app-data with visibility \'app\'), newest first with a ' +
+      "tt:app/<clientId> (written via POST /api/v1/app-data with visibility 'app'), newest first with a " +
       'cursor — never entries from other apps, never private entries. key= matches exactly, key=post:* or ' +
-      "prefix= matches a prefix; limit clamps to 1–50 (default 20). Requires the app-data.shared scope on " +
+      'prefix= matches a prefix; limit clamps to 1–50 (default 20). Requires the app-data.shared scope on ' +
       "the calling token, and each entry's author must still hold a live grant covering that scope — a user " +
       'who disconnects the app (or whose grant expires) drops out of this feed instantly while keeping ' +
       "their data. Each entry's author is shaped by that AUTHOR's own grant, exactly like /oauth/userinfo: " +
       'id + username always, displayName/avatarUrl only when that author granted profile.displayName / ' +
       'profile.avatar. Same CORS + origin binding as /api/v1/app-data. Note the scope is EXACT consent: ' +
-      "granting app-data does NOT imply app-data.shared — apps must request it and users see its own line " +
+      'granting app-data does NOT imply app-data.shared — apps must request it and users see its own line ' +
       'on the consent screen.',
     auth: { mode: 'bearer', description: 'App-scoped Bearer token with the app-data.shared scope.' },
     methods: ['GET'],
     steps: [
-      "Request the app-data.shared scope in Thingtime.login({ scopes: [...] }).",
+      'Request the app-data.shared scope in Thingtime.login({ scopes: [...] }).',
       "Write shared entries with POST /api/v1/app-data { key, value, visibility: 'app' }.",
       'GET this route (e.g. ?key=post:*) and page with nextCursor until it returns null.',
-      'Render authors from each entry\'s author object — fields mirror what each author consented to.'
+      "Render authors from each entry's author object — fields mirror what each author consented to."
     ],
-    requestExamples: [
-      { name: 'App feed', description: 'Newest shared post entries.', method: 'GET', query: { key: 'post:*', limit: 20 } }
-    ],
+    requestExamples: [{ name: 'App feed', description: 'Newest shared post entries.', method: 'GET', query: { key: 'post:*', limit: 20 } }],
     responseExamples: [
       {
         status: 200,
@@ -2762,24 +3069,39 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'embed',
     title: 'App data (storage usage)',
     endpoint: '/api/v1/app-data/usage',
-    summary: 'This (user, app) namespace\'s storage ledger — bytes used against the byte budget.',
+    summary: 'Both storage ledgers: this app user and the whole registered app.',
     detail:
       'GET with the app-scoped Bearer token. Storage is byte-budgeted, never entry-counted: every ' +
       'write through this app — KV entries and generic things alike — charges its serialized size ' +
-      '(the root sizeBytes stamp) against one per-(user, app) budget: 50MB by default, 5MB per ' +
-      'sandbox namespace. Updates charge only the delta and deletes refund, so usedBytes tracks ' +
-      'what is actually stored. Over-budget writes fail with 507; poll this to pace the app ' +
+      '(the root sizeBytes stamp) against both the 50 MiB per-app-user allowance and the registered ' +
+      "app's 5 GiB aggregate allowance. Updates charge only the delta and deletes refund, so both " +
+      'ledgers track what is actually stored. Legacy usedBytes/budgetBytes remain aliases for the ' +
+      'current user ledger; userStorage and appStorage add explicit used, allowance, and remaining ' +
+      'bytes. Sandboxes return appStorage: null because their aggregate protection is windowed. ' +
+      'Over-allowance writes fail with 507; poll this to pace the app ' +
       'instead of discovering the ceiling. Same CORS + origin binding as /api/v1/app-data.',
     auth: { mode: 'bearer', description: 'App-scoped Bearer token with the app-data scope.' },
     methods: ['GET'],
     steps: [
       'GET with the token from Thingtime.login(…).',
-      'Compare usedBytes to budgetBytes before large writes; a 507 on any write means the budget is spent.',
+      'Compare both userStorage.remainingBytes and appStorage.remainingBytes before large writes; a 507 identifies which allowance is spent.',
       'Deleting entries (or shrinking values) refunds bytes immediately.'
     ],
     requestExamples: [{ name: 'Read usage', description: 'Bytes used and the budget.', method: 'GET' }],
     responseExamples: [
-      { status: 200, description: 'The ledger.', body: { ok: true, usedBytes: 183204, budgetBytes: 52428800 } },
+      {
+        status: 200,
+        description: 'Both registered-app ledgers (with backward-compatible user aliases).',
+        body: {
+          ok: true,
+          usedBytes: 183204,
+          budgetBytes: 52428800,
+          remainingBytes: 52245596,
+          userStorage: { usedBytes: 183204, allowanceBytes: 52428800, remainingBytes: 52245596 },
+          appStorage: { usedBytes: 12345678, allowanceBytes: 5368709120, remainingBytes: 5356363442 },
+          storageAccountingReady: true
+        }
+      },
       { status: 401, description: 'Missing/expired/revoked token.', body: { ok: false, error: 'Unauthorized' } }
     ]
   }),
@@ -2795,7 +3117,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       mode: 'session-or-bearer',
       description:
         'Mutations require an auth cookie or Authorization: Bearer token — a full session or a scoped personal access token (see /api/v1/tokens; scopes gate each verb, e.g. things.create for POST, things.update for PATCH, both for PUT). GET works logged out for tt:all things; attached things inherit their target audience. ' +
-        'App-scoped Bearer tokens ("Login with Thingtime", app-data scope) get every verb too, fenced to the app\'s own namespace: reads conjoin the server-stamped root appId (plus the audience acl, tt:inherit chain resolution, and author-liveness for cross-user docs — anything outside the namespace 404s), writes are stamped (root appId + sizeBytes), charged against the namespace byte budget, and acl-clamped to tt:user (the default — app inserts are private, never the public default) or tt:app/<clientId> (needs the app-data.shared scope). save/share things and protected kinds are refused; app responses carry the generic thing projection (never the post aggregation) with visibility \'private\' | \'app\' | \'inherit\' and the acl filtered to the app\'s own entries.'
+        "App-scoped Bearer tokens (\"Login with Thingtime\", app-data scope) get every verb too, fenced to the app's own namespace: reads conjoin the server-stamped root appId (plus the audience acl, tt:inherit chain resolution, and author-liveness for cross-user docs — anything outside the namespace 404s), writes are stamped (root appId + sizeBytes), charged against both the whole-app and per-app-user allowances, and acl-clamped to tt:user (the default — app inserts are private, never the public default) or tt:app/<clientId> (needs the app-data.shared scope). save/share things and protected kinds are refused; app responses carry the generic thing projection (never the post aggregation) with visibility 'private' | 'app' | 'inherit' and the acl filtered to the app's own entries."
     },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     steps: [
@@ -2804,7 +3126,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Omit thingtime entirely to create a schema-less thing: { crystal: { any: "shape" } } defaults to thingtime ["data"].',
       'Optionally add extended: any JSON up to 512KB, stored untouched and returned as-is — replace-on-write, null clears it. It is not structured-searchable (/search field conditions can’t target it), though its string content is indexed by the wildcard text index like any field.',
       'Attached kinds (comment, reaction) require targetId and carry acl ["tt:inherit"]; shares carry thingtime ["post","share"].',
-      'GET ?id= reads one thing; GET ?target=&thingtime=comment lists a visible thing’s comments; GET ?thingtime=&cursor=&limit= lists your own things. Session callers may add appId=<clientId> to the own-things list to browse ONE app\'s namespace (see /api/v1/apps/data-summary).',
+      "GET ?id= reads one thing; GET ?target=&thingtime=comment lists a visible thing’s comments; GET ?thingtime=&cursor=&limit= lists your own things. Session callers may add appId=<clientId> to the own-things list to browse ONE app's namespace (see /api/v1/apps/data-summary).",
       'PUT { id, thingtime, crystal, acl? } creates the thing at that id (201) or replaces the owned thing’s crystal whole (200); PATCH { id, crystal?, extended?, acl?, tags? } merges crystal fields (extended still replaces whole).',
       'DELETE ?id= (or body { id }) removes an owned thing; attached comments/reactions go with it, shares survive with an original-unavailable placeholder.',
       'Handle 401 unauthenticated, 400 invalid payload or acl, 404 missing target/thing, and 413 oversized payload.'
@@ -2981,7 +3303,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       {
         status: 400,
         description: 'Malformed acl entry.',
-        body: { ok: false, error: "acl entries look like tt:all, tt:user, tt:userFriends, or tt:user/<username>, optionally '-' prefixed (got tt bogus)" }
+        body: {
+          ok: false,
+          error: "acl entries look like tt:all, tt:user, tt:userFriends, or tt:user/<username>, optionally '-' prefixed (got tt bogus)"
+        }
       }
     ],
     notes: [
@@ -2990,7 +3315,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Every doc stores the root schemaVersion it was written at; admins migrate older docs via /api/v1/admin/migrations.',
       'Browse every schema kind at /schemas or GET /api/v1/schemas.',
       'The comment/react/share/update/delete sub-routes remain as sugar over this endpoint.',
-      'App-token behaviour in one line: same verbs, own namespace only — a thing without the app\'s root appId stamp 404s for reads, writes, and deletes alike. Apps read children (comments/reactions) relationally via GET ?target=… inside the namespace; child counts never mix in first-party or other-app children.'
+      "App-token behaviour in one line: same verbs, own namespace only — a thing without the app's root appId stamp 404s for reads, writes, and deletes alike. Apps read children (comments/reactions) relationally via GET ?target=… inside the namespace; child counts never mix in first-party or other-app children."
     ]
   }),
   endpoint({
@@ -3149,7 +3474,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       mode: 'optional',
       description:
         'Works logged out (tt:all things only, throttled per IP). Authenticated searches also see your own things. ' +
-        'App-scoped Bearer tokens get the full grammar (conditions, sorts, cursors, engagement windows) with results fenced server-side to the app\'s own appId namespace — own entries, plus the app-audience slice when the token holds app-data.shared. appId and acl are never client-searchable fields; the namespace conjunction is injected server-side and inexpressible from the grammar.'
+        "App-scoped Bearer tokens get the full grammar (conditions, sorts, cursors, engagement windows) with results fenced server-side to the app's own appId namespace — own entries, plus the app-audience slice when the token holds app-data.shared. appId and acl are never client-searchable fields; the namespace conjunction is injected server-side and inexpressible from the grammar."
     },
     methods: ['GET', 'POST'],
     steps: [
@@ -3252,7 +3577,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       {
         status: 400,
         description: 'A condition failed the grammar.',
-        body: { ok: false, error: 'Unknown search operator: where (use eq, ne, gt, gte, lt, lte, between, in, nin, exists, type, contains, startsWith, endsWith)' }
+        body: {
+          ok: false,
+          error: 'Unknown search operator: where (use eq, ne, gt, gte, lt, lte, between, in, nin, exists, type, contains, startsWith, endsWith)'
+        }
       }
     ],
     notes: [
@@ -3272,7 +3600,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     auth: {
       mode: 'session-or-bearer',
       description:
-        'Requires an auth cookie or Authorization: Bearer token. App-scoped tokens comment only on things inside their own appId namespace (including other users\' app-audience docs when the token holds app-data.shared); the comment is auto-stamped into the namespace, charged against the byte budget, and the returned commentCount is namespace-fenced.'
+        "Requires an auth cookie or Authorization: Bearer token. App-scoped tokens comment only on things inside their own appId namespace (including other users' app-audience docs when the token holds app-data.shared); the comment is auto-stamped into the namespace, charged against the byte budget, and the returned commentCount is namespace-fenced."
     },
     methods: ['POST'],
     steps: [
@@ -3398,7 +3726,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     auth: {
       mode: 'session-or-bearer',
       description:
-        'Requires an auth cookie or Authorization: Bearer token. App-scoped tokens react only to things inside their own appId namespace; counts come back namespace-fenced and the user\'s personal recent-reactions list is never touched.'
+        "Requires an auth cookie or Authorization: Bearer token. App-scoped tokens react only to things inside their own appId namespace; counts come back namespace-fenced and the user's personal recent-reactions list is never touched."
     },
     methods: ['POST'],
     steps: [
@@ -3505,8 +3833,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     title: 'Share post',
     endpoint: '/api/v1/things/share',
     summary: 'Creates a share post that points back to a visible root post.',
-    detail:
-      'Shares copy the root post reference rather than chaining share-of-share references, so delete and count behavior stays deterministic.',
+    detail: 'Shares copy the root post reference rather than chaining share-of-share references, so delete and count behavior stays deterministic.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -3593,8 +3920,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     title: 'User posts',
     endpoint: '/api/v1/things/user',
     summary: 'Returns posts for a public profile, filtered by viewer visibility.',
-    detail:
-      'Profile pages use this route to page through a user posts. Owners can see their full circle set; other viewers only see public content.',
+    detail: 'Profile pages use this route to page through a user posts. Owners can see their full circle set; other viewers only see public content.',
     auth: {
       mode: 'optional',
       description: 'Anonymous callers can read public posts; authenticated callers may see their own broader visibility.'
@@ -3704,14 +4030,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'POST { id } (the id from the tokens list / mint response) revokes the token server-side — the very next request with it fails, whatever its expiry or remaining uses. Owner-bound and idempotent. Revoked never-expiring tokens are kept visible for ~30 days, then reaped.',
     auth: { mode: 'session', description: 'Full session required — a personal access token cannot revoke tokens.' },
     methods: ['POST'],
-    steps: [
-      'List your tokens to find the id.',
-      'POST { id } to revoke.',
-      'The token stops resolving immediately (its session record is revoked).'
-    ],
-    requestExamples: [
-      { name: 'Revoke', description: 'Revoke one token by id.', method: 'POST', body: { id: 'jti-uuid' } }
-    ],
+    steps: ['List your tokens to find the id.', 'POST { id } to revoke.', 'The token stops resolving immediately (its session record is revoked).'],
+    requestExamples: [{ name: 'Revoke', description: 'Revoke one token by id.', method: 'POST', body: { id: 'jti-uuid' } }],
     responseExamples: [
       {
         status: 200,
@@ -3736,9 +4056,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Read scopes + usesRemaining to know what you can afford to do.',
       'Fetch /api/docs for the full endpoint reference.'
     ],
-    requestExamples: [
-      { name: 'Introspect', description: 'Who am I and what can I do?', method: 'GET' }
-    ],
+    requestExamples: [{ name: 'Introspect', description: 'Who am I and what can I do?', method: 'GET' }],
     responseExamples: [
       {
         status: 200,
@@ -3845,8 +4163,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     title: 'Vercel deployments',
     endpoint: '/api/v1/vercel/deployments',
     summary: 'Returns deployment overview data for environment pickers and dashboards.',
-    detail:
-      'This route is visible only when deployment status is enabled. It normalizes branch limits and hides itself with 404 otherwise.',
+    detail: 'This route is visible only when deployment status is enabled. It normalizes branch limits and hides itself with 404 otherwise.',
     auth: {
       mode: 'none',
       description: 'Public status endpoint when enabled by server-side deployment configuration.'
@@ -3885,8 +4202,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     title: 'Vercel status',
     endpoint: '/api/v1/vercel/status',
     summary: 'Returns status for the current Vercel deployment.',
-    detail:
-      'Use this route for footer/status UI when the deployment status feature is enabled.',
+    detail: 'Use this route for footer/status UI when the deployment status feature is enabled.',
     auth: {
       mode: 'none',
       description: 'Public status endpoint when enabled by server-side deployment configuration.'
@@ -3919,8 +4235,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     title: 'Vercel status data',
     endpoint: '/api/v1/vercel/status-data',
     summary: 'Resource-only GET version of Vercel deployment status.',
-    detail:
-      'Use this endpoint when fetch callers need JSON and should not hit route components or tester parity actions.',
+    detail: 'Use this endpoint when fetch callers need JSON and should not hit route components or tester parity actions.',
     auth: {
       mode: 'none',
       description: 'Public status endpoint when enabled by server-side deployment configuration.'
@@ -4104,8 +4419,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'registered migrations still have work to do.',
     auth: {
       mode: 'session-or-bearer',
-      description:
-        'Admin-only (meta.admin flag or the ADMIN_USERNAMES env allowlist): anonymous callers get 401, signed-in non-admins 403.'
+      description: 'Admin-only (meta.admin flag or the ADMIN_USERNAMES env allowlist): anonymous callers get 401, signed-in non-admins 403.'
     },
     methods: ['GET'],
     steps: [
@@ -4143,9 +4457,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
             { collection: 'things', physical: 'things', version: null, docs: 42, current: false, stale: true }
           ],
           adoptionIssues: [],
-          migrations: [
-            { id: 'things-v1-to-v2', collection: 'things', fromVersion: 1, toVersion: 2, destructive: false, pending: 24 }
-          ]
+          migrations: [{ id: 'things-v1-to-v2', collection: 'things', fromVersion: 1, toVersion: 2, destructive: false, pending: 24 }]
         }
       },
       {
@@ -4170,8 +4482,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'is destructive and additionally requires confirm: true on the non-dry run.',
     auth: {
       mode: 'session-or-bearer',
-      description:
-        'Admin-only (meta.admin flag or the ADMIN_USERNAMES env allowlist): anonymous callers get 401, signed-in non-admins 403.'
+      description: 'Admin-only (meta.admin flag or the ADMIN_USERNAMES env allowlist): anonymous callers get 401, signed-in non-admins 403.'
     },
     methods: ['POST'],
     steps: [
@@ -4236,9 +4547,7 @@ const apiDocMap = new Map(apiEndpointDocs.map((doc) => [normaliseApiPath(doc.end
 
 export const getApiDocByPath = (path: string) => apiDocMap.get(normaliseApiPath(path)) || null;
 
-export const apiV1RouteKeys = apiEndpointDocs
-  .filter((doc) => doc.endpoint.startsWith('/api/v1/'))
-  .map((doc) => doc.endpoint.replace(/^\/api\//, ''));
+export const apiV1RouteKeys = apiEndpointDocs.filter((doc) => doc.endpoint.startsWith('/api/v1/')).map((doc) => doc.endpoint.replace(/^\/api\//, ''));
 
 export const apiV1DocsRouteKeys = apiV1RouteKeys.map((route) => `${route}-docs`);
 
@@ -4260,8 +4569,7 @@ const makeUrl = (origin: string, endpointPath: string, query?: ApiRequestExample
   return url.toString();
 };
 
-const shouldIncludeAuthHeader = (mode: ApiAuthMode) =>
-  mode === 'bearer' || mode === 'session-or-bearer' || mode === 'optional';
+const shouldIncludeAuthHeader = (mode: ApiAuthMode) => mode === 'bearer' || mode === 'session-or-bearer' || mode === 'optional';
 
 const buildHeaders = (doc: ApiEndpointDoc, hasBody: boolean) => {
   const headers: Record<string, string> = {
@@ -4286,10 +4594,7 @@ const primaryRequestExample = (doc: ApiEndpointDoc): ApiRequestExample =>
     method: doc.methods[0]
   };
 
-export const buildPlatformExamples = (
-  doc: ApiEndpointDoc,
-  origin = 'https://thingtime.com'
-): ApiPlatformExamples => {
+export const buildPlatformExamples = (doc: ApiEndpointDoc, origin = 'https://thingtime.com'): ApiPlatformExamples => {
   const example = primaryRequestExample(doc);
   const method = example.method || doc.methods[0];
   const hasBody = example.body !== undefined;
@@ -4322,7 +4627,10 @@ export const buildPlatformExamples = (
     'console.log(await response.json());'
   ].join('\n');
 
-  const pythonHeaders = prettyJson(headers).replace(/\btrue\b/g, 'True').replace(/\bfalse\b/g, 'False').replace(/\bnull\b/g, 'None');
+  const pythonHeaders = prettyJson(headers)
+    .replace(/\btrue\b/g, 'True')
+    .replace(/\bfalse\b/g, 'False')
+    .replace(/\bnull\b/g, 'None');
   const python = [
     'import json',
     'from urllib import request',
@@ -4339,11 +4647,7 @@ export const buildPlatformExamples = (
     '    print(response.read().decode("utf-8"))'
   ].join('\n');
 
-  const rubyHeaders = [
-    '{',
-    ...headerEntries.map(([key, value]) => `  ${JSON.stringify(key)} => ${JSON.stringify(value)}`),
-    '}'
-  ].join('\n');
+  const rubyHeaders = ['{', ...headerEntries.map(([key, value]) => `  ${JSON.stringify(key)} => ${JSON.stringify(value)}`), '}'].join('\n');
   const ruby = [
     "require 'json'",
     "require 'net/http'",
@@ -4371,10 +4675,7 @@ export const buildPlatformExamples = (
   };
 };
 
-export const serializeApiDoc = (
-  doc: ApiEndpointDoc,
-  origin = 'https://thingtime.com'
-): SerializedApiEndpointDoc => ({
+export const serializeApiDoc = (doc: ApiEndpointDoc, origin = 'https://thingtime.com'): SerializedApiEndpointDoc => ({
   ...doc,
   platformExamples: buildPlatformExamples(doc, origin)
 });

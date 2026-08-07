@@ -14,16 +14,7 @@
 // @ts-ignore Node 24 executes TypeScript directly and requires the extension.
 import { MAX_REACTION_EMOJIS, sanitizeReactionToken } from '../utils/reactionTokens.ts';
 
-export type ThingtimeFieldType =
-  | 'string'
-  | 'number'
-  | 'boolean'
-  | 'date'
-  | 'enum'
-  | 'string[]'
-  | 'object'
-  | 'record'
-  | 'id';
+export type ThingtimeFieldType = 'string' | 'number' | 'boolean' | 'date' | 'enum' | 'string[]' | 'object' | 'record' | 'id';
 
 export type ThingtimeSchemaField = {
   name: string;
@@ -128,9 +119,7 @@ export const LEGACY_VISIBILITY_ACLS: Record<ThingVisibility, string[]> = {
 };
 
 export const aclFromVisibility = (visibility: unknown): string[] | null =>
-  typeof visibility === 'string' && visibility in LEGACY_VISIBILITY_ACLS
-    ? [...LEGACY_VISIBILITY_ACLS[visibility as ThingVisibility]]
-    : null;
+  typeof visibility === 'string' && visibility in LEGACY_VISIBILITY_ACLS ? [...LEGACY_VISIBILITY_ACLS[visibility as ThingVisibility]] : null;
 
 export const visibilityFromAcl = (acl: string[]): ThingVisibility => {
   if (acl.includes(ACL_INHERIT)) return 'inherit';
@@ -148,7 +137,11 @@ export const sanitizeAcl = (value: unknown): string[] | { ok: false; status: num
     const entry = raw.trim();
     if (!entry) continue;
     if (entry.length > MAX_ACL_ENTRY_CHARS || !ACL_ENTRY_PATTERN.test(entry)) {
-      return { ok: false, status: 400, error: `acl entries look like tt:all, tt:user, tt:userFriends, or tt:user/<username>, optionally '-' prefixed (got ${entry.slice(0, 80)})` };
+      return {
+        ok: false,
+        status: 400,
+        error: `acl entries look like tt:all, tt:user, tt:userFriends, or tt:user/<username>, optionally '-' prefixed (got ${entry.slice(0, 80)})`
+      };
     }
     if (!entries.includes(entry)) entries.push(entry);
     if (entries.length > MAX_ACL_ENTRIES) return { ok: false, status: 400, error: `acl can have at most ${MAX_ACL_ENTRIES} entries` };
@@ -218,12 +211,16 @@ export const MAX_APP_ORIGINS = 20;
 export const MAX_APPS_PER_USER = 20;
 export const MAX_APP_DATA_KEY_CHARS = 128;
 export const MAX_APP_DATA_VALUE_BYTES = 32 * 1024;
-// App storage is byte-budgeted, not doc-counted: each (user, app) namespace
-// holds unlimited things bounded by a standing byte budget (a service-quota
-// style counter thing, fail-closed, admin-tunable via settings). sizeBytes is
-// stamped on every app-written doc so updates charge deltas and deletes
-// refund. Sandbox namespaces get a tighter budget and die with their token.
-export const DEFAULT_APP_STORAGE_BYTES = 50 * 1024 * 1024;
+// App storage is byte-budgeted, not doc-counted. Every registered app has a
+// standing aggregate allowance across all of its users, and each (user, app)
+// namespace has its own allowance inside that ceiling. The aggregate is on
+// the app Thing; per-user usage/overrides are protected relational ledgers.
+// sizeBytes deltas charge both race-safe counters and deletes refund them.
+// Sandbox namespaces get a tighter ephemeral allowance plus their existing
+// app-wide windowed brake.
+export const DEFAULT_APP_STORAGE_ALLOWANCE_BYTES = 5 * 1024 * 1024 * 1024;
+export const DEFAULT_APP_USER_STORAGE_ALLOWANCE_BYTES = 50 * 1024 * 1024;
+export const APP_STORAGE_ACCOUNTING_VERSION = 1;
 export const SANDBOX_STORAGE_BYTES = 5 * 1024 * 1024;
 // Live app sessions one user can hold for one app: re-approvals mint fresh
 // sessions, so without a cap a re-running embed accumulates grants without
@@ -302,13 +299,42 @@ const rootThingSchema: ThingtimeSchema = {
     'and it defaults to ["data"], the bounded free-form crystal.',
   fields: [
     { name: 'shareId', type: 'id', required: true, system: true, description: 'Public id — the only id clients ever see.' },
-    { name: 'schemaVersion', type: 'number', required: true, system: true, description: 'Root schema version this doc was written at (docs without one are version 1).' },
-    { name: 'thingtime', type: 'string[]', required: true, description: 'Thingtime Schema ids applied to this thing, e.g. ["post"] or ["post","share"]. Omitting it on create defaults to ["data"] — the schema-less crystal.' },
+    {
+      name: 'schemaVersion',
+      type: 'number',
+      required: true,
+      system: true,
+      description: 'Root schema version this doc was written at (docs without one are version 1).'
+    },
+    {
+      name: 'thingtime',
+      type: 'string[]',
+      required: true,
+      description:
+        'Thingtime Schema ids applied to this thing, e.g. ["post"] or ["post","share"]. Omitting it on create defaults to ["data"] — the schema-less crystal.'
+    },
     { name: 'crystal', type: 'object', required: true, description: 'The sub-schema payload, validated against every schema in thingtime.' },
-    { name: 'extended', type: 'record', required: false, description: `Schema-free sidecar: any JSON up to ${EXTENDED_MAX_BYTES} bytes, stored untouched, never validated, structured-searchable, or interpreted. Replace-on-write; null clears it.` },
+    {
+      name: 'extended',
+      type: 'record',
+      required: false,
+      description: `Schema-free sidecar: any JSON up to ${EXTENDED_MAX_BYTES} bytes, stored untouched, never validated, structured-searchable, or interpreted. Replace-on-write; null clears it.`
+    },
     { name: 'ownerId', type: 'id', required: true, system: true, description: 'The owning user id.' },
-    { name: 'acl', type: 'string[]', required: true, max: 16, description: 'Permission entries: tt:all, tt:user (owner), tt:userFriends, tt:userFamily, tt:user/<username>, each optionally "-" prefixed to exclude; tt:inherit on target-attached things. Most specific matching entry decides; owners always view.' },
-    { name: 'targetId', type: 'id', required: false, description: 'shareId of the thing this thing is about (comment → post, reaction → post, share → root post).' },
+    {
+      name: 'acl',
+      type: 'string[]',
+      required: true,
+      max: 16,
+      description:
+        'Permission entries: tt:all, tt:user (owner), tt:userFriends, tt:userFamily, tt:user/<username>, each optionally "-" prefixed to exclude; tt:inherit on target-attached things. Most specific matching entry decides; owners always view.'
+    },
+    {
+      name: 'targetId',
+      type: 'id',
+      required: false,
+      description: 'shareId of the thing this thing is about (comment → post, reaction → post, share → root post).'
+    },
     { name: 'tags', type: 'string[]', required: true, max: 12, description: 'Lowercased tags, max 12 × 40 chars.' },
     { name: 'createdAt', type: 'date', required: true, system: true, description: 'Creation time.' },
     { name: 'updatedAt', type: 'date', required: true, system: true, description: 'Last mutation time.' }
@@ -342,8 +368,20 @@ const postSchema: ThingtimeSchema = {
     'whitelist (searchable as crystal.thing.<field> on /search).',
   fields: [
     { name: 'type', type: 'enum', required: true, values: [...POST_TYPES], description: 'What kind of post this is.' },
-    { name: 'text', type: 'string', required: false, max: MAX_TEXT_CHARS, description: `Post body (required for text posts), max ${MAX_TEXT_CHARS} chars.` },
-    { name: 'images', type: 'string[]', required: false, max: MAX_IMAGES, description: `http(s) image URLs, max ${MAX_IMAGES} × ${MAX_IMAGE_URL_CHARS} chars (image posts need at least one).` },
+    {
+      name: 'text',
+      type: 'string',
+      required: false,
+      max: MAX_TEXT_CHARS,
+      description: `Post body (required for text posts), max ${MAX_TEXT_CHARS} chars.`
+    },
+    {
+      name: 'images',
+      type: 'string[]',
+      required: false,
+      max: MAX_IMAGES,
+      description: `http(s) image URLs, max ${MAX_IMAGES} × ${MAX_IMAGE_URL_CHARS} chars (image posts need at least one).`
+    },
     {
       name: 'listing',
       type: 'object',
@@ -355,13 +393,25 @@ const postSchema: ThingtimeSchema = {
         { name: 'title', type: 'string', required: true, max: 120, description: 'Listing title, max 120 chars.' },
         { name: 'price', type: 'number', required: true, min: 0, max: 1_000_000_000, description: 'Non-negative price, rounded to cents.' },
         { name: 'currency', type: 'string', required: false, max: 3, description: '3-letter currency code, defaults to AUD.' },
-        { name: 'category', type: 'enum', required: false, values: [...MARKETPLACE_CATEGORIES], description: 'Marketplace category, defaults to other.' },
+        {
+          name: 'category',
+          type: 'enum',
+          required: false,
+          values: [...MARKETPLACE_CATEGORIES],
+          description: 'Marketplace category, defaults to other.'
+        },
         { name: 'condition', type: 'enum', required: false, values: ['new', 'used'], description: 'Item condition.' },
         { name: 'location', type: 'string', required: false, max: 120, description: 'Free-text location, max 120 chars.' },
         { name: 'sold', type: 'boolean', required: false, description: 'Whether the listing has sold.' }
       ]
     },
-    { name: 'thing', type: 'record', required: false, description: 'Free-form structured thing payload — required for thingtime posts, bounded like data crystals (searchable as crystal.thing.<field>). Thingtime posts can also carry images and a listing.' }
+    {
+      name: 'thing',
+      type: 'record',
+      required: false,
+      description:
+        'Free-form structured thing payload — required for thingtime posts, bounded like data crystals (searchable as crystal.thing.<field>). Thingtime posts can also carry images and a listing.'
+    }
   ],
   example: { type: 'text', text: 'Everything is a thing ✨', images: [], listing: null, thing: null }
 };
@@ -381,9 +431,7 @@ const commentSchema: ThingtimeSchema = {
     'post — each has its own /post/:id page. Comments used to live embedded inside post docs — ' +
     'the things v1→v2 migration explodes them into these.',
   requiresTarget: true,
-  fields: [
-    { name: 'text', type: 'string', required: true, max: MAX_COMMENT_CHARS, description: `Comment body, max ${MAX_COMMENT_CHARS} chars.` }
-  ],
+  fields: [{ name: 'text', type: 'string', required: true, max: MAX_COMMENT_CHARS, description: `Comment body, max ${MAX_COMMENT_CHARS} chars.` }],
   example: { text: 'So say we all 🚀' }
 };
 
@@ -561,7 +609,7 @@ const schemaThingSchema: ThingtimeSchema = {
     'wood/plastic/concrete, width/height/depth). Fields nest arbitrarily (object children, typed ' +
     'array items) with per-field constraints: required, number min/max, string maxLength, enum ' +
     'value lists, array min/maxItems. Things that follow a schema simply carry its fields in ' +
-    'their crystal — a schema never gates OTHER things\' writes (Thingtime searches real ' +
+    "their crystal — a schema never gates OTHER things' writes (Thingtime searches real " +
     'datatypes, not schema registrations), but schema things themselves are validated on write ' +
     'like any crystal, builtin seeds included. /schemas browses every published ' +
     'schema; /search prefills its query builder from the field definitions.',
@@ -587,8 +635,7 @@ const schemaThingSchema: ThingtimeSchema = {
       name: 'render',
       type: 'record',
       required: false,
-      description:
-        `Optional serialised component preview — a chakra tree ({ chakra: "Box", props, children }) or element tree ({ tag: "div", props, children }), max ${MAX_SCHEMA_RENDER_BYTES} bytes / ${MAX_SCHEMA_RENDER_NODES} nodes, always drawn through the sanitising allowlist renderers.`
+      description: `Optional serialised component preview — a chakra tree ({ chakra: "Box", props, children }) or element tree ({ tag: "div", props, children }), max ${MAX_SCHEMA_RENDER_BYTES} bytes / ${MAX_SCHEMA_RENDER_NODES} nodes, always drawn through the sanitising allowlist renderers.`
     }
   ],
   example: {
@@ -648,27 +695,151 @@ const saveThingSchema: ThingtimeSchema = {
 
 const subscriptionSchema: ThingtimeSchema = {
   id: 'subscription',
-  version: 1,
+  version: 2,
   kind: 'crystal',
   collection: null,
   title: 'Subscription',
-  summary: 'A tier/quota assignment for a user or app (admin-managed; PROTECTED from generic CRUD).',
+  summary: 'A tier/quota assignment (admin-managed; PROTECTED from generic CRUD).',
   detail:
-    'One per subject, written only through the admin-gated /api/v1/admin/subscriptions (self-assigning a ' +
-    'tier through /api/v1/things would be privilege escalation, so the kind is protected). The tier ' +
-    '(free/plus/pro/payg) supplies default quotas; per-field admin overrides win, with null meaning ' +
+    'One protected Thing per user subject, written only through the admin-gated /api/v1/admin/subscriptions ' +
+    '(self-assigning a tier through /api/v1/things would be privilege escalation). App subscriptions use ' +
+    'the same API shape but live atomically on the app Thing beside its aggregate storage counter. Every ' +
+    'assignment snapshots an immutable subscription-tier version id + version so a later publish/archive ' +
+    'never changes the plan someone originally selected. The tier supplies default quotas; per-field admin overrides win, with null meaning ' +
     'unlimited. payg is the metered tier: no hard caps, usage is measured by the byte ledgers and billed. ' +
     'Enforcement (app storage budgets, app/PAT mint caps) resolves through the merged "effective" quotas.',
   fields: [
     { name: 'quotaKind', type: 'string', required: true, values: ['subscription'], description: 'Bookkeeping marker (like the app-storage ledger).' },
-    { name: 'subjectType', type: 'enum', required: true, values: ['user', 'app'], description: 'What the assignment applies to.' },
-    { name: 'subjectId', type: 'id', required: true, description: 'User id, or app clientId.' },
-    { name: 'tier', type: 'enum', required: true, values: ['free', 'plus', 'pro', 'payg'], description: 'The assigned tier.' },
-    { name: 'overrides', type: 'record', required: false, description: 'Per-field quota overrides (appStorageBytes, userStorageBytes, maxApps, maxPats; null = unlimited).' },
+    {
+      name: 'subjectType',
+      type: 'enum',
+      required: true,
+      values: ['user'],
+      description: 'Stored subscription Things apply to users; app plans live on app Things.'
+    },
+    { name: 'subjectId', type: 'id', required: true, description: 'User id.' },
+    { name: 'tier', type: 'string', required: true, description: 'Stable tier id.' },
+    { name: 'tierVersionId', type: 'id', required: true, description: 'Immutable subscription-tier Thing shareId selected for this assignment.' },
+    { name: 'tierVersion', type: 'number', required: true, min: 1, description: 'Human-readable revision number of the selected tier.' },
+    { name: 'tierQuotas', type: 'record', required: true, description: 'Immutable quota snapshot from the selected tier revision.' },
+    {
+      name: 'overrides',
+      type: 'record',
+      required: false,
+      description: 'Per-field user quota overrides (userStorageBytes, maxApps, maxPats; null = unlimited).'
+    },
     { name: 'note', type: 'string', required: false, max: 500, description: 'Admin note (why this assignment exists).' },
     { name: 'updatedBy', type: 'id', required: false, description: 'The admin who last changed it.' }
   ],
-  example: { quotaKind: 'subscription', subjectType: 'user', subjectId: '664f1c2a9d3e5b0012345678', tier: 'pro', overrides: { appStorageBytes: 2147483648 }, note: 'Beta partner' }
+  example: {
+    quotaKind: 'subscription',
+    subjectType: 'user',
+    subjectId: '664f1c2a9d3e5b0012345678',
+    tier: 'pro',
+    tierVersionId: 'subscription-tier-pro-v1',
+    tierVersion: 1,
+    overrides: { userStorageBytes: 21474836480 },
+    note: 'Beta partner'
+  }
+};
+
+const subscriptionTierSchema: ThingtimeSchema = {
+  id: 'subscription-tier',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Subscription tier revision',
+  summary: 'An immutable, versioned pricing/quota tier (admin-managed; PROTECTED from generic CRUD).',
+  detail:
+    'One protected Thing per tier revision. tierId stays stable while version and shareId identify the exact ' +
+    'revision. Drafts are editable; publishing makes the draft live and archives the previous live revision. ' +
+    'Published/archived revisions remain permanently readable so user and app subscription assignments can ' +
+    'trace the exact prices, inclusions, and quotas originally selected. Only live revisions appear in customer tier cards.',
+  createdVia: 'POST /api/v1/admin/tiers',
+  fields: [
+    { name: 'quotaKind', type: 'string', required: true, values: ['subscription-tier'], description: 'Bookkeeping marker.' },
+    { name: 'tierId', type: 'id', required: true, description: 'Stable product id shared by every revision.' },
+    { name: 'version', type: 'number', required: true, min: 1, description: 'Immutable integer revision.' },
+    { name: 'status', type: 'enum', required: true, values: ['draft', 'live', 'archived'], description: 'Catalog lifecycle section.' },
+    { name: 'title', type: 'string', required: true, max: 80, description: 'Tier name.' },
+    { name: 'tagline', type: 'string', required: false, max: 240, description: 'Short subtitle shown on tier cards.' },
+    { name: 'emoji', type: 'string', required: false, max: 16, description: 'Optional visual shorthand shown beside the name.' },
+    { name: 'bannerImageUrl', type: 'string', required: false, description: 'Optional http(s) banner image.' },
+    { name: 'sortOrder', type: 'number', required: true, description: 'Customer-card ordering.' },
+    { name: 'metered', type: 'boolean', required: true, description: 'Whether usage is metered rather than blocked at finite caps.' },
+    { name: 'currency', type: 'string', required: true, max: 3, description: 'Three-letter ISO currency code.' },
+    { name: 'prices', type: 'record', required: true, description: 'Daily, weekly, monthly, yearly integer minor-unit prices.' },
+    {
+      name: 'discountOverrides',
+      type: 'record',
+      required: false,
+      description: 'Optional custom percentage-saved values; absent comparisons are computed.'
+    },
+    {
+      name: 'discounts',
+      type: 'record',
+      required: true,
+      description: 'Saved six-way percentage-saved matrix resolved from prices plus custom overrides.'
+    },
+    {
+      name: 'discountFormulaVersion',
+      type: 'number',
+      required: true,
+      min: 1,
+      description: 'Version of the annualized discount formula used for this snapshot.'
+    },
+    { name: 'inclusions', type: 'record', required: true, description: 'Editor.js rich-text document rendered on customer tier cards.' },
+    { name: 'quotas', type: 'record', required: true, description: 'Quota defaults snapshotted into each assignment.' },
+    { name: 'sourceVersionId', type: 'id', required: false, description: 'Revision cloned to create this draft.' },
+    { name: 'createdBy', type: 'id', required: true, description: 'Admin who created this revision.' },
+    { name: 'updatedBy', type: 'id', required: true, description: 'Admin who last changed its draft or lifecycle status.' },
+    { name: 'publishedAt', type: 'date', required: false, description: 'When this revision first became live.' },
+    { name: 'archivedAt', type: 'date', required: false, description: 'When this revision left the live catalog.' }
+  ],
+  example: {
+    quotaKind: 'subscription-tier',
+    tierId: 'pro',
+    version: 2,
+    status: 'live',
+    title: 'Pro',
+    emoji: '🌳',
+    sortOrder: 20,
+    metered: false,
+    currency: 'USD',
+    prices: { daily: 300, weekly: 1800, monthly: 5900, yearly: 59000 },
+    discounts: { yearlyFromDaily: 46.12, yearlyFromWeekly: 36.97, yearlyFromMonthly: 16.67 },
+    discountFormulaVersion: 1,
+    createdBy: 'system',
+    updatedBy: 'system'
+  }
+};
+
+const appStorageLedgerSchema: ThingtimeSchema = {
+  id: 'app-storage',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'App-user storage ledger',
+  summary: 'Protected byte accounting and an optional sub-tier for one (app, user) namespace.',
+  detail:
+    'One deterministic relational Thing per app user. The ledger meters usedBytes and optionally stores ' +
+    'a manager-assigned storageAllowanceBytes override; no override inherits the app default. It is a ' +
+    'PROTECTED system kind, so the end user can browse/delete their app data without editing or deleting ' +
+    'the quota counter itself. The app aggregate still wins if many user caps add up beyond the app plan.',
+  createdVia: 'App authorization/storage writes and /api/v1/apps/storage',
+  fields: [
+    { name: 'quotaKind', type: 'string', required: true, description: 'Bookkeeping marker: app-storage.' },
+    { name: 'appId', type: 'id', required: true, description: 'Registered app clientId.' },
+    { name: 'usedBytes', type: 'number', required: true, min: 0, description: 'Bytes currently used by this app user.' },
+    {
+      name: 'storageAllowanceBytes',
+      type: 'number',
+      required: false,
+      min: 0,
+      description: 'Optional app-manager override; absent inherits the app default.'
+    }
+  ],
+  example: { quotaKind: 'app-storage', appId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', usedBytes: 1048576, storageAllowanceBytes: 209715200 }
 };
 
 const accountLinkSchema: ThingtimeSchema = {
@@ -683,15 +854,21 @@ const accountLinkSchema: ThingtimeSchema = {
     'owners per target, any number of targets per owner). linkKind "account" puts the target under the ' +
     'user\'s "Owned accounts" (assumable without credentials via /api/v1/auth/accounts/assume); linkKind ' +
     '"app" adds them as a co-manager of a registered app (it appears in their /apps, and update/delete ' +
-    'accept them). The doc\'s ownerId is the managing user, so their links surface first-party.',
+    "accept them). The doc's ownerId is the managing user, so their links surface first-party.",
   fields: [
     { name: 'linkKind', type: 'enum', required: true, values: ['account', 'app'], description: 'Owned account, or co-managed app.' },
     { name: 'userId', type: 'id', required: true, description: 'The managing (owner) user.' },
-    { name: 'targetId', type: 'id', required: true, description: 'Owned account\'s user id, or the app\'s clientId.' },
+    { name: 'targetId', type: 'id', required: true, description: "Owned account's user id, or the app's clientId." },
     { name: 'role', type: 'string', required: true, values: ['owner'], description: 'Link role (owner today).' },
     { name: 'createdBy', type: 'id', required: true, description: 'The admin who assigned it.' }
   ],
-  example: { linkKind: 'account', userId: '664f1c2a9d3e5b0012345678', targetId: '664f1c2a9d3e5b0087654321', role: 'owner', createdBy: '664f1c2a9d3e5b0000000001' }
+  example: {
+    linkKind: 'account',
+    userId: '664f1c2a9d3e5b0012345678',
+    targetId: '664f1c2a9d3e5b0087654321',
+    role: 'owner',
+    createdBy: '664f1c2a9d3e5b0000000001'
+  }
 };
 
 const sessionSchema: ThingtimeSchema = {
@@ -706,7 +883,13 @@ const sessionSchema: ThingtimeSchema = {
     { name: 'jti', type: 'id', required: true, description: 'Unique token id carried in the JWT.' },
     { name: 'userId', type: 'id', required: true, description: 'The session owner.' },
     { name: 'type', type: 'string', required: true, values: ['tt.session'], description: 'Doc type tag.' },
-    { name: 'purpose', type: 'enum', required: false, values: ['browser', 'service', 'app', 'app-sandbox', 'pat'], description: 'Browser cookie session, service Bearer token, app-scoped grant, sandbox grant, or personal access token.' },
+    {
+      name: 'purpose',
+      type: 'enum',
+      required: false,
+      values: ['browser', 'service', 'app', 'app-sandbox', 'pat'],
+      description: 'Browser cookie session, service Bearer token, app-scoped grant, sandbox grant, or personal access token.'
+    },
     { name: 'expiresAt', type: 'date', required: false, description: 'Expiry (null = non-expiring service token).' },
     { name: 'revokedAt', type: 'date', required: false, description: 'Set when revoked — token stops working immediately.' },
     { name: 'meta', type: 'record', required: false, description: 'Session metadata.' },
@@ -798,28 +981,53 @@ const emailMessageSchema: ThingtimeSchema = {
     'email_templates/email_subscriptions/email_identities (reserved for the owned-email roadmap).',
   fields: [
     { name: 'provider', type: 'enum', required: true, values: ['console', 'ses'], description: 'Delivery provider resolved from env.' },
-    { name: 'stream', type: 'enum', required: true, values: ['transactional', 'newsletter'], description: 'Send stream — picks the from-address and unsubscribe rules.' },
+    {
+      name: 'stream',
+      type: 'enum',
+      required: true,
+      values: ['transactional', 'newsletter'],
+      description: 'Send stream — picks the from-address and unsubscribe rules.'
+    },
     { name: 'templateKey', type: 'string', required: false, description: 'Dotted template id, e.g. auth.password_reset.' },
-    { name: 'status', type: 'enum', required: true, values: ['queued', 'sent', 'logged', 'skipped', 'failed'], description: 'Delivery lifecycle state.' },
+    {
+      name: 'status',
+      type: 'enum',
+      required: true,
+      values: ['queued', 'sent', 'logged', 'skipped', 'failed'],
+      description: 'Delivery lifecycle state.'
+    },
     { name: 'from', type: 'string', required: true, description: 'From address used.' },
     { name: 'replyTo', type: 'string', required: false, description: 'Reply-to address (null when unset).' },
     { name: 'to', type: 'string[]', required: true, description: 'Normalized recipient list.' },
     { name: 'subject', type: 'string', required: true, description: 'Subject line.' },
     { name: 'html', type: 'string', required: true, description: 'Rendered HTML body — replaced by a redacted placeholder when sensitive is true.' },
     { name: 'text', type: 'string', required: true, description: 'Rendered text body — replaced by a redacted placeholder when sensitive is true.' },
-    { name: 'sensitive', type: 'boolean', required: true, description: 'True for secret-bearing mail (OTP codes, reset links); its body is stored redacted so the outbox can’t replay the secret.' },
+    {
+      name: 'sensitive',
+      type: 'boolean',
+      required: true,
+      description: 'True for secret-bearing mail (OTP codes, reset links); its body is stored redacted so the outbox can’t replay the secret.'
+    },
     { name: 'metadata', type: 'record', required: false, description: 'Purpose tags for analytics (never secrets).' },
     { name: 'tags', type: 'record', required: false, description: 'Provider tags ({ stream, template }).' },
     { name: 'providerMessageId', type: 'string', required: false, description: 'SES message id when delivered.' },
-    { name: 'suppressedRecipients', type: 'string[]', required: false, description: 'Recipients dropped for suppression/unsubscribe (set only when some were skipped).' },
+    {
+      name: 'suppressedRecipients',
+      type: 'string[]',
+      required: false,
+      description: 'Recipients dropped for suppression/unsubscribe (set only when some were skipped).'
+    },
     { name: 'schemaVersion', type: 'number', required: true, description: 'Collection schema version.' },
     { name: 'createdAt', type: 'date', required: true, description: 'Queue time.' },
-    { name: 'updatedAt', type: 'date', required: true, description: 'Last status change (sentAt/loggedAt/failedAt/skippedAt + error/skippedReason ride alongside per outcome).' }
+    {
+      name: 'updatedAt',
+      type: 'date',
+      required: true,
+      description: 'Last status change (sentAt/loggedAt/failedAt/skippedAt + error/skippedReason ride alongside per outcome).'
+    }
   ],
   example: { provider: 'console', stream: 'transactional', templateKey: 'auth.email_otp', status: 'logged', schemaVersion: 2 }
 };
-
-
 
 const rateLimitSchema: ThingtimeSchema = {
   id: 'rate-limit',
@@ -843,7 +1051,7 @@ const rateLimitSchema: ThingtimeSchema = {
 
 const appSchema: ThingtimeSchema = {
   id: 'app',
-  version: 1,
+  version: 3,
   kind: 'crystal',
   collection: null,
   title: 'App',
@@ -852,14 +1060,68 @@ const appSchema: ThingtimeSchema = {
     'Created only through /api/v1/apps (no generic-route sanitizer on purpose — the server mints ' +
     'the clientId and validates the origin allowlist, so neither can be forged through /api/v1/things). ' +
     'The clientId identifies the app to the embed SDK; origins is the exact list of web origins ' +
-    'allowed to open the authorize popup and receive tokens. Deleting the app revokes every ' +
-    'app-scoped session minted for it.',
+    'allowed to open the authorize popup and receive tokens. The subscription tier and optional admin ' +
+    'override determine storageAllowanceBytes; storageUsedBytes is the atomic aggregate ledger. The app ' +
+    'owner controls userStorageAllowanceBytes as the default app-user cap, while protected relational ' +
+    'app-storage Things hold individual overrides. Deleting the app revokes every app-scoped session ' +
+    'minted for it.',
   fields: [
     { name: 'clientId', type: 'id', required: true, description: 'Server-minted public app id (ttapp_<uuid>) used by the embed SDK.' },
-    { name: 'name', type: 'string', required: true, max: MAX_APP_NAME_CHARS, description: `App name shown on the consent screen, max ${MAX_APP_NAME_CHARS} chars.` },
-    { name: 'origins', type: 'string[]', required: true, max: MAX_APP_ORIGINS, description: `Allowed web origins (https, or http for localhost dev), max ${MAX_APP_ORIGINS}.` }
+    {
+      name: 'name',
+      type: 'string',
+      required: true,
+      max: MAX_APP_NAME_CHARS,
+      description: `App name shown on the consent screen, max ${MAX_APP_NAME_CHARS} chars.`
+    },
+    {
+      name: 'origins',
+      type: 'string[]',
+      required: true,
+      max: MAX_APP_ORIGINS,
+      description: `Allowed web origins (https, or http for localhost dev), max ${MAX_APP_ORIGINS}.`
+    },
+    { name: 'subscriptionTier', type: 'string', required: true, description: 'Stable app storage tier id.' },
+    { name: 'subscriptionTierVersionId', type: 'id', required: true, description: 'Immutable subscription-tier revision assigned to this app.' },
+    { name: 'subscriptionTierVersion', type: 'number', required: true, min: 1, description: 'Revision number of the assigned tier.' },
+    {
+      name: 'storageAllowanceBytes',
+      type: 'number',
+      required: true,
+      description: 'Server-owned aggregate app-data allowance across every user of this app, in bytes; null is metered/unlimited.'
+    },
+    {
+      name: 'storageAllowanceOverrideBytes',
+      type: 'number',
+      required: false,
+      description: 'Optional administrator plan override; null means metered/unlimited.'
+    },
+    {
+      name: 'storageUsedBytes',
+      type: 'number',
+      required: true,
+      description: 'Bytes currently charged across every non-sandbox namespace owned by this app.'
+    },
+    {
+      name: 'userStorageAllowanceBytes',
+      type: 'number',
+      required: true,
+      description: 'App-owner-managed default allowance for each individual app user, in bytes.'
+    },
+    { name: 'storageAccountingVersion', type: 'number', required: true, description: 'Enables fail-closed quota writes after reconciliation.' }
   ],
-  example: { clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', name: 'Rainbow Notes', origins: ['https://rainbownotes.example'] }
+  example: {
+    clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f',
+    name: 'Rainbow Notes',
+    origins: ['https://rainbownotes.example'],
+    subscriptionTier: 'free',
+    subscriptionTierVersionId: 'subscription-tier-free-v1',
+    subscriptionTierVersion: 1,
+    storageAllowanceBytes: DEFAULT_APP_STORAGE_ALLOWANCE_BYTES,
+    storageUsedBytes: 0,
+    userStorageAllowanceBytes: DEFAULT_APP_USER_STORAGE_ALLOWANCE_BYTES,
+    storageAccountingVersion: APP_STORAGE_ACCOUNTING_VERSION
+  }
 };
 
 const appDataSchema: ThingtimeSchema = {
@@ -868,18 +1130,25 @@ const appDataSchema: ThingtimeSchema = {
   kind: 'crystal',
   collection: null,
   title: 'App data',
-  summary: 'A key/value entry a third-party app stores in a user\'s Thingtime account.',
+  summary: "A key/value entry a third-party app stores in a user's Thingtime account.",
   detail:
     'Written only through /api/v1/app-data with an app-scoped Bearer token (no generic-route ' +
     'sanitizer on purpose), one thing per (user, app, key) — relational, atomic, and bounded per ' +
-    `FUNDAMENTALS.md §3: values cap at ${MAX_APP_DATA_VALUE_BYTES / 1024}KB of JSON and the (user, app) ` +
-    `namespace shares a ${DEFAULT_APP_STORAGE_BYTES / (1024 * 1024)}MB storage byte budget (unlimited entry ` +
+    `FUNDAMENTALS.md §3: values cap at ${MAX_APP_DATA_VALUE_BYTES / 1024} KiB of JSON and the (user, app) ` +
+    `namespace starts with a ${DEFAULT_APP_USER_STORAGE_ALLOWANCE_BYTES / (1024 * 1024)} MiB app-managed storage allowance inside the app's ` +
+    `${DEFAULT_APP_STORAGE_ALLOWANCE_BYTES / (1024 * 1024 * 1024)} GiB free-tier aggregate allowance (unlimited entry ` +
     'count). Owned by the END USER (acl ["tt:user"]), not the app ' +
     'developer, so users can see and delete what an app has stored for them.',
   fields: [
     { name: 'appId', type: 'id', required: true, description: 'The clientId of the app this entry belongs to.' },
-    { name: 'key', type: 'string', required: true, max: MAX_APP_DATA_KEY_CHARS, description: `Entry key ([A-Za-z0-9._:-], first char alphanumeric, max ${MAX_APP_DATA_KEY_CHARS} chars).` },
-    { name: 'value', type: 'record', required: true, description: `Arbitrary JSON value, max ${MAX_APP_DATA_VALUE_BYTES / 1024}KB serialized.` }
+    {
+      name: 'key',
+      type: 'string',
+      required: true,
+      max: MAX_APP_DATA_KEY_CHARS,
+      description: `Entry key ([A-Za-z0-9._:-], first char alphanumeric, max ${MAX_APP_DATA_KEY_CHARS} chars).`
+    },
+    { name: 'value', type: 'record', required: true, description: `Arbitrary JSON value, max ${MAX_APP_DATA_VALUE_BYTES / 1024} KiB serialized.` }
   ],
   example: { appId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', key: 'preferences', value: { theme: 'rainbow' } }
 };
@@ -896,12 +1165,20 @@ const appDataSchema: ThingtimeSchema = {
 // uniqueness rides the root `uniqueKeys` array (multikey unique sparse index;
 // BinData elements, PII keys hashed).
 
-// `subscription` and `account-link` are admin-plane kinds (tier/quota
-// assignments and account-ownership links) — self-assigning either through
-// the generic CRUD would be privilege escalation, so they are protected too.
-export const PROTECTED_THINGTIME = ['user', 'theme', 'feed-algorithm', 'waitlist', 'subscription', 'account-link'] as const;
-export const isProtectedThingtime = (ids: string[]): boolean =>
-  ids.some((id) => (PROTECTED_THINGTIME as readonly string[]).includes(id));
+// Subscription tiers/assignments, account links, and app-storage are control-plane
+// kinds (pricing, quota assignments, ownership links, and byte ledgers). Editing any through
+// generic CRUD would be privilege escalation or quota bypass.
+export const PROTECTED_THINGTIME = [
+  'user',
+  'theme',
+  'feed-algorithm',
+  'waitlist',
+  'subscription-tier',
+  'subscription',
+  'account-link',
+  'app-storage'
+] as const;
+export const isProtectedThingtime = (ids: string[]): boolean => ids.some((id) => (PROTECTED_THINGTIME as readonly string[]).includes(id));
 
 const userThingSchema: ThingtimeSchema = {
   id: 'user',
@@ -970,7 +1247,12 @@ const feedAlgorithmThingSchema: ThingtimeSchema = {
     { name: 'name', type: 'string', required: true, max: 60, description: 'Algorithm name.' },
     { name: 'emoji', type: 'string', required: true, description: 'Display emoji.' },
     { name: 'parentId', type: 'id', required: false, description: 'Branch lineage parent.' },
-    { name: 'weights', type: 'record', required: true, description: '{ types, tags, authors } weight maps — open keys, so the shape stays a record.' },
+    {
+      name: 'weights',
+      type: 'record',
+      required: true,
+      description: '{ types, tags, authors } weight maps — open keys, so the shape stays a record.'
+    },
     { name: 'eventCount', type: 'number', required: true, description: 'Engagement events trained on.' },
     { name: 'lastTrainedAt', type: 'date', required: false, description: 'Last training time.' }
   ],
@@ -1007,8 +1289,10 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   appSchema,
   appDataSchema,
   // admin-plane kinds (PROTECTED: written only through admin endpoints)
+  subscriptionTierSchema,
   subscriptionSchema,
   accountLinkSchema,
+  appStorageLedgerSchema,
   // system kinds (collections collapsing into things — dual-era)
   userThingSchema,
   themeThingSchema,
@@ -1023,8 +1307,7 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   rateLimitSchema
 ];
 
-export const getThingtimeSchema = (id: string): ThingtimeSchema | null =>
-  thingtimeSchemas.find((schema) => schema.id === id) || null;
+export const getThingtimeSchema = (id: string): ThingtimeSchema | null => thingtimeSchemas.find((schema) => schema.id === id) || null;
 
 export const crystalSchemas = (): ThingtimeSchema[] => thingtimeSchemas.filter((schema) => schema.kind === 'crystal');
 
@@ -1038,10 +1321,7 @@ const isFail = <T extends { ok: boolean }>(value: T | Fail): value is Fail => va
 
 const isHttpUrl = (value: string) => /^https?:\/\//i.test(value);
 
-const sanitizePostCrystal = (
-  input: Record<string, unknown>,
-  appliedIds: string[]
-): { ok: true; crystal: Record<string, unknown> } | Fail => {
+const sanitizePostCrystal = (input: Record<string, unknown>, appliedIds: string[]): { ok: true; crystal: Record<string, unknown> } | Fail => {
   const type = POST_TYPES.includes(input.type as any) ? (input.type as string) : null;
   if (!type) return fail(400, 'Post type must be text, image, marketplace, or thingtime');
   // share things render the shared original, so their post payload may be
@@ -1074,10 +1354,7 @@ const sanitizePostCrystal = (
   // used to 400 every marketplace share.
   let listing: Record<string, unknown> | null = null;
   const listingProvided = input.listing !== undefined && input.listing !== null;
-  if (
-    (type === 'marketplace' && !isShare) ||
-    ((type === 'marketplace' || type === 'thingtime') && listingProvided)
-  ) {
+  if ((type === 'marketplace' && !isShare) || ((type === 'marketplace' || type === 'thingtime') && listingProvided)) {
     const value = input.listing;
     if (!value || typeof value !== 'object') return fail(400, 'Marketplace posts need listing details');
     const raw = value as Record<string, unknown>;
@@ -1087,10 +1364,7 @@ const sanitizePostCrystal = (
     if (!Number.isFinite(price) || price < 0 || price > 1_000_000_000) {
       return fail(400, 'Listing price must be a non-negative number');
     }
-    const currency =
-      typeof raw.currency === 'string' && /^[A-Za-z]{3}$/.test(raw.currency.trim())
-        ? raw.currency.trim().toUpperCase()
-        : 'AUD';
+    const currency = typeof raw.currency === 'string' && /^[A-Za-z]{3}$/.test(raw.currency.trim()) ? raw.currency.trim().toUpperCase() : 'AUD';
     const category = MARKETPLACE_CATEGORIES.includes(raw.category as any) ? (raw.category as string) : 'other';
     const condition = raw.condition === 'new' || raw.condition === 'used' ? raw.condition : null;
     const location = typeof raw.location === 'string' ? raw.location.trim().slice(0, 120) || null : null;
@@ -1123,10 +1397,7 @@ const sanitizePostCrystal = (
   return { ok: true, crystal: { type, text, images, listing, thing } };
 };
 
-const sanitizeCommentCrystal = (
-  input: Record<string, unknown>,
-  ids?: string[]
-): { ok: true; crystal: Record<string, unknown> } | Fail => {
+const sanitizeCommentCrystal = (input: Record<string, unknown>, ids?: string[]): { ok: true; crystal: Record<string, unknown> } | Fail => {
   // Rich comments are ["post","comment"] things — the post sanitizer owns the
   // whole crystal there (its own text/image/listing rules apply, so an
   // image-only comment is legal the same way an image-only post is).
@@ -1192,7 +1463,14 @@ const sanitizeDataValue = (
   let nodes = 0;
   const seen = new WeakSet<object>();
   const stack: DataWalkItem[] = [
-    { value: input, path: base?.path ?? '', depth: base?.depth ?? 1, assign: (out) => { rootOut = out; } },
+    {
+      value: input,
+      path: base?.path ?? '',
+      depth: base?.depth ?? 1,
+      assign: (out) => {
+        rootOut = out;
+      }
+    }
   ];
   while (stack.length) {
     const item = stack.pop()!;
@@ -1238,7 +1516,9 @@ const sanitizeDataValue = (
           value: value[slot],
           path: `${path}[${slot}]`,
           depth: depth + 1,
-          assign: (child) => { out[slot] = child; },
+          assign: (child) => {
+            out[slot] = child;
+          }
         });
       }
       continue;
@@ -1259,7 +1539,9 @@ const sanitizeDataValue = (
           path: path ? `${path}.${key}` : key,
           depth: depth + 1,
           key,
-          assign: (child) => { out[key] = child; },
+          assign: (child) => {
+            out[key] = child;
+          }
         });
       }
       continue;
@@ -1294,9 +1576,7 @@ const sanitizeDataCrystal = (input: Record<string, unknown>): { ok: true; crysta
 // Never mutates or drops — extended is stored exactly as given.
 const checkExtendedKeys = (root: unknown): true | Fail => {
   const seen = new WeakSet<object>();
-  const stack: Array<{ value: unknown; path: string; depth: number }> = [
-    { value: root, path: '', depth: 1 },
-  ];
+  const stack: Array<{ value: unknown; path: string; depth: number }> = [{ value: root, path: '', depth: 1 }];
   while (stack.length) {
     const { value, path, depth } = stack.pop()!;
     if (!value || typeof value !== 'object') continue;
@@ -1430,17 +1710,11 @@ const projectBuiltinField = (field: ThingtimeSchemaField, depth: number): Record
 export const projectBuiltinSchemaCrystal = (schema: ThingtimeSchema): Record<string, unknown> => ({
   name: schema.title,
   description: schema.summary,
-  fields: schema.fields
-    .map((field) => projectBuiltinField(field, 1))
-    .filter((field): field is Record<string, unknown> => field !== null)
+  fields: schema.fields.map((field) => projectBuiltinField(field, 1)).filter((field): field is Record<string, unknown> => field !== null)
 });
 
 // whole-number constraint (maxLength/minItems/maxItems); fail-loudly on junk
-const sanitizeCountConstraint = (
-  raw: unknown,
-  label: string,
-  ceiling: number
-): { ok: true; value: number | null } | Fail => {
+const sanitizeCountConstraint = (raw: unknown, label: string, ceiling: number): { ok: true; value: number | null } | Fail => {
   if (raw === undefined || raw === null) return { ok: true, value: null };
   const num = Number(raw);
   if (!Number.isInteger(num) || num < 0) return fail(400, `${label} must be a whole number ≥ 0`);
@@ -1818,8 +2092,7 @@ export const MAX_DISPLAY_NAME_CHARS = 80;
 export const MAX_BIO_CHARS = 500;
 export const MAX_PROFILE_URL_CHARS = 64 * 1024;
 
-const boundedString = (value: unknown, max: number): string | null =>
-  typeof value === 'string' && value.trim() ? value.trim().slice(0, max) : null;
+const boundedString = (value: unknown, max: number): string | null => (typeof value === 'string' && value.trim() ? value.trim().slice(0, max) : null);
 
 const sanitizeUserCrystal = (input: Record<string, unknown>): { ok: true; crystal: Record<string, unknown> } | Fail => {
   const username = boundedString(input.username, MAX_USERNAME_CHARS)?.toLowerCase();
@@ -1846,9 +2119,7 @@ const sanitizeThemeCrystal = (input: Record<string, unknown>): { ok: true; cryst
   return { ok: true, crystal: { name, theme: input.theme } };
 };
 
-const sanitizeFeedAlgorithmCrystal = (
-  input: Record<string, unknown>
-): { ok: true; crystal: Record<string, unknown> } | Fail => {
+const sanitizeFeedAlgorithmCrystal = (input: Record<string, unknown>): { ok: true; crystal: Record<string, unknown> } | Fail => {
   const name = boundedString(input.name, 60);
   if (!name) return fail(400, 'Algorithms need a name');
   const emoji = boundedString(input.emoji, 16) || '🧠';

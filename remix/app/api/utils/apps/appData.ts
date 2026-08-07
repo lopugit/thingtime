@@ -197,7 +197,7 @@ export const setAppData = async (
     return fail(400, 'value must be JSON-serializable');
   }
   if (serialized === undefined || Buffer.byteLength(serialized, 'utf8') > MAX_APP_DATA_VALUE_BYTES) {
-    return fail(400, `value must be JSON up to ${MAX_APP_DATA_VALUE_BYTES / 1024}KB`);
+    return fail(400, `value must be JSON up to ${MAX_APP_DATA_VALUE_BYTES / 1024} KiB`);
   }
 
   const things = await getThingsCollection();
@@ -212,51 +212,63 @@ export const setAppData = async (
     sandbox: audience.sandbox ? { space: audience.sandboxSpace ?? null } : null
   };
 
-  // Byte budget: charge the size DELTA before writing (admission can never
-  // overshoot the budget), refund if the write ultimately fails; shrinking
-  // writes refund after success so a failed write never loses bytes. Racing
-  // same-key writes can briefly over-charge — the safe direction, healed by
-  // the sizeBytes reconcile sweep.
+  // Byte allowances: every attempt reads the current stamped size, reserves a
+  // positive delta, then compare-and-swaps that exact size. A losing writer
+  // knows its write did not land and can safely compensate before retrying;
+  // shrinking writes refund only after an acknowledged swap. An ambiguous
+  // Mongo error deliberately keeps the reservation (conservative over-count)
+  // because refunding a write that may have landed could create free storage.
   const newSize = appThingSizeBytes({ crystal: { appId, key, value } });
-  const existing = await things.findOne(filter, { projection: { sizeBytes: 1, crystal: 1, extended: 1, tags: 1 } });
-  const oldSize = existing
-    ? typeof existing.sizeBytes === 'number'
-      ? existing.sizeBytes
-      : appThingSizeBytes(existing)
-    : 0;
-  const delta = newSize - oldSize;
-  if (delta > 0) {
-    const charge = await chargeAppStorage(scope, delta);
-    if (!charge.ok) return charge;
-  }
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const existing = await things.findOne(filter, {
+      projection: { sizeBytes: 1, crystal: 1, extended: 1, tags: 1 }
+    });
+    const oldSize = existing
+      ? typeof existing.sizeBytes === 'number'
+        ? existing.sizeBytes
+        : appThingSizeBytes(existing)
+      : 0;
+    const delta = newSize - oldSize;
+    if (delta > 0) {
+      const charge = await chargeAppStorage(scope, delta);
+      if (charge.ok === false) return charge;
+    }
 
-  const finish = async (entry: AppDataEntry): Promise<{ ok: true; entry: AppDataEntry }> => {
-    if (delta < 0) await refundAppStorage(scope, -delta);
-    return { ok: true, entry };
-  };
-
-  // update-then-insert, retried: a racing set() of the same new key loses the
-  // insert to the unique index and folds into an update on the next pass; a
-  // set() racing a delete of the winner just inserts on the next pass. Two
-  // full passes always suffice for one interleaving; the bound only trips
-  // under sustained adversarial interleaving, which gets a structured 503
-  // instead of a raw duplicate-key 500.
-  for (let attempt = 0; attempt < 3; attempt++) {
     const now = new Date();
+    if (existing) {
+      // Audience only changes when the write names one — a plain { key, value }
+      // update never silently flips a shared entry private (or vice versa).
+      // Root appId + sizeBytes ride every write, adopting pre-namespace docs on
+      // their first touch (sandbox TTL stamps are creation-only).
+      const set: Record<string, unknown> = { 'crystal.value': value, updatedAt: now, appId, sizeBytes: newSize };
+      if (resolved.acl) set.acl = resolved.acl;
+      const expectedSize = Object.prototype.hasOwnProperty.call(existing, 'sizeBytes')
+        ? { sizeBytes: existing.sizeBytes }
+        : { sizeBytes: { $exists: false } };
 
-    // Audience only changes when the write names one — a plain { key, value }
-    // update never silently flips a shared entry private (or vice versa).
-    // Root appId + sizeBytes ride every write, adopting pre-namespace docs on
-    // their first touch (sandbox TTL stamps are creation-only).
-    const set: Record<string, unknown> = { 'crystal.value': value, updatedAt: now, appId, sizeBytes: newSize };
-    if (resolved.acl) set.acl = resolved.acl;
+      let updated;
+      try {
+        updated = await things.findOneAndUpdate(
+          { ...filter, _id: existing._id, ...expectedSize },
+          { $set: set },
+          { returnDocument: 'after' }
+        );
+      } catch (error) {
+        // The write result is ambiguous. Keep any positive reservation so an
+        // applied update can never exceed its ledgers; reconciliation can
+        // reclaim a reservation if Mongo did not apply it.
+        throw error;
+      }
 
-    const updated = await things.findOneAndUpdate(
-      filter,
-      { $set: set },
-      { returnDocument: 'after' }
-    );
-    if (updated) return finish(toEntry(updated));
+      if (updated) {
+        if (delta < 0) await refundAppStorage(scope, -delta);
+        return { ok: true, entry: toEntry(updated) };
+      }
+
+      // The size CAS lost, so this write definitely did not land.
+      if (delta > 0) await refundAppStorage(scope, delta);
+      continue;
+    }
 
     const doc = {
       shareId: randomUUID(),
@@ -276,21 +288,26 @@ export const setAppData = async (
 
     try {
       await things.insertOne(doc as any);
-      return finish(toEntry(doc));
+      return { ok: true, entry: toEntry(doc) };
     } catch (err: any) {
-      if (err?.code !== 11000) throw err;
-      // lost the insert race — loop back to the update path
+      if (err?.code !== 11000) {
+        // As above, an unknown insert result keeps its reservation.
+        throw err;
+      }
+      // A duplicate-key rejection proves our insert did not land, so this
+      // reservation can be compensated before reading the winner and retrying.
+      if (delta > 0) await refundAppStorage(scope, delta);
     }
   }
 
-  if (delta > 0) await refundAppStorage(scope, delta);
   return fail(503, 'Storage is busy for this key — try again');
 };
 
 export const deleteAppData = async (
   ownerId: string,
   appId: string,
-  rawKey: unknown
+  rawKey: unknown,
+  sandbox: { enabled: boolean; space?: string | null } = { enabled: false }
 ): Promise<{ ok: true; deleted: boolean } | Fail> => {
   const key = sanitizeAppDataKey(rawKey);
   if (!key) return fail(400, 'key is required');
@@ -300,7 +317,17 @@ export const deleteAppData = async (
   if (doc) {
     // refund the freed bytes (legacy pre-stamp docs re-measure on the way out)
     const bytes = typeof doc.sizeBytes === 'number' ? doc.sizeBytes : appThingSizeBytes(doc);
-    await refundAppStorage({ appId, ownerId, sharedRead: false, scopes: [], username: '', sandbox: null }, bytes);
+    await refundAppStorage(
+      {
+        appId,
+        ownerId,
+        sharedRead: false,
+        scopes: [],
+        username: '',
+        sandbox: sandbox.enabled ? { space: sandbox.space ?? null } : null
+      },
+      bytes
+    );
   }
   return { ok: true, deleted: !!doc };
 };

@@ -1,127 +1,226 @@
 // Relative + extensioned so `node --test` can load this module without the
 // bundler's `~` alias (same stance as mongodb/collectionNames.ts).
-import { DEFAULT_APP_STORAGE_BYTES, MAX_APPS_PER_USER } from '../../../schemas/registry.ts';
+import { DEFAULT_APP_STORAGE_ALLOWANCE_BYTES, MAX_APPS_PER_USER } from '../../../schemas/registry.ts';
 
-// The subscription tier catalog — a pure module (no Mongo, no Node built-ins)
-// so the client tier selector and the server quota resolver share one source
-// of truth, exactly like auth/patScopes.ts does for PAT permissions.
-//
-// The model:
-//   • A SUBJECT (a user, or an app by clientId) has at most one subscription
-//     assignment (a protected `subscription` thing — see
-//     api/utils/subscriptions/subscriptions.ts). No assignment means `free`.
-//   • A TIER supplies the default quota numbers. `payg` is the metered tier:
-//     no hard caps (every quota is null = unbounded), usage is measured by the
-//     existing byte ledgers and billed instead of blocked.
-//   • ADMIN OVERRIDES are orthogonal to the tier: a per-field partial stored
-//     on the assignment. An override field wins over the tier default;
-//     explicitly-null override fields mean "unlimited for this subject".
-//     A subject with any override shows as "custom" in the admin UI.
-//   • `null` ANYWHERE in resolved quotas means unlimited — enforcement sites
-//     skip their cap check for null.
+// Pure subscription-tier types, defaults, money math, and quota sanitizers.
+// Mongo-backed version history lives in tierCatalogStore.ts; keeping this file
+// pure lets the browser tier cards and node:test share the exact same pricing
+// and quota rules without bundling a database client.
 
-export type SubscriptionTierId = 'free' | 'plus' | 'pro' | 'payg';
+export type SubscriptionTierId = string;
+export type SubscriptionTierStatus = 'draft' | 'live' | 'archived';
 
 export type TierQuotas = {
-  // Per (user, app) namespace storage budget in bytes (the #158 byte budget).
   appStorageBytes: number | null;
-  // Per-user overall storage allowance in bytes (surfaced on the user; the
-  // admin UI edits it — general enforcement is a follow-up, see PR notes).
   userStorageBytes: number | null;
-  // How many apps one user may register.
   maxApps: number | null;
-  // How many personal access tokens one user may hold.
   maxPats: number | null;
 };
 
+export type TierPricePeriod = 'daily' | 'weekly' | 'monthly' | 'yearly';
+export type TierPrices = Record<TierPricePeriod, number | null>;
+
+export const TIER_DISCOUNT_COMPARISONS = [
+  { key: 'weeklyFromDaily', target: 'weekly', source: 'daily', label: 'Weekly compared with daily' },
+  { key: 'monthlyFromDaily', target: 'monthly', source: 'daily', label: 'Monthly compared with daily' },
+  { key: 'monthlyFromWeekly', target: 'monthly', source: 'weekly', label: 'Monthly compared with weekly' },
+  { key: 'yearlyFromDaily', target: 'yearly', source: 'daily', label: 'Yearly compared with daily' },
+  { key: 'yearlyFromWeekly', target: 'yearly', source: 'weekly', label: 'Yearly compared with weekly' },
+  { key: 'yearlyFromMonthly', target: 'yearly', source: 'monthly', label: 'Yearly compared with monthly' }
+] as const;
+
+export type TierDiscountKey = (typeof TIER_DISCOUNT_COMPARISONS)[number]['key'];
+export type TierDiscountOverrides = Partial<Record<TierDiscountKey, number>>;
+export type TierDiscounts = Record<TierDiscountKey, number | null>;
+
+export type TierInclusions = {
+  kind: 'rich-text';
+  blocks: Array<{ type: string; data: Record<string, unknown>; id?: string; tunes?: Record<string, unknown> }>;
+};
+
 export type SubscriptionTierDescriptor = {
+  // Stable product id plus immutable revision identity.
   id: SubscriptionTierId;
+  versionId: string;
+  version: number;
+  status: SubscriptionTierStatus;
   title: string;
+  tagline: string;
+  // Compatibility alias used by existing tier-card callers.
   description: string;
   emoji: string;
-  // Metered tiers bill usage instead of blocking at a cap.
+  bannerImageUrl: string | null;
+  sortOrder: number;
   metered: boolean;
+  currency: string;
+  // Integer minor units (cents for two-decimal currencies), never floats.
+  prices: TierPrices;
+  discountOverrides: TierDiscountOverrides;
+  discounts: TierDiscounts;
+  inclusions: TierInclusions;
   quotas: TierQuotas;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  publishedAt?: string | null;
+  archivedAt?: string | null;
 };
 
 const MB = 1024 * 1024;
 const GB = 1024 * MB;
 
-// Free mirrors today's hardcoded product caps, so an unassigned subject
-// behaves exactly as before this system existed. (maxPats mirrors
-// MAX_PAT_TOKENS_PER_USER in auth/patTokens.ts — that module is Mongo-bound
-// and cannot be imported from this pure catalog.)
-export const SUBSCRIPTION_TIER_CATALOG: SubscriptionTierDescriptor[] = [
-  {
-    id: 'free',
-    title: 'Free',
-    description: 'The default tier every account starts on.',
-    emoji: '🌱',
-    metered: false,
-    quotas: {
-      appStorageBytes: DEFAULT_APP_STORAGE_BYTES,
-      userStorageBytes: 500 * MB,
-      maxApps: MAX_APPS_PER_USER,
-      maxPats: 200
+export const EMPTY_TIER_PRICES: TierPrices = {
+  daily: null,
+  weekly: null,
+  monthly: null,
+  yearly: null
+};
+
+export const EMPTY_TIER_INCLUSIONS: TierInclusions = {
+  kind: 'rich-text',
+  blocks: [{ type: 'paragraph', data: { text: '' } }]
+};
+
+const EMPTY_DISCOUNTS: TierDiscounts = {
+  weeklyFromDaily: null,
+  monthlyFromDaily: null,
+  monthlyFromWeekly: null,
+  yearlyFromDaily: null,
+  yearlyFromWeekly: null,
+  yearlyFromMonthly: null
+};
+
+// Normalize every renewal option to one year before comparing it. This makes
+// all six comparisons internally consistent (365 daily, 52 weekly, 12 monthly,
+// one yearly renewal) and avoids pretending every month has exactly 28 days.
+const RENEWALS_PER_YEAR: Record<TierPricePeriod, number> = {
+  daily: 365,
+  weekly: 52,
+  monthly: 12,
+  yearly: 1
+};
+
+const roundPercent = (value: number): number => Math.round((value + Number.EPSILON) * 100) / 100;
+
+export const computeTierDiscounts = (prices: TierPrices, overrides: TierDiscountOverrides = {}): TierDiscounts => {
+  const result: TierDiscounts = { ...EMPTY_DISCOUNTS };
+  for (const comparison of TIER_DISCOUNT_COMPARISONS) {
+    const custom = overrides[comparison.key];
+    if (typeof custom === 'number' && Number.isFinite(custom)) {
+      result[comparison.key] = roundPercent(custom);
+      continue;
     }
-  },
-  {
-    id: 'plus',
-    title: 'Plus',
-    description: 'Roomier budgets for active builders.',
-    emoji: '🌿',
-    metered: false,
-    quotas: {
-      appStorageBytes: 250 * MB,
-      userStorageBytes: 5 * GB,
-      maxApps: 50,
-      maxPats: 500
+    const sourcePrice = prices[comparison.source];
+    const targetPrice = prices[comparison.target];
+    if (
+      sourcePrice === null ||
+      targetPrice === null ||
+      !Number.isSafeInteger(sourcePrice) ||
+      !Number.isSafeInteger(targetPrice) ||
+      sourcePrice <= 0 ||
+      targetPrice < 0
+    ) {
+      result[comparison.key] = null;
+      continue;
     }
-  },
-  {
-    id: 'pro',
-    title: 'Pro',
-    description: 'High ceilings for heavy apps and fleets of tokens.',
-    emoji: '🌳',
-    metered: false,
-    quotas: {
-      appStorageBytes: 1 * GB,
-      userStorageBytes: 20 * GB,
-      maxApps: 100,
-      maxPats: 1000
-    }
-  },
-  {
-    id: 'payg',
-    title: 'Pay as you go',
-    description: 'No hard caps — usage is metered by the byte ledgers and billed.',
-    emoji: '⚡️',
-    metered: true,
-    quotas: {
-      appStorageBytes: null,
-      userStorageBytes: null,
-      maxApps: null,
-      maxPats: null
-    }
+    const sourceAnnual = sourcePrice * RENEWALS_PER_YEAR[comparison.source];
+    const targetAnnual = targetPrice * RENEWALS_PER_YEAR[comparison.target];
+    result[comparison.key] = roundPercent((1 - targetAnnual / sourceAnnual) * 100);
   }
+  return result;
+};
+
+// ISO 4217 currencies do not all use two fractional digits (JPY uses zero,
+// KWD uses three). The currency itself is the durable exponent source, so UI
+// amount conversion and display stay aligned without a second editable field.
+export const currencyMinorUnitFactor = (currency: string): number => {
+  try {
+    const digits = new Intl.NumberFormat('en', {
+      style: 'currency',
+      currency: String(currency || '')
+        .trim()
+        .toUpperCase()
+    }).resolvedOptions().maximumFractionDigits;
+    return 10 ** Math.min(4, Math.max(0, digits));
+  } catch {
+    return 100;
+  }
+};
+
+const builtIn = (
+  id: 'free' | 'plus' | 'pro' | 'payg',
+  title: string,
+  tagline: string,
+  emoji: string,
+  sortOrder: number,
+  metered: boolean,
+  quotas: TierQuotas
+): SubscriptionTierDescriptor => ({
+  id,
+  versionId: `subscription-tier-${id}-v1`,
+  version: 1,
+  status: 'live',
+  title,
+  tagline,
+  description: tagline,
+  emoji,
+  bannerImageUrl: null,
+  sortOrder,
+  metered,
+  currency: 'USD',
+  prices: { ...EMPTY_TIER_PRICES },
+  discountOverrides: {},
+  discounts: { ...EMPTY_DISCOUNTS },
+  inclusions: {
+    kind: 'rich-text',
+    blocks: [{ type: 'paragraph', data: { text: tagline } }]
+  },
+  quotas
+});
+
+// Bootstrap catalog. These immutable v1 descriptors are inserted into the
+// Thingtime database on first catalog access; after an admin publishes v2 the
+// old v1 record remains archived so historical assignments still resolve.
+export const SUBSCRIPTION_TIER_CATALOG: SubscriptionTierDescriptor[] = [
+  builtIn('free', 'Free', 'The default tier every account starts on.', '🌱', 0, false, {
+    appStorageBytes: DEFAULT_APP_STORAGE_ALLOWANCE_BYTES,
+    userStorageBytes: 500 * MB,
+    maxApps: MAX_APPS_PER_USER,
+    maxPats: 200
+  }),
+  builtIn('plus', 'Plus', 'Roomier budgets for active builders.', '🌿', 10, false, {
+    appStorageBytes: 25 * GB,
+    userStorageBytes: 5 * GB,
+    maxApps: 50,
+    maxPats: 500
+  }),
+  builtIn('pro', 'Pro', 'High ceilings for heavy apps and fleets of tokens.', '🌳', 20, false, {
+    appStorageBytes: 100 * GB,
+    userStorageBytes: 20 * GB,
+    maxApps: 100,
+    maxPats: 1000
+  }),
+  builtIn('payg', 'Pay as you go', 'No hard caps — usage is metered by the byte ledgers and billed.', '⚡️', 30, true, {
+    appStorageBytes: null,
+    userStorageBytes: null,
+    maxApps: null,
+    maxPats: null
+  })
 ];
 
 export const DEFAULT_SUBSCRIPTION_TIER: SubscriptionTierId = 'free';
 
+// Static checks remain useful for reading legacy assignments that predate the
+// database catalog. New assignments are validated against live DB revisions.
 export const isKnownSubscriptionTier = (value: unknown): value is SubscriptionTierId =>
-  SUBSCRIPTION_TIER_CATALOG.some((tier) => tier.id === value);
+  typeof value === 'string' && SUBSCRIPTION_TIER_CATALOG.some((tier) => tier.id === value);
 
 export const subscriptionTierById = (id: SubscriptionTierId): SubscriptionTierDescriptor =>
   SUBSCRIPTION_TIER_CATALOG.find((tier) => tier.id === id) ?? SUBSCRIPTION_TIER_CATALOG[0];
 
-// Admin overrides: a partial of TierQuotas. Absent field = inherit the tier;
-// number = replace; null = unlimited.
 export type QuotaOverrides = Partial<TierQuotas>;
 
 export const QUOTA_OVERRIDE_FIELDS = ['appStorageBytes', 'userStorageBytes', 'maxApps', 'maxPats'] as const;
 
-// Clamp bounds — same stance as rateLimit/config.ts clampRule: an admin typo
-// can never persist a nonsense number.
 export const QUOTA_OVERRIDE_BOUNDS: Record<keyof TierQuotas, { min: number; max: number }> = {
   appStorageBytes: { min: 0, max: 1024 * GB },
   userStorageBytes: { min: 0, max: 1024 * GB },
@@ -129,11 +228,7 @@ export const QUOTA_OVERRIDE_BOUNDS: Record<keyof TierQuotas, { min: number; max:
   maxPats: { min: 0, max: 1000000 }
 };
 
-// Validate + clamp an override payload. Unknown keys fail loudly (a typo'd
-// field should surface, not silently do nothing — patScopes stance).
-export const sanitizeQuotaOverrides = (
-  input: unknown
-): { ok: true; overrides: QuotaOverrides | null } | { ok: false; error: string } => {
+export const sanitizeQuotaOverrides = (input: unknown): { ok: true; overrides: QuotaOverrides | null } | { ok: false; error: string } => {
   if (input === undefined || input === null) return { ok: true, overrides: null };
   if (typeof input !== 'object' || Array.isArray(input)) {
     return { ok: false, error: 'overrides must be an object of quota fields' };
@@ -151,7 +246,10 @@ export const sanitizeQuotaOverrides = (
     }
     const value = Number(raw);
     if (!Number.isFinite(value)) {
-      return { ok: false, error: `${field} must be a number of ${field.endsWith('Bytes') ? 'bytes' : 'items'}, or null for unlimited` };
+      return {
+        ok: false,
+        error: `${field} must be a number of ${field.endsWith('Bytes') ? 'bytes' : 'items'}, or null for unlimited`
+      };
     }
     const bounds = QUOTA_OVERRIDE_BOUNDS[field];
     overrides[field] = Math.min(bounds.max, Math.max(bounds.min, Math.floor(value)));
@@ -160,10 +258,17 @@ export const sanitizeQuotaOverrides = (
   return { ok: true, overrides: Object.keys(overrides).length ? overrides : null };
 };
 
-// The one merge rule: override field (including explicit null) wins; anything
-// absent inherits the tier.
-export const resolveTierQuotas = (tierId: SubscriptionTierId, overrides?: QuotaOverrides | null): TierQuotas => {
-  const base = subscriptionTierById(tierId).quotas;
+export const sanitizeTierQuotas = (input: unknown): { ok: true; quotas: TierQuotas } | { ok: false; error: string } => {
+  const sanitized = sanitizeQuotaOverrides(input);
+  if (sanitized.ok === false) return sanitized;
+  const quotas = sanitized.overrides;
+  if (!quotas || QUOTA_OVERRIDE_FIELDS.some((field) => !(field in quotas))) {
+    return { ok: false, error: 'quotas must include appStorageBytes, userStorageBytes, maxApps, and maxPats' };
+  }
+  return { ok: true, quotas: quotas as TierQuotas };
+};
+
+export const resolveQuotas = (base: TierQuotas, overrides?: QuotaOverrides | null): TierQuotas => {
   if (!overrides) return { ...base };
   const resolved: TierQuotas = { ...base };
   for (const field of QUOTA_OVERRIDE_FIELDS) {
@@ -171,3 +276,6 @@ export const resolveTierQuotas = (tierId: SubscriptionTierId, overrides?: QuotaO
   }
   return resolved;
 };
+
+export const resolveTierQuotas = (tierId: SubscriptionTierId, overrides?: QuotaOverrides | null): TierQuotas =>
+  resolveQuotas(subscriptionTierById(tierId).quotas, overrides);

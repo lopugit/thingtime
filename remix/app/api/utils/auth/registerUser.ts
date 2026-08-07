@@ -9,6 +9,9 @@ import { hashPassword } from './passwords';
 import { createSession } from './sessions';
 import { findUserByEmail, findUserByUsername, insertUser, toPublicUser } from './users';
 import type { PublicUser, UserDoc } from './users';
+import { DEFAULT_SUBSCRIPTION_TIER, subscriptionTierById } from '../subscriptions/tierCatalog';
+import { setSubscription } from '../subscriptions/subscriptions';
+import { getLiveSubscriptionTier, tierAssignmentSnapshot } from '../subscriptions/tierCatalogStore';
 
 export type RegisterInput = {
   username: string;
@@ -37,9 +40,7 @@ export type CreateUserAccountInput = {
   meta?: Record<string, any>;
 };
 
-export type CreateUserAccountResult =
-  | { ok: false; status: number; error: string }
-  | { ok: true; user: any; publicUser: PublicUser };
+export type CreateUserAccountResult = { ok: false; status: number; error: string } | { ok: true; user: any; publicUser: PublicUser };
 
 const isEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 
@@ -107,9 +108,25 @@ export const createUserAccount = async (input: CreateUserAccountInput): Promise<
   if (input.storageAllowanceBytes !== undefined) userDoc.storageAllowanceBytes = input.storageAllowanceBytes;
   if (input.storageUsedBytes !== undefined) userDoc.storageUsedBytes = input.storageUsedBytes;
 
+  const liveDefault = await getLiveSubscriptionTier(DEFAULT_SUBSCRIPTION_TIER);
+  const defaultSnapshot = tierAssignmentSnapshot(liveDefault ?? subscriptionTierById(DEFAULT_SUBSCRIPTION_TIER));
   let user;
   try {
-    user = await insertUser(userDoc);
+    user = await insertUser(userDoc, { initialSubscription: defaultSnapshot });
+    const userId = String(user._id);
+    const assigned = await setSubscription({
+      subjectType: 'user',
+      subjectId: userId,
+      ownerId: userId,
+      tier: defaultSnapshot.tierId,
+      tierVersionId: defaultSnapshot.versionId,
+      overrides: null,
+      updatedBy: 'system',
+      isDefaultAssignment: true
+    });
+    if (assigned.ok === false) {
+      console.error(`[subscriptions] signup assignment will use its durable user snapshot: ${assigned.error}`);
+    }
   } catch (err: any) {
     // a unique index caught a duplicate that raced past the checks above —
     // things-era collisions surface via uniqueKeys ('email:<hash>' or

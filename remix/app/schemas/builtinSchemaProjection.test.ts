@@ -13,8 +13,7 @@ import { projectBuiltinSchemaCrystal, thingtimeSchemas, validateThingtimeCrystal
 
 const crystalSchemas = thingtimeSchemas.filter((schema) => schema.kind === 'crystal');
 
-const fieldNames = (crystal: Record<string, unknown>): string[] =>
-  (crystal.fields as Array<{ name: string }>).map((field) => field.name);
+const fieldNames = (crystal: Record<string, unknown>): string[] => (crystal.fields as Array<{ name: string }>).map((field) => field.name);
 
 // Pinned projections. A diff here is a REVIEW PROMPT, not necessarily a bug:
 // a new registry field should appear (or be knowingly dropped as a record/
@@ -27,8 +26,42 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   data: [], // '*' is a record; 'schema' is a reserved top-level name
   schema: ['name', 'description', 'forkOf'], // fields + render: records → dropped
   save: [], // marker schema
-  app: ['clientId', 'name', 'origins'],
+  app: [
+    'clientId',
+    'name',
+    'origins',
+    'subscriptionTier',
+    'subscriptionTierVersionId',
+    'subscriptionTierVersion',
+    'storageAllowanceBytes',
+    'storageAllowanceOverrideBytes',
+    'storageUsedBytes',
+    'userStorageAllowanceBytes',
+    'storageAccountingVersion'
+  ],
   'app-data': ['appId', 'key'], // value: record → dropped
+  'subscription-tier': [
+    'quotaKind',
+    'tierId',
+    'version',
+    'status',
+    'title',
+    'tagline',
+    'emoji',
+    'bannerImageUrl',
+    'sortOrder',
+    'metered',
+    'currency',
+    'discountFormulaVersion',
+    'sourceVersionId',
+    'createdBy',
+    'updatedBy',
+    'publishedAt',
+    'archivedAt'
+  ], // pricing/inclusions/quotas: records → dropped
+  subscription: ['quotaKind', 'subjectType', 'subjectId', 'tier', 'tierVersionId', 'tierVersion', 'note', 'updatedBy'], // snapshots/overrides: records → dropped
+  'app-storage': ['quotaKind', 'appId', 'usedBytes', 'storageAllowanceBytes'],
+  'account-link': ['linkKind', 'userId', 'targetId', 'role', 'createdBy'],
   user: ['username', 'ttid', 'displayName', 'bio', 'avatarUrl', 'bannerUrl'],
   theme: ['name'], // theme: record → dropped
   'feed-algorithm': ['name', 'emoji', 'parentId', 'eventCount', 'lastTrainedAt'], // weights: record → dropped
@@ -36,10 +69,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
 };
 
 test('the builtin crystal-schema set matches the pinned projection table', () => {
-  assert.deepEqual(
-    crystalSchemas.map((schema) => schema.id).sort(),
-    Object.keys(EXPECTED_PROJECTED_FIELDS).sort()
-  );
+  assert.deepEqual(crystalSchemas.map((schema) => schema.id).sort(), Object.keys(EXPECTED_PROJECTED_FIELDS).sort());
 });
 
 for (const schema of crystalSchemas) {

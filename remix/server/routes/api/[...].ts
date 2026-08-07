@@ -16,6 +16,7 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/admin/rate-limits': () => import('../../../app/routes/api/v1/admin/rate-limits/_rate-limits'),
   'v1/admin/set-admin': () => import('../../../app/routes/api/v1/admin/set-admin/_set-admin'),
   'v1/admin/subscriptions': () => import('../../../app/routes/api/v1/admin/subscriptions/_subscriptions'),
+  'v1/admin/tiers': () => import('../../../app/routes/api/v1/admin/tiers/_tiers'),
   'v1/admin/users': () => import('../../../app/routes/api/v1/admin/users/_users'),
   'v1/admin/users/overview': () => import('../../../app/routes/api/v1/admin/users/overview/_overview'),
   'v1/algorithms': () => import('../../../app/routes/api/v1/algorithms/_algorithms'),
@@ -33,6 +34,7 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/apps/data/shared': () => import('../../../app/routes/api/v1/apps/data/shared/_shared'),
   'v1/apps/delete': () => import('../../../app/routes/api/v1/apps/delete/_delete'),
   'v1/apps/public': () => import('../../../app/routes/api/v1/apps/public/_public'),
+  'v1/apps/storage': () => import('../../../app/routes/api/v1/apps/storage/_storage'),
   'v1/apps/update': () => import('../../../app/routes/api/v1/apps/update/_update'),
   'v1/auth/accounts': () => import('../../../app/routes/api/v1/auth/accounts/_accounts'),
   'v1/auth/accounts/assume': () => import('../../../app/routes/api/v1/auth/accounts/assume/_assume'),
@@ -78,6 +80,7 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/themes/delete': () => import('../../../app/routes/api/v1/themes/delete/_delete'),
   'v1/themes/shared': () => import('../../../app/routes/api/v1/themes/shared/_shared'),
   'v1/things': () => import('../../../app/routes/api/v1/things/_things'),
+  'v1/tiers': () => import('../../../app/routes/api/v1/tiers/_tiers'),
   'v1/tokens': () => import('../../../app/routes/api/v1/tokens/_tokens'),
   'v1/tokens/revoke': () => import('../../../app/routes/api/v1/tokens/revoke/_revoke'),
   'v1/tokens/self': () => import('../../../app/routes/api/v1/tokens/self/_self'),
@@ -127,12 +130,7 @@ const normalizeResponse = (value: unknown) => {
     return value;
   }
 
-  if (
-    value &&
-    typeof value === 'object' &&
-    'body' in value &&
-    ('status' in value || 'headers' in value)
-  ) {
+  if (value && typeof value === 'object' && 'body' in value && ('status' in value || 'headers' in value)) {
     const legacy = value as {
       status?: number;
       headers?: HeadersInit;
@@ -191,10 +189,7 @@ export default defineHandler(async (event) => {
     return new Response('Method not allowed', {
       status: 405,
       headers: {
-        Allow: [
-          route.loader ? 'GET' : undefined,
-          route.action ? 'POST' : undefined
-        ].filter(Boolean).join(', ')
+        Allow: [route.loader ? 'GET' : undefined, route.action ? 'POST' : undefined].filter(Boolean).join(', ')
       }
     });
   }

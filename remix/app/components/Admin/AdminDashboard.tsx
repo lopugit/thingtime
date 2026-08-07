@@ -1,11 +1,12 @@
 import React from 'react';
 import {
+  Alert,
+  AlertIcon,
   Badge,
   Box,
   Button,
   Flex,
   Heading,
-  Input,
   Spinner,
   Tab,
   TabList,
@@ -22,8 +23,12 @@ import {
 } from '@chakra-ui/react';
 
 import { AdminPanel } from '~/components/Admin/AdminPanel';
+import { AdminRowQueryControls, useAdminRowQuery } from '~/components/Admin/AdminRowQueryControls';
 import { LinkManagerModal } from '~/components/Admin/LinkManagerModal';
-import { SubscriptionEditorModal, tierLabel } from '~/components/Admin/SubscriptionEditorModal';
+import { SubscriptionEditorModal } from '~/components/Admin/SubscriptionEditorModal';
+import { TierManager } from '~/components/Admin/TierManager';
+import { loadCompleteAdminSnapshot, type CompleteAdminSnapshot } from '~/components/Admin/adminDirectoryClient';
+import type { AdminRowField } from '~/components/Admin/adminRowQuery';
 import { formatBytes } from '~/components/Apps/ConnectedAppsSection';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useApi } from '~/hooks/useApi';
@@ -40,6 +45,7 @@ type UserRow = {
   username: string;
   displayName: string | null;
   email: string;
+  createdAt: string | null;
   isAdmin: boolean;
   envAdmin: boolean;
   accountKind: 'user' | 'service';
@@ -48,10 +54,16 @@ type UserRow = {
   appNamespaceBytes: number;
   subscription: {
     tier: string;
+    tierName: string;
+    tierVersionId: string;
+    tierVersion: number;
     metered: boolean;
     isDefault: boolean;
     overrides: Record<string, number | null> | null;
     effective: Record<string, number | null>;
+    note: string | null;
+    updatedBy: string | null;
+    updatedAt: string | null;
   };
   counts: { apps: number; linkedApps: number; ownedAccounts: number; pats: number; connectedApps: number };
 };
@@ -69,13 +81,123 @@ type AppRow = {
   subscription: UserRow['subscription'];
 };
 
-const bytesOrInfinity = (value: number | null | undefined): string =>
-  value === null || value === undefined ? '∞' : formatBytes(value);
+const bytesOrInfinity = (value: number | null | undefined): string => (value === null || value === undefined ? '∞' : formatBytes(value));
+
+const formatAdminDate = (value: string | null | undefined): string => {
+  if (!value) return '—';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+};
+
+const QUOTA_FIELDS = ['appStorageBytes', 'userStorageBytes', 'maxApps', 'maxPats'] as const;
+const QUOTA_QUERY_LABELS: Record<(typeof QUOTA_FIELDS)[number], string> = {
+  appStorageBytes: 'app storage',
+  userStorageBytes: 'user storage',
+  maxApps: 'max apps',
+  maxPats: 'max access tokens'
+};
+
+const subscriptionQueryFields = <T,>(prefix = 'subscription'): AdminRowField<T>[] => [
+  { id: `${prefix}.tier`, label: 'Tier ID', kind: 'string', sortable: true },
+  { id: `${prefix}.tierName`, label: 'Tier name', kind: 'string', sortable: true },
+  { id: `${prefix}.tierVersionId`, label: 'Tier version ID', kind: 'string', sortable: true },
+  { id: `${prefix}.tierVersion`, label: 'Tier version', kind: 'number', sortable: true },
+  { id: `${prefix}.metered`, label: 'Metered tier', kind: 'boolean', sortable: true },
+  { id: `${prefix}.isDefault`, label: 'Default assignment', kind: 'boolean', sortable: true },
+  { id: `${prefix}.note`, label: 'Subscription note', kind: 'string', sortable: true },
+  { id: `${prefix}.updatedBy`, label: 'Subscription updated by', kind: 'string', sortable: true },
+  { id: `${prefix}.updatedAt`, label: 'Subscription updated time', kind: 'date', sortable: true },
+  {
+    id: `${prefix}.hasOverrides`,
+    label: 'Has custom quota overrides',
+    kind: 'boolean',
+    getValue: (row: any) => !!row?.subscription?.overrides,
+    sortable: true
+  },
+  ...QUOTA_FIELDS.flatMap<AdminRowField<T>>((field) => [
+    {
+      id: `${prefix}.overrides.${field}`,
+      label: `Override ${QUOTA_QUERY_LABELS[field]}`,
+      kind: 'number',
+      sortable: true
+    },
+    {
+      id: `${prefix}.overrides.${field}.unlimited`,
+      label: `Override ${QUOTA_QUERY_LABELS[field]} is unlimited`,
+      kind: 'boolean',
+      getValue: (row: any) => {
+        const overrides = row?.subscription?.overrides;
+        return overrides && Object.prototype.hasOwnProperty.call(overrides, field) ? overrides[field] === null : undefined;
+      },
+      sortable: true
+    },
+    {
+      id: `${prefix}.effective.${field}`,
+      label: `Effective ${QUOTA_QUERY_LABELS[field]}`,
+      kind: 'number',
+      sortable: true
+    },
+    {
+      id: `${prefix}.effective.${field}.unlimited`,
+      label: `Effective ${QUOTA_QUERY_LABELS[field]} is unlimited`,
+      kind: 'boolean',
+      getValue: (row: any) => row?.subscription?.effective?.[field] === null,
+      sortable: true
+    }
+  ])
+];
+
+const USER_QUERY_FIELDS: readonly AdminRowField<UserRow>[] = [
+  { id: 'id', label: 'User ID', kind: 'string', sortable: true },
+  { id: 'username', label: 'Username', kind: 'string', sortable: true },
+  { id: 'displayName', label: 'Display name', kind: 'string', sortable: true },
+  { id: 'email', label: 'Email', kind: 'string', sortable: true },
+  { id: 'createdAt', label: 'Created time', kind: 'date', sortable: true },
+  { id: 'accountKind', label: 'Account kind', kind: 'enum', options: [{ value: 'user', label: 'User' }, { value: 'service', label: 'Service' }], sortable: true },
+  { id: 'isAdmin', label: 'Administrator', kind: 'boolean', sortable: true },
+  { id: 'envAdmin', label: 'Environment administrator', kind: 'boolean', sortable: true },
+  { id: 'storageAllowanceBytes', label: 'Stored allowance (bytes)', kind: 'number', sortable: true },
+  { id: 'storageUsedBytes', label: 'User storage used (bytes)', kind: 'number', sortable: true },
+  { id: 'appNamespaceBytes', label: 'App data used (bytes)', kind: 'number', sortable: true },
+  ...subscriptionQueryFields<UserRow>(),
+  { id: 'counts.apps', label: 'Registered apps', kind: 'number', sortable: true },
+  { id: 'counts.linkedApps', label: 'Linked apps', kind: 'number', sortable: true },
+  { id: 'counts.ownedAccounts', label: 'Owned accounts', kind: 'number', sortable: true },
+  { id: 'counts.pats', label: 'Access tokens', kind: 'number', sortable: true },
+  { id: 'counts.connectedApps', label: 'Connected apps', kind: 'number', sortable: true }
+];
+
+const APP_QUERY_FIELDS: readonly AdminRowField<AppRow>[] = [
+  { id: 'clientId', label: 'Client ID', kind: 'string', sortable: true },
+  { id: 'name', label: 'App name', kind: 'string', sortable: true },
+  { id: 'origins', label: 'Allowed origins', kind: 'string', sortable: true },
+  { id: 'createdAt', label: 'Created time', kind: 'date', sortable: true },
+  { id: 'revokedAt', label: 'Suspended time', kind: 'date', sortable: true },
+  {
+    id: 'status',
+    label: 'Status',
+    kind: 'enum',
+    getValue: (row) => (row.revokedAt ? 'suspended' : 'active'),
+    options: [{ value: 'active', label: 'Active' }, { value: 'suspended', label: 'Suspended' }],
+    sortable: true
+  },
+  { id: 'owner.id', label: 'Owner ID', kind: 'string', sortable: true },
+  { id: 'owner.username', label: 'Owner username', kind: 'string', sortable: true },
+  { id: 'managers.id', label: 'Manager ID', kind: 'string', sortable: true },
+  { id: 'managers.username', label: 'Manager username', kind: 'string', sortable: true },
+  { id: 'userCount', label: 'Connected users', kind: 'number', sortable: true },
+  { id: 'usedBytes', label: 'Storage used (bytes)', kind: 'number', sortable: true },
+  ...subscriptionQueryFields<AppRow>()
+];
+
+const userRowId = (row: UserRow) => row.id;
+const appRowId = (row: AppRow) => row.clientId;
 
 const TierBadge = ({ subscription }: { subscription: UserRow['subscription'] }) => (
   <Flex gap={1} align="center" wrap="wrap">
     <Badge colorScheme={subscription.tier === 'payg' ? 'orange' : subscription.isDefault ? 'gray' : 'purple'} fontSize="0.65em">
-      {tierLabel(subscription.tier)}
+      {subscription.tierName || subscription.tier}
+      {subscription.tierVersion ? ` · v${subscription.tierVersion}` : ''}
     </Badge>
     {subscription.overrides && (
       <Badge colorScheme="pink" fontSize="0.6em" title="Admin quota overrides are active">
@@ -85,11 +207,14 @@ const TierBadge = ({ subscription }: { subscription: UserRow['subscription'] }) 
   </Flex>
 );
 
-// Debounce a search box into a fetcher; shared by both tabs.
-const useSearchedRows = <T,>(fetcher: (q: string) => Promise<T[] | null>, deps: React.DependencyList) => {
-  const [query, setQuery] = React.useState('');
+// Fetch the complete admin directory through bounded keyset pages. The typed
+// query controls run over the whole snapshot locally, so searching nested and
+// computed rollup fields stays fast. A refreshed snapshot swaps in atomically,
+// avoiding loading flashes and blind spots past the first 200 rows.
+const useAdminRows = <T,>(fetcher: (signal: AbortSignal) => Promise<CompleteAdminSnapshot<T> | null>, deps: React.DependencyList) => {
   const [rows, setRows] = React.useState<T[] | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState(false);
   const fetcherRef = React.useRef(fetcher);
   fetcherRef.current = fetcher;
   const [tick, setTick] = React.useState(0);
@@ -97,62 +222,96 @@ const useSearchedRows = <T,>(fetcher: (q: string) => Promise<T[] | null>, deps: 
 
   React.useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
     // Optimistic-rendering house rule: keep the last rows on screen while the
     // refetch runs; only the cold start shows the spinner.
     setLoading(rows === null);
-    const timer = setTimeout(
-      () => {
-        fetcherRef.current(query.trim())
-          .then((next) => {
-            if (!cancelled && next) setRows(next);
-          })
-          .catch(() => {})
-          .finally(() => !cancelled && setLoading(false));
-      },
-      query ? 250 : 0
-    );
+    setError(false);
+    fetcherRef
+      .current(controller.signal)
+      .then((next) => {
+        if (cancelled || !next) return;
+        setRows(next.rows);
+      })
+      .catch(() => !cancelled && setError(true))
+      .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
-      clearTimeout(timer);
+      controller.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, tick, ...deps]);
+  }, [tick, ...deps]);
 
-  return { query, setQuery, rows, loading, refresh };
+  return { rows, loading, error, refresh };
 };
+
+const SnapshotErrorNotice = ({ hasPreviousRows, onRetry }: { hasPreviousRows: boolean; onRetry: () => void }) => (
+  <Alert borderRadius="md" fontSize="xs" mb={3} status="error" variant="left-accent">
+    <AlertIcon boxSize={4} />
+    <Box flex="1">
+      {hasPreviousRows
+        ? 'Could not refresh the complete directory. The last complete snapshot remains visible.'
+        : 'Could not load the complete directory.'}
+    </Box>
+    <Button ml={3} onClick={onRetry} size="xs" variant="outline">
+      Retry
+    </Button>
+  </Alert>
+);
 
 const UsersTab = () => {
   const api = useApi();
   const apiRef = React.useRef(api);
   apiRef.current = api;
-  const { query, setQuery, rows, loading, refresh } = useSearchedRows<UserRow>(
-    (q) => apiRef.current.v1.admin.usersOverview(q ? { q } : undefined).then((resp: any) => (resp?.ok ? resp.users : null)),
+  const { rows, loading, error, refresh } = useAdminRows<UserRow>(
+    (signal) =>
+      loadCompleteAdminSnapshot<UserRow>(
+        (cursor, pageSignal) =>
+          apiRef.current.v1.admin.usersOverview(
+            { limit: 200, ...(cursor ? { cursor } : {}) },
+            { signal: pageSignal }
+          ),
+        'users',
+        userRowId,
+        signal
+      ),
     []
   );
+  const userQuery = useAdminRowQuery({
+    rows: rows ?? [],
+    fields: USER_QUERY_FIELDS,
+    getRowId: userRowId,
+    initialSort: { field: 'createdAt', direction: 'desc' }
+  });
   const [subscriptionFor, setSubscriptionFor] = React.useState<UserRow | null>(null);
   const [linksFor, setLinksFor] = React.useState<UserRow | null>(null);
 
   return (
     <Box>
-      <Input
-        size="sm"
-        maxW="360px"
-        placeholder="Search users by username or email…"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        mb={3}
-      />
+      <Box mb={3}>
+        <AdminRowQueryControls
+          ariaLabel="Query users"
+          fields={USER_QUERY_FIELDS}
+          onChange={userQuery.setQuery}
+          resultCount={userQuery.rows.length}
+          searchPlaceholder="Search every user field…"
+          totalCount={rows?.length ?? 0}
+          value={userQuery.query}
+        />
+      </Box>
+      {error ? <SnapshotErrorNotice hasPreviousRows={rows !== null} onRetry={refresh} /> : null}
       {loading && !rows ? (
         <Flex justify="center" py={10}>
           <Spinner />
         </Flex>
-      ) : (
+      ) : rows ? (
         <Box overflowX="auto">
           <Table size="sm" minW="880px">
             <Thead>
               <Tr>
                 <Th>User</Th>
                 <Th>Tier</Th>
+                <Th>Created</Th>
                 <Th isNumeric>Storage</Th>
                 <Th isNumeric>App data</Th>
                 <Th isNumeric>Apps</Th>
@@ -162,7 +321,7 @@ const UsersTab = () => {
               </Tr>
             </Thead>
             <Tbody>
-              {(rows ?? []).map((row) => (
+              {userQuery.rows.map((row) => (
                 <Tr key={row.id}>
                   <Td>
                     <Text fontWeight={600} fontSize="sm">
@@ -185,6 +344,9 @@ const UsersTab = () => {
                   <Td>
                     <TierBadge subscription={row.subscription} />
                   </Td>
+                  <Td fontSize="xs" whiteSpace="nowrap" title={row.createdAt || undefined}>
+                    {formatAdminDate(row.createdAt)}
+                  </Td>
                   <Td isNumeric fontSize="xs" whiteSpace="nowrap">
                     {formatBytes(row.storageUsedBytes)} / {bytesOrInfinity(row.subscription.effective.userStorageBytes)}
                   </Td>
@@ -193,7 +355,12 @@ const UsersTab = () => {
                   </Td>
                   <Td isNumeric fontSize="xs">
                     {row.counts.apps}
-                    {row.counts.linkedApps > 0 && <Text as="span" opacity={0.55}> +{row.counts.linkedApps}</Text>}
+                    {row.counts.linkedApps > 0 && (
+                      <Text as="span" opacity={0.55}>
+                        {' '}
+                        +{row.counts.linkedApps}
+                      </Text>
+                    )}
                   </Td>
                   <Td isNumeric fontSize="xs">
                     {row.counts.pats}
@@ -211,11 +378,11 @@ const UsersTab = () => {
                   </Td>
                 </Tr>
               ))}
-              {rows && rows.length === 0 && (
+              {rows && userQuery.rows.length === 0 && (
                 <Tr>
-                  <Td colSpan={8}>
+                  <Td colSpan={9}>
                     <Text fontSize="sm" opacity={0.6} py={2}>
-                      No users match.
+                      No users match this query.
                     </Text>
                   </Td>
                 </Tr>
@@ -223,7 +390,7 @@ const UsersTab = () => {
             </Tbody>
           </Table>
         </Box>
-      )}
+      ) : null}
       {subscriptionFor && (
         <SubscriptionEditorModal
           subjectType="user"
@@ -253,10 +420,26 @@ const AppsTab = () => {
   const lopu = useLopu();
   const apiRef = React.useRef(api);
   apiRef.current = api;
-  const { query, setQuery, rows, loading, refresh } = useSearchedRows<AppRow>(
-    (q) => apiRef.current.v1.admin.apps(q ? { q } : undefined).then((resp: any) => (resp?.ok ? resp.apps : null)),
+  const { rows, loading, error, refresh } = useAdminRows<AppRow>(
+    (signal) =>
+      loadCompleteAdminSnapshot<AppRow>(
+        (cursor, pageSignal) =>
+          apiRef.current.v1.admin.apps(
+            { limit: 200, ...(cursor ? { cursor } : {}) },
+            { signal: pageSignal }
+          ),
+        'apps',
+        appRowId,
+        signal
+      ),
     []
   );
+  const appQuery = useAdminRowQuery({
+    rows: rows ?? [],
+    fields: APP_QUERY_FIELDS,
+    getRowId: appRowId,
+    initialSort: { field: 'createdAt', direction: 'desc' }
+  });
   const [subscriptionFor, setSubscriptionFor] = React.useState<AppRow | null>(null);
   const [managersFor, setManagersFor] = React.useState<AppRow | null>(null);
   const [confirmRevoke, setConfirmRevoke] = React.useState<string | null>(null);
@@ -286,25 +469,30 @@ const AppsTab = () => {
 
   return (
     <Box>
-      <Input
-        size="sm"
-        maxW="360px"
-        placeholder="Search apps by name or clientId…"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        mb={3}
-      />
+      <Box mb={3}>
+        <AdminRowQueryControls
+          ariaLabel="Query apps"
+          fields={APP_QUERY_FIELDS}
+          onChange={appQuery.setQuery}
+          resultCount={appQuery.rows.length}
+          searchPlaceholder="Search every app field…"
+          totalCount={rows?.length ?? 0}
+          value={appQuery.query}
+        />
+      </Box>
+      {error ? <SnapshotErrorNotice hasPreviousRows={rows !== null} onRetry={refresh} /> : null}
       {loading && !rows ? (
         <Flex justify="center" py={10}>
           <Spinner />
         </Flex>
-      ) : (
+      ) : rows ? (
         <Box overflowX="auto">
           <Table size="sm" minW="880px">
             <Thead>
               <Tr>
                 <Th>App</Th>
                 <Th>Owner</Th>
+                <Th>Created</Th>
                 <Th isNumeric>Users</Th>
                 <Th isNumeric>Storage</Th>
                 <Th>Tier</Th>
@@ -313,7 +501,7 @@ const AppsTab = () => {
               </Tr>
             </Thead>
             <Tbody>
-              {(rows ?? []).map((row) => (
+              {appQuery.rows.map((row) => (
                 <Tr key={row.clientId} opacity={row.revokedAt ? 0.6 : 1}>
                   <Td>
                     <Text fontWeight={600} fontSize="sm">
@@ -326,24 +514,24 @@ const AppsTab = () => {
                   <Td fontSize="xs">
                     @{row.owner.username ?? row.owner.id}
                     {row.managers.length > 0 && (
-                      <Text as="span" opacity={0.55}> +{row.managers.length}</Text>
+                      <Text as="span" opacity={0.55}>
+                        {' '}
+                        +{row.managers.length}
+                      </Text>
                     )}
+                  </Td>
+                  <Td fontSize="xs" whiteSpace="nowrap" title={row.createdAt || undefined}>
+                    {formatAdminDate(row.createdAt)}
                   </Td>
                   <Td isNumeric fontSize="xs">
                     {row.userCount}
                   </Td>
                   <Td isNumeric fontSize="xs" whiteSpace="nowrap">
                     {formatBytes(row.usedBytes)}
-                    {!row.subscription.isDefault && ` / ${bytesOrInfinity(row.subscription.effective.appStorageBytes)}`}
+                    {` / ${bytesOrInfinity(row.subscription.effective.appStorageBytes)}`}
                   </Td>
                   <Td>
-                    {row.subscription.isDefault ? (
-                      <Text fontSize="xs" opacity={0.55}>
-                        user tier
-                      </Text>
-                    ) : (
-                      <TierBadge subscription={row.subscription} />
-                    )}
+                    <TierBadge subscription={row.subscription} />
                   </Td>
                   <Td>
                     {row.revokedAt ? (
@@ -365,13 +553,7 @@ const AppsTab = () => {
                     </Button>
                     {confirmRevoke === row.clientId ? (
                       <>
-                        <Button
-                          size="xs"
-                          colorScheme="red"
-                          mr={1}
-                          isLoading={busyClientId === row.clientId}
-                          onClick={() => toggleRevoked(row)}
-                        >
+                        <Button size="xs" colorScheme="red" mr={1} isLoading={busyClientId === row.clientId} onClick={() => toggleRevoked(row)}>
                           Confirm
                         </Button>
                         <Button size="xs" variant="ghost" onClick={() => setConfirmRevoke(null)}>
@@ -392,11 +574,11 @@ const AppsTab = () => {
                   </Td>
                 </Tr>
               ))}
-              {rows && rows.length === 0 && (
+              {rows && appQuery.rows.length === 0 && (
                 <Tr>
-                  <Td colSpan={7}>
+                  <Td colSpan={8}>
                     <Text fontSize="sm" opacity={0.6} py={2}>
-                      No apps match.
+                      No apps match this query.
                     </Text>
                   </Td>
                 </Tr>
@@ -404,7 +586,7 @@ const AppsTab = () => {
             </Tbody>
           </Table>
         </Box>
-      )}
+      ) : null}
       {subscriptionFor && (
         <SubscriptionEditorModal
           subjectType="app"
@@ -436,12 +618,7 @@ export const AdminDashboard = () => {
   // never a redirect, so the URL is shareable between admins.
   if (!user?.isAdmin) {
     return (
-      <Flex
-        justify="center"
-        px={4}
-        py={16}
-        paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px) + 32px)"
-      >
+      <Flex justify="center" px={4} py={16} paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px) + 32px)">
         <Box {...CARD_STYLES} maxW="420px" width="100%" p={6} textAlign="center">
           <Heading size="md" mb={2}>
             🔐 Admin access required
@@ -456,7 +633,7 @@ export const AdminDashboard = () => {
 
   return (
     <Box
-      maxW="1080px"
+      maxW="1280px"
       mx="auto"
       px={{ base: 3, md: 6 }}
       py={6}
@@ -469,10 +646,11 @@ export const AdminDashboard = () => {
       <Text fontSize="sm" opacity={0.65} mb={4}>
         Manage users, apps, subscription tiers, quotas, and ownership.
       </Text>
-      <Tabs variant="enclosed" size="sm" isLazy>
+      <Tabs variant="enclosed" size="sm" isLazy lazyBehavior="keepMounted">
         <TabList flexWrap="wrap">
           <Tab>Users</Tab>
           <Tab>Apps</Tab>
+          <Tab>Tiers</Tab>
           <Tab>System</Tab>
         </TabList>
         <TabPanels>
@@ -481,6 +659,9 @@ export const AdminDashboard = () => {
           </TabPanel>
           <TabPanel px={0}>
             <AppsTab />
+          </TabPanel>
+          <TabPanel px={0}>
+            <TierManager />
           </TabPanel>
           <TabPanel px={0}>
             <AdminPanel />

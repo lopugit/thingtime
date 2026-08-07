@@ -19,20 +19,59 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Typed queries across every admin workspace**: Users, Apps, Tiers, rate
+  limits, and the administrator roster now share an all-field free-text,
+  filter, and deterministic-sort interface. It handles nested/list fields,
+  created-day ranges, tiers and immutable versions, quotas/usage/counts,
+  lifecycle state, pricing/discounts/inclusion text, and booleans. User/app
+  APIs use private, no-store 200-row keyset pages, and the UI drains the full
+  directory before applying computed/nested filters instead of silently
+  filtering only the newest page. User/app rows now expose created time, while
+  hidden rate-limit edits remain intact. — Codex (AI),
+  2026-08-05
+
+- **Versioned subscription-tier admin + customer cards**: `/admin` now has a
+  Tiers workspace with separate Live, Draft / not live, and Archived sections.
+  Admins can create tiers and immutable revisions; edit names, taglines,
+  banners, four renewal prices, six annualized computed-or-custom savings,
+  Editor.js inclusions, metering, and quota defaults; then publish/archive with
+  confirmation while preserving every historical revision. The public
+  `/api/v1/tiers`, admin `/api/v1/admin/tiers`, subscription editor, and app
+  storage manager all use exact tier version ids. Each revision freezes its
+  pricing/discounts, and assignments freeze the tier name, version, metering,
+  and quota snapshot so later catalog changes cannot move existing customers.
+  Includes standalone-Mongo-safe
+  publish recovery, protected `subscription-*` ids, default-tier safeguards,
+  dynamic customer cards, schemas/indexes/docs/tests, and legacy v1 pinning. —
+  Codex (AI), 2026-08-05
+
+- **App-owner storage subscriptions + app-user sub-tiers**: `/apps/manage`
+  lets a registering owner or linked co-manager inspect measured whole-app
+  usage, switch the aggregate plan (Free 5 GiB, Plus 25 GiB, Pro 100 GiB,
+  metered PAYG), change the inherited per-user cap (50 MiB by default), and
+  assign/reset one or up to 200 selected app users to custom caps. App tier +
+  aggregate allowance/usage now live atomically on the app Thing; protected
+  relational `app-storage` Things hold user usage and optional overrides, with
+  guarded writes enforcing both ceilings and clamping every user cap to the
+  whole-app total. Includes owner/co-manager API, privacy-gated usernames,
+  responsive manager UI, schema/index/migration updates, API/embed docs, and a
+  30-check local-only live suite. This supersedes the earlier app→end-user-tier
+  fallback from the stacked admin-manager change. — Codex (AI), 2026-08-05
+
 - **/admin dashboard + subscription tiers + ownership links** (stacked on the
   PAT × app-namespace tree): admin-gated `/admin` page (Users / Apps / System
   tabs) managing every user and app — subscription tiers (free/plus/pro/payg;
   payg = metered, no hard caps) with per-field admin overrides (`null` =
-  unlimited), quota enforcement wired through the tiers (app-storage byte
-  budget resolves app assignment → end-user tier → free default; app + PAT
-  mint caps), platform-level app suspension (`crystal.revokedAt` checked at
+  unlimited), quota enforcement wired through the tiers (whole-app storage,
+  app registration, and PAT mint caps), platform-level app suspension
+  (`crystal.revokedAt` checked at
   the `resolveAppToken` choke point + live-session sweep), and many-to-many
   ownership links (`account-link` things): owned accounts appear in the
   switcher's "Owned accounts" and are assumable without credentials
   (`POST /api/v1/auth/accounts/assume`), app links grant co-management. New
   protected kinds `subscription` + `account-link`; 7 new documented endpoints;
   guard smoke tests; `test:subscriptions` unit suite; live suite
-  `scripts/verify-admin-subscriptions.mjs` (32 checks, needs
+  `scripts/verify-admin-subscriptions.mjs` (38 checks, needs
   `TT_VERIFY_ADMIN_USER`/`TT_VERIFY_ADMIN_PASS` of an env-admin). See the
   detailed PR note in `PRs/`. — Claude (AI), 2026-08-02
 
@@ -41,6 +80,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - **PR #69 final-review hardening round**: a multi-agent review of the unified
   /search + profile/feed branch surfaced a batch of merge-blocking issues, all
   fixed here — Claude (AI), 2026-07-17:
+
   - **Advanced filters no longer 400 + wipe results on numeric values**: the
     query builder's default `contains` operator coerced `4`/`true`/`null` to
     real types, which the server rejects for text-only operators, clearing the
@@ -92,6 +132,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   unrequested fallback search. — Claude (AI), 2026-07-16
 
 ### Changed
+
+- **App-data now has real allowances at both scopes**: every registered app
+  stores a server-owned 5 GiB aggregate allowance/usage counter plus a 50 MiB
+  per-app-user allowance. Namespace writes reserve both guarded ledgers,
+  deletes refund both, `/api/v1/app-data/usage` reports used/allowance/remaining
+  for each, and `/api/v1/apps` exposes the developer's aggregate status without
+  allowing `/apps/update` to raise it. The idempotent
+  `backfill-app-storage-allowances` migration write-fences legacy apps,
+  reconciles user ledgers, and initializes aggregate usage last. — Codex (AI),
+  2026-08-02
 
 - **Feed things render natively** (`ThingView`): thingtime posts mount the real
   Thingtime component — right-click context menu, collapse, and view⇄edit

@@ -3,13 +3,26 @@ import { randomUUID } from 'node:crypto';
 import { listLinkedAppClientIds, userCanManageApp } from '../accounts/accountLinks';
 import { getSessionsCollection, getThingsCollection } from '../mongodb/collections';
 import { getSubscription } from '../subscriptions/subscriptions';
-import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS, MAX_APP_NAME_CHARS, MAX_APP_ORIGINS } from '~/schemas/registry';
+import { DEFAULT_SUBSCRIPTION_TIER, subscriptionTierById, type SubscriptionTierId } from '../subscriptions/tierCatalog';
+import { getLiveSubscriptionTier, tierAssignmentSnapshot } from '../subscriptions/tierCatalogStore';
+import { remainingStorageBytes, storageUsage, storedByteAllowance, storedByteCount } from './appStorageCore';
+import {
+  ACL_OWNER,
+  APP_STORAGE_ACCOUNTING_VERSION,
+  COLLECTION_SCHEMA_VERSIONS,
+  DEFAULT_APP_STORAGE_ALLOWANCE_BYTES,
+  DEFAULT_APP_USER_STORAGE_ALLOWANCE_BYTES,
+  MAX_APPS_PER_USER,
+  MAX_APP_NAME_CHARS,
+  MAX_APP_ORIGINS
+} from '~/schemas/registry';
 
 // Embed apps for "Login with Thingtime" (FUNDAMENTALS.md: everything is a
-// thing) — a registered app is a `things` doc with thingtime ['app'] and
-// crystal { clientId, name, origins }, owned by the developer user. Apps are
-// created ONLY here (the schema has no generic-route sanitizer), the server
-// mints the clientId, and a partial unique index keeps clientId one-of-a-kind.
+// thing) — a registered app is a `things` doc with thingtime ['app'] and a
+// crystal containing its identity/origins plus server-owned storage allowance
+// + usage fields, owned by the developer user. Apps are created ONLY here (the
+// schema has no generic-route sanitizer), the server mints the clientId, and a
+// partial unique index keeps clientId one-of-a-kind.
 
 type Fail = { ok: false; status: number; error: string };
 const fail = (status: number, error: string): Fail => ({ ok: false, status, error });
@@ -18,11 +31,28 @@ export type PublicApp = {
   clientId: string;
   name: string;
   origins: string[];
+  storageAllowanceBytes: number | null;
+  storageUsedBytes: number;
+  storageRemainingBytes: number | null;
+  userStorageAllowanceBytes: number;
+  storageAccountingReady: boolean;
+  subscriptionTier: SubscriptionTierId;
+  subscriptionMetered: boolean;
+  subscriptionCustom: boolean;
   createdAt: Date;
   updatedAt: Date;
   // Set while an admin has suspended the app: every token is refused at the
   // resolveAppToken choke point and the consent screen won't render.
   revokedAt: Date | null;
+};
+
+export type AppStoragePolicy = {
+  storageAllowanceBytes: number | null;
+  storageUsedBytes: number;
+  userStorageAllowanceBytes: number;
+  subscriptionTier: SubscriptionTierId;
+  subscriptionCustom: boolean;
+  ready: boolean;
 };
 
 // The shape shown to ANONYMOUS callers (the authorize popup before login):
@@ -76,24 +106,61 @@ export const sanitizeAppOrigins = (value: unknown): string[] | Fail => {
   for (const entry of value) {
     const normalized = normalizeAppOrigin(entry);
     if (!normalized) {
-      return fail(
-        400,
-        'Origins must be bare https origins like https://example.com (http is allowed for localhost only)'
-      );
+      return fail(400, 'Origins must be bare https origins like https://example.com (http is allowed for localhost only)');
     }
     if (!origins.includes(normalized)) origins.push(normalized);
   }
   return origins;
 };
 
-const toPublicApp = (doc: any): PublicApp => ({
-  clientId: doc.crystal?.clientId,
-  name: doc.crystal?.name,
-  origins: Array.isArray(doc.crystal?.origins) ? doc.crystal.origins : [],
-  createdAt: doc.createdAt,
-  updatedAt: doc.updatedAt,
-  revokedAt: doc.crystal?.revokedAt instanceof Date ? doc.crystal.revokedAt : null
-});
+export const appStoragePolicyOf = (doc: any): AppStoragePolicy => {
+  const crystal = doc?.crystal;
+  const hasAllowance = !!crystal && Object.prototype.hasOwnProperty.call(crystal, 'storageAllowanceBytes');
+  const allowanceValid =
+    hasAllowance &&
+    (crystal.storageAllowanceBytes === null || (Number.isSafeInteger(crystal.storageAllowanceBytes) && Number(crystal.storageAllowanceBytes) >= 0));
+  const subscriptionTier: SubscriptionTierId =
+    typeof crystal?.subscriptionTier === 'string' && crystal.subscriptionTier.trim() ? crystal.subscriptionTier.trim() : DEFAULT_SUBSCRIPTION_TIER;
+  const ready =
+    allowanceValid &&
+    Number.isSafeInteger(crystal?.storageUsedBytes) &&
+    Number(crystal.storageUsedBytes) >= 0 &&
+    Number.isSafeInteger(crystal?.userStorageAllowanceBytes) &&
+    Number(crystal.userStorageAllowanceBytes) >= 0 &&
+    crystal?.storageAccountingVersion === APP_STORAGE_ACCOUNTING_VERSION;
+  return {
+    storageAllowanceBytes: storedByteAllowance(crystal?.storageAllowanceBytes, DEFAULT_APP_STORAGE_ALLOWANCE_BYTES),
+    storageUsedBytes: storedByteCount(crystal?.storageUsedBytes, 0),
+    userStorageAllowanceBytes: storedByteCount(crystal?.userStorageAllowanceBytes, DEFAULT_APP_USER_STORAGE_ALLOWANCE_BYTES),
+    subscriptionTier,
+    subscriptionCustom: !!crystal && Object.prototype.hasOwnProperty.call(crystal, 'storageAllowanceOverrideBytes'),
+    ready
+  };
+};
+
+const toPublicApp = (doc: any): PublicApp => {
+  const policy = appStoragePolicyOf(doc);
+  const appUsage = storageUsage(policy.storageUsedBytes, policy.storageAllowanceBytes, DEFAULT_APP_STORAGE_ALLOWANCE_BYTES);
+  return {
+    clientId: doc.crystal?.clientId,
+    name: doc.crystal?.name,
+    origins: Array.isArray(doc.crystal?.origins) ? doc.crystal.origins : [],
+    storageAllowanceBytes: appUsage.allowanceBytes,
+    storageUsedBytes: appUsage.usedBytes,
+    storageRemainingBytes: remainingStorageBytes(appUsage),
+    userStorageAllowanceBytes: policy.userStorageAllowanceBytes,
+    storageAccountingReady: policy.ready,
+    subscriptionTier: policy.subscriptionTier,
+    subscriptionMetered:
+      typeof doc.crystal?.subscriptionTierMetered === 'boolean'
+        ? doc.crystal.subscriptionTierMetered
+        : subscriptionTierById(policy.subscriptionTier).metered,
+    subscriptionCustom: policy.subscriptionCustom,
+    createdAt: doc.createdAt,
+    updatedAt: doc.updatedAt,
+    revokedAt: doc.crystal?.revokedAt instanceof Date ? doc.crystal.revokedAt : null
+  };
+};
 
 // Admin suspension state. Lives in crystal (like every app field) and is
 // checked at the resolveAppToken choke point, so setting it kills every live
@@ -122,10 +189,7 @@ export const appAllowsOrigin = (appDoc: any, origin: string): boolean => {
   return Array.isArray(origins) && origins.includes(normalized);
 };
 
-export const createApp = async (
-  ownerId: string,
-  input: { name?: unknown; origins?: unknown }
-): Promise<{ ok: true; app: PublicApp } | Fail> => {
+export const createApp = async (ownerId: string, input: { name?: unknown; origins?: unknown }): Promise<{ ok: true; app: PublicApp } | Fail> => {
   const name = sanitizeAppName(input.name);
   if (!name) return fail(400, `App name is required (max ${MAX_APP_NAME_CHARS} chars)`);
 
@@ -147,11 +211,27 @@ export const createApp = async (
   }
 
   const now = new Date();
+  const liveDefault = await getLiveSubscriptionTier(DEFAULT_SUBSCRIPTION_TIER);
+  const defaultSnapshot = tierAssignmentSnapshot(liveDefault ?? subscriptionTierById(DEFAULT_SUBSCRIPTION_TIER));
   const doc = {
     shareId: randomUUID(),
     schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
     thingtime: ['app'],
-    crystal: { clientId: `ttapp_${randomUUID()}`, name, origins },
+    crystal: {
+      clientId: `ttapp_${randomUUID()}`,
+      name,
+      origins,
+      subscriptionTier: defaultSnapshot.tierId,
+      subscriptionTierVersionId: defaultSnapshot.versionId,
+      subscriptionTierVersion: defaultSnapshot.version,
+      subscriptionTierName: defaultSnapshot.title,
+      subscriptionTierMetered: defaultSnapshot.metered,
+      subscriptionTierQuotas: defaultSnapshot.quotas,
+      storageAllowanceBytes: defaultSnapshot.quotas.appStorageBytes,
+      storageUsedBytes: 0,
+      userStorageAllowanceBytes: DEFAULT_APP_USER_STORAGE_ALLOWANCE_BYTES,
+      storageAccountingVersion: APP_STORAGE_ACCOUNTING_VERSION
+    },
     ownerId,
     acl: [ACL_OWNER],
     targetId: null,
@@ -232,10 +312,7 @@ export const deleteApp = async (ownerId: string, clientId: unknown): Promise<{ o
   const deleted = await things.deleteOne({ thingtime: 'app', 'crystal.clientId': id });
   if (!deleted.deletedCount) return fail(404, 'App not found');
 
-  await (await getSessionsCollection()).updateMany(
-    { purpose: 'app', 'meta.clientId': id, revokedAt: null },
-    { $set: { revokedAt: new Date() } }
-  );
+  await (await getSessionsCollection()).updateMany({ purpose: 'app', 'meta.clientId': id, revokedAt: null }, { $set: { revokedAt: new Date() } });
 
   return { ok: true };
 };
@@ -249,11 +326,7 @@ export const toEmbedApp = (appDoc: any): EmbedApp => ({
 // sweeps the app's live sessions (same sweep as deleteApp) so holders lose
 // access even before the choke-point check lands; restoring never resurrects
 // swept sessions — users re-authorize, which is the point of a suspension.
-export const setAppRevoked = async (
-  clientId: unknown,
-  revoked: boolean,
-  adminId: string
-): Promise<{ ok: true; app: PublicApp } | Fail> => {
+export const setAppRevoked = async (clientId: unknown, revoked: boolean, adminId: string): Promise<{ ok: true; app: PublicApp } | Fail> => {
   if (typeof clientId !== 'string' || !clientId.trim()) return fail(400, 'clientId is required');
   const id = clientId.trim();
 
@@ -268,10 +341,7 @@ export const setAppRevoked = async (
   if (!updated) return fail(404, 'App not found');
 
   if (revoked) {
-    await (await getSessionsCollection()).updateMany(
-      { purpose: 'app', 'meta.clientId': id, revokedAt: null },
-      { $set: { revokedAt: new Date() } }
-    );
+    await (await getSessionsCollection()).updateMany({ purpose: 'app', 'meta.clientId': id, revokedAt: null }, { $set: { revokedAt: new Date() } });
   }
 
   return { ok: true, app: toPublicApp(updated) };
