@@ -4480,8 +4480,8 @@
     "semantic_hash": "59e8896c68da625c73d7242d2d187250"
   },
   "PRs/99-claude-eval-csp-hardening--persisted-state-csp-register-body-cap.md": {
-    "mtime": 1786148916.1720517,
-    "ast_hash": "bee465ae55217f6f39106375bb47ad20",
-    "semantic_hash": ""
+    "mtime": 1786149600.3847482,
+    "ast_hash": "d6f78a7b90a469f0bfe31490843146ab",
+    "semantic_hash": "d6f78a7b90a469f0bfe31490843146ab"
   }
 }
