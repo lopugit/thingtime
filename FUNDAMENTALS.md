@@ -35,7 +35,7 @@ comments, reactions, shares, and free-form data all live in `things`, each
 kind declared through the `thingtime` schema-id array (see
 `app/schemas/registry.ts` and `claude-todo/12-everything-is-a-thing-collections.md`).
 
-**Physical collections are versioned.** The names below are *logical* — the
+**Physical collections are versioned.** The names below are _logical_ — the
 vocabulary of code, docs, and the admin query API. On the MongoDB server each
 collection physically lives at `<name>_v<N>`, where `N` is that collection's
 entry in `COLLECTION_SCHEMA_VERSIONS` (`app/schemas/registry.ts`): logical
@@ -50,27 +50,38 @@ stays behind as a frozen snapshot until the admin runs the destructive
 then everything below the current version can safely be deleted. Runbook and
 edge cases live in `api/utils/migrations/migrations.ts`.
 
-| Collection | Holds |
-| ---------- | ----- |
-| `things`   | ALL Thingtime data. System kinds: `user` (public profile in `crystal`, all private state as a single BinData `secure` blob, uniqueness via BinData `uniqueKeys`), `theme`, `feed-algorithm`, `waitlist`, `schema`; content kinds: `post`, `comment`, `reaction`, `share`, `data`. Every thing also carries a schema-free `extended` property for arbitrary unvalidated JSON (≤512KB, replace-on-write, never structured-searchable) |
-| `sessions` | server-side sessions / JWT records (revocation; `userId` = the user thing's `shareId`) |
-| `rosters`  | account-switcher rosters (TTL-reaped) |
-| `emailVerifications` | pending email-verification tokens |
-| `passwordResets` | single-use password-reset tokens (1h TTL; consuming one revokes every live session) |
-| `authOtps` | email-2FA login challenges (gated by user `meta.twoFactorEmailEnabled`; sha256 code hashes only, 10-min TTL, attempt-capped) |
-| `email_messages` + `email_events`/`email_suppression_list`/`email_unsubscribes`/`email_templates`/`email_subscriptions`/`email_identities` | the owned email layer — outbox rows for every send plus deliverability satellites (see `api/utils/email/`) |
-| `lopuMusingRateLimits` / `rateLimits` | rate-limit windows |
-| `settings` | admin-editable app settings singletons |
-| `users` / `themes` / `feedAlgorithms` / `waitlist` | LEGACY — new records are always written as things; a legacy doc is only ever *updated in place* (dual-era fallback) until the admin migrations (`/api/v1/admin/migrations`) convert it into a thing and delete it. No NEW records land here. |
+| Collection                                                                                                                                 | Holds                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `things`                                                                                                                                   | ALL Thingtime data. System kinds: `user` (public profile in `crystal`, all private state as a single BinData `secure` blob, uniqueness via BinData `uniqueKeys`), `theme`, `feed-algorithm`, `waitlist`, `schema`; content kinds: `post`, `comment`, `reaction`, `share`, `data`; control-plane kinds: `app` (registered client identity, origin allowlist, and aggregate app-byte ledger), `subscription-tier` (immutable versioned catalog revisions with live/draft/archived lifecycle, pricing, inclusions, and quota defaults), `subscription` (an exact tier-revision/quota snapshot plus the authoritative account-byte ledger per user — app plans live atomically on app Things), `app-storage` (protected per-app-user usage + optional sub-tier), `service-quota` (protected operational admission state), `account-link` (owned accounts + app co-managers, many-to-many). Every thing also carries a schema-free `extended` property for arbitrary unvalidated JSON (≤512KB, replace-on-write, never structured-searchable) |
+| `sessions`                                                                                                                                 | server-side sessions / JWT records (revocation; `userId` = the user thing's `shareId`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `rosters`                                                                                                                                  | account-switcher rosters (TTL-reaped)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `emailVerifications`                                                                                                                       | pending email-verification tokens                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `passwordResets`                                                                                                                           | single-use password-reset tokens (1h TTL; consuming one revokes every live session)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `authOtps`                                                                                                                                 | email-2FA login challenges (gated by user `meta.twoFactorEmailEnabled`; sha256 code hashes only, 10-min TTL, attempt-capped)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `email_messages` + `email_events`/`email_suppression_list`/`email_unsubscribes`/`email_templates`/`email_subscriptions`/`email_identities` | the owned email layer — outbox rows for every send plus deliverability satellites (see `api/utils/email/`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `lopuMusingRateLimits` / `rateLimits`                                                                                                      | rate-limit windows                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `settings`                                                                                                                                 | admin-editable app settings singletons                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `users` / `themes` / `feedAlgorithms` / `waitlist`                                                                                         | LEGACY — new records are always written as things; a legacy doc is only ever _updated in place_ (dual-era fallback) until the admin migrations (`/api/v1/admin/migrations`) convert it into a thing and delete it. No NEW records land here.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 
 System-kind rules (never bypass):
-- **Protected** kinds — `user`, `theme`, `feed-algorithm`, `waitlist` — are
+
+- **Protected** kinds — `user`, `theme`, `feed-algorithm`, `waitlist`, `app`,
+  `subscription-tier`, `subscription`, `app-storage`, `service-quota`,
+  `account-link` — are
   refused by the generic `/api/v1/things` CRUD; only their dedicated utils
-  write them (register, profile, themes, algorithms, waitlist). The `schema`
-  kind is NOT protected: anyone may publish a schema thing (the builtins are
-  seeded system-owned ones, user schemas are community-published).
+  write them (register, profile, themes, algorithms, waitlist, apps, and the
+  admin-gated tier/subscription/link endpoints — forging a client identity or
+  origin allowlist, publishing a tier,
+  self-assigning one, or creating an ownership link would be privilege
+  escalation). The deterministic `subscription-*` shareId namespace is also
+  reserved so ordinary Things cannot squat future tier revisions or assignment
+  records. The deterministic `quota-*` namespace is reserved for protected
+  service-quota records for the same reason.
+  The `schema` kind is NOT protected: anyone may publish a schema thing (the
+  builtins are seeded system-owned ones, user schemas are
+  community-published).
 - Private state lives under root `secure` as a single **BinData blob** (the
-  search wildcard text index tokenizes string *fields* only, so a binary blob
+  search wildcard text index tokenizes string _fields_ only, so a binary blob
   is entirely unsearchable — no field inside it can ever leak via `q=<value>`),
   never in `crystal`; the one queryable flag (`admin`) is a root boolean.
   `uniqueKeys` elements are BinData for the same reason, PII keys additionally
@@ -92,6 +103,7 @@ the parent bounded, make each write per-item + concurrency-safe (a partial-uniqu
 index enforces invariants like one-reaction-per-user), and give natural paging.
 
 How (see `api/utils/things/things.ts`):
+
 - Child docs carry `kind` + `parentId` + `ownerId` (+ payload), no `shareId`.
 - Reads **batch-aggregate** children for the whole page in ONE query per kind
   (`{ kind, parentId: { $in: postIds } }`) — never N+1 — and project the same
@@ -99,7 +111,97 @@ How (see `api/utils/things/things.ts`):
 - Writes create/delete one child doc; per-parent/per-user caps become soft
   product limits, not structural safety rails.
 - Legacy embedded data folds in on read and migrates to children on first write.
-- Deleting a parent cascades: delete its children by `parentId`.
+- Deleting a parent drains the complete transitive attachment graph
+  (`targetId` plus legacy `parentId`) child-first in bounded transactions; the
+  parent remains a retry anchor until no comments/replies/reactions/saves can
+  survive it.
+
+### Account storage is one exact, transactional ledger
+
+Every billable Thing has a server-owned `storageClass: "content"`, a versioned
+`storageAccountingVersion`, and `sizeBytes` equal to the UTF-8 byte length of
+exactly `JSON.stringify({ crystal, extended, tags })` after the API has
+normalized those three stored payload fields. This is the stable logical
+customer-content measure. It deliberately excludes platform envelope fields,
+Mongo indexes, compression, replication, and other physical database overhead
+that cannot be deterministically assigned to one account.
+
+`currentContentStorageSizeBytes()` is the shared proof used by every
+incremental writer: current schema + array `thingtime` + current content stamp
+
+- a fresh canonical payload re-measurement. An old, missing, fractional,
+  unsafe, or stale stamp is never used for delta arithmetic. Updates fail with a
+  migration-required response; deletes remain available but fence affected
+  ledgers for exact source reconciliation instead of guessing a refund.
+
+The protected user `subscription` Thing is the authoritative account ledger:
+its tier snapshot/override resolves `userStorageBytes`, while
+`storageUsedBytes` is the one enforced and displayed total. Every customer
+content create/update/delete changes that counter in the **same Mongo
+transaction** as the content. Unknown future user-content kinds default to
+billable. Only protected control-plane kinds or a server-written root
+`storageClass: "control"` are excluded; user-authored `crystal` values can never
+opt a Thing out.
+
+App data contributes to the account ledger exactly once. The app aggregate and
+per-(app,user) ledgers are overlapping sub-limits used for app-plan admission,
+not extra bytes added to the account total. In one 100-byte app write, account,
+app, and app-user counters each move by 100, while the account total remains 100. Public/admin UI and API projections read this canonical ledger; legacy
+flat user fields are compatibility aliases derived from the same nested
+`storage` value, never independent counters. Used/remaining compatibility
+aliases are null while the ledger is not ready, so cached or malformed values
+cannot masquerade as exact usage.
+
+Growth fails closed until the versioned ledger is `ready`, and finite
+allowances are checked atomically with the increment. A detected underflow
+marks `needs-reconcile`; the next growth attempt repairs from canonical content
+stamps inside its transaction before applying the new delta exactly once. The
+idempotent admin migration stamps all legacy content, ignores the old
+never-maintained usage values, preserves explicit legacy allowances as real
+subscription overrides, reconciles the ledger, and only then marks it ready.
+That migration first fences account, app, and app-user ledgers, runs every
+storage-affecting prerequisite to convergence, stamps content with compare-and-
+swap writes, and reconciles every overlapping ledger before publishing ready.
+Running a source-changing prerequisite by itself is refused while ledgers are
+live; the orchestrating storage migration is the safe entry point.
+Any new content writer must use these shared storage/transaction primitives;
+directly updating `things` is a quota bypass and violates §1.
+
+Operational boundaries are explicit rather than silent. Reconciliation and
+the whole-corpus migration fail closed: interruption leaves affected ledgers
+fenced and the idempotent migration must be rerun before growth resumes. A
+single very high-cardinality app may eventually need a batched, fenced
+background reconciliation instead of the current one-transaction repair.
+Admin account totals and app-data subtotals are separate read projections and
+can briefly reflect adjacent committed snapshots during active writes; quota
+admission itself remains transactional. The exact legacy compare-and-swap
+uses the complete bounded source Thing, so a malformed historical document at
+Mongo's BSON ceiling requires operator repair. These are logical content bytes,
+not physical BSON/WiredTiger/index/replication billing bytes.
+
+### App namespaces ("Login with Thingtime")
+
+Things written through an app-scoped token carry a server-stamped scalar root
+`appId` — the NAMESPACE marker. It is deliberately not the acl (users can
+hand-write `tt:app/<x>` acl entries, so acl membership would be spoofable);
+`acl` stays what it always was — the AUDIENCE: `tt:user` private, plus
+`tt:app/<clientId>` for that app's user base. Every app-token read and write is
+fenced to the namespace (`api/utils/apps/namespace.ts`), and storage is bounded
+by TWO standing BYTE allowances — the app Thing's aggregate subscription
+ceiling (Free 5 GiB, Plus 25 GiB, Pro 100 GiB, PAYG metered/unbounded) and one
+effective per-(user, app) ceiling (the app-owner default, 50 MiB initially,
+optionally replaced by a relational `app-storage` sub-tier and always clamped
+to the aggregate). Root `sizeBytes` is charged against the account, app, and
+app-user ledgers — never doc counts — in the same transaction as registered
+app content, so partial commits cannot drift them. Plan + aggregate counter are
+one app document, so entitlement and admission cannot drift; recoverable
+underflow fences reconcile from stamped app content before admitting growth.
+Sandboxes instead get a 5 MiB
+ephemeral namespace plus the global windowed brake. The end user owns
+every namespace doc and can browse (`GET /api/v1/things?appId=`,
+`/api/v1/apps/data-summary`) and delete
+(`POST /api/v1/apps/data/delete-all`) everything an app stores. Full model in
+`claude-todo/16-full-power-app-namespaces.md`.
 
 ## 4. One MongoDB connection source
 
@@ -140,7 +242,7 @@ One auth model used everywhere (see `claude-todo/03-auth-login-register.md`):
   live in `sessions` (not revoked). Logout / revoke = flip the session in Mongo →
   the JWT stops working immediately, before `exp`.
 
-So the JWT lives in the cookie for the website *and* works as a Bearer token for
+So the JWT lives in the cookie for the website _and_ works as a Bearer token for
 API clients — and either way Mongo is the source of truth for revocation.
 
 Multi-account: a second httpOnly cookie, **`tt_accounts`**, holds an opaque id
@@ -173,7 +275,7 @@ Two hooks, same look:
   `status` is `'success' | 'error' | 'info'`; default `duration` is 15s.
 - `useLopuStream()` → a streaming toast that pops instantly ("Lopu is thinking…")
   and types an NDJSON response in live (used by the DevKit musing). The read-timer
-  starts when the stream *finishes*.
+  starts when the stream _finishes_.
 
 Don't pass Chakra-native toast props (e.g. `isClosable`, `render`) to `lopu()` —
 the component owns presentation. `console.error`/logging is for developers and is

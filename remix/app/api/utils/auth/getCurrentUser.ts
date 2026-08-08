@@ -2,7 +2,7 @@ import { getAuthToken } from './authCookie';
 import { verifyJwt } from './jwt';
 import type { JwtClaims } from './jwt';
 import { getLiveSession } from './sessions';
-import { findUserById, toPublicUser } from './users';
+import { findUserById, toPublicUserWithStorage } from './users';
 import type { PublicUser } from './users';
 
 const SERVICE_EMAIL_VERIFICATION_GRACE_MS = 1000 * 60 * 60 * 24 * 7;
@@ -35,8 +35,12 @@ export const resolveSessionUser = async (jti: string, expectedUserId: string): P
   // full account credentials: they only work through the app-token path
   // (apps/appTokens.ts), which checks the purpose itself. Sandbox tokens
   // couldn't resolve anyway (their userId is no real user), but reject them
-  // explicitly all the same.
-  if (session.purpose === 'app' || session.purpose === 'app-sandbox') return null;
+  // explicitly all the same. Personal access tokens (the Settings token
+  // minter, auth/patTokens.ts) are likewise scoped credentials, not full
+  // sessions — they only resolve through resolveThingsActor and the token
+  // introspection endpoint, never here, so a PAT can never mint more tokens,
+  // change auth settings, or reach unscoped surfaces.
+  if (session.purpose === 'app' || session.purpose === 'app-sandbox' || session.purpose === 'pat') return null;
 
   const user = await findUserById(expectedUserId);
   if (!user) return null;
@@ -44,7 +48,7 @@ export const resolveSessionUser = async (jti: string, expectedUserId: string): P
     return null;
   }
 
-  return toPublicUser(user);
+	return toPublicUserWithStorage(user);
 };
 
 // Resolve a signed JWT to its live user, or null. Verifies the signature + exp,

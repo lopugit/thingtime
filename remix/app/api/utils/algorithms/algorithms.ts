@@ -3,21 +3,13 @@ import { ObjectId } from 'mongodb';
 
 // feed-algorithm is a PROTECTED system kind: algorithm things stay on the home
 // deployment DB even while a data-plane endpoint override is active.
-import {
-  getFeedAlgorithmsCollection,
-  getHomeThingsCollection as getThingsCollection,
-  getUsersCollection
-} from '../mongodb/collections';
+import { getFeedAlgorithmsCollection, getHomeThingsCollection as getThingsCollection, getUsersCollection, withMongoTransaction } from '../mongodb/collections';
 import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 import { clearUserActiveFeedAlgorithm, setUserActiveFeedAlgorithm } from '../auth/users';
-import {
-  applyEventsToWeights,
-  emptyWeights,
-  topInterests,
-  type AlgorithmWeights,
-  type EngagementEvent
-} from '../things/feedRanking';
+import { applyEventsToWeights, emptyWeights, topInterests, type AlgorithmWeights, type EngagementEvent } from '../things/feedRanking';
 import { getPostFeatures } from '../things/things';
+import { StorageMutationError, USER_STORAGE_ACCOUNTING_VERSION, currentContentStorageSizeBytes, thingStorageSizeBytes } from '../storage/storageCore';
+import { applyUserStorageDelta, markUserStorageNeedsReconcile, readyUserStorageMatch } from '../storage/userStorage';
 
 // Personal feed algorithms: named, branchable interest-weight profiles trained
 // by doomscroll engagement. A user can keep many and switch the active one
@@ -68,6 +60,34 @@ const DEFAULT_EMOJI = '🧠';
 type Fail = { ok: false; status: number; error: string };
 const fail = (status: number, error: string): Fail => ({ ok: false, status, error });
 
+const storageFail = (error: unknown): Fail | null => (error instanceof StorageMutationError ? fail(error.status, error.message) : null);
+
+const storedAlgorithmSizeBytes = (thing: any): number => {
+	const canonical = currentContentStorageSizeBytes(thing || {});
+	if (canonical === null) {
+		throw new StorageMutationError(409, 'storage_conflict', 'This feed algorithm requires the current storage migration before it can be changed');
+	}
+	return canonical;
+};
+
+const algorithmStorageCas = (thing: any): Record<string, unknown> => ({
+	updatedAt: thing.updatedAt,
+	storageClass: 'content',
+	storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION,
+	sizeBytes: thing.sizeBytes
+});
+
+const assertLegacyAlgorithmMutationAllowed = async (ownerId: string, things: any, session: any): Promise<void> => {
+	const ready = await things.findOne(readyUserStorageMatch(ownerId), { projection: { _id: 1 }, session });
+	if (ready) {
+		throw new StorageMutationError(
+			409,
+			'storage_conflict',
+			'This feed algorithm is still in legacy storage and must be migrated before it can be changed'
+		);
+	}
+};
+
 // thing → legacy FeedAlgorithmDoc view (same move as users.ts userThingToDoc):
 // shareId/ownerId stay at the root, the trained profile comes out of crystal.
 const algorithmThingToDoc = (thing: any): FeedAlgorithmDoc => ({
@@ -115,10 +135,7 @@ const resolveAuthorUsernames = async (ids: string[]): Promise<Map<string, string
   return usernames;
 };
 
-const projectAlgorithm = (
-  doc: FeedAlgorithmDoc,
-  usernames: Map<string, string>
-): PublicAlgorithm => ({
+const projectAlgorithm = (doc: FeedAlgorithmDoc, usernames: Map<string, string>): PublicAlgorithm => ({
   id: doc.shareId,
   name: doc.name,
   emoji: doc.emoji || DEFAULT_EMOJI,
@@ -128,17 +145,13 @@ const projectAlgorithm = (
   createdAt: new Date(doc.createdAt).toISOString(),
   updatedAt: new Date(doc.updatedAt).toISOString(),
   topInterests: topInterests(doc.weights || emptyWeights()).map((entry) =>
-    entry.kind === 'author' && usernames.has(entry.key)
-      ? { ...entry, label: `@${usernames.get(entry.key)}` }
-      : entry
+		entry.kind === 'author' && usernames.has(entry.key) ? { ...entry, label: `@${usernames.get(entry.key)}` } : entry
   )
 });
 
 export const toPublicAlgorithm = async (doc: FeedAlgorithmDoc): Promise<PublicAlgorithm> => {
   const interests = topInterests(doc.weights || emptyWeights());
-  const usernames = await resolveAuthorUsernames(
-    interests.filter((entry) => entry.kind === 'author').map((entry) => entry.key)
-  );
+	const usernames = await resolveAuthorUsernames(interests.filter((entry) => entry.kind === 'author').map((entry) => entry.key));
   return projectAlgorithm(doc, usernames);
 };
 
@@ -216,15 +229,15 @@ export const listAlgorithmsForUser = async (ownerId: string): Promise<PublicAlgo
 
   const interestsByDoc = page.map((doc) => topInterests(doc.weights || emptyWeights()));
   const usernames = await resolveAuthorUsernames(
-    interestsByDoc.flat().filter((entry) => entry.kind === 'author').map((entry) => entry.key)
+		interestsByDoc
+			.flat()
+			.filter((entry) => entry.kind === 'author')
+			.map((entry) => entry.key)
   );
   return page.map((doc) => projectAlgorithm(doc, usernames));
 };
 
-export const getOwnedAlgorithmWeights = async (
-  ownerId: string,
-  shareId: string
-): Promise<AlgorithmWeights | null> => {
+export const getOwnedAlgorithmWeights = async (ownerId: string, shareId: string): Promise<AlgorithmWeights | null> => {
   const doc = await findOwnedAlgorithm(ownerId, shareId);
   return doc ? doc.weights || emptyWeights() : null;
 };
@@ -239,10 +252,7 @@ export type CreateAlgorithmInput = {
 // Create a fresh algorithm, optionally branched from an existing one (weights
 // copied, lineage kept in parentId) and optionally seed-trained from a batch
 // of session events ("save this doomscroll session as an algorithm").
-export const createAlgorithm = async (
-  ownerId: string,
-  input: CreateAlgorithmInput
-): Promise<Fail | { ok: true; algorithm: PublicAlgorithm }> => {
+export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInput): Promise<Fail | { ok: true; algorithm: PublicAlgorithm }> => {
   const name = typeof input.name === 'string' ? input.name.trim().slice(0, MAX_NAME_CHARS) : '';
   if (!name) return fail(400, 'Algorithm name is required');
 
@@ -276,7 +286,10 @@ export const createAlgorithm = async (
 
   const seedEvents = sanitizeEvents(input.events);
   if (seedEvents.length) {
-    const features = await getPostFeatures(ownerId, seedEvents.map((event) => event.thingId));
+		const features = await getPostFeatures(
+			ownerId,
+			seedEvents.map((event) => event.thingId)
+		);
     const trained = applyEventsToWeights(weights, seedEvents, features);
     weights = trained.weights;
     eventCount = trained.applied;
@@ -301,7 +314,7 @@ export const createAlgorithm = async (
   // targetId stays null (branch lineage lives ONLY in crystal.parentId) so the
   // things_reaction_unique partial index (string targetId + crystal.emoji) can
   // never collide two same-emoji branches of one parent.
-  await things.insertOne({
+	const thing = {
     shareId: doc.shareId,
     schemaVersion: doc.schemaVersion,
     thingtime: ['feed-algorithm'],
@@ -313,13 +326,30 @@ export const createAlgorithm = async (
       eventCount: doc.eventCount,
       lastTrainedAt: doc.lastTrainedAt
     },
+		extended: null,
     ownerId,
     acl: [ACL_OWNER],
     targetId: null,
     tags: [],
     createdAt: now,
     updatedAt: now
-  } as any);
+	};
+	const sizeBytes = thingStorageSizeBytes(thing);
+	Object.assign(thing, {
+		storageClass: 'content',
+		sizeBytes,
+		storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION
+	});
+	try {
+		await withMongoTransaction(async (session) => {
+			await applyUserStorageDelta(ownerId, sizeBytes, session);
+			await things.insertOne(thing as any, { session });
+		});
+	} catch (error) {
+		const projected = storageFail(error);
+		if (projected) return projected;
+		throw error;
+	}
   return { ok: true, algorithm: await toPublicAlgorithm(doc) };
 };
 
@@ -341,34 +371,118 @@ export const updateAlgorithm = async (
     set.emoji = sanitizeEmoji(input.emoji);
   }
 
-  // write to the store the doc actually lives in
+	let updatedDoc: FeedAlgorithmDoc | null = null;
+	try {
+		// Write to the store the doc actually lives in. Thing-era updates read a
+		// before-image, debit its exact byte delta, then CAS the document in the
+		// same transaction. Legacy writes are allowed only before the account
+		// ledger becomes ready; after that, migration is mandatory.
   if (era === 'things') {
-    const thingSet: Record<string, any> = { updatedAt: set.updatedAt };
-    if (set.name !== undefined) thingSet['crystal.name'] = set.name;
-    if (set.emoji !== undefined) thingSet['crystal.emoji'] = set.emoji;
-    await (await getThingsCollection()).updateOne(
-      { shareId: doc.shareId, ownerId, thingtime: 'feed-algorithm' } as any,
-      { $set: thingSet }
+			const things = await getThingsCollection();
+			await withMongoTransaction(async (session) => {
+				const before = await things.findOne({ shareId: doc.shareId, ownerId, thingtime: 'feed-algorithm' } as any, { session });
+				if (!before) {
+					throw new StorageMutationError(409, 'storage_conflict', 'Algorithm changed while it was being updated — try again');
+				}
+				const crystal = { ...(before.crystal || {}) };
+				if (set.name !== undefined) crystal.name = set.name;
+				if (set.emoji !== undefined) crystal.emoji = set.emoji;
+				const extended = before.extended ?? null;
+				const tags = Array.isArray(before.tags) ? before.tags : [];
+				const sizeBytes = thingStorageSizeBytes({ crystal, extended, tags });
+				const deltaBytes = sizeBytes - storedAlgorithmSizeBytes(before);
+				if (deltaBytes !== 0) await applyUserStorageDelta(ownerId, deltaBytes, session);
+				const write = await things.updateOne(
+					{
+						_id: before._id,
+						ownerId,
+						thingtime: 'feed-algorithm',
+						...algorithmStorageCas(before)
+					} as any,
+					{
+						$set: {
+							crystal,
+							extended,
+							tags,
+							schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+							storageClass: 'content',
+							sizeBytes,
+							storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION,
+							updatedAt: set.updatedAt
+						}
+					},
+					{ session }
     );
+				if (write.matchedCount === 0) {
+					throw new StorageMutationError(409, 'storage_conflict', 'Algorithm changed while it was being updated — try again');
+				}
+				updatedDoc = algorithmThingToDoc({
+					...before,
+					crystal,
+					extended,
+					tags,
+					schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+					storageClass: 'content',
+					sizeBytes,
+					storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION,
+					updatedAt: set.updatedAt
+				});
+			});
   } else {
-    await (await getFeedAlgorithmsCollection()).updateOne({ shareId: doc.shareId, ownerId } as any, { $set: set });
+			const things = await getThingsCollection();
+			const algorithms = await getFeedAlgorithmsCollection();
+			await withMongoTransaction(async (session) => {
+				await assertLegacyAlgorithmMutationAllowed(ownerId, things, session);
+				const before = (await algorithms.findOne({ shareId: doc.shareId, ownerId } as any, { session })) as any as FeedAlgorithmDoc | null;
+				if (!before) {
+					throw new StorageMutationError(409, 'storage_conflict', 'Algorithm changed while it was being updated — try again');
+				}
+				const write = await algorithms.updateOne({ _id: before._id, ownerId, updatedAt: before.updatedAt } as any, { $set: set }, { session });
+				if (write.matchedCount === 0) {
+					throw new StorageMutationError(409, 'storage_conflict', 'Algorithm changed while it was being updated — try again');
+				}
+				updatedDoc = { ...before, ...set };
+			});
+		}
+	} catch (error) {
+		const projected = storageFail(error);
+		if (projected) return projected;
+		throw error;
   }
-  return { ok: true, algorithm: await toPublicAlgorithm({ ...doc, ...set }) };
+	return { ok: true, algorithm: await toPublicAlgorithm(updatedDoc || { ...doc, ...set }) };
 };
 
 export const deleteAlgorithm = async (ownerId: string, shareId: unknown): Promise<Fail | { ok: true }> => {
   if (typeof shareId !== 'string' || !shareId.trim()) return fail(400, 'Algorithm id is required');
   const id = shareId.trim();
 
-  // delete from BOTH stores — a migration that crashed between thing-upsert and
-  // legacy-delete leaves a twin; removing only one would let the dual-era read
-  // resurrect the "deleted" algorithm (and the next migration re-create it)
+	// Delete from BOTH stores. The Thing before-image and its account-ledger
+	// refund commit together. If a ready account still has a legacy twin, stop
+	// and require migration rather than mutating bytes outside the ledger.
   const things = await getThingsCollection();
-  const [thingRes, legacyRes] = await Promise.all([
-    things.deleteOne({ shareId: id, ownerId, thingtime: 'feed-algorithm' } as any),
-    (await getFeedAlgorithmsCollection()).deleteOne({ shareId: id, ownerId } as any)
-  ]);
-  if (!thingRes.deletedCount && !legacyRes.deletedCount) return fail(404, 'Algorithm not found');
+	const algorithms = await getFeedAlgorithmsCollection();
+	let deletedThing = false;
+	let deletedLegacy = false;
+	try {
+		await withMongoTransaction(async (session) => {
+			const legacy = await algorithms.findOne({ shareId: id, ownerId } as any, { projection: { _id: 1 }, session });
+			if (legacy) await assertLegacyAlgorithmMutationAllowed(ownerId, things, session);
+			const before = await things.findOneAndDelete({ shareId: id, ownerId, thingtime: 'feed-algorithm' } as any, { session });
+			const legacyRes = await algorithms.deleteOne({ shareId: id, ownerId } as any, { session });
+			if (before) {
+				const exactBytes = currentContentStorageSizeBytes(before);
+				if (exactBytes === null) await markUserStorageNeedsReconcile(ownerId, session);
+				else await applyUserStorageDelta(ownerId, -exactBytes, session);
+			}
+			deletedThing = !!before;
+			deletedLegacy = legacyRes.deletedCount > 0;
+		});
+	} catch (error) {
+		const projected = storageFail(error);
+		if (projected) return projected;
+		throw error;
+	}
+	if (!deletedThing && !deletedLegacy) return fail(404, 'Algorithm not found');
 
   // don't leave the owner's active algorithm dangling at a deleted id — the
   // users-store layout (secure blob, either era) is owned by auth/users
@@ -377,10 +491,7 @@ export const deleteAlgorithm = async (ownerId: string, shareId: unknown): Promis
   return { ok: true };
 };
 
-export const setActiveAlgorithm = async (
-  ownerId: string,
-  algorithmId: unknown
-): Promise<Fail | { ok: true; activeAlgorithmId: string | null }> => {
+export const setActiveAlgorithm = async (ownerId: string, algorithmId: unknown): Promise<Fail | { ok: true; activeAlgorithmId: string | null }> => {
   if (algorithmId === null || algorithmId === undefined || algorithmId === '') {
     await setUserActiveFeedAlgorithm(ownerId, null);
     return { ok: true, activeAlgorithmId: null };
@@ -404,38 +515,105 @@ export const trackEngagement = async (
     return fail(400, 'events are required');
   }
 
-  const targetId =
-    typeof input.algorithmId === 'string' && input.algorithmId.trim() ? input.algorithmId.trim() : activeAlgorithmId;
+	const targetId = typeof input.algorithmId === 'string' && input.algorithmId.trim() ? input.algorithmId.trim() : activeAlgorithmId;
   if (!targetId) return { ok: true, trained: false, applied: 0 };
 
   const found = await findOwnedAlgorithmWithEra(ownerId, targetId);
   if (!found) return fail(404, 'Algorithm not found');
   const { doc, era } = found;
 
-  const features = await getPostFeatures(ownerId, events.map((event) => event.thingId));
-  const trained = applyEventsToWeights(doc.weights || emptyWeights(), events, features);
-  if (!trained.applied) return { ok: true, trained: false, applied: 0 };
-
-  // training writes go to the store the doc lives in. weights is replaced as a
-  // WHOLE object (one crystal.weights path, never per-key dotted paths) so tag
-  // keys containing '.' stay safe.
+	const features = await getPostFeatures(
+		ownerId,
+		events.map((event) => event.thingId)
+	);
   const now = new Date();
+	let applied = 0;
+	try {
+		// Weights replace as one object (never dotted per-tag keys), but the
+		// before-image is read inside the transaction so concurrent training is
+		// composed rather than lost. Its exact size delta shares the commit with
+		// the account ledger.
   if (era === 'things') {
-    await (await getThingsCollection()).updateOne(
-      { shareId: doc.shareId, ownerId, thingtime: 'feed-algorithm' } as any,
+			const things = await getThingsCollection();
+			await withMongoTransaction(async (session) => {
+				const before = await things.findOne({ shareId: doc.shareId, ownerId, thingtime: 'feed-algorithm' } as any, { session });
+				if (!before) {
+					throw new StorageMutationError(409, 'storage_conflict', 'Algorithm changed while it was being trained — try again');
+				}
+				const trained = applyEventsToWeights(before.crystal?.weights || emptyWeights(), events, features);
+				if (!trained.applied) {
+					applied = 0;
+					return;
+				}
+				const crystal = {
+					...(before.crystal || {}),
+					weights: trained.weights,
+					eventCount: Math.max(0, Number(before.crystal?.eventCount || 0)) + trained.applied,
+					lastTrainedAt: now
+				};
+				const extended = before.extended ?? null;
+				const tags = Array.isArray(before.tags) ? before.tags : [];
+				const sizeBytes = thingStorageSizeBytes({ crystal, extended, tags });
+				const deltaBytes = sizeBytes - storedAlgorithmSizeBytes(before);
+				if (deltaBytes !== 0) await applyUserStorageDelta(ownerId, deltaBytes, session);
+				const write = await things.updateOne(
+					{
+						_id: before._id,
+						ownerId,
+						thingtime: 'feed-algorithm',
+						...algorithmStorageCas(before)
+					} as any,
       {
-        $set: { 'crystal.weights': trained.weights, 'crystal.lastTrainedAt': now, updatedAt: now },
-        $inc: { 'crystal.eventCount': trained.applied }
-      } as any
+						$set: {
+							crystal,
+							extended,
+							tags,
+							schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+							storageClass: 'content',
+							sizeBytes,
+							storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION,
+							updatedAt: now
+						}
+					},
+					{ session }
     );
+				if (write.matchedCount === 0) {
+					throw new StorageMutationError(409, 'storage_conflict', 'Algorithm changed while it was being trained — try again');
+				}
+				applied = trained.applied;
+			});
   } else {
-    await (await getFeedAlgorithmsCollection()).updateOne(
-      { shareId: doc.shareId, ownerId } as any,
+			const things = await getThingsCollection();
+			const algorithms = await getFeedAlgorithmsCollection();
+			await withMongoTransaction(async (session) => {
+				await assertLegacyAlgorithmMutationAllowed(ownerId, things, session);
+				const before = (await algorithms.findOne({ shareId: doc.shareId, ownerId } as any, { session })) as any as FeedAlgorithmDoc | null;
+				if (!before) {
+					throw new StorageMutationError(409, 'storage_conflict', 'Algorithm changed while it was being trained — try again');
+				}
+				const trained = applyEventsToWeights(before.weights || emptyWeights(), events, features);
+				if (!trained.applied) {
+					applied = 0;
+					return;
+				}
+				const write = await algorithms.updateOne(
+					{ _id: before._id, ownerId, updatedAt: before.updatedAt } as any,
       {
         $set: { weights: trained.weights, lastTrainedAt: now, updatedAt: now },
         $inc: { eventCount: trained.applied }
-      } as any
+					} as any,
+					{ session }
     );
+				if (write.matchedCount === 0) {
+					throw new StorageMutationError(409, 'storage_conflict', 'Algorithm changed while it was being trained — try again');
+				}
+				applied = trained.applied;
+			});
+		}
+	} catch (error) {
+		const projected = storageFail(error);
+		if (projected) return projected;
+		throw error;
   }
-  return { ok: true, trained: true, applied: trained.applied };
+	return { ok: true, trained: applied > 0, applied };
 };

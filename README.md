@@ -304,6 +304,45 @@ Env-allowlisted usernames are a permanent override (they can't be demoted from
 the UI, so there's always a way back in) and are reserved at registration so
 nobody can squat an admin username before you register it.
 
+Admins get the `/admin` dashboard (also under the drawer's Account section):
+Users, Apps, Tiers, and System management. The Tiers tab manages protected,
+versioned `subscription-tier` Things in separate Live, Draft / not live, and
+Archived sections. Admins can create a tier or draft a new revision, edit its
+name, tagline, banner, currency, daily/weekly/monthly/yearly prices, six
+computed-or-custom percentage-saved comparisons, Editor.js inclusions, and
+quota defaults, then publish or archive without deleting history. User and app
+assignments pin the exact immutable revision and quota snapshot, so later tier
+changes never silently rewrite an existing customer's plan. The dashboard also
+supports per-field quota overrides (`null` = unlimited), platform-level app
+suspension, and many-to-many ownership links (assign accounts to an owner so
+one login can switch into its service accounts without credentials, and assign
+apps to co-managers).
+
+App owners and linked co-managers use `/apps/manage` to see the app's measured
+aggregate usage and choose among the current live tier cards (the bootstrapped
+catalog starts with Free 5 GiB, Plus 25 GiB, Pro 100 GiB, and metered PAYG).
+Cards show the configured banner, renewal prices, savings, and Editor.js
+inclusions; selection sends both the stable tier id and exact live revision id.
+Managers can also change the inherited per-app-user cap (50 MiB by default) and
+assign or reset custom caps for one or many app users. The app Thing is the
+aggregate ledger; protected relational `app-storage` Things hold per-user usage
+and optional sub-tiers, so neither generic app editing nor an end user can
+rewrite the accounting rows.
+
+The live verification suites need a disposable local database. The app-storage
+suite is deliberately local-URL-only; the admin suite needs an env-admin's
+credentials (placeholders — use your own throwaway admin):
+
+```sh
+node remix/scripts/verify-app-storage.mjs http://127.0.0.1:10000
+```
+
+```sh
+TT_VERIFY_ADMIN_USER="your-admin-username" \
+TT_VERIFY_ADMIN_PASS="your-admin-password" \
+node remix/scripts/verify-admin-subscriptions.mjs http://127.0.0.1:10000
+```
+
 ## Auth and Lopu AI
 
 JWT-backed browser sessions prefer ES256 asymmetric signing so other platforms
