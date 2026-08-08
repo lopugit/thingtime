@@ -8,6 +8,11 @@
 // group are stacked: the first promotion PR targets main, the second targets
 // the first promotion branch, and so on (ordered by merge time into develop).
 //
+// Coexists with the all-or-nothing "Promote develop to main" omnibus PR
+// (head `develop`): merging the omnibus makes every source merge commit an
+// ancestor of main, so scans skip them, and open promotion PRs whose diff has
+// become empty are closed automatically as redundant.
+//
 // Group membership for a source PR is resolved from, in priority order:
 //   1. A `Promotion-Group: <key>` line or `<!-- promotion-group: <key> -->`
 //      comment in the source PR body.
@@ -20,22 +25,24 @@
 // State model (no external state files — everything is derived from GitHub):
 //   - A promotion PR carries `<!-- promotion-of: <n> -->` in its body and a
 //     deterministic `promote/pr-<n>-*` head branch; either identifies it.
+//   - content already on main (ancestor merge commit, or the cherry-pick
+//     comes out empty) → skipped as a no-op.
 //   - promotion MERGED  → source is done, never touched again.
 //   - promotion OPEN    → reused as the base for later stack members.
 //   - promotion CLOSED  → the change was rejected for main; never recreated
 //                         (reopen the closed PR to change your mind).
-//   - content already on main (ancestor merge commit, or the cherry-pick
-//     comes out empty) → skipped as a no-op.
 //   - cherry-pick conflict → the group stops there (later members depend on
 //     it); the summary prints exact manual commands, and the next run resumes
 //     once the manually-pushed branch exists.
 //
-// A maintenance pass also retargets open promotion PRs whose base promotion
-// PR has merged (backstop for GitHub's delete-branch auto-retargeting).
+// Maintenance passes each run: open promotion PRs whose base promotion PR has
+// merged are retargeted (backstop for GitHub's delete-branch auto-retarget),
+// and open promotion PRs whose diff against their base is empty are closed as
+// redundant (branch deleted once nothing stacks on it).
 //
 // Run modes: normal, DRY_RUN=1 (simulates cherry-picks in a temp worktree and
-// reports the full plan without pushing/creating anything), --self-test
-// (pure-helper assertions, no git/gh needed).
+// reports the full plan without pushing/creating/closing anything),
+// --self-test (pure-helper assertions, no git/gh needed).
 
 import { execFileSync, spawnSync } from "node:child_process";
 import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -321,6 +328,41 @@ function retargetPass(promotionPrs, results) {
 }
 
 // ---------------------------------------------------------------------------
+// Maintenance: close promotion PRs made redundant by an omnibus (or direct)
+// merge — their diff against the base is empty, so there is nothing to review.
+// ---------------------------------------------------------------------------
+
+function closeRedundantPass(promotionPrs, results) {
+  const closed = [];
+  for (const pr of promotionPrs) {
+    if (pr.state !== "OPEN") continue;
+    const diff = tryGh(["pr", "diff", String(pr.number), ...repoFlag(), "--name-only"]);
+    if (!diff.ok || diff.out !== "") continue;
+    if (CFG.dryRun) {
+      results.closed.push(`(dry-run) would close #${pr.number} (\`${pr.headRefName}\`) — empty diff vs \`${pr.baseRefName}\``);
+      continue;
+    }
+    const res = tryGh(["pr", "close", String(pr.number), ...repoFlag(), "--comment",
+      `🧹 Closing as redundant: these changes have already reached \`${pr.baseRefName}\` ` +
+      `(for example via an omnibus ${CFG.source} → ${CFG.target} merge), so this PR's diff is empty. ` +
+      "Reopen if that looks wrong."]);
+    if (res.ok) {
+      pr.state = "CLOSED";
+      closed.push(pr);
+      results.closed.push(`closed #${pr.number} (\`${pr.headRefName}\`) — empty diff vs \`${pr.baseRefName}\``);
+    } else {
+      results.warnings.push(`failed to close redundant #${pr.number}: ${res.err}`);
+    }
+  }
+  for (const pr of closed) {
+    const stillUsed = promotionPrs.some(
+      (other) => other.state === "OPEN" && other.baseRefName === pr.headRefName,
+    );
+    if (!stillUsed) tryGit(["push", "origin", "--delete", pr.headRefName]);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Cherry-pick planning and execution
 // ---------------------------------------------------------------------------
 
@@ -411,7 +453,7 @@ function promotionBody(pr, groupKey, position, groupPrs, statusFor) {
   const lines = [];
   lines.push(
     `Automated promotion of #${pr.number} from \`${CFG.source}\` to \`${CFG.target}\`, ` +
-    `opened by the **Promote develop to main** workflow for release review.`,
+    `opened by the **Promote features to main** workflow for release review.`,
     "",
     `<!-- promotion-of: ${pr.number} -->`,
   );
@@ -454,9 +496,12 @@ function promotionBody(pr, groupKey, position, groupPrs, statusFor) {
     "  the **Sync main into develop** workflow keeps `develop` aligned afterwards.",
     `- Close it (without merging) to keep the change out of \`${CFG.target}\`;`,
     "  the workflow never recreates a closed promotion (reopen it to change your mind).",
+    `- Prefer shipping everything at once? Merge the standing omnibus`,
+    `  **Promote develop to main** PR instead — this PR's diff then becomes`,
+    "  empty and the workflow closes it automatically.",
     "",
     "---",
-    "🤖 Generated by the `promote-develop-to-main` workflow.",
+    "🤖 Generated by the `promote-features-to-main` workflow.",
   );
   return lines.join("\n");
 }
@@ -490,6 +535,7 @@ function summarize(results, eligibleCount) {
   };
   section("Created", results.created);
   section("Retargeted", results.retargeted);
+  section("Closed as redundant", results.closed);
   section("Conflicts (manual promotion needed)", results.conflicts);
   section("Blocked", results.blocked);
   section("Warnings", results.warnings);
@@ -523,7 +569,7 @@ async function main() {
   }
 
   const results = {
-    created: [], retargeted: [], conflicts: [], blocked: [], warnings: [], skipped: [],
+    created: [], retargeted: [], closed: [], conflicts: [], blocked: [], warnings: [], skipped: [],
   };
   const skip = (pr, reason) => results.skipped.push(`#${pr.number} ${pr.title} — ${reason}`);
 
@@ -550,6 +596,7 @@ async function main() {
   const remoteBranches = listRemotePromotionBranches();
 
   retargetPass(promotionPrs, results);
+  closeRedundantPass(promotionPrs, results);
 
   // --- Filter candidates ---------------------------------------------------
   const eligible = [];
@@ -618,8 +665,17 @@ async function main() {
 
       for (const [index, pr] of group.prs.entries()) {
         const position = index + 1;
-        const record = promoBySource.get(pr.number);
 
+        // Content already on main (individually promoted and back-merged, or
+        // shipped via an omnibus develop → main merge) beats every promotion
+        // record — it is simply done.
+        const inMain = tryGit(["merge-base", "--is-ancestor", pr.mergeCommit.oid, mainSha]).ok;
+        if (inMain) {
+          skip(pr, `merge commit already on ${CFG.target}`);
+          continue;
+        }
+
+        const record = promoBySource.get(pr.number);
         if (record?.state === "MERGED") {
           skip(pr, `already promoted and merged (#${record.number})`);
           continue;
@@ -632,12 +688,6 @@ async function main() {
         }
         if (record?.state === "CLOSED") {
           skip(pr, `promotion #${record.number} was closed without merging — not recreating (reopen it to promote)`);
-          continue;
-        }
-
-        const inMain = tryGit(["merge-base", "--is-ancestor", pr.mergeCommit.oid, mainSha]).ok;
-        if (inMain) {
-          skip(pr, `merge commit already on ${CFG.target}`);
           continue;
         }
 

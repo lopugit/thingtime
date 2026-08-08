@@ -509,19 +509,27 @@ the preset fallback responses instead of calling an AI provider.
 
 ## Branch automation: develop → main promotion
 
-`develop` is the integration branch; `main` is the release branch. Three
-workflows keep them flowing without manual branch surgery:
+`develop` is the integration branch; `main` is the release branch. Four
+workflows keep them flowing without manual branch surgery, giving two
+complementary ways to ship:
 
-- **Promote develop to main** (`.github/workflows/promote-develop-to-main.yml`)
+- **Promote features to main** (`.github/workflows/promote-features-to-main.yml`)
   scans PRs merged into `develop` and opens one promotion PR per feature
   against `main` (cherry-picked `promote/pr-<n>-<slug>` branches), so every
-  change gets a second, release-focused review. PRs that share a feature group
-  (a `Promotion-Group: <key>` body line, a `stack:<key>`/`group:<key>`/
-  `feature:<key>` label, a `feature/<key>/...` branch, or a `feat(<key>): ...`
-  title) are opened as a stacked chain in merge order — review and merge
-  bottom-up, deleting each branch on merge. Label a develop PR `no-promote` to
-  keep it out of the train; close a promotion PR to reject that change for
-  `main` permanently.
+  change can get a second, release-focused review on its own. PRs that share a
+  feature group (a `Promotion-Group: <key>` body line, a `stack:<key>`/
+  `group:<key>`/`feature:<key>` label, a `feature/<key>/...` branch, or a
+  `feat(<key>): ...` title) are opened as a stacked chain in merge order —
+  review and merge bottom-up, deleting each branch on merge. Label a develop
+  PR `no-promote` to keep it out of the train; close a promotion PR to reject
+  that change for `main` permanently.
+- **Promote develop to main** (`.github/workflows/promote-develop-to-main.yml`)
+  keeps one standing all-or-nothing PR open (head `develop`, base `main`).
+  When everything on `develop` is deemed mergeable, merge it instead of
+  merging every feature individually. The two trains never fight: after an
+  omnibus merge the per-feature workflow sees the content already on `main`,
+  skips it, and automatically closes any open promotion PRs whose diff has
+  become empty.
 - **Sync main into develop** back-merges `main` after promotions land.
 - The AI conflict/rebase workflows keep promotion PRs and stacks mergeable.
 
