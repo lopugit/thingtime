@@ -507,6 +507,31 @@ AI-backed musings per detected IP address per rolling hour. Requests over the
 limit, or requests made while the rate-limit collection is unavailable, stream
 the preset fallback responses instead of calling an AI provider.
 
+## Branch automation: develop → main promotion
+
+`develop` is the integration branch; `main` is the release branch. Three
+workflows keep them flowing without manual branch surgery:
+
+- **Promote develop to main** (`.github/workflows/promote-develop-to-main.yml`)
+  scans PRs merged into `develop` and opens one promotion PR per feature
+  against `main` (cherry-picked `promote/pr-<n>-<slug>` branches), so every
+  change gets a second, release-focused review. PRs that share a feature group
+  (a `Promotion-Group: <key>` body line, a `stack:<key>`/`group:<key>`/
+  `feature:<key>` label, a `feature/<key>/...` branch, or a `feat(<key>): ...`
+  title) are opened as a stacked chain in merge order — review and merge
+  bottom-up, deleting each branch on merge. Label a develop PR `no-promote` to
+  keep it out of the train; close a promotion PR to reject that change for
+  `main` permanently.
+- **Sync main into develop** back-merges `main` after promotions land.
+- The AI conflict/rebase workflows keep promotion PRs and stacks mergeable.
+
+Fork setup: everything runs with the default `GITHUB_TOKEN`, but promotion
+PRs it creates will not trigger CI, and promotion branches touching
+`.github/workflows/**` cannot be pushed. Optionally add a `PROMOTION_PAT`
+repository secret (fine-grained token with Contents + Pull requests +
+Workflows read/write, placeholder value `github_pat_...`) to lift both limits;
+`SYNC_BRANCHES_PAT` / `CONFLICT_RESOLVER_PAT` are honoured as fallbacks.
+
 ## Vercel deployment status
 
 The footer can show live Vercel deployment/build status. It works in a limited

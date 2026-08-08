@@ -19,6 +19,21 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Per-feature develop → main promotion PRs (with stacks)**: the **Promote
+  develop to main** workflow was rebuilt from the standing single
+  develop→main PR (#186) into a granular release train. It scans PRs merged
+  into `develop`, cherry-picks each unshipped one onto its own
+  `promote/pr-<n>-<slug>` branch cut from `main`, and opens a per-feature
+  promotion PR for release review; PRs sharing a feature group
+  (`Promotion-Group:` body line, `stack:`/`group:`/`feature:` label,
+  `feature/<key>/...` branch, or `feat(<key>):` title scope) become a stacked
+  chain in merge order, with automatic retargeting as earlier members merge.
+  `no-promote` skips a source PR; closing a promotion PR rejects that change
+  for `main` permanently; cherry-pick conflicts stop the affected group and
+  the job summary prints exact manual-promotion commands. Runs on pushes to
+  `develop`, a 6-hourly schedule, and manual dispatch with a dry-run mode.
+  — Claude (AI), 2026-08-08
+
 - **AI PR and stack rebase conflict resolution**: a separate **Rebase PRs and
   stacks (AI)** workflow evaluates every same-repository PR regardless of base
   branch. Standalone PRs that merge cleanly but cannot rebase and stack members
