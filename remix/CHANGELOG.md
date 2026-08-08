@@ -120,6 +120,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Sync main→develop fallback PR is now PAT-authored**: the **Sync main into
+  develop** workflow's "Open (or reuse) the sync PR" step used `GITHUB_TOKEN`,
+  which failed outright while the repo blocked Actions-created PRs — and even
+  with that setting enabled, a `GITHUB_TOKEN`-created PR triggers no workflows
+  (GitHub anti-recursion), so the sync PR would sit with no Web CI/CodeQL
+  checks. The step now uses the same
+  `SYNC_BRANCHES_PAT || CONFLICT_RESOLVER_PAT` chain as the checkout/push path
+  and fails loudly when neither secret exists instead of degrading to a
+  checkless PR. — Claude (AI), 2026-08-08
 - **PRs that make themselves conflicted now get rescanned**: a push to a PR's
   head branch can create a conflict (the resolver deliberately ignores
   `synchronize` to avoid self-loops), and with no follow-up push to the base,
