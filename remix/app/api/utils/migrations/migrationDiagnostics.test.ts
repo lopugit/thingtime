@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { fromBin, toBin } from '../auth/users';
+import { captureAdminErrorDiagnostic } from '../errors/adminDiagnostic';
 import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS, MIGRATION_DIAGNOSTIC_THINGTIME } from '../../../schemas/registry';
 import {
 	buildMigrationDiagnosticThing,
@@ -116,6 +117,36 @@ test('stored diagnostic detail is re-scrubbed before ordinary projection', () =>
 	assert.match(projected.detail, /raw=\[redacted-object-id\]/);
 	assert.equal(projected.revealables.length, 1);
 	assert.equal(migrationDiagnosticRevealFromThing(doc, 'mongodb-object-id-1', new Date('2026-08-08T00:00:01.000Z'))?.value, raw);
+});
+
+test('already-scrubbed diagnostic redaction counts stay stable through write and read', () => {
+	const now = new Date('2026-08-08T00:00:00.000Z');
+	const raw = '507f1f77bcf86cd799439011';
+	const diagnostics = [
+		captureAdminErrorDiagnostic(new Error(`Thing ${raw} failed in /Users/private-user/project`), {
+			mongodbObjectIds: [raw]
+		}),
+		captureAdminErrorDiagnostic(new Error('Cookie: sid=very-secret-cookie')),
+		captureAdminErrorDiagnostic(new Error('Authorization: Basic dXNlcjpzZWNyZXQ='))
+	];
+	for (const diagnostic of diagnostics) {
+		const doc = buildMigrationDiagnosticThing(
+			{
+				ownerId: 'admin-user-id',
+				migrationId: 'backfill-user-storage-accounting',
+				status: 500,
+				outcome: 'unknown',
+				summary: 'Migration stopped before completion.',
+				diagnostic
+			},
+			{ now, id }
+		);
+		const stored = JSON.parse(fromBin(doc.secure));
+		const projected = migrationDiagnosticFromThing(doc, new Date('2026-08-08T00:00:01.000Z'));
+
+		assert.equal(stored.redactions, diagnostic.redactions);
+		assert.equal(projected?.redactions, diagnostic.redactions);
+	}
 });
 
 test('stored JSON outside the closed error snapshot cannot become diagnostic detail', () => {

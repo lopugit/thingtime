@@ -19,11 +19,12 @@ import {
 	Text
 } from '@chakra-ui/react';
 import { Eye, EyeOff, Lock } from 'lucide-react';
+import { Link } from 'react-router';
 
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useApi } from '~/hooks/useApi';
 import { CARD_STYLES } from '~/theme/card';
-import { sensitiveRevealErrorMessage } from './sensitiveRevealError';
+import { sensitiveRevealFailure, type SensitiveRevealFailure } from './sensitiveRevealError';
 
 export type SensitiveThingRevealDescriptor = {
 	reference: string;
@@ -83,15 +84,22 @@ const SensitiveThingRevealScope = ({
 	const { v1 } = useApi();
 	const lopu = useLopu();
 	const passwordRef = React.useRef<HTMLInputElement>(null);
+	const revealedValueRef = React.useRef<HTMLElement>(null);
+	const recoveryMessageRef = React.useRef<HTMLParagraphElement>(null);
+	const revealButtonRefs = React.useRef(new Map<string, HTMLButtonElement>());
+	const focusAfterHideRef = React.useRef<string | null>(null);
 	const controllerRef = React.useRef<AbortController | null>(null);
 	const requestIdRef = React.useRef(0);
 	const revealRef = React.useRef(v1.things.reveal);
+	const describedByBaseId = React.useId();
+	const promptErrorId = `${describedByBaseId}-error`;
+	const promptNoteId = `${describedByBaseId}-note`;
 	revealRef.current = v1.things.reveal;
 
 	const [prompt, setPrompt] = React.useState<SensitiveThingRevealDescriptor | null>(null);
 	const [password, setPassword] = React.useState('');
 	const [submitting, setSubmitting] = React.useState(false);
-	const [promptError, setPromptError] = React.useState<string | null>(null);
+	const [failure, setFailure] = React.useState<SensitiveRevealFailure | null>(null);
 	const [revealed, setRevealed] = React.useState<RevealedValue | null>(null);
 
 	const clearRequest = React.useCallback(() => {
@@ -105,7 +113,7 @@ const SensitiveThingRevealScope = ({
 		setPrompt(null);
 		setPassword('');
 		setSubmitting(false);
-		setPromptError(null);
+		setFailure(null);
 		setRevealed(null);
 	}, [clearRequest]);
 
@@ -123,15 +131,23 @@ const SensitiveThingRevealScope = ({
 	}, [clearTransientState]);
 
 	React.useEffect(() => {
-		if (promptError && !submitting) passwordRef.current?.focus();
-	}, [promptError, submitting]);
+		if (failure?.recovery === 'password' && !submitting) passwordRef.current?.focus();
+		else if (failure && !submitting) recoveryMessageRef.current?.focus();
+	}, [failure, submitting]);
+
+	React.useEffect(() => {
+		const reference = focusAfterHideRef.current;
+		if (revealed || !reference) return;
+		focusAfterHideRef.current = null;
+		revealButtonRefs.current.get(reference)?.focus();
+	}, [revealed]);
 
 	const closePrompt = React.useCallback(() => {
 		clearRequest();
 		setPrompt(null);
 		setPassword('');
 		setSubmitting(false);
-		setPromptError(null);
+		setFailure(null);
 	}, [clearRequest]);
 
 	const openPrompt = (descriptor: SensitiveThingRevealDescriptor) => {
@@ -140,7 +156,7 @@ const SensitiveThingRevealScope = ({
 		setPrompt(descriptor);
 		setPassword('');
 		setSubmitting(false);
-		setPromptError(null);
+		setFailure(null);
 	};
 
 	const submitReveal = async (event: React.FormEvent) => {
@@ -149,7 +165,7 @@ const SensitiveThingRevealScope = ({
 		const submittedPassword = password;
 		setPassword('');
 		if (!submittedPassword) {
-			setPromptError('Enter your current password to continue.');
+			setFailure({ message: 'Enter your current password to continue.', recovery: 'password' });
 			passwordRef.current?.focus();
 			return;
 		}
@@ -159,7 +175,7 @@ const SensitiveThingRevealScope = ({
 		controllerRef.current = controller;
 		const requestId = requestIdRef.current;
 		setSubmitting(true);
-		setPromptError(null);
+		setFailure(null);
 
 		try {
 			const response = await revealRef.current(
@@ -173,13 +189,13 @@ const SensitiveThingRevealScope = ({
 
 			setRevealed(response.reveal);
 			setPrompt(null);
-			setPromptError(null);
+			setFailure(null);
 			lopu({ title: 'Protected value revealed', status: 'success', duration: 5000 });
 		} catch (error) {
 			if (controller.signal.aborted || requestId !== requestIdRef.current || (error instanceof Error && error.name === 'AbortError')) return;
-			const message = sensitiveRevealErrorMessage(error);
-			setPromptError(message);
-			lopu({ title: 'Protected value could not be revealed', description: message, status: 'error', duration: 7000 });
+			const nextFailure = sensitiveRevealFailure(error);
+			setFailure(nextFailure);
+			lopu({ title: 'Protected value could not be revealed', description: nextFailure.message, status: 'error', duration: 7000 });
 		} finally {
 			if (requestId === requestIdRef.current) {
 				controllerRef.current = null;
@@ -187,6 +203,13 @@ const SensitiveThingRevealScope = ({
 			}
 		}
 	};
+
+	const hideRevealedValue = (reference: string) => {
+		focusAfterHideRef.current = reference;
+		setRevealed(null);
+	};
+
+	const passwordFormAvailable = failure === null || failure.recovery === 'password';
 
 	if (revealables.length === 0) return null;
 
@@ -218,8 +241,10 @@ const SensitiveThingRevealScope = ({
 				<Stack spacing={3}>
 					{revealables.map((descriptor) => {
 						const visible = revealed?.reference === descriptor.reference && revealed.kind === descriptor.kind;
+						const visibleValue = visible ? revealed?.value : null;
+						const revealButtonKey = `${descriptor.reference}:${descriptor.kind}`;
 						return (
-							<Box key={`${descriptor.reference}:${descriptor.kind}`} borderWidth="1px" borderRadius="var(--tt-radius-lg, 14px)" p={3} minW={0}>
+							<Box key={revealButtonKey} borderWidth="1px" borderRadius="var(--tt-radius-lg, 14px)" p={3} minW={0}>
 								<Flex align={{ base: 'stretch', sm: 'center' }} justify="space-between" gap={3} direction={{ base: 'column', sm: 'row' }}>
 									<Box minW={0}>
 										<Flex align="center" gap={2} wrap="wrap">
@@ -230,24 +255,34 @@ const SensitiveThingRevealScope = ({
 										</Flex>
 										<Box
 											as="code"
+											ref={visible ? revealedValueRef : undefined}
 											display="block"
 											mt={1.5}
 											fontSize={{ base: '11px', md: '12px' }}
 											color={visible ? 'var(--tt-ink, #16161a)' : MUTED}
 											overflowWrap="anywhere"
 											whiteSpace="pre-wrap"
-											aria-label={visible ? `Revealed ${descriptor.label}` : `Redacted ${descriptor.label}`}
+											tabIndex={visible ? -1 : undefined}
+											aria-label={visibleValue ? `Revealed ${descriptor.label}: ${visibleValue}` : `Redacted ${descriptor.label}`}
 										>
-											{visible ? revealed.value : descriptor.placeholder}
+											{visibleValue ?? descriptor.placeholder}
 										</Box>
 									</Box>
 									<Flex gap={2} flexShrink={0}>
 										{visible ? (
-											<Button size="sm" variant="ghost" leftIcon={<EyeOff size={14} />} onClick={() => setRevealed(null)}>
+											<Button size="sm" variant="ghost" leftIcon={<EyeOff size={14} />} onClick={() => hideRevealedValue(revealButtonKey)}>
 												Hide
 											</Button>
 										) : null}
-										<Button size="sm" leftIcon={<Eye size={14} />} onClick={() => openPrompt(descriptor)}>
+										<Button
+											ref={(node) => {
+												if (node) revealButtonRefs.current.set(revealButtonKey, node);
+												else revealButtonRefs.current.delete(revealButtonKey);
+											}}
+											size="sm"
+											leftIcon={<Eye size={14} />}
+											onClick={() => openPrompt(descriptor)}
+										>
 											Reveal
 										</Button>
 									</Flex>
@@ -258,7 +293,14 @@ const SensitiveThingRevealScope = ({
 				</Stack>
 			</Box>
 
-			<Modal isOpen={prompt !== null} onClose={closePrompt} initialFocusRef={passwordRef} isCentered scrollBehavior="inside">
+			<Modal
+				isOpen={prompt !== null}
+				onClose={closePrompt}
+				initialFocusRef={passwordRef}
+				finalFocusRef={revealed ? revealedValueRef : undefined}
+				isCentered
+				scrollBehavior="inside"
+			>
 				<ModalOverlay />
 				<ModalContent as="form" onSubmit={submitReveal} mx={3}>
 					<ModalHeader pr={10}>Confirm to reveal</ModalHeader>
@@ -267,39 +309,61 @@ const SensitiveThingRevealScope = ({
 						<Text color={MUTED} fontSize="sm" mb={4}>
 							Enter your current Thingtime password to reveal {prompt?.label || 'this protected value'}. This confirmation applies only to this request.
 						</Text>
-						<FormControl isRequired isInvalid={Boolean(promptError)}>
-							<FormLabel fontSize="sm">Current password</FormLabel>
-							<Input
-								ref={passwordRef}
-								type="password"
-								name="sensitive-reveal-password"
-								autoComplete="current-password"
-								value={password}
-								onChange={(event) => {
-									setPassword(event.target.value);
-									if (promptError) setPromptError(null);
-								}}
-								isDisabled={submitting}
-								aria-describedby={promptError ? 'sensitive-reveal-error' : 'sensitive-reveal-note'}
-							/>
-							{promptError ? (
-								<Text id="sensitive-reveal-error" role="alert" mt={2} color="red.500" fontSize="xs">
-									{promptError}
-								</Text>
+						{passwordFormAvailable ? (
+							<FormControl isRequired isInvalid={Boolean(failure)}>
+								<FormLabel fontSize="sm">Current password</FormLabel>
+								<Input
+									ref={passwordRef}
+									type="password"
+									name="sensitive-reveal-password"
+									autoComplete="current-password"
+									value={password}
+									onChange={(event) => {
+										setPassword(event.target.value);
+										if (failure?.recovery === 'password') setFailure(null);
+									}}
+									isDisabled={submitting}
+									aria-describedby={failure ? promptErrorId : promptNoteId}
+								/>
+								{failure ? (
+									<Text id={promptErrorId} role="alert" mt={2} color="red.500" fontSize="xs">
+										{failure.message}
+									</Text>
 								) : (
-									<Text id="sensitive-reveal-note" mt={2} color={MUTED} fontSize="xs">
+									<Text id={promptNoteId} mt={2} color={MUTED} fontSize="xs">
 										Neither your password nor the revealed value is stored in browser storage; hiding or leaving this page clears the reveal.
-								</Text>
-							)}
-						</FormControl>
+									</Text>
+								)}
+							</FormControl>
+						) : (
+							<Text ref={recoveryMessageRef} id={promptErrorId} role="alert" tabIndex={-1} color="red.500" fontSize="sm">
+								{failure?.message}
+							</Text>
+						)}
 					</ModalBody>
-					<ModalFooter gap={2}>
+					<ModalFooter gap={2} flexWrap="wrap">
 						<Button type="button" variant="ghost" onClick={closePrompt} isDisabled={submitting}>
-							Cancel
+							{passwordFormAvailable ? 'Cancel' : 'Close'}
 						</Button>
-						<Button type="submit" leftIcon={<Eye size={15} />} isLoading={submitting} loadingText="Confirming">
-							Reveal once
-						</Button>
+						{failure?.recovery === 'login' ? (
+							<Button as={Link} to="/login" onClick={closePrompt}>
+								Log in again
+							</Button>
+						) : failure?.recovery === 'refresh' ? (
+							<Button
+								type="button"
+								onClick={() => {
+									closePrompt();
+									window.location.reload();
+								}}
+							>
+								Refresh Thing
+							</Button>
+						) : passwordFormAvailable ? (
+							<Button type="submit" leftIcon={<Eye size={15} />} isLoading={submitting} loadingText="Confirming">
+								Reveal once
+							</Button>
+						) : null}
 					</ModalFooter>
 				</ModalContent>
 			</Modal>

@@ -1,7 +1,9 @@
+import { randomUUID } from 'node:crypto';
+
 const MAX_CAUSE_DEPTH = 3;
 const MAX_DIAGNOSTIC_STRING_CHARS = 16 * 1024;
 const MAX_ERROR_LABELS = 12;
-const RAW_TRUNCATION_SAFETY_MARGIN = 256;
+const RAW_REDACTION_LOOKAHEAD_CHARS = 512;
 export const MAX_ADMIN_DIAGNOSTIC_CHARS = 48 * 1024;
 export const MAX_ADMIN_DIAGNOSTIC_REVEALABLES = 32;
 
@@ -23,9 +25,12 @@ export type AdminErrorDiagnostic = {
 type CaptureState = {
 	redactions: number;
 	truncated: boolean;
+	revealDisabled: boolean;
+	allowPublicRevealPlaceholders: boolean;
+	markerNonce: string;
 	approvedObjectIds: Set<string>;
 	deniedObjectIds: Set<string>;
-	revealableObjectIds: Map<string, AdminDiagnosticRevealable>;
+	revealableObjectIds: Map<string, AdminDiagnosticRevealable & { marker: string }>;
 };
 
 export type AdminDiagnosticRevealContext = {
@@ -48,42 +53,78 @@ type ErrorSnapshot = {
 	cause?: ErrorSnapshot;
 };
 
-const boundedText = (value: string, state: CaptureState): string => {
-	if (value.length <= MAX_DIAGNOSTIC_STRING_CHARS) return value;
-	state.truncated = true;
-	const suffix = '\n…[string truncated; raw boundary removed before redaction]';
-	return `${value.slice(0, Math.max(0, MAX_DIAGNOSTIC_STRING_CHARS - suffix.length - RAW_TRUNCATION_SAFETY_MARGIN))}${suffix}`;
-};
-
 const objectIdPlaceholder = (index: number): string => `[redacted MongoDB ObjectId #${index}]`;
 
 const MONGODB_OBJECT_ID_PATTERN = /^[0-9a-f]{24}$/i;
-const MONGODB_OBJECT_ID_SEARCH_PATTERN = /\b[0-9a-f]{24}\b/gi;
+const MONGODB_OBJECT_ID_SEARCH_PATTERN = /(?<![0-9a-f])[0-9a-f]{24}(?![0-9a-f])/gi;
 const REVEAL_PLACEHOLDER_SOURCE = '\\[redacted MongoDB ObjectId #(?:[1-9]|[12][0-9]|3[0-2])\\]';
-const EXACT_REVEAL_IDENTIFIER_VALUE_PATTERN = new RegExp(
-	`^(?:${REVEAL_PLACEHOLDER_SOURCE}|["']${REVEAL_PLACEHOLDER_SOURCE}["']|(?:new\\s+)?ObjectId\\s*\\(\\s*["']${REVEAL_PLACEHOLDER_SOURCE}["']\\s*\\)|\\{\\s*["']?\\$oid["']?\\s*[:=]\\s*["']${REVEAL_PLACEHOLDER_SOURCE}["']\\s*\\})$`,
-	'i'
-);
-
-const credentialLabel =
-	'(?:' +
-	'(?:[A-Za-z0-9]+[_-])*(?:' +
-	'(?:hashed?[_-]?)?password(?:[_-]?(?:hash|digest))?|' +
-	'passwd(?:[_-]?(?:hash|digest))?|' +
-	'passphrase|' +
-	'(?:refresh|access|auth|session|client|api|private)?[_-]?(?:secret|token|credential(?:s)?)(?:[_-]?(?:hash|digest))?|' +
-	'secret[_-]?key(?:[_-]?(?:hash|digest))?|' +
-	'api[_-]?key(?:[_-]?(?:hash|digest))?|' +
-	'access[_-]?key(?:[_-]?(?:hash|digest))?|' +
-	'private[_-]?key(?:[_-]?(?:hash|digest))?|' +
-	'authorization|cookie(?:s|[_-]?jar)?|jwt|session(?:[_-]?(?:id|jti|token|hash|digest))?|email' +
-	')' +
-	')';
 const identifierLabel =
 	'(?:\\$oid|_id|object[_-]?id|document[_-]?id|thing[_-]?id|record[_-]?id|source[_-]?id|target[_-]?id|owner[_-]?id|user[_-]?id|share[_-]?id|app[_-]?id|client[_-]?id)';
-const sensitiveQueryLabel = `(?:${credentialLabel}|${identifierLabel})`;
+const ASSIGNMENT_LABEL_PATTERN = /(^|[^A-Za-z0-9])(["']?)([-_$A-Za-z0-9][_$A-Za-z0-9-]*(?:[ \t]+[-_$A-Za-z0-9][_$A-Za-z0-9-]*){0,3})\2([ \t]*[:=][ \t]*)/gim;
+const CLI_OPTION_PATTERN = /(^|\s)(--[A-Za-z0-9][A-Za-z0-9_-]*)([ \t]+)/gim;
+const CREDENTIAL_COMPONENTS = new Set([
+	'authorization',
+	'cookie',
+	'cookies',
+	'credential',
+	'credentials',
+	'email',
+	'emails',
+	'jwt',
+	'key',
+	'keys',
+	'passphrase',
+	'passphrases',
+	'passwd',
+	'passwds',
+	'password',
+	'passwords',
+	'private',
+	'secure',
+	'secret',
+	'secrets',
+	'sensitive',
+	'session',
+	'sessions',
+	'token',
+	'tokens'
+]);
 
-const createCaptureState = (context: AdminDiagnosticRevealContext = {}): CaptureState => {
+const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const exactRevealIdentifierValuePattern = (tokenSource: string): RegExp =>
+	new RegExp(
+		`^(?:${tokenSource}|["']${tokenSource}["']|(?:new\\s+)?ObjectId\\s*\\(\\s*["']${tokenSource}["']\\s*\\)|\\{\\s*["']?\\$oid["']?\\s*[:=]\\s*["']${tokenSource}["']\\s*\\})$`,
+		'i'
+	);
+
+const credentialLabelComponents = (value: string): string[] =>
+	value
+		.replace(/^[-_$]+/, '')
+		.replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+		.replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2')
+		.toLowerCase()
+		.split(/[^a-z0-9]+/)
+		.filter(Boolean);
+
+const isCredentialLabel = (value: string): boolean =>
+	credentialLabelComponents(value).some((component) => CREDENTIAL_COMPONENTS.has(component));
+
+const truncateSanitizedText = (value: string, maxChars: number, suffix: string): string => {
+	const limit = Math.max(0, maxChars - suffix.length);
+	const candidate = value.slice(0, limit);
+	let boundary = -1;
+	for (let index = candidate.length - 1; index >= 0; index -= 1) {
+		if (/\s/.test(candidate[index])) {
+			boundary = index;
+			break;
+		}
+	}
+	const safePrefix = boundary >= 0 ? candidate.slice(0, boundary).trimEnd() : '';
+	return `${safePrefix}${suffix}`;
+};
+
+const createCaptureState = (context: AdminDiagnosticRevealContext = {}, allowPublicRevealPlaceholders = false): CaptureState => {
 	const approvedObjectIds = new Set<string>();
 	let truncated = false;
 	if (Array.isArray(context.mongodbObjectIds)) {
@@ -99,6 +140,9 @@ const createCaptureState = (context: AdminDiagnosticRevealContext = {}): Capture
 	return {
 		redactions: 0,
 		truncated,
+		revealDisabled: false,
+		allowPublicRevealPlaceholders,
+		markerNonce: randomUUID().replace(/-/g, ''),
 		approvedObjectIds,
 		deniedObjectIds: new Set(),
 		revealableObjectIds: new Map()
@@ -113,9 +157,9 @@ const rememberIrreversibleObjectIds = (value: string, state: CaptureState) => {
 
 const captureObjectId = (rawValue: string, state: CaptureState): string => {
 	const value = rawValue.toLowerCase();
-	if (!state.approvedObjectIds.has(value) || state.deniedObjectIds.has(value)) return '[redacted-object-id]';
+	if (state.revealDisabled || !state.approvedObjectIds.has(value) || state.deniedObjectIds.has(value)) return '[redacted-object-id]';
 	const existing = state.revealableObjectIds.get(value);
-	if (existing) return existing.placeholder;
+	if (existing) return existing.marker;
 	if (state.revealableObjectIds.size >= MAX_ADMIN_DIAGNOSTIC_REVEALABLES) {
 		// The detail remains safely redacted, but the bounded private lookup table
 		// deliberately stops growing. `truncated` covers every capture safety cap.
@@ -124,40 +168,34 @@ const captureObjectId = (rawValue: string, state: CaptureState): string => {
 	}
 
 	const index = state.revealableObjectIds.size + 1;
-	const revealable: AdminDiagnosticRevealable = {
+	const revealable: AdminDiagnosticRevealable & { marker: string } = {
 		reference: `mongodb-object-id-${index}`,
 		kind: 'mongodb-object-id',
 		label: `MongoDB ObjectId #${index}`,
 		placeholder: objectIdPlaceholder(index),
-		value
+		value,
+		marker: `\u{e000}thingtime-reveal-${state.markerNonce}-${index}\u{e001}`
 	};
 	state.revealableObjectIds.set(value, revealable);
-	return revealable.placeholder;
+	return revealable.marker;
 };
 
 const redactText = (value: string, state: CaptureState, maxChars = MAX_DIAGNOSTIC_STRING_CHARS): string => {
-	// Bound first: no thrown string can make the regex work or output allocation
-	// exceed a fixed cost while an admin failure is being prepared.
-	let redacted =
-		maxChars === MAX_DIAGNOSTIC_STRING_CHARS
-			? boundedText(value, state)
-			: value.length <= maxChars
-			? value
-			: (() => {
-					state.truncated = true;
-					const suffix = '\n…[diagnostic truncated; raw boundary removed before redaction]';
-					return `${value.slice(0, Math.max(0, maxChars - suffix.length - RAW_TRUNCATION_SAFETY_MARGIN))}${suffix}`;
-			  })();
-	const replace = (pattern: RegExp, replacement: string | ((...args: any[]) => string)) => {
-		if (typeof replacement === 'string') {
-			const matches = redacted.match(pattern);
-			if (matches?.length) state.redactions += matches.length;
-			redacted = redacted.replace(pattern, replacement);
-			return;
-		}
+	// Inspect a fixed lookahead beyond the eventual output boundary so tokens
+	// crossing that boundary are redacted whole. If raw input is omitted, all
+	// reveal eligibility is disabled: an unseen suffix might otherwise contain
+	// a credential occurrence that should veto an earlier approved identifier.
+	const rawTruncated = value.length > maxChars;
+	if (rawTruncated) {
+		state.truncated = true;
+		state.revealDisabled = true;
+	}
+	let redacted = rawTruncated ? value.slice(0, maxChars + RAW_REDACTION_LOOKAHEAD_CHARS) : value;
+	const replace = (pattern: RegExp, replacement: (...args: any[]) => string) => {
 		redacted = redacted.replace(pattern, (...args) => {
-			state.redactions += 1;
-			return replacement(...args);
+			const next = replacement(...args);
+			if (next !== args[0]) state.redactions += 1;
+			return next;
 		});
 	};
 
@@ -189,32 +227,48 @@ const redactText = (value: string, state: CaptureState, maxChars = MAX_DIAGNOSTI
 		rememberIrreversibleObjectIds(match, state);
 		return '[redacted-token]';
 	});
+	if (!state.allowPublicRevealPlaceholders) {
+		replace(new RegExp(REVEAL_PLACEHOLDER_SOURCE, 'g'), () => '[redacted-placeholder]');
+	}
 
 	// Header values are a single irreversible unit. In particular, a Cookie or
 	// Set-Cookie line can contain many semicolon-separated credentials.
 	replace(/\b((?:set-cookie|cookie|authorization|proxy-authorization)\s*:)[^\r\n]*/gi, (match, prefix) => {
 		rememberIrreversibleObjectIds(match, state);
-		return `${prefix} [redacted]`;
+		return `${prefix} [redacted credential field and remainder]`;
 	});
 
 	// Credential-shaped values are never retained for reveal, even when the value
-	// happens to look exactly like an ObjectId. Identifier values are handled in
-	// a separate, closed allowlist below so future reveal support cannot turn into
-	// a generic secret recovery mechanism.
-	// Once a credential assignment starts, redact the remainder of this bounded
-	// field. Credential objects and arrays regularly continue over many lines,
-	// and guessing where an arbitrary structure ends can retain both secrets and
-	// an otherwise-approved id on a continuation line. The diagnostic loses some
-	// trailing context in exchange for making that whole boundary irreversible.
-	replace(new RegExp(`(^|[^A-Za-z0-9_$-])(["']?${credentialLabel}["']?\\s*[:=]\\s*)[\\s\\S]*$`, 'gi'), (match, leading, prefix) => {
+	// happens to look exactly like an ObjectId. Parse the whole bounded assignment
+	// label, normalize camelCase, separators, plural forms, CLI dashes and sigils,
+	// then redact the remainder of the field. This intentionally treats any
+	// standalone key/keys component as sensitive (for example signingKey).
+	let credentialBoundary: { index: number; valueStart: number } | null = null;
+	for (const [pattern, labelIndex] of [
+		[ASSIGNMENT_LABEL_PATTERN, 3],
+		[CLI_OPTION_PATTERN, 2]
+	] as const) {
+		pattern.lastIndex = 0;
+		let match: RegExpExecArray | null;
+		while ((match = pattern.exec(redacted))) {
+			if (!isCredentialLabel(match[labelIndex])) continue;
+			const candidate = { index: match.index, valueStart: match.index + match[0].length };
+			if (!credentialBoundary || candidate.index < credentialBoundary.index) credentialBoundary = candidate;
+			break;
+		}
+	}
+	if (credentialBoundary) {
+		const sensitiveRemainder = redacted.slice(credentialBoundary.index);
+		rememberIrreversibleObjectIds(sensitiveRemainder, state);
+		const next = `${redacted.slice(0, credentialBoundary.valueStart)}[redacted credential field and remainder]`;
+		if (next !== redacted) state.redactions += 1;
+		redacted = next;
+	}
+	// Query strings are an irreversible unit: they are routinely copied into
+	// errors without enough schema context to distinguish ids from credentials.
+	replace(/\?[^#\s"'<>]+/g, (match) => {
 		rememberIrreversibleObjectIds(match, state);
-		return `${leading}${prefix}[redacted credential field and remainder]`;
-	});
-	// URLs are an irreversible boundary: query strings may be copied into logs or
-	// diagnostics without enough context to prove that a 24-hex value is an id.
-	replace(new RegExp(`([?&]${sensitiveQueryLabel}=)[^&#\\s]+`, 'gi'), (match, prefix) => {
-		rememberIrreversibleObjectIds(match, state);
-		return `${prefix}[redacted]`;
+		return '?[redacted-query]';
 	});
 
 	// Reveal permission is structural, not inferred from prose. Replace only ids
@@ -227,44 +281,61 @@ const redactText = (value: string, state: CaptureState, maxChars = MAX_DIAGNOSTI
 		.filter(({ index }) => index >= 0)
 		.sort((left, right) => left.index - right.index || left.order - right.order);
 	for (const { objectId } of approved) {
-		replace(new RegExp(`\\b${objectId}\\b`, 'gi'), () => captureObjectId(objectId, state));
+		replace(new RegExp(`(?<![0-9a-f])${objectId}(?![0-9a-f])`, 'gi'), () => captureObjectId(objectId, state));
 	}
 
-	const mongoToken = `(?:[0-9a-f]{24}|\\[redacted MongoDB ObjectId #(?:[1-9]|[12][0-9]|3[0-2])\\])`;
+	const internalMarkerSource = [...state.revealableObjectIds.values()].map((entry) => escapeRegExp(entry.marker)).join('|');
+	const revealTokenSource = internalMarkerSource
+		? `(?:${REVEAL_PLACEHOLDER_SOURCE}|${internalMarkerSource})`
+		: REVEAL_PLACEHOLDER_SOURCE;
+	const exactRevealValue = exactRevealIdentifierValuePattern(revealTokenSource);
+	const mongoToken = `(?:[0-9a-f]{24}|${revealTokenSource})`;
 	const identifierValue =
 		`(?:(?:new\\s+)?ObjectId\\s*\\(\\s*["']${mongoToken}["']\\s*\\)|` +
 		`\\{\\s*["']?\\$oid["']?\\s*[:=]\\s*["']${mongoToken}["']\\s*\\}|` +
 		`"(?:\\\\.|[^"\\\\])*"|'(?:\\\\.|[^'\\\\])*'|` +
-		`\\[redacted MongoDB ObjectId #(?:[1-9]|[12][0-9]|3[0-2])\\]|[^\\s,;}\\]]+)`;
+		`${revealTokenSource}|[^\\s,;}\\]]+)`;
 	redacted = redacted.replace(
 		new RegExp(
 			`(^|[^A-Za-z0-9_$-])(["']?${identifierLabel}["']?\\s*[:=]\\s*)(${identifierValue})`,
 			'gim'
 		),
 		(_match, leading, prefix, candidate) => {
-			if (EXACT_REVEAL_IDENTIFIER_VALUE_PATTERN.test(String(candidate))) return `${leading}${prefix}${candidate}`;
-			state.redactions += 1;
-			return `${leading}${prefix}[redacted]`;
+			const next = exactRevealValue.test(String(candidate)) ? `${leading}${prefix}${candidate}` : `${leading}${prefix}[redacted]`;
+			if (next !== _match) state.redactions += 1;
+			return next;
 		}
 	);
-	replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[redacted-email]');
-	replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi, '[redacted-uuid]');
-	replace(/\b[0-9a-f]{24}\b/gi, '[redacted-object-id]');
-	replace(/(\/(?:Users|home)\/)[^/\s]+/g, '$1[redacted-user]');
+	replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, () => '[redacted-email]');
+	replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi, () => '[redacted-uuid]');
+	replace(/(?<![0-9a-f])[0-9a-f]{24}(?![0-9a-f])/gi, () => '[redacted-object-id]');
+	replace(/(\/(?:Users|home)\/)[^/\s]+/g, (_match, prefix) => `${prefix}[redacted-user]`);
+
+	if (rawTruncated || redacted.length > maxChars) {
+		state.truncated = true;
+		redacted = truncateSanitizedText(redacted, maxChars, '\n…[text truncated after redaction]');
+	}
 	return redacted;
 };
 
 // Read one named data property without invoking accessors or enumerating an
 // arbitrary exception graph. A short prototype walk preserves standard Error
 // fields while keeping work fixed even for unusually wide thrown objects.
-const dataProperty = (value: object, key: string): unknown => {
+type PropertyLookup = { kind: 'data'; value: unknown } | { kind: 'accessor' } | null;
+
+const propertyLookup = (value: object, key: string): PropertyLookup => {
 	let cursor: object | null = value;
-	for (let depth = 0; cursor && depth < 4; depth += 1) {
+	for (let depth = 0; cursor && depth < 6; depth += 1) {
 		const descriptor = Object.getOwnPropertyDescriptor(cursor, key);
-		if (descriptor) return 'value' in descriptor ? descriptor.value : undefined;
+		if (descriptor) return 'value' in descriptor ? { kind: 'data', value: descriptor.value } : { kind: 'accessor' };
 		cursor = Object.getPrototypeOf(cursor);
 	}
-	return undefined;
+	return null;
+};
+
+const dataProperty = (value: object, key: string): unknown => {
+	const lookup = propertyLookup(value, key);
+	return lookup?.kind === 'data' ? lookup.value : undefined;
 };
 
 // Node 24 represents an untouched native Error stack as a lazy own accessor.
@@ -279,12 +350,55 @@ const safeTextProperty = (value: object, key: string, state: CaptureState): stri
 	return typeof property === 'string' && property ? redactText(property, state) : undefined;
 };
 
-const safeStackProperty = (value: object, state: CaptureState): string | undefined => {
-	const property = dataProperty(value, 'stack');
-	if (typeof property === 'string' && property) return redactText(property, state);
+const formattedErrorHeader = (name: string, message: string): string => {
+	if (!name) return message;
+	if (!message) return name;
+	return `${name}: ${message}`;
+};
+
+const sanitizedStack = (
+	rawStack: string,
+	rawName: string | undefined,
+	rawMessage: string | undefined,
+	safeName: string,
+	safeMessage: string,
+	state: CaptureState
+): string => {
+	if (rawName !== undefined && rawMessage !== undefined) {
+		const rawHeader = formattedErrorHeader(rawName, rawMessage);
+		if (rawStack === rawHeader || rawStack.startsWith(`${rawHeader}\n`)) {
+			const frames = rawStack === rawHeader ? '' : rawStack.slice(rawHeader.length + 1);
+			const safeFrames = frames ? redactText(frames, state) : '';
+			const safeHeader = formattedErrorHeader(safeName, safeMessage);
+			return safeFrames ? `${safeHeader}\n${safeFrames}` : safeHeader;
+		}
+	}
+	return redactText(rawStack, state);
+};
+
+const safeStackProperty = (
+	value: object,
+	state: CaptureState,
+	rawName: string | undefined,
+	rawMessage: string | undefined,
+	safeName: string,
+	safeMessage: string
+): string | undefined => {
+	const stackLookup = propertyLookup(value, 'stack');
+	if (stackLookup?.kind === 'data') {
+		return typeof stackLookup.value === 'string' && stackLookup.value
+			? sanitizedStack(stackLookup.value, rawName, rawMessage, safeName, safeMessage, state)
+			: undefined;
+	}
 
 	const descriptor = Object.getOwnPropertyDescriptor(value, 'stack');
+	const safeNativeInputs =
+		propertyLookup(value, 'name')?.kind === 'data' &&
+		typeof rawName === 'string' &&
+		propertyLookup(value, 'message')?.kind === 'data' &&
+		typeof rawMessage === 'string';
 	if (
+		!safeNativeInputs ||
 		!descriptor ||
 		'value' in descriptor ||
 		!nativeErrorStackGetter ||
@@ -295,7 +409,9 @@ const safeStackProperty = (value: object, state: CaptureState): string | undefin
 	}
 	try {
 		const nativeStack = Reflect.apply(nativeErrorStackGetter, value, []);
-		return typeof nativeStack === 'string' && nativeStack ? redactText(nativeStack, state) : undefined;
+		return typeof nativeStack === 'string' && nativeStack
+			? sanitizedStack(nativeStack, rawName, rawMessage, safeName, safeMessage, state)
+			: undefined;
 	} catch {
 		return undefined;
 	}
@@ -334,11 +450,16 @@ const errorSnapshot = (thrown: unknown, state: CaptureState, depth = 0): ErrorSn
 		};
 	}
 
-	const name = safeTextProperty(thrown, 'name', state) || (thrown instanceof Error ? 'Error' : 'NonErrorThrow');
+	const rawNameValue = dataProperty(thrown, 'name');
+	const rawMessageValue = dataProperty(thrown, 'message');
+	const rawName = typeof rawNameValue === 'string' ? rawNameValue : undefined;
+	const rawMessage = typeof rawMessageValue === 'string' ? rawMessageValue : undefined;
+	const name = (rawName ? redactText(rawName, state) : undefined) || (thrown instanceof Error ? 'Error' : 'NonErrorThrow');
 	const message =
-		safeTextProperty(thrown, 'message', state) || (thrown instanceof Error ? 'The error had no message.' : 'A non-Error object was thrown.');
+		(rawMessage ? redactText(rawMessage, state) : undefined) ||
+		(thrown instanceof Error ? 'The error had no message.' : 'A non-Error object was thrown.');
 	const snapshot: ErrorSnapshot = { name, message };
-	const stack = safeStackProperty(thrown, state);
+	const stack = safeStackProperty(thrown, state, rawName, rawMessage, name, message);
 	const code = safeCodeProperty(thrown, 'code', state);
 	const codeName = safeTextProperty(thrown, 'codeName', state);
 	const errno = safeCodeProperty(thrown, 'errno', state);
@@ -366,7 +487,17 @@ const errorSnapshot = (thrown: unknown, state: CaptureState, depth = 0): ErrorSn
 const sanitizeStoredSnapshot = (value: unknown, state: CaptureState, depth = 0): Record<string, unknown> | null => {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
 	const snapshot: Record<string, unknown> = {};
-	for (const key of ['name', 'message', 'stack', 'codeName', 'syscall'] as const) {
+	const rawNameValue = dataProperty(value, 'name');
+	const rawMessageValue = dataProperty(value, 'message');
+	const rawName = typeof rawNameValue === 'string' ? rawNameValue : undefined;
+	const rawMessage = typeof rawMessageValue === 'string' ? rawMessageValue : undefined;
+	const safeName = rawName ? redactText(rawName, state) : undefined;
+	const safeMessage = rawMessage ? redactText(rawMessage, state) : undefined;
+	if (safeName) snapshot.name = safeName;
+	if (safeMessage) snapshot.message = safeMessage;
+	const stack = safeStackProperty(value, state, rawName, rawMessage, safeName || '', safeMessage || '');
+	if (stack) snapshot.stack = stack;
+	for (const key of ['codeName', 'syscall'] as const) {
 		const text = safeTextProperty(value, key, state);
 		if (text) snapshot[key] = text;
 	}
@@ -398,28 +529,35 @@ const sanitizeStoredSnapshot = (value: unknown, state: CaptureState, depth = 0):
 // descriptor placeholder. Parsed snapshots retain only the same closed fields
 // as fresh captures; non-JSON legacy detail is scrubbed as bounded plain text.
 export const sanitizeStoredAdminDiagnosticDetail = (value: unknown): AdminErrorDiagnostic => {
-	const state = createCaptureState();
+	const state = createCaptureState({}, true);
 	const source = typeof value === 'string' ? value : '';
 	let detail: string;
-	try {
-		const snapshot = sanitizeStoredSnapshot(JSON.parse(source), state);
-		detail = snapshot
-			? JSON.stringify(snapshot, null, 2)
-			: JSON.stringify(
-					{
-						name: 'UnavailableDiagnostic',
-						message: 'The stored diagnostic did not match the supported error snapshot.'
-					},
-					null,
-					2
-			  );
-	} catch {
+	const unavailableDetail = () =>
+		JSON.stringify(
+			{
+				name: 'UnavailableDiagnostic',
+				message: 'The stored diagnostic did not match the supported error snapshot.'
+			},
+			null,
+			2
+		);
+	const firstNonWhitespace = source.match(/\S/)?.[0];
+	if (source.length > MAX_ADMIN_DIAGNOSTIC_CHARS && (firstNonWhitespace === '{' || firstNonWhitespace === '[')) {
+		state.truncated = true;
+		detail = unavailableDetail();
+	} else if (source.length > MAX_ADMIN_DIAGNOSTIC_CHARS) {
 		detail = redactText(source, state, MAX_ADMIN_DIAGNOSTIC_CHARS);
+	} else {
+		try {
+			const snapshot = sanitizeStoredSnapshot(JSON.parse(source), state);
+			detail = snapshot ? JSON.stringify(snapshot, null, 2) : unavailableDetail();
+		} catch {
+			detail = redactText(source, state, MAX_ADMIN_DIAGNOSTIC_CHARS);
+		}
 	}
 	if (detail.length > MAX_ADMIN_DIAGNOSTIC_CHARS) {
 		state.truncated = true;
-		const suffix = '\n…[diagnostic truncated]';
-		detail = `${detail.slice(0, MAX_ADMIN_DIAGNOSTIC_CHARS - suffix.length)}${suffix}`;
+		detail = truncateSanitizedText(detail, MAX_ADMIN_DIAGNOSTIC_CHARS, '\n…[diagnostic truncated after redaction]');
 	}
 	return { detail, redactions: state.redactions, truncated: state.truncated, revealables: [] };
 };
@@ -432,20 +570,23 @@ export const captureAdminErrorDiagnostic = (
 		const state = createCaptureState(revealContext);
 		const snapshot = errorSnapshot(error, state);
 		let detail = JSON.stringify(snapshot, null, 2);
-		for (const [value, entry] of state.revealableObjectIds) {
-			if (state.deniedObjectIds.has(value)) detail = detail.split(entry.placeholder).join('[redacted-object-id]');
-		}
 		if (detail.length > MAX_ADMIN_DIAGNOSTIC_CHARS) {
 			state.truncated = true;
-			const suffix = '\n…[diagnostic truncated]';
-			detail = `${detail.slice(0, MAX_ADMIN_DIAGNOSTIC_CHARS - suffix.length)}${suffix}`;
+			detail = truncateSanitizedText(detail, MAX_ADMIN_DIAGNOSTIC_CHARS, '\n…[diagnostic truncated after redaction]');
 		}
-		// Never retain a value whose placeholder was itself removed by the final
-		// whole-diagnostic bound. The normal read response exposes descriptors only;
-		// raw values stay inside the protected diagnostic envelope.
-		const revealables = [...state.revealableObjectIds.values()].filter(
-			(entry) => !state.deniedObjectIds.has(entry.value) && detail.includes(entry.placeholder)
-		);
+		// Generated markers carry per-capture random provenance until every scrub and
+		// output bound is complete. Attacker-authored public placeholder text can
+		// therefore never keep a raw lookup-table entry alive after its real marker
+		// was removed. Only then convert surviving markers to public placeholders.
+		const revealables: AdminDiagnosticRevealable[] = [];
+		for (const [value, entry] of state.revealableObjectIds) {
+			const eligible = !state.revealDisabled && !state.deniedObjectIds.has(value) && detail.includes(entry.marker);
+			detail = detail.split(entry.marker).join(eligible ? entry.placeholder : '[redacted-object-id]');
+			if (eligible) {
+				const { marker: _marker, ...publicEntry } = entry;
+				revealables.push(publicEntry);
+			}
+		}
 		return { detail, redactions: state.redactions, truncated: state.truncated, revealables };
 	} catch {
 		return {

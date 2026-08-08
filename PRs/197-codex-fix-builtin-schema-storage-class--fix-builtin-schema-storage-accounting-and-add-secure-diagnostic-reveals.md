@@ -38,6 +38,14 @@ public response, searchable field, or browser cache.
   connection strings, private keys, sensitive URL query values, and ambiguous
   24-hex strings are irreversibly redacted. Stored JSON diagnostics are
   re-parsed through a bounded field allowlist before projection.
+- Credential labels are normalized across camelCase, separators, plurals,
+  spaced labels, and CLI options, including Thingtime's canonical `secure`
+  field. Random internal capture markers preserve reveal provenance until the
+  final scrub completes; forged public placeholders cannot authorize a value.
+- Redaction examines a bounded lookahead before truncation, uses hexadecimal
+  boundaries for ObjectIds, avoids invoking thrown-object accessors, and
+  preserves safe native stack frames without copying a credential-bearing
+  message back into the stack.
 - `/api/v1/things/reveal` is a closed provider registry rather than a generic
   secure-field reader. It requires a live current admin session, the exact
   diagnostic owner, fresh current-password verification on every request,
@@ -46,22 +54,29 @@ public response, searchable field, or browser cache.
 - `/thing/:id` holds password and revealed values only in component memory.
   Hide, cancel, account/Thing changes, navigation, request aborts, and tab
   backgrounding clear transient state.
+- Reveal failures use fixed client-authored copy, so unexpected server error
+  prose cannot reach the modal or toast. Password, expired-session,
+  permission, missing-value, rate-limit, transport, and outage paths have
+  distinct recovery behavior and keyboard-focus handling.
 
 ## Verification
 
-- Full Remix unit suite: 215 passed, including 11 focused password/provider/
+- Full Remix unit suite: 223 passed, including 11 focused password/provider/
   endpoint reveal tests and the builtin-schema storage regressions.
 - Read-only API suite: 297 passed. Mutating API cases were intentionally skipped
-  against the connected database; no production migration or database mutation
-  was run during validation.
+  against the connected database. One explicit local migration exercise created
+  a private diagnostic Thing in the local development database; no production
+  migration or production data mutation was run.
 - App-storage regression suite: 6 passed.
 - Typecheck ratchet passes at 138 findings, down from the 143-finding baseline.
 - Touched-file ESLint reports no errors; one unchanged `no-loop-func` warning
   remains in the large migrations file. `git diff --check` passes.
 - The production build and Vercel output verifier pass.
-- Desktop and 390×844 browser QA exercised the diagnostic page, required
-  password guard, one-time reveal, Hide, cancel/reopen clearing, modal bounds,
-  and top-to-bottom scrolling using synthetic intercepted responses. No real
-  password, diagnostic, or database record was used.
+- Desktop browser QA exercised the diagnostic page and password-confirmation
+  modal with a synthetic intercepted diagnostic, including top-to-bottom
+  scrolling and horizontal-overflow checks. The password-manager overlay and a
+  locked browser host prevented completing the live synthetic reveal/Hide and
+  mobile-viewport passes; focused tests cover the response mapping and transient
+  state, and no real password or raw sensitive value was submitted.
 - Graphify semantic output, report, manifest, and tracked content-addressed
   cache were refreshed from the final source tree.
