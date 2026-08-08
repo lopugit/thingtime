@@ -434,6 +434,11 @@ is fixed, and cite the checklist you ran in the PR description.
       returned document must still pass the complete protected-envelope check.
       A malformed Thing occupying that id remains untouched and returns the
       authored storage-invariant error.
+- [ ] Remove `storageClass` from existing reserved, system-owned `schema-*`
+      builtin schema Things. `seed-builtin-schemas` reports each as pending and
+      restores `storageClass: "control"`; running
+      `backfill-user-storage-accounting` directly invokes that repair first.
+      A community/user-owned `thingtime: ["schema"]` Thing remains billable.
 - [ ] Force a migration runner exception once: the public error field remains
       a safe exception class/code (never a raw Mongo message, query, document
       id, host, or credential), and Lopu renders contextual text beneath the

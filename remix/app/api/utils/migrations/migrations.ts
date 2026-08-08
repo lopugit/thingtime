@@ -30,7 +30,7 @@ import {
 } from '../auth/users';
 import { waitlistEmailKey } from '../waitlist/waitlist';
 import { themeAcl } from '../themes/themes';
-import { exactDocumentSnapshotMatch, storageMigrationOwnership } from './migrationCore';
+import { builtinSchemaSeedNeedsRefresh, exactDocumentSnapshotMatch, storageMigrationOwnership } from './migrationCore';
 import { MigrationOperatorError, migrationFailureResult, type MigrationFailure } from './migrationFailure';
 import { getSubscription } from '../subscriptions/subscriptions';
 import {
@@ -1123,9 +1123,9 @@ const waitlistToThings = collectionToThingsMigration({
 // needs system-only powers the generic CRUD rightly refuses: ownerId 'system',
 // the reserved 'schema-' shareId prefix (sanitizeShareId blocks it against
 // squatters), uniqueKeys, and reconciling upserts. Re-runs self-heal drift —
-// a genuine seeded doc whose crystal no longer matches the validated registry
-// projection is refreshed in place — and pending() counts missing AND stale
-// docs, so drift genuinely surfaces in the admin census.
+// a genuine seeded doc whose crystal or server-owned control-plane storage
+// stamp no longer matches is refreshed in place — and pending() counts missing
+// AND stale docs, so drift genuinely surfaces in the admin census.
 
 const BUILTIN_SCHEMA_SHARE_PREFIX = 'schema-';
 
@@ -1147,21 +1147,20 @@ const seedBuiltinSchemas: Migration = {
   toVersion: THINGS_VERSION,
   title: 'Seed builtin crystal schemas as schema things',
   description:
-    'Every builtin crystal schema in the code registry (all 13 crystal kinds: post, comment, ' +
-    'reaction, share, data, schema, save, app, app-data, user, theme, feed-algorithm, waitlist) ' +
-    'is seeded as a system-owned public schema thing — thingtime ["schema"], shareId ' +
-    'schema-<id>, uniqueKeys ["schema:<id>"], acl ["tt:all"]. Each crystal is projected onto ' +
+    'Every builtin crystal schema in the code registry is seeded as a system-owned public schema ' +
+    'thing — thingtime ["schema"], shareId schema-<id>, uniqueKeys ["schema:<id>"], acl ["tt:all"], ' +
+    'and the server-owned storageClass "control". Each crystal is projected onto ' +
     'the schema-thing field grammar and validated through validateThingtimeCrystal(["schema"]) ' +
     '— the same gate user-published schemas pass — before writing; open record shapes and ' +
     'reserved names are projected away, and a validation failure is reported as a bug. ' +
     'Idempotent and self-healing: re-runs upsert by shareId, refresh genuine seeded docs whose ' +
-    'crystal drifted from the registry, and skip+note foreign docs squatting a destination id.',
+    'crystal or control-plane storage stamp drifted, and skip+note foreign docs squatting a destination id.',
   pending: async () => {
     const things = await getCollection('things');
     const schemas = builtinCrystalSchemas();
     const docs = await things
       .find({ shareId: { $in: builtinSchemaShareIds() } } as any)
-      .project({ shareId: 1, thingtime: 1, ownerId: 1, crystal: 1 })
+      .project({ shareId: 1, thingtime: 1, ownerId: 1, crystal: 1, storageClass: 1 })
       .toArray();
 		const byShareId = new Map<string, any>(docs.map((doc: any) => [String(doc.shareId), doc]));
     let count = 0;
@@ -1173,9 +1172,9 @@ const seedBuiltinSchemas: Migration = {
         continue;
       }
       const validated = builtinSchemaCrystal(schema);
-      // projection no longer validates (registry/grammar drift) or the stored
-      // crystal differs from the validated projection — both are pending work
-      if (validated.ok === false || JSON.stringify(twin.crystal ?? {}) !== JSON.stringify(validated.crystal)) {
+      // Projection/grammar drift, registry crystal drift, and a missing or
+      // incorrect server-owned control-plane stamp are all pending work.
+      if (validated.ok === false || builtinSchemaSeedNeedsRefresh(twin, validated.crystal)) {
         count += 1;
       }
     }
@@ -1211,6 +1210,7 @@ const seedBuiltinSchemas: Migration = {
           thingtime: validated.thingtime,
           crystal: validated.crystal,
           ownerId: 'system',
+          storageClass: 'control',
           acl: [ACL_ALL],
           targetId: null,
           tags: [],
@@ -1235,15 +1235,21 @@ const seedBuiltinSchemas: Migration = {
           skipped += 1;
           continue;
         }
-        if (JSON.stringify(twin!.crystal ?? {}) !== JSON.stringify(validated.crystal)) {
+        const crystalNeedsRefresh = JSON.stringify(twin!.crystal ?? {}) !== JSON.stringify(validated.crystal);
+        const storageClassNeedsRefresh = twin!.storageClass !== 'control';
+        if (builtinSchemaSeedNeedsRefresh(twin, validated.crystal)) {
           if (!dryRun) {
             // genuineness lives IN the filter — a foreign doc matches nothing,
             // preserving the same anti-squat guarantee as the skip above
 						await things.updateOne({ shareId, ownerId: 'system', thingtime: 'schema' } as any, {
-							$set: { crystal: validated.crystal, updatedAt: now }
+							$set: { crystal: validated.crystal, storageClass: 'control', updatedAt: now }
 						});
           }
-          notes.push(`schema ${schema.id}: crystal ${dryRun ? 'would be ' : ''}refreshed from the registry`);
+          const repairs = [
+            crystalNeedsRefresh ? 'registry crystal' : null,
+            storageClassNeedsRefresh ? 'control-plane storage class' : null
+          ].filter(Boolean);
+          notes.push(`schema ${schema.id}: ${dryRun ? 'would repair' : 'repaired'} ${repairs.join(' and ')}`);
           refreshed += 1;
           continue;
         }
@@ -1604,9 +1610,10 @@ const backfillAppStorageAllowances: Migration = {
 
 // Function (rather than a module-time array) because mergeLegacyCollections is
 // declared below this migration. Calls happen only after module initialization.
-const userStoragePrerequisites = (): Migration[] => [
+export const userStoragePrerequisites = (): Migration[] => [
 	mergeLegacyCollections,
 	thingsMigration,
+	seedBuiltinSchemas,
 	usersToThings,
 	themesToThings,
 	feedAlgorithmsToThings,

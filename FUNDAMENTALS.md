@@ -80,9 +80,9 @@ System-kind rules (never bypass):
   `migration-diagnostic-*` namespace is likewise reserved; those records are
   written after a failed real migration releases its lease, expire after 30
   days, and are readable only through the exact-owner current-admin endpoint.
-  The `schema` kind is NOT protected: anyone may publish a schema thing (the
-  builtins are seeded system-owned ones, user schemas are
-  community-published).
+  The `schema` kind is NOT protected: anyone may publish a schema thing. Builtin
+  schemas are reserved system-owned seeds with root `storageClass: "control"`;
+  community/user schemas remain ordinary billable content.
 - Private state lives under root `secure` as a single **BinData blob** (the
   search wildcard text index tokenizes string _fields_ only, so a binary blob
   is entirely unsearchable — no field inside it can ever leak via `q=<value>`),
