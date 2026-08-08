@@ -776,6 +776,126 @@ jobs:
           }
           post_start_comment || echo "::warning::Could not post the resolution-start comment; continuing with the resolution."
 
+      - name: Prepare the trusted merge-review comment helper
+        shell: bash
+        run: |
+          set -euo pipefail
+          helper="$RUNNER_TEMP/post-merge-review-comments.sh"
+          umask 077
+          cat >"$helper" <<'MERGE_REVIEW_COMMENT_HELPER'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          IFS=$'\n\t'
+
+          [[ $# -eq 7 ]] || {
+            echo "usage: $0 <path-file> <repo> <pr> <run-url> <context-id> <heading> <description>" >&2
+            exit 64
+          }
+          paths="$1"
+          repo="$2"
+          pr_number="$3"
+          run_url="$4"
+          context_id="$5"
+          heading="$6"
+          description="$7"
+          [[ -f "$paths" && ! -L "$paths" ]] || exit 0
+          [[ -s "$paths" ]] || exit 0
+          [[ "$context_id" =~ ^[a-z0-9-]+$ ]] || {
+            echo "invalid merge-review comment context id" >&2
+            exit 1
+          }
+
+          work="$(mktemp -d "$RUNNER_TEMP/merge-review-comments.XXXXXX")"
+          trap 'rm -rf -- "$work"' EXIT
+          rendered="$work/rendered.md"
+          : >"$rendered"
+          while IFS= read -r path; do
+            [[ -n "$path" ]] || continue
+            [[ ! "$path" =~ [[:cntrl:]] ]] || {
+              echo "control character in merge-review path" >&2
+              exit 1
+            }
+            escaped="$(printf '%s' "$path" \
+              | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g')"
+            printf -- '- <code>%s</code>\n' "$escaped" >>"$rendered"
+          done <"$paths"
+
+          chunks="$work/chunks"
+          mkdir -- "$chunks"
+          LC_ALL=C awk -v dir="$chunks" -v limit=45000 '
+            function open_next() {
+              part++
+              file = sprintf("%s/part-%03d.md", dir, part)
+              size = 0
+            }
+            BEGIN { open_next() }
+            {
+              line = $0 ORS
+              bytes = length(line)
+              if (size > 0 && size + bytes > limit) {
+                close(file)
+                open_next()
+              }
+              printf "%s", line >> file
+              size += bytes
+            }
+          ' "$rendered"
+          mapfile -t chunk_files < <(find "$chunks" -type f -name 'part-*.md' | LC_ALL=C sort)
+          total="${#chunk_files[@]}"
+          (( total > 0 )) || exit 0
+
+          comments="$(gh api --paginate "repos/$repo/issues/$pr_number/comments?per_page=100" \
+            --slurp | jq -c 'add // []')"
+          part=0
+          for chunk in "${chunk_files[@]}"; do
+            ((part += 1))
+            marker="<!-- thingtime-merge-review:v1 run=${GITHUB_RUN_ID} context=$context_id part=$part -->"
+            body="$work/body-$part.md"
+            {
+              echo "$heading (part $part/$total)"
+              echo
+              echo "$description"
+              echo
+              cat -- "$chunk"
+              echo
+              echo "[Workflow run]($run_url)"
+              echo
+              echo "$marker"
+            } >"$body"
+            comment_id="$(jq -r --arg marker "$marker" '
+              [.[]
+                | select(.user.login == "github-actions[bot]")
+                | select(.body | contains($marker))
+                | .id]
+              | last // empty
+            ' <<<"$comments")"
+            if [[ -n "$comment_id" ]]; then
+              gh api --method PATCH "repos/$repo/issues/comments/$comment_id" \
+                -F "body=@$body" >/dev/null
+            else
+              gh api "repos/$repo/issues/$pr_number/comments" \
+                -F "body=@$body" >/dev/null
+            fi
+          done
+          marker_prefix="<!-- thingtime-merge-review:v1 run=${GITHUB_RUN_ID} context=$context_id part="
+          while IFS= read -r stale_id; do
+            [[ -n "$stale_id" ]] || continue
+            gh api --method DELETE "repos/$repo/issues/comments/$stale_id" >/dev/null
+          done < <(jq -r \
+            --arg prefix "$marker_prefix" \
+            --argjson total "$total" '
+              .[]
+              | select(.user.login == "github-actions[bot]")
+              | select(.body | contains($prefix))
+              | (.body | split($prefix) | last | split(" -->") | first) as $part
+              | select($part | test("^[0-9]+$"))
+              | select(($part | tonumber) > $total)
+              | .id
+            ' <<<"$comments")
+          MERGE_REVIEW_COMMENT_HELPER
+          chmod 0700 "$helper"
+          printf 'MERGE_REVIEW_COMMENT_HELPER=%s\n' "$helper" >> "$GITHUB_ENV"
+
       - name: Check out PR head
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -933,39 +1053,6 @@ jobs:
         id: merge
         run: |
           set -euo pipefail
-          review_sensitive_path() {
-            local path="$1"
-            local base="${path##*/}"
-            case "$path" in
-              .github/*|*/.github/*|\
-              .gitattributes|*/.gitattributes|.gitmodules|*/.gitmodules|\
-              .claude/*|*/.claude/*|.mcp.json|*/.mcp.json|.claude.json|*/.claude.json|\
-              CLAUDE.md|*/CLAUDE.md|CLAUDE.local.md|*/CLAUDE.local.md|\
-              AGENTS.md|*/AGENTS.md|AGENTS.override.md|*/AGENTS.override.md|AI_ALL.md|*/AI_ALL.md|\
-              .ripgreprc|*/.ripgreprc|.husky/*|*/.husky/*|\
-              .env|.env.*|*/.env|*/.env.*|\
-              .npmrc|*/.npmrc|.yarnrc|.yarnrc.*|*/.yarnrc|*/.yarnrc.*|\
-              package.json|*/package.json|package-lock.json|*/package-lock.json|\
-              pnpm-lock.yaml|*/pnpm-lock.yaml|pnpm-workspace.yaml|*/pnpm-workspace.yaml|\
-              yarn.lock|*/yarn.lock|bun.lock|*/bun.lock|bun.lockb|*/bun.lockb|\
-              Dockerfile|*/Dockerfile|Dockerfile.*|*/Dockerfile.*|\
-              docker-compose.yml|*/docker-compose.yml|docker-compose.yaml|*/docker-compose.yaml|\
-              compose.yml|*/compose.yml|compose.yaml|*/compose.yaml|\
-              Makefile|*/Makefile|GNUmakefile|*/GNUmakefile|justfile|*/justfile|\
-              *.pem|*.key|*.p12|*.pfx|CODEOWNERS|*/CODEOWNERS)
-                return 0
-                ;;
-            esac
-            case "$base" in
-              vite.config.*|nitro.config.*|next.config.*|remix.config.*|\
-              webpack.config.*|rollup.config.*|babel.config.*|postcss.config.*|\
-              tailwind.config.*|eslint.config.*|jest.config.*|vitest.config.*)
-                return 0
-                ;;
-            esac
-            return 1
-          }
-
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           # zdiff3 markers show ours + BASE + theirs, so the model can infer
@@ -1019,16 +1106,6 @@ jobs:
 
           if [ "$clean" = false ]; then
             git diff --name-only --diff-filter=U > "$RUNNER_TEMP/conflicted.txt"
-            : > "$RUNNER_TEMP/merge-sensitive-conflicts.txt"
-            while IFS= read -r path; do
-              [ -n "$path" ] || continue
-              if review_sensitive_path "$path"; then
-                printf '%s\n' "$path" >> "$RUNNER_TEMP/merge-sensitive-conflicts.txt"
-              fi
-            done < "$RUNNER_TEMP/conflicted.txt"
-            LC_ALL=C sort -u -o \
-              "$RUNNER_TEMP/merge-sensitive-conflicts.txt" \
-              "$RUNNER_TEMP/merge-sensitive-conflicts.txt"
             if [ ! -s "$RUNNER_TEMP/conflicted.txt" ]; then
               # the graphify reset was the only conflict — finish the merge
               # deterministically, zero AI spend
@@ -1160,6 +1237,39 @@ jobs:
           GRAPHIFY_RESET: ${{ steps.merge.outputs.graphify_reset }}
         run: |
           set -euo pipefail
+
+          review_sensitive_path() {
+            local path="$1"
+            local base="${path##*/}"
+            case "$path" in
+              .github/*|*/.github/*|\
+              .gitattributes|*/.gitattributes|.gitmodules|*/.gitmodules|\
+              .claude/*|*/.claude/*|.mcp.json|*/.mcp.json|.claude.json|*/.claude.json|\
+              CLAUDE.md|*/CLAUDE.md|CLAUDE.local.md|*/CLAUDE.local.md|\
+              AGENTS.md|*/AGENTS.md|AGENTS.override.md|*/AGENTS.override.md|AI_ALL.md|*/AI_ALL.md|\
+              .ripgreprc|*/.ripgreprc|.husky/*|*/.husky/*|\
+              .env|.env.*|*/.env|*/.env.*|\
+              .npmrc|*/.npmrc|.yarnrc|.yarnrc.*|*/.yarnrc|*/.yarnrc.*|\
+              package.json|*/package.json|package-lock.json|*/package-lock.json|\
+              pnpm-lock.yaml|*/pnpm-lock.yaml|pnpm-workspace.yaml|*/pnpm-workspace.yaml|\
+              yarn.lock|*/yarn.lock|bun.lock|*/bun.lock|bun.lockb|*/bun.lockb|\
+              Dockerfile|*/Dockerfile|Dockerfile.*|*/Dockerfile.*|\
+              docker-compose.yml|*/docker-compose.yml|docker-compose.yaml|*/docker-compose.yaml|\
+              compose.yml|*/compose.yml|compose.yaml|*/compose.yaml|\
+              Makefile|*/Makefile|GNUmakefile|*/GNUmakefile|justfile|*/justfile|\
+              *.pem|*.key|*.p12|*.pfx|CODEOWNERS|*/CODEOWNERS)
+                return 0
+                ;;
+            esac
+            case "$base" in
+              vite.config.*|nitro.config.*|next.config.*|remix.config.*|\
+              webpack.config.*|rollup.config.*|babel.config.*|postcss.config.*|\
+              tailwind.config.*|eslint.config.*|jest.config.*|vitest.config.*)
+                return 0
+                ;;
+            esac
+            return 1
+          }
 
           # The merge must still be in progress (the model must not have
           # committed or aborted it).
@@ -1312,6 +1422,22 @@ jobs:
             fi
           done < "$RUNNER_TEMP/conflicted-derived.txt"
           rm -f "$keyfile" "$blob"
+
+          # Record reviewer-focus paths only from the verifier's authoritative
+          # conflict set, after every resolution has staged cleanly, passed the
+          # scope/marker/credential checks, and is ready to commit. The initial
+          # git-merge view is intentionally not trusted here because in-tree
+          # attributes can make it differ from the empty-cwd recomputation.
+          : > "$RUNNER_TEMP/merge-sensitive-conflicts.txt"
+          while IFS= read -r path; do
+            [ -n "$path" ] || continue
+            if review_sensitive_path "$path"; then
+              printf '%s\n' "$path" >> "$RUNNER_TEMP/merge-sensitive-conflicts.txt"
+            fi
+          done < "$RUNNER_TEMP/conflicted-derived.txt"
+          LC_ALL=C sort -u -o \
+            "$RUNNER_TEMP/merge-sensitive-conflicts.txt" \
+            "$RUNNER_TEMP/merge-sensitive-conflicts.txt"
 
           if [ -n "$(git diff --name-only)" ]; then
             echo "::warning::Unstaged edits left behind (not committed):"
@@ -1695,6 +1821,14 @@ jobs:
         run: |
           set -euo pipefail
           body="$RUNNER_TEMP/comment.md"
+          resolved_count=0
+          sensitive_count=0
+          if [ -s "$RUNNER_TEMP/conflicted-derived.txt" ]; then
+            resolved_count="$(wc -l < "$RUNNER_TEMP/conflicted-derived.txt" | tr -d ' ')"
+          fi
+          if [ -s "$RUNNER_TEMP/merge-sensitive-conflicts.txt" ]; then
+            sensitive_count="$(wc -l < "$RUNNER_TEMP/merge-sensitive-conflicts.txt" | tr -d ' ')"
+          fi
           {
             echo "🤝 Merged \`$BASE_REF\` into \`$HEAD_REF\` — conflicts auto-resolved by the [resolve-pr-conflicts workflow]($RUN_URL)."
             echo
@@ -1702,17 +1836,13 @@ jobs:
             # model finished (recomputed from git), so it is the trustworthy
             # list; plain conflicted.txt only exists on non-AI paths.
             if [ -s "$RUNNER_TEMP/conflicted-derived.txt" ]; then
-              echo "Conflicted files:"
-              sed 's/^/- `/; s/$/`/' "$RUNNER_TEMP/conflicted-derived.txt"
+              echo "Auto-resolved conflict files: $resolved_count (full escaped list posted in bounded follow-up comment(s))."
             else
               echo "No AI resolution was needed by merge time; the branch was updated with a plain merge commit."
             fi
             if [ -s "$RUNNER_TEMP/merge-sensitive-conflicts.txt" ]; then
               echo
-              echo "⚠️ Configuration/security-adjacent conflicts were auto-resolved and did not pause this run. Review these paths closely:"
-              sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' \
-                -e 's|^|- <code>|' -e 's|$|</code>|' \
-                "$RUNNER_TEMP/merge-sensitive-conflicts.txt"
+              echo "⚠️ Focused configuration/security review paths: $sensitive_count (posted separately in bounded follow-up comment(s)); filename sensitivity did not pause this run."
             fi
             if [ "$GRAPHIFY_RESET" = "true" ]; then
               echo
@@ -1738,8 +1868,21 @@ jobs:
             echo
             echo "Please review the merge commit before relying on it."
           } > "$body"
-          gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file "$body" || \
-            echo "::warning::Conflict resolution succeeded, but the PR review comment could not be posted."
+          gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file "$body"
+          if [ -s "$RUNNER_TEMP/conflicted-derived.txt" ]; then
+            "$MERGE_REVIEW_COMMENT_HELPER" \
+              "$RUNNER_TEMP/conflicted-derived.txt" \
+              "$REPO" "$PR_NUMBER" "$RUN_URL" resolved-files \
+              "🧾 **Auto-resolved conflict files**" \
+              "The verifier accepted and published every path below."
+          fi
+          if [ -s "$RUNNER_TEMP/merge-sensitive-conflicts.txt" ]; then
+            "$MERGE_REVIEW_COMMENT_HELPER" \
+              "$RUNNER_TEMP/merge-sensitive-conflicts.txt" \
+              "$REPO" "$PR_NUMBER" "$RUN_URL" sensitive-files \
+              "⚠️ **Focused review: configuration/security-adjacent conflicts**" \
+              "These paths were auto-resolved and published; filename sensitivity did not pause the merge. Review each resolution closely."
+          fi
 
       - name: Cascade to PRs stacked on this head
         # With a PAT, the push itself retriggers this workflow for the head
@@ -1883,6 +2026,17 @@ jobs:
             fi
           fi
 
+          list="$RUNNER_TEMP/conflicted-derived.txt"
+          [ -s "$list" ] || list="$RUNNER_TEMP/conflicted.txt"
+          conflict_count=0
+          sensitive_count=0
+          if [ -s "$list" ]; then
+            conflict_count="$(wc -l < "$list" | tr -d ' ')"
+          fi
+          if [ -s "$RUNNER_TEMP/merge-sensitive-conflicts.txt" ]; then
+            sensitive_count="$(wc -l < "$RUNNER_TEMP/merge-sensitive-conflicts.txt" | tr -d ' ')"
+          fi
+
           body="$RUNNER_TEMP/comment.md"
           {
             if [ "$PUSH_OUTCOME" = "success" ]; then
@@ -1891,22 +2045,14 @@ jobs:
               echo "⚠️ Merging \`$BASE_REF\` into this branch changes \`.github/workflows/\`, which the default token cannot push. Merge the base branch manually (\`git merge $BASE_REF\`), or add a \`CONFLICT_RESOLVER_PAT\` secret (repo + workflow scope) so this workflow can handle it. [Workflow run]($RUN_URL)"
             else
               echo "⚠️ Could not auto-resolve conflicts with \`$BASE_REF\` — manual resolution needed. See the [workflow run]($RUN_URL)."
-              # prefer the verify step's recomputed list when it exists; the
-              # merge step's list is informational (pre-AI)
-              list="$RUNNER_TEMP/conflicted-derived.txt"
-              [ -s "$list" ] || list="$RUNNER_TEMP/conflicted.txt"
               if [ -s "$list" ]; then
                 echo
-                echo "Conflicted files (as recorded by the merge step):"
-                sed 's/^/- `/; s/$/`/' "$list"
+                echo "Conflict paths from this attempt: $conflict_count (full escaped list posted in bounded follow-up comment(s))."
               fi
             fi
             if [ -s "$RUNNER_TEMP/merge-sensitive-conflicts.txt" ]; then
               echo
-              echo "⚠️ Configuration/security-adjacent conflict paths encountered (path sensitivity itself was not a blocker):"
-              sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' \
-                -e 's|^|- <code>|' -e 's|$|</code>|' \
-                "$RUNNER_TEMP/merge-sensitive-conflicts.txt"
+              echo "⚠️ Focused configuration/security review paths: $sensitive_count (posted separately in bounded follow-up comment(s)); path sensitivity itself was not a blocker."
             fi
             if [ "$paused" = true ]; then
               echo
@@ -1922,4 +2068,31 @@ jobs:
                 >/dev/null 2>&1 || true
               echo "::warning::Pause comment failed, so ai-merge-paused was removed rather than leaving metadata-free state."
             fi
+          fi
+          if [ -s "$list" ]; then
+            if [ "$PUSH_STATE" = published ] || [ "$PUSH_OUTCOME" = success ]; then
+              "$MERGE_REVIEW_COMMENT_HELPER" \
+                "$list" "$REPO" "$PR_NUMBER" "$RUN_URL" resolved-files \
+                "🧾 **Auto-resolved conflict files**" \
+                "These verifier-recorded paths were published before a later workflow step failed."
+            else
+              "$MERGE_REVIEW_COMMENT_HELPER" \
+                "$list" "$REPO" "$PR_NUMBER" "$RUN_URL" local-failure-files \
+                "🧾 **Conflict paths from the failed attempt**" \
+                "Nothing from this run was published; review these paths when retrying."
+            fi
+          fi
+          if [ -s "$RUNNER_TEMP/merge-sensitive-conflicts.txt" ]; then
+            if [ "$PUSH_STATE" = published ] || [ "$PUSH_OUTCOME" = success ]; then
+              sensitive_context=sensitive-files
+              sensitive_description="These paths were auto-resolved and published before a later workflow step failed. Review each resolution closely."
+            else
+              sensitive_context=local-failure-sensitive
+              sensitive_description="These paths resolved locally before a later workflow failure, but this run published nothing. Review them when retrying."
+            fi
+            "$MERGE_REVIEW_COMMENT_HELPER" \
+              "$RUNNER_TEMP/merge-sensitive-conflicts.txt" \
+              "$REPO" "$PR_NUMBER" "$RUN_URL" "$sensitive_context" \
+              "⚠️ **Focused review: configuration/security-adjacent conflicts**" \
+              "$sensitive_description"
           fi

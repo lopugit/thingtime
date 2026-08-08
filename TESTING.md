@@ -259,7 +259,11 @@ is fixed, and cite the checklist you ran in the PR description.
       every eligible regular-text conflict is resolved, and the terminal success
       (or later failure) comment lists each configuration/security-adjacent path
       once. Repeat with a normal source conflict and confirm no empty advisory
-      section is posted. The workflow-PAT gate, non-regular/binary/size gates,
+      section is posted. Exercise enough merge conflicts and rebase rounds/long
+      paths to exceed one GitHub comment, and confirm both escaped lists split
+      into bounded, upserted parts without omissions; retry with a shorter list
+      and confirm stale higher-numbered parts are removed. The workflow-PAT
+      gate, non-regular/binary/size gates,
       credential scan, scope verification, protected/default/fork refusal, and
       exact-ref lease must remain enforced.
 

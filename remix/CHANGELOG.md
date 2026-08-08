@@ -23,8 +23,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   both AI auto-mergers now resolve eligible regular-text conflicts in package
   manifests, lockfiles, workflows, repository policies, `.gitattributes`,
   environment templates, and build configuration. Merge and rebase terminal
-  PR comments call out the exact configuration/security-adjacent paths for
-  focused review, with rebase paths accumulated across all replay rounds.
+  PR comments call out the verifier-accepted configuration/security-adjacent
+  paths for focused review, with rebase paths accumulated across all replay
+  rounds and long merge/rebase audits split into bounded, HTML-escaped,
+  retry-pruned comments.
   Uncertain unions use the newer base/destination side as a deterministic
   fallback instead of deliberately leaving markers. Unsafe paths and file
   types, binaries/size caps, executable Git drivers, credential and scope

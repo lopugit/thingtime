@@ -44,6 +44,10 @@ adjacent path. Those conflicts now follow the same verified file-only AI path
 as other text conflicts, with a deterministic base/destination fallback when a
 semantic union is uncertain. Each terminal PR comment lists the sensitive path
 set for focused reviewer attention, accumulated across every rebase round.
+Merge annotations come only from the verifier's authoritative accepted conflict
+set. Both merge and rebase path audits are HTML-escaped and split across
+bounded, upserted comments, with stale retry parts removed, so GitHub's
+single-comment size limit cannot silently drop or misstate a review list.
 
 This does not relax the real publication boundaries: unsafe paths, symlinks,
 submodules, executable modes, binary/oversized inputs, executable Git drivers,

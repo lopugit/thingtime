@@ -907,6 +907,127 @@ jobs:
           set -euo pipefail
           printf 'REBASE_REPO=%s\n' "$RUNNER_TEMP/ai-rebase-repo" >> "$GITHUB_ENV"
 
+      - name: Prepare the trusted sensitive-path comment helper
+        if: steps.context.outputs.skip == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          helper="$RUNNER_TEMP/post-sensitive-review-comments.sh"
+          umask 077
+          cat >"$helper" <<'SENSITIVE_COMMENT_HELPER'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          IFS=$'\n\t'
+
+          [[ $# -eq 7 ]] || {
+            echo "usage: $0 <audit-file> <repo> <pr> <run-url> <context-id> <heading> <description>" >&2
+            exit 64
+          }
+          audit="$1"
+          repo="$2"
+          pr_number="$3"
+          run_url="$4"
+          context_id="$5"
+          heading="$6"
+          description="$7"
+          [[ -f "$audit" && ! -L "$audit" ]] || exit 0
+          [[ -s "$audit" ]] || exit 0
+          [[ "$context_id" =~ ^[a-z0-9-]+$ ]] || {
+            echo "invalid sensitive-comment context id" >&2
+            exit 1
+          }
+
+          work="$(mktemp -d "$RUNNER_TEMP/sensitive-review-comments.XXXXXX")"
+          trap 'rm -rf -- "$work"' EXIT
+          rendered="$work/rendered.md"
+          : >"$rendered"
+          while IFS= read -r path; do
+            [[ -n "$path" ]] || continue
+            [[ ! "$path" =~ [[:cntrl:]] ]] || {
+              echo "control character in sensitive-review path" >&2
+              exit 1
+            }
+            escaped="$(printf '%s' "$path" \
+              | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g')"
+            printf -- '- <code>%s</code>\n' "$escaped" >>"$rendered"
+          done <"$audit"
+
+          chunks="$work/chunks"
+          mkdir -- "$chunks"
+          LC_ALL=C awk -v dir="$chunks" -v limit=45000 '
+            function open_next() {
+              part++
+              file = sprintf("%s/part-%03d.md", dir, part)
+              size = 0
+            }
+            BEGIN { open_next() }
+            {
+              line = $0 ORS
+              bytes = length(line)
+              if (size > 0 && size + bytes > limit) {
+                close(file)
+                open_next()
+              }
+              printf "%s", line >> file
+              size += bytes
+            }
+          ' "$rendered"
+          mapfile -t chunk_files < <(find "$chunks" -type f -name 'part-*.md' | LC_ALL=C sort)
+          total="${#chunk_files[@]}"
+          (( total > 0 )) || exit 0
+
+          comments="$(gh api --paginate "repos/$repo/issues/$pr_number/comments?per_page=100" \
+            --slurp | jq -c 'add // []')"
+          part=0
+          for chunk in "${chunk_files[@]}"; do
+            ((part += 1))
+            marker="<!-- thingtime-sensitive-review:v1 run=${GITHUB_RUN_ID} context=$context_id part=$part -->"
+            body="$work/body-$part.md"
+            {
+              echo "$heading (part $part/$total)"
+              echo
+              echo "$description"
+              echo
+              cat -- "$chunk"
+              echo
+              echo "[Workflow run]($run_url)"
+              echo
+              echo "$marker"
+            } >"$body"
+            comment_id="$(jq -r --arg marker "$marker" '
+              [.[]
+                | select(.user.login == "github-actions[bot]")
+                | select(.body | contains($marker))
+                | .id]
+              | last // empty
+            ' <<<"$comments")"
+            if [[ -n "$comment_id" ]]; then
+              gh api --method PATCH "repos/$repo/issues/comments/$comment_id" \
+                -F "body=@$body" >/dev/null
+            else
+              gh api "repos/$repo/issues/$pr_number/comments" \
+                -F "body=@$body" >/dev/null
+            fi
+          done
+          marker_prefix="<!-- thingtime-sensitive-review:v1 run=${GITHUB_RUN_ID} context=$context_id part="
+          while IFS= read -r stale_id; do
+            [[ -n "$stale_id" ]] || continue
+            gh api --method DELETE "repos/$repo/issues/comments/$stale_id" >/dev/null
+          done < <(jq -r \
+            --arg prefix "$marker_prefix" \
+            --argjson total "$total" '
+              .[]
+              | select(.user.login == "github-actions[bot]")
+              | select(.body | contains($prefix))
+              | (.body | split($prefix) | last | split(" -->") | first) as $part
+              | select($part | test("^[0-9]+$"))
+              | select(($part | tonumber) > $total)
+              | .id
+            ' <<<"$comments")
+          SENSITIVE_COMMENT_HELPER
+          chmod 0700 "$helper"
+          printf 'SENSITIVE_COMMENT_HELPER=%s\n' "$helper" >> "$GITHUB_ENV"
+
       - name: Check out the exact trusted workflow revision
         if: steps.context.outputs.skip == 'false'
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -1900,17 +2021,19 @@ jobs:
               echo "- Child cascade: disabled for this manual run"
             fi
             if [ -s "$RUNNER_TEMP/rebase-sensitive-conflicts.txt" ]; then
-              echo
-              echo "⚠️ Configuration/security-adjacent conflicts were auto-resolved and did not pause this run. Review these paths closely:"
-              sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' \
-                -e 's|^|- <code>|' -e 's|$|</code>|' \
-                "$RUNNER_TEMP/rebase-sensitive-conflicts.txt"
+              echo "- Focused configuration/security review paths: posted in bounded follow-up comment(s)"
             fi
             echo
             echo "The branch was published once with an exact force-with-lease. Please review the rewritten commits before relying on them."
           } > "$body"
-          gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file "$body" || \
-            echo "::warning::Rebase succeeded, but the PR comment could not be posted."
+          gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file "$body"
+          if [ -s "$RUNNER_TEMP/rebase-sensitive-conflicts.txt" ]; then
+            "$SENSITIVE_COMMENT_HELPER" \
+              "$RUNNER_TEMP/rebase-sensitive-conflicts.txt" \
+              "$REPO" "$PR_NUMBER" "$RUN_URL" published \
+              "⚠️ **Focused review: configuration/security-adjacent conflicts**" \
+              "These paths were auto-resolved and published; filename sensitivity did not pause the rebase. Review each resolution closely."
+          fi
 
       - name: Clean up after a pre-push failure
         if: >-
@@ -2083,10 +2206,7 @@ jobs:
             fi
             if [ -s "$RUNNER_TEMP/rebase-sensitive-conflicts.txt" ]; then
               echo
-              echo "⚠️ Configuration/security-adjacent conflicts were resolved locally before this later failure; nothing from this run was published. Review these paths when retrying:"
-              sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' \
-                -e 's|^|- <code>|' -e 's|$|</code>|' \
-                "$RUNNER_TEMP/rebase-sensitive-conflicts.txt"
+              echo "Focused configuration/security review paths that resolved locally before the later failure will be posted in bounded follow-up comment(s); nothing from this run was published."
             fi
           } > "$body"
           if ! gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file "$body"; then
@@ -2096,6 +2216,13 @@ jobs:
                 >/dev/null 2>&1 || true
               echo "::warning::Pause comment failed, so ai-rebase-paused was removed rather than leaving metadata-free state."
             fi
+          fi
+          if [ -s "$RUNNER_TEMP/rebase-sensitive-conflicts.txt" ]; then
+            "$SENSITIVE_COMMENT_HELPER" \
+              "$RUNNER_TEMP/rebase-sensitive-conflicts.txt" \
+              "$REPO" "$PR_NUMBER" "$RUN_URL" local-failure \
+              "⚠️ **Focused review: configuration/security-adjacent conflicts**" \
+              "These paths resolved locally before a later workflow failure, but this run published nothing. Review them when retrying."
           fi
 
       - name: Clean up if publication succeeded but follow-up failed
@@ -2130,10 +2257,15 @@ jobs:
             echo "⚠️ The branch was rewritten successfully, but a [post-push verification or cascade step]($RUN_URL) failed. Child holds were released so the next scheduled scan can recover them."
             if [ -s "$RUNNER_TEMP/rebase-sensitive-conflicts.txt" ]; then
               echo
-              echo "⚠️ Configuration/security-adjacent conflicts were auto-resolved and published. Review these paths closely:"
-              sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' \
-                -e 's|^|- <code>|' -e 's|$|</code>|' \
-                "$RUNNER_TEMP/rebase-sensitive-conflicts.txt"
+              echo "Focused configuration/security review paths were published and will be posted in bounded follow-up comment(s)."
             fi
           } > "$body"
-          gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file "$body" || true
+          gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file "$body" || \
+            echo "::warning::Could not post the post-push failure summary."
+          if [ -s "$RUNNER_TEMP/rebase-sensitive-conflicts.txt" ]; then
+            "$SENSITIVE_COMMENT_HELPER" \
+              "$RUNNER_TEMP/rebase-sensitive-conflicts.txt" \
+              "$REPO" "$PR_NUMBER" "$RUN_URL" published \
+              "⚠️ **Focused review: configuration/security-adjacent conflicts**" \
+              "These paths were auto-resolved and published before a later verification or cascade failure. Review each resolution closely."
+          fi
