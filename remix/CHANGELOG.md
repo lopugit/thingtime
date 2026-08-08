@@ -17,6 +17,49 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`withMongoTransaction` ReferenceError + Web CI transaction support**: the
+  AI-resolved merge that landed on main via PR #158 left `withMongoTransaction`
+  calling the removed `getClientCached()`, 500-ing every transactional write
+  (registration's subscription-ledger seed, service-account creation,
+  verification emails — Web CI's API suite red on main). The transaction client
+  now mirrors the collection getters: `withMongoTransaction` follows the ACTIVE
+  data plane (like `getCollection`) and the new `withHomeMongoTransaction` is
+  pinned home (like `getHomeCollection`) for the protected home-plane callers
+  (themes, algorithms, apps, registration). Web CI's `mongo:7` service is
+  replaced by a docker-run **single-node replica set** (standalone mongod
+  rejects transactions with IllegalOperation, and there is deliberately no
+  non-transactional fallback), so the transactional paths are now genuinely
+  exercised in CI — local runbook note: transactional flows need an
+  RS-enabled local mongod too (`mongod --replSet …` + one-time
+  `rs.initiate(...)` with an explicit `127.0.0.1` member host). The two strict
+  `[401]` auth-guard API tests now send truly anonymous requests (new
+  `anonymous` test flag honored by both the /tests page and the headless
+  runner) instead of inheriting the suite's shared session cookie. Full suite:
+  307/307 against a local single-node RS. Both auto-resolver workflows also
+  now post an upserted "resolution/rebase running, expected finish ~time"
+  PR comment before starting, so reviewers who catch the conflict window
+  aren't left guessing. — Claude (AI), 2026-08-08
+- **Mixed-plane transactions resolved — ledgers have one true plane**: user
+  subscription/billing objects (`subscriptions.ts`, `userStorage.ts`,
+  `tierCatalogStore.ts`) are now HOME-pinned like users/sessions, and account
+  storage meters HOME-hosted bytes only — active-plane writers (`things.ts`
+  create/update/delete, `appData.ts` set/delete) skip account accounting and
+  content stamps when a data-plane endpoint override is live (bytes on a
+  user's own MongoDB are not Thingtime storage; app ledgers still
+  self-account on the active plane). Registration/service-account creation
+  now succeed with an override active: identity + ledger land home, verified
+  live (register + posts with/without `x-tt-mongo-url` against two dbs on
+  one RS mongod — home ledger read exactly the home post's bytes; the
+  override post carried no stamps and moved no ledger). Local runbook:
+  boot now probes transaction support and prints the exact single-node-RS
+  conversion + `rs.initiate` commands when the connected mongod is
+  standalone (`warnIfTransactionsUnsupported`), `/api/v1/mongodb/status`
+  reports `replicaSet`, and the brew `mongod.conf` replica-set stanza is
+  staged locally (takes effect on the next sudo mongod restart +
+  one-time initiate). — Claude (AI), 2026-08-08
+
 ### Added
 
 - **AI PR and stack rebase conflict resolution**: a separate **Rebase PRs and

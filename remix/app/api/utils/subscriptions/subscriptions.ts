@@ -1,4 +1,8 @@
-import { getThingsCollection } from '../mongodb/collections';
+// Subscription/billing ledgers are identity-plane objects: they live on the
+// HOME deployment only, regardless of any data-plane endpoint override — the
+// same pinning as users/sessions (see endpoint.ts). Callers passing a session
+// must therefore be inside a withHomeMongoTransaction.
+import { getHomeThingsCollection as getThingsCollection } from '../mongodb/collections';
 import { ACL_OWNER, APP_STORAGE_ACCOUNTING_VERSION, COLLECTION_SCHEMA_VERSIONS, USER_STORAGE_LEDGER_ENVELOPE_VERSION } from '~/schemas/registry';
 import {
   DEFAULT_SUBSCRIPTION_TIER,

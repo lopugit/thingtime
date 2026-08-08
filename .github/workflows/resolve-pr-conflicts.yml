@@ -733,6 +733,49 @@ jobs:
       GIT_CONFIG_GLOBAL: /dev/null
       GIT_CONFIG_SYSTEM: /dev/null
     steps:
+      # Reviewers who open a conflicted PR mid-resolution see GitHub's bare
+      # conflict banner plus this workflow's (by design, always-skipped)
+      # push-run check stubs — which reads as "the resolver is broken"
+      # (observed on PR #183, resolved within ~6 minutes of the banner
+      # appearing). Say a resolution attempt is underway BEFORE anything slow
+      # (the full-history checkout alone takes a while on this repository).
+      # Upserted via hidden marker so retried attempts edit one status comment
+      # instead of stacking new ones; a comment failure never blocks the
+      # resolution itself.
+      - name: Comment on PR (resolution starting)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          post_start_comment() {
+            local marker='<!-- thingtime-ai-resolve-start:v1 -->'
+            local started eta body comment_id
+            started="$(date -u '+%H:%M UTC')"
+            eta="$(date -u -d '+8 minutes' '+%H:%M UTC')"
+            body="$RUNNER_TEMP/resolve-start-comment.md"
+            {
+              printf '🤖 **Auto-resolve running** — the conflict resolver started working on this PR at %s.\n\n' "$started"
+              printf 'Expected to finish around **%s** (resolutions typically land in 3-8 minutes; the job times out at 30). ' "$eta"
+              printf 'On success a merge commit resolving the conflicts is pushed to this branch and a result comment follows — no manual action is needed meanwhile.\n\n'
+              printf '[Live status](%s)\n\n%s\n' "$RUN_URL" "$marker"
+            } > "$body"
+            comment_id="$(gh api --paginate "repos/$REPO/issues/$PR_NUMBER/comments?per_page=100" --slurp \
+              | jq -r '
+                  add // []
+                  | [.[]
+                      | select(.user.login == "github-actions[bot]")
+                      | select(.body | contains("thingtime-ai-resolve-start:v1"))
+                      | .id]
+                  | last // empty
+                ')"
+            if [ -n "$comment_id" ]; then
+              gh api --method PATCH "repos/$REPO/issues/comments/$comment_id" -F "body=@$body" >/dev/null
+            else
+              gh api "repos/$REPO/issues/$PR_NUMBER/comments" -F "body=@$body" >/dev/null
+            fi
+          }
+          post_start_comment || echo "::warning::Could not post the resolution-start comment; continuing with the resolution."
+
       - name: Check out PR head
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
