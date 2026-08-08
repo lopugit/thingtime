@@ -1,7 +1,7 @@
 import { verifyPassword } from './passwords';
 import { findUserById, type UserDoc } from './users';
 
-const MAX_CONFIRMATION_PASSWORD_CHARS = 4_096;
+const CONFIRMATION_INPUT_CHAR_LIMIT = 4_096;
 const MAX_CONFIRMATION_USER_ID_CHARS = 256;
 
 type PasswordConfirmationDependencies = {
@@ -30,7 +30,7 @@ export const confirmCurrentPassword = async (
 		userId.length > MAX_CONFIRMATION_USER_ID_CHARS ||
 		typeof password !== 'string' ||
 		!password ||
-		password.length > MAX_CONFIRMATION_PASSWORD_CHARS
+		password.length > CONFIRMATION_INPUT_CHAR_LIMIT
 	) {
 		return 'mismatch';
 	}
