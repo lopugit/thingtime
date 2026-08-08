@@ -4,7 +4,8 @@ import test from 'node:test';
 import {
 	MAX_ADMIN_DIAGNOSTIC_CHARS,
 	MAX_ADMIN_DIAGNOSTIC_REVEALABLES,
-	captureAdminErrorDiagnostic
+	captureAdminErrorDiagnostic,
+	sanitizeStoredAdminDiagnosticDetail
 } from './adminDiagnostic';
 
 test('admin diagnostics keep useful error context while scrubbing common secrets', () => {
@@ -145,6 +146,23 @@ test('an irreversible credential occurrence vetoes the same approved ObjectId ev
 	assert.deepEqual(diagnostic.revealables, []);
 	assert.doesNotMatch(diagnostic.detail, new RegExp(repeated, 'i'));
 	assert.doesNotMatch(diagnostic.detail, /redacted MongoDB ObjectId/);
+});
+
+test('stored JSON diagnostics are rebuilt from the bounded error field allowlist', () => {
+	const rawObjectId = '507f1f77bcf86cd799439011';
+	const diagnostic = sanitizeStoredAdminDiagnosticDetail(
+		JSON.stringify({
+			name: 'MongoServerError',
+			message: `Billable Thing ${rawObjectId} belongs to no current user`,
+			password: 'must-never-survive',
+			nested: { ownerId: rawObjectId }
+		})
+	);
+
+	assert.match(diagnostic.detail, /MongoServerError/);
+	assert.match(diagnostic.detail, /\[redacted-object-id\]/);
+	assert.doesNotMatch(diagnostic.detail, /507f1f77bcf86cd799439011|must-never-survive|nested|ownerId/i);
+	assert.deepEqual(diagnostic.revealables, []);
 });
 
 test('admin diagnostics are bounded across deep, wide, and oversized thrown values', () => {

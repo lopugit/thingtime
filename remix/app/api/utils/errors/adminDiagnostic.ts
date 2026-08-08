@@ -74,7 +74,7 @@ const credentialLabel =
 	')' +
 	')';
 const identifierLabel =
-	'(?:\$oid|_id|object[_-]?id|document[_-]?id|thing[_-]?id|record[_-]?id|source[_-]?id|target[_-]?id|owner[_-]?id|user[_-]?id|share[_-]?id|app[_-]?id|client[_-]?id)';
+	'(?:\\$oid|_id|object[_-]?id|document[_-]?id|thing[_-]?id|record[_-]?id|source[_-]?id|target[_-]?id|owner[_-]?id|user[_-]?id|share[_-]?id|app[_-]?id|client[_-]?id)';
 const sensitiveQueryLabel = `(?:${credentialLabel}|${identifierLabel})`;
 
 const createCaptureState = (context: AdminDiagnosticRevealContext = {}): CaptureState => {
@@ -245,16 +245,6 @@ const redactText = (value: string, state: CaptureState, maxChars = MAX_DIAGNOSTI
 	return redacted;
 };
 
-// Re-scrub stored envelopes at both write and read boundaries. This keeps a
-// manually constructed or legacy-corrupt diagnostic from bypassing password
-// confirmation by placing a raw identifier beside an otherwise valid
-// descriptor placeholder.
-export const sanitizeStoredAdminDiagnosticDetail = (value: unknown): AdminErrorDiagnostic => {
-	const state = createCaptureState();
-	const detail = redactText(typeof value === 'string' ? value : '', state, MAX_ADMIN_DIAGNOSTIC_CHARS);
-	return { detail, redactions: state.redactions, truncated: state.truncated, revealables: [] };
-};
-
 // Read one named data property without invoking accessors or enumerating an
 // arbitrary exception graph. A short prototype walk preserves standard Error
 // fields while keeping work fixed even for unusually wide thrown objects.
@@ -333,6 +323,58 @@ const errorSnapshot = (thrown: unknown, state: CaptureState, depth = 0): ErrorSn
 		else state.truncated = true;
 	}
 	return snapshot;
+};
+
+const sanitizeStoredSnapshot = (value: unknown, state: CaptureState, depth = 0): Record<string, unknown> | null => {
+	if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+	const snapshot: Record<string, unknown> = {};
+	for (const key of ['name', 'message', 'stack', 'codeName', 'syscall'] as const) {
+		const text = safeTextProperty(value, key, state);
+		if (text) snapshot[key] = text;
+	}
+	for (const key of ['code', 'errno'] as const) {
+		const code = safeCodeProperty(value, key, state);
+		if (code !== undefined) snapshot[key] = code;
+	}
+	for (const key of ['status', 'statusCode'] as const) {
+		const number = safeNumberProperty(value, key);
+		if (number !== undefined) snapshot[key] = number;
+	}
+	const errorLabels = safeErrorLabels(value, state);
+	if (errorLabels) snapshot.errorLabels = errorLabels;
+	const cause = dataProperty(value, 'cause');
+	if (cause !== undefined) {
+		if (depth < MAX_CAUSE_DEPTH) {
+			const nested = sanitizeStoredSnapshot(cause, state, depth + 1);
+			if (nested) snapshot.cause = nested;
+		} else {
+			state.truncated = true;
+		}
+	}
+	return Object.keys(snapshot).length ? snapshot : null;
+};
+
+// Re-scrub stored envelopes at both write and read boundaries. This keeps a
+// manually constructed or legacy-corrupt diagnostic from bypassing password
+// confirmation by placing a raw identifier beside an otherwise valid
+// descriptor placeholder. Parsed snapshots retain only the same closed fields
+// as fresh captures; non-JSON legacy detail is scrubbed as bounded plain text.
+export const sanitizeStoredAdminDiagnosticDetail = (value: unknown): AdminErrorDiagnostic => {
+	const state = createCaptureState();
+	const source = typeof value === 'string' ? value : '';
+	let detail: string;
+	try {
+		const snapshot = sanitizeStoredSnapshot(JSON.parse(source), state);
+		detail = snapshot ? JSON.stringify(snapshot, null, 2) : redactText(source, state, MAX_ADMIN_DIAGNOSTIC_CHARS);
+	} catch {
+		detail = redactText(source, state, MAX_ADMIN_DIAGNOSTIC_CHARS);
+	}
+	if (detail.length > MAX_ADMIN_DIAGNOSTIC_CHARS) {
+		state.truncated = true;
+		const suffix = '\n…[diagnostic truncated]';
+		detail = `${detail.slice(0, MAX_ADMIN_DIAGNOSTIC_CHARS - suffix.length)}${suffix}`;
+	}
+	return { detail, redactions: state.redactions, truncated: state.truncated, revealables: [] };
 };
 
 export const captureAdminErrorDiagnostic = (
