@@ -206,7 +206,7 @@ jobs:
     if: github.event_name != 'push' || github.event.deleted == false
     runs-on: ubuntu-latest
     # Mergeability polling alone may legitimately spend MERGEABLE_POLL_SECONDS
-    # (~6 minutes) before classification starts; keep headroom for sweeps.
+    # (~8 minutes) before classification starts; keep headroom for sweeps.
     timeout-minutes: 15
     permissions:
       contents: read
@@ -254,7 +254,7 @@ jobs:
           # (observed ~6 minutes on PR #190, where the old 80-second poll gave
           # up and the conflict sat undetected until the scheduled sweep).
           # Total time budget for verdicts, and the pause between re-queries.
-          MERGEABLE_POLL_SECONDS: "360"
+          MERGEABLE_POLL_SECONDS: "500"
           MERGEABLE_POLL_INTERVAL: "15"
         run: |
           set -euo pipefail

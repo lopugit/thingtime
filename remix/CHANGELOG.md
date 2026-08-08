@@ -26,7 +26,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   detection while the PR still read UNKNOWN, so nothing was handed off, no
   comment appeared, and the conflict sat silent until the scheduled sweep.
   Detection now re-queries until every scanned PR has a verdict or a time
-  budget runs out (`MERGEABLE_POLL_SECONDS`, default 360s, with
+  budget runs out (`MERGEABLE_POLL_SECONDS`, default 500s, with
   `MERGEABLE_POLL_INTERVAL` between re-queries; detect timeout raised to 15
   minutes), and the detect job now upserts a status comment on any PR it must
   leave alone — conflicting fork PRs it cannot push to, and PRs whose
