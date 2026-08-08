@@ -18,6 +18,7 @@ import {
 import { Database, FlaskConical, Play } from 'lucide-react';
 
 import { useLopu } from '~/components/Lopu/useLopu';
+import { apiErrorMessage, hasUnknownMutationOutcome } from '~/hooks/apiFailure';
 import { useApi } from '~/hooks/useApi';
 import { CARD_STYLES } from '~/theme/card';
 
@@ -102,8 +103,10 @@ export function MigrationsPanel() {
         migrations: data?.migrations || []
       });
       setError(null);
+      return true;
     } catch (err: any) {
-      setError(err?.error || 'Failed to load migration status');
+      setError(apiErrorMessage(err, 'Failed to load migration status'));
+      return false;
     } finally {
       setLoading(false);
     }
@@ -130,9 +133,16 @@ export function MigrationsPanel() {
         });
         await fetchStatus();
       } catch (err: any) {
+        // A real migration may have applied an idempotent subset before a
+        // network/5xx failure. Refresh what remains instead of leaving stale
+        // pending counts on screen; dry runs never mutate and need no refresh.
+        if (!dryRun && hasUnknownMutationOutcome(err)) await fetchStatus();
         lopu({
           title: dryRun ? `Dry run failed: ${migration.id}` : `Migration failed: ${migration.id}`,
-          description: err?.error || 'Something went wrong running the migration',
+          description: apiErrorMessage(
+            err,
+            dryRun ? 'Thingtime could not preview this migration.' : 'Thingtime could not run this migration.'
+          ),
           status: 'error'
         });
       } finally {

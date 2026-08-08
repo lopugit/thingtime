@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 
 import { useAsyncFetcher } from './useAsyncFetcher';
+import { createApiFailure, readApiResponsePayload } from './apiFailure';
 
 const refreshRootData = () => {
   window.dispatchEvent(new Event('thingtime:root-data-refresh'));
@@ -9,9 +10,23 @@ const refreshRootData = () => {
 // GET helper mirroring useAsyncFetcher semantics: parses JSON and throws the
 // parsed payload on !ok so callers catch { ok: false, error } shapes.
 const getJson = async (url: string, options?: { signal?: AbortSignal }) => {
-  const response = await fetch(url, { credentials: 'include', signal: options?.signal });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw data;
+  let response: Response;
+  try {
+    response = await fetch(url, { credentials: 'include', signal: options?.signal });
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') throw error;
+    throw createApiFailure({ cause: error, action: 'load Thingtime data', method: 'GET' });
+  }
+  const data = await readApiResponsePayload(response, { action: 'load Thingtime data', method: 'GET' });
+  if (!response.ok) {
+    throw createApiFailure({
+      payload: data,
+      status: response.status,
+      retryAfter: response.headers.get('Retry-After'),
+      action: 'load Thingtime data',
+      method: 'GET'
+    });
+  }
   return data;
 };
 
@@ -144,7 +159,10 @@ export function useApi() {
         async (args) =>
           asyncFetcher.submit(
             { migration: args?.migration, dryRun: args?.dryRun, confirm: args?.confirm },
-            { action: '/api/v1/admin/migrations/run' }
+            {
+              action: '/api/v1/admin/migrations/run',
+              errorContext: args?.dryRun ? `preview migration ${args?.migration}` : `run migration ${args?.migration}`
+            }
           ),
         [asyncFetcher]
       ),
@@ -319,7 +337,11 @@ export function useApi() {
         [asyncFetcher]
       ),
       react: useCallback(
-        async (args) => asyncFetcher.submit({ id: args?.id, emoji: args?.emoji ?? null }, { action: '/api/v1/things/react' }),
+        async (args) =>
+          asyncFetcher.submit(
+            { id: args?.id, emoji: args?.emoji ?? null },
+            { action: '/api/v1/things/react', errorContext: 'save your reaction' }
+          ),
         [asyncFetcher]
       ),
       // toggle a private "add to my library" save on any visible thing

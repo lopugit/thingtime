@@ -3,6 +3,7 @@ import { Box, Flex, Text, useToast } from '@chakra-ui/react';
 import { keyframes } from '@emotion/react';
 
 import { RAINBOW, RAINBOW_PALETTE } from '~/theme/rainbow';
+import { normalizeLopuMessage } from './lopuMessage';
 
 // 🦄 Lopu — the Thingtime AI. A minimal, modern toast: a rainbow gradient
 // "unicorn vomit" border around a clean white card, shown as a little message
@@ -207,22 +208,24 @@ export const useLopu = () => {
   const toast = useToast();
 
   return useCallback(
-    ({ title, description, status, duration = 13000, link }: LopuArgs) =>
-      toast({
+    ({ title, description, status, duration = 13000, link }: LopuArgs) => {
+      const message = normalizeLopuMessage({ title, description, status });
+      return toast({
         duration,
         position: 'top',
         containerStyle: CONTAINER_STYLE,
         render: ({ onClose }) => (
           <LopuToast
-            title={title}
-            description={description}
+            title={message.title}
+            description={message.description}
             status={status}
             link={link}
             countdown={duration}
             onClose={onClose}
           />
         )
-      }),
+      });
+    },
     [toast]
   );
 };

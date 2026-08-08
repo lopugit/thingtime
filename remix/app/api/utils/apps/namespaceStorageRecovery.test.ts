@@ -9,34 +9,56 @@ import { createServer } from 'vite';
 // runner while keeping these tests database-free and focused on the exact
 // reconciliation/eligibility decisions used by the Mongo repair.
 const remixRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
-const vite = await createServer({
-	root: remixRoot,
-	configFile: false,
-	appType: 'custom',
-	server: { middlewareMode: true },
-	resolve: { alias: { '~': path.join(remixRoot, 'app') } }
-});
-const namespace = await vite.ssrLoadModule('/app/api/utils/apps/namespace.ts');
-const thingsModule = await vite.ssrLoadModule('/app/api/utils/things/things.ts');
-test.after(async () => {
-	await vite.close();
-});
+type NamespaceModule = typeof import('./namespace');
+type ThingsModule = typeof import('../things/things');
+let vite: Awaited<ReturnType<typeof createServer>>;
+let APP_STORAGE_ACCOUNTING_VERSION: NamespaceModule['APP_STORAGE_ACCOUNTING_VERSION'];
+let appStorageAdmissionLedgerDecision: NamespaceModule['appStorageAdmissionLedgerDecision'];
+let appStorageCounterCrystalIsReady: NamespaceModule['appStorageCounterCrystalIsReady'];
+let appStorageCounterEnvelopeIsTrusted: NamespaceModule['appStorageCounterEnvelopeIsTrusted'];
+let appStorageCounterMatch: NamespaceModule['appStorageCounterMatch'];
+let appStorageCounterProjectionIsReady: NamespaceModule['appStorageCounterProjectionIsReady'];
+let appStorageCounterUpsertPlan: NamespaceModule['appStorageCounterUpsertPlan'];
+let appStorageLedgerNeedsBaseline: NamespaceModule['appStorageLedgerNeedsBaseline'];
+let appStorageReconciliationPlan: NamespaceModule['appStorageReconciliationPlan'];
+let chargeAppStorage: NamespaceModule['chargeAppStorage'];
+let historicalAppStorageCounterConversionPlan: NamespaceModule['historicalAppStorageCounterConversionPlan'];
+let isAppStorageCounterCandidateId: NamespaceModule['isAppStorageCounterCandidateId'];
+let orphanAppStorageReconciliationPlan: NamespaceModule['orphanAppStorageReconciliationPlan'];
+let deletionStorageFenceDecision: ThingsModule['deletionStorageFenceDecision'];
+let legacyInteractionLazyConversionIsSafe: ThingsModule['legacyInteractionLazyConversionIsSafe'];
+let sanitizeShareId: ThingsModule['sanitizeShareId'];
+let uncertainAppStorageLedgerMatch: ThingsModule['uncertainAppStorageLedgerMatch'];
+let uncertainAppUserStorageLedgerMatch: ThingsModule['uncertainAppUserStorageLedgerMatch'];
+let uncertainUserStorageLedgerMatch: ThingsModule['uncertainUserStorageLedgerMatch'];
+let validateLegacyInteractionResidue: ThingsModule['validateLegacyInteractionResidue'];
 
-const {
+test.before(async () => {
+	vite = await createServer({
+		root: remixRoot,
+		configFile: false,
+		appType: 'custom',
+		server: { middlewareMode: true },
+		resolve: { alias: { '~': path.join(remixRoot, 'app') } }
+	});
+	const namespace = (await vite.ssrLoadModule('/app/api/utils/apps/namespace.ts')) as NamespaceModule;
+	const thingsModule = (await vite.ssrLoadModule('/app/api/utils/things/things.ts')) as ThingsModule;
+	({
 	APP_STORAGE_ACCOUNTING_VERSION,
 	appStorageAdmissionLedgerDecision,
 	appStorageCounterCrystalIsReady,
 	appStorageCounterEnvelopeIsTrusted,
 	appStorageCounterMatch,
 	appStorageCounterProjectionIsReady,
+	appStorageCounterUpsertPlan,
 	appStorageLedgerNeedsBaseline,
 	appStorageReconciliationPlan,
 	chargeAppStorage,
 	historicalAppStorageCounterConversionPlan,
 	isAppStorageCounterCandidateId,
 	orphanAppStorageReconciliationPlan
-} = namespace as typeof import('./namespace');
-const {
+	} = namespace);
+	({
 	deletionStorageFenceDecision,
 	legacyInteractionLazyConversionIsSafe,
 	sanitizeShareId,
@@ -44,7 +66,12 @@ const {
 	uncertainAppUserStorageLedgerMatch,
 	uncertainUserStorageLedgerMatch,
 	validateLegacyInteractionResidue
-} = thingsModule as typeof import('../things/things');
+	} = thingsModule);
+});
+
+test.after(async () => {
+	await vite?.close();
+});
 
 test('non-transactional storage admission rejects registered app namespaces', async () => {
 	const result = await chargeAppStorage({ appId: 'app-a', ownerId: 'user-a', sharedRead: false, scopes: [], username: '', sandbox: null }, 1);
@@ -208,6 +235,41 @@ test('app counter identity accepts only the complete protected server envelope',
 	]) {
 		assert.equal(appStorageCounterEnvelopeIsTrusted(untrusted, scope), false);
 	}
+});
+
+test('app counter creation uses an upsert-safe deterministic match and a complete protected envelope', () => {
+	const now = new Date('2026-08-08T00:00:00.000Z');
+	const registeredScope = {
+		appId: 'app-a',
+		ownerId: 'user-a',
+		sharedRead: false,
+		scopes: [],
+		username: 'User A',
+		sandbox: null
+	};
+	const plan = appStorageCounterUpsertPlan(registeredScope, now);
+
+	assert.deepEqual(plan.match, { shareId: appStorageCounterMatch('user-a', 'app-a').shareId });
+	assert.equal(JSON.stringify(plan.match).includes('$expr'), false);
+	assert.deepEqual(plan.setOnInsert.thingtime, ['app-storage']);
+	assert.equal(plan.setOnInsert.ownerId, 'user-a');
+	assert.equal(plan.setOnInsert.crystal.appId, 'app-a');
+	assert.equal(plan.setOnInsert.crystal.usedBytes, 0);
+	assert.equal(plan.setOnInsert.crystal.storageLedgerStatus, 'needs-reconcile');
+	assert.equal(plan.setOnInsert.createdAt, now);
+
+	const insertedEnvelope = { shareId: plan.match.shareId, ...plan.setOnInsert };
+	assert.equal(appStorageCounterEnvelopeIsTrusted(insertedEnvelope, registeredScope), true);
+
+	const sandboxScope = { ...registeredScope, ownerId: 'sandbox:test', sandbox: { space: null } };
+	const sandboxPlan = appStorageCounterUpsertPlan(sandboxScope, now);
+	assert.equal(sandboxPlan.setOnInsert.crystal.storageLedgerStatus, 'ready');
+	assert.equal(sandboxPlan.setOnInsert.crystal.storageReconciledAt, now);
+	assert.equal(sandboxPlan.setOnInsert.sandboxExpiresAt instanceof Date, true);
+	assert.equal(
+		appStorageCounterEnvelopeIsTrusted({ shareId: sandboxPlan.match.shareId, ...sandboxPlan.setOnInsert }, sandboxScope),
+		true
+	);
 });
 
 test('counter readiness rejects malformed usage, overrides, and extra payload', () => {

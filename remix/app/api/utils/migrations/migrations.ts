@@ -31,6 +31,7 @@ import {
 import { waitlistEmailKey } from '../waitlist/waitlist';
 import { themeAcl } from '../themes/themes';
 import { exactDocumentSnapshotMatch, storageMigrationOwnership } from './migrationCore';
+import { MigrationOperatorError, migrationFailureResult } from './migrationFailure';
 import { getSubscription } from '../subscriptions/subscriptions';
 import {
 	legacyUserSubscriptionLedgerEnvelopeCanUpgrade,
@@ -151,7 +152,7 @@ const acquireMigrationLease = async (migrationId: string): Promise<MigrationLeas
 	let lost = false;
 	let renewal = Promise.resolve();
 	const renew = async (): Promise<void> => {
-		if (lost) throw new Error('The migration lease expired; no ledger was published ready');
+		if (lost) throw new MigrationOperatorError('lease_lost');
 		const at = new Date();
 		const result = await settings.updateOne(
 			{
@@ -168,7 +169,7 @@ const acquireMigrationLease = async (migrationId: string): Promise<MigrationLeas
 		);
 		if (result.matchedCount !== 1) {
 			lost = true;
-			throw new Error('The migration lease expired; no ledger was published ready');
+			throw new MigrationOperatorError('lease_lost');
 		}
 	};
 	const heartbeat = setInterval(() => {
@@ -566,7 +567,9 @@ const thingsMigration: Migration = {
 						// exact destination check/insert. A concurrent edit/delete becomes
 						// a transaction conflict; no partial copy can commit.
 						const removed = await things.deleteOne({ _id: fresh._id, kind: fresh.kind } as any, { session });
-						if (removed.deletedCount !== 1) throw new Error('Legacy relational source changed during migration');
+						if (removed.deletedCount !== 1) {
+							throw new MigrationOperatorError('legacy_source_changed');
+						}
 						return { kind: 'converted' as const, created: inserted, shareId: String(expected.shareId) };
 					});
 
@@ -1947,7 +1950,9 @@ const upgradeUserSubscriptionLedgerEnvelopes = async (ids: readonly string[]): P
 		let doc = await things.findOne(looseMatch);
 		if (!doc || userSubscriptionLedgerEnvelopeIsTrusted(doc, ownerId)) continue;
 		if (!legacyUserSubscriptionLedgerEnvelopeCanUpgrade(doc, ownerId)) {
-			throw new Error(`Subscription ledger ${looseMatch.shareId} has an invalid protected envelope`);
+			throw new MigrationOperatorError('subscription_envelope_invalid', {
+				internalMessage: `Subscription ledger ${looseMatch.shareId} has an invalid protected envelope`
+			});
 		}
 		const result = await things.updateOne(legacyUserSubscriptionLedgerMatch(ownerId) as any, {
 			$set: { storageLedgerEnvelopeVersion: USER_STORAGE_LEDGER_ENVELOPE_VERSION }
@@ -1955,7 +1960,9 @@ const upgradeUserSubscriptionLedgerEnvelopes = async (ids: readonly string[]): P
 		if (result.modifiedCount) upgraded += 1;
 		doc = await things.findOne(looseMatch);
 		if (!userSubscriptionLedgerEnvelopeIsTrusted(doc, ownerId)) {
-			throw new Error(`Subscription ledger ${looseMatch.shareId} changed while its protected envelope was upgraded`);
+			throw new MigrationOperatorError('subscription_envelope_changed', {
+				internalMessage: `Subscription ledger ${looseMatch.shareId} changed while its protected envelope was upgraded`
+			});
 		}
 	}
 	return upgraded;
@@ -2035,7 +2042,7 @@ const backfillUserStorageAccounting: Migration = {
 		const matched = await pendingUserStorageAccounting();
 		const notes: string[] = [];
 		if (dryRun) return { dryRun, matched, migrated: 0, created: 0, skipped: 0, notes };
-		if (!assertLease) throw new Error('Storage accounting migration requires the global migration lease');
+		if (!assertLease) throw new MigrationOperatorError('lease_required');
 		await assertLease();
 
 		// Eliminate every dual-era content bypass before a whole-account ledger is
@@ -2063,7 +2070,10 @@ const backfillUserStorageAccounting: Migration = {
 				await assertLease();
 				const remaining = await prerequisite.pending();
 				if (remaining) {
-					throw new Error(`Storage prerequisite ${prerequisite.id} still has ${remaining} unresolved record(s)`);
+					throw new MigrationOperatorError('prerequisite_unresolved', {
+						prerequisiteId: prerequisite.id,
+						pending: remaining
+					});
 				}
 			}
 
@@ -2079,10 +2089,10 @@ const backfillUserStorageAccounting: Migration = {
 			);
 			const unresolvedPrerequisite = finalPrerequisitePending.find((entry) => entry.pending > 0);
 			if (unresolvedPrerequisite) {
-				throw new Error(
-					`Storage prerequisite ${unresolvedPrerequisite.id} became pending again ` +
-						`(${unresolvedPrerequisite.pending} unresolved record(s)); ledgers remain fenced`
-				);
+				throw new MigrationOperatorError('prerequisite_reappeared', {
+					prerequisiteId: unresolvedPrerequisite.id,
+					pending: unresolvedPrerequisite.pending
+				});
 			}
 
 			// Service quotas used to masquerade as user-editable `data` Things. Only an
@@ -2121,15 +2131,21 @@ const backfillUserStorageAccounting: Migration = {
 				const ownership = storageMigrationOwnership(initialDoc as any, knownUsers);
 				if (ownership === 'excluded') continue;
 				if (ownership === 'unknown-user') {
-					throw new Error(`Billable Thing ${String(initialDoc._id)} belongs to no current user and requires administrator repair`);
+					throw new MigrationOperatorError('orphan_billable_thing', {
+						internalMessage: `Billable Thing ${String(initialDoc._id)} belongs to no current user`
+					});
 				}
 				if (initialSandboxState === 'invalid' && initialDoc.sandboxExpiresAt !== null) {
-					throw new Error(`Billable Thing ${String(initialDoc._id)} has an invalid sandbox marker`);
+					throw new MigrationOperatorError('invalid_sandbox_marker', {
+						internalMessage: `Billable Thing ${String(initialDoc._id)} has an invalid sandbox marker`
+					});
 				}
 				let doc: any = initialDoc;
 				for (let attempt = 0; attempt < 3; attempt += 1) {
 					if (doc.schemaVersion !== COLLECTION_SCHEMA_VERSIONS.things || !Array.isArray(doc.thingtime)) {
-						throw new Error(`Billable Thing ${String(doc._id)} requires its schema migration before storage accounting`);
+						throw new MigrationOperatorError('schema_prerequisite', {
+							internalMessage: `Billable Thing ${String(doc._id)} requires its schema migration before storage accounting`
+						});
 					}
 					const sizeBytes = thingStorageSizeBytes(doc as any);
 					if (
@@ -2163,14 +2179,20 @@ const backfillUserStorageAccounting: Migration = {
 					const freshOwnership = storageMigrationOwnership(fresh as any, knownUsers);
 					if (freshOwnership === 'excluded') break;
 					if (freshOwnership === 'unknown-user') {
-						throw new Error(`Billable Thing ${String(fresh._id)} changed to an unknown owner during storage migration`);
+						throw new MigrationOperatorError('unknown_owner_change', {
+							internalMessage: `Billable Thing ${String(fresh._id)} changed to an unknown owner during storage migration`
+						});
 					}
 					if (storageSandboxState(fresh as any) === 'invalid' && fresh.sandboxExpiresAt !== null) {
-						throw new Error(`Billable Thing ${String(fresh._id)} has an invalid sandbox marker`);
+						throw new MigrationOperatorError('invalid_sandbox_marker', {
+							internalMessage: `Billable Thing ${String(fresh._id)} has an invalid sandbox marker`
+						});
 					}
 					doc = fresh;
 					if (attempt === 2) {
-						throw new Error(`Billable Thing ${String(doc._id)} kept changing during storage migration`);
+						throw new MigrationOperatorError('billable_thing_churn', {
+							internalMessage: `Billable Thing ${String(doc._id)} kept changing during storage migration`
+						});
 					}
 				}
 			}
@@ -2199,7 +2221,9 @@ const backfillUserStorageAccounting: Migration = {
 						await assertLease();
 						const ownerId = typeof candidate.ownerId === 'string' ? candidate.ownerId : '';
 						if (!ownerId || ownerId.startsWith('sandbox:')) {
-							throw new Error(`Reserved app-storage counter for ${appId} has an invalid owner`);
+							throw new MigrationOperatorError('app_counter_owner_invalid', {
+								internalMessage: `Reserved app-storage counter for ${appId} has an invalid owner`
+							});
 						}
 						await convertHistoricalAppStorageCounter(ownerId, appId);
 					}
@@ -2277,10 +2301,16 @@ const backfillUserStorageAccounting: Migration = {
 							if (hasLegacyAllowance) preservedAllowances += 1;
 						}
 						existing = await things.findOne(match);
-						if (!existing) throw new Error(`Subscription ledger for ${ownerId} could not be initialized`);
+						if (!existing) {
+							throw new MigrationOperatorError('subscription_init_failed', {
+								internalMessage: `Subscription ledger for ${ownerId} could not be initialized`
+							});
+						}
 					}
 					if (!userSubscriptionLedgerEnvelopeIsTrusted(existing, ownerId)) {
-						throw new Error(`Subscription ledger ${match.shareId} has an invalid protected envelope`);
+						throw new MigrationOperatorError('subscription_envelope_invalid', {
+							internalMessage: `Subscription ledger ${match.shareId} has an invalid protected envelope`
+						});
 					}
 
 					const overrideWasAbsent =
@@ -2327,7 +2357,7 @@ const backfillUserStorageAccounting: Migration = {
 			await assertLease();
 			const unfinished = await pendingUserStorageAccounting();
 			if (unfinished) {
-				throw new Error(`Storage accounting still has ${unfinished} pending record(s); ledgers remain fenced`);
+				throw new MigrationOperatorError('pending_storage_records', { pending: unfinished });
 			}
 
 			notes.push(`${stamped} billable Thing(s) stamped with canonical bytes`);
@@ -2658,8 +2688,14 @@ export const runMigration = async (
     return fail(400, `Migration ${migration.id} drops data — pass confirm: true to run it`);
   }
 	if (dryRun) {
-		const report = await migration.run({ dryRun: true });
-  return { ok: true, migration: migration.id, report };
+		try {
+			const report = await migration.run({ dryRun: true });
+			return { ok: true, migration: migration.id, report };
+		} catch (error) {
+			// Dry runs cannot publish writes, so even an exception is a known
+			// rejection rather than an ambiguous mutation outcome.
+			return migrationFailureResult(migration.id, error, 'rejected');
+		}
 	}
 
 	const lease = await acquireMigrationLease(migration.id);
@@ -2720,7 +2756,7 @@ export const runMigration = async (
 			// remove readiness, never publish a stale total.
 			await fenceAllStorageLedgers().catch(() => {});
 		}
-		throw error;
+		return migrationFailureResult(migration.id, error);
 	} finally {
 		await lease.release();
 	}

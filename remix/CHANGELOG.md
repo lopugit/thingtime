@@ -19,6 +19,25 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Contextual reaction/migration errors + storage migration upsert repair**:
+  Lopu can no longer render a lone 🌧️ when Nitro replaces an unhandled server
+  exception with boolean `error: true`; fetch failures now become typed,
+  action-aware errors, one-shot toasts reject non-string runtime values, and
+  failed reaction writes distinguish known rejection from an ambiguous
+  network/5xx outcome (refetching server truth instead of blindly reversing a
+  possibly committed toggle). Reaction and migration routes preserve authored
+  failures and turn unknown exceptions into safe class/code summaries without
+  leaking stacks or database details. Structured login/account-switcher failure
+  fields remain intact, malformed successful mutation responses are reconciled
+  as commit-unknown, server-marked reaction rejections roll back without a
+  redundant read, and late reaction truth merges only reaction fields so it
+  cannot overwrite newer comments or shares. Migration invariants now use a
+  closed operator-safe message catalogue with private record ids confined to
+  server logs. The three storage backfills are unblocked:
+  their shared app-counter ensure path no longer puts `$expr` in an upsert
+  predicate (MongoDB code 224); it upserts by the deterministic reserved
+  `shareId` and still validates the complete protected envelope before trusting
+  either a new or existing ledger. — Codex (AI), 2026-08-08
 - **`withMongoTransaction` ReferenceError + Web CI transaction support**: the
   AI-resolved merge that landed on main via PR #158 left `withMongoTransaction`
   calling the removed `getClientCached()`, 500-ing every transactional write
