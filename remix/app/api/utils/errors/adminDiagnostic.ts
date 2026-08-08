@@ -1,6 +1,7 @@
 const MAX_CAUSE_DEPTH = 3;
 const MAX_DIAGNOSTIC_STRING_CHARS = 16 * 1024;
 const MAX_ERROR_LABELS = 12;
+const RAW_TRUNCATION_SAFETY_MARGIN = 256;
 export const MAX_ADMIN_DIAGNOSTIC_CHARS = 48 * 1024;
 export const MAX_ADMIN_DIAGNOSTIC_REVEALABLES = 32;
 
@@ -50,15 +51,19 @@ type ErrorSnapshot = {
 const boundedText = (value: string, state: CaptureState): string => {
 	if (value.length <= MAX_DIAGNOSTIC_STRING_CHARS) return value;
 	state.truncated = true;
-	const suffix = '\n…[string truncated before redaction]';
-	return `${value.slice(0, MAX_DIAGNOSTIC_STRING_CHARS - suffix.length)}${suffix}`;
+	const suffix = '\n…[string truncated; raw boundary removed before redaction]';
+	return `${value.slice(0, Math.max(0, MAX_DIAGNOSTIC_STRING_CHARS - suffix.length - RAW_TRUNCATION_SAFETY_MARGIN))}${suffix}`;
 };
 
 const objectIdPlaceholder = (index: number): string => `[redacted MongoDB ObjectId #${index}]`;
 
 const MONGODB_OBJECT_ID_PATTERN = /^[0-9a-f]{24}$/i;
 const MONGODB_OBJECT_ID_SEARCH_PATTERN = /\b[0-9a-f]{24}\b/gi;
-const REVEAL_PLACEHOLDER_PATTERN = /\[redacted MongoDB ObjectId #(?:[1-9]|[12][0-9]|3[0-2])\]/;
+const REVEAL_PLACEHOLDER_SOURCE = '\\[redacted MongoDB ObjectId #(?:[1-9]|[12][0-9]|3[0-2])\\]';
+const EXACT_REVEAL_IDENTIFIER_VALUE_PATTERN = new RegExp(
+	`^(?:${REVEAL_PLACEHOLDER_SOURCE}|["']${REVEAL_PLACEHOLDER_SOURCE}["']|(?:new\\s+)?ObjectId\\s*\\(\\s*["']${REVEAL_PLACEHOLDER_SOURCE}["']\\s*\\)|\\{\\s*["']?\\$oid["']?\\s*[:=]\\s*["']${REVEAL_PLACEHOLDER_SOURCE}["']\\s*\\})$`,
+	'i'
+);
 
 const credentialLabel =
 	'(?:' +
@@ -140,8 +145,8 @@ const redactText = (value: string, state: CaptureState, maxChars = MAX_DIAGNOSTI
 			? value
 			: (() => {
 					state.truncated = true;
-					const suffix = '\n…[diagnostic truncated before redaction]';
-					return `${value.slice(0, maxChars - suffix.length)}${suffix}`;
+					const suffix = '\n…[diagnostic truncated; raw boundary removed before redaction]';
+					return `${value.slice(0, Math.max(0, maxChars - suffix.length - RAW_TRUNCATION_SAFETY_MARGIN))}${suffix}`;
 			  })();
 	const replace = (pattern: RegExp, replacement: string | ((...args: any[]) => string)) => {
 		if (typeof replacement === 'string') {
@@ -237,7 +242,7 @@ const redactText = (value: string, state: CaptureState, maxChars = MAX_DIAGNOSTI
 			'gim'
 		),
 		(_match, leading, prefix, candidate) => {
-			if (REVEAL_PLACEHOLDER_PATTERN.test(String(candidate))) return `${leading}${prefix}${candidate}`;
+			if (EXACT_REVEAL_IDENTIFIER_VALUE_PATTERN.test(String(candidate))) return `${leading}${prefix}${candidate}`;
 			state.redactions += 1;
 			return `${leading}${prefix}[redacted]`;
 		}

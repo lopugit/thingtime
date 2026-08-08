@@ -138,6 +138,80 @@ test('credential headers, hashes, and structured values are irreversible', () =>
 		diagnostic.detail,
 		/session=|second-cookie|super-secret-password-hash|aaaaaaaaaaaaaaaaaaaaaaaa|bbbbbbbbbbbbbbbbbbbbbbbb|cccccccccccccccccccccccc|dddddddddddddddddddddddd|eeeeeeeeeeeeeeeeeeeeeeee/i
 	);
+
+	for (const [label, value] of [
+		['credentials', credentialsId],
+		['secretKey', secretKeyId]
+	] as const) {
+		const isolated = captureAdminErrorDiagnostic(new Error(`${label}=${value}`), { mongodbObjectIds: [value] });
+		assert.deepEqual(isolated.revealables, []);
+		assert.doesNotMatch(isolated.detail, new RegExp(value, 'i'));
+	}
+});
+
+test('multiline credential and cookie structures make every continuation irreversible', () => {
+	const approved = '507f1f77bcf86cd799439011';
+	for (const field of ['request cookies', 'clientSecret', 'password']) {
+		const diagnostic = captureAdminErrorDiagnostic(
+			new Error(
+				[
+					'context before credentials',
+					`${field}: {`,
+					'  "custom-name": "super-sensitive-value-should-not-render",',
+					`  "nested-id": "${approved}"`,
+					'}'
+				].join('\n')
+			),
+			{ mongodbObjectIds: [approved] }
+		);
+
+		assert.match(diagnostic.detail, /context before credentials/);
+		assert.match(diagnostic.detail, /redacted credential field and remainder/);
+		assert.doesNotMatch(diagnostic.detail, /super-sensitive-value-should-not-render|507f1f77bcf86cd799439011/);
+		assert.deepEqual(diagnostic.revealables, []);
+	}
+});
+
+test('native Error stacks are retained without invoking a substituted stack accessor', () => {
+	const native = captureAdminErrorDiagnostic(new Error('native stack sentinel'));
+	const nativeSnapshot = JSON.parse(native.detail);
+	assert.equal(typeof nativeSnapshot.stack, 'string');
+	assert.match(nativeSnapshot.stack, /native stack sentinel/);
+
+	let stackReads = 0;
+	const hostile = new Error('safe message');
+	Object.defineProperty(hostile, 'stack', {
+		configurable: true,
+		get() {
+			stackReads += 1;
+			return 'stack-accessor-secret';
+		}
+	});
+	const captured = captureAdminErrorDiagnostic(hostile);
+	assert.equal(stackReads, 0);
+	assert.doesNotMatch(captured.detail, /stack-accessor-secret/);
+});
+
+test('identifier values containing extra text cannot inherit reveal eligibility from a placeholder', () => {
+	const approved = '507f1f77bcf86cd799439011';
+	const diagnostic = captureAdminErrorDiagnostic(new Error(`ownerId="tenant-secret ${approved}"`), {
+		mongodbObjectIds: [approved]
+	});
+
+	assert.deepEqual(diagnostic.revealables, []);
+	assert.doesNotMatch(diagnostic.detail, /tenant-secret|507f1f77bcf86cd799439011|redacted MongoDB ObjectId/);
+	assert.match(diagnostic.detail, /ownerId=\[redacted\]/);
+});
+
+test('raw truncation removes the unsafe tail before redaction can split an identifier', () => {
+	const objectId = '507f1f77bcf86cd799439011';
+	const message = `${'x'.repeat(16 * 1024 - 60)}${objectId}${'z'.repeat(100)}`;
+	const diagnostic = captureAdminErrorDiagnostic(new Error(message), { mongodbObjectIds: [objectId] });
+
+	assert.equal(diagnostic.truncated, true);
+	assert.doesNotMatch(diagnostic.detail, /507f1f/);
+	assert.deepEqual(diagnostic.revealables, []);
+	assert.match(diagnostic.detail, /raw boundary removed/);
 });
 
 test('an irreversible credential occurrence vetoes the same approved ObjectId everywhere', () => {

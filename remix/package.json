@@ -32,7 +32,7 @@
     "verify:app-storage": "node scripts/verify-app-storage.mjs",
     "test:autosave": "node --import tsx --test app/Providers/*.test.ts",
     "test:collections": "node --import tsx --test app/api/utils/mongodb/*.test.ts",
-    "test:client-errors": "node --import tsx --test app/hooks/apiFailure.test.ts app/components/Lopu/lopuMessage.test.ts app/components/Feed/reactionFailure.test.ts app/api/utils/errors/adminDiagnostic.test.ts app/api/utils/migrations/migrationFailure.test.ts app/api/utils/migrations/migrationDiagnostics.test.ts",
+    "test:client-errors": "node --import tsx --test app/hooks/apiFailure.test.ts app/components/Lopu/lopuMessage.test.ts app/components/Feed/reactionFailure.test.ts app/components/Things/sensitiveRevealError.test.ts app/api/utils/errors/adminDiagnostic.test.ts app/api/utils/migrations/migrationFailure.test.ts app/api/utils/migrations/migrationDiagnostics.test.ts",
     "test:editorjs": "node --import tsx --test app/components/Editor/*.test.ts app/components/Kinds/*.test.ts",
     "test:migrations": "node --import tsx --test app/api/utils/migrations/*.test.ts",
     "test:sensitive-reveal": "node --import tsx --test app/api/utils/auth/passwordConfirmation.test.ts app/api/utils/things/sensitiveReveal.test.ts app/routes/api/v1/things/reveal/reveal.test.ts",

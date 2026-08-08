@@ -21,9 +21,9 @@ import {
 import { Eye, EyeOff, Lock } from 'lucide-react';
 
 import { useLopu } from '~/components/Lopu/useLopu';
-import { ThingtimeApiError, apiErrorMessage } from '~/hooks/apiFailure';
 import { useApi } from '~/hooks/useApi';
 import { CARD_STYLES } from '~/theme/card';
+import { sensitiveRevealErrorMessage } from './sensitiveRevealError';
 
 export type SensitiveThingRevealDescriptor = {
 	reference: string;
@@ -49,23 +49,6 @@ const MUTED = 'var(--tt-muted, #9a9aa6)';
 
 const kindLabel = (kind: SensitiveThingRevealDescriptor['kind']) =>
 	kind === 'mongodb-object-id' ? 'MongoDB ObjectId' : 'Protected value';
-
-const revealErrorMessage = (error: unknown): string => {
-	if (error instanceof ThingtimeApiError) {
-		if (error.status === 401) return 'We could not confirm your password. Re-enter your current password and try again.';
-		if (error.status === 403) return 'Your account no longer has permission to reveal this protected value.';
-		if (error.status === 404) return 'This protected value is missing, expired, or no longer available. Refresh this Thing.';
-		if (error.status === 429) {
-			return error.retryAfterSeconds === null
-				? 'Too many reveal confirmation attempts. Please wait before trying again.'
-				: `Too many reveal confirmation attempts. Try again in ${error.retryAfterSeconds} seconds.`;
-		}
-		if (error.status !== null && error.status >= 500) {
-			return 'Protected-value confirmation is temporarily unavailable. Please wait and try again.';
-		}
-	}
-	return apiErrorMessage(error, 'We could not reveal this protected value. Please try again.');
-};
 
 const validRevealResponse = (
 	response: unknown,
@@ -194,7 +177,7 @@ const SensitiveThingRevealScope = ({
 			lopu({ title: 'Protected value revealed', status: 'success', duration: 5000 });
 		} catch (error) {
 			if (controller.signal.aborted || requestId !== requestIdRef.current || (error instanceof Error && error.name === 'AbortError')) return;
-			const message = revealErrorMessage(error);
+			const message = sensitiveRevealErrorMessage(error);
 			setPromptError(message);
 			lopu({ title: 'Protected value could not be revealed', description: message, status: 'error', duration: 7000 });
 		} finally {

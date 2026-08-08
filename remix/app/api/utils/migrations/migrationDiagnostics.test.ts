@@ -118,6 +118,33 @@ test('stored diagnostic detail is re-scrubbed before ordinary projection', () =>
 	assert.equal(migrationDiagnosticRevealFromThing(doc, 'mongodb-object-id-1', new Date('2026-08-08T00:00:01.000Z'))?.value, raw);
 });
 
+test('stored JSON outside the closed error snapshot cannot become diagnostic detail', () => {
+	const now = new Date('2026-08-08T00:00:00.000Z');
+	const secret = 'super-sensitive-value-should-not-render';
+	const doc = buildMigrationDiagnosticThing(
+		{
+			ownerId: 'admin-user-id',
+			migrationId: 'backfill-user-storage-accounting',
+			status: 500,
+			outcome: 'unknown',
+			summary: 'Migration stopped before completion.',
+			diagnostic: {
+				detail: JSON.stringify({ nested: { privateValue: secret } }),
+				redactions: 0,
+				truncated: false,
+				revealables: []
+			}
+		},
+		{ now, id }
+	);
+
+	const stored = fromBin(doc.secure);
+	const projected = migrationDiagnosticFromThing(doc, new Date('2026-08-08T00:00:01.000Z'));
+	assert.doesNotMatch(stored, new RegExp(secret));
+	assert.doesNotMatch(JSON.stringify(projected), new RegExp(secret));
+	assert.match(projected?.detail || '', /UnavailableDiagnostic/);
+});
+
 test('legacy v1 diagnostics remain readable while unknown and mismatched envelopes fail closed', () => {
 	const now = new Date('2026-08-08T00:00:00.000Z');
 	const current = buildMigrationDiagnosticThing(
