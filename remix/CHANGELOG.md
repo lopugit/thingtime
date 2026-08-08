@@ -19,6 +19,19 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Password-confirmed reveal for protected Thing diagnostics**: new migration
+  diagnostics use a backward-compatible v2 secure envelope that keeps a bounded
+  set of explicitly contextual MongoDB ObjectIds behind numbered redaction
+  references. The ordinary diagnostic response exposes descriptors only;
+  credentials, tokens, URLs, private keys, query identifiers, and ambiguous
+  24-hex values remain irreversible. `/thing/:id` now offers a reusable Reveal
+  modal that verifies the current password on every lookup, keeps only one value
+  transiently in memory, and clears it on hide, account/Thing change, navigation,
+  or tab backgrounding. The closed-codec reveal endpoint rejects arbitrary
+  secure fields and cross-origin/non-JSON browser posts, returns private no-store
+  responses, and has a non-configurable fail-closed five-attempt/15-minute
+  ceiling. Existing v1 diagnostics remain readable without reveal values. — Codex
+  (AI), 2026-08-09
 - **Builtin schemas no longer block whole-account storage accounting**:
   reserved system-owned `schema-*` Things are now seeded with the server-owned
   `storageClass: "control"` stamp, existing genuine seeds missing that stamp

@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { MAX_ADMIN_DIAGNOSTIC_CHARS, captureAdminErrorDiagnostic } from './adminDiagnostic';
+import {
+	MAX_ADMIN_DIAGNOSTIC_CHARS,
+	MAX_ADMIN_DIAGNOSTIC_REVEALABLES,
+	captureAdminErrorDiagnostic
+} from './adminDiagnostic';
 
 test('admin diagnostics keep useful error context while scrubbing common secrets', () => {
 	let getterReads = 0;
@@ -43,6 +47,104 @@ test('admin diagnostics keep useful error context while scrubbing common secrets
 		/db-user|db-pass|cause-token|user:pass|service-token|jwt-secret|value with spaces|507f1f77bcf86cd799439011|person@example\.invalid|private-material|plain-password|api-key-value|refresh-value|getter-secret/
 	);
 	assert.ok(diagnostic.redactions >= 5);
+	assert.deepEqual(diagnostic.revealables, [], 'arbitrary error prose cannot authorize a reveal');
+});
+
+test('admin diagnostics retain only explicitly approved ObjectIds behind stable reveal references', () => {
+	const first = '507f1f77bcf86cd799439011';
+	const secondUppercase = '64B64C7E11AA22BB33CC44DD';
+	const passwordShaped = 'aaaaaaaaaaaaaaaaaaaaaaaa';
+	const tokenShaped = 'bbbbbbbbbbbbbbbbbbbbbbbb';
+	const queryShaped = 'cccccccccccccccccccccccc';
+	const ambiguous = 'dddddddddddddddddddddddd';
+	const error = new Error(
+		[
+			`Billable Thing ${first} belongs to no current user`,
+			`duplicate _id=${first}`,
+			`driver _id: ObjectId("${secondUppercase}")`,
+			`password=${passwordShaped}`,
+			`token=${tokenShaped}`,
+			`https://example.invalid/path?documentId=${queryShaped}`,
+			`API secret was ObjectId("${ambiguous}")`
+		].join(' · ')
+	);
+
+	const diagnostic = captureAdminErrorDiagnostic(error, { mongodbObjectIds: [first, secondUppercase] });
+
+	assert.deepEqual(
+		diagnostic.revealables.map(({ reference, kind, label, placeholder, value }) => ({ reference, kind, label, placeholder, value })),
+		[
+			{
+				reference: 'mongodb-object-id-1',
+				kind: 'mongodb-object-id',
+				label: 'MongoDB ObjectId #1',
+				placeholder: '[redacted MongoDB ObjectId #1]',
+				value: first
+			},
+			{
+				reference: 'mongodb-object-id-2',
+				kind: 'mongodb-object-id',
+				label: 'MongoDB ObjectId #2',
+				placeholder: '[redacted MongoDB ObjectId #2]',
+				value: secondUppercase.toLowerCase()
+			}
+		]
+	);
+	assert.match(diagnostic.detail, /Billable Thing \[redacted MongoDB ObjectId #1\]/);
+	assert.match(JSON.parse(diagnostic.detail).message, /_id: ObjectId\("\[redacted MongoDB ObjectId #2\]"\)/);
+	assert.doesNotMatch(diagnostic.detail, new RegExp([first, secondUppercase, passwordShaped, tokenShaped, queryShaped, ambiguous].join('|'), 'i'));
+	assert.doesNotMatch(
+		diagnostic.revealables.map((entry) => entry.value).join(' '),
+		new RegExp([passwordShaped, tokenShaped, queryShaped, ambiguous].join('|'), 'i')
+	);
+});
+
+test('admin diagnostic reveal tables stay bounded while overflow values remain redacted', () => {
+	const ids = Array.from({ length: MAX_ADMIN_DIAGNOSTIC_REVEALABLES + 1 }, (_, index) => (index + 1).toString(16).padStart(24, '0'));
+	const diagnostic = captureAdminErrorDiagnostic(new Error(ids.map((value) => `ObjectId("${value}")`).join(' ')), {
+		mongodbObjectIds: ids
+	});
+
+	assert.equal(diagnostic.revealables.length, MAX_ADMIN_DIAGNOSTIC_REVEALABLES);
+	assert.equal(diagnostic.truncated, true);
+	assert.doesNotMatch(diagnostic.detail, new RegExp(ids.at(-1)!));
+	assert.match(diagnostic.detail, /\[redacted-object-id\]/);
+});
+
+test('credential headers, hashes, and structured values are irreversible', () => {
+	const cookieId = 'aaaaaaaaaaaaaaaaaaaaaaaa';
+	const passwordId = 'bbbbbbbbbbbbbbbbbbbbbbbb';
+	const tokenId = 'cccccccccccccccccccccccc';
+	const error = new Error(
+		[
+			`Cookie: session=${cookieId}; refresh=second-cookie`,
+			'passwordHash=$2b$12$super-secret-password-hash',
+			`password: new ObjectId("${passwordId}")`,
+			`token: ["first-secret", "${tokenId}"]`
+		].join('\n')
+	);
+
+	const diagnostic = captureAdminErrorDiagnostic(error, {
+		mongodbObjectIds: [cookieId, passwordId, tokenId]
+	});
+
+	assert.deepEqual(diagnostic.revealables, []);
+	assert.doesNotMatch(
+		diagnostic.detail,
+		/session=|second-cookie|super-secret-password-hash|aaaaaaaaaaaaaaaaaaaaaaaa|bbbbbbbbbbbbbbbbbbbbbbbb|cccccccccccccccccccccccc/i
+	);
+});
+
+test('an irreversible credential occurrence vetoes the same approved ObjectId everywhere', () => {
+	const repeated = '507f1f77bcf86cd799439011';
+	const diagnostic = captureAdminErrorDiagnostic(
+		new Error(`Billable Thing ${repeated} belongs to no current user\npassword=${repeated}`),
+		{ mongodbObjectIds: [repeated] }
+	);
+
+	assert.deepEqual(diagnostic.revealables, []);
+	assert.doesNotMatch(diagnostic.detail, new RegExp(repeated, 'i'));
+	assert.doesNotMatch(diagnostic.detail, /redacted MongoDB ObjectId/);
 });
 
 test('admin diagnostics are bounded across deep, wide, and oversized thrown values', () => {

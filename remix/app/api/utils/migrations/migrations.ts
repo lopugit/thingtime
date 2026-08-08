@@ -2139,19 +2139,22 @@ const backfillUserStorageAccounting: Migration = {
 				if (ownership === 'excluded') continue;
 				if (ownership === 'unknown-user') {
 					throw new MigrationOperatorError('orphan_billable_thing', {
-						internalMessage: `Billable Thing ${String(initialDoc._id)} belongs to no current user`
+						internalMessage: `Billable Thing ${String(initialDoc._id)} belongs to no current user`,
+						diagnosticObjectIds: [String(initialDoc._id)]
 					});
 				}
 				if (initialSandboxState === 'invalid' && initialDoc.sandboxExpiresAt !== null) {
 					throw new MigrationOperatorError('invalid_sandbox_marker', {
-						internalMessage: `Billable Thing ${String(initialDoc._id)} has an invalid sandbox marker`
+						internalMessage: `Billable Thing ${String(initialDoc._id)} has an invalid sandbox marker`,
+						diagnosticObjectIds: [String(initialDoc._id)]
 					});
 				}
 				let doc: any = initialDoc;
 				for (let attempt = 0; attempt < 3; attempt += 1) {
 					if (doc.schemaVersion !== COLLECTION_SCHEMA_VERSIONS.things || !Array.isArray(doc.thingtime)) {
 						throw new MigrationOperatorError('schema_prerequisite', {
-							internalMessage: `Billable Thing ${String(doc._id)} requires its schema migration before storage accounting`
+							internalMessage: `Billable Thing ${String(doc._id)} requires its schema migration before storage accounting`,
+							diagnosticObjectIds: [String(doc._id)]
 						});
 					}
 					const sizeBytes = thingStorageSizeBytes(doc as any);
@@ -2187,18 +2190,21 @@ const backfillUserStorageAccounting: Migration = {
 					if (freshOwnership === 'excluded') break;
 					if (freshOwnership === 'unknown-user') {
 						throw new MigrationOperatorError('unknown_owner_change', {
-							internalMessage: `Billable Thing ${String(fresh._id)} changed to an unknown owner during storage migration`
+							internalMessage: `Billable Thing ${String(fresh._id)} changed to an unknown owner during storage migration`,
+							diagnosticObjectIds: [String(fresh._id)]
 						});
 					}
 					if (storageSandboxState(fresh as any) === 'invalid' && fresh.sandboxExpiresAt !== null) {
 						throw new MigrationOperatorError('invalid_sandbox_marker', {
-							internalMessage: `Billable Thing ${String(fresh._id)} has an invalid sandbox marker`
+							internalMessage: `Billable Thing ${String(fresh._id)} has an invalid sandbox marker`,
+							diagnosticObjectIds: [String(fresh._id)]
 						});
 					}
 					doc = fresh;
 					if (attempt === 2) {
 						throw new MigrationOperatorError('billable_thing_churn', {
-							internalMessage: `Billable Thing ${String(doc._id)} kept changing during storage migration`
+							internalMessage: `Billable Thing ${String(doc._id)} kept changing during storage migration`,
+							diagnosticObjectIds: [String(doc._id)]
 						});
 					}
 				}

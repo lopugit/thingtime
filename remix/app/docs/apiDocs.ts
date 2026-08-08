@@ -4744,7 +4744,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		detail:
 			'A failed real migration may create a protected, non-billable migration-diagnostic Thing after its lease is released. ' +
 			'Pass its id to read a bounded snapshot of the error name, message, stack, standard codes, labels, and cause chain. Secret, ' +
-			'credential, PII-identifier, connection-string, and private-key patterns are redacted. Reads are pinned to Thingtime’s home database and require the same current ' +
+			'credential, connection-string, and private-key patterns are irreversibly redacted. New v2 reports may also advertise value-free reveal descriptors for explicitly contextual MongoDB ObjectIds; the raw values remain inside the protected envelope until the owning admin confirms their current password through /api/v1/things/reveal. Reads are pinned to Thingtime’s home database and require the same current ' +
 			'admin account that ran the migration. Dry runs never create diagnostics; failed diagnostic persistence falls back to detail ' +
 			'in the private migration response instead.',
 		auth: {
@@ -4756,6 +4756,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 			'Copy diagnosticThingId from a failed real migration response.',
 			'GET with id=<diagnosticThingId> as the same current admin.',
 			'Render detail as plain text only; the server captures a closed field set and redacts sensitive text patterns.',
+			'If revealables is non-empty, correlate its placeholders with detail and use the password-confirmed reveal endpoint one reference at a time.',
 			'Treat 404 as expired, removed, or inaccessible without distinguishing those cases.'
 		],
 		requestExamples: [
@@ -4782,11 +4783,71 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 						expiresAt: '2026-09-07T00:00:00.000Z',
 						detail: '{\n  "name": "MongoServerError"\n}',
 						redactions: 1,
-						truncated: false
+							truncated: false,
+							revealables: [
+								{
+									reference: 'mongodb-object-id-1',
+									kind: 'mongodb-object-id',
+									label: 'MongoDB ObjectId #1',
+									placeholder: '[redacted MongoDB ObjectId #1]'
+								}
+							]
 					}
 				}
 			},
 			{ status: 404, description: 'Expired, missing, or inaccessible.', body: { ok: false, error: 'Diagnostic not found' } }
+		]
+	}),
+	endpoint({
+		id: 'things-sensitive-reveal',
+		group: 'things',
+		title: 'Reveal one protected Thing value',
+		endpoint: '/api/v1/things/reveal',
+		summary: 'Password-confirms the current user, then reveals one allowlisted value from a protected Thing.',
+		detail:
+			'This is a closed-codec reveal boundary, not a generic secure-field reader. The caller supplies only a Thing id, an opaque reference advertised by that Thing’s dedicated reader, and the current account password. ' +
+			'Thingtime repeats live-session and password verification on every request, applies a non-configurable fail-closed attempt limit, and returns one value with private no-store headers. The first provider supports current-owner admin migration diagnostics and MongoDB ObjectIds only. ' +
+			'Passwords, authorization values, tokens, credentials, connection strings, arbitrary secure Binary fields, and ambiguous 24-hex strings are never retained for reveal.',
+		auth: {
+			mode: 'session-or-bearer',
+			description:
+				'Requires a full live account session (app, sandbox, and PAT sessions do not resolve here), the current password, and provider-specific authorization. Migration diagnostics require the same owning admin.'
+		},
+		methods: ['POST'],
+		steps: [
+			'Read the protected Thing through its dedicated endpoint and choose one returned revealables reference.',
+			'POST thingId, reference, and the current account password as same-origin application/json.',
+			'Use the returned value transiently; do not persist it in browser storage or a URL.',
+			'Repeat password confirmation for every later reveal.'
+		],
+		requestExamples: [
+			{
+				name: 'Reveal one migration ObjectId',
+				description: 'Confirm the current password for this single lookup.',
+				method: 'POST',
+				body: {
+					thingId: 'migration-diagnostic-89c5d4f2-b478-4aa1-b37d-755171dc3d90',
+					reference: 'mongodb-object-id-1',
+					password: '<current password>'
+				}
+			}
+		],
+		responseExamples: [
+			{
+				status: 200,
+				description: 'Exactly one approved value returned.',
+				body: {
+					ok: true,
+					reveal: { reference: 'mongodb-object-id-1', kind: 'mongodb-object-id', value: '507f1f77bcf86cd799439011' }
+				}
+			},
+			{ status: 401, description: 'No full session or password confirmation failed.', body: { ok: false, error: 'Password confirmation failed' } },
+			{ status: 404, description: 'Missing, expired, inaccessible, or unknown reference.', body: { ok: false, error: 'Sensitive value not found' } },
+			{ status: 429, description: 'The fixed confirmation-attempt ceiling was reached.', body: { ok: false, error: 'Too many password confirmation attempts' } }
+		],
+		notes: [
+			'Content-Type must be application/json. Browser requests with a cross-origin Origin header are rejected.',
+			'No confirmation cookie, token, or grace period is issued; each reveal request includes and verifies the password again.'
 		]
 	}),
   endpoint({

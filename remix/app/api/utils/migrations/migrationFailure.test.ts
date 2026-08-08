@@ -120,6 +120,33 @@ test('operator failures keep identifiers in logs and return only authored repair
   }
 });
 
+test('only an authored operator context can retain a MongoDB ObjectId for reveal', () => {
+	const objectId = '507f1f77bcf86cd799439011';
+	const originalConsoleError = console.error;
+	console.error = () => {};
+	try {
+		const authored = migrationFailureResult(
+			'backfill-user-storage-accounting',
+			new MigrationOperatorError('orphan_billable_thing', {
+				internalMessage: `Billable Thing ${objectId} belongs to no current user`,
+				diagnosticObjectIds: [objectId]
+			})
+		);
+		const diagnostic = captureMigrationFailureDiagnostic(authored);
+		assert.ok(diagnostic);
+		assert.deepEqual(diagnostic.revealables.map((entry) => entry.value), [objectId]);
+		assert.doesNotMatch(diagnostic.detail, new RegExp(objectId, 'i'));
+
+		const inferred = migrationFailureResult(
+			'backfill-user-storage-accounting',
+			new Error(`API secret was ObjectId("${objectId}")`)
+		);
+		assert.deepEqual(captureMigrationFailureDiagnostic(inferred)?.revealables, []);
+	} finally {
+		console.error = originalConsoleError;
+	}
+});
+
 test('operator taxonomy validates dynamic prerequisite context', () => {
   const originalConsoleError = console.error;
   console.error = () => {};

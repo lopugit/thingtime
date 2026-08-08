@@ -1352,6 +1352,25 @@ export const apiTests: ApiTestDefinition[] = [
 			'The registered diagnostic route rejected an anonymous caller with its admin guard.'
 		)
 	},
+	{
+		id: 'things-sensitive-reveal-guarded',
+		name: 'Sensitive Thing reveal requires a full session',
+		description: 'The password-confirmed reveal route rejects anonymous callers before reading the submitted password.',
+		group: 'things',
+		method: 'POST',
+		path: '/api/v1/things/reveal',
+		anonymous: true,
+		body: {
+			thingId: 'migration-diagnostic-00000000-0000-4000-8000-000000000000',
+			reference: 'mongodb-object-id-1',
+			password: 'not-read-without-a-session'
+		},
+		expect: expectJson(
+			[401],
+			(body) => body?.ok === false && body?.error === 'Unauthorized',
+			'The registered sensitive reveal route rejected an anonymous caller before password confirmation.'
+		)
+	},
   {
     id: 'admin-migrations-run-guarded',
     name: 'Migration run is admin-only',
