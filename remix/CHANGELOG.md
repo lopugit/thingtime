@@ -108,7 +108,19 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
-- **AI PR and stack rebase conflict resolution**: a separate **Rebase PRs and
+- **Promotion PR changelog**: the **Promote develop to main** workflow now
+  maintains an at-a-glance changelog on the standing promotion PR. A new
+  `.github/scripts/promotion-pr-changelog.mjs` resolves the first-parent spine
+  of `main..develop` to the merged develop-based PRs it carries (merge/squash
+  subjects, then content matching against recently merged PRs — merge SHA, PR
+  title, and the PRs' own commit subjects, which survives AI rebases of
+  develop — then the commit-association API), rewrites a marker-delimited
+  section of the PR description with a PR table (title, author, source branch,
+  merge date), `no-promote` label warnings re-verified via REST, and collapsed
+  direct commits, and posts short delta comments when PRs enter or leave the
+  promotion window. State is derived from the PR body itself; re-runs on the
+  same develop SHA are byte-identical no-ops. Supports `DRY_RUN=1` and
+  `--self-test`. — Claude (AI), 2026-08-08
   stacks (AI)** workflow evaluates every same-repository PR regardless of base
   branch. Standalone PRs that merge cleanly but cannot rebase and stack members
   needing a history update are rebase-owned, while standalone merge conflicts
