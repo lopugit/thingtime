@@ -66,11 +66,12 @@ const credentialLabel =
 	'(?:hashed?[_-]?)?password(?:[_-]?(?:hash|digest))?|' +
 	'passwd(?:[_-]?(?:hash|digest))?|' +
 	'passphrase|' +
-	'(?:refresh|access|auth|session|client|api|private)?[_-]?(?:secret|token|credential)(?:[_-]?(?:hash|digest))?|' +
+	'(?:refresh|access|auth|session|client|api|private)?[_-]?(?:secret|token|credential(?:s)?)(?:[_-]?(?:hash|digest))?|' +
+	'secret[_-]?key(?:[_-]?(?:hash|digest))?|' +
 	'api[_-]?key(?:[_-]?(?:hash|digest))?|' +
 	'access[_-]?key(?:[_-]?(?:hash|digest))?|' +
 	'private[_-]?key(?:[_-]?(?:hash|digest))?|' +
-	'authorization|cookie|jwt|session(?:[_-]?(?:id|jti|token|hash|digest))?|email' +
+	'authorization|cookie(?:s|[_-]?jar)?|jwt|session(?:[_-]?(?:id|jti|token|hash|digest))?|email' +
 	')' +
 	')';
 const identifierLabel =
@@ -195,12 +196,14 @@ const redactText = (value: string, state: CaptureState, maxChars = MAX_DIAGNOSTI
 	// happens to look exactly like an ObjectId. Identifier values are handled in
 	// a separate, closed allowlist below so future reveal support cannot turn into
 	// a generic secret recovery mechanism.
-	// Once a credential assignment starts, redact the rest of that bounded line.
-	// This deliberately over-redacts structured/multi-token values rather than
-	// guessing where a nested object or array ends and accidentally retaining it.
-	replace(new RegExp(`(["']?${credentialLabel}["']?\\s*[:=]\\s*)[^\\r\\n]*`, 'gi'), (match, prefix) => {
+	// Once a credential assignment starts, redact the remainder of this bounded
+	// field. Credential objects and arrays regularly continue over many lines,
+	// and guessing where an arbitrary structure ends can retain both secrets and
+	// an otherwise-approved id on a continuation line. The diagnostic loses some
+	// trailing context in exchange for making that whole boundary irreversible.
+	replace(new RegExp(`(^|[^A-Za-z0-9_$-])(["']?${credentialLabel}["']?\\s*[:=]\\s*)[\\s\\S]*$`, 'gi'), (match, leading, prefix) => {
 		rememberIrreversibleObjectIds(match, state);
-		return `${prefix}[redacted]`;
+		return `${leading}${prefix}[redacted credential field and remainder]`;
 	});
 	// URLs are an irreversible boundary: query strings may be copied into logs or
 	// diagnostics without enough context to prove that a 24-hex value is an id.
@@ -228,14 +231,15 @@ const redactText = (value: string, state: CaptureState, maxChars = MAX_DIAGNOSTI
 		`\\{\\s*["']?\\$oid["']?\\s*[:=]\\s*["']${mongoToken}["']\\s*\\}|` +
 		`"(?:\\\\.|[^"\\\\])*"|'(?:\\\\.|[^'\\\\])*'|` +
 		`\\[redacted MongoDB ObjectId #(?:[1-9]|[12][0-9]|3[0-2])\\]|[^\\s,;}\\]]+)`;
-	replace(
+	redacted = redacted.replace(
 		new RegExp(
 			`(^|[^A-Za-z0-9_$-])(["']?${identifierLabel}["']?\\s*[:=]\\s*)(${identifierValue})`,
 			'gim'
 		),
 		(_match, leading, prefix, candidate) => {
-			const replacement = REVEAL_PLACEHOLDER_PATTERN.test(String(candidate)) ? candidate : '[redacted]';
-			return `${leading}${prefix}${replacement}`;
+			if (REVEAL_PLACEHOLDER_PATTERN.test(String(candidate))) return `${leading}${prefix}${candidate}`;
+			state.redactions += 1;
+			return `${leading}${prefix}[redacted]`;
 		}
 	);
 	replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[redacted-email]');
@@ -258,9 +262,38 @@ const dataProperty = (value: object, key: string): unknown => {
 	return undefined;
 };
 
+// Node 24 represents an untouched native Error stack as a lazy own accessor.
+// Cache V8's exact accessor identities once so we can materialize that useful
+// stack without ever calling an accessor supplied by a thrown object.
+const nativeErrorStackDescriptor = Object.getOwnPropertyDescriptor(new Error(), 'stack');
+const nativeErrorStackGetter = nativeErrorStackDescriptor && !('value' in nativeErrorStackDescriptor) ? nativeErrorStackDescriptor.get : undefined;
+const nativeErrorStackSetter = nativeErrorStackDescriptor && !('value' in nativeErrorStackDescriptor) ? nativeErrorStackDescriptor.set : undefined;
+
 const safeTextProperty = (value: object, key: string, state: CaptureState): string | undefined => {
 	const property = dataProperty(value, key);
 	return typeof property === 'string' && property ? redactText(property, state) : undefined;
+};
+
+const safeStackProperty = (value: object, state: CaptureState): string | undefined => {
+	const property = dataProperty(value, 'stack');
+	if (typeof property === 'string' && property) return redactText(property, state);
+
+	const descriptor = Object.getOwnPropertyDescriptor(value, 'stack');
+	if (
+		!descriptor ||
+		'value' in descriptor ||
+		!nativeErrorStackGetter ||
+		descriptor.get !== nativeErrorStackGetter ||
+		descriptor.set !== nativeErrorStackSetter
+	) {
+		return undefined;
+	}
+	try {
+		const nativeStack = Reflect.apply(nativeErrorStackGetter, value, []);
+		return typeof nativeStack === 'string' && nativeStack ? redactText(nativeStack, state) : undefined;
+	} catch {
+		return undefined;
+	}
 };
 
 const safeNumberProperty = (value: object, key: string): number | undefined => {
@@ -300,7 +333,7 @@ const errorSnapshot = (thrown: unknown, state: CaptureState, depth = 0): ErrorSn
 	const message =
 		safeTextProperty(thrown, 'message', state) || (thrown instanceof Error ? 'The error had no message.' : 'A non-Error object was thrown.');
 	const snapshot: ErrorSnapshot = { name, message };
-	const stack = safeTextProperty(thrown, 'stack', state);
+	const stack = safeStackProperty(thrown, state);
 	const code = safeCodeProperty(thrown, 'code', state);
 	const codeName = safeTextProperty(thrown, 'codeName', state);
 	const errno = safeCodeProperty(thrown, 'errno', state);
@@ -365,7 +398,16 @@ export const sanitizeStoredAdminDiagnosticDetail = (value: unknown): AdminErrorD
 	let detail: string;
 	try {
 		const snapshot = sanitizeStoredSnapshot(JSON.parse(source), state);
-		detail = snapshot ? JSON.stringify(snapshot, null, 2) : redactText(source, state, MAX_ADMIN_DIAGNOSTIC_CHARS);
+		detail = snapshot
+			? JSON.stringify(snapshot, null, 2)
+			: JSON.stringify(
+					{
+						name: 'UnavailableDiagnostic',
+						message: 'The stored diagnostic did not match the supported error snapshot.'
+					},
+					null,
+					2
+			  );
 	} catch {
 		detail = redactText(source, state, MAX_ADMIN_DIAGNOSTIC_CHARS);
 	}

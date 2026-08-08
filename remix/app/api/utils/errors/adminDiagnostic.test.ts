@@ -116,23 +116,27 @@ test('credential headers, hashes, and structured values are irreversible', () =>
 	const cookieId = 'aaaaaaaaaaaaaaaaaaaaaaaa';
 	const passwordId = 'bbbbbbbbbbbbbbbbbbbbbbbb';
 	const tokenId = 'cccccccccccccccccccccccc';
+	const credentialsId = 'dddddddddddddddddddddddd';
+	const secretKeyId = 'eeeeeeeeeeeeeeeeeeeeeeee';
 	const error = new Error(
 		[
 			`Cookie: session=${cookieId}; refresh=second-cookie`,
 			'passwordHash=$2b$12$super-secret-password-hash',
 			`password: new ObjectId("${passwordId}")`,
-			`token: ["first-secret", "${tokenId}"]`
+			`token: ["first-secret", "${tokenId}"]`,
+			`credentials: { backup: "${credentialsId}" }`,
+			`secretKey=${secretKeyId}`
 		].join('\n')
 	);
 
 	const diagnostic = captureAdminErrorDiagnostic(error, {
-		mongodbObjectIds: [cookieId, passwordId, tokenId]
+		mongodbObjectIds: [cookieId, passwordId, tokenId, credentialsId, secretKeyId]
 	});
 
 	assert.deepEqual(diagnostic.revealables, []);
 	assert.doesNotMatch(
 		diagnostic.detail,
-		/session=|second-cookie|super-secret-password-hash|aaaaaaaaaaaaaaaaaaaaaaaa|bbbbbbbbbbbbbbbbbbbbbbbb|cccccccccccccccccccccccc/i
+		/session=|second-cookie|super-secret-password-hash|aaaaaaaaaaaaaaaaaaaaaaaa|bbbbbbbbbbbbbbbbbbbbbbbb|cccccccccccccccccccccccc|dddddddddddddddddddddddd|eeeeeeeeeeeeeeeeeeeeeeee/i
 	);
 });
 
@@ -163,6 +167,13 @@ test('stored JSON diagnostics are rebuilt from the bounded error field allowlist
 	assert.match(diagnostic.detail, /\[redacted-object-id\]/);
 	assert.doesNotMatch(diagnostic.detail, /507f1f77bcf86cd799439011|must-never-survive|nested|ownerId/i);
 	assert.deepEqual(diagnostic.revealables, []);
+
+	const unsupported = sanitizeStoredAdminDiagnosticDetail(
+		JSON.stringify({ nested: { ownerId: rawObjectId } })
+	);
+	assert.match(unsupported.detail, /UnavailableDiagnostic/);
+	assert.doesNotMatch(unsupported.detail, /507f1f77bcf86cd799439011|nested|ownerId/i);
+	assert.deepEqual(unsupported.revealables, []);
 });
 
 test('admin diagnostics are bounded across deep, wide, and oversized thrown values', () => {
