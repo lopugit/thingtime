@@ -14,8 +14,22 @@ export type CurrentUser = {
   createdAt: string;
   accountKind: 'user' | 'service';
   emailVerificationRequiredBy: string | null;
+	// Flat aliases are retained for older consumers, but all new UI should read
+	// the canonical nested projection so unavailable/reconciling accounting is
+	// never mistaken for zero usage or an unlimited allowance.
   storageAllowanceBytes: number | null;
   storageUsedBytes: number | null;
+	storageRemainingBytes: number | null;
+	storageAccountingReady: boolean;
+	storage: {
+		usedBytes: number | null;
+		allowanceBytes: number | null;
+		remainingBytes: number | null;
+		overageBytes: number | null;
+		status: 'ready' | 'reconciling' | 'unavailable';
+		accountingVersion: number | null;
+		reconciledAt: string | null;
+	};
   activeThemeId: string | null;
   activeFeedAlgorithmId: string | null;
 } | null;

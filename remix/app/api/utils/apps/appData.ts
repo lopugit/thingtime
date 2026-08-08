@@ -1,17 +1,24 @@
 import { randomUUID } from 'node:crypto';
 
-import { getSessionsCollection, getThingsCollection } from '../mongodb/collections';
+import { getThingsCollection, withMongoTransaction } from '../mongodb/collections';
 import { findUserById } from '../auth/users';
-import { SANDBOX_MAX_KEYS, SANDBOX_TOKEN_TTL_MS, sandboxDisplayName } from './sandbox';
-import { scopeCovers, sessionScopes } from './scopes';
+import { StorageMutationError, USER_STORAGE_ACCOUNTING_VERSION, currentContentStorageSizeBytes } from '../storage/storageCore';
+import { applyUserStorageDelta } from '../storage/userStorage';
+import { sandboxDisplayName } from './sandbox';
+import { scopeCovers } from './scopes';
 import {
-  ACL_APP_PREFIX,
-  ACL_OWNER,
-  COLLECTION_SCHEMA_VERSIONS,
-  MAX_APP_DATA_KEYS_PER_APP_USER,
-  MAX_APP_DATA_KEY_CHARS,
-  MAX_APP_DATA_VALUE_BYTES
-} from '~/schemas/registry';
+  appAclEntry,
+  appNamespaceStamp,
+  appThingSizeBytes,
+	applyAppStorageDeltaTransaction,
+  chargeAppStorage,
+  liveSandboxAuthors,
+  liveSharingAuthors,
+  refundAppStorage,
+  resolveAppScopedAcl
+} from './namespace';
+import type { AppNamespaceScope } from './namespace';
+import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS, MAX_APP_DATA_KEY_CHARS, MAX_APP_DATA_VALUE_BYTES } from '~/schemas/registry';
 
 // Per-(user, app) key/value storage for embedded apps — each entry is its own
 // atomic `things` doc (thingtime ['app-data'], crystal { appId, key, value }),
@@ -32,6 +39,29 @@ import {
 type Fail = { ok: false; status: number; error: string };
 const fail = (status: number, error: string): Fail => ({ ok: false, status, error });
 
+const storageMutationFail = (error: unknown): Fail | null => (error instanceof StorageMutationError ? fail(error.status, error.message) : null);
+
+const registeredStorageSize = (doc: any): number => {
+	const canonical = currentContentStorageSizeBytes(doc || {});
+	if (canonical === null) {
+		throw new StorageMutationError(
+			503,
+			'accounting_unavailable',
+			'This app-data entry requires the current storage migration before it can be changed'
+		);
+	}
+	return canonical;
+};
+
+// Throwing this from a transaction callback aborts all ledger reservations
+// before the outer bounded retry re-reads the winning content version.
+class AppDataWriteConflict extends Error {
+	constructor() {
+		super('App-data content changed during the write');
+		this.name = 'AppDataWriteConflict';
+	}
+}
+
 export type AppDataVisibility = 'private' | 'app';
 
 export type AppDataEntry = {
@@ -42,8 +72,9 @@ export type AppDataEntry = {
   updatedAt: Date;
 };
 
-// The acl entry granting an app's user base read access to an entry.
-export const appAclEntry = (appId: string) => `${ACL_APP_PREFIX}${appId}`;
+// The acl entry granting an app's user base read access to an entry —
+// canonical home is apps/namespace.ts; re-exported here for existing callers.
+export { appAclEntry } from './namespace';
 
 const APP_DATA_KEY_RE = new RegExp(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,${MAX_APP_DATA_KEY_CHARS - 1}}$`);
 
@@ -53,8 +84,7 @@ export const sanitizeAppDataKey = (value: unknown): string | null => {
   return APP_DATA_KEY_RE.test(key) ? key : null;
 };
 
-const entryAcl = (doc: any): string[] =>
-  Array.isArray(doc.acl) && doc.acl.length ? doc.acl : [ACL_OWNER];
+const entryAcl = (doc: any): string[] => (Array.isArray(doc.acl) && doc.acl.length ? doc.acl : [ACL_OWNER]);
 
 const toEntry = (doc: any): AppDataEntry => {
   const acl = entryAcl(doc);
@@ -67,59 +97,84 @@ const toEntry = (doc: any): AppDataEntry => {
   };
 };
 
-// Resolve the requested audience for a write into a stored acl. Accepts the
-// acl array itself, or `visibility` sugar ('private' | 'app'). App-data acls
-// are deliberately narrower than general thing acls: only the owner and this
-// one app's user base are expressible — tt:all / other apps / other users are
-// rejected, so a compromised or sloppy app can never widen an entry beyond
-// its own walls. Returns null when the write doesn't mention audience at all
-// (update keeps the entry's current acl; insert defaults private).
-export const resolveAppDataAcl = (
-  appId: string,
-  visibility: unknown,
-  acl: unknown
-): { acl: string[] | null; shared: boolean } | Fail => {
-  const shared = appAclEntry(appId);
+// Resolve the requested audience for a write into a stored acl — the ONE
+// app-write acl clamp, shared with the full things surface (canonical
+// implementation + rationale in apps/namespace.ts resolveAppScopedAcl).
+export const resolveAppDataAcl = resolveAppScopedAcl;
 
-  if (acl !== undefined && acl !== null) {
-    if (!Array.isArray(acl)) return fail(400, 'acl must be a list of tt: entries');
-    const entries: string[] = [];
-    for (const raw of acl) {
-      const entry = typeof raw === 'string' ? raw.trim() : '';
-      if (!entry) continue;
-      if (entry !== ACL_OWNER && entry !== shared) {
-        return fail(400, `app-data acl entries can only be ${ACL_OWNER} (just you) or ${shared} (users of this app)`);
-      }
-      if (!entries.includes(entry)) entries.push(entry);
-    }
-    if (!entries.includes(ACL_OWNER)) entries.unshift(ACL_OWNER); // owners always read their own
-    return { acl: entries, shared: entries.includes(shared) };
-  }
-
-  if (visibility === undefined || visibility === null) return { acl: null, shared: false };
-  if (visibility === 'private') return { acl: [ACL_OWNER], shared: false };
-  if (visibility === 'app') return { acl: [ACL_OWNER, shared], shared: true };
-  return fail(400, "visibility must be 'private' or 'app' (or pass an acl array)");
-};
-
-export const getAppData = async (
-  ownerId: string,
-  appId: string,
-  key: string
-): Promise<AppDataEntry | null> => {
+export const getAppData = async (ownerId: string, appId: string, key: string): Promise<AppDataEntry | null> => {
   const things = await getThingsCollection();
   const doc = await things.findOne({ thingtime: 'app-data', ownerId, 'crystal.appId': appId, 'crystal.key': key });
   return doc ? toEntry(doc) : null;
 };
 
-export const listAppData = async (ownerId: string, appId: string): Promise<AppDataEntry[]> => {
+const MAX_PRIVATE_PAGE = 200;
+
+// Opaque private-list cursor: the last returned key, base64url.
+const encodeKeyCursor = (key: string): string => Buffer.from(JSON.stringify({ k: key }), 'utf8').toString('base64url');
+const decodeKeyCursor = (raw: string): string | null => {
+  try {
+    const parsed = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8'));
+    return typeof parsed?.k === 'string' ? parsed.k : null;
+  } catch {
+    return null;
+  }
+};
+
+// key= filters exactly; a trailing * (e.g. key=post:*) or prefix= filters by
+// prefix. Regex is built from an escaped literal, never raw user input. One
+// grammar for the private list and the shared feed.
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const buildKeyFilter = (params: { key?: string | null; prefix?: string | null }): Record<string, unknown> | null | Fail => {
+  const rawKey = typeof params.key === 'string' ? params.key.trim() : '';
+  const rawPrefix = typeof params.prefix === 'string' ? params.prefix.trim() : '';
+  if (rawKey.endsWith('*')) return { $regex: `^${escapeRe(rawKey.slice(0, -1))}` };
+  if (rawKey) {
+    const key = sanitizeAppDataKey(rawKey);
+    if (!key) return fail(400, 'key is not a valid app-data key (append * for a prefix match)');
+    return { $eq: key };
+  }
+  if (rawPrefix) return { $regex: `^${escapeRe(rawPrefix)}` };
+  return null;
+};
+
+export const listAppData = async (
+  ownerId: string,
+  appId: string,
+  params: { prefix?: string | null; key?: string | null; limit?: number | null; cursor?: string | null } = {}
+): Promise<{ ok: true; entries: AppDataEntry[]; nextCursor: string | null } | Fail> => {
+  const limit = Math.min(MAX_PRIVATE_PAGE, Math.max(1, Math.floor(params.limit ?? MAX_PRIVATE_PAGE) || MAX_PRIVATE_PAGE));
+
+  const keyFilter = buildKeyFilter(params);
+	if (keyFilter && (keyFilter as Fail).ok === false) return keyFilter as Fail;
+
+  let afterKey: string | null = null;
+  if (params.cursor) {
+    afterKey = decodeKeyCursor(params.cursor);
+    if (!afterKey) return fail(400, 'cursor is not a cursor this endpoint issued');
+  }
+
+  const keyCond: Record<string, unknown> = { ...(keyFilter ?? {}) };
+  if (afterKey) keyCond.$gt = afterKey;
+
   const things = await getThingsCollection();
   const docs = await things
-    .find({ thingtime: 'app-data', ownerId, 'crystal.appId': appId })
+    .find({
+      thingtime: 'app-data',
+      ownerId,
+      'crystal.appId': appId,
+      ...(Object.keys(keyCond).length ? { 'crystal.key': keyCond } : {})
+    })
     .sort({ 'crystal.key': 1 })
-    .limit(MAX_APP_DATA_KEYS_PER_APP_USER)
+    .limit(limit + 1)
     .toArray();
-  return docs.map(toEntry);
+
+  const page = docs.slice(0, limit);
+  return {
+    ok: true,
+    entries: page.map(toEntry),
+    nextCursor: docs.length > limit && page.length ? encodeKeyCursor(page[page.length - 1].crystal?.key) : null
+  };
 };
 
 export const setAppData = async (
@@ -156,39 +211,76 @@ export const setAppData = async (
     return fail(400, 'value must be JSON-serializable');
   }
   if (serialized === undefined || Buffer.byteLength(serialized, 'utf8') > MAX_APP_DATA_VALUE_BYTES) {
-    return fail(400, `value must be JSON up to ${MAX_APP_DATA_VALUE_BYTES / 1024}KB`);
+    return fail(400, `value must be JSON up to ${MAX_APP_DATA_VALUE_BYTES / 1024} KiB`);
   }
 
   const things = await getThingsCollection();
   const filter = { thingtime: 'app-data', ownerId, 'crystal.appId': appId, 'crystal.key': key };
 
-  // update-then-insert, retried: a racing set() of the same new key loses the
-  // insert to the unique index and folds into an update on the next pass; a
-  // set() racing a delete of the winner just inserts on the next pass. Two
-  // full passes always suffice for one interleaving; the bound only trips
-  // under sustained adversarial interleaving, which gets a structured 503
-  // instead of a raw duplicate-key 500.
-  for (let attempt = 0; attempt < 3; attempt++) {
+  const scope: AppNamespaceScope = {
+    appId,
+    ownerId,
+    sharedRead: audience.allowShared,
+    scopes: [], // budget accounting only — no projections ride this scope
+    username: '',
+    sandbox: audience.sandbox ? { space: audience.sandboxSpace ?? null } : null
+  };
+
+	const createdSize = appThingSizeBytes({ crystal: { appId, key, value } });
+
+	// Sandboxes have no real account subscription ledger. Keep their existing
+	// ephemeral byte-window accounting and compensating-CAS path unchanged.
+	if (scope.sandbox) {
+		// Every attempt reads the current stamped size, reserves a positive delta,
+		// then compare-and-swaps that exact size. A losing writer knows its write
+		// did not land and can safely compensate before retrying; shrinking writes
+		// refund only after an acknowledged swap. An ambiguous Mongo error keeps
+		// the reservation because refunding a write that may have landed could
+		// create free storage.
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const existing = await things.findOne(filter, {
+      projection: { sizeBytes: 1, crystal: 1, extended: 1, tags: 1 }
+    });
+			const oldSize = existing ? (typeof existing.sizeBytes === 'number' ? existing.sizeBytes : appThingSizeBytes(existing)) : 0;
+			const nextSize = appThingSizeBytes({
+				crystal: { ...(existing?.crystal || {}), appId, key, value },
+				extended: existing?.extended,
+				tags: existing?.tags
+			});
+			const delta = nextSize - oldSize;
+    if (delta > 0) {
+      const charge = await chargeAppStorage(scope, delta);
+      if (charge.ok === false) return charge;
+    }
+
     const now = new Date();
+    if (existing) {
+				// Audience only changes when the write names one — a plain
+				// { key, value } update never silently flips a shared entry private.
+				const set: Record<string, unknown> = { 'crystal.value': value, updatedAt: now, appId, sizeBytes: nextSize };
+      if (resolved.acl) set.acl = resolved.acl;
+      const expectedSize = Object.prototype.hasOwnProperty.call(existing, 'sizeBytes')
+        ? { sizeBytes: existing.sizeBytes }
+        : { sizeBytes: { $exists: false } };
 
-    // Audience only changes when the write names one — a plain { key, value }
-    // update never silently flips a shared entry private (or vice versa).
-    const set: Record<string, unknown> = { 'crystal.value': value, updatedAt: now };
-    if (resolved.acl) set.acl = resolved.acl;
+      let updated;
+      try {
+					updated = await things.findOneAndUpdate({ ...filter, _id: existing._id, ...expectedSize }, { $set: set }, { returnDocument: 'after' });
+      } catch (error) {
+					// The write result is ambiguous. Keep any positive reservation so
+					// an applied update can never exceed its ledgers; reconciliation can
+        // reclaim a reservation if Mongo did not apply it.
+        throw error;
+      }
 
-    const updated = await things.findOneAndUpdate(
-      filter,
-      { $set: set },
-      { returnDocument: 'after' }
-    );
-    if (updated) return { ok: true, entry: toEntry(updated) };
+      if (updated) {
+        if (delta < 0) await refundAppStorage(scope, -delta);
+        return { ok: true, entry: toEntry(updated) };
+      }
 
-    // New key: soft product cap on keys per (user, app), then insert.
-    // Sandbox namespaces get a tighter budget — the mint is anonymous.
-    const maxKeys = audience.sandbox ? SANDBOX_MAX_KEYS : MAX_APP_DATA_KEYS_PER_APP_USER;
-    const count = await things.countDocuments({ thingtime: 'app-data', ownerId, 'crystal.appId': appId });
-    if (count >= maxKeys) {
-      return fail(400, `An app can store at most ${maxKeys} keys per user${audience.sandbox ? ' in the sandbox' : ''}`);
+      // The size CAS lost, so this write definitely did not land.
+      if (delta > 0) await refundAppStorage(scope, delta);
+      continue;
     }
 
     const doc = {
@@ -202,25 +294,112 @@ export const setAppData = async (
       tags: [],
       createdAt: now,
       updatedAt: now,
-      // sandbox writes are ephemeral: the TTL reaper deletes them with the
-      // token's lifetime, so pretend data can never accumulate. The space
-      // stamp lets same-space sandboxes pool their shared entries.
-      ...(audience.sandbox
-        ? {
-            sandboxExpiresAt: new Date(now.getTime() + SANDBOX_TOKEN_TTL_MS),
-            ...(audience.sandboxSpace ? { sandboxSpace: audience.sandboxSpace } : {})
-          }
-        : {})
+				// Namespace + TTL/space stamps make pretend data reap with the token.
+				...appNamespaceStamp(scope, createdSize)
     };
 
     try {
       await things.insertOne(doc as any);
       return { ok: true, entry: toEntry(doc) };
     } catch (err: any) {
-      if (err?.code !== 11000) throw err;
-      // lost the insert race — loop back to the update path
+      if (err?.code !== 11000) {
+        // As above, an unknown insert result keeps its reservation.
+        throw err;
+      }
+				// A duplicate-key rejection proves our insert did not land.
+      if (delta > 0) await refundAppStorage(scope, delta);
     }
   }
+
+		return fail(503, 'Storage is busy for this key — try again');
+	}
+
+	// Registered writes debit the whole-account, whole-app and app-user ledgers
+	// in the SAME transaction as the content mutation. A stale size CAS or a
+	// duplicate insert throws to abort every debit before the bounded retry.
+	for (let attempt = 0; attempt < 5; attempt++) {
+		try {
+			const entry = await withMongoTransaction(async (session) => {
+				const existing = await things.findOne(filter, {
+					projection: {
+						schemaVersion: 1,
+						thingtime: 1,
+						sizeBytes: 1,
+						storageClass: 1,
+						storageAccountingVersion: 1,
+						crystal: 1,
+						extended: 1,
+						tags: 1
+					},
+					session
+				});
+				const oldSize = existing ? registeredStorageSize(existing) : 0;
+				const nextSize = appThingSizeBytes({
+					crystal: { ...(existing?.crystal || {}), appId, key, value },
+					extended: existing?.extended,
+					tags: existing?.tags
+				});
+				const delta = nextSize - oldSize;
+
+				// One global lock order for every registered content mutation.
+				await applyUserStorageDelta(ownerId, delta, session);
+				await applyAppStorageDeltaTransaction(scope, delta, session);
+
+				const now = new Date();
+				if (existing) {
+					const set: Record<string, unknown> = {
+						'crystal.value': value,
+						updatedAt: now,
+						appId,
+						sizeBytes: nextSize,
+						storageClass: 'content',
+						storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION
+					};
+					if (resolved.acl) set.acl = resolved.acl;
+					const expectedSize = Object.prototype.hasOwnProperty.call(existing, 'sizeBytes')
+						? { sizeBytes: existing.sizeBytes }
+						: { sizeBytes: { $exists: false } };
+					const updated = await things.findOneAndUpdate(
+						{ ...filter, _id: existing._id, ...expectedSize },
+						{ $set: set },
+						{ returnDocument: 'after', session }
+					);
+					if (!updated) throw new AppDataWriteConflict();
+					return toEntry(updated);
+				}
+
+				const doc = {
+					shareId: randomUUID(),
+					schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+					thingtime: ['app-data'],
+					crystal: { appId, key, value },
+					ownerId,
+					acl: resolved.acl ?? [ACL_OWNER],
+					targetId: null,
+					tags: [],
+					createdAt: now,
+					updatedAt: now,
+					...appNamespaceStamp(scope, createdSize),
+					storageClass: 'content',
+					storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION
+				};
+
+				try {
+					await things.insertOne(doc as any, { session });
+				} catch (error: any) {
+					if (error?.code === 11000) throw new AppDataWriteConflict();
+					throw error;
+				}
+				return toEntry(doc);
+			});
+			return { ok: true, entry };
+		} catch (error) {
+			if (error instanceof AppDataWriteConflict) continue;
+			const storageFail = storageMutationFail(error);
+			if (storageFail) return storageFail;
+			throw error;
+		}
+	}
 
   return fail(503, 'Storage is busy for this key — try again');
 };
@@ -228,14 +407,73 @@ export const setAppData = async (
 export const deleteAppData = async (
   ownerId: string,
   appId: string,
-  rawKey: unknown
+  rawKey: unknown,
+  sandbox: { enabled: boolean; space?: string | null } = { enabled: false }
 ): Promise<{ ok: true; deleted: boolean } | Fail> => {
   const key = sanitizeAppDataKey(rawKey);
   if (!key) return fail(400, 'key is required');
 
   const things = await getThingsCollection();
-  const result = await things.deleteOne({ thingtime: 'app-data', ownerId, 'crystal.appId': appId, 'crystal.key': key });
-  return { ok: true, deleted: result.deletedCount > 0 };
+	const filter = { thingtime: 'app-data', ownerId, 'crystal.appId': appId, 'crystal.key': key };
+	const scope: AppNamespaceScope = {
+        appId,
+        ownerId,
+        sharedRead: false,
+        scopes: [],
+        username: '',
+        sandbox: sandbox.enabled ? { space: sandbox.space ?? null } : null
+	};
+
+	if (scope.sandbox) {
+		const doc = await things.findOneAndDelete(filter);
+		if (doc) {
+			// Keep the existing sandbox refund behavior (legacy pre-stamp docs
+			// re-measure on the way out).
+			const bytes = typeof doc.sizeBytes === 'number' ? doc.sizeBytes : appThingSizeBytes(doc);
+			await refundAppStorage(scope, bytes);
+  }
+  return { ok: true, deleted: !!doc };
+	}
+
+	for (let attempt = 0; attempt < 5; attempt++) {
+		try {
+			const doc = await withMongoTransaction(async (session) => {
+				const existing = await things.findOne(filter, {
+					projection: {
+						schemaVersion: 1,
+						thingtime: 1,
+						sizeBytes: 1,
+						storageClass: 1,
+						storageAccountingVersion: 1,
+						crystal: 1,
+						extended: 1,
+						tags: 1
+					},
+					session
+				});
+				if (!existing) return null;
+
+				const bytes = registeredStorageSize(existing);
+				await applyUserStorageDelta(ownerId, -bytes, session);
+				await applyAppStorageDeltaTransaction(scope, -bytes, session);
+
+				const expectedSize = Object.prototype.hasOwnProperty.call(existing, 'sizeBytes')
+					? { sizeBytes: existing.sizeBytes }
+					: { sizeBytes: { $exists: false } };
+				const deleted = await things.findOneAndDelete({ ...filter, _id: existing._id, ...expectedSize }, { session });
+				if (!deleted) throw new AppDataWriteConflict();
+				return deleted;
+			});
+			return { ok: true, deleted: !!doc };
+		} catch (error) {
+			if (error instanceof AppDataWriteConflict) continue;
+			const storageFail = storageMutationFail(error);
+			if (storageFail) return storageFail;
+			throw error;
+		}
+	}
+
+	return fail(503, 'Storage is busy for this key — try again');
 };
 
 // ---------------------------------------------------------------------------
@@ -278,69 +516,9 @@ const decodeCursor = (raw: string): { u: number; s: string } | null => {
   }
 };
 
-// The authors (of `userIds`) whose grant for this app is still alive AND still
-// covers app-data.shared — revoke the grant (or let it expire) and your
-// entries leave the shared feed immediately; the docs themselves stay yours.
-// Returns each live author's scope union, for userinfo-style field gating.
-const liveSharingAuthors = async (clientId: string, userIds: string[]): Promise<Map<string, string[]>> => {
-  if (!userIds.length) return new Map();
-  const sessions = await (await getSessionsCollection())
-    .find({
-      purpose: 'app',
-      'meta.clientId': clientId,
-      userId: { $in: userIds },
-      revokedAt: null,
-      $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }]
-    })
-    .toArray();
-
-  const scopesByUser = new Map<string, string[]>();
-  for (const session of sessions) {
-    const userId = String(session.userId);
-    const union = scopesByUser.get(userId) || [];
-    for (const scope of sessionScopes(session.meta)) {
-      if (!union.includes(scope)) union.push(scope);
-    }
-    scopesByUser.set(userId, union);
-  }
-  for (const [userId, scopes] of [...scopesByUser]) {
-    if (!scopeCovers(scopes, 'app-data.shared')) scopesByUser.delete(userId);
-  }
-  return scopesByUser;
-};
-
-// Same-space sandbox authors: live app-sandbox sessions for these owners in
-// this clientId's pool — the sandbox mirror of liveSharingAuthors, carrying
-// each pretend user's username + scope set. A dead session (expired token)
-// drops its author from the pool, mirroring real revocation semantics.
-const liveSandboxAuthors = async (
-  clientId: string,
-  space: string,
-  userIds: string[]
-): Promise<Map<string, { scopes: string[]; username: string }>> => {
-  if (!userIds.length) return new Map();
-  const sessions = await (await getSessionsCollection())
-    .find({
-      purpose: 'app-sandbox',
-      'meta.clientId': clientId,
-      'meta.space': space,
-      userId: { $in: userIds },
-      revokedAt: null,
-      $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }]
-    })
-    .toArray();
-
-  const byUser = new Map<string, { scopes: string[]; username: string }>();
-  for (const session of sessions) {
-    const scopes = sessionScopes(session.meta);
-    if (!scopeCovers(scopes, 'app-data.shared')) continue;
-    byUser.set(String(session.userId), {
-      scopes,
-      username: typeof session.meta?.username === 'string' ? session.meta.username : 'sandbox-you'
-    });
-  }
-  return byUser;
-};
+// Author-liveness gates (liveSharingAuthors / liveSandboxAuthors) are the
+// namespace layer's — one revocation semantic for the KV feed and the full
+// things surface alike (apps/namespace.ts).
 
 export const listSharedAppData = async (
   appId: string,
@@ -352,21 +530,9 @@ export const listSharedAppData = async (
 ): Promise<{ ok: true; entries: SharedAppDataEntry[]; nextCursor: string | null } | Fail> => {
   const limit = Math.min(MAX_SHARED_PAGE, Math.max(1, Math.floor(params.limit ?? DEFAULT_SHARED_PAGE) || DEFAULT_SHARED_PAGE));
 
-  // key= filters exactly; a trailing * (e.g. key=post:*) or prefix= filters by
-  // prefix. Regex is built from an escaped literal, never raw user input.
-  let keyFilter: Record<string, unknown> | null = null;
-  const rawKey = typeof params.key === 'string' ? params.key.trim() : '';
-  const rawPrefix = typeof params.prefix === 'string' ? params.prefix.trim() : '';
-  const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  if (rawKey.endsWith('*')) {
-    keyFilter = { $regex: `^${escapeRe(rawKey.slice(0, -1))}` };
-  } else if (rawKey) {
-    const key = sanitizeAppDataKey(rawKey);
-    if (!key) return fail(400, 'key is not a valid app-data key (append * for a prefix match)');
-    keyFilter = { $eq: key };
-  } else if (rawPrefix) {
-    keyFilter = { $regex: `^${escapeRe(rawPrefix)}` };
-  }
+  // Same key/prefix grammar as the private list (buildKeyFilter above).
+  const keyFilter = buildKeyFilter(params);
+	if (keyFilter && (keyFilter as Fail).ok === false) return keyFilter as Fail;
 
   const shared = appAclEntry(appId);
   const baseFilter: Record<string, unknown> = {
@@ -406,10 +572,7 @@ export const listSharedAppData = async (
   for (let pass = 0; pass < 4 && kept.length <= limit; pass++) {
     const cursorFilter = after
       ? {
-          $or: [
-            { updatedAt: { $lt: new Date(after.u) } },
-            { updatedAt: new Date(after.u), shareId: { $lt: after.s } }
-          ]
+					$or: [{ updatedAt: { $lt: new Date(after.u) } }, { updatedAt: new Date(after.u), shareId: { $lt: after.s } }]
         }
       : {};
     const batchSize = Math.max(limit + 1, 25);
@@ -424,9 +587,7 @@ export const listSharedAppData = async (
       break;
     }
 
-    const authorIds = [...new Set(docs.map((doc: any) => String(doc.ownerId)))].filter(
-      (id) => !authorScopes.has(id)
-    );
+		const authorIds: string[] = [...new Set<string>(docs.map((doc: any) => String(doc.ownerId)))].filter((id) => !authorScopes.has(id));
     if (viewer?.sandbox && !viewer.sandbox.space) {
       // The sandbox owner is by definition live (the viewer's own token).
       for (const id of authorIds) authorScopes.set(id, ['app-data.shared']);

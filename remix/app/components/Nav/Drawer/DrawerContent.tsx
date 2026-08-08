@@ -195,7 +195,7 @@ export const DrawerContent = (props: DrawerContentProps) => {
 	}, [pathname, loading, variant, open]);
 
 	const subItems = React.useMemo(() => {
-		const children = filterDrawerItemsByAuth(selectedTopItem?.children || [], !!user);
+		const children = filterDrawerItemsByAuth(selectedTopItem?.children || [], !!user, !!user?.isAdmin);
 		const defaultIds = children.map((item) => item.id);
 		const orderedIds = applyDrawerOrdering(defaultIds, ordering?.[selectedTopItem?.id]);
 

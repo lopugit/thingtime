@@ -1,7 +1,7 @@
 import { json, readJsonBody } from '~/api/http';
 
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
-import { appAllowsOrigin, findAppByClientId, normalizeAppOrigin } from '~/api/utils/apps/apps';
+import { appAllowsOrigin, appIsRevoked, findAppByClientId, normalizeAppOrigin } from '~/api/utils/apps/apps';
 import { issueAppToken } from '~/api/utils/apps/appTokens';
 import { parseScopeParam, sanitizeGrantedScopes, scopeCovers } from '~/api/utils/apps/scopes';
 import { sanitizeSharedThings } from '~/api/utils/apps/sharedThings';
@@ -64,6 +64,9 @@ export const action = async ({ request }: { request: Request }) => {
 
   const app = await findAppByClientId(clientId);
   if (!app) return json({ ok: false, error: 'App not found' }, { status: 404 });
+  if (appIsRevoked(app)) {
+    return json({ ok: false, error: 'This app has been suspended by an administrator' }, { status: 403 });
+  }
 
   if (!appAllowsOrigin(app, origin)) {
     return json({ ok: false, error: 'This origin is not on the app’s allowlist' }, { status: 403 });
