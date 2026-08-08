@@ -73,7 +73,19 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
-- **AI PR and stack rebase conflict resolution**: a separate **Rebase PRs and
+- **Promotion PR changelog**: the **Promote develop to main** workflow now
+  maintains an at-a-glance changelog on the standing promotion PR. A new
+  `.github/scripts/promotion-pr-changelog.mjs` resolves the first-parent spine
+  of `main..develop` to the merged develop-based PRs it carries (merge/squash
+  subjects, then content matching against recently merged PRs — merge SHA, PR
+  title, and the PRs' own commit subjects, which survives AI rebases of
+  develop — then the commit-association API), rewrites a marker-delimited
+  section of the PR description with a PR table (title, author, source branch,
+  merge date), `no-promote` label warnings re-verified via REST, and collapsed
+  direct commits, and posts short delta comments when PRs enter or leave the
+  promotion window. State is derived from the PR body itself; re-runs on the
+  same develop SHA are byte-identical no-ops. Supports `DRY_RUN=1` and
+  `--self-test`. — Claude (AI), 2026-08-08
   stacks (AI)** workflow evaluates every same-repository PR regardless of base
   branch. Standalone PRs that merge cleanly but cannot rebase and stack members
   needing a history update are rebase-owned, while standalone merge conflicts
@@ -196,6 +208,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   #106 plus stacked PR #102; open cross-tab PR #92 remains a separate feature.
   — Claude (AI) + Codex (AI), 2026-08-08
 
+- **Sync main→develop fallback PR is now PAT-authored**: the **Sync main into
+  develop** workflow's "Open (or reuse) the sync PR" step used `GITHUB_TOKEN`,
+  which failed outright while the repo blocked Actions-created PRs — and even
+  with that setting enabled, a `GITHUB_TOKEN`-created PR triggers no workflows
+  (GitHub anti-recursion), so the sync PR would sit with no Web CI/CodeQL
+  checks. The step now uses the same
+  `SYNC_BRANCHES_PAT || CONFLICT_RESOLVER_PAT` chain as the checkout/push path
+  and fails loudly when neither secret exists instead of degrading to a
+  checkless PR. — Claude (AI), 2026-08-08
 - **PRs that make themselves conflicted now get rescanned**: a push to a PR's
   head branch can create a conflict (the resolver deliberately ignores
   `synchronize` to avoid self-loops), and with no follow-up push to the base,
