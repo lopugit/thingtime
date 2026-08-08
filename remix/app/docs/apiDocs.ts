@@ -1357,8 +1357,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'crypto',
     title: 'Crypto tools',
     endpoint: '/api/v1/crypto',
-    summary:
-      'Lists crypto standards and runs key generation, JWT verification, signature verification, key matching, and password hashing helpers.',
+		summary: 'Lists crypto standards and runs key generation, JWT verification, signature verification, key matching, and password hashing helpers.',
     detail:
       'Use this route for Thingtime-compatible ES256 key workflows and diagnostics. POST bodies are intent-driven. intent: hash-password additionally turns a password into the exact bcrypt hash Thingtime stores (cost 10, the auth/passwords.ts settings) and returns a paste-ready mongosh snippet that writes it into a user — the manual recovery path for a database you own when the emailed reset flow is not an option. It is a PURE computation: no database is read or written, no account is looked up, and nothing about who exists is revealed. Because bcrypt is deliberately CPU-heavy, this intent is rate-limited per IP (crypto.hashPassword).',
     auth: {
@@ -1753,8 +1752,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Thin-frontend mode: the session can point the open data plane (things, feed, search, comments, reactions, schemas, app-data) at any reachable MongoDB. Identity, auth and the protected system kinds always stay on the home Thingtime DB. The override is an httpOnly session cookie (tt_mongo) — or send an x-tt-mongo-url header per request from API clients. Activation probes the endpoint (connect + ping) before accepting it. Responses never include the URL itself, only the credentials-stripped host and db name.',
     auth: {
       mode: 'optional',
-      description:
-        'Works logged out for { url } and { reset }. Selecting a saved endpoint ({ savedId }) requires a signed-in session.'
+			description: 'Works logged out for { url } and { reset }. Selecting a saved endpoint ({ savedId }) requires a signed-in session.'
     },
     methods: ['GET', 'POST', 'DELETE'],
     steps: [
@@ -4737,6 +4735,60 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       }
     ]
   }),
+	endpoint({
+		id: 'admin-migrations-diagnostic',
+		group: 'admin',
+		title: 'Read migration diagnostic',
+		endpoint: '/api/v1/admin/migrations/diagnostic',
+		summary: 'Reads one short-lived, private error report created after a failed real migration run.',
+		detail:
+			'A failed real migration may create a protected, non-billable migration-diagnostic Thing after its lease is released. ' +
+			'Pass its id to read a bounded snapshot of the error name, message, stack, standard codes, labels, and cause chain. Secret, ' +
+			'credential, PII-identifier, connection-string, and private-key patterns are redacted. Reads are pinned to Thingtime’s home database and require the same current ' +
+			'admin account that ran the migration. Dry runs never create diagnostics; failed diagnostic persistence falls back to detail ' +
+			'in the private migration response instead.',
+		auth: {
+			mode: 'session-or-bearer',
+			description: 'Requires a current admin session and exact ownership of the diagnostic. Missing or inaccessible ids return 404.'
+		},
+		methods: ['GET'],
+		steps: [
+			'Copy diagnosticThingId from a failed real migration response.',
+			'GET with id=<diagnosticThingId> as the same current admin.',
+			'Render detail as plain text only; the server captures a closed field set and redacts sensitive text patterns.',
+			'Treat 404 as expired, removed, or inaccessible without distinguishing those cases.'
+		],
+		requestExamples: [
+			{
+				name: 'Read error report',
+				description: 'Open the durable report linked by the migration toast.',
+				method: 'GET',
+				query: { id: 'migration-diagnostic-89c5d4f2-b478-4aa1-b37d-755171dc3d90' }
+			}
+		],
+		responseExamples: [
+			{
+				status: 200,
+				description: 'Private diagnostic returned.',
+				body: {
+					ok: true,
+					diagnostic: {
+						id: 'migration-diagnostic-89c5d4f2-b478-4aa1-b37d-755171dc3d90',
+						migrationId: 'backfill-user-storage-accounting',
+						status: 500,
+						outcome: 'unknown',
+						summary: 'Migration stopped before completion.',
+						capturedAt: '2026-08-08T00:00:00.000Z',
+						expiresAt: '2026-09-07T00:00:00.000Z',
+						detail: '{\n  "name": "MongoServerError"\n}',
+						redactions: 1,
+						truncated: false
+					}
+				}
+			},
+			{ status: 404, description: 'Expired, missing, or inaccessible.', body: { ok: false, error: 'Diagnostic not found' } }
+		]
+	}),
   endpoint({
     id: 'admin-migrations-run',
     group: 'admin',
@@ -4749,7 +4801,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       '["post","share"], moves post payloads under crystal, and stamps schemaVersion; the other collections stamp the ' +
       'version they already conform to. merge-legacy-collections folds leftover unversioned collections into their ' +
       'versioned successors, and drop-stale-collection-generations removes superseded physical collections — that one ' +
-      'is destructive and additionally requires confirm: true on the non-dry run.',
+			'is destructive and additionally requires confirm: true on the non-dry run. Failed real runs may return a private ' +
+			'diagnosticThingId for the same admin to open at /thing/:id; failed dry runs never create diagnostics and instead return ' +
+			'bounded redacted adminDetail inline.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Admin-only (meta.admin flag or the ADMIN_USERNAMES env allowlist): anonymous callers get 401, signed-in non-admins 403.'
@@ -4760,6 +4814,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Pass dryRun: true first to see matched counts without writing.',
       'Pass confirm: true when running a destructive migration for real.',
       'Read the report for matched, migrated, created, skipped, and notes.',
+			'On failure, open diagnosticThingId as the same admin, or render adminDetail when persistence was skipped or unavailable.',
       'Handle 401 non-admin callers and 404 unknown migration ids.'
     ],
     requestExamples: [
@@ -4786,6 +4841,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           report: { dryRun: false, matched: 24, migrated: 24, created: 28, skipped: 0, notes: [] }
         }
       },
+			{
+				status: 500,
+				description: 'Real run failed; a private diagnostic was saved after the migration lease was released.',
+				body: {
+					ok: false,
+					error:
+						'Migration backfill-user-storage-accounting stopped before completion: MongoServerError (224). Refresh migration status before retrying.',
+					outcome: 'unknown',
+					diagnosticThingId: 'migration-diagnostic-89c5d4f2-b478-4aa1-b37d-755171dc3d90'
+				}
+			},
       {
         status: 404,
         description: 'Unknown migration id.',
