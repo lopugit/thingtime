@@ -22,7 +22,7 @@ be masked by a previously consumed rate-limit bucket.
 ## Design preview isolation
 
 Repository-controlled design bundles still need their runtime compiler and
-unpkg dependencies. Only `/docs/design/*` receives that compatibility policy.
+unpkg dependencies. Only `/docs/design-bundles/*` receives that compatibility policy.
 Those documents are served with CORS enabled and loaded in an opaque-origin
 iframe sandbox without `allow-same-origin`; the ordinary application and
 authorization routes retain the strict policy without `unsafe-eval`.

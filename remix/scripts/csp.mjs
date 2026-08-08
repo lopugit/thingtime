@@ -76,7 +76,6 @@ export const designBundlesCsp = serialize({
     'allow-forms',
     'allow-modals',
     'allow-popups',
-    'allow-popups-to-escape-sandbox',
     'allow-downloads'
   ]
 });

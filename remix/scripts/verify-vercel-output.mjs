@@ -110,6 +110,12 @@ if (
 ) {
   throw new Error('Design-bundle CSP lost its generated-runtime compatibility sources.');
 }
+if (
+  designBundlesCsp.includes('allow-same-origin') ||
+  designBundlesCsp.includes('allow-popups-to-escape-sandbox')
+) {
+  throw new Error('Design-bundle CSP lost its opaque-origin popup containment.');
+}
 if (!authorizeCsp.includes("frame-ancestors 'none'")) {
   throw new Error("/authorize CSP lost frame-ancestors 'none'.");
 }
