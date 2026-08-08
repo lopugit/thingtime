@@ -5,10 +5,13 @@
 // - vite.config.ts                   → dev-server headers (dev variant)
 // - scripts/verify-vercel-output.mjs → build-time assertions
 //
-// The policy deliberately has NO 'unsafe-eval': persisted-state function
-// revival was removed from ThingtimeProvider, and eval-backed magic (Commander
-// code commands, smarts scoped-eval replace mode) is expected to fail closed
-// under this policy rather than re-open storage-payload code execution.
+// The application policy deliberately has NO 'unsafe-eval': persisted-state
+// function revival was removed from ThingtimeProvider, and eval-backed magic
+// (Commander code commands, smarts scoped-eval replace mode) is expected to
+// fail closed under this policy rather than re-open storage-payload code
+// execution. The repo-controlled design prototypes have a narrowly scoped
+// compatibility policy below because their generated runtime compiles templates
+// with Function; that exception never applies to the application shell.
 //
 // External hosts:
 // - cdn.jsdelivr.net       @monaco-editor/react default loader (scripts, css, fonts)
@@ -57,12 +60,25 @@ export const buildCsp = (opts = {}) => serialize(directives(opts));
 export const prodCsp = buildCsp();
 export const devCsp = buildCsp({ dev: true });
 
-// The static prototype bundles under /docs/design-bundles are self-contained
-// generated pages with inline scripts (no eval). They get the same policy with
-// inline scripts allowed.
+// The static prototype bundles under /docs/design-bundles are repo-controlled
+// generated pages. Their Design Components runtime compiles templates with
+// Function and loads pinned React/Babel UMD assets from unpkg, so this path gets
+// a narrowly scoped compatibility exception. Do not reuse it for app routes.
 export const designBundlesCsp = serialize({
   ...directives(),
-  'script-src': ["'self'", "'unsafe-inline'"]
+  'script-src': ["'self'", "'unsafe-inline'", "'unsafe-eval'", 'https://unpkg.com'],
+  'connect-src': ["'self'", 'https://unpkg.com'],
+  // Opaque-origin sandbox: generated runtime code cannot reach Thingtime's
+  // cookies/storage even when a prototype is opened directly. Static bundle
+  // responses expose CORS so relative component fetches still work.
+  sandbox: [
+    'allow-scripts',
+    'allow-forms',
+    'allow-modals',
+    'allow-popups',
+    'allow-popups-to-escape-sandbox',
+    'allow-downloads'
+  ]
 });
 
 // /authorize must additionally never render inside a frame (UI-redress

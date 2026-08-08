@@ -1,6 +1,6 @@
 # 09 — Security hardening (unauth endpoints, auth rate limiting, persisted-state eval)
 
-**Status:** 🔴 Not started · raised 2026-07-08 by a multi-agent review, each
+**Status:** 🟡 In progress · raised 2026-07-08 by a multi-agent review, each
 finding adversarially verified against the source.
 
 This groups the security findings from the 2026-07-08 review. They share a theme
@@ -65,20 +65,18 @@ service-account token lifetime regardless.
   no attempt counter, lockout, or IP throttle; the dispatcher adds no middleware.
   Only friction is bcrypt cost 10 (skipped for unknown usernames). Credentials are
   brute-forceable at full speed.
-- `POST /api/v1/auth/register` (`_register.tsx` L10–14): no rate limit, no body
-  cap before `request.json()`, and `meta` is persisted verbatim as
-  `Record<string, any>` (`registerUser.ts` L72, `meta: input.meta ?? {}`).
+- `POST /api/v1/auth/register` (`_register.tsx`): the shared IP-based
+  `auth.register` limiter landed in PR #167. Before PR #99, the route still had
+  no body cap before `request.json()`; its public action already whitelisted
+  fields and never forwarded caller-controlled `meta`.
 - `POST /api/v1/auth/resend-verification`: mints unlimited verification tokens per
   request (email cost currently masked only by the dev console stub in
   `remix/app/api/utils/auth/email.ts`).
 
-**Fix:** reuse the existing per-IP fixed-window quota
-(`consumeJoinQuota` in `remix/app/api/utils/waitlist/waitlist.ts` L23–41, or
-`consumeLopuMusingQuota` in `remix/app/api/utils/lopu/rateLimit.ts`, both backed
-by the `lopuMusingRateLimits` TTL collection) to return 429 after N failed
-attempts per IP (and per username for login) per window. Cap register/login body
-size (use `readJsonBody(request, 64*1024)` like the things/algorithms routes
-already do). Whitelist known `meta` keys or enforce a serialized-size ceiling.
+**Fix:** reuse the shared `enforceRateLimit` path for per-IP auth quotas rather
+than adding another registration limiter. Cap register/login body size with
+`readJsonBody`; public registration must continue to whitelist accepted fields
+instead of forwarding caller-controlled `meta`.
 
 ## C. Persisted-state `eval` → arbitrary code execution + no CSP
 
@@ -120,20 +118,23 @@ revive only tagged values.
       any that remain apply visibility filtering.
 - [x] Login / register / resend-verification return 429 past a per-IP (and
       per-username, for login) threshold, reusing the existing quota util.
-      Login + resend already enforced the shared `enforceRateLimit`; register
-      now does too (`auth.register`, 10/10min per IP). — PR #99
+      Login + resend already enforced the shared `enforceRateLimit`; the
+      IP-based `auth.register` rule (10/15min) landed separately in PR #167.
 - [x] Register/login enforce a body-size cap; `meta` is whitelisted/bounded.
       Register now reads via `readJsonBody(request, 16 KB)` (413 over cap); the
       route already whitelists fields and never passes `meta`. — PR #99
-- [x] Function values are no longer revived via `eval`; a CSP without
-      `unsafe-eval` is in place and the app still hydrates. — PR #99
+- [x] Function values are no longer revived via `eval`; the application CSP
+      omits `unsafe-eval` and the app still hydrates. Repo-controlled generated
+      design prototypes keep a path-scoped compatibility exception. — PR #99
 - [x] The `Date.parse` reviver no longer coerces plain strings (verified by a
       round-trip test: seed `"Post 1"`, save, reload, assert it is still a string). — PR #99
 - [x] Regression coverage added — `remix/app/Providers/thingtimePersistCodec.test.ts`
       (`npm run test:persist`). The codec is client-side, so coverage lives beside
       it rather than in the fetch-based `apiTests.ts`. — PR #99
 
-**§B (auth rate limiting — register), §C (persisted-state `eval` + CSP), and §D
-(Date.parse corruption) shipped in PR #99.** The persist codec moved to
-`remix/app/Providers/thingtimePersistCodec.ts` (pure/React-free). §A (unauth
-admin/data endpoints — raw-results, populate, service-account) remains open.
+**§B's IP-based register rate limit shipped in PR #167. PR #99 keeps that
+single implementation and supplies the remaining register body cap, plus §C
+(persisted-state `eval` + CSP) and §D (Date.parse corruption).** The persist
+codec moved to `remix/app/Providers/thingtimePersistCodec.ts` (pure/React-free).
+§A (unauth admin/data endpoints — raw-results, populate, service-account)
+remains open.

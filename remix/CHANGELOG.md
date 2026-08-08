@@ -40,6 +40,19 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **PR #99 persisted-state, CSP, and registration-body hardening**: persisted
+  Thingtime functions are no longer serialized or revived with `eval`; Dates
+  use explicit tags so ordinary date-like strings retain their type; Vite and
+  Vercel now share a CSP without `unsafe-eval`; and public registration caps
+  request bodies at 16 KiB while continuing to use the IP-based
+  `auth.register` limiter already merged in PR #167. The pre-paint theme and
+  environment title boot moved to a same-origin external script so they still
+  run under the policy; generated design prototypes retain their required
+  runtime compiler and unpkg access through a path-scoped compatibility policy
+  that never applies to the app shell. See the
+  [PR #99 implementation note](../PRs/99-claude-eval-csp-hardening--persisted-state-csp-register-body-cap.md).
+  — Claude (AI) + Codex (AI), 2026-08-08
+
 - **PRs that make themselves conflicted now get rescanned**: a push to a PR's
   head branch can create a conflict (the resolver deliberately ignores
   `synchronize` to avoid self-loops), and with no follow-up push to the base,

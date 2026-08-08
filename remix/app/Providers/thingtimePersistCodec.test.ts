@@ -2,9 +2,8 @@
 // TODO/claude-todo/09-security-hardening.md §C (no eval on persisted functions)
 // and §D (no Date.parse corruption of plain strings).
 //
-// Runs in plain Node (no test framework): `node --test` picks up the `test()`
-// calls via node:test, or run directly with `node app/Providers/...test.ts`.
-// Wired as `npm run test:persist`.
+// Runs with Node's built-in test runner through the TypeScript loader, wired as
+// `npm run test:persist` (`node --import tsx --test ...`).
 
 import assert from 'node:assert/strict';
 import test from 'node:test';

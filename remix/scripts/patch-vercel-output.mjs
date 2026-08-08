@@ -29,7 +29,8 @@ config.routes = [
   {
     src: '^/docs/design-bundles(?:/.*)?$',
     headers: {
-      'Content-Security-Policy': designBundlesCsp
+      'Content-Security-Policy': designBundlesCsp,
+      'Access-Control-Allow-Origin': '*'
     },
     continue: true
   },

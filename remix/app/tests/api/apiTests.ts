@@ -14,6 +14,14 @@ import { apiEndpointDocs } from '~/docs/apiDocs';
 // Math.random here
 const uniqueSuffix = () => `${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
 
+// Documentation-only IPv6 range (RFC 3849), randomized per runner load so the
+// inherited auth.register IP bucket cannot mask the body-cap assertion on
+// repeated local/CI runs.
+const uniqueTestIp = () => {
+  const hex = crypto.randomUUID().replace(/-/g, '');
+  return `2001:db8:${hex.slice(0, 4)}:${hex.slice(4, 8)}:${hex.slice(8, 12)}:${hex.slice(12, 16)}:${hex.slice(16, 20)}:${hex.slice(20, 24)}`;
+};
+
 // Email tests deliver to the configured test inbox via plus aliases so real
 // sends stay contained: support@x.com → support+signup-<suffix>@x.com.
 const DEFAULT_EMAIL_TEST_RECIPIENT = 'support@thingtime.com';
@@ -235,20 +243,12 @@ export const apiTests: ApiTestDefinition[] = [
   {
     id: 'auth-register-validation',
     name: 'Register validation',
-    description: 'Register fails before database writes when required fields are missing (or 429 once the per-IP sign-up window is exhausted).',
+    description: 'Register fails before database writes when required fields are missing.',
     group: 'auth',
     method: 'POST',
     path: '/api/v1/auth/register',
     body: {},
-    // A 429 must carry the rate-limit error shape; a 400 must be a real
-    // validation rejection. Accepting 429 keeps the suite green once the
-    // per-IP window fills, without hiding a misconfigured always-429 limiter
-    // (that would fail the shape check on the 400 branch).
-    expect: expectJson(
-      [400, 429],
-      (body) => body?.ok === false && typeof body?.error === 'string',
-      'Register returned a validation error (or was rate-limited with an error shape).'
-    )
+    expect: expectJson([400], (body) => body?.ok === false && Boolean(body?.error), 'Register returned validation error.')
   },
   {
     id: 'auth-register-body-cap',
@@ -257,15 +257,13 @@ export const apiTests: ApiTestDefinition[] = [
     group: 'auth',
     method: 'POST',
     path: '/api/v1/auth/register',
+    headers: { 'X-Forwarded-For': uniqueTestIp() },
     // ~64 KB payload, well over the 16 KB route cap.
     body: { username: 'tt-api-test-oversized', password: 'valid-length-password', pad: 'x'.repeat(64 * 1024) },
     expect: expectJson(
-      [413, 429],
-      (body, response) =>
-        response.status === 413
-          ? body?.ok === false && typeof body?.error === 'string'
-          : typeof body?.error === 'string',
-      'Oversized register body was rejected with a 413 (or rate-limited) error shape.'
+      [413],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Oversized register body was rejected with a 413 error shape.'
     )
   },
   {

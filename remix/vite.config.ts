@@ -6,7 +6,7 @@ import { fileURLToPath, URL } from 'node:url';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
-import { devCsp } from './scripts/csp.mjs';
+import { designBundlesCsp, devCsp } from './scripts/csp.mjs';
 
 const designDocsBase = '/docs/design-bundles';
 const designDocsDir = fileURLToPath(new URL('../docs/design', import.meta.url));
@@ -126,6 +126,11 @@ const designDocsStaticPlugin = () => ({
 
       res.statusCode = 200;
       res.setHeader('Cache-Control', 'no-cache');
+      // Repo-controlled generated prototypes compile their Design Components
+      // at runtime. Keep that compatibility exception on this path only; the
+      // application shell continues to use devCsp without unsafe-eval.
+      res.setHeader('Content-Security-Policy', designBundlesCsp);
+      res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Content-Length', String(stats.size));
       res.setHeader('Content-Type', mimeTypes[extname(filePath)] || 'application/octet-stream');
       createReadStream(filePath).pipe(res);

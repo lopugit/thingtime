@@ -310,13 +310,8 @@ is fixed, and cite the checklist you ran in the PR description.
       standalone-demo link within ~10s — the preview must never show a
       permanent loading state.
 
-## Auth endpoint rate limiting (`remix/app/routes/api/v1/auth/register/_register.tsx`)
+## Register request body cap (`remix/app/routes/api/v1/auth/register/_register.tsx`)
 
-- [ ] `POST /api/v1/auth/register` returns 429 past the `auth.register` window
-      (default 10 / 10 min per IP), checked BEFORE the body is read, so a burst
-      of empty-body signups (each 400) still trips the cap. Verify per-IP
-      isolation with distinct `X-Forwarded-For` values — one IP's cap must not
-      throttle another.
 - [ ] Register rejects an oversize body with 413 (`readJsonBody` 16 KiB cap)
       before any bcrypt/DB work; a normal signup from a fresh IP still returns
       200 and a session cookie.
@@ -330,6 +325,10 @@ is fixed, and cite the checklist you ran in the PR description.
       (older builds turned it into a Date and rewrote it permanently).
 - [ ] Live: app hydrates under the CSP with no `unsafe-eval`; theme pre-paint
       and `[LC]`/env title prefix still work from `/tt-boot.js`.
+- [ ] A `/docs/design-bundles/<slug>/index.html` prototype still renders: its
+      repo-controlled generated runtime gets the path-scoped `unsafe-eval` +
+      unpkg compatibility policy, while `/`, `/authorize`, and ordinary app
+      routes keep the strict policy without `unsafe-eval`.
 
 ## MongoDB data endpoint (`/mongodb-status`, `remix/app/components/MongoDB/MongoEndpointConfig.tsx`)
 

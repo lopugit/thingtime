@@ -2,7 +2,7 @@
 
 import { readFileSync } from 'node:fs';
 
-import { authorizeCsp, prodCsp } from './csp.mjs';
+import { authorizeCsp, designBundlesCsp, prodCsp } from './csp.mjs';
 
 const readJson = (path) => JSON.parse(readFileSync(path, 'utf8'));
 const indexHtml = readFileSync('.vercel/output/static/index.html', 'utf8');
@@ -84,14 +84,34 @@ if (cspHeadersIndex > spaIndex) {
 if (cspHeadersIndex > authorizeHeadersIndex) {
   throw new Error('Vercel output stamps the global CSP after the /authorize override, so /authorize would lose frame-ancestors.');
 }
+const designBundlesHeadersIndex = routes.findIndex(
+  (route) =>
+    route.continue === true &&
+    route.src === '^/docs/design-bundles(?:/.*)?$' &&
+    route.headers?.['Content-Security-Policy'] === designBundlesCsp &&
+    route.headers?.['Access-Control-Allow-Origin'] === '*'
+);
+if (designBundlesHeadersIndex === -1) {
+  throw new Error('Vercel output config is missing the scoped design-bundle CSP.');
+}
+if (designBundlesHeadersIndex < cspHeadersIndex || designBundlesHeadersIndex > spaIndex) {
+  throw new Error('Vercel output does not apply the design-bundle CSP after the global policy and before routing.');
+}
 for (const route of routes) {
   const csp = route.headers?.['Content-Security-Policy'];
-  if (typeof csp === 'string' && csp.includes('unsafe-eval')) {
-    throw new Error(`Vercel output CSP re-introduces 'unsafe-eval' (route ${route.src}).`);
+  if (typeof csp === 'string' && csp.includes('unsafe-eval') && csp !== designBundlesCsp) {
+    throw new Error(`Vercel output CSP re-introduces 'unsafe-eval' outside design bundles (route ${route.src}).`);
   }
+}
+if (
+  !designBundlesCsp.includes("'unsafe-eval'") ||
+  !designBundlesCsp.includes('https://unpkg.com') ||
+  !designBundlesCsp.includes('sandbox allow-scripts')
+) {
+  throw new Error('Design-bundle CSP lost its generated-runtime compatibility sources.');
 }
 if (!authorizeCsp.includes("frame-ancestors 'none'")) {
   throw new Error("/authorize CSP lost frame-ancestors 'none'.");
 }
 
-console.log('[verify] Vercel output includes the Vite shell, filesystem route, SPA fallback, global CSP (no unsafe-eval), and /authorize frame-deny.');
+console.log('[verify] Vercel output includes the Vite shell, filesystem route, SPA fallback, strict app CSP, scoped design-bundle CSP, and /authorize frame-deny.');

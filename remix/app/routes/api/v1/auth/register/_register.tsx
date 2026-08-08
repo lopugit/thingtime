@@ -21,16 +21,12 @@ const MAX_BODY_BYTES = 16 * 1024;
 // a caller could mass-assign themselves admin. Legit meta is set later via its
 // own authenticated endpoints.
 export const action = async ({ request }: { request: Request }) => {
-  // Anonymous by definition: each signup creates a user, burns a bcrypt hash,
-  // and queues a verification email (and is an awaited ensureIndexes bootstrap
-  // caller) — throttle by IP before any of that work so the endpoint can't be
-  // used for mass account creation or mailbox spam (mirrors the other auth
-  // routes). readJsonBody also caps the body so an oversized payload can't be
-  // buffered before validation.
+  // anonymous by definition — throttle by IP before the bcrypt + insert +
+  // verification-email work (and before the awaited ensureIndexes bootstrap)
   const limit = await enforceRateLimit(request, 'auth.register', null);
   if (!limit.allowed) {
     return json(
-      { ok: false, error: 'Too many sign-up attempts — try again soon 🌸' },
+      { ok: false, error: 'Too many sign-up attempts — take a breather 🌸' },
       rateLimitedResponseInit(limit)
     );
   }
