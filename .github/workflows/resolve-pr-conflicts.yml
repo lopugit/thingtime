@@ -205,10 +205,17 @@ jobs:
     # Branch deletions also fire `push`; there is nothing to scan then.
     if: github.event_name != 'push' || github.event.deleted == false
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # Mergeability polling alone may legitimately spend MERGEABLE_POLL_SECONDS
+    # (~6 minutes) before classification starts; keep headroom for sweeps.
+    timeout-minutes: 15
     permissions:
       contents: read
-      pull-requests: read
+      # Still an API-only detector: nothing is checked out and no code from
+      # scanned PRs runs here. Write access exists solely to upsert the
+      # detect-status comment on PRs the detector must leave alone (fork
+      # conflicts, verdicts that never settle) so silence is never ambiguous.
+      pull-requests: write
+      issues: write
     outputs:
       prs: ${{ steps.scan.outputs.prs }}
       any: ${{ steps.scan.outputs.any }}
@@ -242,6 +249,13 @@ jobs:
           # ai-merge-paused PRs. Event-driven and blank/global scans abstain.
           MANUAL_RETRY: >-
             ${{ github.event_name == 'workflow_dispatch' && inputs.branch != '' }}
+          # GitHub computes a PR's mergeability lazily after its base moves,
+          # and verdicts can take several minutes to settle on a busy base
+          # (observed ~6 minutes on PR #190, where the old 80-second poll gave
+          # up and the conflict sat undetected until the scheduled sweep).
+          # Total time budget for verdicts, and the pause between re-queries.
+          MERGEABLE_POLL_SECONDS: "360"
+          MERGEABLE_POLL_INTERVAL: "15"
         run: |
           set -euo pipefail
 
@@ -261,6 +275,39 @@ jobs:
               *) return 1 ;;
             esac
             printf '%s' "$value" | base64 --decode
+          }
+
+          # Detection visibility: reviewers otherwise see only GitHub's
+          # conflict banner plus this workflow's always-skipped push-run check
+          # stubs, so a detector that stands aside must say so ON the PR.
+          # Upserted via hidden marker: repeat runs edit one status comment
+          # instead of stacking new ones, and a comment failure never blocks
+          # detection. Handed-off conflicts announce themselves through the
+          # resolve job's "Auto-resolve running" comment instead.
+          upsert_detect_comment() {
+            local number="$1" text="$2"
+            local marker='<!-- thingtime-merge-detect-status:v1 -->'
+            local body comment_id
+            body="$RUNNER_TEMP/detect-status-$number.md"
+            {
+              printf '%s\n\n' "$text"
+              printf '_Posted by the conflict detector at %s; this notice is edited in place on re-checks._\n\n%s\n' \
+                "$(date -u '+%H:%M UTC, %Y-%m-%d')" "$marker"
+            } > "$body"
+            comment_id="$(gh api --paginate "repos/$REPO/issues/$number/comments?per_page=100" --slurp \
+              | jq -r '
+                  add // []
+                  | [.[]
+                      | select(.user.login == "github-actions[bot]")
+                      | select(.body | contains("thingtime-merge-detect-status:v1"))
+                      | .id]
+                  | last // empty
+                ')"
+            if [ -n "$comment_id" ]; then
+              gh api --method PATCH "repos/$REPO/issues/comments/$comment_id" -F "body=@$body" >/dev/null
+            else
+              gh api "repos/$REPO/issues/$number/comments" -F "body=@$body" >/dev/null
+            fi
           }
 
           all_open_prs() {
@@ -317,12 +364,24 @@ jobs:
 
           # GitHub computes mergeability lazily after a base push; poll until
           # every PR has a verdict (querying is itself what triggers compute).
+          # Verdicts routinely take minutes to settle after a busy base push —
+          # the old fixed eight-attempt/80-second loop gave up too early
+          # (observed on PR #190) — so the wait is a time budget that exits
+          # the moment every scanned PR has a verdict.
           prs="$(query)"
-          for attempt in 1 2 3 4 5 6 7 8; do
+          poll_started="$SECONDS"
+          attempt=0
+          while :; do
             unknown="$(jq '[.[] | select(.mergeable == "UNKNOWN")] | length' <<<"$prs")"
             [ "$unknown" -eq 0 ] && break
-            echo "attempt $attempt: $unknown PR(s) still computing mergeability; retrying..."
-            sleep 10
+            elapsed="$(( SECONDS - poll_started ))"
+            if [ "$elapsed" -ge "$MERGEABLE_POLL_SECONDS" ]; then
+              echo "$unknown PR(s) still lack a mergeability verdict after ${elapsed}s; deferring them to the next event or scheduled sweep."
+              break
+            fi
+            attempt="$(( attempt + 1 ))"
+            echo "attempt $attempt (${elapsed}s elapsed): $unknown PR(s) still computing mergeability; retrying in ${MERGEABLE_POLL_INTERVAL}s..."
+            sleep "$MERGEABLE_POLL_INTERVAL"
             prs="$(query)"
           done
 
@@ -422,6 +481,15 @@ jobs:
 
           skipped="$(jq -r '[.[] | select(.isCrossRepository) | select(.mergeable == "CONFLICTING") | .number] | join(", ")' <<<"$prs")"
           [ -n "$skipped" ] && echo "::warning::Skipping conflicting fork PR(s) #$skipped — cannot push to fork branches."
+          while IFS= read -r encoded; do
+            [ -n "$encoded" ] || continue
+            fork_pr="$(base64 --decode <<<"$encoded")"
+            fork_number="$(jq -r '.number' <<<"$fork_pr")"
+            fork_base="$(jq -r '.baseRefName' <<<"$fork_pr")"
+            upsert_detect_comment "$fork_number" \
+              "🤖 **Conflict seen — cannot auto-resolve a fork PR.** This PR conflicts with \`$fork_base\`, and the resolver cannot push to branches in a fork. Please resolve the conflicts manually (merge \`$fork_base\` into your branch, or rebase onto it)." \
+              || echo "::warning::Could not post the detect-status comment on #$fork_number."
+          done < <(jq -r '.[] | select(.isCrossRepository) | select(.mergeable == "CONFLICTING") | @base64' <<<"$prs")
           rebase_active="$(jq -r '[.[] | select(.mergeable == "CONFLICTING") | select([.labels[].name] | index("ai-rebase-in-progress") != null) | .number] | join(", ")' <<<"$prs")"
           [ -n "$rebase_active" ] && echo "::notice::Skipping PR(s) #$rebase_active — the AI PR/stack rebase workflow is actively rewriting them."
           merge_paused="$(jq -r '[.[] | select(.mergeable == "CONFLICTING") | select([.labels[].name] | index("ai-merge-paused") != null) | .number] | join(", ")' <<<"$prs")"
@@ -445,6 +513,12 @@ jobs:
           [ -n "$stacked_owned" ] && echo "::notice::Skipping stacked PR(s) #$stacked_owned — the AI PR/stack rebase workflow owns stack history."
           still_unknown="$(jq -r '[.[] | select(.mergeable == "UNKNOWN") | .number] | join(", ")' <<<"$prs")"
           [ -n "$still_unknown" ] && echo "::warning::PR(s) #$still_unknown still UNKNOWN after polling; they will be re-checked by the next event or scheduled sweep."
+          while IFS= read -r unknown_number; do
+            [ -n "$unknown_number" ] || continue
+            upsert_detect_comment "$unknown_number" \
+              "🤖 **Mergeability still computing.** The base branch moved, and GitHub had not finished recomputing whether this PR conflicts after the detector waited ${MERGEABLE_POLL_SECONDS}s — so no resolution was started this round. The next push or the twice-hourly scheduled sweep (minutes :02/:32) re-checks automatically; if a conflict is found then, resolution starts and announces itself here." \
+              || echo "::warning::Could not post the detect-status comment on #$unknown_number."
+          done < <(jq -r '.[] | select(.mergeable == "UNKNOWN") | .number' <<<"$prs")
 
           # On a pull_request_target event, scan ONLY the triggering PR — the
           # other PRs sharing this base are not this event's business and are

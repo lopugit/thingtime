@@ -74,6 +74,16 @@ its PR/ref/label/stack/protection checks immediately before publication, and
 uses an exact head lease. If either branch moves while Claude is working, the
 resolved merge is discarded rather than overwriting the newer work.
 
+Detection is patient and audible: GitHub computes a PR's mergeability lazily
+after its base moves and verdicts can take minutes to settle, so the merge
+detector re-queries until every scanned PR has a verdict (time-budgeted via
+`MERGEABLE_POLL_SECONDS`, default six minutes) instead of sampling once at
+push time. When it must leave a conflicted-looking PR alone — a fork PR it
+cannot push to, or a verdict that never settled — it upserts one status
+comment on the PR saying exactly that, so a silent PR means "nothing needed
+doing", never "nobody looked". Conflicts that are handed off announce
+themselves through the resolve job's "Auto-resolve running" comment.
+
 **Rebase PRs and stacks (AI)** rewrites PR history, so its force push has
 stricter boundaries:
 
