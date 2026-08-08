@@ -62,6 +62,18 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Promotion PR rebase protection (`no-ai-rebase`)**: the promotion workflow
+  now creates the standing develop → main PR with — and re-applies on every
+  develop push — the `no-ai-rebase` label (env `PROMOTION_PR_LABELS`, creating
+  the repo label if missing; the AI workflows honored it but nothing had ever
+  created it). The AI rebase workflow skips labeled PRs, so develop — an
+  integration branch whose history IS its merge commits — is never flattened
+  again (the 2026-08-08 develop rebase destroyed merge-subject and SHA↔PR
+  attribution, the changelog's primary signals). The merge-based conflict
+  resolver explicitly keeps ownership of `no-ai-rebase` PRs and levels
+  develop with main via history-preserving merge commits, the repo's house
+  style. Label state is read via REST (search-backed listings lag) and stray
+  removals self-heal on the next develop push. — Claude (AI), 2026-08-08
 - **Promotion PR changelog**: the **Promote develop to main** workflow now
   maintains an at-a-glance changelog on the standing promotion PR. A new
   `.github/scripts/promotion-pr-changelog.mjs` resolves the first-parent spine
@@ -75,6 +87,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   promotion window. State is derived from the PR body itself; re-runs on the
   same develop SHA are byte-identical no-ops. Supports `DRY_RUN=1` and
   `--self-test`. — Claude (AI), 2026-08-08
+
+- **AI PR and stack rebase conflict resolution**: a separate **Rebase PRs and
   stacks (AI)** workflow evaluates every same-repository PR regardless of base
   branch. Standalone PRs that merge cleanly but cannot rebase and stack members
   needing a history update are rebase-owned, while standalone merge conflicts
