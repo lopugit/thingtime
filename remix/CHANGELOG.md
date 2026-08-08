@@ -51,6 +51,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   runtime compiler and unpkg access through a path-scoped compatibility policy
   that never applies to the app shell. See the
   [PR #99 implementation note](../PRs/99-claude-eval-csp-hardening--persisted-state-csp-register-body-cap.md).
+  This consolidates the useful work from closed PRs #94, #96, #98, #103, and
+  #106 plus stacked PR #102; open cross-tab PR #92 remains a separate feature.
   — Claude (AI) + Codex (AI), 2026-08-08
 
 - **PRs that make themselves conflicted now get rescanned**: a push to a PR's

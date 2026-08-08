@@ -319,12 +319,21 @@ is fixed, and cite the checklist you ran in the PR description.
 ## Persisted-state codec (`remix/app/Providers/thingtimePersistCodec.ts`)
 
 - [ ] `npm run test:persist` passes (tagged Dates, escaped ISO-lookalike user
-      strings, legacy bare-ISO migration, no function persistence/revival).
+      strings, exact legacy `Date.toISOString()` migration, malformed tag
+      preservation, circular data, invalid Dates, no function revival).
 - [ ] Live: type a post whose text is a full ISO timestamp (e.g.
       `2026-01-01T00:00:00.000Z`), reload twice — the text must stay a string
       (older builds turned it into a Date and rewrote it permanently).
 - [ ] Live: app hydrates under the CSP with no `unsafe-eval`; theme pre-paint
       and `[LC]`/env title prefix still work from `/tt-boot.js`.
+- [ ] `npm run verify:vercel-output` rejects app `script-src` policies that add
+      `unsafe-inline`/`unsafe-eval`, an inline executable shell script, or a
+      missing `/tt-boot.js`. On a built/Vercel preview, append an inline script
+      element that sets a harmless test variable — CSP blocks it and the
+      variable remains unset.
+- [ ] Commander search/navigation and registered magic-word actions still work
+      under the strict policy. A raw eval-backed value command must fail closed;
+      never restore global `unsafe-eval` to make arbitrary JavaScript execute.
 - [ ] A `/docs/design-bundles/<slug>/index.html` prototype still renders: its
       repo-controlled generated runtime gets the path-scoped `unsafe-eval` +
       unpkg compatibility policy, while `/`, `/authorize`, and ordinary app

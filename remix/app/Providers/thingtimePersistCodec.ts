@@ -23,6 +23,12 @@ import { parse as parseAux, stringify as stringifyAux } from 'flatted';
 // pre-tagging persists (which stored Dates as bare ISO strings).
 export const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/;
 
+// The old serializer stored real Dates via Date.toJSON()/toISOString(), whose
+// output is always UTC with exactly three fractional digits. Keep the legacy
+// migration narrower than the new-string escape rule above: an offset or
+// short-fraction timestamp in an old blob could only have been user text.
+export const LEGACY_DATE_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+
 // NOTE: must be a `function` (not an arrow) — the parser calls the reviver
 // with the holder object as `this`, and the inner string of a tag wrapper must
 // NOT hit the legacy bare-ISO fallback below (it runs for the inner keys
@@ -42,7 +48,10 @@ export const reviver = function (this: any, key: string, value: any): any {
 				return revived;
 			}
 		}
-		return typeof value?.iso === 'string' ? value.iso : undefined;
+		// A user object can legitimately contain a tag-looking shape. If it is
+		// not a valid codec value, preserve it rather than silently replacing or
+		// deleting user data.
+		return value;
 	}
 
 	// A user STRING that merely looks like a timestamp was escaped by the
@@ -51,7 +60,7 @@ export const reviver = function (this: any, key: string, value: any): any {
 		if (typeof value.s === 'string') {
 			return value.s;
 		}
-		return value.s instanceof Date ? value.s.toISOString() : undefined;
+		return value;
 	}
 
 	// The inner string of a tag wrapper is handled by the wrapper branches
@@ -62,7 +71,7 @@ export const reviver = function (this: any, key: string, value: any): any {
 	// Legacy fallback: pre-tagging persists stored real Dates as bare strict
 	// ISO strings. New persists never produce these (real Dates are tagged,
 	// ISO-lookalike user strings are escaped), so this only migrates old data.
-	if (typeof value === 'string' && !insideOwnTag && ISO_TIMESTAMP.test(value)) {
+	if (typeof value === 'string' && !insideOwnTag && LEGACY_DATE_TIMESTAMP.test(value)) {
 		const revived = new Date(value);
 		if (!isNaN(revived.getTime())) {
 			return revived;

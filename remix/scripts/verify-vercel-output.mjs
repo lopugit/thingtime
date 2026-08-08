@@ -6,10 +6,44 @@ import { authorizeCsp, designBundlesCsp, prodCsp } from './csp.mjs';
 
 const readJson = (path) => JSON.parse(readFileSync(path, 'utf8'));
 const indexHtml = readFileSync('.vercel/output/static/index.html', 'utf8');
+const bootScript = readFileSync('.vercel/output/static/tt-boot.js', 'utf8');
 const config = readJson('.vercel/output/config.json');
+
+const getDirectiveSources = (policy, name) => {
+  const directive = policy
+    .split(';')
+    .map((part) => part.trim())
+    .find((part) => part === name || part.startsWith(`${name} `));
+  if (!directive) {
+    throw new Error(`Application CSP is missing ${name}.`);
+  }
+  return directive.split(/\s+/).slice(1);
+};
 
 if (!indexHtml.includes('<div id="root"></div>')) {
   throw new Error('Vercel output is missing the Vite root shell.');
+}
+
+const appScriptSources = getDirectiveSources(prodCsp, 'script-src');
+for (const forbidden of ["'unsafe-inline'", "'unsafe-eval'"]) {
+  if (appScriptSources.includes(forbidden)) {
+    throw new Error(`Application script-src must not contain ${forbidden}.`);
+  }
+}
+
+const inlineExecutableScripts = [...indexHtml.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)].filter(
+  ([, attributes]) => {
+    if (/\bsrc\s*=/i.test(attributes)) return false;
+    const typeMatch = attributes.match(/\btype\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i);
+    const type = (typeMatch?.[1] || typeMatch?.[2] || typeMatch?.[3] || '').toLowerCase();
+    return !type || type === 'module' || type === 'text/javascript' || type === 'application/javascript';
+  }
+);
+if (inlineExecutableScripts.length > 0) {
+  throw new Error('Vercel shell contains an inline executable script that the strict CSP must block.');
+}
+if (!indexHtml.includes('src="/tt-boot.js"') || bootScript.trim().length === 0) {
+  throw new Error('Vercel output is missing the external pre-paint /tt-boot.js script.');
 }
 
 const hasFilesystemRoute = config.routes?.some((route) => route.handle === 'filesystem');
@@ -120,4 +154,4 @@ if (!authorizeCsp.includes("frame-ancestors 'none'")) {
   throw new Error("/authorize CSP lost frame-ancestors 'none'.");
 }
 
-console.log('[verify] Vercel output includes the Vite shell, filesystem route, SPA fallback, strict app CSP, scoped design-bundle CSP, and /authorize frame-deny.');
+console.log('[verify] Vercel output includes the external-boot Vite shell, filesystem route, SPA fallback, injection-resistant strict app CSP, scoped design-bundle CSP, and /authorize frame-deny.');

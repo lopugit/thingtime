@@ -43,13 +43,18 @@ test('a real Date revives as a Date and preserves its instant', () => {
 	assert.equal(out.createdAt.getTime(), now.getTime());
 });
 
-test('LEGACY bare ISO-8601 timestamp strings still revive to Dates; offsets accepted', () => {
+test('LEGACY bare Date.toISOString output revives, but broader timestamp text stays a string', () => {
 	// pre-tagging persists stored real Dates as bare ISO strings — the reviver
-	// keeps migrating them (new persists tag Dates and escape lookalike strings)
+	// keeps migrating that exact historical shape. Date.toJSON never emitted
+	// offsets or shortened fractions, so those old values can only be user text.
 	assert.ok(reviver('k', '2024-03-15T10:00:00.000Z') instanceof Date);
-	assert.ok(reviver('k', '2024-03-15T10:00:00+10:00') instanceof Date);
+	assert.equal(typeof reviver('k', '2024-03-15T10:00:00+10:00'), 'string');
+	assert.equal(typeof reviver('k', '2024-03-15T10:00:00.1Z'), 'string');
 	assert.equal(typeof reviver('k', '2024-03-15'), 'string');
 	assert.equal(typeof reviver('k', 'not a date'), 'string');
+
+	const out = roundtrip({ offset: '2024-03-15T10:00:00+10:00' });
+	assert.equal(out.offset, '2024-03-15T10:00:00+10:00');
 });
 
 test('a USER string that looks like a full ISO timestamp survives round-trips as a string', () => {
@@ -73,11 +78,28 @@ test('a Date and an identical-looking user string coexist and each keep their ty
 	assert.equal(out.fake, instant);
 });
 
-test('tagged {ttype:date} payloads revive; malformed tags degrade without throwing', () => {
+test('tagged {ttype:date} payloads revive; malformed tag-shaped user objects survive', () => {
 	assert.ok(reviver('k', { ttype: 'date', iso: '2024-03-15T10:00:00.000Z' }) instanceof Date);
-	assert.equal(reviver('k', { ttype: 'date', iso: 'garbage' }), 'garbage');
-	assert.equal(reviver('k', { ttype: 'date' }), undefined);
+	const malformedDate = { ttype: 'date', iso: 'garbage', label: 'keep me' };
+	const incompleteDate = { ttype: 'date', label: 'also keep me' };
+	const malformedString = { ttype: 'iso-string', s: 42, label: 'keep this too' };
+	assert.deepEqual(reviver('k', malformedDate), malformedDate);
+	assert.deepEqual(reviver('k', incompleteDate), incompleteDate);
+	assert.deepEqual(reviver('k', malformedString), malformedString);
 	assert.equal(reviver('k', { ttype: 'iso-string', s: '2024-03-15T10:00:00.000Z' }), '2024-03-15T10:00:00.000Z');
+	assert.deepEqual(roundtrip({ malformedDate, incompleteDate, malformedString }), {
+		malformedDate,
+		incompleteDate,
+		malformedString
+	});
+});
+
+test('circular references survive and invalid Dates degrade to null without throwing', () => {
+	const input: any = { invalid: new Date('not-a-date') };
+	input.self = input;
+	const out = roundtrip(input);
+	assert.equal(out.invalid, null);
+	assert.equal(out.self, out);
 });
 
 test('functions never persist and never revive (no eval on storage)', () => {
