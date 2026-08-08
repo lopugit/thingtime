@@ -4744,7 +4744,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		detail:
 			'A failed real migration may create a protected, non-billable migration-diagnostic Thing after its lease is released. ' +
 			'Pass its id to read a bounded snapshot of the error name, message, stack, standard codes, labels, and cause chain. Secret, ' +
-			'credential, connection-string, and private-key patterns are irreversibly redacted. New v2 reports may also advertise value-free reveal descriptors for explicitly contextual MongoDB ObjectIds; the raw values remain inside the protected envelope until the owning admin confirms their current password through /api/v1/things/reveal. Reads are pinned to Thingtime’s home database and require the same current ' +
+			'credential, connection-string, and private-key patterns are irreversibly redacted. New v2 reports may also advertise value-free reveal descriptors for MongoDB ObjectIds supplied through an explicitly authored server-side error context; arbitrary error prose cannot grant reveal access. The raw values remain inside the protected envelope until the owning admin confirms their current password through /api/v1/things/reveal. Reads are pinned to Thingtime’s home database and require the same current ' +
 			'admin account that ran the migration. Dry runs never create diagnostics; failed diagnostic persistence falls back to detail ' +
 			'in the private migration response instead.',
 		auth: {
@@ -4783,15 +4783,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 						expiresAt: '2026-09-07T00:00:00.000Z',
 						detail: '{\n  "name": "MongoServerError"\n}',
 						redactions: 1,
-							truncated: false,
-							revealables: [
-								{
-									reference: 'mongodb-object-id-1',
-									kind: 'mongodb-object-id',
-									label: 'MongoDB ObjectId #1',
-									placeholder: '[redacted MongoDB ObjectId #1]'
-								}
-							]
+						truncated: false,
+						revealables: [
+							{
+								reference: 'mongodb-object-id-1',
+								kind: 'mongodb-object-id',
+								label: 'MongoDB ObjectId #1',
+								placeholder: '[redacted MongoDB ObjectId #1]'
+							}
+						]
 					}
 				}
 			},
@@ -4807,7 +4807,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		detail:
 			'This is a closed-codec reveal boundary, not a generic secure-field reader. The caller supplies only a Thing id, an opaque reference advertised by that Thing’s dedicated reader, and the current account password. ' +
 			'Thingtime repeats live-session and password verification on every request, applies a non-configurable fail-closed attempt limit, and returns one value with private no-store headers. The first provider supports current-owner admin migration diagnostics and MongoDB ObjectIds only. ' +
-			'Passwords, authorization values, tokens, credentials, connection strings, arbitrary secure Binary fields, and ambiguous 24-hex strings are never retained for reveal.',
+			'Passwords, authorization values, tokens, credentials, connection strings, arbitrary secure Binary fields, and ambiguous 24-hex strings are never retained for reveal. The fixed five-request window counts every confirmation request, including successful reveals.',
 		auth: {
 			mode: 'session-or-bearer',
 			description:
@@ -4841,13 +4841,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 					reveal: { reference: 'mongodb-object-id-1', kind: 'mongodb-object-id', value: '507f1f77bcf86cd799439011' }
 				}
 			},
-			{ status: 401, description: 'No full session or password confirmation failed.', body: { ok: false, error: 'Password confirmation failed' } },
+			{ status: 401, description: 'No full live account session.', body: { ok: false, error: 'Unauthorized' } },
+			{ status: 401, description: 'Current-password confirmation failed.', body: { ok: false, error: 'Password confirmation failed' } },
 			{ status: 404, description: 'Missing, expired, inaccessible, or unknown reference.', body: { ok: false, error: 'Sensitive value not found' } },
-			{ status: 429, description: 'The fixed confirmation-attempt ceiling was reached.', body: { ok: false, error: 'Too many password confirmation attempts' } }
+			{ status: 429, description: 'The fixed confirmation-request ceiling was reached.', body: { ok: false, error: 'Too many reveal confirmation attempts' } },
+			{ status: 503, description: 'The rate limiter, password verifier, or protected reader is temporarily unavailable.', body: { ok: false, error: 'Sensitive reveal is temporarily unavailable' } }
 		],
 		notes: [
 			'Content-Type must be application/json. Browser requests with a cross-origin Origin header are rejected.',
-			'No confirmation cookie, token, or grace period is issued; each reveal request includes and verifies the password again.'
+			'No confirmation cookie, token, or grace period is issued; each reveal request includes and verifies the password again.',
+			'Every success and error response, including unsupported GET/HEAD and oversized-body errors, is private and no-store.'
 		]
 	}),
   endpoint({

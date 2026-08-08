@@ -77,31 +77,32 @@ System-kind rules (never bypass):
   reserved so ordinary Things cannot squat future tier revisions or assignment
   records. The deterministic `quota-*` namespace is reserved for protected
   service-quota records for the same reason. The
-	`migration-diagnostic-*` namespace is likewise reserved; those records are
-	written after a failed real migration releases its lease, expire after 30
-	days, and are readable only through the exact-owner current-admin endpoint.
-	A v2 diagnostic may advertise value-free references for a bounded set of
-	explicitly contextual MongoDB ObjectIds. Resolving one reference repeats
-	current-password verification through the closed `/api/v1/things/reveal`
-	codec; there is no generic `secure` field/path/blob decoder and no reusable
-	confirmation token.
+  `migration-diagnostic-*` namespace is likewise reserved; those records are
+  written after a failed real migration releases its lease, expire after 30
+  days, and are readable only through the exact-owner current-admin endpoint.
+  A v2 diagnostic may advertise value-free references for a bounded set of
+  MongoDB ObjectIds supplied through an explicitly authored server-side error
+  context. Error prose alone never grants reveal access. Resolving one reference
+  repeats current-password verification through the closed
+  `/api/v1/things/reveal` codec; there is no generic `secure` field/path/blob
+  decoder and no reusable confirmation token.
   The `schema` kind is NOT protected: anyone may publish a schema thing. Builtin
   schemas are reserved system-owned seeds with root `storageClass: "control"`;
   community/user schemas remain ordinary billable content.
 - Private state lives under root `secure` as a single **BinData blob** (the
-	search wildcard text index tokenizes string _fields_ only, so a binary blob
-	is entirely unsearchable — no field inside it can ever leak via `q=<value>`),
-	never in `crystal`; the one queryable flag (`admin`) is a root boolean. BinData
-	is an indexing/access boundary, not application-level encryption: dedicated
-	readers must still authenticate, authorize, bound, and project every value.
+  search wildcard text index tokenizes string _fields_ only, so a binary blob
+  is entirely unsearchable — no field inside it can ever leak via `q=<value>`),
+  never in `crystal`; the one queryable flag (`admin`) is a root boolean. BinData
+  is an indexing/access boundary, not application-level encryption: dedicated
+  readers must still authenticate, authorize, bound, and project every value.
   `uniqueKeys` elements are BinData for the same reason, PII keys additionally
   sha256-hashed. New writers use the shared builders/helpers in `auth/users.ts`
   so nothing hand-rolls the binary encoding.
-	Migration diagnostics use the same binary root boundary for their bounded,
-	redacted error detail; only safe run metadata and value-free reveal descriptors
-	leave it. Credentials, tokens, authorization values, connection strings,
-	private keys, URL query identifiers, and ambiguous 24-hex strings are always
-	irreversibly redacted rather than retained for reveal.
+  Migration diagnostics use the same binary root boundary for their bounded,
+  redacted error detail; only safe run metadata and value-free reveal descriptors
+  leave it. Credentials, tokens, authorization values, connection strings,
+  private keys, URL query identifiers, and ambiguous 24-hex strings are always
+  irreversibly redacted rather than retained for reveal.
 
 ### Appended/child data is relational — never an unbounded embedded array
 
