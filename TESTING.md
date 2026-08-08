@@ -220,6 +220,40 @@ is fixed, and cite the checklist you ran in the PR description.
       circle is only the no-avatar fallback (regression: UserAvatarCircle
       ignored avatarUrl entirely).
 
+## AI merge-conflict resolver (`.github/workflows/resolve-pr-conflicts.yml`)
+
+- [ ] Create standalone same-repository merge-conflicting PRs targeting
+      `main` and a non-default base. Confirm both are detected and updated,
+      while a clean PR, a fork PR, a protected head, and the default branch
+      are never resolver push targets.
+- [ ] Exercise a base-branch push, a head-branch push, PR opened/reopened, the
+      scheduled repository scan, a blank manual scan, and a named-base manual
+      scan. Push detection must find PRs both targeting and originating from
+      the pushed branch. A global scan spanning three conflicted bases must
+      dispatch exactly three trusted base-scoped resolution runs.
+- [ ] Create a normal two-PR stack and confirm its members are excluded before
+      either ownership label exists. Add `no-ai-rebase` and confirm that member
+      becomes merge-owned. Add a fresh `ai-rebase-in-progress` mutex and confirm
+      the merge resolver abstains. Confirm a pause label alone never determines
+      ownership: if topology/verdicts transition the PR to merge ownership, the
+      merge resolver verifies and clears stale `ai-rebase-paused` before work.
+- [ ] Force an unchanged eligible merge-resolution failure and confirm it adds
+      `ai-merge-paused`; scheduled, push, PR-target, and blank-manual scans must
+      abstain afterward. A named-base manual run must clear the hold and retry.
+      A failure after the head/base/topology/ownership changes must not leave a
+      stale pause label on the newly owned state. Verify the hidden pause marker
+      is accepted only from `github-actions[bot]`, requires the complete strict
+      schema, and round-trips the exact refs, SHAs, owner, and topology.
+- [ ] Feed a mocked global scan more than 1,000 open PRs across GraphQL pages.
+      Confirm every page is combined exactly once and conflicting PRs on every
+      base remain eligible for their unique base-scoped handoff.
+- [ ] Move the head, move the base, change stack topology or ownership labels,
+      close the PR, or protect the head while a run is resolving. Every case
+      must refuse publication. An exact-head lease must preserve concurrent
+      work; if `git push` reports a transport error after the exact commit
+      lands, the live-ref check must classify it as published rather than
+      retrying it.
+
 ## PR conflict resolver model waterfall (`remix/app/components/Admin/`)
 
 - [ ] Logged out, `GET /api/v1/settings/pr-conflict-auto-resolver-model-waterfall`
@@ -245,6 +279,75 @@ is fixed, and cite the checklist you ran in the PR description.
       Code tries the ordered native fallback chain. A completed run that still
       leaves conflict markers stops for manual review; it does not silently
       spend another model attempt.
+
+## AI PR/stack rebase resolver (`.github/workflows/rebase-pr-stacks.yml`)
+
+- [ ] Create standalone same-repo PRs against `main` and against a non-default
+      branch whose heads are `mergeable: true` but `rebaseable: false`.
+      Confirm **Rebase PRs and stacks (AI)** detects both while the merge-based
+      resolver correctly no-ops, and that replaying more than one conflicting
+      commit can advance through multiple bounded Claude/verify/continue
+      rounds. Then make a standalone PR genuinely merge-conflicting and
+      confirm only **Resolve PR conflicts (AI)** owns it.
+- [ ] Create a two-PR stack (child PR based on the root PR's head). After the
+      root is rebased, confirm the child dispatch receives the old and new
+      parent SHAs, replays with onto semantics, and completes root-to-leaf
+      without duplicating the parent's commits.
+- [ ] Exercise detection from a branch push, PR opened/reopened event, the
+      scheduled scan, and a manual PR-number dispatch. Automatic scans select
+      every same-repo PR regardless of base branch, route standalone merge
+      conflicts to the merge workflow, do not race a blocked child ahead of
+      its parent, and terminate after resolution instead of looping on the
+      workflow's own push. A blank manual dispatch must perform the same
+      repository-wide scan.
+- [ ] Return unknown merge/rebaseability for several PRs at once and confirm
+      polling proceeds round-robin, giving every candidate an API check in each
+      bounded round. Exercise a stack deeper than eight PRs and confirm it is
+      still ordered and cascaded root-to-leaf (the hard loop guard is 64).
+- [ ] Add `no-ai-rebase` before detection and confirm the PR is skipped. Force
+      a resolver failure, confirm `ai-rebase-paused` is added and automatic
+      scans leave the exact failed snapshot alone, then change a ref or topology
+      and confirm the stale hold is cleared and re-detected. Review an unchanged
+      run and confirm a deliberate manual retry is available. Transition a PR
+      from merge-owned/`ai-merge-paused` to rebase-owned and vice versa; the new
+      owner must clear only the opposing pause after proving ownership, while a
+      fresh `ai-rebase-in-progress` mutex always blocks publication. Queue a
+      retry, then add a fresh same-snapshot pause or change its resolver owner;
+      the queued run must not erase that newer hold. Publication must require
+      pauses to be absent, and post-push cleanup must preserve any pause created
+      for the newly published snapshot. While a parent is
+      paused, actively owned, protected,
+      or still has unknown rebaseability, confirm an automatically detected
+      conflicting child is held back; once that same parent is confirmed
+      rebaseable, the child may become the next root. Confirm stack members are
+      excluded from the merge-based resolver before ownership labels exist;
+      `no-ai-rebase` deliberately routes a merge-conflicting member back to it.
+- [ ] Leave an `ai-rebase-in-progress` label behind for more than 90 minutes.
+      Confirm a still-conflicting PR is recovered into a new exact dispatch,
+      while a now-clean PR has the orphaned lock removed without a rewrite. A
+      manual clean retry should also clear a stale `ai-rebase-paused` label.
+- [ ] While a run is resolving, push another commit to the PR head. The exact
+      force-with-lease must reject the stale rewrite; no partial rebase may
+      reach the remote branch and the concurrent commit must remain intact.
+- [ ] Present a fork PR, the default branch, and a protected branch. Each is
+      refused before Claude or a force push runs. A conflict file that attempts
+      prompt injection cannot make Claude edit outside the recomputed conflict
+      set or invoke Git/shell; trusted verification rejects unresolved markers,
+      unmerged index entries, and out-of-scope changes before any push.
+- [ ] Resolve a PR whose final diff touches `remix/` using only `GITHUB_TOKEN`.
+      Confirm the rewritten SHA receives an explicit **Web CI** workflow run;
+      a non-web diff should not spend a redundant CI dispatch.
+- [ ] Add a non-conflicted tracked symlink targeting `.git/config`, plus a
+      conflict prompt that asks Claude to read/write through it. Confirm the AI
+      workspace contains only regular copies of the exact conflict files and no
+      repository, symlink, trusted action, or Git metadata. Add an external or
+      `.git`-targeting tracked symlink and confirm graphify validation refuses it
+      before semantic extraction or publication.
+- [ ] Change the repository default branch while a resolver fixture is paused,
+      and simulate a push whose server-side ref update succeeds but whose client
+      exits nonzero. The adjacent pre-push default-branch check must prevent a
+      default ref rewrite, while post-push ref inspection must report the actual
+      published state rather than claiming the remote stayed unchanged.
 
 ## Data crystals & nesting depth (`remix/app/schemas/registry.ts`)
 
