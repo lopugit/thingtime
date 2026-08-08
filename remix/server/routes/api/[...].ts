@@ -9,11 +9,17 @@ type RouteModule = {
 };
 
 const routeModules: Record<string, () => Promise<RouteModule>> = {
+  'v1/admin/apps': () => import('../../../app/routes/api/v1/admin/apps/_apps'),
+  'v1/admin/apps/revoke': () => import('../../../app/routes/api/v1/admin/apps/revoke/_revoke'),
+  'v1/admin/links': () => import('../../../app/routes/api/v1/admin/links/_links'),
   'v1/admin/migrations': () => import('../../../app/routes/api/v1/admin/migrations/_migrations'),
   'v1/admin/migrations/run': () => import('../../../app/routes/api/v1/admin/migrations/run/_run'),
   'v1/admin/rate-limits': () => import('../../../app/routes/api/v1/admin/rate-limits/_rate-limits'),
   'v1/admin/set-admin': () => import('../../../app/routes/api/v1/admin/set-admin/_set-admin'),
+  'v1/admin/subscriptions': () => import('../../../app/routes/api/v1/admin/subscriptions/_subscriptions'),
+  'v1/admin/tiers': () => import('../../../app/routes/api/v1/admin/tiers/_tiers'),
   'v1/admin/users': () => import('../../../app/routes/api/v1/admin/users/_users'),
+  'v1/admin/users/overview': () => import('../../../app/routes/api/v1/admin/users/overview/_overview'),
   'v1/algorithms': () => import('../../../app/routes/api/v1/algorithms/_algorithms'),
   'v1/algorithms/active': () => import('../../../app/routes/api/v1/algorithms/active/_active'),
   'v1/algorithms/delete': () => import('../../../app/routes/api/v1/algorithms/delete/_delete'),
@@ -22,11 +28,18 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/app-data': () => import('../../../app/routes/api/v1/app-data/_app-data'),
   'v1/app-data/delete': () => import('../../../app/routes/api/v1/app-data/delete/_delete'),
   'v1/app-data/shared': () => import('../../../app/routes/api/v1/app-data/shared/_shared'),
+  'v1/app-data/usage': () => import('../../../app/routes/api/v1/app-data/usage/_usage'),
   'v1/apps': () => import('../../../app/routes/api/v1/apps/_apps'),
+  'v1/apps/data-summary': () => import('../../../app/routes/api/v1/apps/data-summary/_data-summary'),
+  'v1/apps/data/delete-all': () => import('../../../app/routes/api/v1/apps/data/delete-all/_delete-all'),
+  'v1/apps/data/shared': () => import('../../../app/routes/api/v1/apps/data/shared/_shared'),
   'v1/apps/delete': () => import('../../../app/routes/api/v1/apps/delete/_delete'),
   'v1/apps/public': () => import('../../../app/routes/api/v1/apps/public/_public'),
+  'v1/apps/storage': () => import('../../../app/routes/api/v1/apps/storage/_storage'),
   'v1/apps/update': () => import('../../../app/routes/api/v1/apps/update/_update'),
   'v1/auth/accounts': () => import('../../../app/routes/api/v1/auth/accounts/_accounts'),
+  'v1/auth/accounts/assume': () => import('../../../app/routes/api/v1/auth/accounts/assume/_assume'),
+  'v1/auth/accounts/owned': () => import('../../../app/routes/api/v1/auth/accounts/owned/_owned'),
   'v1/auth/accounts/remove': () => import('../../../app/routes/api/v1/auth/accounts/remove/_remove'),
   'v1/auth/accounts/switch': () => import('../../../app/routes/api/v1/auth/accounts/switch/_switch'),
   'v1/auth/jwks': () => import('../../../app/routes/api/v1/auth/jwks/_jwks'),
@@ -64,6 +77,10 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/oauth/userinfo': () => import('../../../app/routes/api/v1/oauth/userinfo/_userinfo'),
   'v1/schemas': () => import('../../../app/routes/api/v1/schemas/_schemas'),
   'v1/schemas/browse': () => import('../../../app/routes/api/v1/schemas/browse/_browse'),
+  'v1/settings/pr-conflict-auto-resolver-model-waterfall': () =>
+    import(
+      '../../../app/routes/api/v1/settings/pr-conflict-auto-resolver-model-waterfall/_pr-conflict-auto-resolver-model-waterfall'
+    ),
   'v1/teapot': () => import('../../../app/routes/api/v1/teapot/_teapot'),
   'v1/template': () => import('../../../app/routes/api/v1/template/_template'),
   'v1/themes': () => import('../../../app/routes/api/v1/themes/_themes'),
@@ -71,6 +88,10 @@ const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/themes/delete': () => import('../../../app/routes/api/v1/themes/delete/_delete'),
   'v1/themes/shared': () => import('../../../app/routes/api/v1/themes/shared/_shared'),
   'v1/things': () => import('../../../app/routes/api/v1/things/_things'),
+  'v1/tiers': () => import('../../../app/routes/api/v1/tiers/_tiers'),
+  'v1/tokens': () => import('../../../app/routes/api/v1/tokens/_tokens'),
+  'v1/tokens/revoke': () => import('../../../app/routes/api/v1/tokens/revoke/_revoke'),
+  'v1/tokens/self': () => import('../../../app/routes/api/v1/tokens/self/_self'),
   'v1/things/comment': () => import('../../../app/routes/api/v1/things/comment/_comment'),
   'v1/things/delete': () => import('../../../app/routes/api/v1/things/delete/_delete'),
   'v1/things/feed': () => import('../../../app/routes/api/v1/things/feed/_feed'),
@@ -117,12 +138,7 @@ const normalizeResponse = (value: unknown) => {
     return value;
   }
 
-  if (
-    value &&
-    typeof value === 'object' &&
-    'body' in value &&
-    ('status' in value || 'headers' in value)
-  ) {
+  if (value && typeof value === 'object' && 'body' in value && ('status' in value || 'headers' in value)) {
     const legacy = value as {
       status?: number;
       headers?: HeadersInit;
@@ -197,10 +213,7 @@ export default defineHandler(async (event) => {
     return new Response('Method not allowed', {
       status: 405,
       headers: {
-        Allow: [
-          route.loader ? 'GET' : undefined,
-          route.action ? 'POST' : undefined
-        ].filter(Boolean).join(', ')
+        Allow: [route.loader ? 'GET' : undefined, route.action ? 'POST' : undefined].filter(Boolean).join(', ')
       }
     });
   }

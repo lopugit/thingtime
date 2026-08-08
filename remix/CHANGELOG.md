@@ -17,7 +17,92 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Sensitive-path conflicts are reviewer annotations, not resolver stops**:
+  both AI auto-mergers now resolve eligible regular-text conflicts in package
+  manifests, lockfiles, workflows, repository policies, `.gitattributes`,
+  environment templates, and build configuration. Merge and rebase terminal
+  PR comments call out the exact configuration/security-adjacent paths for
+  focused review, with rebase paths accumulated across all replay rounds.
+  Uncertain unions use the newer base/destination side as a deterministic
+  fallback instead of deliberately leaving markers. Unsafe paths and file
+  types, binaries/size caps, executable Git drivers, credential and scope
+  checks, workflow-token capability, branch/ref/topology checks, and exact
+  leases remain blocking safety boundaries. — Codex (AI), 2026-08-08
+- **`withMongoTransaction` ReferenceError + Web CI transaction support**: the
+  AI-resolved merge that landed on main via PR #158 left `withMongoTransaction`
+  calling the removed `getClientCached()`, 500-ing every transactional write
+  (registration's subscription-ledger seed, service-account creation,
+  verification emails — Web CI's API suite red on main). The transaction client
+  now mirrors the collection getters: `withMongoTransaction` follows the ACTIVE
+  data plane (like `getCollection`) and the new `withHomeMongoTransaction` is
+  pinned home (like `getHomeCollection`) for the protected home-plane callers
+  (themes, algorithms, apps, registration). Web CI's `mongo:7` service is
+  replaced by a docker-run **single-node replica set** (standalone mongod
+  rejects transactions with IllegalOperation, and there is deliberately no
+  non-transactional fallback), so the transactional paths are now genuinely
+  exercised in CI — local runbook note: transactional flows need an
+  RS-enabled local mongod too (`mongod --replSet …` + one-time
+  `rs.initiate(...)` with an explicit `127.0.0.1` member host). The two strict
+  `[401]` auth-guard API tests now send truly anonymous requests (new
+  `anonymous` test flag honored by both the /tests page and the headless
+  runner) instead of inheriting the suite's shared session cookie. Full suite:
+  307/307 against a local single-node RS. Both auto-resolver workflows also
+  now post an upserted "resolution/rebase running, expected finish ~time"
+  PR comment before starting, so reviewers who catch the conflict window
+  aren't left guessing. — Claude (AI), 2026-08-08
+- **Mixed-plane transactions resolved — ledgers have one true plane**: user
+  subscription/billing objects (`subscriptions.ts`, `userStorage.ts`,
+  `tierCatalogStore.ts`) are now HOME-pinned like users/sessions, and account
+  storage meters HOME-hosted bytes only — active-plane writers (`things.ts`
+  create/update/delete, `appData.ts` set/delete) skip account accounting and
+  content stamps when a data-plane endpoint override is live (bytes on a
+  user's own MongoDB are not Thingtime storage; app ledgers still
+  self-account on the active plane). Registration/service-account creation
+  now succeed with an override active: identity + ledger land home, verified
+  live (register + posts with/without `x-tt-mongo-url` against two dbs on
+  one RS mongod — home ledger read exactly the home post's bytes; the
+  override post carried no stamps and moved no ledger). Local runbook:
+  boot now probes transaction support and prints the exact single-node-RS
+  conversion + `rs.initiate` commands when the connected mongod is
+  standalone (`warnIfTransactionsUnsupported`), `/api/v1/mongodb/status`
+  reports `replicaSet`, and the brew `mongod.conf` replica-set stanza is
+  staged locally (takes effect on the next sudo mongod restart +
+  one-time initiate). — Claude (AI), 2026-08-08
+
 ### Added
+
+- **AI PR and stack rebase conflict resolution**: a separate **Rebase PRs and
+  stacks (AI)** workflow evaluates every same-repository PR regardless of base
+  branch. Standalone PRs that merge cleanly but cannot rebase and stack members
+  needing a history update are rebase-owned, while standalone merge conflicts
+  remain disjointly owned by **Resolve PR conflicts (AI)**. It replays standalone heads onto
+  their bases and stacks root-to-leaf with bounded, file-only Claude conflict
+  rounds and trusted Git verification. Push/open/reopen triggers plus a
+  scheduled all-PR backstop feed the trusted dispatch path, while manual
+  dispatch can target one PR or scan the repository. The merge resolver now
+  has its own staggered all-PR backstop and exact live-ref snapshot, pre-push
+  revalidation, lease, publication classification, and `ai-merge-paused`
+  retry-loop guard. Global merge scans use true GraphQL pagination, while
+  rebase verdicts poll round-robin and stack traversal supports 64 levels.
+  Both pause labels are bound to strict bot-authored owner/ref/SHA/topology
+  snapshots; queued retries re-prove ownership before deleting a specific stale
+  hold, publication requires pauses to be absent, and post-push cleanup
+  preserves newer-snapshot holds. `ai-rebase-in-progress` is the only hard
+  mutex.
+  Claude sees only regular conflict-file copies in a
+  repo-less scratch directory; the real checkout, Git state, exact trusted
+  action, and credentials remain outside its workspace. Exact force-with-lease
+  prevents concurrent work from being overwritten; fork, default, and
+  protected branches are refused; `no-ai-rebase` opts out; and failures add
+  `ai-rebase-paused` instead of retrying forever. Parent barriers preserve
+  root-to-leaf ordering, orphaned run locks recover after 90 minutes, and web
+  rewrites explicitly dispatch Web CI for the new SHA. The existing merge
+  resolver now routes stack members deterministically, pins its runner actions,
+  and avoids checkout's spurious `/dev/null` Git-config annotation. See the
+  [PR #183 implementation notes](../PRs/183-codex-ai-rebase-stack-resolver--add-automatic-ai-rebase-support-for-pr-stacks.md).
+  — Codex (AI), 2026-08-08
 
 - **Stable Vercel domain for the `develop` branch**: the Thingtime project now
   assigns `dev.thingtime.com` to `develop` as a branch-specific Preview
@@ -25,6 +110,45 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   branch-scoped Preview secrets already used by develop deployments. The
   deployment runbook now records the required Cloudflare DNS-only CNAME and
   ownership-verification flow. — Codex (AI), 2026-08-07
+
+- **Typed queries across every admin workspace**: Users, Apps, Tiers, rate
+  limits, and the administrator roster now share an all-field free-text,
+  filter, and deterministic-sort interface. It handles nested/list fields,
+  created-day ranges, tiers and immutable versions, quotas/usage/counts,
+  lifecycle state, pricing/discounts/inclusion text, and booleans. User/app
+  APIs use private, no-store 200-row keyset pages, and the UI drains the full
+  directory before applying computed/nested filters instead of silently
+  filtering only the newest page. User/app rows now expose created time, while
+  hidden rate-limit edits remain intact. — Codex (AI),
+  2026-08-05
+
+- **Versioned subscription-tier admin + customer cards**: `/admin` now has a
+  Tiers workspace with separate Live, Draft / not live, and Archived sections.
+  Admins can create tiers and immutable revisions; edit names, taglines,
+  banners, four renewal prices, six annualized computed-or-custom savings,
+  Editor.js inclusions, metering, and quota defaults; then publish/archive with
+  confirmation while preserving every historical revision. The public
+  `/api/v1/tiers`, admin `/api/v1/admin/tiers`, subscription editor, and app
+  storage manager all use exact tier version ids. Each revision freezes its
+  pricing/discounts, and assignments freeze the tier name, version, metering,
+  and quota snapshot so later catalog changes cannot move existing customers.
+  Includes standalone-Mongo-safe
+  publish recovery, protected `subscription-*` ids, default-tier safeguards,
+  dynamic customer cards, schemas/indexes/docs/tests, and legacy v1 pinning. —
+  Codex (AI), 2026-08-05
+
+- **App-owner storage subscriptions + app-user sub-tiers**: `/apps/manage`
+  lets a registering owner or linked co-manager inspect measured whole-app
+  usage, switch the aggregate plan (Free 5 GiB, Plus 25 GiB, Pro 100 GiB,
+  metered PAYG), change the inherited per-user cap (50 MiB by default), and
+  assign/reset one or up to 200 selected app users to custom caps. App tier +
+  aggregate allowance/usage now live atomically on the app Thing; protected
+  relational `app-storage` Things hold user usage and optional overrides, with
+  guarded writes enforcing both ceilings and clamping every user cap to the
+  whole-app total. Includes owner/co-manager API, privacy-gated usernames,
+  responsive manager UI, schema/index/migration updates, API/embed docs, and a
+  30-check local-only live suite. This supersedes the earlier app→end-user-tier
+  fallback from the stacked admin-manager change. — Codex (AI), 2026-08-05
 
 - **CI conflict-resolver graphify refresh now does LLM semantic extraction**:
   after an auto-resolved merge, `resolve-pr-conflicts.yml` runs
@@ -37,6 +161,23 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   the old AST-only `graphify update` when no credential exists or extraction
   fails. Staged refresh outputs get the same best-effort secret scan as
   resolved files. — Claude (AI), 2026-08-03
+
+- **/admin dashboard + subscription tiers + ownership links** (stacked on the
+  PAT × app-namespace tree): admin-gated `/admin` page (Users / Apps / System
+  tabs) managing every user and app — subscription tiers (free/plus/pro/payg;
+  payg = metered, no hard caps) with per-field admin overrides (`null` =
+  unlimited), quota enforcement wired through the tiers (whole-app storage,
+  app registration, and PAT mint caps), platform-level app suspension
+  (`crystal.revokedAt` checked at
+  the `resolveAppToken` choke point + live-session sweep), and many-to-many
+  ownership links (`account-link` things): owned accounts appear in the
+  switcher's "Owned accounts" and are assumable without credentials
+  (`POST /api/v1/auth/accounts/assume`), app links grant co-management. New
+  protected kinds `subscription` + `account-link`; 7 new documented endpoints;
+  guard smoke tests; `test:subscriptions` unit suite; live suite
+  `scripts/verify-admin-subscriptions.mjs` (38 checks, needs
+  `TT_VERIFY_ADMIN_USER`/`TT_VERIFY_ADMIN_PASS` of an env-admin). See the
+  detailed PR note in `PRs/`. — Claude (AI), 2026-08-02
 
 ### Fixed
 
@@ -140,6 +281,42 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   unrequested fallback search. — Claude (AI), 2026-07-16
 
 ### Changed
+
+- **One exact logical-byte accounting model across Thingtime**: account usage
+  now comes only from the protected subscription ledger and is enforced on
+  every supported customer-content writer in the same Mongo transaction as
+  the content. App data moves the account, whole-app, and per-app-user scope
+  counters from one canonical UTF-8 JSON measurement without double-counting
+  the account total. Legacy user usage values are ignored and removed during
+  the idempotent storage migration; explicit legacy allowances become real
+  overrides. APIs and UI now expose a canonical `storage` projection with
+  `ready`, `reconciling`, or `unavailable` status, preserve flat fields only as
+  derived compatibility aliases, show exact byte counts, and never present an
+  unavailable ledger as zero. Protected envelopes, transactional
+  reconciliation, full-source compare-and-swap migration, global lease
+  fencing, app lifecycle guards, and focused race/malformed-ledger tests close
+  the previously independent and bypassable counter paths. See PR #170's
+  detailed note in `PRs/`. — Codex (AI), 2026-08-07
+
+- **PR conflict-resolution models are now an admin-managed waterfall**:
+  the resolver hard-defaults to Claude Code's `default` model, then reads the
+  public `Thingtime.PRConflictAutoResolverModelWaterfall` setting and applies
+  its strictly allowlisted order through Claude Code's native model fallback
+  chain at max effort. Admins can add, remove, and drag Fable 5, Opus 5, and
+  the required default fallback in Settings; anonymous callers can read the
+  public projection, while every write is re-authorized server-side. Invalid,
+  empty, or unavailable remote config fails safely back to `default`.
+  — Codex (AI), 2026-08-07
+
+- **App-data now has real allowances at both scopes**: every registered app
+  stores a server-owned 5 GiB aggregate allowance/usage counter plus a 50 MiB
+  per-app-user allowance. Namespace writes reserve both guarded ledgers,
+  deletes refund both, `/api/v1/app-data/usage` reports used/allowance/remaining
+  for each, and `/api/v1/apps` exposes the developer's aggregate status without
+  allowing `/apps/update` to raise it. The idempotent
+  `backfill-app-storage-allowances` migration write-fences legacy apps,
+  reconciles user ledgers, and initializes aggregate usage last. — Codex (AI),
+  2026-08-02
 
 - **Repository AI guidance now has one canonical source**: unique rules from
   the former root `AGENTS.md`, `CLAUDE.md`, and `CODEX.md` now live in

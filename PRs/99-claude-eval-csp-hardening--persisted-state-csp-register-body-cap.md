@@ -35,6 +35,22 @@ Open PR #92 is intentionally not folded in or closed: cross-tab synchronization
 is a separate feature. It should rebase after #99 and use the extracted safe
 codec rather than restoring Provider-local serialization.
 
+## Conflict-resolver cleanup
+
+The merge and rebase auto-resolvers no longer pause merely because a regular
+text conflict is in a package manifest, lockfile, workflow, repository policy,
+environment template, `.gitattributes`, or another configuration/security-
+adjacent path. Those conflicts now follow the same verified file-only AI path
+as other text conflicts, with a deterministic base/destination fallback when a
+semantic union is uncertain. Each terminal PR comment lists the sensitive path
+set for focused reviewer attention, accumulated across every rebase round.
+
+This does not relax the real publication boundaries: unsafe paths, symlinks,
+submodules, executable modes, binary/oversized inputs, executable Git drivers,
+unresolved markers, detected workflow credentials, out-of-scope edits, forks,
+default/protected branches, stale refs/topology, missing workflow-capable PATs,
+and failed exact leases still stop publication.
+
 ## Design preview isolation
 
 Repository-controlled design bundles still need their runtime compiler and
@@ -63,5 +79,5 @@ isolated execution design.
 - desktop and mobile browser checks for the application shell and sandboxed
   design preview, including console/CSP inspection.
 
-The repository typecheck ratchet remains at the base-existing 149 errors versus
-its 143-error baseline; this PR does not widen or rewrite that baseline.
+The repository typecheck ratchet passes at 138 errors versus its 143-error
+baseline; this PR does not widen or rewrite that baseline.

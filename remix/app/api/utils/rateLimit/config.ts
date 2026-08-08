@@ -59,8 +59,15 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // anonymous sandbox-token mint (/api/v1/oauth/sandbox) — each call writes a
   // short-lived session doc and unlocks a (small, TTL-reaped) storage
   // namespace, so the per-IP budget is deliberately tight: worst-case junk
-  // per IP ≈ limit/min × 60 × SANDBOX_MAX_KEYS × 32KB, all gone within 1h
+  // per IP ≈ limit/min × 60 × SANDBOX_STORAGE_BYTES, all gone within 1h
   'oauth.sandbox': { limit: 10, windowMs: 60_000, enabled: true },
+  // Global sandbox storage brake (TODO/claude-todo/15 §1): the app-wide byte
+  // budget every sandbox write charges against, layered on the per-namespace
+  // budget. UNIT EXCEPTION: `limit` here is MEGABYTES per window (a byte
+  // budget, consumed by rateLimit/byteBudget.ts), not a request count — the
+  // default is 512MB/hour across ALL sandboxes. Enforced FAIL-CLOSED: sandbox
+  // writes are anonymous standing storage, so an unavailable ledger refuses.
+  'sandbox.storage.global': { limit: 512, windowMs: 3_600_000, enabled: true },
   // app-token READ endpoints (oauth/userinfo, oauth/shared, app-data GET) —
   // token-gated, keyed per (user, app); a backstop against a compromised or
   // abusive integration hammering the resolution + read path
@@ -87,6 +94,14 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // keeps retries from re-running the index battery too. Keyed by IP; roomy
   // enough for a human fumbling taken usernames, tight for account farming.
   'auth.register': { limit: 10, windowMs: 15 * 60_000, enabled: true },
+  // personal-access-token minting (POST /api/v1/tokens) — session-authed, but
+  // each mint writes a session doc, so bound accumulation beyond the per-user
+  // token cap
+  'tokens.mint': { limit: 30, windowMs: 3_600_000, enabled: true },
+  // PAT listing aggregates the user's pat sessions — bounded like oauth.grants
+  'tokens.read': { limit: 60, windowMs: 60_000, enabled: true },
+  // PAT revocation — cheap owner-bound update, still bounded
+  'tokens.revoke': { limit: 60, windowMs: 60_000, enabled: true },
   // /crypto password hasher: anonymous and pure (no DB), but bcrypt burns
   // ~100ms of CPU per call by design, so the budget is tight per IP — the
   // compute is the abuse surface, not the hash it returns

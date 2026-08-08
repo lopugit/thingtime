@@ -81,7 +81,7 @@ const SHARED_THINGS_CODE = `Thingtime.shared(session.token).then(function (thing
 });`;
 
 const APP_STORAGE_CODE = `var data = Thingtime.data(session.token);
-data.set('preferences', { theme: 'rainbow' });   // any JSON ≤ 32KB, ≤ 200 keys/user
+data.set('preferences', { theme: 'rainbow' });   // any JSON value ≤ 32 KiB
 data.get('preferences').then(function (value) { … });
 data.list();                                     // [{ key, value, visibility, updatedAt }, …]
 data.remove('preferences');
@@ -526,7 +526,13 @@ export default function DocsEmbed() {
         </CodeWindow>
         <Text>
           <strong>App storage:</strong> keep your per-user data (settings, saves, progress…) in the
-          user’s Thingtime account — your app can only ever see its own keys.
+          user’s Thingtime account — your app can only ever see its own namespace. Free starts at 5 GiB
+          across all users and 50 MiB per app user. Owners and co-managers can upgrade the aggregate
+          plan, change the default user cap, and assign individual user sub-tiers in{' '}
+          <ChakraLink href="/apps/manage" color="var(--tt-docs-accent-ink, #0f5132)">
+            the app manager
+          </ChakraLink>
+          ; read both live ledgers via <code>/api/v1/app-data/usage</code>.
         </Text>
         <CodeWindow language="javascript" title="app-storage.js">
           {APP_STORAGE_CODE}
