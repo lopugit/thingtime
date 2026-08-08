@@ -1435,9 +1435,9 @@
     "semantic_hash": "829580533674af55b849c25c5a518ae8"
   },
   "remix/package.json": {
-    "mtime": 1786201346.771469,
-    "ast_hash": "5f1f0f92012b1168c949e60e6957483c",
-    "semantic_hash": "5f1f0f92012b1168c949e60e6957483c"
+    "mtime": 1786202103.133738,
+    "ast_hash": "8d88699d340ebabbdf09c6fe3aa5aa76",
+    "semantic_hash": ""
   },
   "remix/public/manifest.json": {
     "mtime": 1786153589.9694173,
@@ -1527,7 +1527,7 @@
   "FUNDAMENTALS.md": {
     "mtime": 1786201370.8044424,
     "ast_hash": "cc2affb220ad7278139b9dbe2d9beca6",
-    "semantic_hash": ""
+    "semantic_hash": "cc2affb220ad7278139b9dbe2d9beca6"
   },
   "README.md": {
     "mtime": 1786153589.2599027,
@@ -1757,7 +1757,7 @@
   "remix/CHANGELOG.md": {
     "mtime": 1786201370.8048007,
     "ast_hash": "25cdcc6ed68e8668dc67484f47432ddb",
-    "semantic_hash": ""
+    "semantic_hash": "25cdcc6ed68e8668dc67484f47432ddb"
   },
   "remix/README.md": {
     "mtime": 1786153589.6557567,
@@ -4162,7 +4162,7 @@
   "TESTING.md": {
     "mtime": 1786201370.8051322,
     "ast_hash": "2042453075b9bb81f52e3e808877b258",
-    "semantic_hash": ""
+    "semantic_hash": "2042453075b9bb81f52e3e808877b258"
   },
   "claude-todo/12-everything-is-a-thing-collections.md": {
     "mtime": 1786153589.267535,
@@ -4935,19 +4935,19 @@
     "semantic_hash": "5d5d3a010c4a612a47f075caa3d53831"
   },
   "remix/app/api/utils/errors/adminDiagnostic.test.ts": {
-    "mtime": 1786201331.1938052,
-    "ast_hash": "3d6c80ce1a6f6eac7065b31190ede39f",
-    "semantic_hash": "3d6c80ce1a6f6eac7065b31190ede39f"
+    "mtime": 1786202027.1861928,
+    "ast_hash": "1b00be4a71a3cb0e0b73c30be4806398",
+    "semantic_hash": ""
   },
   "remix/app/api/utils/errors/adminDiagnostic.ts": {
-    "mtime": 1786201306.7555008,
-    "ast_hash": "4d77d82a5e9eb5aed9dd6af573150fb2",
-    "semantic_hash": "4d77d82a5e9eb5aed9dd6af573150fb2"
+    "mtime": 1786202006.771407,
+    "ast_hash": "a460d31cc4b0d77f7c356b1533596b6a",
+    "semantic_hash": ""
   },
   "remix/app/api/utils/migrations/migrationDiagnostics.test.ts": {
-    "mtime": 1786201086.0217268,
-    "ast_hash": "07d4e4ade6b5e57d3abc764bdb36dcbe",
-    "semantic_hash": "07d4e4ade6b5e57d3abc764bdb36dcbe"
+    "mtime": 1786202035.6288855,
+    "ast_hash": "a47349a7252af3a1d65d7f8369225cf1",
+    "semantic_hash": ""
   },
   "remix/app/api/utils/migrations/migrationDiagnostics.ts": {
     "mtime": 1786201074.7883217,
@@ -4975,9 +4975,9 @@
     "semantic_hash": "b844d033e91729fdb3dc24cd2c9b8e0f"
   },
   "remix/app/components/Things/SensitiveThingReveal.tsx": {
-    "mtime": 1786201195.474492,
-    "ast_hash": "74789b897cabf73a5952338c2053de62",
-    "semantic_hash": "74789b897cabf73a5952338c2053de62"
+    "mtime": 1786202053.7825055,
+    "ast_hash": "4c55ee798c480aeebb4072b77316ac96",
+    "semantic_hash": ""
   },
   "remix/app/api/utils/auth/passwordConfirmation.test.ts": {
     "mtime": 1786201100.8288422,
@@ -5008,5 +5008,20 @@
     "mtime": 1786201342.5112867,
     "ast_hash": "2feb7ebe87e0463d90a9c77e026cc37e",
     "semantic_hash": "2feb7ebe87e0463d90a9c77e026cc37e"
+  },
+  "PRs/197-codex-fix-builtin-schema-storage-class--fix-builtin-schema-storage-accounting-and-add-secure-diagnostic-reveals.md": {
+    "mtime": 1786201801.7485087,
+    "ast_hash": "4dbf74b7a811c8a69b5f34b559aa4eea",
+    "semantic_hash": ""
+  },
+  "remix/app/components/Things/sensitiveRevealError.test.ts": {
+    "mtime": 1786202053.7822268,
+    "ast_hash": "33bd6dba4ea121d81ec5d6d99e53cc37",
+    "semantic_hash": ""
+  },
+  "remix/app/components/Things/sensitiveRevealError.ts": {
+    "mtime": 1786202053.7820828,
+    "ast_hash": "dfc3b331e0e2172b6387f43e2be42173",
+    "semantic_hash": ""
   }
 }
