@@ -1,5 +1,5 @@
 // @ts-ignore Node 24's direct TypeScript test runner requires the extension.
-import { COLLECTION_SCHEMA_VERSIONS, USER_STORAGE_ACCOUNTING_VERSION } from '../../../schemas/registry.ts';
+import { COLLECTION_SCHEMA_VERSIONS, MIGRATION_DIAGNOSTIC_THINGTIME, USER_STORAGE_ACCOUNTING_VERSION } from '../../../schemas/registry.ts';
 
 // One versioned logical byte definition for every billable Thing. We measure
 // the exact UTF-8 JSON stored in the customer-controlled payload fields. This
@@ -70,7 +70,8 @@ export const CONTROL_PLANE_STORAGE_THINGTIMES = [
   'subscription',
   'subscription-tier',
   'user',
-  'waitlist'
+	'waitlist',
+	MIGRATION_DIAGNOSTIC_THINGTIME
 ] as const;
 const CONTROL_PLANE_THINGTIMES = new Set<string>(CONTROL_PLANE_STORAGE_THINGTIMES);
 
@@ -82,9 +83,7 @@ export type StorageSandboxState = 'real' | 'sandbox' | 'invalid';
 // both the standing ledger and TTL cleanup.
 export const storageSandboxState = (doc: { sandboxExpiresAt?: unknown }): StorageSandboxState => {
   if (!Object.prototype.hasOwnProperty.call(doc, 'sandboxExpiresAt')) return 'real';
-  return doc.sandboxExpiresAt instanceof Date && Number.isFinite(doc.sandboxExpiresAt.getTime())
-    ? 'sandbox'
-    : 'invalid';
+	return doc.sandboxExpiresAt instanceof Date && Number.isFinite(doc.sandboxExpiresAt.getTime()) ? 'sandbox' : 'invalid';
 };
 
 // Shared Mongo expressions for the same three-way rule. Candidate scans retain
@@ -105,10 +104,7 @@ export const billableStorageCandidateExpression = {
       $eq: [
         {
           $size: {
-            $setIntersection: [
-              { $cond: [{ $isArray: '$thingtime' }, '$thingtime', []] },
-              [...CONTROL_PLANE_STORAGE_THINGTIMES]
-            ]
+						$setIntersection: [{ $cond: [{ $isArray: '$thingtime' }, '$thingtime', []] }, [...CONTROL_PLANE_STORAGE_THINGTIMES]]
           }
         },
         0
@@ -159,20 +155,12 @@ export const normalizedStorageUsage = (input: {
   const storedUsedBytes = validUsedBytes ? Number(input.usedBytes) : null;
   const validAllowance =
     input.allowanceValid !== false &&
-    (input.allowanceBytes === null ||
-      (Number.isSafeInteger(input.allowanceBytes) && Number(input.allowanceBytes) >= 0));
+		(input.allowanceBytes === null || (Number.isSafeInteger(input.allowanceBytes) && Number(input.allowanceBytes) >= 0));
   const expectedAccountingVersion = input.expectedAccountingVersion ?? USER_STORAGE_ACCOUNTING_VERSION;
-  const structurallyCurrent =
-    validUsedBytes &&
-    validAllowance &&
-    input.accountingVersion === expectedAccountingVersion;
-  const ready =
-    structurallyCurrent &&
-    input.ledgerStatus === USER_STORAGE_STATUS.ready;
+	const structurallyCurrent = validUsedBytes && validAllowance && input.accountingVersion === expectedAccountingVersion;
+	const ready = structurallyCurrent && input.ledgerStatus === USER_STORAGE_STATUS.ready;
   const reconciling =
-    structurallyCurrent &&
-    (input.ledgerStatus === USER_STORAGE_STATUS.initializing ||
-      input.ledgerStatus === USER_STORAGE_STATUS.needsReconcile);
+		structurallyCurrent && (input.ledgerStatus === USER_STORAGE_STATUS.initializing || input.ledgerStatus === USER_STORAGE_STATUS.needsReconcile);
   const status = ready ? 'ready' : reconciling ? 'reconciling' : 'unavailable';
   const usedBytes = status === 'unavailable' ? null : storedUsedBytes!;
   return {

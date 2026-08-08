@@ -274,8 +274,7 @@ export const apiTests: ApiTestDefinition[] = [
   {
     id: 'auth-password-reset-confirm-invalid',
     name: 'Password reset confirm rejects bad tokens',
-    description:
-      'Unknown/expired reset tokens are rejected with a 400 error shape (or 429 when the per-IP window is exhausted).',
+		description: 'Unknown/expired reset tokens are rejected with a 400 error shape (or 429 when the per-IP window is exhausted).',
     group: 'auth',
     method: 'POST',
     path: '/api/v1/auth/password-reset/confirm',
@@ -330,8 +329,7 @@ export const apiTests: ApiTestDefinition[] = [
   {
     id: 'auth-resend-verification-empty',
     name: 'Resend verification empty body',
-    description:
-      'The resend route returns ok for empty input so account existence cannot be probed (or 429 when the per-IP window is exhausted).',
+		description: 'The resend route returns ok for empty input so account existence cannot be probed (or 429 when the per-IP window is exhausted).',
     group: 'auth',
     method: 'POST',
     path: '/api/v1/auth/resend-verification',
@@ -1340,6 +1338,20 @@ export const apiTests: ApiTestDefinition[] = [
       'Migration status either returned the census (admin) or was rejected (non-admin).'
     )
   },
+	{
+		id: 'admin-migrations-diagnostic-guarded',
+		name: 'Migration diagnostics are admin-only',
+		description: 'Anonymous/non-admin callers are rejected; inaccessible ids are non-enumerating 404s for admins.',
+		group: 'admin',
+		method: 'GET',
+		path: '/api/v1/admin/migrations/diagnostic?id=migration-diagnostic-00000000-0000-4000-8000-000000000000',
+		anonymous: true,
+		expect: expectJson(
+			[401],
+			(body) => body?.ok === false && body?.error === 'Unauthorized',
+			'The registered diagnostic route rejected an anonymous caller with its admin guard.'
+		)
+	},
   {
     id: 'admin-migrations-run-guarded',
     name: 'Migration run is admin-only',
