@@ -434,12 +434,30 @@ is fixed, and cite the checklist you ran in the PR description.
       returned document must still pass the complete protected-envelope check.
       A malformed Thing occupying that id remains untouched and returns the
       authored storage-invariant error.
-- [ ] Force a migration runner exception once: the API returns canonical JSON
-      with a safe exception class/code (never a raw Mongo message, query,
-      document id, host, or credential), and Lopu renders that detail beneath
-      the migration id — never a title-only/decoration-only toast. A failed real
+- [ ] Force a migration runner exception once: the public error field remains
+      a safe exception class/code (never a raw Mongo message, query, document
+      id, host, or credential), and Lopu renders contextual text beneath the
+      migration id — never a title-only/decoration-only toast. A failed real
       run refreshes pending counts because an idempotent subset may have landed;
       a failed dry run does not claim that a write outcome is ambiguous.
+- [ ] On a failed real migration, the private response carries a validated
+      `migration-diagnostic-*` id and Lopu shows “View full migration
+      diagnostic”. The link opens `/thing/:id` at the top of the page, reloads
+      successfully, shows the bounded redacted stack/detail as plain text, and
+      identifies its capture/expiry time. A
+      different admin, a signed-in non-admin, and an anonymous caller cannot
+      read it; missing, expired, and inaccessible ids share the same 404 shape.
+- [ ] On a failed migration dry run, no diagnostic Thing is written and the
+      complete bounded redacted detail appears in a long-lived, scrollable
+      Lopu toast. Force diagnostic persistence to fail on a real run and verify
+      the same inline fallback appears without replacing the original migration
+      status, summary, or mutation outcome.
+- [ ] Confirm migration diagnostics use `storageClass: "control"`, owner-only
+      ACL, an opaque binary `secure` detail, a root `expiresAt`, the home data
+      plane, a 30-day home-only TTL index, and best-effort newest-25 per-admin
+      retention.
+      Generic Thing get/list/search/create/update/delete must neither expose nor
+      forge them; custom Mongo endpoints must never receive the diagnostic TTL.
 - [ ] Force each typed migration operator failure once: the response uses the
       closed lease/concurrency/prerequisite/repair/invariant message catalogue,
       includes only registered migration ids and aggregate counts, and keeps

@@ -3,35 +3,43 @@ import test from 'node:test';
 
 import { PublicError } from '../errors/safeError';
 import { StorageMutationError } from '../storage/storageCore';
-import { MigrationOperatorError, migrationFailureResult } from './migrationFailure';
+import { MigrationOperatorError, captureMigrationFailureDiagnostic, migrationFailureResult } from './migrationFailure';
 
 test('migration failures preserve explicitly authored operator guidance', () => {
-  assert.deepEqual(
-    migrationFailureResult(
-      'backfill-app-storage-allowances',
-      new StorageMutationError(503, 'accounting_unavailable', 'Storage accounting is being initialized — try again shortly')
-    ),
-    {
-      ok: false,
-      status: 503,
-      error: 'Storage accounting is being initialized — try again shortly',
-      outcome: 'unknown'
-    }
-  );
+  const originalConsoleError = console.error;
+  console.error = () => {};
+  try {
+    assert.deepEqual(
+      migrationFailureResult(
+        'backfill-app-storage-allowances',
+        new StorageMutationError(503, 'accounting_unavailable', 'Storage accounting is being initialized — try again shortly')
+      ),
+      {
+        ok: false,
+        status: 503,
+        error:
+          'Migration backfill-app-storage-allowances stopped before completion: Storage accounting is unavailable or still being initialized. Refresh status before retrying.',
+        outcome: 'unknown'
+      }
+    );
 
-  assert.deepEqual(migrationFailureResult('backfill-app-namespace-fields', new PublicError('Repair the legacy app record first')), {
-    ok: false,
-    status: 500,
-    error:
-      'Migration backfill-app-namespace-fields stopped before completion: Repair the legacy app record first. Refresh migration status before retrying.',
-    outcome: 'unknown'
-  });
+    assert.deepEqual(migrationFailureResult('backfill-app-namespace-fields', new PublicError('Repair the legacy app record first')), {
+      ok: false,
+      status: 500,
+      error:
+        'Migration backfill-app-namespace-fields stopped before completion: Repair the legacy app record first. Refresh migration status before retrying.',
+      outcome: 'unknown'
+    });
+  } finally {
+    console.error = originalConsoleError;
+  }
 });
 
 test('migration failures expose only safe exception class and code', () => {
   const error = Object.assign(new Error('mongodb://user:secret@example.invalid/thingtime'), {
     name: 'MongoServerError',
-    code: 224
+		code: 224,
+		password: 'private-password'
   });
   const originalConsoleError = console.error;
   console.error = () => {};
@@ -40,6 +48,53 @@ test('migration failures expose only safe exception class and code', () => {
     assert.equal(result.status, 500);
     assert.match(result.error, /MongoServerError \(224\)/);
     assert.doesNotMatch(result.error, /secret|example\.invalid/);
+		const diagnostic = captureMigrationFailureDiagnostic(result);
+		assert.ok(diagnostic);
+		assert.match(diagnostic.detail, /MongoServerError/);
+		assert.doesNotMatch(diagnostic.detail, /user:secret|private-password|example\.invalid/);
+		assert.equal(Object.keys(result).includes('diagnosticSource'), false);
+		assert.doesNotMatch(JSON.stringify(result), /diagnosticSource|private-password/);
+	} finally {
+		console.error = originalConsoleError;
+	}
+});
+
+test('unsafe exception names and codes cannot become public migration copy', () => {
+	const error = Object.assign(new Error('private message'), {
+		name: 'Mongo error\nprivate-host',
+		code: '224 private-code'
+	});
+	const originalConsoleError = console.error;
+	console.error = () => {};
+	try {
+		const result = migrationFailureResult('backfill-user-storage-accounting', error);
+		assert.match(result.error, /Unexpected migration error/);
+		assert.doesNotMatch(result.error, /private-host|private-code|private message/);
+	} finally {
+		console.error = originalConsoleError;
+	}
+});
+
+test('migration failure diagnostics are captured lazily from a closed field set', () => {
+	let stackReads = 0;
+	const error = new Error('failure detail');
+	Object.defineProperty(error, 'stack', {
+		get() {
+			stackReads += 1;
+			return 'private stack';
+		}
+	});
+	Object.assign(error, { arbitraryDocument: { email: 'private@example.invalid' } });
+
+	const originalConsoleError = console.error;
+	console.error = () => {};
+	try {
+		const result = migrationFailureResult('backfill-user-storage-accounting', error);
+		assert.equal(stackReads, 0, 'failure normalization must not capture diagnostics while a migration lease may be held');
+		const diagnostic = captureMigrationFailureDiagnostic(result);
+		assert.equal(stackReads, 0, 'diagnostic capture must not invoke accessors');
+		assert.ok(diagnostic);
+		assert.doesNotMatch(diagnostic.detail, /arbitraryDocument|private@example\.invalid|private stack/);
   } finally {
     console.error = originalConsoleError;
   }

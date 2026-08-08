@@ -34,13 +34,7 @@ const CONTAINER_STYLE = {
 const drain = keyframes`from { stroke-dashoffset: 0 } to { stroke-dashoffset: 31.42 }`;
 
 const CountdownRing = ({ ms }: { ms: number }) => (
-  <Box
-    position="absolute"
-    bottom="6px"
-    right="8px"
-    pointerEvents="none"
-    sx={{ '& .lopu-drain': { animation: `${drain} ${ms}ms linear forwards` } }}
-  >
+	<Box position="absolute" bottom="6px" right="8px" pointerEvents="none" sx={{ '& .lopu-drain': { animation: `${drain} ${ms}ms linear forwards` } }}>
     <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
       <defs>
         {/* SVG gradient stops can't read CSS var() — use the palette hexes,
@@ -80,6 +74,8 @@ type LopuArgs = {
   status?: LopuStatus;
   duration?: number;
   link?: LopuLink;
+	announceDescription?: boolean;
+	descriptionLabel?: string;
 };
 
 const statusEmoji = (status?: LopuStatus) => (status === 'success' ? '✨ ' : status === 'error' ? '🌧️ ' : '');
@@ -89,12 +85,14 @@ const LopuToast = ({
   description,
   status,
   link,
+	announceDescription = true,
+	descriptionLabel,
   loading,
   countdown,
   onClose
 }: LopuArgs & { loading?: boolean; countdown?: number | null; onClose: () => void }) => (
   <Box
-    role="status"
+		role={announceDescription ? 'status' : 'group'}
     pointerEvents="auto"
     p="2px"
     borderRadius="var(--tt-radius-xl, 20px)"
@@ -103,13 +101,7 @@ const LopuToast = ({
     width="360px"
     maxWidth="calc(100vw - 24px)"
   >
-    <Box
-      bg="var(--tt-card, #ffffff)"
-      borderRadius="calc(var(--tt-radius-xl, 20px) - 2px)"
-      px={4}
-      py={3}
-      position="relative"
-    >
+		<Box bg="var(--tt-card, #ffffff)" borderRadius="calc(var(--tt-radius-xl, 20px) - 2px)" px={4} py={3} position="relative">
       <Flex align="center" gap={2} mb={title || description || loading ? 1.5 : 0}>
         <Text fontSize="md" lineHeight={1}>
           🦄
@@ -122,14 +114,7 @@ const LopuToast = ({
         >
           Lopu
         </Text>
-        <Text
-          fontFamily="mono"
-          fontSize="10px"
-          fontWeight="500"
-          letterSpacing="0.1em"
-          textTransform="uppercase"
-          color="var(--tt-muted, #9a9aa6)"
-        >
+				<Text fontFamily="mono" fontSize="10px" fontWeight="500" letterSpacing="0.1em" textTransform="uppercase" color="var(--tt-muted, #9a9aa6)">
           Thingtime AI
         </Text>
         <Box flex={1} />
@@ -163,16 +148,11 @@ const LopuToast = ({
         </Text>
       ) : (
         title && (
-          <Text fontSize="sm" fontWeight="600" color="var(--tt-ink, #16161a)">
+					<Text role={announceDescription ? undefined : 'status'} fontSize="sm" fontWeight="600" color="var(--tt-ink, #16161a)">
             {statusEmoji(status)}
             {title}
             {loading && (
-              <Box
-                as="span"
-                ml="1px"
-                color="var(--tt-faint, #b6b6c0)"
-                sx={{ animation: 'tt-blink 1s steps(1) infinite' }}
-              >
+							<Box as="span" ml="1px" color="var(--tt-faint, #b6b6c0)" sx={{ animation: 'tt-blink 1s steps(1) infinite' }}>
                 ▍
               </Box>
             )}
@@ -180,7 +160,20 @@ const LopuToast = ({
         )
       )}
       {description && (
-        <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)" mt="2px">
+				<Text
+					fontSize="xs"
+					color="var(--tt-muted, #9a9aa6)"
+					mt="2px"
+					maxH="min(55vh, 460px)"
+					overflowY="auto"
+					overflowWrap="anywhere"
+					pr={1}
+					whiteSpace="pre-wrap"
+					role={announceDescription ? undefined : 'region'}
+					aria-label={announceDescription ? undefined : descriptionLabel || 'Additional Thingtime message detail'}
+					aria-live={announceDescription ? undefined : 'off'}
+					tabIndex={announceDescription ? undefined : 0}
+				>
           {description}
         </Text>
       )}
@@ -208,7 +201,7 @@ export const useLopu = () => {
   const toast = useToast();
 
   return useCallback(
-    ({ title, description, status, duration = 13000, link }: LopuArgs) => {
+		({ title, description, status, duration = 13000, link, announceDescription, descriptionLabel }: LopuArgs) => {
       const message = normalizeLopuMessage({ title, description, status });
       return toast({
         duration,
@@ -220,6 +213,8 @@ export const useLopu = () => {
             description={message.description}
             status={status}
             link={link}
+						announceDescription={announceDescription}
+						descriptionLabel={descriptionLabel}
             countdown={duration}
             onClose={onClose}
           />
@@ -228,6 +223,13 @@ export const useLopu = () => {
     },
     [toast]
   );
+};
+
+// Privacy-sensitive callers can close every Lopu surface when their owning
+// screen unmounts or the authenticated account changes.
+export const useDismissLopu = () => {
+	const toast = useToast();
+	return useCallback(() => toast.closeAll(), [toast]);
 };
 
 const sourceLabel = (source?: string) =>

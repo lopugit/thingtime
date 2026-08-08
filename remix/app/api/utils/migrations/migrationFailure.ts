@@ -1,10 +1,33 @@
+import { captureAdminErrorDiagnostic, type AdminErrorDiagnostic } from '../errors/adminDiagnostic';
 import { safeErrorText } from '../errors/safeError';
 import { StorageMutationError } from '../storage/storageCore';
 
 const safeMigrationId = (value: unknown): string =>
   typeof value === 'string' && /^[a-z0-9][a-z0-9-]{0,127}$/.test(value) ? value : 'requested-migration';
 
-export type MigrationFailure = { ok: false; status: number; error: string; outcome: 'rejected' | 'unknown' };
+export type MigrationFailure = {
+	ok: false;
+	status: number;
+	error: string;
+	outcome: 'rejected' | 'unknown';
+	// Non-enumerable: runMigration returns this source only after its finally
+	// has released the lease. The route captures/persists it afterward, while
+	// spreading/JSON-stringifying a failure can never leak the original error.
+	diagnosticSource?: unknown;
+};
+
+const withDiagnosticSource = (failure: Omit<MigrationFailure, 'diagnosticSource'>, error: unknown): MigrationFailure => {
+	Object.defineProperty(failure, 'diagnosticSource', {
+		value: error,
+		enumerable: false,
+		configurable: false,
+		writable: false
+	});
+	return failure;
+};
+
+export const captureMigrationFailureDiagnostic = (failure: MigrationFailure): AdminErrorDiagnostic | null =>
+	Object.prototype.hasOwnProperty.call(failure, 'diagnosticSource') ? captureAdminErrorDiagnostic(failure.diagnosticSource) : null;
 
 export type MigrationOperatorCode =
   | 'lease_lost'
@@ -29,27 +52,21 @@ type MigrationOperatorOptions = {
   pending?: number;
 };
 
-const safeCount = (value: unknown): number =>
-  typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 0;
+const safeCount = (value: unknown): number => (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 0);
 
-const operatorPresentation = (
-  code: MigrationOperatorCode,
-  options: MigrationOperatorOptions
-): { status: number; message: string } => {
+const operatorPresentation = (code: MigrationOperatorCode, options: MigrationOperatorOptions): { status: number; message: string } => {
   const prerequisite = safeMigrationId(options.prerequisiteId);
   const pending = safeCount(options.pending);
   switch (code) {
     case 'lease_lost':
       return {
         status: 409,
-        message:
-          'The migration lease expired before completion. No ledger was published ready. Refresh migration status and rerun the migration.'
+				message: 'The migration lease expired before completion. No ledger was published ready. Refresh migration status and rerun the migration.'
       };
     case 'legacy_source_changed':
       return {
         status: 409,
-        message:
-          'Legacy relational data changed during migration. Its transaction was rolled back and the source was kept. Rerun the migration.'
+				message: 'Legacy relational data changed during migration. Its transaction was rolled back and the source was kept. Rerun the migration.'
       };
     case 'subscription_envelope_invalid':
       return {
@@ -106,8 +123,7 @@ const operatorPresentation = (
     case 'billable_thing_churn':
       return {
         status: 409,
-        message:
-          'A billable Thing kept changing during storage migration. Ledgers remain fenced. Retry after concurrent writes settle.'
+				message: 'A billable Thing kept changing during storage migration. Ledgers remain fenced. Retry after concurrent writes settle.'
       };
     case 'app_counter_owner_invalid':
       return {
@@ -146,34 +162,60 @@ export class MigrationOperatorError extends Error {
   }
 }
 
+const storageMutationPresentation = (error: StorageMutationError): { status: number; message: string } => {
+	const status = Number.isSafeInteger(error.status) && error.status >= 400 && error.status <= 599 ? error.status : 500;
+	switch (error.code) {
+		case 'quota_exceeded':
+			return { status, message: 'Storage quota was exceeded while the migration was running.' };
+		case 'accounting_unavailable':
+			return { status, message: 'Storage accounting is unavailable or still being initialized. Refresh status before retrying.' };
+		case 'storage_conflict':
+			return { status, message: 'Stored data changed while the migration was running. Refresh status before retrying.' };
+		case 'storage_invariant':
+			return { status, message: 'Storage accounting found an invalid protected record. Inspect the private diagnostic before retrying.' };
+	}
+};
+
 // Migrations are admin-only, but caught database messages can still contain
-// document ids, hosts, or connection details. Preserve explicitly authored
-// storage failures; summarize every other exception by safe class/code while
-// keeping the full original in server logs.
-export const migrationFailureResult = (
-  migrationId: unknown,
-  error: unknown,
-  outcome: MigrationFailure['outcome'] = 'unknown'
-): MigrationFailure => {
+// document ids, hosts, or connection details. Map storage failures through a
+// closed code catalogue; summarize every other exception by safe class/code
+// while keeping the full original in server logs.
+export const migrationFailureResult = (migrationId: unknown, error: unknown, outcome: MigrationFailure['outcome'] = 'unknown'): MigrationFailure => {
+	const id = safeMigrationId(migrationId);
   if (error instanceof StorageMutationError) {
-    return { ok: false, status: error.status, error: error.message, outcome };
+		console.error(`[migration ${id}]`, error);
+		const presentation = storageMutationPresentation(error);
+		return withDiagnosticSource(
+			{
+				ok: false,
+				status: presentation.status,
+				error: `Migration ${id} stopped before completion: ${presentation.message}`,
+				outcome
+			},
+			error
+		);
   }
 
-  const id = safeMigrationId(migrationId);
   if (error instanceof MigrationOperatorError) {
     console.error(`[migration ${id}]`, error);
-    return {
+		return withDiagnosticSource(
+			{
       ok: false,
       status: error.status,
       error: `Migration ${id} stopped before completion: ${error.publicMessage}`,
       outcome
-    };
+			},
+			error
+		);
   }
   const detail = safeErrorText(error, `migration ${id}`, 'Unexpected migration error');
-  return {
+	return withDiagnosticSource(
+		{
     ok: false,
     status: 500,
     error: `Migration ${id} stopped before completion: ${detail}. Refresh migration status before retrying.`,
     outcome
-  };
+		},
+		error
+	);
 };

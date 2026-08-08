@@ -371,10 +371,13 @@ test('orphan app reconciliation plans exact owner sums and zeroes stale counters
 	);
 });
 
-test('generic Thing ids cannot squat the app-storage ledger namespace', () => {
+test('generic Thing ids cannot squat protected control-plane namespaces', () => {
 	const blocked: any = sanitizeShareId('app-storage-attacker-controlled');
 	assert.equal(blocked?.ok, false);
 	assert.equal(blocked?.status, 400);
+	const diagnostic: any = sanitizeShareId('migration-diagnostic-attacker-controlled');
+	assert.equal(diagnostic?.ok, false);
+	assert.equal(diagnostic?.status, 400);
 	assert.equal(sanitizeShareId('ordinary-user-thing'), 'ordinary-user-thing');
 });
 

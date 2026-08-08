@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { apiErrorMessage, createApiFailure, hasUnknownMutationOutcome, readApiResponsePayload } from './apiFailure';
+import {
+	apiAdminErrorDetail,
+	apiDiagnosticThingId,
+	apiErrorMessage,
+	createApiFailure,
+	hasUnknownMutationOutcome,
+	readApiResponsePayload
+} from './apiFailure';
 
 test('Nitro unhandled errors become contextual, nonblank API failures', () => {
   const error = createApiFailure({
@@ -38,6 +45,49 @@ test('structured auth and account-switcher failure fields survive normalization'
 
   assert.equal(error.reason, 'challenge_invalid');
   assert.deepEqual(error.accounts, accounts);
+});
+
+test('migration diagnostics accept only bounded authored detail and fixed-format ids', () => {
+	const id = 'migration-diagnostic-89c5d4f2-b478-4aa1-b37d-755171dc3d90';
+	const error = createApiFailure({
+		payload: { ok: false, error: 'Migration failed safely', diagnosticThingId: id, adminDetail: '  full\nredacted detail  ' },
+		status: 500,
+		method: 'POST'
+	});
+
+	assert.equal(apiDiagnosticThingId(error), id);
+	assert.equal(apiAdminErrorDetail(error), 'full\nredacted detail');
+
+	const hostile = createApiFailure({
+		payload: {
+			ok: false,
+			error: 'Migration failed safely',
+      diagnosticThingId: ['java', 'script:alert(1)'].join(''),
+			adminDetail: 'x'.repeat(70 * 1024)
+		},
+		status: 500,
+		method: 'POST'
+	});
+	assert.equal(apiDiagnosticThingId(hostile), null);
+	assert.equal(apiAdminErrorDetail(hostile)?.length, 64 * 1024);
+});
+
+test('Nitro unhandled payloads cannot smuggle migration diagnostic metadata', () => {
+	const error = createApiFailure({
+		payload: {
+			ok: false,
+			error: 'private runtime text',
+			unhandled: true,
+			diagnosticThingId: 'migration-diagnostic-89c5d4f2-b478-4aa1-b37d-755171dc3d90',
+			adminDetail: 'private stack'
+		},
+		status: 500,
+		method: 'POST'
+	});
+
+	assert.equal(apiDiagnosticThingId(error), null);
+	assert.equal(apiAdminErrorDetail(error), null);
+	assert.doesNotMatch(error.error, /private runtime text|private stack/);
 });
 
 test('an explicit reaction rejection overrides the generic 5xx ambiguity rule', () => {
@@ -84,14 +134,11 @@ test('unreadable successful mutation responses remain commit-unknown', async () 
       }
     } as unknown as Response;
 
-    await assert.rejects(
-      readApiResponsePayload(response, { action: 'save your reaction', method: 'POST' }),
-      (error: unknown) => {
+		await assert.rejects(readApiResponsePayload(response, { action: 'save your reaction', method: 'POST' }), (error: unknown) => {
         assert.equal(hasUnknownMutationOutcome(error), true);
         assert.match(apiErrorMessage(error, ''), /unreadable response/);
         assert.doesNotMatch(apiErrorMessage(error, ''), /private|truncated|stream/);
         return true;
-      }
-    );
+		});
   }
 });

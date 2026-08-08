@@ -27,7 +27,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   network/5xx outcome (refetching server truth instead of blindly reversing a
   possibly committed toggle). Reaction and migration routes preserve authored
   failures and turn unknown exceptions into safe class/code summaries without
-  leaking stacks or database details. Structured login/account-switcher failure
+  leaking stacks or database details publicly. Failed real admin migrations now
+  capture a bounded, secret-scrubbed diagnostic after releasing their lease,
+  store it as an expiring owner-only, non-billable control Thing, and link the
+  Lopu toast to its readable `/thing/:id` view; failed dry runs never create a
+  diagnostic Thing and show the full redacted detail in a long-lived scrollable
+  toast. If diagnostic persistence is unavailable, real runs use that same
+  private inline fallback without masking the original status or outcome.
+  Structured login/account-switcher failure
   fields remain intact, malformed successful mutation responses are reconciled
   as commit-unknown, server-marked reaction rejections roll back without a
   redundant read, and late reaction truth merges only reaction fields so it
@@ -196,7 +203,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   `synchronize` to avoid self-loops), and with no follow-up push to the base,
   the PR sat unresolved indefinitely — observed on the resolver's own PR #173.
   Every branch push already spawns a detect run; it now also scans the open PR
-  *from* the pushed branch, and the handoff dispatches under each conflicting
+  _from_ the pushed branch, and the handoff dispatches under each conflicting
   PR's base branch instead of the pushed ref. Self-terminating: the resolver's
   own resolution push finds its PR mergeable and no-ops.
   — Claude (AI), 2026-08-06
@@ -225,6 +232,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - **PR #69 final-review hardening round**: a multi-agent review of the unified
   /search + profile/feed branch surfaced a batch of merge-blocking issues, all
   fixed here — Claude (AI), 2026-07-17:
+
   - **Advanced filters no longer 400 + wipe results on numeric values**: the
     query builder's default `contains` operator coerced `4`/`true`/`null` to
     real types, which the server rejects for text-only operators, clearing the

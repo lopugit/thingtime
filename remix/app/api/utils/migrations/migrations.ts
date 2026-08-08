@@ -31,7 +31,7 @@ import {
 import { waitlistEmailKey } from '../waitlist/waitlist';
 import { themeAcl } from '../themes/themes';
 import { exactDocumentSnapshotMatch, storageMigrationOwnership } from './migrationCore';
-import { MigrationOperatorError, migrationFailureResult } from './migrationFailure';
+import { MigrationOperatorError, migrationFailureResult, type MigrationFailure } from './migrationFailure';
 import { getSubscription } from '../subscriptions/subscriptions';
 import {
 	legacyUserSubscriptionLedgerEnvelopeCanUpgrade,
@@ -851,7 +851,7 @@ const collectionToThingsMigration = (spec: ConvertSpec): Migration => ({
 					// twin alone is never conversion proof.
           if (inserted) created += 1;
           const fresh = await legacy.findOne({ _id: doc._id } as any);
-					const destinationShareId = inserted ? thing.shareId : (twin?.shareId ?? thing.shareId);
+					const destinationShareId = inserted ? thing.shareId : twin?.shareId ?? thing.shareId;
 					if (!fresh) {
 						// Another runner already consumed the source. Its receipt, not our
 						// observation of a destination-shaped row, is the completion proof.
@@ -2235,7 +2235,7 @@ const backfillUserStorageAccounting: Migration = {
 				}
 			}
 			notes.push(
-				`${reconciledApps} live app aggregate set(s) and ${reconciledOrphanApps} orphan namespace ledger set(s) ` + 'reconciled from canonical bytes'
+				`${reconciledApps} live app aggregate set(s) and ${reconciledOrphanApps} orphan namespace ledger set(s) reconciled from canonical bytes`
 			);
 
 			let initialized = 0;
@@ -2503,7 +2503,7 @@ const dropStaleCollectionGenerations: Migration = {
 
     for (const row of stale) {
       const docs = await db.collection(row.physical).estimatedDocumentCount();
-			const missing = row.version === null ? (unmerged.get(row.physical) ?? 0) : 0;
+			const missing = row.version === null ? unmerged.get(row.physical) ?? 0 : 0;
       if (missing > 0) {
         notes.push(`${row.physical}: kept — ${missing} doc(s) not yet merged (run merge-legacy-collections)`);
         skipped += 1;
@@ -2650,7 +2650,9 @@ export const getMigrationStatus = async (): Promise<{
     .map(
       (generation) =>
         renameFailures.get(generation.collection) ||
-        `${generation.collection}: legacy collection still exists beside ${physicalCollectionName(generation.collection)} — run merge-legacy-collections`
+				`${generation.collection}: legacy collection still exists beside ${physicalCollectionName(
+					generation.collection
+				)} — run merge-legacy-collections`
     );
 
   const withPending = await Promise.all(
@@ -2678,7 +2680,7 @@ export const getMigrationStatus = async (): Promise<{
 export const runMigration = async (
   id: unknown,
   options: { dryRun?: unknown; confirm?: unknown }
-): Promise<Fail | { ok: true; migration: string; report: MigrationReport }> => {
+): Promise<Fail | MigrationFailure | { ok: true; migration: string; report: MigrationReport }> => {
   const migration = getMigration(id);
   if (!migration) return fail(404, 'Unknown migration');
   const dryRun = options.dryRun === true || options.dryRun === 'true';
@@ -2692,14 +2694,21 @@ export const runMigration = async (
 			const report = await migration.run({ dryRun: true });
 			return { ok: true, migration: migration.id, report };
 		} catch (error) {
-			// Dry runs cannot publish writes, so even an exception is a known
-			// rejection rather than an ambiguous mutation outcome.
+			// Dry runs never mutate migration target documents, so an exception is
+			// a known rejection rather than an ambiguous mutation outcome. Some
+			// runners may still bootstrap database indexes before their read pass.
 			return migrationFailureResult(migration.id, error, 'rejected');
 		}
 	}
 
-	const lease = await acquireMigrationLease(migration.id);
+	let lease: Awaited<ReturnType<typeof acquireMigrationLease>>;
+	try {
+		lease = await acquireMigrationLease(migration.id);
+	} catch (error) {
+		return migrationFailureResult(migration.id, error, 'rejected');
+	}
 	if (!lease) return fail(409, 'Another database migration is already running; wait for it to finish and refresh');
+	let migrationStarted = false;
 	try {
 		await lease.assert();
 		if (migration.id !== backfillUserStorageAccounting.id && new Set(userStoragePrerequisites().map((entry) => entry.id)).has(migration.id)) {
@@ -2745,18 +2754,19 @@ export const runMigration = async (
 			}
 		}
 		await lease.assert();
+		migrationStarted = true;
 		const report = await migration.run({ dryRun: false, assertLease: lease.assert });
 		await lease.assert();
 		return { ok: true, migration: migration.id, report };
 	} catch (error) {
-		if (migration.id === backfillUserStorageAccounting.id) {
+		if (migrationStarted && migration.id === backfillUserStorageAccounting.id) {
 			// A late postflight/lease failure must never leave the ledgers that were
 			// already reconciled earlier in the sweep looking authoritative. This
 			// fence is monotonic-safe even if a successor has begun: it can only
 			// remove readiness, never publish a stale total.
 			await fenceAllStorageLedgers().catch(() => {});
 		}
-		return migrationFailureResult(migration.id, error);
+		return migrationFailureResult(migration.id, error, migrationStarted ? 'unknown' : 'rejected');
 	} finally {
 		await lease.release();
 	}

@@ -133,18 +133,11 @@ export function useApi() {
     settings: {
       // Public so the GitHub conflict resolver can read the same ordered model
       // waterfall as the admin UI without inheriting an admin browser session.
-      prConflictResolverModelWaterfall: useCallback(
-        async () => getJson('/api/v1/settings/pr-conflict-auto-resolver-model-waterfall'),
-        []
-      )
+			prConflictResolverModelWaterfall: useCallback(async () => getJson('/api/v1/settings/pr-conflict-auto-resolver-model-waterfall'), [])
     },
     admin: {
       setPrConflictResolverModelWaterfall: useCallback(
-        async (waterfall) =>
-          asyncFetcher.submit(
-            { waterfall },
-            { action: '/api/v1/settings/pr-conflict-auto-resolver-model-waterfall' }
-          ),
+				async (waterfall) => asyncFetcher.submit({ waterfall }, { action: '/api/v1/settings/pr-conflict-auto-resolver-model-waterfall' }),
         [asyncFetcher]
       ),
       rateLimits: useCallback(async () => getJson('/api/v1/admin/rate-limits'), []),
@@ -155,6 +148,10 @@ export function useApi() {
         [asyncFetcher]
       ),
       migrations: useCallback(async () => getJson('/api/v1/admin/migrations'), []),
+			migrationDiagnostic: useCallback(
+				async (args, options?: { signal?: AbortSignal }) => getJson(`/api/v1/admin/migrations/diagnostic${toQuery({ id: args?.id })}`, options),
+				[]
+			),
       migrationsRun: useCallback(
         async (args) =>
           asyncFetcher.submit(
@@ -277,7 +274,7 @@ export function useApi() {
         [asyncFetcher]
       ),
       userPosts: useCallback(async (args) => getJson(`/api/v1/things/user${toQuery(args)}`), []),
-      get: useCallback(async (args) => getJson(`/api/v1/things${toQuery({ id: args?.id })}`), []),
+			get: useCallback(async (args, options?: { signal?: AbortSignal }) => getJson(`/api/v1/things${toQuery({ id: args?.id })}`, options), []),
       list: useCallback(
         async (args) =>
           getJson(
@@ -338,10 +335,7 @@ export function useApi() {
       ),
       react: useCallback(
         async (args) =>
-          asyncFetcher.submit(
-            { id: args?.id, emoji: args?.emoji ?? null },
-            { action: '/api/v1/things/react', errorContext: 'save your reaction' }
-          ),
+					asyncFetcher.submit({ id: args?.id, emoji: args?.emoji ?? null }, { action: '/api/v1/things/react', errorContext: 'save your reaction' }),
         [asyncFetcher]
       ),
       // toggle a private "add to my library" save on any visible thing
