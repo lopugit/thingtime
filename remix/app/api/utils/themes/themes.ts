@@ -4,7 +4,7 @@ import { ObjectId } from 'mongodb';
 import { resolveTheme, THINGTIME_THEME, TtTheme } from '../../../theme/tokens';
 // theme is a PROTECTED system kind: theme things stay on the home deployment
 // DB even while a data-plane endpoint override is active (see endpoint.ts).
-import { getHomeThingsCollection as getThingsCollection, getThemesCollection, withMongoTransaction } from '../mongodb/collections';
+import { getHomeThingsCollection as getThingsCollection, getThemesCollection, withHomeMongoTransaction } from '../mongodb/collections';
 import { ACL_ALL, ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 import { clearUserActiveTheme } from '../auth/users';
 import { StorageMutationError, USER_STORAGE_ACCOUNTING_VERSION, currentContentStorageSizeBytes, thingStorageSizeBytes } from '../storage/storageCore';
@@ -147,7 +147,7 @@ export const saveTheme = async (ownerId: string, input: SaveThemeInput): Promise
       }
 			let updatedThing: any;
 			try {
-				await withMongoTransaction(async (session) => {
+				await withHomeMongoTransaction(async (session) => {
 					const before = await things.findOne({ _id: existingThing._id, ownerId, thingtime: 'theme' } as any, { session });
 					if (!before) {
 						throw new StorageMutationError(409, 'storage_conflict', 'Theme changed while it was being updated — try again');
@@ -209,7 +209,7 @@ export const saveTheme = async (ownerId: string, input: SaveThemeInput): Promise
     // admin themes-to-things migration remains the ONE conversion path.
     const visibility = explicitVisibility ?? (existing.visibility === 'public' ? 'public' : 'private');
 		try {
-			await withMongoTransaction(async (session) => {
+			await withHomeMongoTransaction(async (session) => {
 				await assertLegacyThemeMutationAllowed(ownerId, things, session);
 				const write = await themes.updateOne(
 					{ _id: new ObjectId(existing._id), ownerId, updatedAt: existing.updatedAt },
@@ -264,7 +264,7 @@ export const saveTheme = async (ownerId: string, input: SaveThemeInput): Promise
 		storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION
 	});
 	try {
-		await withMongoTransaction(async (session) => {
+		await withHomeMongoTransaction(async (session) => {
 			await applyUserStorageDelta(ownerId, sizeBytes, session);
 			await things.insertOne(thing as any, { session });
 		});
@@ -344,7 +344,7 @@ export const deleteTheme = async (ownerId: string, shareId: unknown): Promise<{ 
 	let deletedThing = false;
 	let deletedLegacy = false;
 	try {
-		await withMongoTransaction(async (session) => {
+		await withHomeMongoTransaction(async (session) => {
 			const legacy = await themes.findOne({ shareId: id, ownerId }, { projection: { _id: 1 }, session });
 			if (legacy) await assertLegacyThemeMutationAllowed(ownerId, things, session);
 			const before = await things.findOneAndDelete({ thingtime: 'theme', shareId: id, ownerId } as any, { session });

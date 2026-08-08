@@ -1,4 +1,4 @@
-import { ensureIndexes, withMongoTransaction } from '../mongodb/collections';
+import { ensureIndexes, withHomeMongoTransaction } from '../mongodb/collections';
 import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
 import { isEnvAdmin } from './admin';
@@ -110,7 +110,7 @@ export const createUserAccount = async (input: CreateUserAccountInput): Promise<
 	let assignedSubscription = null;
 	let assignmentFailure: Extract<CreateUserAccountResult, { ok: false }> | null = null;
   try {
-		await withMongoTransaction(async (session) => {
+		await withHomeMongoTransaction(async (session) => {
 			user = await insertUser(userDoc, { initialSubscription: defaultSnapshot, session });
     const userId = String(user._id);
     const assigned = await setSubscription({

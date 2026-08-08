@@ -80,8 +80,17 @@ const getClientCachedFor = (uri: string, isHome: boolean) => {
 // under-count. Atlas replica sets support transactions; an unsupported local
 // deployment therefore fails the write loudly instead of weakening the
 // invariant.
-export const withMongoTransaction = async <T>(work: (session: any) => Promise<T>): Promise<T> => {
-	const client = await getClientCached();
+//
+// Sessions are CLIENT-bound: a session only works with collection handles from
+// the MongoClient that started it. The two variants mirror the collection
+// getters — withMongoTransaction follows the request's ACTIVE data plane
+// (exactly like getCollection/getThingtimeDb, so data-plane transactions stay
+// on the override's client when one is active), and withHomeMongoTransaction
+// is pinned to the home deployment (like getHomeCollection) for
+// identity/control-plane transactions, which must keep working while a
+// data-plane override is active on the request. A transaction cannot span both
+// planes: with an override active, home and active are different clients.
+const runMongoTransaction = async <T>(client: any, work: (session: any) => Promise<T>): Promise<T> => {
 	const session = client.startSession();
 	let result!: T;
 	try {
@@ -100,6 +109,17 @@ export const withMongoTransaction = async <T>(work: (session: any) => Promise<T>
 		await session.endSession();
 	}
 };
+
+export const withMongoTransaction = async <T>(work: (session: any) => Promise<T>): Promise<T> =>
+	runMongoTransaction(
+		await (isCustomMongoEndpointActive()
+			? getClientCachedFor(getActiveMongoUri(), false)
+			: getClientCachedFor(getMongoUri(), true)),
+		work
+	);
+
+export const withHomeMongoTransaction = async <T>(work: (session: any) => Promise<T>): Promise<T> =>
+	runMongoTransaction(await getClientCachedFor(getMongoUri(), true), work);
 
 // Issues the last adoption pass could not resolve (rename unsupported /
 // unauthorized). Surfaced through the admin migrations census so a split
