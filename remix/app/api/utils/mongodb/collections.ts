@@ -80,8 +80,17 @@ const getClientCachedFor = (uri: string, isHome: boolean) => {
 // under-count. Atlas replica sets support transactions; an unsupported local
 // deployment therefore fails the write loudly instead of weakening the
 // invariant.
-export const withMongoTransaction = async <T>(work: (session: any) => Promise<T>): Promise<T> => {
-	const client = await getClientCached();
+//
+// Sessions are CLIENT-bound: a session only works with collection handles from
+// the MongoClient that started it. The two variants mirror the collection
+// getters — withMongoTransaction follows the request's ACTIVE data plane
+// (exactly like getCollection/getThingtimeDb, so data-plane transactions stay
+// on the override's client when one is active), and withHomeMongoTransaction
+// is pinned to the home deployment (like getHomeCollection) for
+// identity/control-plane transactions, which must keep working while a
+// data-plane override is active on the request. A transaction cannot span both
+// planes: with an override active, home and active are different clients.
+const runMongoTransaction = async <T>(client: any, work: (session: any) => Promise<T>): Promise<T> => {
 	const session = client.startSession();
 	let result!: T;
 	try {
@@ -100,6 +109,17 @@ export const withMongoTransaction = async <T>(work: (session: any) => Promise<T>
 		await session.endSession();
 	}
 };
+
+export const withMongoTransaction = async <T>(work: (session: any) => Promise<T>): Promise<T> =>
+	runMongoTransaction(
+		await (isCustomMongoEndpointActive()
+			? getClientCachedFor(getActiveMongoUri(), false)
+			: getClientCachedFor(getMongoUri(), true)),
+		work
+	);
+
+export const withHomeMongoTransaction = async <T>(work: (session: any) => Promise<T>): Promise<T> =>
+	runMongoTransaction(await getClientCachedFor(getMongoUri(), true), work);
 
 // Issues the last adoption pass could not resolve (rename unsupported /
 // unauthorized). Surfaced through the admin migrations census so a split
@@ -180,6 +200,45 @@ export const getThingtimeDb = async () => {
   const db = (await getClientCachedFor(uri, false)).db(getActiveMongoDbName());
   ensureCustomDataIndexes(uri, db);
   return db;
+};
+
+// Transactions (storage accounting, registration's subscription-ledger seed)
+// require a REPLICA SET: a standalone mongod rejects them with
+// IllegalOperation, and there is deliberately no non-transactional fallback
+// (see withMongoTransaction). Atlas is always a replica set; a local dev
+// mongod usually is not — and every transactional flow (registration, service
+// accounts, storage-accounted writes) then 500s. Probe once at boot and say
+// so loudly with the exact fix, instead of letting the first registration
+// surface a bare IllegalOperation.
+let transactionSupportProbed = false;
+export const warnIfTransactionsUnsupported = async (): Promise<void> => {
+  if (transactionSupportProbed) return;
+  transactionSupportProbed = true;
+  try {
+    const db = await getHomeThingtimeDb();
+    const hello = await db.admin().command({ hello: 1 });
+    if (!hello?.setName) {
+      console.error(
+        '[mongodb] The connected MongoDB is STANDALONE — multi-document transactions (registration, service accounts, storage-accounted writes) WILL FAIL with IllegalOperation.\n' +
+          '[mongodb] Fix: run it as a single-node replica set. Add to mongod.conf (brew: /opt/homebrew/etc/mongod.conf):\n' +
+          '[mongodb]     replication:\n' +
+          '[mongodb]       replSetName: rs0\n' +
+          '[mongodb] restart mongod, then initiate ONCE with an explicit localhost member host:\n' +
+          `[mongodb]     mongosh --eval 'rs.initiate({_id: "rs0", members: [{_id: 0, host: "127.0.0.1:27017"}]})'`
+      );
+    }
+  } catch (err: any) {
+    // A replSet-configured but NOT-YET-INITIATED mongod cannot serve normal
+    // operations, so the connect/hello above fails instead of answering. Name
+    // that state (conditionally — the same error also covers mongod-down).
+    const text = String(err?.message || err);
+    if (/NotYetInitialized|no replset config|Server selection timed out/i.test(text)) {
+      console.error(
+        '[mongodb] Could not reach a usable MongoDB. If mongod is running and was recently switched to replSetName without initiating, run ONCE:\n' +
+          `[mongodb]     mongosh --eval 'rs.initiate({_id: "rs0", members: [{_id: 0, host: "127.0.0.1:27017"}]})'`
+      );
+    }
+  }
 };
 
 // THE way to a collection handle: logical name in, current-generation physical
