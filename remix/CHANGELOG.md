@@ -19,6 +19,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Stable Vercel domain for the `develop` branch**: the Thingtime project now
+  assigns `dev.thingtime.com` to `develop` as a branch-specific Preview
+  domain, matching the existing staging pattern while preserving the
+  branch-scoped Preview secrets already used by develop deployments. The
+  deployment runbook now records the required Cloudflare DNS-only CNAME and
+  ownership-verification flow. — Codex (AI), 2026-08-07
+
 - **CI conflict-resolver graphify refresh now does LLM semantic extraction**:
   after an auto-resolved merge, `resolve-pr-conflicts.yml` runs
   `graphify extract` + `cluster-only` with whichever Claude credential the
