@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Binary, ObjectId } from 'mongodb';
 
 import { getHomeThingsCollection, getThingsCollection, getUsersCollection, withMongoTransaction } from '../mongodb/collections';
+import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
 import { findUserByUsername, pushUserRecentReaction } from '../auth/users';
 import {
 	StorageMutationError,
@@ -375,16 +376,22 @@ const applyDeletedStorageDeltas = async (docs: ThingDoc[], session: any): Promis
 	const uncertainUsers = new Set<string>();
 	const uncertainAppOwners = new Map<string, Set<string>>();
 
+	// Foreign-plane deletes never touch the home account ledger (the mirror of
+	// createThing's billable gate); app ledgers below still settle on the
+	// active plane so an override DB keeps its own app accounting exact.
+	const accountPlaneApplies = !isCustomMongoEndpointActive();
 	for (const doc of docs) {
 		const accountedBytes = currentContentSizeBytes(doc);
 		const ownerId = String(doc.ownerId);
 		const deletionDecision = deletionStorageFenceDecision(doc);
 		const sandboxState = deletionDecision.sandboxState;
-		if (deletionDecision.fenceAccount) {
-			uncertainUsers.add(ownerId);
-		} else if (isBillableStorageThing(doc)) {
-			if (accountedBytes === null) uncertainUsers.add(ownerId);
-			else if (accountedBytes > 0) userBytes.set(ownerId, (userBytes.get(ownerId) ?? 0) + accountedBytes);
+		if (accountPlaneApplies) {
+			if (deletionDecision.fenceAccount) {
+				uncertainUsers.add(ownerId);
+			} else if (isBillableStorageThing(doc)) {
+				if (accountedBytes === null) uncertainUsers.add(ownerId);
+				else if (accountedBytes > 0) userBytes.set(ownerId, (userBytes.get(ownerId) ?? 0) + accountedBytes);
+			}
 		}
 
 		const scoped = appStorageScopeForDoc(doc);
@@ -868,7 +875,14 @@ export const createThing = async (
     updatedAt: now,
 		...(app ? appNamespaceStamp(app, sizeBytes) : {})
 	};
-	const billable = isBillableStorageThing(doc);
+	// Account storage meters HOME-hosted bytes only. With a data-plane endpoint
+	// override active this content lands on the user's own MongoDB: it consumes
+	// no Thingtime account storage, gets no home-accounting stamps, and must
+	// not touch the home subscription ledger (which a foreign-plane transaction
+	// could not reach anyway — sessions are client-bound and the ledger is
+	// home-pinned). App ledgers still self-account on the active plane through
+	// appNamespaceStamp/applyAppStorageDeltaTransaction below.
+	const billable = isBillableStorageThing(doc) && !isCustomMongoEndpointActive();
 	if (billable) {
 		doc.storageClass = 'content';
 		doc.sizeBytes = sizeBytes;
@@ -2976,7 +2990,11 @@ export const updateThing = async (
 
 	const nextExtended = hasExtendedChange ? extended.value : (doc.extended ?? null);
 	const newSize = thingStorageSizeBytes({ crystal: validated.crystal, extended: nextExtended, tags });
-	const wasBillable = isBillableStorageThing(doc);
+	// Same home-plane rule as createThing: under a data-plane endpoint override
+	// this row lives on the user's own MongoDB — account accounting (and its
+	// content stamps) never applies, even to synced-in rows that carry stamps.
+	const accountPlaneApplies = !isCustomMongoEndpointActive();
+	const wasBillable = isBillableStorageThing(doc) && accountPlaneApplies;
 	const nextStorageDoc: ThingDoc = {
 		...doc,
 		schemaVersion: THINGS_SCHEMA_VERSION,
@@ -2985,7 +3003,7 @@ export const updateThing = async (
 		extended: nextExtended,
       tags
 	};
-	const isBillable = isBillableStorageThing(nextStorageDoc);
+	const isBillable = isBillableStorageThing(nextStorageDoc) && accountPlaneApplies;
 	const registeredStorageScope = storageScope && !storageScope.sandbox ? storageScope : null;
 	const currentSourceBytes = currentContentSizeBytes(doc);
 	if ((wasBillable || registeredStorageScope) && currentSourceBytes === null) {

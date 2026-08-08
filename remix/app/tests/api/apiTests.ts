@@ -1033,6 +1033,9 @@ export const apiTests: ApiTestDefinition[] = [
     group: 'auth',
     method: 'GET',
     path: '/api/v1/auth/accounts/owned',
+    // strict [401] needs a truly session-less request — with the suite's
+    // shared cookie state an earlier registration would make this a 200
+    anonymous: true,
     expect: expectJson([401], (body) => body?.ok === false && typeof body?.error === 'string', 'Anonymous owned-accounts read was rejected.')
   },
   {
@@ -1043,6 +1046,9 @@ export const apiTests: ApiTestDefinition[] = [
     method: 'POST',
     path: '/api/v1/auth/accounts/assume',
     body: { accountId: '000000000000000000000000' },
+    // strict [401] needs a truly session-less request — with the suite's
+    // shared cookie state an earlier registration would make this a 403
+    anonymous: true,
     expect: expectJson([401], (body) => body?.ok === false && typeof body?.error === 'string', 'Anonymous assume attempt was rejected.')
   },
   {
