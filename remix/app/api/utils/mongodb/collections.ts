@@ -202,6 +202,45 @@ export const getThingtimeDb = async () => {
   return db;
 };
 
+// Transactions (storage accounting, registration's subscription-ledger seed)
+// require a REPLICA SET: a standalone mongod rejects them with
+// IllegalOperation, and there is deliberately no non-transactional fallback
+// (see withMongoTransaction). Atlas is always a replica set; a local dev
+// mongod usually is not — and every transactional flow (registration, service
+// accounts, storage-accounted writes) then 500s. Probe once at boot and say
+// so loudly with the exact fix, instead of letting the first registration
+// surface a bare IllegalOperation.
+let transactionSupportProbed = false;
+export const warnIfTransactionsUnsupported = async (): Promise<void> => {
+  if (transactionSupportProbed) return;
+  transactionSupportProbed = true;
+  try {
+    const db = await getHomeThingtimeDb();
+    const hello = await db.admin().command({ hello: 1 });
+    if (!hello?.setName) {
+      console.error(
+        '[mongodb] The connected MongoDB is STANDALONE — multi-document transactions (registration, service accounts, storage-accounted writes) WILL FAIL with IllegalOperation.\n' +
+          '[mongodb] Fix: run it as a single-node replica set. Add to mongod.conf (brew: /opt/homebrew/etc/mongod.conf):\n' +
+          '[mongodb]     replication:\n' +
+          '[mongodb]       replSetName: rs0\n' +
+          '[mongodb] restart mongod, then initiate ONCE with an explicit localhost member host:\n' +
+          `[mongodb]     mongosh --eval 'rs.initiate({_id: "rs0", members: [{_id: 0, host: "127.0.0.1:27017"}]})'`
+      );
+    }
+  } catch (err: any) {
+    // A replSet-configured but NOT-YET-INITIATED mongod cannot serve normal
+    // operations, so the connect/hello above fails instead of answering. Name
+    // that state (conditionally — the same error also covers mongod-down).
+    const text = String(err?.message || err);
+    if (/NotYetInitialized|no replset config|Server selection timed out/i.test(text)) {
+      console.error(
+        '[mongodb] Could not reach a usable MongoDB. If mongod is running and was recently switched to replSetName without initiating, run ONCE:\n' +
+          `[mongodb]     mongosh --eval 'rs.initiate({_id: "rs0", members: [{_id: 0, host: "127.0.0.1:27017"}]})'`
+      );
+    }
+  }
+};
+
 // THE way to a collection handle: logical name in, current-generation physical
 // collection out. Every read and write in the codebase goes through one of
 // these two (or a named getter below), so nothing can touch a stale generation

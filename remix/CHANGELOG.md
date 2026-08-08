@@ -41,6 +41,24 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   now post an upserted "resolution/rebase running, expected finish ~time"
   PR comment before starting, so reviewers who catch the conflict window
   aren't left guessing. — Claude (AI), 2026-08-08
+- **Mixed-plane transactions resolved — ledgers have one true plane**: user
+  subscription/billing objects (`subscriptions.ts`, `userStorage.ts`,
+  `tierCatalogStore.ts`) are now HOME-pinned like users/sessions, and account
+  storage meters HOME-hosted bytes only — active-plane writers (`things.ts`
+  create/update/delete, `appData.ts` set/delete) skip account accounting and
+  content stamps when a data-plane endpoint override is live (bytes on a
+  user's own MongoDB are not Thingtime storage; app ledgers still
+  self-account on the active plane). Registration/service-account creation
+  now succeed with an override active: identity + ledger land home, verified
+  live (register + posts with/without `x-tt-mongo-url` against two dbs on
+  one RS mongod — home ledger read exactly the home post's bytes; the
+  override post carried no stamps and moved no ledger). Local runbook:
+  boot now probes transaction support and prints the exact single-node-RS
+  conversion + `rs.initiate` commands when the connected mongod is
+  standalone (`warnIfTransactionsUnsupported`), `/api/v1/mongodb/status`
+  reports `replicaSet`, and the brew `mongod.conf` replica-set stanza is
+  staged locally (takes effect on the next sudo mongod restart +
+  one-time initiate). — Claude (AI), 2026-08-08
 
 ### Added
 

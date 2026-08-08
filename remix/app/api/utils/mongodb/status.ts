@@ -16,6 +16,9 @@ export type MongoConnectionStatus = {
 	// round-trip time of a `ping` command, in milliseconds
 	pingMs: number | null;
 	collections: number | null;
+	// replica set name from `hello` — null on a STANDALONE mongod, where
+	// multi-document transactions (registration, storage accounting) fail
+	replicaSet: string | null;
 	checkedAt: string;
 	error: string | null;
 };
@@ -41,6 +44,7 @@ export const getMongoStatus = async (): Promise<MongoConnectionStatus> => {
 			custom,
 			pingMs: null,
 			collections: null,
+			replicaSet: null,
 			checkedAt,
 			error: safeErrorText(err, 'mongodb status: config', 'MongoDB configuration error')
 		};
@@ -65,6 +69,7 @@ export const getMongoStatus = async (): Promise<MongoConnectionStatus> => {
 		const pingMs = Date.now() - start;
 
 		const collections = (await db.listCollections().toArray()).length;
+		const hello = await db.command({ hello: 1 }).catch(() => null);
 
 		return {
 			connected: true,
@@ -73,6 +78,7 @@ export const getMongoStatus = async (): Promise<MongoConnectionStatus> => {
 			custom,
 			pingMs,
 			collections,
+			replicaSet: typeof hello?.setName === 'string' ? hello.setName : null,
 			checkedAt,
 			error: null
 		};
@@ -84,6 +90,7 @@ export const getMongoStatus = async (): Promise<MongoConnectionStatus> => {
 			custom,
 			pingMs: null,
 			collections: null,
+			replicaSet: null,
 			checkedAt,
 			error: safeErrorText(err, 'mongodb status: connect', 'MongoDB connection failed')
 		};
