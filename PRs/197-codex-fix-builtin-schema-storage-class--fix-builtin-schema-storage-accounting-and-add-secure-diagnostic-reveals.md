@@ -76,7 +76,8 @@ public response, searchable field, or browser cache.
   modal with a synthetic intercepted diagnostic, including top-to-bottom
   scrolling and horizontal-overflow checks. The password-manager overlay and a
   locked browser host prevented completing the live synthetic reveal/Hide and
-  mobile-viewport passes; focused tests cover the response mapping and transient
-  state, and no real password or raw sensitive value was submitted.
+  mobile-viewport passes. Fixed-copy response mapping has focused automated
+  coverage; those live transient-UI paths remain explicitly unverified in this
+  pass, and no real password or raw sensitive value was submitted.
 - Graphify semantic output, report, manifest, and tracked content-addressed
   cache were refreshed from the final source tree.
