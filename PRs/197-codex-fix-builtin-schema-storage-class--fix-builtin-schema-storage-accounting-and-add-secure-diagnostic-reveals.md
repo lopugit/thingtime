@@ -49,7 +49,7 @@ public response, searchable field, or browser cache.
 
 ## Verification
 
-- Full Remix unit suite: 208 passed, including 11 focused password/provider/
+- Full Remix unit suite: 215 passed, including 11 focused password/provider/
   endpoint reveal tests and the builtin-schema storage regressions.
 - Read-only API suite: 297 passed. Mutating API cases were intentionally skipped
   against the connected database; no production migration or database mutation
