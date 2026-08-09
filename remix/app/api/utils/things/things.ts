@@ -15,6 +15,7 @@ import {
 } from '../storage/storageCore';
 import { applyUserStorageDelta } from '../storage/userStorage';
 import { userSubscriptionLedgerMatch } from '../subscriptions/subscriptionIdentity';
+import { toAttachmentPublicMetadata, type AttachmentPublicMetadata } from '../attachments/attachmentCore';
 import { sanitizeReactionToken } from '~/utils/reactionTokens';
 import {
   ACL_ALL,
@@ -133,6 +134,20 @@ export type ThingDoc = {
 	storageClass?: 'content' | 'control';
 	expiresAt?: Date;
 	storageAccountingVersion?: number;
+	// Protected private-S3 attachment envelope. Dedicated attachment utilities
+	// are the only writers; generic Thing CRUD rejects the attachment kind.
+	attachmentEnvelopeVersion?: number;
+	attachmentState?: 'pending' | 'finalizing' | 'ready' | 'deleting';
+	objectSizeBytes?: number;
+	objectKey?: string;
+	objectVersionId?: string;
+	attachmentRequestFingerprint?: string;
+	attachmentFinalizationLeaseId?: string;
+	attachmentPartsIssuedAt?: Date;
+	attachmentObjectlessDelete?: true;
+	attachmentMpuEmptyVerifiedAt?: Date;
+	uploadId?: string;
+	attachmentExpiresAt?: Date;
   sandboxExpiresAt?: Date;
   sandboxSpace?: string;
   // System kinds only (user/theme/feed-algorithm/waitlist — the collections
@@ -211,6 +226,7 @@ export type PublicPost = {
   acl: string[];
   text: string;
   images: string[];
+	attachments: AttachmentPublicMetadata[];
   listing: MarketplaceListing | null;
   // thingtime posts: the free-form structured thing under crystal.thing
   thing: Record<string, any> | null;
@@ -682,6 +698,15 @@ export type CreateThingInput = {
 
 type CreateThingResult = Fail | { ok: true; doc: ThingDoc };
 
+// Dedicated server features may extend the atomic Thing insert without
+// opening their protected fields to generic client input. Hooks run after the
+// insert and before commit; throwing rolls back the content row and its ledger
+// charge together.
+export type CreateThingHooks = {
+	postAttachments?: { hasAny: boolean; hasVisual: boolean };
+	afterInsert?: (doc: ThingDoc, session: any) => Promise<void>;
+};
+
 // audience for a new thing: explicit acl > legacy visibility name > default
 const resolveInputAcl = (input: { acl?: unknown; visibility?: unknown }): string[] | null | Fail => {
   if (input.acl !== undefined && input.acl !== null) {
@@ -724,10 +749,13 @@ export const createThing = async (
   ownerId: string,
   input: CreateThingInput,
   viewer: Viewer = null,
-  app: AppLens = null
+	app: AppLens = null,
+	hooks: CreateThingHooks = {}
 ): Promise<CreateThingResult> => {
   const asOwner = viewer && viewer.id === ownerId ? viewer : { id: ownerId };
-  const validated = validateThingtimeCrystal(input.thingtime, input.crystal);
+	const validated = validateThingtimeCrystal(input.thingtime, input.crystal, {
+		postAttachments: hooks.postAttachments
+	});
   if (isFail(validated)) return validated;
 
   // system kinds are written ONLY by their dedicated utils (register, themes,
@@ -905,11 +933,12 @@ export const createThing = async (
 		if (charge.ok === false) return fail(charge.status, charge.error);
 	}
   try {
-		if (billable || registeredApp || target) {
+		if (billable || registeredApp || target || hooks.afterInsert) {
 			await withMongoTransaction(async (session) => {
 				if (billable) await applyUserStorageDelta(ownerId, sizeBytes, session);
 				if (registeredApp) await applyAppStorageDeltaTransaction(registeredApp, sizeBytes, session);
 				await things.insertOne(doc as any, { session });
+				if (hooks.afterInsert) await hooks.afterInsert(doc, session);
 				if (target) {
 					const touched = await things.updateOne({ shareId: target.shareId } as any, { $set: { updatedAt: now } }, { session });
 					if (touched.matchedCount === 0) {
@@ -972,7 +1001,12 @@ export type CreatePostInput = {
 type CreateResult = Fail | { ok: true; post: PublicPost };
 
 // Legacy-shaped convenience wrapper — same unified path underneath.
-export const createPost = async (ownerId: string, input: CreatePostInput, viewer: Viewer = null): Promise<CreateResult> => {
+export const createPost = async (
+	ownerId: string,
+	input: CreatePostInput,
+	viewer: Viewer = null,
+	hooks: CreateThingHooks = {}
+): Promise<CreateResult> => {
   const created = await createThing(
     ownerId,
     {
@@ -985,7 +1019,9 @@ export const createPost = async (ownerId: string, input: CreatePostInput, viewer
       shareId: input.shareId,
       createdAt: input.createdAt
     },
-    viewer
+		viewer,
+		null,
+		hooks
   );
   if (isFail(created)) return created;
   return { ok: true, post: (await toPublicPosts([created.doc], viewer || ownerId))[0] };
@@ -1187,6 +1223,30 @@ const resolveRelated = async (docs: ThingDoc[]): Promise<RelatedThings> => {
   return { commentsByTarget, reactionsByTarget, shareCountByTarget, commentCountByTarget };
 };
 
+// Attachments are relational protected Things. Resolve one bounded query for
+// the whole post page (including shared originals), and project only stable
+// metadata; private object keys/upload ids never leave this module boundary.
+const resolvePostAttachments = async (postIds: string[]): Promise<Map<string, AttachmentPublicMetadata[]>> => {
+	const ids = [...new Set(postIds)].filter(Boolean);
+	const byTarget = new Map<string, AttachmentPublicMetadata[]>();
+	if (!ids.length) return byTarget;
+	const things = await getThingsCollection();
+	const docs = (await things
+		.find({ thingtime: 'attachment', targetId: { $in: ids }, attachmentState: 'ready' } as any)
+		.project({ shareId: 1, targetId: 1, crystal: 1, createdAt: 1 })
+		.sort({ createdAt: 1, shareId: 1 })
+		.toArray()) as any[];
+	for (const doc of docs) {
+		const targetId = typeof doc.targetId === 'string' ? doc.targetId : '';
+		const attachment = toAttachmentPublicMetadata(doc.shareId, doc.crystal);
+		if (!targetId || !attachment) continue;
+		const current = byTarget.get(targetId) ?? [];
+		current.push(attachment);
+		byTarget.set(targetId, current);
+	}
+	return byTarget;
+};
+
 // Total comment count for whole threads (every descendant, not just direct
 // children) — one $graphLookup per page of ids, following targetId chains
 // through v2 comment things.
@@ -1275,9 +1335,13 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
     : [];
   const originalsById = new Map(originals.map((doc) => [doc.shareId, doc]));
 
-  const related = await resolveRelated([...docs, ...originals]);
+	const projectedDocs = [...docs, ...originals];
+	const [related, threadCounts, attachmentsByTarget] = await Promise.all([
+		resolveRelated(projectedDocs),
   // total thread sizes (all descendants) for the "N comments" counters
-  const threadCounts = await resolveThreadCounts([...docs, ...originals].map((doc) => doc.shareId));
+		resolveThreadCounts(projectedDocs.map((doc) => doc.shareId)),
+		resolvePostAttachments(projectedDocs.map((doc) => doc.shareId))
+	]);
 
   const userIds: string[] = [];
   [...docs, ...originals].forEach((doc) => {
@@ -1343,6 +1407,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
       acl: aclOf(doc),
       text: String(crystal.text || ''),
       images: (crystal.images as string[]) || [],
+			attachments: attachmentsByTarget.get(doc.shareId) || [],
       listing: (crystal.listing as MarketplaceListing) || null,
       thing: crystal.thing && typeof crystal.thing === 'object' && !Array.isArray(crystal.thing) ? (crystal.thing as Record<string, any>) : null,
       tags: doc.tags || [],
@@ -2476,7 +2541,7 @@ const cascadeAttachmentFilter = (parentIds: string[]) => ({
 			targetId: { $in: parentIds },
 			// A malformed multi-kind Thing must never turn a share into cascade
 			// garbage: shares intentionally survive their original disappearing.
-			thingtime: { $in: ['comment', 'reaction', 'save'], $nin: ['share'] }
+			thingtime: { $in: ['attachment', 'comment', 'reaction', 'save'], $nin: ['share'] }
 		},
 		{
 			parentId: { $in: parentIds },
@@ -2500,7 +2565,7 @@ const cascadeParentIdsOf = (doc: ThingDoc): string[] => {
 	const parents = new Set<string>();
 	const thingtime = Array.isArray(doc.thingtime) ? doc.thingtime : [];
 	if (
-		thingtime.some((entry) => entry === 'comment' || entry === 'reaction' || entry === 'save') &&
+		thingtime.some((entry) => entry === 'attachment' || entry === 'comment' || entry === 'reaction' || entry === 'save') &&
 		!thingtime.includes('share') &&
 		typeof doc.targetId === 'string' &&
 		doc.targetId
@@ -2778,7 +2843,19 @@ const deleteDrainedRootAtomically = async (deleteFilter: Record<string, any>): P
 	});
 };
 
-export const deleteThing = async (viewerInput: string | Viewer, shareId: unknown, app: AppLens = null): Promise<Fail | { ok: true }> => {
+export type DeleteThingHooks = {
+	// External objects must become inaccessible before their protected source
+	// Things are removed and quota is refunded. A failure leaves the root and
+	// conservative charge intact for a safe retry.
+	beforeCascade?: (root: ThingDoc) => Promise<Fail | { ok: true }>;
+};
+
+export const deleteThing = async (
+	viewerInput: string | Viewer,
+	shareId: unknown,
+	app: AppLens,
+	hooks: DeleteThingHooks
+): Promise<Fail | { ok: true }> => {
   const viewer = asViewer(viewerInput);
   if (!viewer?.id) return fail(401, 'Unauthorized');
   if (typeof shareId !== 'string' || !shareId.trim()) return fail(400, 'Thing id is required');
@@ -2811,6 +2888,25 @@ export const deleteThing = async (viewerInput: string | Viewer, shareId: unknown
 	const anchoredDeleteFilter = { ...deleteFilter, _id: (initial as any)._id };
 
 	try {
+		if (hooks.beforeCascade) {
+			const prepared = await hooks.beforeCascade(initial);
+			if (prepared.ok === false) return prepared;
+		} else {
+			// Defense in depth for future/internal callers: generic cascade deletion
+			// must never refund a protected attachment Thing before its external S3
+			// version is permanently deleted. Home routes provide beforeCascade;
+			// custom data planes cannot own private attachments.
+			const attachmentChild = await things.findOne(
+				{
+					ownerId: initial.ownerId,
+					thingtime: 'attachment',
+					attachmentState: { $in: ['pending', 'finalizing', 'ready', 'deleting'] },
+					targetId: { $in: cascadeLinkIdsOf(initial) }
+				} as any,
+				{ projection: { _id: 1 } }
+			);
+			if (attachmentChild) return fail(409, 'Attachment cleanup must finish before this Thing can be deleted');
+		}
 		// Descendants commit leaf-first in deterministic <=100-row transactions;
 		// the root remains as a durable retry anchor until the closure is empty.
 		// Each batch uses exact findOneAndDelete before-images, so Mongo callback

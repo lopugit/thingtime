@@ -1,0 +1,132 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+import {
+	ATTACHMENT_ENVELOPE_VERSION,
+	ATTACHMENT_STATES,
+	attachmentMediaKindForContentType,
+	attachmentObjectSizeBytesForAccounting,
+	isAttachmentFinalizationLeaseId,
+	isAttachmentObjectVersionId,
+	sanitizeAttachmentPublicMetadata,
+	toAttachmentPublicMetadata
+} from './attachmentCore.ts';
+
+const attachment = (overrides: Record<string, unknown> = {}) => ({
+	thingtime: ['attachment'],
+	attachmentEnvelopeVersion: ATTACHMENT_ENVELOPE_VERSION,
+	attachmentState: 'pending',
+	objectSizeBytes: 42,
+	objectKey: 'pending/user/attachment-id',
+	crystal: {
+		name: 'photo.png',
+		size: 42,
+		contentType: 'image/png',
+		mediaKind: 'image'
+	},
+	...overrides
+});
+
+test('attachment metadata is canonical, bounded, and derives a safe media kind', () => {
+	assert.deepEqual(
+		sanitizeAttachmentPublicMetadata({
+			name: '  Holiday Photo.PNG  ',
+			size: 42,
+			contentType: 'IMAGE/PNG',
+			mediaKind: 'file'
+		}),
+		{
+			ok: true,
+			crystal: {
+				name: 'Holiday Photo.PNG',
+				size: 42,
+				contentType: 'image/png',
+				mediaKind: 'image'
+			}
+		}
+	);
+	assert.equal(attachmentMediaKindForContentType('image/svg+xml'), 'file');
+	assert.equal(attachmentMediaKindForContentType('text/html'), 'file');
+	assert.equal(attachmentMediaKindForContentType('video/mp4'), 'video');
+	assert.equal(attachmentMediaKindForContentType('audio/mpeg'), 'audio');
+	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'bad\0name', size: 1, contentType: 'text/plain' }).ok, false);
+	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'bad\ud800name', size: 1, contentType: 'text/plain' }).ok, false);
+	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'safe\u202Egnp.exe', size: 1, contentType: 'text/plain' }).ok, false);
+	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'bad', size: 1.5, contentType: 'text/plain' }).ok, false);
+	assert.deepEqual(toAttachmentPublicMetadata('attachment-id', attachment().crystal), {
+		id: 'attachment-id',
+		name: 'photo.png',
+		size: 42,
+		contentType: 'image/png',
+		mediaKind: 'image'
+	});
+});
+
+test('every lifecycle state remains a valid billable attachment envelope', () => {
+	for (const attachmentState of ATTACHMENT_STATES) {
+		assert.equal(attachmentObjectSizeBytesForAccounting(attachment({ attachmentState })), 42, attachmentState);
+	}
+	assert.equal(attachmentObjectSizeBytesForAccounting(attachment({ objectVersionId: 'opaque-version-id' })), 42);
+	assert.equal(isAttachmentObjectVersionId('opaque-version-id'), true);
+	assert.equal(isAttachmentFinalizationLeaseId('finalize:lease-1'), true);
+});
+
+test('only an exact server envelope contributes object bytes', () => {
+	assert.equal(attachmentObjectSizeBytesForAccounting({ thingtime: ['post'], objectSizeBytes: 999 }), undefined);
+	assert.equal(attachmentObjectSizeBytesForAccounting(attachment({ attachmentEnvelopeVersion: 0 })), null);
+	assert.equal(attachmentObjectSizeBytesForAccounting(attachment({ attachmentState: 'uploaded' })), null);
+	assert.equal(attachmentObjectSizeBytesForAccounting(attachment({ objectSizeBytes: 41 })), null);
+	assert.equal(attachmentObjectSizeBytesForAccounting(attachment({ objectKey: '' })), null);
+	assert.equal(attachmentObjectSizeBytesForAccounting(attachment({ objectVersionId: '' })), null);
+	assert.equal(attachmentObjectSizeBytesForAccounting(attachment({ objectVersionId: 'bad\nversion' })), null);
+	assert.equal(attachmentObjectSizeBytesForAccounting(attachment({ attachmentRequestFingerprint: 'a'.repeat(64) })), 42);
+	assert.equal(attachmentObjectSizeBytesForAccounting(attachment({ attachmentRequestFingerprint: 'not-a-fingerprint' })), null);
+	assert.equal(
+		attachmentObjectSizeBytesForAccounting(attachment({ attachmentState: 'finalizing', attachmentFinalizationLeaseId: 'finalize:lease-1' })),
+		42
+	);
+	assert.equal(attachmentObjectSizeBytesForAccounting(attachment({ attachmentFinalizationLeaseId: 'finalize:lease-1' })), null);
+	assert.equal(
+		attachmentObjectSizeBytesForAccounting(attachment({ attachmentState: 'finalizing', attachmentFinalizationLeaseId: 'bad lease' })),
+		null
+	);
+	assert.equal(
+		attachmentObjectSizeBytesForAccounting(attachment({ attachmentPartsIssuedAt: new Date('2026-08-09T00:00:00.000Z'), uploadId: 'mpu-1' })),
+		42
+	);
+	assert.equal(attachmentObjectSizeBytesForAccounting(attachment({ attachmentPartsIssuedAt: new Date('2026-08-09T00:00:00.000Z') })), null);
+	assert.equal(
+		attachmentObjectSizeBytesForAccounting(
+			attachment({
+				attachmentState: 'ready',
+				attachmentPartsIssuedAt: new Date('2026-08-09T00:00:00.000Z'),
+				uploadId: 'mpu-1'
+			})
+		),
+		null
+	);
+	assert.equal(attachmentObjectSizeBytesForAccounting(attachment({ attachmentState: 'deleting', attachmentObjectlessDelete: true })), 42);
+	assert.equal(attachmentObjectSizeBytesForAccounting(attachment({ attachmentObjectlessDelete: true })), null);
+	assert.equal(attachmentObjectSizeBytesForAccounting(attachment({ attachmentState: 'deleting', attachmentObjectlessDelete: false })), null);
+	assert.equal(
+		attachmentObjectSizeBytesForAccounting(attachment({ attachmentState: 'deleting', attachmentObjectlessDelete: true, uploadId: 'mpu-1' })),
+		null
+	);
+	assert.equal(
+		attachmentObjectSizeBytesForAccounting(
+			attachment({
+				attachmentState: 'deleting',
+				uploadId: 'mpu-1',
+				attachmentPartsIssuedAt: new Date('2026-08-08T00:00:00.000Z'),
+				attachmentMpuEmptyVerifiedAt: new Date('2026-08-09T00:00:00.000Z')
+			})
+		),
+		42
+	);
+	assert.equal(attachmentObjectSizeBytesForAccounting(attachment({ attachmentMpuEmptyVerifiedAt: new Date('2026-08-09T00:00:00.000Z') })), null);
+	assert.equal(
+		attachmentObjectSizeBytesForAccounting(attachment({ crystal: { name: 'photo.png', size: 42, contentType: 'image/png', mediaKind: 'file' } })),
+		null,
+		'a caller cannot forge an inline-safe media kind or a noncanonical crystal'
+	);
+});

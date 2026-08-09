@@ -1,6 +1,6 @@
 # Vercel Deployments
 
-Last updated: 2026-08-07
+Last updated: 2026-08-09
 
 ## Project
 
@@ -23,6 +23,23 @@ Last updated: 2026-08-07
 - Production alias: https://thingtime-lopugits-projects.vercel.app
 - Main branch alias: https://thingtime-git-main-lopugits-projects.vercel.app
 - Production branch: `main`
+- Private post attachments use Vercel OIDC to assume the AWS role named
+  `thingtime-vercel-s3-production`. The project variables
+  `THINGTIME_PRIVATE_S3_ROLE_ARN`, `THINGTIME_PRIVATE_S3_BUCKET`, and
+  `THINGTIME_PRIVATE_S3_REGION` are scoped to Production only. Preview branches
+  intentionally cannot assume this role or upload to the production bucket; a
+  future preview attachment environment needs its own role, bucket, and CORS
+  origin.
+- Add `CRON_SECRET` as a **Sensitive**, **Production-only** variable (never
+  record its value here). `remix/vercel.json` invokes
+  `GET /api/v1/attachments/cleanup` at minute 17 every hour; Vercel sends the
+  exact `Authorization: Bearer <CRON_SECRET>` header automatically. The route
+  has no cookie, PAT, app-token, or service-account fallback, processes at most
+  1,000 cleanup intents with a 25-second wall-clock budget, and leaves failed
+  rows billed and scheduled for a later retry. Canceled multipart uploads that
+  issued a part URL stay billed through the bucket's seven-day lifecycle window
+  plus a safety day, then require two empty verification passes at least one
+  hour apart.
 
 ## Preview
 

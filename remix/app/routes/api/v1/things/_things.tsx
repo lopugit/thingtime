@@ -2,6 +2,17 @@ import { json } from '~/api/http';
 
 import { actorCors, actorPat, actorUser, resolveActor } from '~/api/utils/auth/resolveActor';
 import { appCorsHeaders, appDataPreflight } from '~/api/utils/apps/cors';
+import {
+  createReadyAttachmentPostInsertHook,
+  inspectReadyAttachmentsForPost,
+  prepareAttachmentCascadeForThing
+} from '~/api/utils/attachments/attachments';
+import { isSameOriginAttachmentRequest } from '~/api/utils/attachments/attachmentResponses';
+import {
+  attachmentPostActorAllowed,
+  postAttachmentRequest,
+  postBodyWithoutAttachmentIds
+} from '~/api/utils/attachments/postCreate';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import {
   appShapeProjections,
@@ -194,6 +205,56 @@ export const action = async ({ request }: { request: Request }) => {
     );
   }
 
+  const isUnifiedPostBody =
+    method === 'POST' && body && typeof body === 'object' && ('thingtime' in body || 'crystal' in body);
+  const attachmentRequest = postAttachmentRequest(method, body, !!isUnifiedPostBody);
+  if (attachmentRequest.ok === false) {
+    return json(
+      { ok: false, error: attachmentRequest.error },
+      { status: attachmentRequest.status, headers: cors }
+    );
+  }
+
+  let bodyForCreate = body;
+  let attachmentHooks:
+    | {
+        postAttachments: { hasAny: boolean; hasVisual: boolean };
+        afterInsert?: ReturnType<typeof createReadyAttachmentPostInsertHook>;
+      }
+    | undefined;
+  if (attachmentRequest.present) {
+    if (!attachmentPostActorAllowed(actor.kind, user.accountKind)) {
+      return json(
+        { ok: false, error: 'Attachments require a full user session' },
+        { status: 403, headers: cors }
+      );
+    }
+    if (!isSameOriginAttachmentRequest(request)) {
+      return json(
+        { ok: false, error: 'Cross-origin attachment requests are not allowed' },
+        { status: 403, headers: cors }
+      );
+    }
+    const mediaType = request.headers.get('Content-Type')?.split(';')[0]?.trim().toLowerCase();
+    if (mediaType !== 'application/json') {
+      return json(
+        { ok: false, error: 'Content-Type must be application/json' },
+        { status: 415, headers: cors }
+      );
+    }
+
+    const inspected = await inspectReadyAttachmentsForPost(user.id, attachmentRequest.attachmentIds);
+    if (inspected.ok === false) {
+      return json({ ok: false, error: inspected.error }, { status: inspected.status, headers: cors });
+    }
+    const attachmentIds = attachmentRequest.attachmentIds as readonly string[];
+    attachmentHooks = {
+      postAttachments: { hasAny: inspected.hasAny, hasVisual: inspected.hasVisual },
+      ...(attachmentIds.length ? { afterInsert: createReadyAttachmentPostInsertHook(attachmentIds) } : {})
+    };
+    bodyForCreate = postBodyWithoutAttachmentIds(body as Record<string, unknown>);
+  }
+
   if (method === 'POST') {
     // Unified shape whenever the body opts into the thing vocabulary: an
     // explicit `thingtime`, or a schema-less `crystal` (defaults to ["data"]).
@@ -201,7 +262,7 @@ export const action = async ({ request }: { request: Request }) => {
     // keeps the decision in one place — validateThingtimeCrystal raises the
     // right error for a malformed thingtime/crystal instead of the request
     // silently falling through to the legacy post path.
-    const isUnified = body && typeof body === 'object' && ('thingtime' in body || 'crystal' in body);
+    const isUnified = !!isUnifiedPostBody;
     if (app && !isUnified) {
       // the legacy post path resolves audience through the first-party
       // defaults — app writes must always ride the clamped unified path
@@ -211,7 +272,7 @@ export const action = async ({ request }: { request: Request }) => {
       );
     }
     if (isUnified) {
-      const result = await createThing(user.id, body, viewer, app);
+      const result = await createThing(user.id, bodyForCreate, viewer, app, attachmentHooks);
       if (result.ok === false) {
         return json({ ok: false, error: result.error }, { status: result.status, headers: cors });
       }
@@ -226,7 +287,7 @@ export const action = async ({ request }: { request: Request }) => {
       }
       return json({ ok: true, thing: (await toPublicThings([result.doc], viewer))[0] });
     }
-    const result = await createPost(user.id, body, viewer);
+    const result = await createPost(user.id, bodyForCreate, viewer, attachmentHooks);
     if (result.ok === false) {
       return json({ ok: false, error: result.error }, { status: result.status });
     }
@@ -254,7 +315,11 @@ export const action = async ({ request }: { request: Request }) => {
 
   if (method === 'DELETE') {
     const id = (new URL(request.url).searchParams.get('id') || '').trim() || body?.id;
-    const result = await deleteThing(viewer, id, app);
+    const attachmentHooks =
+      actor.kind !== 'app' && user.accountKind === 'user'
+        ? { beforeCascade: prepareAttachmentCascadeForThing }
+        : undefined;
+    const result = await deleteThing(viewer, id, app, attachmentHooks);
     if (result.ok === false) {
       return json({ ok: false, error: result.error }, { status: result.status, headers: cors });
     }

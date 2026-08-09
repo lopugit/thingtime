@@ -2,6 +2,8 @@
 // public projections in remix/app/api/utils/things + algorithms + auth/users —
 // the API utils are the source of truth; keep this file in sync with them.
 
+import type { PublicAttachment } from '~/components/Attachments/attachmentTypes';
+
 export type PublicProfile = {
   id: string;
   username: string;
@@ -71,6 +73,9 @@ export type PublicPost = {
   visibility: PostVisibility;
   text: string;
   images: string[];
+  // Stable metadata only. Content always resolves through the authenticated
+  // attachment endpoint; feed payloads never carry S3 keys or signed URLs.
+  attachments: PublicAttachment[];
   listing: MarketplaceListing | null;
   // thingtime posts: the free-form structured thing (crystal.thing)
   thing: Record<string, any> | null;

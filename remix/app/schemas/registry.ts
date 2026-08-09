@@ -13,6 +13,17 @@
 // builtin-projection test.
 // @ts-ignore Node 24 executes TypeScript directly and requires the extension.
 import { MAX_REACTION_EMOJIS, sanitizeReactionToken } from '../utils/reactionTokens.ts';
+// Pure attachment metadata/envelope vocabulary shared with the server storage
+// layer. This module has no Node imports, so registry remains browser-safe.
+import {
+	ATTACHMENT_ENVELOPE_VERSION,
+	ATTACHMENT_MEDIA_KINDS,
+	ATTACHMENT_STATES,
+	ATTACHMENT_THINGTIME,
+	MAX_ATTACHMENT_CONTENT_TYPE_CHARS,
+	MAX_ATTACHMENT_NAME_CHARS,
+	sanitizeAttachmentPublicMetadata
+} from '../api/utils/attachments/attachmentCore.ts';
 
 export type ThingtimeFieldType = 'string' | 'number' | 'boolean' | 'date' | 'enum' | 'string[]' | 'object' | 'record' | 'id';
 
@@ -360,7 +371,8 @@ const rootThingSchema: ThingtimeSchema = {
 			type: 'number',
 			required: false,
 			system: true,
-			description: 'Exact UTF-8 JSON bytes of the billable crystal, extended, and tags payload; absent on platform control-plane Things.'
+			description:
+				'Exact logical bytes billed to the owner: UTF-8 JSON crystal/extended/tags bytes plus verified objectSizeBytes for protected attachment Things; absent on platform control-plane Things.'
 		},
 		{
 			name: 'storageClass',
@@ -376,6 +388,93 @@ const rootThingSchema: ThingtimeSchema = {
 			required: false,
 			system: true,
 			description: 'Version of the logical byte projection used for sizeBytes.'
+		},
+		{
+			name: 'attachmentEnvelopeVersion',
+			type: 'number',
+			required: false,
+			system: true,
+			description: `Server-only proof for attachment object accounting (currently ${ATTACHMENT_ENVELOPE_VERSION}); never accepted from generic Thing input.`
+		},
+		{
+			name: 'attachmentState',
+			type: 'enum',
+			required: false,
+			values: [...ATTACHMENT_STATES],
+			system: true,
+			description:
+				'Private upload lifecycle state. Pending, finalizing, ready, and deleting objects all remain billable until their source Thing is removed.'
+		},
+		{
+			name: 'objectSizeBytes',
+			type: 'number',
+			required: false,
+			min: 0,
+			system: true,
+			description: 'Verified S3 object bytes added to a protected attachment Thing’s ordinary JSON allocation.'
+		},
+		{
+			name: 'objectKey',
+			type: 'string',
+			required: false,
+			system: true,
+			description: 'Private server-generated S3 object key; never copied from generic Thing input or projected publicly.'
+		},
+		{
+			name: 'objectVersionId',
+			type: 'string',
+			required: false,
+			system: true,
+			description: 'Private immutable S3 version id used for exact reads and permanent deletion before quota is refunded.'
+		},
+		{
+			name: 'attachmentRequestFingerprint',
+			type: 'string',
+			required: false,
+			system: true,
+			description: 'Private server-derived fingerprint that makes upload-start retries idempotent without exposing request metadata.'
+		},
+		{
+			name: 'attachmentFinalizationLeaseId',
+			type: 'string',
+			required: false,
+			system: true,
+			description: 'Private server-generated fencing token for the one request allowed to finalize a multipart upload.'
+		},
+		{
+			name: 'attachmentPartsIssuedAt',
+			type: 'date',
+			required: false,
+			system: true,
+			description: 'Private proof that a presigned UploadPart URL left the server; only these MPUs require lifecycle-backed settlement before refund.'
+		},
+		{
+			name: 'attachmentObjectlessDelete',
+			type: 'boolean',
+			required: false,
+			system: true,
+			description: 'Private deletion proof for a reserved upload that never received a multipart upload id or object version.'
+		},
+		{
+			name: 'attachmentMpuEmptyVerifiedAt',
+			type: 'date',
+			required: false,
+			system: true,
+			description: 'Private timestamp of the first empty multipart verification; a later cron pass must independently confirm it before refund.'
+		},
+		{
+			name: 'uploadId',
+			type: 'string',
+			required: false,
+			system: true,
+			description: 'Private multipart-upload id while an attachment is pending or finalizing.'
+		},
+		{
+			name: 'attachmentExpiresAt',
+			type: 'date',
+			required: false,
+			system: true,
+			description: 'Private cleanup deadline for an unfinished upload; cleanup must refund transactionally rather than using Mongo TTL.'
 		},
 		{
 			name: 'expiresAt',
@@ -462,6 +561,53 @@ const postSchema: ThingtimeSchema = {
     }
   ],
   example: { type: 'text', text: 'Everything is a thing ✨', images: [], listing: null, thing: null }
+};
+
+const attachmentSchema: ThingtimeSchema = {
+	id: ATTACHMENT_THINGTIME,
+	version: 1,
+	kind: 'crystal',
+	collection: null,
+	title: 'Attachment',
+	summary: 'A private-S3 file attached relationally to a post.',
+	detail:
+		'Attachment Things are created only through the dedicated upload endpoints. Their crystal contains ' +
+		'stable, safe public metadata; object keys, multipart ids, lifecycle state, and verified object bytes ' +
+		'are server-owned root fields. A ready attachment points at its post through targetId and inherits that ' +
+		'post’s audience. Pending/finalizing/deleting rows remain billable source records until cleanup confirms ' +
+		'the object is inaccessible, preventing quota oversubscription and refund races.',
+	createdVia: 'POST /api/v1/attachments/uploads',
+	fields: [
+		{
+			name: 'name',
+			type: 'string',
+			required: true,
+			max: MAX_ATTACHMENT_NAME_CHARS,
+			description: 'Display filename only; never used as an S3 key.'
+		},
+		{
+			name: 'size',
+			type: 'number',
+			required: true,
+			min: 0,
+			description: 'Verified object size in bytes; must equal the server-owned root objectSizeBytes.'
+		},
+		{
+			name: 'contentType',
+			type: 'string',
+			required: true,
+			max: MAX_ATTACHMENT_CONTENT_TYPE_CHARS,
+			description: 'Normalized MIME type, defaulting to application/octet-stream.'
+		},
+		{
+			name: 'mediaKind',
+			type: 'enum',
+			required: true,
+			values: [...ATTACHMENT_MEDIA_KINDS],
+			description: 'Server-derived safe rendering class. SVG, HTML, and unknown types are files, never inline media.'
+		}
+	],
+	example: { name: 'sunset.webp', size: 482013, contentType: 'image/webp', mediaKind: 'image' }
 };
 
 const commentSchema: ThingtimeSchema = {
@@ -1323,6 +1469,7 @@ const appDataSchema: ThingtimeSchema = {
 // any through generic CRUD would be privilege escalation, credential forgery,
 // or a quota bypass.
 export const PROTECTED_THINGTIME = [
+	ATTACHMENT_THINGTIME,
   'user',
   'theme',
   'feed-algorithm',
@@ -1437,6 +1584,7 @@ const waitlistThingSchema: ThingtimeSchema = {
 export const thingtimeSchemas: ThingtimeSchema[] = [
   rootThingSchema,
   postSchema,
+	attachmentSchema,
   commentSchema,
   reactionSchema,
   shareSchema,
@@ -1480,12 +1628,35 @@ const isFail = <T extends { ok: boolean }>(value: T | Fail): value is Fail => va
 
 const isHttpUrl = (value: string) => /^https?:\/\//i.test(value);
 
-const sanitizePostCrystal = (input: Record<string, unknown>, appliedIds: string[]): { ok: true; crystal: Record<string, unknown> } | Fail => {
+const sanitizeAttachmentCrystal = (input: Record<string, unknown>): { ok: true; crystal: Record<string, unknown> } | Fail => {
+	const sanitized = sanitizeAttachmentPublicMetadata(input);
+	if (sanitized.ok === false) return fail(400, sanitized.error);
+	return sanitized;
+};
+
+export type ThingtimeCrystalValidationOptions = {
+	// Server-only attachment preflight. Generic Thing input never controls this
+	// context; the dedicated attachment store verifies ownership/state first and
+	// the post transaction rechecks while binding.
+	postAttachments?: { hasAny: boolean; hasVisual: boolean };
+};
+
+const sanitizePostCrystal = (
+	input: Record<string, unknown>,
+	appliedIds: string[],
+	options: ThingtimeCrystalValidationOptions = {}
+): { ok: true; crystal: Record<string, unknown> } | Fail => {
   const type = POST_TYPES.includes(input.type as any) ? (input.type as string) : null;
   if (!type) return fail(400, 'Post type must be text, image, marketplace, or thingtime');
   // share things render the shared original, so their post payload may be
   // an empty caption regardless of type
   const isShare = appliedIds.includes('share');
+	// Comment attachments are intentionally not shipping in this change. Rich
+	// comments still pass through the post sanitizer, so never let a post-level
+	// attachment preflight relax their existing body rules.
+	const isComment = appliedIds.includes('comment');
+	const hasAnyAttachment = !isComment && options.postAttachments?.hasAny === true;
+	const hasVisualAttachment = !isComment && options.postAttachments?.hasVisual === true;
 
   const text = typeof input.text === 'string' ? input.text.trim() : '';
   if (text.length > MAX_TEXT_CHARS) return fail(400, `Post text is too long (max ${MAX_TEXT_CHARS})`);
@@ -1550,8 +1721,10 @@ const sanitizePostCrystal = (input: Record<string, unknown>, appliedIds: string[
     }
   }
 
-  if (!isShare && type === 'text' && !text) return fail(400, 'Say something first ✍️');
-  if (!isShare && type === 'image' && !images.length) return fail(400, 'Image posts need at least one image');
+	if (!isShare && type === 'text' && !text && !hasAnyAttachment) return fail(400, 'Say something first ✍️');
+	if (!isShare && type === 'image' && !images.length && !hasVisualAttachment) {
+		return fail(400, 'Image posts need at least one image or video attachment');
+	}
 
   return { ok: true, crystal: { type, text, images, listing, thing } };
 };
@@ -2301,8 +2474,13 @@ const sanitizeFeedAlgorithmCrystal = (input: Record<string, unknown>): { ok: tru
 
 const crystalSanitizers: Record<
   string,
-  (input: Record<string, unknown>, appliedIds: string[]) => { ok: true; crystal: Record<string, unknown> } | Fail
+	(
+		input: Record<string, unknown>,
+		appliedIds: string[],
+		options?: ThingtimeCrystalValidationOptions
+	) => { ok: true; crystal: Record<string, unknown> } | Fail
 > = {
+	attachment: sanitizeAttachmentCrystal,
   post: sanitizePostCrystal,
   comment: sanitizeCommentCrystal,
   reaction: sanitizeReactionCrystal,
@@ -2328,7 +2506,11 @@ export type ValidatedCrystal = { ok: true; thingtime: string[]; crystal: Record<
 // /search — without declaring any schema. Storage always carries the resolved
 // non-empty thingtime; schema-lessness is an input convenience, never a stored
 // state.
-export const validateThingtimeCrystal = (thingtime: unknown, crystal: unknown): ValidatedCrystal | Fail => {
+export const validateThingtimeCrystal = (
+	thingtime: unknown,
+	crystal: unknown,
+	options: ThingtimeCrystalValidationOptions = {}
+): ValidatedCrystal | Fail => {
   if (thingtime === undefined || thingtime === null || (Array.isArray(thingtime) && !thingtime.length)) {
     thingtime = ['data'];
   }
@@ -2365,7 +2547,7 @@ export const validateThingtimeCrystal = (thingtime: unknown, crystal: unknown): 
       // refuse with the real reason instead of pretending they don't exist.
       return fail(403, `${id} things are managed by their own endpoints`);
     }
-    const sanitized = sanitizer(input, ids);
+		const sanitized = sanitizer(input, ids, options);
     if (sanitized.ok === false) return sanitized;
     Object.assign(merged, sanitized.crystal);
   }
