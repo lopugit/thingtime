@@ -5724,6 +5724,502 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'users-follow',
+    group: 'social',
+    title: 'Follow / unfollow',
+    endpoint: '/api/v1/users/follow',
+    summary: 'Follow or unfollow another user — one-way, no approval needed.',
+    detail:
+      'Follows are one-way edges (thingtime ["follow"], one thing per follower/followed pair, deduped ' +
+      'by a unique index). Omitting `follow` toggles; passing it explicitly makes the call idempotent. ' +
+      'A new follow emits a new-follower notification to the followed user (respecting their ' +
+      'notification prefs). Friendships are a separate, approval-based system — see /api/v1/users/friend.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST { userId } or { username } of the user to follow.',
+      'Optionally pass follow: true|false for an idempotent set instead of a toggle.',
+      'Read { following, followerCount } back and update the button + count optimistically.',
+      'Handle 400 self-follow, 401 unauthenticated, 404 unknown user, 429 rate-limited.'
+    ],
+    requestExamples: [
+      {
+        name: 'Toggle follow',
+        description: 'Follow (or unfollow, if already following) by user id.',
+        method: 'POST',
+        body: { userId: '664f1c2a9d3e5b0012345678' }
+      },
+      {
+        name: 'Explicit follow',
+        description: 'Idempotent follow by username.',
+        method: 'POST',
+        body: { username: 'lopu', follow: true }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Now following.',
+        body: { ok: true, following: true, followerCount: 12 }
+      },
+      {
+        status: 400,
+        description: 'Self-follow.',
+        body: { ok: false, error: 'You already have your own undivided attention 💅' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'users-friend',
+    group: 'social',
+    title: 'Friend request actions',
+    endpoint: '/api/v1/users/friend',
+    summary: 'Drive the friendship state machine: request, cancel, accept, decline, unfriend.',
+    detail:
+      'Friendships need approval (unlike follows): one thing per user pair (thingtime ["friend"], ' +
+      'crystal.friendKey = sorted pair, unique index), status pending until the recipient accepts. ' +
+      'Requesting someone who already requested you accepts instead of duplicating. Requests emit ' +
+      'friend-request notifications; accepts emit friend-accepted. Accepted friendships power the ' +
+      'tt:userFriends acl circle — friends-only posts become visible to real friends.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST { userId | username, intent } — intent: request | cancel | accept | decline | unfriend.',
+      'request → pending-outgoing (or friends, if they had already asked you).',
+      'accept/decline act on a pending-incoming request; cancel retracts your own.',
+      'Read { friendState } back: none | pending-outgoing | pending-incoming | friends.',
+      'Handle 400 bad intent/self, 401 unauthenticated, 404 unknown user or no pending request, 429 rate-limited.'
+    ],
+    requestExamples: [
+      {
+        name: 'Send request',
+        description: 'Ask another user to be friends.',
+        method: 'POST',
+        body: { username: 'lopu', intent: 'request' }
+      },
+      {
+        name: 'Accept request',
+        description: 'Accept a pending incoming request.',
+        method: 'POST',
+        body: { userId: '664f1c2a9d3e5b0012345678', intent: 'accept' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Request sent.',
+        body: { ok: true, friendState: 'pending-outgoing' }
+      },
+      {
+        status: 404,
+        description: 'Nothing to accept.',
+        body: { ok: false, error: 'No pending friend request from that user' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'users-relationships',
+    group: 'social',
+    title: 'Relationship summary',
+    endpoint: '/api/v1/users/relationships',
+    summary: 'Public follower/following/friend counts for a profile, plus the viewer’s relationship state.',
+    detail:
+      'Counts are public (they render on every profile). When authenticated, `viewer` reports your ' +
+      'relationship to that user: following, followedBy, and friendState (none | pending-outgoing | ' +
+      'pending-incoming | friends). Asking about yourself adds incomingRequests — the pending ' +
+      'friend-request badge count. Logged out, `viewer` is null.',
+    auth: {
+      mode: 'optional',
+      description: 'Works logged out (counts only); anonymous callers are rate-limited per hashed IP.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET ?username=<name> (or ?userId=).',
+      'Render counts on the profile header; drive the Follow / Add friend buttons from `viewer`.',
+      'Handle 404 unknown user and 429 rate-limited.'
+    ],
+    requestExamples: [
+      {
+        name: 'Profile summary',
+        description: 'Counts + viewer state for a profile page.',
+        method: 'GET',
+        query: { username: 'lopu' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Counts and the viewer’s state.',
+        body: {
+          ok: true,
+          userId: '664f…',
+          counts: { followers: 12, following: 34, friends: 5 },
+          viewer: { following: true, followedBy: false, friendState: 'friends' }
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'users-connections',
+    group: 'social',
+    title: 'Connection lists',
+    endpoint: '/api/v1/users/connections',
+    summary: 'Paged public lists of a user’s followers, following, or friends (and your own pending requests).',
+    detail:
+      'type=followers|following|friends return public profile projections for anyone (matching the ' +
+      'public counts). type=requests lists the PENDING incoming friend requests — only for your own ' +
+      'account (403 otherwise). Cursor pagination: pass back `nextBefore` as `before` until it is null.',
+    auth: {
+      mode: 'optional',
+      description: 'Public lists work logged out; type=requests requires auth and your own userId/username.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET ?username=<name>&type=followers|following|friends&limit=&before=.',
+      'Render as profile rows; page with before=<nextBefore>.',
+      'type=requests (your own account) powers the accept/decline inbox.',
+      'Handle 400 bad type, 403 requests-for-someone-else, 404 unknown user, 429 rate-limited.'
+    ],
+    requestExamples: [
+      {
+        name: 'Followers list',
+        description: 'First page of a user’s followers.',
+        method: 'GET',
+        query: { username: 'lopu', type: 'followers', limit: 20 }
+      },
+      {
+        name: 'Pending requests',
+        description: 'Your own incoming friend requests.',
+        method: 'GET',
+        query: { username: 'me-myself', type: 'requests' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'One page of public profiles.',
+        body: {
+          ok: true,
+          users: [{ id: '664f…', username: 'rick', displayName: 'Rick Deckard', avatarUrl: null }],
+          nextBefore: null
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'notifications-list',
+    group: 'notifications',
+    title: 'List notifications',
+    endpoint: '/api/v1/notifications',
+    summary: 'Your notifications, newest first, filtered by your notification prefs — plus the unread count.',
+    detail:
+      'Notifications are server-minted things (new followers, friend requests/accepts, comments, ' +
+      'replies, reactions, shares, and capped posts-from-followed/friends fan-out). The list is ' +
+      'ALWAYS filtered by your current notification settings, so disabling a type hides even ' +
+      'already-written notifications of that type. unreadCount backs the bell badge. Cursor ' +
+      'pagination via before=<nextBefore>.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET ?limit=&before= — newest first.',
+      'Show unreadCount on the bell; refetch on window focus.',
+      'Click-through: postId → /post/<id>, otherwise actor → /profile/<username>.',
+      'Handle 401 unauthenticated and 429 rate-limited.'
+    ],
+    requestExamples: [
+      {
+        name: 'Bell dropdown',
+        description: 'First page for the notifications popover.',
+        method: 'GET',
+        query: { limit: 20 }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Notifications + unread count.',
+        body: {
+          ok: true,
+          notifications: [
+            {
+              id: 'a1b2…',
+              type: 'new-follower',
+              actorId: '664f…',
+              actorUsername: 'rick',
+              actorName: 'Rick Deckard',
+              actorAvatarUrl: null,
+              targetId: '664f…',
+              postId: null,
+              preview: null,
+              readAt: null,
+              createdAt: '2026-08-01T12:00:00.000Z'
+            }
+          ],
+          unreadCount: 1,
+          nextBefore: null
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'notifications-read',
+    group: 'notifications',
+    title: 'Mark notifications read',
+    endpoint: '/api/v1/notifications/read',
+    summary: 'Mark some ({ ids }) or all ({ all: true }) of your notifications as read.',
+    detail:
+      'Flips root readAt on your unread notification things; the unread badge recomputes from it. ' +
+      'Already-read ids are skipped (updated counts only fresh flips).',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST { all: true } when opening the bell, or { ids: [...] } for targeted marks.',
+      'Optimistically zero the badge; reconcile with the response.',
+      'Handle 400 (neither ids nor all), 401 unauthenticated, 429 rate-limited.'
+    ],
+    requestExamples: [
+      {
+        name: 'Mark all read',
+        description: 'Zero the bell badge.',
+        method: 'POST',
+        body: { all: true }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Marked.',
+        body: { ok: true, updated: 3 }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'notifications-settings',
+    group: 'notifications',
+    title: 'Notification settings',
+    endpoint: '/api/v1/notifications/settings',
+    summary: 'Read or merge-patch your notification switches — per type, per channel (push + email), plus channel masters.',
+    detail:
+      'Two channels: push (the bell/in-app channel) and email (SES-backed notification emails), each ' +
+      'with a master switch and per-type switches. Types: friend-request, friend-accepted, ' +
+      'new-follower, post-from-followed, post-from-friend, comment, reply, reaction, share, groups ' +
+      '(reserved), plus the email-only weekly-summary digest. Defaults ON, except email for the two ' +
+      'high-volume post types (post-from-followed / post-from-friend), which are opt-in. GET always ' +
+      'returns the full matrix. POST merges only the keys you send — the new channel shape ' +
+      '{ prefs: { push?, email?, masters? } } or the original flat { prefs: { <type>: boolean } } ' +
+      '(which patches the push channel); unknown keys 400. A disabled push type is hidden from your ' +
+      'list and unread count immediately; a disabled email type stops future emails. Emails only go ' +
+      'to verified addresses and are capped per recipient per hour; every one carries a manage link ' +
+      'and a one-click unsubscribe link.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET returns { prefs: { push, email, masters } } with every switch as a boolean.',
+      'POST { prefs: { email: { <type>: boolean } } } (or push / masters) merges just those switches.',
+      'The flat legacy body { prefs: { <type>: boolean } } still works and patches push.',
+      'Flip switches optimistically; revert on failure.',
+      'Handle 400 unknown key / non-boolean, 401 unauthenticated, 429 rate-limited.'
+    ],
+    requestExamples: [
+      {
+        name: 'Disable follower emails',
+        description: 'Stop new-follower emails only — the bell keeps working.',
+        method: 'POST',
+        body: { prefs: { email: { 'new-follower': false } } }
+      },
+      {
+        name: 'Mute all emails',
+        description: 'Flip the email master off without touching per-type switches.',
+        method: 'POST',
+        body: { prefs: { masters: { email: false } } }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'The full merged switch matrix.',
+        body: {
+          ok: true,
+          prefs: {
+            push: {
+              'friend-request': true,
+              'friend-accepted': true,
+              'new-follower': true,
+              'post-from-followed': true,
+              'post-from-friend': true,
+              comment: true,
+              reply: true,
+              reaction: true,
+              share: true,
+              groups: true
+            },
+            email: {
+              'friend-request': true,
+              'friend-accepted': true,
+              'new-follower': false,
+              'post-from-followed': false,
+              'post-from-friend': false,
+              comment: true,
+              reply: true,
+              reaction: true,
+              share: true,
+              groups: true,
+              'weekly-summary': true
+            },
+            masters: { push: true, email: true }
+          }
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'notifications-email-unsubscribe',
+    group: 'notifications',
+    title: 'Email one-click unsubscribe',
+    endpoint: '/api/v1/notifications/email/unsubscribe',
+    summary: 'The one-click link in notification email footers — flips the email master switch off.',
+    detail:
+      'GET with ?uid=<userId>&token=<hmac> (both come pre-built in every notification email footer; ' +
+      'the token is an HMAC over the user id, so a link can only ever mute its own recipient). No ' +
+      'session needed — email clients don’t carry cookies. Responds with a small HTML confirmation ' +
+      'page, is idempotent, and the switch can be flipped back on any time in Settings → ' +
+      'Notifications. Invalid or missing tokens get a 400 page; requests are IP rate-limited.',
+    auth: {
+      mode: 'none',
+      description: 'Authenticated by the HMAC token in the link, not by session.'
+    },
+    methods: ['GET'],
+    steps: [
+      'Click the “Unsubscribe from all” link in any notification email.',
+      'The email master switch flips off; per-type switches are untouched.',
+      'Re-enable any time from Settings → Notifications.'
+    ],
+    requestExamples: [
+      {
+        name: 'One-click unsubscribe',
+        description: 'As clicked from an email footer.',
+        method: 'GET',
+        query: { uid: '664f…', token: '3f2a…' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'HTML confirmation page (text/html, not JSON).',
+        body: { note: 'Returns an HTML page: “You’re unsubscribed 💌”.' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'notifications-email-weekly-summary',
+    group: 'notifications',
+    title: 'Weekly summary digest run',
+    endpoint: '/api/v1/notifications/email/weekly-summary',
+    summary: 'Kick off the weekly email digest — cron (CRON_SECRET bearer) or admin only.',
+    detail:
+      'Sends every opted-in, email-verified user a recap of the last seven days around their things ' +
+      '(new followers, friend requests, comments, replies, reactions, shares, post views, posts). ' +
+      'Users with zero activity are skipped, and a six-day per-recipient lookback makes the run ' +
+      'idempotent — a retried cron or a manual admin run never double-sends. The Vercel cron ' +
+      '(remix/vercel.json) calls GET with Authorization: Bearer <CRON_SECRET>; signed-in admins can ' +
+      'also run it, and POST { dryRun: true } (or GET ?dryRun=1) previews counts without sending.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Admin session, or the CRON_SECRET bearer token Vercel cron attaches.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'Configure CRON_SECRET in Vercel so the scheduled cron authenticates.',
+      'GET ?dryRun=1 as an admin to preview who would get a digest.',
+      'POST {} (admin) to run manually; the lookback prevents double-sends.',
+      'Handle 401 unauthenticated / 403 non-admin.'
+    ],
+    requestExamples: [
+      {
+        name: 'Dry run',
+        description: 'Preview counts without sending anything.',
+        method: 'POST',
+        body: { dryRun: true }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Run summary.',
+        body: {
+          ok: true,
+          considered: 42,
+          eligible: 17,
+          sent: 9,
+          skipped: { alreadySent: 5, noActivity: 3, failed: 0 },
+          truncated: false,
+          dryRun: false
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'things-views',
+    group: 'things',
+    title: 'Record post views',
+    endpoint: '/api/v1/things/views',
+    summary: 'Batched post view/impression telemetry — unique-viewer deduped, anti-bot filtered, beacon-safe.',
+    detail:
+      'The client reports posts that were ≥50% visible for ≥1s: { events: [{ id, dwellMs, ratio, pos }] } ' +
+      '(dwellMs = on-screen time, ratio = max visible fraction, pos = viewport position 0..1). One doc ' +
+      'per (post, viewer identity) keeps the public viewCount = UNIQUE viewers — replay only bumps ' +
+      'impressions, which the rate limit bounds. Anonymous viewers dedup on a salted hash of IP+UA ' +
+      '(no raw IP stored); UA-less requests are dropped. Owner self-views never count. Views are only ' +
+      'accepted for posts the caller could read. Stats surface publicly on every post payload as ' +
+      'viewCount + viewStats { impressions, avgDwellMs }.',
+    auth: {
+      mode: 'optional',
+      description: 'Works logged out (anonymous identities dedup per salted IP+UA hash).'
+    },
+    methods: ['POST'],
+    steps: [
+      'Batch events client-side (the app flushes every ~10s and on page hide via sendBeacon).',
+      'POST { events: [{ id, dwellMs?, ratio?, pos? }] } — up to 50 per call.',
+      'The response { counted } is informational; failures are safe to ignore.',
+      'Handle 429 rate-limited by dropping the batch (never retry-loop telemetry).'
+    ],
+    requestExamples: [
+      {
+        name: 'Flush view batch',
+        description: 'Two posts seen this scroll session.',
+        method: 'POST',
+        body: {
+          events: [
+            { id: 'a1b2c3…', dwellMs: 4200, ratio: 1, pos: 0.31 },
+            { id: 'd4e5f6…', dwellMs: 900, ratio: 0.8, pos: 0.66 }
+          ]
+        }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Batch accepted (counted = events that passed validation).',
+        body: { ok: true, counted: 2 }
+      }
+    ]
+  }),
+  endpoint({
     id: 'vercel-deployments',
     group: 'vercel',
     title: 'Vercel deployments',
