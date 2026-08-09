@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  CONTROL_PLANE_STORAGE_THINGTIMES,
+  InvalidAttachmentStorageEnvelopeError,
   USER_STORAGE_ACCOUNTING_VERSION,
   USER_STORAGE_STATUS,
   currentContentStorageSizeBytes,
@@ -28,6 +30,54 @@ test('missing payload fields normalize identically everywhere', () => {
 	assert.equal(thingStorageSizeBytes({}), Buffer.byteLength(JSON.stringify({ crystal: null, extended: null, tags: [] }), 'utf8'));
 });
 
+test('protected attachment envelopes add exact object bytes without changing ordinary Thing sizes', () => {
+  const ordinary = {
+    thingtime: ['post'],
+    crystal: { name: 'photo.png', size: 42, contentType: 'image/png', mediaKind: 'image' },
+    extended: null,
+    tags: []
+  };
+  const payloadBytes = Buffer.byteLength(
+    JSON.stringify({ crystal: ordinary.crystal, extended: ordinary.extended, tags: ordinary.tags }),
+    'utf8'
+  );
+  assert.equal(thingStorageSizeBytes(ordinary), payloadBytes);
+  assert.equal(
+    thingStorageSizeBytes({
+      ...ordinary,
+      attachmentEnvelopeVersion: 1,
+      attachmentState: 'ready',
+      objectSizeBytes: 999,
+      objectKey: 'objects/user/forged'
+    }),
+    payloadBytes,
+    'non-attachment Things cannot forge object-byte accounting through root-like fields'
+  );
+  assert.equal(
+    thingStorageSizeBytes({
+      ...ordinary,
+      thingtime: ['attachment'],
+      attachmentEnvelopeVersion: 1,
+      attachmentState: 'ready',
+      objectSizeBytes: 42,
+      objectKey: 'objects/user/attachment-id'
+    }),
+    payloadBytes + 42
+  );
+  assert.throws(
+    () =>
+      thingStorageSizeBytes({
+        ...ordinary,
+        thingtime: ['attachment'],
+        attachmentEnvelopeVersion: 1,
+        attachmentState: 'ready',
+        objectSizeBytes: 41,
+        objectKey: 'objects/user/attachment-id'
+      }),
+    InvalidAttachmentStorageEnvelopeError
+  );
+});
+
 test('incremental ledger arithmetic accepts only an exact current canonical source stamp', () => {
   const doc = {
     schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
@@ -47,6 +97,33 @@ test('incremental ledger arithmetic accepts only an exact current canonical sour
   assert.equal(currentContentStorageSizeBytes({ ...doc, storageClass: undefined }), null);
 });
 
+test('all attachment lifecycle states stay billable while malformed envelopes fail current-stamp validation', () => {
+  const base = {
+    schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+    thingtime: ['attachment'],
+    crystal: { name: 'movie.mp4', size: 100, contentType: 'video/mp4', mediaKind: 'video' },
+    extended: null,
+    tags: [],
+    storageClass: 'content',
+    storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION,
+    attachmentEnvelopeVersion: 1,
+    objectSizeBytes: 100,
+    objectKey: 'pending/user/attachment-id',
+    attachmentState: 'pending',
+    sizeBytes: 0
+  };
+  for (const attachmentState of ['pending', 'finalizing', 'ready', 'deleting']) {
+    const doc = { ...base, attachmentState };
+    doc.sizeBytes = thingStorageSizeBytes(doc);
+    assert.equal(currentContentStorageSizeBytes(doc), doc.sizeBytes, attachmentState);
+  }
+  const current = { ...base };
+  current.sizeBytes = thingStorageSizeBytes(current);
+  assert.equal(currentContentStorageSizeBytes({ ...current, objectSizeBytes: 99 }), null);
+  assert.equal(currentContentStorageSizeBytes({ ...current, objectKey: '' }), null);
+  assert.equal(currentContentStorageSizeBytes({ ...current, attachmentEnvelopeVersion: 0 }), null);
+});
+
 test('billable policy defaults user content on and excludes control-plane and sandbox Things', () => {
   assert.equal(isBillableStorageThing({ ownerId: 'u1', thingtime: ['post'], crystal: {} }), true);
   assert.equal(isBillableStorageThing({ ownerId: 'u1', thingtime: ['future-user-kind'], crystal: {} }), true);
@@ -59,6 +136,8 @@ test('billable policy defaults user content on and excludes control-plane and sa
     'user-authored crystal metadata cannot exempt content from billing'
   );
   assert.equal(isBillableStorageThing({ ownerId: 'u1', thingtime: ['service-quota'], crystal: {} }), false);
+	assert.equal(isBillableStorageThing({ ownerId: 'u1', thingtime: ['attachment'], crystal: {} }), true);
+	assert.equal((CONTROL_PLANE_STORAGE_THINGTIMES as readonly string[]).includes('attachment'), false);
 	assert.equal(isBillableStorageThing({ ownerId: 'u1', thingtime: ['migration-diagnostic'], crystal: {} }), false);
   assert.equal(
     isBillableStorageThing({ ownerId: 'u1', thingtime: 'service-quota', crystal: {} }),

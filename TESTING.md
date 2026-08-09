@@ -53,6 +53,52 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] The in-post editor height-drags via the bottom handle (mouse and touch)
       with no upper limit, and never below the small floor.
 
+## Post attachments (`remix/app/components/Attachments/`)
+
+- [ ] The top-level feed/profile composer shows the attachment drop zone, but
+      rich comment and reply composers do not. The existing image-URL rows and
+      URL-only photo-post flow still work unchanged.
+- [ ] Pick and drag/drop raster images, a supported video, and an arbitrary
+      file. Safe image/video previews appear immediately; each row reports
+      progress; Post stays disabled until every selected file is Ready; and a
+      26th unique file is rejected with the fixed 25-attachment limit message.
+- [ ] Cancel an in-flight file, remove a completed draft file, and retry both a
+      failed part upload and a failed completion. No file is silently omitted,
+      duplicated, charged twice, or left in a permanent uploading state.
+- [ ] Drop the upload-start response after the server reserves storage, then
+      retry/remove: the stable request id resolves the same owner-scoped upload
+      without a second charge. A different account using that request id gets
+      its own opaque attachment id and learns nothing about the first.
+- [ ] Remove an MPU before any part URL is issued: its empty reservation refunds
+      promptly. Remove after a part URL was issued: the UI explains that bytes
+      remain reserved while lifecycle-backed cleanup settles, without exposing
+      server or S3 error text.
+- [ ] Post an attachment without body text, then post URL photos and uploaded
+      attachments together. The optimistic card receives stable metadata only
+      and survives a later reload without persisting a presigned URL.
+- [ ] Feed, profile, nested repost, and permalink cards render vetted raster
+      images and videos inline. SVG, HTML, script, and unknown types render only
+      as named download rows; their bytes never execute inline.
+- [ ] Let a content URL expire at the storage provider and open the attachment
+      again: the stable authenticated `/api/v1/attachments/content?id=…` route
+      issues fresh access. A private post's attachment fails closed for another
+      account and logged-out browser.
+- [ ] Exhaust the active account tier, upload a file, and verify the fixed
+      storage-limit message. Removing the draft or deleting the post reconciles
+      usage, and `ready` / `reconciling` / `unavailable` storage labels never
+      present unknown accounting as unlimited capacity.
+- [ ] Switch Thingtime accounts during prepare, hashing, direct upload, and
+      completion. Requests and XHRs cancel, local previews clear, and no draft
+      attachment ID or storage content crosses into the new account.
+- [ ] Simulate a lost post-create response: the exact first payload becomes
+      inert, retry uses the same post id and attachment set, and an exact GET
+      readback completes once without duplicating the post. A first-attempt
+      attachment 409 does not freeze an otherwise editable draft.
+- [ ] At desktop and narrow mobile widths, long filenames truncate without
+      horizontal overflow, controls remain at least 44px touchable, keyboard
+      users can add/retry/cancel/remove files, and progress/error updates are
+      announced without stealing focus.
+
 ## Editor windows & layer system (`remix/app/components/Thingtime/EditorSplit.tsx`)
 
 - [ ] Every toolbar control on a FLOATING frame (splits, edit toggle, reader/

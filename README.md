@@ -495,6 +495,71 @@ Signed-in admins can run the same endpoint manually (`?dryRun=1` or
 a six-day per-recipient lookback in the `email_messages` outbox prevents
 double-sends.
 
+### Private S3 post attachments
+
+Post images, video, audio, and generic files use direct, checksummed multipart
+uploads to a private S3 bucket. The browser receives short-lived part URLs, not
+AWS credentials; stored posts reference stable attachment ids, never expiring
+S3 URLs. Attachment bytes are reserved against the account's Thingtime storage
+tier before upload and remain charged until S3 deletion is confirmed. A stable
+client request id is hashed with the authenticated owner into an opaque
+owner-scoped attachment id, making lost start responses safely retryable without
+cross-account id squatting or existence disclosure.
+
+Configure only these server-side Vercel variables. Scope a production bucket
+and role to **Production** only; use a separate bucket/role for previews rather
+than granting preview branches access to production objects.
+
+```sh
+THINGTIME_PRIVATE_S3_ROLE_ARN="arn:aws:iam::<12-digit-account-id>:role/<production-attachment-role>"
+THINGTIME_PRIVATE_S3_BUCKET="<private-bucket-name>"
+THINGTIME_PRIVATE_S3_REGION="<aws-region>"
+CRON_SECRET="<long-random-vercel-cron-secret>"
+```
+
+In Vercel, mark all four values **Sensitive** and scope them to **Production**
+only. `CRON_SECRET` authenticates only the hourly
+`/api/v1/attachments/cleanup` Vercel Cron request; it is not a Thingtime user,
+PAT, app, or service-account credential, and must never use a `THINGTIME_*`
+browser-visible name.
+
+The role must use Vercel OIDC temporary credentials and an exact production
+subject for this project. Do not create an S3 IAM user, reuse the SES IAM user,
+or set generic `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, or `AWS_REGION`
+variables for attachments. Restrict its object policy to the app's `objects/*`
+prefix. The runtime role needs only these object actions:
+
+- `s3:PutObject`
+- `s3:GetObject` and `s3:GetObjectVersion`
+- `s3:DeleteObjectVersion`
+- `s3:AbortMultipartUpload` and `s3:ListMultipartUploadParts`
+- `s3:PutObjectVersionTagging`
+
+Do not grant `s3:ListBucket`, `s3:ListBucketMultipartUploads`, ACL,
+public-read, or bucket-administration actions. Completed attachments persist
+the opaque S3 `VersionId`; sniffing, tagging, download, and deletion all target
+that exact verified version. Exact-version deletion happens before the Thingtime
+storage reservation is refunded, so bucket versioning cannot hide unmetered
+noncurrent bytes.
+
+Keep both account- and bucket-level S3 Block Public Access enabled, Bucket Owner
+Enforced object ownership on, and bucket versioning enabled. Bucket policy
+should explicitly deny non-TLS requests and TLS below 1.2. Configure CORS with
+only the production Thingtime origin, `PUT`, the checksum/content-type headers,
+and the ETag/checksum response headers. Lifecycle must abort incomplete
+multipart uploads after seven days and remove noncurrent versions after 30
+days. Presigned URLs work with a private bucket; public access must stay off.
+The app's hourly Vercel cron (minute 17, at most 1,000 rows and a 25-second
+wall-clock budget per pass) is the durable cleanup path. Pending cancellations
+that issued a presigned part URL stay conservatively billed through an eight-day,
+lifecycle-backed settlement window. Cleanup then requires two empty
+Abort/ListParts checks at least one hour apart before HEAD verification,
+exact-version deletion, and transactional refund. This prevents a signed part
+PUT that finishes late from escaping tier accounting; the seven-day S3
+incomplete-MPU lifecycle remains a required independent guard.
+An MPU that never issued a part URL has no possible late browser PUT and can be
+refunded promptly after Abort/ListParts/HEAD proves it empty.
+
 ### Service account provisioning
 
 Apps and backend services can create service-owned Thingtime accounts through:
@@ -643,8 +708,9 @@ Unset values fall back to `https://thingtime.com`, `https://dev.thingtime.com`,
 
 Only variables with the `THINGTIME_` prefix are intentionally copied into the
 browser-visible loader data, and variables containing `PRIVATE` are excluded.
-Keep secrets such as MongoDB passwords and Vercel API tokens unprefixed and
-server-only.
+Use the `THINGTIME_PRIVATE_` namespace for server-only Thingtime integrations
+such as S3, and keep secrets such as MongoDB passwords and Vercel API tokens
+unprefixed and server-only.
 
 ## Native iOS TestFlight web URL
 

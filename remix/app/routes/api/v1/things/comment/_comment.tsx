@@ -2,6 +2,7 @@ import { json } from '~/api/http';
 
 import { actorCors, actorPat, actorUser, resolveActor } from '~/api/utils/auth/resolveActor';
 import { appDataPreflight, readJsonBodyWithCors } from '~/api/utils/apps/cors';
+import { bodyHasAttachmentIds } from '~/api/utils/attachments/postCreate';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import { addComment, viewerOf } from '~/api/utils/things/things';
 
@@ -40,6 +41,12 @@ export const action = async ({ request }: { request: Request }) => {
 
   // same ceiling as post creation — rich comments carry image URL lists
   const body = await readJsonBodyWithCors(request, 256 * 1024, cors);
+  if (bodyHasAttachmentIds(body)) {
+    return json(
+      { ok: false, error: 'Attachments are available only on top-level posts' },
+      { status: 400, headers: cors }
+    );
+  }
   const { id, ...rest } = body || {};
   const result = await addComment(viewerOf(user, actorPat(actor)), id, rest, app);
 

@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 
+import { flushAttachmentDraftCleanups } from '~/components/Attachments/attachmentDraftCleanup';
 import { useAsyncFetcher } from './useAsyncFetcher';
 import { createApiFailure, readApiResponsePayload } from './apiFailure';
 
@@ -93,6 +94,7 @@ export function useApi() {
       },
       logout: useCallback(
         async (args?: { all?: boolean }) => {
+					await flushAttachmentDraftCleanups();
           const ret = asyncFetcher.submit(args?.all ? { all: true } : {}, { action: '/api/v1/auth/logout' });
           ret.then(refreshRootData).catch(() => {});
           return ret;
@@ -105,6 +107,7 @@ export function useApi() {
         list: useCallback(async () => getJson('/api/v1/auth/accounts'), []),
         switch: useCallback(
           async (args) => {
+						await flushAttachmentDraftCleanups();
             const ret = asyncFetcher.submit({ userId: args?.userId }, { action: '/api/v1/auth/accounts/switch' });
             ret.then(refreshRootData).catch(() => {});
             return ret;
@@ -122,6 +125,7 @@ export function useApi() {
         owned: useCallback(async () => getJson('/api/v1/auth/accounts/owned'), []),
         assume: useCallback(
           async (args: { accountId: string }) => {
+						await flushAttachmentDraftCleanups();
             const ret = asyncFetcher.submit({ accountId: args?.accountId }, { action: '/api/v1/auth/accounts/assume' });
             ret.then(refreshRootData).catch(() => {});
             return ret;
@@ -255,13 +259,84 @@ export function useApi() {
         )
       }
     },
+		attachments: {
+			uploads: {
+				create: useCallback(
+					async (args: { requestId: string; filename: string; contentType: string; sizeBytes: number }, options?: { signal?: AbortSignal }) => {
+						const ret = asyncFetcher.submit(
+							{
+								requestId: args?.requestId,
+								filename: args?.filename,
+								contentType: args?.contentType,
+								sizeBytes: args?.sizeBytes
+							},
+							{
+								action: '/api/v1/attachments/uploads',
+								signal: options?.signal,
+								errorContext: 'prepare a file upload'
+							}
+						);
+						ret.then(refreshRootData).catch(() => {});
+						return ret;
+					},
+					[asyncFetcher]
+				),
+				parts: useCallback(
+					async (args: { uploadId: string; parts: Array<{ partNumber: number; checksumSha256: string }> }, options?: { signal?: AbortSignal }) =>
+						asyncFetcher.submit(
+							{ uploadId: args?.uploadId, parts: args?.parts },
+							{
+								action: '/api/v1/attachments/uploads/parts',
+								signal: options?.signal,
+								errorContext: 'prepare file upload parts'
+							}
+						),
+					[asyncFetcher]
+				),
+				complete: useCallback(
+					async (args: { uploadId: string }, options?: { signal?: AbortSignal }) => {
+						const ret = asyncFetcher.submit(
+							{ uploadId: args?.uploadId },
+							{
+								action: '/api/v1/attachments/uploads/complete',
+								signal: options?.signal,
+								errorContext: 'verify a file upload'
+							}
+						);
+						ret.then(refreshRootData).catch(() => {});
+						return ret;
+					},
+					[asyncFetcher]
+				),
+				abort: useCallback(
+					async (args: { uploadId: string }, options?: { signal?: AbortSignal }) => {
+						const ret = asyncFetcher.submit(
+							{ uploadId: args?.uploadId },
+							{
+								action: '/api/v1/attachments/uploads/abort',
+								signal: options?.signal,
+								errorContext: 'cancel a file upload'
+							}
+						);
+						ret.then(refreshRootData).catch(() => {});
+						return ret;
+					},
+					[asyncFetcher]
+				)
+			},
+			remove: useCallback(
+				async (args: { id: string }) => {
+					const ret = asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/attachments/delete', errorContext: 'remove a draft file' });
+					ret.then(refreshRootData).catch(() => {});
+					return ret;
+				},
+				[asyncFetcher]
+			)
+		},
     things: {
       feed: useCallback(async (args) => getJson(`/api/v1/things/feed${toQuery(args)}`), []),
 			reveal: useCallback(
-				async (
-					args: { thingId: string; reference: string; password: string },
-					options?: { signal?: AbortSignal }
-				) =>
+				async (args: { thingId: string; reference: string; password: string }, options?: { signal?: AbortSignal }) =>
 					asyncFetcher.submit(
 						{ thingId: args?.thingId, reference: args?.reference, password: args?.password },
 						{ action: '/api/v1/things/reveal', signal: options?.signal, errorContext: 'reveal a protected value' }
@@ -335,12 +410,16 @@ export function useApi() {
       reactionsRecent: useCallback(async () => getJson('/api/v1/things/reactions-recent'), []),
       create: useCallback(
         async (args) => {
-          const { type, text, images, listing, thing, thingtime, crystal, targetId, acl, visibility, tags, tokenAcl } = args;
+					const { type, text, images, listing, thing, thingtime, crystal, targetId, acl, visibility, tags, tokenAcl, attachmentIds, shareId } = args;
           // unified shape when thingtime is given, legacy post shape otherwise
           const payload = Array.isArray(thingtime)
-            ? { thingtime, crystal, targetId, acl, visibility, tags, tokenAcl }
-            : { type, text, images, listing, thing, acl, visibility, tags };
-          return asyncFetcher.submit(payload, { action: '/api/v1/things' });
+						? { thingtime, crystal, targetId, acl, visibility, tags, tokenAcl, attachmentIds, shareId }
+						: { type, text, images, listing, thing, acl, visibility, tags, attachmentIds, shareId };
+					const ret = asyncFetcher.submit(payload, { action: '/api/v1/things' });
+					if (Array.isArray(attachmentIds) && attachmentIds.length > 0) {
+						ret.then(refreshRootData).catch(() => {});
+					}
+					return ret;
         },
         [asyncFetcher]
       ),
@@ -365,7 +444,14 @@ export function useApi() {
           asyncFetcher.submit({ id: args?.id, text: args?.text, acl: args?.acl, visibility: args?.visibility }, { action: '/api/v1/things/share' }),
         [asyncFetcher]
       ),
-      remove: useCallback(async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/things', method: 'DELETE' }), [asyncFetcher])
+			remove: useCallback(
+				async (args) => {
+					const ret = asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/things', method: 'DELETE' });
+					ret.then(refreshRootData).catch(() => {});
+					return ret;
+				},
+				[asyncFetcher]
+			)
     },
     // "Login with Thingtime" grants — the user's connected apps
     oauth: {

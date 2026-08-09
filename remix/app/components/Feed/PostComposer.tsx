@@ -1,26 +1,24 @@
 import React from 'react';
-import {
-  Box,
-  Button,
-  Flex,
-  IconButton,
-  Image,
-  Input,
-  Modal,
-  ModalContent,
-  ModalOverlay,
-  Select,
-  Text
-} from '@chakra-ui/react';
+import { Box, Button, Flex, IconButton, Image, Input, Modal, ModalContent, ModalOverlay, Select, Text } from '@chakra-ui/react';
 import { PictureInPicture2, X } from 'lucide-react';
 
 import { useApi } from '~/hooks/useApi';
+import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { AttachmentComposer, type AttachmentComposerHandle } from '~/components/Attachments/AttachmentComposer';
+import type { AttachmentComposerSnapshot } from '~/components/Attachments/attachmentTypes';
+import {
+	canonicalPostTags,
+	matchesCommittedPostCreate,
+	shouldFreezeAmbiguousPostSubmission,
+	type CommittedPostExpectation
+} from '~/components/Attachments/attachmentUiCore';
 import { LongTextEditor } from '~/components/Editor/LongTextEditor';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { UserAvatarCircle } from '~/components/Nav/Drawer/DrawerContent';
 import { EditorSplit } from '~/components/Thingtime/EditorSplit';
 import { ThingView } from '~/components/Thingtime/ThingView';
 import { useThingtime } from '~/components/Thingtime/useThingtime';
+import { hasUnknownMutationOutcome } from '~/hooks/apiFailure';
 import { RAINBOW } from '~/theme/rainbow';
 import { CIRCLE_META, MARKETPLACE_CATEGORY_META, POST_TYPE_META } from './feedTypes';
 import type { MarketplaceCategory, PostType, PostVisibility, PublicPost } from './feedTypes';
@@ -48,6 +46,13 @@ const RADIUS_MD = 'var(--tt-radius-md, 12px)';
 const MAX_IMAGES = 8;
 const CURRENCIES = ['AUD', 'USD', 'EUR'];
 
+const EMPTY_ATTACHMENT_SNAPSHOT: AttachmentComposerSnapshot = {
+	attachmentIds: [],
+	attachments: [],
+	blocking: false,
+	hasSelection: false
+};
+
 // The thingtime-tab draft lives under a SESSION-SCOPED branch of the global
 // store: tmp.<sessionId>.New Thing. A fresh session id per composer mount (and
 // pruning prior composer sessions on seed) means drafts never persist across
@@ -55,6 +60,15 @@ const CURRENCIES = ['AUD', 'USD', 'EUR'];
 // one clean "New Thing" root (the key IS the label the editor shows).
 const DRAFT_ROOT_KEY = 'New Thing';
 const DRAFT_TMP_KEY = 'tmp';
+
+type PendingPostSubmission = {
+	shareId: string;
+	payload: Record<string, unknown>;
+	expectation: CommittedPostExpectation;
+	attachmentIds: string[];
+	postType: PostType;
+	unknownOutcome: boolean;
+};
 
 // A composer session id is `s` + 10 hex chars (see draftSessionId below). `tmp`
 // is a plain user-writable root key in the Thingtime editor, so seeding must
@@ -67,6 +81,8 @@ const DEFAULT_EDITOR_HEIGHT = 440;
 const MIN_EDITOR_HEIGHT = 120;
 
 const isImageUrl = (url: string) => /^https?:\/\/\S+$/i.test(url.trim());
+
+const clonePostJson = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 
 // A thing "has content" once any leaf holds a real value — numbers, booleans,
 // and deliberate nulls count; empty strings don't, so the auto-seeded
@@ -98,14 +114,7 @@ export type PostComposerProps = {
 };
 
 const Eyebrow = ({ children }: { children: React.ReactNode }) => (
-  <Text
-    fontFamily="mono"
-    fontSize="10px"
-    fontWeight={600}
-    letterSpacing="0.08em"
-    textTransform="uppercase"
-    color={MUTED}
-  >
+	<Text fontFamily="mono" fontSize="10px" fontWeight={600} letterSpacing="0.08em" textTransform="uppercase" color={MUTED}>
     {children}
   </Text>
 );
@@ -116,6 +125,7 @@ export const PostComposer = (props: PostComposerProps) => {
   const isComment = !!parentId;
 
   const api = useApi();
+	const user = useCurrentUser();
   const lopu = useLopu();
   const { getThingtime, setThingtime, loading: thingtimeLoading, events } = useThingtime();
 
@@ -132,6 +142,8 @@ export const PostComposer = (props: PostComposerProps) => {
   const [tagsInput, setTagsInput] = React.useState('');
   const [visibility, setVisibility] = React.useState<PostVisibility>('public');
   const [posting, setPosting] = React.useState(false);
+	const [submissionUncertain, setSubmissionUncertain] = React.useState(false);
+	const [attachmentSnapshot, setAttachmentSnapshot] = React.useState<AttachmentComposerSnapshot>(EMPTY_ATTACHMENT_SNAPSHOT);
 
   // thingtime-tab extras: toggleable photos/marketplace field groups, the
   // in-post editor's draggable height, and its imperative API (the pop-out
@@ -142,6 +154,14 @@ export const PostComposer = (props: PostComposerProps) => {
   // host a full editor inline, and mobile needs the room)
   const [thingModalOpen, setThingModalOpen] = React.useState(false);
   const editorApiRef = React.useRef<{ popOutDuplicate: () => void } | null>(null);
+	const attachmentComposerRef = React.useRef<AttachmentComposerHandle | null>(null);
+	// A stable client id turns a lost POST response into a safely reconcilable
+	// read. It is rotated only after the draft is definitively committed/reset.
+	const pendingPostSubmissionRef = React.useRef<PendingPostSubmission | null>(null);
+	React.useEffect(() => {
+		pendingPostSubmissionRef.current = null;
+		setSubmissionUncertain(false);
+	}, [user?.id]);
   const handleEditorApi = React.useCallback((api: { popOutDuplicate: () => void } | null) => {
     editorApiRef.current = api;
   }, []);
@@ -150,14 +170,7 @@ export const PostComposer = (props: PostComposerProps) => {
   // (while mounted, the editor owns the text)
   const [composerSession, setComposerSession] = React.useState(0);
 
-  const parsedTags = Array.from(
-    new Set(
-      tagsInput
-        .split(',')
-        .map((tag) => tag.trim().toLowerCase())
-        .filter(Boolean)
-    )
-  );
+	const parsedTags = canonicalPostTags(tagsInput.split(','));
 
   const validImages = images.map((url) => url.trim()).filter(isImageUrl);
 
@@ -170,9 +183,7 @@ export const PostComposer = (props: PostComposerProps) => {
   React.useEffect(() => {
     const subscription = (events as any)?.subscribe?.((event: any) => {
       if (event?.type !== 'path-renamed' || typeof event.from !== 'string' || typeof event.to !== 'string') return;
-      setDraftPath((prev) =>
-        prev === event.from || prev.startsWith(`${event.from}.`) ? `${event.to}${prev.slice(event.from.length)}` : prev
-      );
+			setDraftPath((prev) => (prev === event.from || prev.startsWith(`${event.from}.`) ? `${event.to}${prev.slice(event.from.length)}` : prev));
     });
     return () => {
       subscription?.unsubscribe?.();
@@ -213,29 +224,32 @@ export const PostComposer = (props: PostComposerProps) => {
   const showListing = type === 'marketplace' || (type === 'thingtime' && thingListing);
 
   const listingValid =
-    title.trim().length > 0 &&
-    price.trim() !== '' &&
-    Number.isFinite(Number(price)) &&
-    Number(price) >= 0 &&
-    !!currency &&
-    !!category;
+		title.trim().length > 0 && price.trim() !== '' && Number.isFinite(Number(price)) && Number(price) >= 0 && !!currency && !!category;
 
-  const valid =
+	const hasReadyAttachment = attachmentSnapshot.attachments.length > 0;
+	const hasReadyVisualAttachment = attachmentSnapshot.attachments.some(
+		(attachment) => attachment.mediaKind === 'image' || attachment.mediaKind === 'video'
+	);
+
+	const contentValid =
     type === 'text'
-      ? text.trim().length > 0
+			? text.trim().length > 0 || hasReadyAttachment
       : type === 'image'
-        ? validImages.length > 0
+			? validImages.length > 0 || hasReadyVisualAttachment
         : type === 'thingtime'
           ? draftReady &&
             Object.keys(draftThing).length > 0 &&
             thingHasContent(draftThing) &&
             (!thingListing || listingValid) &&
-            // a toggled-on Photos group with no valid image is a half-filled
-            // form, not an implicit un-toggle — same bar as an image post
-            (!thingPhotos || validImages.length > 0)
+			  // A toggled-on Photos group accepts either the existing URL flow
+			  // or a securely uploaded image/video attachment.
+			  (!thingPhotos || validImages.length > 0 || hasReadyVisualAttachment)
           : listingValid;
+	const valid = contentValid && !attachmentSnapshot.blocking;
 
   const reset = () => {
+		pendingPostSubmissionRef.current = null;
+		setSubmissionUncertain(false);
     setExpanded(isComment);
     setType('text');
     setText('');
@@ -251,6 +265,7 @@ export const PostComposer = (props: PostComposerProps) => {
     setVisibility('public');
     setThingPhotos(false);
     setThingListing(false);
+		setAttachmentSnapshot(EMPTY_ATTACHMENT_SNAPSHOT);
   };
 
   const setImageAt = (index: number, url: string) => {
@@ -262,45 +277,136 @@ export const PostComposer = (props: PostComposerProps) => {
   };
 
   const handlePost = async () => {
-    if (!valid || posting) return;
+		if (!valid || posting || attachmentSnapshot.blocking) return;
+		setThingModalOpen(false);
 
-    setPosting(true);
-    try {
-      const payload: any = {
+		const currentAttachmentIds = [...attachmentSnapshot.attachmentIds];
+		const currentPostShareId = isComment ? null : crypto.randomUUID();
+		const canonicalListing = showListing
+			? {
+					title: title.trim().slice(0, 120),
+					price: Math.round(Number(price) * 100) / 100,
+					currency: currency.trim().toUpperCase(),
+					category,
+					condition: condition === 'new' || condition === 'used' ? condition : null,
+					location: listingLocation.trim().slice(0, 120) || null,
+					sold: false
+			  }
+			: null;
+		const canonicalImages = showPhotos ? validImages : [];
+		const canonicalThing = type === 'thingtime' ? draftThing : null;
+		const canonicalTags = [...parsedTags, ...(canonicalListing ? [canonicalListing.category] : [])].filter(
+			(tag, index, all) => all.indexOf(tag) === index
+		);
+		const currentCommittedExpectation =
+			currentPostShareId && user?.id
+				? {
+						shareId: currentPostShareId,
+						ownerId: user.id,
+						crystal: {
+							type,
+							text: text.trim(),
+							images: canonicalImages,
+							listing: canonicalListing,
+							thing: canonicalThing
+						},
+						tags: canonicalTags,
+						visibility,
+						attachmentIds: currentAttachmentIds
+				  }
+				: null;
+		const currentPayload: Record<string, unknown> = {
         type,
         text: text.trim(),
         tags: parsedTags
       };
+		if (currentPostShareId) currentPayload.shareId = currentPostShareId;
       // comments inherit the thread root's audience server-side
-      if (!isComment) payload.visibility = visibility;
-      if (showPhotos) payload.images = validImages;
-      if (type === 'thingtime') payload.thing = draftThing;
-      if (showListing) {
-        payload.listing = {
-          title: title.trim(),
-          price: Number(price),
-          currency,
-          category,
-          condition: condition || null,
-          location: listingLocation.trim() || null,
-          sold: false
+		if (!isComment) currentPayload.visibility = visibility;
+		if (!isComment && currentAttachmentIds.length > 0) currentPayload.attachmentIds = currentAttachmentIds;
+		if (showPhotos) currentPayload.images = canonicalImages;
+		if (type === 'thingtime') currentPayload.thing = canonicalThing;
+		if (showListing) currentPayload.listing = canonicalListing;
+
+		if (!isComment && !pendingPostSubmissionRef.current && currentPostShareId && currentCommittedExpectation) {
+			pendingPostSubmissionRef.current = {
+				shareId: currentPostShareId,
+				// Thingtime editor writes may mutate nested draft objects in place.
+				// Clone the JSON-safe submission so retry/reconciliation cannot drift.
+				payload: clonePostJson(currentPayload),
+				expectation: clonePostJson(currentCommittedExpectation),
+				attachmentIds: currentAttachmentIds,
+				postType: type,
+				unknownOutcome: false
         };
       }
+		const pendingSubmission = isComment ? null : pendingPostSubmissionRef.current;
+		const postShareId = pendingSubmission?.shareId ?? null;
+		const committedExpectation = pendingSubmission?.expectation ?? null;
+		const payload = pendingSubmission?.payload ?? currentPayload;
+		const attachmentIds = pendingSubmission?.attachmentIds ?? currentAttachmentIds;
+		const submittedPostType = pendingSubmission?.postType ?? type;
 
-      const resp = isComment
-        ? await api.v1.things.comment({ id: parentId, ...payload })
-        : await api.v1.things.create(payload);
+		const finishPost = (created: PublicPost) => {
+			if (!isComment && attachmentIds.length > 0) {
+				// A successful or exactly reconciled post means the server atomically
+				// claimed these drafts. Mark them before reset unmounts the uploader.
+				attachmentComposerRef.current?.markCommitted(attachmentIds);
+			}
       lopu({ title: isComment ? 'Commented 💬' : 'Posted ✨', status: 'success', duration: 6000 });
-      // the posted thing draft is spent — next thingtime tab starts fresh
-      // (reset the whole session branch so the draft value is undefined again,
-      // not an empty {} that would render as an object)
-      if (type === 'thingtime') setThingtime(`${DRAFT_TMP_KEY}.${draftSessionId}`, {});
+			if (submittedPostType === 'thingtime') setThingtime(`${DRAFT_TMP_KEY}.${draftSessionId}`, {});
       reset();
-      onPosted(isComment ? resp.comment : resp.post);
-    } catch (err: any) {
-      lopu({ title: err?.error || 'Post did not go through 😞', status: 'error' });
+			onPosted(created);
+		};
+
+		setPosting(true);
+		try {
+			const resp = isComment ? await api.v1.things.comment({ id: parentId, ...payload }) : await api.v1.things.create(payload);
+			finishPost(isComment ? resp.comment : resp.post);
+		} catch (error) {
+			let reconciled: PublicPost | null = null;
+			const status = Number((error as { status?: unknown } | null)?.status);
+			if (!isComment && postShareId && committedExpectation && (hasUnknownMutationOutcome(error) || status === 409)) {
+				// The first GET may race a still-committing request. Keep this bounded;
+				// if it remains absent, the next click resubmits the SAME shareId and
+				// can reconcile the resulting duplicate safely.
+				for (const delay of [0, 150, 400]) {
+					if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
+					try {
+						const readBack = await api.v1.things.get({ id: postShareId });
+						if (matchesCommittedPostCreate(readBack, committedExpectation)) {
+							reconciled = readBack.post as PublicPost;
+						}
+						break;
+					} catch {
+						// A not-yet-visible or unavailable read is retried only within the
+						// short bounded window above; no server/proxy text reaches the UI.
     }
+				}
+			}
+			if (reconciled) {
+				window.dispatchEvent(new Event('thingtime:root-data-refresh'));
+				finishPost(reconciled);
+			} else {
+				const unknownNow = !isComment && hasUnknownMutationOutcome(error);
+				const preserveAmbiguousSubmission =
+					!isComment && shouldFreezeAmbiguousPostSubmission(unknownNow, status, pendingSubmission?.unknownOutcome === true);
+				if (preserveAmbiguousSubmission) {
+					// Freeze the immutable first submission. Its id, attachments and payload
+					// must not drift while a lost response may still be committing.
+					if (unknownNow && pendingPostSubmissionRef.current) {
+						pendingPostSubmissionRef.current.unknownOutcome = true;
+					}
+					setSubmissionUncertain(true);
+				} else if (!isComment) {
+					pendingPostSubmissionRef.current = null;
+					setSubmissionUncertain(false);
+				}
+				lopu({ title: 'Post did not go through 😞', status: 'error' });
+			}
+		} finally {
     setPosting(false);
+		}
   };
 
   if (!expanded) {
@@ -337,6 +443,7 @@ export const PostComposer = (props: PostComposerProps) => {
 
   return (
     <Flex
+			position="relative"
       flexDirection="column"
       rowGap={3}
       background="var(--tt-card, #ffffff)"
@@ -345,16 +452,34 @@ export const PostComposer = (props: PostComposerProps) => {
       boxShadow="var(--tt-shadow-card, 0px 1px 2px rgba(22, 22, 26, 0.05))"
       padding={4}
     >
+			{(posting || submissionUncertain) && (
+				<Flex
+					position="absolute"
+					inset={0}
+					zIndex={20}
+					alignItems="center"
+					justifyContent="center"
+					padding={4}
+					borderRadius="inherit"
+					background={submissionUncertain && !posting ? 'rgba(255, 255, 255, 0.94)' : 'transparent'}
+				>
+					{submissionUncertain && !posting && (
+						<Flex flexDirection="column" alignItems="center" textAlign="center" rowGap={3} maxWidth="360px">
+							<Text fontSize="sm" color={TEXT}>
+								Thingtime is still checking whether this exact post went live. The draft is frozen so retrying cannot create a duplicate.
+							</Text>
+							<Button size="sm" borderRadius={RADIUS_MD} onClick={handlePost}>
+								Check and retry safely
+							</Button>
+						</Flex>
+					)}
+				</Flex>
+			)}
+			<Box display="contents" {...((posting || submissionUncertain ? { inert: '' } : {}) as any)}>
       {/* type tabs — wrap on narrow screens so labels never overlap */}
       <Flex columnGap={1} rowGap={1} alignItems="center" flexWrap="wrap">
         {(Object.keys(POST_TYPE_META) as PostType[]).map((key) => (
-          <Button
-            key={key}
-            size="xs"
-            variant={type === key ? 'solid' : 'ghost'}
-            borderRadius={RADIUS_SM}
-            onClick={() => setType(key)}
-          >
+						<Button key={key} size="xs" variant={type === key ? 'solid' : 'ghost'} borderRadius={RADIUS_SM} onClick={() => setType(key)}>
             {POST_TYPE_META[key].emoji} {POST_TYPE_META[key].label}
           </Button>
         ))}
@@ -366,7 +491,14 @@ export const PostComposer = (props: PostComposerProps) => {
           color={MUTED}
           marginLeft="auto"
           borderRadius="8px"
-          onClick={() => (isComment ? onClose?.() : setExpanded(false))}
+						isDisabled={posting}
+						onClick={() => {
+							if (isComment) onClose?.();
+							else {
+								setExpanded(false);
+								setAttachmentSnapshot(EMPTY_ATTACHMENT_SNAPSHOT);
+							}
+						}}
         />
       </Flex>
 
@@ -444,13 +576,7 @@ export const PostComposer = (props: PostComposerProps) => {
 
           {/* bottom-sheet editor: flush left/right/bottom, padded + rounded
           top on mobile; a centered sheet on desktop */}
-          <Modal
-            isOpen={thingModalOpen}
-            onClose={() => setThingModalOpen(false)}
-            size="full"
-            motionPreset="slideInBottom"
-            autoFocus={false}
-          >
+						<Modal isOpen={thingModalOpen} onClose={() => setThingModalOpen(false)} size="full" motionPreset="slideInBottom" autoFocus={false}>
             <ModalOverlay background="rgba(20, 20, 26, 0.45)" />
             <ModalContent
               position="fixed"
@@ -473,14 +599,7 @@ export const PostComposer = (props: PostComposerProps) => {
               flexDirection="column"
               background="var(--tt-card, #ffffff)"
             >
-              <Flex
-                alignItems="center"
-                columnGap={2}
-                paddingX={4}
-                paddingY={3}
-                borderBottom={BORDER}
-                flexShrink={0}
-              >
+								<Flex alignItems="center" columnGap={2} paddingX={4} paddingY={3} borderBottom={BORDER} flexShrink={0}>
                 <Eyebrow>Thing 🌀</Eyebrow>
                 <Flex marginLeft="auto" columnGap={1} alignItems="center">
                   <IconButton
@@ -608,12 +727,7 @@ export const PostComposer = (props: PostComposerProps) => {
                 </option>
               ))}
             </Select>
-            <Select
-              size="sm"
-              borderRadius={RADIUS_SM}
-              value={condition}
-              onChange={(event) => setCondition(event.target.value)}
-            >
+							<Select size="sm" borderRadius={RADIUS_SM} value={condition} onChange={(event) => setCondition(event.target.value)}>
               <option value="">Condition…</option>
               <option value="new">New ✨</option>
               <option value="used">Used ♻️</option>
@@ -628,6 +742,20 @@ export const PostComposer = (props: PostComposerProps) => {
           />
         </Flex>
       )}
+
+				{/* Attachments stay a post-only primitive until message/thread support
+      lands. Rich comment/reply composers deliberately never mount it. */}
+				{!isComment && user && (
+					<AttachmentComposer
+						ref={attachmentComposerRef}
+						key={`attachments-${user.id}-${composerSession}`}
+						ownerId={user.id}
+						disabled={posting || submissionUncertain}
+						remainingBytes={user.storage.remainingBytes}
+						storageStatus={user.storage.status}
+						onChange={setAttachmentSnapshot}
+					/>
+				)}
 
       {/* tags */}
       <Flex flexDirection="column" rowGap={2}>
@@ -686,13 +814,14 @@ export const PostComposer = (props: PostComposerProps) => {
           sx={{ animation: 'var(--tt-rainbow-anim, moving-rainbow 5s linear infinite)' }}
           _hover={{ opacity: 0.9 }}
           borderRadius={RADIUS_MD}
-          isDisabled={!valid}
+						isDisabled={!valid || attachmentSnapshot.blocking}
           isLoading={posting}
           onClick={handlePost}
         >
           {isComment ? 'Comment 💬' : 'Post ✨'}
         </Button>
       </Flex>
+			</Box>
     </Flex>
   );
 };

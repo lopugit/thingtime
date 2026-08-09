@@ -19,6 +19,7 @@ const fieldNames = (crystal: Record<string, unknown>): string[] => (crystal.fiel
 // a new registry field should appear (or be knowingly dropped as a record/
 // reserved name) and the pin updated in the same change.
 const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
+  attachment: ['name', 'size', 'contentType', 'mediaKind'],
   post: ['type', 'text', 'images', 'listing'], // thing: record → dropped
   comment: ['text'],
   reaction: ['emoji'],
@@ -99,12 +100,67 @@ test('the builtin crystal-schema set matches the pinned projection table', () =>
   assert.deepEqual(crystalSchemas.map((schema) => schema.id).sort(), Object.keys(EXPECTED_PROJECTED_FIELDS).sort());
 });
 
-test('registered app control Things are protected from generic Thing CRUD', () => {
+test('registered server-owned Things are protected from generic Thing CRUD', () => {
+	assert.ok(PROTECTED_THINGTIME.includes('attachment'));
 	assert.ok(PROTECTED_THINGTIME.includes('app'));
 	assert.ok(PROTECTED_THINGTIME.includes('migration-diagnostic'));
 	assert.equal(isProtectedThingtime(['app']), true);
+	assert.equal(isProtectedThingtime(['attachment']), true);
 	assert.equal(isProtectedThingtime(['migration-diagnostic']), true);
 	assert.equal(isProtectedThingtime(['data', 'app']), true);
+});
+
+test('attachment metadata is normalized but its Thingtime kind remains protected from generic CRUD', () => {
+	const validated = validateThingtimeCrystal(['attachment'], {
+		name: '  clip.MP4 ',
+		size: 123,
+		contentType: 'VIDEO/MP4',
+		mediaKind: 'file'
+	});
+	assert.equal(validated.ok, true);
+	if (validated.ok !== true) return;
+	assert.deepEqual(validated.crystal, {
+		name: 'clip.MP4',
+		size: 123,
+		contentType: 'video/mp4',
+		mediaKind: 'video'
+	});
+	assert.equal(isProtectedThingtime(validated.thingtime), true);
+});
+
+test('post attachment preflight allows attachment-only posts without weakening ordinary post validation', () => {
+  const emptyText = { type: 'text', text: '', images: [], listing: null, thing: null };
+  assert.equal(validateThingtimeCrystal(['post'], emptyText).ok, false);
+  assert.equal(
+    validateThingtimeCrystal(['post'], emptyText, {
+      postAttachments: { hasAny: true, hasVisual: false }
+    }).ok,
+    true
+  );
+
+  const emptyImage = { type: 'image', text: '', images: [], listing: null, thing: null };
+  assert.equal(
+    validateThingtimeCrystal(['post'], emptyImage, {
+      postAttachments: { hasAny: true, hasVisual: false }
+    }).ok,
+    false
+  );
+  assert.equal(
+    validateThingtimeCrystal(['post'], emptyImage, {
+      postAttachments: { hasAny: true, hasVisual: true }
+    }).ok,
+    true
+  );
+});
+
+test('post attachment preflight never enables attachment-only rich comments', () => {
+  const emptyComment = { type: 'text', text: '', images: [], listing: null, thing: null };
+  assert.equal(
+    validateThingtimeCrystal(['post', 'comment'], emptyComment, {
+      postAttachments: { hasAny: true, hasVisual: true }
+    }).ok,
+    false
+  );
 });
 
 for (const schema of crystalSchemas) {
