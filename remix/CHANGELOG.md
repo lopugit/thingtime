@@ -17,7 +17,212 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Conflict resolution now uses a fixed `develop` control plane**: every
+  external event and human manual run is detector-only, then dispatches each
+  selected PR number to the resolver workflow revision on `develop`; only a
+  validated bot-originated internal handoff on that ref may load the model or
+  resolve. Manual selection now accepts an exact PR number or a PR base/head,
+  fails visibly when nothing open matches, reports when no merge worker is
+  needed, and carries explicit retry intent through the trusted hop. Direct
+  stack cascades use the same per-PR Actions dispatch instead of loading
+  secret-bearing resolver YAML from the repository default branch. This closes
+  the recurring `develop`-target/default-`main` workflow split once promoted;
+  the older workflow already on `main` remains a one-time bootstrap limitation
+  until this revision reaches it. See the
+  [PR #190 repair note](../PRs/190-claude-github-action-pr-promotion-c65173-per-feature-develop-main-promotion-prs-with-stacks.md).
+  — Codex (AI), 2026-08-09
+- **Conflict resolver no longer mistakes promotion PRs for giant stacks**:
+  `no-ai-rebase` PRs now break stack-topology edges, so the standing
+  `develop` → `main` promotion PR cannot divert every feature PR targeting
+  `develop` away from merge-based conflict resolution. The rebase detector's
+  bottom-up ordering also loads repository-wide JSON from `RUNNER_TEMP`
+  instead of command-line `--argjson` values, preventing the observed
+  `jq: Argument list too long` detector crash as the open-PR graph grows. —
+  Codex (AI), 2026-08-09
+- **Password-confirmed reveal for protected Thing diagnostics**: new migration
+  diagnostics use a backward-compatible v2 secure envelope that keeps a bounded
+  set of MongoDB ObjectIds supplied by explicitly authored server-side error
+  context behind numbered redaction
+  references. The ordinary diagnostic response exposes descriptors only;
+  credentials, tokens, URLs, private keys, query identifiers, and ambiguous
+  24-hex values remain irreversible. `/thing/:id` now offers a reusable Reveal
+  modal that verifies the current password on every lookup, keeps only one value
+  transiently in memory, and clears it on hide, account/Thing change, navigation,
+  or tab backgrounding. The closed-codec reveal endpoint rejects arbitrary
+  secure fields and cross-origin/non-JSON browser posts, returns private no-store
+  responses, and has a non-configurable fail-closed five-request/15-minute
+  confirmation ceiling. Existing v1 diagnostics remain readable without reveal values. — Codex
+  (AI), 2026-08-09
+- **Builtin schemas no longer block whole-account storage accounting**:
+  reserved system-owned `schema-*` Things are now seeded with the server-owned
+  `storageClass: "control"` stamp, existing genuine seeds missing that stamp
+  surface as pending and self-repair, and the account-storage orchestrator runs
+  the schema seed prerequisite before scanning billable content. Community and
+  user-authored schemas remain billable. — Codex (AI), 2026-08-09
+- **Conflict detection waits out GitHub and says so when it stands aside**:
+  the merge resolver's detector polled mergeability for only ~80 seconds
+  after a base push, but GitHub's verdicts can take ~6 minutes to settle —
+  observed on PR #190, where the develop push that created the conflict ran
+  detection while the PR still read UNKNOWN, so nothing was handed off, no
+  comment appeared, and the conflict sat silent until the scheduled sweep.
+  Detection now re-queries until every scanned PR has a verdict or a time
+  budget runs out (`MERGEABLE_POLL_SECONDS`, default 500s, with
+  `MERGEABLE_POLL_INTERVAL` between re-queries; detect timeout raised to 15
+  minutes), and the detect job now upserts a status comment on any PR it must
+  leave alone — conflicting fork PRs it cannot push to, and PRs whose
+  mergeability never settled — so detector silence always means "nothing
+  needed doing", never "nobody looked". Conflicts that are handed off keep
+  announcing themselves through the existing "Auto-resolve running" comment;
+  the rebase workflow already polls its verdicts round-robin and is
+  unchanged. Also restored the "AI PR and stack rebase conflict resolution"
+  changelog bullet's opening line, dropped by the AI resolution of a previous
+  merge. — Claude (AI), 2026-08-08
+- **Contextual reaction/migration errors + storage migration upsert repair**:
+  Lopu can no longer render a lone 🌧️ when Nitro replaces an unhandled server
+  exception with boolean `error: true`; fetch failures now become typed,
+  action-aware errors, one-shot toasts reject non-string runtime values, and
+  failed reaction writes distinguish known rejection from an ambiguous
+  network/5xx outcome (refetching server truth instead of blindly reversing a
+  possibly committed toggle). Reaction and migration routes preserve authored
+  failures and turn unknown exceptions into safe class/code summaries without
+  leaking stacks or database details publicly. Failed real admin migrations now
+  capture a bounded, secret-scrubbed diagnostic after releasing their lease,
+  store it as an expiring owner-only, non-billable control Thing, and link the
+  Lopu toast to its readable `/thing/:id` view; failed dry runs never create a
+  diagnostic Thing and show the full redacted detail in a long-lived scrollable
+  toast. If diagnostic persistence is unavailable, real runs use that same
+  private inline fallback without masking the original status or outcome.
+  Structured login/account-switcher failure
+  fields remain intact, malformed successful mutation responses are reconciled
+  as commit-unknown, server-marked reaction rejections roll back without a
+  redundant read, and late reaction truth merges only reaction fields so it
+  cannot overwrite newer comments or shares. Migration invariants now use a
+  closed operator-safe message catalogue with private record ids confined to
+  server logs. The three storage backfills are unblocked:
+  their shared app-counter ensure path no longer puts `$expr` in an upsert
+  predicate (MongoDB code 224); it upserts by the deterministic reserved
+  `shareId` and still validates the complete protected envelope before trusting
+  either a new or existing ledger. — Codex (AI), 2026-08-08
+- **`withMongoTransaction` ReferenceError + Web CI transaction support**: the
+  AI-resolved merge that landed on main via PR #158 left `withMongoTransaction`
+  calling the removed `getClientCached()`, 500-ing every transactional write
+  (registration's subscription-ledger seed, service-account creation,
+  verification emails — Web CI's API suite red on main). The transaction client
+  now mirrors the collection getters: `withMongoTransaction` follows the ACTIVE
+  data plane (like `getCollection`) and the new `withHomeMongoTransaction` is
+  pinned home (like `getHomeCollection`) for the protected home-plane callers
+  (themes, algorithms, apps, registration). Web CI's `mongo:7` service is
+  replaced by a docker-run **single-node replica set** (standalone mongod
+  rejects transactions with IllegalOperation, and there is deliberately no
+  non-transactional fallback), so the transactional paths are now genuinely
+  exercised in CI — local runbook note: transactional flows need an
+  RS-enabled local mongod too (`mongod --replSet …` + one-time
+  `rs.initiate(...)` with an explicit `127.0.0.1` member host). The two strict
+  `[401]` auth-guard API tests now send truly anonymous requests (new
+  `anonymous` test flag honored by both the /tests page and the headless
+  runner) instead of inheriting the suite's shared session cookie. Full suite:
+  307/307 against a local single-node RS. Both auto-resolver workflows also
+  now post an upserted "resolution/rebase running, expected finish ~time"
+  PR comment before starting, so reviewers who catch the conflict window
+  aren't left guessing. — Claude (AI), 2026-08-08
+- **Mixed-plane transactions resolved — ledgers have one true plane**: user
+  subscription/billing objects (`subscriptions.ts`, `userStorage.ts`,
+  `tierCatalogStore.ts`) are now HOME-pinned like users/sessions, and account
+  storage meters HOME-hosted bytes only — active-plane writers (`things.ts`
+  create/update/delete, `appData.ts` set/delete) skip account accounting and
+  content stamps when a data-plane endpoint override is live (bytes on a
+  user's own MongoDB are not Thingtime storage; app ledgers still
+  self-account on the active plane). Registration/service-account creation
+  now succeed with an override active: identity + ledger land home, verified
+  live (register + posts with/without `x-tt-mongo-url` against two dbs on
+  one RS mongod — home ledger read exactly the home post's bytes; the
+  override post carried no stamps and moved no ledger). Local runbook:
+  boot now probes transaction support and prints the exact single-node-RS
+  conversion + `rs.initiate` commands when the connected mongod is
+  standalone (`warnIfTransactionsUnsupported`), `/api/v1/mongodb/status`
+  reports `replicaSet`, and the brew `mongod.conf` replica-set stanza is
+  staged locally (takes effect on the next sudo mongod restart +
+  one-time initiate). — Claude (AI), 2026-08-08
+
 ### Added
+
+- **Promotion PR rebase protection (`no-ai-rebase`)**: the promotion workflow
+  now creates the standing develop → main PR with — and re-applies on every
+  develop push — the `no-ai-rebase` label (env `PROMOTION_PR_LABELS`, creating
+  the repo label if missing; the AI workflows honored it but nothing had ever
+  created it). The AI rebase workflow skips labeled PRs, so develop — an
+  integration branch whose history IS its merge commits — is never flattened
+  again (the 2026-08-08 develop rebase destroyed merge-subject and SHA↔PR
+  attribution, the changelog's primary signals). The merge-based conflict
+  resolver explicitly keeps ownership of `no-ai-rebase` PRs and levels
+  develop with main via history-preserving merge commits, the repo's house
+  style. Label state is read via REST (search-backed listings lag) and stray
+  removals self-heal on the next develop push. — Claude (AI), 2026-08-08
+- **Promotion PR changelog**: the **Promote develop to main** workflow now
+  maintains an at-a-glance changelog on the standing promotion PR. A new
+  `.github/scripts/promotion-pr-changelog.mjs` resolves the first-parent spine
+  of `main..develop` to the merged develop-based PRs it carries (merge/squash
+  subjects, then content matching against recently merged PRs — merge SHA, PR
+  title, and the PRs' own commit subjects, which survives AI rebases of
+  develop — then the commit-association API), rewrites a marker-delimited
+  section of the PR description with a PR table (title, author, source branch,
+  merge date), `no-promote` label warnings re-verified via REST, and collapsed
+  direct commits, and posts short delta comments when PRs enter or leave the
+  promotion window. State is derived from the PR body itself; re-runs on the
+  same develop SHA are byte-identical no-ops. Supports `DRY_RUN=1` and
+  `--self-test`. — Claude (AI), 2026-08-08
+
+- **Per-feature develop → main promotion PRs (with stacks)**: a new **Promote
+  features to main** workflow (`promote-features-to-main.yml`) joins the
+  standing all-or-nothing **Promote develop to main** omnibus PR (#186) as a
+  granular release train. It scans PRs merged into `develop`, cherry-picks
+  each unshipped one onto its own `promote/pr-<n>-<slug>` branch cut from
+  `main`, and opens a per-feature promotion PR for release review; PRs sharing
+  a feature group (`Promotion-Group:` body line, `stack:`/`group:`/`feature:`
+  label, `feature/<key>/...` branch, or `feat(<key>):` title scope) become a
+  stacked chain in merge order, with automatic retargeting as earlier members
+  merge. The two trains coexist: merge individual promotion PRs for granular
+  review, or merge the omnibus PR when everything on develop is mergeable —
+  promotion PRs whose diff becomes empty afterwards are closed automatically
+  as redundant (branches deleted once nothing stacks on them). `no-promote`
+  skips a source PR; closing a promotion PR rejects that change for `main`
+  permanently; cherry-pick conflicts stop the affected group and the job
+  summary prints exact manual-promotion commands. Runs on pushes to `develop`,
+  a 6-hourly schedule, and manual dispatch with a dry-run mode.
+  — Claude (AI), 2026-08-08
+
+- **AI PR and stack rebase conflict resolution**: a separate **Rebase PRs and
+  stacks (AI)** workflow evaluates every same-repository PR regardless of base
+  branch. Standalone PRs that merge cleanly but cannot rebase and stack members
+  needing a history update are rebase-owned, while standalone merge conflicts
+  remain disjointly owned by **Resolve PR conflicts (AI)**. It replays standalone heads onto
+  their bases and stacks root-to-leaf with bounded, file-only Claude conflict
+  rounds and trusted Git verification. Push/open/reopen triggers plus a
+  scheduled all-PR backstop feed the trusted dispatch path, while manual
+  dispatch can target one PR or scan the repository. The merge resolver now
+  has its own staggered all-PR backstop and exact live-ref snapshot, pre-push
+  revalidation, lease, publication classification, and `ai-merge-paused`
+  retry-loop guard. Global merge scans use true GraphQL pagination, while
+  rebase verdicts poll round-robin and stack traversal supports 64 levels.
+  Both pause labels are bound to strict bot-authored owner/ref/SHA/topology
+  snapshots; queued retries re-prove ownership before deleting a specific stale
+  hold, publication requires pauses to be absent, and post-push cleanup
+  preserves newer-snapshot holds. `ai-rebase-in-progress` is the only hard
+  mutex.
+  Claude sees only regular conflict-file copies in a
+  repo-less scratch directory; the real checkout, Git state, exact trusted
+  action, and credentials remain outside its workspace. Exact force-with-lease
+  prevents concurrent work from being overwritten; fork, default, and
+  protected branches are refused; `no-ai-rebase` opts out; and failures add
+  `ai-rebase-paused` instead of retrying forever. Parent barriers preserve
+  root-to-leaf ordering, orphaned run locks recover after 90 minutes, and web
+  rewrites explicitly dispatch Web CI for the new SHA. The existing merge
+  resolver now routes stack members deterministically, pins its runner actions,
+  and avoids checkout's spurious `/dev/null` Git-config annotation. See the
+  [PR #183 implementation notes](../PRs/183-codex-ai-rebase-stack-resolver--add-automatic-ai-rebase-support-for-pr-stacks.md).
+  — Codex (AI), 2026-08-08
 
 - **Stable Vercel domain for the `develop` branch**: the Thingtime project now
   assigns `dev.thingtime.com` to `develop` as a branch-specific Preview
@@ -25,6 +230,77 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   branch-scoped Preview secrets already used by develop deployments. The
   deployment runbook now records the required Cloudflare DNS-only CNAME and
   ownership-verification flow. — Codex (AI), 2026-08-07
+
+- **Typed queries across every admin workspace**: Users, Apps, Tiers, rate
+  limits, and the administrator roster now share an all-field free-text,
+  filter, and deterministic-sort interface. It handles nested/list fields,
+  created-day ranges, tiers and immutable versions, quotas/usage/counts,
+  lifecycle state, pricing/discounts/inclusion text, and booleans. User/app
+  APIs use private, no-store 200-row keyset pages, and the UI drains the full
+  directory before applying computed/nested filters instead of silently
+  filtering only the newest page. User/app rows now expose created time, while
+  hidden rate-limit edits remain intact. — Codex (AI),
+  2026-08-05
+
+- **Versioned subscription-tier admin + customer cards**: `/admin` now has a
+  Tiers workspace with separate Live, Draft / not live, and Archived sections.
+  Admins can create tiers and immutable revisions; edit names, taglines,
+  banners, four renewal prices, six annualized computed-or-custom savings,
+  Editor.js inclusions, metering, and quota defaults; then publish/archive with
+  confirmation while preserving every historical revision. The public
+  `/api/v1/tiers`, admin `/api/v1/admin/tiers`, subscription editor, and app
+  storage manager all use exact tier version ids. Each revision freezes its
+  pricing/discounts, and assignments freeze the tier name, version, metering,
+  and quota snapshot so later catalog changes cannot move existing customers.
+  Includes standalone-Mongo-safe
+  publish recovery, protected `subscription-*` ids, default-tier safeguards,
+  dynamic customer cards, schemas/indexes/docs/tests, and legacy v1 pinning. —
+  Codex (AI), 2026-08-05
+
+- **App-owner storage subscriptions + app-user sub-tiers**: `/apps/manage`
+  lets a registering owner or linked co-manager inspect measured whole-app
+  usage, switch the aggregate plan (Free 5 GiB, Plus 25 GiB, Pro 100 GiB,
+  metered PAYG), change the inherited per-user cap (50 MiB by default), and
+  assign/reset one or up to 200 selected app users to custom caps. App tier +
+  aggregate allowance/usage now live atomically on the app Thing; protected
+  relational `app-storage` Things hold user usage and optional overrides, with
+  guarded writes enforcing both ceilings and clamping every user cap to the
+  whole-app total. Includes owner/co-manager API, privacy-gated usernames,
+  responsive manager UI, schema/index/migration updates, API/embed docs, and a
+  30-check local-only live suite. This supersedes the earlier app→end-user-tier
+  fallback from the stacked admin-manager change. — Codex (AI), 2026-08-05
+
+- **Per-channel notification toggles + SES notification emails**: Settings →
+  Notifications is now a per-type × per-channel switch matrix — Push (the
+  bell/in-app channel, stored as the original flat pref keys so existing prefs
+  keep working) and Email (new nested `email`/`masters` keys in the same
+  secure-blob pref object), each with a master switch. Activity notifications
+  (friend requests/accepts, new followers, comments, replies, reactions,
+  shares; posts-from-followed/friends email opt-in) now also send SES emails on
+  the new `notification` email stream — fire-and-forget from the same emits,
+  verified addresses only, ≤10/recipient/hour throttle, manage +
+  one-click-unsubscribe links in every footer (HMAC-tokened
+  `GET /api/v1/notifications/email/unsubscribe`). A weekly summary digest
+  (email-only type, Vercel cron `remix/vercel.json` →
+  `GET /api/v1/notifications/email/weekly-summary` with `CRON_SECRET` bearer or
+  admin session, six-day idempotency lookback, dry-run mode) recaps followers,
+  requests, comments, replies, reactions, shares, post views and posts. New
+  env: `THINGTIME_EMAIL_NOTIFICATIONS_FROM`, `THINGTIME_EMAIL_UNSUB_SECRET`
+  (optional), `CRON_SECRET`, `APP_URL` (email links) — see README “Notification
+  emails”. — Claude (AI), 2026-08-03
+
+- **Followers + friends, notifications, and public post view stats**: one-way
+  follows and approval-based friendships (`follow`/`friend` protected things,
+  `/api/v1/users/{follow,friend,relationships,connections}`) with the
+  `tt:userFriends` acl circle now resolving against the real friend graph;
+  server-minted in-app notifications (nav bell 🔔 + popover, capped post
+  fan-out, per-type switches in Settings → Notifications stored in the user
+  secure blob, read-time pref filtering); and anti-bot post view telemetry
+  (`postViews` collection, unique-viewer dedup per salted identity,
+  dwell/ratio/position capture via `useViewTracking` on feed/profile/permalink,
+  public 👁 viewCount + impressions/avg-read-time on every post). Detailed
+  notes in `PRs/followers-friends-notifications-views.md`.
+  — Claude (AI), 2026-08-03
 
 - **CI conflict-resolver graphify refresh now does LLM semantic extraction**:
   after an auto-resolved merge, `resolve-pr-conflicts.yml` runs
@@ -38,14 +314,65 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   fails. Staged refresh outputs get the same best-effort secret scan as
   resolved files. — Claude (AI), 2026-08-03
 
+- **Thingtime Messenger** (`/messages`): a full chat platform inside the app —
+  Slack-style **Spaces** (communities with channels, sidebar sections, topics,
+  invites, threads) and FB-style **Chats** (DMs, groups, nicknames, message
+  requests bucketed follower/unknown) behind one mode toggle. Everything is a
+  thing: nine new dedicated-endpoint kinds (`chat`, `chat-member`,
+  `chat-message`, `chat-section`, `community`, `community-member`,
+  `community-invite`, `custom-emoji`, `follow`) with membership enforced in
+  `api/utils/messenger/` and the generic `/api/v1/things` paths refusing them.
+  Reactions reuse the post reaction store + unique index and add a
+  `custom:<emoji id>` token namespace for uploaded gif/webp emojis (≤512KB
+  data URIs, the avatar pattern). Read receipts are per-member forward-only
+  high-water marks with a parity privacy setting (off = neither share nor
+  see); unread counts skip system messages and muted chats; new-message Lopu
+  toasts + nav badge ride a visibility-aware poll (4s open chat / 15s list /
+  25s global). 23 new documented endpoints (docs registry = Nitro
+  registration), 6 new rate-limit buckets, 7 new partial/thread indexes, and
+  `scripts/verify-messenger.mjs` (100 live-API checks, including 14
+  regressions locked in from the pre-merge adversarial multi-agent review —
+  community-gated channel adds, a generic-DELETE wall for messenger kinds,
+  community-leave channel revocation, ex-owner role reset, sealed DM member
+  verbs, request-walled group invites, receipt-free pending reads, and
+  cursor/limit fixes). Detailed note:
+  [PR #174](../PRs/174-thingtime-messenger-platform-thingtime-messenger-spaces-chats.md).
+  — Claude (AI), 2026-08-03
+
+- **/admin dashboard + subscription tiers + ownership links** (stacked on the
+  PAT × app-namespace tree): admin-gated `/admin` page (Users / Apps / System
+  tabs) managing every user and app — subscription tiers (free/plus/pro/payg;
+  payg = metered, no hard caps) with per-field admin overrides (`null` =
+  unlimited), quota enforcement wired through the tiers (whole-app storage,
+  app registration, and PAT mint caps), platform-level app suspension
+  (`crystal.revokedAt` checked at
+  the `resolveAppToken` choke point + live-session sweep), and many-to-many
+  ownership links (`account-link` things): owned accounts appear in the
+  switcher's "Owned accounts" and are assumable without credentials
+  (`POST /api/v1/auth/accounts/assume`), app links grant co-management. New
+  protected kinds `subscription` + `account-link`; 7 new documented endpoints;
+  guard smoke tests; `test:subscriptions` unit suite; live suite
+  `scripts/verify-admin-subscriptions.mjs` (38 checks, needs
+  `TT_VERIFY_ADMIN_USER`/`TT_VERIFY_ADMIN_PASS` of an env-admin). See the
+  detailed PR note in `PRs/`. — Claude (AI), 2026-08-02
+
 ### Fixed
 
+- **Sync main→develop fallback PR is now PAT-authored**: the **Sync main into
+  develop** workflow's "Open (or reuse) the sync PR" step used `GITHUB_TOKEN`,
+  which failed outright while the repo blocked Actions-created PRs — and even
+  with that setting enabled, a `GITHUB_TOKEN`-created PR triggers no workflows
+  (GitHub anti-recursion), so the sync PR would sit with no Web CI/CodeQL
+  checks. The step now uses the same
+  `SYNC_BRANCHES_PAT || CONFLICT_RESOLVER_PAT` chain as the checkout/push path
+  and fails loudly when neither secret exists instead of degrading to a
+  checkless PR. — Claude (AI), 2026-08-08
 - **PRs that make themselves conflicted now get rescanned**: a push to a PR's
   head branch can create a conflict (the resolver deliberately ignores
   `synchronize` to avoid self-loops), and with no follow-up push to the base,
   the PR sat unresolved indefinitely — observed on the resolver's own PR #173.
   Every branch push already spawns a detect run; it now also scans the open PR
-  *from* the pushed branch, and the handoff dispatches under each conflicting
+  _from_ the pushed branch, and the handoff dispatches under each conflicting
   PR's base branch instead of the pushed ref. Self-terminating: the resolver's
   own resolution push finds its PR mergeable and no-ops.
   — Claude (AI), 2026-08-06
@@ -58,6 +385,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   through the existing detect→handoff→dispatch hop — API-only in the target
   context, no PR code checkout, resolve job excluded for that event.
   — Claude (AI), 2026-08-03
+
+- **Multi-emoji reaction tokens render in full on the react button**: the
+  merged reaction control truncated every token to its first grapheme, so a
+  🤣🤣🙌💀💦 reaction looked like 🤣; posts and comments now show the whole
+  token. — Claude (AI), 2026-08-03
+- **Mobile nav controls no longer sit under the commander pill**: the
+  nav-right section (bell, username) stacks above the absolutely-positioned
+  search pill and the pill reserves room for the bell, so those controls are
+  tappable on phones. — Claude (AI), 2026-08-03
 
 - **Index bootstrap recovery after PRs #159/#161**: failed boot-time
   `ensureIndexes()` work no longer caches a rejected promise for 60 seconds.
@@ -74,6 +410,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - **PR #69 final-review hardening round**: a multi-agent review of the unified
   /search + profile/feed branch surfaced a batch of merge-blocking issues, all
   fixed here — Claude (AI), 2026-07-17:
+
   - **Advanced filters no longer 400 + wipe results on numeric values**: the
     query builder's default `contains` operator coerced `4`/`true`/`null` to
     real types, which the server rejects for text-only operators, clearing the
@@ -125,6 +462,42 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   unrequested fallback search. — Claude (AI), 2026-07-16
 
 ### Changed
+
+- **One exact logical-byte accounting model across Thingtime**: account usage
+  now comes only from the protected subscription ledger and is enforced on
+  every supported customer-content writer in the same Mongo transaction as
+  the content. App data moves the account, whole-app, and per-app-user scope
+  counters from one canonical UTF-8 JSON measurement without double-counting
+  the account total. Legacy user usage values are ignored and removed during
+  the idempotent storage migration; explicit legacy allowances become real
+  overrides. APIs and UI now expose a canonical `storage` projection with
+  `ready`, `reconciling`, or `unavailable` status, preserve flat fields only as
+  derived compatibility aliases, show exact byte counts, and never present an
+  unavailable ledger as zero. Protected envelopes, transactional
+  reconciliation, full-source compare-and-swap migration, global lease
+  fencing, app lifecycle guards, and focused race/malformed-ledger tests close
+  the previously independent and bypassable counter paths. See PR #170's
+  detailed note in `PRs/`. — Codex (AI), 2026-08-07
+
+- **PR conflict-resolution models are now an admin-managed waterfall**:
+  the resolver hard-defaults to Claude Code's `default` model, then reads the
+  public `Thingtime.PRConflictAutoResolverModelWaterfall` setting and applies
+  its strictly allowlisted order through Claude Code's native model fallback
+  chain at max effort. Admins can add, remove, and drag Fable 5, Opus 5, and
+  the required default fallback in Settings; anonymous callers can read the
+  public projection, while every write is re-authorized server-side. Invalid,
+  empty, or unavailable remote config fails safely back to `default`.
+  — Codex (AI), 2026-08-07
+
+- **App-data now has real allowances at both scopes**: every registered app
+  stores a server-owned 5 GiB aggregate allowance/usage counter plus a 50 MiB
+  per-app-user allowance. Namespace writes reserve both guarded ledgers,
+  deletes refund both, `/api/v1/app-data/usage` reports used/allowance/remaining
+  for each, and `/api/v1/apps` exposes the developer's aggregate status without
+  allowing `/apps/update` to raise it. The idempotent
+  `backfill-app-storage-allowances` migration write-fences legacy apps,
+  reconciles user ledgers, and initializes aggregate usage last. — Codex (AI),
+  2026-08-02
 
 - **Repository AI guidance now has one canonical source**: unique rules from
   the former root `AGENTS.md`, `CLAUDE.md`, and `CODEX.md` now live in

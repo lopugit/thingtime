@@ -44,7 +44,7 @@ export const SettingsSection = (props: {
   </Flex>
 );
 
-export const SettingRow = (props: { label: string; hint?: string; children: React.ReactNode }) => (
+export const SettingRow = (props: { label: React.ReactNode; hint?: string; children: React.ReactNode }) => (
   <Flex alignItems="center" columnGap={4} paddingY={2} whiteSpace="normal">
     <Box minWidth={0}>
       <Text fontSize="sm" color="var(--tt-ink, #16161a)">

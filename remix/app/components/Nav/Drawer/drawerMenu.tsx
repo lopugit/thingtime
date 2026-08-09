@@ -17,6 +17,7 @@ export interface DrawerSubItem {
 	// visibility filters against the current user
 	authOnly?: boolean;
 	guestOnly?: boolean;
+	adminOnly?: boolean;
 }
 
 export interface DrawerTopItem {
@@ -51,6 +52,16 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		]
 	},
 	{
+		id: 'messages',
+		label: 'Messages',
+		icon: '💬',
+		to: '/messages',
+		children: [
+			{ id: 'messages-home', label: 'Messages', icon: '💬', to: '/messages', authOnly: true },
+			{ id: 'messages-requests', label: 'Requests', icon: '💌', to: '/messages?view=requests', authOnly: true }
+		]
+	},
+	{
 		id: 'search',
 		label: 'Search',
 		icon: '🔍',
@@ -81,6 +92,8 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		children: [
 			{ id: 'account-profile', label: 'Profile', icon: '👤', to: '/profile', authOnly: true },
 			{ id: 'account-settings', label: 'Settings', icon: '⚙️', to: '/settings' },
+			{ id: 'account-manage-apps', label: 'My apps', icon: '🧩', to: '/apps/manage', authOnly: true },
+			{ id: 'account-apps', label: 'App data', icon: '📦', to: '/apps', authOnly: true },
 			{ id: 'account-welcome', label: 'Welcome', icon: '✨', to: '/welcome', authOnly: true },
 			{ id: 'account-themes', label: 'Themes', icon: '🎨', to: '/themes' },
 			{ id: 'account-login', label: 'Log in', icon: '🗝️', to: '/login', guestOnly: true },
@@ -104,6 +117,7 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		icon: '💻',
 		to: '/tests',
 		children: [
+			{ id: 'dev-admin', label: 'Admin', icon: '🛠️', to: '/admin', adminOnly: true },
 			{ id: 'dev-tests', label: 'API tests', icon: '✅', to: '/tests' },
 			{ id: 'dev-crypto', label: 'Crypto', icon: '🔒', to: '/crypto' },
 			{ id: 'dev-migrations', label: 'Migrations', icon: '🛠️', to: '/migrations' }
@@ -132,6 +146,26 @@ export const drawerMenuItems: DrawerTopItem[] = [
 	}
 ];
 
+// Top-level hubs whose click KEEPS the drawer open by default, so their
+// submenu stays browsable (they're all multi-destination sections). An
+// explicit per-item "close after click" setting always wins over this
+// default, in either direction.
+export const DRAWER_KEEP_OPEN_DEFAULT_IDS: string[] = ['dev', 'status', 'branding', 'docs'];
+
+// The one resolver for "does clicking this item close the drawer?" — shared
+// by the click handlers (useDrawer.closesOnClick) and the settings toggles so
+// the checkboxes always show the behavior that will actually happen.
+export const drawerItemClosesOnClick = (
+	closeOnClick: Record<string, boolean> | undefined,
+	itemId: string
+): boolean => {
+	const saved = closeOnClick?.[itemId];
+	if (typeof saved === 'boolean') {
+		return saved;
+	}
+	return !DRAWER_KEEP_OPEN_DEFAULT_IDS.includes(itemId);
+};
+
 // Order ids by the user's saved ordering; unknown/new ids keep their default
 // position appended after the known ones, removed ids are dropped.
 export const applyDrawerOrdering = (defaultIds: string[], saved?: string[]): string[] => {
@@ -145,12 +179,19 @@ export const applyDrawerOrdering = (defaultIds: string[], saved?: string[]): str
 	return [...known, ...missing];
 };
 
-export const filterDrawerItemsByAuth = <T extends { authOnly?: boolean; guestOnly?: boolean }>(items: T[], loggedIn: boolean): T[] => {
+export const filterDrawerItemsByAuth = <T extends { authOnly?: boolean; guestOnly?: boolean; adminOnly?: boolean }>(
+	items: T[],
+	loggedIn: boolean,
+	isAdmin = false
+): T[] => {
 	return items.filter((item) => {
 		if (item.authOnly && !loggedIn) {
 			return false;
 		}
 		if (item.guestOnly && loggedIn) {
+			return false;
+		}
+		if (item.adminOnly && !isAdmin) {
 			return false;
 		}
 		return true;

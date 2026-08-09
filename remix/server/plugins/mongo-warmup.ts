@@ -1,6 +1,6 @@
 import { definePlugin } from 'nitro';
 
-import { ensureIndexes } from '../../app/api/utils/mongodb/collections';
+import { ensureIndexes, warnIfTransactionsUnsupported } from '../../app/api/utils/mongodb/collections';
 
 // Cold-start warmup: start the Mongo client connect + adoption pass + index
 // ensure the moment a fresh instance boots, instead of awaiting them inside
@@ -17,6 +17,9 @@ import { ensureIndexes } from '../../app/api/utils/mongodb/collections';
 export default definePlugin(() => {
   try {
     void ensureIndexes().catch(() => {});
+    // One boot-time probe that names the standalone-mongod trap (transactions
+    // unsupported) with its exact fix — see warnIfTransactionsUnsupported.
+    void warnIfTransactionsUnsupported().catch(() => {});
   } catch {
     // no MONGODB env: fallback-proxy deployments boot without a database
   }
