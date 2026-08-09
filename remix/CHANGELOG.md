@@ -126,7 +126,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Custom Environment ID only in a private GitHub variable, documents minimal
   wildcard S3 CORS/DNS, and calls out that eligible PRs intentionally share the
   same development data plane rather than receiving isolated sandboxes. — Codex
-  (AI), 2026-08-09
+  (AI), 2026-08-09. [Detailed PR #212 runbook](../PRs/212-codex-develop-pr-previews-add-secure-develop-target-pr-previews.md).
 - **AI PR and stack rebase conflict resolution**: a separate **Rebase PRs and
   stacks (AI)** workflow evaluates every same-repository PR regardless of base
   branch. Standalone PRs that merge cleanly but cannot rebase and stack members

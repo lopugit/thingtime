@@ -1532,12 +1532,12 @@
   "README.md": {
     "mtime": 1786283321.6160283,
     "ast_hash": "441f0167c77d0ecf7a645f4e9f076223",
-    "semantic_hash": ""
+    "semantic_hash": "441f0167c77d0ecf7a645f4e9f076223"
   },
   "VERCEL_DEPLOYMENTS.md": {
     "mtime": 1786283321.6162696,
     "ast_hash": "1605500d5c27cb8d7c3bdb658500a38d",
-    "semantic_hash": ""
+    "semantic_hash": "1605500d5c27cb8d7c3bdb658500a38d"
   },
   "docs/Use Cases/car.md": {
     "mtime": 1786280186.6535385,
@@ -4162,7 +4162,7 @@
   "TESTING.md": {
     "mtime": 1786283321.6166155,
     "ast_hash": "f4e37749b07326e37f9f1d3adce87c72",
-    "semantic_hash": ""
+    "semantic_hash": "f4e37749b07326e37f9f1d3adce87c72"
   },
   "claude-todo/12-everything-is-a-thing-collections.md": {
     "mtime": 1786280186.651086,
@@ -5032,6 +5032,6 @@
   ".github/workflows/develop-pr-preview.yml": {
     "mtime": 1786283321.6157358,
     "ast_hash": "f7a77eb69231159da81bdd21ce7e76b5",
-    "semantic_hash": ""
+    "semantic_hash": "f7a77eb69231159da81bdd21ce7e76b5"
   }
 }
