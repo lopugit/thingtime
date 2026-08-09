@@ -785,9 +785,9 @@
     "semantic_hash": "3c4e1c0f0a39f7ffc2bb9843e7aaa377"
   },
   "remix/app/api/utils/auth/users.ts": {
-    "mtime": 1786251254.131076,
-    "ast_hash": "9a2872089d1db925b4c9dab03c45af25",
-    "semantic_hash": "9a2872089d1db925b4c9dab03c45af25"
+    "mtime": 1786252781.3721511,
+    "ast_hash": "356854d7c6f861e959a6d392e2977afc",
+    "semantic_hash": "356854d7c6f861e959a6d392e2977afc"
   },
   "remix/app/api/utils/crypto/cryptoTools.server.ts": {
     "mtime": 1786251254.1318326,
@@ -815,9 +815,9 @@
     "semantic_hash": "b3e63b849b85a9614e8d562b148d279b"
   },
   "remix/app/api/utils/mongodb/collections.ts": {
-    "mtime": 1786251254.1398485,
-    "ast_hash": "b10fbe5c467f4b32adb9d5f3273e9f99",
-    "semantic_hash": "b10fbe5c467f4b32adb9d5f3273e9f99"
+    "mtime": 1786252781.3732338,
+    "ast_hash": "4072768d66ec6c47fa0b9d559d9e4de0",
+    "semantic_hash": "4072768d66ec6c47fa0b9d559d9e4de0"
   },
   "remix/app/api/utils/mongodb/config.ts": {
     "mtime": 1786251254.1400795,
@@ -915,9 +915,9 @@
     "semantic_hash": "f9b42c21024591b1022f9038cd9e8681"
   },
   "remix/app/components/Layout/Main.tsx": {
-    "mtime": 1786251254.170938,
-    "ast_hash": "4f9cc4477b72329763da96154fbc31e0",
-    "semantic_hash": "4f9cc4477b72329763da96154fbc31e0"
+    "mtime": 1786252781.3743465,
+    "ast_hash": "e8b7dd9f2c47bae85b0ae1e6253af131",
+    "semantic_hash": "e8b7dd9f2c47bae85b0ae1e6253af131"
   },
   "remix/app/components/Layout/TopSpacing.tsx": {
     "mtime": 1786251254.1709988,
@@ -1195,14 +1195,14 @@
     "semantic_hash": "689aa489ed73d14667a3a4c2d3428fb4"
   },
   "remix/app/root.tsx": {
-    "mtime": 1786251254.198469,
-    "ast_hash": "8eb2a2d09c0f4fa828b8d42d10bb34db",
-    "semantic_hash": "8eb2a2d09c0f4fa828b8d42d10bb34db"
+    "mtime": 1786252781.3774378,
+    "ast_hash": "df36b373eaef9c4a7b260ab2bc12c34d",
+    "semantic_hash": "df36b373eaef9c4a7b260ab2bc12c34d"
   },
   "remix/app/routes.tsx": {
-    "mtime": 1786251254.198694,
-    "ast_hash": "738bc7919c5a551ea2223338b1362ca6",
-    "semantic_hash": "738bc7919c5a551ea2223338b1362ca6"
+    "mtime": 1786252781.3777723,
+    "ast_hash": "95593a39301a45989f6584d7a2fb95da",
+    "semantic_hash": "95593a39301a45989f6584d7a2fb95da"
   },
   "remix/app/routes/$.tsx": {
     "mtime": 1786251254.1987886,
@@ -1480,9 +1480,9 @@
     "semantic_hash": "3e068c437e00eacf7136b9836e06d3a0"
   },
   "remix/server/routes/api/[...].ts": {
-    "mtime": 1786251254.3693829,
-    "ast_hash": "70de99b4daea7ec52e7c27283c6ca075",
-    "semantic_hash": "70de99b4daea7ec52e7c27283c6ca075"
+    "mtime": 1786252781.3826113,
+    "ast_hash": "0c66e82febfcefa77d2649c30b3ae663",
+    "semantic_hash": "0c66e82febfcefa77d2649c30b3ae663"
   },
   "remix/server/routes/api/root-data.get.ts": {
     "mtime": 1786251254.3699036,
@@ -1525,9 +1525,9 @@
     "semantic_hash": "9434e7191af48004e2365ca96fe0a502"
   },
   "FUNDAMENTALS.md": {
-    "mtime": 1786251253.8449717,
-    "ast_hash": "cc2affb220ad7278139b9dbe2d9beca6",
-    "semantic_hash": "cc2affb220ad7278139b9dbe2d9beca6"
+    "mtime": 1786252781.3319805,
+    "ast_hash": "4acb0ed85342a1673f388576ad02aca7",
+    "semantic_hash": "4acb0ed85342a1673f388576ad02aca7"
   },
   "README.md": {
     "mtime": 1786251636.4166396,
@@ -1755,8 +1755,8 @@
     "semantic_hash": "f162fbffa18046af73dfca08802a536f"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1786252644.9555964,
-    "ast_hash": "57183171c7d6e4179a3e2f9040cc7032",
+    "mtime": 1786252781.3687649,
+    "ast_hash": "5b541685c8749747037c2915e6e7ca84",
     "semantic_hash": ""
   },
   "remix/README.md": {
@@ -2635,9 +2635,9 @@
     "semantic_hash": "96c986db7b463fb594ff1c9bbe2d0172"
   },
   "remix/app/components/Nav/Drawer/DrawerContent.tsx": {
-    "mtime": 1786251254.1745055,
-    "ast_hash": "e2849a6d01950671298f7d149f8a9c4b",
-    "semantic_hash": "e2849a6d01950671298f7d149f8a9c4b"
+    "mtime": 1786252781.3763285,
+    "ast_hash": "0e0fd22685822fdf289b61b1f43d54a8",
+    "semantic_hash": "0e0fd22685822fdf289b61b1f43d54a8"
   },
   "remix/app/components/Nav/Drawer/DrawerSystem.tsx": {
     "mtime": 1786251254.1746023,
@@ -2665,9 +2665,9 @@
     "semantic_hash": "83cbda0242d9bd701207000da4b84b0b"
   },
   "remix/app/components/Nav/Drawer/drawerMenu.tsx": {
-    "mtime": 1786251254.1755772,
-    "ast_hash": "cb0ba8f6aebb423c547140ed3fa08f64",
-    "semantic_hash": "cb0ba8f6aebb423c547140ed3fa08f64"
+    "mtime": 1786252781.3765695,
+    "ast_hash": "ca8828dc967a27e9e6db2a1cd392cceb",
+    "semantic_hash": "ca8828dc967a27e9e6db2a1cd392cceb"
   },
   "remix/app/components/Nav/Drawer/useDrawer.tsx": {
     "mtime": 1786251254.1760168,
@@ -3055,9 +3055,9 @@
     "semantic_hash": "70a4a9dbd0d87d97133f4e04742017cf"
   },
   "remix/app/api/utils/things/things.ts": {
-    "mtime": 1786251254.1518247,
-    "ast_hash": "b2282994fb4bb55e71247a9ddc9075fc",
-    "semantic_hash": "b2282994fb4bb55e71247a9ddc9075fc"
+    "mtime": 1786252781.3742075,
+    "ast_hash": "1d24be76e09336923e7afb2ccbdef7de",
+    "semantic_hash": "1d24be76e09336923e7afb2ccbdef7de"
   },
   "remix/app/components/Feed/Feed.tsx": {
     "mtime": 1786251254.1632504,
@@ -3215,9 +3215,9 @@
     "semantic_hash": "f33d517f220a280930d5f773399b28a0"
   },
   "remix/app/docs/apiDocs.ts": {
-    "mtime": 1786251254.1941426,
-    "ast_hash": "0631ed79b68595c777851afce02034a7",
-    "semantic_hash": "0631ed79b68595c777851afce02034a7"
+    "mtime": 1786252781.377308,
+    "ast_hash": "956233a44bea7982485ab85675407db3",
+    "semantic_hash": "956233a44bea7982485ab85675407db3"
   },
   "remix/app/routes/docs/api.tsx": {
     "mtime": 1786251254.2276576,
@@ -3585,9 +3585,9 @@
     "semantic_hash": "72315d91a917dab861c5a059d418c3f2"
   },
   "remix/app/api/utils/rateLimit/config.ts": {
-    "mtime": 1786251636.4594424,
-    "ast_hash": "7a4c66bfdfcd1d0fe7ba131d27b7e5a2",
-    "semantic_hash": "7a4c66bfdfcd1d0fe7ba131d27b7e5a2"
+    "mtime": 1786252781.3736172,
+    "ast_hash": "fc37d81e46a3a53a355f484b65742d01",
+    "semantic_hash": "fc37d81e46a3a53a355f484b65742d01"
   },
   "remix/app/api/utils/rateLimit/enforce.ts": {
     "mtime": 1786251254.1430302,
@@ -3665,9 +3665,9 @@
     "semantic_hash": "11e91e35cc2445733bcc00ff39bacbbb"
   },
   "remix/app/utils/reactionTokens.ts": {
-    "mtime": 1786251254.242327,
-    "ast_hash": "ce4473a3bfe4f942731be8b737f74d92",
-    "semantic_hash": "ce4473a3bfe4f942731be8b737f74d92"
+    "mtime": 1786252781.3821266,
+    "ast_hash": "6b9dc18356b1c2b4141ab7735755986f",
+    "semantic_hash": "6b9dc18356b1c2b4141ab7735755986f"
   },
   "remix/app/api/utils/migrations/migrations.ts": {
     "mtime": 1786251254.1387804,
@@ -3710,9 +3710,9 @@
     "semantic_hash": "d5126ef1f13ccf198ac1b7f8dd9b143b"
   },
   "remix/app/schemas/registry.ts": {
-    "mtime": 1786251254.2350688,
-    "ast_hash": "338e76bb990bb77772f69d639f39e8ff",
-    "semantic_hash": "338e76bb990bb77772f69d639f39e8ff"
+    "mtime": 1786252781.3819642,
+    "ast_hash": "bcfeaa614571cbb820e2034b1407cdaf",
+    "semantic_hash": "bcfeaa614571cbb820e2034b1407cdaf"
   },
   "PRs/59-claude-unified-thing-crystal-schemas--everything-is-a-thing.md": {
     "mtime": 1786251253.8503664,
@@ -4160,9 +4160,9 @@
     "semantic_hash": "3690d11b40344928dd512587d7c1e06b"
   },
   "TESTING.md": {
-    "mtime": 1786251636.417316,
-    "ast_hash": "b35ef07d8cb5b69eab71af885d4613e7",
-    "semantic_hash": "b35ef07d8cb5b69eab71af885d4613e7"
+    "mtime": 1786252781.3327873,
+    "ast_hash": "46cd8e2b9fa54d39cf065ea3ce1d8d24",
+    "semantic_hash": "46cd8e2b9fa54d39cf065ea3ce1d8d24"
   },
   "claude-todo/12-everything-is-a-thing-collections.md": {
     "mtime": 1786251253.8572433,
@@ -4190,9 +4190,9 @@
     "semantic_hash": "b885f9675011e5ba0b7e1f59d42e4a74"
   },
   "remix/app/schemas/builtinSchemaProjection.test.ts": {
-    "mtime": 1786251254.2341952,
-    "ast_hash": "a9429b42c10b19069f370347458fef4d",
-    "semantic_hash": "a9429b42c10b19069f370347458fef4d"
+    "mtime": 1786252781.3809056,
+    "ast_hash": "788ab5989122ea463708df39110f0460",
+    "semantic_hash": "788ab5989122ea463708df39110f0460"
   },
   "remix/app/routes/docs/docsCode.tsx": {
     "mtime": 1786251254.2293618,
@@ -4247,7 +4247,7 @@
   ".github/workflows/resolve-pr-conflicts.yml": {
     "mtime": 1786252644.9038048,
     "ast_hash": "cacb026ec860c8e7e65bdb94ad58922a",
-    "semantic_hash": ""
+    "semantic_hash": "cacb026ec860c8e7e65bdb94ad58922a"
   },
   "iOS/Thingtime/Resources/AppIcon.icon/Assets/canopy.svg": {
     "mtime": 1786251254.0375836,
@@ -4882,7 +4882,7 @@
   ".github/workflows/rebase-pr-stacks.yml": {
     "mtime": 1786252644.9033515,
     "ast_hash": "9abbbc833fde20569c23dc346e7e6050",
-    "semantic_hash": ""
+    "semantic_hash": "9abbbc833fde20569c23dc346e7e6050"
   },
   "PRs/183-codex-ai-rebase-stack-resolver--add-automatic-ai-rebase-support-for-pr-stacks.md": {
     "mtime": 1786251253.8484771,
@@ -5024,14 +5024,259 @@
     "ast_hash": "c8bb61bf5f3f58db6d33e3d6cf70fa11",
     "semantic_hash": "c8bb61bf5f3f58db6d33e3d6cf70fa11"
   },
-  "remix/api/index.js": {
-    "mtime": 1786251271.702642,
-    "ast_hash": "844210d487b558804d922d7ac0c53dfa",
-    "semantic_hash": "844210d487b558804d922d7ac0c53dfa"
+  "remix/app/api/utils/messenger/channels.ts": {
+    "mtime": 1786252781.37232,
+    "ast_hash": "efb5590599c4c425c48c582a8efddab8",
+    "semantic_hash": "efb5590599c4c425c48c582a8efddab8"
+  },
+  "remix/app/api/utils/messenger/communities.ts": {
+    "mtime": 1786252781.3724232,
+    "ast_hash": "377af65080628dded05fdd37a2b5ee86",
+    "semantic_hash": "377af65080628dded05fdd37a2b5ee86"
+  },
+  "remix/app/api/utils/messenger/emojis.ts": {
+    "mtime": 1786252781.3725355,
+    "ast_hash": "00ba472358f888252b4e0635acd90627",
+    "semantic_hash": "00ba472358f888252b4e0635acd90627"
+  },
+  "remix/app/api/utils/messenger/follows.ts": {
+    "mtime": 1786252781.3726165,
+    "ast_hash": "910fb7937f5612141d4e33fc364b09eb",
+    "semantic_hash": "910fb7937f5612141d4e33fc364b09eb"
+  },
+  "remix/app/api/utils/messenger/messenger.ts": {
+    "mtime": 1786252781.3727598,
+    "ast_hash": "01796639866ada01df41c2d95f492616",
+    "semantic_hash": "01796639866ada01df41c2d95f492616"
+  },
+  "remix/app/api/utils/messenger/shared.ts": {
+    "mtime": 1786252781.37285,
+    "ast_hash": "e60920c98bb5a6d4c074f240b07efbd5",
+    "semantic_hash": "e60920c98bb5a6d4c074f240b07efbd5"
+  },
+  "remix/app/components/Messenger/ChatDetailsDrawer.tsx": {
+    "mtime": 1786252781.3745437,
+    "ast_hash": "cc07a1f8227d27fdf9bfd5bffcc23196",
+    "semantic_hash": "cc07a1f8227d27fdf9bfd5bffcc23196"
+  },
+  "remix/app/components/Messenger/ChatView.tsx": {
+    "mtime": 1786252781.3746424,
+    "ast_hash": "03e94d5da3b4ac61593a205e9565f056",
+    "semantic_hash": "03e94d5da3b4ac61593a205e9565f056"
+  },
+  "remix/app/components/Messenger/Composer.tsx": {
+    "mtime": 1786252781.374734,
+    "ast_hash": "cae564d410fe067411e93db5177a08d8",
+    "semantic_hash": "cae564d410fe067411e93db5177a08d8"
+  },
+  "remix/app/components/Messenger/CustomEmojiImage.tsx": {
+    "mtime": 1786252781.3748064,
+    "ast_hash": "2a6594c796ae6ac8303bb0e6282102a4",
+    "semantic_hash": "2a6594c796ae6ac8303bb0e6282102a4"
+  },
+  "remix/app/components/Messenger/EmojiUploadModal.tsx": {
+    "mtime": 1786252781.3748868,
+    "ast_hash": "6870f9c2b20fd63aebe909c491176442",
+    "semantic_hash": "6870f9c2b20fd63aebe909c491176442"
+  },
+  "remix/app/components/Messenger/InboxSidebar.tsx": {
+    "mtime": 1786252781.3749807,
+    "ast_hash": "d85ff7436aa6ab5a7b6edd8ca1a2b4b7",
+    "semantic_hash": "d85ff7436aa6ab5a7b6edd8ca1a2b4b7"
+  },
+  "remix/app/components/Messenger/MessageList.tsx": {
+    "mtime": 1786252781.375059,
+    "ast_hash": "ee9070468c2fbacd2f9affa69da6b73c",
+    "semantic_hash": "ee9070468c2fbacd2f9affa69da6b73c"
+  },
+  "remix/app/components/Messenger/MessageRow.tsx": {
+    "mtime": 1786252781.3751793,
+    "ast_hash": "3ae16e4eacbdb1d4f6b12b7b0d3c2213",
+    "semantic_hash": "3ae16e4eacbdb1d4f6b12b7b0d3c2213"
+  },
+  "remix/app/components/Messenger/MessengerEmojiPicker.tsx": {
+    "mtime": 1786252781.3752751,
+    "ast_hash": "e69485c23ff6e614cab2f22eb8d6428c",
+    "semantic_hash": "e69485c23ff6e614cab2f22eb8d6428c"
+  },
+  "remix/app/components/Messenger/MessengerModals.tsx": {
+    "mtime": 1786252781.375359,
+    "ast_hash": "09eb5f4bf7975d3d5a7ddeeab0f7d88a",
+    "semantic_hash": "09eb5f4bf7975d3d5a7ddeeab0f7d88a"
+  },
+  "remix/app/components/Messenger/MessengerNotifications.tsx": {
+    "mtime": 1786252781.3754554,
+    "ast_hash": "07699834ea8feaf821a32122d8683293",
+    "semantic_hash": "07699834ea8feaf821a32122d8683293"
+  },
+  "remix/app/components/Messenger/MessengerPage.tsx": {
+    "mtime": 1786252781.3755805,
+    "ast_hash": "1720379b49e48d06609cb01d381443ff",
+    "semantic_hash": "1720379b49e48d06609cb01d381443ff"
+  },
+  "remix/app/components/Messenger/RequestsView.tsx": {
+    "mtime": 1786252781.375668,
+    "ast_hash": "a7a5bf87d50a4962fc4d2be7cb988dd2",
+    "semantic_hash": "a7a5bf87d50a4962fc4d2be7cb988dd2"
+  },
+  "remix/app/components/Messenger/SlackSidebar.tsx": {
+    "mtime": 1786252781.3757892,
+    "ast_hash": "7f00d1aaaddb5dd0f88f285e31b40255",
+    "semantic_hash": "7f00d1aaaddb5dd0f88f285e31b40255"
+  },
+  "remix/app/components/Messenger/messengerCache.ts": {
+    "mtime": 1786252781.3758628,
+    "ast_hash": "aa216a9118d26dac205eeac372da64c6",
+    "semantic_hash": "aa216a9118d26dac205eeac372da64c6"
+  },
+  "remix/app/components/Messenger/messengerTypes.ts": {
+    "mtime": 1786252781.3759334,
+    "ast_hash": "12f7957aa31ce657d7418c53f8fedf71",
+    "semantic_hash": "12f7957aa31ce657d7418c53f8fedf71"
+  },
+  "remix/app/components/Messenger/useMessengerApi.ts": {
+    "mtime": 1786252781.3760011,
+    "ast_hash": "b739e5fce2163af624156b856b48e6e7",
+    "semantic_hash": "b739e5fce2163af624156b856b48e6e7"
+  },
+  "remix/app/routes/api/v1/chats/_chats.tsx": {
+    "mtime": 1786252781.3779194,
+    "ast_hash": "e36a74c3e8915090038e9db8852e1712",
+    "semantic_hash": "e36a74c3e8915090038e9db8852e1712"
+  },
+  "remix/app/routes/api/v1/chats/get/_get.tsx": {
+    "mtime": 1786252781.3780558,
+    "ast_hash": "928c9a13d17f2d1a6e0f59757a314d36",
+    "semantic_hash": "928c9a13d17f2d1a6e0f59757a314d36"
+  },
+  "remix/app/routes/api/v1/chats/leave/_leave.tsx": {
+    "mtime": 1786252781.3781843,
+    "ast_hash": "33814c91f809dc529404cf322edc1d2b",
+    "semantic_hash": "33814c91f809dc529404cf322edc1d2b"
+  },
+  "remix/app/routes/api/v1/chats/members/_members.tsx": {
+    "mtime": 1786252781.3782902,
+    "ast_hash": "a13808c548eea682533b4f5b76c11ce4",
+    "semantic_hash": "a13808c548eea682533b4f5b76c11ce4"
+  },
+  "remix/app/routes/api/v1/chats/messages/_messages.tsx": {
+    "mtime": 1786252781.3784153,
+    "ast_hash": "d291bd67483093694401c862b8783f55",
+    "semantic_hash": "d291bd67483093694401c862b8783f55"
+  },
+  "remix/app/routes/api/v1/chats/messages/delete/_delete.tsx": {
+    "mtime": 1786252781.3785317,
+    "ast_hash": "aed03ef872504777fc57f281672d899f",
+    "semantic_hash": "aed03ef872504777fc57f281672d899f"
+  },
+  "remix/app/routes/api/v1/chats/messages/edit/_edit.tsx": {
+    "mtime": 1786252781.3786273,
+    "ast_hash": "ac3e04ea931f044eb3bf0cd7e5fad3c6",
+    "semantic_hash": "ac3e04ea931f044eb3bf0cd7e5fad3c6"
+  },
+  "remix/app/routes/api/v1/chats/react/_react.tsx": {
+    "mtime": 1786252781.378742,
+    "ast_hash": "b98d72e3bc1be804c8042cc7ad2a1096",
+    "semantic_hash": "b98d72e3bc1be804c8042cc7ad2a1096"
+  },
+  "remix/app/routes/api/v1/chats/read/_read.tsx": {
+    "mtime": 1786252781.3788574,
+    "ast_hash": "a1f41a922a8d6375c03a5ec087d50331",
+    "semantic_hash": "a1f41a922a8d6375c03a5ec087d50331"
+  },
+  "remix/app/routes/api/v1/chats/requests/_requests.tsx": {
+    "mtime": 1786252781.378971,
+    "ast_hash": "f26dd3936b0fc026bb5d7bb08ca0b952",
+    "semantic_hash": "f26dd3936b0fc026bb5d7bb08ca0b952"
+  },
+  "remix/app/routes/api/v1/chats/settings/_settings.tsx": {
+    "mtime": 1786252781.3790843,
+    "ast_hash": "fea8b1f3eb013d5f2127e0947b008873",
+    "semantic_hash": "fea8b1f3eb013d5f2127e0947b008873"
+  },
+  "remix/app/routes/api/v1/chats/update/_update.tsx": {
+    "mtime": 1786252781.3791792,
+    "ast_hash": "098cb12a7662f471471e918df4690c12",
+    "semantic_hash": "098cb12a7662f471471e918df4690c12"
+  },
+  "remix/app/routes/api/v1/chats/updates/_updates.tsx": {
+    "mtime": 1786252781.3792865,
+    "ast_hash": "bacfd09d6695cfff320997919b731f72",
+    "semantic_hash": "bacfd09d6695cfff320997919b731f72"
+  },
+  "remix/app/routes/api/v1/communities/_communities.tsx": {
+    "mtime": 1786252781.3793905,
+    "ast_hash": "205f58ffb0ab5849c6482c86f2b5bbbf",
+    "semantic_hash": "205f58ffb0ab5849c6482c86f2b5bbbf"
+  },
+  "remix/app/routes/api/v1/communities/get/_get.tsx": {
+    "mtime": 1786252781.3794906,
+    "ast_hash": "6ef2c8fb9f366f926a3a6f441c5d2652",
+    "semantic_hash": "6ef2c8fb9f366f926a3a6f441c5d2652"
+  },
+  "remix/app/routes/api/v1/communities/invites/_invites.tsx": {
+    "mtime": 1786252781.379603,
+    "ast_hash": "705e5bccf334a2ad5e9e380e58750fa2",
+    "semantic_hash": "705e5bccf334a2ad5e9e380e58750fa2"
+  },
+  "remix/app/routes/api/v1/communities/join/_join.tsx": {
+    "mtime": 1786252781.379704,
+    "ast_hash": "805f0e6391e402e6cbffcffa11e959ef",
+    "semantic_hash": "805f0e6391e402e6cbffcffa11e959ef"
+  },
+  "remix/app/routes/api/v1/communities/members/_members.tsx": {
+    "mtime": 1786252781.3797977,
+    "ast_hash": "3d1fa3355a7b5b2d25f6019b6e841311",
+    "semantic_hash": "3d1fa3355a7b5b2d25f6019b6e841311"
+  },
+  "remix/app/routes/api/v1/communities/sections/_sections.tsx": {
+    "mtime": 1786252781.379911,
+    "ast_hash": "3ac4ab59deb7fca0fa78af8be69a1d76",
+    "semantic_hash": "3ac4ab59deb7fca0fa78af8be69a1d76"
+  },
+  "remix/app/routes/api/v1/communities/update/_update.tsx": {
+    "mtime": 1786252781.3800027,
+    "ast_hash": "e1e371a5b39c1c0426b68815a3c443ef",
+    "semantic_hash": "e1e371a5b39c1c0426b68815a3c443ef"
+  },
+  "remix/app/routes/api/v1/emojis/_emojis.tsx": {
+    "mtime": 1786252781.3801107,
+    "ast_hash": "5464299f5c80a3c31778fb5977c19981",
+    "semantic_hash": "5464299f5c80a3c31778fb5977c19981"
+  },
+  "remix/app/routes/api/v1/emojis/delete/_delete.tsx": {
+    "mtime": 1786252781.3802078,
+    "ast_hash": "919fd8b626af24e7b978f5e042922d5c",
+    "semantic_hash": "919fd8b626af24e7b978f5e042922d5c"
+  },
+  "remix/app/routes/api/v1/users/follow/_follow.tsx": {
+    "mtime": 1786252781.3803298,
+    "ast_hash": "306f9696c04594b90e83e14fe45b28de",
+    "semantic_hash": "306f9696c04594b90e83e14fe45b28de"
+  },
+  "remix/app/routes/messages.tsx": {
+    "mtime": 1786252781.3803918,
+    "ast_hash": "4409a1df510cc4b5a8cad5a59afafbca",
+    "semantic_hash": "4409a1df510cc4b5a8cad5a59afafbca"
+  },
+  "remix/scripts/verify-messenger.mjs": {
+    "mtime": 1786252781.3822744,
+    "ast_hash": "7a337a5914e2a0016d931a80f9b68e01",
+    "semantic_hash": "7a337a5914e2a0016d931a80f9b68e01"
   },
   ".github/workflows/promote-develop-to-main.yml": {
     "mtime": 1786252103.714714,
     "ast_hash": "ba826ff25801c22dc58452b2191574b4",
-    "semantic_hash": ""
+    "semantic_hash": "ba826ff25801c22dc58452b2191574b4"
+  },
+  "PRs/174-thingtime-messenger-platform-thingtime-messenger-spaces-chats.md": {
+    "mtime": 1786252781.3322196,
+    "ast_hash": "5466b020efecbcd76be02bc5f148ba5d",
+    "semantic_hash": "5466b020efecbcd76be02bc5f148ba5d"
+  },
+  "remix/api/index.js": {
+    "mtime": 1786251271.702642,
+    "ast_hash": "844210d487b558804d922d7ac0c53dfa",
+    "semantic_hash": "844210d487b558804d922d7ac0c53dfa"
   }
 }

@@ -249,6 +249,31 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   fails. Staged refresh outputs get the same best-effort secret scan as
   resolved files. — Claude (AI), 2026-08-03
 
+- **Thingtime Messenger** (`/messages`): a full chat platform inside the app —
+  Slack-style **Spaces** (communities with channels, sidebar sections, topics,
+  invites, threads) and FB-style **Chats** (DMs, groups, nicknames, message
+  requests bucketed follower/unknown) behind one mode toggle. Everything is a
+  thing: nine new dedicated-endpoint kinds (`chat`, `chat-member`,
+  `chat-message`, `chat-section`, `community`, `community-member`,
+  `community-invite`, `custom-emoji`, `follow`) with membership enforced in
+  `api/utils/messenger/` and the generic `/api/v1/things` paths refusing them.
+  Reactions reuse the post reaction store + unique index and add a
+  `custom:<emoji id>` token namespace for uploaded gif/webp emojis (≤512KB
+  data URIs, the avatar pattern). Read receipts are per-member forward-only
+  high-water marks with a parity privacy setting (off = neither share nor
+  see); unread counts skip system messages and muted chats; new-message Lopu
+  toasts + nav badge ride a visibility-aware poll (4s open chat / 15s list /
+  25s global). 23 new documented endpoints (docs registry = Nitro
+  registration), 6 new rate-limit buckets, 7 new partial/thread indexes, and
+  `scripts/verify-messenger.mjs` (100 live-API checks, including 14
+  regressions locked in from the pre-merge adversarial multi-agent review —
+  community-gated channel adds, a generic-DELETE wall for messenger kinds,
+  community-leave channel revocation, ex-owner role reset, sealed DM member
+  verbs, request-walled group invites, receipt-free pending reads, and
+  cursor/limit fixes). Detailed note:
+  [PR #174](../PRs/174-thingtime-messenger-platform-thingtime-messenger-spaces-chats.md).
+  — Claude (AI), 2026-08-03
+
 - **/admin dashboard + subscription tiers + ownership links** (stacked on the
   PAT × app-namespace tree): admin-gated `/admin` page (Users / Apps / System
   tabs) managing every user and app — subscription tiers (free/plus/pro/payg;
