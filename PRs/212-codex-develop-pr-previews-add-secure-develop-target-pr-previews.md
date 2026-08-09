@@ -69,7 +69,7 @@ Do not describe credentialed PR previews as live until all of these pass:
 
 ## Verification completed
 
-- Controller self-test: 37/37
+- Controller self-test: 40/40
 - Node syntax check
 - Actionlint 1.7.7
 - Workflow YAML parse

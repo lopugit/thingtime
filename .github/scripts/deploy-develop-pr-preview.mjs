@@ -88,16 +88,32 @@ const parseTrustedLogins = (value) => {
 	return new Set(entries);
 };
 
+const isHostnameLabel = (value) => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(value);
+
 const safeHostname = (value, name) => {
 	const hostname = String(value ?? '')
 		.trim()
 		.toLowerCase();
 	if (hostname.length > 253 || hostname.includes('..')) throw new Error(`${name} is invalid`);
 	const labels = hostname.split('.');
-	if (labels.length < 2 || labels.some((label) => !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label))) {
+	if (labels.length < 2 || labels.some((label) => !isHostnameLabel(label))) {
 		throw new Error(`${name} is invalid`);
 	}
 	return hostname;
+};
+
+const isS3BucketHostname = (hostname) => {
+	const awsSuffix = hostname.endsWith('.amazonaws.com.cn') ? '.amazonaws.com.cn' : hostname.endsWith('.amazonaws.com') ? '.amazonaws.com' : null;
+	if (!awsSuffix) return false;
+	const endpoint = hostname.slice(0, -awsSuffix.length);
+	const markerIndex = endpoint.indexOf('.s3');
+	if (markerIndex < 3 || markerIndex !== endpoint.lastIndexOf('.s3')) return false;
+	const bucket = endpoint.slice(0, markerIndex);
+	const service = endpoint.slice(markerIndex + 1);
+	if (bucket.length > 63 || !isHostnameLabel(bucket)) return false;
+	if (service === 's3') return true;
+	if (!service.startsWith('s3.') && !service.startsWith('s3-')) return false;
+	return isHostnameLabel(service.slice(3));
 };
 
 const safeCorsProbeUrl = (value) => {
@@ -108,14 +124,7 @@ const safeCorsProbeUrl = (value) => {
 		throw new Error('Develop S3 CORS probe URL is invalid');
 	}
 	const hostname = safeHostname(parsed.hostname, 'Develop S3 CORS probe hostname');
-	if (
-		parsed.protocol !== 'https:' ||
-		parsed.username ||
-		parsed.password ||
-		parsed.search ||
-		parsed.hash ||
-		!/^.+\.s3(?:[.-][a-z0-9-]+)*\.amazonaws\.com(?:\.cn)?$/.test(hostname)
-	) {
+	if (parsed.protocol !== 'https:' || parsed.username || parsed.password || parsed.search || parsed.hash || !isS3BucketHostname(hostname)) {
 		throw new Error('Develop S3 CORS probe URL must be an unsigned HTTPS S3 bucket URL');
 	}
 	return parsed.href;
@@ -341,9 +350,12 @@ const runSelfTest = () => {
 		safeCorsProbeUrl('https://example-develop.s3.ap-southeast-2.amazonaws.com/cors-probe'),
 		'https://example-develop.s3.ap-southeast-2.amazonaws.com/cors-probe'
 	);
+	equal(safeCorsProbeUrl('https://example-develop.s3.amazonaws.com/cors-probe'), 'https://example-develop.s3.amazonaws.com/cors-probe');
 	throws(() => safeCorsProbeUrl('https://example-develop.s3.ap-southeast-2.amazonaws.com/cors-probe?signature=no'));
 	throws(() => safeCorsProbeUrl('https://user@example-develop.s3.ap-southeast-2.amazonaws.com/probe'));
 	throws(() => safeCorsProbeUrl('https://example.invalid/probe'));
+	throws(() => safeCorsProbeUrl(`https://a.s3-${'--'.repeat(10_000)}.amazonaws.com/probe`));
+	throws(() => safeCorsProbeUrl('https://example-develop.s3evil.amazonaws.com/probe'));
 	equal([...parseTrustedLogins(' Lopu, trusted-bot\n')], ['lopu', 'trusted-bot']);
 	throws(() => parseTrustedLogins(''));
 	truthy(TRUSTED_PERMISSIONS.has('write'));
