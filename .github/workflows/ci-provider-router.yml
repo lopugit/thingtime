@@ -1,0 +1,182 @@
+name: Route CI compute provider
+
+on:
+  workflow_call:
+    inputs:
+      workflow:
+        description: "Allowlisted Thingtime automation key"
+        required: true
+        type: string
+      execution_provider:
+        description: "Provider already selected for an internal worker"
+        required: false
+        default: "github-actions"
+        type: string
+      runner_label:
+        description: "Unique self-hosted runner label for an internal Vercel worker"
+        required: false
+        default: ""
+        type: string
+      control_dispatch_id:
+        description: "Thingtime dispatch id for an already-routed worker or fallback"
+        required: false
+        default: ""
+        type: string
+      pr_number:
+        required: false
+        default: ""
+        type: string
+      branch:
+        required: false
+        default: ""
+        type: string
+      cascade:
+        required: false
+        default: true
+        type: boolean
+      dry_run:
+        required: false
+        default: false
+        type: boolean
+      lookback:
+        required: false
+        default: "50"
+        type: string
+    secrets:
+      THINGTIME_CI_ROUTER_SECRET:
+        required: false
+    outputs:
+      execute:
+        description: "Whether this GitHub workflow run should continue locally"
+        value: ${{ jobs.route.outputs.execute }}
+      execution_provider:
+        description: "The selected or failover execution provider"
+        value: ${{ jobs.route.outputs.execution_provider }}
+
+permissions: {}
+
+jobs:
+  route:
+    name: Select GitHub or Vercel compute
+    runs-on: ${{ inputs.runner_label || 'ubuntu-latest' }}
+    timeout-minutes: 3
+    outputs:
+      execute: ${{ steps.route.outputs.execute }}
+      execution_provider: ${{ steps.route.outputs.execution_provider }}
+    steps:
+      - name: Route through Thingtime CI Control
+        id: route
+        shell: bash
+        env:
+          WORKFLOW: ${{ inputs.workflow }}
+          EXECUTION_PROVIDER: ${{ inputs.execution_provider }}
+          RUNNER_LABEL: ${{ inputs.runner_label }}
+          CONTROL_DISPATCH_ID: ${{ inputs.control_dispatch_id }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          BRANCH: ${{ inputs.branch }}
+          CASCADE: ${{ inputs.cascade }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          LOOKBACK: ${{ inputs.lookback }}
+          ROUTER_URL: ${{ vars.THINGTIME_CI_ROUTER_URL || 'https://dev.thingtime.com/api/v1/integrations/ci/route' }}
+          ROUTER_SECRET: ${{ secrets.THINGTIME_CI_ROUTER_SECRET }}
+        run: |
+          set -euo pipefail
+
+          continue_on_github() {
+            echo "execute=true" >> "$GITHUB_OUTPUT"
+            echo "execution_provider=github-actions" >> "$GITHUB_OUTPUT"
+          }
+
+          # A Vercel Workflow already provisioned this exact runner and sent
+          # the protected workflow back with its unique label. Do not route it
+          # a second time.
+          if [[ -n "$RUNNER_LABEL" && "$EXECUTION_PROVIDER" == "vercel-sandbox" ]]; then
+            echo "execute=true" >> "$GITHUB_OUTPUT"
+            echo "execution_provider=vercel-sandbox" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # A durable Vercel workflow may re-enter on GitHub-hosted compute
+          # after a late Sandbox/runner failure. Only the two automation actors
+          # may mark that already-routed fallback; ordinary manual dispatches
+          # still pass through the stored policy below.
+          if [[ -n "$CONTROL_DISPATCH_ID" \
+             && "$EXECUTION_PROVIDER" == "github-actions" \
+             && ( "$GITHUB_ACTOR" == "github-actions[bot]" \
+                  || "$GITHUB_ACTOR" == "thingtime-ci-control[bot]" ) ]]; then
+            echo "execute=true" >> "$GITHUB_OUTPUT"
+            echo "execution_provider=github-actions" >> "$GITHUB_OUTPUT"
+            echo "::notice::Vercel runner fallback accepted; continuing the protected workflow on GitHub-hosted compute."
+            exit 0
+          fi
+
+          # Routing is an optimisation, not a new single point of failure.
+          # Until setup is complete (or during an outage), preserve the exact
+          # previous GitHub-hosted behaviour.
+          if [[ -z "$ROUTER_SECRET" || -z "$ROUTER_URL" ]]; then
+            echo "::warning::Thingtime provider routing is not configured; continuing on GitHub-hosted compute."
+            continue_on_github
+            exit 0
+          fi
+
+          case "$WORKFLOW" in
+            resolve-conflicts)
+              workflow_inputs="$(jq -nc --arg pr_number "$PR_NUMBER" --arg branch "$BRANCH" '{pr_number:$pr_number,branch:$branch}')"
+              ;;
+            rebase-stack)
+              workflow_inputs="$(jq -nc --arg pr_number "$PR_NUMBER" --arg branch "$BRANCH" --argjson cascade "$CASCADE" '{pr_number:$pr_number,branch:$branch,cascade:$cascade}')"
+              ;;
+            promote-features)
+              workflow_inputs="$(jq -nc --argjson dry_run "$DRY_RUN" --arg lookback "$LOOKBACK" '{dry_run:$dry_run,lookback:$lookback}')"
+              ;;
+            promote-develop|sync-main)
+              workflow_inputs='{}'
+              ;;
+            *)
+              echo "::error::Unsupported provider-routed workflow: $WORKFLOW"
+              exit 1
+              ;;
+          esac
+
+          requested_at="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
+          delivery_key="${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}:${GITHUB_EVENT_NAME}:${WORKFLOW}"
+          body="$(jq -nc \
+            --arg workflow "$WORKFLOW" \
+            --arg deliveryKey "$delivery_key" \
+            --arg actorId "github:${GITHUB_ACTOR}" \
+            --arg requestedAt "$requested_at" \
+            --argjson inputs "$workflow_inputs" \
+            '{workflow:$workflow,deliveryKey:$deliveryKey,actorId:$actorId,requestedAt:$requestedAt,inputs:$inputs}')"
+          digest="$(printf '%s' "$body" | openssl dgst -sha256 -hmac "$ROUTER_SECRET" -hex | awk '{print $NF}')"
+          response_file="$(mktemp)"
+          trap 'rm -f "$response_file"' EXIT
+          if ! curl --fail --silent --show-error \
+            --connect-timeout 10 --max-time 60 \
+            -H 'Content-Type: application/json' \
+            -H "X-Thingtime-CI-Signature: sha256=${digest}" \
+            --data-binary "$body" \
+            "$ROUTER_URL" > "$response_file"; then
+            echo "::warning::Thingtime provider routing was unavailable; continuing on GitHub-hosted compute."
+            continue_on_github
+            exit 0
+          fi
+          if [[ "$(jq -r '.ok == true' "$response_file")" != "true" ]]; then
+            echo "::warning::Thingtime rejected the provider route; continuing on GitHub-hosted compute."
+            continue_on_github
+            exit 0
+          fi
+
+          execute="$(jq -r 'if .execute == true then "true" else "false" end' "$response_file")"
+          provider="$(jq -r '.executionProvider // "github-actions"' "$response_file")"
+          if [[ "$provider" != "github-actions" && "$provider" != "vercel-sandbox" ]]; then
+            echo "::warning::Thingtime returned an unknown provider; continuing on GitHub-hosted compute."
+            continue_on_github
+            exit 0
+          fi
+          echo "execute=$execute" >> "$GITHUB_OUTPUT"
+          echo "execution_provider=$provider" >> "$GITHUB_OUTPUT"
+          if [[ "$execute" == "false" && "$provider" == "vercel-sandbox" ]]; then
+            echo "::notice::This trigger was handed to Vercel Workflow + Sandbox; the protected workflow will re-enter on its unique runner."
+          elif [[ "$execute" == "false" ]]; then
+            echo "::notice::This automation is disabled by Thingtime CI Control."
+          fi
