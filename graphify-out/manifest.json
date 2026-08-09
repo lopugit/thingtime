@@ -4245,8 +4245,8 @@
     "semantic_hash": "505fca8e81926065aff3be4ea340c700"
   },
   ".github/workflows/resolve-pr-conflicts.yml": {
-    "mtime": 1786290142.737615,
-    "ast_hash": "5010f6fd97561da881d200ec21a4672a",
+    "mtime": 1786293256.7983813,
+    "ast_hash": "24c5e1dd8c57e0d3daaf6c6cb93a7f3c",
     "semantic_hash": ""
   },
   "iOS/Thingtime/Resources/AppIcon.icon/Assets/canopy.svg": {
@@ -4430,8 +4430,8 @@
     "semantic_hash": "77009e8bbbaa2c98f5e39a71003e80bb"
   },
   ".github/workflows/sync-main-into-develop.yml": {
-    "mtime": 1786279812.0093012,
-    "ast_hash": "341e83de54b8e32122148a23e3084c74",
+    "mtime": 1786291752.5071347,
+    "ast_hash": "88bb30401f1cfd5581e847db1ff5c4a8",
     "semantic_hash": ""
   },
   "PRs/164-claude-crypto-password-hasher-7c31e9--password-hasher-mongosh-rotate-snippet.md": {
@@ -4880,8 +4880,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/rebase-pr-stacks.yml": {
-    "mtime": 1786279886.3850572,
-    "ast_hash": "7b8d0a7520dd2c1fd00b03efe903900d",
+    "mtime": 1786293086.310027,
+    "ast_hash": "02222ed17514310312edc6a26f00b142",
     "semantic_hash": ""
   },
   "PRs/183-codex-ai-rebase-stack-resolver--add-automatic-ai-rebase-support-for-pr-stacks.md": {
@@ -5022,7 +5022,7 @@
   ".github/scripts/promotion-pr-changelog.mjs": {
     "mtime": 1786287809.137071,
     "ast_hash": "761b35e477a27c12e56f84c507adbac6",
-    "semantic_hash": "761b35e477a27c12e56f84c507adbac6"
+    "semantic_hash": ""
   },
   "remix/app/api/utils/messenger/channels.ts": {
     "mtime": 1786286860.0177355,
@@ -5265,8 +5265,8 @@
     "semantic_hash": "7a337a5914e2a0016d931a80f9b68e01"
   },
   ".github/workflows/promote-develop-to-main.yml": {
-    "mtime": 1786279869.818032,
-    "ast_hash": "d499cf6810041722ac2aa0da44d5eecd",
+    "mtime": 1786291752.506386,
+    "ast_hash": "2ea712ed2101516fd521eacea1003eb4",
     "semantic_hash": ""
   },
   "PRs/174-thingtime-messenger-platform-thingtime-messenger-spaces-chats.md": {
@@ -5365,8 +5365,8 @@
     "semantic_hash": "c382f688a5083eb053f55690d93e47fd"
   },
   ".github/scripts/promote-features-to-main.mjs": {
-    "mtime": 1786290315.8023498,
-    "ast_hash": "a0daca984533a2fbe2aabda5b6753cff",
+    "mtime": 1786293209.3572702,
+    "ast_hash": "b704c4f48878182a93e77b806ec015ac",
     "semantic_hash": ""
   },
   "PRs/172-followers-friends-notifications-views-4fcfcf-followers-friends-notifications-views.md": {
@@ -5375,13 +5375,13 @@
     "semantic_hash": "1bac091f31b99443dbeafa2d037a005b"
   },
   ".github/scripts/resolve-pr-conflicts-routing-contract.mjs": {
-    "mtime": 1786288707.6549935,
-    "ast_hash": "dbe7568a5daa5977bb50a88626f44057",
+    "mtime": 1786293284.5662434,
+    "ast_hash": "ed64451a9a61c1430f05c5ef4254721b",
     "semantic_hash": ""
   },
   ".github/workflows/promote-features-to-main.yml": {
-    "mtime": 1786289780.2700503,
-    "ast_hash": "24fbdf6b1c7e1b6cd220bf8b50945ff3",
+    "mtime": 1786293323.8090196,
+    "ast_hash": "40d0d43bf30ca99abda0210f11f272c0",
     "semantic_hash": ""
   },
   "PRs/190-claude-github-action-pr-promotion-c65173-per-feature-develop-main-promotion-prs-with-stacks.md": {
@@ -5400,8 +5400,8 @@
     "semantic_hash": "33e30dbe292704371a290961e581066b"
   },
   ".github/scripts/workflow-control-plane-contract.mjs": {
-    "mtime": 1786288914.904667,
-    "ast_hash": "b45cdd4784a81ed81536a537c7b02d1d",
+    "mtime": 1786293563.7777824,
+    "ast_hash": "3add0dd95471d9d3584207a2c9e7a913",
     "semantic_hash": ""
   },
   ".github/workflows/control-plane-ci.yml": {
@@ -5409,19 +5409,24 @@
     "ast_hash": "a1d8064d391c8ef70343c27a4d8b5238",
     "semantic_hash": ""
   },
+  ".github/workflows/ci-provider-router.yml": {
+    "mtime": 1786293552.2040517,
+    "ast_hash": "97d3a1b83b64c2a664e81f29a629fa57",
+    "semantic_hash": ""
+  },
   ".github/scripts/promotion-worker-contract.sh": {
-    "mtime": 1786289817.7776377,
-    "ast_hash": "3db30c9e6316ba508fa4f9ee511be16a",
+    "mtime": 1786293164.675224,
+    "ast_hash": "1ac22877d0ec7fffbabcf1a03440103a",
     "semantic_hash": ""
   },
   ".github/scripts/promotion-worker-routing-contract.mjs": {
-    "mtime": 1786290305.0105453,
-    "ast_hash": "fb021d231e7f4be9ba33525e020cdb1d",
+    "mtime": 1786293105.029389,
+    "ast_hash": "53823e9e4280d8deafef0fe1a8350672",
     "semantic_hash": ""
   },
   ".github/scripts/rebase-stack/promotion-worker.sh": {
-    "mtime": 1786289571.9425857,
-    "ast_hash": "aab690f4d0fbcf8e489ce4e1f73cbb9b",
+    "mtime": 1786293105.0282862,
+    "ast_hash": "3e5228e1cbed80ca3a4c3c1720c442c6",
     "semantic_hash": ""
   },
   ".github/scripts/rebase-stack/refresh-promotion-graphify.sh": {

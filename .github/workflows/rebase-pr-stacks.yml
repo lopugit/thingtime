@@ -47,10 +47,77 @@ on:
         required: false
         default: ""
         type: string
+      branch:
+        description: "PR base or head branch to scan when no exact PR is supplied"
+        required: false
+        default: ""
+        type: string
       cascade:
         description: "Continue through PRs stacked on the rebased branch"
         required: false
         default: true
+        type: boolean
+      execution_provider:
+        description: "Internal: hosted compute selected by Thingtime CI Control"
+        required: false
+        default: "github-actions"
+        type: string
+      runner_label:
+        description: "Internal: unique Vercel Sandbox self-hosted runner label"
+        required: false
+        default: ""
+        type: string
+      control_dispatch_id:
+        description: "Internal: Thingtime ci-dispatch id used for cross-run observability"
+        required: false
+        default: ""
+        type: string
+      routing_proof:
+        description: "Internal: signed proof for an already-validated provider route"
+        required: false
+        default: ""
+        type: string
+      routing_proof_issued_at:
+        description: "Internal: Unix timestamp bound into routing_proof"
+        required: false
+        default: ""
+        type: string
+      worker_handoff:
+        description: "Internal: exact snapshot worker routing flag"
+        required: false
+        default: false
+        type: boolean
+      expected_head_sha:
+        required: false
+        default: ""
+        type: string
+      expected_base_sha:
+        required: false
+        default: ""
+        type: string
+      old_base_sha:
+        required: false
+        default: ""
+        type: string
+      new_base_sha:
+        required: false
+        default: ""
+        type: string
+      manual:
+        required: false
+        default: false
+        type: boolean
+      depth:
+        required: false
+        default: "0"
+        type: string
+      visited:
+        required: false
+        default: ""
+        type: string
+      recover_stale_lock:
+        required: false
+        default: false
         type: boolean
   push:
     branches:
@@ -69,10 +136,86 @@ on:
         required: false
         default: ""
         type: string
+      branch:
+        description: "PR base or head branch to scan when no exact PR is supplied"
+        required: false
+        default: ""
+        type: string
       cascade:
         description: "Continue through PRs stacked on the rebased branch"
         required: false
         default: true
+        type: boolean
+      execution_provider:
+        description: "Internal: hosted compute selected by Thingtime CI Control"
+        required: false
+        default: "github-actions"
+        type: choice
+        options: [github-actions, vercel-sandbox]
+      runner_label:
+        description: "Internal: unique Vercel Sandbox self-hosted runner label"
+        required: false
+        default: ""
+        type: string
+      control_dispatch_id:
+        description: "Internal: Thingtime ci-dispatch id used for cross-run observability"
+        required: false
+        default: ""
+        type: string
+      routing_proof:
+        description: "Internal: signed proof for an already-validated provider route"
+        required: false
+        default: ""
+        type: string
+      routing_proof_issued_at:
+        description: "Internal: Unix timestamp bound into routing_proof"
+        required: false
+        default: ""
+        type: string
+      worker_handoff:
+        description: "Internal: exact snapshot worker routing flag (leave false)"
+        required: false
+        default: false
+        type: boolean
+      expected_head_sha:
+        description: "Internal: snapshotted head SHA"
+        required: false
+        default: ""
+        type: string
+      expected_base_sha:
+        description: "Internal: snapshotted base SHA"
+        required: false
+        default: ""
+        type: string
+      old_base_sha:
+        description: "Internal: previous stack parent SHA"
+        required: false
+        default: ""
+        type: string
+      new_base_sha:
+        description: "Internal: rewritten stack parent SHA"
+        required: false
+        default: ""
+        type: string
+      manual:
+        description: "Internal: explicit retry provenance"
+        required: false
+        default: false
+        type: boolean
+      depth:
+        description: "Internal: cascade depth"
+        required: false
+        default: "0"
+        type: string
+      visited:
+        description: "Internal: cycle-safe visited PR list"
+        required: false
+        default: ""
+        type: string
+      recover_stale_lock:
+        description: "Internal: stale-lock recovery permission"
+        required: false
+        default: false
         type: boolean
   repository_dispatch:
     types: [rebase-pr-stack-ai]
@@ -112,20 +255,48 @@ env:
 
 concurrency:
   group: >-
-    ${{ github.event_name == 'repository_dispatch'
-        && format('ai-rebase-pr-{0}', github.event.client_payload.pr_number)
+    ${{ (github.event_name == 'repository_dispatch'
+          || (github.event_name == 'workflow_dispatch' && inputs.worker_handoff == true))
+        && format('ai-rebase-pr-{0}', github.event.client_payload.pr_number || inputs.pr_number)
         || format('ai-rebase-detect-{0}-{1}', github.event_name,
              github.event.pull_request.number || github.ref_name || github.run_id) }}
   # Never cancel a history rewrite. Detector runs are safe to supersede.
-  cancel-in-progress: ${{ github.event_name != 'repository_dispatch' }}
+  cancel-in-progress: >-
+    ${{ github.event_name != 'repository_dispatch'
+        && (github.event_name != 'workflow_dispatch' || inputs.worker_handoff != true) }}
 
 jobs:
+  route:
+    uses: ./.github/workflows/ci-provider-router.yml
+    with:
+      workflow: rebase-stack
+      execution_provider: ${{ inputs.execution_provider || github.event.client_payload.execution_provider || 'github-actions' }}
+      runner_label: ${{ inputs.runner_label || github.event.client_payload.runner_label || '' }}
+      control_dispatch_id: ${{ inputs.control_dispatch_id || github.event.client_payload.control_dispatch_id || '' }}
+      routing_proof: ${{ inputs.routing_proof || github.event.client_payload.routing_proof || '' }}
+      routing_proof_issued_at: ${{ inputs.routing_proof_issued_at || github.event.client_payload.routing_proof_issued_at || '' }}
+      internal_worker: >-
+        ${{ github.event_name == 'repository_dispatch'
+            || (github.event_name == 'workflow_dispatch'
+                && inputs.worker_handoff == true
+                && inputs.pr_number != ''
+                && inputs.branch == ''
+                && inputs.expected_head_sha != ''
+                && inputs.expected_base_sha != '') }}
+      pr_number: ${{ inputs.pr_number || github.event.client_payload.pr_number || github.event.pull_request.number || '' }}
+      branch: ${{ inputs.branch || (github.event_name == 'push' && github.ref_name) || '' }}
+      cascade: ${{ github.event_name != 'workflow_dispatch' || inputs.cascade }}
+    secrets: inherit
+
   detect:
     name: Find stack members that need rebasing
+    needs: route
     if: >-
-      github.event_name != 'repository_dispatch'
+      needs.route.outputs.execute == 'true'
+      && github.event_name != 'repository_dispatch'
+      && (github.event_name != 'workflow_dispatch' || inputs.worker_handoff != true)
       && (github.event_name != 'push' || github.event.deleted == false)
-    runs-on: ubuntu-latest
+    runs-on: ${{ needs.route.outputs.runner_label || 'ubuntu-latest' }}
     # A scheduled/manual sweep may evaluate every open same-repo PR. Most
     # mergeability answers are cached, but the API can require one or more
     # bounded polling rounds across a large open-PR set.
@@ -204,6 +375,7 @@ jobs:
           PUSHED_REF: ${{ github.ref_name }}
           EVENT_PR: ${{ github.event.pull_request.number }}
           MANUAL_PR: ${{ inputs.pr_number }}
+          MANUAL_BRANCH: ${{ inputs.branch }}
           CASCADE: >-
             ${{ github.event_name == 'workflow_dispatch'
                 && inputs.cascade == false && 'false' || 'true' }}
@@ -256,6 +428,8 @@ jobs:
               if [ -n "${MANUAL_PR:-}" ]; then
                 explicit=true
                 candidates="$(jq -c --argjson n "$MANUAL_PR" '[.[] | select(.number == $n)]' <<<"$same_repo")"
+              elif [ -n "${MANUAL_BRANCH:-}" ]; then
+                candidates="$(jq -c --arg ref "$MANUAL_BRANCH" '[.[] | select(.head.ref == $ref or .base.ref == $ref)]' <<<"$same_repo")"
               else
                 candidates="$same_repo"
               fi
@@ -707,19 +881,24 @@ jobs:
           echo "any=$(jq 'length > 0' <<<"$roots")" >> "$GITHUB_OUTPUT"
 
   handoff:
-    name: Hand off to trusted default-branch runs
-    needs: detect
+    name: Hand off to trusted github-actions workers
+    needs: [route, detect]
     if: needs.detect.outputs.any == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ needs.route.outputs.runner_label || 'ubuntu-latest' }}
     timeout-minutes: 5
     permissions:
-      contents: write
+      actions: write
     steps:
       - name: Dispatch one exact ref snapshot per root PR
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           TARGETS: ${{ needs.detect.outputs.targets }}
+          EXECUTION_PROVIDER: ${{ needs.route.outputs.execution_provider || 'github-actions' }}
+          RUNNER_LABEL: ${{ needs.route.outputs.runner_label || '' }}
+          CONTROL_DISPATCH_ID: ${{ needs.route.outputs.control_dispatch_id || '' }}
+          ROUTING_PROOF: ${{ needs.route.outputs.routing_proof || '' }}
+          ROUTING_PROOF_ISSUED_AT: ${{ needs.route.outputs.routing_proof_issued_at || '' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -728,22 +907,56 @@ jobs:
             target="$(base64 --decode <<<"$encoded")"
             number="$(jq -r '.number' <<<"$target")"
             echo "Dispatching trusted AI rebase for #$number."
-            gh api "repos/$REPO/dispatches" \
-              -f event_type=rebase-pr-stack-ai \
-              -f "client_payload[pr_number]=$number" \
-              -f "client_payload[expected_head_sha]=$(jq -r '.head_sha' <<<"$target")" \
-              -f "client_payload[expected_base_sha]=$(jq -r '.base_sha' <<<"$target")" \
-              -f "client_payload[cascade]=$(jq -r '.cascade' <<<"$target")" \
-              -f "client_payload[manual]=$(jq -r '.manual' <<<"$target")" \
-              -f "client_payload[recover_stale_lock]=$(jq -r '.stale_lock' <<<"$target")" \
-              -f "client_payload[depth]=0" \
-              -f "client_payload[visited]="
+            jq -n \
+              --arg pr_number "$number" \
+              --arg expected_head_sha "$(jq -r '.head_sha' <<<"$target")" \
+              --arg expected_base_sha "$(jq -r '.base_sha' <<<"$target")" \
+              --arg execution_provider "$EXECUTION_PROVIDER" \
+              --arg runner_label "$RUNNER_LABEL" \
+              --arg control_dispatch_id "$CONTROL_DISPATCH_ID" \
+              --arg routing_proof "$ROUTING_PROOF" \
+              --arg routing_proof_issued_at "$ROUTING_PROOF_ISSUED_AT" \
+              --argjson cascade "$(jq -r '.cascade' <<<"$target")" \
+              --argjson manual "$(jq -r '.manual' <<<"$target")" \
+              --argjson recover_stale_lock "$(jq -r '.stale_lock' <<<"$target")" '
+                {
+                  ref:"github-actions",
+                  inputs:{
+                    pr_number:$pr_number,
+                    branch:"",
+                    cascade:$cascade,
+                    execution_provider:$execution_provider,
+                    runner_label:$runner_label,
+                    control_dispatch_id:$control_dispatch_id,
+                    routing_proof:$routing_proof,
+                    routing_proof_issued_at:$routing_proof_issued_at,
+                    worker_handoff:true,
+                    expected_head_sha:$expected_head_sha,
+                    expected_base_sha:$expected_base_sha,
+                    old_base_sha:"",
+                    new_base_sha:"",
+                    manual:$manual,
+                    depth:"0",
+                    visited:"",
+                    recover_stale_lock:$recover_stale_lock
+                  }
+                }
+              ' | gh api --method POST \
+                "repos/$REPO/actions/workflows/rebase-pr-stacks.yml/dispatches" \
+                --input -
           done < <(jq -r '.[] | @base64' <<<"$TARGETS")
 
   rebase:
-    name: "Rebase PR #${{ github.event.client_payload.pr_number }}"
-    if: github.event_name == 'repository_dispatch'
-    runs-on: ubuntu-latest
+    name: "Rebase PR #${{ github.event.client_payload.pr_number || inputs.pr_number }}"
+    needs: route
+    if: >-
+      needs.route.outputs.execute == 'true'
+      && (github.event_name == 'repository_dispatch'
+          || (github.event_name == 'workflow_dispatch'
+              && inputs.worker_handoff == true
+              && github.actor == 'github-actions[bot]'
+              && github.ref_name == 'github-actions'))
+    runs-on: ${{ needs.route.outputs.runner_label || 'ubuntu-latest' }}
     timeout-minutes: 55
     permissions:
       actions: write
@@ -752,16 +965,16 @@ jobs:
       issues: write
     env:
       REPO: ${{ github.repository }}
-      PR_NUMBER: ${{ github.event.client_payload.pr_number }}
-      EXPECTED_HEAD_SHA: ${{ github.event.client_payload.expected_head_sha }}
-      EXPECTED_BASE_SHA: ${{ github.event.client_payload.expected_base_sha }}
-      OLD_BASE_SHA: ${{ github.event.client_payload.old_base_sha }}
-      NEW_BASE_SHA: ${{ github.event.client_payload.new_base_sha }}
-      CASCADE: ${{ github.event.client_payload.cascade || 'true' }}
-      MANUAL: ${{ github.event.client_payload.manual || 'false' }}
-      DEPTH: ${{ github.event.client_payload.depth || '0' }}
-      VISITED: ${{ github.event.client_payload.visited || '' }}
-      RECOVER_STALE_LOCK: ${{ github.event.client_payload.recover_stale_lock || 'false' }}
+      PR_NUMBER: ${{ github.event.client_payload.pr_number || inputs.pr_number }}
+      EXPECTED_HEAD_SHA: ${{ github.event.client_payload.expected_head_sha || inputs.expected_head_sha }}
+      EXPECTED_BASE_SHA: ${{ github.event.client_payload.expected_base_sha || inputs.expected_base_sha }}
+      OLD_BASE_SHA: ${{ github.event.client_payload.old_base_sha || inputs.old_base_sha }}
+      NEW_BASE_SHA: ${{ github.event.client_payload.new_base_sha || inputs.new_base_sha }}
+      CASCADE: ${{ github.event.client_payload.cascade || inputs.cascade || 'true' }}
+      MANUAL: ${{ github.event.client_payload.manual || inputs.manual || 'false' }}
+      DEPTH: ${{ github.event.client_payload.depth || inputs.depth || '0' }}
+      VISITED: ${{ github.event.client_payload.visited || inputs.visited || '' }}
+      RECOVER_STALE_LOCK: ${{ github.event.client_payload.recover_stale_lock || inputs.recover_stale_lock || 'false' }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       # Every trusted git operation is hook- and fsmonitor-proof, including
       # commands launched inside the exact-SHA local composite action.
@@ -1942,6 +2155,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           NEW_PARENT_SHA: ${{ steps.published.outputs.sha }}
           VISITED_NEXT: ${{ steps.context.outputs.visited }}
+          EXECUTION_PROVIDER: ${{ needs.route.outputs.execution_provider || 'github-actions' }}
+          RUNNER_LABEL: ${{ needs.route.outputs.runner_label || '' }}
+          CONTROL_DISPATCH_ID: ${{ needs.route.outputs.control_dispatch_id || '' }}
+          ROUTING_PROOF: ${{ needs.route.outputs.routing_proof || '' }}
+          ROUTING_PROOF_ISSUED_AT: ${{ needs.route.outputs.routing_proof_issued_at || '' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -1953,17 +2171,44 @@ jobs:
             child="$(base64 --decode <<<"$encoded")"
             number="$(jq -r '.number' <<<"$child")"
             next_depth=$((DEPTH + 1))
-            if gh api "repos/$REPO/dispatches" \
-              -f event_type=rebase-pr-stack-ai \
-              -f "client_payload[pr_number]=$number" \
-              -f "client_payload[expected_head_sha]=$(jq -r '.head_sha' <<<"$child")" \
-              -f "client_payload[expected_base_sha]=$NEW_PARENT_SHA" \
-              -f "client_payload[old_base_sha]=$(jq -r '.fork_point' <<<"$child")" \
-              -f "client_payload[new_base_sha]=$NEW_PARENT_SHA" \
-              -f "client_payload[cascade]=true" \
-              -f "client_payload[manual]=false" \
-              -f "client_payload[depth]=$next_depth" \
-              -f "client_payload[visited]=$VISITED_NEXT"; then
+            if jq -n \
+              --arg pr_number "$number" \
+              --arg expected_head_sha "$(jq -r '.head_sha' <<<"$child")" \
+              --arg expected_base_sha "$NEW_PARENT_SHA" \
+              --arg old_base_sha "$(jq -r '.fork_point' <<<"$child")" \
+              --arg new_base_sha "$NEW_PARENT_SHA" \
+              --arg depth "$next_depth" \
+              --arg visited "$VISITED_NEXT" \
+              --arg execution_provider "$EXECUTION_PROVIDER" \
+              --arg runner_label "$RUNNER_LABEL" \
+              --arg control_dispatch_id "$CONTROL_DISPATCH_ID" \
+              --arg routing_proof "$ROUTING_PROOF" \
+              --arg routing_proof_issued_at "$ROUTING_PROOF_ISSUED_AT" '
+                {
+                  ref:"github-actions",
+                  inputs:{
+                    pr_number:$pr_number,
+                    branch:"",
+                    cascade:true,
+                    execution_provider:$execution_provider,
+                    runner_label:$runner_label,
+                    control_dispatch_id:$control_dispatch_id,
+                    routing_proof:$routing_proof,
+                    routing_proof_issued_at:$routing_proof_issued_at,
+                    worker_handoff:true,
+                    expected_head_sha:$expected_head_sha,
+                    expected_base_sha:$expected_base_sha,
+                    old_base_sha:$old_base_sha,
+                    new_base_sha:$new_base_sha,
+                    manual:false,
+                    depth:$depth,
+                    visited:$visited,
+                    recover_stale_lock:false
+                  }
+                }
+              ' | gh api --method POST \
+                "repos/$REPO/actions/workflows/rebase-pr-stacks.yml/dispatches" \
+                --input -; then
               echo "Dispatched child PR #$number."
             else
               echo "::warning::Could not dispatch child #$number; releasing its hold for the next scheduled scan."

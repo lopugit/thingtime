@@ -5,10 +5,11 @@
 // yet reached TARGET_BRANCH (main) re-applies its exact diff on a dedicated
 // `promote/pr-<n>-<slug>` branch, then opens a promotion PR targeting main.
 // Verified non-CI-sensitive plans use the direct `git cherry-pick -x` fast
-// path. Every `.github/**` or source-lineage-unverified plan is quarantined
-// before historical replay and dispatched to the protected trusted worker,
-// which reconstructs a bot-authored `[skip ci]` content commit and publishes
-// a review checkpoint. PRs that belong to the same feature
+// path. Every verified `.github/**` plan is quarantined before historical
+// replay and dispatched to the protected trusted worker, which reconstructs a
+// bot-authored `[skip ci]` content commit and publishes a review checkpoint.
+// A historical patch not provably present on current develop stops before any
+// branch, worker, or PR is created. PRs that belong to the same feature
 // group are stacked: the first promotion PR targets main, the second targets
 // the first promotion branch, and so on (ordered by merge time into develop).
 //
@@ -40,10 +41,9 @@
 //     immutable source plan to the trusted worker; later members of only that
 //     dependency group wait for the reviewed branch.
 //   - recoverable historical patch whose current-source intent is removed or
-//     ambiguous → create the exact promotion candidate with a durable
-//     `source-lineage-unverified` warning and defer dependent stack members;
-//     missing objects, malformed patches, and operational inspection failures
-//     still stop before any branch or PR is created.
+//     ambiguous → block visibly before any branch, AI worker, or PR is created;
+//     only unrelated groups continue. Missing objects, malformed patches, and
+//     operational inspection failures use the same fail-closed boundary.
 //
 // Maintenance passes each run: open promotion PRs whose base promotion PR has
 // merged are retargeted (backstop for GitHub's delete-branch auto-retarget),
@@ -309,8 +309,9 @@ export function readPlannedPatch(
 // Check the current source tree, not merely its history. A force-rewritten
 // equivalent commit may later be reverted: in that case the old patch is
 // forward-applicable (absent), while a still-present patch is reverse-
-// applicable. Ambiguous/overlapping evolution is classified explicitly so an
-// exact historical patch can become a visibly quarantined review candidate.
+// applicable. Ambiguous/overlapping evolution is classified explicitly so the
+// promoter can stop visibly without reconstructing code whose current source
+// intent cannot be proven.
 export function inspectPatchAtSourceTip(
   patch,
   sourceSha,
@@ -373,9 +374,9 @@ export function inspectPatchAtSourceTip(
 // source branch still contains its effect. Ancestry alone is insufficient
 // because a later revert preserves ancestry. Exact patch identity plus a clean
 // current-tip reverse-application is required after rewrites. A recoverable
-// but removed/ambiguous patch is never called verified: it carries immutable
-// review-required provenance into the generated promotion PR. Operational or
-// patch-authority failures still block before any branch is created.
+// but removed/ambiguous patch is never called verified. It is a hard safety
+// stop: no reservation, branch, AI worker, or promotion PR may be created.
+// Operational and patch-authority failures use the same fail-closed boundary.
 export function inspectSourcePresence(
   sha,
   sourceSha,
@@ -400,28 +401,22 @@ export function inspectSourcePresence(
   if (!presentAtTip.ok) return presentAtTip;
   if (presentAtTip.present === false) {
     return {
-      ok: true,
-      equivalentSha: null,
-      rewritten: !contained.isAncestor,
-      verifiedAtSourceTip: false,
+      ok: false,
+      error:
+        `source-lineage safety block: the exact historical patch is not present at current ` +
+        `\`${CFG.source}\` tip; it may have been intentionally removed or reverted, so no ` +
+        "promotion branch or AI worker was created",
       sourceLineageStatus: "review-required-removed",
-      sourceLineageReviewRequired: true,
-      sourceLineageDetail:
-        `The exact historical patch is not present at current \`${CFG.source}\` tip. ` +
-        "It may have been intentionally removed or reverted after the source PR merged.",
     };
   }
   if (presentAtTip.present === null) {
     return {
-      ok: true,
-      equivalentSha: null,
-      rewritten: !contained.isAncestor,
-      verifiedAtSourceTip: false,
+      ok: false,
+      error:
+        `source-lineage safety block: the exact historical patch cannot be proven present at ` +
+        `current \`${CFG.source}\` tip because later edits overlap its effect; no promotion ` +
+        "branch or AI worker was created",
       sourceLineageStatus: "review-required-ambiguous",
-      sourceLineageReviewRequired: true,
-      sourceLineageDetail:
-        `The exact historical patch cannot be proven present at current \`${CFG.source}\` tip ` +
-        "because later edits overlap its effect.",
     };
   }
 
@@ -1354,7 +1349,6 @@ export function buildPromotionDispatchRequest(repo, context, reservationSha, tit
     payload: {
       ref: "github-actions",
       inputs: {
-        promotion_handoff: true,
         promotion_source_pr: String(context.sourcePr),
         promotion_plan_b64: encodedPlan,
       },
@@ -2076,9 +2070,9 @@ function pathspecAuthorityIntegrationTest(assert) {
     const presence = inspectSourcePresence(sourceCommit, sourceTip, root, {
       picks: [{ sha: sourceCommit }],
     });
-    assert.equal(presence.ok, true);
-    assert.notEqual(presence.sourceLineageStatus, "verified");
-    assert.equal(presence.sourceLineageReviewRequired, true);
+    assert.equal(presence.ok, false);
+    assert.equal(presence.sourceLineageStatus, "review-required-ambiguous");
+    assert.match(presence.error, /source-lineage safety block/);
 
     testGit(["checkout", "--detach", baseCommit]);
     testGit(["cherry-pick", "-x", sourceCommit]);
@@ -2163,8 +2157,7 @@ function orphanedMergeHydrationIntegrationTest(assert) {
     testGit(["push", "origin", "main", "develop"], writer);
 
     // A normal merge remains an ancestor after `git revert`; ancestry alone
-    // must not silently call the removed feature verified. The exact patch may
-    // become a visible review candidate, but it carries a removal warning.
+    // must not silently call the removed feature verified or create a branch.
     testGit(["checkout", "-b", "ancestry-revert", "develop"], writer);
     testGit(["revert", "-m", "1", "--no-edit", orphanedMergeSha], writer);
     const ancestryRevertTip = testGit(["rev-parse", "HEAD"], writer);
@@ -2174,9 +2167,9 @@ function orphanedMergeHydrationIntegrationTest(assert) {
       writer,
       { picks: [{ sha: orphanedMergeSha, mainline: true }] },
     );
-    assert.equal(ancestryReverted.ok, true);
+    assert.equal(ancestryReverted.ok, false);
     assert.equal(ancestryReverted.sourceLineageStatus, "review-required-removed");
-    assert.equal(ancestryReverted.sourceLineageReviewRequired, true);
+    assert.match(ancestryReverted.error, /no promotion branch or AI worker was created/);
 
     // Reproduce the historical failure: force-rewrite develop to an equivalent
     // cherry-pick, leaving the original merge object stored but unadvertised.
@@ -2218,10 +2211,9 @@ function orphanedMergeHydrationIntegrationTest(assert) {
       "the hydrated historical merge remains distinct from rewritten develop",
     );
     const removedFromSource = inspectSourcePresence(orphanedMergeSha, "origin/main", fresh);
-    assert.equal(removedFromSource.ok, true);
+    assert.equal(removedFromSource.ok, false);
     assert.equal(removedFromSource.sourceLineageStatus, "review-required-removed");
-    assert.equal(removedFromSource.sourceLineageReviewRequired, true);
-    assert.equal(removedFromSource.verifiedAtSourceTip, false);
+    assert.match(removedFromSource.error, /source-lineage safety block/);
 
     testGit(["push", "origin", "main:refs/heads/promote/test-reuse"], writer);
     const firstBranchFetch = ensureRemoteBranchAvailable("promote/test-reuse", fresh, testTryGit);
@@ -2908,8 +2900,8 @@ function orphanedMergeHydrationIntegrationTest(assert) {
     assert.equal(aggregatePresence.aggregateVerified, true);
 
     // Merely finding an equivalent rewritten commit in history is not enough:
-    // if a later source commit reverts it, preflight must preserve the exact
-    // picks but mark the candidate for explicit restoration review.
+    // if a later source commit reverts it, preflight must block before any
+    // reservation, branch, AI work, or promotion PR can be created.
     testGit(["revert", "--no-edit", rewrittenSha], writer);
     testGit(["push", "origin", "HEAD:develop"], writer);
     testGit([
@@ -2920,10 +2912,8 @@ function orphanedMergeHydrationIntegrationTest(assert) {
       sourceSha: "origin/develop",
     });
     const revertedPlan = revertedPlans.get(sourcePr.number);
-    assert.equal(revertedPlan.error, undefined);
-    assert.equal(revertedPlan.sourceLineageStatus, "review-required-removed");
-    assert.equal(revertedPlan.sourceLineageReviewRequired, true);
-    assert.deepEqual(revertedPlan.picks, [{ sha: orphanedMergeSha, mainline: true }]);
+    assert.match(revertedPlan.error, /source-lineage safety block/);
+    assert.equal(revertedPlan.picks, undefined);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -2935,6 +2925,23 @@ async function selfTest() {
   assert.equal(slugify("Hello, World! 42"), "hello-world-42");
   assert.equal(slugify("---"), "change");
   assert.equal(slugify("a".repeat(80)).length, 40);
+  assert.equal(
+    isSourceLineageSafetyBlocked({
+      error: "source-lineage safety block",
+      sourceLineageStatus: "review-required-removed",
+      sourceLineageSafetyBlocked: true,
+    }),
+    true,
+    "an existing bot promotion whose source patch was removed is closed by maintenance",
+  );
+  assert.equal(
+    isSourceLineageSafetyBlocked({
+      sourceLineageStatus: "verified",
+      sourceLineageSafetyBlocked: false,
+    }),
+    false,
+    "verified source lineage never activates the close-before-AI maintenance boundary",
+  );
 
   const pr = { number: 7, headRefName: "claude/search-index-abc123", title: "feat: add search" };
   assert.equal(promotionBranchFor(pr), "promote/pr-7-search-index-abc123");
@@ -3190,11 +3197,9 @@ async function selfTest() {
   );
   assert.equal(dispatchRequest.payload.ref, "github-actions");
   assert.deepEqual(Object.keys(dispatchRequest.payload.inputs), [
-    "promotion_handoff",
     "promotion_source_pr",
     "promotion_plan_b64",
   ]);
-  assert.equal(dispatchRequest.payload.inputs.promotion_handoff, true);
   const decodedDispatchPlan = JSON.parse(
     Buffer.from(dispatchRequest.payload.inputs.promotion_plan_b64, "base64").toString("utf8"),
   );
@@ -3359,9 +3364,9 @@ async function selfTest() {
       tipInspector: () => ({ ok: true, present: null }),
     },
   );
-  assert.equal(ambiguousLineage.ok, true);
+  assert.equal(ambiguousLineage.ok, false);
   assert.equal(ambiguousLineage.sourceLineageStatus, "review-required-ambiguous");
-  assert.equal(ambiguousLineage.sourceLineageReviewRequired, true);
+  assert.match(ambiguousLineage.error, /source-lineage safety block/);
   const failedLineageInspection = inspectSourcePresence(
     "a".repeat(40),
     "b".repeat(40),
@@ -4246,7 +4251,19 @@ export function preflightPromotionPlans(
       }
       const present = sourcePresence(sha, sourceSha, cwd, { picks: computed.picks });
       if (!present.ok) {
-        plans.set(pr.number, { error: present.error, recovered: available.fetched });
+        const blockedStatus = SOURCE_LINEAGE_STATUSES.has(present.sourceLineageStatus)
+          ? present.sourceLineageStatus
+          : "";
+        plans.set(pr.number, {
+          error: present.error,
+          recovered: available.fetched,
+          ...(blockedStatus
+            ? {
+                sourceLineageStatus: blockedStatus,
+                sourceLineageSafetyBlocked: blockedStatus !== "verified",
+              }
+            : {}),
+        });
         continue;
       }
       if (!SOURCE_LINEAGE_STATUSES.has(present.sourceLineageStatus)) {
@@ -4257,6 +4274,14 @@ export function preflightPromotionPlans(
         continue;
       }
       const lineageStatus = present.sourceLineageStatus;
+      if (lineageStatus !== "verified") {
+        plans.set(pr.number, {
+          error:
+            "source-lineage safety block: only a patch proven present at the current source tip may be promoted",
+          recovered: available.fetched,
+        });
+        continue;
+      }
       plans.set(pr.number, {
         ...computed,
         inTarget: false,
@@ -4436,6 +4461,64 @@ function ensureSourceLineageReviewLabel(token = "") {
     : tryGh(args);
   sourceLineageLabelEnsured = result.ok;
   return sourceLineageLabelEnsured;
+}
+
+export function isSourceLineageSafetyBlocked(plan) {
+  return Boolean(
+    plan?.sourceLineageSafetyBlocked === true &&
+    (plan?.sourceLineageStatus === "review-required-removed" ||
+      plan?.sourceLineageStatus === "review-required-ambiguous"),
+  );
+}
+
+function closeSourceLineageBlockedPromotion(sourcePr, promotion, plan, results) {
+  if (!isSourceLineageSafetyBlocked(plan)) return false;
+  const status = plan.sourceLineageStatus;
+  const reason = sourceLineageReason(status);
+  if (ensureSourceLineageReviewLabel(process.env.ACTIONS_TOKEN)) {
+    const labelled = withActionsToken([
+      "pr", "edit", String(promotion.number), ...repoFlag(),
+      "--add-label", SOURCE_LINEAGE_REVIEW_LABEL,
+    ]);
+    if (!labelled.ok) {
+      results.warnings.push(
+        `Promotion #${promotion.number} lineage-block label repair failed: ${labelled.error}`,
+      );
+    }
+  }
+  const closed = withActionsToken([
+    "pr", "close", String(promotion.number), ...repoFlag(),
+    "--comment",
+    `Source-lineage safety block at current \`${CFG.source}\` tip: ${reason} ` +
+      "This bot-created promotion is closed without running AI or changing its branch. " +
+      "Restore or re-merge the intended source change before asking the promoter to try again.",
+  ]);
+  if (!closed.ok) {
+    results.warnings.push(
+      `Promotion #${promotion.number} could not be closed after its source lineage became ` +
+        `unverified: ${closed.error}`,
+    );
+    return true;
+  }
+  promotion.state = "CLOSED";
+  results.blocked.push(
+    `Promotion #${promotion.number} (source #${sourcePr.number}) was closed because its ` +
+      `historical patch is no longer provably present at current \`${CFG.source}\` tip; ` +
+      "no AI worker or replacement promotion was started.",
+  );
+  upsertBotIssueComment(
+    sourcePr.number,
+    "thingtime-promotion-source-lineage-blocked:v1",
+    [
+      `⛔ Promotion #${promotion.number} was closed by the source-lineage safety boundary.`,
+      "",
+      reason,
+      "",
+      `No AI worker or replacement promotion PR will run until the change is again provably present on \`${CFG.source}\`.`,
+      "<!-- thingtime-promotion-source-lineage-blocked:v1 -->",
+    ].join("\n"),
+  );
+  return true;
 }
 
 function promotionBody(pr, groupKey, position, groupPrs, statusFor, plan = {}) {
@@ -4983,6 +5066,17 @@ async function runPromotion(results, state) {
     for (const promotion of promotionPrs.filter((candidate) => candidate.state === "OPEN")) {
       try {
         const loaded = loadExternalPromotionPlan(promotion);
+        if (
+          loaded.sourcePr &&
+          closeSourceLineageBlockedPromotion(
+            loaded.sourcePr,
+            promotion,
+            loaded.plan,
+            results,
+          )
+        ) {
+          continue;
+        }
         if (loaded.error || loaded.plan?.error || loaded.plan?.inTarget) continue;
         if (sourceLineageReviewRequired(loaded.plan)) {
           const warned = finalizeSourceLineageMetadata(

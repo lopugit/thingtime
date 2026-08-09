@@ -161,22 +161,25 @@ SOURCE_START_SHA="$merge_feature_parent" SOURCE_END_SHA="$merge_endpoint" \
   bash "$authority" "$merge_repo" "$run_temp/pr-commits.json" "$run_temp/pr-files.json" >/dev/null 2>&1 \
   && { echo 'merge feature-side parent unexpectedly passed source authority' >&2; exit 1; }
 
-# The trusted worker independently reproduces all three strict source-tip
-# classifications. These fixtures share the same exact source patch; only the
-# immutable source-tip tree and the plan-bound enum differ.
-exercise_lineage_status() {
-  local expected="$1" tip="$2" fixture_repo="$run_temp/lineage-$1" fixture_hash fixture_reservation
+# The trusted worker accepts only a verified plan classification, and then
+# independently proves that classification again before constructing any
+# synthetic replay. These fixtures prove both boundaries without changing a
+# ref, moving HEAD, or writing any worker outputs that publication could use.
+reject_lineage_status() {
+  local planned="$1" observed="$2" tip="$3"
+  local fixture_repo="$run_temp/lineage-$planned-$observed" fixture_hash fixture_reservation
+  local before_head before_refs after_refs fixture_output fixture_log
   git clone -q --no-local "$repo" "$fixture_repo"
   git -C "$fixture_repo" config user.name fixture
   git -C "$fixture_repo" config user.email fixture@example.invalid
-  if [[ "$expected" == review-required-ambiguous ]]; then
+  if [[ "$observed" == ambiguous ]]; then
     git -C "$fixture_repo" switch -q --detach "$source_end"
     printf 'later overlapping source evolution\n' >"$fixture_repo/feature.txt"
     git -C "$fixture_repo" add -- ':(literal)feature.txt'
     git -C "$fixture_repo" commit -qm 'overlap source patch'
     tip="$(git -C "$fixture_repo" rev-parse HEAD)"
   fi
-  fixture_hash="$(compute_plan_hash "$expected")"
+  fixture_hash="$(compute_plan_hash "$planned")"
   git -C "$fixture_repo" switch -q --detach "$base_sha"
   git -C "$fixture_repo" commit -q --allow-empty \
     -m 'Reserve promotion lineage fixture' \
@@ -187,18 +190,36 @@ exercise_lineage_status() {
     -m "Thingtime-Promotion-Branch: $branch" \
     -m "Thingtime-Promotion-Source-Start-SHA: $source_start" \
     -m "Thingtime-Promotion-Source-End-SHA: $source_end" \
-    -m "Thingtime-Promotion-Source-Lineage: $expected" \
+    -m "Thingtime-Promotion-Source-Lineage: $planned" \
     -m "Thingtime-Promotion-Plan-Hash: $fixture_hash"
   fixture_reservation="$(git -C "$fixture_repo" rev-parse HEAD)"
-  : >"$root/lineage-output"
-  GITHUB_OUTPUT="$root/lineage-output" \
+  before_head="$(git -C "$fixture_repo" rev-parse HEAD)"
+  before_refs="$(git -C "$fixture_repo" show-ref)"
+  fixture_output="$root/lineage-$planned-$observed-output"
+  fixture_log="$root/lineage-$planned-$observed-log"
+  : >"$fixture_output"
+  if GITHUB_OUTPUT="$fixture_output" \
   RESERVATION_SHA="$fixture_reservation" SOURCE_TIP_SHA="$tip" \
-  SOURCE_LINEAGE_STATUS="$expected" PLAN_HASH="$fixture_hash" \
-    bash "$worker" prepare "$fixture_repo"
-  grep -qx "source_lineage_status=$expected" "$root/lineage-output"
+  SOURCE_LINEAGE_STATUS="$planned" PLAN_HASH="$fixture_hash" \
+    bash "$worker" prepare "$fixture_repo" >"$fixture_log" 2>&1; then
+    echo "unsafe lineage fixture unexpectedly replayed ($planned / $observed)" >&2
+    exit 1
+  fi
+  grep -Fq 'source-lineage safety block:' "$fixture_log"
+  if [[ "$planned" == verified ]]; then
+    grep -Fq "review-required-$observed" "$fixture_log"
+  fi
+  [[ "$(git -C "$fixture_repo" rev-parse HEAD)" == "$before_head" ]]
+  after_refs="$(git -C "$fixture_repo" show-ref)"
+  [[ "$after_refs" == "$before_refs" ]]
+  [[ -z "$(git -C "$fixture_repo" status --porcelain --untracked-files=all)" ]]
+  [[ ! -d "$(git -C "$fixture_repo" rev-parse --git-dir)/rebase-merge" ]]
+  [[ ! -d "$(git -C "$fixture_repo" rev-parse --git-dir)/rebase-apply" ]]
+  [[ ! -s "$fixture_output" ]]
 }
-exercise_lineage_status review-required-removed "$source_start"
-exercise_lineage_status review-required-ambiguous ""
+reject_lineage_status review-required-removed removed "$source_start"
+reject_lineage_status review-required-ambiguous ambiguous ""
+reject_lineage_status verified ambiguous ""
 
 if SOURCE_LINEAGE_STATUS=review-required-removed \
   bash "$worker" prepare "$repo" >/dev/null 2>&1; then
@@ -327,10 +348,10 @@ if bash "$worker" verify "$repo" >/dev/null 2>&1; then
   exit 1
 fi
 
-# A clean, non-.github historical patch still enters the same review gate when
-# current source lineage is unverified. It must be reconstructed as one
-# bot-authored [skip ci] commit; the original source subject must not appear in
-# the promotion ancestry even though no AI conflict round is needed.
+# A clean, non-.github historical patch whose change is absent from current
+# develop must hard-block even if a forged handoff labels it verified. The
+# independent source-tip proof runs before the synthetic commit/rebase, so no
+# candidate commit or promotable ref is created.
 (
   lineage_only_repo="$run_temp/lineage-only-review"
   mkdir -p "$lineage_only_repo"
@@ -359,7 +380,7 @@ fi
   git -C "$lineage_only_repo" diff --binary --full-index "$source_start" "$source_end" \
     -- ':(literal)feature.txt' >"$patch_file"
   patch_id="$(git -C "$lineage_only_repo" patch-id --stable <"$patch_file" | awk 'NR == 1 { print $1 }')"
-  source_lineage_status=review-required-removed
+  source_lineage_status=verified
   plan_hash="$(compute_plan_hash "$source_lineage_status")"
   git -C "$lineage_only_repo" commit -q --allow-empty \
     -m 'Reserve lineage-only review fixture' \
@@ -374,31 +395,27 @@ fi
     -m "Thingtime-Promotion-Plan-Hash: $plan_hash"
   reservation_sha="$(git -C "$lineage_only_repo" rev-parse HEAD)"
   lineage_output="$root/lineage-only-output"
+  lineage_log="$root/lineage-only-log"
+  before_head="$(git -C "$lineage_only_repo" rev-parse HEAD)"
+  before_refs="$(git -C "$lineage_only_repo" show-ref)"
   : >"$lineage_output"
-  GITHUB_OUTPUT="$lineage_output" \
+  if GITHUB_OUTPUT="$lineage_output" \
   SOURCE_PR="$source_pr" BASE_REF="$base_ref" BASE_SHA="$base_sha" \
   PROMOTION_BRANCH="$branch" RESERVATION_SHA="$reservation_sha" \
   SOURCE_START_SHA="$source_start" SOURCE_TIP_SHA="$source_tip" SOURCE_END_SHA="$source_end" \
   SOURCE_LINEAGE_STATUS="$source_lineage_status" PLAN_HASH="$plan_hash" \
-    bash "$worker" prepare "$lineage_only_repo"
-  grep -qx 'conflicted=false' "$lineage_output"
-  grep -qx 'complete=true' "$lineage_output"
-  grep -qx 'ci_sensitive_paths=false' "$lineage_output"
-  grep -qx 'review_gated=true' "$lineage_output"
-  git -C "$lineage_only_repo" show -s --format=%s HEAD | grep -q '\[skip ci\]'
-  if git -C "$lineage_only_repo" log --format=%s "$base_sha..HEAD" \
-    | grep -Fqx 'UNVERIFIED-NONCI-SOURCE-SENTINEL'; then
-    echo 'unverified non-CI source subject escaped the trusted synthetic replay' >&2
+    bash "$worker" prepare "$lineage_only_repo" >"$lineage_log" 2>&1; then
+    echo 'removed non-CI source patch unexpectedly entered synthetic replay' >&2
     exit 1
   fi
-  : >"$lineage_output"
-  GITHUB_OUTPUT="$lineage_output" \
-  SOURCE_PR="$source_pr" BASE_REF="$base_ref" BASE_SHA="$base_sha" \
-  PROMOTION_BRANCH="$branch" RESERVATION_SHA="$reservation_sha" \
-  SOURCE_START_SHA="$source_start" SOURCE_TIP_SHA="$source_tip" SOURCE_END_SHA="$source_end" \
-  SOURCE_LINEAGE_STATUS="$source_lineage_status" PLAN_HASH="$plan_hash" \
-    bash "$worker" verify "$lineage_only_repo"
-  grep -qx 'verified=true' "$lineage_output"
+  grep -Fq 'source-lineage safety block:' "$lineage_log"
+  grep -Fq 'review-required-removed' "$lineage_log"
+  [[ "$(git -C "$lineage_only_repo" rev-parse HEAD)" == "$before_head" ]]
+  [[ "$(git -C "$lineage_only_repo" show-ref)" == "$before_refs" ]]
+  [[ -z "$(git -C "$lineage_only_repo" status --porcelain --untracked-files=all)" ]]
+  [[ ! -d "$(git -C "$lineage_only_repo" rev-parse --git-dir)/rebase-merge" ]]
+  [[ ! -d "$(git -C "$lineage_only_repo" rev-parse --git-dir)/rebase-apply" ]]
+  [[ ! -s "$lineage_output" ]]
 )
 
 # Closed-policy rejections must survive errexit as the explicit terminal-review

@@ -32,10 +32,13 @@ const promoter = readFileSync(
 
 export function trustedPromotionRoute(input) {
   return input.event === "workflow_dispatch" &&
-    input.handoff === true &&
     input.actor === "github-actions[bot]" &&
     input.ref === "github-actions" &&
     /^[1-9][0-9]*$/.test(String(input.sourcePr || "")) &&
+    typeof input.planB64 === "string" && input.planB64.length > 0 &&
+    input.executionProvider === "github-actions" &&
+    !input.runnerLabel &&
+    !input.controlDispatchId &&
     !input.prNumber &&
     !input.branch &&
     input.detectorHandoff !== true &&
@@ -44,24 +47,28 @@ export function trustedPromotionRoute(input) {
 }
 
 assert.equal(trustedPromotionRoute({
-  event: "workflow_dispatch", handoff: true, actor: "github-actions[bot]",
-  ref: "github-actions", sourcePr: "207", prNumber: "", branch: "", detectorHandoff: false,
+  event: "workflow_dispatch", actor: "github-actions[bot]",
+  ref: "github-actions", sourcePr: "207", planB64: "e30=", executionProvider: "github-actions", prNumber: "", branch: "", detectorHandoff: false,
   manualRetry: false, depth: "0",
 }), true);
 for (const override of [
-  { event: "push" }, { actor: "lopugit" }, { ref: "main" }, { sourcePr: "" },
+  { event: "push" }, { actor: "lopugit" }, { ref: "main" }, { sourcePr: "" }, { planB64: "" },
+  { executionProvider: "vercel-sandbox" }, { runnerLabel: "thingtime-runner" }, { controlDispatchId: "dispatch-1" },
   { sourcePr: "0" }, { sourcePr: "207x" }, { prNumber: "207" },
   { branch: "develop" }, { detectorHandoff: true }, { manualRetry: true }, { depth: "1" },
 ]) {
   assert.equal(trustedPromotionRoute({
-    event: "workflow_dispatch", handoff: true, actor: "github-actions[bot]",
-    ref: "github-actions", sourcePr: "207", prNumber: "", branch: "", detectorHandoff: false,
+    event: "workflow_dispatch", actor: "github-actions[bot]",
+    ref: "github-actions", sourcePr: "207", planB64: "e30=", executionProvider: "github-actions", prNumber: "", branch: "", detectorHandoff: false,
     manualRetry: false, depth: "0",
     ...override,
   }), false);
 }
 
-assert.match(workflow, /inputs\.promotion_handoff != true\s+&& \(github\.event_name != 'push'/);
+assert.match(workflow, /if: inputs\.promotion_source_pr == '' && inputs\.promotion_plan_b64 == ''/);
+assert.doesNotMatch(workflow, /promotion_handoff:/);
+assert.match(workflow, /Promotion handoff cannot use external compute routing/);
+assert.match(workflow, /Promotion handoff cannot carry external runner metadata/);
 assert.match(workflow, /promotion_plan_b64:/);
 assert.match(
   workflow,
@@ -82,13 +89,13 @@ assert.match(workflow, /Independently re-derive the source patch boundary/);
 assert.match(workflow, /--force-with-lease="refs\/heads\/\$PROMOTION_BRANCH:\$RESERVATION_SHA"/);
 assert.match(workflow, /thingtime-ai-promotion-resolved:v1/);
 assert.match(workflow, /thingtime-ai-promotion-paused:v1/);
-assert.match(workflow, /source-lineage-unverified/);
-assert.match(workflow, /review-required-removed\|review-required-ambiguous/);
+assert.match(workflow, /\[ "\$SOURCE_LINEAGE_STATUS" = verified \]/);
+assert.match(workflow, /source-lineage safety block: trusted promotion workers require a historical patch proven present at current develop/);
+assert.doesNotMatch(workflow, /verified\|review-required-removed\|review-required-ambiguous/);
 assert.match(workflow, /source_lineage_status: \$\{\{ steps\.validate\.outputs\.source_lineage_status \}\}/);
 assert.match(workflow, /SOURCE_LINEAGE_STATUS: \$\{\{ needs\.promotion_validate\.outputs\.source_lineage_status \}\}/);
 assert.match(workflow, /value\.source_lineage_status === process\.env\.SOURCE_LINEAGE_STATUS/);
 assert.match(workflow, /source_lineage_status:\$source_lineage_status/);
-assert.match(workflow, /Historical source lineage requires an explicit release decision/);
 assert.match(workflow, /actions\/workflows\/promote-features-to-main\.yml\/dispatches/);
 assert.match(workflow, /paused_label=.*ai-promotion-paused/);
 assert.match(workflow, /\[ "\$paused" = true \] && \[ "\$paused_label" = true \]/);
@@ -138,7 +145,10 @@ assert.match(worker, /ci_sensitive_paths true/);
 assert.match(worker, /promotion-ci-sensitive-paths\.txt/);
 assert.match(worker, /review_gated true/);
 assert.match(worker, /promotion-review-gated\.txt/);
-assert.match(worker, /SOURCE_LINEAGE_STATUS" != verified/);
+assert.match(worker, /\[\[ "\$SOURCE_LINEAGE_STATUS" == verified \]\]/);
+assert.match(worker, /\[\[ "\$observed_lineage" == verified \]\]/);
+assert.match(worker, /source-lineage safety block: current develop does not prove this historical patch remains present/);
+assert.doesNotMatch(worker, /verified\|review-required-removed\|review-required-ambiguous/);
 assert.match(worker, /Review-gated promotion source commit is missing \[skip ci\]/);
 assert.match(worker, /classify_source_lineage\(\)/);
 assert.match(worker, /git apply --cached --check --reverse --whitespace=nowarn/);

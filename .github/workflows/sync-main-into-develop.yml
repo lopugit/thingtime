@@ -23,9 +23,42 @@ name: Sync main into develop
 
 on:
   workflow_call:
+    inputs:
+      execution_provider:
+        description: "Internal: hosted compute selected by Thingtime CI Control"
+        required: false
+        default: "github-actions"
+        type: string
+      runner_label:
+        description: "Internal: unique Vercel Sandbox self-hosted runner label"
+        required: false
+        default: ""
+        type: string
+      control_dispatch_id:
+        description: "Internal: Thingtime ci-dispatch id used for cross-run observability"
+        required: false
+        default: ""
+        type: string
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      execution_provider:
+        description: "Internal: hosted compute selected by Thingtime CI Control"
+        required: false
+        default: "github-actions"
+        type: choice
+        options: [github-actions, vercel-sandbox]
+      runner_label:
+        description: "Internal: unique Vercel Sandbox self-hosted runner label"
+        required: false
+        default: ""
+        type: string
+      control_dispatch_id:
+        description: "Internal: Thingtime ci-dispatch id used for cross-run observability"
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: write
@@ -36,8 +69,19 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  route:
+    uses: ./.github/workflows/ci-provider-router.yml
+    with:
+      workflow: sync-main
+      execution_provider: ${{ inputs.execution_provider || 'github-actions' }}
+      runner_label: ${{ inputs.runner_label || '' }}
+      control_dispatch_id: ${{ inputs.control_dispatch_id || '' }}
+    secrets: inherit
+
   sync:
-    runs-on: ubuntu-latest
+    needs: route
+    if: needs.route.outputs.execute == 'true'
+    runs-on: ${{ needs.route.outputs.runner_label || 'ubuntu-latest' }}
     steps:
       - name: Check develop exists
         id: develop

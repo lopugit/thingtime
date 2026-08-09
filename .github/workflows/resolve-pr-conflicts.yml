@@ -126,7 +126,6 @@ name: Resolve PR conflicts (AI)
 
 run-name: >-
   ${{ github.event_name == 'workflow_dispatch'
-      && inputs.promotion_handoff == true
       && github.actor == 'github-actions[bot]'
       && github.ref_name == 'github-actions'
       && inputs.promotion_source_pr != ''
@@ -185,11 +184,6 @@ on:
         required: false
         default: "0"
         type: string
-      promotion_handoff:
-        description: "Internal: trusted pre-PR promotion conflict handoff (leave false)"
-        required: false
-        default: false
-        type: boolean
       promotion_source_pr:
         description: "Internal: merged develop source PR"
         required: false
@@ -197,6 +191,31 @@ on:
         type: string
       promotion_plan_b64:
         description: "Internal: canonical-base64 immutable promotion routing plan"
+        required: false
+        default: ""
+        type: string
+      execution_provider:
+        description: "Internal: hosted compute selected by Thingtime CI Control"
+        required: false
+        default: "github-actions"
+        type: string
+      runner_label:
+        description: "Internal: unique Vercel Sandbox self-hosted runner label"
+        required: false
+        default: ""
+        type: string
+      control_dispatch_id:
+        description: "Internal: Thingtime ci-dispatch id used for cross-run observability"
+        required: false
+        default: ""
+        type: string
+      routing_proof:
+        description: "Internal: signed proof for an already-validated provider route"
+        required: false
+        default: ""
+        type: string
+      routing_proof_issued_at:
+        description: "Internal: Unix timestamp bound into routing_proof"
         required: false
         default: ""
         type: string
@@ -256,11 +275,6 @@ on:
         required: false
         default: "0"
         type: string
-      promotion_handoff:
-        description: "Internal: trusted pre-PR promotion conflict handoff (leave false)"
-        required: false
-        default: false
-        type: boolean
       promotion_source_pr:
         description: "Internal: merged develop source PR"
         required: false
@@ -268,6 +282,32 @@ on:
         type: string
       promotion_plan_b64:
         description: "Internal: canonical-base64 immutable promotion routing plan"
+        required: false
+        default: ""
+        type: string
+      execution_provider:
+        description: "Internal: hosted compute selected by Thingtime CI Control"
+        required: false
+        default: "github-actions"
+        type: choice
+        options: [github-actions, vercel-sandbox]
+      runner_label:
+        description: "Internal: unique Vercel Sandbox self-hosted runner label"
+        required: false
+        default: ""
+        type: string
+      control_dispatch_id:
+        description: "Internal: Thingtime ci-dispatch id used for cross-run observability"
+        required: false
+        default: ""
+        type: string
+      routing_proof:
+        description: "Internal: signed proof for an already-validated provider route"
+        required: false
+        default: ""
+        type: string
+      routing_proof_issued_at:
+        description: "Internal: Unix timestamp bound into routing_proof"
         required: false
         default: ""
         type: string
@@ -283,7 +323,6 @@ concurrency:
   # A human exact-PR detector therefore cannot cancel the worker it creates.
   group: >-
     ${{ github.event_name == 'workflow_dispatch'
-        && inputs.promotion_handoff == true
         && github.actor == 'github-actions[bot]'
         && github.ref_name == 'github-actions'
         && inputs.promotion_source_pr != ''
@@ -294,7 +333,7 @@ concurrency:
         && inputs.pr_number == ''
         && inputs.branch == ''
         && format('resolve-promotion-pr{0}', inputs.promotion_source_pr)
-        || inputs.promotion_handoff == true
+        || (inputs.promotion_source_pr != '' || inputs.promotion_plan_b64 != '')
         && format('resolve-invalid-promotion-{0}', github.run_id)
         || github.event_name == 'workflow_dispatch'
         && inputs.detector_handoff == true
@@ -323,9 +362,8 @@ concurrency:
   # must finish or fail coherently; never cancel it halfway through a merge.
   cancel-in-progress: >-
     ${{ !(github.event_name == 'workflow_dispatch'
-          && github.actor == 'github-actions[bot]'
           && github.ref_name == 'github-actions'
-          && ((inputs.promotion_handoff == true
+          && (((github.actor == 'github-actions[bot]')
                && inputs.promotion_source_pr != ''
                && inputs.promotion_plan_b64 != ''
                && inputs.detector_handoff != true
@@ -333,7 +371,9 @@ concurrency:
                && inputs.depth == '0'
                && inputs.pr_number == ''
                && inputs.branch == '')
-              || (inputs.promotion_handoff != true
+              || (github.actor == 'github-actions[bot]'
+                  && inputs.promotion_source_pr == ''
+                  && inputs.promotion_plan_b64 == ''
                   && inputs.detector_handoff == true
                   && inputs.pr_number != ''
                   && inputs.branch == ''))) }}
@@ -342,13 +382,37 @@ permissions:
   contents: read
 
 jobs:
+  route:
+    if: inputs.promotion_source_pr == '' && inputs.promotion_plan_b64 == ''
+    uses: ./.github/workflows/ci-provider-router.yml
+    with:
+      workflow: resolve-conflicts
+      execution_provider: ${{ inputs.execution_provider || github.event.client_payload.execution_provider || 'github-actions' }}
+      runner_label: ${{ inputs.runner_label || github.event.client_payload.runner_label || '' }}
+      control_dispatch_id: ${{ inputs.control_dispatch_id || github.event.client_payload.control_dispatch_id || '' }}
+      routing_proof: ${{ inputs.routing_proof || github.event.client_payload.routing_proof || '' }}
+      routing_proof_issued_at: ${{ inputs.routing_proof_issued_at || github.event.client_payload.routing_proof_issued_at || '' }}
+      internal_worker: >-
+        ${{ github.event_name == 'workflow_dispatch'
+            && inputs.detector_handoff == true
+            && inputs.pr_number != ''
+            && inputs.branch == ''
+            && inputs.promotion_source_pr == ''
+            && inputs.promotion_plan_b64 == '' }}
+      pr_number: ${{ inputs.pr_number || github.event.client_payload.pr_number || github.event.pull_request.number || '' }}
+      branch: ${{ inputs.branch || (github.event_name == 'push' && github.ref_name) || '' }}
+    secrets: inherit
+
   detect:
     name: Find merge-conflicting PRs
+    needs: route
     # Branch deletions also fire `push`; there is nothing to scan then.
     if: >-
-      inputs.promotion_handoff != true
+      needs.route.outputs.execute == 'true'
+      && inputs.promotion_source_pr == ''
+      && inputs.promotion_plan_b64 == ''
       && (github.event_name != 'push' || github.event.deleted == false)
-    runs-on: ubuntu-latest
+    runs-on: ${{ needs.route.outputs.runner_label || 'ubuntu-latest' }}
     # Mergeability polling alone may legitimately spend MERGEABLE_POLL_SECONDS
     # (~8 minutes) before classification starts; keep headroom for sweeps.
     timeout-minutes: 15
@@ -869,7 +933,7 @@ jobs:
     name: Validate trusted promotion handoff
     if: >-
       github.event_name == 'workflow_dispatch'
-      && inputs.promotion_handoff == true
+      && (inputs.promotion_source_pr != '' || inputs.promotion_plan_b64 != '')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -906,6 +970,9 @@ jobs:
           DEPTH: ${{ inputs.depth }}
           SOURCE_PR: ${{ inputs.promotion_source_pr }}
           PLAN_B64: ${{ inputs.promotion_plan_b64 }}
+          EXECUTION_PROVIDER: ${{ inputs.execution_provider }}
+          RUNNER_LABEL: ${{ inputs.runner_label }}
+          CONTROL_DISPATCH_ID: ${{ inputs.control_dispatch_id }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
@@ -945,6 +1012,10 @@ jobs:
           [ "$EVENT_NAME" = workflow_dispatch ] || fail "Promotion handoff requires workflow_dispatch."
           [ "$EVENT_REF" = github-actions ] || fail "Promotion handoff must run from the fixed github-actions revision."
           [ "$EVENT_ACTOR" = 'github-actions[bot]' ] || fail "Promotion handoff must be bot-authored."
+          [ "$EXECUTION_PROVIDER" = github-actions ] \
+            || fail "Promotion handoff cannot use external compute routing."
+          [ -z "$RUNNER_LABEL" ] && [ -z "$CONTROL_DISPATCH_ID" ] \
+            || fail "Promotion handoff cannot carry external runner metadata."
           [ -z "$ORDINARY_PR" ] && [ -z "$ORDINARY_BRANCH" ] \
             || fail "Promotion and ordinary PR selectors are mutually exclusive."
           [ "$DETECTOR_HANDOFF" = false ] && [ "$MANUAL_RETRY" = false ] \
@@ -952,9 +1023,9 @@ jobs:
           [ "${DEPTH:-0}" = 0 ] || fail "Promotion handoff depth must remain zero."
           [[ "$SOURCE_PR" =~ ^[1-9][0-9]*$ ]] || fail "promotion_source_pr must be a positive decimal number."
 
-          # workflow_dispatch has a hard ten-input cap. All non-routing
-          # promotion values therefore travel in one canonical, bounded JSON
-          # envelope and are exposed to the secret job only after validation.
+          # Keep the dispatch surface small and stable: all non-routing
+          # promotion values travel in one canonical, bounded JSON envelope
+          # and reach the secret-bearing job only after validation.
           export PLAN_B64
           node <<'NODE'
           const fs = require('node:fs');
@@ -999,10 +1070,8 @@ jobs:
           [[ "$SOURCE_START_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "promotion_source_start_sha must be a full SHA-1."
           [[ "$SOURCE_TIP_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "promotion_source_tip_sha must be a full SHA-1."
           [[ "$SOURCE_END_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "promotion_source_end_sha must be a full SHA-1."
-          case "$SOURCE_LINEAGE_STATUS" in
-            verified|review-required-removed|review-required-ambiguous) ;;
-            *) fail "promotion source-lineage status is not allowed." ;;
-          esac
+          [ "$SOURCE_LINEAGE_STATUS" = verified ] \
+            || fail "source-lineage safety block: trusted promotion workers require a historical patch proven present at current develop; no replay or publication will be attempted."
           [[ "$PLAN_HASH" =~ ^[0-9a-f]{64}$ ]] || fail "promotion_plan_hash must be a SHA-256."
           safe_ref "$BASE_REF" || fail "Unsafe promotion base ref."
           safe_ref "$PROMOTION_BRANCH" || fail "Unsafe promotion branch ref."
@@ -1141,14 +1210,14 @@ jobs:
   # dispatched directly to this protected github-actions implementation.
   handoff:
     name: Hand off each selected PR to the github-actions resolver control plane
-    needs: detect
+    needs: [route, detect]
     if: >-
       needs.detect.outputs.any == 'true'
       && (github.event_name != 'workflow_dispatch'
           || inputs.detector_handoff != true
           || github.actor != 'github-actions[bot]'
           || github.ref_name != 'github-actions')
-    runs-on: ubuntu-latest
+    runs-on: ${{ needs.route.outputs.runner_label || 'ubuntu-latest' }}
     timeout-minutes: 5
     permissions:
       actions: write
@@ -1159,6 +1228,11 @@ jobs:
           REPO: ${{ github.repository }}
           PRS: ${{ needs.detect.outputs.prs }}
           DEPTH: ${{ github.event.client_payload.depth || inputs.depth || '0' }}
+          EXECUTION_PROVIDER: ${{ needs.route.outputs.execution_provider || 'github-actions' }}
+          RUNNER_LABEL: ${{ needs.route.outputs.runner_label || '' }}
+          CONTROL_DISPATCH_ID: ${{ needs.route.outputs.control_dispatch_id || '' }}
+          ROUTING_PROOF: ${{ needs.route.outputs.routing_proof || '' }}
+          ROUTING_PROOF_ISSUED_AT: ${{ needs.route.outputs.routing_proof_issued_at || '' }}
         run: |
           set -euo pipefail
           while IFS= read -r encoded; do
@@ -1170,6 +1244,11 @@ jobs:
             jq -n \
               --arg pr_number "$number" \
               --arg depth "$DEPTH" \
+              --arg execution_provider "$EXECUTION_PROVIDER" \
+              --arg runner_label "$RUNNER_LABEL" \
+              --arg control_dispatch_id "$CONTROL_DISPATCH_ID" \
+              --arg routing_proof "$ROUTING_PROOF" \
+              --arg routing_proof_issued_at "$ROUTING_PROOF_ISSUED_AT" \
               --argjson manual_retry "$manual_retry" '
                 {
                   ref:"github-actions",
@@ -1178,7 +1257,12 @@ jobs:
                     branch:"",
                     detector_handoff:true,
                     manual_retry:$manual_retry,
-                    depth:$depth
+                    depth:$depth,
+                    execution_provider:$execution_provider,
+                    runner_label:$runner_label,
+                    control_dispatch_id:$control_dispatch_id,
+                    routing_proof:$routing_proof,
+                    routing_proof_issued_at:$routing_proof_issued_at
                   }
                 }
               ' \
@@ -1189,30 +1273,31 @@ jobs:
 
   model_config:
     name: Load the conflict-resolver model waterfall
-    needs: [detect, promotion_validate]
+    needs: [route, detect, promotion_validate]
     # Only a bot-originated internal worker running the fixed github-actions revision
     # may load resolver configuration. Ordinary PR and pre-PR promotion modes
     # are mutually exclusive; skipped sibling validation is expected.
     if: >-
       always()
       && github.event_name == 'workflow_dispatch'
-      && github.actor == 'github-actions[bot]'
       && github.ref_name == 'github-actions'
       && ((needs.detect.result == 'success'
            && needs.detect.outputs.any == 'true'
-           && inputs.promotion_handoff != true
+           && github.actor == 'github-actions[bot]'
+           && inputs.promotion_source_pr == ''
+           && inputs.promotion_plan_b64 == ''
            && inputs.detector_handoff == true
            && inputs.pr_number != ''
            && inputs.branch == '')
           || (needs.promotion_validate.result == 'success'
               && needs.promotion_validate.outputs.ready == 'true'
-              && inputs.promotion_handoff == true
+              && github.actor == 'github-actions[bot]'
               && inputs.detector_handoff != true
               && inputs.pr_number == ''
               && inputs.branch == ''
               && inputs.promotion_source_pr != ''
               && inputs.promotion_plan_b64 != ''))
-    runs-on: ubuntu-latest
+    runs-on: ${{ (inputs.promotion_source_pr != '' || inputs.promotion_plan_b64 != '') && 'ubuntu-latest' || needs.route.outputs.runner_label || 'ubuntu-latest' }}
     timeout-minutes: 2
     # This job deliberately has no checkout and no repository permissions. It
     # reads one public, non-secret setting and turns it into a closed set of
@@ -1313,7 +1398,6 @@ jobs:
           echo "A model that completes but leaves conflict markers does not mechanically trigger the next model."
           echo "model_args=$model_args" >> "$GITHUB_OUTPUT"
           echo "primary_model=$primary" >> "$GITHUB_OUTPUT"
-
   resolve_promotion:
     name: "Resolve promotion for source PR #${{ inputs.promotion_source_pr }}"
     needs: [promotion_validate, model_config]
@@ -1322,7 +1406,6 @@ jobs:
       && needs.promotion_validate.outputs.ready == 'true'
       && needs.model_config.result == 'success'
       && github.event_name == 'workflow_dispatch'
-      && inputs.promotion_handoff == true
       && inputs.detector_handoff != true
       && github.actor == 'github-actions[bot]'
       && github.ref_name == 'github-actions'
@@ -2119,10 +2202,9 @@ jobs:
             gh api --method POST "repos/$REPO/issues/$SOURCE_PR/labels" \
               --input <(jq -n '{labels:["ai-promotion-paused"]}') >/dev/null
           fi
-
   resolve:
     name: "Resolve PR #${{ matrix.pr.number }}"
-    needs: [detect, model_config]
+    needs: [route, detect, model_config]
     # Secret-bearing resolution runs only from the fixed github-actions control-plane
     # revision after a bot-originated exact-PR selection handoff. The detect step has
     # already validated the routing shape and re-snapshotted live PR refs.
@@ -2134,7 +2216,7 @@ jobs:
       && github.ref_name == 'github-actions'
       && inputs.pr_number != ''
       && inputs.branch == ''
-    runs-on: ubuntu-latest
+    runs-on: ${{ needs.route.outputs.runner_label || 'ubuntu-latest' }}
     timeout-minutes: 30
     permissions:
       actions: write
@@ -3154,6 +3236,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           DEPTH: ${{ github.event.client_payload.depth || inputs.depth || '0' }}
+          EXECUTION_PROVIDER: ${{ needs.route.outputs.execution_provider || 'github-actions' }}
+          RUNNER_LABEL: ${{ needs.route.outputs.runner_label || '' }}
+          CONTROL_DISPATCH_ID: ${{ needs.route.outputs.control_dispatch_id || '' }}
+          ROUTING_PROOF: ${{ needs.route.outputs.routing_proof || '' }}
+          ROUTING_PROOF_ISSUED_AT: ${{ needs.route.outputs.routing_proof_issued_at || '' }}
         run: |
           set -euo pipefail
           labels="$(gh api "repos/$REPO/issues/$PR_NUMBER" --jq '[.labels[].name]')"
@@ -3179,7 +3266,9 @@ jobs:
             [ -n "$child_number" ] || continue
             if ! jq -n \
               --arg pr_number "$child_number" \
-              --arg depth "$next_depth" '
+              --arg depth "$next_depth" \
+              --arg routing_proof "$ROUTING_PROOF" \
+              --arg routing_proof_issued_at "$ROUTING_PROOF_ISSUED_AT" '
                 {
                   ref:"github-actions",
                   inputs:{
@@ -3187,7 +3276,12 @@ jobs:
                     branch:"",
                     detector_handoff:true,
                     manual_retry:false,
-                    depth:$depth
+                    depth:$depth,
+                    execution_provider:env.EXECUTION_PROVIDER,
+                    runner_label:env.RUNNER_LABEL,
+                    control_dispatch_id:env.CONTROL_DISPATCH_ID,
+                    routing_proof:$routing_proof,
+                    routing_proof_issued_at:$routing_proof_issued_at
                   }
                 }
               ' \

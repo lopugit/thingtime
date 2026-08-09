@@ -115,7 +115,7 @@ function assertWorkflowSource() {
   const rebaseActionSource = readFileSync(REBASE_ACTION_URL, "utf8");
   const modelBlock = source.slice(
     source.indexOf("\n  model_config:"),
-    source.indexOf("\n  resolve:"),
+    source.indexOf("\n  resolve_promotion:"),
   );
   const resolveBlock = source.slice(source.indexOf("\n  resolve:"));
   const cascadeBlock = source.slice(
@@ -130,6 +130,11 @@ function assertWorkflowSource() {
   assert.match(source, /format\('resolve-detect-pr\{0\}'/);
   assert.match(source, /format\('resolve-pr\{0\}'/);
   assert.match(source, /github\.actor == 'github-actions\[bot\]'/);
+  assert.doesNotMatch(
+    source,
+    /github\.actor == 'thingtime-ci-control\[bot\]'/,
+    "CI Control App runs are detectors only; GITHUB_TOKEN creates exact workers",
+  );
   assert.match(source, /github\.ref_name == 'github-actions'/);
   assert.match(source, /inputs\.detector_handoff == true/);
   assert.match(source, /manual_retry is internal routing state and requires detector_handoff/);
@@ -280,6 +285,17 @@ export function selfTest() {
     concurrency: "resolve-pr190",
     cancelInProgress: false,
     modelAndResolve: true,
+  });
+
+  assertRoute("CI control App cannot become an exact secret-bearing worker", {
+    event: "workflow_dispatch", ref: "github-actions", actor: "thingtime-ci-control[bot]",
+    prNumber: "190", detectorHandoff: true,
+  }, {
+    valid: false,
+    internalWorker: false,
+    detectorOnly: true,
+    handoffEligible: false,
+    modelAndResolve: false,
   });
 
   assertRoute("machine retry worker", {

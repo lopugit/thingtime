@@ -63,10 +63,8 @@ require_environment() {
   [[ "$SOURCE_START_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "SOURCE_START_SHA must be a full SHA-1."
   [[ "$SOURCE_TIP_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "SOURCE_TIP_SHA must be a full SHA-1."
   [[ "$SOURCE_END_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "SOURCE_END_SHA must be a full SHA-1."
-  case "$SOURCE_LINEAGE_STATUS" in
-    verified|review-required-removed|review-required-ambiguous) ;;
-    *) fail "SOURCE_LINEAGE_STATUS is not an allowed source-lineage classification." ;;
-  esac
+  [[ "$SOURCE_LINEAGE_STATUS" == verified ]] \
+    || fail "source-lineage safety block: SOURCE_LINEAGE_STATUS must be verified; refusing every replay or publication for an unproven historical patch."
   [[ "$PLAN_HASH" =~ ^[0-9a-f]{64}$ ]] || fail "PLAN_HASH must be a SHA-256."
 }
 
@@ -78,9 +76,10 @@ unsafe_path_syntax() {
 }
 
 # Reproduce the promoter's source-tip classification from the exact aggregate
-# patch in a temporary index. A caller cannot downgrade a removed or ambiguous
-# historical patch to `verified`: the trusted worker observes the same
-# forward/reverse applicability against the immutable SOURCE_TIP_SHA itself.
+# patch in a temporary index. A caller cannot label a removed or ambiguous
+# historical patch `verified`: the trusted worker independently observes the
+# same forward/reverse applicability against immutable SOURCE_TIP_SHA and
+# blocks before constructing the synthetic replay.
 classify_source_lineage() {
   local repo="$1" patch_file="$2" index_file forward_status reverse_status
   index_file="$RUNNER_TEMP/promotion-lineage-index"
@@ -166,6 +165,8 @@ write_plan() {
     -- "${lineage_pathspecs[@]}" >"$lineage_patch_file"
   [[ -s "$lineage_patch_file" ]] || fail "Promotion lineage patch is empty."
   observed_lineage="$(classify_source_lineage "$repo" "$lineage_patch_file")"
+  [[ "$observed_lineage" == verified ]] \
+    || fail "source-lineage safety block: current develop does not prove this historical patch remains present ($observed_lineage); refusing every replay or publication."
   [[ "$observed_lineage" == "$SOURCE_LINEAGE_STATUS" ]] \
     || fail "Source-lineage classification differs from the trusted handoff ($observed_lineage != $SOURCE_LINEAGE_STATUS)."
 
@@ -201,7 +202,7 @@ write_plan() {
     printf 'false\n' >"$RUNNER_TEMP/promotion-workflow-paths.txt"
     emit workflow_paths false
   fi
-  if grep -q '^\.github/' "$paths_file" || [[ "$SOURCE_LINEAGE_STATUS" != verified ]]; then
+  if grep -q '^\.github/' "$paths_file"; then
     printf 'true\n' >"$RUNNER_TEMP/promotion-review-gated.txt"
     emit review_gated true
   else

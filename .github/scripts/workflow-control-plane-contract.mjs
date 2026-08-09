@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import assert from "node:assert/strict";
+import { createHmac } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, relative, resolve } from "node:path";
@@ -21,8 +22,189 @@ const IMPLEMENTATIONS = [
   "web-ci.yml",
 ];
 
+const PROVIDER_ROUTED_IMPLEMENTATIONS = [
+  "promote-develop-to-main.yml",
+  "promote-features-to-main.yml",
+  "rebase-pr-stacks.yml",
+  "resolve-pr-conflicts.yml",
+  "sync-main-into-develop.yml",
+];
+
 const readWorkflow = (name) =>
   readFileSync(resolve(workflows, name), "utf8");
+
+const ROUTING_PROOF_DOMAIN = "thingtime-ci-routing-proof:v1";
+
+function makeRoutingProof({ workflow, provider, runnerLabel, dispatchId, issuedAt, secret }) {
+  const canonical = [
+    ROUTING_PROOF_DOMAIN,
+    workflow,
+    provider,
+    runnerLabel,
+    dispatchId,
+    String(issuedAt),
+    "",
+  ].join("\n");
+  return createHmac("sha256", secret).update(canonical).digest("hex");
+}
+
+function acceptsBotRoutingProof(input) {
+  if (input.event !== "workflow_dispatch") return false;
+  if (input.ref !== "github-actions") return false;
+  if (input.actor !== "github-actions[bot]") return false;
+  if (!input.internalWorker) return false;
+  if (!/^[A-Za-z0-9._:-]{1,160}$/u.test(input.dispatchId)) return false;
+  if (input.provider === "vercel-sandbox") {
+    if (!/^[A-Za-z0-9._:-]{1,160}$/u.test(input.runnerLabel)) return false;
+  } else if (input.provider === "github-actions") {
+    if (input.runnerLabel !== "") return false;
+  } else {
+    return false;
+  }
+  if (!/^\d{10}$/u.test(String(input.issuedAt))) return false;
+  const age = input.now - Number(input.issuedAt);
+  if (age < -300 || age > 7200) return false;
+  if (!/^[0-9a-f]{64}$/u.test(input.proof)) return false;
+  return input.proof === makeRoutingProof({
+    workflow: input.workflow,
+    provider: input.provider,
+    runnerLabel: input.runnerLabel,
+    dispatchId: input.dispatchId,
+    issuedAt: input.issuedAt,
+    secret: input.secret,
+  });
+}
+
+function appReentryDisposition(input) {
+  if (
+    input.event !== "workflow_dispatch" ||
+    input.ref !== "github-actions" ||
+    input.actor !== "thingtime-ci-control[bot]"
+  ) {
+    return "route";
+  }
+  const token = (value) => /^[A-Za-z0-9._:-]{1,160}$/u.test(String(value || ""));
+  if (
+    input.provider === "vercel-sandbox" &&
+    token(input.runnerLabel) &&
+    token(input.dispatchId)
+  ) {
+    return "mint-proof";
+  }
+  if (
+    input.provider === "github-actions" &&
+    String(input.runnerLabel || "") === "" &&
+    token(input.dispatchId)
+  ) {
+    return "mint-proof";
+  }
+  return "local-fallback";
+}
+
+function assertRoutingProofContract(providerRouter) {
+  const now = 1_786_300_000;
+  const valid = {
+    event: "workflow_dispatch",
+    ref: "github-actions",
+    actor: "github-actions[bot]",
+    internalWorker: true,
+    workflow: "resolve-conflicts",
+    provider: "vercel-sandbox",
+    runnerLabel: "thingtime-ci-123",
+    dispatchId: "dispatch:123",
+    issuedAt: now - 60,
+    now,
+    secret: "contract-only-secret",
+  };
+  valid.proof = makeRoutingProof(valid);
+  assert.equal(acceptsBotRoutingProof(valid), true, "fresh exact worker proof is accepted");
+  assert.equal(
+    acceptsBotRoutingProof({ ...valid, now: valid.issuedAt + 7_199 }),
+    true,
+    "same-workflow cascade proof remains valid within the bounded lifetime",
+  );
+  for (const mutation of [
+    { workflow: "rebase-stack" },
+    { provider: "github-actions" },
+    { runnerLabel: "thingtime-ci-other" },
+    { dispatchId: "dispatch:other" },
+    { actor: "lopugit" },
+    { actor: "thingtime-ci-control[bot]" },
+    { ref: "develop" },
+    { event: "repository_dispatch" },
+    { internalWorker: false },
+    { proof: "" },
+  ]) {
+    assert.equal(
+      acceptsBotRoutingProof({ ...valid, ...mutation }),
+      false,
+      `routing proof mutation is rejected: ${JSON.stringify(mutation)}`,
+    );
+  }
+  for (const issuedAt of [now - 7_201, now + 301]) {
+    const outOfWindow = { ...valid, issuedAt };
+    outOfWindow.proof = makeRoutingProof(outOfWindow);
+    assert.equal(
+      acceptsBotRoutingProof(outOfWindow),
+      false,
+      `cryptographically valid proof outside freshness window is rejected: ${issuedAt}`,
+    );
+  }
+  const githubFallback = {
+    ...valid,
+    provider: "github-actions",
+    runnerLabel: "",
+  };
+  githubFallback.proof = makeRoutingProof(githubFallback);
+  assert.equal(
+    acceptsBotRoutingProof(githubFallback),
+    true,
+    "authenticated GitHub fallback metadata is accepted",
+  );
+  assert.equal(
+    appReentryDisposition({
+      event: "workflow_dispatch",
+      ref: "github-actions",
+      actor: "thingtime-ci-control[bot]",
+      provider: "vercel-sandbox",
+      runnerLabel: "thingtime-ci-123",
+      dispatchId: "dispatch:123",
+    }),
+    "mint-proof",
+    "complete App Vercel re-entry mints bounded worker provenance",
+  );
+  assert.equal(
+    appReentryDisposition({
+      event: "workflow_dispatch",
+      ref: "github-actions",
+      actor: "thingtime-ci-control[bot]",
+      provider: "github-actions",
+      runnerLabel: "",
+      dispatchId: "",
+    }),
+    "local-fallback",
+    "App re-entry missing its dispatch id cannot be routed back into a loop",
+  );
+  assert.equal(
+    appReentryDisposition({
+      event: "workflow_dispatch",
+      ref: "github-actions",
+      actor: "github-actions[bot]",
+      provider: "github-actions",
+      runnerLabel: "",
+      dispatchId: "",
+    }),
+    "route",
+    "ordinary bot-authored detector dispatches still consult provider policy",
+  );
+
+  assert.match(providerRouter, /GITHUB_EVENT_NAME.*workflow_dispatch/);
+  assert.match(providerRouter, /GITHUB_REF_NAME.*github-actions/);
+  assert.match(providerRouter, /GITHUB_ACTOR.*github-actions\[bot\]/);
+  assert.match(providerRouter, /INTERNAL_WORKER.*true/);
+  assert.match(providerRouter, /ROUTING_PROOF.*\^\[0-9a-f\]\{64\}\$/);
+  assert.match(providerRouter, /proof_is_fresh/);
+}
 
 const ADMIN_MODEL_ENDPOINT =
   "https://thingtime.com/api/v1/settings/pr-conflict-auto-resolver-model-waterfall";
@@ -78,7 +260,7 @@ function assertAdminModelRouting(resolver, rebase) {
   const resolverLoader = workflowBlock(
     resolver,
     "  model_config:\n",
-    "  resolve:\n",
+    "  resolve_promotion:\n",
     "resolver model loader",
   );
   const rebaseLoader = workflowBlock(
@@ -204,6 +386,50 @@ export function assertControlPlaneContract() {
     assert.match(source, /\njobs:\n/, `${name}: contains implementation jobs`);
   }
 
+  const providerRouter = readWorkflow("ci-provider-router.yml");
+  assertRoutingProofContract(providerRouter);
+  assert.match(providerRouter, /workflow_call:/, "provider router is reusable only");
+  assert.match(providerRouter, /THINGTIME_CI_ROUTER_SECRET/, "provider router uses the signed route secret");
+  assert.match(providerRouter, /execution_provider=github-actions/, "provider router fails open to GitHub");
+  assert.match(providerRouter, /thingtime-ci-control\[bot\]/, "provider router restricts routed fallback actors");
+  assert.match(providerRouter, /CONTROL_DISPATCH_ID/, "provider router requires dispatch provenance for fallback");
+  assert.match(providerRouter, /ROUTING_PROOF/, "provider router carries a signed routing capability");
+  assert.match(providerRouter, /ROUTING_PROOF_ISSUED_AT/, "provider routing capability is time bounded");
+  assert.match(providerRouter, /INTERNAL_WORKER/, "bot proof reuse requires an exact internal worker shape");
+  assert.match(providerRouter, /thingtime-ci-routing-proof:v1/, "routing proof uses a versioned canonical domain");
+  assert.match(providerRouter, /age.*-le 7200/, "routing proof has a bounded two-hour lifetime");
+  assert.match(providerRouter, /Bot-carried Vercel routing proof is missing or invalid/);
+  assert.match(providerRouter, /without re-routing/, "invalid bot metadata fails over locally instead of looping");
+  assert.match(
+    providerRouter,
+    /Malformed CI Control re-entry was rejected; continuing on GitHub-hosted compute without re-routing/,
+    "unmatched App re-entry fails over locally rather than re-entering CI Control",
+  );
+  assert.match(
+    providerRouter,
+    /GITHUB_EVENT_NAME" == "repository_dispatch"[\s\S]*WORKFLOW" == "rebase-stack"[\s\S]*Legacy exact rebase handoff is pinned to GitHub-hosted compute/,
+    "legacy exact rebase payloads retain their snapshot by bypassing external routing",
+  );
+  assert.match(providerRouter, /runs-on: ubuntu-latest/, "router secret stays on GitHub-hosted compute");
+  assert.doesNotMatch(
+    providerRouter,
+    /runs-on:.*inputs\.runner_label/,
+    "unvalidated caller labels never select the secret-bearing router runner",
+  );
+  assert.match(providerRouter, /runner_label: \$\{\{ steps\.route\.outputs\.runner_label \}\}/);
+  assert.match(providerRouter, /routing_proof: \$\{\{ steps\.route\.outputs\.routing_proof \}\}/);
+  assert.match(providerRouter, /routing_proof_issued_at: \$\{\{ steps\.route\.outputs\.routing_proof_issued_at \}\}/);
+
+  for (const name of PROVIDER_ROUTED_IMPLEMENTATIONS) {
+    const source = readWorkflow(name);
+    assert.match(source, /uses: \.\/\.github\/workflows\/ci-provider-router\.yml/, `${name}: calls the provider router`);
+    assert.match(source, /control_dispatch_id:/, `${name}: carries the Thingtime dispatch id`);
+    assert.match(source, /needs: route/, `${name}: implementation waits for provider selection`);
+    assert.match(source, /needs\.route\.outputs\.execute == 'true'/, `${name}: implementation obeys provider selection`);
+    assert.match(source, /runs-on: \$\{\{ needs\.route\.outputs\.runner_label \|\| 'ubuntu-latest' \}\}/, `${name}: uses only the validated runner label`);
+    assert.doesNotMatch(source, /runs-on:.*inputs\.runner_label/, `${name}: never schedules directly from caller metadata`);
+  }
+
   const promotions = readWorkflow("promote-features-to-main.yml");
   assert.match(promotions, /ref: github-actions/);
   assert.match(promotions, /workflow-control\/\.github\/scripts\/promote-features-to-main\.mjs/);
@@ -231,19 +457,47 @@ export function assertControlPlaneContract() {
   assert.match(rebase, /ref: github-actions/);
   assert.match(rebase, /origin\/github-actions/);
   assert.doesNotMatch(rebase, /ref: \$\{\{ github\.sha \}\}/);
+  assert.match(rebase, /routing_proof: \$\{\{ inputs\.routing_proof/);
+  assert.match(rebase, /routing_proof_issued_at: \$\{\{ inputs\.routing_proof_issued_at/);
+  assert.match(rebase, /internal_worker: >-/);
+  assert.match(
+    rebase,
+    /github\.event_name == 'repository_dispatch'[\s\S]*inputs\.worker_handoff == true/,
+    "legacy repository_dispatch and modern exact workers are both identified before routing",
+  );
+  assert.match(rebase, /routing_proof:\$routing_proof/);
+  assert.match(rebase, /routing_proof_issued_at:\$routing_proof_issued_at/);
+  for (const input of ["routing_proof", "routing_proof_issued_at"]) {
+    assert.equal(
+      rebase.match(new RegExp(`^      ${input}:$`, "gm"))?.length,
+      2,
+      `rebase ${input}: declared for workflow_call and workflow_dispatch`,
+    );
+  }
 
   const resolver = readWorkflow("resolve-pr-conflicts.yml");
   assert.match(resolver, /github\.ref_name == 'github-actions'/);
   assert.match(resolver, /ref:"github-actions"/);
   assert.doesNotMatch(resolver, /ref:"develop"/);
   assert.match(resolver, /github\.actor == 'github-actions\[bot\]'/);
+  assert.doesNotMatch(
+    resolver,
+    /github\.actor == 'thingtime-ci-control\[bot\]'/,
+    "CI Control App selects detector compute; exact workers are GITHUB_TOKEN-authored",
+  );
   assert.match(resolver, /\[ "\$EVENT_REF" = github-actions \]/);
   assert.doesNotMatch(resolver, /\[ "\$EVENT_REF" = develop \]/);
   assert.doesNotMatch(resolver, /ref: \$\{\{ github\.sha \}\}/);
+  assert.match(resolver, /routing_proof: \$\{\{ inputs\.routing_proof/);
+  assert.match(resolver, /routing_proof_issued_at: \$\{\{ inputs\.routing_proof_issued_at/);
+  assert.match(resolver, /internal_worker: >-/);
+  assert.match(resolver, /routing_proof:\$routing_proof/);
+  assert.match(resolver, /routing_proof_issued_at:\$routing_proof_issued_at/);
   for (const input of [
-    "promotion_handoff",
     "promotion_source_pr",
     "promotion_plan_b64",
+    "routing_proof",
+    "routing_proof_issued_at",
   ]) {
     assert.equal(
       resolver.match(new RegExp(`^      ${input}:$`, "gm"))?.length,
