@@ -11,6 +11,7 @@ import { ReorderableList } from './ReorderableList';
 import { applyDrawerOrdering, buildDrawerSubSections, drawerMenuItems, filterDrawerItemsByAuth } from './drawerMenu';
 import { useDrawer, useIsMobileViewport } from './useDrawer';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { MessengerUnreadBadge } from '../../Messenger/MessengerNotifications';
 
 // Shared drawer inner content, used by both the pinned NavDrawer panel and
 // the desktop hover popup.
@@ -349,6 +350,7 @@ export const DrawerContent = (props: DrawerContentProps) => {
 				<Icon name={item.icon} size="13px"></Icon>
 				<Text fontSize="sm" fontWeight={selected ? 600 : 400}>
 					{item.label}
+					{item.id === 'messages' ? <MessengerUnreadBadge /> : null}
 				</Text>
 			</Flex>
 		);

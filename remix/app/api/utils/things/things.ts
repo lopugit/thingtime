@@ -25,6 +25,7 @@ import {
 	APP_STORAGE_RESERVED_ID_PREFIX,
   COLLECTION_SCHEMA_VERSIONS,
   MAX_TEXT_CHARS,
+  MESSENGER_THINGTIME,
 	MIGRATION_DIAGNOSTIC_ID_PREFIX,
 	MIGRATION_DIAGNOSTIC_THINGTIME,
   POST_TYPES as REGISTRY_POST_TYPES,
@@ -1002,7 +1003,7 @@ const toFeedAuthor = (doc: any): FeedAuthor => ({
   avatarUrl: typeof doc.avatarUrl === 'string' ? doc.avatarUrl : null
 });
 
-const resolveProfiles = async (userIds: string[]): Promise<Map<string, FeedAuthor>> => {
+export const resolveProfiles = async (userIds: string[]): Promise<Map<string, FeedAuthor>> => {
   const wanted = [...new Set(userIds)].filter((id) => typeof id === 'string' && id.trim());
   if (!wanted.length) return new Map();
   const profiles = new Map<string, FeedAuthor>();
@@ -1886,10 +1887,12 @@ export const listThings = async (
     if (!viewer?.id) return fail(401, 'Unauthorized');
     // your OWN things, but not your account/theme/algorithm/waitlist things —
     // those are managed by their dedicated endpoints and would otherwise show
-    // up as inert, non-editable entries (edit/delete 403) in the data browser
+    // up as inert, non-editable entries (edit/delete 403) in the data browser.
+    // Messenger plumbing (chats, memberships, messages…) stays out for the
+    // same reason — /messages is its browser.
     match = {
       ownerId: viewer.id,
-      thingtime: { $nin: [...PROTECTED_THINGTIME] },
+      thingtime: { $nin: [...PROTECTED_THINGTIME, ...MESSENGER_THINGTIME] },
       $or: [{ thingtime: { $exists: true } }, { kind: 'post' }]
     };
     // narrow to one app's namespace (session-auth data browser)
@@ -2785,15 +2788,18 @@ export const deleteThing = async (viewerInput: string | Viewer, shareId: unknown
   const things = await getThingsCollection();
   // system kinds (a user's own account thing!) are never deletable through the
   // generic DELETE — $nin on the multikey array excludes them atomically. Their
-  // dedicated endpoints (themes, algorithms) own deletion. Under the app lens
-  // the filter additionally carries the namespace stamp, so an app can only
-  // ever delete what it stored; sandboxed tokens add their grant stamp to the
-  // same atomic filter — no check-then-delete race either way.
+  // dedicated endpoints (themes, algorithms) own deletion. Messenger kinds are
+  // excluded too: a chat/community doc is one doc standing in for every
+  // MEMBER's data, so owner-may-delete does not apply — their family owns the
+  // whole lifecycle (leave, decline, soft delete, emoji retire). Under the app
+  // lens the filter additionally carries the namespace stamp, so an app can
+  // only ever delete what it stored; sandboxed tokens add their grant stamp to
+  // the same atomic filter — no check-then-delete race either way.
   const sandboxTokenId = patSandboxOf(viewer);
 	const deleteFilter = {
     shareId: shareId.trim(),
     ownerId: viewer.id,
-    thingtime: { $nin: [...PROTECTED_THINGTIME] },
+    thingtime: { $nin: [...PROTECTED_THINGTIME, ...MESSENGER_THINGTIME] },
     ...(app ? { appId: app.appId } : {}),
     ...(sandboxTokenId ? { $or: [{ tokenAcl: tokenAclEntryFor(sandboxTokenId) }, { createdByTokenId: sandboxTokenId }] } : {})
 	};
