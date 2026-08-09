@@ -76,8 +76,15 @@ const SAFE_AUDIO_CONTENT_TYPES = new Set([
 const ATTACHMENT_PART_ISSUING_STATES = new Set<unknown>(['pending', 'finalizing', 'deleting']);
 
 const CONTENT_TYPE_RE = /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/;
-const CONTROL_CHAR_RE = /[\u0000-\u001f\u007f]/;
 const UNSAFE_FILENAME_CHAR_RE = /[\p{Cc}\p{Cf}\p{Cs}]/u;
+
+const hasAsciiControlChar = (value: string): boolean => {
+	for (let index = 0; index < value.length; index += 1) {
+		const code = value.charCodeAt(index);
+		if (code <= 0x1f || code === 0x7f) return true;
+	}
+	return false;
+};
 
 const isWellFormedUnicode = (value: string): boolean => {
 	for (let index = 0; index < value.length; index += 1) {
@@ -146,7 +153,7 @@ export const isAttachmentState = (value: unknown): value is AttachmentState =>
 	typeof value === 'string' && (ATTACHMENT_STATES as readonly string[]).includes(value);
 
 export const isAttachmentObjectVersionId = (value: unknown): value is string =>
-	typeof value === 'string' && !!value && value.length <= MAX_ATTACHMENT_OBJECT_VERSION_ID_CHARS && !CONTROL_CHAR_RE.test(value);
+	typeof value === 'string' && !!value && value.length <= MAX_ATTACHMENT_OBJECT_VERSION_ID_CHARS && !hasAsciiControlChar(value);
 
 export const isAttachmentFinalizationLeaseId = (value: unknown): value is string =>
 	typeof value === 'string' &&
@@ -186,7 +193,7 @@ export const attachmentObjectSizeBytesForAccounting = (doc: AttachmentStorageCan
 		typeof doc.objectKey !== 'string' ||
 		!doc.objectKey ||
 		doc.objectKey.length > MAX_ATTACHMENT_OBJECT_KEY_CHARS ||
-		CONTROL_CHAR_RE.test(doc.objectKey)
+		hasAsciiControlChar(doc.objectKey)
 	) {
 		return null;
 	}

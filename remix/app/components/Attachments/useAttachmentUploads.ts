@@ -335,7 +335,7 @@ export const useAttachmentUploads = (
 			}
 			enqueue({ localId, file: upload.file, attempt: nextAttempt, completeOnly, resumeExisting });
 		},
-		[enqueue, isCurrent, patchUpload]
+		[enqueue, patchUpload]
 	);
 
 	const remove = React.useCallback(
@@ -412,9 +412,13 @@ export const useAttachmentUploads = (
 		mountedRef.current = true;
 		const activeRequests = activeRequestsRef.current;
 		const activeXhrs = activeXhrsRef.current;
+		const uploadPlans = uploadPlansRef.current;
 		return () => {
 			mountedRef.current = false;
 			queueRef.current = [];
+			// Teardown intentionally reads the latest upload snapshot, not the one
+			// captured when this mount-only effect was installed.
+			// eslint-disable-next-line react-hooks/exhaustive-deps
 			for (const upload of uploadsRef.current) {
 				activeRequests.get(upload.localId)?.abort();
 				activeXhrs.get(upload.localId)?.abort();
@@ -425,7 +429,7 @@ export const useAttachmentUploads = (
 			}
 			activeRequests.clear();
 			activeXhrs.clear();
-			uploadPlansRef.current.clear();
+			uploadPlans.clear();
 		};
 	}, [cleanupUpload]);
 
