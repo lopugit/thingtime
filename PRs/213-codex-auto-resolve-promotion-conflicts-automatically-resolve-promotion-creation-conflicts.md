@@ -12,10 +12,11 @@ clean-replay branch validator could reject that manually resolved branch too.
 ## Automatic path
 
 - The thin `develop` listener grants only the permissions needed by the
-  protected promoter implementation. The promoter creates a deterministic
-  empty reservation on the exact promotion base, records the immutable
-  source/base plan, and dispatches one bot-only worker at the fixed protected
-  `github-actions` resolver revision.
+  protected promoter implementation. Only after the promoter positively proves
+  the historical source patch is still effective at the current `develop` tip
+  does it create a deterministic empty reservation on the exact promotion base,
+  record the immutable source/base plan, and dispatch one bot-only worker at the
+  fixed protected `github-actions` resolver revision.
 - The protected integration keeps the secret-bearing provider router on
   GitHub-hosted compute and accepts only authenticated, validated downstream
   runner metadata. Promotion-plan handoffs bypass external provider routing
@@ -48,40 +49,36 @@ clean-replay branch validator could reject that manually resolved branch too.
   later run finish exact cleanup and replan. A concurrently moved branch is
   preserved and its PR reopened; stale bot retirement authority is cancelled
   so a later reviewer closure remains intentional.
-- Every `.github/**` promotion, including a conflict-free replay, is published
-  as a bot-authored `[skip ci]` content commit instead of retaining an
-  executable historical commit message. A separate empty non-skip review
-  checkpoint is pushed with `GITHUB_TOKEN`, causing GitHub to create
+- Every source-verified `.github/**` promotion, including a conflict-free
+  replay, is published as a bot-authored `[skip ci]` content commit instead of
+  retaining an executable historical commit message. A separate empty non-skip
+  review checkpoint is pushed with `GITHUB_TOKEN`, causing GitHub to create
   approval-required PR checks without immediately executing promoted
   automation.
 - Historical source patches whose effect cannot be positively proven at the
-  current `develop` tip are never silently treated as current features. When
-  the exact historical patch is still recoverable, the promoter creates a
-  visibly quarantined candidate with `source-lineage-unverified`, prominent PR
-  and source-PR warnings, the exact checked `develop` tip, and an immutable
-  `review-required-removed` or `review-required-ambiguous` plan state. A
-  reviewer must explicitly decide whether restoring that change is intended;
-  later members of the same stack remain deferred meanwhile. These candidates
-  use the same `[skip ci]` content commit and approval-required bot checkpoint
-  even when they do not touch `.github/**`, so unverified historical code does
-  not execute before that review.
-- Source authority still fails closed before any branch or PR exists when the
-  historical object or exact patch cannot be recovered, Git inspection fails,
-  the worker independently derives a different lineage classification, or any
-  immutable source/base/plan evidence drifts. AI resolves only known file
-  conflicts; it never invents missing source or upgrades an unverified feature
-  to verified.
-- A clean-replay candidate can have stale warning metadata repaired after a
-  fresh maintenance proof. An AI-attested candidate's lineage enum remains
-  bound to its immutable plan hash: it stays visibly warned unless the old
-  candidate is retired and a new safely replanned candidate replaces it.
+  current `develop` tip are never silently treated as current features. A
+  recoverable patch classified as removed or ambiguous is reported as visibly
+  blocked before any reservation, branch, immutable promotion plan, AI worker,
+  or promotion PR is created. Later dependent members of that promotion group
+  remain deferred, while unrelated groups continue independently; the promoter
+  exposes the blocked result without creating any review branch or PR that
+  could resurrect the historical patch.
+- Preflight source authority also fails closed before any reservation, branch,
+  or PR exists when the historical object or exact patch cannot be recovered or
+  Git inspection fails. A worker-observed lineage mismatch or immutable
+  source/base/plan drift stops publication after dispatch. AI resolves only
+  known file conflicts; it never invents missing source or upgrades an
+  unverified feature to verified.
+- A later scan may proceed only after a fresh proof establishes that the patch
+  is effective at the then-current `develop` tip. That run starts from a new
+  verified plan; no blocked removed/ambiguous result is upgraded in place.
 
 ## Verification
 
-- Promoter Node syntax and self-test, including orphaned commits, verified,
-  removed, and ambiguous source-lineage classifications, immutable lineage
-  plan identity, empty picks, stacks, stale retirement, duplicate comment
-  events, checkpoint rollback, and exact token-header isolation.
+- Promoter Node syntax and self-test, including orphaned commits; verified,
+  removed, and ambiguous source-lineage classifications; the verified path's
+  immutable plan identity; empty picks; stacks; stale retirement; duplicate
+  comment events; checkpoint rollback; and exact token-header isolation.
 - Real-Git worker contract covering a genuine creation-time conflict,
   independent source-lineage reclassification and mismatch rejection,
   ten-character Git markers, literal pathspecs, source authority, omitted-path

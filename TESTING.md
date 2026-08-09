@@ -282,12 +282,13 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] Merge a standalone source PR whose exact promotion patch conflicts with
       `main`. Confirm the thin `develop` caller contains no executable behavior,
       retains `actions: write`, and invokes the protected promoter. The promoter
-      must create one immutable reservation branch, dispatch one bot-authored
-      worker to the fixed `github-actions` resolver revision, and continue
-      processing unrelated groups. The worker must re-derive the source plan
-      and live base/branch SHAs, resolve the conflict, replace the reservation
-      with an exact-lease push, and open the promotion PR without any manual
-      cherry-pick or follow-up promoter run.
+      must first prove the historical source patch is still effective at the
+      current `develop` tip, then create one immutable reservation branch,
+      dispatch one bot-authored worker to the fixed `github-actions` resolver
+      revision, and continue processing unrelated groups. The worker must
+      re-derive the source plan and live base/branch SHAs, resolve the conflict,
+      replace the reservation with an exact-lease push, and open the promotion
+      PR without any manual cherry-pick or follow-up promoter run.
 - [ ] Confirm an automatically resolved promotion PR has the `promotion`,
       `ai-conflict-resolved`, and `review-ai-resolution` labels plus an upserted
       comment naming the immutable source/base SHAs, resolver run, and exact
@@ -327,8 +328,9 @@ is fixed, and cite the checklist you ran in the PR description.
       must reject them. A standalone Markdown `=======` divider must remain
       valid and must not be treated as an unresolved conflict.
 - [ ] Exercise both conflict-free and AI-resolved promotions that change
-      `.github/**`. Confirm their bot-authored content commits carry `[skip ci]`
-      rather than executable historical commit messages, the promotion PR is created by
+      `.github/**` after source authority is positively verified. Confirm their
+      bot-authored content commits carry `[skip ci]` rather than executable
+      historical commit messages, the promotion PR is created by
       `GITHUB_TOKEN`, and an empty non-skip review-checkpoint child produces
       approval-gated `pull_request` checks without executing the edited
       automation automatically. Crash before/after checkpoint push and leave
@@ -351,28 +353,25 @@ is fixed, and cite the checklist you ran in the PR description.
       cherry-pick, and gets the expected tree. Repeat after a later revert and
       with overlapping source edits that make both forward and reverse checks
       inconclusive: the exact patch must remain mechanically recoverable, but
-      the candidate must carry immutable `review-required-removed` or
-      `review-required-ambiguous` lineage instead of being called verified.
-      The full aggregate range, not only its last commit, must be classified.
-- [ ] Exercise both a clean replay and an AI-conflicted replay with unverified
-      source lineage. Each must create exactly one review candidate labelled
-      `source-lineage-unverified`, add durable warning comments to the source
-      and promotion PRs with the checked `develop` tip, and defer only later
-      members of that promotion stack while unrelated groups continue. Both
-      must use a `[skip ci]` content commit plus an approval-required bot
-      checkpoint even when no `.github/**` path changed. AI
-      conflict resolution must not clear or downgrade the separate source-
-      intent warning.
-- [ ] Move `develop` so a previously ambiguous clean-replay promotion becomes
-      verifiably present. Maintenance may remove its stale warning only after
-      freshly reconstructing and verifying its clean-replay metadata. Repeat
-      with an AI-attested candidate: its lineage enum must remain bound to the
-      immutable plan hash, so the existing candidate stays warned or is retired
-      and replaced by a new safely replanned candidate; it must never be
-      silently re-attested or upgraded in place. Conversely, a missing merge
-      object, unreadable or empty exact patch, Git inspection failure, unknown
-      lineage enum, or worker-observed classification mismatch must create no
-      branch or PR and remain visible in the blocked summary.
+      the promoter must classify the full aggregate range, not only its last
+      commit, as removed or ambiguous and block visibly before creating any
+      reservation, branch, AI worker, or promotion PR.
+- [ ] Exercise both a mechanically clean replay and a potentially conflicting
+      replay whose recovered source patch is removed or ambiguous at current
+      `develop`. Each must create no reservation, branch, immutable promotion
+      plan, AI worker, or promotion PR; the blocked summary must name the checked
+      `develop` tip and lineage classification. Defer only later members of that
+      promotion group while unrelated groups continue, and confirm no review
+      branch or PR is opened.
+- [ ] Move `develop` so a previously ambiguous blocked source becomes
+      verifiably present. A later run may proceed only after freshly proving
+      source authority and must create a new verified plan rather than upgrading
+      the blocked result in place. Conversely, a still-removed or ambiguous
+      patch, missing merge object, unreadable or empty exact patch, Git
+      inspection failure, or unknown lineage enum must create no reservation,
+      branch, worker, or PR and remain visible in the blocked summary. A worker-
+      observed classification mismatch after verified dispatch must stop before
+      publication and leave a visible blocked result.
 - [ ] Run the orphaned-history self-test with the clone's Git author name
       deliberately empty. The attempted mainline cherry-pick must return an
       operational error, abort the sequencer, leave `HEAD` at the target base,
