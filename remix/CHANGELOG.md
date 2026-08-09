@@ -19,6 +19,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **The complete Actions control plane is ready for atomic promotion to
+  `main`**: the mutually dependent workflow fixes from source PRs #192, #193,
+  #194, #190, #199, #206, #207, and #208 are replayed together so the default
+  branch never runs an obsolete intermediate resolver, rebaser, or feature
+  promoter revision. The seven action workflow/script files exactly match the
+  current `develop` versions. See the
+  [PR #210 engineering note](../PRs/210-promote-actions-control-plane-rollup.md).
+  — Codex (AI), 2026-08-09
 - **Promotion self-test and empty-pick handling are runner-safe**: the
   per-feature promoter's orphaned-history fixture now configures its own Git
   author identity instead of depending on runner account defaults. Failed
