@@ -339,6 +339,13 @@ is fixed, and cite the checklist you ran in the PR description.
       duplicate/unknown model, wrong key, or empty array emits a warning and
       selects only `--model default`; no stored value can inject another CLI
       flag.
+- [ ] On the protected `github-actions` control plane, put `claude-opus-5`
+      first and exercise a merge conflict, a rebase conflict, and each
+      workflow's semantic Graphify refresh (including a clean rebase). Confirm
+      the Claude action and Graphify logs name the same Admin-selected primary;
+      repeat with `default`, then run the workflow control-plane contract and
+      confirm it rejects any legacy or hardcoded model in active AI runtime
+      YAML.
 - [ ] With an availability failure on the first configured model, Claude
       Code tries the ordered native fallback chain. A completed run that still
       leaves conflict markers stops for manual review; it does not silently

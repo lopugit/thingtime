@@ -1247,7 +1247,9 @@ jobs:
 
       - name: Load the conflict-resolver model waterfall
         id: models
-        if: steps.context.outputs.skip == 'false' && steps.start.outputs.complete != 'true'
+        # Load this for every owned rebase: conflict rounds and the final
+        # semantic Graphify refresh must use the same Admin-selected primary.
+        if: steps.context.outputs.skip == 'false'
         shell: bash
         run: |
           set -euo pipefail
@@ -1281,6 +1283,7 @@ jobs:
             args="$args --fallback-model $fallbacks"
           fi
           echo "model_args=$args" >> "$GITHUB_OUTPUT"
+          echo "primary_model=$primary" >> "$GITHUB_OUTPUT"
 
       - name: Isolate the real rebasing repository outside model workspace
         if: steps.context.outputs.skip == 'false'
@@ -1572,6 +1575,7 @@ jobs:
           GRAPHIFY_VERSION: "0.9.4"
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          PREFERRED_MODEL: ${{ steps.models.outputs.primary_model }}
           PIP_CONFIG_FILE: /dev/null
           PIP_INDEX_URL: https://pypi.org/simple
           PIP_EXTRA_INDEX_URL: ""
@@ -1582,6 +1586,21 @@ jobs:
           cd -- "$REBASE_REPO"
           [ -n "${ANTHROPIC_API_KEY:-}" ] || unset ANTHROPIC_API_KEY
           [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] || unset CLAUDE_CODE_OAUTH_TOKEN
+
+          graphify_model_args=()
+          case "${PREFERRED_MODEL:-default}" in
+            default)
+              unset GRAPHIFY_CLAUDE_CLI_MODEL
+              ;;
+            claude-fable-5|claude-opus-5)
+              graphify_model_args=(--model "$PREFERRED_MODEL")
+              export GRAPHIFY_CLAUDE_CLI_MODEL="$PREFERRED_MODEL"
+              ;;
+            *)
+              echo "::warning::Unexpected preferred model output; Graphify will use its built-in default."
+              unset GRAPHIFY_CLAUDE_CLI_MODEL
+              ;;
+          esac
 
           # Start from the exact replayed commits. Ignored/untracked model
           # output must not become an input to graphify's tracked outputs.
@@ -1638,7 +1657,7 @@ jobs:
           if [ -n "$backend" ]; then
             concurrency=4
             [ "$backend" != claude-cli ] || concurrency=1
-            if graphify extract . --backend "$backend" \
+            if graphify extract . --backend "$backend" "${graphify_model_args[@]}" \
                  --max-concurrency "$concurrency" --api-timeout 240 \
                && graphify cluster-only . --no-viz --no-label \
                && graph_not_collapsed; then

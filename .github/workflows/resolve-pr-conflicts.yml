@@ -934,6 +934,7 @@ jobs:
     permissions: {}
     outputs:
       model_args: ${{ steps.waterfall.outputs.model_args }}
+      primary_model: ${{ steps.waterfall.outputs.primary_model }}
     steps:
       - name: Fetch and validate the configured waterfall
         id: waterfall
@@ -1025,6 +1026,7 @@ jobs:
           echo "Fallbacks apply only to model overload, unavailability, or eligible server errors."
           echo "A model that completes but leaves conflict markers does not mechanically trigger the next model."
           echo "model_args=$model_args" >> "$GITHUB_OUTPUT"
+          echo "primary_model=$primary" >> "$GITHUB_OUTPUT"
 
   resolve:
     name: "Resolve PR #${{ matrix.pr.number }}"
@@ -1653,16 +1655,34 @@ jobs:
           # claude CLI it shells out to.
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          # graphify's claude-cli backend defaults to the CLI's default model
-          # (Opus) — structured-JSON extraction doesn't need it; sonnet is the
-          # right cost/quality point.
-          GRAPHIFY_CLAUDE_CLI_MODEL: sonnet
+          # Keep the post-resolution semantic refresh on the same trusted,
+          # administrator-selected primary model as the conflict edit itself.
+          PREFERRED_MODEL: ${{ needs.model_config.outputs.primary_model }}
         run: |
           set -euo pipefail
           # An empty env var and an unset one look the same to `[ -n ]` but
           # not necessarily to child processes (the claude CLI); normalize.
           [ -n "${ANTHROPIC_API_KEY:-}" ] || unset ANTHROPIC_API_KEY
           [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] || unset CLAUDE_CODE_OAUTH_TOKEN
+
+          # `default` deliberately leaves each Graphify backend on its own
+          # default. Every named value is a literal emitted by model_config's
+          # closed allowlist: the API backend consumes --model, while the
+          # claude-cli backend consumes GRAPHIFY_CLAUDE_CLI_MODEL.
+          graphify_model_args=()
+          case "${PREFERRED_MODEL:-default}" in
+            default)
+              unset GRAPHIFY_CLAUDE_CLI_MODEL
+              ;;
+            claude-fable-5|claude-opus-5)
+              graphify_model_args=(--model "$PREFERRED_MODEL")
+              export GRAPHIFY_CLAUDE_CLI_MODEL="$PREFERRED_MODEL"
+              ;;
+            *)
+              echo "::warning::Unexpected preferred model output; Graphify will use its built-in default."
+              unset GRAPHIFY_CLAUDE_CLI_MODEL
+              ;;
+          esac
 
           # Index exactly what was committed, and nothing the model left behind.
           # -x is REQUIRED: without it, ignored paths survive, and the model can
@@ -1737,7 +1757,8 @@ jobs:
           if [ -n "$backend" ]; then
             conc=4
             if [ "$backend" = "claude-cli" ]; then conc=1; fi
-            if graphify extract . --backend "$backend" --max-concurrency "$conc" --api-timeout 240 \
+            if graphify extract . --backend "$backend" "${graphify_model_args[@]}" \
+                 --max-concurrency "$conc" --api-timeout 240 \
                && graphify cluster-only . --no-viz --no-label \
                && graph_not_collapsed; then
               semantic="$backend"
