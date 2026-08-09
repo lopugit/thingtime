@@ -288,6 +288,15 @@ is fixed, and cite the checklist you ran in the PR description.
       cherry-pick, and gets the expected tree. Repeat after a later revert and
       with a multi-commit rebase range: the revert must fail closed, while the
       full aggregate range (not only its last commit) must be verified.
+- [ ] Run the orphaned-history self-test with the clone's Git author name
+      deliberately empty. The attempted mainline cherry-pick must return an
+      operational error, abort the sequencer, leave `HEAD` at the target base,
+      and clean both the index and tracked worktree instead of treating the
+      words `empty ident name` as an empty source patch.
+- [ ] Configure a valid Git identity, apply the recovered source pick, then
+      apply that identical pick again. The second, genuinely empty pick must
+      be skipped from verified sequencer/index state and leave the promoted
+      tree unchanged.
 - [ ] Give one standalone source PR an invalid or unavailable historical merge
       object between two valid standalone PRs. A dry run must report that PR as
       blocked, continue to plan the later independent PR, and publish both the
@@ -339,22 +348,26 @@ is fixed, and cite the checklist you ran in the PR description.
 
 - [ ] Create standalone same-repo PRs against `main` and against a non-default
       branch whose heads are `mergeable: true` but `rebaseable: false`.
-      Confirm **Rebase PRs and stacks (AI)** detects both while the merge-based
-      resolver correctly no-ops, and that replaying more than one conflicting
-      commit can advance through multiple bounded Claude/verify/continue
-      rounds. Then make a standalone PR genuinely merge-conflicting and
-      confirm only **Resolve PR conflicts (AI)** owns it.
+      Confirm automatic, scheduled, push-triggered, PR-triggered, and blank
+      manual scans leave both histories untouched: they are not stacks and
+      already merge cleanly. An explicit PR-number retry may still replay one
+      deliberately. Then make a standalone PR genuinely merge-conflicting and
+      confirm only **Resolve PR conflicts (AI)** owns it. Regression class:
+      standalone replay failures were incorrectly force-rebased and could
+      ping-pong with a merge-resolver update.
 - [ ] Create a two-PR stack (child PR based on the root PR's head). After the
       root is rebased, confirm the child dispatch receives the old and new
       parent SHAs, replays with onto semantics, and completes root-to-leaf
-      without duplicating the parent's commits.
+      without duplicating the parent's commits. Confirm a stack member with
+      either `mergeable: false` or `rebaseable: false` remains rebase-owned,
+      while a clean stack is left alone.
 - [ ] Exercise detection from a branch push, PR opened/reopened event, the
-      scheduled scan, and a manual PR-number dispatch. Automatic scans select
-      every same-repo PR regardless of base branch, route standalone merge
-      conflicts to the merge workflow, do not race a blocked child ahead of
-      its parent, and terminate after resolution instead of looping on the
-      workflow's own push. A blank manual dispatch must perform the same
-      repository-wide scan.
+      scheduled scan, and a manual PR-number dispatch. Automatic scans evaluate
+      every same-repo PR regardless of base branch, never dispatch a
+      standalone history rewrite, route standalone merge conflicts to the
+      merge workflow, do not race a blocked child ahead of its parent, and
+      terminate after resolution instead of looping on the workflow's own
+      push. A blank manual dispatch must perform the same repository-wide scan.
 - [ ] Return unknown merge/rebaseability for several PRs at once and confirm
       polling proceeds round-robin, giving every candidate an API check in each
       bounded round. Exercise a stack deeper than eight PRs and confirm it is
