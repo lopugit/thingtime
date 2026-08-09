@@ -1,0 +1,275 @@
+import { createHash } from 'node:crypto';
+
+import { getHomeThingsCollection } from '../mongodb/collections';
+import { CI_CONTROL_THINGTIME, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
+
+export const CI_THINGTIME = CI_CONTROL_THINGTIME;
+
+export type CiThingtime = (typeof CI_THINGTIME)[number];
+export type CiProvider = 'github' | 'vercel' | 'thingtime';
+
+export type CiEntityInput = {
+  kind: Exclude<CiThingtime, 'ci-event'>;
+  provider: CiProvider;
+  repository: string;
+  externalId: string;
+  title: string;
+  status: string;
+  url?: string | null;
+  parentId?: string | null;
+  occurredAt?: string | Date | null;
+  data?: Record<string, unknown>;
+};
+
+export type CiEventInput = {
+  provider: CiProvider;
+  repository: string;
+  deliveryId: string;
+  eventType: string;
+  action?: string | null;
+  parentId?: string | null;
+  actor?: string | null;
+  statusFrom?: string | null;
+  statusTo?: string | null;
+  occurredAt?: string | Date | null;
+  data?: Record<string, unknown>;
+};
+
+const boundedText = (value: unknown, max = 500): string => {
+  if (typeof value !== 'string') return '';
+  return value.trim().slice(0, max);
+};
+
+const dateFrom = (value: unknown, fallback = new Date()): Date => {
+  const parsed = value instanceof Date ? value : typeof value === 'string' || typeof value === 'number' ? new Date(value) : null;
+  return parsed && Number.isFinite(parsed.getTime()) ? parsed : fallback;
+};
+
+const stableShareId = (key: string): string =>
+  `ci-${createHash('sha256').update(key).digest('hex').slice(0, 48)}`;
+
+export const ciEntityKey = (input: Pick<CiEntityInput, 'provider' | 'repository' | 'kind' | 'externalId'>): string =>
+  [input.provider, input.repository, input.kind, input.externalId].map((part) => boundedText(part, 300)).join(':');
+
+const publicCrystal = (doc: any) => {
+  const crystal = doc?.crystal && typeof doc.crystal === 'object' ? doc.crystal : {};
+  return {
+    id: String(doc?.shareId ?? ''),
+    kind: String(Array.isArray(doc?.thingtime) ? doc.thingtime[0] ?? '' : doc?.thingtime ?? ''),
+    parentId: typeof doc?.parentId === 'string' ? doc.parentId : null,
+    createdAt: doc?.createdAt instanceof Date ? doc.createdAt.toISOString() : doc?.createdAt ?? null,
+    updatedAt: doc?.updatedAt instanceof Date ? doc.updatedAt.toISOString() : doc?.updatedAt ?? null,
+    ...crystal,
+    sourceUpdatedAt:
+      crystal.sourceUpdatedAt instanceof Date
+        ? crystal.sourceUpdatedAt.toISOString()
+        : crystal.sourceUpdatedAt ?? null
+  };
+};
+
+export const recordCiEvent = async (input: CiEventInput): Promise<{ id: string; inserted: boolean }> => {
+  const things = await getHomeThingsCollection();
+  const eventKey = [
+    input.provider,
+    input.repository,
+    'ci-event',
+    boundedText(input.deliveryId, 300),
+    boundedText(input.parentId ?? 'repository', 180)
+  ].join(':');
+  const shareId = stableShareId(eventKey);
+  const occurredAt = dateFrom(input.occurredAt);
+  const now = new Date();
+  try {
+    const result = await things.updateOne(
+      { shareId, thingtime: 'ci-event' },
+      {
+        $setOnInsert: {
+          schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+          shareId,
+          thingtime: ['ci-event'],
+          crystal: {
+            provider: input.provider,
+            repository: boundedText(input.repository, 300),
+            deliveryId: boundedText(input.deliveryId, 300),
+            eventType: boundedText(input.eventType, 120),
+            action: boundedText(input.action, 120) || null,
+            actor: boundedText(input.actor, 180) || null,
+            statusFrom: boundedText(input.statusFrom, 120) || null,
+            statusTo: boundedText(input.statusTo, 120) || null,
+            occurredAt,
+            data: input.data ?? {}
+          },
+          ownerId: 'system',
+          acl: [],
+          storageClass: 'control',
+          parentId: input.parentId ?? null,
+          targetId: null,
+          tags: [],
+          createdAt: now,
+          updatedAt: now
+        }
+      },
+      { upsert: true }
+    );
+    return { id: shareId, inserted: result.upsertedCount > 0 };
+  } catch (error: any) {
+    if (error?.code === 11000) return { id: shareId, inserted: false };
+    throw error;
+  }
+};
+
+export const upsertCiEntity = async (
+  input: CiEntityInput,
+  event?: Omit<CiEventInput, 'parentId' | 'statusFrom' | 'statusTo'>
+): Promise<{ id: string; changed: boolean; ignoredAsOlder: boolean }> => {
+  const things = await getHomeThingsCollection();
+  const entityKey = ciEntityKey(input);
+  const shareId = stableShareId(entityKey);
+  const occurredAt = dateFrom(input.occurredAt);
+  const now = new Date();
+  const current = await things.findOne(
+    { shareId, thingtime: input.kind },
+    { projection: { 'crystal.status': 1, 'crystal.sourceUpdatedAt': 1 } }
+  );
+  const currentUpdatedAt = dateFrom(current?.crystal?.sourceUpdatedAt, new Date(0));
+  let ignoredAsOlder = !!current && currentUpdatedAt.getTime() > occurredAt.getTime();
+  const previousStatus = boundedText(current?.crystal?.status, 120) || null;
+  const nextStatus = boundedText(input.status, 120) || 'unknown';
+
+  if (!ignoredAsOlder) {
+    const filter = current
+      ? {
+          shareId,
+          thingtime: input.kind,
+          $or: [
+            { 'crystal.sourceUpdatedAt': { $lte: occurredAt } },
+            { 'crystal.sourceUpdatedAt': { $exists: false } }
+          ]
+        }
+      : { shareId, thingtime: input.kind };
+    const update = {
+      $set: {
+        crystal: {
+          ...(input.data ?? {}),
+          provider: input.provider,
+          repository: boundedText(input.repository, 300),
+          externalId: boundedText(input.externalId, 300),
+          entityKey,
+          title: boundedText(input.title, 500),
+          status: nextStatus,
+          url: boundedText(input.url, 1500) || null,
+          sourceUpdatedAt: occurredAt
+        },
+        parentId: input.parentId ?? null,
+        updatedAt: now
+      },
+      $setOnInsert: {
+        schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+        shareId,
+        thingtime: [input.kind],
+        ownerId: 'system',
+        acl: [],
+        storageClass: 'control',
+        targetId: null,
+        tags: [],
+        createdAt: now
+      }
+    };
+    try {
+      const result = await things.updateOne(filter, update, { upsert: !current });
+      ignoredAsOlder = result.matchedCount === 0 && result.upsertedCount === 0;
+    } catch (error: any) {
+      if (error?.code !== 11000 || current) throw error;
+      // Another delivery inserted the deterministic entity between the read
+      // and upsert. Retry as an update with the provider-time guard so an
+      // older event can never win that race.
+      const result = await things.updateOne(
+        {
+          shareId,
+          thingtime: input.kind,
+          $or: [
+            { 'crystal.sourceUpdatedAt': { $lte: occurredAt } },
+            { 'crystal.sourceUpdatedAt': { $exists: false } }
+          ]
+        },
+        update,
+        { upsert: false }
+      );
+      ignoredAsOlder = result.matchedCount === 0;
+    }
+  }
+
+  if (event) {
+    await recordCiEvent({
+      ...event,
+      parentId: shareId,
+      statusFrom: previousStatus,
+      statusTo: ignoredAsOlder ? previousStatus : nextStatus,
+      data: { ...(event.data ?? {}), ignoredAsOlder }
+    });
+  }
+
+  return {
+    id: shareId,
+    changed: !ignoredAsOlder && previousStatus !== nextStatus,
+    ignoredAsOlder
+  };
+};
+
+const readKind = async (kind: CiThingtime, limit: number) => {
+  const things = await getHomeThingsCollection();
+  const docs = await things
+    .find({ thingtime: kind })
+    .sort({ updatedAt: -1, shareId: 1 })
+    .limit(limit)
+    .toArray();
+  return docs.map(publicCrystal);
+};
+
+export const listCiDashboard = async (options?: { limit?: number; eventLimit?: number }) => {
+  const limit = Math.min(250, Math.max(1, Math.floor(options?.limit ?? 100)));
+  const eventLimit = Math.min(500, Math.max(1, Math.floor(options?.eventLimit ?? 200)));
+  const [repositories, features, branches, pullRequests, workflowRuns, deployments, previews, dispatches, events] =
+    await Promise.all([
+      readKind('ci-repository', 20),
+      readKind('ci-feature', limit),
+      readKind('ci-branch', limit),
+      readKind('ci-pull-request', limit),
+      readKind('ci-workflow-run', limit),
+      readKind('ci-deployment', limit),
+      readKind('ci-preview', limit),
+      readKind('ci-dispatch', limit),
+      readKind('ci-event', eventLimit)
+    ]);
+
+  const statusCount = (values: any[], accepted: string[]) =>
+    values.filter((value) => accepted.includes(String(value.status ?? '').toLowerCase())).length;
+  const latest = events[0]?.occurredAt ?? events[0]?.updatedAt ?? null;
+  return {
+    repositories,
+    features,
+    branches,
+    pullRequests,
+    workflowRuns,
+    deployments,
+    previews,
+    dispatches,
+    events,
+    stats: {
+      openPullRequests: pullRequests.filter((pr: any) => pr.state === 'OPEN' || pr.state === 'open').length,
+      conflicting: statusCount(pullRequests, ['conflicting', 'dirty', 'blocked']),
+      activeRuns: statusCount(workflowRuns, ['queued', 'requested', 'waiting', 'in_progress', 'pending']),
+      readyPreviews: statusCount(previews, ['ready', 'success', 'succeeded'])
+    },
+    freshness: {
+      latestEventAt: latest,
+      stale: !latest || Date.now() - new Date(latest).getTime() > 15 * 60 * 1000
+    }
+  };
+};
+
+export const clearCiControlForTests = async () => {
+  if (process.env.NODE_ENV !== 'test') throw new Error('CI control data can only be cleared in tests');
+  const things = await getHomeThingsCollection();
+  await things.deleteMany({ thingtime: { $in: [...CI_THINGTIME] } });
+};

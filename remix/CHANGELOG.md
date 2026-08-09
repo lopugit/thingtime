@@ -17,6 +17,23 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Added
+
+- **One GitHub Actions control plane + Admin CI dashboard**: executable CI,
+  promotion, sync, release, rebase, and AI conflict-resolution behavior now
+  lives on the protected `github-actions` branch. `main`/`develop` retain only
+  GitHub-required trigger/input/permission callers pinned to that branch, with
+  a regression contract that rejects runner steps or local Actions scripts.
+  Admin → CI Control renders cached feature/branch/PR/run/deployment/preview
+  topology, signed GitHub/Vercel webhook freshness, relational status history,
+  GitHub App reconciliation, and allowlisted audited dispatch controls across
+  desktop and mobile. All current projections and append-only events are
+  protected, system-owned, non-billable Things. Fork-safe App/webhook setup and
+  failure-preserving verification are documented in README/TESTING. Reconcile
+  pagination covers repositories with more than 100 branches, and administrator
+  dispatches can enter only through the reviewed `develop`/`main` listeners. —
+  Codex (AI), 2026-08-09
+
 ### Fixed
 
 - **Every live AI conflict/rebase path now follows the current Thingtime Admin
@@ -25,9 +42,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   refresh silently fall back to Sonnet. The public setting endpoint now reads
   the home-DB singleton on every request (retaining last-known-good only for a
   real database outage), so a successful Admin reorder is visible immediately
-  across warm serverless instances. A source contract inventories every AI
-  workflow/action and rejects new unbound runtimes or obsolete hard-coded
-  models. The deleted legacy GitHub workflow registration was also disabled.
+  across warm serverless instances. Source contracts cover the delegated
+  product-branch callers and inventory every control-plane AI workflow/action,
+  rejecting new unbound runtimes or obsolete hard-coded models. The deleted
+  legacy GitHub workflow registration was also disabled.
   — Codex (AI), 2026-08-10
 - **The complete Actions control plane is ready for atomic promotion to
   `main`**: the mutually dependent workflow fixes from source PRs #192, #193,
