@@ -42,9 +42,10 @@ surfaces, not isolated sandboxes.
   deployment targeting the Custom Environment.
 - The PR wildcard is registered and verified in Vercel while remaining detached
   from both a Git branch and a Custom Environment.
-- Its DNS-only wildcard CNAME now resolves, but Vercel still reports the domain
-  as misconfigured and wildcard TLS fails because the narrow ACME nameserver
-  delegation is not yet published.
+- Its DNS-only wildcard CNAME resolves through Cloudflare's authoritative DNS
+  and the `1.1.1.1` and `8.8.8.8` public resolvers, but Vercel still reports the
+  domain as misconfigured and wildcard TLS fails because the narrow ACME
+  nameserver delegation is not yet published.
 - The protected GitHub Environment and its non-secret controller variables
   exist and allow only `main`.
 - The active `main` `Basic Protection` ruleset has no bypass, requires pull
@@ -57,6 +58,9 @@ surfaces, not isolated sandboxes.
 - A previously used Vercel admin token was rotated and revoked during the final
   security audit. A fresh project-scoped 90-day controller token is installed
   only as the masked `VERCEL_DEVELOP_DEPLOY_TOKEN` Environment secret.
+- The masked `THINGTIME_DEVELOP_S3_CORS_PROBE_URL` Environment secret is
+  installed with the unsigned exact-bucket probe URL; its value remains absent
+  from tracked files and logs.
 - Generic Preview has no private runtime rows. All nine legacy `develop` branch
   rows, plus the develop S3 bucket/region/role and CRON, JWT, MongoDB, and
   application variables, are now scoped only to the `develop` Custom
@@ -72,20 +76,18 @@ Do not describe credentialed PR previews as live until all of these pass:
    reports `misconfigured: false` and the wildcard certificate is valid.
 2. Add the wildcard PR origin to the private develop bucket's minimal PUT CORS
    rule.
-3. Install the unsigned exact-bucket probe URL as the masked
-   `THINGTIME_DEVELOP_S3_CORS_PROBE_URL` Environment secret.
-4. Merge this PR to `main`; `pull_request_target` cannot activate from the
+3. Merge this PR to `main`; `pull_request_target` cannot activate from the
    feature branch that introduces it.
-5. Run the Develop-target checklist in `TESTING.md`, including upload/removal,
+4. Run the Develop-target checklist in `TESTING.md`, including upload/removal,
    negative-origin, supersession, close, and reconciliation cases.
 
-The `main` ruleset, Environment variables, dedicated Vercel token, and Vercel
-runtime scoping are already complete. The wildcard CNAME also resolves, but the
-ACME NS delegation, bucket CORS, probe secret, controller merge, and live
-checklist remain. Finish the DNS delegation and bucket CORS before installing
-the probe secret, then merge the trusted controller and run the live checklist.
-Until that final sequence succeeds, the controller is not active and no PR
-alias should be described as ready.
+The `main` ruleset, Environment variables, dedicated Vercel token, probe secret,
+Vercel runtime scoping, and authoritative/public-resolver CNAME verification are
+already complete. The ACME NS delegation, bucket CORS, controller merge, and
+live checklist remain. Finish the DNS delegation and bucket CORS, then merge the
+trusted controller and run the live checklist. Until that final sequence
+succeeds, the controller is not active and no PR alias should be described as
+ready.
 
 ## Verification completed
 

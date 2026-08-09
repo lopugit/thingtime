@@ -623,12 +623,13 @@ scheduled reconciliation instead of letting them run automatically.
 
 Thingtime's protected GitHub Environment `vercel-develop-pr-control` allows only
 the `main` deployment branch. It contains the nine controller variables and a
-dedicated project-scoped 90-day Vercel token; the unsigned S3 CORS probe secret
-is still pending. The secret-free `pull_request_target` stage hands off to a
-`repository_dispatch` run in the default-branch context; scheduled runs also
-use the default branch, and the workflow refuses a manual dispatch from any
-other ref. Forks must use values from their own Vercel project; the examples are
-placeholders and must not be committed with live credentials or identifiers:
+dedicated project-scoped 90-day Vercel token. The masked unsigned S3 CORS probe
+secret is also installed. The secret-free `pull_request_target` stage hands off
+to a `repository_dispatch` run in the default-branch context; scheduled runs
+also use the default branch, and the workflow refuses a manual dispatch from
+any other ref. Forks must use values from their own Vercel project; the examples
+are placeholders and must not be committed with live credentials or
+identifiers:
 
 ```sh
 # GitHub Environment secrets
@@ -707,14 +708,15 @@ stays private:
 ```
 
 Activation status as of 2026-08-10: the no-bypass `main` ruleset, protected
-Environment, nine controller variables, dedicated 90-day Vercel token, and
-private runtime scoping are complete. The wildcard CNAME now resolves, but
-Vercel still reports the domain as misconfigured and wildcard TLS fails until
-the two `_acme-challenge.previews` NS delegations are published. That narrow
-Cloudflare delegation, the exact develop-bucket CORS update, masked
-`THINGTIME_DEVELOP_S3_CORS_PROBE_URL` secret, merge of this controller to
-`main`, and live end-to-end checklist remain pending. The installed Vercel token
-does not make the controller live while its workflow is absent from `main`, and
+Environment, nine controller variables, dedicated 90-day Vercel token, masked
+`THINGTIME_DEVELOP_S3_CORS_PROBE_URL` secret, and private runtime scoping are
+complete. The wildcard CNAME also resolves through Cloudflare's authoritative
+DNS and the `1.1.1.1` and `8.8.8.8` public resolvers. Vercel still reports the
+domain as misconfigured and wildcard TLS fails until the two
+`_acme-challenge.previews` NS delegations are published. That narrow Cloudflare
+delegation, the exact develop-bucket CORS update, merge of this controller to
+`main`, and live end-to-end checklist remain pending. The installed secrets do
+not make the controller live while its workflow is absent from `main`, and
 alias publication will fail closed without a successful exact-bucket CORS
 probe. Do not describe a PR alias as ready before every remaining gate passes.
 

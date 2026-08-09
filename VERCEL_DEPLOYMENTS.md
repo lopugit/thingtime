@@ -78,12 +78,13 @@ One-time private setup (values never belong in git):
   workflow refuses manual dispatch from another ref.
 - Environment secrets: the fresh, dedicated, project-scoped 90-day Vercel
   control-plane token is installed as `VERCEL_DEVELOP_DEPLOY_TOKEN`, separate
-  from the app's runtime status token. `THINGTIME_DEVELOP_S3_CORS_PROBE_URL`
-  remains pending; it must be a credential-free HTTPS object URL on the exact
-  develop bucket with no query string or signature. The controller uses the
-  latter only for an unauthenticated CORS `OPTIONS` check and refuses to publish
-  the PR alias when the check fails. Keeping it masked avoids exposing the
-  private bucket name through an Actions variable.
+  from the app's runtime status token. The masked
+  `THINGTIME_DEVELOP_S3_CORS_PROBE_URL` secret is also installed as a
+  credential-free HTTPS object URL on the exact develop bucket with no query
+  string or signature. The controller uses it only for an unauthenticated CORS
+  `OPTIONS` check and refuses to publish the PR alias when the check fails.
+  Keeping it masked avoids exposing the private bucket name through an Actions
+  variable.
 - Environment variables: `VERCEL_PROJECT_ID`, `VERCEL_PROJECT_NAME`,
   `VERCEL_TEAM_ID`, `VERCEL_TEAM_SLUG`, `VERCEL_GITHUB_REPO_ID`, and
   `VERCEL_CUSTOM_ENVIRONMENT_ID` with the exact immutable value
@@ -126,15 +127,16 @@ One-time private setup (values never belong in git):
   a signed upload plan. Generic Preview OIDC remains untrusted by the role.
 
 Activation status as of 2026-08-10: the no-bypass `main` ruleset, protected
-Environment, all controller variables, dedicated 90-day Vercel token, and
-private runtime scoping are complete. The wildcard CNAME now resolves, but
-Vercel still reports the domain as misconfigured and wildcard TLS fails until
-the two `_acme-challenge.previews` NS delegations are published. That narrow
-Cloudflare delegation, the exact develop-bucket CORS update, masked
-`THINGTIME_DEVELOP_S3_CORS_PROBE_URL` secret, merge of the controller to `main`,
-and the live end-to-end checklist remain pending. The installed token alone does
-not activate the feature, and a green controller self-test alone does not prove
-browser uploads are ready.
+Environment, all controller variables, dedicated 90-day Vercel token, masked
+`THINGTIME_DEVELOP_S3_CORS_PROBE_URL` secret, and private runtime scoping are
+complete. The wildcard CNAME also resolves through Cloudflare's authoritative
+DNS and the `1.1.1.1` and `8.8.8.8` public resolvers. Vercel still reports the
+domain as misconfigured and wildcard TLS fails until the two
+`_acme-challenge.previews` NS delegations are published. That narrow Cloudflare
+delegation, the exact develop-bucket CORS update, merge of the controller to
+`main`, and the live end-to-end checklist remain pending. The installed secrets
+alone do not activate the feature, and a green controller self-test alone does
+not prove browser uploads are ready.
 
 Do not copy the develop bucket/role variables into Vercel's generic Preview
 environment or trust `environment:preview` in AWS. Keep MongoDB, JWT, email, S3,
