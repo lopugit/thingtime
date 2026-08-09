@@ -19,6 +19,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Admin-selected conflict model now covers every protected AI runtime**: the
+  `github-actions` control plane passes its validated Thingtime Admin primary
+  model into merge- and rebase-side Graphify semantic refreshes as well as the
+  Claude conflict edit. Clean rebases now load the setting before Graphify,
+  and the control-plane contract inventories all active AI workflow/action
+  YAML while rejecting legacy or hardcoded model selections. — Codex (AI),
+  2026-08-10
 - **Promotion self-test and empty-pick handling are runner-safe**: the
   per-feature promoter's orphaned-history fixture now configures its own Git
   author identity instead of depending on runner account defaults. Failed
