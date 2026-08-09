@@ -29,6 +29,9 @@ Last updated: 2026-08-09
   `THINGTIME_PRIVATE_S3_REGION` are scoped to Production only. Preview and
   develop deployments cannot assume this role or upload to the production
   bucket.
+  The production bucket configuration, variables, and existing objects were not
+  changed when develop storage was provisioned. The production role gained the
+  required `s3:PutObjectTagging` action used by tagged multipart initiation.
 - Add `CRON_SECRET` as a **Sensitive**, **Production-only** variable (never
   record its value here). `remix/vercel.json` invokes
   `GET /api/v1/attachments/cleanup` at minute 17 every hour; Vercel sends the
@@ -58,12 +61,14 @@ Last updated: 2026-08-09
 - `THINGTIME_PRIVATE_S3_ROLE_ARN`, `THINGTIME_PRIVATE_S3_BUCKET`,
   `THINGTIME_PRIVATE_S3_REGION`, and a distinct `CRON_SECRET` are Sensitive and
   scoped only to this Custom Environment. Generic Preview and Production do not
-  inherit them.
+  inherit the develop values.
 - Vercel Cron invokes Production deployments only. Develop cleanup is therefore
-  called at minute 17 every hour by a dedicated AWS EventBridge API Destination
-  using the develop `CRON_SECRET`; its IAM invocation role is limited to that
-  one destination. The app route still rejects missing, wrong, user, PAT, and
-  service-account credentials.
+  targeted at minute 17 every hour by a dedicated AWS EventBridge API
+  Destination using the develop `CRON_SECRET`; its IAM invocation role is
+  limited to that one destination. The app route still rejects missing, wrong,
+  user, PAT, and service-account credentials.
+  The rule and destination are configured, but the first successful invocation
+  remains pending until this PR's attachment route is deployed to `develop`.
 - Cloudflare DNS remains `CNAME dev` to
   `b45b7349d6eb9c18.vercel-dns-017.com`, DNS only, TTL Auto. Vercel domain
   ownership and TLS are verified.

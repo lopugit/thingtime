@@ -185,15 +185,20 @@ variable scoping, distinct OIDC subject, bucket controls, IAM policies, and AWS
 EventBridge cleanup resources were verified live. A non-develop Vercel OIDC
 identity was denied by the develop role.
 
-The positive end-to-end upload/delete smoke remains unverified because the
-current live `develop` deployment does not yet contain this PR's attachment
-routes; the stable cleanup URL therefore returns 404 until the PR lands on
-`develop`. The EventBridge rule is enabled and correctly targeted, but a
-successful invocation cannot be claimed until that route is deployed. After
-merge, repeat the `TESTING.md` develop flow: upload a tiny attachment, render or
-download it, delete it, confirm the exact S3 version disappears, confirm the
-storage meter returns to its prior value, and check that EventBridge records a
-successful cleanup invocation.
+The positive develop upload/delete smoke and the first successful EventBridge
+cleanup invocation remain unverified because the live `develop` deployment does
+not yet contain this PR's attachment routes; the stable cleanup URL therefore
+returns 404 until this PR's code is deployed to `develop`. The EventBridge rule
+is enabled and correctly targeted, but a successful invocation cannot be
+claimed before that deployment. Afterward, repeat the `TESTING.md` develop flow:
+upload a tiny attachment, render or download it, delete it, confirm the exact S3
+version disappears, confirm the storage meter returns to its prior value, and
+check that EventBridge records a successful cleanup invocation.
 
-The production upload path remains deliberately unverified. No production S3
-object was created or deleted during this environment setup.
+The production upload path remains deliberately unverified. The production
+bucket configuration, Production-scoped Vercel S3 variables, and existing
+objects were unchanged, and no production object was created or deleted. The
+only production-side change was adding the required `s3:PutObjectTagging`
+permission to the existing attachment role. An earlier local Chrome
+file-selection attempt was also blocked because the ChatGPT Chrome extension
+did not have file-URL access; it created no post or S3 object.
