@@ -997,3 +997,58 @@ re-checks the whole management plane end-to-end:
       cost, so a burst past the limit 429s with the hashing message. The
       intent stays ANONYMOUS on purpose — being locked out is the reason to
       reach for it — and never reads or writes the database.
+
+## Messenger (chats, communities, custom emojis) (`remix/app/components/Messenger/`, `/api/v1/chats*`, `api/utils/messenger/`)
+
+Automated first: `node scripts/verify-messenger.mjs` from `remix/` against the
+running dev stack (86 live-API checks: permissions, requests, receipts,
+reactions, custom emojis, generic-things escape hatches). Then in a browser:
+
+- [ ] `/messages` requires login (guests bounce to `/login`) and the page owns
+      the viewport: no body scroll, no footer under the composer, nav
+      clearance intact at desktop and mobile widths.
+- [ ] Mode toggle (🏛️ Spaces / 💬 Chats) swaps the SAME conversations between
+      Slack-style rows and Messenger bubbles; the choice survives reload
+      (per-account localStorage key `tt-messenger-mode:<uid>`).
+- [ ] DM flow: search someone → chat opens instantly (optimistic), Enter
+      sends, bubble shows yours right/theirs left, conversation pins to the
+      BOTTOM of the pane even when short.
+- [ ] Requests: a DM from a stranger lands in Message requests (follower vs
+      unknown buckets), stays OUT of the main list and unread totals until
+      accepted; replying accepts implicitly; declining hides the chat and
+      the sender is not told. SECURITY: the decliner can no longer read it.
+- [ ] Slack mode: create community → channel (name slugs to lowercase),
+      topic inline-edit (admins only), sections group channels, right-click
+      renames a channel, public channels joinable via Browse channels while
+      private ones stay invisible to non-members (check the directory).
+- [ ] Threads: Reply in thread opens the side panel, replies stay OUT of the
+      main list, the root shows a 🧵 count chip. One level deep only —
+      replying to a reply files under the same root.
+- [ ] Reactions: hover/long-press → quick row + full picker; same token
+      toggles off; custom tab lists community + personal emojis; a custom
+      reaction renders its image chip for OTHER members too (resolved by id,
+      `custom:<emoji id>`); custom tokens are REJECTED by the post react
+      endpoint (namespace isolation both ways).
+- [ ] Custom emojis: upload ≤512KB gif/webp/png/jpeg → renders inline via
+      `:name:` in messages, animated gifs animate; duplicate name in scope
+      409s; another user's PERSONAL emoji is refused in your chat.
+- [ ] Read receipts: opening a chat advances your receipt (forward-only —
+      REGRESSION: reading an old message must never rewind it); seen-by
+      avatars appear under the last-read message in Messenger mode; the
+      settings toggle (details drawer) is PARITY: off = stop sharing AND
+      stop seeing, while unread counts keep working.
+- [ ] Unread + notifications: sidebar badges + bold rows; system messages
+      (joins/renames) never count as unread; muted chats keep their count
+      but leave the total; a fresh incoming message pops ONE Lopu toast per
+      chat per 30s with an Open chat link (none while that chat is open and
+      visible); polling PAUSES when the tab is hidden and fires immediately
+      on return.
+- [ ] Member control: group rename by ANY member (Messenger rule) vs channel
+      rename by admins only; nicknames settable by anyone for anyone and
+      shown everywhere names render; promote/demote/remove for admins with
+      the owner untouchable; owner leaving hands the chat to the earliest
+      admin, else earliest member.
+- [ ] Generic paths stay closed: `POST /api/v1/things` with any messenger
+      kind 403s ("managed by their own endpoints"); chats/messages are 404
+      through `GET /api/v1/things?id=` for non-owners; `POST
+      /api/v1/things/react` cannot reach another member's chat message.
