@@ -30,7 +30,8 @@ import {
 } from '../auth/users';
 import { waitlistEmailKey } from '../waitlist/waitlist';
 import { themeAcl } from '../themes/themes';
-import { exactDocumentSnapshotMatch, storageMigrationOwnership } from './migrationCore';
+import { builtinSchemaSeedNeedsRefresh, exactDocumentSnapshotMatch, storageMigrationOwnership } from './migrationCore';
+import { MigrationOperatorError, migrationFailureResult, type MigrationFailure } from './migrationFailure';
 import { getSubscription } from '../subscriptions/subscriptions';
 import {
 	legacyUserSubscriptionLedgerEnvelopeCanUpgrade,
@@ -151,7 +152,7 @@ const acquireMigrationLease = async (migrationId: string): Promise<MigrationLeas
 	let lost = false;
 	let renewal = Promise.resolve();
 	const renew = async (): Promise<void> => {
-		if (lost) throw new Error('The migration lease expired; no ledger was published ready');
+		if (lost) throw new MigrationOperatorError('lease_lost');
 		const at = new Date();
 		const result = await settings.updateOne(
 			{
@@ -168,7 +169,7 @@ const acquireMigrationLease = async (migrationId: string): Promise<MigrationLeas
 		);
 		if (result.matchedCount !== 1) {
 			lost = true;
-			throw new Error('The migration lease expired; no ledger was published ready');
+			throw new MigrationOperatorError('lease_lost');
 		}
 	};
 	const heartbeat = setInterval(() => {
@@ -566,7 +567,9 @@ const thingsMigration: Migration = {
 						// exact destination check/insert. A concurrent edit/delete becomes
 						// a transaction conflict; no partial copy can commit.
 						const removed = await things.deleteOne({ _id: fresh._id, kind: fresh.kind } as any, { session });
-						if (removed.deletedCount !== 1) throw new Error('Legacy relational source changed during migration');
+						if (removed.deletedCount !== 1) {
+							throw new MigrationOperatorError('legacy_source_changed');
+						}
 						return { kind: 'converted' as const, created: inserted, shareId: String(expected.shareId) };
 					});
 
@@ -848,7 +851,7 @@ const collectionToThingsMigration = (spec: ConvertSpec): Migration => ({
 					// twin alone is never conversion proof.
           if (inserted) created += 1;
           const fresh = await legacy.findOne({ _id: doc._id } as any);
-					const destinationShareId = inserted ? thing.shareId : (twin?.shareId ?? thing.shareId);
+					const destinationShareId = inserted ? thing.shareId : twin?.shareId ?? thing.shareId;
 					if (!fresh) {
 						// Another runner already consumed the source. Its receipt, not our
 						// observation of a destination-shaped row, is the completion proof.
@@ -1120,9 +1123,9 @@ const waitlistToThings = collectionToThingsMigration({
 // needs system-only powers the generic CRUD rightly refuses: ownerId 'system',
 // the reserved 'schema-' shareId prefix (sanitizeShareId blocks it against
 // squatters), uniqueKeys, and reconciling upserts. Re-runs self-heal drift —
-// a genuine seeded doc whose crystal no longer matches the validated registry
-// projection is refreshed in place — and pending() counts missing AND stale
-// docs, so drift genuinely surfaces in the admin census.
+// a genuine seeded doc whose crystal or server-owned control-plane storage
+// stamp no longer matches is refreshed in place — and pending() counts missing
+// AND stale docs, so drift genuinely surfaces in the admin census.
 
 const BUILTIN_SCHEMA_SHARE_PREFIX = 'schema-';
 
@@ -1144,21 +1147,20 @@ const seedBuiltinSchemas: Migration = {
   toVersion: THINGS_VERSION,
   title: 'Seed builtin crystal schemas as schema things',
   description:
-    'Every builtin crystal schema in the code registry (all 13 crystal kinds: post, comment, ' +
-    'reaction, share, data, schema, save, app, app-data, user, theme, feed-algorithm, waitlist) ' +
-    'is seeded as a system-owned public schema thing — thingtime ["schema"], shareId ' +
-    'schema-<id>, uniqueKeys ["schema:<id>"], acl ["tt:all"]. Each crystal is projected onto ' +
+    'Every builtin crystal schema in the code registry is seeded as a system-owned public schema ' +
+    'thing — thingtime ["schema"], shareId schema-<id>, uniqueKeys ["schema:<id>"], acl ["tt:all"], ' +
+    'and the server-owned storageClass "control". Each crystal is projected onto ' +
     'the schema-thing field grammar and validated through validateThingtimeCrystal(["schema"]) ' +
     '— the same gate user-published schemas pass — before writing; open record shapes and ' +
     'reserved names are projected away, and a validation failure is reported as a bug. ' +
     'Idempotent and self-healing: re-runs upsert by shareId, refresh genuine seeded docs whose ' +
-    'crystal drifted from the registry, and skip+note foreign docs squatting a destination id.',
+    'crystal or control-plane storage stamp drifted, and skip+note foreign docs squatting a destination id.',
   pending: async () => {
     const things = await getCollection('things');
     const schemas = builtinCrystalSchemas();
     const docs = await things
       .find({ shareId: { $in: builtinSchemaShareIds() } } as any)
-      .project({ shareId: 1, thingtime: 1, ownerId: 1, crystal: 1 })
+      .project({ shareId: 1, thingtime: 1, ownerId: 1, crystal: 1, storageClass: 1 })
       .toArray();
 		const byShareId = new Map<string, any>(docs.map((doc: any) => [String(doc.shareId), doc]));
     let count = 0;
@@ -1170,9 +1172,9 @@ const seedBuiltinSchemas: Migration = {
         continue;
       }
       const validated = builtinSchemaCrystal(schema);
-      // projection no longer validates (registry/grammar drift) or the stored
-      // crystal differs from the validated projection — both are pending work
-      if (validated.ok === false || JSON.stringify(twin.crystal ?? {}) !== JSON.stringify(validated.crystal)) {
+      // Projection/grammar drift, registry crystal drift, and a missing or
+      // incorrect server-owned control-plane stamp are all pending work.
+      if (validated.ok === false || builtinSchemaSeedNeedsRefresh(twin, validated.crystal)) {
         count += 1;
       }
     }
@@ -1208,6 +1210,7 @@ const seedBuiltinSchemas: Migration = {
           thingtime: validated.thingtime,
           crystal: validated.crystal,
           ownerId: 'system',
+          storageClass: 'control',
           acl: [ACL_ALL],
           targetId: null,
           tags: [],
@@ -1232,15 +1235,21 @@ const seedBuiltinSchemas: Migration = {
           skipped += 1;
           continue;
         }
-        if (JSON.stringify(twin!.crystal ?? {}) !== JSON.stringify(validated.crystal)) {
+        const crystalNeedsRefresh = JSON.stringify(twin!.crystal ?? {}) !== JSON.stringify(validated.crystal);
+        const storageClassNeedsRefresh = twin!.storageClass !== 'control';
+        if (builtinSchemaSeedNeedsRefresh(twin, validated.crystal)) {
           if (!dryRun) {
             // genuineness lives IN the filter — a foreign doc matches nothing,
             // preserving the same anti-squat guarantee as the skip above
 						await things.updateOne({ shareId, ownerId: 'system', thingtime: 'schema' } as any, {
-							$set: { crystal: validated.crystal, updatedAt: now }
+							$set: { crystal: validated.crystal, storageClass: 'control', updatedAt: now }
 						});
           }
-          notes.push(`schema ${schema.id}: crystal ${dryRun ? 'would be ' : ''}refreshed from the registry`);
+          const repairs = [
+            crystalNeedsRefresh ? 'registry crystal' : null,
+            storageClassNeedsRefresh ? 'control-plane storage class' : null
+          ].filter(Boolean);
+          notes.push(`schema ${schema.id}: ${dryRun ? 'would repair' : 'repaired'} ${repairs.join(' and ')}`);
           refreshed += 1;
           continue;
         }
@@ -1601,9 +1610,10 @@ const backfillAppStorageAllowances: Migration = {
 
 // Function (rather than a module-time array) because mergeLegacyCollections is
 // declared below this migration. Calls happen only after module initialization.
-const userStoragePrerequisites = (): Migration[] => [
+export const userStoragePrerequisites = (): Migration[] => [
 	mergeLegacyCollections,
 	thingsMigration,
+	seedBuiltinSchemas,
 	usersToThings,
 	themesToThings,
 	feedAlgorithmsToThings,
@@ -1947,7 +1957,9 @@ const upgradeUserSubscriptionLedgerEnvelopes = async (ids: readonly string[]): P
 		let doc = await things.findOne(looseMatch);
 		if (!doc || userSubscriptionLedgerEnvelopeIsTrusted(doc, ownerId)) continue;
 		if (!legacyUserSubscriptionLedgerEnvelopeCanUpgrade(doc, ownerId)) {
-			throw new Error(`Subscription ledger ${looseMatch.shareId} has an invalid protected envelope`);
+			throw new MigrationOperatorError('subscription_envelope_invalid', {
+				internalMessage: `Subscription ledger ${looseMatch.shareId} has an invalid protected envelope`
+			});
 		}
 		const result = await things.updateOne(legacyUserSubscriptionLedgerMatch(ownerId) as any, {
 			$set: { storageLedgerEnvelopeVersion: USER_STORAGE_LEDGER_ENVELOPE_VERSION }
@@ -1955,7 +1967,9 @@ const upgradeUserSubscriptionLedgerEnvelopes = async (ids: readonly string[]): P
 		if (result.modifiedCount) upgraded += 1;
 		doc = await things.findOne(looseMatch);
 		if (!userSubscriptionLedgerEnvelopeIsTrusted(doc, ownerId)) {
-			throw new Error(`Subscription ledger ${looseMatch.shareId} changed while its protected envelope was upgraded`);
+			throw new MigrationOperatorError('subscription_envelope_changed', {
+				internalMessage: `Subscription ledger ${looseMatch.shareId} changed while its protected envelope was upgraded`
+			});
 		}
 	}
 	return upgraded;
@@ -2035,7 +2049,7 @@ const backfillUserStorageAccounting: Migration = {
 		const matched = await pendingUserStorageAccounting();
 		const notes: string[] = [];
 		if (dryRun) return { dryRun, matched, migrated: 0, created: 0, skipped: 0, notes };
-		if (!assertLease) throw new Error('Storage accounting migration requires the global migration lease');
+		if (!assertLease) throw new MigrationOperatorError('lease_required');
 		await assertLease();
 
 		// Eliminate every dual-era content bypass before a whole-account ledger is
@@ -2063,7 +2077,10 @@ const backfillUserStorageAccounting: Migration = {
 				await assertLease();
 				const remaining = await prerequisite.pending();
 				if (remaining) {
-					throw new Error(`Storage prerequisite ${prerequisite.id} still has ${remaining} unresolved record(s)`);
+					throw new MigrationOperatorError('prerequisite_unresolved', {
+						prerequisiteId: prerequisite.id,
+						pending: remaining
+					});
 				}
 			}
 
@@ -2079,10 +2096,10 @@ const backfillUserStorageAccounting: Migration = {
 			);
 			const unresolvedPrerequisite = finalPrerequisitePending.find((entry) => entry.pending > 0);
 			if (unresolvedPrerequisite) {
-				throw new Error(
-					`Storage prerequisite ${unresolvedPrerequisite.id} became pending again ` +
-						`(${unresolvedPrerequisite.pending} unresolved record(s)); ledgers remain fenced`
-				);
+				throw new MigrationOperatorError('prerequisite_reappeared', {
+					prerequisiteId: unresolvedPrerequisite.id,
+					pending: unresolvedPrerequisite.pending
+				});
 			}
 
 			// Service quotas used to masquerade as user-editable `data` Things. Only an
@@ -2121,15 +2138,24 @@ const backfillUserStorageAccounting: Migration = {
 				const ownership = storageMigrationOwnership(initialDoc as any, knownUsers);
 				if (ownership === 'excluded') continue;
 				if (ownership === 'unknown-user') {
-					throw new Error(`Billable Thing ${String(initialDoc._id)} belongs to no current user and requires administrator repair`);
+					throw new MigrationOperatorError('orphan_billable_thing', {
+						internalMessage: `Billable Thing ${String(initialDoc._id)} belongs to no current user`,
+						diagnosticObjectIds: [String(initialDoc._id)]
+					});
 				}
 				if (initialSandboxState === 'invalid' && initialDoc.sandboxExpiresAt !== null) {
-					throw new Error(`Billable Thing ${String(initialDoc._id)} has an invalid sandbox marker`);
+					throw new MigrationOperatorError('invalid_sandbox_marker', {
+						internalMessage: `Billable Thing ${String(initialDoc._id)} has an invalid sandbox marker`,
+						diagnosticObjectIds: [String(initialDoc._id)]
+					});
 				}
 				let doc: any = initialDoc;
 				for (let attempt = 0; attempt < 3; attempt += 1) {
 					if (doc.schemaVersion !== COLLECTION_SCHEMA_VERSIONS.things || !Array.isArray(doc.thingtime)) {
-						throw new Error(`Billable Thing ${String(doc._id)} requires its schema migration before storage accounting`);
+						throw new MigrationOperatorError('schema_prerequisite', {
+							internalMessage: `Billable Thing ${String(doc._id)} requires its schema migration before storage accounting`,
+							diagnosticObjectIds: [String(doc._id)]
+						});
 					}
 					const sizeBytes = thingStorageSizeBytes(doc as any);
 					if (
@@ -2163,14 +2189,23 @@ const backfillUserStorageAccounting: Migration = {
 					const freshOwnership = storageMigrationOwnership(fresh as any, knownUsers);
 					if (freshOwnership === 'excluded') break;
 					if (freshOwnership === 'unknown-user') {
-						throw new Error(`Billable Thing ${String(fresh._id)} changed to an unknown owner during storage migration`);
+						throw new MigrationOperatorError('unknown_owner_change', {
+							internalMessage: `Billable Thing ${String(fresh._id)} changed to an unknown owner during storage migration`,
+							diagnosticObjectIds: [String(fresh._id)]
+						});
 					}
 					if (storageSandboxState(fresh as any) === 'invalid' && fresh.sandboxExpiresAt !== null) {
-						throw new Error(`Billable Thing ${String(fresh._id)} has an invalid sandbox marker`);
+						throw new MigrationOperatorError('invalid_sandbox_marker', {
+							internalMessage: `Billable Thing ${String(fresh._id)} has an invalid sandbox marker`,
+							diagnosticObjectIds: [String(fresh._id)]
+						});
 					}
 					doc = fresh;
 					if (attempt === 2) {
-						throw new Error(`Billable Thing ${String(doc._id)} kept changing during storage migration`);
+						throw new MigrationOperatorError('billable_thing_churn', {
+							internalMessage: `Billable Thing ${String(doc._id)} kept changing during storage migration`,
+							diagnosticObjectIds: [String(doc._id)]
+						});
 					}
 				}
 			}
@@ -2199,7 +2234,9 @@ const backfillUserStorageAccounting: Migration = {
 						await assertLease();
 						const ownerId = typeof candidate.ownerId === 'string' ? candidate.ownerId : '';
 						if (!ownerId || ownerId.startsWith('sandbox:')) {
-							throw new Error(`Reserved app-storage counter for ${appId} has an invalid owner`);
+							throw new MigrationOperatorError('app_counter_owner_invalid', {
+								internalMessage: `Reserved app-storage counter for ${appId} has an invalid owner`
+							});
 						}
 						await convertHistoricalAppStorageCounter(ownerId, appId);
 					}
@@ -2211,7 +2248,7 @@ const backfillUserStorageAccounting: Migration = {
 				}
 			}
 			notes.push(
-				`${reconciledApps} live app aggregate set(s) and ${reconciledOrphanApps} orphan namespace ledger set(s) ` + 'reconciled from canonical bytes'
+				`${reconciledApps} live app aggregate set(s) and ${reconciledOrphanApps} orphan namespace ledger set(s) reconciled from canonical bytes`
 			);
 
 			let initialized = 0;
@@ -2277,10 +2314,16 @@ const backfillUserStorageAccounting: Migration = {
 							if (hasLegacyAllowance) preservedAllowances += 1;
 						}
 						existing = await things.findOne(match);
-						if (!existing) throw new Error(`Subscription ledger for ${ownerId} could not be initialized`);
+						if (!existing) {
+							throw new MigrationOperatorError('subscription_init_failed', {
+								internalMessage: `Subscription ledger for ${ownerId} could not be initialized`
+							});
+						}
 					}
 					if (!userSubscriptionLedgerEnvelopeIsTrusted(existing, ownerId)) {
-						throw new Error(`Subscription ledger ${match.shareId} has an invalid protected envelope`);
+						throw new MigrationOperatorError('subscription_envelope_invalid', {
+							internalMessage: `Subscription ledger ${match.shareId} has an invalid protected envelope`
+						});
 					}
 
 					const overrideWasAbsent =
@@ -2327,7 +2370,7 @@ const backfillUserStorageAccounting: Migration = {
 			await assertLease();
 			const unfinished = await pendingUserStorageAccounting();
 			if (unfinished) {
-				throw new Error(`Storage accounting still has ${unfinished} pending record(s); ledgers remain fenced`);
+				throw new MigrationOperatorError('pending_storage_records', { pending: unfinished });
 			}
 
 			notes.push(`${stamped} billable Thing(s) stamped with canonical bytes`);
@@ -2473,7 +2516,7 @@ const dropStaleCollectionGenerations: Migration = {
 
     for (const row of stale) {
       const docs = await db.collection(row.physical).estimatedDocumentCount();
-			const missing = row.version === null ? (unmerged.get(row.physical) ?? 0) : 0;
+			const missing = row.version === null ? unmerged.get(row.physical) ?? 0 : 0;
       if (missing > 0) {
         notes.push(`${row.physical}: kept — ${missing} doc(s) not yet merged (run merge-legacy-collections)`);
         skipped += 1;
@@ -2620,7 +2663,9 @@ export const getMigrationStatus = async (): Promise<{
     .map(
       (generation) =>
         renameFailures.get(generation.collection) ||
-        `${generation.collection}: legacy collection still exists beside ${physicalCollectionName(generation.collection)} — run merge-legacy-collections`
+				`${generation.collection}: legacy collection still exists beside ${physicalCollectionName(
+					generation.collection
+				)} — run merge-legacy-collections`
     );
 
   const withPending = await Promise.all(
@@ -2648,7 +2693,7 @@ export const getMigrationStatus = async (): Promise<{
 export const runMigration = async (
   id: unknown,
   options: { dryRun?: unknown; confirm?: unknown }
-): Promise<Fail | { ok: true; migration: string; report: MigrationReport }> => {
+): Promise<Fail | MigrationFailure | { ok: true; migration: string; report: MigrationReport }> => {
   const migration = getMigration(id);
   if (!migration) return fail(404, 'Unknown migration');
   const dryRun = options.dryRun === true || options.dryRun === 'true';
@@ -2658,12 +2703,25 @@ export const runMigration = async (
     return fail(400, `Migration ${migration.id} drops data — pass confirm: true to run it`);
   }
 	if (dryRun) {
-		const report = await migration.run({ dryRun: true });
-  return { ok: true, migration: migration.id, report };
+		try {
+			const report = await migration.run({ dryRun: true });
+			return { ok: true, migration: migration.id, report };
+		} catch (error) {
+			// Dry runs never mutate migration target documents, so an exception is
+			// a known rejection rather than an ambiguous mutation outcome. Some
+			// runners may still bootstrap database indexes before their read pass.
+			return migrationFailureResult(migration.id, error, 'rejected');
+		}
 	}
 
-	const lease = await acquireMigrationLease(migration.id);
+	let lease: Awaited<ReturnType<typeof acquireMigrationLease>>;
+	try {
+		lease = await acquireMigrationLease(migration.id);
+	} catch (error) {
+		return migrationFailureResult(migration.id, error, 'rejected');
+	}
 	if (!lease) return fail(409, 'Another database migration is already running; wait for it to finish and refresh');
+	let migrationStarted = false;
 	try {
 		await lease.assert();
 		if (migration.id !== backfillUserStorageAccounting.id && new Set(userStoragePrerequisites().map((entry) => entry.id)).has(migration.id)) {
@@ -2709,18 +2767,19 @@ export const runMigration = async (
 			}
 		}
 		await lease.assert();
+		migrationStarted = true;
 		const report = await migration.run({ dryRun: false, assertLease: lease.assert });
 		await lease.assert();
 		return { ok: true, migration: migration.id, report };
 	} catch (error) {
-		if (migration.id === backfillUserStorageAccounting.id) {
+		if (migrationStarted && migration.id === backfillUserStorageAccounting.id) {
 			// A late postflight/lease failure must never leave the ledgers that were
 			// already reconciled earlier in the sweep looking authoritative. This
 			// fence is monotonic-safe even if a successor has begun: it can only
 			// remove readiness, never publish a stale total.
 			await fenceAllStorageLedgers().catch(() => {});
 		}
-		throw error;
+		return migrationFailureResult(migration.id, error, migrationStarted ? 'unknown' : 'rejected');
 	} finally {
 		await lease.release();
 	}

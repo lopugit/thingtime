@@ -1,6 +1,9 @@
 import { randomBytes } from 'node:crypto';
 
-import { ensureIndexes, getSettingsCollection, getThingsCollection } from '../mongodb/collections';
+// The subscription-tier catalog is platform configuration: revisions and the
+// tier settings pointer live on the HOME deployment only, never on a
+// data-plane endpoint override (a foreign DB must not answer entitlements).
+import { ensureIndexes, getSettingsCollection, getHomeThingsCollection as getThingsCollection } from '../mongodb/collections';
 import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 import {
   EMPTY_TIER_INCLUSIONS,

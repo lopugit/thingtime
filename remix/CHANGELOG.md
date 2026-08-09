@@ -17,7 +17,128 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Password-confirmed reveal for protected Thing diagnostics**: new migration
+  diagnostics use a backward-compatible v2 secure envelope that keeps a bounded
+  set of MongoDB ObjectIds supplied by explicitly authored server-side error
+  context behind numbered redaction
+  references. The ordinary diagnostic response exposes descriptors only;
+  credentials, tokens, URLs, private keys, query identifiers, and ambiguous
+  24-hex values remain irreversible. `/thing/:id` now offers a reusable Reveal
+  modal that verifies the current password on every lookup, keeps only one value
+  transiently in memory, and clears it on hide, account/Thing change, navigation,
+  or tab backgrounding. The closed-codec reveal endpoint rejects arbitrary
+  secure fields and cross-origin/non-JSON browser posts, returns private no-store
+  responses, and has a non-configurable fail-closed five-request/15-minute
+  confirmation ceiling. Existing v1 diagnostics remain readable without reveal values. — Codex
+  (AI), 2026-08-09
+- **Builtin schemas no longer block whole-account storage accounting**:
+  reserved system-owned `schema-*` Things are now seeded with the server-owned
+  `storageClass: "control"` stamp, existing genuine seeds missing that stamp
+  surface as pending and self-repair, and the account-storage orchestrator runs
+  the schema seed prerequisite before scanning billable content. Community and
+  user-authored schemas remain billable. — Codex (AI), 2026-08-09
+- **Conflict detection waits out GitHub and says so when it stands aside**:
+  the merge resolver's detector polled mergeability for only ~80 seconds
+  after a base push, but GitHub's verdicts can take ~6 minutes to settle —
+  observed on PR #190, where the develop push that created the conflict ran
+  detection while the PR still read UNKNOWN, so nothing was handed off, no
+  comment appeared, and the conflict sat silent until the scheduled sweep.
+  Detection now re-queries until every scanned PR has a verdict or a time
+  budget runs out (`MERGEABLE_POLL_SECONDS`, default 500s, with
+  `MERGEABLE_POLL_INTERVAL` between re-queries; detect timeout raised to 15
+  minutes), and the detect job now upserts a status comment on any PR it must
+  leave alone — conflicting fork PRs it cannot push to, and PRs whose
+  mergeability never settled — so detector silence always means "nothing
+  needed doing", never "nobody looked". Conflicts that are handed off keep
+  announcing themselves through the existing "Auto-resolve running" comment;
+  the rebase workflow already polls its verdicts round-robin and is
+  unchanged. Also restored the "AI PR and stack rebase conflict resolution"
+  changelog bullet's opening line, dropped by the AI resolution of a previous
+  merge. — Claude (AI), 2026-08-08
+- **Contextual reaction/migration errors + storage migration upsert repair**:
+  Lopu can no longer render a lone 🌧️ when Nitro replaces an unhandled server
+  exception with boolean `error: true`; fetch failures now become typed,
+  action-aware errors, one-shot toasts reject non-string runtime values, and
+  failed reaction writes distinguish known rejection from an ambiguous
+  network/5xx outcome (refetching server truth instead of blindly reversing a
+  possibly committed toggle). Reaction and migration routes preserve authored
+  failures and turn unknown exceptions into safe class/code summaries without
+  leaking stacks or database details publicly. Failed real admin migrations now
+  capture a bounded, secret-scrubbed diagnostic after releasing their lease,
+  store it as an expiring owner-only, non-billable control Thing, and link the
+  Lopu toast to its readable `/thing/:id` view; failed dry runs never create a
+  diagnostic Thing and show the full redacted detail in a long-lived scrollable
+  toast. If diagnostic persistence is unavailable, real runs use that same
+  private inline fallback without masking the original status or outcome.
+  Structured login/account-switcher failure
+  fields remain intact, malformed successful mutation responses are reconciled
+  as commit-unknown, server-marked reaction rejections roll back without a
+  redundant read, and late reaction truth merges only reaction fields so it
+  cannot overwrite newer comments or shares. Migration invariants now use a
+  closed operator-safe message catalogue with private record ids confined to
+  server logs. The three storage backfills are unblocked:
+  their shared app-counter ensure path no longer puts `$expr` in an upsert
+  predicate (MongoDB code 224); it upserts by the deterministic reserved
+  `shareId` and still validates the complete protected envelope before trusting
+  either a new or existing ledger. — Codex (AI), 2026-08-08
+- **`withMongoTransaction` ReferenceError + Web CI transaction support**: the
+  AI-resolved merge that landed on main via PR #158 left `withMongoTransaction`
+  calling the removed `getClientCached()`, 500-ing every transactional write
+  (registration's subscription-ledger seed, service-account creation,
+  verification emails — Web CI's API suite red on main). The transaction client
+  now mirrors the collection getters: `withMongoTransaction` follows the ACTIVE
+  data plane (like `getCollection`) and the new `withHomeMongoTransaction` is
+  pinned home (like `getHomeCollection`) for the protected home-plane callers
+  (themes, algorithms, apps, registration). Web CI's `mongo:7` service is
+  replaced by a docker-run **single-node replica set** (standalone mongod
+  rejects transactions with IllegalOperation, and there is deliberately no
+  non-transactional fallback), so the transactional paths are now genuinely
+  exercised in CI — local runbook note: transactional flows need an
+  RS-enabled local mongod too (`mongod --replSet …` + one-time
+  `rs.initiate(...)` with an explicit `127.0.0.1` member host). The two strict
+  `[401]` auth-guard API tests now send truly anonymous requests (new
+  `anonymous` test flag honored by both the /tests page and the headless
+  runner) instead of inheriting the suite's shared session cookie. Full suite:
+  307/307 against a local single-node RS. Both auto-resolver workflows also
+  now post an upserted "resolution/rebase running, expected finish ~time"
+  PR comment before starting, so reviewers who catch the conflict window
+  aren't left guessing. — Claude (AI), 2026-08-08
+- **Mixed-plane transactions resolved — ledgers have one true plane**: user
+  subscription/billing objects (`subscriptions.ts`, `userStorage.ts`,
+  `tierCatalogStore.ts`) are now HOME-pinned like users/sessions, and account
+  storage meters HOME-hosted bytes only — active-plane writers (`things.ts`
+  create/update/delete, `appData.ts` set/delete) skip account accounting and
+  content stamps when a data-plane endpoint override is live (bytes on a
+  user's own MongoDB are not Thingtime storage; app ledgers still
+  self-account on the active plane). Registration/service-account creation
+  now succeed with an override active: identity + ledger land home, verified
+  live (register + posts with/without `x-tt-mongo-url` against two dbs on
+  one RS mongod — home ledger read exactly the home post's bytes; the
+  override post carried no stamps and moved no ledger). Local runbook:
+  boot now probes transaction support and prints the exact single-node-RS
+  conversion + `rs.initiate` commands when the connected mongod is
+  standalone (`warnIfTransactionsUnsupported`), `/api/v1/mongodb/status`
+  reports `replicaSet`, and the brew `mongod.conf` replica-set stanza is
+  staged locally (takes effect on the next sudo mongod restart +
+  one-time initiate). — Claude (AI), 2026-08-08
+
 ### Added
+
+- **Promotion PR changelog**: the **Promote develop to main** workflow now
+  maintains an at-a-glance changelog on the standing promotion PR. A new
+  `.github/scripts/promotion-pr-changelog.mjs` resolves the first-parent spine
+  of `main..develop` to the merged develop-based PRs it carries (merge/squash
+  subjects, then content matching against recently merged PRs — merge SHA, PR
+  title, and the PRs' own commit subjects, which survives AI rebases of
+  develop — then the commit-association API), rewrites a marker-delimited
+  section of the PR description with a PR table (title, author, source branch,
+  merge date), `no-promote` label warnings re-verified via REST, and collapsed
+  direct commits, and posts short delta comments when PRs enter or leave the
+  promotion window. State is derived from the PR body itself; re-runs on the
+  same develop SHA are byte-identical no-ops. Supports `DRY_RUN=1` and
+  `--self-test`. — Claude (AI), 2026-08-08
 
 - **AI PR and stack rebase conflict resolution**: a separate **Rebase PRs and
   stacks (AI)** workflow evaluates every same-repository PR regardless of base
@@ -159,12 +280,21 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Sync main→develop fallback PR is now PAT-authored**: the **Sync main into
+  develop** workflow's "Open (or reuse) the sync PR" step used `GITHUB_TOKEN`,
+  which failed outright while the repo blocked Actions-created PRs — and even
+  with that setting enabled, a `GITHUB_TOKEN`-created PR triggers no workflows
+  (GitHub anti-recursion), so the sync PR would sit with no Web CI/CodeQL
+  checks. The step now uses the same
+  `SYNC_BRANCHES_PAT || CONFLICT_RESOLVER_PAT` chain as the checkout/push path
+  and fails loudly when neither secret exists instead of degrading to a
+  checkless PR. — Claude (AI), 2026-08-08
 - **PRs that make themselves conflicted now get rescanned**: a push to a PR's
   head branch can create a conflict (the resolver deliberately ignores
   `synchronize` to avoid self-loops), and with no follow-up push to the base,
   the PR sat unresolved indefinitely — observed on the resolver's own PR #173.
   Every branch push already spawns a detect run; it now also scans the open PR
-  *from* the pushed branch, and the handoff dispatches under each conflicting
+  _from_ the pushed branch, and the handoff dispatches under each conflicting
   PR's base branch instead of the pushed ref. Self-terminating: the resolver's
   own resolution push finds its PR mergeable and no-ops.
   — Claude (AI), 2026-08-06
@@ -202,6 +332,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - **PR #69 final-review hardening round**: a multi-agent review of the unified
   /search + profile/feed branch surfaced a batch of merge-blocking issues, all
   fixed here — Claude (AI), 2026-07-17:
+
   - **Advanced filters no longer 400 + wipe results on numeric values**: the
     query builder's default `contains` operator coerced `4`/`true`/`null` to
     real types, which the server rejects for text-only operators, clearing the

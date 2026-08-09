@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { Binary, ObjectId } from 'mongodb';
+import { ObjectId, type Binary } from 'mongodb';
 
 import { getHomeThingsCollection, getThingsCollection, getUsersCollection, withMongoTransaction } from '../mongodb/collections';
+import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
 import { findUserByUsername, pushUserRecentReaction } from '../auth/users';
 import {
 	StorageMutationError,
@@ -24,6 +25,8 @@ import {
 	APP_STORAGE_RESERVED_ID_PREFIX,
   COLLECTION_SCHEMA_VERSIONS,
   MAX_TEXT_CHARS,
+	MIGRATION_DIAGNOSTIC_ID_PREFIX,
+	MIGRATION_DIAGNOSTIC_THINGTIME,
   POST_TYPES as REGISTRY_POST_TYPES,
   PROTECTED_THINGTIME,
   REACTION_EMOJIS,
@@ -131,7 +134,8 @@ export type ThingDoc = {
   // ledger), and — for sandbox tokens — the ephemeral TTL/space stamps.
   appId?: string;
   sizeBytes?: number;
-	storageClass?: 'content';
+	storageClass?: 'content' | 'control';
+	expiresAt?: Date;
 	storageAccountingVersion?: number;
   sandboxExpiresAt?: Date;
   sandboxSpace?: string;
@@ -395,16 +399,22 @@ const applyDeletedStorageDeltas = async (docs: ThingDoc[], session: any): Promis
 	const uncertainUsers = new Set<string>();
 	const uncertainAppOwners = new Map<string, Set<string>>();
 
+	// Foreign-plane deletes never touch the home account ledger (the mirror of
+	// createThing's billable gate); app ledgers below still settle on the
+	// active plane so an override DB keeps its own app accounting exact.
+	const accountPlaneApplies = !isCustomMongoEndpointActive();
 	for (const doc of docs) {
 		const accountedBytes = currentContentSizeBytes(doc);
 		const ownerId = String(doc.ownerId);
 		const deletionDecision = deletionStorageFenceDecision(doc);
 		const sandboxState = deletionDecision.sandboxState;
-		if (deletionDecision.fenceAccount) {
-			uncertainUsers.add(ownerId);
-		} else if (isBillableStorageThing(doc)) {
-			if (accountedBytes === null) uncertainUsers.add(ownerId);
-			else if (accountedBytes > 0) userBytes.set(ownerId, (userBytes.get(ownerId) ?? 0) + accountedBytes);
+		if (accountPlaneApplies) {
+			if (deletionDecision.fenceAccount) {
+				uncertainUsers.add(ownerId);
+			} else if (isBillableStorageThing(doc)) {
+				if (accountedBytes === null) uncertainUsers.add(ownerId);
+				else if (accountedBytes > 0) userBytes.set(ownerId, (userBytes.get(ownerId) ?? 0) + accountedBytes);
+			}
 		}
 
 		const scoped = appStorageScopeForDoc(doc);
@@ -660,6 +670,7 @@ export const sanitizeShareId = (value: unknown): string | null | Fail => {
     trimmed.startsWith(SCHEMA_RESERVED_ID_PREFIX) ||
 		trimmed.startsWith(SUBSCRIPTION_RESERVED_ID_PREFIX) ||
 		trimmed.startsWith(SERVICE_QUOTA_RESERVED_ID_PREFIX) ||
+		trimmed.startsWith(MIGRATION_DIAGNOSTIC_ID_PREFIX) ||
 		trimmed.startsWith(APP_STORAGE_RESERVED_ID_PREFIX)
   ) {
 		// Deterministic migration, schema, tier-revision, subscription assignment,
@@ -888,7 +899,14 @@ export const createThing = async (
     updatedAt: now,
 		...(app ? appNamespaceStamp(app, sizeBytes) : {})
 	};
-	const billable = isBillableStorageThing(doc);
+	// Account storage meters HOME-hosted bytes only. With a data-plane endpoint
+	// override active this content lands on the user's own MongoDB: it consumes
+	// no Thingtime account storage, gets no home-accounting stamps, and must
+	// not touch the home subscription ledger (which a foreign-plane transaction
+	// could not reach anyway — sessions are client-bound and the ledger is
+	// home-pinned). App ledgers still self-account on the active plane through
+	// appNamespaceStamp/applyAppStorageDeltaTransaction below.
+	const billable = isBillableStorageThing(doc) && !isCustomMongoEndpointActive();
 	if (billable) {
 		doc.storageClass = 'content';
 		doc.sizeBytes = sizeBytes;
@@ -1493,6 +1511,9 @@ export const toPublicThings = async (docs: ThingDoc[], viewerInput: string | Vie
 const aclOf = (doc: ThingDoc): string[] => (Array.isArray(doc.acl) && doc.acl.length ? doc.acl : aclFromVisibility(doc.visibility) || [ACL_OWNER]);
 
 const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
+	// Operational diagnostics have a stricter boundary than ordinary private
+	// Things: only the dedicated current-admin endpoint may decode/read them.
+	if (thingtimeOf(doc).includes(MIGRATION_DIAGNOSTIC_THINGTIME)) return false;
   if (viewer?.id && doc.ownerId === viewer.id) return true;
   return aclAllows(aclOf(doc), viewer, doc.ownerId);
 };
@@ -1673,7 +1694,7 @@ export const appShapeProjections = async (
     const ownerId = String(doc.ownerId);
     const self = ownerId === app.ownerId;
     const scopes = self ? app.scopes : scopesById.get(ownerId) || [];
-		const username = self ? app.username : (sandboxNames.get(ownerId) ?? item.author?.username);
+		const username = self ? app.username : sandboxNames.get(ownerId) ?? item.author?.username;
     item.author = username
       ? {
           id: ownerId,
@@ -1681,9 +1702,9 @@ export const appShapeProjections = async (
           displayName: scopeCovers(scopes, 'profile.displayName')
             ? sandboxNames.has(ownerId) || (self && app.sandbox)
               ? sandboxDisplayName(username)
-							: (item.author?.displayName ?? null)
+							: item.author?.displayName ?? null
             : null,
-					avatarUrl: scopeCovers(scopes, 'profile.avatar') ? (item.author?.avatarUrl ?? null) : null
+					avatarUrl: scopeCovers(scopes, 'profile.avatar') ? item.author?.avatarUrl ?? null : null
         }
       : null;
     if (Array.isArray(item.acl)) {
@@ -3061,9 +3082,7 @@ export const updateThing = async (
     // grows the list past the create-time fold's bound. Keyed on the category
     // actually changing (not tag membership: the new category may coincide
     // with a user tag, and the old one must STILL come out then).
-		const previousCategory = thingtime.includes('post')
-			? ((crystalOf(doc).listing as MarketplaceListing | null | undefined)?.category ?? null)
-			: null;
+		const previousCategory = thingtime.includes('post') ? (crystalOf(doc).listing as MarketplaceListing | null | undefined)?.category ?? null : null;
     if (previousCategory !== categoryTag[0]) {
       tags = [...tags.filter((tag) => tag !== previousCategory), ...categoryTag].filter((tag, index, all) => all.indexOf(tag) === index);
     }
@@ -3102,9 +3121,13 @@ export const updateThing = async (
   const nextTokenAcl = sanitizeTokenAcl(input.tokenAcl);
   if (isFail(nextTokenAcl)) return nextTokenAcl;
 
-	const nextExtended = hasExtendedChange ? extended.value : (doc.extended ?? null);
+	const nextExtended = hasExtendedChange ? extended.value : doc.extended ?? null;
 	const newSize = thingStorageSizeBytes({ crystal: validated.crystal, extended: nextExtended, tags });
-	const wasBillable = isBillableStorageThing(doc);
+	// Same home-plane rule as createThing: under a data-plane endpoint override
+	// this row lives on the user's own MongoDB — account accounting (and its
+	// content stamps) never applies, even to synced-in rows that carry stamps.
+	const accountPlaneApplies = !isCustomMongoEndpointActive();
+	const wasBillable = isBillableStorageThing(doc) && accountPlaneApplies;
 	const nextStorageDoc: ThingDoc = {
 		...doc,
 		schemaVersion: THINGS_SCHEMA_VERSION,
@@ -3113,7 +3136,7 @@ export const updateThing = async (
 		extended: nextExtended,
       tags
 	};
-	const isBillable = isBillableStorageThing(nextStorageDoc);
+	const isBillable = isBillableStorageThing(nextStorageDoc) && accountPlaneApplies;
 	const registeredStorageScope = storageScope && !storageScope.sandbox ? storageScope : null;
 	const currentSourceBytes = currentContentSizeBytes(doc);
 	if ((wasBillable || registeredStorageScope) && currentSourceBytes === null) {

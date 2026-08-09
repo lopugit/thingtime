@@ -2,6 +2,7 @@ import { getMongoUri } from './config';
 import { getActiveMongoDbName, getActiveMongoUri, isCustomMongoEndpointActive } from './endpoint';
 import { getMongoDb } from './mongodb';
 import { COLLECTIONS, physicalCollectionName } from './collectionNames';
+import { MIGRATION_DIAGNOSTIC_THINGTIME } from '../../../schemas/registry';
 
 export { COLLECTIONS, physicalCollectionName, versionedCollectionName, collectionVersion } from './collectionNames';
 
@@ -80,8 +81,17 @@ const getClientCachedFor = (uri: string, isHome: boolean) => {
 // under-count. Atlas replica sets support transactions; an unsupported local
 // deployment therefore fails the write loudly instead of weakening the
 // invariant.
-export const withMongoTransaction = async <T>(work: (session: any) => Promise<T>): Promise<T> => {
-	const client = await getClientCached();
+//
+// Sessions are CLIENT-bound: a session only works with collection handles from
+// the MongoClient that started it. The two variants mirror the collection
+// getters — withMongoTransaction follows the request's ACTIVE data plane
+// (exactly like getCollection/getThingtimeDb, so data-plane transactions stay
+// on the override's client when one is active), and withHomeMongoTransaction
+// is pinned to the home deployment (like getHomeCollection) for
+// identity/control-plane transactions, which must keep working while a
+// data-plane override is active on the request. A transaction cannot span both
+// planes: with an override active, home and active are different clients.
+const runMongoTransaction = async <T>(client: any, work: (session: any) => Promise<T>): Promise<T> => {
 	const session = client.startSession();
 	let result!: T;
 	try {
@@ -100,6 +110,15 @@ export const withMongoTransaction = async <T>(work: (session: any) => Promise<T>
 		await session.endSession();
 	}
 };
+
+export const withMongoTransaction = async <T>(work: (session: any) => Promise<T>): Promise<T> =>
+	runMongoTransaction(
+		await (isCustomMongoEndpointActive() ? getClientCachedFor(getActiveMongoUri(), false) : getClientCachedFor(getMongoUri(), true)),
+		work
+	);
+
+export const withHomeMongoTransaction = async <T>(work: (session: any) => Promise<T>): Promise<T> =>
+	runMongoTransaction(await getClientCachedFor(getMongoUri(), true), work);
 
 // Issues the last adoption pass could not resolve (rename unsupported /
 // unauthorized). Surfaced through the admin migrations census so a split
@@ -182,16 +201,53 @@ export const getThingtimeDb = async () => {
   return db;
 };
 
+// Transactions (storage accounting, registration's subscription-ledger seed)
+// require a REPLICA SET: a standalone mongod rejects them with
+// IllegalOperation, and there is deliberately no non-transactional fallback
+// (see withMongoTransaction). Atlas is always a replica set; a local dev
+// mongod usually is not — and every transactional flow (registration, service
+// accounts, storage-accounted writes) then 500s. Probe once at boot and say
+// so loudly with the exact fix, instead of letting the first registration
+// surface a bare IllegalOperation.
+let transactionSupportProbed = false;
+export const warnIfTransactionsUnsupported = async (): Promise<void> => {
+  if (transactionSupportProbed) return;
+  transactionSupportProbed = true;
+  try {
+    const db = await getHomeThingtimeDb();
+    const hello = await db.admin().command({ hello: 1 });
+    if (!hello?.setName) {
+      console.error(
+        '[mongodb] The connected MongoDB is STANDALONE — multi-document transactions (registration, service accounts, storage-accounted writes) WILL FAIL with IllegalOperation.\n' +
+          '[mongodb] Fix: run it as a single-node replica set. Add to mongod.conf (brew: /opt/homebrew/etc/mongod.conf):\n' +
+          '[mongodb]     replication:\n' +
+          '[mongodb]       replSetName: rs0\n' +
+          '[mongodb] restart mongod, then initiate ONCE with an explicit localhost member host:\n' +
+          `[mongodb]     mongosh --eval 'rs.initiate({_id: "rs0", members: [{_id: 0, host: "127.0.0.1:27017"}]})'`
+      );
+    }
+  } catch (err: any) {
+    // A replSet-configured but NOT-YET-INITIATED mongod cannot serve normal
+    // operations, so the connect/hello above fails instead of answering. Name
+    // that state (conditionally — the same error also covers mongod-down).
+    const text = String(err?.message || err);
+    if (/NotYetInitialized|no replset config|Server selection timed out/i.test(text)) {
+      console.error(
+        '[mongodb] Could not reach a usable MongoDB. If mongod is running and was recently switched to replSetName without initiating, run ONCE:\n' +
+          `[mongodb]     mongosh --eval 'rs.initiate({_id: "rs0", members: [{_id: 0, host: "127.0.0.1:27017"}]})'`
+      );
+    }
+  }
+};
+
 // THE way to a collection handle: logical name in, current-generation physical
 // collection out. Every read and write in the codebase goes through one of
 // these two (or a named getter below), so nothing can touch a stale generation
 // by accident. getCollection follows the request's ACTIVE endpoint (the open
 // data plane); getHomeCollection is pinned to the home deployment and is what
 // every identity / auth / control-plane getter uses.
-export const getCollection = async (logical: string) =>
-  (await getThingtimeDb()).collection(physicalCollectionName(logical));
-export const getHomeCollection = async (logical: string) =>
-  (await getHomeThingtimeDb()).collection(physicalCollectionName(logical));
+export const getCollection = async (logical: string) => (await getThingtimeDb()).collection(physicalCollectionName(logical));
+export const getHomeCollection = async (logical: string) => (await getHomeThingtimeDb()).collection(physicalCollectionName(logical));
 
 export const getUsersCollection = async () => getHomeCollection('users');
 export const getSessionsCollection = async () => getHomeCollection('sessions');
@@ -302,7 +358,10 @@ const taggedCollection = (collection: any, logical: string) => ({
       return await collection.createIndex(keys, options);
     } catch (err: any) {
       const name =
-        options?.name || Object.entries(keys).map(([field, dir]) => `${field}_${dir}`).join('_');
+				options?.name ||
+				Object.entries(keys)
+					.map(([field, dir]) => `${field}_${dir}`)
+					.join('_');
       if (err && typeof err === 'object') err.indexBeingBuilt = `${logical}.${name}`;
       throw err;
     }
@@ -340,10 +399,7 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
     col.createIndex({ thingtime: 1, 'crystal.username': 1 }),
     // admin roster: a partial index over just the (rare) admin user things,
     // so listAdmins is a few-entry scan, not a full-user-base fetch+filter
-    col.createIndex(
-      { secureAdmin: 1 },
-      { partialFilterExpression: { secureAdmin: true } }
-    ),
+		col.createIndex({ secureAdmin: 1 }, { partialFilterExpression: { secureAdmin: true } }),
     col.createIndex({ kind: 1, visibility: 1, createdAt: -1, shareId: 1 }),
     col.createIndex({ kind: 1, ownerId: 1, createdAt: -1, shareId: 1 }),
     // Admin user/app snapshots filter by thingtime without ownerId, then
@@ -434,23 +490,14 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // pre-unification relational model): aggregation + dedup indexes stay
     // until the things migration converts those docs to thingtime things.
     col.createIndex({ kind: 1, parentId: 1, createdAt: 1 }),
-    col.createIndex(
-      { parentId: 1, ownerId: 1, token: 1 },
-      { unique: true, partialFilterExpression: { kind: 'reaction' } }
-    ),
-    col.createIndex(
-      { commentId: 1 },
-      { unique: true, partialFilterExpression: { kind: 'comment' } }
-    ),
+		col.createIndex({ parentId: 1, ownerId: 1, token: 1 }, { unique: true, partialFilterExpression: { kind: 'reaction' } }),
+		col.createIndex({ commentId: 1 }, { unique: true, partialFilterExpression: { kind: 'comment' } }),
     // Embed apps ("Login with Thingtime", api/utils/apps): one thing per
     // clientId, ever — a second doc claiming an existing clientId (however
     // created) could answer origin lookups with a different allowlist, so
     // uniqueness is structural. Only app things carry crystal.clientId;
     // app-data things reference the app as crystal.appId instead.
-    col.createIndex(
-      { 'crystal.clientId': 1 },
-      { unique: true, partialFilterExpression: { 'crystal.clientId': { $exists: true } } }
-    ),
+		col.createIndex({ 'crystal.clientId': 1 }, { unique: true, partialFilterExpression: { 'crystal.clientId': { $exists: true } } }),
     // Immutable subscription-tier revisions: one (tierId, version) ever,
     // at most one live revision per stable tier id, plus the status/order
     // scan used by the admin Live / Draft / Archived sections.
@@ -509,17 +556,11 @@ const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // carries tt:app/<clientId>, newest first. acl is the only multikey
     // field here (appId/updatedAt/shareId are scalars), so the compound is
     // legal; partial keeps every non-app-data thing out.
-    col.createIndex(
-      { 'crystal.appId': 1, acl: 1, updatedAt: -1, shareId: -1 },
-      { partialFilterExpression: { 'crystal.appId': { $exists: true } } }
-    ),
+		col.createIndex({ 'crystal.appId': 1, acl: 1, updatedAt: -1, shareId: -1 }, { partialFilterExpression: { 'crystal.appId': { $exists: true } } }),
     // Account-ownership links (accounts/accountLinks.ts): "who is linked
     // to this target" — the admin owners view and app co-manager checks.
     // Links a USER holds ride the (thingtime, ownerId) prefix instead.
-    col.createIndex(
-      { 'crystal.targetId': 1, 'crystal.linkKind': 1 },
-      { partialFilterExpression: { 'crystal.targetId': { $exists: true } } }
-    ),
+		col.createIndex({ 'crystal.targetId': 1, 'crystal.linkKind': 1 }, { partialFilterExpression: { 'crystal.targetId': { $exists: true } } }),
     // Sandbox app-data is ephemeral: only docs written under a sandbox
     // token carry sandboxExpiresAt (TTL skips docs without the field), so
     // pretend data reaps itself with the token's lifetime.
@@ -566,8 +607,7 @@ export const ensureIndexes = async () => {
       // failures are tagged with `<logical>.<index name>` (via taggedCollection)
       // because Promise.all surfaces only the first rejection and driver
       // messages don't always name the index being built
-      const col = (logical: string) =>
-        taggedCollection(db.collection(physicalCollectionName(logical)), logical);
+			const col = (logical: string) => taggedCollection(db.collection(physicalCollectionName(logical)), logical);
       await Promise.all([
         col('users').createIndex({ username: 1 }, { unique: true }),
         col('users').createIndex({ email: 1 }, { unique: true }),
@@ -628,6 +668,17 @@ export const ensureIndexes = async () => {
         col('waitlist').createIndex({ email: 1 }, { unique: true }),
         // the shared data-plane (`things`) index set — see createThingsDataIndexes
         ...createThingsDataIndexes(db),
+				// Migration diagnostics exist only on Thingtime's HOME plane. Keep
+				// this live TTL deleter out of createThingsDataIndexes(), which also
+				// installs indexes on user-supplied custom Mongo endpoints.
+				col('things').createIndex(
+					{ expiresAt: 1 },
+					{
+						name: 'migration_diagnostic_expires_at',
+						expireAfterSeconds: 0,
+						partialFilterExpression: { thingtime: MIGRATION_DIAGNOSTIC_THINGTIME }
+					}
+				),
         col('feedAlgorithms').createIndex({ shareId: 1 }, { unique: true }),
         col('feedAlgorithms').createIndex({ ownerId: 1 }),
         // global app settings singletons (rate-limit config lives here)

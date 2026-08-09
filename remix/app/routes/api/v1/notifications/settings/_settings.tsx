@@ -96,17 +96,17 @@ export const action = async ({ request }: { request: Request }) => {
 
   if (pushInput !== undefined) {
     const parsed = parseChannelPatch(pushInput, NOTIFICATION_TYPES, 'push');
-    if (!parsed.ok) return json({ ok: false, error: parsed.error }, { status: 400 });
+    if (parsed.ok === false) return json({ ok: false, error: parsed.error }, { status: 400 });
     Object.assign(patch, parsed.patch);
   }
   if ((input as any).email !== undefined) {
     const parsed = parseChannelPatch((input as any).email, EMAIL_NOTIFICATION_TYPES, 'email');
-    if (!parsed.ok) return json({ ok: false, error: parsed.error }, { status: 400 });
+    if (parsed.ok === false) return json({ ok: false, error: parsed.error }, { status: 400 });
     if (Object.keys(parsed.patch).length) patch.email = parsed.patch;
   }
   if ((input as any).masters !== undefined) {
     const parsed = parseChannelPatch((input as any).masters, MASTER_KEYS, 'masters');
-    if (!parsed.ok) return json({ ok: false, error: parsed.error }, { status: 400 });
+    if (parsed.ok === false) return json({ ok: false, error: parsed.error }, { status: 400 });
     if (Object.keys(parsed.patch).length) patch.masters = parsed.patch;
   }
 

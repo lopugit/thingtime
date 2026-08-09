@@ -93,3 +93,23 @@ notification system emails via the existing AWS SES layer.
   - /tests in-browser battery: **269 passed / 1 failed** — the failure is the known environmental "Current user anonymous" test (browser session logged in), same as the original PR run. All 3 new notification tests PASS.
   - Browser UI (1280 desktop + 375 mobile): settings matrix renders with PUSH|EMAIL column headers, "All notifications" master row, weekly-summary email-only row (— in push column); flipping the email master instantly dims + disables the whole email column (screenshot-verified) and persists (masters.email=false server-side); per-type email flip (post-from-friend) persists + reverts; mobile 375px shows no overflow/misalignment/collisions; unsubscribe confirmation page clean at 375px.
   - Gotchas for future runs: env-admin usernames can't self-register (register first, then restart with ADMIN_USERNAMES); killing vite leaves nitro on :19032 (kill the whole port trio); outbox evidence lives in email_messages_v2 on the LOCALHOST connection line (the other MONGODB_CONNECTION_STRING line is Atlas prod — read-only, never write).
+
+## Develop conflict refresh (2026-08-09)
+
+- Merged current `develop` at `ad797a64bd476bc9e0fdede1b96874a68d0dd4c2`
+  with a merge commit. The one source conflict was a semantic union in
+  `schemas/registry.ts`: retain `develop`'s protected migration-diagnostic
+  schema alongside this PR's protected follow, friend, and notification
+  schemas.
+- Updated `develop`'s newer builtin-schema projection pin for the three social
+  schemas. The focused schema suite now proves all three project and validate
+  through the same schema-thing write gate as every other builtin.
+- Repaired two pre-existing PR typecheck gaps surfaced by current `develop`:
+  notification settings now uses explicit discriminant narrowing, and the API
+  test runner recognizes the social and notifications groups. The typecheck
+  ratchet is green at 138 errors against the 143-error allowance without
+  changing the baseline.
+- Verification: all PR TypeScript files lint with zero errors (nine existing
+  warnings); complete unit suite 226/226; schema suite 28/28; `git diff --check`
+  clean. Graphify was rebuilt from the whole `develop` side and semantically
+  refreshed for the merged documentation.

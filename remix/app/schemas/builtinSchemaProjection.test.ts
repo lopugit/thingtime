@@ -75,6 +75,10 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
 	], // snapshots/overrides: records → dropped
   'app-storage': ['quotaKind', 'appId', 'usedBytes', 'storageAllowanceBytes'],
 	'service-quota': ['quotaKind', 'quotaVersion', 'key', 'dayKey', 'dailyUsed', 'permitIds', 'releasedIds'], // policy + state records → dropped
+	'migration-diagnostic': ['diagnosticVersion', 'migrationId', 'mode', 'status', 'outcome', 'summary', 'capturedAt'],
+  follow: ['follow'],
+  friend: ['status', 'friendKey'],
+  notification: ['type', 'actorId', 'actorName', 'postId', 'preview'],
   'account-link': ['linkKind', 'userId', 'targetId', 'role', 'createdBy'],
   user: ['username', 'ttid', 'displayName', 'bio', 'avatarUrl', 'bannerUrl'],
   theme: ['name'], // theme: record → dropped
@@ -88,7 +92,9 @@ test('the builtin crystal-schema set matches the pinned projection table', () =>
 
 test('registered app control Things are protected from generic Thing CRUD', () => {
 	assert.ok(PROTECTED_THINGTIME.includes('app'));
+	assert.ok(PROTECTED_THINGTIME.includes('migration-diagnostic'));
 	assert.equal(isProtectedThingtime(['app']), true);
+	assert.equal(isProtectedThingtime(['migration-diagnostic']), true);
 	assert.equal(isProtectedThingtime(['data', 'app']), true);
 });
 

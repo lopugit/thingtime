@@ -857,6 +857,49 @@ jobs:
             echo "visited=$visited_next"
           } >> "$GITHUB_OUTPUT"
 
+      # Same reviewer-visibility contract as resolve-pr-conflicts.yml's
+      # "Comment on PR (resolution starting)": once validation commits this
+      # run to the rebase (skip=false, ownership label taken), say so on the
+      # PR before the slow checkouts and replay rounds, so a reviewer opening
+      # the PR mid-rebase is not left guessing. Upserted via hidden marker so
+      # cascades and retries edit one status comment; a comment failure never
+      # blocks the rebase itself.
+      - name: Comment on PR (rebase starting)
+        if: steps.context.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          post_start_comment() {
+            local marker='<!-- thingtime-ai-rebase-start:v1 -->'
+            local started eta body comment_id
+            started="$(date -u '+%H:%M UTC')"
+            eta="$(date -u -d '+15 minutes' '+%H:%M UTC')"
+            body="$RUNNER_TEMP/rebase-start-comment.md"
+            {
+              printf '🤖 **Auto-rebase running** — the stack rebase started working on this PR at %s.\n\n' "$started"
+              printf 'Expected to finish around **%s** (rebases typically land in 5-15 minutes; the job times out at 55). ' "$eta"
+              printf 'On success this branch is force-pushed onto its new base and a result comment follows — no manual action is needed meanwhile.\n\n'
+              printf '[Live status](%s)\n\n%s\n' "$RUN_URL" "$marker"
+            } > "$body"
+            comment_id="$(gh api --paginate "repos/$REPO/issues/$PR_NUMBER/comments?per_page=100" --slurp \
+              | jq -r '
+                  add // []
+                  | [.[]
+                      | select(.user.login == "github-actions[bot]")
+                      | select(.body | contains("thingtime-ai-rebase-start:v1"))
+                      | .id]
+                  | last // empty
+                ')"
+            if [ -n "$comment_id" ]; then
+              gh api --method PATCH "repos/$REPO/issues/comments/$comment_id" -F "body=@$body" >/dev/null
+            else
+              gh api "repos/$REPO/issues/$PR_NUMBER/comments" -F "body=@$body" >/dev/null
+            fi
+          }
+          post_start_comment || echo "::warning::Could not post the rebase-start comment; continuing with the rebase."
+
       - name: Define the isolated real-repository path
         if: steps.context.outputs.skip == 'false'
         shell: bash
