@@ -1,4 +1,4 @@
-const ROLE_ARN_RE = /^arn:aws:iam::(\d{12}):role\/[A-Za-z0-9+=,.@_\/-]{1,512}$/;
+const ROLE_ARN_RE = new RegExp(String.raw`^arn:aws:iam::(\d{12}):role/[A-Za-z0-9+=,.@_/-]{1,512}$`);
 const BUCKET_RE = /^(?!\d{1,3}(?:\.\d{1,3}){3}$)[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])?$/;
 const REGION_RE = /^[a-z]{2}(?:-gov)?-[a-z]+-\d$/;
 
