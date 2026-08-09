@@ -108,9 +108,9 @@ System-kind rules (never bypass):
 
 Data that accumulates on a parent (post **reactions**, post **comments**, and
 post **attachments**) is stored as its OWN atomic `things` doc
-(`kind: 'reaction'`, `kind: 'comment'`, …) and aggregated back on read. The
-ordinary child relation is `parentId`; protected attachment lifecycle records
-bind to the post's `shareId` through their server-only `targetId`. NEVER append
+(`thingtime: ['reaction']`, `thingtime: ['comment']`, …) and aggregated back on
+read. The canonical v2 child relation is root `targetId`, containing the
+parent's stable `shareId`; `parentId` is legacy compatibility only. NEVER append
 accumulating data as an ever-growing array/map field on the parent doc.
 
 Why: an embedded array/map has no natural bound — one actor can grow a single
@@ -121,10 +121,17 @@ index enforces invariants like one-reaction-per-user), and give natural paging.
 
 How (see `api/utils/things/things.ts`):
 
-- Child docs carry `kind` + `parentId` + `ownerId` (+ payload), no `shareId`.
+- Canonical child records are full Things with a stable `shareId`, `ownerId`,
+  their `thingtime` discriminator, server-validated root `targetId`, and payload.
+  Protected attachment binding sets `targetId` server-side. A child without a
+  `shareId`, or any child using `kind`/`parentId` instead of
+  `thingtime`/`targetId`, is legacy compatibility data, not the shape for new
+  writers.
 - Reads **batch-aggregate** children for the whole page in ONE query per kind
-  (`{ kind, parentId: { $in: postIds } }`) — never N+1 — and project the same
-  shape the client already consumes, so the UI is unchanged.
+  (canonical filter: `{ thingtime: <kind>, targetId: { $in: postIds } }`) —
+  never N+1 — while folding legacy `kind`/`parentId` rows through the explicit
+  compatibility path. Project the same shape the client already consumes, so
+  the UI is unchanged.
 - Writes create/delete one child doc; per-parent/per-user caps become soft
   product limits, not structural safety rails.
 - Legacy embedded data folds in on read and migrates to children on first write.

@@ -24,10 +24,10 @@ test('multipart creation omits ACLs and fixes encryption, checksum, metadata, an
 	};
 	const s3 = createPrivateS3(
 		{
-			roleArn: 'arn:aws:iam::232261468846:role/thingtime',
+			roleArn: 'arn:aws:iam::123456789012:role/thingtime',
 			bucket: 'example-private-bucket',
 			region: 'ap-southeast-2',
-			expectedBucketOwner: '232261468846'
+			expectedBucketOwner: '123456789012'
 		},
 		client as any
 	);
@@ -44,7 +44,7 @@ test('multipart creation omits ACLs and fixes encryption, checksum, metadata, an
 	assert.equal(input.ChecksumType, 'COMPOSITE');
 	assert.deepEqual(input.Metadata, { 'attachment-id': 'one' });
 	assert.equal(input.Tagging, 'thingtime-state=pending');
-	assert.equal(input.ExpectedBucketOwner, '232261468846');
+	assert.equal(input.ExpectedBucketOwner, '123456789012');
 });
 
 test('presigned UploadPart binds exact Content-Length and checksum as signed headers', async () => {
@@ -52,10 +52,10 @@ test('presigned UploadPart binds exact Content-Length and checksum as signed hea
 	let options: any;
 	const s3 = createPrivateS3(
 		{
-			roleArn: 'arn:aws:iam::232261468846:role/thingtime',
+			roleArn: 'arn:aws:iam::123456789012:role/thingtime',
 			bucket: 'example-private-bucket',
 			region: 'ap-southeast-2',
-			expectedBucketOwner: '232261468846'
+			expectedBucketOwner: '123456789012'
 		},
 		{} as any,
 		async (_client, inputCommand, inputOptions) => {
@@ -85,10 +85,10 @@ test('presigned UploadPart binds exact Content-Length and checksum as signed hea
 
 test('real presigner emits content-length and checksum in X-Amz-SignedHeaders', async () => {
 	const config = {
-		roleArn: 'arn:aws:iam::232261468846:role/thingtime',
+		roleArn: 'arn:aws:iam::123456789012:role/thingtime',
 		bucket: 'example-private-bucket',
 		region: 'ap-southeast-2',
-		expectedBucketOwner: '232261468846'
+		expectedBucketOwner: '123456789012'
 	};
 	const client = new S3Client({
 		region: config.region,
@@ -132,10 +132,10 @@ test('every post-completion S3 operation targets the exact verified object versi
 	};
 	const s3 = createPrivateS3(
 		{
-			roleArn: 'arn:aws:iam::232261468846:role/thingtime',
+			roleArn: 'arn:aws:iam::123456789012:role/thingtime',
 			bucket: 'example-private-bucket',
 			region: 'ap-southeast-2',
-			expectedBucketOwner: '232261468846'
+			expectedBucketOwner: '123456789012'
 		},
 		client as any,
 		async (_client, command) => {

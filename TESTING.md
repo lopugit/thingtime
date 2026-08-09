@@ -98,6 +98,31 @@ is fixed, and cite the checklist you ran in the PR description.
       horizontal overflow, controls remain at least 44px touchable, keyboard
       users can add/retry/cancel/remove files, and progress/error updates are
       announced without stealing focus.
+- [ ] In the production AWS account, all four account-level and bucket-level
+      Block Public Access switches are on, Object Ownership is Bucket Owner
+      Enforced, versioning is enabled, default encryption is on, and no bucket
+      ACL or public-access policy is present.
+- [ ] The Vercel OIDC role trust policy matches the exact team audience and
+      `owner:<team>:project:<project>:environment:production` subject. A
+      production function can assume it; preview/development tokens cannot.
+- [ ] The attachment role is limited to `objects/*` and the documented seven
+      version-aware multipart/object actions. Confirm `s3:ListBucket`,
+      `s3:DeleteObject`, ACL, and bucket-administration actions are denied.
+- [ ] The bucket policy denies HTTP and TLS below 1.2 for non-service
+      principals. CORS preflight succeeds only for the production origin's
+      `PUT` with `x-amz-checksum-sha256`; a different origin, method, or header
+      is denied, and no response header is unnecessarily exposed.
+- [ ] The enabled `objects/` lifecycle rule aborts incomplete multipart uploads
+      after seven days and permanently expires noncurrent versions after 30
+      days. Account and bucket settings still match after a fresh console load.
+- [ ] Upload a tiny production attachment, record its S3 VersionId and storage
+      usage, then delete its post. That exact version is permanently absent
+      before the Thingtime ledger refunds the bytes; no delete marker or hidden
+      noncurrent copy stands in for deletion.
+- [ ] Call `/api/v1/attachments/cleanup` with no bearer, a Thingtime user token,
+      and an incorrect cron secret: every request fails closed. The exact
+      production `CRON_SECRET` succeeds only through the scheduled cleanup
+      path, and a cleanup retry never exposes the secret or raw S3 errors.
 
 ## Editor windows & layer system (`remix/app/components/Thingtime/EditorSplit.tsx`)
 
