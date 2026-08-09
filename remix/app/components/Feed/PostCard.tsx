@@ -34,6 +34,7 @@ import { useLopu } from '~/components/Lopu/useLopu';
 import { ThingView } from '~/components/Thingtime/ThingView';
 import { EmojiPicker } from '~/components/Emoji/EmojiPicker';
 import { useRecentReactions } from '~/components/Emoji/useRecentReactions';
+import { PostAttachments } from '~/components/Attachments/PostAttachments';
 import { sanitizeReactionToken } from '~/utils/reactionTokens';
 import { RAINBOW } from '~/theme/rainbow';
 import { PostComposer } from './PostComposer';
@@ -376,7 +377,15 @@ const ListingBlock = ({ post, hideImage }: { post: Pick<PublicPost, 'images' | '
 // Body by post type — shared between the main card, nested shares, and
 // comment rows (comments share the post schema, so PostComment fits too).
 type PostBodyShape = Pick<PublicPost, 'type' | 'text' | 'images' | 'listing' | 'thing'>;
-const PostBody = ({ post, compact }: { post: PostBodyShape; compact?: boolean }) => (
+const PostBody = ({
+  post,
+  compact,
+  attachments
+}: {
+  post: PostBodyShape;
+  compact?: boolean;
+  attachments?: PublicPost['attachments'];
+}) => (
   <Flex flexDirection="column" rowGap={compact ? 2 : 3}>
     {post.text && (
       <Text fontSize={compact ? 'sm' : 'md'} color={TEXT} whiteSpace="normal">
@@ -395,6 +404,7 @@ const PostBody = ({ post, compact }: { post: PostBodyShape; compact?: boolean })
       <ImageGrid images={post.images} alt={post.text || 'Thing photo'} />
     )}
     {post.type === 'thingtime' && post.listing && <ListingBlock post={post} hideImage={!!post.images?.length} />}
+    <PostAttachments attachments={attachments} compact={compact} />
   </Flex>
 );
 
@@ -413,7 +423,7 @@ const SharedPostCard = ({ post }: { post: PublicPost }) => (
         <TimestampLink id={post.id} createdAt={post.createdAt} />
       </Box>
     </Flex>
-    <PostBody post={post} compact />
+    <PostBody post={post} compact attachments={post.attachments} />
   </Box>
 );
 
@@ -1484,6 +1494,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
                 {post.text}
               </Text>
             )}
+            <PostAttachments attachments={post.attachments} />
             {post.shareOf ? (
               <SharedPostCard post={post.shareOf} />
             ) : (
@@ -1501,7 +1512,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
             )}
           </Flex>
         ) : (
-          <PostBody post={post} />
+          <PostBody post={post} attachments={post.attachments} />
         )}
 
         {/* action row — icons + counts only (X-style, no labels); the merged

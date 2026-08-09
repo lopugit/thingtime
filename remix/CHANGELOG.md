@@ -17,6 +17,23 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### Added
+
+- **Private S3 post attachments with exact tier accounting**: posts can upload
+  images, video, audio, and generic files directly through checksummed multipart
+  S3 uploads without exposing AWS credentials or public objects. Protected
+  relational attachment Things reserve verified object bytes against the same
+  transactional account storage ledger as Mongo content, stable authorized
+  content routes replace persisted presigned URLs, and unsafe active content is
+  forced to download. S3 VersionIds keep sniff/tag/read/delete pinned to the
+  exact verified object version before quota refund, stable client request ids
+  make ambiguous upload starts idempotent, and an hourly bounded cron safely
+  retries expired or crash-interrupted cleanup behind a lifecycle-backed,
+  two-pass multipart settlement fence. Production uses an exact-subject Vercel
+  OIDC role and server-only `THINGTIME_PRIVATE_*` configuration; comments and
+  messenger/thread surfaces remain intentionally unchanged in this post-only
+  scope. — Codex (AI), 2026-08-09
+
 ### Fixed
 
 - **Conflict resolver no longer mistakes promotion PRs for giant stacks**:

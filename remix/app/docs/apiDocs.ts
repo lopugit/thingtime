@@ -2092,6 +2092,318 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       }
     ]
   }),
+	endpoint({
+		id: 'attachment-uploads',
+		group: 'attachments',
+		title: 'Start attachment upload',
+		endpoint: '/api/v1/attachments/uploads',
+		summary: 'Reserves account storage and starts a private, checksummed S3 multipart upload.',
+		detail:
+			'Creates a billable pending attachment before S3 accepts any bytes, preventing concurrent uploads from oversubscribing the account storage tier. ' +
+			'A client-generated requestId makes ambiguous starts idempotent for the same owner and exact metadata. The server derives an owner-scoped opaque attachment id, so another account using the same requestId neither collides nor learns that it exists. The object key and multipart id remain private. Request presigned URLs in bounded batches from /uploads/parts.',
+		auth: {
+			mode: 'session-or-bearer',
+			description:
+				'Requires a full revocable user session (httpOnly cookie or its Bearer session JWT); PAT, app, and service-account tokens are rejected.'
+		},
+		methods: ['POST'],
+		steps: [
+			'POST a stable random requestId, filename, browser-reported contentType, and exact sizeBytes.',
+			'Split the file using partSizeBytes; the final part may be smaller.',
+			'Compute base64 SHA-256 for each part and request its signed PUT URL.',
+			'Abort unused uploads and honor deferred/retryAt while the conservative storage reservation settles.'
+		],
+		requestExamples: [
+			{
+				name: 'Reserve a video upload',
+				description: 'The MIME value is advisory; final type comes from server-side magic-byte detection.',
+				method: 'POST',
+				body: {
+					requestId: '3bda8208-625c-4f5d-941f-348020021848',
+					filename: 'launch.mp4',
+					contentType: 'video/mp4',
+					sizeBytes: 18874368
+				}
+			}
+		],
+		responseExamples: [
+			{
+				status: 200,
+				description: 'Quota reserved and MPU created.',
+				body: {
+					ok: true,
+					upload: {
+						id: 'att_3f9a7d2c5b1e8046a39f12dc7b5e90186d437be2a059c8f1467e3b9d1c4a502e',
+						partSizeBytes: 8388608,
+						partCount: 3,
+						expiresAt: '2026-08-10T00:00:00.000Z'
+					}
+				}
+			},
+			{ status: 507, description: 'Storage tier allowance exceeded.', body: { ok: false, error: 'This would exceed the account storage allowance' } }
+		],
+		notes: [
+			'The bucket remains private. Browser uploads use short-lived presigned UploadPart URLs, not public object access.',
+			'Private attachments are unavailable while a custom MongoDB data endpoint is active because quota and object ownership stay on Thingtime home storage.'
+		]
+	}),
+	endpoint({
+		id: 'attachment-upload-parts',
+		group: 'attachments',
+		title: 'Sign attachment parts',
+		endpoint: '/api/v1/attachments/uploads/parts',
+		summary: 'Issues checksum-locked presigned UploadPart URLs in bounded batches.',
+		detail:
+			'Each returned URL is short-lived and signs the exact server-derived Content-Length plus x-amz-checksum-sha256 header. The browser uploads the raw slice directly to S3, lets the browser set Content-Length, and must send the returned checksum header unchanged. The server never proxies large file bodies.',
+		auth: {
+			mode: 'session-or-bearer',
+			description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
+		},
+		methods: ['POST'],
+		steps: [
+			'Compute SHA-256 over each raw file slice and base64-encode the 32-byte digest.',
+			'Request at most 20 unique part numbers per call.',
+			'PUT each slice to its URL with only the returned checksum header; use a Blob with an empty MIME type.',
+			'Retry a failed part by requesting a fresh URL before the upload expires.'
+		],
+		requestExamples: [
+			{
+				name: 'Sign two parts',
+				description: 'Checksums are illustrative base64 SHA-256 values.',
+				method: 'POST',
+				body: {
+					uploadId: '3bda8208-625c-4f5d-941f-348020021848',
+					parts: [
+						{ partNumber: 1, checksumSha256: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' },
+						{ partNumber: 2, checksumSha256: 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA=' }
+					]
+				}
+			}
+		],
+		responseExamples: [
+			{
+				status: 200,
+				description: 'Signed part URLs.',
+				body: {
+					ok: true,
+					parts: [
+						{
+							partNumber: 1,
+							url: 'https://example-private-bucket.s3.ap-southeast-2.amazonaws.com/objects/example?...',
+							expiresAt: '2026-08-09T00:10:00.000Z',
+							headers: { 'x-amz-checksum-sha256': 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' }
+						}
+					]
+				}
+			}
+		]
+	}),
+	endpoint({
+		id: 'attachment-upload-complete',
+		group: 'attachments',
+		title: 'Complete attachment upload',
+		endpoint: '/api/v1/attachments/uploads/complete',
+		summary: 'Verifies every S3 part and publishes canonical attachment metadata idempotently.',
+		detail:
+			'The server lists parts itself, requires consecutive numbers, exact expected sizes, ETags, and SHA-256 checksums, then completes and HEAD-verifies the object. ' +
+			'It reads only a small prefix to detect a narrow inline-safe raster/video type. Active and generic formats stay application/octet-stream downloads. Repeating a successful request is safe.',
+		auth: {
+			mode: 'session-or-bearer',
+			description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
+		},
+		methods: ['POST'],
+		steps: [
+			'Wait for every direct S3 PUT to succeed.',
+			'POST the uploadId; do not send browser-trusted ETags or sizes.',
+			'Store the returned canonical {id,name,size,contentType,mediaKind} metadata.',
+			'Pass the attachment id in attachmentIds when creating the post.'
+		],
+		requestExamples: [
+			{
+				name: 'Finalize upload',
+				description: 'The server derives the part manifest from S3.',
+				method: 'POST',
+				body: { uploadId: 'att_3f9a7d2c5b1e8046a39f12dc7b5e90186d437be2a059c8f1467e3b9d1c4a502e' }
+			}
+		],
+		responseExamples: [
+			{
+				status: 200,
+				description: 'Ready attachment metadata.',
+				body: {
+					ok: true,
+					attachment: {
+						id: '3bda8208-625c-4f5d-941f-348020021848',
+						name: 'launch.mp4',
+						size: 18874368,
+						contentType: 'video/mp4',
+						mediaKind: 'video'
+					}
+				}
+			},
+			{
+				status: 409,
+				description: 'Parts are incomplete; the same MPU can be retried.',
+				body: {
+					ok: false,
+					error: 'Upload parts are incomplete',
+					code: 'upload_parts_retryable',
+					retryable: true
+				}
+			}
+		]
+	}),
+	endpoint({
+		id: 'attachment-upload-abort',
+		group: 'attachments',
+		title: 'Cancel attachment upload',
+		endpoint: '/api/v1/attachments/uploads/abort',
+		summary: 'Cancels an unattached upload and safely schedules its reserved-storage refund.',
+		detail:
+			'Aborts any open MPU and deletes a completed draft object before removing the billable source record. Because a signed UploadPart may finish after Abort, an MPU that issued a part URL stays billed through a lifecycle-backed settlement window and two separated empty checks; deferred and retryAt report that honestly. An MPU that never issued a part URL can refund promptly after one empty Abort/ListParts/HEAD verification. Missing uploads are an idempotent success. Attached files must be removed through their post lifecycle.',
+		auth: {
+			mode: 'session-or-bearer',
+			description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
+		},
+		methods: ['POST'],
+		steps: [
+			'POST either the returned upload id or the original requestId when the user removes a draft file or abandons composition; lookup remains owner-scoped.',
+			'Treat ok:true as idempotent.',
+			'When deferred is true, quota remains reserved until the cleanup job passes retryAt and completes its separated verification.'
+		],
+		requestExamples: [
+			{
+				name: 'Cancel draft',
+				description: 'Make object bytes inaccessible before refund.',
+				method: 'POST',
+				body: { uploadId: '3bda8208-625c-4f5d-941f-348020021848' }
+			}
+		],
+		responseExamples: [
+			{
+				status: 200,
+				description: 'Cancellation recorded; quota remains reserved during safe MPU settlement.',
+				body: { ok: true, deferred: true, retryAt: '2026-08-17T00:00:00.000Z' }
+			},
+			{ status: 200, description: 'Already absent or fully refunded.', body: { ok: true, deferred: false } }
+		]
+	}),
+	endpoint({
+		id: 'attachment-delete',
+		group: 'attachments',
+		title: 'Delete attachment',
+		endpoint: '/api/v1/attachments/delete',
+		summary: 'Deletes an owned attachment object before refunding its storage.',
+		detail:
+			'This explicit owner route is idempotent. Completed objects persist their opaque S3 VersionId, and deletion removes that exact version before refunding quota so bucket versioning cannot retain unmetered noncurrent bytes. Post deletion uses the same object-first rule through the Thing cascade.',
+		auth: {
+			mode: 'session-or-bearer',
+			description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
+		},
+		methods: ['POST'],
+		steps: [
+			'POST the canonical attachment id.',
+			'On success, remove it from local draft state.',
+			'Retry a temporary 503; the source row stays charged until S3 deletion succeeds.'
+		],
+		requestExamples: [
+			{
+				name: 'Delete file',
+				description: 'Delete one owned attachment.',
+				method: 'POST',
+				body: { id: '3bda8208-625c-4f5d-941f-348020021848' }
+			}
+		],
+		responseExamples: [{ status: 200, description: 'Attachment absent.', body: { ok: true } }]
+	}),
+	endpoint({
+		id: 'attachment-content',
+		group: 'attachments',
+		title: 'Read attachment content',
+		endpoint: '/api/v1/attachments/content',
+		summary: 'Authorizes a stable same-origin attachment URL and redirects to short-lived private S3 content.',
+		detail:
+			'Owners may read unattached drafts; everyone else must be able to view the target post. The bucket never becomes public. ' +
+			'Only magic-byte-verified AVIF/GIF/JPEG/PNG/WebP and MP4/WebM may render inline. Add download=1 to force attachment/octet-stream for every type.',
+		auth: { mode: 'optional', description: 'Anonymous access works only when the attachment inherits a publicly viewable target post.' },
+		methods: ['GET'],
+		steps: [
+			'GET with id; optionally add download=1.',
+			'Follow the 302 to the short-lived private object URL.',
+			'Use the same stable endpoint again after expiry; never persist the presigned target.',
+			'Treat 404 uniformly for missing and unauthorized attachments.'
+		],
+		requestExamples: [
+			{
+				name: 'Inline-safe content',
+				description: 'Render only if the server-vetted mediaKind is image/video.',
+				method: 'GET',
+				query: { id: '3bda8208-625c-4f5d-941f-348020021848' }
+			},
+			{
+				name: 'Force download',
+				description: 'Download any file as opaque bytes.',
+				method: 'GET',
+				query: { id: '3bda8208-625c-4f5d-941f-348020021848', download: 1 }
+			}
+		],
+		responseExamples: [
+			{
+				status: 302,
+				description: 'Authorized short-lived S3 redirect.',
+				headers: {
+					'Cache-Control': 'private, no-store, max-age=0',
+					Location: 'https://example-private-bucket.s3.ap-southeast-2.amazonaws.com/objects/example?...'
+				}
+			},
+			{ status: 404, description: 'Missing or unauthorized.', body: { ok: false, error: 'Attachment not found' } }
+		]
+	}),
+	endpoint({
+		id: 'attachment-cleanup',
+		group: 'attachments',
+		title: 'Reap expired attachment drafts',
+		endpoint: '/api/v1/attachments/cleanup',
+		summary: 'Internal hourly job that deletes expired private objects before refunding reserved storage.',
+		detail:
+			'Vercel Cron calls this bounded, idempotent GET at minute 17 each hour. It scans at most 1,000 cleanup intents in expiry order with five workers and a 25-second wall-clock budget. Pending multipart cancellations that issued a part URL stay billed through an eight-day lifecycle-backed settlement window, then require two empty Abort/ListParts checks at least one hour apart before HEAD verification, exact-version deletion, and refund. MPUs with no issued part URL can refund after one empty verification. Deleting tombstones remain sweepable even after a post cascade crash. ' +
+			'There is no session, PAT, app-token, or service-account fallback.',
+		auth: {
+			mode: 'bearer',
+			description: 'Requires the exact Vercel cron Authorization header derived from the private CRON_SECRET deployment variable.'
+		},
+		methods: ['GET'],
+		steps: [
+			'Configure CRON_SECRET only in the deployment environment.',
+			'Let the hourly Vercel schedule invoke this endpoint; clients do not call it.',
+			'Monitor failed; a later invocation safely retries rows that remain conservatively charged.'
+		],
+		requestExamples: [
+			{
+				name: 'Scheduled cleanup',
+				description: 'Vercel supplies the private Authorization header automatically.',
+				method: 'GET'
+			}
+		],
+		responseExamples: [
+			{
+				status: 200,
+				description: 'One bounded cleanup pass.',
+				body: {
+					ok: true,
+					scanned: 12,
+					deleted: 9,
+					deferred: 1,
+					skipped: 1,
+					failed: 1,
+					hasMore: false,
+					stoppedForTimeBudget: false
+				}
+			},
+			{ status: 401, description: 'Missing or inexact cron authorization.', body: { ok: false, error: 'Unauthorized' } }
+		],
+		notes: ['No response or log contains the cron secret. Mongo TTL deletion is intentionally disabled.']
+	}),
   endpoint({
     id: 'themes',
     group: 'themes',
@@ -6638,8 +6950,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 			{ status: 401, description: 'No full live account session.', body: { ok: false, error: 'Unauthorized' } },
 			{ status: 401, description: 'Current-password confirmation failed.', body: { ok: false, error: 'Password confirmation failed' } },
 			{ status: 404, description: 'Missing, expired, inaccessible, or unknown reference.', body: { ok: false, error: 'Sensitive value not found' } },
-			{ status: 429, description: 'The fixed confirmation-request ceiling was reached.', body: { ok: false, error: 'Too many reveal confirmation attempts' } },
-			{ status: 503, description: 'The rate limiter, password verifier, or protected reader is temporarily unavailable.', body: { ok: false, error: 'Sensitive reveal is temporarily unavailable' } }
+			{
+				status: 429,
+				description: 'The fixed confirmation-request ceiling was reached.',
+				body: { ok: false, error: 'Too many reveal confirmation attempts' }
+			},
+			{
+				status: 503,
+				description: 'The rate limiter, password verifier, or protected reader is temporarily unavailable.',
+				body: { ok: false, error: 'Sensitive reveal is temporarily unavailable' }
+			}
 		],
 		notes: [
 			'Content-Type must be application/json. Browser requests with a cross-origin Origin header are rejected.',
