@@ -37,4 +37,3 @@ the regression was not caused by object hydration or a Git-version change.
 - Graphify semantic refresh and multigraph diagnosis with no missing,
   dangling, self-loop, duplicate, or collapsed edges.
 - Independent code review found no P0, P1, or P2 issue.
-
