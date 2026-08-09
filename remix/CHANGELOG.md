@@ -19,6 +19,78 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **The complete Actions control plane is ready for atomic promotion to
+  `main`**: the mutually dependent workflow fixes from source PRs #192, #193,
+  #194, #190, #199, #206, #207, and #208 are replayed together so the default
+  branch never runs an obsolete intermediate resolver, rebaser, or feature
+  promoter revision. The seven action workflow/script files exactly match the
+  current `develop` versions. See the
+  [PR #210 engineering note](../PRs/210-promote-actions-control-plane-rollup.md).
+  — Codex (AI), 2026-08-09
+- **Promotion self-test and empty-pick handling are runner-safe**: the
+  per-feature promoter's orphaned-history fixture now configures its own Git
+  author identity instead of depending on runner account defaults. Failed
+  cherry-picks are classified from sequencer and index state rather than broad
+  error-message words, so an operational failure such as `empty ident name`
+  is aborted and reported instead of being mistaken for an empty patch and
+  silently skipped. A genuine already-applied cherry-pick still advances the
+  sequencer safely. See the
+  [PR #207 engineering note](../PRs/207-codex-fix-promoter-empty-pick-detection-distinguish-empty-promotion-cherry-picks-safely.md).
+  — Codex (AI), 2026-08-09
+- **Automatic rebasing is now restricted to genuine PR stacks**: the stack
+  detector still identifies a member only when its base targets another open
+  PR head or another open PR targets its head, but automatic scans no longer
+  override that topology for standalone PRs whose combined diff merges cleanly
+  while individual commits are not replayable. Those standalone branches are
+  left untouched instead of being force-rebased or ping-ponging after a merge
+  resolver update. Shared topology and ownership expressions are rechecked at
+  detection, worker validation, post-replay validation, pre-push validation,
+  and failure cleanup; an inline truth-table regression guard covers
+  standalone, stack, opt-out, and explicit exact-PR retry cases. — Codex (AI),
+  2026-08-09
+- **Per-feature promotion survives rewritten historical merge commits and
+  isolated failures**: the `develop` → `main` promoter now verifies every
+  source merge object, fetches unreachable historical merges by exact SHA,
+  distinguishes a normal non-ancestor result from a Git inspection error, and
+  requires original ancestry or both patch-equivalent history and current-tip
+  effect verification before an old change may be promoted. Later reverts and
+  removed aggregate ranges fail closed instead of being resurrected. It
+  records structured per-PR blocks instead of aborting the batch. A failed
+  standalone feature no longer prevents later independent promotions; a
+  failed stack member still defers only its dependent members. Group-local
+  exceptions are contained through the remaining groups before failing the
+  run, the partial summary is always published, reused promotion branches are
+  freshly fetched and checked against an exactly reconstructed source tree and
+  expected PR base before stacking, every external OPEN link is validated back
+  to `main`, every genuinely earlier CLOSED predecessor is checked, and
+  `MAX_NEW_PRS` applies to branch reuse too. A local-Git regression test
+  reproduces the force-rewritten-history failure before proving full-parent
+  recovery. Promotion-marker lookup also scans up to 1,000 PRs so older records
+  remain idempotent as the repository grows. See the
+  [PR #206 engineering note](../PRs/206-codex-harden-feature-promoter-keep-feature-promotion-running-across-historical-git-failures.md).
+  — Codex (AI), 2026-08-09
+- **Conflict resolution now uses a fixed `develop` control plane**: every
+  external event and human manual run is detector-only, then dispatches each
+  selected PR number to the resolver workflow revision on `develop`; only a
+  validated bot-originated internal handoff on that ref may load the model or
+  resolve. Manual selection now accepts an exact PR number or a PR base/head,
+  fails visibly when nothing open matches, reports when no merge worker is
+  needed, and carries explicit retry intent through the trusted hop. Direct
+  stack cascades use the same per-PR Actions dispatch instead of loading
+  secret-bearing resolver YAML from the repository default branch. This closes
+  the recurring `develop`-target/default-`main` workflow split once promoted;
+  the older workflow already on `main` remains a one-time bootstrap limitation
+  until this revision reaches it. See the
+  [PR #190 repair note](../PRs/190-claude-github-action-pr-promotion-c65173-per-feature-develop-main-promotion-prs-with-stacks.md).
+  — Codex (AI), 2026-08-09
+- **Conflict resolver no longer mistakes promotion PRs for giant stacks**:
+  `no-ai-rebase` PRs now break stack-topology edges, so the standing
+  `develop` → `main` promotion PR cannot divert every feature PR targeting
+  `develop` away from merge-based conflict resolution. The rebase detector's
+  bottom-up ordering also loads repository-wide JSON from `RUNNER_TEMP`
+  instead of command-line `--argjson` values, preventing the observed
+  `jq: Argument list too long` detector crash as the open-PR graph grows. —
+  Codex (AI), 2026-08-09
 - **Password-confirmed reveal for protected Thing diagnostics**: new migration
   diagnostics use a backward-compatible v2 secure envelope that keeps a bounded
   set of MongoDB ObjectIds supplied by explicitly authored server-side error
@@ -65,6 +137,25 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   predicate (MongoDB code 224); it upserts by the deterministic reserved
   `shareId` and still validates the complete protected envelope before trusting
   either a new or existing ledger. — Codex (AI), 2026-08-08
+- **Conflict detection waits out GitHub and says so when it stands aside**:
+  the merge resolver's detector polled mergeability for only ~80 seconds
+  after a base push, but GitHub's verdicts can take ~6 minutes to settle —
+  observed on PR #190, where the develop push that created the conflict ran
+  detection while the PR still read UNKNOWN, so nothing was handed off, no
+  comment appeared, and the conflict sat silent until the scheduled sweep.
+  Detection now re-queries until every scanned PR has a verdict or a time
+  budget runs out (`MERGEABLE_POLL_SECONDS`, default 500s, with
+  `MERGEABLE_POLL_INTERVAL` between re-queries; detect timeout raised to 15
+  minutes), and the detect job now upserts a status comment on any PR it must
+  leave alone — conflicting fork PRs it cannot push to, and PRs whose
+  mergeability never settled — so detector silence always means "nothing
+  needed doing", never "nobody looked". Conflicts that are handed off keep
+  announcing themselves through the existing "Auto-resolve running" comment;
+  the rebase workflow already polls its verdicts round-robin and is
+  unchanged. Also restored the "AI PR and stack rebase conflict resolution"
+  changelog bullet's opening line, dropped by the AI resolution of a previous
+  merge. — Claude (AI), 2026-08-08
+
 - **`withMongoTransaction` ReferenceError + Web CI transaction support**: the
   AI-resolved merge that landed on main via PR #158 left `withMongoTransaction`
   calling the removed `getClientCached()`, 500-ing every transactional write
@@ -107,6 +198,51 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   one-time initiate). — Claude (AI), 2026-08-08
 
 ### Added
+
+- **Promotion PR rebase protection (`no-ai-rebase`)**: the promotion workflow
+  now creates the standing develop → main PR with — and re-applies on every
+  develop push — the `no-ai-rebase` label (env `PROMOTION_PR_LABELS`, creating
+  the repo label if missing; the AI workflows honored it but nothing had ever
+  created it). The AI rebase workflow skips labeled PRs, so develop — an
+  integration branch whose history IS its merge commits — is never flattened
+  again (the 2026-08-08 develop rebase destroyed merge-subject and SHA↔PR
+  attribution, the changelog's primary signals). The merge-based conflict
+  resolver explicitly keeps ownership of `no-ai-rebase` PRs and levels
+  develop with main via history-preserving merge commits, the repo's house
+  style. Label state is read via REST (search-backed listings lag) and stray
+  removals self-heal on the next develop push. — Claude (AI), 2026-08-08
+- **Promotion PR changelog**: the **Promote develop to main** workflow now
+  maintains an at-a-glance changelog on the standing promotion PR. A new
+  `.github/scripts/promotion-pr-changelog.mjs` resolves the first-parent spine
+  of `main..develop` to the merged develop-based PRs it carries (merge/squash
+  subjects, then content matching against recently merged PRs — merge SHA, PR
+  title, and the PRs' own commit subjects, which survives AI rebases of
+  develop — then the commit-association API), rewrites a marker-delimited
+  section of the PR description with a PR table (title, author, source branch,
+  merge date), `no-promote` label warnings re-verified via REST, and collapsed
+  direct commits, and posts short delta comments when PRs enter or leave the
+  promotion window. State is derived from the PR body itself; re-runs on the
+  same develop SHA are byte-identical no-ops. Supports `DRY_RUN=1` and
+  `--self-test`. — Claude (AI), 2026-08-08
+
+- **Per-feature develop → main promotion PRs (with stacks)**: a new **Promote
+  features to main** workflow (`promote-features-to-main.yml`) joins the
+  standing all-or-nothing **Promote develop to main** omnibus PR (#186) as a
+  granular release train. It scans PRs merged into `develop`, cherry-picks
+  each unshipped one onto its own `promote/pr-<n>-<slug>` branch cut from
+  `main`, and opens a per-feature promotion PR for release review; PRs sharing
+  a feature group (`Promotion-Group:` body line, `stack:`/`group:`/`feature:`
+  label, `feature/<key>/...` branch, or `feat(<key>):` title scope) become a
+  stacked chain in merge order, with automatic retargeting as earlier members
+  merge. The two trains coexist: merge individual promotion PRs for granular
+  review, or merge the omnibus PR when everything on develop is mergeable —
+  promotion PRs whose diff becomes empty afterwards are closed automatically
+  as redundant (branches deleted once nothing stacks on them). `no-promote`
+  skips a source PR; closing a promotion PR rejects that change for `main`
+  permanently; cherry-pick conflicts stop the affected group and the job
+  summary prints exact manual-promotion commands. Runs on pushes to `develop`,
+  a 6-hourly schedule, and manual dispatch with a dry-run mode.
+  — Claude (AI), 2026-08-08
 
 - **AI PR and stack rebase conflict resolution**: a separate **Rebase PRs and
   stacks (AI)** workflow evaluates every same-repository PR regardless of base

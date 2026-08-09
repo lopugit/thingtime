@@ -12,12 +12,14 @@
 #
 # TRIGGER SHAPE (load-bearing): claude-code-action@v1 rejects the `push` event
 # ("Unsupported event type: push"), so a push-triggered run can only DETECT and
-# then hand off — the `handoff` job fires a repository_dispatch, and that run
-# (a supported event) performs the resolution. Do not move the resolve job back
-# onto `push`; the AI step fails there every time, after the merge has already
-# been computed. pull_request_target runs take the same handoff hop — the
-# action rejects that event too, and PR code must never run in target
-# context anyway. Conflicting same-repo PRs get the base
+# then hand off — the `handoff` job dispatches one exact PR selection to this
+# workflow at the repo-designated `develop` control-plane ref. That internal
+# workflow_dispatch (a supported event) performs the resolution. Do not move the
+# resolve job back onto `push`; the AI step fails there every time, after the
+# merge has already been computed. pull_request_target and legacy
+# repository_dispatch runs take the same detector-only handoff hop — the action
+# rejects target-context events too, and PR code must never run there anyway.
+# Conflicting same-repo PRs get the base
 # branch merged into their head, with Claude resolving the conflicted files,
 # and the merge commit pushed back to the PR branch.
 #
@@ -79,13 +81,15 @@
 #   safely push to them, and running the model when publication is forbidden
 #   would expose content to secrets and spend AI budget for no useful result.
 # - GITHUB_TOKEN pushes don't retrigger `push` workflows (no self-loops);
-#   stacked PRs are cascaded via repository_dispatch (always creates runs,
-#   needs only contents:write), with a depth cap as a loop guard.
+#   direct stacked children are dispatched individually to the fixed `develop`
+#   control plane, with a depth cap as a loop guard. No secret-bearing resolver
+#   YAML is loaded from an arbitrary PR base or head ref.
 # - An unchanged, still-eligible PR is labelled ai-merge-paused after a failed
 #   run, so the global sweep cannot spend AI budget every 30 minutes forever.
 #   The pause is bound to one strict bot-authored owner/ref/SHA/topology marker;
-#   changed snapshots recover automatically, while a base-scoped manual
-#   dispatch deliberately clears and retries an unchanged hold.
+#   changed snapshots recover automatically, while an explicit human PR/base/
+#   head selector carries a manual-retry intent through the trusted handoff and
+#   deliberately clears and retries an unchanged hold.
 #
 # graphify-out/** is never given to the AI. The repo's merge driver for
 # graph.json is not configured in CI, so git would silently text-merge it into
@@ -121,7 +125,25 @@
 name: Resolve PR conflicts (AI)
 
 run-name: >-
-  Resolve PR conflicts under ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.branch == '')) && 'all open PRs' || github.event.client_payload.branch || inputs.branch || github.event.pull_request.base.ref || github.ref_name }}
+  ${{ github.event_name == 'workflow_dispatch'
+      && inputs.detector_handoff == true
+      && github.actor == 'github-actions[bot]'
+      && github.ref_name == 'develop'
+      && inputs.pr_number != ''
+      && inputs.branch == ''
+      && format('Resolve PR #{0} from develop control plane', inputs.pr_number)
+      || github.event_name == 'workflow_dispatch' && inputs.pr_number != ''
+      && format('Detect conflicts for PR #{0}', inputs.pr_number)
+      || github.event_name == 'workflow_dispatch' && inputs.branch != ''
+      && format('Detect conflicts matching PR base/head {0}', inputs.branch)
+      || (github.event_name == 'schedule'
+          || (github.event_name == 'workflow_dispatch'
+              && inputs.pr_number == '' && inputs.branch == ''))
+      && 'Detect conflicts across all open PRs'
+      || format('Detect conflicts under {0}',
+          github.event.client_payload.branch
+          || github.event.pull_request.base.ref
+          || github.ref_name) }}
 
 on:
   push:
@@ -137,8 +159,9 @@ on:
   # catch. pull_request_target fires from the base-branch context regardless
   # of mergeability. SECURITY: target-context runs never check out or execute
   # PR code here — the detect job is API-only, the resolve job is excluded
-  # for this event, and resolution happens in the repository_dispatch
-  # re-entry, the same hop every push takes.
+  # for this event, and resolution happens only after an exact-PR selection is
+  # handed off to the fixed `develop` workflow revision, the same hop every
+  # detector takes.
   # Deliberately NOT `synchronize`: that fires on every push to a PR head,
   # including this workflow's own resolution pushes. Head pushes are covered
   # by the plain `push` trigger instead — its detect run also scans the PR
@@ -154,11 +177,26 @@ on:
     - cron: "2,32 * * * *"
   workflow_dispatch:
     inputs:
-      branch:
-        description: "Base branch to scan; leave blank to scan every open PR"
+      pr_number:
+        description: "Exact PR to scan (takes precedence over branch); leave blank for a branch/all scan"
         required: false
         default: ""
         type: string
+      branch:
+        description: "PR base or head branch to scan; leave blank with no PR number to scan all"
+        required: false
+        default: ""
+        type: string
+      detector_handoff:
+        description: "Internal: exact-PR handoff to the develop resolver control plane (leave false)"
+        required: false
+        default: false
+        type: boolean
+      manual_retry:
+        description: "Internal: carry a human explicit-selector retry through the trusted handoff"
+        required: false
+        default: false
+        type: boolean
       depth:
         description: "Internal: stacked-PR cascade depth (leave at 0)"
         required: false
@@ -167,34 +205,46 @@ on:
   repository_dispatch:
     types: [resolve-conflicts-cascade]
 
-# One run per base branch; a newer push supersedes an in-flight resolution
-# (the push is atomic, so cancelling mid-run never half-publishes anything).
+# Detector runs are disposable; internal per-PR workers are not. A detector and
+# the worker it spawns must never share a cancellation namespace.
 concurrency:
-  # Three distinct namespaces, because they must NOT cancel each other:
-  #   detect-<branch>  a push run (detect + handoff only)
-  #   pr<N>            a pull_request_target run (detect + handoff), per PR
-  #   base-<branch>    an actual resolution sweep (dispatch / workflow_dispatch)
-  #   all-open         a scheduled or blank-manual repository-wide detector
-  # Critically, a push run and the dispatch it spawns previously shared a group,
-  # so the child cancelled its own parent mid-handoff — observed as
-  # "handoff: cancelled". It happened to work only because the dispatch API call
-  # had already returned; had cancellation landed first the handoff would have
-  # been lost with no error, i.e. a silent, timing-dependent no-op.
+  # Distinct namespaces are load-bearing:
+  #   resolve-detect-*   external/event/API-only detectors
+  #   resolve-pr<N>      one internal develop-control-plane worker per PR
+  # A human exact-PR detector therefore cannot cancel the worker it creates.
   group: >-
-    ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.branch == ''))
-        && 'resolve-all-open'
+    ${{ github.event_name == 'workflow_dispatch'
+        && inputs.detector_handoff == true
+        && github.actor == 'github-actions[bot]'
+        && github.ref_name == 'develop'
+        && inputs.pr_number != ''
+        && inputs.branch == ''
+        && format('resolve-pr{0}', inputs.pr_number)
+        || github.event_name == 'workflow_dispatch' && inputs.pr_number != ''
+        && format('resolve-detect-pr{0}', inputs.pr_number)
+        || github.event_name == 'workflow_dispatch' && inputs.branch != ''
+        && format('resolve-detect-selector-{0}', inputs.branch)
+        || (github.event_name == 'schedule'
+            || github.event_name == 'workflow_dispatch')
+        && 'resolve-detect-all-open'
         || github.event_name == 'push'
         && format('resolve-detect-{0}', github.ref_name)
-        || (github.event.pull_request.number && format('resolve-pr{0}', github.event.pull_request.number))
-        || format('resolve-base-{0}', github.event.client_payload.branch || inputs.branch || github.ref_name) }}
-  # Detectors are disposable and may collapse into the newest scan. A real
-  # resolution run must finish or fail coherently; never cancel one halfway
-  # through a merge merely because another detector found the same base.
+        || (github.event.pull_request.number
+            && format('resolve-detect-pr{0}', github.event.pull_request.number))
+        || github.event_name == 'repository_dispatch'
+        && format('resolve-detect-legacy-{0}',
+             github.event.client_payload.branch || github.run_id)
+        || format('resolve-detect-{0}-{1}',
+             github.event_name, github.ref_name || github.run_id) }}
+  # Every external detector is safe to supersede. A validated internal worker
+  # must finish or fail coherently; never cancel it halfway through a merge.
   cancel-in-progress: >-
-    ${{ github.event_name == 'push'
-        || github.event_name == 'pull_request_target'
-        || github.event_name == 'schedule'
-        || (github.event_name == 'workflow_dispatch' && inputs.branch == '') }}
+    ${{ github.event_name != 'workflow_dispatch'
+        || inputs.detector_handoff != true
+        || github.actor != 'github-actions[bot]'
+        || github.ref_name != 'develop'
+        || inputs.pr_number == ''
+        || inputs.branch != '' }}
 
 permissions:
   contents: read
@@ -205,10 +255,17 @@ jobs:
     # Branch deletions also fire `push`; there is nothing to scan then.
     if: github.event_name != 'push' || github.event.deleted == false
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # Mergeability polling alone may legitimately spend MERGEABLE_POLL_SECONDS
+    # (~8 minutes) before classification starts; keep headroom for sweeps.
+    timeout-minutes: 15
     permissions:
       contents: read
-      pull-requests: read
+      # Still an API-only detector: nothing is checked out and no code from
+      # scanned PRs runs here. Write access exists solely to upsert the
+      # detect-status comment on PRs the detector must leave alone (fork
+      # conflicts, verdicts that never settle) so silence is never ambiguous.
+      pull-requests: write
+      issues: write
     outputs:
       prs: ${{ steps.scan.outputs.prs }}
       any: ${{ steps.scan.outputs.any }}
@@ -218,32 +275,103 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_REF: ${{ github.ref_name }}
+          EVENT_ACTOR: ${{ github.actor }}
           TARGET: ${{ github.event.client_payload.branch || inputs.branch || github.event.pull_request.base.ref || github.ref_name }}
+          SELECTED_PR: ${{ inputs.pr_number }}
+          INPUT_BRANCH: ${{ inputs.branch }}
+          DEPTH: ${{ github.event.client_payload.depth || inputs.depth || '0' }}
+          DETECTOR_HANDOFF: ${{ inputs.detector_handoff && 'true' || 'false' }}
+          ROUTED_MANUAL_RETRY: ${{ inputs.manual_retry && 'true' || 'false' }}
           # Set only on pull_request_target events: narrows the scan to the
           # triggering PR instead of every PR sharing its base. TARGET reads
           # base.ref from the PR record rather than event ref context, which
           # stays correct regardless of which ref the event ran from.
           ONLY_PR: ${{ github.event.pull_request.number }}
-          # Push runs only: also scan the open PR FROM the pushed branch. A
-          # head push can CREATE a conflict (`synchronize` is deliberately
-          # not a trigger, and the next base push may be days away — observed
-          # on PR #173, which made itself conflicted and sat unresolved).
+          # Pushes and explicit human branch selectors match either PR base or
+          # PR head. A head push can CREATE a conflict (`synchronize` is
+          # deliberately not a trigger, and the next base push may be days
+          # away — observed on PR #173, which made itself conflicted and sat
+          # unresolved). The exact PR-number selector takes precedence below.
           # Costs nothing: this run exists for every push anyway. Cannot
           # loop: the resolver's own resolution push makes its PR mergeable,
           # so that push's detect run finds nothing to do.
-          SCAN_HEAD: ${{ github.event_name == 'push' }}
-          # Scheduled sweeps and blank manual runs cover every open PR,
-          # regardless of base branch. Stack members remain excluded below so
-          # the rebase resolver can own their history without a race.
+          SCAN_HEAD: >-
+            ${{ github.event_name == 'push'
+                || (github.event_name == 'workflow_dispatch'
+                    && inputs.detector_handoff != true
+                    && inputs.pr_number == ''
+                    && inputs.branch != '') }}
+          # Scheduled sweeps and external blank manual runs cover every open PR.
+          # Internal workers always carry an exact PR number and never scan all.
           SCAN_ALL: >-
             ${{ github.event_name == 'schedule'
-                || (github.event_name == 'workflow_dispatch' && inputs.branch == '') }}
-          # A named-base manual run is the deliberate recovery path for
-          # ai-merge-paused PRs. Event-driven and blank/global scans abstain.
+                || (github.event_name == 'workflow_dispatch'
+                    && inputs.detector_handoff != true
+                    && inputs.pr_number == ''
+                    && inputs.branch == '') }}
+          HUMAN_EXPLICIT: >-
+            ${{ github.event_name == 'workflow_dispatch'
+                && inputs.detector_handoff != true
+                && (inputs.pr_number != '' || inputs.branch != '') }}
+          # An explicit human PR/base/head detector is the deliberate recovery
+          # path for ai-merge-paused PRs. The detector passes that intent to the
+          # internal worker; ordinary events and machine handoffs never invent it.
           MANUAL_RETRY: >-
-            ${{ github.event_name == 'workflow_dispatch' && inputs.branch != '' }}
+            ${{ github.event_name == 'workflow_dispatch'
+                && ((inputs.detector_handoff == true
+                     && inputs.manual_retry == true)
+                    || (inputs.detector_handoff != true
+                        && (inputs.pr_number != '' || inputs.branch != ''))) }}
+          # GitHub computes a PR's mergeability lazily after its base moves,
+          # and verdicts can take several minutes to settle on a busy base
+          # (observed ~6 minutes on PR #190, where the old 80-second poll gave
+          # up and the conflict sat undetected until the scheduled sweep).
+          # Total time budget for verdicts, and the pause between re-queries.
+          MERGEABLE_POLL_SECONDS: "500"
+          MERGEABLE_POLL_INTERVAL: "15"
         run: |
           set -euo pipefail
+
+          case "$DEPTH" in
+            ''|*[!0-9]*)
+              echo "::error::depth must be a decimal integer from 0 through 3."
+              exit 1
+              ;;
+          esac
+          if [ "$DEPTH" -gt 3 ]; then
+            echo "::error::depth must not exceed the cascade cap of 3."
+            exit 1
+          fi
+          if [ -n "$SELECTED_PR" ]; then
+            if ! [[ "$SELECTED_PR" =~ ^[1-9][0-9]*$ ]]; then
+              echo "::error::pr_number must be a positive decimal PR number."
+              exit 1
+            fi
+          fi
+          if [ "$ROUTED_MANUAL_RETRY" = true ]; then
+            if [ "$DETECTOR_HANDOFF" != true ]; then
+              echo "::error::manual_retry is internal routing state and requires detector_handoff."
+              exit 1
+            fi
+          fi
+          if [ "$DETECTOR_HANDOFF" = true ]; then
+            # detector_handoff/manual_retry are routing metadata, not authority.
+            # Fixed develop YAML plus exact live PR/ref revalidation are the
+            # substantive controls; the bot actor check is provenance
+            # defense-in-depth and still permits re-runs of bot-originated work.
+            invalid_handoff=false
+            [ "$EVENT_NAME" = workflow_dispatch ] || invalid_handoff=true
+            [ "$EVENT_REF" = develop ] || invalid_handoff=true
+            [ "$EVENT_ACTOR" = "github-actions[bot]" ] || invalid_handoff=true
+            [ -n "$SELECTED_PR" ] || invalid_handoff=true
+            [ -z "$INPUT_BRANCH" ] || invalid_handoff=true
+            if [ "$invalid_handoff" = true ]; then
+              echo "::error::Invalid internal resolver handoff: require bot-authored workflow_dispatch on develop with a positive pr_number and empty branch."
+              exit 1
+            fi
+          fi
 
           encode_ref() {
             jq -rn --arg value "$1" '$value | @uri'
@@ -261,6 +389,39 @@ jobs:
               *) return 1 ;;
             esac
             printf '%s' "$value" | base64 --decode
+          }
+
+          # Detection visibility: reviewers otherwise see only GitHub's
+          # conflict banner plus this workflow's always-skipped push-run check
+          # stubs, so a detector that stands aside must say so ON the PR.
+          # Upserted via hidden marker: repeat runs edit one status comment
+          # instead of stacking new ones, and a comment failure never blocks
+          # detection. Handed-off conflicts announce themselves through the
+          # resolve job's "Auto-resolve running" comment instead.
+          upsert_detect_comment() {
+            local number="$1" text="$2"
+            local marker='<!-- thingtime-merge-detect-status:v1 -->'
+            local body comment_id
+            body="$RUNNER_TEMP/detect-status-$number.md"
+            {
+              printf '%s\n\n' "$text"
+              printf '_Posted by the conflict detector at %s; this notice is edited in place on re-checks._\n\n%s\n' \
+                "$(date -u '+%H:%M UTC, %Y-%m-%d')" "$marker"
+            } > "$body"
+            comment_id="$(gh api --paginate "repos/$REPO/issues/$number/comments?per_page=100" --slurp \
+              | jq -r '
+                  add // []
+                  | [.[]
+                      | select(.user.login == "github-actions[bot]")
+                      | select(.body | contains("thingtime-merge-detect-status:v1"))
+                      | .id]
+                  | last // empty
+                ')"
+            if [ -n "$comment_id" ]; then
+              gh api --method PATCH "repos/$REPO/issues/comments/$comment_id" -F "body=@$body" >/dev/null
+            else
+              gh api "repos/$REPO/issues/$number/comments" -F "body=@$body" >/dev/null
+            fi
           }
 
           all_open_prs() {
@@ -301,6 +462,10 @@ jobs:
           query() {
             local open
             open="$(all_open_prs)"
+            if [ -n "$SELECTED_PR" ]; then
+              jq -c --argjson number "$SELECTED_PR" '[.[] | select(.number == $number)]' <<<"$open"
+              return
+            fi
             if [ "$SCAN_ALL" = "true" ]; then
               printf '%s\n' "$open"
               return
@@ -317,17 +482,52 @@ jobs:
 
           # GitHub computes mergeability lazily after a base push; poll until
           # every PR has a verdict (querying is itself what triggers compute).
+          # Verdicts routinely take minutes to settle after a busy base push —
+          # the old fixed eight-attempt/80-second loop gave up too early
+          # (observed on PR #190) — so the wait is a time budget that exits
+          # the moment every scanned PR has a verdict.
           prs="$(query)"
-          for attempt in 1 2 3 4 5 6 7 8; do
+          if [ "$HUMAN_EXPLICIT" = true ]; then
+            if [ "$(jq 'length' <<<"$prs")" -eq 0 ]; then
+              if [ -n "$SELECTED_PR" ]; then
+                selector="PR #$SELECTED_PR"
+                guidance="Enter an open PR number, or clear it and enter that PR's exact base/head branch."
+              else
+                selector="branch $TARGET"
+                guidance="Enter an exact open PR base or head branch, or leave branch blank to scan every open PR."
+              fi
+              echo "::error::No open PR matched the manual selector: $selector. $guidance"
+              {
+                echo "## No open PR matched the manual selector"
+                echo
+                printf -- '- Selector: `%s`\n' "$selector"
+                printf -- '- %s\n' "$guidance"
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
+          fi
+          poll_started="$SECONDS"
+          attempt=0
+          while :; do
             unknown="$(jq '[.[] | select(.mergeable == "UNKNOWN")] | length' <<<"$prs")"
             [ "$unknown" -eq 0 ] && break
-            echo "attempt $attempt: $unknown PR(s) still computing mergeability; retrying..."
-            sleep 10
+            elapsed="$(( SECONDS - poll_started ))"
+            if [ "$elapsed" -ge "$MERGEABLE_POLL_SECONDS" ]; then
+              echo "$unknown PR(s) still lack a mergeability verdict after ${elapsed}s; deferring them to the next event or scheduled sweep."
+              break
+            fi
+            attempt="$(( attempt + 1 ))"
+            echo "attempt $attempt (${elapsed}s elapsed): $unknown PR(s) still computing mergeability; retrying in ${MERGEABLE_POLL_INTERVAL}s..."
+            sleep "$MERGEABLE_POLL_INTERVAL"
             prs="$(query)"
           done
 
           if [ "$SCAN_ALL" = "true" ]; then
             echo "Open PRs in repository-wide scan:"
+          elif [ -n "$SELECTED_PR" ]; then
+            echo "Open PR selected exactly as #$SELECTED_PR:"
+          elif [ "$SCAN_HEAD" = "true" ]; then
+            echo "Open PRs whose base or head matches $TARGET:"
           else
             echo "Open PRs based on $TARGET:"
           fi
@@ -336,6 +536,10 @@ jobs:
           # Resolver ownership must not depend on which detector wins a race.
           # Build the full open same-repo PR graph so stack members go to the
           # rebase workflow before either workflow has had time to add labels.
+          # A no-ai-rebase PR is a topology boundary as well as an opt-out:
+          # long-lived integration branches use that label on their promotion
+          # PR, and must not make every feature PR targeting the integration
+          # branch look like one enormous stack.
           all_open="$(all_open_prs)"
 
           # A pause belongs to one exact failed snapshot, recorded in a strict
@@ -359,6 +563,7 @@ jobs:
               any(.[];
                 .number != $n
                 and (.isCrossRepository | not)
+                and ([.labels[].name] | index("no-ai-rebase") == null)
                 and (.headRefName == $base or .baseRefName == $head))
             ' <<<"$all_open")"
             no_ai="$(jq -r '[.labels[].name] | index("no-ai-rebase") != null' <<<"$paused_pr")"
@@ -397,7 +602,7 @@ jobs:
                 ' <<<"$decoded" 2>/dev/null || true)"
             fi
             if [ -z "$payload" ]; then
-              echo "::notice::#$number remains ai-merge-paused: exact bot snapshot metadata is unavailable; use a named-base manual retry."
+              echo "::notice::#$number remains ai-merge-paused: exact bot snapshot metadata is unavailable; use an explicit PR/base/head manual retry."
               continue
             fi
 
@@ -422,11 +627,20 @@ jobs:
 
           skipped="$(jq -r '[.[] | select(.isCrossRepository) | select(.mergeable == "CONFLICTING") | .number] | join(", ")' <<<"$prs")"
           [ -n "$skipped" ] && echo "::warning::Skipping conflicting fork PR(s) #$skipped — cannot push to fork branches."
+          while IFS= read -r encoded; do
+            [ -n "$encoded" ] || continue
+            fork_pr="$(base64 --decode <<<"$encoded")"
+            fork_number="$(jq -r '.number' <<<"$fork_pr")"
+            fork_base="$(jq -r '.baseRefName' <<<"$fork_pr")"
+            upsert_detect_comment "$fork_number" \
+              "🤖 **Conflict seen — cannot auto-resolve a fork PR.** This PR conflicts with \`$fork_base\`, and the resolver cannot push to branches in a fork. Please resolve the conflicts manually (merge \`$fork_base\` into your branch, or rebase onto it)." \
+              || echo "::warning::Could not post the detect-status comment on #$fork_number."
+          done < <(jq -r '.[] | select(.isCrossRepository) | select(.mergeable == "CONFLICTING") | @base64' <<<"$prs")
           rebase_active="$(jq -r '[.[] | select(.mergeable == "CONFLICTING") | select([.labels[].name] | index("ai-rebase-in-progress") != null) | .number] | join(", ")' <<<"$prs")"
           [ -n "$rebase_active" ] && echo "::notice::Skipping PR(s) #$rebase_active — the AI PR/stack rebase workflow is actively rewriting them."
           merge_paused="$(jq -r '[.[] | select(.mergeable == "CONFLICTING") | select([.labels[].name] | index("ai-merge-paused") != null) | .number] | join(", ")' <<<"$prs")"
           if [ -n "$merge_paused" ] && [ "$MANUAL_RETRY" != true ]; then
-            echo "::notice::Skipping PR(s) #$merge_paused — automatic merge resolution is paused; use a named-base manual run to retry."
+            echo "::notice::Skipping PR(s) #$merge_paused — automatic merge resolution is paused; use an explicit PR/base/head manual run to retry."
           fi
           stacked_owned="$(jq -r --argjson all "$all_open" '
             [.[] as $pr
@@ -437,6 +651,7 @@ jobs:
               | select(any($all[];
                   .number != $pr.number
                   and (.isCrossRepository | not)
+                  and ([.labels[].name] | index("no-ai-rebase") == null)
                   and (.headRefName == $pr.baseRefName
                        or .baseRefName == $pr.headRefName)))
               | .number]
@@ -445,6 +660,12 @@ jobs:
           [ -n "$stacked_owned" ] && echo "::notice::Skipping stacked PR(s) #$stacked_owned — the AI PR/stack rebase workflow owns stack history."
           still_unknown="$(jq -r '[.[] | select(.mergeable == "UNKNOWN") | .number] | join(", ")' <<<"$prs")"
           [ -n "$still_unknown" ] && echo "::warning::PR(s) #$still_unknown still UNKNOWN after polling; they will be re-checked by the next event or scheduled sweep."
+          while IFS= read -r unknown_number; do
+            [ -n "$unknown_number" ] || continue
+            upsert_detect_comment "$unknown_number" \
+              "🤖 **Mergeability still computing.** The base branch moved, and GitHub had not finished recomputing whether this PR conflicts after the detector waited ${MERGEABLE_POLL_SECONDS}s — so no resolution was started this round. The next push or the twice-hourly scheduled sweep (minutes :02/:32) re-checks automatically; if a conflict is found then, resolution starts and announces itself here." \
+              || echo "::warning::Could not post the detect-status comment on #$unknown_number."
+          done < <(jq -r '.[] | select(.mergeable == "UNKNOWN") | .number' <<<"$prs")
 
           # On a pull_request_target event, scan ONLY the triggering PR — the
           # other PRs sharing this base are not this event's business and are
@@ -459,6 +680,7 @@ jobs:
           # carrying it may still use this merge-based resolver.
           conflicting="$(jq -c \
             --arg only "${ONLY_PR:-}" \
+            --argjson manual_retry "$MANUAL_RETRY" \
             --argjson recover "$recover_merge_paused" \
             --argjson all "$all_open" '
             [.[] as $pr
@@ -474,10 +696,12 @@ jobs:
                   or (any($all[];
                       .number != $pr.number
                       and (.isCrossRepository | not)
+                      and ([.labels[].name] | index("no-ai-rebase") == null)
                       and (.headRefName == $pr.baseRefName
                            or .baseRefName == $pr.headRefName)) | not))
               | select($only == "" or (.number | tostring) == $only)
               | {number: .number, head: .headRefName, base: .baseRefName,
+                  manual_retry: $manual_retry,
                   recover_merge_pause: any($recover[]; . == $pr.number),
                   recover_rebase_pause:
                     ([.labels[].name] | index("ai-rebase-paused") != null)}]
@@ -527,6 +751,19 @@ jobs:
             snapshots="$(jq -c --argjson item "$candidate" '. + [$item]' <<<"$snapshots")"
           done < <(jq -r '.[] | @base64' <<<"$conflicting")
           conflicting="$snapshots"
+          if [ "$HUMAN_EXPLICIT" = true ] \
+             && [ "$(jq 'length' <<<"$prs")" -gt 0 ] \
+             && [ "$(jq 'length' <<<"$conflicting")" -eq 0 ]; then
+            matched="$(jq 'length' <<<"$prs")"
+            echo "::warning::The manual selector matched $matched open PR(s), but none is currently eligible for merge-conflict resolution."
+            {
+              echo "## Manual selector matched, but no merge worker is needed"
+              echo
+              echo "$matched open PR(s) matched. None is currently eligible for this merge resolver."
+              echo
+              echo "Mergeable/UNKNOWN PRs, fork or protected/default heads, paused snapshots, and stack/rebase-owned PRs are intentionally excluded."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
           echo "prs=$conflicting" >> "$GITHUB_OUTPUT"
           echo "any=$(jq 'length > 0' <<<"$conflicting")" >> "$GITHUB_OUTPUT"
 
@@ -534,54 +771,74 @@ jobs:
   # ("Unsupported event type: push"). Its supported set is issues,
   # issue_comment, pull_request, pull_request_review,
   # pull_request_review_comment, workflow_dispatch, repository_dispatch,
-  # schedule, workflow_run. So a push-triggered run cannot resolve anything
-  # itself — it detects the work and hands off to repository_dispatch, which
-  # IS supported and re-enters this same workflow to do the real work. Global
-  # scans use the same handoff so every actual run comes from the trusted
-  # default-branch workflow and remains grouped by the PR's real base branch.
+  # schedule, workflow_run. All external events — including human
+  # workflow_dispatch and legacy repository_dispatch — are detector-only.
+  # Eligible PR selections are handed off one-by-one through the Actions API to
+  # this workflow at the hard-coded `develop` control-plane ref. The worker
+  # re-detects and snapshots the selected PR's live refs before any checkout.
+  # Until this revision reaches the default branch, old default-branch
+  # repository_dispatch/scheduled runs remain a one-time bootstrap limitation.
   handoff:
-    name: Hand off to a trusted dispatch run per conflicted base
+    name: Hand off each selected PR to the develop resolver control plane
     needs: detect
     if: >-
-      (github.event_name == 'push'
-       || github.event_name == 'pull_request_target'
-       || github.event_name == 'schedule'
-       || (github.event_name == 'workflow_dispatch' && inputs.branch == ''))
-      && needs.detect.outputs.any == 'true'
+      needs.detect.outputs.any == 'true'
+      && (github.event_name != 'workflow_dispatch'
+          || inputs.detector_handoff != true
+          || github.actor != 'github-actions[bot]'
+          || github.ref_name != 'develop')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
-      contents: write
+      actions: write
     steps:
-      - name: Dispatch a resolvable run per conflicted base branch
+      - name: Dispatch one trusted develop worker per selected PR
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          # Bases come from the conflicting PRs' own records, NOT the event
-          # ref: a push run may have found the PR *from* the pushed branch
-          # (head-push-created conflict), whose resolution sweep must run
-          # under that PR's BASE branch. For PRs found by the base scan the
-          # derived base equals the event ref anyway.
           PRS: ${{ needs.detect.outputs.prs }}
+          DEPTH: ${{ github.event.client_payload.depth || inputs.depth || '0' }}
         run: |
           set -euo pipefail
-          jq -r '[.[].base] | unique | .[]' <<<"$PRS" | while IFS= read -r base; do
-            echo "Conflicting PR(s) under $base; re-entering via repository_dispatch."
-            gh api "repos/$REPO/dispatches" \
-              -f event_type=resolve-conflicts-cascade \
-              -f "client_payload[branch]=$base" \
-              -f "client_payload[depth]=0"
-          done
+          while IFS= read -r encoded; do
+            [ -n "$encoded" ] || continue
+            selected="$(base64 --decode <<<"$encoded")"
+            number="$(jq -r '.number' <<<"$selected")"
+            manual_retry="$(jq -r '.manual_retry' <<<"$selected")"
+            echo "Dispatching selected PR #$number to the fixed develop resolver control plane."
+            jq -n \
+              --arg pr_number "$number" \
+              --arg depth "$DEPTH" \
+              --argjson manual_retry "$manual_retry" '
+                {
+                  ref:"develop",
+                  inputs:{
+                    pr_number:$pr_number,
+                    branch:"",
+                    detector_handoff:true,
+                    manual_retry:$manual_retry,
+                    depth:$depth
+                  }
+                }
+              ' \
+              | gh api --method POST \
+                  "repos/$REPO/actions/workflows/resolve-pr-conflicts.yml/dispatches" \
+                  --input -
+          done < <(jq -r '.[] | @base64' <<<"$PRS")
 
   model_config:
     name: Load the conflict-resolver model waterfall
     needs: detect
-    # Fetch once for the whole resolution sweep, never once per matrix PR. The
-    # API-only detector runs hand off, so they do not need this config.
+    # Only a bot-originated internal worker running the fixed develop revision
+    # may load resolver configuration. Human/API/event runs remain detectors.
     if: >-
       needs.detect.outputs.any == 'true'
-      && (github.event_name == 'repository_dispatch'
-          || (github.event_name == 'workflow_dispatch' && inputs.branch != ''))
+      && github.event_name == 'workflow_dispatch'
+      && inputs.detector_handoff == true
+      && github.actor == 'github-actions[bot]'
+      && github.ref_name == 'develop'
+      && inputs.pr_number != ''
+      && inputs.branch == ''
     runs-on: ubuntu-latest
     timeout-minutes: 2
     # This job deliberately has no checkout and no repository permissions. It
@@ -685,16 +942,21 @@ jobs:
   resolve:
     name: "Resolve PR #${{ matrix.pr.number }}"
     needs: [detect, model_config]
-    # Run only in a trusted repository_dispatch or an explicitly base-scoped
-    # manual invocation. Every broad/event-driven scan is API-only and hands
-    # off one default-branch dispatch per conflicted base.
+    # Secret-bearing resolution runs only from the fixed develop control-plane
+    # revision after a bot-originated exact-PR selection handoff. The detect step has
+    # already validated the routing shape and re-snapshotted live PR refs.
     if: >-
       needs.detect.outputs.any == 'true'
-      && (github.event_name == 'repository_dispatch'
-          || (github.event_name == 'workflow_dispatch' && inputs.branch != ''))
+      && github.event_name == 'workflow_dispatch'
+      && inputs.detector_handoff == true
+      && github.actor == 'github-actions[bot]'
+      && github.ref_name == 'develop'
+      && inputs.pr_number != ''
+      && inputs.branch == ''
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
+      actions: write
       contents: write
       pull-requests: write
       issues: write
@@ -798,8 +1060,7 @@ jobs:
           || env.RECOVER_REBASE_PAUSE == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          MANUAL_RETRY: >-
-            ${{ github.event_name == 'workflow_dispatch' && inputs.branch != '' }}
+          MANUAL_RETRY: ${{ inputs.manual_retry && 'true' || 'false' }}
         run: |
           set -euo pipefail
           encode_ref() { jq -rn --arg value "$1" '$value | @uri'; }
@@ -863,6 +1124,7 @@ jobs:
                 .number != $number
                 and .head.repo.full_name == $repo
                 and .base.repo.full_name == $repo
+                and ([.labels[].name] | index("no-ai-rebase") == null)
                 and (.head.ref == $base or .base.ref == $head))
             ' <<<"$all_open")"
           merge_owned=false
@@ -1038,9 +1300,9 @@ jobs:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ github.token }}
-          # The handoff fires repository_dispatch with GITHUB_TOKEN, so those
-          # runs are attributed to github-actions[bot]. The action refuses
-          # non-human actors by default ("Workflow initiated by non-human
+          # The trusted Actions workflow dispatch uses GITHUB_TOKEN, so its
+          # develop worker is attributed to github-actions[bot]. The action
+          # refuses non-human actors by default ("Workflow initiated by non-human
           # actor: github-actions (type: Bot)"), which silently broke the whole
           # push -> handoff -> dispatch -> resolve chain: only runs a human
           # dispatched ever reached the model. Allow exactly this bot, not '*'.
@@ -1545,6 +1807,7 @@ jobs:
                   .number != $number
                   and .head.repo.full_name == $repo
                   and .base.repo.full_name == $repo
+                  and ([.labels[].name] | index("no-ai-rebase") == null)
                   and (.head.ref == $base or .base.ref == $head))
               ' <<<"$all_open")"
             [ "$stack_member" != true ] \
@@ -1684,34 +1947,56 @@ jobs:
           gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file "$body"
 
       - name: Cascade to PRs stacked on this head
-        # With a PAT, the push itself retriggers this workflow for the head
-        # branch (natural cascade) — dispatching too would double-run it.
-        if: env.HAS_WORKFLOW_PUSH != 'true'
+        # Always dispatch exact child PR selections, even when a PAT-backed
+        # push also creates a detector run. Duplicate discovery is harmless:
+        # trusted workers serialize per PR without cancellation and re-detect
+        # the live mergeability/ref snapshot before doing secret-bearing work.
         env:
           GH_TOKEN: ${{ github.token }}
           DEPTH: ${{ github.event.client_payload.depth || inputs.depth || '0' }}
         run: |
           set -euo pipefail
+          labels="$(gh api "repos/$REPO/issues/$PR_NUMBER" --jq '[.labels[].name]')"
+          if jq -e 'index("no-ai-rebase") != null' >/dev/null <<<"$labels"; then
+            echo "PR #$PR_NUMBER is a no-ai-rebase topology boundary — not cascading through $HEAD_REF."
+            exit 0
+          fi
           case "$DEPTH" in (*[!0-9]*) DEPTH=99 ;; esac
           if [ "$DEPTH" -ge 3 ]; then
             echo "Cascade depth cap reached ($DEPTH) — not dispatching further."
             exit 0
           fi
-          stacked="$(gh pr list --repo "$REPO" --base "$HEAD_REF" --state open --json number --jq 'length')"
-          if [ "$stacked" -gt 0 ]; then
-            echo "$stacked open PR(s) are based on $HEAD_REF — dispatching a follow-up scan."
-            # repository_dispatch always creates a run (from the default
-            # branch's workflow file) and needs only contents:write. Non-fatal:
-            # a missed cascade is re-covered by the next real push.
-            if ! gh api "repos/$REPO/dispatches" \
-                 -f event_type=resolve-conflicts-cascade \
-                 -f "client_payload[branch]=$HEAD_REF" \
-                 -f "client_payload[depth]=$((DEPTH + 1))"; then
-              echo "::warning::Cascade dispatch failed (transient API error?) — the next real push re-covers it."
-            fi
-          else
+          children="$(gh pr list --repo "$REPO" --base "$HEAD_REF" --state open --limit 1000 --json number --jq '.[].number')"
+          if [ -z "$children" ]; then
             echo "No PRs are stacked on $HEAD_REF."
+            exit 0
           fi
+
+          count="$(wc -l <<<"$children" | tr -d ' ')"
+          next_depth="$((DEPTH + 1))"
+          echo "$count open PR(s) are based on $HEAD_REF — dispatching each exact PR selection to the fixed develop control plane."
+          while IFS= read -r child_number; do
+            [ -n "$child_number" ] || continue
+            if ! jq -n \
+              --arg pr_number "$child_number" \
+              --arg depth "$next_depth" '
+                {
+                  ref:"develop",
+                  inputs:{
+                    pr_number:$pr_number,
+                    branch:"",
+                    detector_handoff:true,
+                    manual_retry:false,
+                    depth:$depth
+                  }
+                }
+              ' \
+              | gh api --method POST \
+                  "repos/$REPO/actions/workflows/resolve-pr-conflicts.yml/dispatches" \
+                  --input -; then
+              echo "::warning::Cascade dispatch for child PR #$child_number failed — the next real push or scheduled sweep re-covers it."
+            fi
+          done <<<"$children"
 
       - name: Comment on PR (needs attention)
         if: failure()
@@ -1774,6 +2059,7 @@ jobs:
                     .number != $number
                     and .head.repo.full_name == $repo
                     and .base.repo.full_name == $repo
+                    and ([.labels[].name] | index("no-ai-rebase") == null)
                     and (.head.ref == $base or .base.ref == $head))
                 ' >/dev/null <<<"$all_open"; then
                 stack_member=true
@@ -1845,7 +2131,7 @@ jobs:
             fi
             if [ "$paused" = true ]; then
               echo
-              echo "Automatic retries are paused with \`ai-merge-paused\` so the scheduled sweep cannot repeat the same failed AI run forever. After review, run this action manually with base \`$BASE_REF\` to clear the hold and retry."
+              echo "Automatic retries are paused with \`ai-merge-paused\` so the scheduled sweep cannot repeat the same failed AI run forever. After review, run this action manually with PR \`$PR_NUMBER\` (or its exact base/head branch) to clear the hold and retry."
               echo
               echo "$pause_marker"
             fi

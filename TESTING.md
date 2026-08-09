@@ -238,10 +238,19 @@ is fixed, and cite the checklist you ran in the PR description.
       while a clean PR, a fork PR, a protected head, and the default branch
       are never resolver push targets.
 - [ ] Exercise a base-branch push, a head-branch push, PR opened/reopened, the
-      scheduled repository scan, a blank manual scan, and a named-base manual
-      scan. Push detection must find PRs both targeting and originating from
-      the pushed branch. A global scan spanning three conflicted bases must
-      dispatch exactly three trusted base-scoped resolution runs.
+      scheduled repository scan, a blank manual scan, and exact PR/base/head
+      manual selectors. Push detection must find PRs both targeting and
+      originating from the pushed branch. A global scan spanning three
+      conflicted PRs must dispatch exactly three trusted per-PR workers to the
+      fixed `develop` workflow revision. Human/manual and legacy
+      `repository_dispatch` runs must stay detector-only; only a bot-authored
+      internal handoff on `develop` with a positive PR, blank branch, and valid
+      depth may load the model or resolve.
+- [ ] Give a manual exact-PR/base/head selector that matches no open PR and
+      confirm the detector fails with actionable log and step-summary output.
+      Give one that matches only clean, UNKNOWN, fork, protected/default-head,
+      paused, or rebase-owned PRs and confirm it succeeds with a visible
+      no-worker warning/summary rather than silently skipping downstream jobs.
 - [ ] Create a normal two-PR stack and confirm its members are excluded before
       either ownership label exists. Add `no-ai-rebase` and confirm that member
       becomes merge-owned. Add a fresh `ai-rebase-in-progress` mutex and confirm
@@ -250,20 +259,64 @@ is fixed, and cite the checklist you ran in the PR description.
       merge resolver verifies and clears stale `ai-rebase-paused` before work.
 - [ ] Force an unchanged eligible merge-resolution failure and confirm it adds
       `ai-merge-paused`; scheduled, push, PR-target, and blank-manual scans must
-      abstain afterward. A named-base manual run must clear the hold and retry.
-      A failure after the head/base/topology/ownership changes must not leave a
-      stale pause label on the newly owned state. Verify the hidden pause marker
-      is accepted only from `github-actions[bot]`, requires the complete strict
-      schema, and round-trips the exact refs, SHAs, owner, and topology.
+      abstain afterward. An exact PR/base/head manual run must carry internal
+      retry intent, clear the hold, and retry. A failure after the
+      head/base/topology/ownership changes must not leave a stale pause label on
+      the newly owned state. Verify the hidden pause marker is accepted only
+      from `github-actions[bot]`, requires the complete strict schema, and
+      round-trips the exact refs, SHAs, owner, and topology.
 - [ ] Feed a mocked global scan more than 1,000 open PRs across GraphQL pages.
       Confirm every page is combined exactly once and conflicting PRs on every
-      base remain eligible for their unique base-scoped handoff.
+      base remain eligible for their unique per-PR handoff. Give one resolved
+      head more than 30 direct child PRs and confirm the cascade's explicit high
+      limit dispatches every child number to `develop` without truncation.
 - [ ] Move the head, move the base, change stack topology or ownership labels,
       close the PR, or protect the head while a run is resolving. Every case
       must refuse publication. An exact-head lease must preserve concurrent
       work; if `git push` reports a transport error after the exact commit
       lands, the live-ref check must classify it as published rather than
       retrying it.
+
+## Per-feature develop → main promoter (`.github/scripts/promote-features-to-main.mjs`)
+
+- [ ] Merge a feature PR into `develop`, record its two-parent merge SHA, then
+      force-rewrite `develop` to an equivalent cherry-pick so that merge object
+      is no longer advertised by any ref. From a fresh full clone, confirm the
+      promoter's self-test first proves the object is absent, fetches it by
+      exact SHA with both parents, proves a stable patch-equivalent commit is
+      still effective at the current `develop` tip, performs the mainline
+      cherry-pick, and gets the expected tree. Repeat after a later revert and
+      with a multi-commit rebase range: the revert must fail closed, while the
+      full aggregate range (not only its last commit) must be verified.
+- [ ] Run the orphaned-history self-test with the clone's Git author name
+      deliberately empty. The attempted mainline cherry-pick must return an
+      operational error, abort the sequencer, leave `HEAD` at the target base,
+      and clean both the index and tracked worktree instead of treating the
+      words `empty ident name` as an empty source patch.
+- [ ] Configure a valid Git identity, apply the recovered source pick, then
+      apply that identical pick again. The second, genuinely empty pick must
+      be skipped from verified sequencer/index state and leave the promoted
+      tree unchanged.
+- [ ] Give one standalone source PR an invalid or unavailable historical merge
+      object between two valid standalone PRs. A dry run must report that PR as
+      blocked, continue to plan the later independent PR, and publish both the
+      block and partial plan in the step summary without exiting early.
+- [ ] Repeat with the unavailable PR in the middle of a named promotion stack.
+      The failed member and only its later dependent stack members must be
+      deferred while the next unrelated group continues. Force an unexpected
+      group-local Git error as well and confirm later groups still run.
+- [ ] Re-run after a partial batch has already created promotion PRs. Existing
+      `promotion-of` markers and branches must prevent duplicates, including
+      records older than the first 200 repository PRs, while `MAX_NEW_PRS`
+      counts reused branches as newly opened PRs too. Force-update an open
+      promotion branch between runs and confirm the promoter fetches its live
+      OID before stacking the next member rather than using a stale local ref;
+      a repurposed branch, same-path/whitespace drift, duplicate provenance,
+      or an OPEN promotion targeting the wrong stack base must be blocked. For
+      an external stack, validate every OPEN link back to `main` and every
+      CLOSED source merged before the current group; any unshipped earlier
+      CLOSED member must stop dependents, while a later successor must not be
+      misclassified as their prerequisite.
 
 ## PR conflict resolver model waterfall (`remix/app/components/Admin/`)
 
@@ -295,22 +348,26 @@ is fixed, and cite the checklist you ran in the PR description.
 
 - [ ] Create standalone same-repo PRs against `main` and against a non-default
       branch whose heads are `mergeable: true` but `rebaseable: false`.
-      Confirm **Rebase PRs and stacks (AI)** detects both while the merge-based
-      resolver correctly no-ops, and that replaying more than one conflicting
-      commit can advance through multiple bounded Claude/verify/continue
-      rounds. Then make a standalone PR genuinely merge-conflicting and
-      confirm only **Resolve PR conflicts (AI)** owns it.
+      Confirm automatic, scheduled, push-triggered, PR-triggered, and blank
+      manual scans leave both histories untouched: they are not stacks and
+      already merge cleanly. An explicit PR-number retry may still replay one
+      deliberately. Then make a standalone PR genuinely merge-conflicting and
+      confirm only **Resolve PR conflicts (AI)** owns it. Regression class:
+      standalone replay failures were incorrectly force-rebased and could
+      ping-pong with a merge-resolver update.
 - [ ] Create a two-PR stack (child PR based on the root PR's head). After the
       root is rebased, confirm the child dispatch receives the old and new
       parent SHAs, replays with onto semantics, and completes root-to-leaf
-      without duplicating the parent's commits.
+      without duplicating the parent's commits. Confirm a stack member with
+      either `mergeable: false` or `rebaseable: false` remains rebase-owned,
+      while a clean stack is left alone.
 - [ ] Exercise detection from a branch push, PR opened/reopened event, the
-      scheduled scan, and a manual PR-number dispatch. Automatic scans select
-      every same-repo PR regardless of base branch, route standalone merge
-      conflicts to the merge workflow, do not race a blocked child ahead of
-      its parent, and terminate after resolution instead of looping on the
-      workflow's own push. A blank manual dispatch must perform the same
-      repository-wide scan.
+      scheduled scan, and a manual PR-number dispatch. Automatic scans evaluate
+      every same-repo PR regardless of base branch, never dispatch a
+      standalone history rewrite, route standalone merge conflicts to the
+      merge workflow, do not race a blocked child ahead of its parent, and
+      terminate after resolution instead of looping on the workflow's own
+      push. A blank manual dispatch must perform the same repository-wide scan.
 - [ ] Return unknown merge/rebaseability for several PRs at once and confirm
       polling proceeds round-robin, giving every candidate an API check in each
       bounded round. Exercise a stack deeper than eight PRs and confirm it is
