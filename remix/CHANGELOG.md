@@ -19,6 +19,20 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Conflict resolution now uses a fixed `develop` control plane**: every
+  external event and human manual run is detector-only, then dispatches each
+  selected PR number to the resolver workflow revision on `develop`; only a
+  validated bot-originated internal handoff on that ref may load the model or
+  resolve. Manual selection now accepts an exact PR number or a PR base/head,
+  fails visibly when nothing open matches, reports when no merge worker is
+  needed, and carries explicit retry intent through the trusted hop. Direct
+  stack cascades use the same per-PR Actions dispatch instead of loading
+  secret-bearing resolver YAML from the repository default branch. This closes
+  the recurring `develop`-target/default-`main` workflow split once promoted;
+  the older workflow already on `main` remains a one-time bootstrap limitation
+  until this revision reaches it. See the
+  [PR #190 repair note](../PRs/190-claude-github-action-pr-promotion-c65173-per-feature-develop-main-promotion-prs-with-stacks.md).
+  — Codex (AI), 2026-08-09
 - **Conflict resolver no longer mistakes promotion PRs for giant stacks**:
   `no-ai-rebase` PRs now break stack-topology edges, so the standing
   `develop` → `main` promotion PR cannot divert every feature PR targeting
@@ -160,6 +174,25 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   promotion window. State is derived from the PR body itself; re-runs on the
   same develop SHA are byte-identical no-ops. Supports `DRY_RUN=1` and
   `--self-test`. — Claude (AI), 2026-08-08
+
+- **Per-feature develop → main promotion PRs (with stacks)**: a new **Promote
+  features to main** workflow (`promote-features-to-main.yml`) joins the
+  standing all-or-nothing **Promote develop to main** omnibus PR (#186) as a
+  granular release train. It scans PRs merged into `develop`, cherry-picks
+  each unshipped one onto its own `promote/pr-<n>-<slug>` branch cut from
+  `main`, and opens a per-feature promotion PR for release review; PRs sharing
+  a feature group (`Promotion-Group:` body line, `stack:`/`group:`/`feature:`
+  label, `feature/<key>/...` branch, or `feat(<key>):` title scope) become a
+  stacked chain in merge order, with automatic retargeting as earlier members
+  merge. The two trains coexist: merge individual promotion PRs for granular
+  review, or merge the omnibus PR when everything on develop is mergeable —
+  promotion PRs whose diff becomes empty afterwards are closed automatically
+  as redundant (branches deleted once nothing stacks on them). `no-promote`
+  skips a source PR; closing a promotion PR rejects that change for `main`
+  permanently; cherry-pick conflicts stop the affected group and the job
+  summary prints exact manual-promotion commands. Runs on pushes to `develop`,
+  a 6-hourly schedule, and manual dispatch with a dry-run mode.
+  — Claude (AI), 2026-08-08
 
 - **AI PR and stack rebase conflict resolution**: a separate **Rebase PRs and
   stacks (AI)** workflow evaluates every same-repository PR regardless of base
