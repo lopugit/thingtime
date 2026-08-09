@@ -36,6 +36,40 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Creation-time promotion conflicts are resolved automatically**: when a
+  selected `develop` feature cannot be replayed cleanly onto its promotion
+  base, the protected per-feature promoter reserves the deterministic branch
+  and hands the immutable source/base plan to a bot-only worker on the fixed
+  `github-actions` control plane. The thin `develop` listener grants the
+  Actions permission needed for that dispatch without restoring executable
+  workflow behavior to product branches. The worker re-derives live authority,
+  resolves only mechanically proven conflict paths, treats `graphify-out/**`
+  as derived target-side output, publishes with an exact lease, opens the
+  promotion PR, and resumes dependent stack members automatically. The result
+  is labelled for review and receives evidence naming the resolver run,
+  immutable SHAs, and AI-edited paths; unchanged failed snapshots pause
+  visibly instead of requiring undocumented manual cherry-picks or repeatedly
+  spending model budget. Bot attestations, exact leases, durable stale-snapshot
+  retirement, and idempotent checkpoint/metadata recovery make retries
+  converge across API ambiguity, worker crashes, base movement, or duplicate
+  comments. Recoverable historical patches that current `develop` no longer
+  proves present become explicitly quarantined review candidates: the
+  immutable plan records `review-required-removed` or
+  `review-required-ambiguous`, the PR receives `source-lineage-unverified`,
+  both source and promotion PRs receive durable warnings, and dependent stack
+  members wait for a human restoration decision. AI-attested lineage remains
+  bound to its plan hash rather than being silently upgraded; missing objects,
+  unreadable patches, operational Git failures, and worker classification
+  mismatches still stop before publication. See the
+  [PR #213 engineering note](../PRs/213-codex-auto-resolve-promotion-conflicts-automatically-resolve-promotion-creation-conflicts.md).
+  Conflict-free and AI-resolved promotions that touch `.github/**` now share
+  the same bot-authored `[skip ci]` content commit and `GITHUB_TOKEN` review
+  checkpoint, so a quarantined historical workflow cannot execute merely from
+  the branch push that creates its review PR. Every unverified-lineage
+  candidate uses that review gate too, even without a workflow-file change, so
+  no restored historical code executes before a maintainer approves its PR
+  checks.
+  — Codex (AI), 2026-08-10
 - **The complete Actions control plane is ready for atomic promotion to
   `main`**: the mutually dependent workflow fixes from source PRs #192, #193,
   #194, #190, #199, #206, #207, and #208 are replayed together so the default
@@ -71,7 +105,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   distinguishes a normal non-ancestor result from a Git inspection error, and
   requires original ancestry or both patch-equivalent history and current-tip
   effect verification before an old change may be promoted. Later reverts and
-  removed aggregate ranges fail closed instead of being resurrected. It
+  removed aggregate ranges are classified instead of being mistaken for
+  current source; PR #213 exposes recoverable cases as explicitly labelled
+  restoration-review candidates while unrecoverable authority still fails
+  closed. It
   records structured per-PR blocks instead of aborting the batch. A failed
   standalone feature no longer prevents later independent promotions; a
   failed stack member still defers only its dependent members. Group-local
