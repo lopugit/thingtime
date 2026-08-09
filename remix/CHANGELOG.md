@@ -19,6 +19,20 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Conflict resolution now uses a fixed `develop` control plane**: every
+  external event and human manual run is detector-only, then dispatches each
+  selected PR number to the resolver workflow revision on `develop`; only a
+  validated bot-originated internal handoff on that ref may load the model or
+  resolve. Manual selection now accepts an exact PR number or a PR base/head,
+  fails visibly when nothing open matches, reports when no merge worker is
+  needed, and carries explicit retry intent through the trusted hop. Direct
+  stack cascades use the same per-PR Actions dispatch instead of loading
+  secret-bearing resolver YAML from the repository default branch. This closes
+  the recurring `develop`-target/default-`main` workflow split once promoted;
+  the older workflow already on `main` remains a one-time bootstrap limitation
+  until this revision reaches it. See the
+  [PR #190 repair note](../PRs/190-claude-github-action-pr-promotion-c65173-per-feature-develop-main-promotion-prs-with-stacks.md).
+  — Codex (AI), 2026-08-09
 - **Conflict resolver no longer mistakes promotion PRs for giant stacks**:
   `no-ai-rebase` PRs now break stack-topology edges, so the standing
   `develop` → `main` promotion PR cannot divert every feature PR targeting

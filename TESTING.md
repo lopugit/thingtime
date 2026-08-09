@@ -238,10 +238,19 @@ is fixed, and cite the checklist you ran in the PR description.
       while a clean PR, a fork PR, a protected head, and the default branch
       are never resolver push targets.
 - [ ] Exercise a base-branch push, a head-branch push, PR opened/reopened, the
-      scheduled repository scan, a blank manual scan, and a named-base manual
-      scan. Push detection must find PRs both targeting and originating from
-      the pushed branch. A global scan spanning three conflicted bases must
-      dispatch exactly three trusted base-scoped resolution runs.
+      scheduled repository scan, a blank manual scan, and exact PR/base/head
+      manual selectors. Push detection must find PRs both targeting and
+      originating from the pushed branch. A global scan spanning three
+      conflicted PRs must dispatch exactly three trusted per-PR workers to the
+      fixed `develop` workflow revision. Human/manual and legacy
+      `repository_dispatch` runs must stay detector-only; only a bot-authored
+      internal handoff on `develop` with a positive PR, blank branch, and valid
+      depth may load the model or resolve.
+- [ ] Give a manual exact-PR/base/head selector that matches no open PR and
+      confirm the detector fails with actionable log and step-summary output.
+      Give one that matches only clean, UNKNOWN, fork, protected/default-head,
+      paused, or rebase-owned PRs and confirm it succeeds with a visible
+      no-worker warning/summary rather than silently skipping downstream jobs.
 - [ ] Create a normal two-PR stack and confirm its members are excluded before
       either ownership label exists. Add `no-ai-rebase` and confirm that member
       becomes merge-owned. Add a fresh `ai-rebase-in-progress` mutex and confirm
@@ -250,14 +259,17 @@ is fixed, and cite the checklist you ran in the PR description.
       merge resolver verifies and clears stale `ai-rebase-paused` before work.
 - [ ] Force an unchanged eligible merge-resolution failure and confirm it adds
       `ai-merge-paused`; scheduled, push, PR-target, and blank-manual scans must
-      abstain afterward. A named-base manual run must clear the hold and retry.
-      A failure after the head/base/topology/ownership changes must not leave a
-      stale pause label on the newly owned state. Verify the hidden pause marker
-      is accepted only from `github-actions[bot]`, requires the complete strict
-      schema, and round-trips the exact refs, SHAs, owner, and topology.
+      abstain afterward. An exact PR/base/head manual run must carry internal
+      retry intent, clear the hold, and retry. A failure after the
+      head/base/topology/ownership changes must not leave a stale pause label on
+      the newly owned state. Verify the hidden pause marker is accepted only
+      from `github-actions[bot]`, requires the complete strict schema, and
+      round-trips the exact refs, SHAs, owner, and topology.
 - [ ] Feed a mocked global scan more than 1,000 open PRs across GraphQL pages.
       Confirm every page is combined exactly once and conflicting PRs on every
-      base remain eligible for their unique base-scoped handoff.
+      base remain eligible for their unique per-PR handoff. Give one resolved
+      head more than 30 direct child PRs and confirm the cascade's explicit high
+      limit dispatches every child number to `develop` without truncation.
 - [ ] Move the head, move the base, change stack topology or ownership labels,
       close the PR, or protect the head while a run is resolving. Every case
       must refuse publication. An exact-head lease must preserve concurrent
