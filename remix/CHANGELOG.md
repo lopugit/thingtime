@@ -19,6 +19,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Automatic rebasing is now restricted to genuine PR stacks**: the stack
+  detector still identifies a member only when its base targets another open
+  PR head or another open PR targets its head, but automatic scans no longer
+  override that topology for standalone PRs whose combined diff merges cleanly
+  while individual commits are not replayable. Those standalone branches are
+  left untouched instead of being force-rebased or ping-ponging after a merge
+  resolver update. Shared topology and ownership expressions are rechecked at
+  detection, worker validation, post-replay validation, pre-push validation,
+  and failure cleanup; an inline truth-table regression guard covers
+  standalone, stack, opt-out, and explicit exact-PR retry cases. — Codex (AI),
+  2026-08-09
 - **Per-feature promotion survives rewritten historical merge commits and
   isolated failures**: the `develop` → `main` promoter now verifies every
   source merge object, fetches unreachable historical merges by exact SHA,
