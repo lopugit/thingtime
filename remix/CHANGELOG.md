@@ -37,7 +37,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   `MAX_NEW_PRS` applies to branch reuse too. A local-Git regression test
   reproduces the force-rewritten-history failure before proving full-parent
   recovery. Promotion-marker lookup also scans up to 1,000 PRs so older records
-  remain idempotent as the repository grows. — Codex (AI), 2026-08-09
+  remain idempotent as the repository grows. See the
+  [PR #206 engineering note](../PRs/206-codex-harden-feature-promoter-keep-feature-promotion-running-across-historical-git-failures.md).
+  — Codex (AI), 2026-08-09
 - **Conflict resolution now uses a fixed `develop` control plane**: every
   external event and human manual run is detector-only, then dispatches each
   selected PR number to the resolver workflow revision on `develop`; only a

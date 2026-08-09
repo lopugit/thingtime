@@ -1755,8 +1755,8 @@
     "semantic_hash": "f162fbffa18046af73dfca08802a536f"
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1786271380.13225,
-    "ast_hash": "5ee6cc699576469aad09da2a04c83ff4",
+    "mtime": 1786271854.3160205,
+    "ast_hash": "be14c5abf57e5b34611689394bb03891",
     "semantic_hash": ""
   },
   "remix/README.md": {
@@ -4162,7 +4162,7 @@
   "TESTING.md": {
     "mtime": 1786271380.1318376,
     "ast_hash": "9f21bd3992964f90eb9df491501c3a62",
-    "semantic_hash": ""
+    "semantic_hash": "9f21bd3992964f90eb9df491501c3a62"
   },
   "claude-todo/12-everything-is-a-thing-collections.md": {
     "mtime": 1786266797.6769521,
@@ -5388,5 +5388,10 @@
     "mtime": 1786266797.6712887,
     "ast_hash": "911718847139851c594ed8cc2abd5178",
     "semantic_hash": "911718847139851c594ed8cc2abd5178"
+  },
+  "PRs/206-codex-harden-feature-promoter-keep-feature-promotion-running-across-historical-git-failures.md": {
+    "mtime": 1786271854.3156223,
+    "ast_hash": "72728c363db371a955647c33c40428ca",
+    "semantic_hash": ""
   }
 }
