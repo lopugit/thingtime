@@ -9,9 +9,14 @@
 //   node .github/scripts/resolve-pr-conflicts-routing-contract.mjs --self-test
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
+import { join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const WORKFLOW_URL = new URL("../workflows/resolve-pr-conflicts.yml", import.meta.url);
+const REBASE_WORKFLOW_URL = new URL("../workflows/rebase-pr-stacks.yml", import.meta.url);
+const REBASE_ACTION_URL = new URL("../actions/rebase-conflict-round/action.yml", import.meta.url);
+const REPO_ROOT = fileURLToPath(new URL("../../", import.meta.url));
 
 const positiveDecimal = (value) => /^[1-9][0-9]*$/.test(value);
 const validDepth = (value) => /^[0-9]+$/.test(value) && Number(value) <= 3;
@@ -106,6 +111,8 @@ function assertRoute(name, input, expected) {
 
 function assertWorkflowSource() {
   const source = readFileSync(WORKFLOW_URL, "utf8");
+  const rebaseSource = readFileSync(REBASE_WORKFLOW_URL, "utf8");
+  const rebaseActionSource = readFileSync(REBASE_ACTION_URL, "utf8");
   const modelBlock = source.slice(
     source.indexOf("\n  model_config:"),
     source.indexOf("\n  resolve:"),
@@ -146,6 +153,86 @@ function assertWorkflowSource() {
   const dispatchCount =
     source.match(/actions\/workflows\/resolve-pr-conflicts\.yml\/dispatches/g)?.length || 0;
   assert.equal(dispatchCount, 2, "detector handoff and stacked cascade both use fixed workflow dispatch");
+
+  assertAdminModelRouting(source, rebaseSource, rebaseActionSource, modelBlock);
+}
+
+function workflowYamlFiles(directory) {
+  const files = [];
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) files.push(...workflowYamlFiles(path));
+    else if (entry.isFile() && /\.ya?ml$/.test(entry.name)) files.push(path);
+  }
+  return files;
+}
+
+function assertAdminLoader(block, label) {
+  assert.match(
+    block,
+    /https:\/\/thingtime\.com\/api\/v1\/settings\/pr-conflict-auto-resolver-model-waterfall/,
+    `${label}: endpoint`,
+  );
+  assert.match(block, /Thingtime\.PRConflictAutoResolverModelWaterfall/, `${label}: singleton key`);
+  for (const model of ["default", "claude-fable-5", "claude-opus-5"]) {
+    assert.ok(block.includes(model), `${label}: closed model ${model}`);
+  }
+  assert.match(block, /model_args=.*GITHUB_OUTPUT/, `${label}: full waterfall output`);
+  assert.match(block, /primary_model=.*GITHUB_OUTPUT/, `${label}: primary model output`);
+}
+
+function assertAdminModelRouting(source, rebaseSource, rebaseActionSource, modelBlock) {
+  const rebaseModelBlock = rebaseSource.slice(
+    rebaseSource.indexOf("      - name: Load the conflict-resolver model waterfall"),
+    rebaseSource.indexOf("      - name: Isolate the real rebasing repository outside model workspace"),
+  );
+  assertAdminLoader(modelBlock, "merge resolver");
+  assertAdminLoader(rebaseModelBlock, "rebase resolver");
+
+  assert.ok(
+    !rebaseModelBlock.includes("steps.start.outputs.complete != 'true'"),
+    "rebase model loader must also run for clean rebases whose Graphify refresh uses AI",
+  );
+  assert.ok(source.includes('PREFERRED_MODEL: ${{ needs.model_config.outputs.primary_model }}'));
+  assert.ok(rebaseSource.includes('PREFERRED_MODEL: ${{ steps.models.outputs.primary_model }}'));
+  for (const [label, yaml] of [["merge resolver", source], ["rebase resolver", rebaseSource]]) {
+    assert.ok(yaml.includes('case "${PREFERRED_MODEL:-default}"'), `${label}: validated primary mapping`);
+    assert.ok(yaml.includes('graphify_model_args=(--model "$PREFERRED_MODEL")'), `${label}: API model override`);
+    assert.ok(yaml.includes('export GRAPHIFY_CLAUDE_CLI_MODEL="$PREFERRED_MODEL"'), `${label}: CLI model override`);
+    assert.ok(yaml.includes('"${graphify_model_args[@]}"'), `${label}: Graphify receives primary`);
+    assert.doesNotMatch(yaml, /GRAPHIFY_CLAUDE_CLI_MODEL:\s*(?:sonnet|haiku|opus)/, `${label}: no hard-coded Graphify model`);
+  }
+
+  assert.ok(source.includes('${{ needs.model_config.outputs.model_args }}'));
+  assert.ok(rebaseActionSource.includes('${{ inputs.model-args }}'));
+  assert.doesNotMatch(rebaseActionSource, /--model\s+claude-/, "composite action must not choose its own model");
+  const rebaseRoundCount = rebaseSource.match(/uses: \.\/trusted\/\.github\/actions\/rebase-conflict-round/g)?.length || 0;
+  const rebaseModelArgsCount = rebaseSource.match(/model-args: \$\{\{ steps\.models\.outputs\.model_args \}\}/g)?.length || 0;
+  assert.equal(rebaseRoundCount, 10, "expected ten bounded rebase conflict rounds");
+  assert.equal(rebaseModelArgsCount, rebaseRoundCount, "every rebase round must receive the Admin waterfall");
+
+  const aiRuntimePattern = /anthropics\/claude-code-action@|\bbackend=(?:"claude"|'claude'|claude)(?![\w-])/;
+  const actualRuntimeFiles = [
+    ...workflowYamlFiles(join(REPO_ROOT, ".github", "workflows")),
+    ...workflowYamlFiles(join(REPO_ROOT, ".github", "actions")),
+  ]
+    .filter((path) => aiRuntimePattern.test(readFileSync(path, "utf8")))
+    .map((path) => relative(REPO_ROOT, path))
+    .sort();
+  assert.deepEqual(
+    actualRuntimeFiles,
+    [
+      ".github/actions/rebase-conflict-round/action.yml",
+      ".github/workflows/rebase-pr-stacks.yml",
+      ".github/workflows/resolve-pr-conflicts.yml",
+    ],
+    "new AI runtime YAML must be added to the Admin-model contract",
+  );
+
+  for (const path of actualRuntimeFiles) {
+    const yaml = readFileSync(join(REPO_ROOT, path), "utf8");
+    assert.doesNotMatch(yaml, /claude-opus-4-8/, `${path}: obsolete hard-coded model`);
+  }
 }
 
 export function selfTest() {
