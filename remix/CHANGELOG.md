@@ -19,6 +19,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Conflict resolver no longer mistakes promotion PRs for giant stacks**:
+  `no-ai-rebase` PRs now break stack-topology edges, so the standing
+  `develop` → `main` promotion PR cannot divert every feature PR targeting
+  `develop` away from merge-based conflict resolution. The rebase detector's
+  bottom-up ordering also loads repository-wide JSON from `RUNNER_TEMP`
+  instead of command-line `--argjson` values, preventing the observed
+  `jq: Argument list too long` detector crash as the open-PR graph grows. —
+  Codex (AI), 2026-08-09
 - **Password-confirmed reveal for protected Thing diagnostics**: new migration
   diagnostics use a backward-compatible v2 secure envelope that keeps a bounded
   set of MongoDB ObjectIds supplied by explicitly authored server-side error
