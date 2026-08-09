@@ -1,7 +1,8 @@
-# Graph Report - .  (2026-08-10)
+# Graph Report - worktree  (2026-08-10)
 
 ## Corpus Check
-- cluster-only mode — file stats not available
+- 863 files · ~6,052,701 words
+- Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
 - 26656 nodes · 67236 edges · 1019 communities (621 shown, 398 thin omitted)
@@ -9,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `a1e8dbf3`
+- Built from commit: `f84e4d1c`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -3462,7 +3463,7 @@ Nodes (3): Green Canopy Icon Layer, Brown Trunk Icon Layer, Thingtime App Icon L
   docs/design/claude-design-mockup-v1/index.html · relation: semantically_similar_to
 
 ## Knowledge Gaps
-- **2316 isolated node(s):** `extends`, `CFG`, `EXEC_OPTS`, `CFG`, `EXEC_OPTS` (+2311 more)
+- **2316 isolated node(s):** `here`, `githubRoot`, `workflows`, `IMPLEMENTATIONS`, `PROVIDER_ROUTED_IMPLEMENTATIONS` (+2311 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **398 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -3481,5 +3482,5 @@ _Questions this graph is uniquely positioned to answer:_
   _`error()` has 21 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 21 inferred relationships involving `error()` (e.g. with `act()` and `commitBeforeMutationEffects_complete()`) actually correct?**
   _`error()` has 21 INFERRED edges - model-reasoned connections that need verification._
-- **What connects `extends`, `CFG`, `EXEC_OPTS` to the rest of the system?**
+- **What connects `here`, `githubRoot`, `workflows` to the rest of the system?**
   _2316 weakly-connected nodes found - possible documentation gaps or missing edges._
