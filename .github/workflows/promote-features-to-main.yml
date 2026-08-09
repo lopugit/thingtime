@@ -64,6 +64,16 @@
 name: Promote features to main
 
 on:
+  workflow_call:
+    inputs:
+      dry_run:
+        description: "Plan only — no branches, PRs, comments, closes, or retargets"
+        type: boolean
+        default: false
+      lookback:
+        description: "How many recently merged develop PRs to scan (max 100)"
+        type: string
+        default: "50"
   push:
     branches: [develop]
   schedule:
@@ -98,20 +108,28 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.PROMOTION_PAT || secrets.SYNC_BRANCHES_PAT || secrets.CONFLICT_RESOLVER_PAT || github.token }}
 
+      - name: Check out trusted automation support
+        uses: actions/checkout@v4
+        with:
+          ref: github-actions
+          path: workflow-control
+          fetch-depth: 1
+          persist-credentials: false
+
       - name: Configure git identity
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
       - name: Script and orphaned-history self-tests
-        run: node .github/scripts/promote-features-to-main.mjs --self-test
+        run: node workflow-control/.github/scripts/promote-features-to-main.mjs --self-test
 
       - name: Promote merged develop PRs to main
         env:
           GH_TOKEN: ${{ secrets.PROMOTION_PAT || secrets.SYNC_BRANCHES_PAT || secrets.CONFLICT_RESOLVER_PAT || github.token }}
           SOURCE_BRANCH: develop
           TARGET_BRANCH: main
-          LOOKBACK: ${{ github.event.inputs.lookback || '50' }}
+          LOOKBACK: ${{ inputs.lookback || '50' }}
           MAX_NEW_PRS: "10"
           REQUIRE_LABEL: ""
           SKIP_LABELS: "no-promote,skip-promotion"
@@ -119,5 +137,5 @@ jobs:
           GROUP_FROM_BRANCH_PREFIX: "true"
           COMMENT_ON_SOURCE: "true"
           PROMOTION_LABEL: "promotion"
-          DRY_RUN: ${{ github.event.inputs.dry_run == 'true' && '1' || '' }}
-        run: node .github/scripts/promote-features-to-main.mjs
+          DRY_RUN: ${{ inputs.dry_run == true && '1' || '' }}
+        run: node workflow-control/.github/scripts/promote-features-to-main.mjs

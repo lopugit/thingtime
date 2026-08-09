@@ -37,7 +37,7 @@ export function route(input) {
   const internalShape =
     event === "workflow_dispatch" &&
     detectorHandoff &&
-    ref === "develop" &&
+    ref === "github-actions" &&
     actor === "github-actions[bot]" &&
     positiveDecimal(prNumber) &&
     branch === "";
@@ -123,11 +123,11 @@ function assertWorkflowSource() {
   assert.match(source, /format\('resolve-detect-pr\{0\}'/);
   assert.match(source, /format\('resolve-pr\{0\}'/);
   assert.match(source, /github\.actor == 'github-actions\[bot\]'/);
-  assert.match(source, /github\.ref_name == 'develop'/);
+  assert.match(source, /github\.ref_name == 'github-actions'/);
   assert.match(source, /inputs\.detector_handoff == true/);
   assert.match(source, /manual_retry is internal routing state and requires detector_handoff/);
   assert.match(source, /--base "\$HEAD_REF" --state open --limit 1000/);
-  assert.match(source, /ref:"develop"/);
+  assert.match(source, /ref:"github-actions"/);
   assert.match(source, /detector_handoff:true/);
   assert.match(source, /manual_retry:false/);
   assert.match(source, /actions\/workflows\/resolve-pr-conflicts\.yml\/dispatches/g);
@@ -138,7 +138,7 @@ function assertWorkflowSource() {
     assert.match(block, /github\.event_name == 'workflow_dispatch'/, `${name}: event gate`);
     assert.match(block, /inputs\.detector_handoff == true/, `${name}: handoff gate`);
     assert.match(block, /github\.actor == 'github-actions\[bot\]'/, `${name}: actor gate`);
-    assert.match(block, /github\.ref_name == 'develop'/, `${name}: ref gate`);
+    assert.match(block, /github\.ref_name == 'github-actions'/, `${name}: ref gate`);
     assert.match(block, /inputs\.pr_number != ''/, `${name}: PR gate`);
     assert.match(block, /inputs\.branch == ''/, `${name}: empty branch gate`);
   }
@@ -192,7 +192,7 @@ export function selfTest() {
   });
 
   assertRoute("machine worker", {
-    event: "workflow_dispatch", ref: "develop", actor: "github-actions[bot]",
+    event: "workflow_dispatch", ref: "github-actions", actor: "github-actions[bot]",
     prNumber: "190", detectorHandoff: true,
   }, {
     valid: true,
@@ -207,7 +207,7 @@ export function selfTest() {
   });
 
   assertRoute("machine retry worker", {
-    event: "workflow_dispatch", ref: "develop", actor: "github-actions[bot]",
+    event: "workflow_dispatch", ref: "github-actions", actor: "github-actions[bot]",
     prNumber: "190", detectorHandoff: true, manualRetry: true,
   }, {
     valid: true,
@@ -227,7 +227,7 @@ export function selfTest() {
     ["machine non-decimal depth", { depth: "x" }, "invalid depth"],
   ]) {
     const result = route({
-      event: "workflow_dispatch", ref: "develop", actor: "github-actions[bot]",
+      event: "workflow_dispatch", ref: "github-actions", actor: "github-actions[bot]",
       prNumber: "190", detectorHandoff: true, ...overrides,
     });
     assert.equal(result.valid, false, name);

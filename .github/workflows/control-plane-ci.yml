@@ -1,0 +1,52 @@
+name: Workflow control-plane CI
+
+on:
+  push:
+    branches: [github-actions]
+    paths:
+      - .github/actions/**
+      - .github/scripts/**
+      - .github/workflows/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: workflow-control-plane-ci
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out github-actions
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+
+      - name: Validate JavaScript syntax
+        run: |
+          set -euo pipefail
+          while IFS= read -r script; do
+            node --check "$script"
+          done < <(find .github/scripts -type f -name '*.mjs' -print | sort)
+
+      - name: Validate shell syntax
+        run: |
+          set -euo pipefail
+          while IFS= read -r script; do
+            bash -n "$script"
+          done < <(find .github/scripts -type f -name '*.sh' -print | sort)
+
+      - name: Run automation contracts
+        run: |
+          set -euo pipefail
+          node .github/scripts/workflow-control-plane-contract.mjs --self-test
+          node .github/scripts/resolve-pr-conflicts-routing-contract.mjs --self-test
+          node .github/scripts/promotion-pr-changelog.mjs --self-test
+          node .github/scripts/promote-features-to-main.mjs --self-test
+
+      - name: Verify patch hygiene
+        run: git diff --check

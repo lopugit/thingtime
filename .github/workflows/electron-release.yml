@@ -1,6 +1,7 @@
 name: Electron App Release
 
 on:
+  workflow_call:
   push:
     branches:
       - main

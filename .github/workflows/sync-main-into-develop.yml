@@ -22,6 +22,7 @@
 name: Sync main into develop
 
 on:
+  workflow_call:
   push:
     branches: [main]
   workflow_dispatch:

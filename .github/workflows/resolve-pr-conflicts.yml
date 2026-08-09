@@ -81,7 +81,7 @@
 #   safely push to them, and running the model when publication is forbidden
 #   would expose content to secrets and spend AI budget for no useful result.
 # - GITHUB_TOKEN pushes don't retrigger `push` workflows (no self-loops);
-#   direct stacked children are dispatched individually to the fixed `develop`
+#   direct stacked children are dispatched individually to the fixed `github-actions`
 #   control plane, with a depth cap as a loop guard. No secret-bearing resolver
 #   YAML is loaded from an arbitrary PR base or head ref.
 # - An unchanged, still-eligible PR is labelled ai-merge-paused after a failed
@@ -128,7 +128,7 @@ run-name: >-
   ${{ github.event_name == 'workflow_dispatch'
       && inputs.detector_handoff == true
       && github.actor == 'github-actions[bot]'
-      && github.ref_name == 'develop'
+      && github.ref_name == 'github-actions'
       && inputs.pr_number != ''
       && inputs.branch == ''
       && format('Resolve PR #{0} from develop control plane', inputs.pr_number)
@@ -146,6 +146,33 @@ run-name: >-
           || github.ref_name) }}
 
 on:
+  workflow_call:
+    inputs:
+      pr_number:
+        description: "Exact PR to scan (takes precedence over branch); leave blank for a branch/all scan"
+        required: false
+        default: ""
+        type: string
+      branch:
+        description: "PR base or head branch to scan; leave blank with no PR number to scan all"
+        required: false
+        default: ""
+        type: string
+      detector_handoff:
+        description: "Internal: exact-PR handoff to the github-actions resolver control plane (leave false)"
+        required: false
+        default: false
+        type: boolean
+      manual_retry:
+        description: "Internal: carry a human explicit-selector retry through the trusted handoff"
+        required: false
+        default: false
+        type: boolean
+      depth:
+        description: "Internal: stacked-PR cascade depth (leave at 0)"
+        required: false
+        default: "0"
+        type: string
   push:
     branches:
       - "**"
@@ -160,7 +187,7 @@ on:
   # of mergeability. SECURITY: target-context runs never check out or execute
   # PR code here — the detect job is API-only, the resolve job is excluded
   # for this event, and resolution happens only after an exact-PR selection is
-  # handed off to the fixed `develop` workflow revision, the same hop every
+  # handed off to the fixed `github-actions` control-plane revision, the same hop every
   # detector takes.
   # Deliberately NOT `synchronize`: that fires on every push to a PR head,
   # including this workflow's own resolution pushes. Head pushes are covered
@@ -188,7 +215,7 @@ on:
         default: ""
         type: string
       detector_handoff:
-        description: "Internal: exact-PR handoff to the develop resolver control plane (leave false)"
+        description: "Internal: exact-PR handoff to the github-actions resolver control plane (leave false)"
         required: false
         default: false
         type: boolean
@@ -210,13 +237,13 @@ on:
 concurrency:
   # Distinct namespaces are load-bearing:
   #   resolve-detect-*   external/event/API-only detectors
-  #   resolve-pr<N>      one internal develop-control-plane worker per PR
+  #   resolve-pr<N>      one internal github-actions control-plane worker per PR
   # A human exact-PR detector therefore cannot cancel the worker it creates.
   group: >-
     ${{ github.event_name == 'workflow_dispatch'
         && inputs.detector_handoff == true
         && github.actor == 'github-actions[bot]'
-        && github.ref_name == 'develop'
+        && github.ref_name == 'github-actions'
         && inputs.pr_number != ''
         && inputs.branch == ''
         && format('resolve-pr{0}', inputs.pr_number)
@@ -242,7 +269,7 @@ concurrency:
     ${{ github.event_name != 'workflow_dispatch'
         || inputs.detector_handoff != true
         || github.actor != 'github-actions[bot]'
-        || github.ref_name != 'develop'
+        || github.ref_name != 'github-actions'
         || inputs.pr_number == ''
         || inputs.branch != '' }}
 
@@ -368,7 +395,7 @@ jobs:
             [ -n "$SELECTED_PR" ] || invalid_handoff=true
             [ -z "$INPUT_BRANCH" ] || invalid_handoff=true
             if [ "$invalid_handoff" = true ]; then
-              echo "::error::Invalid internal resolver handoff: require bot-authored workflow_dispatch on develop with a positive pr_number and empty branch."
+              echo "::error::Invalid internal resolver handoff: require bot-authored workflow_dispatch on github-actions with a positive pr_number and empty branch."
               exit 1
             fi
           fi
@@ -779,14 +806,14 @@ jobs:
   # Until this revision reaches the default branch, old default-branch
   # repository_dispatch/scheduled runs remain a one-time bootstrap limitation.
   handoff:
-    name: Hand off each selected PR to the develop resolver control plane
+    name: Hand off each selected PR to the github-actions resolver control plane
     needs: detect
     if: >-
       needs.detect.outputs.any == 'true'
       && (github.event_name != 'workflow_dispatch'
           || inputs.detector_handoff != true
           || github.actor != 'github-actions[bot]'
-          || github.ref_name != 'develop')
+          || github.ref_name != 'github-actions')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -805,13 +832,13 @@ jobs:
             selected="$(base64 --decode <<<"$encoded")"
             number="$(jq -r '.number' <<<"$selected")"
             manual_retry="$(jq -r '.manual_retry' <<<"$selected")"
-            echo "Dispatching selected PR #$number to the fixed develop resolver control plane."
+            echo "Dispatching selected PR #$number to the fixed github-actions resolver control plane."
             jq -n \
               --arg pr_number "$number" \
               --arg depth "$DEPTH" \
               --argjson manual_retry "$manual_retry" '
                 {
-                  ref:"develop",
+                  ref:"github-actions",
                   inputs:{
                     pr_number:$pr_number,
                     branch:"",
@@ -829,14 +856,14 @@ jobs:
   model_config:
     name: Load the conflict-resolver model waterfall
     needs: detect
-    # Only a bot-originated internal worker running the fixed develop revision
+    # Only a bot-originated internal worker running the fixed github-actions revision
     # may load resolver configuration. Human/API/event runs remain detectors.
     if: >-
       needs.detect.outputs.any == 'true'
       && github.event_name == 'workflow_dispatch'
       && inputs.detector_handoff == true
       && github.actor == 'github-actions[bot]'
-      && github.ref_name == 'develop'
+      && github.ref_name == 'github-actions'
       && inputs.pr_number != ''
       && inputs.branch == ''
     runs-on: ubuntu-latest
@@ -942,7 +969,7 @@ jobs:
   resolve:
     name: "Resolve PR #${{ matrix.pr.number }}"
     needs: [detect, model_config]
-    # Secret-bearing resolution runs only from the fixed develop control-plane
+    # Secret-bearing resolution runs only from the fixed github-actions control-plane
     # revision after a bot-originated exact-PR selection handoff. The detect step has
     # already validated the routing shape and re-snapshotted live PR refs.
     if: >-
@@ -950,7 +977,7 @@ jobs:
       && github.event_name == 'workflow_dispatch'
       && inputs.detector_handoff == true
       && github.actor == 'github-actions[bot]'
-      && github.ref_name == 'develop'
+      && github.ref_name == 'github-actions'
       && inputs.pr_number != ''
       && inputs.branch == ''
     runs-on: ubuntu-latest
@@ -1974,14 +2001,14 @@ jobs:
 
           count="$(wc -l <<<"$children" | tr -d ' ')"
           next_depth="$((DEPTH + 1))"
-          echo "$count open PR(s) are based on $HEAD_REF — dispatching each exact PR selection to the fixed develop control plane."
+          echo "$count open PR(s) are based on $HEAD_REF — dispatching each exact PR selection to the fixed github-actions control plane."
           while IFS= read -r child_number; do
             [ -n "$child_number" ] || continue
             if ! jq -n \
               --arg pr_number "$child_number" \
               --arg depth "$next_depth" '
                 {
-                  ref:"develop",
+                  ref:"github-actions",
                   inputs:{
                     pr_number:$pr_number,
                     branch:"",

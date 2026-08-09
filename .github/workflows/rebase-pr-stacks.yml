@@ -11,8 +11,9 @@
 #
 # Security and race invariants:
 # - push and pull_request_target runs are API-only detectors. Actual work is
-#   handed to repository_dispatch. The real run checks out its exact default-
-#   branch workflow SHA and invokes that immutable local composite action.
+#   handed to repository_dispatch, whose thin default-branch listener calls
+#   this reusable workflow from the protected github-actions control plane.
+#   The worker checks out that same control ref before invoking local support.
 # - fork PRs, the default branch, protected head branches, opted-out PRs, and
 #   stale ref snapshots are rejected before checkout or Claude.
 # - The real Git checkout moves under RUNNER_TEMP before Claude. The model gets
@@ -39,6 +40,18 @@ run-name: >-
   Rebase PR history${{ github.event.client_payload.pr_number && format(' at #{0}', github.event.client_payload.pr_number) || inputs.pr_number && format(' at #{0}', inputs.pr_number) || '' }}
 
 on:
+  workflow_call:
+    inputs:
+      pr_number:
+        description: "Exact PR to retry; leave blank to scan conflicting stacks"
+        required: false
+        default: ""
+        type: string
+      cascade:
+        description: "Continue through PRs stacked on the rebased branch"
+        required: false
+        default: true
+        type: boolean
   push:
     branches:
       - "**"
@@ -995,25 +1008,25 @@ jobs:
           set -euo pipefail
           printf 'REBASE_REPO=%s\n' "$RUNNER_TEMP/ai-rebase-repo" >> "$GITHUB_ENV"
 
-      - name: Check out the exact trusted workflow revision
+      - name: Check out the trusted automation control plane
         if: steps.context.outputs.skip == 'false'
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
-          ref: ${{ github.sha }}
+          ref: github-actions
           path: trusted
           fetch-depth: 1
           persist-credentials: false
           set-safe-directory: false
 
-      - name: Verify the immutable trusted action snapshot
+      - name: Verify the trusted action snapshot
         if: steps.context.outputs.skip == 'false'
-        env:
-          TRUSTED_SHA: ${{ github.sha }}
         shell: bash
         run: |
           set -euo pipefail
-          [ "$(git -C trusted rev-parse HEAD)" = "$TRUSTED_SHA" ] \
-            || { echo "::error::Trusted checkout does not match the workflow event SHA."; exit 1; }
+          trusted_sha="$(git -C trusted rev-parse HEAD)"
+          trusted_ref_sha="$(git -C trusted rev-parse 'origin/github-actions^{commit}')"
+          [ "$trusted_sha" = "$trusted_ref_sha" ] \
+            || { echo "::error::Trusted checkout does not match origin/github-actions."; exit 1; }
           for path in \
             .github/actions/rebase-conflict-round/action.yml \
             .github/scripts/rebase-stack/start.sh \

@@ -8,6 +8,7 @@ name: Web CI
 #                no mocks, per FUNDAMENTALS.md (seed and test via the real API).
 
 on:
+  workflow_call:
   pull_request:
     paths:
       - remix/**

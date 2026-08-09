@@ -36,6 +36,7 @@
 name: Promote develop to main
 
 on:
+  workflow_call:
   push:
     branches: [develop]
   workflow_dispatch:
@@ -57,9 +58,17 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Check out trusted automation support
+        uses: actions/checkout@v4
+        with:
+          ref: github-actions
+          path: workflow-control
+          fetch-depth: 1
+          persist-credentials: false
+
       - name: Open or refresh the promotion PR (changelog + delta comments)
         env:
           GH_TOKEN: ${{ github.token }}
           GH_TOKEN_CREATE: ${{ secrets.SYNC_BRANCHES_PAT || secrets.CONFLICT_RESOLVER_PAT || github.token }}
           PROMOTION_PR_LABELS: no-ai-rebase
-        run: node .github/scripts/promotion-pr-changelog.mjs
+        run: node workflow-control/.github/scripts/promotion-pr-changelog.mjs
