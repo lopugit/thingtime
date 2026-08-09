@@ -416,6 +416,17 @@ is fixed, and cite the checklist you ran in the PR description.
       duplicate/unknown model, wrong key, or empty array emits a warning and
       selects only `--model default`; no stored value can inject another CLI
       flag.
+- [ ] Save a new Admin order, then issue GETs through separate warm app
+      instances immediately (no 15-second wait): both must read the new
+      home-DB value. With Mongo unavailable, a warm instance may return its
+      last-known-good order and a cold instance must return only `default`.
+- [ ] Put `claude-opus-5` first and exercise a merge conflict, a replay/rebase
+      conflict, and each workflow's semantic Graphify refresh. Logs must show
+      the same Admin-selected primary for every Claude/Graphify invocation;
+      no refresh may inject literal Sonnet. Repeat with `default` first and
+      confirm Graphify leaves its backend default unforced. Run
+      `node .github/scripts/resolve-pr-conflicts-routing-contract.mjs
+      --self-test` to prove all AI runtime YAML remains in this contract.
 - [ ] With an availability failure on the first configured model, Claude
       Code tries the ordered native fallback chain. A completed run that still
       leaves conflict markers stops for manual review; it does not silently

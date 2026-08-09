@@ -29,6 +29,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   trusted collaborator exists. See the
   [PR #212 engineering note](../PRs/212-codex-develop-pr-previews-add-secure-develop-target-pr-previews.md).
   — Codex (AI), 2026-08-10
+- **Every live AI conflict/rebase path now follows the current Thingtime Admin
+  model order**: merge resolution, all rebase rounds, and their semantic
+  Graphify refreshes share the validated primary model instead of letting the
+  refresh silently fall back to Sonnet. The public setting endpoint now reads
+  the home-DB singleton on every request (retaining last-known-good only for a
+  real database outage), so a successful Admin reorder is visible immediately
+  across warm serverless instances. A source contract inventories every AI
+  workflow/action and rejects new unbound runtimes or obsolete hard-coded
+  models. The deleted legacy GitHub workflow registration was also disabled.
+  — Codex (AI), 2026-08-10
 - **The complete Actions control plane is ready for atomic promotion to
   `main`**: the mutually dependent workflow fixes from source PRs #192, #193,
   #194, #190, #199, #206, #207, and #208 are replayed together so the default
