@@ -19,6 +19,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Per-automation GitHub/Vercel compute routing**: Admin → CI Control can now
+  keep each supported automation on GitHub-hosted runners or move its expensive
+  work to an ephemeral Vercel Sandbox with one toggle. A signed, idempotent
+  provider route starts a durable Vercel Workflow, registers a uniquely labelled
+  self-hosted runner, dispatches the exact protected `github-actions` workflow,
+  projects its status history, and removes the runner/Sandbox afterward. Native
+  trigger routing fails over to GitHub compute when the external path is not
+  configured or is unavailable; Docker-backed Web CI and native Electron builds
+  remain explicitly GitHub-only. Fork-safe App permissions, secrets, bootstrap,
+  first-Reconcile behavior, and regression checks are documented in
+  README/TESTING. — Codex (AI), 2026-08-10
 - **One GitHub Actions control plane + Admin CI dashboard**: executable CI,
   promotion, sync, release, rebase, and AI conflict-resolution behavior now
   lives on the protected `github-actions` branch. `main`/`develop` retain only

@@ -3,6 +3,7 @@ import { withAdminPrivateResponse } from '~/api/utils/admin/adminResponse';
 import { requireAdmin } from '~/api/utils/auth/requireAdmin';
 import { githubAppConfigured } from '~/api/utils/ciControl/githubClient';
 import { listCiDashboard } from '~/api/utils/ciControl/store';
+import { vercelRunnerConfigured } from '~/api/utils/ciControl/vercelRunner';
 
 export const loader = ({ request }: { request: Request }) =>
   withAdminPrivateResponse(async () => {
@@ -19,7 +20,9 @@ export const loader = ({ request }: { request: Request }) =>
         controlPlaneRef: 'github-actions',
         githubAppConfigured: githubAppConfigured(),
         githubWebhookConfigured: Boolean(process.env.THINGTIME_GITHUB_WEBHOOK_SECRET),
-        vercelWebhookConfigured: Boolean(process.env.THINGTIME_VERCEL_WEBHOOK_SECRET)
+        vercelWebhookConfigured: Boolean(process.env.THINGTIME_VERCEL_WEBHOOK_SECRET),
+        vercelRunnerConfigured: vercelRunnerConfigured(),
+        providerRouterConfigured: Boolean(process.env.THINGTIME_CI_ROUTER_SECRET)
       }
     });
   });

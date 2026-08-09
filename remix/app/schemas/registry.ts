@@ -75,6 +75,7 @@ export const MIGRATION_DIAGNOSTIC_ID_PREFIX = 'migration-diagnostic-';
 // This registry is the single source for their protection and schema docs.
 export const CI_CONTROL_THINGTIME = [
   'ci-repository',
+  'ci-automation',
   'ci-feature',
   'ci-branch',
   'ci-pull-request',
@@ -1083,6 +1084,7 @@ const ciEntitySchema = (
 
 const ciControlSchemas: ThingtimeSchema[] = [
   ciEntitySchema('ci-repository', 'CI repository', 'Current integration and default-branch state for one repository.'),
+  ciEntitySchema('ci-automation', 'CI automation policy', 'Current execution-provider policy for one allowlisted automation.'),
   ciEntitySchema('ci-feature', 'CI feature', 'A feature/stack grouping that relates source and promotion pull requests.'),
   ciEntitySchema('ci-branch', 'CI branch', 'Current ref and head state for one repository branch.'),
   ciEntitySchema('ci-pull-request', 'CI pull request', 'Current topology, mergeability, and review state for one pull request.'),

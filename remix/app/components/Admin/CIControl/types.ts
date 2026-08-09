@@ -26,6 +26,7 @@ export type CiEvent = CiEntity & {
 
 export type CiDashboard = {
   repositories: CiEntity[];
+  automations: CiAutomationPolicy[];
   features: CiEntity[];
   branches: CiEntity[];
   pullRequests: CiEntity[];
@@ -46,12 +47,28 @@ export type CiDashboard = {
   };
 };
 
+export type CiExecutionProvider = 'github-actions' | 'vercel-sandbox';
+
+export type CiAutomationPolicy = {
+  key: CiWorkflowKey;
+  title: string;
+  summary: string;
+  defaultProvider: CiExecutionProvider;
+  executionProvider: CiExecutionProvider;
+  enabled: boolean;
+  vercelSupported: boolean;
+  sourceUpdatedAt: string | null;
+  updatedBy: string | null;
+};
+
 export type CiIntegration = {
   repository: string;
   controlPlaneRef: string;
   githubAppConfigured: boolean;
   githubWebhookConfigured: boolean;
   vercelWebhookConfigured: boolean;
+  vercelRunnerConfigured: boolean;
+  providerRouterConfigured: boolean;
 };
 
 export type CiControlResponse = {
