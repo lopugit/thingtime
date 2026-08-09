@@ -2,7 +2,9 @@ import { json } from '~/api/http';
 
 import { actorCors, actorPat, actorUser, resolveActor } from '~/api/utils/auth/resolveActor';
 import { appDataPreflight, readJsonBodyWithCors } from '~/api/utils/apps/cors';
+import { safeErrorText } from '~/api/utils/errors/safeError';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
+import { StorageMutationError } from '~/api/utils/storage/storageCore';
 import { toggleReaction, viewerOf } from '~/api/utils/things/things';
 
 // POST /api/v1/things/react — { id, emoji } — toggle the caller's reaction on a
@@ -39,10 +41,22 @@ export const action = async ({ request }: { request: Request }) => {
   }
 
   const body = await readJsonBodyWithCors(request, 64 * 1024, cors);
-  const result = await toggleReaction(viewerOf(user, actorPat(actor)), body.id, body.emoji ?? null, app);
+  let result: Awaited<ReturnType<typeof toggleReaction>>;
+  try {
+    result = await toggleReaction(viewerOf(user, actorPat(actor)), body.id, body.emoji ?? null, app);
+  } catch (error) {
+    if (error instanceof StorageMutationError) {
+      return json({ ok: false, error: error.message, outcome: 'rejected' }, { status: error.status, headers: cors });
+    }
+    const detail = safeErrorText(error, 'things react', 'Unexpected reaction error');
+    return json(
+      { ok: false, error: `Thingtime could not finish that reaction: ${detail}.`, outcome: 'unknown' },
+      { status: 500, headers: cors }
+    );
+  }
 
   if (result.ok === false) {
-    return json({ ok: false, error: result.error }, { status: result.status, headers: cors });
+    return json({ ok: false, error: result.error, outcome: 'rejected' }, { status: result.status, headers: cors });
   }
   return json(
     {

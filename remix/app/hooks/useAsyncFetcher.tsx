@@ -1,5 +1,7 @@
 import { useCallback, useState } from 'react';
 
+import { createApiFailure, readApiResponsePayload } from './apiFailure';
+
 export function useAsyncFetcher() {
   const [defaultOpts, setDefaultOpts] = useState({
     method: 'POST',
@@ -7,7 +9,10 @@ export function useAsyncFetcher() {
   });
 
   const submit = useCallback(
-    async (data, opts: { action: string; method?: string; encType?: string; signal?: AbortSignal }) => {
+    async (
+      data,
+      opts: { action: string; method?: string; encType?: string; signal?: AbortSignal; errorContext?: string }
+    ) => {
       const nextOpts = { ...defaultOpts, ...opts };
       const headers = new Headers();
       let body: BodyInit | undefined;
@@ -25,20 +30,33 @@ export function useAsyncFetcher() {
         body = formData;
       }
 
-      const response = await fetch(nextOpts.action, {
-        method: nextOpts.method || 'POST',
-        credentials: 'include',
-        headers,
-        body,
-        signal: nextOpts.signal
+      const method = nextOpts.method || 'POST';
+      let response: Response;
+      try {
+        response = await fetch(nextOpts.action, {
+          method,
+          credentials: 'include',
+          headers,
+          body,
+          signal: nextOpts.signal
+        });
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') throw error;
+        throw createApiFailure({ cause: error, action: nextOpts.errorContext, method });
+      }
+      const payload = await readApiResponsePayload(response, {
+        action: nextOpts.errorContext,
+        method
       });
-      const contentType = response.headers.get('Content-Type') || '';
-      const payload = contentType.includes('application/json')
-        ? await response.json()
-        : await response.text();
 
       if (!response.ok) {
-        throw payload;
+        throw createApiFailure({
+          payload,
+          status: response.status,
+          retryAfter: response.headers.get('Retry-After'),
+          action: nextOpts.errorContext,
+          method
+        });
       }
 
       return payload;

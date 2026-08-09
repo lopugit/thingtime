@@ -1,4 +1,10 @@
-import { getThingsCollection, withMongoTransaction } from '../mongodb/collections';
+// The user subscription ledger is an identity/billing object: HOME-pinned like
+// users/sessions, whatever data-plane override the request carries. Reads (a
+// user's quota) and reconciliation must always answer from the home ledger,
+// and ledger writes only ever ride sessions from home-client transactions
+// (sessions are client-bound) — active-plane writers skip account accounting
+// entirely when an override is live (foreign bytes are not Thingtime storage).
+import { getHomeThingsCollection as getThingsCollection, withHomeMongoTransaction } from '../mongodb/collections';
 import {
   subscriptionThingMatch,
   userSubscriptionLedgerEnvelopeIsTrusted,
@@ -375,7 +381,7 @@ export const markUserStorageNeedsReconcile = async (
 // ledger write conflict/retry against concurrent writers. The resulting total
 // is therefore from one serializable point, not a racy best-effort sum.
 export const reconcileUserStorage = async (ownerId: string): Promise<UserStorageUsage> =>
-  withMongoTransaction(async (session) => {
+  withHomeMongoTransaction(async (session) => {
     const repaired = await reconcileUserStorageInTransaction(ownerId, session);
     if (!repaired) {
       throw new StorageMutationError(503, 'accounting_unavailable', 'The account subscription ledger is missing');

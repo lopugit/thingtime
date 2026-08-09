@@ -3,7 +3,7 @@ import { ObjectId } from 'mongodb';
 
 // feed-algorithm is a PROTECTED system kind: algorithm things stay on the home
 // deployment DB even while a data-plane endpoint override is active.
-import { getFeedAlgorithmsCollection, getHomeThingsCollection as getThingsCollection, getUsersCollection, withMongoTransaction } from '../mongodb/collections';
+import { getFeedAlgorithmsCollection, getHomeThingsCollection as getThingsCollection, getUsersCollection, withHomeMongoTransaction } from '../mongodb/collections';
 import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 import { clearUserActiveFeedAlgorithm, setUserActiveFeedAlgorithm } from '../auth/users';
 import { applyEventsToWeights, emptyWeights, topInterests, type AlgorithmWeights, type EngagementEvent } from '../things/feedRanking';
@@ -341,7 +341,7 @@ export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInp
 		storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION
 	});
 	try {
-		await withMongoTransaction(async (session) => {
+		await withHomeMongoTransaction(async (session) => {
 			await applyUserStorageDelta(ownerId, sizeBytes, session);
 			await things.insertOne(thing as any, { session });
 		});
@@ -379,7 +379,7 @@ export const updateAlgorithm = async (
 		// ledger becomes ready; after that, migration is mandatory.
   if (era === 'things') {
 			const things = await getThingsCollection();
-			await withMongoTransaction(async (session) => {
+			await withHomeMongoTransaction(async (session) => {
 				const before = await things.findOne({ shareId: doc.shareId, ownerId, thingtime: 'feed-algorithm' } as any, { session });
 				if (!before) {
 					throw new StorageMutationError(409, 'storage_conflict', 'Algorithm changed while it was being updated — try again');
@@ -431,7 +431,7 @@ export const updateAlgorithm = async (
   } else {
 			const things = await getThingsCollection();
 			const algorithms = await getFeedAlgorithmsCollection();
-			await withMongoTransaction(async (session) => {
+			await withHomeMongoTransaction(async (session) => {
 				await assertLegacyAlgorithmMutationAllowed(ownerId, things, session);
 				const before = (await algorithms.findOne({ shareId: doc.shareId, ownerId } as any, { session })) as any as FeedAlgorithmDoc | null;
 				if (!before) {
@@ -464,7 +464,7 @@ export const deleteAlgorithm = async (ownerId: string, shareId: unknown): Promis
 	let deletedThing = false;
 	let deletedLegacy = false;
 	try {
-		await withMongoTransaction(async (session) => {
+		await withHomeMongoTransaction(async (session) => {
 			const legacy = await algorithms.findOne({ shareId: id, ownerId } as any, { projection: { _id: 1 }, session });
 			if (legacy) await assertLegacyAlgorithmMutationAllowed(ownerId, things, session);
 			const before = await things.findOneAndDelete({ shareId: id, ownerId, thingtime: 'feed-algorithm' } as any, { session });
@@ -535,7 +535,7 @@ export const trackEngagement = async (
 		// the account ledger.
   if (era === 'things') {
 			const things = await getThingsCollection();
-			await withMongoTransaction(async (session) => {
+			await withHomeMongoTransaction(async (session) => {
 				const before = await things.findOne({ shareId: doc.shareId, ownerId, thingtime: 'feed-algorithm' } as any, { session });
 				if (!before) {
 					throw new StorageMutationError(409, 'storage_conflict', 'Algorithm changed while it was being trained — try again');
@@ -585,7 +585,7 @@ export const trackEngagement = async (
   } else {
 			const things = await getThingsCollection();
 			const algorithms = await getFeedAlgorithmsCollection();
-			await withMongoTransaction(async (session) => {
+			await withHomeMongoTransaction(async (session) => {
 				await assertLegacyAlgorithmMutationAllowed(ownerId, things, session);
 				const before = (await algorithms.findOne({ shareId: doc.shareId, ownerId } as any, { session })) as any as FeedAlgorithmDoc | null;
 				if (!before) {
