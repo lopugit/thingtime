@@ -1,18 +1,37 @@
-# Keep a standing promotion PR open from develop into main.
+# Keep a standing promotion PR open from develop into main, with a live
+# changelog of what merging it would ship.
 #
-# On every push to develop (or manual dispatch):
-# - An open PR (base main, head develop) already exists → do nothing. Its head
-#   is the moving develop ref, so it picks up new pushes/merges by itself.
-# - No open PR and develop has commits main lacks → open a fresh promotion PR.
-# - develop and main are level → skip quietly. That is the normal state right
-#   after a promotion merges and "Sync main into develop" levels develop with
-#   main again, so this pair of workflows never ping-pongs.
+# On every push to develop (or manual dispatch),
+# .github/scripts/promotion-pr-changelog.mjs:
+# - opens the promotion PR (base main, head develop) when develop is ahead of
+#   main and none is open — the body already contains the changelog section;
+# - refreshes the changelog section in the open PR's description (between the
+#   <!-- promotion-changelog --> markers, preserving any preamble text) so the
+#   PR lists, at a glance, every feature PR merged into develop that this
+#   promotion carries: title, author, source branch, merge date, no-promote
+#   warnings, plus direct commits without a PR;
+# - posts a short delta comment when PRs enter or leave the promotion window,
+#   so watchers get a notification without re-reading the description;
+# - creates the promotion PR with, and keeps re-applying, the no-ai-rebase
+#   label (PROMOTION_PR_LABELS). The AI rebase workflow honors it and never
+#   rewrites the PR head, so develop — an integration branch whose history IS
+#   its "Merge pull request #N" commits — is never flattened into plain
+#   commits again (a develop rebase on 2026-08-08 destroyed merge subjects
+#   and SHA↔PR association, the changelog's primary attribution signals).
+#   The merge-based conflict resolver explicitly keeps ownership of
+#   no-ai-rebase PRs, resolving develop↔main divergence with history-
+#   preserving merge commits, which is also the repo's house style;
+# - does nothing when develop and main are level. That is the normal state
+#   right after a promotion merges and "Sync main into develop" levels the
+#   branches again, so this pair of workflows never ping-pongs.
 #
 # Token notes (same trade-off documented in sync-main-into-develop.yml):
 # - A PR opened with GITHUB_TOKEN gets no pull_request workflow runs for the
 #   opening event (recursion guard), so Web CI would sit blank until the next
 #   push to develop. When SYNC_BRANCHES_PAT (or CONFLICT_RESOLVER_PAT) is
-#   configured we open the PR with it so CI runs on the PR immediately.
+#   configured the script opens the PR with it so CI runs on the PR
+#   immediately. Description edits and changelog comments stay on
+#   GITHUB_TOKEN.
 
 name: Promote develop to main
 
@@ -30,43 +49,17 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  open-pr:
+  promotion-pr:
     runs-on: ubuntu-latest
     steps:
-      - name: Reuse the open promotion PR if one exists
-        id: existing
+      - name: Check out develop with full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Open or refresh the promotion PR (changelog + delta comments)
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          existing=$(gh pr list --repo "${{ github.repository }}" --base main --head develop --state open --json number --jq '.[0].number')
-          if [ -n "$existing" ]; then
-            echo "found=true" >> "$GITHUB_OUTPUT"
-            echo "Promotion PR #$existing is already open and tracks develop automatically." >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "found=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Check develop is ahead of main
-        if: steps.existing.outputs.found == 'false'
-        id: ahead
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          ahead=$(gh api "repos/${{ github.repository }}/compare/main...develop" --jq '.ahead_by')
-          echo "ahead=$ahead" >> "$GITHUB_OUTPUT"
-          if [ "$ahead" = "0" ]; then
-            echo "develop has nothing main lacks — no promotion PR needed." >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-      - name: Open the promotion PR
-        if: steps.existing.outputs.found == 'false' && steps.ahead.outputs.ahead != '0'
-        env:
-          GH_TOKEN: ${{ secrets.SYNC_BRANCHES_PAT || secrets.CONFLICT_RESOLVER_PAT || github.token }}
-        run: |
-          gh pr create \
-            --repo "${{ github.repository }}" \
-            --base main \
-            --head develop \
-            --title "Promote develop to main" \
-            --body "Standing promotion PR opened by the *Promote develop to main* workflow. Its head is \`develop\`, so every new push or merge to \`develop\` shows up here on its own. Merge it whenever main should catch up — the workflow opens the next one after the following push to \`develop\`. The *Sync main into develop* workflow levels develop with main again after each promotion."
-          echo "Opened a promotion PR (develop → main)." >> "$GITHUB_STEP_SUMMARY"
+          GH_TOKEN_CREATE: ${{ secrets.SYNC_BRANCHES_PAT || secrets.CONFLICT_RESOLVER_PAT || github.token }}
+          PROMOTION_PR_LABELS: no-ai-rebase
+        run: node .github/scripts/promotion-pr-changelog.mjs
