@@ -19,6 +19,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Conflict resolver no longer mistakes promotion PRs for giant stacks**:
+  `no-ai-rebase` PRs now break stack-topology edges, so the standing
+  `develop` → `main` promotion PR cannot divert every feature PR targeting
+  `develop` away from merge-based conflict resolution. The rebase detector's
+  bottom-up ordering also loads repository-wide JSON from `RUNNER_TEMP`
+  instead of command-line `--argjson` values, preventing the observed
+  `jq: Argument list too long` detector crash as the open-PR graph grows. —
+  Codex (AI), 2026-08-09
 - **Password-confirmed reveal for protected Thing diagnostics**: new migration
   diagnostics use a backward-compatible v2 secure envelope that keeps a bounded
   set of MongoDB ObjectIds supplied by explicitly authored server-side error
@@ -126,6 +134,18 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
+- **Promotion PR rebase protection (`no-ai-rebase`)**: the promotion workflow
+  now creates the standing develop → main PR with — and re-applies on every
+  develop push — the `no-ai-rebase` label (env `PROMOTION_PR_LABELS`, creating
+  the repo label if missing; the AI workflows honored it but nothing had ever
+  created it). The AI rebase workflow skips labeled PRs, so develop — an
+  integration branch whose history IS its merge commits — is never flattened
+  again (the 2026-08-08 develop rebase destroyed merge-subject and SHA↔PR
+  attribution, the changelog's primary signals). The merge-based conflict
+  resolver explicitly keeps ownership of `no-ai-rebase` PRs and levels
+  develop with main via history-preserving merge commits, the repo's house
+  style. Label state is read via REST (search-backed listings lag) and stray
+  removals self-heal on the next develop push. — Claude (AI), 2026-08-08
 - **Promotion PR changelog**: the **Promote develop to main** workflow now
   maintains an at-a-glance changelog on the standing promotion PR. A new
   `.github/scripts/promotion-pr-changelog.mjs` resolves the first-parent spine
