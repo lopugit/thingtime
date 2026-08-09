@@ -434,6 +434,11 @@ is fixed, and cite the checklist you ran in the PR description.
       returned document must still pass the complete protected-envelope check.
       A malformed Thing occupying that id remains untouched and returns the
       authored storage-invariant error.
+- [ ] Remove `storageClass` from existing reserved, system-owned `schema-*`
+      builtin schema Things. `seed-builtin-schemas` reports each as pending and
+      restores `storageClass: "control"`; running
+      `backfill-user-storage-accounting` directly invokes that repair first.
+      A community/user-owned `thingtime: ["schema"]` Thing remains billable.
 - [ ] Force a migration runner exception once: the public error field remains
       a safe exception class/code (never a raw Mongo message, query, document
       id, host, or credential), and Lopu renders contextual text beneath the
@@ -444,9 +449,29 @@ is fixed, and cite the checklist you ran in the PR description.
       `migration-diagnostic-*` id and Lopu shows “View full migration
       diagnostic”. The link opens `/thing/:id` at the top of the page, reloads
       successfully, shows the bounded redacted stack/detail as plain text, and
-      identifies its capture/expiry time. A
-      different admin, a signed-in non-admin, and an anonymous caller cannot
-      read it; missing, expired, and inaccessible ids share the same 404 shape.
+      identifies its capture/expiry time. A different admin, a signed-in
+      non-admin, and an anonymous caller cannot read it; missing, expired, and
+      inaccessible ids share the same 404 shape.
+- [ ] Force the `orphan_billable_thing` error with a Mongo ObjectId. The normal
+      diagnostic GET and `/thing/:id` detail contain only a numbered
+      `[redacted MongoDB ObjectId #…]` placeholder plus a value-free reveal
+      descriptor; the raw id is absent from `crystal`, normal GET JSON, generic
+      Thing get/list/search, and the redacted detail. A legacy v1 diagnostic
+      remains readable and shows no Reveal controls.
+- [ ] On `/thing/:diagnostic-id`, click Reveal, enter the current owning admin's
+      correct password, and confirm exactly the selected ObjectId appears. Hide
+      it, switch account, navigate away, and background the tab; each clears the
+      transient value. Every later Reveal prompts for and verifies the password
+      again. A wrong/old password returns the same generic failure, another
+      admin or non-admin receives no value, and five confirmation requests
+      (including successes) in 15 minutes hit the fixed fail-closed ceiling.
+      Success and every error carry `private, no-store` and `Pragma: no-cache`.
+- [ ] Throw diagnostics containing a 24-hex password/token/authorization value,
+      structured password/token values, a multi-value Cookie header, a
+      connection-string credential, a sensitive URL query value, and an
+      unlabelled 24-hex string. Each is irreversibly redacted and none appears
+      in the private reveal table. No reveal request accepts a caller-selected
+      owner, kind, field name, JSON path, or raw `secure` blob selector.
 - [ ] On a failed migration dry run, no diagnostic Thing is written and the
       complete bounded redacted detail appears in a long-lived, scrollable
       Lopu toast. Force diagnostic persistence to fail on a real run and verify
@@ -461,8 +486,11 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] Force each typed migration operator failure once: the response uses the
       closed lease/concurrency/prerequisite/repair/invariant message catalogue,
       includes only registered migration ids and aggregate counts, and keeps
-      Mongo `_id`, ownerId, appId, shareId, query text, hosts, and stacks in
-      server logs. Recoverable conflicts return 409 while still marking a real
+      Mongo `_id`, ownerId, appId, shareId, query text, hosts, and stacks out of
+      the public response. Only ObjectIds supplied through an explicitly
+      authored server-side context may enter the protected diagnostic reveal
+      table; all other private context stays in server logs. Recoverable
+      conflicts return 409 while still marking a real
       run commit-unknown so the panel refreshes potentially changed counts.
 - [ ] `drop-stale-collection-generations` shows the red destructive badge;
       dry-run lists exactly what would drop with doc counts; a non-dry run

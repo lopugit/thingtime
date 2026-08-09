@@ -966,7 +966,7 @@ const migrationDiagnosticSchema: ThingtimeSchema = {
 	detail:
 		'Protected control-plane Thing written only by the admin migration runner after its lease is released. ' +
 		'The crystal contains bounded run metadata; the full redacted error is an opaque binary root field, read ' +
-		'only through the current-admin diagnostic endpoint. It expires automatically and never enters storage billing.',
+		'only through the current-admin diagnostic endpoint. Version 2 may retain a bounded map of explicitly contextual MongoDB ObjectIds behind value-free references; each raw value requires fresh current-password confirmation through the closed reveal endpoint. Credentials and ambiguous values remain irreversible. It expires automatically and never enters storage billing.',
 	createdVia: 'POST /api/v1/admin/migrations/run (failure path)',
 	fields: [
 		{ name: 'diagnosticVersion', type: 'number', required: true, description: 'Diagnostic envelope version.' },
@@ -984,7 +984,7 @@ const migrationDiagnosticSchema: ThingtimeSchema = {
 		{ name: 'capturedAt', type: 'date', required: true, description: 'Diagnostic capture time.' }
 	],
 	example: {
-		diagnosticVersion: 1,
+		diagnosticVersion: 2,
 		migrationId: 'backfill-user-storage-accounting',
 		mode: 'run',
 		status: 500,

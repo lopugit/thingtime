@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { exactDocumentSnapshotMatch, storageMigrationOwnership } from './migrationCore.ts';
+import { builtinSchemaSeedNeedsRefresh, exactDocumentSnapshotMatch, storageMigrationOwnership } from './migrationCore.ts';
 
 test('legacy conversion delete pins the full source even without updatedAt', () => {
 	const source = { _id: 'legacy-1', email: 'person@example.test', nested: { value: 1 } };
@@ -17,4 +17,17 @@ test('billable content with no current user remains unresolved', () => {
 	assert.equal(storageMigrationOwnership({ ownerId: 'user-1', thingtime: ['data'] }, known), 'known-user');
 	assert.equal(storageMigrationOwnership({ ownerId: 'missing-user', thingtime: ['data'] }, known), 'unknown-user');
 	assert.equal(storageMigrationOwnership({ ownerId: 'missing-user', thingtime: ['subscription'], storageClass: 'control' }, known), 'excluded');
+	assert.equal(storageMigrationOwnership({ ownerId: 'system', thingtime: ['schema'], storageClass: 'control' }, known), 'excluded');
+	assert.equal(storageMigrationOwnership({ ownerId: 'user-1', thingtime: ['schema'] }, known), 'known-user');
+});
+
+test('builtin schema seed treats a missing control-plane stamp as repairable drift', () => {
+	const crystal = { id: 'service-quota', name: 'Service quota' };
+	assert.equal(builtinSchemaSeedNeedsRefresh({ crystal }, crystal), true);
+	assert.equal(builtinSchemaSeedNeedsRefresh({ crystal, storageClass: 'content' }, crystal), true);
+	assert.equal(builtinSchemaSeedNeedsRefresh({ crystal, storageClass: 'control' }, crystal), false);
+	assert.equal(
+		builtinSchemaSeedNeedsRefresh({ crystal: { ...crystal, name: 'Stale' }, storageClass: 'control' }, crystal),
+		true
+	);
 });
