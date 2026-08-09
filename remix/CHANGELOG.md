@@ -256,6 +256,39 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   30-check local-only live suite. This supersedes the earlier app→end-user-tier
   fallback from the stacked admin-manager change. — Codex (AI), 2026-08-05
 
+- **Per-channel notification toggles + SES notification emails**: Settings →
+  Notifications is now a per-type × per-channel switch matrix — Push (the
+  bell/in-app channel, stored as the original flat pref keys so existing prefs
+  keep working) and Email (new nested `email`/`masters` keys in the same
+  secure-blob pref object), each with a master switch. Activity notifications
+  (friend requests/accepts, new followers, comments, replies, reactions,
+  shares; posts-from-followed/friends email opt-in) now also send SES emails on
+  the new `notification` email stream — fire-and-forget from the same emits,
+  verified addresses only, ≤10/recipient/hour throttle, manage +
+  one-click-unsubscribe links in every footer (HMAC-tokened
+  `GET /api/v1/notifications/email/unsubscribe`). A weekly summary digest
+  (email-only type, Vercel cron `remix/vercel.json` →
+  `GET /api/v1/notifications/email/weekly-summary` with `CRON_SECRET` bearer or
+  admin session, six-day idempotency lookback, dry-run mode) recaps followers,
+  requests, comments, replies, reactions, shares, post views and posts. New
+  env: `THINGTIME_EMAIL_NOTIFICATIONS_FROM`, `THINGTIME_EMAIL_UNSUB_SECRET`
+  (optional), `CRON_SECRET`, `APP_URL` (email links) — see README “Notification
+  emails”. — Claude (AI), 2026-08-03
+
+- **Followers + friends, notifications, and public post view stats**: one-way
+  follows and approval-based friendships (`follow`/`friend` protected things,
+  `/api/v1/users/{follow,friend,relationships,connections}`) with the
+  `tt:userFriends` acl circle now resolving against the real friend graph;
+  server-minted in-app notifications (nav bell 🔔 + popover, capped post
+  fan-out, per-type switches in Settings → Notifications stored in the user
+  secure blob, read-time pref filtering); and anti-bot post view telemetry
+  (`postViews` collection, unique-viewer dedup per salted identity,
+  dwell/ratio/position capture via `useViewTracking` on feed/profile/permalink,
+  public 👁 viewCount + impressions/avg-read-time on every post). Detailed
+  notes in
+  [`PRs/172-followers-friends-notifications-views-4fcfcf-followers-friends-notifications-views.md`](../PRs/172-followers-friends-notifications-views-4fcfcf-followers-friends-notifications-views.md).
+  — Claude (AI), 2026-08-03
+
 - **CI conflict-resolver graphify refresh now does LLM semantic extraction**:
   after an auto-resolved merge, `resolve-pr-conflicts.yml` runs
   `graphify extract` + `cluster-only` with whichever Claude credential the
@@ -339,6 +372,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   through the existing detect→handoff→dispatch hop — API-only in the target
   context, no PR code checkout, resolve job excluded for that event.
   — Claude (AI), 2026-08-03
+
+- **Multi-emoji reaction tokens render in full on the react button**: the
+  merged reaction control truncated every token to its first grapheme, so a
+  🤣🤣🙌💀💦 reaction looked like 🤣; posts and comments now show the whole
+  token. — Claude (AI), 2026-08-03
+- **Mobile nav controls no longer sit under the commander pill**: the
+  nav-right section (bell, username) stacks above the absolutely-positioned
+  search pill and the pill reserves room for the bell, so those controls are
+  tappable on phones. — Claude (AI), 2026-08-03
 
 - **Index bootstrap recovery after PRs #159/#161**: failed boot-time
   `ensureIndexes()` work no longer caches a rejected promise for 60 seconds.

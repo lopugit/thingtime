@@ -39,6 +39,7 @@ import {
   sanitizeExtended,
   validateThingtimeCrystal,
   visibilityFromAcl,
+  type NotificationType,
   type ThingVisibility
 } from '~/schemas/registry';
 import { scorePost, type AlgorithmWeights, type PostFeatures } from './feedRanking';
@@ -61,6 +62,9 @@ import {
 import type { AppNamespaceScope } from '../apps/namespace';
 import { scopeCovers } from '../apps/scopes';
 import { resolveAppScopedAcl } from '../apps/namespace';
+import { resolveViewStats } from './views';
+import { emitNotification, emitNotificationsBulk } from '../notifications/notifications';
+import { followerIdsOf, friendIdsOf } from '../users/social';
 
 // Everything in thingtime.things is a thing (see app/schemas/registry.ts):
 // one root Thing schema, sub-schemas applied via the `thingtime` array of
@@ -241,6 +245,10 @@ export type PublicPost = {
   // not visible to the viewer (shareOf null in that case)
   isShare: boolean;
   shareOf: PublicPost | null;
+  // public view stats (see views.ts): viewCount = unique viewer identities
+  // (the manipulation-resistant number), impressions/avgDwellMs secondary
+  viewCount: number;
+  viewStats: { impressions: number; avgDwellMs: number };
   extended: unknown | null;
   createdAt: string;
 };
@@ -271,12 +279,24 @@ export type PublicThing = {
 // When the actor is a personal access token, `pat` rides along: tokenId
 // stamps everything the token creates (createdByTokenId), and
 // onlyCreatedThings sandboxes its mutations to those stamped things.
+// friendIds is the viewer's accepted-friend set, loaded once per request path
+// by withFriendIds so sync acl checks can resolve tt:userFriends.
 export type Viewer = {
   id: string;
   username?: string | null;
   pat?: { tokenId: string; onlyCreatedThings: boolean } | null;
+  friendIds?: ReadonlySet<string>;
 } | null;
 export const asViewer = (value: string | Viewer | null | undefined): Viewer => (typeof value === 'string' ? { id: value } : value || null);
+
+// Attach the viewer's accepted-friend set (one indexed query, memoised on the
+// viewer object — already-enriched viewers pass straight through). Read paths
+// call this before acl evaluation so friends-only things resolve for real
+// friends instead of only their owner.
+export const withFriendIds = async (viewer: Viewer): Promise<Viewer> => {
+  if (!viewer?.id || viewer.friendIds) return viewer;
+  return { ...viewer, friendIds: await friendIdsOf(viewer.id) };
+};
 
 export const POST_TYPES: PostType[] = [...REGISTRY_POST_TYPES];
 export const VISIBILITIES: PostVisibility[] = ['public', 'friends', 'family', 'private'];
@@ -981,7 +1001,92 @@ export const createThing = async (
     }
     throw err;
   }
+
+  // notification side effects — emit* never throws, so a notification hiccup
+  // can't fail the write that triggered it
+  await emitCreationNotifications(doc, target, asOwner);
   return { ok: true, doc };
+};
+
+// Posts land in followers'/friends' notification feeds, capped — big accounts
+// notify their newest FANOUT_CAP connections rather than block the write.
+const FANOUT_CAP = 200;
+
+// Notifications for a freshly created thing. createThing is the single funnel
+// for posts, comments (plain + rich), shares AND reaction things, so this one
+// hook covers every creation path — dedicated routes and generic POST alike.
+export const emitCreationNotifications = async (doc: ThingDoc, target: ThingDoc | null, actor: Viewer): Promise<void> => {
+	// A custom endpoint is an untrusted, caller-controlled data plane. Its docs
+	// can deliberately collide with home shareIds/ownerIds, so none may trigger
+	// bell or email side effects in Thingtime's home identity plane.
+	if (isCustomMongoEndpointActive()) return;
+  if (!actor?.id) return;
+  const kinds = thingtimeOf(doc);
+  const actorRef = { id: actor.id, username: actor.username || null };
+
+  if (target && kinds.includes('reaction')) {
+    await emitNotification({
+      recipientId: target.ownerId,
+      type: 'reaction',
+      actor: actorRef,
+      targetId: target.shareId,
+      postId: target.shareId,
+      preview: String(crystalOf(doc).emoji || '')
+    });
+    return;
+  }
+  if (target && kinds.includes('comment')) {
+    await emitNotification({
+      recipientId: target.ownerId,
+      // replying to a comment notifies its author as a reply; commenting on a
+      // post notifies the post author as a comment
+      type: thingtimeOf(target).includes('comment') ? 'reply' : 'comment',
+      actor: actorRef,
+      targetId: doc.shareId,
+      postId: target.shareId,
+      preview: String(crystalOf(doc).text || '')
+    });
+    return;
+  }
+  if (target && kinds.includes('share')) {
+    await emitNotification({
+      recipientId: target.ownerId,
+      type: 'share',
+      actor: actorRef,
+      targetId: doc.shareId,
+      postId: doc.shareId,
+      preview: String(crystalOf(doc).text || '') || String(crystalOf(target).text || '')
+    });
+    // a share is also a new post — fall through to the fan-out below
+  }
+  if (!kinds.includes('post') || kinds.includes('comment')) return;
+
+  // fan-out only to audiences that can actually view the post: public → both
+  // circles, friends-only → friends; anything narrower skips fan-out.
+  const acl = aclOf(doc);
+  const isPublic = acl.includes(ACL_ALL);
+  if (!isPublic && !acl.includes(ACL_FRIENDS)) return;
+  const friends = await friendIdsOf(actor.id);
+  const recipients: Array<{ recipientId: string; type: NotificationType }> = [];
+  for (const id of friends) {
+    if (recipients.length >= FANOUT_CAP) break;
+    recipients.push({ recipientId: id, type: 'post-from-friend' });
+  }
+  if (isPublic && recipients.length < FANOUT_CAP) {
+    const followers = await followerIdsOf(actor.id, FANOUT_CAP);
+    for (const id of followers) {
+      if (recipients.length >= FANOUT_CAP) break;
+      if (friends.has(id)) continue;
+      recipients.push({ recipientId: id, type: 'post-from-followed' });
+    }
+  }
+  if (!recipients.length) return;
+  await emitNotificationsBulk(recipients, {
+    actor: actorRef,
+    targetId: doc.shareId,
+    postId: doc.shareId,
+    preview: String(crystalOf(doc).text || '')
+  });
 };
 
 export type CreatePostInput = {
@@ -1324,7 +1429,7 @@ const viewerReactionsOf = (entries: ReactionEntry[], viewerId: string | null): s
 const liveShareCountOf = (doc: ThingDoc, related: RelatedThings): number => related.shareCountByTarget.get(doc.shareId) || 0;
 
 export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | Viewer): Promise<PublicPost[]> => {
-  const viewer = asViewer(viewerInput);
+  const viewer = await withFriendIds(asViewer(viewerInput));
   const viewerId = viewer?.id || null;
   if (!docs.length) return [];
   const things = await getThingsCollection();
@@ -1336,13 +1441,16 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
     : [];
   const originalsById = new Map(originals.map((doc) => [doc.shareId, doc]));
 
-	const projectedDocs = [...docs, ...originals];
-	const [related, threadCounts, attachmentsByTarget] = await Promise.all([
-		resolveRelated(projectedDocs),
-  // total thread sizes (all descendants) for the "N comments" counters
-		resolveThreadCounts(projectedDocs.map((doc) => doc.shareId)),
-		resolvePostAttachments(projectedDocs.map((doc) => doc.shareId))
-	]);
+  const allDocs = [...docs, ...originals];
+  // One batched pass each: interactions, whole-thread comment totals,
+  // protected attachment metadata, and public view stats. Run them together
+  // so neither attachments nor views add serial read latency.
+  const [related, threadCounts, attachmentsByTarget, viewStats] = await Promise.all([
+    resolveRelated(allDocs),
+    resolveThreadCounts(allDocs.map((doc) => doc.shareId)),
+    resolvePostAttachments(allDocs.map((doc) => doc.shareId)),
+    resolveViewStats(allDocs.map((doc) => doc.shareId))
+  ]);
 
   const userIds: string[] = [];
   [...docs, ...originals].forEach((doc) => {
@@ -1420,6 +1528,14 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
       isShare: !!shareTarget && thingtimeOf(doc).includes('share'),
       // only surface originals the viewer is allowed to see
       shareOf: original && canView(original, viewer) ? project(original, false) : null,
+      viewCount: viewStats.get(doc.shareId)?.viewCount || 0,
+      viewStats: (() => {
+        const stats = viewStats.get(doc.shareId);
+        return {
+          impressions: stats?.impressions || 0,
+          avgDwellMs: stats?.viewCount ? Math.round(stats.totalDwellMs / stats.viewCount) : 0
+        };
+      })(),
       extended: doc.extended ?? null,
       createdAt: new Date(doc.createdAt).toISOString()
     };
@@ -1503,6 +1619,12 @@ export const visibilityQueryFor = (viewer: Viewer, circles: PostVisibility[]) =>
 
   const clauses: any[] = [];
   if (publicWanted) clauses.push(circleClause('public'));
+  // friends-only posts from users the viewer is an accepted friend of — the
+  // DB match is a superset; exact evaluation (exclusions etc.) stays with
+  // canView on the fetched page. Requires an enriched viewer (withFriendIds).
+  if (viewer?.id && viewer.friendIds?.size && wanted.includes('friends')) {
+    clauses.push({ $and: [{ ownerId: { $in: [...viewer.friendIds] } }, circleClause('friends')] });
+  }
   if (viewer?.id) {
     // the viewer's own things, optionally narrowed to the requested circles
     clauses.push(
@@ -1522,7 +1644,9 @@ const findThing = async (shareId: unknown): Promise<ThingDoc | null> => {
 
 const findViewableThing = async (shareId: unknown, viewer: Viewer): Promise<ThingDoc | null> => {
   const doc = await findThing(shareId);
-  if (!doc || !(await canViewInherited(doc, viewer))) return null;
+  // friend enrichment happens here so every interaction path (react, comment,
+  // share, save, view) resolves friends-only targets for real friends
+  if (!doc || !(await canViewInherited(doc, await withFriendIds(viewer)))) return null;
   return doc;
 };
 
@@ -1739,7 +1863,7 @@ export const getFeed = async (
   viewerInput: string | Viewer,
   query: FeedQuery
 ): Promise<{ ok: true; posts: PublicPost[]; nextCursor: string | null; ranked: boolean } | Fail> => {
-  const viewer = asViewer(viewerInput);
+  const viewer = await withFriendIds(asViewer(viewerInput));
   const limit = Math.min(Math.max(1, query.limit || DEFAULT_FEED_LIMIT), MAX_FEED_LIMIT);
   const types = (query.types || []).filter((type) => POST_TYPES.includes(type));
   const circles = (query.circles || []).filter((circle) => VISIBILITIES.includes(circle));
@@ -1824,7 +1948,7 @@ export const listUserPosts = async (
   cursor: string | null,
   limit = DEFAULT_FEED_LIMIT
 ): Promise<{ ok: true; posts: PublicPost[]; nextCursor: string | null; postCount?: number } | Fail> => {
-  const viewer = asViewer(viewerInput);
+  const viewer = await withFriendIds(asViewer(viewerInput));
   if (typeof username !== 'string' || !username.trim()) return fail(400, 'username is required');
   // dual-era: findUserByUsername resolves user things first, legacy second —
   // a bare users.findOne would 404 every things-era + migrated account
@@ -1833,7 +1957,13 @@ export const listUserPosts = async (
 
   const ownerId = String(user._id);
   const own = viewer?.id === ownerId;
-  const match = own ? withMatch(postMatch(), { ownerId }) : withMatch(postMatch(), { ownerId }, circleClause('public'));
+  // a friend browsing this profile also sees the owner's friends-circle posts
+  const friendOfOwner = !!viewer?.friendIds?.has(ownerId);
+  const match = own
+    ? withMatch(postMatch(), { ownerId })
+    : friendOfOwner
+      ? withMatch(postMatch(), { ownerId }, { $or: [circleClause('public'), circleClause('friends')] })
+      : withMatch(postMatch(), { ownerId }, circleClause('public'));
 
   const things = await getThingsCollection();
   const parsed = parseChronoCursor(cursor);
@@ -1866,7 +1996,7 @@ export const getThing = async (
   shareId: unknown,
   app: AppLens = null
 ): Promise<Fail | { ok: true; thing: PublicThing; post: PublicPost | null; parent: PublicPost | null; root: PublicPost | null }> => {
-  const viewer = asViewer(viewerInput);
+  const viewer = await withFriendIds(asViewer(viewerInput));
   const doc = await findViewableThingAs(shareId, viewer, app);
   if (!doc) return fail(404, 'Thing not found');
   const thing = (await toPublicThings([doc], viewer))[0];
@@ -1935,7 +2065,7 @@ export const listThings = async (
   query: ListThingsQuery,
   app: AppLens = null
 ): Promise<Fail | { ok: true; things: PublicThing[]; nextCursor: string | null }> => {
-  const viewer = asViewer(viewerInput);
+  const viewer = await withFriendIds(asViewer(viewerInput));
   const limit = Math.min(Math.max(1, query.limit || DEFAULT_FEED_LIMIT), MAX_FEED_LIMIT);
   const thingtime = (query.thingtime || []).filter((id) => typeof id === 'string' && id.trim());
 

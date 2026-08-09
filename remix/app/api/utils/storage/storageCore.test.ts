@@ -138,6 +138,18 @@ test('billable policy defaults user content on and excludes control-plane and sa
   assert.equal(isBillableStorageThing({ ownerId: 'u1', thingtime: ['service-quota'], crystal: {} }), false);
 	assert.equal(isBillableStorageThing({ ownerId: 'u1', thingtime: ['attachment'], crystal: {} }), true);
 	assert.equal((CONTROL_PLANE_STORAGE_THINGTIMES as readonly string[]).includes('attachment'), false);
+	for (const thingtime of ['follow', 'friend', 'notification'] as const) {
+		assert.equal(
+			(CONTROL_PLANE_STORAGE_THINGTIMES as readonly string[]).includes(thingtime),
+			true,
+			`${thingtime} must be excluded by the Mongo reconciliation candidate list`
+		);
+		assert.equal(
+			isBillableStorageThing({ ownerId: 'u1', thingtime: [thingtime], crystal: {} }),
+			false,
+			`${thingtime} is protected server plumbing, not user-billable content`
+		);
+	}
 	assert.equal(isBillableStorageThing({ ownerId: 'u1', thingtime: ['migration-diagnostic'], crystal: {} }), false);
   assert.equal(
     isBillableStorageThing({ ownerId: 'u1', thingtime: 'service-quota', crystal: {} }),

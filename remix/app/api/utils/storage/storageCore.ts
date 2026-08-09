@@ -100,6 +100,11 @@ export const CONTROL_PLANE_STORAGE_THINGTIMES = [
   'account-link',
   'app',
   'app-storage',
+	// Protected server-plumbing state is platform overhead. These Things are
+	// minted by dedicated home-plane state machines, never generic user CRUD.
+	'follow',
+	'friend',
+	'notification',
   'service-quota',
   'subscription',
   'subscription-tier',

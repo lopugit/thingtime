@@ -108,9 +108,10 @@ export const MIGRATION_DIAGNOSTIC_ID_PREFIX = 'migration-diagnostic-';
 // Evaluation: the MOST SPECIFIC entry matching the viewer decides (exclusions
 // win ties), so a broad '-tt:all' never locks out someone a narrower grant
 // admits. Specificity: tt:all < circles/groups < tt:user < tt:user/<name>.
-// Owners always view their own things regardless of acl. No relationship
-// graph exists yet, so circle entries currently resolve to the owner only —
-// matching the pre-acl behaviour of friends/family visibility.
+// Owners always view their own things regardless of acl. tt:userFriends
+// resolves against the real friend graph (accepted `friend` things — the read
+// path preloads the viewer's friend set into AclViewer.friendIds). No family
+// graph exists yet, so tt:userFamily still resolves to the owner only.
 
 export const ACL_ALL = 'tt:all';
 export const ACL_OWNER = 'tt:user';
@@ -166,7 +167,10 @@ export const sanitizeAcl = (value: unknown): string[] | { ok: false; status: num
   return entries;
 };
 
-export type AclViewer = { id: string | null; username?: string | null } | null;
+// friendIds: shareIds of users the viewer has an ACCEPTED friendship with,
+// preloaded by the read path (one batched query per request) so acl checks
+// stay sync + pure. Absent set = no friend info loaded = circle denies.
+export type AclViewer = { id: string | null; username?: string | null; friendIds?: ReadonlySet<string> } | null;
 
 const aclSpecificity = (id: string): number => {
   if (id === ACL_ALL) return 0;
@@ -183,8 +187,12 @@ const aclEntryMatches = (id: string, viewer: AclViewer, ownerId: string): boolea
     const username = id.slice(ACL_USER_PREFIX.length).toLowerCase();
     return !!viewer.username && viewer.username.toLowerCase() === username;
   }
-  // circles/groups: no relationship graph yet — owner only
-  if (id === ACL_FRIENDS || id === ACL_FAMILY) return viewer.id === ownerId;
+  // friends circle: real graph — the viewer sees it when they're an accepted
+  // friend of the owner (friendship is mutual, so the viewer's own friend set
+  // answers for any owner). Owner always counts as their own friend.
+  if (id === ACL_FRIENDS) return viewer.id === ownerId || viewer.friendIds?.has(ownerId) === true;
+  // family circle: no family graph yet — owner only
+  if (id === ACL_FAMILY) return viewer.id === ownerId;
   return false;
 };
 
@@ -319,6 +327,8 @@ export const COLLECTION_SCHEMA_VERSIONS: Record<string, number> = {
   rosters: 1,
   settings: 1,
   rateLimits: 1,
+  // post view telemetry: one doc per (postId, viewerKey) — see api/utils/things/views.ts
+  postViews: 1,
   email_events: 1,
   email_templates: 1,
   email_subscriptions: 1,
@@ -1193,6 +1203,150 @@ const accountLinkSchema: ThingtimeSchema = {
   }
 };
 
+// ---------------------------------------------------------------------------
+// Social graph + notifications. All three kinds are PROTECTED (see
+// PROTECTED_THINGTIME): only their dedicated endpoints/utils mint them.
+
+// One follow edge: ownerId follows targetId (a user thing's shareId). No
+// approval involved. crystal.follow is a constant marker so the unique
+// partial index (targetId, ownerId where crystal.follow exists) can scope to
+// follow docs — same trick as the reaction dedup index.
+const followThingSchema: ThingtimeSchema = {
+  id: 'follow',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Follow',
+  summary: 'A one-way follow edge: the owner follows the target user. No approval needed.',
+  detail:
+    'Created/removed by POST /api/v1/users/follow { userId }. ownerId is the follower, targetId ' +
+    'the followed user\'s id. Always private to the follower (acl ["tt:user"]); follower/' +
+    'following counts and lists are served by /api/v1/users/relationships and ' +
+    '/api/v1/users/connections. The generic things CRUD refuses this kind.',
+  requiresTarget: true,
+  createdVia: 'POST /api/v1/users/follow',
+  fields: [
+    { name: 'follow', type: 'boolean', required: true, description: 'Always true — dedup index marker.' }
+  ],
+  example: { follow: true }
+};
+
+// One friendship per unordered pair: ownerId sent the request, targetId
+// received it. status flips pending → accepted; decline/cancel/unfriend
+// deletes the doc. crystal.friendKey = '<minId>~<maxId>' makes the pair
+// unique regardless of direction (unique partial index).
+const friendThingSchema: ThingtimeSchema = {
+  id: 'friend',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Friendship',
+  summary: 'A friendship (or pending friend request) between two users — one doc per pair.',
+  detail:
+    'Driven by POST /api/v1/users/friend { userId, intent }. ownerId is the requester, targetId ' +
+    'the recipient; crystal.status is pending until the recipient accepts. Accepted friendships ' +
+    'power the tt:userFriends acl circle (friends-only posts). Private to the pair (served via ' +
+    'the users endpoints); the generic things CRUD refuses this kind.',
+  requiresTarget: true,
+  createdVia: 'POST /api/v1/users/friend',
+  fields: [
+    { name: 'status', type: 'enum', required: true, values: ['pending', 'accepted'], description: 'Request state.' },
+    { name: 'friendKey', type: 'string', required: true, description: 'Canonical unordered pair key <minId>~<maxId> — unique per pair.' }
+  ],
+  example: { status: 'accepted', friendKey: '664f1c2a9d3e5b0012345678~664f1c2a9d3e5b0012345679' }
+};
+
+// Per-type notification switches users can flip in Settings → Notifications.
+// 'groups' is reserved for the future groups feature (the pref persists, no
+// emitter exists yet). Reads ALWAYS filter by the recipient's prefs, so a
+// fanned-out notification written before a pref flip stays hidden.
+export const NOTIFICATION_TYPES = [
+  'friend-request',
+  'friend-accepted',
+  'new-follower',
+  'post-from-followed',
+  'post-from-friend',
+  'comment',
+  'reply',
+  'reaction',
+  'share',
+  'groups'
+] as const;
+export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
+
+// Email-channel notification switches. Every bell type can also send an email,
+// plus email-only types (weekly-summary) that never mint a bell notification.
+export const EMAIL_ONLY_NOTIFICATION_TYPES = ['weekly-summary'] as const;
+export const EMAIL_NOTIFICATION_TYPES = [...NOTIFICATION_TYPES, ...EMAIL_ONLY_NOTIFICATION_TYPES] as const;
+export type EmailNotificationType = (typeof EMAIL_NOTIFICATION_TYPES)[number];
+
+// High-volume types whose EMAIL channel defaults OFF (the bell stays ON): a
+// busy follow graph would otherwise turn every post into an email.
+export const EMAIL_DEFAULT_OFF_TYPES: readonly string[] = ['post-from-followed', 'post-from-friend'];
+
+export type NotificationChannelMasters = { push: boolean; email: boolean };
+export type NormalizedNotificationPrefs = {
+  push: Record<string, boolean>;
+  email: Record<string, boolean>;
+  masters: NotificationChannelMasters;
+};
+
+// Stored shape (meta.notificationPrefs): the flat { [type]: boolean } keys are
+// the push/in-app channel — unchanged from the original shape, so prefs saved
+// before channels existed keep working with zero migration — plus nested
+// email: { [type]: boolean } and masters: { push, email }. Absent = ON,
+// except EMAIL_DEFAULT_OFF_TYPES whose email channel is opt-in. Shared by the
+// server (write/read gating) and the settings UI (defaults) so both sides
+// agree on what absent keys mean. Also accepts an already-normalized matrix
+// (nested push object) so the wire shape round-trips: normalize(normalize(x))
+// === normalize(x), which lets the client cache the GET response as-is.
+export const normalizeNotificationPrefs = (
+  stored: Record<string, any> | null | undefined
+): NormalizedNotificationPrefs => {
+  const source = stored && typeof stored === 'object' ? stored : {};
+  const emailStored = source.email && typeof source.email === 'object' ? source.email : {};
+  const mastersStored = source.masters && typeof source.masters === 'object' ? source.masters : {};
+  const pushStored = source.push && typeof source.push === 'object' ? source.push : source;
+  const push: Record<string, boolean> = {};
+  for (const type of NOTIFICATION_TYPES) push[type] = pushStored[type] !== false;
+  const email: Record<string, boolean> = {};
+  for (const type of EMAIL_NOTIFICATION_TYPES) {
+    email[type] = EMAIL_DEFAULT_OFF_TYPES.includes(type)
+      ? emailStored[type] === true
+      : emailStored[type] !== false;
+  }
+  return {
+    push,
+    email,
+    masters: { push: mastersStored.push !== false, email: mastersStored.email !== false }
+  };
+};
+
+const notificationThingSchema: ThingtimeSchema = {
+  id: 'notification',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Notification',
+  summary: 'A server-minted in-app notification for one recipient (ownerId).',
+  detail:
+    'Minted by the server when someone else follows you, sends/accepts a friend request, ' +
+    'comments, replies, reacts, shares, or (fan-out, capped) posts while you follow them. ' +
+    'ownerId is the recipient, targetId the subject thing (post/comment/user), root readAt ' +
+    'flips when read. Listed via GET /api/v1/notifications (filtered by the recipient\'s ' +
+    'meta.notificationPrefs), marked via POST /api/v1/notifications/read. Always acl ' +
+    '["tt:user"]; the generic things CRUD refuses this kind.',
+  createdVia: 'server-side emission (social/engagement events)',
+  fields: [
+    { name: 'type', type: 'enum', required: true, values: [...NOTIFICATION_TYPES], description: 'Notification type (drives prefs + copy).' },
+    { name: 'actorId', type: 'id', required: true, description: 'The user whose action triggered this.' },
+    { name: 'actorName', type: 'string', required: false, description: 'Actor display name snapshot.' },
+    { name: 'postId', type: 'id', required: false, description: 'Related post for click-through.' },
+    { name: 'preview', type: 'string', required: false, max: 140, description: 'Short content preview.' }
+  ],
+  example: { type: 'new-follower', actorId: '664f1c2a9d3e5b0012345678', actorName: 'Rick Deckard' }
+};
+
 const sessionSchema: ThingtimeSchema = {
   id: 'session',
   version: COLLECTION_SCHEMA_VERSIONS.sessions,
@@ -1701,6 +1855,13 @@ const followSchema: ThingtimeSchema = {
 // pricing, quota assignments, ownership links, and admission ledgers). Editing
 // any through generic CRUD would be privilege escalation, credential forgery,
 // or a quota bypass.
+// follow/friend/notification are protected for a different reason than the
+// system kinds above: they are server-owned state machines. A forged `friend`
+// doc would fake an ACL friendship (friends-only posts leak), a forged
+// `follow` would skip dedup + notification emission, and notifications are
+// minted only by the server on someone ELSE's action. Their dedicated
+// endpoints (/api/v1/users/follow, /api/v1/users/friend, notifications utils)
+// do direct inserts.
 export const PROTECTED_THINGTIME = [
 	ATTACHMENT_THINGTIME,
   'user',
@@ -1713,7 +1874,10 @@ export const PROTECTED_THINGTIME = [
   'account-link',
 	'app-storage',
 	'service-quota',
-	MIGRATION_DIAGNOSTIC_THINGTIME
+  MIGRATION_DIAGNOSTIC_THINGTIME,
+  'follow',
+  'friend',
+  'notification'
 ] as const;
 export const isProtectedThingtime = (ids: string[]): boolean => ids.some((id) => (PROTECTED_THINGTIME as readonly string[]).includes(id));
 
@@ -1848,7 +2012,13 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   accountLinkSchema,
   appStorageLedgerSchema,
 	serviceQuotaSchema,
-	migrationDiagnosticSchema,
+  migrationDiagnosticSchema,
+  // social graph + notifications (protected, server-minted). The `follow`
+  // kind registers ONCE, below with the messenger family: followSchema is the
+  // crystal.followKey shape POST /api/v1/users/follow actually mints, which
+  // supersedes the earlier followThingSchema (crystal.follow marker) draft.
+  friendThingSchema,
+  notificationThingSchema,
   // messenger kinds (dedicated endpoints only — no generic sanitizers)
   communitySchema,
   communityMemberSchema,

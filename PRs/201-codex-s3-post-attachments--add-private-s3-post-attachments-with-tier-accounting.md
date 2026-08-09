@@ -121,6 +121,35 @@ cleanup, the exact OIDC subject, and least-privilege role policy.
 - Independent adversarial reviews found no remaining P0/P1 security,
   accounting, cross-account, deletion/refund, or lifecycle race issue.
 
+## Develop conflict refresh (2026-08-09)
+
+Merged current `develop` at `454d6ce4` while retaining both feature sets: S3
+attachments and the newly landed social graph, notification email, and post-view
+work. The source conflicts were additive (attachment metadata alongside view
+stats, both Vercel crons, both README runbooks, and attachment rendering beside
+the expanded engagement UI).
+
+The merge audit also closed cross-feature boundaries that became visible only
+when the two branches met:
+
+- follow identity now uses one canonical, home-pinned `crystal.followKey`
+  writer for Messenger, profiles, notifications, and ACL reads;
+- custom Mongo content cannot trigger home bell/email side effects or read/write
+  home post-view telemetry through a colliding public ID;
+- protected follow, friend, and notification Things are explicit non-billable
+  platform plumbing, so strict storage reconciliation cannot mistake unstamped
+  server state for user content;
+- duplicate follow API documentation, schema projection, and rate-limit entries
+  were consolidated, retaining the intended 30 requests/minute policy; and
+- the hourly attachment cleanup and weekly notification digest schedules coexist
+  in `remix/vercel.json`.
+
+Post-merge verification passed the complete unit suite, attachment **63/63**,
+schema **40/40**, storage **7/7**, the custom-plane regression, the production
+Vercel build/output verifier, and merge-owned ESLint with 0 errors or warnings.
+The TypeScript ratchet improved to 140 errors against the inherited 143-error
+ceiling.
+
 ## Remaining live verification
 
 The production upload path remains deliberately unverified until a deployment

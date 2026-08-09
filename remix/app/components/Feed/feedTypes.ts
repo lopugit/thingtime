@@ -91,6 +91,10 @@ export type PublicPost = {
   isShare: boolean;
   // original post when this post is a share (resolved one level deep)
   shareOf: PublicPost | null;
+  // public view stats: viewCount = unique viewers (dedup-protected),
+  // impressions/avgDwellMs secondary — see api/utils/things/views.ts
+  viewCount?: number;
+  viewStats?: { impressions: number; avgDwellMs: number };
   createdAt: string;
 };
 

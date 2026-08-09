@@ -406,6 +406,70 @@ export const findLegacyUserStorageFieldsByIds = async (ids: readonly string[]): 
 	return fields;
 };
 
+// Batch userId → email-send candidate (address, verified flag, display name,
+// raw notificationPrefs) for notification emails: one query per store for a
+// whole fan-out instead of N findUserById round trips. Only returns users
+// that actually have an email address; things win over legacy on id collision.
+export type EmailNotificationTarget = {
+  id: string;
+  email: string;
+  emailVerified: boolean;
+  username: string | null;
+  displayName: string | null;
+  notificationPrefs: Record<string, any>;
+};
+
+export const getEmailNotificationTargets = async (userIds: string[]): Promise<EmailNotificationTarget[]> => {
+  const ids = [...new Set(userIds.map(String))].filter(Boolean);
+  if (!ids.length) return [];
+  const objectIds = ids.filter((id) => ObjectId.isValid(id)).map((id) => new ObjectId(id));
+  const [things, legacy] = await Promise.all([
+    getThingsCollection().then((c) =>
+      c
+        .find({ thingtime: 'user', shareId: { $in: ids } } as any)
+        .project({ shareId: 1, crystal: 1, secure: 1 })
+        .toArray()
+    ),
+    objectIds.length
+      ? getUsersCollection().then((c) =>
+          c
+            .find({ _id: { $in: objectIds } })
+            .project({ email: 1, emailVerified: 1, username: 1, displayName: 1, 'meta.notificationPrefs': 1 })
+            .toArray()
+        )
+      : Promise.resolve([])
+  ]);
+  const map = new Map<string, EmailNotificationTarget>();
+  for (const doc of legacy as any[]) {
+    if (typeof doc.email !== 'string' || !doc.email) continue;
+    map.set(String(doc._id), {
+      id: String(doc._id),
+      email: doc.email,
+      emailVerified: !!doc.emailVerified,
+      username: doc.username || null,
+      displayName: doc.displayName || null,
+      notificationPrefs:
+        doc.meta?.notificationPrefs && typeof doc.meta.notificationPrefs === 'object'
+          ? doc.meta.notificationPrefs
+          : {}
+    });
+  }
+  for (const doc of things as any[]) {
+    const secure = unpackSecure(doc.secure);
+    if (!secure.email) continue;
+    const prefs = secure.meta?.notificationPrefs;
+    map.set(String(doc.shareId), {
+      id: String(doc.shareId),
+      email: secure.email,
+      emailVerified: !!secure.emailVerified,
+      username: doc.crystal?.username || null,
+      displayName: doc.crystal?.displayName ?? null,
+      notificationPrefs: prefs && typeof prefs === 'object' ? prefs : {}
+    });
+  }
+  return ids.map((id) => map.get(id)).filter((t): t is EmailNotificationTarget => !!t);
+};
+
 // New accounts are user things. The id is minted ObjectId-shaped so every
 // String(user._id) / ObjectId.isValid assumption in the auth web holds for
 // both eras; users own themselves (ownerId = shareId) and the crystal profile
@@ -608,6 +672,70 @@ export const setUserTwoFactorEmailEnabled = async (userId: string, enabled: bool
   const res = await (
     await getUsersCollection()
   ).updateOne({ _id: new ObjectId(userId) }, { $set: { 'meta.twoFactorEmailEnabled': enabled, updatedAt: new Date() } });
+  return res.matchedCount > 0;
+};
+
+// Notification prefs (meta.notificationPrefs: { [type]: boolean }) — absent
+// key = enabled (defaults ON). Dual-era accessors mirroring the 2FA flag
+// above; cold-written, so the secure blob is the right home (never crystal —
+// string-free booleans, but the blob keeps ALL private account state in one
+// place). Merged as a patch so two devices flipping different switches don't
+// clobber each other.
+export const getUserNotificationPrefs = async (userId: string): Promise<Record<string, boolean>> => {
+  const things = await getThingsCollection();
+  const thing = await things.findOne(
+    { shareId: String(userId), thingtime: 'user' } as any,
+    { projection: { secure: 1 } }
+  );
+  if (thing) {
+    const prefs = unpackSecure((thing as any).secure).meta?.notificationPrefs;
+    return prefs && typeof prefs === 'object' ? { ...prefs } : {};
+  }
+  if (!ObjectId.isValid(userId)) return {};
+  const doc = await (await getUsersCollection()).findOne(
+    { _id: new ObjectId(userId) },
+    { projection: { 'meta.notificationPrefs': 1 } }
+  );
+  const prefs = doc?.meta?.notificationPrefs;
+  return prefs && typeof prefs === 'object' ? { ...prefs } : {};
+};
+
+// Returns whether a store matched the user. Contended writes throw — a false
+// success would leave a switch the user flipped silently unapplied.
+// Flat boolean keys are the push/in-app channel; the 'email' and 'masters'
+// keys hold nested channel objects and merge one level deep so flipping one
+// email switch never clobbers the others.
+export const setUserNotificationPrefs = async (
+  userId: string,
+  patch: Record<string, boolean | Record<string, boolean>>
+): Promise<boolean> => {
+  const result = await mutateUserThingSecure(userId, (s) => {
+    const current = s.meta!.notificationPrefs;
+    const base = { ...(current && typeof current === 'object' ? current : {}) } as Record<string, any>;
+    for (const [key, value] of Object.entries(patch)) {
+      if (value && typeof value === 'object') {
+        const nested = base[key] && typeof base[key] === 'object' ? base[key] : {};
+        base[key] = { ...nested, ...value };
+      } else {
+        base[key] = value;
+      }
+    }
+    s.meta!.notificationPrefs = base;
+  });
+  if (result === 'mutated') return true;
+  if (result === 'contended') throw new SecureWriteContendedError(userId);
+  if (!ObjectId.isValid(userId)) return false;
+  const sets: Record<string, any> = { updatedAt: new Date() };
+  for (const [key, value] of Object.entries(patch)) {
+    if (value && typeof value === 'object') {
+      for (const [subKey, subValue] of Object.entries(value)) {
+        sets[`meta.notificationPrefs.${key}.${subKey}`] = subValue;
+      }
+    } else {
+      sets[`meta.notificationPrefs.${key}`] = value;
+    }
+  }
+  const res = await (await getUsersCollection()).updateOne({ _id: new ObjectId(userId) }, { $set: sets });
   return res.matchedCount > 0;
 };
 
