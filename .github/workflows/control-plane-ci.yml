@@ -7,6 +7,12 @@ on:
       - .github/actions/**
       - .github/scripts/**
       - .github/workflows/**
+  pull_request:
+    branches: [github-actions]
+    paths:
+      - .github/actions/**
+      - .github/scripts/**
+      - .github/workflows/**
   workflow_dispatch:
 
 permissions:
@@ -45,6 +51,8 @@ jobs:
           set -euo pipefail
           node .github/scripts/workflow-control-plane-contract.mjs --self-test
           node .github/scripts/resolve-pr-conflicts-routing-contract.mjs --self-test
+          node .github/scripts/promotion-worker-routing-contract.mjs
+          bash .github/scripts/promotion-worker-contract.sh
           node .github/scripts/promotion-pr-changelog.mjs --self-test
           node .github/scripts/promote-features-to-main.mjs --self-test
 

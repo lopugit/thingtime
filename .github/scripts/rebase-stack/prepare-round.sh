@@ -9,11 +9,22 @@
 set -euo pipefail
 IFS=$'\n\t'
 
+# EX_CONFIG: deterministic conflict policy says a human must review this exact
+# snapshot. The composite action preserves the nonzero failure while exposing
+# this classification to the promotion retry controller.
+TERMINAL_REVIEW_EXIT=78
+
 MAX_SOURCE_BYTES="${AI_REBASE_MAX_SOURCE_BYTES:-524288}"
 MAX_AI_CONFLICT_FILES="${AI_REBASE_MAX_CONFLICT_FILES:-20}"
 MAX_AI_ROUND_BYTES="${AI_REBASE_MAX_ROUND_BYTES:-2097152}"
 MAX_TOTAL_CONFLICT_FILES="${AI_REBASE_MAX_TOTAL_CONFLICT_FILES:-200}"
 MAX_CONFLICT_PATH_BYTES="${AI_REBASE_MAX_CONFLICT_PATH_BYTES:-16384}"
+CONFLICT_POLICY="${AI_REBASE_CONFLICT_POLICY:-pr-rebase}"
+
+case "$CONFLICT_POLICY" in
+  pr-rebase|promotion) ;;
+  *) echo "::error::Unknown AI rebase conflict policy."; exit 1 ;;
+esac
 
 emit() {
   printf '%s=%s\n' "$1" "$2" >>"$GITHUB_OUTPUT"
@@ -58,8 +69,28 @@ unsafe_path_syntax() {
 sensitive_path() {
   local path="$1"
   local base="${path##*/}"
+  local lower
+  lower="$(tr '[:upper:]' '[:lower:]' <<<"$path")"
+  # Credential-bearing names remain closed everywhere in promotion mode, not
+  # only under .github/. Keep the legacy PR-rebase policy unchanged. Word-like
+  # boundaries avoid false positives such as keyboard.ts while catching
+  # secrets/, api-key.*, and private_token.*.
+  if [[ "$CONFLICT_POLICY" == promotion \
+        && "$lower" =~ (^|[/_.-])(secret|secrets|credential|credentials|token|tokens|password|passwords|passwd|key|keys|private)([/_.-]|$) ]]; then
+    return 0
+  fi
   case "$path" in
-    .github/*|*/.github/*|\
+    .github/*|*/.github/*)
+      if [[ "$CONFLICT_POLICY" != promotion ]]; then
+        return 0
+      fi
+      # Promotion mode is reachable only from the fixed develop control plane
+      # and replays code already merged there. It may resolve workflow/action
+      # conflicts, but path names that plausibly carry credentials remain
+      # outside the model even in that mode.
+      ;;
+  esac
+  case "$path" in
     .gitattributes|*/.gitattributes|.gitmodules|*/.gitmodules|\
     .claude/*|*/.claude/*|.mcp.json|*/.mcp.json|.claude.json|*/.claude.json|\
     CLAUDE.md|*/CLAUDE.md|CLAUDE.local.md|*/CLAUDE.local.md|\
@@ -90,25 +121,33 @@ sensitive_path() {
 
 has_coherent_zdiff3_markers() {
   # A bare ======= outside an active conflict is intentionally ignored: it is
-  # valid Markdown. A real zdiff3 block must have ordered start/base/divider/end
-  # markers, and every opened block must close.
+  # valid Markdown. Repositories may raise conflict-marker-size above Git's
+  # default seven via .gitattributes, so recognize homogeneous marker runs of
+  # seven or more characters. A real zdiff3 block must have ordered
+  # start/base/divider/end markers, and every opened block must close.
   awk '
     BEGIN { state = 0; blocks = 0; bad = 0 }
-    /^<<<<<<<( |$)/ {
+    function is_marker(ch,    i, n, tail) {
+      n = length($0)
+      for (i = 1; i <= n && substr($0, i, 1) == ch; i++) {}
+      tail = substr($0, i, 1)
+      return i - 1 >= 7 && (tail == "" || tail == " ")
+    }
+    is_marker("<") {
       if (state != 0) bad = 1
       state = 1
       next
     }
-    /^\|\|\|\|\|\|\|( |$)/ {
+    is_marker("|") {
       if (state != 1) bad = 1
       state = 2
       next
     }
-    /^=======$/ {
+    is_marker("=") {
       if (state == 2) state = 3
       next
     }
-    /^>>>>>>>( |$)/ {
+    is_marker(">") {
       if (state != 3) bad = 1
       else {
         state = 0
@@ -126,23 +165,23 @@ assert_safe_regular_text_conflict() {
 
   if unsafe_path_syntax "$path"; then
     echo "::error::Unsafe conflict path syntax: $path"
-    return 1
+    return "$TERMINAL_REVIEW_EXIT"
   fi
   if sensitive_path "$path"; then
     echo "::error::Sensitive configuration/security conflict requires human review: $path"
-    return 1
+    return "$TERMINAL_REVIEW_EXIT"
   fi
   if [[ ! -f "$path" || -L "$path" ]]; then
     echo "::error::Only existing regular-file conflicts are eligible for AI resolution: $path"
-    return 1
+    return "$TERMINAL_REVIEW_EXIT"
   fi
   if (( $(wc -c <"$path") > MAX_SOURCE_BYTES * 3 )); then
     echo "::error::Conflict marker file is too large for AI resolution: $path"
-    return 1
+    return "$TERMINAL_REVIEW_EXIT"
   fi
   if ! has_coherent_zdiff3_markers "$path"; then
     echo "::error::Conflict does not contain coherent zdiff3 markers: $path"
-    return 1
+    return "$TERMINAL_REVIEW_EXIT"
   fi
 
   blob_tmp="$(mktemp)"
@@ -153,25 +192,25 @@ assert_safe_regular_text_conflict() {
     if [[ "$mode" != 100644 ]]; then
       echo "::error::Symlink, submodule, executable, or non-regular conflict requires human review: $path (mode $mode)"
       rm -f -- "$blob_tmp"
-      return 1
+      return "$TERMINAL_REVIEW_EXIT"
     fi
     stage_size="$(git cat-file -s "$oid")"
     if (( stage_size > MAX_SOURCE_BYTES )); then
       echo "::error::Conflict source blob is too large for AI resolution: $path ($stage_size bytes)"
       rm -f -- "$blob_tmp"
-      return 1
+      return "$TERMINAL_REVIEW_EXIT"
     fi
     git cat-file blob "$oid" >"$blob_tmp"
     if [[ -s "$blob_tmp" ]] && ! LC_ALL=C grep -Iq . "$blob_tmp"; then
       echo "::error::Binary conflict requires human review: $path"
       rm -f -- "$blob_tmp"
-      return 1
+      return "$TERMINAL_REVIEW_EXIT"
     fi
-  done < <(git ls-files -u -- "$path" | awk '{ print $1, $2, $3 }')
+  done < <(git ls-files -u -- ":(literal)$path" | awk '{ print $1, $2, $3 }')
   rm -f -- "$blob_tmp"
   if (( stage_count == 0 )); then
     echo "::error::No immutable index stages found for conflict: $path"
-    return 1
+    return "$TERMINAL_REVIEW_EXIT"
   fi
 }
 
@@ -215,7 +254,7 @@ write_unmerged_paths() {
   while IFS= read -r -d '' path; do
     if [[ "$path" =~ [[:cntrl:]] ]]; then
       echo "::error::Control characters in conflict paths are not supported."
-      return 1
+      return "$TERMINAL_REVIEW_EXIT"
     fi
     printf '%s\n' "$path" >>"$output"
   done < <(git diff --name-only --diff-filter=U -z)
@@ -230,6 +269,33 @@ clear_scratch() {
   }
   find "$scratch" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
 }
+
+if [[ "${1:-}" == --self-test-policy ]]; then
+  expect_sensitive() {
+    sensitive_path "$1" || { echo "expected sensitive: $1" >&2; exit 1; }
+  }
+  expect_allowed() {
+    ! sensitive_path "$1" || { echo "expected allowed: $1" >&2; exit 1; }
+  }
+  CONFLICT_POLICY=pr-rebase
+  expect_sensitive .github/workflows/resolve-pr-conflicts.yml
+  expect_sensitive package.json
+  expect_allowed remix/private-key.ts
+  expect_allowed remix/app/routes/example.tsx
+  CONFLICT_POLICY=promotion
+  expect_allowed .github/workflows/resolve-pr-conflicts.yml
+  expect_allowed .github/actions/example/action.yml
+  expect_sensitive .github/workflows/token-rotation.yml
+  expect_sensitive .github/credentials/example.yml
+  expect_sensitive config/secrets.json
+  expect_sensitive remix/private-key.ts
+  expect_sensitive .gitattributes
+  expect_sensitive AGENTS.md
+  expect_sensitive package.json
+  expect_allowed remix/app/routes/example.tsx
+  echo "prepare-round promotion path policy: self-test OK"
+  exit 0
+fi
 
 [[ $# -eq 3 ]] || {
   echo "usage: $0 <real-repo-path> <workspace-scratch-path> <safe-round-dir>" >&2
@@ -294,7 +360,7 @@ conflict_path_bytes="$(wc -c <"$all_conflicts")"
 if (( total_conflict_count > MAX_TOTAL_CONFLICT_FILES \
       || conflict_path_bytes > MAX_CONFLICT_PATH_BYTES )); then
   echo "::error::Conflict path set exceeds the safe workflow-output cap ($total_conflict_count files, $conflict_path_bytes bytes). Human review is required."
-  exit 1
+  exit "$TERMINAL_REVIEW_EXIT"
 fi
 
 graphify_reset=false
@@ -303,18 +369,21 @@ while IFS= read -r path; do
   [[ -n "$path" ]] || continue
   if unsafe_path_syntax "$path"; then
     echo "::error::Unsafe conflict path syntax: $path"
-    exit 1
+    exit "$TERMINAL_REVIEW_EXIT"
   fi
   case "$path" in
     graphify-out/*)
       graphify_reset=true
       ;;
     *)
+      # Keep this as a direct simple command: errexit must remain active inside
+      # the validator so an immutable-object read failure cannot be ignored.
+      # Explicit closed-policy returns are already terminal-review exit 78.
       assert_safe_regular_text_conflict "$path"
       ai_round_bytes=$((ai_round_bytes + $(wc -c <"$path")))
       if (( ai_round_bytes > MAX_AI_ROUND_BYTES )); then
         echo "::error::Model-editable conflict input is $ai_round_bytes bytes; the per-round aggregate cap is $MAX_AI_ROUND_BYTES. Human review is required."
-        exit 1
+        exit "$TERMINAL_REVIEW_EXIT"
       fi
       printf '%s\n' "$path" >>"$ai_conflicts"
       ;;
@@ -324,7 +393,7 @@ done <"$all_conflicts"
 ai_conflict_count="$(wc -l <"$ai_conflicts")"
 if (( ai_conflict_count > MAX_AI_CONFLICT_FILES )); then
   echo "::error::Conflict set has $ai_conflict_count model-editable files; the per-round cap is $MAX_AI_CONFLICT_FILES."
-  exit 1
+  exit "$TERMINAL_REVIEW_EXIT"
 fi
 
 if [[ "$graphify_reset" == true ]]; then

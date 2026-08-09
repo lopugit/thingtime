@@ -9,6 +9,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const githubRoot = resolve(here, "..");
 const workflows = resolve(githubRoot, "workflows");
 const actions = resolve(githubRoot, "actions");
+const scripts = resolve(githubRoot, "scripts");
 
 const IMPLEMENTATIONS = [
   "electron-release.yml",
@@ -206,6 +207,21 @@ export function assertControlPlaneContract() {
   const promotions = readWorkflow("promote-features-to-main.yml");
   assert.match(promotions, /ref: github-actions/);
   assert.match(promotions, /workflow-control\/\.github\/scripts\/promote-features-to-main\.mjs/);
+  assert.match(promotions, /^  actions: write$/m);
+  assert.match(promotions, /ACTIONS_TOKEN: \$\{\{ github\.token \}\}/);
+  const promoter = readFileSync(
+    resolve(scripts, "promote-features-to-main.mjs"),
+    "utf8",
+  );
+  assert.match(promoter, /ref: "github-actions"/);
+  assert.doesNotMatch(promoter, /ref: "develop"/);
+
+  const controlPlaneCi = readWorkflow("control-plane-ci.yml");
+  assert.match(
+    controlPlaneCi,
+    /pull_request:\n\s+branches: \[github-actions\]/,
+  );
+  assert.doesNotMatch(controlPlaneCi, /^\s+secrets:/m);
 
   const omnibus = readWorkflow("promote-develop-to-main.yml");
   assert.match(omnibus, /ref: github-actions/);
@@ -221,6 +237,20 @@ export function assertControlPlaneContract() {
   assert.match(resolver, /ref:"github-actions"/);
   assert.doesNotMatch(resolver, /ref:"develop"/);
   assert.match(resolver, /github\.actor == 'github-actions\[bot\]'/);
+  assert.match(resolver, /\[ "\$EVENT_REF" = github-actions \]/);
+  assert.doesNotMatch(resolver, /\[ "\$EVENT_REF" = develop \]/);
+  assert.doesNotMatch(resolver, /ref: \$\{\{ github\.sha \}\}/);
+  for (const input of [
+    "promotion_handoff",
+    "promotion_source_pr",
+    "promotion_plan_b64",
+  ]) {
+    assert.equal(
+      resolver.match(new RegExp(`^      ${input}:$`, "gm"))?.length,
+      2,
+      `${input}: declared for workflow_call and workflow_dispatch`,
+    );
+  }
 
   assertAdminModelRouting(resolver, rebase);
 

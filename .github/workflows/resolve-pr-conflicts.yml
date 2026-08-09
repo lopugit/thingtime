@@ -13,7 +13,7 @@
 # TRIGGER SHAPE (load-bearing): claude-code-action@v1 rejects the `push` event
 # ("Unsupported event type: push"), so a push-triggered run can only DETECT and
 # then hand off — the `handoff` job dispatches one exact PR selection to this
-# workflow at the repo-designated `develop` control-plane ref. That internal
+# workflow at the protected `github-actions` control-plane ref. That internal
 # workflow_dispatch (a supported event) performs the resolution. Do not move the
 # resolve job back onto `push`; the AI step fails there every time, after the
 # merge has already been computed. pull_request_target and legacy
@@ -126,12 +126,24 @@ name: Resolve PR conflicts (AI)
 
 run-name: >-
   ${{ github.event_name == 'workflow_dispatch'
+      && inputs.promotion_handoff == true
+      && github.actor == 'github-actions[bot]'
+      && github.ref_name == 'github-actions'
+      && inputs.promotion_source_pr != ''
+      && inputs.promotion_plan_b64 != ''
+      && inputs.detector_handoff != true
+      && inputs.manual_retry != true
+      && inputs.depth == '0'
+      && inputs.pr_number == ''
+      && inputs.branch == ''
+      && format('AI-resolve promotion for source PR #{0}', inputs.promotion_source_pr)
+      || github.event_name == 'workflow_dispatch'
       && inputs.detector_handoff == true
       && github.actor == 'github-actions[bot]'
       && github.ref_name == 'github-actions'
       && inputs.pr_number != ''
       && inputs.branch == ''
-      && format('Resolve PR #{0} from develop control plane', inputs.pr_number)
+      && format('Resolve PR #{0} from github-actions control plane', inputs.pr_number)
       || github.event_name == 'workflow_dispatch' && inputs.pr_number != ''
       && format('Detect conflicts for PR #{0}', inputs.pr_number)
       || github.event_name == 'workflow_dispatch' && inputs.branch != ''
@@ -172,6 +184,21 @@ on:
         description: "Internal: stacked-PR cascade depth (leave at 0)"
         required: false
         default: "0"
+        type: string
+      promotion_handoff:
+        description: "Internal: trusted pre-PR promotion conflict handoff (leave false)"
+        required: false
+        default: false
+        type: boolean
+      promotion_source_pr:
+        description: "Internal: merged develop source PR"
+        required: false
+        default: ""
+        type: string
+      promotion_plan_b64:
+        description: "Internal: canonical-base64 immutable promotion routing plan"
+        required: false
+        default: ""
         type: string
   push:
     branches:
@@ -229,6 +256,21 @@ on:
         required: false
         default: "0"
         type: string
+      promotion_handoff:
+        description: "Internal: trusted pre-PR promotion conflict handoff (leave false)"
+        required: false
+        default: false
+        type: boolean
+      promotion_source_pr:
+        description: "Internal: merged develop source PR"
+        required: false
+        default: ""
+        type: string
+      promotion_plan_b64:
+        description: "Internal: canonical-base64 immutable promotion routing plan"
+        required: false
+        default: ""
+        type: string
   repository_dispatch:
     types: [resolve-conflicts-cascade]
 
@@ -237,10 +279,24 @@ on:
 concurrency:
   # Distinct namespaces are load-bearing:
   #   resolve-detect-*   external/event/API-only detectors
-  #   resolve-pr<N>      one internal github-actions control-plane worker per PR
+  #   resolve-pr<N>      one internal github-actions-control-plane worker per PR
   # A human exact-PR detector therefore cannot cancel the worker it creates.
   group: >-
     ${{ github.event_name == 'workflow_dispatch'
+        && inputs.promotion_handoff == true
+        && github.actor == 'github-actions[bot]'
+        && github.ref_name == 'github-actions'
+        && inputs.promotion_source_pr != ''
+        && inputs.promotion_plan_b64 != ''
+        && inputs.detector_handoff != true
+        && inputs.manual_retry != true
+        && inputs.depth == '0'
+        && inputs.pr_number == ''
+        && inputs.branch == ''
+        && format('resolve-promotion-pr{0}', inputs.promotion_source_pr)
+        || inputs.promotion_handoff == true
+        && format('resolve-invalid-promotion-{0}', github.run_id)
+        || github.event_name == 'workflow_dispatch'
         && inputs.detector_handoff == true
         && github.actor == 'github-actions[bot]'
         && github.ref_name == 'github-actions'
@@ -266,12 +322,21 @@ concurrency:
   # Every external detector is safe to supersede. A validated internal worker
   # must finish or fail coherently; never cancel it halfway through a merge.
   cancel-in-progress: >-
-    ${{ github.event_name != 'workflow_dispatch'
-        || inputs.detector_handoff != true
-        || github.actor != 'github-actions[bot]'
-        || github.ref_name != 'github-actions'
-        || inputs.pr_number == ''
-        || inputs.branch != '' }}
+    ${{ !(github.event_name == 'workflow_dispatch'
+          && github.actor == 'github-actions[bot]'
+          && github.ref_name == 'github-actions'
+          && ((inputs.promotion_handoff == true
+               && inputs.promotion_source_pr != ''
+               && inputs.promotion_plan_b64 != ''
+               && inputs.detector_handoff != true
+               && inputs.manual_retry != true
+               && inputs.depth == '0'
+               && inputs.pr_number == ''
+               && inputs.branch == '')
+              || (inputs.promotion_handoff != true
+                  && inputs.detector_handoff == true
+                  && inputs.pr_number != ''
+                  && inputs.branch == ''))) }}
 
 permissions:
   contents: read
@@ -280,7 +345,9 @@ jobs:
   detect:
     name: Find merge-conflicting PRs
     # Branch deletions also fire `push`; there is nothing to scan then.
-    if: github.event_name != 'push' || github.event.deleted == false
+    if: >-
+      inputs.promotion_handoff != true
+      && (github.event_name != 'push' || github.event.deleted == false)
     runs-on: ubuntu-latest
     # Mergeability polling alone may legitimately spend MERGEABLE_POLL_SECONDS
     # (~8 minutes) before classification starts; keep headroom for sweeps.
@@ -390,7 +457,7 @@ jobs:
             # defense-in-depth and still permits re-runs of bot-originated work.
             invalid_handoff=false
             [ "$EVENT_NAME" = workflow_dispatch ] || invalid_handoff=true
-            [ "$EVENT_REF" = develop ] || invalid_handoff=true
+            [ "$EVENT_REF" = github-actions ] || invalid_handoff=true
             [ "$EVENT_ACTOR" = "github-actions[bot]" ] || invalid_handoff=true
             [ -n "$SELECTED_PR" ] || invalid_handoff=true
             [ -z "$INPUT_BRANCH" ] || invalid_handoff=true
@@ -794,6 +861,273 @@ jobs:
           echo "prs=$conflicting" >> "$GITHUB_OUTPUT"
           echo "any=$(jq 'length > 0' <<<"$conflicting")" >> "$GITHUB_OUTPUT"
 
+  # Creation-time promotion conflicts do not have a PR yet, so the ordinary
+  # detector cannot own them. The promoter first creates an immutable empty
+  # reservation commit, then dispatches this fixed github-actions revision. Validate
+  # that routing and every live GitHub object before any secret-bearing job.
+  promotion_validate:
+    name: Validate trusted promotion handoff
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      && inputs.promotion_handoff == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    outputs:
+      ready: ${{ steps.validate.outputs.ready }}
+      noop: ${{ steps.validate.outputs.noop }}
+      base_ref: ${{ steps.validate.outputs.base_ref }}
+      base_sha: ${{ steps.validate.outputs.base_sha }}
+      promotion_branch: ${{ steps.validate.outputs.promotion_branch }}
+      reservation_sha: ${{ steps.validate.outputs.reservation_sha }}
+      source_tip_sha: ${{ steps.validate.outputs.source_tip_sha }}
+      source_start_sha: ${{ steps.validate.outputs.source_start_sha }}
+      source_end_sha: ${{ steps.validate.outputs.source_end_sha }}
+      source_lineage_status: ${{ steps.validate.outputs.source_lineage_status }}
+      plan_hash: ${{ steps.validate.outputs.plan_hash }}
+      title_b64: ${{ steps.validate.outputs.title_b64 }}
+      body_b64: ${{ steps.validate.outputs.body_b64 }}
+    steps:
+      - name: Validate routing, snapshots, reservation, and review labels
+        id: validate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_REF: ${{ github.ref_name }}
+          EVENT_ACTOR: ${{ github.actor }}
+          ORDINARY_PR: ${{ inputs.pr_number }}
+          ORDINARY_BRANCH: ${{ inputs.branch }}
+          DETECTOR_HANDOFF: ${{ inputs.detector_handoff && 'true' || 'false' }}
+          MANUAL_RETRY: ${{ inputs.manual_retry && 'true' || 'false' }}
+          DEPTH: ${{ inputs.depth }}
+          SOURCE_PR: ${{ inputs.promotion_source_pr }}
+          PLAN_B64: ${{ inputs.promotion_plan_b64 }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+
+          fail() { echo "::error::$*"; exit 1; }
+          encode_ref() { jq -rn --arg value "$1" '$value | @uri'; }
+          live_ref_sha() {
+            gh api "repos/$REPO/git/ref/heads/$(encode_ref "$1")" --jq '.object.sha'
+          }
+          safe_ref() {
+            local ref="$1"
+            [ -n "$ref" ] && [ "${#ref}" -le 240 ] \
+              && git check-ref-format "refs/heads/$ref" >/dev/null 2>&1 \
+              && [[ "$ref" != refs/* ]]
+          }
+          require_trailer() {
+            local message="$1" expected="$2" count
+            count="$(grep -Fxc -- "$expected" <<<"$message" || true)"
+            [ "$count" = 1 ] || fail "Reservation commit must contain exactly one '$expected' trailer."
+          }
+          upsert_source_status() {
+            local text="$1" marker='<!-- thingtime-ai-promotion-status:v1 -->'
+            local body="$RUNNER_TEMP/promotion-status.md" comment_id
+            {
+              printf '%s\n\n' "$text"
+              printf 'Immutable plan: `%s` · [workflow run](%s)\n\n%s\n' "$PLAN_HASH" "$RUN_URL" "$marker"
+            } >"$body"
+            comment_id="$(gh api --paginate "repos/$REPO/issues/$SOURCE_PR/comments?per_page=100" --slurp \
+              | jq -r 'add // [] | [.[] | select(.user.login == "github-actions[bot]") | select(.body | contains("thingtime-ai-promotion-status:v1")) | .id] | last // empty')"
+            if [ -n "$comment_id" ]; then
+              gh api --method PATCH "repos/$REPO/issues/comments/$comment_id" -F "body=@$body" >/dev/null
+            else
+              gh api "repos/$REPO/issues/$SOURCE_PR/comments" -F "body=@$body" >/dev/null
+            fi
+          }
+
+          [ "$EVENT_NAME" = workflow_dispatch ] || fail "Promotion handoff requires workflow_dispatch."
+          [ "$EVENT_REF" = github-actions ] || fail "Promotion handoff must run from the fixed github-actions revision."
+          [ "$EVENT_ACTOR" = 'github-actions[bot]' ] || fail "Promotion handoff must be bot-authored."
+          [ -z "$ORDINARY_PR" ] && [ -z "$ORDINARY_BRANCH" ] \
+            || fail "Promotion and ordinary PR selectors are mutually exclusive."
+          [ "$DETECTOR_HANDOFF" = false ] && [ "$MANUAL_RETRY" = false ] \
+            || fail "Promotion and ordinary detector routing flags are mutually exclusive."
+          [ "${DEPTH:-0}" = 0 ] || fail "Promotion handoff depth must remain zero."
+          [[ "$SOURCE_PR" =~ ^[1-9][0-9]*$ ]] || fail "promotion_source_pr must be a positive decimal number."
+
+          # workflow_dispatch has a hard ten-input cap. All non-routing
+          # promotion values therefore travel in one canonical, bounded JSON
+          # envelope and are exposed to the secret job only after validation.
+          export PLAN_B64
+          node <<'NODE'
+          const fs = require('node:fs');
+          const { TextDecoder } = require('node:util');
+          const encoded = process.env.PLAN_B64 || '';
+          if (encoded.length > 60000 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded)) {
+            throw new Error('promotion_plan_b64 is oversized or non-canonical');
+          }
+          const bytes = Buffer.from(encoded, 'base64');
+          if (!bytes.length || bytes.length > 45000 || bytes.toString('base64') !== encoded) {
+            throw new Error('promotion plan envelope is empty, oversized, or non-canonical');
+          }
+          const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+          if (text.includes('\0')) throw new Error('promotion plan contains NUL');
+          const value = JSON.parse(text);
+          const keys = ['base_ref','base_sha','branch','reservation_sha','source_tip_sha','source_start_sha','source_end_sha','source_lineage_status','plan_hash','title_b64','body_b64'];
+          if (!value || Array.isArray(value) || Object.keys(value).join(',') !== keys.join(',') || JSON.stringify(value) !== text) {
+            throw new Error('promotion plan must be canonical JSON with the exact trusted schema');
+          }
+          if (!keys.every((key) => typeof value[key] === 'string' && value[key].length > 0)) {
+            throw new Error('promotion plan fields must be non-empty strings');
+          }
+          fs.writeFileSync(`${process.env.RUNNER_TEMP}/promotion-plan.json`, text, { mode: 0o600 });
+          NODE
+          plan_file="$RUNNER_TEMP/promotion-plan.json"
+          BASE_REF="$(jq -r '.base_ref' "$plan_file")"
+          BASE_SHA="$(jq -r '.base_sha' "$plan_file")"
+          PROMOTION_BRANCH="$(jq -r '.branch' "$plan_file")"
+          RESERVATION_SHA="$(jq -r '.reservation_sha' "$plan_file")"
+          SOURCE_TIP_SHA="$(jq -r '.source_tip_sha' "$plan_file")"
+          SOURCE_START_SHA="$(jq -r '.source_start_sha' "$plan_file")"
+          SOURCE_END_SHA="$(jq -r '.source_end_sha' "$plan_file")"
+          SOURCE_LINEAGE_STATUS="$(jq -r '.source_lineage_status' "$plan_file")"
+          PLAN_HASH="$(jq -r '.plan_hash' "$plan_file")"
+          TITLE_B64="$(jq -r '.title_b64' "$plan_file")"
+          BODY_B64="$(jq -r '.body_b64' "$plan_file")"
+          export BASE_REF BASE_SHA PROMOTION_BRANCH RESERVATION_SHA SOURCE_TIP_SHA \
+            SOURCE_START_SHA SOURCE_END_SHA SOURCE_LINEAGE_STATUS PLAN_HASH TITLE_B64 BODY_B64
+
+          [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "promotion_base_sha must be a full SHA-1."
+          [[ "$RESERVATION_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "promotion_reservation_sha must be a full SHA-1."
+          [[ "$SOURCE_START_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "promotion_source_start_sha must be a full SHA-1."
+          [[ "$SOURCE_TIP_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "promotion_source_tip_sha must be a full SHA-1."
+          [[ "$SOURCE_END_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "promotion_source_end_sha must be a full SHA-1."
+          case "$SOURCE_LINEAGE_STATUS" in
+            verified|review-required-removed|review-required-ambiguous) ;;
+            *) fail "promotion source-lineage status is not allowed." ;;
+          esac
+          [[ "$PLAN_HASH" =~ ^[0-9a-f]{64}$ ]] || fail "promotion_plan_hash must be a SHA-256."
+          safe_ref "$BASE_REF" || fail "Unsafe promotion base ref."
+          safe_ref "$PROMOTION_BRANCH" || fail "Unsafe promotion branch ref."
+          [[ "$BASE_REF" = main || "$BASE_REF" = promote/pr-* ]] \
+            || fail "Promotion base must be main or a prior promotion branch."
+
+          # Decode only to bounded runner-temp files. Canonical re-encoding
+          # rejects whitespace, alternate alphabets, truncated padding, and
+          # other ambiguous base64 forms before they reach gh.
+          export TITLE_B64 BODY_B64
+          node <<'NODE'
+          const fs = require('node:fs');
+          const { TextDecoder } = require('node:util');
+          const decode = (name, max, singleLine, out) => {
+            const encoded = process.env[name] || '';
+            if (!encoded || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded)) {
+              throw new Error(`${name} is not canonical RFC4648 base64`);
+            }
+            const bytes = Buffer.from(encoded, 'base64');
+            if (bytes.toString('base64') !== encoded || bytes.length === 0 || bytes.length > max) {
+              throw new Error(`${name} is empty, oversized, or non-canonical`);
+            }
+            const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+            if (text.includes('\0') || (singleLine && /[\x00-\x1f\x7f]/.test(text))) {
+              throw new Error(`${name} contains forbidden control structure`);
+            }
+            fs.writeFileSync(out, bytes, { mode: 0o600 });
+          };
+          decode('TITLE_B64', 256, true, `${process.env.RUNNER_TEMP}/promotion-title.txt`);
+          decode('BODY_B64', 24000, false, `${process.env.RUNNER_TEMP}/promotion-body.md`);
+          NODE
+
+          pr="$(gh api "repos/$REPO/pulls/$SOURCE_PR")"
+          [ "$(jq -r '.state' <<<"$pr")" = closed ] && [ "$(jq -r '.merged_at // empty' <<<"$pr")" != '' ] \
+            || fail "Source PR is not merged."
+          [ "$(jq -r '.base.ref' <<<"$pr")" = develop ] \
+            || fail "Source PR was not merged to develop."
+          [ "$(jq -r '.base.repo.full_name' <<<"$pr")" = "$REPO" ] \
+            && [ "$(jq -r '.head.repo.full_name' <<<"$pr")" = "$REPO" ] \
+            || fail "Source PR must be wholly inside this repository."
+          [ "$(jq -r '.merge_commit_sha' <<<"$pr")" = "$SOURCE_END_SHA" ] \
+            || fail "Source PR merge SHA no longer matches the promotion source endpoint."
+
+          # Branch naming is re-derived from immutable source PR metadata; a
+          # caller cannot route the secret worker to an arbitrary ref.
+          source_head="$(jq -r '.head.ref' <<<"$pr")"
+          source_title="$(jq -r '.title' <<<"$pr")"
+          expected_branch="$(SOURCE_HEAD="$source_head" SOURCE_TITLE="$source_title" SOURCE_PR="$SOURCE_PR" node <<'NODE'
+          const prefixes = new Set(['claude','codex','feature','feat','fix','chore','promote']);
+          const segments = (process.env.SOURCE_HEAD || '').split('/').filter(Boolean);
+          while (segments.length > 1 && prefixes.has(segments[0].toLowerCase())) segments.shift();
+          const raw = segments.join('-') || process.env.SOURCE_TITLE || `pr-${process.env.SOURCE_PR}`;
+          const slug = raw.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+            .slice(0, 40).replace(/-+$/g, '') || 'change';
+          process.stdout.write(`promote/pr-${process.env.SOURCE_PR}-${slug}`);
+          NODE
+          )"
+          [ "$PROMOTION_BRANCH" = "$expected_branch" ] \
+            || fail "Promotion branch does not match the deterministic source-PR branch."
+
+          [ "$(live_ref_sha "$BASE_REF")" = "$BASE_SHA" ] \
+            || fail "Promotion base moved after the plan was created; the promoter must re-plan."
+          [ "$(live_ref_sha develop)" = "$SOURCE_TIP_SHA" ] \
+            || fail "Develop moved after the source plan was created; the promoter must re-plan."
+          [ "$(live_ref_sha "$PROMOTION_BRANCH")" = "$RESERVATION_SHA" ] \
+            || fail "Reservation branch moved; refusing to overwrite newer work."
+          reservation="$(gh api "repos/$REPO/git/commits/$RESERVATION_SHA")"
+          [ "$(jq -r '.parents | length' <<<"$reservation")" = 1 ] \
+            && [ "$(jq -r '.parents[0].sha' <<<"$reservation")" = "$BASE_SHA" ] \
+            || fail "Reservation must be an empty single-parent child of the exact base."
+          base_commit="$(gh api "repos/$REPO/git/commits/$BASE_SHA")"
+          [ "$(jq -r '.tree.sha' <<<"$reservation")" = "$(jq -r '.tree.sha' <<<"$base_commit")" ] \
+            || fail "Reservation tree differs from the promotion base."
+          message="$(jq -r '.message' <<<"$reservation")"
+          require_trailer "$message" 'Thingtime-Promotion-Reservation: v1'
+          require_trailer "$message" "Thingtime-Promotion-Source-PR: $SOURCE_PR"
+          require_trailer "$message" "Thingtime-Promotion-Base-Ref: $BASE_REF"
+          require_trailer "$message" "Thingtime-Promotion-Base-SHA: $BASE_SHA"
+          require_trailer "$message" "Thingtime-Promotion-Branch: $PROMOTION_BRANCH"
+          require_trailer "$message" "Thingtime-Promotion-Source-Start-SHA: $SOURCE_START_SHA"
+          require_trailer "$message" "Thingtime-Promotion-Source-End-SHA: $SOURCE_END_SHA"
+          require_trailer "$message" "Thingtime-Promotion-Source-Lineage: $SOURCE_LINEAGE_STATUS"
+          require_trailer "$message" "Thingtime-Promotion-Plan-Hash: $PLAN_HASH"
+
+          for spec in \
+            'promotion:5319e7:Automated develop to main promotion PR' \
+            'ai-conflict-resolved:1d76db:Promotion conflict resolved by the isolated AI worker' \
+            'review-ai-resolution:fbca04:Review the AI-resolved promotion conflict paths' \
+            'source-lineage-unverified:b60205:Historical source intent must be reviewed before promotion' \
+            'ai-promotion-paused:d93f0b:Automatic promotion resolution paused for this exact snapshot'; do
+            IFS=: read -r name color description <<<"$spec"
+            gh label create "$name" --repo "$REPO" --color "$color" --description "$description" --force >/dev/null
+          done
+
+          paused="$(gh api --paginate "repos/$REPO/issues/$SOURCE_PR/comments?per_page=100" --slurp \
+            | jq -r --arg hash "$PLAN_HASH" 'add // [] | any(.[]; .user.login == "github-actions[bot]" and (.body | contains("thingtime-ai-promotion-paused:v1 " + $hash)))')"
+          paused_label="$(jq -r 'any(.labels[]?; .name == "ai-promotion-paused")' <<<"$pr")"
+          if [ "$paused" = true ] && [ "$paused_label" = true ]; then
+            echo "Exact promotion snapshot is already paused after an automatic attempt; no AI spend repeated."
+            echo "ready=false" >>"$GITHUB_OUTPUT"
+            echo "noop=true" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          gh api --method DELETE "repos/$REPO/issues/$SOURCE_PR/labels/ai-promotion-paused" >/dev/null 2>&1 || true
+          if [ "$SOURCE_LINEAGE_STATUS" = verified ]; then
+            upsert_source_status "🤖 Automatic promotion conflict resolution is running for \`$PROMOTION_BRANCH\`."
+          else
+            upsert_source_status "⚠️ A review-required historical promotion is running for \`$PROMOTION_BRANCH\`. The exact patch is recoverable, but current \`develop\` does not prove that it remains intended (\`$SOURCE_LINEAGE_STATUS\`). The resulting PR must be reviewed before merge."
+          fi
+          {
+            echo "base_ref=$BASE_REF"
+            echo "base_sha=$BASE_SHA"
+            echo "promotion_branch=$PROMOTION_BRANCH"
+            echo "reservation_sha=$RESERVATION_SHA"
+            echo "source_tip_sha=$SOURCE_TIP_SHA"
+            echo "source_start_sha=$SOURCE_START_SHA"
+            echo "source_end_sha=$SOURCE_END_SHA"
+            echo "source_lineage_status=$SOURCE_LINEAGE_STATUS"
+            echo "plan_hash=$PLAN_HASH"
+            echo "title_b64=$TITLE_B64"
+            echo "body_b64=$BODY_B64"
+          } >>"$GITHUB_OUTPUT"
+          echo "ready=true" >>"$GITHUB_OUTPUT"
+          echo "noop=false" >>"$GITHUB_OUTPUT"
+
   # anthropics/claude-code-action@v1 REJECTS the `push` event outright
   # ("Unsupported event type: push"). Its supported set is issues,
   # issue_comment, pull_request, pull_request_review,
@@ -801,10 +1135,10 @@ jobs:
   # schedule, workflow_run. All external events — including human
   # workflow_dispatch and legacy repository_dispatch — are detector-only.
   # Eligible PR selections are handed off one-by-one through the Actions API to
-  # this workflow at the hard-coded `develop` control-plane ref. The worker
+  # this workflow at the hard-coded `github-actions` control-plane ref. The worker
   # re-detects and snapshots the selected PR's live refs before any checkout.
-  # Until this revision reaches the default branch, old default-branch
-  # repository_dispatch/scheduled runs remain a one-time bootstrap limitation.
+  # Product branches only host thin listeners. Every secret-bearing worker is
+  # dispatched directly to this protected github-actions implementation.
   handoff:
     name: Hand off each selected PR to the github-actions resolver control plane
     needs: detect
@@ -819,7 +1153,7 @@ jobs:
     permissions:
       actions: write
     steps:
-      - name: Dispatch one trusted develop worker per selected PR
+      - name: Dispatch one trusted github-actions worker per selected PR
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -855,17 +1189,29 @@ jobs:
 
   model_config:
     name: Load the conflict-resolver model waterfall
-    needs: detect
+    needs: [detect, promotion_validate]
     # Only a bot-originated internal worker running the fixed github-actions revision
-    # may load resolver configuration. Human/API/event runs remain detectors.
+    # may load resolver configuration. Ordinary PR and pre-PR promotion modes
+    # are mutually exclusive; skipped sibling validation is expected.
     if: >-
-      needs.detect.outputs.any == 'true'
+      always()
       && github.event_name == 'workflow_dispatch'
-      && inputs.detector_handoff == true
       && github.actor == 'github-actions[bot]'
       && github.ref_name == 'github-actions'
-      && inputs.pr_number != ''
-      && inputs.branch == ''
+      && ((needs.detect.result == 'success'
+           && needs.detect.outputs.any == 'true'
+           && inputs.promotion_handoff != true
+           && inputs.detector_handoff == true
+           && inputs.pr_number != ''
+           && inputs.branch == '')
+          || (needs.promotion_validate.result == 'success'
+              && needs.promotion_validate.outputs.ready == 'true'
+              && inputs.promotion_handoff == true
+              && inputs.detector_handoff != true
+              && inputs.pr_number == ''
+              && inputs.branch == ''
+              && inputs.promotion_source_pr != ''
+              && inputs.promotion_plan_b64 != ''))
     runs-on: ubuntu-latest
     timeout-minutes: 2
     # This job deliberately has no checkout and no repository permissions. It
@@ -967,6 +1313,812 @@ jobs:
           echo "A model that completes but leaves conflict markers does not mechanically trigger the next model."
           echo "model_args=$model_args" >> "$GITHUB_OUTPUT"
           echo "primary_model=$primary" >> "$GITHUB_OUTPUT"
+
+  resolve_promotion:
+    name: "Resolve promotion for source PR #${{ inputs.promotion_source_pr }}"
+    needs: [promotion_validate, model_config]
+    if: >-
+      needs.promotion_validate.result == 'success'
+      && needs.promotion_validate.outputs.ready == 'true'
+      && needs.model_config.result == 'success'
+      && github.event_name == 'workflow_dispatch'
+      && inputs.promotion_handoff == true
+      && inputs.detector_handoff != true
+      && github.actor == 'github-actions[bot]'
+      && github.ref_name == 'github-actions'
+      && inputs.promotion_source_pr != ''
+      && inputs.promotion_plan_b64 != ''
+      && inputs.manual_retry != true
+      && inputs.depth == '0'
+      && inputs.pr_number == ''
+      && inputs.branch == ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+      issues: write
+    env:
+      REPO: ${{ github.repository }}
+      SOURCE_PR: ${{ inputs.promotion_source_pr }}
+      BASE_REF: ${{ needs.promotion_validate.outputs.base_ref }}
+      BASE_SHA: ${{ needs.promotion_validate.outputs.base_sha }}
+      PROMOTION_BRANCH: ${{ needs.promotion_validate.outputs.promotion_branch }}
+      RESERVATION_SHA: ${{ needs.promotion_validate.outputs.reservation_sha }}
+      SOURCE_START_SHA: ${{ needs.promotion_validate.outputs.source_start_sha }}
+      SOURCE_TIP_SHA: ${{ needs.promotion_validate.outputs.source_tip_sha }}
+      SOURCE_END_SHA: ${{ needs.promotion_validate.outputs.source_end_sha }}
+      SOURCE_LINEAGE_STATUS: ${{ needs.promotion_validate.outputs.source_lineage_status }}
+      PLAN_HASH: ${{ needs.promotion_validate.outputs.plan_hash }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      GIT_CONFIG_COUNT: "2"
+      GIT_CONFIG_KEY_0: core.hooksPath
+      GIT_CONFIG_VALUE_0: /dev/null
+      GIT_CONFIG_KEY_1: core.fsmonitor
+      GIT_CONFIG_VALUE_1: "false"
+      GIT_CONFIG_GLOBAL: /dev/null
+      GIT_CONFIG_SYSTEM: /dev/null
+    steps:
+      - name: Check out the fixed trusted github-actions control plane
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: github-actions
+          fetch-depth: 0
+          persist-credentials: false
+          path: trusted
+
+      - name: Create an isolated, credential-free real checkout
+        id: repo
+        shell: bash
+        env:
+          FETCH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          repo_path="$(mktemp -d "$RUNNER_TEMP/promotion-repo.XXXXXX")"
+          # --dissociate copies every required object out of the workspace;
+          # the repo-less AI action later wipes GITHUB_WORKSPACE completely.
+          git clone -q --no-checkout --dissociate "$GITHUB_WORKSPACE/trusted" "$repo_path"
+          git -C "$repo_path" remote remove origin
+          # Never inherit a checkout credential header into later canonical
+          # publication. The isolated clone should not copy local config, but
+          # remove the key explicitly and verify it again immediately pre-push.
+          git -C "$repo_path" config --local --unset-all 'http.https://github.com/.extraheader' \
+            >/dev/null 2>&1 || true
+          # Full-history checkout does not guarantee unreachable historical
+          # PR merge objects (the regression that previously stopped the
+          # promoter batch). Fetch every immutable endpoint explicitly from
+          # the canonical repository before the model can run.
+          basic="$(printf 'x-access-token:%s' "$FETCH_TOKEN" | base64 -w0)"
+          for sha in "$SOURCE_START_SHA" "$SOURCE_END_SHA" "$SOURCE_TIP_SHA" "$BASE_SHA" "$RESERVATION_SHA"; do
+            if ! git -C "$repo_path" cat-file -e "$sha^{commit}" 2>/dev/null; then
+              GIT_CONFIG_COUNT=3 \
+              GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null \
+              GIT_CONFIG_KEY_1=core.fsmonitor GIT_CONFIG_VALUE_1=false \
+              GIT_CONFIG_KEY_2=http.https://github.com/.extraheader \
+              GIT_CONFIG_VALUE_2="AUTHORIZATION: basic $basic" \
+                git -C "$repo_path" fetch -q --no-tags --force \
+                  "https://github.com/$REPO.git" "$sha"
+            fi
+            git -C "$repo_path" cat-file -e "$sha^{commit}" \
+              || { echo "::error::Exact fetch did not materialize required commit $sha."; exit 1; }
+          done
+          unset basic FETCH_TOKEN
+          echo "repo_path=$repo_path" >>"$GITHUB_OUTPUT"
+
+      - name: Independently re-derive the source patch boundary
+        id: source_authority
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          commits="$RUNNER_TEMP/promotion-source-pr-commits.json"
+          files="$RUNNER_TEMP/promotion-source-pr-files.json"
+          gh api --paginate "repos/$REPO/pulls/$SOURCE_PR/commits?per_page=100" --slurp \
+            | jq -c 'add // []' >"$commits"
+          gh api --paginate "repos/$REPO/pulls/$SOURCE_PR/files?per_page=100" --slurp \
+            | jq -c '[add // [] | .[].filename]' >"$files"
+          authority_status=0
+          bash "$GITHUB_WORKSPACE/trusted/.github/scripts/rebase-stack/verify-promotion-source-authority.sh" \
+            "${{ steps.repo.outputs.repo_path }}" "$commits" "$files" || authority_status=$?
+          if (( authority_status != 0 )); then
+            echo "terminal_review_needed=true" >>"$GITHUB_OUTPUT"
+            exit "$authority_status"
+          fi
+          echo "terminal_review_needed=false" >>"$GITHUB_OUTPUT"
+
+      - name: Reconstruct the exact plan and start its synthetic rebase
+        id: prepare_promotion
+        shell: bash
+        run: |
+          set -euo pipefail
+          prepare_status=0
+          bash "$GITHUB_WORKSPACE/trusted/.github/scripts/rebase-stack/promotion-worker.sh" \
+            prepare "${{ steps.repo.outputs.repo_path }}" || prepare_status=$?
+          if (( prepare_status != 0 )); then
+            echo "terminal_review_needed=true" >>"$GITHUB_OUTPUT"
+            exit "$prepare_status"
+          fi
+          echo "terminal_review_needed=false" >>"$GITHUB_OUTPUT"
+
+      - name: Gate publication of AI-resolved workflow files before model spend
+        id: promotion_publication_policy
+        shell: bash
+        env:
+          HAS_WORKFLOW_PAT: ${{ secrets.CONFLICT_RESOLVER_PAT != '' }}
+          WORKFLOW_PATHS: ${{ steps.prepare_promotion.outputs.workflow_paths }}
+        run: |
+          set -euo pipefail
+          echo "terminal_review_needed=false" >>"$GITHUB_OUTPUT"
+          if [ "$WORKFLOW_PATHS" = true ] && [ "$HAS_WORKFLOW_PAT" != true ]; then
+            echo "terminal_review_needed=true" >>"$GITHUB_OUTPUT"
+            echo "::error::Workflow-file promotion requires the review-gated publication token; stopping before AI spend."
+            exit 78
+          fi
+
+      - name: Revalidate immutable refs immediately before AI spend
+        if: steps.prepare_promotion.outputs.conflicted == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          encode_ref() { jq -rn --arg value "$1" '$value | @uri'; }
+          live_ref_sha() {
+            gh api "repos/$REPO/git/ref/heads/$(encode_ref "$1")" --jq '.object.sha'
+          }
+          [ "$(live_ref_sha develop)" = "$SOURCE_TIP_SHA" ] \
+            || { echo "::error::Develop moved before AI started; the promoter must re-plan."; exit 1; }
+          [ "$(live_ref_sha "$BASE_REF")" = "$BASE_SHA" ] \
+            || { echo "::error::Promotion base moved before AI started; the promoter must re-plan."; exit 1; }
+          [ "$(live_ref_sha "$PROMOTION_BRANCH")" = "$RESERVATION_SHA" ] \
+            || { echo "::error::Reservation branch moved before AI started; refusing to overwrite it."; exit 1; }
+
+      - name: Resolve the synthetic promotion conflict in repo-less scratch
+        id: promotion_ai_round
+        if: steps.prepare_promotion.outputs.conflicted == 'true'
+        uses: ./trusted/.github/actions/rebase-conflict-round
+        with:
+          repo-path: ${{ steps.repo.outputs.repo_path }}
+          pr-number: ${{ inputs.promotion_source_pr }}
+          base-ref: ${{ needs.promotion_validate.outputs.base_ref }}
+          head-ref: ${{ needs.promotion_validate.outputs.promotion_branch }}
+          run-url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          round: "1"
+          conflict-policy: promotion
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github-token: ${{ github.token }}
+          allowed-bots: github-actions
+          model-args: ${{ needs.model_config.outputs.model_args }}
+
+      - name: Verify the complete resolved source patch
+        id: verify_promotion
+        if: >-
+          steps.prepare_promotion.outputs.complete == 'true'
+          || steps.promotion_ai_round.outputs.complete == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The composite action's always() cleanup re-hashes and restores this
+          # trusted subtree after wiping the model scratch workspace.
+          bash "$GITHUB_WORKSPACE/trusted/.github/scripts/rebase-stack/promotion-worker.sh" \
+            verify "${{ steps.repo.outputs.repo_path }}"
+
+      - name: Refresh derived Graphify outputs from the promotion-base side
+        id: promotion_graphify
+        if: steps.verify_promotion.outputs.verified == 'true'
+        timeout-minutes: 25
+        shell: bash
+        env:
+          GRAPHIFY_VERSION: "0.9.4"
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          PREFERRED_MODEL: ${{ needs.model_config.outputs.primary_model }}
+          REVIEW_GATED: ${{ steps.prepare_promotion.outputs.review_gated }}
+        run: |
+          set -euo pipefail
+          bash "$GITHUB_WORKSPACE/trusted/.github/scripts/rebase-stack/refresh-promotion-graphify.sh" \
+            "${{ steps.repo.outputs.repo_path }}"
+
+      - name: Revalidate, publish, open the PR, and attest the resolution
+        id: publish_promotion
+        if: steps.verify_promotion.outputs.verified == 'true'
+        shell: bash
+        env:
+          PUSH_PAT: ${{ secrets.CONFLICT_RESOLVER_PAT }}
+          DEFAULT_TOKEN: ${{ github.token }}
+          TITLE_B64: ${{ needs.promotion_validate.outputs.title_b64 }}
+          BODY_B64: ${{ needs.promotion_validate.outputs.body_b64 }}
+          # This is the exact model-edit allowlist, not the full original
+          # conflict set. Derived graphify-out/** paths are deterministic and
+          # must never appear in the AI attestation.
+          CONFLICT_PATHS: ${{ steps.promotion_ai_round.outputs.ai_conflict_paths }}
+          GRAPHIFY_MODE: ${{ steps.promotion_graphify.outputs.refreshed || 'failed' }}
+          GRAPHIFY_SEMANTIC: ${{ steps.promotion_graphify.outputs.semantic || 'unavailable' }}
+          MODEL_ARGS: ${{ needs.model_config.outputs.model_args }}
+          WORKFLOW_PATHS: ${{ steps.prepare_promotion.outputs.workflow_paths }}
+          CI_SENSITIVE_PATHS: ${{ steps.prepare_promotion.outputs.ci_sensitive_paths }}
+          REVIEW_GATED: ${{ steps.prepare_promotion.outputs.review_gated }}
+          AI_STARTED: ${{ steps.promotion_ai_round.outputs.ai_started == 'true' }}
+        run: |
+          set -euo pipefail
+          repo_path="${{ steps.repo.outputs.repo_path }}"
+          cd "$repo_path"
+          final_head="$(git rev-parse HEAD)"
+          encode_ref() { jq -rn --arg value "$1" '$value | @uri'; }
+          live_ref_sha() {
+            GH_TOKEN="$DEFAULT_TOKEN" gh api "repos/$REPO/git/ref/heads/$(encode_ref "$1")" --jq '.object.sha'
+          }
+          fail() { echo "::error::$*"; exit 1; }
+          (( ${#MODEL_ARGS} <= 2048 )) && [[ ! "$MODEL_ARGS" =~ [[:cntrl:]] ]] \
+            || fail "Validated model audit context is oversized or contains control characters."
+          case "$GRAPHIFY_MODE" in true|nochange|failed) ;; *) fail "Invalid Graphify refresh audit mode." ;; esac
+          case "$GRAPHIFY_SEMANTIC" in claude|claude-cli|failed|none|unavailable) ;; *) fail "Invalid Graphify semantic audit mode." ;; esac
+          case "$CI_SENSITIVE_PATHS" in true|false) ;; *) fail "Invalid CI-sensitive audit classification." ;; esac
+          case "$REVIEW_GATED" in true|false) ;; *) fail "Invalid promotion review-gate classification." ;; esac
+          case "$AI_STARTED" in true|false) ;; *) fail "Invalid promotion AI-participation classification." ;; esac
+          ci_sensitive_json=false
+          [ "$CI_SENSITIVE_PATHS" != true ] || ci_sensitive_json=true
+          upsert_comment() {
+            local number="$1" marker="$2" body_file="$3" comment_id
+            comment_id="$(GH_TOKEN="$DEFAULT_TOKEN" gh api --paginate "repos/$REPO/issues/$number/comments?per_page=100" --slurp \
+              | jq -r --arg marker "$marker" 'add // [] | [.[] | select(.user.login == "github-actions[bot]") | select(.body | contains($marker)) | .id] | last // empty')"
+            if [ -n "$comment_id" ]; then
+              GH_TOKEN="$DEFAULT_TOKEN" gh api --method PATCH "repos/$REPO/issues/comments/$comment_id" -F "body=@$body_file" >/dev/null
+            else
+              GH_TOKEN="$DEFAULT_TOKEN" gh api "repos/$REPO/issues/$number/comments" -F "body=@$body_file" >/dev/null
+            fi
+          }
+          make_attestation() {
+            local attested_head="$1" payload encoded
+            payload="$(jq -cn \
+              --argjson source_pr "$SOURCE_PR" --arg base_ref "$BASE_REF" --arg base_sha "$BASE_SHA" \
+              --arg branch "$PROMOTION_BRANCH" --arg source_start_sha "$SOURCE_START_SHA" \
+              --arg source_tip_sha "$SOURCE_TIP_SHA" --arg source_end_sha "$SOURCE_END_SHA" --arg plan_hash "$PLAN_HASH" \
+              --arg source_lineage_status "$SOURCE_LINEAGE_STATUS" \
+              --arg reservation_sha "$RESERVATION_SHA" --arg head_sha "$attested_head" \
+              --argjson conflict_paths "$conflicts_json" --arg run_url "$RUN_URL" \
+              --arg model_args "$MODEL_ARGS" --arg graphify_mode "$GRAPHIFY_MODE" \
+              --arg graphify_semantic "$GRAPHIFY_SEMANTIC" --argjson ci_sensitive "$ci_sensitive_json" \
+              '{v:1,source_pr:$source_pr,base_ref:$base_ref,base_sha:$base_sha,branch:$branch,source_tip_sha:$source_tip_sha,source_start_sha:$source_start_sha,source_end_sha:$source_end_sha,source_lineage_status:$source_lineage_status,plan_hash:$plan_hash,reservation_sha:$reservation_sha,head_sha:$head_sha,conflict_paths:$conflict_paths,run_url:$run_url,model_args:$model_args,graphify_mode:$graphify_mode,graphify_semantic:$graphify_semantic,ci_sensitive:$ci_sensitive}')"
+            (( $(printf '%s' "$payload" | wc -c) <= 30000 )) \
+              || fail "Promotion attestation exceeds its bounded comment payload."
+            encoded="$(printf '%s' "$payload" | base64 -w0 | tr '+/' '-_' | tr -d '=')"
+            printf '<!-- thingtime-ai-promotion-resolved:v1 %s -->' "$encoded"
+          }
+
+          pr="$(GH_TOKEN="$DEFAULT_TOKEN" gh api "repos/$REPO/pulls/$SOURCE_PR")"
+          [ "$(jq -r '.state' <<<"$pr")" = closed ] && [ "$(jq -r '.merged_at // empty' <<<"$pr")" != '' ] \
+            || fail "Source PR is no longer merged."
+          [ "$(jq -r '.base.ref' <<<"$pr")" = develop ] \
+            && [ "$(jq -r '.head.repo.full_name' <<<"$pr")" = "$REPO" ] \
+            && [ "$(jq -r '.base.repo.full_name' <<<"$pr")" = "$REPO" ] \
+            && [ "$(jq -r '.merge_commit_sha' <<<"$pr")" = "$SOURCE_END_SHA" ] \
+            || fail "Source PR authority changed while the worker was running."
+          [ "$(live_ref_sha "$BASE_REF")" = "$BASE_SHA" ] \
+            || fail "Promotion base moved while the worker was running."
+          [ "$(live_ref_sha develop)" = "$SOURCE_TIP_SHA" ] \
+            || fail "Develop moved while the worker was running; the promoter must re-plan."
+          [ "$(live_ref_sha "$PROMOTION_BRANCH")" = "$RESERVATION_SHA" ] \
+            || fail "Reservation branch moved; refusing to overwrite newer work."
+          git merge-base --is-ancestor "$RESERVATION_SHA" "$final_head" \
+            || fail "Final promotion head does not descend from the reservation."
+
+          # Publish the bot-authored attestation before the ref update. The
+          # promoter independently requires the live remote ref to equal this
+          # attested head, so the marker grants nothing early, while closing
+          # the crash gap between a successful push and PR creation.
+          conflicts_json="$(printf '%s\n' "$CONFLICT_PATHS" | sed '/^$/d' | LC_ALL=C sort -u | jq -Rsc 'split("\n") | map(select(length > 0))')"
+          attestation="$(make_attestation "$final_head")"
+          attestation_body="$RUNNER_TEMP/promotion-attestation.md"
+          {
+            echo "🤖 Verified automatic promotion resolution for \`$PROMOTION_BRANCH\` at \`$final_head\`."
+            echo
+            echo "This marker is inert until the live remote branch equals the attested head. [Workflow run]($RUN_URL)."
+            echo
+            echo "$attestation"
+            if [ "$REVIEW_GATED" = true ]; then
+              # A matching content attestation is deliberately not final until
+              # the non-skip review checkpoint has been exact-lease published.
+              echo "<!-- thingtime-ai-promotion-checkpoint-pending:v1 $PLAN_HASH -->"
+            fi
+            echo '<!-- thingtime-ai-promotion-attestation:v1 -->'
+          } >"$attestation_body"
+          upsert_comment "$SOURCE_PR" 'thingtime-ai-promotion-attestation:v1' "$attestation_body"
+
+          # The comment API work above deliberately precedes publication for
+          # crash recovery, but it creates a small time window. Close it before
+          # the lease push: the branch lease alone cannot detect movement of
+          # develop or the promotion base.
+          [ "$(live_ref_sha develop)" = "$SOURCE_TIP_SHA" ] \
+            || fail "Develop moved after attestation; the promoter must re-plan."
+          [ "$(live_ref_sha "$BASE_REF")" = "$BASE_SHA" ] \
+            || fail "Promotion base moved after attestation; the promoter must re-plan."
+          [ "$(live_ref_sha "$PROMOTION_BRANCH")" = "$RESERVATION_SHA" ] \
+            || fail "Reservation branch moved after attestation; refusing to overwrite newer work."
+          if git config --local --get-all 'http.https://github.com/.extraheader' 2>/dev/null \
+             | grep -q .; then
+            fail "Isolated promotion checkout unexpectedly retained an authentication header."
+          fi
+
+          # Ordinary resolutions publish with the run-scoped token. GitHub
+          # does not grant that token workflow-write, so a workflow-file
+          # resolution uses the workflow-scoped PAT only after every generated
+          # review-gated commit was stamped [skip ci]. PR creation/comments
+          # still use the bot token, keeping the attestation provenance and
+          # suppressing recursive execution until manual review.
+          push_token="$DEFAULT_TOKEN"
+          if [ "$WORKFLOW_PATHS" = true ]; then
+            [ -n "$PUSH_PAT" ] || fail "Review-gated workflow publication token disappeared before push."
+            push_token="$PUSH_PAT"
+          fi
+          basic="$(printf 'x-access-token:%s' "$push_token" | base64 -w0)"
+          push_status=0
+          GIT_CONFIG_COUNT=3 \
+          GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null \
+          GIT_CONFIG_KEY_1=core.fsmonitor GIT_CONFIG_VALUE_1=false \
+          GIT_CONFIG_KEY_2=http.https://github.com/.extraheader \
+          GIT_CONFIG_VALUE_2="AUTHORIZATION: basic $basic" \
+            git push --porcelain \
+              --force-with-lease="refs/heads/$PROMOTION_BRANCH:$RESERVATION_SHA" \
+              "https://github.com/$REPO.git" \
+              "$final_head:refs/heads/$PROMOTION_BRANCH" || push_status=$?
+          unset push_token basic
+          if (( push_status != 0 )); then
+            remote_after="$(live_ref_sha "$PROMOTION_BRANCH" 2>/dev/null || true)"
+            [ "$remote_after" = "$final_head" ] \
+              || fail "Promotion push failed and the live ref is not the verified final head."
+            echo "::warning::Push transport failed after the remote accepted the verified final head."
+          fi
+
+          export TITLE_B64 BODY_B64
+          node <<'NODE'
+          const fs = require('node:fs');
+          for (const [name, file] of [['TITLE_B64','promotion-title.txt'], ['BODY_B64','promotion-body.md']]) {
+            const encoded = process.env[name] || '';
+            const bytes = Buffer.from(encoded, 'base64');
+            if (!encoded || bytes.toString('base64') !== encoded) throw new Error(`${name} is non-canonical`);
+            fs.writeFileSync(`${process.env.RUNNER_TEMP}/${file}`, bytes, { mode: 0o600 });
+          }
+          NODE
+          pr_token="$DEFAULT_TOKEN"
+          ci_mode=approval-required
+          if [ "$REVIEW_GATED" = true ]; then
+            ci_mode=review-gated
+          elif [ -n "$PUSH_PAT" ]; then
+            # Non-workflow PRs may safely use the PAT for PR creation so their
+            # normal pull_request CI starts without a manual approval click.
+            pr_token="$PUSH_PAT"
+            ci_mode=automatic
+          fi
+          promotion_number="$(GH_TOKEN="$pr_token" gh pr list --repo "$REPO" --head "$PROMOTION_BRANCH" --state open \
+            --json number,baseRefName --jq '.[0].number // empty')"
+          if [ -z "$promotion_number" ]; then
+            GH_TOKEN="$pr_token" gh pr create --repo "$REPO" \
+              --base "$BASE_REF" --head "$PROMOTION_BRANCH" \
+              --title "$(<"$RUNNER_TEMP/promotion-title.txt")" \
+              --body-file "$RUNNER_TEMP/promotion-body.md" >/dev/null
+            promotion_number="$(GH_TOKEN="$DEFAULT_TOKEN" gh pr list --repo "$REPO" --head "$PROMOTION_BRANCH" --state open \
+              --json number,baseRefName --jq '.[0].number // empty')"
+          fi
+          unset pr_token
+          [[ "$promotion_number" =~ ^[1-9][0-9]*$ ]] || fail "Promotion PR was not created or discoverable."
+          actual_base="$(GH_TOKEN="$DEFAULT_TOKEN" gh pr view "$promotion_number" --repo "$REPO" --json baseRefName --jq '.baseRefName')"
+          [ "$actual_base" = "$BASE_REF" ] || fail "Existing promotion PR has an unexpected base."
+
+          if [ "$REVIEW_GATED" = true ]; then
+            # The skipped content commit prevents PAT publication from running
+            # AI-edited automation. A subsequent empty, non-skip checkpoint is
+            # pushed with GITHUB_TOKEN: push workflows remain suppressed, while
+            # the open PR receives approval-required synchronize checks that a
+            # reviewer can actually approve and run.
+            content_head="$final_head"
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -q --allow-empty \
+              -m 'ci: activate review-gated promotion checks' \
+              -m 'Thingtime-Promotion-Review-Checkpoint: v1' \
+              -m "Thingtime-Promotion-Content-Head: $content_head" \
+              -m "Thingtime-Promotion-Plan-Hash: $PLAN_HASH" \
+              -m "Created by the promotion conflict worker: $RUN_URL"
+            checkpoint_head="$(git rev-parse HEAD)"
+            checkpoint_attestation="$(make_attestation "$checkpoint_head")"
+            {
+              echo "🤖 Verified automatic promotion content at \`$content_head\` and its review-checkpoint at \`$checkpoint_head\`."
+              echo
+              echo "Each marker is inert unless the live branch equals its attested head. [Workflow run]($RUN_URL)."
+              echo
+              echo "$attestation"
+              echo "$checkpoint_attestation"
+              echo "<!-- thingtime-ai-promotion-checkpoint-pending:v1 $PLAN_HASH -->"
+              echo '<!-- thingtime-ai-promotion-attestation:v1 -->'
+            } >"$attestation_body"
+            upsert_comment "$SOURCE_PR" 'thingtime-ai-promotion-attestation:v1' "$attestation_body"
+
+            [ "$(live_ref_sha develop)" = "$SOURCE_TIP_SHA" ] \
+              || fail "Develop moved before the review checkpoint; the promoter must re-plan."
+            [ "$(live_ref_sha "$BASE_REF")" = "$BASE_SHA" ] \
+              || fail "Promotion base moved before the review checkpoint; the promoter must re-plan."
+            [ "$(live_ref_sha "$PROMOTION_BRANCH")" = "$content_head" ] \
+              || fail "Promotion branch moved before the review checkpoint; refusing to overwrite newer work."
+
+            checkpoint_basic="$(printf 'x-access-token:%s' "$DEFAULT_TOKEN" | base64 -w0)"
+            checkpoint_status=0
+            GIT_CONFIG_COUNT=3 \
+            GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null \
+            GIT_CONFIG_KEY_1=core.fsmonitor GIT_CONFIG_VALUE_1=false \
+            GIT_CONFIG_KEY_2=http.https://github.com/.extraheader \
+            GIT_CONFIG_VALUE_2="AUTHORIZATION: basic $checkpoint_basic" \
+              git push --porcelain \
+                --force-with-lease="refs/heads/$PROMOTION_BRANCH:$content_head" \
+                "https://github.com/$REPO.git" \
+                "$checkpoint_head:refs/heads/$PROMOTION_BRANCH" || checkpoint_status=$?
+            unset checkpoint_basic
+            if (( checkpoint_status != 0 )); then
+              remote_checkpoint="$(live_ref_sha "$PROMOTION_BRANCH" 2>/dev/null || true)"
+              [ "$remote_checkpoint" = "$checkpoint_head" ] \
+                || fail "Review-checkpoint push failed and the live ref is not its attested head."
+              echo "::warning::Checkpoint transport failed after the remote accepted the attested head."
+            fi
+            final_head="$checkpoint_head"
+            attestation="$checkpoint_attestation"
+            # Remove the pending marker only after the live remote accepted
+            # the exact checkpoint. If this API update fails, the scheduled
+            # promoter sees live checkpoint provenance and finalizes it
+            # idempotently without repeating the AI round.
+            {
+              echo "🤖 Verified automatic promotion review-checkpoint at \`$checkpoint_head\`."
+              echo
+              echo "This final marker is valid only while the live branch equals the attested checkpoint. [Workflow run]($RUN_URL)."
+              echo
+              echo "$checkpoint_attestation"
+              echo '<!-- thingtime-ai-promotion-attestation:v1 -->'
+            } >"$attestation_body"
+            upsert_comment "$SOURCE_PR" 'thingtime-ai-promotion-attestation:v1' "$attestation_body"
+            ci_mode=approval-required
+          fi
+
+          promotion_labels=(--add-label promotion)
+          if [ "$AI_STARTED" = true ]; then
+            promotion_labels+=(--add-label ai-conflict-resolved --add-label review-ai-resolution)
+          fi
+          GH_TOKEN="$DEFAULT_TOKEN" gh pr edit "$promotion_number" --repo "$REPO" \
+            "${promotion_labels[@]}" >/dev/null
+          if [ "$SOURCE_LINEAGE_STATUS" != verified ]; then
+            GH_TOKEN="$DEFAULT_TOKEN" gh pr edit "$promotion_number" --repo "$REPO" \
+              --add-label source-lineage-unverified >/dev/null
+          else
+            GH_TOKEN="$DEFAULT_TOKEN" gh api --method DELETE \
+              "repos/$REPO/issues/$promotion_number/labels/source-lineage-unverified" \
+              >/dev/null 2>&1 || true
+          fi
+
+          review_body="$RUNNER_TEMP/promotion-review.md"
+          {
+            if [ "$AI_STARTED" = true ]; then
+              echo '🤖 **Automatic promotion conflict resolution completed.**'
+            else
+              echo '🤖 **Protected promotion replay completed without an AI edit.**'
+            fi
+            echo
+            echo "Source PR: #$SOURCE_PR · plan: \`$PLAN_HASH\` · [workflow run]($RUN_URL)"
+            echo
+            echo "Base: \`$BASE_REF\` at \`$BASE_SHA\`"
+            echo
+            echo "Reservation: \`$RESERVATION_SHA\` · verified head: \`$final_head\`"
+            echo
+            if [ "$SOURCE_LINEAGE_STATUS" != verified ]; then
+              echo "⚠️ **Historical source lineage requires an explicit release decision.**"
+              echo
+              echo "The exact source patch was recovered and mechanically verified, but current \`develop\` does not prove that it remains intended (\`$SOURCE_LINEAGE_STATUS\`). This can represent an intentional revert/removal or overlapping later development. Merge this promotion only if restoring that historical feature is desired."
+              echo
+            fi
+            if [ -n "$CONFLICT_PATHS" ]; then
+              echo 'Please manually review the paths the isolated AI resolved:'
+              printf '%s\n' "$CONFLICT_PATHS" | sed '/^$/d;s/^/- `/' | sed 's/$/`/'
+            else
+              echo 'The reconstructed synthetic patch replayed cleanly; no model-edited path remained.'
+            fi
+            echo
+            if [ "$AI_STARTED" = true ]; then
+              echo "Model waterfall: \`$MODEL_ARGS\` · Graphify refresh: \`$GRAPHIFY_MODE\` (semantic: \`$GRAPHIFY_SEMANTIC\`)."
+            else
+              echo "No model round ran. Graphify refresh: \`$GRAPHIFY_MODE\` (semantic: \`$GRAPHIFY_SEMANTIC\`)."
+            fi
+            if [ "$CI_SENSITIVE_PATHS" = true ]; then
+              echo
+              echo "⚠️ This promotion resolves CI-sensitive \`.github/**\` files. Its content commits are stamped \`[skip ci]\`; the final empty non-skip checkpoint creates approval-required PR checks without executing AI-edited push workflows."
+              echo "Approve those checks only after reviewing the paths above."
+              echo "External preview/webhook integrations should also be reviewed before relying on any deployment from this branch."
+            elif [ "$REVIEW_GATED" = true ]; then
+              echo
+              echo "⚠️ This historical patch is source-lineage review-gated. Its content commits are stamped \`[skip ci]\`; the final empty non-skip checkpoint creates approval-required PR checks only after the candidate exists for review."
+            elif [ "$ci_mode" = approval-required ]; then
+              echo
+              echo "ℹ️ The scoped bot token created this PR safely, but GitHub may require one manual approval before its PR workflows begin because no CI-triggering PAT was available."
+            fi
+            echo
+            echo '<!-- thingtime-ai-promotion-review:v1 -->'
+          } >"$review_body"
+          upsert_comment "$promotion_number" 'thingtime-ai-promotion-review:v1' "$review_body"
+
+          source_body="$RUNNER_TEMP/promotion-status-success.md"
+          {
+            echo "✅ The trusted promotion worker opened #$promotion_number for \`$PROMOTION_BRANCH\`."
+            echo
+            echo "Review the exact resolved paths and immutable snapshot in the promotion PR comment. [Workflow run]($RUN_URL)."
+            if [ "$SOURCE_LINEAGE_STATUS" != verified ]; then
+              echo
+              echo "⚠️ Current \`develop\` does not prove this historical patch remains intended (\`$SOURCE_LINEAGE_STATUS\`); the promotion PR is labelled \`source-lineage-unverified\` and must be reviewed before merge."
+            fi
+            echo
+            echo "$attestation"
+            echo '<!-- thingtime-ai-promotion-status:v1 -->'
+          } >"$source_body"
+          upsert_comment "$SOURCE_PR" 'thingtime-ai-promotion-status:v1' "$source_body"
+          GH_TOKEN="$DEFAULT_TOKEN" gh api --method DELETE "repos/$REPO/issues/$SOURCE_PR/labels/ai-promotion-paused" >/dev/null 2>&1 || true
+          echo "promotion_pr=$promotion_number" >>"$GITHUB_OUTPUT"
+          echo "head_sha=$final_head" >>"$GITHUB_OUTPUT"
+
+      - name: Resume independent promotion groups and this stack
+        if: steps.publish_promotion.outputs.promotion_pr != ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          jq -n '{ref:"github-actions",inputs:{dry_run:false,lookback:"100"}}' \
+            | gh api --method POST \
+                "repos/$REPO/actions/workflows/promote-features-to-main.yml/dispatches" \
+                --input -
+
+      - name: Pause only this immutable promotion snapshot after failure
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AI_STARTED: ${{ steps.promotion_ai_round.outputs.ai_started }}
+          TERMINAL_REVIEW_NEEDED: ${{ steps.source_authority.outputs.terminal_review_needed == 'true' || steps.prepare_promotion.outputs.terminal_review_needed == 'true' || steps.promotion_ai_round.outputs.terminal_review_needed == 'true' || steps.promotion_publication_policy.outputs.terminal_review_needed == 'true' }}
+          PUBLISH_OUTCOME: ${{ steps.publish_promotion.outcome }}
+          CONFLICT_PATHS: ${{ steps.promotion_ai_round.outputs.ai_conflict_paths }}
+          GRAPHIFY_MODE: ${{ steps.promotion_graphify.outputs.refreshed || 'failed' }}
+          GRAPHIFY_SEMANTIC: ${{ steps.promotion_graphify.outputs.semantic || 'unavailable' }}
+          MODEL_ARGS: ${{ needs.model_config.outputs.model_args }}
+          CI_SENSITIVE_PATHS: ${{ steps.prepare_promotion.outputs.ci_sensitive_paths }}
+          REVIEW_GATED: ${{ steps.prepare_promotion.outputs.review_gated }}
+        run: |
+          set -euo pipefail
+          encode_ref() { jq -rn --arg value "$1" '$value | @uri'; }
+          live_ref_sha() {
+            gh api "repos/$REPO/git/ref/heads/$(encode_ref "$1")" --jq '.object.sha' 2>/dev/null || true
+          }
+          upsert_comment() {
+            local number="$1" marker="$2" body_file="$3" comment_id
+            comment_id="$(gh api --paginate "repos/$REPO/issues/$number/comments?per_page=100" --slurp \
+              | jq -r --arg marker "$marker" 'add // [] | [.[] | select(.user.login == "github-actions[bot]") | select(.body | contains($marker)) | .id] | last // empty')"
+            if [ -n "$comment_id" ]; then
+              gh api --method PATCH "repos/$REPO/issues/comments/$comment_id" -F "body=@$body_file" >/dev/null
+            else
+              gh api "repos/$REPO/issues/$number/comments" -F "body=@$body_file" >/dev/null
+            fi
+          }
+          remote_head="$(live_ref_sha "$PROMOTION_BRANCH")"
+          live_develop="$(live_ref_sha develop)"
+          live_base="$(live_ref_sha "$BASE_REF")"
+          repo_path="${{ steps.repo.outputs.repo_path }}"
+          local_head=""
+          if [ -n "$repo_path" ] && [ -d "$repo_path" ]; then
+            local_head="$(git -C "$repo_path" rev-parse HEAD 2>/dev/null || true)"
+          fi
+          comments="$RUNNER_TEMP/promotion-failure-comments.json"
+          gh api --paginate "repos/$REPO/issues/$SOURCE_PR/comments?per_page=100" --slurp >"$comments"
+          checkpoint_pending="$(jq -r --arg marker "thingtime-ai-promotion-checkpoint-pending:v1 $PLAN_HASH" \
+            'add // [] | any(.[]; .user.login == "github-actions[bot]" and (.body | contains($marker)))' "$comments")"
+          attested=false
+          if REMOTE_HEAD="$remote_head" COMMENTS_FILE="$comments" node <<'NODE'
+          const fs = require('node:fs');
+          const comments = (JSON.parse(fs.readFileSync(process.env.COMMENTS_FILE, 'utf8')).flat?.() || []);
+          const re = /<!-- thingtime-ai-promotion-resolved:v1 ([A-Za-z0-9_-]+) -->/g;
+          let valid = false;
+          for (const comment of comments) {
+            if (comment?.user?.login !== 'github-actions[bot]') continue;
+            for (const match of String(comment.body || '').matchAll(re)) {
+              try {
+                const pad = '='.repeat((4 - (match[1].length % 4)) % 4);
+                const value = JSON.parse(Buffer.from(match[1].replace(/-/g, '+').replace(/_/g, '/') + pad, 'base64'));
+                if (value.v === 1 &&
+                    value.source_pr === Number(process.env.SOURCE_PR) &&
+                    value.base_ref === process.env.BASE_REF &&
+                    value.base_sha === process.env.BASE_SHA &&
+                    value.branch === process.env.PROMOTION_BRANCH &&
+                    value.source_tip_sha === process.env.SOURCE_TIP_SHA &&
+                    value.source_start_sha === process.env.SOURCE_START_SHA &&
+                    value.source_end_sha === process.env.SOURCE_END_SHA &&
+                    value.source_lineage_status === process.env.SOURCE_LINEAGE_STATUS &&
+                    value.plan_hash === process.env.PLAN_HASH &&
+                    value.reservation_sha === process.env.RESERVATION_SHA &&
+                    value.head_sha === process.env.REMOTE_HEAD &&
+                    Array.isArray(value.conflict_paths) &&
+                    value.conflict_paths.every((path) => typeof path === 'string' && !path.startsWith('graphify-out/')) &&
+                    typeof value.run_url === 'string' &&
+                    (value.model_args === undefined || (typeof value.model_args === 'string' && value.model_args.length <= 2048)) &&
+                    (value.graphify_mode === undefined || ['true','nochange','failed'].includes(value.graphify_mode)) &&
+                    (value.graphify_semantic === undefined || ['claude','claude-cli','failed','none','unavailable'].includes(value.graphify_semantic)) &&
+                    (value.ci_sensitive === undefined || typeof value.ci_sensitive === 'boolean')) valid = true;
+              } catch {}
+            }
+          }
+          process.exit(valid ? 0 : 1);
+          NODE
+          then
+            attested=true
+          fi
+          recoverable=false
+          if [ -n "$remote_head" ] && [ "$remote_head" != "$RESERVATION_SHA" ] \
+             && [ "$remote_head" = "$local_head" ] && [ "$attested" = true ]; then
+            recoverable=true
+          fi
+          remote_is_checkpoint=false
+          if [ "$recoverable" = true ] && [ -n "$repo_path" ]; then
+            checkpoint_message="$(git -C "$repo_path" show -s --format=%B "$remote_head" 2>/dev/null || true)"
+            checkpoint_parent="$(git -C "$repo_path" rev-parse "$remote_head^1" 2>/dev/null || true)"
+            checkpoint_content="$(sed -n 's/^Thingtime-Promotion-Content-Head: //p' <<<"$checkpoint_message")"
+            if [ "$(grep -Fxc 'Thingtime-Promotion-Review-Checkpoint: v1' <<<"$checkpoint_message" || true)" = 1 ] \
+               && [ "$(grep -Fxc "Thingtime-Promotion-Plan-Hash: $PLAN_HASH" <<<"$checkpoint_message" || true)" = 1 ] \
+               && [ "$checkpoint_parent" = "$checkpoint_content" ] \
+               && [ "$(git -C "$repo_path" rev-parse "$remote_head^{tree}" 2>/dev/null || true)" \
+                    = "$(git -C "$repo_path" rev-parse "$checkpoint_content^{tree}" 2>/dev/null || true)" ]; then
+              remote_is_checkpoint=true
+            fi
+          fi
+          pending_content=false
+          if [ "$checkpoint_pending" = true ] && [ "$remote_is_checkpoint" != true ]; then
+            pending_content=true
+          fi
+          finalization_repaired=false
+          if [ "$recoverable" = true ] && [ "$pending_content" != true ]; then
+            promotion_number="$(gh pr list --repo "$REPO" --head "$PROMOTION_BRANCH" --state open \
+              --json number --jq '.[0].number // empty' 2>/dev/null || true)"
+            promotion_labels=(--add-label promotion)
+            if [ "$AI_STARTED" = true ]; then
+              promotion_labels+=(--add-label ai-conflict-resolved --add-label review-ai-resolution)
+            fi
+            if [[ "$promotion_number" =~ ^[1-9][0-9]*$ ]] \
+               && gh pr edit "$promotion_number" --repo "$REPO" \
+                    "${promotion_labels[@]}" >/dev/null; then
+              if [ "$SOURCE_LINEAGE_STATUS" != verified ]; then
+                gh pr edit "$promotion_number" --repo "$REPO" \
+                  --add-label source-lineage-unverified >/dev/null
+              else
+                gh api --method DELETE \
+                  "repos/$REPO/issues/$promotion_number/labels/source-lineage-unverified" \
+                  >/dev/null 2>&1 || true
+              fi
+              repair_review="$RUNNER_TEMP/promotion-review-recovery.md"
+              {
+                if [ "$AI_STARTED" = true ]; then
+                  echo '🤖 **Automatic promotion conflict resolution completed.**'
+                else
+                  echo '🤖 **Protected promotion replay completed without an AI edit.**'
+                fi
+                echo
+                echo "Source PR: #$SOURCE_PR · plan: \`$PLAN_HASH\` · [workflow run]($RUN_URL)"
+                echo
+                echo "Base: \`$BASE_REF\` at \`$BASE_SHA\` · reservation: \`$RESERVATION_SHA\` · verified head: \`$remote_head\`."
+                echo
+                if [ "$SOURCE_LINEAGE_STATUS" != verified ]; then
+                  echo "⚠️ **Historical source lineage requires an explicit release decision.**"
+                  echo
+                  echo "The exact source patch was recovered and mechanically verified, but current \`develop\` does not prove that it remains intended (\`$SOURCE_LINEAGE_STATUS\`). Merge this promotion only if restoring that historical feature is desired."
+                  echo
+                fi
+                if [ -n "$CONFLICT_PATHS" ]; then
+                  echo 'Please manually review the paths the isolated AI resolved:'
+                  printf '%s\n' "$CONFLICT_PATHS" | sed '/^$/d;s/^/- `/' | sed 's/$/`/'
+                else
+                  echo 'The reconstructed synthetic patch replayed without a model-edited source path.'
+                fi
+                echo
+                if [ "$AI_STARTED" = true ]; then
+                  echo "Model waterfall: \`$MODEL_ARGS\` · Graphify refresh: \`$GRAPHIFY_MODE\` (semantic: \`$GRAPHIFY_SEMANTIC\`)."
+                else
+                  echo "No model round ran. Graphify refresh: \`$GRAPHIFY_MODE\` (semantic: \`$GRAPHIFY_SEMANTIC\`)."
+                fi
+                if [ "$CI_SENSITIVE_PATHS" = true ]; then
+                  echo
+                  echo "⚠️ CI-sensitive \`.github/**\` content is \`[skip ci]\` gated; its empty non-skip checkpoint creates approval-required checks without executing AI-edited push workflows."
+                  echo "Approve those checks only after reviewing the resolved paths."
+                elif [ "$REVIEW_GATED" = true ]; then
+                  echo
+                  echo "⚠️ Source-lineage-unverified content is \`[skip ci]\` gated; its empty non-skip checkpoint exposes approval-required checks only after the candidate exists for review."
+                fi
+                echo
+                echo '<!-- thingtime-ai-promotion-review:v1 -->'
+              } >"$repair_review"
+              if upsert_comment "$promotion_number" 'thingtime-ai-promotion-review:v1' "$repair_review"; then
+                finalization_repaired=true
+              fi
+            fi
+          fi
+          stale_or_unknown=false
+          if [ -z "$live_develop" ] || [ "$live_develop" != "$SOURCE_TIP_SHA" ] \
+             || [ -z "$live_base" ] || [ "$live_base" != "$BASE_SHA" ] \
+             || [ -z "$remote_head" ] \
+             || { [ "$remote_head" != "$RESERVATION_SHA" ] && [ "$recoverable" != true ]; }; then
+            stale_or_unknown=true
+          fi
+          retry_without_pause=false
+          if [ "$recoverable" != true ] && [ "$stale_or_unknown" != true ] \
+             && [ "$TERMINAL_REVIEW_NEEDED" != true ] \
+             && [ "$AI_STARTED" != true ] \
+             && [ "$PUBLISH_OUTCOME" != failure ]; then
+            retry_without_pause=true
+          fi
+          marker="<!-- thingtime-ai-promotion-paused:v1 $PLAN_HASH -->"
+          body="$RUNNER_TEMP/promotion-paused.md"
+          {
+            if [ "$recoverable" = true ]; then
+              if [ "$pending_content" = true ]; then
+                echo "🔄 The verified CI-sensitive content head was pushed, but its safe review checkpoint is still pending."
+              else
+                echo "⚠️ The verified promotion head was pushed, but this run stopped before the review PR was fully finalized."
+              fi
+            elif [ "$stale_or_unknown" = true ]; then
+              echo "🔄 Promotion state moved or could not be revalidated while this run was active; the promoter is replanning safely."
+            elif [ "$retry_without_pause" = true ]; then
+              echo "🔄 Promotion setup stopped before any model or publication attempt; this snapshot remains eligible for an automatic retry."
+            else
+              echo "⚠️ Automatic promotion conflict resolution exhausted or failed before a reviewable PR was fully published."
+            fi
+            echo
+            echo "Branch: \`$PROMOTION_BRANCH\` · base: \`$BASE_REF\` at \`$BASE_SHA\` · plan: \`$PLAN_HASH\`."
+            echo
+            if [ "$recoverable" = true ]; then
+              if [ "$pending_content" = true ]; then
+                echo "The bot content attestation matches live head \`$remote_head\`, but its pending marker prevents final reuse. A fresh promoter run was requested to exact-lease the safe checkpoint without repeating AI. [Review the run]($RUN_URL)."
+              else
+                echo "The bot attestation matches live head \`$remote_head\`; a fresh promoter run was requested to recover PR creation or metadata without repeating AI. [Review the run]($RUN_URL)."
+              fi
+              if [ "$finalization_repaired" = true ]; then
+                echo "The existing promotion PR's review labels and exact AI-review comment were also repaired idempotently."
+              fi
+            elif [ "$stale_or_unknown" = true ]; then
+              echo "No pause was recorded because develop, the base, or the reserved branch no longer matches this transient run snapshot. A fresh promoter run was requested to re-derive authority and continue. [Review the run]($RUN_URL)."
+            elif [ "$retry_without_pause" = true ]; then
+              echo "No AI budget was spent and no durable pause was recorded. The scheduled promoter will retry this exact snapshot without needing a manual label change. [Review the run]($RUN_URL)."
+            else
+              echo "No newer branch work was overwritten or deleted. The same immutable snapshot will not spend AI again; a changed source/base snapshot retries automatically. [Review the run]($RUN_URL)."
+            fi
+            echo
+            if [ "$recoverable" != true ] && [ "$stale_or_unknown" != true ] \
+               && [ "$retry_without_pause" != true ]; then
+              echo "$marker"
+            fi
+            echo '<!-- thingtime-ai-promotion-status:v1 -->'
+          } >"$body"
+          comment_id="$(gh api --paginate "repos/$REPO/issues/$SOURCE_PR/comments?per_page=100" --slurp \
+            | jq -r 'add // [] | [.[] | select(.user.login == "github-actions[bot]") | select(.body | contains("thingtime-ai-promotion-status:v1")) | .id] | last // empty')"
+          if [ -n "$comment_id" ]; then
+            gh api --method PATCH "repos/$REPO/issues/comments/$comment_id" -F "body=@$body" >/dev/null
+          else
+            gh api "repos/$REPO/issues/$SOURCE_PR/comments" -F "body=@$body" >/dev/null
+          fi
+          if [ "$recoverable" = true ] || [ "$stale_or_unknown" = true ] \
+             || [ "$retry_without_pause" = true ]; then
+            gh api --method DELETE "repos/$REPO/issues/$SOURCE_PR/labels/ai-promotion-paused" >/dev/null 2>&1 || true
+            if [ "$retry_without_pause" != true ]; then
+              jq -n '{ref:"github-actions",inputs:{dry_run:false,lookback:"100"}}' \
+                | gh api --method POST \
+                    "repos/$REPO/actions/workflows/promote-features-to-main.yml/dispatches" \
+                    --input - \
+                || echo "::warning::Could not dispatch the recovery promoter; its scheduled run will recover this promotion."
+            fi
+          else
+            gh api --method POST "repos/$REPO/issues/$SOURCE_PR/labels" \
+              --input <(jq -n '{labels:["ai-promotion-paused"]}') >/dev/null
+          fi
 
   resolve:
     name: "Resolve PR #${{ matrix.pr.number }}"
@@ -1330,7 +2482,7 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ github.token }}
           # The trusted Actions workflow dispatch uses GITHUB_TOKEN, so its
-          # develop worker is attributed to github-actions[bot]. The action
+          # github-actions worker is attributed to github-actions[bot]. The action
           # refuses non-human actors by default ("Workflow initiated by non-human
           # actor: github-actions (type: Bot)"), which silently broke the whole
           # push -> handoff -> dispatch -> resolve chain: only runs a human

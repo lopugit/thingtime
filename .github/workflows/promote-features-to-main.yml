@@ -5,9 +5,11 @@
 # promotion PR against main, so each feature gets a second, release-focused
 # review before it ships. Concretely, for each PR merged into develop that has
 # not reached main yet, it:
-# - cherry-picks the PR's exact diff onto a `promote/pr-<n>-<slug>` branch cut
-#   from main (`git cherry-pick -x`, so commit messages reference the original
-#   SHAs), and
+# - directly replays only verified, non-CI-sensitive patches;
+# - quarantines every `.github/**` or source-lineage-unverified patch before
+#   historical replay, handing its immutable plan to the protected trusted
+#   worker, which creates a bot-authored `[skip ci]` content commit and a
+#   review-gated checkpoint; and
 # - opens a promotion PR targeting main (labelled `promotion`, body carries a
 #   `<!-- promotion-of: <n> -->` marker that makes every run idempotent).
 #
@@ -38,28 +40,28 @@
 #   the per-feature train entirely;
 # - close a promotion PR without merging to reject that change for main — it
 #   is never recreated unless you reopen it;
-# - cherry-pick conflicts stop that group (later members depend on earlier
-#   ones) and the job summary prints exact manual-promotion commands; the next
-#   run picks up from the manually pushed branch.
+# - conflicts are reserved at the exact base and resolved automatically by the
+#   protected worker; only dependent members of that stack wait for its PR.
 #
 # Relationship to the other branch automation:
 # - "Sync main into develop" back-merges main after promotions land, which is
 #   what makes later cherry-picks come out empty (= already shipped) instead
 #   of duplicated.
-# - The AI conflict/rebase workflows treat promotion PRs like any other
-#   same-repo PRs, so stacks keep getting rebased/resolved automatically.
+# - The protected worker also handles clean review-gated replays, so executable
+#   workflow content and unverified historical intent cannot run before review.
 #
-# The push trigger runs from develop as soon as this file lands there;
-# schedule and dispatch activate once the file reaches main (via its own
-# promotion PR, or an omnibus merge).
+# This implementation lives on protected `github-actions`. Thin product-branch
+# listeners invoke it with `workflow_call`; its own schedule/dispatch also run
+# from the protected control plane.
 #
 # Token notes (same trade-off documented in sync-main-into-develop.yml):
-# - With plain GITHUB_TOKEN, created promotion PRs do NOT trigger other
-#   workflows (Web CI etc.), and promotion branches that touch
-#   .github/workflows/** cannot be pushed at all. A PROMOTION_PAT secret
-#   (repo + workflow scope) fixes both; SYNC_BRANCHES_PAT and
-#   CONFLICT_RESOLVER_PAT are honoured as fallbacks since they already carry
-#   the right scopes.
+# - Since GitHub's June 2026 behavior change, GITHUB_TOKEN-authored opened,
+#   synchronize, and reopened pull_request events create approval-required
+#   workflow runs; PAT/App-authored PR events can start those runs immediately.
+# - A workflow-capable PROMOTION_PAT remains required for the quarantined
+#   `[skip ci]` content push when the exact patch changes
+#   `.github/workflows/**`. SYNC_BRANCHES_PAT and CONFLICT_RESOLVER_PAT are
+#   honoured as fallbacks when they carry the same required scope.
 
 name: Promote features to main
 
@@ -90,6 +92,7 @@ on:
         default: "50"
 
 permissions:
+  actions: write
   contents: write
   pull-requests: write
   issues: write
@@ -127,6 +130,10 @@ jobs:
       - name: Promote merged develop PRs to main
         env:
           GH_TOKEN: ${{ secrets.PROMOTION_PAT || secrets.SYNC_BRANCHES_PAT || secrets.CONFLICT_RESOLVER_PAT || github.token }}
+          # The protected resolver accepts promotion handoffs only from
+          # github-actions[bot]. Keep this token separate from the PAT used for
+          # branch and PR writes.
+          ACTIONS_TOKEN: ${{ github.token }}
           SOURCE_BRANCH: develop
           TARGET_BRANCH: main
           LOOKBACK: ${{ inputs.lookback || '50' }}

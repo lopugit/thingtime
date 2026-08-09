@@ -1756,7 +1756,7 @@
   },
   "remix/CHANGELOG.md": {
     "mtime": 1786279306.3962407,
-    "ast_hash": "005aaedd733e03c16b0a67cec4f98771",
+    "ast_hash": "06a8c24fa135b85ffada636be5d8717a",
     "semantic_hash": ""
   },
   "remix/README.md": {
@@ -4161,7 +4161,7 @@
   },
   "TESTING.md": {
     "mtime": 1786279306.2161229,
-    "ast_hash": "2432763f6a6e7fa00ab50e1d15022a4f",
+    "ast_hash": "7bfd879185ee58f7f8bcbcfa27578658",
     "semantic_hash": ""
   },
   "claude-todo/12-everything-is-a-thing-collections.md": {
@@ -4245,8 +4245,8 @@
     "semantic_hash": "505fca8e81926065aff3be4ea340c700"
   },
   ".github/workflows/resolve-pr-conflicts.yml": {
-    "mtime": 1786279928.2920651,
-    "ast_hash": "ea68b6441631ff75f953fb366a9c5912",
+    "mtime": 1786290142.737615,
+    "ast_hash": "5010f6fd97561da881d200ec21a4672a",
     "semantic_hash": ""
   },
   "iOS/Thingtime/Resources/AppIcon.icon/Assets/canopy.svg": {
@@ -4845,9 +4845,9 @@
     "semantic_hash": "8161980932ed6089f39d049025d92e39"
   },
   ".github/scripts/rebase-stack/prepare-round.sh": {
-    "mtime": 1786286859.3944602,
-    "ast_hash": "86e24cd4a52290568ac8ace89d29ecf8",
-    "semantic_hash": "86e24cd4a52290568ac8ace89d29ecf8"
+    "mtime": 1786288610.541279,
+    "ast_hash": "277dc0bebda55d330480b6cc0778063c",
+    "semantic_hash": ""
   },
   ".github/scripts/rebase-stack/start.sh": {
     "mtime": 1786286859.394623,
@@ -4875,13 +4875,13 @@
     "semantic_hash": "21c290e907d4b49a899a7e3c033c71b8"
   },
   ".github/actions/rebase-conflict-round/action.yml": {
-    "mtime": 1786279306.2053373,
-    "ast_hash": "1f4285e4dccc0a349dcdc928fd3c8120",
-    "semantic_hash": "1f4285e4dccc0a349dcdc928fd3c8120"
+    "mtime": 1786288610.4008868,
+    "ast_hash": "81ee25923ae7b677f1de1be8faf27a11",
+    "semantic_hash": ""
   },
   ".github/workflows/rebase-pr-stacks.yml": {
     "mtime": 1786279886.3850572,
-    "ast_hash": "95353077714abe14b9c5e934c67b1546",
+    "ast_hash": "7b8d0a7520dd2c1fd00b03efe903900d",
     "semantic_hash": ""
   },
   "PRs/183-codex-ai-rebase-stack-resolver--add-automatic-ai-rebase-support-for-pr-stacks.md": {
@@ -5365,9 +5365,9 @@
     "semantic_hash": "c382f688a5083eb053f55690d93e47fd"
   },
   ".github/scripts/promote-features-to-main.mjs": {
-    "mtime": 1786286859.3935385,
-    "ast_hash": "4c72efad3ae02c9c3aa4c2539187274d",
-    "semantic_hash": "4c72efad3ae02c9c3aa4c2539187274d"
+    "mtime": 1786290315.8023498,
+    "ast_hash": "a0daca984533a2fbe2aabda5b6753cff",
+    "semantic_hash": ""
   },
   "PRs/172-followers-friends-notifications-views-4fcfcf-followers-friends-notifications-views.md": {
     "mtime": 1786279306.2111504,
@@ -5375,13 +5375,13 @@
     "semantic_hash": "1bac091f31b99443dbeafa2d037a005b"
   },
   ".github/scripts/resolve-pr-conflicts-routing-contract.mjs": {
-    "mtime": 1786286859.3953776,
-    "ast_hash": "ad29197a11c03a5c2b56bf2c0ccaf383",
-    "semantic_hash": "ad29197a11c03a5c2b56bf2c0ccaf383"
+    "mtime": 1786288707.6549935,
+    "ast_hash": "dbe7568a5daa5977bb50a88626f44057",
+    "semantic_hash": ""
   },
   ".github/workflows/promote-features-to-main.yml": {
-    "mtime": 1786279869.81773,
-    "ast_hash": "bcb0dd5805217dfebeba05a544e3e550",
+    "mtime": 1786289780.2700503,
+    "ast_hash": "24fbdf6b1c7e1b6cd220bf8b50945ff3",
     "semantic_hash": ""
   },
   "PRs/190-claude-github-action-pr-promotion-c65173-per-feature-develop-main-promotion-prs-with-stacks.md": {
@@ -5400,13 +5400,38 @@
     "semantic_hash": "33e30dbe292704371a290961e581066b"
   },
   ".github/scripts/workflow-control-plane-contract.mjs": {
-    "mtime": 1786287809.3061786,
-    "ast_hash": "aa84317eaf743aca7be74119fcbdb301",
-    "semantic_hash": "aa84317eaf743aca7be74119fcbdb301"
+    "mtime": 1786288914.904667,
+    "ast_hash": "b45cdd4784a81ed81536a537c7b02d1d",
+    "semantic_hash": ""
   },
   ".github/workflows/control-plane-ci.yml": {
-    "mtime": 1786279912.821263,
-    "ast_hash": "17a1fc89f3c28b8fdcbd541235646e0e",
+    "mtime": 1786288914.9040546,
+    "ast_hash": "a1d8064d391c8ef70343c27a4d8b5238",
+    "semantic_hash": ""
+  },
+  ".github/scripts/promotion-worker-contract.sh": {
+    "mtime": 1786289817.7776377,
+    "ast_hash": "3db30c9e6316ba508fa4f9ee511be16a",
+    "semantic_hash": ""
+  },
+  ".github/scripts/promotion-worker-routing-contract.mjs": {
+    "mtime": 1786290305.0105453,
+    "ast_hash": "fb021d231e7f4be9ba33525e020cdb1d",
+    "semantic_hash": ""
+  },
+  ".github/scripts/rebase-stack/promotion-worker.sh": {
+    "mtime": 1786289571.9425857,
+    "ast_hash": "aab690f4d0fbcf8e489ce4e1f73cbb9b",
+    "semantic_hash": ""
+  },
+  ".github/scripts/rebase-stack/refresh-promotion-graphify.sh": {
+    "mtime": 1786289576.6309464,
+    "ast_hash": "faf60dfa073f763f6d95466c227bff2e",
+    "semantic_hash": ""
+  },
+  ".github/scripts/rebase-stack/verify-promotion-source-authority.sh": {
+    "mtime": 1786288610.9192822,
+    "ast_hash": "14b9f6d094629a529f4abde76080542e",
     "semantic_hash": ""
   }
 }
