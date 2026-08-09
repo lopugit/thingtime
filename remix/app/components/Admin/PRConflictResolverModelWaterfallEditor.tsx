@@ -148,7 +148,7 @@ export const PRConflictResolverModelWaterfallEditor = () => {
       setRefreshing(false);
       lopu({
         title: 'AI workflow model order saved ✨',
-        description: 'New conflict-resolution runs will try this order from top to bottom.',
+        description: 'New conflict, rebase, and semantic-refresh runs will use this model order.',
         status: 'success',
         duration: 6000
       });
