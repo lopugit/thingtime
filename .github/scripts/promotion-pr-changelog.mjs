@@ -45,6 +45,16 @@
 //                    PRs get no pull_request runs). Falls back to GH_TOKEN.
 //   GH_REPO          owner/repo (defaults to GITHUB_REPOSITORY)
 //   BASE_BRANCH / HEAD_BRANCH  default main / develop
+//   PROMOTION_PR_LABELS  labels created-if-missing and kept applied to the
+//                    standing PR on every run (default "no-ai-rebase").
+//                    no-ai-rebase keeps the AI rebase workflow from ever
+//                    flattening develop's merge commits into plain commits —
+//                    develop is an integration branch whose history IS its
+//                    "Merge pull request #N" commits (they are attribution
+//                    tier 1 for this changelog, and the repo's house style is
+//                    merge commits). The merge-based conflict resolver still
+//                    owns the PR's conflicts (it merges main into develop,
+//                    preserving history). Set empty to opt out.
 //   GIT_BASE / GIT_HEAD        git revs to diff; default origin/<base> and
 //                              HEAD (the checked-out develop push). Local dry
 //                              runs usually pass GIT_HEAD=origin/develop.
@@ -84,6 +94,8 @@ const CFG = {
   repo: env("GH_REPO", env("GITHUB_REPOSITORY", "")),
   skipLabels: env("SKIP_LABELS", "no-promote,skip-promotion")
     .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean),
+  prLabels: env("PROMOTION_PR_LABELS", "no-ai-rebase")
+    .split(",").map((s) => s.trim()).filter(Boolean),
   dryRun: flag("DRY_RUN", false),
   assocApiBudget: 30, // max commits/{sha}/pulls fallback lookups per run
   recentMergedLimit: 40, // merged develop PRs prefetched for content matching
@@ -236,6 +248,11 @@ export function parsePrSet(body) {
   return new Set(
     match[1].split(",").map((s) => Number(s.trim())).filter((n) => Number.isFinite(n) && n > 0),
   );
+}
+
+export function computeMissingLabels(wanted, present) {
+  const have = new Set(present.map((l) => String(l).toLowerCase()));
+  return wanted.filter((l) => !have.has(String(l).toLowerCase()));
 }
 
 export function computeDelta(oldSet, newSet) {
@@ -402,6 +419,62 @@ function contentMatchedPr(sha, subject) {
   return loadSubjectIndex().get(normalized) ?? null;
 }
 
+// Standing-PR labels. no-ai-rebase is honored by both AI history workflows:
+// the rebase workflow skips labeled PRs outright, and the merge-based
+// conflict resolver explicitly keeps ownership of them — so develop's merge
+// commits (attribution tier 1) survive instead of being flattened.
+const LABEL_SPECS = {
+  "no-ai-rebase": {
+    color: "1d76db",
+    description: "Opt this PR's head branch out of AI history rewriting; the merge resolver owns its conflicts",
+  },
+};
+
+const ensuredLabels = new Set();
+function ensureLabelExists(name) {
+  if (ensuredLabels.has(name)) return;
+  try {
+    gh(["api", `repos/${CFG.repo}/labels/${encodeURIComponent(name)}`]);
+  } catch {
+    const spec = LABEL_SPECS[name] ?? { color: "ededed", description: "" };
+    if (CFG.dryRun) {
+      console.log(`DRY_RUN: would create missing label "${name}".`);
+    } else {
+      gh([
+        "api", "-X", "POST", `repos/${CFG.repo}/labels`,
+        "-f", `name=${name}`, "-f", `color=${spec.color}`, "-f", `description=${spec.description}`,
+      ]);
+    }
+  }
+  ensuredLabels.add(name);
+}
+
+// Keep the wanted labels applied to the open standing PR. Labels are read via
+// REST (issues/N/labels) — authoritative, unlike search-backed listings — and
+// re-added when missing, so a stray label removal self-heals on the next push.
+function syncPrLabels(prNumber) {
+  if (!CFG.prLabels.length) return;
+  let present = [];
+  try {
+    present = (ghJson(["api", `repos/${CFG.repo}/issues/${prNumber}/labels`]) ?? [])
+      .map((l) => String(l.name ?? ""));
+  } catch {
+    return; // reads failed — leave labels for the next run rather than guessing
+  }
+  const missing = computeMissingLabels(CFG.prLabels, present);
+  if (!missing.length) return;
+  for (const name of missing) ensureLabelExists(name);
+  if (CFG.dryRun) {
+    console.log(`DRY_RUN: would add label(s) ${missing.join(", ")} to PR #${prNumber}.`);
+    return;
+  }
+  gh([
+    "pr", "edit", String(prNumber), "--repo", CFG.repo,
+    ...missing.flatMap((name) => ["--add-label", name]),
+  ]);
+  summary(`Re-applied missing label(s) on PR #${prNumber}: ${missing.join(", ")}.`);
+}
+
 let assocBudget = CFG.assocApiBudget;
 function associatedPr(sha) {
   if (assocBudget <= 0) return null;
@@ -473,6 +546,10 @@ function selfTest() {
   const delta = computeDelta(new Set([1, 2]), new Set([2, 3]));
   assert(delta.added.join(",") === "3" && delta.removed.join(",") === "1", "delta");
 
+  assert(computeMissingLabels(["no-ai-rebase"], []).join(",") === "no-ai-rebase", "missing label");
+  assert(computeMissingLabels(["no-ai-rebase"], ["No-AI-Rebase"]).length === 0, "label match is case-insensitive");
+  assert(computeMissingLabels([], ["x"]).length === 0, "no wanted labels");
+
   const comment = buildComment({
     initialized: false,
     delta: { added: [187], removed: [42] },
@@ -522,6 +599,7 @@ function main() {
     "pr", "list", "--repo", CFG.repo, "--base", CFG.base, "--head", CFG.head,
     "--state", "open", "--json", "number,body",
   ])?.[0];
+  if (openPr) syncPrLabels(openPr.number);
 
   if (!spine.length) {
     summary(
@@ -563,14 +641,16 @@ function main() {
   try {
     if (!openPr) {
       const body = `${PREAMBLE}\n\n${section}\n`;
+      for (const name of CFG.prLabels) ensureLabelExists(name);
       if (CFG.dryRun) {
-        console.log(`DRY_RUN: would open a promotion PR (${CFG.head} → ${CFG.base}) with body:\n${body}`);
+        console.log(`DRY_RUN: would open a promotion PR (${CFG.head} → ${CFG.base}) labeled [${CFG.prLabels.join(", ")}] with body:\n${body}`);
       } else {
         const createToken = env("GH_TOKEN_CREATE", env("GH_TOKEN"));
         const url = gh(
           [
             "pr", "create", "--repo", CFG.repo, "--base", CFG.base, "--head", CFG.head,
             "--title", "Promote develop to main", "--body-file", bodyFile("body.md", body),
+            ...CFG.prLabels.flatMap((name) => ["--label", name]),
           ],
           { env: { ...process.env, GH_TOKEN: createToken, GITHUB_TOKEN: createToken } },
         ).trim();
