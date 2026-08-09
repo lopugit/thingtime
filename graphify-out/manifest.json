@@ -1530,14 +1530,14 @@
     "semantic_hash": "cc2affb220ad7278139b9dbe2d9beca6"
   },
   "README.md": {
-    "mtime": 1786280186.6477587,
-    "ast_hash": "7b8ae3ced7dced8e1c8cadda33ecc348",
-    "semantic_hash": "7b8ae3ced7dced8e1c8cadda33ecc348"
+    "mtime": 1786283321.6160283,
+    "ast_hash": "441f0167c77d0ecf7a645f4e9f076223",
+    "semantic_hash": ""
   },
   "VERCEL_DEPLOYMENTS.md": {
-    "mtime": 1786280186.6507506,
-    "ast_hash": "f1e86ddf3be593832c51891324010ca4",
-    "semantic_hash": "f1e86ddf3be593832c51891324010ca4"
+    "mtime": 1786283321.6162696,
+    "ast_hash": "1605500d5c27cb8d7c3bdb658500a38d",
+    "semantic_hash": ""
   },
   "docs/Use Cases/car.md": {
     "mtime": 1786280186.6535385,
@@ -4160,8 +4160,8 @@
     "semantic_hash": "3690d11b40344928dd512587d7c1e06b"
   },
   "TESTING.md": {
-    "mtime": 1786280186.6485636,
-    "ast_hash": "6d83a7562712c841a81dfc37d83394ea",
+    "mtime": 1786283321.6166155,
+    "ast_hash": "f4e37749b07326e37f9f1d3adce87c72",
     "semantic_hash": ""
   },
   "claude-todo/12-everything-is-a-thing-collections.md": {
@@ -5028,5 +5028,10 @@
     "mtime": 1786282623.205656,
     "ast_hash": "79e624cbff2c316257245a61c30accd0",
     "semantic_hash": "79e624cbff2c316257245a61c30accd0"
+  },
+  ".github/workflows/develop-pr-preview.yml": {
+    "mtime": 1786283321.6157358,
+    "ast_hash": "f7a77eb69231159da81bdd21ce7e76b5",
+    "semantic_hash": ""
   }
 }
