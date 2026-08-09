@@ -573,6 +573,8 @@ function orphanedMergeHydrationIntegrationTest(assert) {
     testGit(["push", "--force", "origin", "HEAD:develop"], writer);
 
     testGit(["clone", "--no-local", "--branch", "develop", `file://${remote}`, fresh]);
+    testGit(["config", "user.name", "Promoter Test"], fresh);
+    testGit(["config", "user.email", "promoter-test@example.invalid"], fresh);
     assert.equal(
       testTryGit(["cat-file", "-e", `${orphanedMergeSha}^{commit}`], fresh).ok,
       false,
@@ -627,12 +629,40 @@ function orphanedMergeHydrationIntegrationTest(assert) {
     );
 
     testGit(["checkout", "--detach", "origin/main"], fresh);
-    assert.deepEqual(applyPicks(fresh, plan.picks), { status: "ok" });
+    testGit(["config", "user.name", ""], fresh);
+    const identityFailure = applyPicks(fresh, plan.picks, testTryGit);
+    assert.equal(identityFailure.status, "error");
+    assert.match(identityFailure.detail, /empty ident name/i);
+    assert.equal(
+      testGit(["rev-parse", "HEAD^{tree}"], fresh),
+      testGit(["rev-parse", "origin/main^{tree}"], fresh),
+      "an identity failure must abort instead of silently skipping the source patch",
+    );
+    assert.equal(
+      testTryGit(["diff", "--cached", "--quiet", "HEAD", "--"], fresh).status,
+      0,
+      "aborting an operational cherry-pick failure must clean the index",
+    );
+    assert.equal(
+      testTryGit(["diff", "--quiet", "--"], fresh).status,
+      0,
+      "aborting an operational cherry-pick failure must clean tracked worktree changes",
+    );
+
+    testGit(["config", "user.name", "Promoter Test"], fresh);
+    assert.deepEqual(applyPicks(fresh, plan.picks, testTryGit), { status: "ok" });
     assert.equal(
       testGit(["rev-parse", "HEAD^{tree}"], fresh),
       testGit(["rev-parse", `${rewrittenSha}^{tree}`], fresh),
       "the hydrated merge must be complete enough for a correct mainline cherry-pick",
     );
+    const promotedTree = testGit(["rev-parse", "HEAD^{tree}"], fresh);
+    assert.deepEqual(
+      applyPicks(fresh, plan.picks, testTryGit),
+      { status: "ok" },
+      "a genuinely empty repeat pick must still be skipped safely",
+    );
+    assert.equal(testGit(["rev-parse", "HEAD^{tree}"], fresh), promotedTree);
     assert.deepEqual(
       validateReusablePromotionBranch("HEAD", "origin/main", sourcePr, fresh, plan),
       { ok: true },
@@ -1514,17 +1544,35 @@ function applyPicks(worktree, picks, gitRunner = tryGit) {
     args.push(pick.range || pick.sha);
     let res = gitRunner(args, worktree);
     // Empty picks (content already on main) stop the sequencer; skip through
-    // them until the pick finishes or a real conflict appears.
+    // them until the pick finishes or a real conflict appears. Never infer
+    // emptiness from stderr text: operational failures such as "empty ident
+    // name" can leave the intended source patch staged and must be surfaced.
     let guard = 0;
     while (!res.ok && guard++ < 100) {
-      const unmerged = gitRunner(["diff", "--name-only", "--diff-filter=U"], worktree).out;
-      if (unmerged) {
+      const unmerged = gitRunner(["diff", "--name-only", "--diff-filter=U"], worktree);
+      if (!unmerged.ok) {
         gitRunner(["cherry-pick", "--abort"], worktree);
-        return { status: "conflict", detail: unmerged.split("\n").slice(0, 20).join(", ") };
+        return {
+          status: "error",
+          detail: `cannot inspect failed cherry-pick state: ${failureDetail(unmerged)}`,
+        };
       }
-      if (/empty|nothing to commit/i.test(res.err + res.out)) {
+      if (unmerged.out) {
+        gitRunner(["cherry-pick", "--abort"], worktree);
+        return { status: "conflict", detail: unmerged.out.split("\n").slice(0, 20).join(", ") };
+      }
+
+      const cherryPickHead = gitRunner(
+        ["rev-parse", "--verify", "-q", "CHERRY_PICK_HEAD"],
+        worktree,
+      );
+      const staged = gitRunner(["diff", "--cached", "--quiet", "HEAD", "--"], worktree);
+      const tracked = gitRunner(["diff", "--quiet", "--"], worktree);
+      const genuinelyEmpty =
+        cherryPickHead.ok && staged.status === 0 && tracked.status === 0;
+      if (genuinelyEmpty) {
         res = gitRunner(["cherry-pick", "--skip"], worktree);
-        if (res.ok || /no cherry-pick.*in progress/i.test(res.err)) { res = { ok: true }; break; }
+        if (res.ok) break;
         continue;
       }
       gitRunner(["cherry-pick", "--abort"], worktree);

@@ -19,6 +19,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Fixed
 
+- **Promotion self-test and empty-pick handling are runner-safe**: the
+  per-feature promoter's orphaned-history fixture now configures its own Git
+  author identity instead of depending on runner account defaults. Failed
+  cherry-picks are classified from sequencer and index state rather than broad
+  error-message words, so an operational failure such as `empty ident name`
+  is aborted and reported instead of being mistaken for an empty patch and
+  silently skipped. A genuine already-applied cherry-pick still advances the
+  sequencer safely. See the
+  [PR #207 engineering note](../PRs/207-codex-fix-promoter-empty-pick-detection-distinguish-empty-promotion-cherry-picks-safely.md).
+  — Codex (AI), 2026-08-09
 - **Per-feature promotion survives rewritten historical merge commits and
   isolated failures**: the `develop` → `main` promoter now verifies every
   source merge object, fetches unreachable historical merges by exact SHA,
